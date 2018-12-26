@@ -58,7 +58,6 @@ class TestLangevinIntegrator(unittest.TestCase):
         masses = np.array([1.0, 12.0])
         friction = 10.0
         dt = 0.003
-        num_params = 2
         temp = 300.0
 
         x_ph = tf.placeholder(dtype=tf.float32, shape=(2, 3))
@@ -68,7 +67,7 @@ class TestLangevinIntegrator(unittest.TestCase):
         hb = force.HarmonicBondForce()
         ref_intg = ReferenceLangevinIntegrator(masses, dt, friction, temp, disable_noise=True)
 
-        num_steps = 2
+        num_steps = 1
 
         x = x_ph
 
@@ -76,12 +75,15 @@ class TestLangevinIntegrator(unittest.TestCase):
 
         for step in range(num_steps):
             grads = hb.gradients(x)
-            all_tmps.append(grads)
+
+            mixed_partials = hb.mixed_partials(x)
+
+            all_tmps.append(mixed_partials)
             dx = ref_intg.step(grads)
             x += dx
 
         ref_dxdp = tf.gradients(x, hb.params())
-        test_intg = integrator.LangevinIntegrator(masses, 2, dt, friction, temp, disable_noise=True)
+        test_intg = integrator.LangevinIntegrator(masses, len(hb.params()), dt, friction, temp, disable_noise=True)
 
         dx, dxdps, gs, tmp = test_intg.step(x_ph, [hb])
         dxdps = tf.reduce_sum(dxdps, axis=[1,2])
@@ -89,19 +91,18 @@ class TestLangevinIntegrator(unittest.TestCase):
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
 
-        obs_x, obs_dxdp, g0, g1 = sess.run([x, ref_dxdp, all_tmps[0], all_tmps[1]], feed_dict={x_ph: x0})
-        
+        obs_x, obs_dxdp, g0 = sess.run([x, ref_dxdp, all_tmps[0]], feed_dict={x_ph: x0})
 
-        print("g0, g1", g0, g1, "obs_x", obs_x)
+        print("mp_ref", g0, "obs_x", obs_x)
 
         x = x0
 
         for step in range(num_steps):
-            dx_val, dp_val, gs_val, tmp_val = sess.run([dx, dxdps, gs, tmp], feed_dict={x_ph: x})
-            print("test_g", gs_val)
+            dx_val, dxdp_val, gs_val, tmp_val = sess.run([dx, dxdps, gs, tmp], feed_dict={x_ph: x})
+            print("PRODUCT", tmp_val)
             x += dx_val
 
-        test_dxdp = dp_val
+        test_dxdp = dxdp_val
 
         print(obs_x, x)
         print(obs_dxdp, test_dxdp) # relative ratios are correct

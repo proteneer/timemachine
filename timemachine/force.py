@@ -31,13 +31,14 @@ class HarmonicBondForce(ConservativeForce):
     def __init__(self):
         self.kb = tf.get_variable("kb", shape=tuple(), dtype=tf.float32, initializer=tf.constant_initializer(10.0))
         self.r0 = tf.get_variable("r0", shape=tuple(), dtype=tf.float32, initializer=tf.constant_initializer(1.2))
+        self.b0 = tf.get_variable("b0", shape=tuple(), dtype=tf.float32, initializer=tf.constant_initializer(0.0))
 
     def params(self):
-        return [self.kb, self.r0]
+        return [self.kb, self.r0, self.b0]
 
     def energy(self, conf):
         dx = tf.norm(conf[0]-conf[1])
-        return self.kb*tf.pow(dx - self.r0, 2.0)
+        return self.kb*tf.pow(dx - self.r0 + self.b0, 2.0) 
 
 if __name__ == "__main__":
 

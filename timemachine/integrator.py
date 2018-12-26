@@ -41,10 +41,12 @@ class LangevinIntegrator():
         self.ca = tf.cast(self.vscale, dtype=tf.float32)
         self.cbs = []
         for m in masses:
-            self.cbs.append(-self.fscale*self.dt/m)
+            # should there be a negative sign?
+            self.cbs.append((self.fscale)/m)
+        print("SELF CBS", self.cbs)
         self.cbs = np.array(self.cbs, dtype=np.float32)
         self.cbs = tf.reshape(self.cbs, shape=(1, -1, 1))
-        self.steps_to_converge = 4000 # guestimate later
+        self.steps_to_converge = 5 # guestimate later
 
         # pre-compute scaled prefactors once at the beginning
         self.scale = (1-tf.pow(self.ca, tf.range(self.steps_to_converge, dtype=tf.float32)+1))/(1-self.ca)
@@ -57,8 +59,14 @@ class LangevinIntegrator():
             "buffer_velocity",
             shape=(num_atoms, 3),
             dtype=np.float32,
-            initializer=tf.initializers.zeros
-            )
+            initializer=tf.initializers.zeros)
+
+        self.dxdp_t = tf.get_variable(
+            "buffer_dxdp",
+            shape=(num_params, num_atoms, 3),
+            dtype=np.float32,
+            initializer=tf.initializers.zeros)
+
         # buffer for unconverged zetas
         self.buffer_zetas = tf.get_variable(
             "buffer_zetas",
@@ -74,16 +82,19 @@ class LangevinIntegrator():
             initializer=tf.initializers.zeros)
 
 
-    def step(self, x, energies):
+    def step(self, x_t, energies):
+        """
+        Advance x_t in to x_{t+1}
+        """
 
         # buffers for each energy/force type
         gs = []
         hs = []
         es = []
         for e in energies:
-            es.append(e.energy(x))
-            gs.append(e.gradients(x))
-            hs.append(e.hessians(x))
+            es.append(e.energy(x_t))
+            gs.append(e.gradients(x_t))
+            hs.append(e.hessians(x_t))
 
         tot_e = tf.reduce_sum(es)
         grads = tf.reduce_sum(gs, axis=0)
@@ -91,9 +102,6 @@ class LangevinIntegrator():
 
         num_atoms = 2
         num_dims = 3
-
-        # if self.v_t is None:
-            # self.v_t = tf.zeros((num_atoms, num_dims))
 
         noise = 0
         # noise = self.normal.sample((num_atoms, num_dims))
@@ -117,7 +125,9 @@ class LangevinIntegrator():
 
         mixed_partials = []
         for e in energies:
-            mixed_partials.extend(e.mixed_partials(x))
+            mp = e.mixed_partials(x_t)
+            print("MP", mp)
+            mixed_partials.extend(mp)
 
         mixed_partials = tf.stack(mixed_partials) # [num_params, num_atoms, 3]
 
@@ -137,27 +147,32 @@ class LangevinIntegrator():
         # 2. Insert to the front
         # 3. Cyclic-roll buffer left
 
-        # compute dxdp_t using unconverged zeta
-        dxdp_t = self.buffer_zetas * self.scale
-        dxdp_t = tf.reduce_sum(dxdp_t, axis=0)
-        # add remainder from dxdp_t using converged zeta
-        
-        dxdp_t += self.converged_zetas * self.scale[0][0][0][0]
-
-        dxdp_t *= -self.cbs * self.dt 
-
-        # compute zeta_t for this particular step
+        # compute zeta_t for time t
         # a:  0 1 2 3            0 1 2
         # h: [N,3,N,3], dxdp_t: [p,N,3], contraction: [p,N,3], mp: [p,N,3]
-        contraction = tf.einsum('ijkl,mkl->mij', hessians, dxdp_t)
+        contraction = tf.einsum('ijkl,mkl->mij', hessians, self.dxdp_t)
         zeta_t = contraction + mixed_partials
 
         self.converged_zetas = tf.assign_add(self.converged_zetas, self.buffer_zetas[0])
-        with tf.control_dependencies([self.converged_zetas, dxdp_t]):
+        with tf.control_dependencies([self.converged_zetas, self.dxdp_t]):
             override = self.buffer_zetas[0].assign(zeta_t)
-            self.buffer_zetas = tf.assign(self.buffer_zetas, tf.roll(override, shift=-1, axis=0))
+            self.buffer_zetas = tf.assign(
+                self.buffer_zetas,
+                tf.roll(override, shift=-1, axis=0)
+            )
 
-        return dx, dxdp_t, gs, self.buffer_zetas
+            # compute dxdp_{t+1} using unconverged zeta and converged zetas
+            new_dxdp_t = self.buffer_zetas * self.scale
+            new_dxdp_t = tf.reduce_sum(new_dxdp_t, axis=0)
+            new_dxdp_t += self.converged_zetas * self.scale[0][0][0][0]
+
+            print("SHAPES", new_dxdp_t.shape, self.cbs.shape)
+            new_dxdp_t *= -self.cbs * self.dt
+
+            self.dxdp_t = tf.assign(self.dxdp_t, new_dxdp_t)
+
+            return dx, new_dxdp_t, self.scale, -self.cbs * self.dt *(tf.reduce_sum(self.buffer_zetas * self.scale, axis=0) + self.converged_zetas * self.scale[0][0][0][0])
+            # return dx, new_dxdp_t, self.scale, self.buffer_zetas
 
 if __name__ == "__main__":
 
@@ -166,7 +181,7 @@ if __name__ == "__main__":
         masses=np.array([1.0, 12.0]),
         friction=10.0,
         dt=0.03,
-        num_params=2)
+        num_params=len(hb.params()))
     x0 = np.array([[1.0, 0.5, -0.5], [0.2, 0.1, -0.3]])
 
     x_ph = tf.placeholder(dtype=tf.float32, shape=(None, 3))
