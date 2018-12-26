@@ -1,9 +1,10 @@
 import numpy as np
 import tensorflow as tf
 import unittest
-import force
-from constants import BOLTZ
-import integrator
+
+from timemachine import force
+from timemachine.constants import BOLTZ
+from timemachine import integrator
 
 # static long long estimate_steps_to_converge(float coeff_a) {
 #   double epsilon = 1e-8;

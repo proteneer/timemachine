@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
-import force
-from constants import BOLTZ
+
+from timemachine.constants import BOLTZ
 
 class LangevinIntegrator():
 
@@ -178,26 +178,3 @@ class LangevinIntegrator():
 
             # (ytz): note we *MUST* return self.dxdp_t for this not to have a dependency hell
             return dx, self.dxdp_t
-
-if __name__ == "__main__":
-
-    hb = force.HarmonicBondForce()
-    intg = LangevinIntegrator(
-        masses=np.array([1.0, 12.0]),
-        friction=10.0,
-        dt=0.03,
-        num_params=len(hb.params()))
-    x0 = np.array([[1.0, 0.5, -0.5], [0.2, 0.1, -0.3]])
-
-    x_ph = tf.placeholder(dtype=tf.float64, shape=(None, 3))
-
-    dx, dxdps, zt, tmp = intg.step(x_ph, [hb])
-
-    sess = tf.Session()
-    sess.run(tf.initializers.global_variables())
-
-    x = x0
-
-    for step in range(10):
-        dx_val, dp_val, zt_val, tmp_val = sess.run([dx, dxdps, zt, tmp], feed_dict={x_ph: x})
-        x = x + dx_val
