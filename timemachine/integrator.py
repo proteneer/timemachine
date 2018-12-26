@@ -11,6 +11,7 @@ class LangevinIntegrator():
         dt=0.0025,
         friction=1.0,
         temp=300.0,
+        precision=tf.float64,
         disable_noise=False):
         """
         Langevin Integrator
@@ -38,18 +39,18 @@ class LangevinIntegrator():
         self.invMasses = (1.0/masses).reshape((-1, 1))
         self.sqrtInvMasses = np.sqrt(self.invMasses)
 
-        self.ca = tf.cast(self.vscale, dtype=tf.float32)
+        self.ca = tf.cast(self.vscale, dtype=precision)
         self.cbs = []
         for m in masses:
             # should there be a negative sign?
             self.cbs.append((self.fscale)/m)
         print("SELF CBS", self.cbs)
-        self.cbs = np.array(self.cbs, dtype=np.float32)
+        self.cbs = tf.convert_to_tensor(self.cbs, dtype=precision)
         self.cbs = tf.reshape(self.cbs, shape=(1, -1, 1))
-        self.steps_to_converge = 5 # guestimate later
+        self.steps_to_converge = 4000 # guestimate later
 
         # pre-compute scaled prefactors once at the beginning
-        self.scale = (1-tf.pow(self.ca, tf.range(self.steps_to_converge, dtype=tf.float32)+1))/(1-self.ca)
+        self.scale = (1-tf.pow(self.ca, tf.range(self.steps_to_converge, dtype=precision)+1))/(1-self.ca)
         self.scale = tf.reverse(self.scale, [0])
         self.scale = tf.reshape(self.scale, (-1, 1, 1, 1))
 
@@ -58,27 +59,27 @@ class LangevinIntegrator():
         self.v_t = tf.get_variable(
             "buffer_velocity",
             shape=(num_atoms, 3),
-            dtype=np.float32,
+            dtype=precision,
             initializer=tf.initializers.zeros)
 
         self.dxdp_t = tf.get_variable(
             "buffer_dxdp",
             shape=(num_params, num_atoms, 3),
-            dtype=np.float32,
+            dtype=precision,
             initializer=tf.initializers.zeros)
 
         # buffer for unconverged zetas
         self.buffer_zetas = tf.get_variable(
             "buffer_zetas",
             shape=(self.steps_to_converge, num_params, num_atoms, 3),
-            dtype=np.float32,
+            dtype=precision,
             initializer=tf.initializers.zeros)
 
         # buffer for converged zetas
         self.converged_zetas = tf.get_variable(
             "converged_zetas",
             shape=(num_params, num_atoms, 3),
-            dtype=np.float32,
+            dtype=precision,
             initializer=tf.initializers.zeros)
 
 
@@ -126,7 +127,6 @@ class LangevinIntegrator():
         mixed_partials = []
         for e in energies:
             mp = e.mixed_partials(x_t)
-            print("MP", mp)
             mixed_partials.extend(mp)
 
         mixed_partials = tf.stack(mixed_partials) # [num_params, num_atoms, 3]
@@ -166,12 +166,13 @@ class LangevinIntegrator():
             new_dxdp_t = tf.reduce_sum(new_dxdp_t, axis=0)
             new_dxdp_t += self.converged_zetas * self.scale[0][0][0][0]
 
-            print("SHAPES", new_dxdp_t.shape, self.cbs.shape)
             new_dxdp_t *= -self.cbs * self.dt
 
             self.dxdp_t = tf.assign(self.dxdp_t, new_dxdp_t)
 
-            return dx, new_dxdp_t, self.scale, -self.cbs * self.dt *(tf.reduce_sum(self.buffer_zetas * self.scale, axis=0) + self.converged_zetas * self.scale[0][0][0][0])
+            # note we *MUST* return self.dxdp_t for this not to have a dependency hell
+            return dx, self.dxdp_t, contraction, self.buffer_zetas
+            # -self.cbs * self.dt *(tf.reduce_sum(self.buffer_zetas * self.scale, axis=0) + self.converged_zetas * self.scale[0][0][0][0])
             # return dx, new_dxdp_t, self.scale, self.buffer_zetas
 
 if __name__ == "__main__":
@@ -184,7 +185,7 @@ if __name__ == "__main__":
         num_params=len(hb.params()))
     x0 = np.array([[1.0, 0.5, -0.5], [0.2, 0.1, -0.3]])
 
-    x_ph = tf.placeholder(dtype=tf.float32, shape=(None, 3))
+    x_ph = tf.placeholder(dtype=tf.float64, shape=(None, 3))
 
     dx, dxdps, zt, tmp = intg.step(x_ph, [hb])
 

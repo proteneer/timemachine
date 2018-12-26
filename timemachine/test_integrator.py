@@ -60,24 +60,21 @@ class TestLangevinIntegrator(unittest.TestCase):
         dt = 0.003
         temp = 300.0
 
-        x_ph = tf.placeholder(dtype=tf.float32, shape=(2, 3))
+        x_ph = tf.placeholder(dtype=tf.float64, shape=(2, 3))
         
-        x0 = np.array([[1.0, 0.5, -0.5], [0.2, 0.1, -0.3]], dtype=np.float32)
+        x0 = np.array([[1.0, 0.5, -0.5], [0.2, 0.1, -0.3]], dtype=np.float64)
 
         hb = force.HarmonicBondForce()
         ref_intg = ReferenceLangevinIntegrator(masses, dt, friction, temp, disable_noise=True)
 
-        num_steps = 1
+        num_steps = 4
 
         x = x_ph
-
         all_tmps = []
 
         for step in range(num_steps):
             grads = hb.gradients(x)
-
             mixed_partials = hb.mixed_partials(x)
-
             all_tmps.append(mixed_partials)
             dx = ref_intg.step(grads)
             x += dx
@@ -99,7 +96,7 @@ class TestLangevinIntegrator(unittest.TestCase):
 
         for step in range(num_steps):
             dx_val, dxdp_val, gs_val, tmp_val = sess.run([dx, dxdps, gs, tmp], feed_dict={x_ph: x})
-            print("PRODUCT", tmp_val)
+            print("contraction", gs_val)
             x += dx_val
 
         test_dxdp = dxdp_val
