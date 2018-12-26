@@ -1,0 +1,79 @@
+\documentclass{article}
+\usepackage[margin=0.5in]{geometry}
+\usepackage{amsmath}
+\usepackage{physics}
+\usepackage{bm}
+
+\usepackage{graphicx}
+\begin{document}
+
+
+
+\centerline{\sc \large The Time Machine}
+\vspace{.5pc}
+\centerline{\sc Backpropagation through time}
+\vspace{.5pc}
+\centerline{Yutong Zhao (unaffiliated)}
+\vspace{2pc}
+
+
+Suppose we have a loss function $L(O(\vec{x}_{label}), O(\vec{x}_t))$ where O is an observable such as the radius of gyration. $\vec{x}_t$ is a single frame generated from the end of a molecular dynamics simulation starting from some initial state $\vec{x}_0$ and some set of parameters $\theta$ within the forcefield. We wish to analytically derive a gradient for $\dfrac{\partial L}{\partial \theta}$ by time travelling.
+
+Suppose:
+\begin{equation}
+L(O(\vec{x}_{label}), O(\vec{x}_t)) = \lbrack O(\vec{x}_{label}) - O(\vec{x}_t(\vec{x}_0;\theta)) \rbrack ^2
+\end{equation}
+We want to compute the gradient of $L$ with respect to the parameters $\theta$:
+\begin{equation}
+\dfrac {\partial L}{\partial \theta} = \dfrac{\partial L}{\partial \vec{x}_t} \dfrac{\partial \vec{x}_t}{\partial \theta} 
+\end{equation}
+Via noise-free Langevin dynamics, the velocity is $\vec{v}_t$ is computed as:
+\begin{equation}
+\vec{v}_t = a \vec{v}_{t-1} - b \nabla E(\vec{x}_{t-1};\theta) + c \vec{n}_{t-1}
+\end{equation}
+Where $\nabla$ is the gradient w.r.t. coordinates, and $a$, $b$, $c$ are the coefficents derived from the temperature and the friction, and $\vec{n}$ is normal noise.
+\begin{equation}
+\vec{x}_{t} = \vec{x}_{t-1} + \vec{v}_{t} \delta t
+\end{equation}
+Expanding out the first few terms we get:
+\begin{equation}
+\begin{split}
+\vec{x}_1  &= \vec{x}_0 + \big(a \vec{v}_0 - b \nabla E(\vec{x}_0) + c \vec{n}_0  \big) \delta t \\
+\vec{x}_2  &= \vec{x}_1 + \bigg( a \Big( a \vec{v}_0 - b \nabla E(\vec{x}_0) + c \vec{n}_0 \Big) - b \nabla E(\vec{x}_1) + c \vec{n}_1 \bigg) \delta t \\
+\vec{x}_3  &= \vec{x}_2 + \Bigg(a\bigg(a \Big( a \vec{v}_0 - b \nabla E(\vec{x}_0) + c \vec{n}_0 \Big) - b \nabla E(\vec{x}_1) + c \vec{n}_1 \bigg) - b \nabla E(\vec{x}_2) + c \vec{n}_2 \Bigg) \delta t \\
+\end{split}
+\end{equation}
+This is a component wise matrix-multiply, where both $\partial L / \partial \vec{x}_t$ and ${\partial \vec{x}_t}/{\partial \theta}$ are $(N, 3)$ matrices.
+\begin{equation}
+\dfrac {\partial x_t}{\partial \theta} = -b  \delta t \Big( \zeta E(\vec{x}_0; \theta)S_{t-1}^a + \zeta E(\vec{x}_1;\theta)S_{t-2}^a + \ldots +  \zeta E(\vec{x}_{t-1};\theta) \Big)
+\end{equation}
+Where, using the improper chain rule, we can define the $\zeta$ operator:
+\begin{equation}
+\zeta E(\vec{x}_i; \theta) \equiv \dfrac{\partial^2E}{\partial\vec{x}_i^2}\dfrac{\partial\vec{x}_i}{\partial\theta} +  \dfrac{\partial^2 E}{\partial \vec{x}_i \partial \theta} 
+\end{equation}
+
+Note that the above expression needs both the Hessian as well as the mixed partial derivative. The Hessian has shape [N,3,N,3], and is multiplied into a [N,3] coordinate-like matrix for each parameter, resulting in an [N,3] matrix. The mixed partial derivative also has shape [N,3]. We can write out the first few terms:
+\begin{equation}
+\begin{split}
+\dfrac{\partial\vec{x}_1}{\partial\theta}  &= - b\delta t \zeta E(\vec{x}_0) \\
+\dfrac{\partial\vec{x}_2}{\partial\theta}  &= - b\delta t \Big(\zeta E(\vec{x}_0)(1+a)+\zeta E(\vec{x}_1)\Big)\\
+\dfrac{\partial\vec{x}_3}{\partial\theta}  &= - b\delta t \Big(\zeta E(\vec{x}_0)(1+a+a^2)+\zeta E(\vec{x}_1)(1+a)+\zeta E(\vec{x}_2)\Big)\\
+\end{split}
+\end{equation}
+$S_n^a$ is the geometric series of $n$ terms of $a$. Observe that 1) we only need to do a single forward pass, computing the forces and the mixed partials. Naively, this procedure needs $O(t)$ memory since we need to store $\partial\vec{x}_i / \partial\theta$ as they're re-weighted after each step. Fortunately, the rapid convergence of the geometric series implies we only need to store them for for only a small numbers of the most recent steps, since for large $t$:
+\begin{equation}
+\zeta E(\vec{x}_0)(1+a+a^2+...+a^t) \approx \zeta E(\vec{x}_0)(1+a+a^2+...+a^{t-1})
+\end{equation}
+Suppose it takes $k$ steps for converge to numerical accuracy. This allows us to maintain a rolling window of only size $O(k)$ for unconverged $\zeta$ values while using an extra $O(1)$ space for the converged $\zeta$ terms. In practice, $k \approx 4000$, so the over all algorithm is $O(1)$ in memory.
+
+We can fit to the QM forces to bootstrap.
+
+*the improper chain rule is:
+
+\begin{equation}
+\dfrac{\partial}{\partial \theta}g(x(\theta), \theta) = \dfrac{\partial g}{\partial x}\dfrac{\partial x}{\partial \theta} + \dfrac{\partial g}{\partial\theta}
+\end{equation}
+
+We can use some additional tricks, such as enforcing that for all ergodic systems, the time averaged observable must be equal to the ensemble averaged observable. The exact method is that we use reservoir sampling to draw from the time average, and the last time slice of a replica simulation to generate the ensemble average.
+
+\end{document}
