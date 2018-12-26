@@ -5,6 +5,16 @@ import force
 from constants import BOLTZ
 import integrator
 
+# static long long estimate_steps_to_converge(float coeff_a) {
+#   double epsilon = 1e-8;
+#   return static_cast<long long>(log(epsilon)/log(coeff_a)+1);
+# };
+
+# static long long estimate_steps_to_converge(double coeff_a) {
+#   double epsilon = 1e-16;
+#   return static_cast<long long>(log(epsilon)/log(coeff_a)+1);
+# };
+
 class ReferenceLangevinIntegrator():
 
     def __init__(self, masses, dt=0.0025, friction=1.0, temp=300.0, disable_noise=False):
@@ -37,7 +47,6 @@ class ReferenceLangevinIntegrator():
         noise = tf.cast(noise, dtype=grads.dtype)
 
         if self.disable_noise:
-            print("disabling noise")
             noise = tf.zeros(noise.shape, dtype=grads.dtype)
 
         # grads shape: [N x 3]
@@ -51,10 +60,65 @@ class ReferenceLangevinIntegrator():
 class TestLangevinIntegrator(unittest.TestCase):
 
 
-    # def test_buffer(self):
+    def tearDown(self):
+        # (ytz): needed to clear variables
+        tf.reset_default_graph()
 
+    def test_converged_zetas(self):
+        """
+        Unittest for ensuring that our converged buffers are working correctly.
+        """
+        masses = np.array([1.0, 12.0])
+        friction = 10.0
+        dt = 0.08
+        temp = 300.0
+        x_ph = tf.placeholder(dtype=tf.float64, shape=(2, 3))
+        x0 = np.array([
+            [1.0, 0.5, -0.5],
+            [0.2, 0.1, -0.3]
+        ], dtype=np.float64)
+
+        hb = force.HarmonicBondForce()
+
+        num_steps = 100 # with a temp of 10.0 should converge really quickly
+
+        with tf.variable_scope("reference"):
+            ref_intg = integrator.LangevinIntegrator(
+                masses, len(hb.params()), dt, friction, temp, disable_noise=True)
+            # ref_intg.vscale = 0.45 -> so we should converge fully to 16 decimals after 47 steps
+
+        with tf.variable_scope("test"):
+            test_intg = integrator.LangevinIntegrator(
+                masses, len(hb.params()), dt, friction, temp, disable_noise=True, buffer_size=50)
+            # , buffer_size=50)
+
+        ref_dx, ref_dxdps = ref_intg.step(x_ph, [hb])
+        test_dx, test_dxdps = test_intg.step(x_ph, [hb])
+
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
+
+        x_ref = x0
+        x_test = x0
+        for step in range(num_steps):
+
+            ref_dx_val, ref_dxdp_val = sess.run([ref_dx, ref_dxdps], feed_dict={x_ph: x_ref})
+            test_dx_val, test_dxdp_val = sess.run([test_dx, test_dxdps], feed_dict={x_ph: x_test})
+
+            np.testing.assert_array_almost_equal(ref_dx_val, test_dx_val, decimal=14)
+            np.testing.assert_array_almost_equal(ref_dxdp_val, test_dxdp_val, decimal=14)
+
+            x_ref += ref_dx_val
+            x_test += test_dx_val
+
+
+
+        
 
     def test_five_steps(self):
+        """
+        Unit test for ensuring that the reference implementation works.
+        """
         masses = np.array([1.0, 12.0])
         friction = 10.0
         dt = 0.003

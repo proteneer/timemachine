@@ -39,6 +39,8 @@ class LangevinIntegrator():
         self.sqrtInvMasses = np.sqrt(self.invMasses)
 
         self.ca = tf.cast(self.vscale, dtype=precision)
+
+
         self.cbs = []
         for m in masses:
             self.cbs.append((self.fscale*self.dt)/m)
@@ -47,12 +49,10 @@ class LangevinIntegrator():
         self.cbs = tf.reshape(self.cbs, shape=(1, -1, 1))
 
         if buffer_size is None:
-            self.steps_to_converge = 4000 # guestimate later
-        else:
-            self.steps_to_converge = buffer_size
+            buffer_size = 4000 # guestimate later
 
         # pre-compute scaled prefactors once at the beginning
-        self.scale = (1-tf.pow(self.ca, tf.range(self.steps_to_converge, dtype=precision)+1))/(1-self.ca)
+        self.scale = (1-tf.pow(self.ca, tf.range(buffer_size, dtype=precision)+1))/(1-self.ca)
         self.scale = tf.reverse(self.scale, [0])
         self.scale = tf.reshape(self.scale, (-1, 1, 1, 1))
 
@@ -76,7 +76,7 @@ class LangevinIntegrator():
         # buffer for unconverged zetas
         self.buffer_zetas = tf.get_variable(
             "buffer_zetas",
-            shape=(self.steps_to_converge, self.num_params, self.num_atoms, 3),
+            shape=(buffer_size, self.num_params, self.num_atoms, 3),
             dtype=precision,
             initializer=tf.initializers.zeros)
 
