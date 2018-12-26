@@ -12,16 +12,15 @@ class LangevinIntegrator():
         friction=1.0,
         temp=300.0,
         precision=tf.float64,
-        disable_noise=False):
+        disable_noise=False,
+        buffer_size=None):
         """
         Langevin Integrator
 
-        This is a mirror implementation of ReferenceStochasticDynamics.cpp from OpenMM
-
+        This is inspired by ReferenceStochasticDynamics.cpp from OpenMM.
 
         """
         self.dt = dt
-        
         self.friction = friction # dissipation (how fast we forget)
         self.temperature = temp  # temperature
 
@@ -42,43 +41,49 @@ class LangevinIntegrator():
         self.ca = tf.cast(self.vscale, dtype=precision)
         self.cbs = []
         for m in masses:
-            # should there be a negative sign?
-            self.cbs.append((self.fscale)/m)
-        print("SELF CBS", self.cbs)
+            self.cbs.append((self.fscale*self.dt)/m)
+
         self.cbs = tf.convert_to_tensor(self.cbs, dtype=precision)
         self.cbs = tf.reshape(self.cbs, shape=(1, -1, 1))
-        self.steps_to_converge = 4000 # guestimate later
+
+        if buffer_size is None:
+            self.steps_to_converge = 4000 # guestimate later
+        else:
+            self.steps_to_converge = buffer_size
 
         # pre-compute scaled prefactors once at the beginning
         self.scale = (1-tf.pow(self.ca, tf.range(self.steps_to_converge, dtype=precision)+1))/(1-self.ca)
         self.scale = tf.reverse(self.scale, [0])
         self.scale = tf.reshape(self.scale, (-1, 1, 1, 1))
 
+        self.num_atoms = len(masses)
+        self.num_params = num_params
 
-        num_atoms = 2
+        # buffer for accumulated velocities
         self.v_t = tf.get_variable(
             "buffer_velocity",
-            shape=(num_atoms, 3),
+            shape=(self.num_atoms, 3),
             dtype=precision,
             initializer=tf.initializers.zeros)
 
+        # buffer for current step's dxdp
         self.dxdp_t = tf.get_variable(
             "buffer_dxdp",
-            shape=(num_params, num_atoms, 3),
+            shape=(self.num_params, self.num_atoms, 3),
             dtype=precision,
             initializer=tf.initializers.zeros)
 
         # buffer for unconverged zetas
         self.buffer_zetas = tf.get_variable(
             "buffer_zetas",
-            shape=(self.steps_to_converge, num_params, num_atoms, 3),
+            shape=(self.steps_to_converge, self.num_params, self.num_atoms, 3),
             dtype=precision,
             initializer=tf.initializers.zeros)
 
         # buffer for converged zetas
         self.converged_zetas = tf.get_variable(
             "converged_zetas",
-            shape=(num_params, num_atoms, 3),
+            shape=(self.num_params, self.num_atoms, 3),
             dtype=precision,
             initializer=tf.initializers.zeros)
 
@@ -101,11 +106,13 @@ class LangevinIntegrator():
         grads = tf.reduce_sum(gs, axis=0)
         hessians = tf.reduce_sum(hs, axis=0)
 
-        num_atoms = 2
         num_dims = 3
+        num_atoms = self.num_atoms
 
-        noise = 0
-        # noise = self.normal.sample((num_atoms, num_dims))
+        if self.disable_noise:
+            noise = 0
+        else:
+            noise = self.normal.sample((num_atoms, num_dims))
 
         new_v_t = self.vscale*self.v_t - self.fscale*self.invMasses*grads + self.nscale*self.sqrtInvMasses*noise
         self.v_t = tf.assign(self.v_t, new_v_t)
@@ -115,9 +122,9 @@ class LangevinIntegrator():
 
         # The Algorithm:
 
-        # 1. Given starting geometry and velocity x_t and v_t, dxdp_{t-1}, zetas_[0, t)
+        # 1. Given starting geometry and velocity x_t, v_t, dxdp_t, zetas_[0, t)
         # 2. Compute grads, hessians, and mixed partials: g_t, h_t, mp_t
-        # 3. Using previous zetas_[0, t), first compute dxdp_t and then use h_t, mp_t, dxdp_t to compute zeta_t, appending
+        # 3. Using previous zetas_[0, t), first compute zeta_t for time t using h_t, mp_t, dxdp_t to compute zeta_t, appending
         #    zeta_t to list of zetas
         # 4. Return new geometry and dxdp
 
@@ -165,15 +172,12 @@ class LangevinIntegrator():
             new_dxdp_t = self.buffer_zetas * self.scale
             new_dxdp_t = tf.reduce_sum(new_dxdp_t, axis=0)
             new_dxdp_t += self.converged_zetas * self.scale[0][0][0][0]
-
-            new_dxdp_t *= -self.cbs * self.dt
+            new_dxdp_t *= -self.cbs
 
             self.dxdp_t = tf.assign(self.dxdp_t, new_dxdp_t)
 
-            # note we *MUST* return self.dxdp_t for this not to have a dependency hell
-            return dx, self.dxdp_t, contraction, self.buffer_zetas
-            # -self.cbs * self.dt *(tf.reduce_sum(self.buffer_zetas * self.scale, axis=0) + self.converged_zetas * self.scale[0][0][0][0])
-            # return dx, new_dxdp_t, self.scale, self.buffer_zetas
+            # (ytz): note we *MUST* return self.dxdp_t for this not to have a dependency hell
+            return dx, self.dxdp_t
 
 if __name__ == "__main__":
 

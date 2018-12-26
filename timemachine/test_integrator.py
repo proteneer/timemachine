@@ -50,19 +50,20 @@ class ReferenceLangevinIntegrator():
 
 class TestLangevinIntegrator(unittest.TestCase):
 
-    # def test_gradient_descent():
 
-    # def test_slow_convergence():
+    # def test_buffer(self):
+
 
     def test_five_steps(self):
         masses = np.array([1.0, 12.0])
         friction = 10.0
         dt = 0.003
         temp = 300.0
-
         x_ph = tf.placeholder(dtype=tf.float64, shape=(2, 3))
-        
-        x0 = np.array([[1.0, 0.5, -0.5], [0.2, 0.1, -0.3]], dtype=np.float64)
+        x0 = np.array([
+            [1.0, 0.5, -0.5],
+            [0.2, 0.1, -0.3]
+        ], dtype=np.float64)
 
         hb = force.HarmonicBondForce()
         ref_intg = ReferenceLangevinIntegrator(masses, dt, friction, temp, disable_noise=True)
@@ -70,39 +71,34 @@ class TestLangevinIntegrator(unittest.TestCase):
         num_steps = 4
 
         x = x_ph
-        all_tmps = []
 
         for step in range(num_steps):
             grads = hb.gradients(x)
-            mixed_partials = hb.mixed_partials(x)
-            all_tmps.append(mixed_partials)
             dx = ref_intg.step(grads)
             x += dx
 
         ref_dxdp = tf.gradients(x, hb.params())
         test_intg = integrator.LangevinIntegrator(masses, len(hb.params()), dt, friction, temp, disable_noise=True)
 
-        dx, dxdps, gs, tmp = test_intg.step(x_ph, [hb])
+        dx, dxdps = test_intg.step(x_ph, [hb])
         dxdps = tf.reduce_sum(dxdps, axis=[1,2])
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
 
-        obs_x, obs_dxdp, g0 = sess.run([x, ref_dxdp, all_tmps[0]], feed_dict={x_ph: x0})
-
-        print("mp_ref", g0, "obs_x", obs_x)
+        obs_x, obs_dxdp = sess.run([x, ref_dxdp], feed_dict={x_ph: x0})
 
         x = x0
 
         for step in range(num_steps):
-            dx_val, dxdp_val, gs_val, tmp_val = sess.run([dx, dxdps, gs, tmp], feed_dict={x_ph: x})
-            print("contraction", gs_val)
+            dx_val, dxdp_val = sess.run([dx, dxdps], feed_dict={x_ph: x})
             x += dx_val
 
         test_dxdp = dxdp_val
+        test_x = x
 
-        print(obs_x, x)
-        print(obs_dxdp, test_dxdp) # relative ratios are correct
+        np.testing.assert_array_almost_equal(obs_x, test_x, decimal=14)
+        np.testing.assert_array_almost_equal(obs_dxdp, test_dxdp, decimal=14)
 
 
 if __name__ == "__main__":
