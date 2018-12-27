@@ -6,42 +6,50 @@ from timemachine import force
 from timemachine.constants import BOLTZ
 from timemachine import integrator
 
-class TestMinimization(unittest.TestCase):
+class TestOptimization(unittest.TestCase):
 
     def tearDown(self):
         tf.reset_default_graph()
 
-    def test_linear_chain(self):
+    def test_water(self):
         """
-        Test stability of a linear HCN molecule.
+        Testing optimization of forcefield parameters so that an non-equilibriated OH2 can minimize into the correct condensed phase angle.
         """
-        masses = np.array([6.0, 7.0, 1.0])
+        masses = np.array([8.0, 1.0, 1.0])
         x0 = np.array([
-            [-0.0055,    0.0000,   -0.0349], # C
-            [-1.0973,    0.0000,    0.3198], # N
-            [ 1.1213,    1.1250,   -0.3198]  # H 
-        ], dtype=np.float64)
+            [-0.0070, -0.0100, 0.0000],
+            [-1.1426,  0.5814, 0.0000],
+            [ 0.4728, -0.2997, 0.0000],
+        ], dtype=np.float64) # starting geometry
+
+        x_opt = np.array([
+            [-0.0070, -0.0100, 0.0000],
+            [-0.1604,  0.4921, 0.0000],
+            [ 0.5175,  0.0128, 0.0000],
+        ], dtype=np.float64) # idealized geometry
+
+        bonds = x_opt - x_opt[0, :]
+        bond_lengths = np.linalg.norm(bonds[1:, :], axis=1)
 
         num_atoms = len(masses)
 
+        starting_bond = 0.8 # Guessestimate starting
+        starting_angle = 2.1 # Guessestimate ending
+
         bond_params = [
-            tf.get_variable("HC_kb", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(100.0)),
-            tf.get_variable("HC_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(1.0)),
-            tf.get_variable("CN_kb", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(120.0)),
-            tf.get_variable("CN_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(1.2)),
+            tf.get_variable("OH_kb", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(100.0)),
+            tf.get_variable("OH_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_bond)),
         ]
 
         hb = force.HarmonicBondForce(
             params=bond_params,
             bond_idxs=np.array([[0,1],[0,2]], dtype=np.int32),
-            param_idxs=np.array([[2,3],[0,1]], dtype=np.int32)
+            param_idxs=np.array([[0,1],[0,1]], dtype=np.int32)
         )
 
-        ideal_angle = np.pi
-
         angle_params = [
-            tf.get_variable("HCN_ka", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(75.0)),
-            tf.get_variable("HCN_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(ideal_angle)),
+            tf.get_variable("HOH_ka", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(75.0)),
+            tf.get_variable("HOH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_angle)),
         ]
 
         ha = force.HarmonicAngleForce(
@@ -51,118 +59,74 @@ class TestMinimization(unittest.TestCase):
         )
 
         friction = 10.0
-        dt = 0.05
-        temp = 300.0
-
-        intg = integrator.LangevinIntegrator(
-            masses, [hb, ha], dt, friction, temp, disable_noise=True)
-
-        x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
-        dx_op, dxdp_op = intg.step(x_ph)
-
-        num_steps = 400
-
-        sess = tf.Session()
-        sess.run(tf.initializers.global_variables())
-
-        x = x0
-
-        for step in range(num_steps):
-            print(step, x)
-            dx_val, dxdp_val = sess.run([dx_op, dxdp_op], feed_dict={x_ph: x})
-            x += dx_val
-
-        # test idealized bond distances
-        bonds = x - x[0, :]
-        bond_lengths = np.linalg.norm(bonds[1:, :], axis=1)
-        np.testing.assert_almost_equal(bond_lengths, np.array([1.2, 1.0]), decimal=4)
-
-        cj = np.take(x, ha.angle_idxs[:, 0], axis=0)
-        ci = np.take(x, ha.angle_idxs[:, 1], axis=0)
-        ck = np.take(x, ha.angle_idxs[:, 2], axis=0)
-        vij = cj - ci
-        vik = ck - ci
-
-        top = np.sum(vij * vik, -1)
-        bot = np.linalg.norm(vij, axis=-1)*np.linalg.norm(vik, axis=-1)
-        angles = np.arccos(top/bot)
-
-        np.testing.assert_almost_equal(angles, np.array([ideal_angle]*1), decimal=2)
-
-    def test_methane(self):
-        """
-        Testing minimization of methane to forcefield geometries.
-        """
-        masses = np.array([6.0, 1.0, 1.0, 1.0, 1.0])
-        x0 = np.array([
-            [ 0.0637,   0.0126,   0.2203],
-            [ 1.0573,  -0.2011,   1.2864],
-            [ 2.3928,   1.2209,  -0.2230],
-            [-0.6891,   1.6983,   0.0780],
-            [-0.6312,  -1.6261,  -0.2601]
-        ], dtype=np.float64)
-
-        num_atoms = len(masses)
-
-        bond_params = [
-            tf.get_variable("HH_kb", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(100.0)),
-            tf.get_variable("HH_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(1.0)),
-        ]
-
-        hb = force.HarmonicBondForce(
-            params=bond_params,
-            bond_idxs=np.array([[0,1],[0,2],[0,3],[0,4]], dtype=np.int32),
-            param_idxs=np.array([[0,1],[0,1],[0,1],[0,1]], dtype=np.int32)
-        )
-
-        ideal_angle = 1.9111355
-
-        angle_params = [
-            tf.get_variable("HCH_ka", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(75.0)),
-            tf.get_variable("HCH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(ideal_angle)),
-        ]
-
-        ha = force.HarmonicAngleForce(
-            params=angle_params,
-            angle_idxs=np.array([[1,0,2],[1,0,3],[1,0,4],[2,0,3],[2,0,4],[3,0,4]], dtype=np.int32),
-            param_idxs=np.array([[0,1],[0,1],[0,1],[0,1],[0,1],[0,1]], dtype=np.int32)
-        )
-
-        friction = 10.0
         dt = 0.005
         temp = 300.0
 
         intg = integrator.LangevinIntegrator(
-            masses, [hb, ha], dt, friction, temp, disable_noise=True)
+            masses, [hb, ha], dt, friction, temp, disable_noise=True, buffer_size=400)
 
         x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
         dx_op, dxdp_op = intg.step(x_ph)
 
-        num_steps = 1000
+        num_steps = 500
+
+        param_optimizer = tf.train.AdamOptimizer(0.02)
+
+        d0_ph = tf.placeholder(shape=tuple(), dtype=tf.float64)
+        d1_ph = tf.placeholder(shape=tuple(), dtype=tf.float64)
+        d2_ph = tf.placeholder(shape=tuple(), dtype=tf.float64)
+        d3_ph = tf.placeholder(shape=tuple(), dtype=tf.float64)
+
+        grads_and_vars = []
+        for dp, var in zip([d0_ph, d1_ph, d2_ph, d3_ph], bond_params+angle_params):
+            grads_and_vars.append((dp, var))
+
+        train_op = param_optimizer.apply_gradients(grads_and_vars)
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
 
-        x = x0
+        num_epochs = 75
 
-        for step in range(num_steps):
-            dx_val, dxdp_val = sess.run([dx_op, dxdp_op], feed_dict={x_ph: x})
-            x += dx_val
+        def loss(pred_x):
 
-        # test idealized bond distances
-        bonds = x - x[0, :]
-        bond_lengths = np.linalg.norm(bonds[1:, :], axis=1)
-        np.testing.assert_almost_equal(bond_lengths, np.array([1.0]*4), decimal=4)
+            # Compute pairwise distances
+            def dij(x):
+                v01 = x[0]-x[1]
+                v02 = x[0]-x[2]
+                v12 = x[1]-x[2]
+                return tf.stack([tf.norm(v01), tf.norm(v02), tf.norm(v12)])
 
-        cj = np.take(x, ha.angle_idxs[:, 0], axis=0)
-        ci = np.take(x, ha.angle_idxs[:, 1], axis=0)
-        ck = np.take(x, ha.angle_idxs[:, 2], axis=0)
-        vij = cj - ci
-        vik = ck - ci
+            return tf.norm(dij(x_opt) - dij(pred_x)) # wait... this is an absolute difference, not realtive!
 
-        top = np.sum(vij * vik, -1)
-        bot = np.linalg.norm(vij, axis=-1)*np.linalg.norm(vik, axis=-1)
-        angles = np.arccos(top/bot)
+        x_obs_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
+        dLdx = tf.gradients(loss(x_obs_ph), x_obs_ph)
 
-        np.testing.assert_almost_equal(angles, np.array([ideal_angle]*6), decimal=2)
+        for e in range(num_epochs):
+            print("starting epoch", e, "current params", sess.run(bond_params+angle_params))
+            x = x0  
+            intg.reset(sess) # clear buffers
+            for step in range(num_steps):
+                dx_val, dxdp_val = sess.run([dx_op, dxdp_op], feed_dict={x_ph: x})
+                x += dx_val
 
+            dxdp_val = np.array(dxdp_val)
+            dLdx_val = np.array(sess.run(dLdx, feed_dict={x_obs_ph: x}))
+
+            dLdp = np.multiply(dLdx_val, dxdp_val)
+            reduced_dLdp = np.sum(dLdp, axis=(1,2))
+
+            # this creates new nodes in the graph
+            sess.run(train_op, feed_dict={
+                d0_ph: reduced_dLdp[0],
+                d1_ph: reduced_dLdp[1],
+                d2_ph: reduced_dLdp[2],
+                d3_ph: reduced_dLdp[3],
+            })
+
+        params = sess.run(bond_params+angle_params)
+        np.testing.assert_almost_equal(params[1], 0.52, decimal=2)
+        np.testing.assert_almost_equal(params[3], 1.81, decimal=1)
+           
+if __name__ == "__main__":
+    unittest.main()

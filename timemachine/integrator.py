@@ -60,34 +60,49 @@ class LangevinIntegrator():
         self.num_params = sum([len(e.get_params()) for e in energies])
         
 
-        # buffer for accumulated velocities
-        self.v_t = tf.get_variable(
+        self.v_t_var = tf.get_variable(
             "buffer_velocity",
             shape=(self.num_atoms, 3),
             dtype=precision,
             initializer=tf.initializers.zeros)
 
         # buffer for current step's dxdp
-        self.dxdp_t = tf.get_variable(
+        self.dxdp_t_var = tf.get_variable(
             "buffer_dxdp",
             shape=(self.num_params, self.num_atoms, 3),
             dtype=precision,
             initializer=tf.initializers.zeros)
 
         # buffer for unconverged zetas
-        self.buffer_zetas = tf.get_variable(
+        self.buffer_zetas_var = tf.get_variable(
             "buffer_zetas",
             shape=(buffer_size, self.num_params, self.num_atoms, 3),
             dtype=precision,
             initializer=tf.initializers.zeros)
 
         # buffer for converged zetas
-        self.converged_zetas = tf.get_variable(
+        self.converged_zetas_var = tf.get_variable(
             "converged_zetas",
             shape=(self.num_params, self.num_atoms, 3),
             dtype=precision,
             initializer=tf.initializers.zeros)
 
+        # buffer for accumulated velocities
+        self.v_t = self.v_t_var
+        self.dxdp_t = self.dxdp_t_var
+        self.buffer_zetas = self.buffer_zetas_var
+        self.converged_zetas = self.converged_zetas_var
+
+    def reset(self, session):
+        """
+        Reset the state of the integrator using a session.
+        """
+        session.run([
+            self.v_t_var.initializer,
+            self.dxdp_t_var.initializer,
+            self.buffer_zetas_var.initializer,
+            self.converged_zetas_var.initializer
+        ])
 
     def step(self, x_t):
         """
