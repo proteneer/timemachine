@@ -7,7 +7,7 @@ class LangevinIntegrator():
 
     def __init__(self,
         masses,
-        num_params,
+        energies,
         dt=0.0025,
         friction=1.0,
         temp=300.0,
@@ -39,8 +39,6 @@ class LangevinIntegrator():
         self.sqrtInvMasses = np.sqrt(self.invMasses)
 
         self.ca = tf.cast(self.vscale, dtype=precision)
-
-
         self.cbs = []
         for m in masses:
             self.cbs.append((self.fscale*self.dt)/m)
@@ -57,7 +55,10 @@ class LangevinIntegrator():
         self.scale = tf.reshape(self.scale, (-1, 1, 1, 1))
 
         self.num_atoms = len(masses)
-        self.num_params = num_params
+        self.energies = energies
+
+        self.num_params = sum([len(e.get_params()) for e in energies])
+        
 
         # buffer for accumulated velocities
         self.v_t = tf.get_variable(
@@ -88,7 +89,7 @@ class LangevinIntegrator():
             initializer=tf.initializers.zeros)
 
 
-    def step(self, x_t, energies):
+    def step(self, x_t):
         """
         Advance x_t in to x_{t+1}
         """
@@ -97,7 +98,7 @@ class LangevinIntegrator():
         gs = []
         hs = []
         es = []
-        for e in energies:
+        for e in self.energies:
             es.append(e.energy(x_t))
             gs.append(e.gradients(x_t))
             hs.append(e.hessians(x_t))
@@ -132,7 +133,7 @@ class LangevinIntegrator():
         # This uses only [0, t) and doesn't require zeta of the current step
 
         mixed_partials = []
-        for e in energies:
+        for e in self.energies:
             mp = e.mixed_partials(x_t)
             mixed_partials.extend(mp)
 

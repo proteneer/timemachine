@@ -10,6 +10,9 @@ class ConservativeForce():
         raise NotImplementedError("Abstract base class")
 
     def energy(self, conf):
+        """
+        Computes a scalar energy given a geometry.
+        """
         raise NotImplementedError("Abstract base class")
 
     def gradients(self, conf):
@@ -30,6 +33,63 @@ class ConservativeForce():
             mps.extend(tf.gradients(tf.gradients(energy, p), conf))
         return mps
 
+class HarmonicAngleEnergy(ConservativeForce):
+
+    def __init__(self,
+        params,
+        angle_idxs,
+        param_idxs,
+        precision=tf.float64):
+        """
+        This implements a cosine angle potential: V(t) = K(cos(t) - cos(t0))^2. Note
+        that it is different from classic expressions 
+
+
+        Parameters:
+        -----------
+        params: list of tf.Variables
+            an opaque array of parameters used by param_idxs for indexing into
+
+        angle_idxs: [num_angles, 3] np.array
+            each element (a, b, c) is a unique bond in the conformation. The angle is defined
+            as between the two vectors a-b and c-b
+
+        param_idxs: [num_angles, 2] np.array
+            each element (k_idx, t_idx) maps into params for angle constants and ideal lengths
+
+        """
+        self.params = params
+        self.angle_idxs = angle_idxs
+        self.param_idxs = param_idxs
+
+    def energy(self, mol_graph, geometries):
+        """
+        Compute the harmonic bond energy given a collection of molecules.
+        """
+        angle_idxs = mol_graph.get_angle_idxs() # num_angles, 3
+
+        # todo: cache
+        gidxs = generate_gather_nd_idxs(angle_idxs, geometries.shape[0])
+
+        angle_coords = tf.gather_nd(geometries, gidxs) # batch_size, num_angles, 3, 3
+
+        cj = angle_coords[:, :, 0, :]
+        ci = angle_coords[:, :, 1, :]
+        ck = angle_coords[:, :, 2, :]
+        vij = cj - ci
+        vik = ck - ci
+
+        top = tf.reduce_sum(tf.multiply(vij, vik), -1)
+        bot = tf.norm(vij, axis=-1)*tf.norm(vik, axis=-1)
+
+         # 0.975 is to prevent numerical issues for molecules like HC#N
+         # we should never have zero angles.
+        cos_angles = 0.975*(top/bot)
+        angle = tf.acos(cos_angles)
+
+        energies = self.ka/2*tf.pow(cos_angles - tf.cos(self.t0), 2)
+        return tf.reduce_sum(energies, -1)  # reduce over all angles
+
 
 class HarmonicBondForce(ConservativeForce):
 
@@ -44,10 +104,10 @@ class HarmonicBondForce(ConservativeForce):
 
         Parameters:
         -----------
-        params: list of tf.Variable
-            an opaque array of parameters used by kb_idxs and r0_idxs for indexing
+        params: list of tf.Variables
+            an opaque array of parameters used by param_idxs for indexing into
 
-        bonds: [num_bonds, 2] np.array
+        bond_idxs: [num_bonds, 2] np.array
             each element (src, dst) is a unique bond in the conformation
 
         param_idxs: [num_bonds, 2] np.array
@@ -58,36 +118,10 @@ class HarmonicBondForce(ConservativeForce):
         self.bond_idxs = bond_idxs
         self.param_idxs = param_idxs
 
-
-
-
-        # todo: cache
-
-        # bond_coords = tf.gather_nd(geometries, gidxs) # batch_size, num_angles, 3, 3
-
-        # ci = bond_coords[:, :, 1, :]
-        # cj = bond_coords[:, :, 0, :]
-        # cij = cj - ci
-        # dij = tf.norm(cij, axis=-1)
-
-        # energies = (self.kb/2)*tf.pow(dij - self.r0, 2)
-
-        # return tf.reduce_sum(energies, -1) # reduce over atoms
-
-        # self.kbs = []
-        # self.r0s = []
-
-        # bond_type = [(6.0, 5.0)]
-
-        # self.kb = tf.get_variable("kb", shape=tuple(), dtype=precision, initializer=tf.constant_initializer(10.0))
-        # self.r0 = tf.get_variable("r0", shape=tuple(), dtype=precision, initializer=tf.constant_initializer(1.2))
-        # self.b0 = tf.get_variable("b0", shape=tuple(), dtype=precision, initializer=tf.constant_initializer(0.0))
-
     def get_params(self):
         return self.params
 
-    def energy(self, conf):
-
+    def energy(self, conf):    
         ci = tf.gather(conf, self.bond_idxs[:, 0])
         cj = tf.gather(conf, self.bond_idxs[:, 1])
 
