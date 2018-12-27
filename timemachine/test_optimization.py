@@ -33,8 +33,8 @@ class TestOptimization(unittest.TestCase):
 
         num_atoms = len(masses)
 
-        starting_bond = 0.8 # Guessestimate starting
-        starting_angle = 2.1 # Guessestimate ending
+        starting_bond = 0.8 # Guessestimate starting (true x_opt: 0.52)
+        starting_angle = 2.1 # Guessestimate ending (true x_opt: 1.81)
 
         bond_params = [
             tf.get_variable("OH_kb", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(100.0)),
@@ -97,7 +97,7 @@ class TestOptimization(unittest.TestCase):
                 v12 = x[1]-x[2]
                 return tf.stack([tf.norm(v01), tf.norm(v02), tf.norm(v12)])
 
-            return tf.norm(dij(x_opt) - dij(pred_x)) # wait... this is an absolute difference, not realtive!
+            return tf.norm(dij(x_opt) - dij(pred_x))
 
         x_obs_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
         dLdx = tf.gradients(loss(x_obs_ph), x_obs_ph)
@@ -105,7 +105,7 @@ class TestOptimization(unittest.TestCase):
         for e in range(num_epochs):
             print("starting epoch", e, "current params", sess.run(bond_params+angle_params))
             x = x0  
-            intg.reset(sess) # clear buffers
+            intg.reset(sess) # clear integration buffers
             for step in range(num_steps):
                 dx_val, dxdp_val = sess.run([dx_op, dxdp_op], feed_dict={x_ph: x})
                 x += dx_val
@@ -116,7 +116,6 @@ class TestOptimization(unittest.TestCase):
             dLdp = np.multiply(dLdx_val, dxdp_val)
             reduced_dLdp = np.sum(dLdp, axis=(1,2))
 
-            # this creates new nodes in the graph
             sess.run(train_op, feed_dict={
                 d0_ph: reduced_dLdp[0],
                 d1_ph: reduced_dLdp[1],
