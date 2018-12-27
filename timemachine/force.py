@@ -7,7 +7,8 @@ class ConservativeForce():
 
 
     def get_params(self):
-        raise NotImplementedError("Abstract base class")
+        return self.params
+        # raise NotImplementedError("Abstract base class")
 
     def energy(self, conf):
         """
@@ -24,6 +25,7 @@ class ConservativeForce():
         energy = self.energy(conf)
         return tf.hessians(energy, conf)[0]
 
+
     def mixed_partials(self, conf):
         # the order here matters since we're computing gradients and not
         # jacobians, otherwise they get reduced.
@@ -33,7 +35,7 @@ class ConservativeForce():
             mps.extend(tf.gradients(tf.gradients(energy, p), conf))
         return mps
 
-class HarmonicAngleEnergy(ConservativeForce):
+class HarmonicAngleForce(ConservativeForce):
 
     def __init__(self,
         params,
@@ -41,8 +43,7 @@ class HarmonicAngleEnergy(ConservativeForce):
         param_idxs,
         precision=tf.float64):
         """
-        This implements a cosine angle potential: V(t) = K(cos(t) - cos(t0))^2. Note
-        that it is different from classic expressions 
+        This implements a cosine angle potential: V(t) = K(cos(t - t0))^2. 
 
 
         Parameters:
@@ -62,20 +63,17 @@ class HarmonicAngleEnergy(ConservativeForce):
         self.angle_idxs = angle_idxs
         self.param_idxs = param_idxs
 
-    def energy(self, mol_graph, geometries):
+    def energy(self, conf):
         """
         Compute the harmonic bond energy given a collection of molecules.
         """
-        angle_idxs = mol_graph.get_angle_idxs() # num_angles, 3
+        cj = tf.gather(conf, self.angle_idxs[:, 0])
+        ci = tf.gather(conf, self.angle_idxs[:, 1])
+        ck = tf.gather(conf, self.angle_idxs[:, 2])
 
-        # todo: cache
-        gidxs = generate_gather_nd_idxs(angle_idxs, geometries.shape[0])
+        kas = tf.gather(self.params, self.param_idxs[:, 0])
+        a0s = tf.gather(self.params, self.param_idxs[:, 1])
 
-        angle_coords = tf.gather_nd(geometries, gidxs) # batch_size, num_angles, 3, 3
-
-        cj = angle_coords[:, :, 0, :]
-        ci = angle_coords[:, :, 1, :]
-        ck = angle_coords[:, :, 2, :]
         vij = cj - ci
         vik = ck - ci
 
@@ -84,10 +82,10 @@ class HarmonicAngleEnergy(ConservativeForce):
 
          # 0.975 is to prevent numerical issues for molecules like HC#N
          # we should never have zero angles.
-        cos_angles = 0.975*(top/bot)
+        cos_angles = 0.98*(top/bot)
         angle = tf.acos(cos_angles)
 
-        energies = self.ka/2*tf.pow(cos_angles - tf.cos(self.t0), 2)
+        energies = kas/2*tf.pow(angle - a0s, 2)
         return tf.reduce_sum(energies, -1)  # reduce over all angles
 
 
@@ -118,8 +116,8 @@ class HarmonicBondForce(ConservativeForce):
         self.bond_idxs = bond_idxs
         self.param_idxs = param_idxs
 
-    def get_params(self):
-        return self.params
+    # def get_params(self):
+        # return self.params
 
     def energy(self, conf):    
         ci = tf.gather(conf, self.bond_idxs[:, 0])

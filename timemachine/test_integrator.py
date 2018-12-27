@@ -96,7 +96,7 @@ class TestLangevinIntegrator(unittest.TestCase):
 
     def test_converged_zetas(self):
         """
-        Unittest for ensuring that our converged buffers are working correctly.
+        Testing convergence of zetas.
         """
 
         friction = 10.0
@@ -141,7 +141,7 @@ class TestLangevinIntegrator(unittest.TestCase):
 
     def test_five_steps(self):
         """
-        Unit test for ensuring that the reference implementation works.
+        Testing against reference implementation.
         """
         friction = 10.0
         dt = 0.003
