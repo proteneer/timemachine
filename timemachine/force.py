@@ -8,7 +8,6 @@ class ConservativeForce():
 
     def get_params(self):
         return self.params
-        # raise NotImplementedError("Abstract base class")
 
     def energy(self, conf):
         """
@@ -116,9 +115,6 @@ class HarmonicBondForce(ConservativeForce):
         self.bond_idxs = bond_idxs
         self.param_idxs = param_idxs
 
-    # def get_params(self):
-        # return self.params
-
     def energy(self, conf):    
         ci = tf.gather(conf, self.bond_idxs[:, 0])
         cj = tf.gather(conf, self.bond_idxs[:, 1])
@@ -127,6 +123,7 @@ class HarmonicBondForce(ConservativeForce):
 
         kbs = tf.gather(self.params, self.param_idxs[:, 0])
         r0s = tf.gather(self.params, self.param_idxs[:, 1])
+
 
         energy = tf.reduce_sum(kbs*tf.pow(dij - r0s, 2.0))
         return energy
