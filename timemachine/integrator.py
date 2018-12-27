@@ -102,9 +102,9 @@ class LangevinIntegrator():
             gs.append(e.gradients(x_t))
             hs.append(e.hessians(x_t))
 
-        tot_e = tf.reduce_sum(es)
-        grads = tf.reduce_sum(gs, axis=0)
-        hessians = tf.reduce_sum(hs, axis=0)
+        tot_e = tf.reduce_sum(tf.stack(es))
+        grads = tf.reduce_sum(tf.stack(gs), axis=0)
+        hessians = tf.reduce_sum(tf.stack(hs), axis=0)
 
         num_dims = 3
         num_atoms = self.num_atoms
