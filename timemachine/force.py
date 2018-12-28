@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.python.ops.parallel_for.gradients import jacobian
 
 class ConservativeForce():
     """
@@ -24,15 +25,18 @@ class ConservativeForce():
         energy = self.energy(conf)
         return tf.hessians(energy, conf)[0]
 
-
     def mixed_partials(self, conf):
-        # the order here matters since we're computing gradients and not
-        # jacobians, otherwise they get reduced.
-        mps = []
         energy = self.energy(conf)
-        for p in self.get_params():
-            mps.extend(tf.gradients(tf.gradients(energy, p), conf))
-        return mps
+        params = self.get_params()
+        dEdp = tf.stack(tf.gradients(energy, params))
+        return jacobian(dEdp, conf, use_pfor=False) # use_pfor doesn't work with SparseTensors
+
+        # (ytz) TODO: saving an old copy for pedagogy
+        # mps = []
+        # energy = self.energy(conf)
+        # for p in self.get_params():
+        #     mps.extend(tf.gradients(tf.gradients(energy, p), conf))
+        # return mps
 
 class HarmonicAngleForce(ConservativeForce):
 

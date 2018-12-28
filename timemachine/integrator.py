@@ -150,9 +150,9 @@ class LangevinIntegrator():
         mixed_partials = []
         for e in self.energies:
             mp = e.mixed_partials(x_t)
-            mixed_partials.extend(mp)
+            mixed_partials.append(mp)
 
-        mixed_partials = tf.stack(mixed_partials) # [num_params, num_atoms, 3]
+        mixed_partials = tf.concat(mixed_partials, axis=0) # [num_params, num_atoms, 3]
 
         # Rolling Algorithm, insertion is at the front, highest exponent is at the front:
         # buf size: 5         buf   start_idx
