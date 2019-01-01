@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import unittest
 
-from timemachine import force
+from timemachine import bonded_force
 from timemachine.constants import BOLTZ
 from timemachine import integrator
 
@@ -13,7 +13,7 @@ class TestOptimization(unittest.TestCase):
 
     def test_water(self):
         """
-        Testing optimization of forcefield parameters so that an non-equilibriated OH2 can minimize into the correct condensed phase angle.
+        Testing optimization of bonded_forcefield parameters so that an non-equilibriated OH2 can minimize into the correct condensed phase angle.
         """
         masses = np.array([8.0, 1.0, 1.0])
         x0 = np.array([
@@ -41,7 +41,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("OH_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_bond)),
         ]
 
-        hb = force.HarmonicBondForce(
+        hb = bonded_force.HarmonicBondForce(
             params=bond_params,
             bond_idxs=np.array([[0,1],[0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1],[0,1]], dtype=np.int32)
@@ -52,7 +52,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("HOH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_angle)),
         ]
 
-        ha = force.HarmonicAngleForce(
+        ha = bonded_force.HarmonicAngleForce(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)

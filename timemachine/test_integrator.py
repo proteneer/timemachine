@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import unittest
 
-from timemachine import force
+from timemachine import bonded_force
 from timemachine.constants import BOLTZ
 from timemachine import integrator
 
@@ -88,7 +88,7 @@ class TestLangevinIntegrator(unittest.TestCase):
             [2, 3],
         ])
 
-        self.hb = force.HarmonicBondForce(
+        self.hb = bonded_force.HarmonicBondForce(
             params,
             bond_idxs,
             param_idxs,
