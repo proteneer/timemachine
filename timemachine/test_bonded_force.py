@@ -188,6 +188,9 @@ class TestBondedForce(unittest.TestCase):
             assert not np.any(np.isnan(t3))
             assert np.any(np.isnan(r3))
 
+            # net force should be zero
+            np.testing.assert_almost_equal(np.sum(t1, axis=0), [0,0,0], decimal=14)
+
 
 
 if __name__ == "__main__":
