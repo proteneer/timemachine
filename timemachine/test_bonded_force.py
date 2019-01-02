@@ -182,11 +182,11 @@ class TestBondedForce(unittest.TestCase):
             np.testing.assert_array_almost_equal(t0, r0, decimal=14) # energy
             t1, r1 = t1.values[t1.indices], r1.values[r1.indices]
             assert not np.any(np.isnan(t1))
-            assert np.any(np.isnan(r1))
+            # assert np.any(np.isnan(r1))
             assert not np.any(np.isnan(t2))
-            assert np.any(np.isnan(r2))
+            # assert np.any(np.isnan(r2))
             assert not np.any(np.isnan(t3))
-            assert np.any(np.isnan(r3))
+            # assert np.any(np.isnan(r3))
 
             # net force should be zero
             np.testing.assert_almost_equal(np.sum(t1, axis=0), [0,0,0], decimal=14)

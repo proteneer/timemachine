@@ -6,6 +6,19 @@ Computes analytic derivatives of the trajectory with respect to model parameters
 
 This is a prototype written by Yutong during his winter break period of funemployment. For a more detailed explanation, refer to the paper under docs for more information.
 
+# Supported Functional Forms
+
+We currently support only a subset of most forcefields. These are implemented by their energy functions, whose derivatives of various orders are generated automatically.
+
+- Harmonic Bonds
+- Harmonic Angles
+- CHARMM Torsions
+- Non periodic electrostatics
+- Non periodic Leonnard Jones
+- Tensorfield Networks
+
+Implementing a custom force is incredibly easy. Just define the energy function, and the underlying machinery will figure out all the necessary derivatives.
+
 # Requirements
 
 See requirements.txt

@@ -166,3 +166,5 @@ class TestMinimization(unittest.TestCase):
 
         np.testing.assert_almost_equal(angles, np.array([ideal_angle]*6), decimal=2)
 
+if __name__ == "__main__":
+    unittest.main()
