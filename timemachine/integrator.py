@@ -57,9 +57,8 @@ class LangevinIntegrator():
         self.num_atoms = len(masses)
         self.energies = energies
 
-        self.num_params = sum([len(e.get_params()) for e in energies])
+        self.num_params = sum([e.total_params() for e in energies])
         
-
         self.v_t_var = tf.get_variable(
             "buffer_velocity",
             shape=(self.num_atoms, 3),
@@ -149,8 +148,10 @@ class LangevinIntegrator():
 
         mixed_partials = []
         for e in self.energies:
-            mp = e.mixed_partials(x_t)
-            mixed_partials.append(mp)
+            for mp in e.mixed_partials(x_t):
+                mp_N, mp_D = mp.get_shape()[-2], mp.get_shape()[-1]
+                flattened = tf.reshape(mp, (-1, mp_N, mp_D))
+                mixed_partials.append(flattened)
 
         mixed_partials = tf.concat(mixed_partials, axis=0) # [num_params, num_atoms, 3]
 

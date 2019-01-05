@@ -88,7 +88,7 @@ Suppose it takes $k$ steps for the geometric series converge to numerical accura
 
 The first major issue has to do how training proceeds. The above procedure needs to be repeated multiple times for the parameters to converge. That is, each iteration would require us to re-run an entire MD simulation since we can't easily re-use the intermediate values. For some test systems it can take anywhere from 50 to 500 rounds of simulations for a single system to be fully optimized (internal data).
 
-A second more practical issue deals with the computational complexity and speed. The analytically dense Hessian is an inherently $O(N^2)$, which is a major increase from the standard $O(N log N)$ in MD. Furthermore, because the derivatives are automatically generated, and that it's using tensorflow underneath the hood, the simulation itself is significantly slower than a highly optimized MD package. However, with recent advances in XLA-JIT and the flexibility of implementing custom ops, we hope to reconcile this to within an order of magnitude.
+A second more practical issue deals with the computational complexity and speed. The analytically dense Hessian is an inherently $O(N^2)$, which is a major increase from the standard $O(N log N)$ in MD. While the bonded terms have sparse diagonal Hessians, it is unclear if the nonbonded hessians can be sparsified. Furthermore, because the derivatives are automatically generated, and that it's using tensorflow underneath the hood, the simulation itself is significantly slower than a highly optimized MD package. However, with recent advances in XLA-JIT and the flexibility of implementing custom ops, we hope to reconcile this to within an order of magnitude.
 
 \section{Code}
 
