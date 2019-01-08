@@ -62,31 +62,15 @@ class TestOptimization(unittest.TestCase):
         dt = 0.005
         temp = 300.0
 
+        x_ph = tf.placeholder(name="input_geom", dtype=tf.float64, shape=(num_atoms, 3))
         intg = integrator.LangevinIntegrator(
-            masses, [hb, ha], dt, friction, temp, disable_noise=True, buffer_size=400)
+            masses, x_ph, [hb, ha], dt, friction, temp, disable_noise=True, buffer_size=400)
 
-        x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
-        dx_op, dxdp_op = intg.step(x_ph)
+        dx_op, dxdp_op = intg.step_op()
 
         num_steps = 500
 
         param_optimizer = tf.train.AdamOptimizer(0.02)
-
-        d0_ph = tf.placeholder(shape=tuple(), dtype=tf.float64)
-        d1_ph = tf.placeholder(shape=tuple(), dtype=tf.float64)
-        d2_ph = tf.placeholder(shape=tuple(), dtype=tf.float64)
-        d3_ph = tf.placeholder(shape=tuple(), dtype=tf.float64)
-
-        grads_and_vars = []
-        for dp, var in zip([d0_ph, d1_ph, d2_ph, d3_ph], bond_params+angle_params):
-            grads_and_vars.append((dp, var))
-
-        train_op = param_optimizer.apply_gradients(grads_and_vars)
-
-        sess = tf.Session()
-        sess.run(tf.initializers.global_variables())
-
-        num_epochs = 75
 
         def loss(pred_x):
 
@@ -99,8 +83,17 @@ class TestOptimization(unittest.TestCase):
 
             return tf.norm(dij(x_opt) - dij(pred_x))
 
-        x_obs_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
-        dLdx = tf.gradients(loss(x_obs_ph), x_obs_ph)
+        # geometry we arrive at at time t=inf
+        x_final_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
+        dLdx = tf.gradients(loss(x_final_ph), x_final_ph)
+
+        grads_and_vars = intg.grads_and_vars(dLdx)
+        train_op = param_optimizer.apply_gradients(grads_and_vars)
+
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
+
+        num_epochs = 75
 
         for e in range(num_epochs):
             print("starting epoch", e, "current params", sess.run(bond_params+angle_params))
@@ -110,18 +103,7 @@ class TestOptimization(unittest.TestCase):
                 dx_val, dxdp_val = sess.run([dx_op, dxdp_op], feed_dict={x_ph: x})
                 x += dx_val
 
-            dxdp_val = np.array(dxdp_val)
-            dLdx_val = np.array(sess.run(dLdx, feed_dict={x_obs_ph: x}))
-
-            dLdp = np.multiply(dLdx_val, dxdp_val)
-            reduced_dLdp = np.sum(dLdp, axis=(1,2))
-
-            sess.run(train_op, feed_dict={
-                d0_ph: reduced_dLdp[0],
-                d1_ph: reduced_dLdp[1],
-                d2_ph: reduced_dLdp[2],
-                d3_ph: reduced_dLdp[3],
-            })
+            sess.run(train_op, feed_dict={x_final_ph: x})
 
         params = sess.run(bond_params+angle_params)
         np.testing.assert_almost_equal(params[1], 0.52, decimal=2)

@@ -54,11 +54,11 @@ class TestMinimization(unittest.TestCase):
         dt = 0.05
         temp = 300.0
 
-        intg = integrator.LangevinIntegrator(
-            masses, [hb, ha], dt, friction, temp, disable_noise=True)
-
         x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
-        dx_op, dxdp_op = intg.step(x_ph)
+        intg = integrator.LangevinIntegrator(
+            masses, x_ph, [hb, ha], dt, friction, temp, disable_noise=True)
+
+        dx_op, dxdp_op = intg.step_op()
 
         num_steps = 400
 
@@ -68,7 +68,6 @@ class TestMinimization(unittest.TestCase):
         x = x0
 
         for step in range(num_steps):
-            print(step, x)
             dx_val, dxdp_val = sess.run([dx_op, dxdp_op], feed_dict={x_ph: x})
             x += dx_val
 
@@ -132,11 +131,12 @@ class TestMinimization(unittest.TestCase):
         dt = 0.005
         temp = 300.0
 
-        intg = integrator.LangevinIntegrator(
-            masses, [hb, ha], dt, friction, temp, disable_noise=True)
-
         x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
-        dx_op, dxdp_op = intg.step(x_ph)
+
+        intg = integrator.LangevinIntegrator(
+            masses, x_ph, [hb, ha], dt, friction, temp, disable_noise=True)
+
+        dx_op, dxdp_op = intg.step_op()
 
         num_steps = 1000
 
