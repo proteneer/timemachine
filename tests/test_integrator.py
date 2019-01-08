@@ -113,15 +113,15 @@ class TestLangevinIntegrator(unittest.TestCase):
 
         with tf.variable_scope("reference"):
             ref_intg = integrator.LangevinIntegrator(
-                self.masses, [self.hb], dt, friction, temp, disable_noise=True)
+                self.masses, x_ph, [self.hb], dt, friction, temp, disable_noise=True)
             # ref_intg.vscale = 0.45 -> so we should converge fully to 16 decimals after 47 steps
 
         with tf.variable_scope("test"):
             test_intg = integrator.LangevinIntegrator(
-                self.masses, [self.hb], dt, friction, temp, disable_noise=True, buffer_size=50)
+                self.masses, x_ph, [self.hb], dt, friction, temp, disable_noise=True, buffer_size=50)
 
-        ref_dx, ref_dxdps = ref_intg.step(x_ph)
-        test_dx, test_dxdps = test_intg.step(x_ph)
+        ref_dx, ref_dxdps = ref_intg.step_op()
+        test_dx, test_dxdps = test_intg.step_op()
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
@@ -163,9 +163,9 @@ class TestLangevinIntegrator(unittest.TestCase):
             x += dx
 
         ref_dxdp = tf.gradients(x, hb.get_params())
-        test_intg = integrator.LangevinIntegrator(self.masses, [hb], dt, friction, temp, disable_noise=True)
+        test_intg = integrator.LangevinIntegrator(self.masses, x_ph, [hb], dt, friction, temp, disable_noise=True)
 
-        dx, dxdps = test_intg.step(x_ph)
+        dx, dxdps = test_intg.step_op()
         dxdps = tf.reduce_sum(dxdps, axis=[1,2])
 
         sess = tf.Session()
