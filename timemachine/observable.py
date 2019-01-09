@@ -1,39 +1,33 @@
 import numpy as np
 import tensorflow as tf
-import utils
 
-class SortedDistances():
 
-    """ 
-    Given K conformations of Nx3 atoms, we can form a set of
-    [N,N,K] distance matrices. The last dimension is then sorted
-    independently from smallest to longest, forming a marginalized
-    probability distribution. This roughly corresponds to what's
-    actually observed in short-range NOEs.
+def sorted_squared_distances(confs):
     """
+    Compute an observed a sorted squared distance matrix.
 
-    def __init__(self, mask):
-        self.ignore_mask = mask
+    Warning: do *NOT* take a sqrt of the result as this results in
+    NaNs when doing derivative calculations. This has to do with how sqrt
+    works through autodiff in that you end up with a zero in the
+    denominator.
 
+    Parameters
+    ----------
+    confs: [B, N, 3]
+        A batch of geometries.
 
+    Returns
+    -------
+    tf.Tensor [N, N, B]
+        An op representing sorted square distances
 
-    def obs(self, confs):
-
-        dij = utils.generate_distance_matrix(confs, self.ignore_mask) # [batch_size, (num_atoms-1)*(num_atoms)/2 upper right off diagonal]
-        batch_size = dij.shape[0]
-        dij_t = tf.transpose(dij) # shape [(num_atoms-1)*(num_atoms)/2, batch_size]
-
-        sort_idxs = np.argsort(dij_t.numpy(), axis=-1) # (ytz) why do we need x.numpy() here?
-        
-        gather_idxs = []
-        for idx, a in enumerate(sort_idxs):
-            row = []
-            for bidx in range(batch_size):
-                row.append((idx, a[bidx]))
-            gather_idxs.append(row)
-        gather_idxs = np.array(gather_idxs, dtype=np.int32)
-        sorted_dij = tf.gather_nd(dij_t, gather_idxs)
-        return sorted_dij
+    """
+    ri = tf.expand_dims(confs, 1) # [B, 1, N, 3]
+    rj = tf.expand_dims(confs, 2) # [B, N, 1, 3]
+    dij = tf.reduce_sum(tf.pow(ri-rj, 2), axis=-1)
+    dij_t = tf.transpose(dij)
+    sorted_dij = tf.contrib.framework.sort(dij_t, axis=-1)
+    return sorted_dij
 
 class Rg():
     """
