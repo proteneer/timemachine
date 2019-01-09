@@ -46,8 +46,6 @@ class LangevinIntegrator():
         self.dt = dt
         self.friction = friction # dissipation (how fast we forget)
         self.temperature = temp  # temperature
-
-        self.disable_noise = disable_noise
         self.vscale = np.exp(-self.dt*self.friction)
 
         if self.friction == 0:
@@ -234,10 +232,7 @@ class LangevinIntegrator():
         num_dims = 3
         num_atoms = self.num_atoms
 
-        if self.disable_noise:
-            noise = 0
-        else:
-            noise = self.normal.sample((num_atoms, num_dims))
+        noise = self.normal.sample((num_atoms, num_dims))
 
         new_v_t = self.vscale*self.v_t - self.fscale*self.invMasses*grads + self.nscale*self.sqrtInvMasses*noise
         v_t_assign = tf.assign(self.v_t, new_v_t)
