@@ -57,7 +57,9 @@ class LangevinIntegrator():
 
         kT = BOLTZ * self.temperature
         self.nscale = np.sqrt(kT*(1-self.vscale*self.vscale)) # noise scale
-        self.normal = tf.distributions.Normal(loc=0.0, scale=1.0)
+        self.normal = tf.distributions.Normal(loc=np.float64(0.0), scale=np.float64(1.0))
+        # print(self.normal.dtype)
+        # assert 0
         self.invMasses = (1.0/masses).reshape((-1, 1))
         self.sqrtInvMasses = np.sqrt(self.invMasses)
 
@@ -128,8 +130,6 @@ class LangevinIntegrator():
         for e_idx, e in enumerate(self.energies):
             parameter_shapes = []
             for mp_idx, mp in enumerate(e.mixed_partials(x_t)):
-
-                print(e_idx, mp_idx)
                 # store the shapes
                 p_shapes = mp.get_shape().as_list()
                 parameter_shapes.append(p_shapes)
@@ -140,8 +140,6 @@ class LangevinIntegrator():
                 mixed_partials.append(flattened)
 
             self.mixed_partial_shapes.append(parameter_shapes)
-
-        print(self.mixed_partial_shapes)
 
         self.mixed_partials = tf.concat(mixed_partials, axis=0) # [num_params, num_atoms, 3]
 

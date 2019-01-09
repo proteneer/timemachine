@@ -24,10 +24,10 @@ def sorted_squared_distances(confs):
     """
     ri = tf.expand_dims(confs, 1) # [B, 1, N, 3]
     rj = tf.expand_dims(confs, 2) # [B, N, 1, 3]
-    dij = tf.reduce_sum(tf.pow(ri-rj, 2), axis=-1)
-    dij_t = tf.transpose(dij)
-    sorted_dij = tf.contrib.framework.sort(dij_t, axis=-1)
-    return sorted_dij
+    d2ij = tf.reduce_sum(tf.pow(ri-rj, 2), axis=-1)
+    d2ij_t = tf.transpose(d2ij)
+    sorted_d2ij = tf.contrib.framework.sort(d2ij_t, axis=-1)
+    return sorted_d2ij
 
 class Rg():
     """
