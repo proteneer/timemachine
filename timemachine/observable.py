@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow as tf
 
-
 def sorted_squared_distances(confs):
     """
     Compute an observed a sorted squared distance matrix.
@@ -24,10 +23,48 @@ def sorted_squared_distances(confs):
     """
     ri = tf.expand_dims(confs, 1) # [B, 1, N, 3]
     rj = tf.expand_dims(confs, 2) # [B, N, 1, 3]
-    dij = tf.reduce_sum(tf.pow(ri-rj, 2), axis=-1)
-    dij_t = tf.transpose(dij)
-    sorted_dij = tf.contrib.framework.sort(dij_t, axis=-1)
-    return sorted_dij
+    d2ij = tf.reduce_sum(tf.pow(ri-rj, 2), axis=-1)
+    d2ij_t = tf.transpose(d2ij)
+    sorted_d2ij = tf.contrib.framework.sort(d2ij_t, axis=-1)
+    return sorted_d2ij
+
+def vibrational_eigenvalues(conf, masses, energies):
+    """
+    Compute harmonic frequencies.
+
+    Parameters
+    ----------
+    conf: tf.Tensor (N,3)
+        Geometry
+
+    masses: np.ndarray (N,)
+        masses of each atom
+
+    energies: timemachine.ConservativeForce
+        Energies used to compute the hessian
+
+    Returns
+    -------
+    list of tf.complex128
+        Returns real and imaginary frequencies computed from
+        the eigenvalues
+
+    """
+    hessians = []
+    for e in energies:
+        hessians.append(e.hessians(conf))
+    net_hessians = tf.reduce_sum(tf.stack(hessians, axis=0), axis=0)
+    # masses =  tf.tile(masses, [3])
+    masses = np.repeat(masses, 3)
+    reduced_mij = tf.sqrt(tf.expand_dims(masses, 0) * tf.expand_dims(masses, 1))
+    net_hessians = tf.reshape(net_hessians, (conf.shape[0]*3, conf.shape[0]*3))
+    net_hessians = net_hessians/reduced_mij
+    eigenvalues = tf.linalg.eigvalsh(net_hessians)
+    return eigenvalues
+    # eigenvalues = tf.cast(eigenvalues, dtype=tf.complex128)
+
+    print("DEBUG", tf.gradients(eigenvalues, net_hessians))
+    return VIBRATIONAL_CONSTANT*tf.sqrt(eigenvalues)
 
 class Rg():
     """

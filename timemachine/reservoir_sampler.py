@@ -18,4 +18,9 @@ class ReservoirSampler():
                     self.R[j] = item
 
             self.count += 1
+
             yield item
+
+    def sample_all(self):
+        for item in self.sample():
+            continue

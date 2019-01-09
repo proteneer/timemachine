@@ -3,11 +3,58 @@ import unittest
 
 import tensorflow as tf
 from timemachine import observable
+from timemachine import bonded_force
+from timemachine.constants import VIBRATIONAL_CONSTANT
+
 
 class TestObservable(unittest.TestCase):
 
     def tearDown(self):
         tf.reset_default_graph()
+
+    def test_vibrational_frequencies(self):
+        # conf, energies):
+        x_opt = np.array([
+            [-0.0070, -0.0100, 0.0000],
+            [-0.1604,  0.4921, 0.0000],
+            [ 0.5175,  0.0128, 0.0000],
+        ], dtype=np.float64) # idealized geometry
+
+        bond_params = [
+            tf.get_variable("HO_kb", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(100.0)),
+            tf.get_variable("HO_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(0.51)),
+        ]
+
+        hb = bonded_force.HarmonicBondForce(
+            params=bond_params,
+            bond_idxs=np.array([[0,1],[0,2]], dtype=np.int32),
+            param_idxs=np.array([[0,1],[0,1]], dtype=np.int32)
+        )
+
+        angle_params = [
+            tf.get_variable("HOH_ka", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(75.0)),
+            tf.get_variable("HOH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(1.81)),
+        ]
+
+        ha = bonded_force.HarmonicAngleForce(
+            params=angle_params,
+            angle_idxs=np.array([[1,0,2]], dtype=np.int32),
+            param_idxs=np.array([[0,1]], dtype=np.int32)
+        )
+
+        x_ph = tf.placeholder(shape=(3, 3), dtype=np.float64)
+
+
+        test_eigs = observable.vibrational_eigenvalues(x_ph, np.array([8.0, 1.0, 1.0], dtype=np.float64), [hb, ha])
+
+        true_freqs = [0,0,0,40.63,59.383,66.44,1799.2,3809.46,3943] # from http://gaussian.com/vib/
+        true_eigs = [(x/VIBRATIONAL_CONSTANT)**2 for x in true_freqs]
+        loss = tf.pow(true_eigs - test_eigs, 2)
+        dfdp = tf.gradients(loss, bond_params+angle_params)
+        print(loss)
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
+        print(sess.run([loss, dfdp], feed_dict={x_ph: x_opt}))
 
     def test_dense_sorted_dij(self):
 

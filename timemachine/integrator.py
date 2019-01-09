@@ -13,7 +13,6 @@ class LangevinIntegrator():
         friction=1.0,
         temp=300.0,
         precision=tf.float64,
-        disable_noise=False,
         buffer_size=None):
         """
         Langevin Integrator is an implementation of stochastic dynamics that samples
@@ -37,7 +36,8 @@ class LangevinIntegrator():
             Dissipation or memory-losing ability of the heat bath
 
         temp: float
-            Temperature used for drawing random velocities
+            Temperature used for drawing random velocities. Is this is zero then no
+            random noise will be added.
 
         This is inspired by ReferenceStochasticDynamics.cpp from OpenMM.
 
@@ -46,8 +46,6 @@ class LangevinIntegrator():
         self.dt = dt
         self.friction = friction # dissipation (how fast we forget)
         self.temperature = temp  # temperature
-
-        self.disable_noise = disable_noise
         self.vscale = np.exp(-self.dt*self.friction)
 
         if self.friction == 0:
@@ -57,7 +55,7 @@ class LangevinIntegrator():
 
         kT = BOLTZ * self.temperature
         self.nscale = np.sqrt(kT*(1-self.vscale*self.vscale)) # noise scale
-        self.normal = tf.distributions.Normal(loc=0.0, scale=1.0)
+        self.normal = tf.distributions.Normal(loc=np.float64(0.0), scale=np.float64(1.0))
         self.invMasses = (1.0/masses).reshape((-1, 1))
         self.sqrtInvMasses = np.sqrt(self.invMasses)
 
@@ -70,7 +68,10 @@ class LangevinIntegrator():
         self.cbs = tf.reshape(self.cbs, shape=(1, -1, 1))
 
         if buffer_size is None:
-            buffer_size = 4000 # guestimate later
+            epsilon = 1e-14
+            buffer_size = np.int64(np.log(epsilon)/np.log(self.vscale)+1)
+            print("Setting buffer_size to:", buffer_size)
+            # buffer_size = 4000 # guestimate later
 
         # pre-compute scaled prefactors once at the beginning
         self.scale = (1-tf.pow(self.ca, tf.range(buffer_size, dtype=precision)+1))/(1-self.ca)
@@ -128,8 +129,6 @@ class LangevinIntegrator():
         for e_idx, e in enumerate(self.energies):
             parameter_shapes = []
             for mp_idx, mp in enumerate(e.mixed_partials(x_t)):
-
-                print(e_idx, mp_idx)
                 # store the shapes
                 p_shapes = mp.get_shape().as_list()
                 parameter_shapes.append(p_shapes)
@@ -140,8 +139,6 @@ class LangevinIntegrator():
                 mixed_partials.append(flattened)
 
             self.mixed_partial_shapes.append(parameter_shapes)
-
-        print(self.mixed_partial_shapes)
 
         self.mixed_partials = tf.concat(mixed_partials, axis=0) # [num_params, num_atoms, 3]
 
@@ -203,21 +200,30 @@ class LangevinIntegrator():
         for jac, param in self.jacs_and_vars():
             # (ytz): We can probably optimize away two of these reshapes, but
             # they should be relatively cheap so whatever.
-            dLdx_dxdp = tf.multiply(tf.reshape(dLdx, jac.get_shape()), jac)
+            # print(jac.shape)
+            # print(dLdx.shape)
+            left = tf.reshape(dLdx, jac.get_shape())
+            dLdx_dxdp = tf.multiply(left, jac)
             dxdp = tf.reduce_sum(dLdx_dxdp, axis=[-1, -2])
             gv = (tf.reshape(dxdp, param.get_shape()), param)
             gvs.append(gv)
 
         return gvs
 
-    def step_op(self):
+    def step_op(self, inference=False):
         """
         Generate ops that propagate the time by one step.
+
+        Parameters
+        ----------
+        inference: bool
+            If inference is True then we disable generation of extra derivatives needed for training.
 
         Returns
         -------
         tuple: (tf.Op, tf.Op)
             Returns two operations required to advance the time step. Both must be run in a tf.Session.
+            If inference is True then the second element is None.
 
         This should be run exactly once. Remember to call reset() afterwards.
 
@@ -230,16 +236,16 @@ class LangevinIntegrator():
         num_dims = 3
         num_atoms = self.num_atoms
 
-        if self.disable_noise:
-            noise = 0
-        else:
-            noise = self.normal.sample((num_atoms, num_dims))
+        noise = self.normal.sample((num_atoms, num_dims))
 
         new_v_t = self.vscale*self.v_t - self.fscale*self.invMasses*grads + self.nscale*self.sqrtInvMasses*noise
         v_t_assign = tf.assign(self.v_t, new_v_t)
 
         # compute dxs
         dx = v_t_assign * self.dt
+
+        if inference:
+            return dx, None
 
         # The Algorithm:
 
