@@ -139,7 +139,7 @@ class TestLangevinIntegrator(unittest.TestCase):
             x_ref += ref_dx_val
             x_test += test_dx_val
 
-    def test_five_steps(self):
+    def test_ten_steps(self):
         """
         Testing against reference implementation.
         """
@@ -153,7 +153,7 @@ class TestLangevinIntegrator(unittest.TestCase):
 
         ref_intg = ReferenceLangevinIntegrator(self.masses, dt, friction, temp, disable_noise=True)
 
-        num_steps = 4
+        num_steps = 10
 
         x = x_ph
 

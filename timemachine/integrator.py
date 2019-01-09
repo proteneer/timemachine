@@ -13,7 +13,6 @@ class LangevinIntegrator():
         friction=1.0,
         temp=300.0,
         precision=tf.float64,
-        disable_noise=False,
         buffer_size=None):
         """
         Langevin Integrator is an implementation of stochastic dynamics that samples
@@ -37,7 +36,8 @@ class LangevinIntegrator():
             Dissipation or memory-losing ability of the heat bath
 
         temp: float
-            Temperature used for drawing random velocities
+            Temperature used for drawing random velocities. Is this is zero then no
+            random noise will be added.
 
         This is inspired by ReferenceStochasticDynamics.cpp from OpenMM.
 
@@ -208,14 +208,20 @@ class LangevinIntegrator():
 
         return gvs
 
-    def step_op(self):
+    def step_op(self, inference=False):
         """
         Generate ops that propagate the time by one step.
+
+        Parameters
+        ----------
+        inference: bool
+            If inference is True then we disable generation of extra derivatives needed for training.
 
         Returns
         -------
         tuple: (tf.Op, tf.Op)
             Returns two operations required to advance the time step. Both must be run in a tf.Session.
+            If inference is True then the second element is None.
 
         This should be run exactly once. Remember to call reset() afterwards.
 
@@ -238,6 +244,9 @@ class LangevinIntegrator():
 
         # compute dxs
         dx = v_t_assign * self.dt
+
+        if inference:
+            return dx, None
 
         # The Algorithm:
 
