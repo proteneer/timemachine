@@ -387,10 +387,14 @@ class TestOptimization(unittest.TestCase):
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
 
-        num_epochs = 750
+        num_epochs = 100
 
         for e in range(num_epochs):
-            print("starting epoch", e, "current params", sess.run(bond_params+angle_params))
+            params = sess.run(bond_params+angle_params)
+            print("starting epoch", e, "current params", params)
+            # converged
+            if np.abs(params[1] - 0.52) < 0.05 and np.abs(params[3] - 1.81) < 0.05:
+                return
             x = np.copy(x0)
             intg.reset(sess) # clear integration buffers
             for step in range(num_steps):
@@ -399,9 +403,11 @@ class TestOptimization(unittest.TestCase):
 
             sess.run(train_op, feed_dict={x_final_ph: x})
 
-        params = sess.run(bond_params+angle_params)
-        np.testing.assert_almost_equal(params[1], 0.52, decimal=2)
-        np.testing.assert_almost_equal(params[3], 1.81, decimal=1)
+        # failed to converge
+        assert 0
+        # params = sess.run(bond_params+angle_params)
+        # np.testing.assert_almost_equal(params[1], 0.52, decimal=2)
+        # np.testing.assert_almost_equal(params[3], 1.81, decimal=1)
            
 if __name__ == "__main__":
     unittest.main()
