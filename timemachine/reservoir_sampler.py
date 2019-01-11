@@ -8,7 +8,7 @@ class ReservoirSampler():
         self.R = []
         self.count = 0
 
-    def sample_all(self):
+    def sample(self):
         for item in self.generator:
             if self.count < self.k:
                 self.R.append(item)
@@ -19,5 +19,8 @@ class ReservoirSampler():
 
             self.count += 1
 
+            yield item
 
-
+    def sample_all(self):
+        for item in self.sample():
+            continue

@@ -125,9 +125,10 @@ class HarmonicAngleForce(ConservativeForce):
 
          # 0.975 is to prevent numerical issues for molecules like HC#N
          # we should never have zero angles.
-        cos_angles = 0.98*(top/bot)
+        cos_angles = 0.975*(top/bot)
         angle = tf.acos(cos_angles)
 
+        # (ytz): we used the squared version so that we make this energy being strictly positive
         energies = kas/2*tf.pow(angle - a0s, 2)
         return tf.reduce_sum(energies, -1)  # reduce over all angles
 
@@ -161,8 +162,10 @@ class HarmonicBondForce(ConservativeForce):
     def energy(self, conf):    
         ci = tf.gather(conf, self.bond_idxs[:, 0])
         cj = tf.gather(conf, self.bond_idxs[:, 1])
-        dij = tf.norm(ci - cj, axis=-1)
+        dij = tf.norm(ci - cj, axis=-1) # don't ever use norm, just always do 2x and less r0*r0 instead
         kbs = tf.gather(self.params, self.param_idxs[:, 0])
         r0s = tf.gather(self.params, self.param_idxs[:, 1])
-        energy = tf.reduce_sum(kbs*tf.pow(dij - r0s, 2.0))
+
+        # (ytz): we used the squared version so that we make this energy being strictly positive
+        energy = tf.reduce_sum(kbs/2*tf.pow(dij - r0s, 2.0))
         return energy

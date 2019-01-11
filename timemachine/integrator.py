@@ -56,8 +56,6 @@ class LangevinIntegrator():
         kT = BOLTZ * self.temperature
         self.nscale = np.sqrt(kT*(1-self.vscale*self.vscale)) # noise scale
         self.normal = tf.distributions.Normal(loc=np.float64(0.0), scale=np.float64(1.0))
-        # print(self.normal.dtype)
-        # assert 0
         self.invMasses = (1.0/masses).reshape((-1, 1))
         self.sqrtInvMasses = np.sqrt(self.invMasses)
 
@@ -70,7 +68,10 @@ class LangevinIntegrator():
         self.cbs = tf.reshape(self.cbs, shape=(1, -1, 1))
 
         if buffer_size is None:
-            buffer_size = 4000 # guestimate later
+            epsilon = 1e-14
+            buffer_size = np.int64(np.log(epsilon)/np.log(self.vscale)+1)
+            print("Setting buffer_size to:", buffer_size)
+            # buffer_size = 4000 # guestimate later
 
         # pre-compute scaled prefactors once at the beginning
         self.scale = (1-tf.pow(self.ca, tf.range(buffer_size, dtype=precision)+1))/(1-self.ca)
@@ -199,7 +200,10 @@ class LangevinIntegrator():
         for jac, param in self.jacs_and_vars():
             # (ytz): We can probably optimize away two of these reshapes, but
             # they should be relatively cheap so whatever.
-            dLdx_dxdp = tf.multiply(tf.reshape(dLdx, jac.get_shape()), jac)
+            # print(jac.shape)
+            # print(dLdx.shape)
+            left = tf.reshape(dLdx, jac.get_shape())
+            dLdx_dxdp = tf.multiply(left, jac)
             dxdp = tf.reduce_sum(dLdx_dxdp, axis=[-1, -2])
             gv = (tf.reshape(dxdp, param.get_shape()), param)
             gvs.append(gv)
