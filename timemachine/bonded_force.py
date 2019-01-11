@@ -123,9 +123,9 @@ class HarmonicAngleForce(ConservativeForce):
         top = tf.reduce_sum(tf.multiply(vij, vik), -1)
         bot = tf.norm(vij, axis=-1)*tf.norm(vik, axis=-1)
 
-         # 0.975 is to prevent numerical issues for molecules like HC#N
-         # we should never have zero angles.
-        cos_angles = 0.975*(top/bot)
+        # (ytz): 1.0 nans, 0.975 nans but 0.98 is okay? (wtf?)
+        # we really need another functional form for this
+        cos_angles = 0.98*(top/bot)
         angle = tf.acos(cos_angles)
 
         # (ytz): we used the squared version so that we make this energy being strictly positive

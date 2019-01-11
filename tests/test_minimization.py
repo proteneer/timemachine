@@ -52,11 +52,11 @@ class TestMinimization(unittest.TestCase):
 
         friction = 10.0
         dt = 0.05
-        temp = 300.0
+        temp = 0.0 # disables noise
 
         x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
         intg = integrator.LangevinIntegrator(
-            masses, x_ph, [hb, ha], dt, friction, temp, disable_noise=True)
+            masses, x_ph, [hb, ha], dt, friction, temp)
 
         dx_op, dxdp_op = intg.step_op()
 
@@ -129,12 +129,12 @@ class TestMinimization(unittest.TestCase):
 
         friction = 10.0
         dt = 0.005
-        temp = 300.0
+        temp = 0.0
 
         x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
 
         intg = integrator.LangevinIntegrator(
-            masses, x_ph, [hb, ha], dt, friction, temp, disable_noise=True)
+            masses, x_ph, [hb, ha], dt, friction, temp)
 
         dx_op, dxdp_op = intg.step_op()
 

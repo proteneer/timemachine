@@ -157,7 +157,7 @@ class TestOptimization(unittest.TestCase):
             tf.assign(angle_params[1], 2.1)
         ])
 
-        print("starting params", sess.run(bond_params+angle_params))
+        print("Starting params", sess.run(bond_params+angle_params))
 
         for epoch in range(10000):
 
