@@ -1,6 +1,9 @@
 import unittest
 import numpy as np
+import tensorflow as tf
+
 from timemachine.constants import ONE_4PI_EPS0
+from timemachine.periodic_force import EwaldElectrostaticForce
 
 class ReferenceEwaldEnergy():
 
@@ -12,22 +15,21 @@ class ReferenceEwaldEnergy():
         self.box = box # we probably want this to be variable when we start to work on barostats
         self.exclusions = exclusions
         self.alphaEwald = 1.0
+        self.kmax = 10
+        self.recipBoxSize = np.array([
+            (2*np.pi)/self.box[0],
+            (2*np.pi)/self.box[1],
+            (2*np.pi)/self.box[2]]
+        )
+
 
     def energy(self, conf):
         return self.reciprocal_energy(conf)
 
-    def reciprocal_energy(self, conf):
-        # Reference implementation taken from ReferenceLJCoulombIxn.cpp in OpenMM
-        N = self.num_atoms
-        recipBoxSize = np.array([(2*np.pi)/self.box[0], (2*np.pi)/self.box[1], (2*np.pi)/self.box[2]])
-        kmax = 10
-        eir = np.zeros((kmax, N, 3), dtype=np.complex128)
-        tab_xy = np.zeros(N, np.complex128)
-        tab_qxyz = np.zeros(N, np.complex128)
+    def _construct_eir(self, conf):
 
-        totalRecipEnergy = 0
-
-        for i in range(N):
+        eir = np.zeros((self.kmax, self.num_atoms, 3), dtype=np.complex128)
+        for i in range(self.num_atoms):
             coords = conf[i, :]
 
             # j == 0
@@ -37,34 +39,47 @@ class ReferenceEwaldEnergy():
             # j == 1
             for m in range(3):
                 eir[1, i, m] = np.complex(
-                    np.cos(coords[m]*recipBoxSize[m]), # real
-                    np.sin(coords[m]*recipBoxSize[m])  # imag
+                    np.cos(coords[m]*self.recipBoxSize[m]), # real
+                    np.sin(coords[m]*self.recipBoxSize[m])  # imag
                 )
             # j == 2
-            for j in range(2, kmax):
+            for j in range(2, self.kmax):
                 for m in range(3):
+                    # (ytz): this is complex multiplication, not 
+                    # element-wise multiplication
                     eir[j, i, m] = eir[j-1, i, m] * eir[1, i, m]
 
-        print(eir)
+        return eir
 
+
+    def reciprocal_energy(self, conf):
+        # Reference implementation taken from ReferenceLJCoulombIxn.cpp in OpenMM
+        N = self.num_atoms
+
+        eir = self._construct_eir(conf)
+        tab_xy = np.zeros(N, np.complex128)
+        tab_qxyz = np.zeros(N, np.complex128)
+
+        totalRecipEnergy = 0
         lowry = 0
         lowrz = 1
 
-        numRx = kmax
-        numRy = kmax
-        numRz = kmax
+        numRx = self.kmax
+        numRy = self.kmax
+        numRz = self.kmax
 
         factorEwald = -1 / (4*self.alphaEwald*self.alphaEwald)
         epsilon = 1.0
         recipCoeff = ONE_4PI_EPS0*4*np.pi/(self.box[0]*self.box[1]*self.box[2])/epsilon;
 
+        # we can tile and build this up pretty easily.
         for rx in range(numRx):
 
-            kx = rx * recipBoxSize[0]
+            kx = rx * self.recipBoxSize[0]
 
             for ry in range(lowry, numRy):
 
-                ky = ry * recipBoxSize[1]
+                ky = ry * self.recipBoxSize[1]
 
                 if ry >= 0:
                     for n in range(N):
@@ -77,10 +92,10 @@ class ReferenceEwaldEnergy():
                     # print(rx, ry, rz)
                     if rz >= 0:
                         for n in range(N):
-                            tab_qxyz[n] = self.charges[i] * tab_xy[n] * eir[rz, n, 2]
+                            tab_qxyz[n] = self.charges[n] * tab_xy[n] * eir[rz, n, 2]
                     else:
                         for n in range(N):
-                            tab_qxyz[n] = self.charges[i] * tab_xy[n] * np.conj(eir[-rz, n, 2])
+                            tab_qxyz[n] = self.charges[n] * tab_xy[n] * np.conj(eir[-rz, n, 2])
 
                     cs = 0
                     ss = 0
@@ -89,7 +104,7 @@ class ReferenceEwaldEnergy():
                         cs += tab_qxyz[n].real
                         ss += tab_qxyz[n].imag
 
-                    kz = rz * recipBoxSize[2]
+                    kz = rz * self.recipBoxSize[2]
                     k2 = kx * kx + ky*ky + kz*kz
                     ak = np.exp(k2*factorEwald) / k2
 
@@ -132,7 +147,14 @@ class TestPeriodicForce(unittest.TestCase):
         param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
 
         ref = ReferenceEwaldEnergy(params, param_idxs, box, exclusions)
-        print(ref.energy(x0))
+        ref_eir = ref._construct_eir(x0)
+
+        esf = EwaldElectrostaticForce(params, param_idxs, box, exclusions)
+        test_eir = esf._construct_eir(x0)
+
+        sess = tf.Session()
+        np.testing.assert_almost_equal(ref_eir, sess.run(test_eir))
+
 
 
 if __name__ == "__main__":
