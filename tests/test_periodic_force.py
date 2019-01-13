@@ -16,7 +16,7 @@ class ReferenceEwaldEnergy():
     def energy(self, conf):
         return self.reciprocal_energy(conf)
 
-    def energy(self, conf):
+    def reciprocal_energy(self, conf):
         # Reference implementation taken from ReferenceLJCoulombIxn.cpp in OpenMM
         N = self.num_atoms
         recipBoxSize = np.array([(2*np.pi)/self.box[0], (2*np.pi)/self.box[1], (2*np.pi)/self.box[2]])
@@ -45,6 +45,8 @@ class ReferenceEwaldEnergy():
                 for m in range(3):
                     eir[j, i, m] = eir[j-1, i, m] * eir[1, i, m]
 
+        print(eir)
+
         lowry = 0
         lowrz = 1
 
@@ -72,7 +74,7 @@ class ReferenceEwaldEnergy():
                         tab_xy[n] = eir[rx, n, 0] * np.conj(eir[-ry, n, 1])
 
                 for rz in range(lowrz, numRz):
-                    print(rx, ry, rz)
+                    # print(rx, ry, rz)
                     if rz >= 0:
                         for n in range(N):
                             tab_qxyz[n] = self.charges[i] * tab_xy[n] * eir[rz, n, 2]
