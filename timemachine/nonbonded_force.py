@@ -68,7 +68,6 @@ class LJ612Force(ConservativeForce):
         energy = Aij_mask/d12ij_mask - Cij_mask/d6ij_mask
         return tf.reduce_sum(energy, axis=-1)
 
-
 class ElectrostaticForce(ConservativeForce):
 
 
