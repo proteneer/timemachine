@@ -50,7 +50,10 @@ class EwaldElectrostaticForce(ConservativeForce):
 
     def energy(self, conf):
         direct_nrg, exclusion_nrg = self.direct_and_exclusion_energy(conf)
-        return self.reciprocal_energy(conf) + direct_nrg - exclusion_nrg
+        return self.reciprocal_energy(conf) + direct_nrg - exclusion_nrg - self.self_energy(conf)
+
+    def self_energy(self, conf):
+        return tf.reduce_sum(ONE_4PI_EPS0 * tf.pow(self.charges, 2) * self.alphaEwald/np.sqrt(np.pi))
 
     def direct_and_exclusion_energy(self, conf):
         charges = tf.gather(self.params, self.param_idxs)

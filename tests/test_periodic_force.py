@@ -107,7 +107,7 @@ class ReferenceEwaldEnergy():
 
     def reference_reciprocal_energy(self, conf):
 
-        # this generates an energy thats 2x the e
+        # this generates an energy thats 2x the expected due to the double counting
         # x_tiles = [0]
         # y_tiles = [0]
         # z_tiles = [0]
@@ -237,8 +237,6 @@ class ReferenceEwaldEnergy():
 class TestPeriodicForce(unittest.TestCase):
 
     def test_reference_ewald(self):
-
-        # do the hard non-convergent loop
 
         x0 = np.array([
             [ 0.0637,   0.0126,   0.2203],
