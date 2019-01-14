@@ -14,13 +14,13 @@ def generate_exclusion_masks(exclusions):
     return (mask_a - mask_b) - exclusions
 
 
-class LJ612Force(ConservativeForce):
+class LeonnardJonesForce(ConservativeForce):
 
 
-    def __init__(self, params, param_idxs, exclusions):
+    def __init__(self, params, param_idxs, exclusions, box=None):
         """
-        Implements a non-periodic LJ612 potential using the Jorgensen
-        combining rules for sigma/epsilon.
+        Implements a non-periodic LJ612 potential using the Lorentz−Berthelot terms,
+        where sig_ij = sig_i + sig_j and eps_ij = eps_i * eps_j.
 
         Parameters:
         -----------
@@ -37,35 +37,52 @@ class LJ612Force(ConservativeForce):
             is excluded, 0 implies it is kept. Note that only the upper
             right triangular portion of this is used.
 
+        box: np.array (3,)
+            Rectangular box definitions. If None then we assume the system
+            to be aperiodic. Otherwise we enforce periodic boundary conditions
+
         """
         self.params = params
         self.param_idxs = param_idxs
         self.keep_mask = generate_exclusion_masks(exclusions)
+        self.box = box
 
     def energy(self, conf):
-
         A = tf.gather(self.params, self.param_idxs[:, 0])
         C = tf.gather(self.params, self.param_idxs[:, 1])
 
-        Ai = tf.expand_dims(A, 0)
-        Aj = tf.expand_dims(A, 1)
-        Aij = tf.sqrt(tf.multiply(Ai, Aj))
+        sig_i = tf.expand_dims(A, 0)
+        sig_j = tf.expand_dims(A, 1)
+        sig_ij = sig_i + sig_j
 
-        Ci = tf.expand_dims(C, 0)
-        Cj = tf.expand_dims(C, 1)
-        Cij = tf.sqrt(tf.multiply(Ci, Cj))
+        eps_i = tf.expand_dims(C, 0)
+        eps_j = tf.expand_dims(C, 1)
+        eps_ij = eps_i * eps_j
 
         ri = tf.expand_dims(conf, 0)
         rj = tf.expand_dims(conf, 1)
-        d2ij = tf.reduce_sum(tf.pow(ri-rj, 2), axis=-1)
 
-        Aij_mask = tf.boolean_mask(Aij, self.keep_mask)
-        Cij_mask = tf.boolean_mask(Cij, self.keep_mask)
-        d2ij_mask = tf.boolean_mask(d2ij, self.keep_mask)       
-        d6ij_mask = d2ij_mask*d2ij_mask*d2ij_mask
-        d12ij_mask = d6ij_mask*d6ij_mask
+        if self.box is not None:
+            # periodic distance
+            rij = ri - rj
+            base = tf.floor(rij/self.box + 0.5)*self.box # (ytz): can we differentiate through this?
+            dxdydz = tf.pow(rij-base, 2)
+            d2ij = tf.reduce_sum(dxdydz, axis=-1)
+        else:
+            # nonperiodic distance
+            d2ij = tf.reduce_sum(tf.pow(ri-rj, 2), axis=-1)
 
-        energy = Aij_mask/d12ij_mask - Cij_mask/d6ij_mask
+        sig = tf.boolean_mask(sig_ij, self.keep_mask)
+        eps = tf.boolean_mask(eps_ij, self.keep_mask)
+        d2ij = tf.boolean_mask(d2ij, self.keep_mask)
+        dij = tf.sqrt(d2ij)
+
+        sig2 = sig/dij
+        sig2 *= sig2
+        sig6 = sig2*sig2*sig2
+
+        energy = eps*(sig6-1.0)*sig6
+
         return tf.reduce_sum(energy, axis=-1)
 
 class ElectrostaticForce(ConservativeForce):

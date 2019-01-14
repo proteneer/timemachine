@@ -14,7 +14,7 @@ def generate_inclusion_exclusion_masks(exclusions):
 
 class EwaldElectrostaticForce(ConservativeForce):
 
-    def __init__(self, params, param_idxs, box, exclusions, kmax=10):
+    def __init__(self, params, param_idxs, exclusions, box, kmax=10):
         self.params = params
         self.param_idxs = param_idxs # length N
         self.num_atoms = len(self.param_idxs)
