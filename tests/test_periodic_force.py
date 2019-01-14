@@ -2,8 +2,22 @@ import unittest
 import numpy as np
 import tensorflow as tf
 
+from scipy.special import erf, erfc
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.periodic_force import EwaldElectrostaticForce
+
+
+def periodic_difference(val1, val2, period):
+    diff = val1-val2
+    base = np.floor(diff/period+0.5)*period
+    return diff-base;
+
+
+def periodic_dij(ri, rj, boxSize):
+    dx = periodic_difference(ri[0], rj[0], boxSize[0])
+    dy = periodic_difference(ri[1], rj[1], boxSize[1])
+    dz = periodic_difference(ri[2], rj[2], boxSize[2])
+    return np.sqrt(dx*dx + dy*dy + dz*dz)
 
 class ReferenceEwaldEnergy():
 
@@ -21,7 +35,6 @@ class ReferenceEwaldEnergy():
             (2*np.pi)/self.box[1],
             (2*np.pi)/self.box[2]]
         )
-
 
     def energy(self, conf):
         return self.openmm_reciprocal_energy(conf)
@@ -50,6 +63,47 @@ class ReferenceEwaldEnergy():
                     eir[j, i, m] = eir[j-1, i, m] * eir[1, i, m]
 
         return eir
+
+    def openmm_exclusion_energy(self, conf):
+        # minimum image convention, add back in the erf part
+        energy = 0
+        for i in range(self.num_atoms):
+            qi = self.charges[i]
+            for j in range(i+1, self.num_atoms):
+                if self.exclusions[i][j]:
+                    continue
+
+                    qj = self.charges[j]
+                    ri = conf[i]
+                    rj = conf[j]
+                    r = periodic_dij(ri, rj, self.box)
+                    alphaR = self.alphaEwald*r
+                    energy += (qi*qj/r)*erf(alphaR);
+
+        return ONE_4PI_EPS0*energy
+
+    def openmm_direct_and_exclusion_energy(self, conf):
+
+        # minimum image convention
+        direct_nrg = 0
+        exclusion_nrg = 0
+        for i in range(self.num_atoms):
+            qi = self.charges[i]
+            for j in range(i+1, self.num_atoms):
+
+                qj = self.charges[j]
+                ri = conf[i]
+                rj = conf[j]
+                r = periodic_dij(ri, rj, self.box)
+                alphaR = self.alphaEwald*r
+                ixn_nrg = (qi*qj)/r
+
+                if self.exclusions[i][j]:
+                    exclusion_nrg += ixn_nrg*erf(alphaR)
+                else:
+                    direct_nrg += ixn_nrg*erfc(alphaR)
+
+        return ONE_4PI_EPS0*direct_nrg, ONE_4PI_EPS0*exclusion_nrg
 
     def reference_reciprocal_energy(self, conf):
 
@@ -163,7 +217,6 @@ class ReferenceEwaldEnergy():
                     k2 = kx * kx + ky*ky + kz*kz
                     ak = np.exp(k2*factorEwald) / k2
                     recipEnergy = ak * (cs * cs + ss * ss)
-
                     totalRecipEnergy += recipEnergy
 
                     lowrz = 1 - numRz
@@ -204,17 +257,25 @@ class TestPeriodicForce(unittest.TestCase):
         kmax = 10
 
         ref = ReferenceEwaldEnergy(params, param_idxs, box, exclusions, kmax)
-        ref_nrg = ref.reference_reciprocal_energy(x0)
-        omm_nrg = ref.openmm_reciprocal_energy(x0)
+        ref_recip_nrg = ref.reference_reciprocal_energy(x0)
+        omm_recip_nrg = ref.openmm_reciprocal_energy(x0)
 
         esf = EwaldElectrostaticForce(params_tf, param_idxs, box, exclusions, kmax)
         x_ph = tf.placeholder(shape=(5, 3), dtype=np.float64)
-        test_nrg_op = esf.reciprocal_energy(x_ph)
+        test_recip_nrg_op = esf.reciprocal_energy(x_ph)
 
         sess = tf.Session()
 
-        np.testing.assert_almost_equal(ref_nrg, omm_nrg)
-        np.testing.assert_almost_equal(ref_nrg, sess.run(test_nrg_op, feed_dict={x_ph: x0}))
+        # reciprocal
+        np.testing.assert_almost_equal(ref_recip_nrg, omm_recip_nrg)
+        np.testing.assert_almost_equal(ref_recip_nrg, sess.run(test_recip_nrg_op, feed_dict={x_ph: x0}))
+
+        # direct
+        omm_direct_nrg, omm_exc_nrg = ref.openmm_direct_and_exclusion_energy(x0)
+        test_direct_nrg_op, test_exc_nrg_op = esf.direct_and_exclusion_energy(x_ph)
+
+        np.testing.assert_almost_equal(omm_direct_nrg, sess.run(test_direct_nrg_op, feed_dict={x_ph: x0}))
+        np.testing.assert_almost_equal(omm_exc_nrg, sess.run(test_exc_nrg_op, feed_dict={x_ph: x0}))
 
         grads = esf.gradients(x_ph)
         hessians = esf.hessians(x_ph)
@@ -224,7 +285,6 @@ class TestPeriodicForce(unittest.TestCase):
         assert not np.any(np.isnan(g))
         assert not np.any(np.isnan(h))
         assert not np.any(np.isnan(m))
-
 
 if __name__ == "__main__":
     unittest.main()

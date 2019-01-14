@@ -3,6 +3,15 @@ import tensorflow as tf
 from timemachine.force import ConservativeForce
 from timemachine.constants import ONE_4PI_EPS0
 
+def generate_inclusion_exclusion_masks(exclusions):
+    ones = tf.ones_like(exclusions, dtype=tf.int32)
+    mask_a = tf.matrix_band_part(ones, 0, -1) # Upper triangular matrix of 0s and 1s
+    mask_b = tf.matrix_band_part(ones, 0, 0) # Diagonal matrix
+
+    # only use upper triangular part
+    exclusions = tf.cast(tf.matrix_band_part(exclusions, 0, -1), dtype=tf.int32)
+    return (mask_a - mask_b) - exclusions, exclusions
+
 class EwaldElectrostaticForce(ConservativeForce):
 
     def __init__(self, params, param_idxs, box, exclusions, kmax=10):
@@ -15,6 +24,7 @@ class EwaldElectrostaticForce(ConservativeForce):
         self.exclusions = exclusions
         self.alphaEwald = 1.0
         self.kmax = kmax
+        self.direct_mask, self.exclusion_mask = generate_inclusion_exclusion_masks(exclusions)
 
         self.recipBoxSize = np.array([
             (2*np.pi)/self.box[0],
@@ -39,8 +49,39 @@ class EwaldElectrostaticForce(ConservativeForce):
         self.ki = np.expand_dims(self.recipBoxSize, axis=0) * mg # [nk, 3]
 
     def energy(self, conf):
+        direct_nrg, exclusion_nrg = self.direct_and_exclusion_energy(conf)
+        return self.reciprocal_energy(conf) + direct_nrg - exclusion_nrg
 
-        return self.reciprocal_energy(conf)
+    def direct_and_exclusion_energy(self, conf):
+        charges = tf.gather(self.params, self.param_idxs)
+        qi = tf.expand_dims(charges, 0)
+        qj = tf.expand_dims(charges, 1)
+        qij = tf.multiply(qi, qj)
+
+        ri = tf.expand_dims(conf, 0)
+        rj = tf.expand_dims(conf, 1)
+        # compute periodic distance
+        rij = ri - rj
+        base = tf.floor(rij/self.box + 0.5)*self.box # (ytz): can we differentiate through this?
+        dxdydz = tf.pow(rij-base, 2)
+        d2ij = tf.reduce_sum(dxdydz, axis=-1)
+
+        # (ytz): we move the sqrt to outside of the mask
+        # to avoid nans in autograd.
+
+        # direct
+        qij_direct_mask = tf.boolean_mask(qij, self.direct_mask)
+        d2ij_direct_mask = tf.boolean_mask(d2ij, self.direct_mask)
+        r_direct = tf.sqrt(d2ij_direct_mask)
+        eij_direct = (qij_direct_mask/r_direct)*tf.erfc(self.alphaEwald*r_direct)
+
+        # exclusions
+        qij_exclusion_mask = tf.boolean_mask(qij, self.exclusion_mask)
+        d2ij_exclusion_mask = tf.boolean_mask(d2ij, self.exclusion_mask)
+        r_exclusion = tf.sqrt(d2ij_exclusion_mask)
+        eij_exclusion = (qij_exclusion_mask/r_exclusion)*tf.erf(self.alphaEwald*r_exclusion)
+
+        return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1), ONE_4PI_EPS0*tf.reduce_sum(eij_exclusion, axis=-1)
 
     def reciprocal_energy(self, conf):
         # stack with box vectors
