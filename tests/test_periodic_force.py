@@ -71,11 +71,11 @@ class ReferenceEwaldEnergy():
         lowry = 0
         lowrz = 1
 
-        numRx, numRy, numRz = 2, 2, 2
+        numRx, numRy, numRz = self.kmax, self.kmax, self.kmax
 
-        for rx in range(2):
-            for ry in range(lowry, 2):
-                for rz in range(lowrz, 2):
+        for rx in range(self.kmax):
+            for ry in range(lowry, self.kmax):
+                for rz in range(lowrz, self.kmax):
                     mg.append((rx, ry, rz))
                     lowrz = 1 - numRz
                 lowry = 1 - numRy
@@ -201,7 +201,7 @@ class TestPeriodicForce(unittest.TestCase):
         params_tf = tf.convert_to_tensor(params)
         param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
 
-        kmax = 2
+        kmax = 10
 
         ref = ReferenceEwaldEnergy(params, param_idxs, box, exclusions, kmax)
         ref_nrg = ref.reference_reciprocal_energy(x0)
