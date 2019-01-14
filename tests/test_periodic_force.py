@@ -28,7 +28,7 @@ class ReferenceEwaldEnergy():
         self.num_atoms = len(self.charges)
         self.box = box # we probably want this to be variable when we start to work on barostats
         self.exclusions = exclusions
-        self.alphaEwald = 1.0
+        self.alphaEwald = 1.0 # 1/(sqrt(2)*sigma)
         self.kmax = kmax
         self.recipBoxSize = np.array([
             (2*np.pi)/self.box[0],
@@ -160,6 +160,14 @@ class ReferenceEwaldEnergy():
 
         return recipCoeff * nrg
 
+    def openmm_self_energy(self, conf):
+        # self-energy actually doesn't contribute to the forces since it doesn't depend
+        # on the geometry
+        nrg = 0
+        for n in range(self.num_atoms):
+            nrg += ONE_4PI_EPS0*self.charges[n] * self.charges[n]*self.alphaEwald/np.sqrt(np.pi)
+        return nrg
+
     def openmm_reciprocal_energy(self, conf):
         # Reference implementation taken from ReferenceLJCoulombIxn.cpp in OpenMM
         N = self.num_atoms
@@ -270,12 +278,17 @@ class TestPeriodicForce(unittest.TestCase):
         np.testing.assert_almost_equal(ref_recip_nrg, omm_recip_nrg)
         np.testing.assert_almost_equal(ref_recip_nrg, sess.run(test_recip_nrg_op, feed_dict={x_ph: x0}))
 
-        # direct
+        # direct and exclusions
         omm_direct_nrg, omm_exc_nrg = ref.openmm_direct_and_exclusion_energy(x0)
         test_direct_nrg_op, test_exc_nrg_op = esf.direct_and_exclusion_energy(x_ph)
 
         np.testing.assert_almost_equal(omm_direct_nrg, sess.run(test_direct_nrg_op, feed_dict={x_ph: x0}))
         np.testing.assert_almost_equal(omm_exc_nrg, sess.run(test_exc_nrg_op, feed_dict={x_ph: x0}))
+
+        # self
+        omm_self_nrg = ref.openmm_self_energy(x0)
+        test_self_nrg_op = esf.self_energy(x0)
+        np.testing.assert_almost_equal(omm_self_nrg, sess.run(test_self_nrg_op, feed_dict={x_ph: x0}))
 
         grads = esf.gradients(x_ph)
         hessians = esf.hessians(x_ph)
