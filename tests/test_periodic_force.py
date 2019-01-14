@@ -4,8 +4,7 @@ import tensorflow as tf
 
 from scipy.special import erf, erfc
 from timemachine.constants import ONE_4PI_EPS0
-from timemachine.periodic_force import EwaldElectrostaticForce
-
+from timemachine.nonbonded_force import LeonnardJonesForce, ElectrostaticForce
 
 def periodic_difference(val1, val2, period):
     diff = val1-val2
@@ -19,13 +18,54 @@ def periodic_dij(ri, rj, boxSize):
     dz = periodic_difference(ri[2], rj[2], boxSize[2])
     return np.sqrt(dx*dx + dy*dy + dz*dz)
 
+class ReferenceLeonnardJonesEnergy():
+
+    def __init__(self, params, param_idxs, exclusions, box, kmax=0):
+        self.params = params # variadic
+        self.param_idxs = param_idxs # (N, 2), last rank is (sig_idx, eps_idx)
+        self.num_atoms = len(self.param_idxs)
+        self.box = box
+        self.exclusions = exclusions
+
+    def openmm_energy(self, conf):
+
+        # minimum image convention
+        direct_vdw_nrg = 0
+
+        for i in range(self.num_atoms):
+            sig_i = self.params[self.param_idxs[i, 0]]
+            eps_i = self.params[self.param_idxs[i, 1]]
+            ri = conf[i]
+            for j in range(i+1, self.num_atoms):
+                
+                if self.exclusions[i][j]:
+                    continue
+
+                rj = conf[j]
+                r = periodic_dij(ri, rj, self.box)
+
+                sig_j = self.params[self.param_idxs[j, 0]]
+                eps_j = self.params[self.param_idxs[j, 1]]
+
+                sig = sig_i + sig_j
+                sig2 = sig/r
+                sig2 *= sig2
+                sig6 = sig2*sig2*sig2
+                eps = eps_i * eps_j
+
+                vdwEnergy = eps*(sig6-1.0)*sig6
+
+                direct_vdw_nrg += vdwEnergy
+
+        return direct_vdw_nrg
+
 class ReferenceEwaldEnergy():
 
-    def __init__(self, params, param_idxs, box, exclusions, kmax=10):
+    def __init__(self, params, param_idxs, exclusions, box, kmax=10):
         self.params = params
         self.param_idxs = param_idxs # length N
         self.charges = [self.params[p_idx] for p_idx in self.param_idxs]
-        self.num_atoms = len(self.charges)
+        self.num_atoms = len(self.param_idxs)
         self.box = box # we probably want this to be variable when we start to work on barostats
         self.exclusions = exclusions
         self.alphaEwald = 1.0 # 1/(sqrt(2)*sigma)
@@ -236,9 +276,8 @@ class ReferenceEwaldEnergy():
 
 class TestPeriodicForce(unittest.TestCase):
 
-    def test_reference_ewald(self):
-
-        x0 = np.array([
+    def setUp(self):
+        self.x0 = np.array([
             [ 0.0637,   0.0126,   0.2203],
             [ 1.0573,  -0.2011,   1.2864],
             [ 2.3928,   1.2209,  -0.2230],
@@ -246,7 +285,7 @@ class TestPeriodicForce(unittest.TestCase):
             [-0.6312,  -1.6261,  -0.2601]
         ], dtype=np.float64)
 
-        exclusions = np.array([
+        self.exclusions = np.array([
             [0,0,1,0,0],
             [0,0,0,1,1],
             [1,0,0,0,0],
@@ -254,7 +293,41 @@ class TestPeriodicForce(unittest.TestCase):
             [0,1,0,1,0],
             ], dtype=np.bool)
 
-        box = [10.0, 10.0, 10.0]
+        self.box = [10.0, 10.0, 10.0]
+
+
+    def tearDown(self):
+        tf.reset_default_graph()
+
+    def test_reference_leonnard_jones(self):
+        x0 = self.x0
+        exclusions = self.exclusions
+
+        params_np = np.array([3.0, 2.0, 1.0, 1.4], dtype=np.float64)
+        params = tf.convert_to_tensor(params_np)
+        # Ai, Ci
+        param_idxs = np.array([
+            [0, 3],
+            [1, 2],
+            [1, 2],
+            [1, 2],
+            [1, 2]], dtype=np.int32)
+
+        rlj = ReferenceLeonnardJonesEnergy(params_np, param_idxs, self.exclusions, self.box)
+        ref_nrg = rlj.openmm_energy(x0)
+
+        tlj = LeonnardJonesForce(params, param_idxs, self.exclusions, self.box)
+        test_nrg_op = tlj.energy(x0)
+
+        sess = tf.Session()
+        np.testing.assert_almost_equal(ref_nrg, sess.run(test_nrg_op))
+
+
+    def test_reference_ewald_electrostatic(self):
+
+        x0 = self.x0
+        exclusions = self.exclusions
+        box = self.box
 
         params = np.array([1.3, 0.3], dtype=np.float64)
         params_tf = tf.convert_to_tensor(params)
@@ -262,11 +335,11 @@ class TestPeriodicForce(unittest.TestCase):
 
         kmax = 10
 
-        ref = ReferenceEwaldEnergy(params, param_idxs, box, exclusions, kmax)
+        ref = ReferenceEwaldEnergy(params, param_idxs, exclusions, box, kmax)
         ref_recip_nrg = ref.reference_reciprocal_energy(x0)
         omm_recip_nrg = ref.openmm_reciprocal_energy(x0)
 
-        esf = EwaldElectrostaticForce(params_tf, param_idxs, box, exclusions, kmax)
+        esf = ElectrostaticForce(params_tf, param_idxs, exclusions, box, kmax)
         x_ph = tf.placeholder(shape=(5, 3), dtype=np.float64)
         test_recip_nrg_op = esf.reciprocal_energy(x_ph)
 
