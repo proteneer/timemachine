@@ -7,7 +7,7 @@ from timemachine.periodic_force import EwaldElectrostaticForce
 
 class ReferenceEwaldEnergy():
 
-    def __init__(self, params, param_idxs, box, exclusions):
+    def __init__(self, params, param_idxs, box, exclusions, kmax=10):
         self.params = params
         self.param_idxs = param_idxs # length N
         self.charges = [self.params[p_idx] for p_idx in self.param_idxs]
@@ -15,7 +15,7 @@ class ReferenceEwaldEnergy():
         self.box = box # we probably want this to be variable when we start to work on barostats
         self.exclusions = exclusions
         self.alphaEwald = 1.0
-        self.kmax = 10
+        self.kmax = kmax
         self.recipBoxSize = np.array([
             (2*np.pi)/self.box[0],
             (2*np.pi)/self.box[1],
@@ -24,7 +24,7 @@ class ReferenceEwaldEnergy():
 
 
     def energy(self, conf):
-        return self.reciprocal_energy(conf)
+        return self.openmm_reciprocal_energy(conf)
 
     def _construct_eir(self, conf):
 
@@ -51,8 +51,62 @@ class ReferenceEwaldEnergy():
 
         return eir
 
+    def reference_reciprocal_energy(self, conf):
 
-    def reciprocal_energy(self, conf):
+        # this generates an energy thats 2x the e
+        # x_tiles = [0]
+        # y_tiles = [0]
+        # z_tiles = [0]
+
+        # for i in range(1, self.kmax):
+        #     x_tiles.extend([i, -i])
+        #     y_tiles.extend([i, -i])
+        #     z_tiles.extend([i, -i])
+        # # we discard the k=[0,0,0] cells.
+        # mg = np.stack(np.meshgrid(x_tiles, y_tiles, z_tiles), -1).reshape(-1, 3)[1:] # [nk, 3]
+
+        # a faster implementation, saves by factor of two by exploiting anti-symmetry
+        # generates indices using the same method as OpenMM
+        mg = []
+        lowry = 0
+        lowrz = 1
+
+        numRx, numRy, numRz = 2, 2, 2
+
+        for rx in range(2):
+            for ry in range(lowry, 2):
+                for rz in range(lowrz, 2):
+                    mg.append((rx, ry, rz))
+                    lowrz = 1 - numRz
+                lowry = 1 - numRy
+
+        ki = np.expand_dims(self.recipBoxSize, axis=0) * mg # [nk, 3]
+
+        # stack with box vectors
+
+        ri = np.expand_dims(conf, axis=0) # [1, N, 3]
+        rik = np.sum(np.multiply(ri, np.expand_dims(ki, axis=1)), axis=-1) # [nk, N]
+
+        real = np.cos(rik)
+        imag = np.sin(rik)
+
+        eikr = real + 1j*imag # [nk, N]
+
+        qi = np.reshape(np.array(self.charges), (1, -1)) # [1, N]
+
+        Sk = np.sum(qi*eikr, axis=-1)  # [nk]
+        n2Sk = np.power(np.absolute(Sk), 2)
+        k2 = np.sum(np.multiply(ki, ki), axis=-1) # [nk]
+
+        factorEwald = -1/(4*self.alphaEwald*self.alphaEwald)
+        ak = np.exp(k2*factorEwald)/k2 # [nk]
+        nrg = np.sum(ak * n2Sk)
+
+        recipCoeff = (ONE_4PI_EPS0*4*np.pi)/(self.box[0]*self.box[1]*self.box[2])
+
+        return recipCoeff * nrg
+
+    def openmm_reciprocal_energy(self, conf):
         # Reference implementation taken from ReferenceLJCoulombIxn.cpp in OpenMM
         N = self.num_atoms
 
@@ -70,9 +124,10 @@ class ReferenceEwaldEnergy():
 
         factorEwald = -1 / (4*self.alphaEwald*self.alphaEwald)
         epsilon = 1.0
-        recipCoeff = ONE_4PI_EPS0*4*np.pi/(self.box[0]*self.box[1]*self.box[2])/epsilon;
+        recipCoeff = (ONE_4PI_EPS0*4*np.pi)/(self.box[0]*self.box[1]*self.box[2])/epsilon;
 
-        # we can tile and build this up pretty easily.
+        all_idxs = []
+
         for rx in range(numRx):
 
             kx = rx * self.recipBoxSize[0]
@@ -89,7 +144,7 @@ class ReferenceEwaldEnergy():
                         tab_xy[n] = eir[rx, n, 0] * np.conj(eir[-ry, n, 1])
 
                 for rz in range(lowrz, numRz):
-                    # print(rx, ry, rz)
+                    all_idxs.append((rx, ry, rz))
                     if rz >= 0:
                         for n in range(N):
                             tab_qxyz[n] = self.charges[n] * tab_xy[n] * eir[rz, n, 2]
@@ -107,8 +162,7 @@ class ReferenceEwaldEnergy():
                     kz = rz * self.recipBoxSize[2]
                     k2 = kx * kx + ky*ky + kz*kz
                     ak = np.exp(k2*factorEwald) / k2
-
-                    recipEnergy = recipCoeff * ak * (cs * cs + ss * ss)
+                    recipEnergy = ak * (cs * cs + ss * ss)
 
                     totalRecipEnergy += recipEnergy
 
@@ -116,7 +170,7 @@ class ReferenceEwaldEnergy():
 
                 lowry = 1 - numRy
 
-        return totalRecipEnergy
+        return recipCoeff * totalRecipEnergy
 
 
 class TestPeriodicForce(unittest.TestCase):
@@ -144,17 +198,32 @@ class TestPeriodicForce(unittest.TestCase):
         box = [10.0, 10.0, 10.0]
 
         params = np.array([1.3, 0.3], dtype=np.float64)
+        params_tf = tf.convert_to_tensor(params)
         param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
 
-        ref = ReferenceEwaldEnergy(params, param_idxs, box, exclusions)
-        ref_eir = ref._construct_eir(x0)
+        kmax = 2
 
-        esf = EwaldElectrostaticForce(params, param_idxs, box, exclusions)
-        test_eir = esf._construct_eir(x0)
+        ref = ReferenceEwaldEnergy(params, param_idxs, box, exclusions, kmax)
+        ref_nrg = ref.reference_reciprocal_energy(x0)
+        omm_nrg = ref.openmm_reciprocal_energy(x0)
+
+        esf = EwaldElectrostaticForce(params_tf, param_idxs, box, exclusions, kmax)
+        x_ph = tf.placeholder(shape=(5, 3), dtype=np.float64)
+        test_nrg_op = esf.reciprocal_energy(x_ph)
 
         sess = tf.Session()
-        np.testing.assert_almost_equal(ref_eir, sess.run(test_eir))
 
+        np.testing.assert_almost_equal(ref_nrg, omm_nrg)
+        np.testing.assert_almost_equal(ref_nrg, sess.run(test_nrg_op, feed_dict={x_ph: x0}))
+
+        grads = esf.gradients(x_ph)
+        hessians = esf.hessians(x_ph)
+        mixed = esf.mixed_partials(x_ph)
+
+        g,h,m = sess.run([grads, hessians, mixed], feed_dict={x_ph: x0})
+        assert not np.any(np.isnan(g))
+        assert not np.any(np.isnan(h))
+        assert not np.any(np.isnan(m))
 
 
 if __name__ == "__main__":
