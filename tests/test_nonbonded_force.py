@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import tensorflow as tf
-from timemachine.nonbonded_force import ElectrostaticForce, LJ612Force
+from timemachine.nonbonded_force import ElectrostaticForce, LeonnardJonesForce
 from timemachine.constants import ONE_4PI_EPS0
 
 class TestNonbondedForce(unittest.TestCase):
@@ -41,7 +41,7 @@ class TestNonbondedForce(unittest.TestCase):
             [0,1,0,1,0],
             ], dtype=np.bool)
 
-        ef = LJ612Force(params, param_idxs, exclusions)
+        ef = LeonnardJonesForce(params, param_idxs, exclusions, None)
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
@@ -49,15 +49,32 @@ class TestNonbondedForce(unittest.TestCase):
         num_atoms = 5
         ref_nrg = 0
 
+        conf = x0
+
         for i in range(num_atoms):
-            Ai = params_np[param_idxs[i, 0]]
-            Ci = params_np[param_idxs[i, 1]]
+            sig_i = params_np[param_idxs[i, 0]]
+            eps_i = params_np[param_idxs[i, 1]]
+            ri = conf[i]
+
             for j in range(i+1, num_atoms):
-                if not exclusions[i, j]:
-                    Aj = params_np[param_idxs[j, 0]]
-                    Cj = params_np[param_idxs[j, 1]]
-                    dij = np.linalg.norm(x0[i] - x0[j])
-                    ref_nrg += np.sqrt(Ai*Aj)/np.power(dij, 12) - np.sqrt(Ci*Cj)/np.power(dij, 6)
+                if exclusions[i, j]:
+                    continue
+
+                sig_j = params_np[param_idxs[j, 0]]
+                eps_j = params_np[param_idxs[j, 1]]
+                rj = conf[j]
+
+                r = np.linalg.norm(x0[i] - x0[j])
+
+                sig = sig_i + sig_j
+                sig2 = sig/r
+                sig2 *= sig2
+                sig6 = sig2*sig2*sig2
+                eps = eps_i * eps_j
+
+                vdwEnergy = eps*(sig6-1.0)*sig6
+
+                ref_nrg += vdwEnergy
 
         # (ytz) TODO: add a test for forces, for now we rely on
         # autograd to be analytically correct.
@@ -65,18 +82,19 @@ class TestNonbondedForce(unittest.TestCase):
 
         test_nrg = sess.run(test_nrg_op, feed_dict={x_ph: x0})
 
-        np.testing.assert_almost_equal(ref_nrg, test_nrg, decimal=15)
+
+        # 3707370.0568588967, 3707370.056858897
+        np.testing.assert_almost_equal(ref_nrg, test_nrg, decimal=8)
 
         test_grads_op = ef.gradients(x_ph)
         test_grads = sess.run(test_grads_op, feed_dict={x_ph: x0})
 
         net_force = np.sum(test_grads, axis=0)
         # this also checks that there are no NaNs
-        np.testing.assert_almost_equal(net_force, [0,0,0], decimal=14)
+        np.testing.assert_almost_equal(net_force, [0,0,0], decimal=7)
 
         assert not np.any(np.isnan(sess.run(ef.hessians(x_ph), feed_dict={x_ph: x0})))
         assert not np.any(np.isnan(sess.run(ef.mixed_partials(x_ph), feed_dict={x_ph: x0})))
-
 
 
     def test_electrostatics(self):

@@ -4,9 +4,7 @@ import tensorflow as tf
 
 from scipy.special import erf, erfc
 from timemachine.constants import ONE_4PI_EPS0
-from timemachine.periodic_force import EwaldElectrostaticForce
-from timemachine.nonbonded_force import LeonnardJonesForce
-
+from timemachine.nonbonded_force import LeonnardJonesForce, ElectrostaticForce
 
 def periodic_difference(val1, val2, period):
     diff = val1-val2
@@ -341,7 +339,7 @@ class TestPeriodicForce(unittest.TestCase):
         ref_recip_nrg = ref.reference_reciprocal_energy(x0)
         omm_recip_nrg = ref.openmm_reciprocal_energy(x0)
 
-        esf = EwaldElectrostaticForce(params_tf, param_idxs, exclusions, box, kmax)
+        esf = ElectrostaticForce(params_tf, param_idxs, exclusions, box, kmax)
         x_ph = tf.placeholder(shape=(5, 3), dtype=np.float64)
         test_recip_nrg_op = esf.reciprocal_energy(x_ph)
 
