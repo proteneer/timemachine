@@ -19,8 +19,8 @@ We currently support a subset of the standard forcefield:
 - Harmonic Bonds (bonded_force.py)
 - Harmonic Angles (bonded_force.py)
 - CHARMM Torsions (bonded_force.py)
-- Ewald Electrostatics (periodic_force.py, nonbonded_force.py)
-- Non periodic Leonnard Jones (nonbonded_force.py)
+- Ewald Electrostatics (nonbonded_force.py)
+- Ewald Leonnard Jones (nonbonded_force.py)
 - Tensorfield Networks (nn_force.py)
 
  Their various derivatives are implemented by their energy functions, whose derivatives of various orders are subsequently generated automatically via reverse-mode automatic differentiation.
