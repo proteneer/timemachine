@@ -293,8 +293,8 @@ class TestPeriodicForce(unittest.TestCase):
             [0,1,0,1,0],
             ], dtype=np.bool)
 
+        # self.box = tf.placeholder([10.0, 10.0, 10.0], dtype=np.float64)
         self.box = [10.0, 10.0, 10.0]
-
 
     def tearDown(self):
         tf.reset_default_graph()
@@ -316,12 +316,17 @@ class TestPeriodicForce(unittest.TestCase):
         rlj = ReferenceLeonnardJonesEnergy(params_np, param_idxs, self.exclusions, self.box)
         ref_nrg = rlj.openmm_energy(x0)
 
-        tlj = LeonnardJonesForce(params, param_idxs, self.exclusions, self.box)
+        box_ph = tf.placeholder(shape=(3), dtype=tf.float64)
+
+        tlj = LeonnardJonesForce(params, param_idxs, self.exclusions, box_ph)
         test_nrg_op = tlj.energy(x0)
 
         sess = tf.Session()
-        np.testing.assert_almost_equal(ref_nrg, sess.run(test_nrg_op))
+        np.testing.assert_almost_equal(ref_nrg, sess.run(test_nrg_op, feed_dict={box_ph: self.box}))
 
+        print("generating dEdbox")
+        dEdbox = tf.gradients(test_nrg_op, box_ph)
+        print(sess.run(dEdbox, feed_dict={box_ph: self.box}))
 
     def test_reference_ewald_electrostatic(self):
 
@@ -339,7 +344,9 @@ class TestPeriodicForce(unittest.TestCase):
         ref_recip_nrg = ref.reference_reciprocal_energy(x0)
         omm_recip_nrg = ref.openmm_reciprocal_energy(x0)
 
-        esf = ElectrostaticForce(params_tf, param_idxs, exclusions, box, kmax)
+        box_ph = tf.placeholder(shape=(3), dtype=tf.float64)
+
+        esf = ElectrostaticForce(params_tf, param_idxs, exclusions, box_ph, kmax)
         x_ph = tf.placeholder(shape=(5, 3), dtype=np.float64)
         test_recip_nrg_op = esf.reciprocal_energy(x_ph)
 
@@ -347,28 +354,33 @@ class TestPeriodicForce(unittest.TestCase):
 
         # reciprocal
         np.testing.assert_almost_equal(ref_recip_nrg, omm_recip_nrg)
-        np.testing.assert_almost_equal(ref_recip_nrg, sess.run(test_recip_nrg_op, feed_dict={x_ph: x0}))
+        np.testing.assert_almost_equal(ref_recip_nrg, sess.run(test_recip_nrg_op, feed_dict={x_ph: x0, box_ph: self.box}))
 
         # direct and exclusions
         omm_direct_nrg, omm_exc_nrg = ref.openmm_direct_and_exclusion_energy(x0)
         test_direct_nrg_op, test_exc_nrg_op = esf.direct_and_exclusion_energy(x_ph)
 
-        np.testing.assert_almost_equal(omm_direct_nrg, sess.run(test_direct_nrg_op, feed_dict={x_ph: x0}))
-        np.testing.assert_almost_equal(omm_exc_nrg, sess.run(test_exc_nrg_op, feed_dict={x_ph: x0}))
+        np.testing.assert_almost_equal(omm_direct_nrg, sess.run(test_direct_nrg_op, feed_dict={x_ph: x0, box_ph: self.box}))
+        np.testing.assert_almost_equal(omm_exc_nrg, sess.run(test_exc_nrg_op, feed_dict={x_ph: x0, box_ph: self.box}))
 
         # self
         omm_self_nrg = ref.openmm_self_energy(x0)
         test_self_nrg_op = esf.self_energy(x0)
-        np.testing.assert_almost_equal(omm_self_nrg, sess.run(test_self_nrg_op, feed_dict={x_ph: x0}))
+        np.testing.assert_almost_equal(omm_self_nrg, sess.run(test_self_nrg_op, feed_dict={x_ph: x0, box_ph: self.box}))
 
         grads = esf.gradients(x_ph)
         hessians = esf.hessians(x_ph)
         mixed = esf.mixed_partials(x_ph)
 
-        g,h,m = sess.run([grads, hessians, mixed], feed_dict={x_ph: x0})
+        g,h,m = sess.run([grads, hessians, mixed], feed_dict={x_ph: x0, box_ph: self.box})
         assert not np.any(np.isnan(g))
         assert not np.any(np.isnan(h))
         assert not np.any(np.isnan(m))
+
+        box_grads = tf.gradients(esf.energy(x_ph), box_ph)
+
+        assert not np.any(np.isnan(m))
+        print(sess.run(box_grads, feed_dict={x_ph: x0, box_ph: self.box}))
 
 if __name__ == "__main__":
     unittest.main()

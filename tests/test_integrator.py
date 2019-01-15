@@ -7,6 +7,8 @@ from timemachine.constants import BOLTZ
 from timemachine import integrator
 from tensorflow.python.ops.parallel_for.gradients import jacobian
 
+from timemachine.nonbonded_force import LeonnardJonesForce, ElectrostaticForce
+
 # static long long estimate_steps_to_converge(float coeff_a) {
 #   double epsilon = 1e-8;
 #   return static_cast<long long>(log(epsilon)/log(coeff_a)+1);
@@ -146,6 +148,75 @@ class TestLangevinIntegrator(unittest.TestCase):
 
             x_ref += ref_dx_val
             x_test += test_dx_val
+
+
+    def test_ten_steps_with_periodic_box(self):
+        """
+        Testing that we can integrate with a periodic box.
+        """
+        friction = 10.0
+        dt = 0.003
+        temp = 0.0
+
+        masses = np.array([1.0, 12.0, 4.0, 2.0, 3.0])
+        num_atoms = len(masses)
+        x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
+
+        x0 = np.array([
+            [ 0.0637,   0.0126,   0.2203],
+            [ 1.0573,  -0.2011,   1.2864],
+            [ 2.3928,   1.2209,  -0.2230],
+            [-0.6891,   1.6983,   0.0780],
+            [-0.6312,  -1.6261,  -0.2601]
+        ], dtype=np.float64)
+
+        b0 = np.array([10.0, 10.0, 10.0], dtype=np.float64)
+
+        params = tf.convert_to_tensor(np.array([1.0, -0.5], dtype=np.float64))
+        param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
+
+        exclusions = np.array([
+            [0,0,1,0,0],
+            [0,0,0,1,1],
+            [1,0,0,0,0],
+            [0,1,0,0,1],
+            [0,1,0,1,0],
+            ], dtype=np.bool)
+
+        box_ph = tf.placeholder(shape=(3), dtype=tf.float64)
+        energy = ElectrostaticForce(params, param_idxs, exclusions, box_ph)
+
+        sess = tf.Session()
+        
+        ref_intg = ReferenceLangevinIntegrator(masses, dt, friction, temp)
+
+        num_steps = 20
+
+        x = x_ph
+        box = box_ph
+
+        for step in range(num_steps):
+            print("step", step)
+            all_grads = []
+            for force in [energy]:
+                all_grads.append(force.gradients(x))
+            all_grads = tf.stack(all_grads, axis=0)
+            grads = tf.reduce_sum(all_grads, axis=0)
+            box_grads = tf.gradients(energy.energy(x), box_ph)[0]
+            dx = ref_intg.step(grads)
+            x += dx
+            box -= dt*box_grads
+
+        ref_x_final_op = x
+        ref_box_final_op = box
+
+        ref_dxdp_op = jacobian(x, energy.get_params(), use_pfor=False)
+
+        print(sess.run(
+            [ref_x_final_op, ref_box_final_op, ref_dxdp_op],
+            feed_dict={x_ph: x0, box_ph: b0}
+        ))
+
 
 
     def test_ten_steps(self):

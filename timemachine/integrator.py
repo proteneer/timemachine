@@ -13,7 +13,8 @@ class LangevinIntegrator():
         friction=1.0,
         temp=300.0,
         precision=tf.float64,
-        buffer_size=None):
+        buffer_size=None,
+        b_t=None):
         """
         Langevin Integrator is an implementation of stochastic dynamics that samples
         from a gaussian distribution to simulate the effects of a thermostat.
@@ -38,6 +39,16 @@ class LangevinIntegrator():
         temp: float
             Temperature used for drawing random velocities. Is this is zero then no
             random noise will be added.
+
+        precision: precision
+            Either tf.float32 or tf.float64
+
+        buffer_size: int
+            If None then we estimate the buffer size required for convergence automatically.
+            Otherwise we try and compute the buffer analytically.
+
+        b_t: None
+            If not None then we also compute box-vector hessians and mixed partials.
 
         This is inspired by ReferenceStochasticDynamics.cpp from OpenMM.
 

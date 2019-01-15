@@ -164,11 +164,7 @@ class ElectrostaticForce(ConservativeForce):
     def reciprocal_energy(self, conf):
         assert self.box is not None
 
-        recipBoxSize = np.array([
-            (2*np.pi)/self.box[0],
-            (2*np.pi)/self.box[1],
-            (2*np.pi)/self.box[2]]
-        )
+        recipBoxSize = (2*np.pi)/self.box
 
         mg = []
         lowry = 0
@@ -184,7 +180,7 @@ class ElectrostaticForce(ConservativeForce):
                 lowry = 1 - numRy
 
         # lattice vectors
-        ki = np.expand_dims(recipBoxSize, axis=0) * mg # [nk, 3]
+        ki = tf.expand_dims(recipBoxSize, axis=0) * mg # [nk, 3]
         ri = tf.expand_dims(conf, axis=0) # [1, N, 3]
         rik = tf.reduce_sum(tf.multiply(ri, tf.expand_dims(ki, axis=1)), axis=-1) # [nk, N]
         real = tf.cos(rik)
