@@ -28,61 +28,97 @@ Second, the ability to analytically fit these parameters to observables derived 
 
 \section{Mathematical Formalism}
 
-Define the loss function $L(O(\vec{X}_{label}), O(\vec{X}_{md}))$, where $O$ is a function that calculates some observable from an ensemble. $\vec{X}_{md}(\vec{x}_0; \theta)$ is a set of conformations derived from a molecular dynamics simulation, starting from some initial state $\vec{x}_0$ with some set of forcefield parameters $\theta$. We can also write $\vec{X}_{md}$ as a collection of individual states $\vec{x}_t$ at various times $t$. The goal is to analytically derive $\dfrac{\partial L}{\partial \theta}$ so we can train $\theta$ to some experimental observable $O(\vec{X}_{label})$ by using a standard MSE loss:
+Define the loss function $L(O(\bm{X}_{label}), O(\bm{X}_{md}))$, where $O$ is a function that calculates some observable from an ensemble. $\bm{X}_{md}(\bm{x}_0; \theta)$ is a set of conformations derived from a molecular dynamics simulation, starting from some initial state $\bm{x}_0$ with some set of forcefield parameters $\theta$. We can also write $\bm{X}_{md}$ as a collection of individual states $\bm{x}_t$ at various times $t$. The goal is to analytically derive $\dfrac{\partial L}{\partial \theta}$ so we can train $\theta$ to some experimental observable $O(\bm{X}_{label})$ by using a standard MSE loss:
 
 \begin{equation}
-L(O(\vec{x}_{label}), O(\vec{x}_t)) = \lbrack O(\vec{x}_{label}) - O(\vec{X}(\vec{x}_0;\theta)) \rbrack ^2
+L(O(\bm{x}_{label}), O(\bm{x}_t)) = \lbrack O(\bm{x}_{label}) - O(\bm{X}(\bm{x}_0;\theta)) \rbrack ^2
 \end{equation}
 Training the parameters means we need the gradient of $L$ with respect to the parameters $\theta$, which we compute using the chain rule:
 \begin{equation}
-\dfrac {\partial L}{\partial \theta} = \dfrac{\partial L}{\partial \vec{X}_{md}} \dfrac{\partial \vec{X}_{md}}{\partial \theta}
+\dfrac {\partial L}{\partial \theta} = \dfrac{\partial L}{\partial \bm{X}_{md}} \dfrac{\partial \bm{X}_{md}}{\partial \theta}
 \end{equation}
 In an unbiased sample of conformations, this is equal to a sum of the derivatives of individual states from the trajectory:
 \begin{equation}
-\dfrac {\partial L}{\partial \theta} = \sum_{t}{\dfrac{\partial L}{\partial \vec{x}_t} \dfrac{\partial \vec{x}_t}{\partial \theta}}
+\dfrac {\partial L}{\partial \theta} = \sum_{t}{\dfrac{\partial L}{\partial \bm{x}_t} \dfrac{\partial \bm{x}_t}{\partial \theta}}
 \end{equation}
-Each summand is a component-wise matrix-multiply, where both $\partial L / \partial \vec{x}_t$ and ${\partial \vec{x}_t}/{\partial \theta}$ are $(N, 3)$ matrices. The LHS is the derivative of the loss w.r.t. to a conformation, and the RHS is the derivative of a conformation w.r.t. to the model parameters. The LHS is trivial to compute, so the RHS is the main quantity of interest.
+Each summand is a component-wise matrix-multiply, where both $\partial L / \partial \bm{x}_t$ and ${\partial \bm{x}_t}/{\partial \theta}$ are $(N, 3)$ matrices. The LHS is the derivative of the loss w.r.t. to a conformation, and the RHS is the derivative of a conformation w.r.t. to the model parameters. The LHS is trivial to compute, so the RHS is the main quantity of interest.
 
-If we were to run Langevin dynamics, the velocity is $\vec{v}_t$ is updated according to:
+If we were to run Langevin dynamics, the velocity is $\bm{v}_t$ is updated according to:
 \begin{equation}
-\vec{v}_t = a \vec{v}_{t-1} - b \nabla E(\vec{x}_{t-1};\theta) + c \vec{n}_{t-1}
+\bm{v}_t = a \bm{v}_{t-1} - b \grad  E(\bm{x}_{t-1};\theta) + c \bm{n}_{t-1}
 \end{equation}
-Where $\nabla$ is the gradient operator (w.r.t. coordinates), and $a$, $b$, $c$ are the coefficents derived from the temperature and the friction, and $\vec{n}$ is noise sampled from an independent gaussian.
+Where $\grad_x $ is the gradient operator (w.r.t. coordinates), and $a$, $b$, $c$ are the coefficents derived from the temperature and the friction, and $\bm{n}$ is noise sampled from an independent gaussian.
 \begin{equation}
-\vec{x}_{t} = \vec{x}_{t-1} + \vec{v}_{t} \delta t
+\bm{x}_{t} = \bm{x}_{t-1} + \bm{v}_{t} \tau
 \end{equation}
 Expanding out the first few terms we get:
 \begin{equation}
 \begin{split}
-\vec{x}_1  &= \vec{x}_0 + \big(a \vec{v}_0 - b \nabla E(\vec{x}_0) + c \vec{n}_0  \big) \delta t \\
-\vec{x}_2  &= \vec{x}_1 + \bigg( a \Big( a \vec{v}_0 - b \nabla E(\vec{x}_0) + c \vec{n}_0 \Big) - b \nabla E(\vec{x}_1) + c \vec{n}_1 \bigg) \delta t \\
-\vec{x}_3  &= \vec{x}_2 + \Bigg(a\bigg(a \Big( a \vec{v}_0 - b \nabla E(\vec{x}_0) + c \vec{n}_0 \Big) - b \nabla E(\vec{x}_1) + c \vec{n}_1 \bigg) - b \nabla E(\vec{x}_2) + c \vec{n}_2 \Bigg) \delta t \\
+\bm{x}_1  &= \bm{x}_0 + \big(a \bm{v}_0 - b \grad  E(\bm{x}_0) + c \bm{n}_0  \big) \tau \\
+\bm{x}_2  &= \bm{x}_1 + \bigg( a \Big( a \bm{v}_0 - b \grad  E(\bm{x}_0) + c \bm{n}_0 \Big) - b \grad  E(\bm{x}_1) + c \bm{n}_1 \bigg) \tau \\
+\bm{x}_3  &= \bm{x}_2 + \Bigg(a\bigg(a \Big( a \bm{v}_0 - b \grad  E(\bm{x}_0) + c \bm{n}_0 \Big) - b \grad  E(\bm{x}_1) + c \bm{n}_1 \bigg) - b \grad  E(\bm{x}_2) + c \bm{n}_2 \Bigg) \tau \\
 \end{split}
 \end{equation}
-For convenience, we define the $\zeta$ operator:
+Recall we can compute the derivatives with respect to a parameter $\theta$ using the total derivative:
 \begin{equation}
-\zeta E(\vec{x}_i; \theta) \equiv \dfrac{\partial^2E}{\partial\vec{x}_i^2}\dfrac{\partial\vec{x}_i}{\partial\theta} +  \dfrac{\partial^2 E}{\partial \vec{x}_i \partial \theta} 
+D_{\theta}f \equiv \dfrac{df( x_0, \ldots, x_n ;\theta)}{d\theta} = \dfrac{\partial f}{\partial x_0} \dfrac{\partial x_0} {\partial\theta} + \ldots + \dfrac{\partial f}{\partial x_n}\dfrac{\partial x_n}{\partial\theta} + \dfrac{\partial f}{\partial \theta}
 \end{equation}
-To demystify this expression, the first summand is a tensor contraction of a rank-4 hessian (N,3,N,3) with a rank-2 derivative (N,3). The second summand is a rank-2 mixed partial derivative (N,3). We can write out the first few terms of the derivative using the $\zeta$ operator:
+We can then compute the equations of motion:
 \begin{equation}
 \begin{split}
-\dfrac{\partial\vec{x}_1}{\partial\theta}  &= - b\delta t \zeta E(\vec{x}_0) \\
-\dfrac{\partial\vec{x}_2}{\partial\theta}  &= - b\delta t \Big(\zeta E(\vec{x}_0)(1+a)+\zeta E(\vec{x}_1)\Big)\\
-\dfrac{\partial\vec{x}_3}{\partial\theta}  &= - b\delta t \Big(\zeta E(\vec{x}_0)(1+a+a^2)+\zeta E(\vec{x}_1)(1+a)+\zeta E(\vec{x}_2)\Big)\\
+\dfrac{\partial\bm{x}_1}{\partial\theta}  &= - b\tau D_{\theta} \grad E(\bm{x}_0) \\
+\dfrac{\partial\bm{x}_2}{\partial\theta}  &= - b\tau \Big(D_{\theta} \grad E(\bm{x}_0)(1+a)+D_{\theta} \grad E(\bm{x}_1)\Big)\\
+\dfrac{\partial\bm{x}_3}{\partial\theta}  &= - b\tau \Big(D_{\theta} \grad E(\bm{x}_0)(1+a+a^2)+D_{\theta} \grad E(\bm{x}_1)(1+a)+D_{\theta} \grad E(\bm{x}_2)\Big)\\
 \end{split}
 \end{equation}
-Finally, we can tidy this up into the following expression:
+Where,
 \begin{equation}
-\dfrac {\partial x_t}{\partial \theta} = -b  \delta t \Big( \zeta E(\vec{x}_0; \theta)S_{t-1}^a + \zeta E(\vec{x}_1;\theta)S_{t-2}^a + \ldots +  \zeta E(\vec{x}_{t-1};\theta) \Big)
+D_{\theta} \grad E(\bm{x}_t) = \dfrac{\partial \grad E}{\partial \bm{x}_t} \dfrac{\partial \bm{x}_t} {\partial\theta} + \dfrac{\partial \grad E}{\partial \theta}
 \end{equation}
-$S_n^a$ is the geometric series of $n$ terms of $a$. Observe that we only need to do a single forward pass, which can be implemented using forward-mode auto-differentiation. Naively, this procedure needs $O(t)$ memory and $O(t^2)$ runtime since we need to store $\partial\vec{x}_i / \partial\theta$ and traverse back in time as they're re-weighted after each step. But this would catastrophic for all practical purposes. Fortunately, we can immediately leverage the geometric series, whose rapid convergence implies we need to store the $\zeta$ terms for only a small numbers of the most recent steps, since for large $t$:
+Which we can tidy this up into the following expression:
 \begin{equation}
-\zeta E(\vec{x}_0)(1+a+a^2+...+a^t) \approx \zeta E(\vec{x}_0)(1+a+a^2+...+a^{t-1})
+\dfrac {\partial \bm{x}_t}{\partial \theta} = -b  \tau \Big( D_{\theta} \grad E(\bm{x}_0; \theta)S_{t-1}^a + D_{\theta} \grad E(\bm{x}_1;\theta)S_{t-2}^a + \ldots +  D_{\theta} \grad E(\bm{x}_{t-1};\theta) \Big)
+\end{equation}
+$S_n^a$ is the geometric series of $n$ terms of $a$. Observe that we only need to do a single forward pass, which can be implemented using forward-mode auto-differentiation. Naively, this procedure needs $O(t)$ memory and $O(t^2)$ runtime since we need to store $\partial\bm{x}_i / \partial\theta$ and traverse back in time as they're re-weighted after each step. But this would catastrophic for all practical purposes. Fortunately, we can immediately leverage the geometric series, whose rapid convergence implies we need to store the $\zeta$ terms for only a small numbers of the most recent steps, since for large $t$:
+\begin{equation}
+D_{\theta} \grad E(\bm{x}_0)(1+a+a^2+...+a^t) \approx D_{\theta} \grad E(\bm{x}_0)(1+a+a^2+...+a^{t-1})
 \end{equation}
 
 Suppose it takes $k$ steps for the geometric series converge to numerical accuracy. This allows us to maintain a rolling window of only size $O(k)$ for unconverged $\zeta$ values. The converged $\zeta$ terms can be reduced and thus require only $O(1)$ extra space. In practice, $k \approx 4000$, so the over all algorithm becomes becomes $O(1)$ in memory and $O(t)$ in time. 
 
 % With this machinery in place, we can now use some additional tricks to regularize the fitting process, such as enforcing that for all ergodic systems, the time averaged observable must be equal to the ensemble averaged observable. The exact method is that we use reservoir sampling to draw from the time average, and the last time slice of a replica simulation to generate the ensemble average.
+
+\section{Periodic Boundary Conditions}
+
+If our energy function also depends on a set of box vectors $\bm{b}$ then we need to augment our equations of motion with:
+
+\begin{equation}
+\bm{b}_t = \bm{b}_{t-1} - \grad_{\bm{b}}E \tau
+\end{equation}
+
+Here $\grad_{\bm{b}}$ is the gradient operator with respect to the box vectors $\bm{b}$. Similar to the above, we can also compute the parameter derivatives of the box vectors through time:
+
+\begin{equation}
+\dfrac {\partial \bm{b}_t}{\partial \theta} = -\tau \Big( D_{\theta} \grad_{\bm{b}} E(\bm{x}_0,\bm{b}_0; \theta) + D_{\theta} \grad_{\bm{b}} E(\bm{x}_1,\bm{b}_1;\theta) + \ldots +  D_{\theta} \grad_{\bm{b}} E(\bm{x}_{t-1},\bm{b}_{t-1};\theta) \Big)
+\end{equation}
+
+We should also take care to update all the total derivatives to account for the box vectors:
+
+\begin{equation}
+D_{\theta} \grad E(\bm{x},\bm{b}) = \dfrac{\partial \grad E}{\partial \bm{x}} \dfrac{\partial \bm{x}} {\partial\theta} + \dfrac{\partial \grad E}{\partial \bm{b}} \dfrac{\partial \bm{b}} {\partial\theta} + \dfrac{\partial \grad E}{\partial \theta}
+\end{equation}
+
+Similarly,
+
+\begin{equation}
+D_{\theta} \grad_{\bm{b}} E(\bm{x},\bm{b}) = \dfrac{\partial \grad_{\bm{b}} E}{\partial \bm{x}} \dfrac{\partial \bm{x}} {\partial\theta} + \dfrac{\partial \grad_{\bm{b}} E}{\partial \bm{b}} \dfrac{\partial \bm{b}} {\partial\theta} + \dfrac{\partial \grad_{\bm{b}} E}{\partial \theta}
+\end{equation}
+
+Note that:
+
+\begin{equation}
+\dfrac{\partial \grad E}{\partial \bm{b}} \equiv \dfrac{\partial \grad_{\bm{b}} E}{\partial \bm{x}}
+\end{equation}
 
 \section{Issues and Caveats}
 
@@ -92,7 +128,6 @@ A second more practical issue deals with the computational complexity and speed.
 
 \section{Code}
 
-The code has been implemented and will be open-sourced once the manuscript has been accepted. Please contact the author for access.
-
+The code is publicly available at www.github.com/proteneer/timemachine and licensed under the Apache V2.
 
 \end{document}
