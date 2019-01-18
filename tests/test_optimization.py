@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import unittest
 
-from timemachine import bonded_force
+from timemachine.functionals import bonded
 from timemachine.constants import BOLTZ, VIBRATIONAL_CONSTANT
 from timemachine import integrator
 from timemachine import observable
@@ -43,7 +43,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("OH_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(ideal_bond)),
         ]
 
-        hb = bonded_force.HarmonicBond(
+        hb = bonded.HarmonicBond(
             params=bond_params,
             bond_idxs=np.array([[0,1],[0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1],[0,1]], dtype=np.int32)
@@ -54,7 +54,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("HOH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(ideal_angle)),
         ]
 
-        ha = bonded_force.HarmonicAngle(
+        ha = bonded.HarmonicAngle(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
@@ -235,7 +235,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("OH_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_bond)),
         ]
 
-        hb = bonded_force.HarmonicBondForce(
+        hb = bonded.HarmonicBondForce(
             params=bond_params,
             bond_idxs=np.array([[0,1],[0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1],[0,1]], dtype=np.int32)
@@ -246,7 +246,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("HOH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_angle)),
         ]
 
-        ha = bonded_force.HarmonicAngleForce(
+        ha = bonded.HarmonicAngleForce(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
@@ -333,7 +333,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("OH_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_bond)),
         ]
 
-        hb = bonded_force.HarmonicBond(
+        hb = bonded.HarmonicBond(
             params=bond_params,
             bond_idxs=np.array([[0,1],[0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1],[0,1]], dtype=np.int32)
@@ -344,7 +344,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("HOH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_angle)),
         ]
 
-        ha = bonded_force.HarmonicAngle(
+        ha = bonded.HarmonicAngle(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)

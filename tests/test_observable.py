@@ -3,7 +3,7 @@ import unittest
 
 import tensorflow as tf
 from timemachine import observable
-from timemachine import bonded_force
+# from timemachine.functionals import bonded
 from timemachine.constants import VIBRATIONAL_CONSTANT
 
 
