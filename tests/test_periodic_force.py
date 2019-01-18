@@ -294,7 +294,6 @@ class TestPeriodicForce(unittest.TestCase):
             [0,1,0,1,0],
             ], dtype=np.bool)
 
-        # self.box = tf.placeholder([10.0, 10.0, 10.0], dtype=np.float64)
         self.box = [10.0, 10.0, 10.0]
 
     def tearDown(self):
