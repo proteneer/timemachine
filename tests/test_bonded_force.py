@@ -1,11 +1,10 @@
 import unittest
 import numpy as np
 import tensorflow as tf
-from timemachine import force
-from timemachine import bonded_force
+from timemachine.functionals import bonded
+from timemachine import derivatives
 
-
-class PeriodicTorsionForceOpenMM(force.ConservativeForce):
+class PeriodicTorsionForceOpenMM():
 
     def __init__(self,
         params,
@@ -129,18 +128,14 @@ class TestBondedForce(unittest.TestCase):
 
         x_ph = tf.placeholder(shape=(4, 3), dtype=tf.float64)
 
-        test_force = bonded_force.PeriodicTorsionForce(params, torsion_idxs, param_idxs)
+        test_force = bonded.PeriodicTorsion(params, torsion_idxs, param_idxs)
         ref_force = PeriodicTorsionForceOpenMM(params, torsion_idxs, param_idxs)
 
         test_nrg = test_force.energy(x_ph)
-        test_grad = test_force.gradients(x_ph)
-        test_hessian = test_force.hessians(x_ph)
-        test_mixed = test_force.mixed_partials(x_ph)
+        test_grad, test_hessian, test_mixed = derivatives.compute_ghm(test_nrg, x_ph, [params])
 
         ref_nrg = ref_force.energy(x_ph)
-        ref_grad = ref_force.gradients(x_ph)
-        ref_hessian = ref_force.hessians(x_ph)
-        ref_mixed = ref_force.mixed_partials(x_ph)
+        ref_grad, ref_hessian, ref_mixed = derivatives.compute_ghm(ref_nrg, x_ph, [params])
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())

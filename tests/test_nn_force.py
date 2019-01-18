@@ -2,7 +2,8 @@ import scipy
 import unittest
 import numpy as np
 import tensorflow as tf
-from timemachine.nn_force import TensorfieldForce
+from timemachine.functionals.nn import Tensorfield
+from timemachine import derivatives
 
 
 def random_rotation_matrix():
@@ -24,7 +25,7 @@ def rotation_matrix(axis, theta):
     return scipy.linalg.expm(np.cross(np.eye(3), axis * theta))
 
 
-class TestTensorfieldForce(unittest.TestCase):
+class TestTensorfield(unittest.TestCase):
 
     def tearDown(self):
         tf.reset_default_graph()
@@ -139,7 +140,7 @@ class TestTensorfieldForce(unittest.TestCase):
         rbf_spacing = (rbf_high - rbf_low) / rbf_count
         rbf_centers = tf.cast(tf.lin_space(rbf_low, rbf_high, rbf_count), tf.float64)
 
-        tff = TensorfieldForce(
+        tff = Tensorfield(
             params,
             layer_param_idxs,
             self_ixn_param_idxs,
@@ -149,9 +150,8 @@ class TestTensorfieldForce(unittest.TestCase):
 
         # test equivariance
         test_energy_op = tff.energy(x_ph)
-        test_grads_op = tff.gradients(x_ph)
-        test_hessians_op = tff.hessians(x_ph)
-        test_mixed_op = tff.mixed_partials(x_ph)
+
+        test_grads_op, test_hessians_op, test_mixed_op = derivatives.compute_ghm(test_energy_op, x_ph, tff.get_params())
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())

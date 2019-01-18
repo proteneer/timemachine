@@ -1,8 +1,9 @@
 import unittest
 import numpy as np
 import tensorflow as tf
-from timemachine.nonbonded_force import ElectrostaticForce, LeonnardJonesForce
+from timemachine.functionals.nonbonded import Electrostatic, LeonnardJones
 from timemachine.constants import ONE_4PI_EPS0
+from timemachine import derivatives
 
 class TestNonbondedForce(unittest.TestCase):
 
@@ -41,7 +42,7 @@ class TestNonbondedForce(unittest.TestCase):
             [0,1,0,1,0],
             ], dtype=np.bool)
 
-        ef = LeonnardJonesForce(params, param_idxs, exclusions, None)
+        lj = LeonnardJones(params, param_idxs, exclusions)
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
@@ -78,23 +79,22 @@ class TestNonbondedForce(unittest.TestCase):
 
         # (ytz) TODO: add a test for forces, for now we rely on
         # autograd to be analytically correct.
-        test_nrg_op = ef.energy(x_ph)
-
+        test_nrg_op = lj.energy(x_ph)
         test_nrg = sess.run(test_nrg_op, feed_dict={x_ph: x0})
-
 
         # 3707370.0568588967, 3707370.056858897
         np.testing.assert_almost_equal(ref_nrg, test_nrg, decimal=8)
 
-        test_grads_op = ef.gradients(x_ph)
+        test_grads_op = tf.gradients(test_nrg_op, x_ph)[0]
         test_grads = sess.run(test_grads_op, feed_dict={x_ph: x0})
 
         net_force = np.sum(test_grads, axis=0)
         # this also checks that there are no NaNs
         np.testing.assert_almost_equal(net_force, [0,0,0], decimal=7)
 
-        assert not np.any(np.isnan(sess.run(ef.hessians(x_ph), feed_dict={x_ph: x0})))
-        assert not np.any(np.isnan(sess.run(ef.mixed_partials(x_ph), feed_dict={x_ph: x0})))
+        assert not np.any(np.isnan(sess.run(tf.hessians(test_nrg_op, x_ph), feed_dict={x_ph: x0})))
+        mixed_partials = sess.run(derivatives.list_jacobian(test_grads_op, [lj.get_params()]), feed_dict={x_ph: x0})
+        assert not np.any(np.isnan(mixed_partials))
 
 
     def test_electrostatics(self):
@@ -122,7 +122,7 @@ class TestNonbondedForce(unittest.TestCase):
             [0,1,0,1,0],
             ], dtype=np.bool)
 
-        ef = ElectrostaticForce(params, param_idxs, exclusions)
+        ef = Electrostatic(params, param_idxs, exclusions)
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
@@ -144,19 +144,19 @@ class TestNonbondedForce(unittest.TestCase):
         # (ytz) TODO: add a test for forces, for now we rely on
         # autograd to be analytically correct.
         test_nrg_op = ef.energy(x_ph)
-
         test_nrg = sess.run(test_nrg_op, feed_dict={x_ph: x0})
         np.testing.assert_almost_equal(ref_nrg, test_nrg, decimal=13)
 
-        test_grads_op = ef.gradients(x_ph)
+        test_grads_op = tf.gradients(test_nrg_op, x_ph)[0]
         test_grads = sess.run(test_grads_op, feed_dict={x_ph: x0})
 
         net_force = np.sum(test_grads, axis=0)
         # this also checks that there are no NaNs
         np.testing.assert_almost_equal(net_force, [0,0,0], decimal=14)
 
-        assert not np.any(np.isnan(sess.run(ef.hessians(x_ph), feed_dict={x_ph: x0})))
-        assert not np.any(np.isnan(sess.run(ef.mixed_partials(x_ph), feed_dict={x_ph: x0})))
+        assert not np.any(np.isnan(sess.run(tf.hessians(test_nrg_op, x_ph), feed_dict={x_ph: x0})))
+        mixed_partials = sess.run(derivatives.list_jacobian(test_grads_op, [ef.get_params()]), feed_dict={x_ph: x0})
+        assert not np.any(np.isnan(mixed_partials))
 
 
 

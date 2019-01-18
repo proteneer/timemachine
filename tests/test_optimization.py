@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import unittest
 
-from timemachine import bonded_force
+from timemachine.functionals import bonded
 from timemachine.constants import BOLTZ, VIBRATIONAL_CONSTANT
 from timemachine import integrator
 from timemachine import observable
@@ -43,7 +43,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("OH_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(ideal_bond)),
         ]
 
-        hb = bonded_force.HarmonicBondForce(
+        hb = bonded.HarmonicBond(
             params=bond_params,
             bond_idxs=np.array([[0,1],[0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1],[0,1]], dtype=np.int32)
@@ -54,7 +54,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("HOH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(ideal_angle)),
         ]
 
-        ha = bonded_force.HarmonicAngleForce(
+        ha = bonded.HarmonicAngle(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
@@ -68,7 +68,7 @@ class TestOptimization(unittest.TestCase):
 
         x_ph = tf.placeholder(name="input_geom", dtype=tf.float64, shape=(num_atoms, 3))
         intg = integrator.LangevinIntegrator(
-            masses, x_ph, [hb, ha], dt, friction, temp)
+            masses, x_ph, None, [hb, ha], dt, friction, temp)
 
         reservoir_size = 200
 
@@ -126,7 +126,7 @@ class TestOptimization(unittest.TestCase):
 
         with tf.variable_scope("bad"):
             bad_intg = integrator.LangevinIntegrator(
-                masses, x_ph, [hb, ha], dt, friction, temp, buffer_size=None)
+                masses, x_ph, None, [hb, ha], dt, friction, temp, buffer_size=None)
 
         bad_dx_op, bad_dxdp_op = bad_intg.step_op()
 
@@ -235,7 +235,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("OH_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_bond)),
         ]
 
-        hb = bonded_force.HarmonicBondForce(
+        hb = bonded.HarmonicBondForce(
             params=bond_params,
             bond_idxs=np.array([[0,1],[0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1],[0,1]], dtype=np.int32)
@@ -246,7 +246,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("HOH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_angle)),
         ]
 
-        ha = bonded_force.HarmonicAngleForce(
+        ha = bonded.HarmonicAngleForce(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
@@ -333,7 +333,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("OH_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_bond)),
         ]
 
-        hb = bonded_force.HarmonicBondForce(
+        hb = bonded.HarmonicBond(
             params=bond_params,
             bond_idxs=np.array([[0,1],[0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1],[0,1]], dtype=np.int32)
@@ -344,7 +344,7 @@ class TestOptimization(unittest.TestCase):
             tf.get_variable("HOH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(starting_angle)),
         ]
 
-        ha = bonded_force.HarmonicAngleForce(
+        ha = bonded.HarmonicAngle(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
@@ -357,7 +357,7 @@ class TestOptimization(unittest.TestCase):
 
         x_ph = tf.placeholder(name="input_geom", dtype=tf.float64, shape=(num_atoms, 3))
         intg = integrator.LangevinIntegrator(
-            masses, x_ph, [hb, ha], dt, friction, temp)
+            masses, x_ph, None, [hb, ha], dt, friction, temp)
 
         dx_op, dxdp_op = intg.step_op()
 
@@ -403,11 +403,7 @@ class TestOptimization(unittest.TestCase):
 
             sess.run(train_op, feed_dict={x_final_ph: x})
 
-        # failed to converge
         assert 0
-        # params = sess.run(bond_params+angle_params)
-        # np.testing.assert_almost_equal(params[1], 0.52, decimal=2)
-        # np.testing.assert_almost_equal(params[3], 1.81, decimal=1)
            
 if __name__ == "__main__":
     unittest.main()

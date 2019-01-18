@@ -2,9 +2,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops.parallel_for.gradients import jacobian
 
-from timemachine.force import ConservativeForce
-from timemachine import nn_layers
-from timemachine.nn_utils import FLOAT_TYPE, EPSILON
+from timemachine.functionals import Energy
+from timemachine.functionals import nn_layers
+from timemachine.functionals.nn_utils import FLOAT_TYPE, EPSILON
 
 
 def norm_with_epsilon(input_tensor, axis=None, keep_dims=False):
@@ -20,7 +20,7 @@ def norm_with_epsilon(input_tensor, axis=None, keep_dims=False):
     return tf.sqrt(tf.maximum(tf.reduce_sum(tf.square(input_tensor), axis=axis, keep_dims=keep_dims), EPSILON))
 
 
-class TensorfieldForce(ConservativeForce):
+class Tensorfield(Energy):
 
     def __init__(self,
         params,
