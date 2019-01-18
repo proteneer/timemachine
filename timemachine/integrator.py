@@ -1,8 +1,10 @@
 import numpy as np
 import tensorflow as tf
-import inspect
-from timemachine.derivatives import list_jacobian
 from tensorflow.python.ops.parallel_for.gradients import jacobian
+import inspect
+
+
+from timemachine.derivatives import list_jacobian
 from timemachine.constants import BOLTZ
 
 class LangevinIntegrator():

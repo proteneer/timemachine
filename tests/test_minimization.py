@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import unittest
 
-from timemachine import bonded_force
+from timemachine.functionals import bonded
 from timemachine.constants import BOLTZ
 from timemachine import integrator
 
@@ -31,7 +31,7 @@ class TestMinimization(unittest.TestCase):
             tf.get_variable("CN_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(1.2)),
         ]
 
-        hb = bonded_force.HarmonicBondForce(
+        hb = bonded.HarmonicBond(
             params=bond_params,
             bond_idxs=np.array([[0,1],[0,2]], dtype=np.int32),
             param_idxs=np.array([[2,3],[0,1]], dtype=np.int32)
@@ -44,7 +44,7 @@ class TestMinimization(unittest.TestCase):
             tf.get_variable("HCN_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(ideal_angle)),
         ]
 
-        ha = bonded_force.HarmonicAngleForce(
+        ha = bonded.HarmonicAngle(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
@@ -56,7 +56,7 @@ class TestMinimization(unittest.TestCase):
 
         x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
         intg = integrator.LangevinIntegrator(
-            masses, x_ph, [hb, ha], dt, friction, temp)
+            masses, x_ph, None, [hb, ha], dt, friction, temp)
 
         dx_op, dxdp_op = intg.step_op()
 
@@ -108,7 +108,7 @@ class TestMinimization(unittest.TestCase):
             tf.get_variable("HH_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(1.0)),
         ]
 
-        hb = bonded_force.HarmonicBondForce(
+        hb = bonded.HarmonicBond(
             params=bond_params,
             bond_idxs=np.array([[0,1],[0,2],[0,3],[0,4]], dtype=np.int32),
             param_idxs=np.array([[0,1],[0,1],[0,1],[0,1]], dtype=np.int32)
@@ -121,7 +121,7 @@ class TestMinimization(unittest.TestCase):
             tf.get_variable("HCH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(ideal_angle)),
         ]
 
-        ha = bonded_force.HarmonicAngleForce(
+        ha = bonded.HarmonicAngle(
             params=angle_params,
             angle_idxs=np.array([[1,0,2],[1,0,3],[1,0,4],[2,0,3],[2,0,4],[3,0,4]], dtype=np.int32),
             param_idxs=np.array([[0,1],[0,1],[0,1],[0,1],[0,1],[0,1]], dtype=np.int32)
@@ -134,7 +134,7 @@ class TestMinimization(unittest.TestCase):
         x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
 
         intg = integrator.LangevinIntegrator(
-            masses, x_ph, [hb, ha], dt, friction, temp)
+            masses, x_ph, None, [hb, ha], dt, friction, temp)
 
         dx_op, dxdp_op = intg.step_op()
 

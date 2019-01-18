@@ -1,8 +1,8 @@
 from math import sqrt
 import tensorflow as tf
 import numpy as np
-from timemachine import nn_utils
-from timemachine.nn_utils import FLOAT_TYPE, EPSILON
+from timemachine.functionals import nn_utils
+from timemachine.functionals.nn_utils import FLOAT_TYPE, EPSILON
 
 # Layers for 3D rotation-equivariant network.
 

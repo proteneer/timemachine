@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from timemachine.force import Force
+from timemachine.functionals import Energy
 from timemachine.constants import ONE_4PI_EPS0
 
 
@@ -24,7 +24,7 @@ def generate_inclusion_exclusion_masks(exclusions):
     exclusions = tf.cast(tf.matrix_band_part(exclusions, 0, -1), dtype=tf.int32)
     return (mask_a - mask_b) - exclusions, exclusions
 
-class LeonnardJones(Force):
+class LeonnardJones(Energy):
 
     def __init__(self, params, param_idxs, exclusions):
         """
@@ -93,7 +93,7 @@ class LeonnardJones(Force):
 
         return tf.reduce_sum(energy, axis=-1)
 
-class Electrostatic(Force):
+class Electrostatic(Energy):
 
     def __init__(self, params, param_idxs, exclusions, kmax=10):
         self.params = params

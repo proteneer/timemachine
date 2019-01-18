@@ -1,7 +1,7 @@
 import unittest
 import numpy as np
 import tensorflow as tf
-from timemachine.nonbonded_force import Electrostatic, LeonnardJones
+from timemachine.functionals.nonbonded import Electrostatic, LeonnardJones
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine import derivatives
 

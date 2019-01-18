@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from scipy.special import erf, erfc
 from timemachine.constants import ONE_4PI_EPS0
-from timemachine.nonbonded_force import LeonnardJones, Electrostatic
+from timemachine.functionals.nonbonded import LeonnardJones, Electrostatic
 from timemachine import derivatives
 
 def periodic_difference(val1, val2, period):

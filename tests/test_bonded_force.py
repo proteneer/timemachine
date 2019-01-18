@@ -1,8 +1,7 @@
 import unittest
 import numpy as np
 import tensorflow as tf
-from timemachine import force
-from timemachine import bonded_force
+from timemachine.functionals import bonded
 from timemachine import derivatives
 
 class PeriodicTorsionForceOpenMM():
@@ -129,7 +128,7 @@ class TestBondedForce(unittest.TestCase):
 
         x_ph = tf.placeholder(shape=(4, 3), dtype=tf.float64)
 
-        test_force = bonded_force.PeriodicTorsion(params, torsion_idxs, param_idxs)
+        test_force = bonded.PeriodicTorsion(params, torsion_idxs, param_idxs)
         ref_force = PeriodicTorsionForceOpenMM(params, torsion_idxs, param_idxs)
 
         test_nrg = test_force.energy(x_ph)

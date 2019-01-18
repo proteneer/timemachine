@@ -2,12 +2,12 @@ import numpy as np
 import tensorflow as tf
 import unittest
 
-from timemachine import bonded_force
 from timemachine.constants import BOLTZ
 from timemachine import integrator
 from tensorflow.python.ops.parallel_for.gradients import jacobian
 
-from timemachine.nonbonded_force import LeonnardJones, Electrostatic
+from timemachine.functionals import bonded
+from timemachine.functionals.nonbonded import LeonnardJones, Electrostatic
 
 class ReferenceLangevinIntegrator():
 
@@ -84,7 +84,7 @@ class TestLangevinIntegrator(unittest.TestCase):
             [0, 1],
         ])
 
-        hb = bonded_force.HarmonicBond(
+        hb = bonded.HarmonicBond(
             bond_params,
             bond_idxs,
             param_idxs,
@@ -95,7 +95,7 @@ class TestLangevinIntegrator(unittest.TestCase):
             tf.get_variable("HCH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(1.81)),
         ]
 
-        ha = bonded_force.HarmonicAngle(
+        ha = bonded.HarmonicAngle(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
@@ -265,7 +265,7 @@ class TestLangevinIntegrator(unittest.TestCase):
             [0, 1],
         ])
 
-        hb = bonded_force.HarmonicBond(
+        hb = bonded.HarmonicBond(
             bond_params,
             bond_idxs,
             param_idxs,
@@ -276,7 +276,7 @@ class TestLangevinIntegrator(unittest.TestCase):
             tf.get_variable("HCH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(1.81)),
         ]
 
-        ha = bonded_force.HarmonicAngle(
+        ha = bonded.HarmonicAngle(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
