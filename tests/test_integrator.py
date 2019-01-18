@@ -9,16 +9,6 @@ from tensorflow.python.ops.parallel_for.gradients import jacobian
 
 from timemachine.nonbonded_force import LeonnardJones, Electrostatic
 
-# static long long estimate_steps_to_converge(float coeff_a) {
-#   double epsilon = 1e-8;
-#   return static_cast<long long>(log(epsilon)/log(coeff_a)+1);
-# };
-
-# static long long estimate_steps_to_converge(double coeff_a) {
-#   double epsilon = 1e-16;
-#   return static_cast<long long>(log(epsilon)/log(coeff_a)+1);
-# };
-
 class ReferenceLangevinIntegrator():
 
     def __init__(self, masses, dt=0.0025, friction=1.0, temp=300.0, disable_noise=False):
@@ -66,14 +56,18 @@ class TestLangevinIntegrator(unittest.TestCase):
         # (ytz): needed to clear variables
         tf.reset_default_graph()
 
-    def setUp(self):
-        self.masses = np.array([1.0, 12.0, 4.0])
-        self.x0 = np.array([
+    def test_converged_zetas(self):
+        """
+        Testing convergence of zetas.
+        """
+
+        masses = np.array([1.0, 12.0, 4.0])
+        x0 = np.array([
             [1.0, 0.5, -0.5],
             [0.2, 0.1, -0.3],
             [0.5, 0.4, 0.3],
         ], dtype=np.float64)
-        self.x0.setflags(write=False)
+        x0.setflags(write=False)
 
         bond_params = [
             tf.get_variable("HO_kb", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(100.0)),
@@ -90,7 +84,7 @@ class TestLangevinIntegrator(unittest.TestCase):
             [0, 1],
         ])
 
-        self.hb = bonded_force.HarmonicBond(
+        hb = bonded_force.HarmonicBond(
             bond_params,
             bond_idxs,
             param_idxs,
@@ -101,53 +95,48 @@ class TestLangevinIntegrator(unittest.TestCase):
             tf.get_variable("HCH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(1.81)),
         ]
 
-        self.ha = bonded_force.HarmonicAngle(
+        ha = bonded_force.HarmonicAngle(
             params=angle_params,
             angle_idxs=np.array([[1,0,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
         )
 
-    # def test_converged_zetas(self):
-    #     """
-    #     Testing convergence of zetas.
-    #     """
+        friction = 10.0
+        dt = 0.08
+        temp = 0.0
+        num_atoms = x0.shape[0]
 
-    #     friction = 10.0
-    #     dt = 0.08
-    #     temp = 0.0
-    #     num_atoms = self.x0.shape[0]
+        x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
 
-    #     x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
+        num_steps = 100 # with a temp of 10.0 should converge really quickly
 
-    #     num_steps = 100 # with a temp of 10.0 should converge really quickly
+        with tf.variable_scope("reference"):
+            ref_intg = integrator.LangevinIntegrator(
+                masses, x_ph, None, [ha, hb], dt, friction, temp)
+            # ref_intg.vscale = 0.45 -> so we should converge fully to 16 decimals after 47 steps
 
-    #     with tf.variable_scope("reference"):
-    #         ref_intg = integrator.LangevinIntegrator(
-    #             self.masses, x_ph, None, [self.ha, self.hb], dt, friction, temp)
-    #         # ref_intg.vscale = 0.45 -> so we should converge fully to 16 decimals after 47 steps
+        with tf.variable_scope("test"):
+            test_intg = integrator.LangevinIntegrator(
+                masses, x_ph, None, [ha, hb], dt, friction, temp, buffer_size=50)
 
-    #     with tf.variable_scope("test"):
-    #         test_intg = integrator.LangevinIntegrator(
-    #             self.masses, x_ph, None, [self.ha, self.hb], dt, friction, temp, buffer_size=50)
+        ref_dx, ref_dxdps = ref_intg.step_op()
+        test_dx, test_dxdps = test_intg.step_op()
 
-    #     ref_dx, ref_dxdps = ref_intg.step_op()
-    #     test_dx, test_dxdps = test_intg.step_op()
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
 
-    #     sess = tf.Session()
-    #     sess.run(tf.initializers.global_variables())
+        x_ref = np.copy(x0)
+        x_test = np.copy(x0)
+        for step in range(num_steps):
 
-    #     x_ref = np.copy(self.x0)
-    #     x_test = np.copy(self.x0)
-    #     for step in range(num_steps):
+            ref_dx_val, ref_dxdp_val = sess.run([ref_dx, ref_dxdps], feed_dict={x_ph: x_ref})
+            test_dx_val, test_dxdp_val = sess.run([test_dx, test_dxdps], feed_dict={x_ph: x_test})
 
-    #         ref_dx_val, ref_dxdp_val = sess.run([ref_dx, ref_dxdps], feed_dict={x_ph: x_ref})
-    #         test_dx_val, test_dxdp_val = sess.run([test_dx, test_dxdps], feed_dict={x_ph: x_test})
+            np.testing.assert_array_almost_equal(ref_dx_val, test_dx_val, decimal=14)
+            np.testing.assert_array_almost_equal(ref_dxdp_val, test_dxdp_val, decimal=14) # BAD WTF CONVERGENCE
 
-    #         np.testing.assert_array_almost_equal(ref_dx_val, test_dx_val, decimal=14)
-    #         np.testing.assert_array_almost_equal(ref_dxdp_val, test_dxdp_val, decimal=14) # BAD WTF CONVERGENCE
-
-    #         x_ref += ref_dx_val
-    #         x_test += test_dx_val
+            x_ref += ref_dx_val
+            x_test += test_dx_val
 
 
     def test_ten_steps_with_periodic_box(self):
@@ -174,7 +163,8 @@ class TestLangevinIntegrator(unittest.TestCase):
         b0 = np.array([10.0, 10.0, 10.0], dtype=np.float64)
         b0.setflags(write=False)
 
-        params = tf.convert_to_tensor(np.array([1.0, -0.5], dtype=np.float64))
+        # one of the particles moves into infinity lol
+        params = tf.convert_to_tensor(np.array([0.2, -0.2], dtype=np.float64))
         param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
 
         exclusions = np.array([
@@ -216,6 +206,7 @@ class TestLangevinIntegrator(unittest.TestCase):
         ref_x_final_op = x
         ref_box_final_op = box
 
+        # x = [5,3], params = [2], res = [5, 3, 2], but we typically expect [2,5,3]
         ref_dxdp_op = jacobian(x, electrostatic.get_params(), use_pfor=False)
 
         a, b, c = sess.run(
@@ -225,7 +216,6 @@ class TestLangevinIntegrator(unittest.TestCase):
 
         test_intg = integrator.LangevinIntegrator(masses, x_ph, box_ph, [electrostatic], dt, friction, temp)
         [dx_op, dxdps_op], [db_op, dbdps_op] = test_intg.step_op()
-        # dxdps_op = tf.reduce_sum(dxdps_op, axis=[1,2])
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
@@ -235,9 +225,12 @@ class TestLangevinIntegrator(unittest.TestCase):
         x = np.copy(x0) # this copy is super important else it just modifies everything in place
         b = np.copy(b0)
         for step in range(num_steps):
+            # dxdp_ops returns [5,3,2]
             dx_val, dxdp_val, db_val, dbdp_val = sess.run([dx_op, dxdps_op, db_op, dbdps_op], feed_dict={x_ph: x, box_ph: b})
             x += dx_val
             b += db_val
+
+
         test_dxdp = dxdp_val
         test_x_final_val = x
 
@@ -245,93 +238,130 @@ class TestLangevinIntegrator(unittest.TestCase):
         np.testing.assert_array_almost_equal(dxdp_val, np.transpose(c, (2,0,1)), decimal=13) # PASSED WTf
 
 
+    def test_ten_steps(self):
+        """
+        Testing against reference implementation.
+        """
+        masses = np.array([1.0, 12.0, 4.0])
+        x0 = np.array([
+            [1.0, 0.5, -0.5],
+            [0.2, 0.1, -0.3],
+            [0.5, 0.4, 0.3],
+        ], dtype=np.float64)
+        x0.setflags(write=False)
 
-    # def test_ten_steps(self):
-    #     """
-    #     Testing against reference implementation.
-    #     """
-    #     friction = 10.0
-    #     dt = 0.003
-    #     temp = 0.0
-    #     num_atoms = len(self.masses)
-    #     x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
+        bond_params = [
+            tf.get_variable("HO_kb", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(100.0)),
+            tf.get_variable("HO_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(2.0)),
+        ]
 
-    #     hb = self.hb
-    #     ha = self.ha
+        bond_idxs = np.array([
+            [0, 1],
+            [1, 2]
+        ], dtype=np.int32)
 
-    #     ref_intg = ReferenceLangevinIntegrator(self.masses, dt, friction, temp)
+        param_idxs = np.array([
+            [0, 1],
+            [0, 1],
+        ])
 
-    #     num_steps = 1
+        hb = bonded_force.HarmonicBond(
+            bond_params,
+            bond_idxs,
+            param_idxs,
+        )
 
-    #     x = x_ph
+        angle_params = [
+            tf.get_variable("HCH_ka", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(np.sqrt(75.0))),
+            tf.get_variable("HCH_a0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(1.81)),
+        ]
 
-    #     for step in range(num_steps):
-    #         print("step", step)
-    #         all_grads = []
-    #         for nrg in [self.hb, self.ha]:
-    #             all_grads.append(tf.gradients(nrg.energy(x), x)[0])
-    #         all_grads = tf.stack(all_grads, axis=0)
-    #         grads = tf.reduce_sum(all_grads, axis=0)
-    #         dx = ref_intg.step(grads)
-    #         x += dx
+        ha = bonded_force.HarmonicAngle(
+            params=angle_params,
+            angle_idxs=np.array([[1,0,2]], dtype=np.int32),
+            param_idxs=np.array([[0,1]], dtype=np.int32)
+        )
 
-    #     ref_x_final_op = x
+        friction = 10.0
+        dt = 0.003
+        temp = 0.0
+        num_atoms = len(masses)
+        x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
 
-    #     # verify correctness of jacobians through time
-    #     ref_dxdp_hb_op = jacobian(x, hb.get_params(), use_pfor=False)
-    #     ref_dxdp_ha_op = jacobian(x, ha.get_params(), use_pfor=False)
 
-    #     test_intg = integrator.LangevinIntegrator(self.masses, x_ph, None, [hb, ha], dt, friction, temp)
-    #     dx_op, dxdps_op = test_intg.step_op()
-    #     # dxdps_op = tf.reduce_sum(dxdps_op, axis=[1,2])
+        ref_intg = ReferenceLangevinIntegrator(masses, dt, friction, temp)
 
-    #     sess = tf.Session()
-    #     sess.run(tf.initializers.global_variables())
+        num_steps = 5
 
-    #     ref_x_final, ref_dxdp_hb, ref_dxdp_ha = sess.run([ref_x_final_op, ref_dxdp_hb_op, ref_dxdp_ha_op], feed_dict={x_ph: self.x0})
+        x = x_ph
 
-    #     x = np.copy(self.x0) # this copy is super important else it just modifies everything in place
-    #     for step in range(num_steps):
-    #         dx_val, dxdp_val = sess.run([dx_op, dxdps_op], feed_dict={x_ph: x})
-    #         x += dx_val
-    #     test_dxdp = dxdp_val
-    #     test_x_final_val = x
+        for step in range(num_steps):
+            print("step", step)
+            all_grads = []
+            for nrg in [hb, ha]:
+                all_grads.append(tf.gradients(nrg.energy(x), x)[0])
+            all_grads = tf.stack(all_grads, axis=0)
+            grads = tf.reduce_sum(all_grads, axis=0)
+            dx = ref_intg.step(grads)
+            x += dx
 
-    #     np.testing.assert_array_almost_equal(ref_x_final, test_x_final_val, decimal=14)
-    #     np.testing.assert_array_almost_equal(np.concatenate([ref_dxdp_hb, ref_dxdp_ha]), test_dxdp[0], decimal=14) # BAD, restore to 13
+        ref_x_final_op = x
 
-    #     # test grads_and_vars and computation of higher derivatives
-    #     x_opt = np.array([
-    #         [-0.0070, -0.0100, 0.0000],
-    #         [-0.1604,  0.4921, 0.0000],
-    #         [ 0.5175,  0.0128, 0.0000],
-    #     ], dtype=np.float64) # idealized geometry
+        # verify correctness of jacobians through time
+        ref_dxdp_hb_op = jacobian(x, hb.get_params(), use_pfor=False)
+        ref_dxdp_ha_op = jacobian(x, ha.get_params(), use_pfor=False)
 
-    #     def loss(pred_x):
+        test_intg = integrator.LangevinIntegrator(masses, x_ph, None, [hb, ha], dt, friction, temp)
+        dx_op, dxdps_op = test_intg.step_op()
+        # dxdps_op = tf.reduce_sum(dxdps_op, axis=[1,2])
 
-    #         # Compute pairwise distances
-    #         def dij(x):
-    #             v01 = x[0]-x[1]
-    #             v02 = x[0]-x[2]
-    #             v12 = x[1]-x[2]
-    #             return tf.stack([tf.norm(v01), tf.norm(v02), tf.norm(v12)])
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
 
-    #         return tf.norm(dij(x_opt) - dij(pred_x))
+        ref_x_final, ref_dxdp_hb, ref_dxdp_ha = sess.run([ref_x_final_op, ref_dxdp_hb_op, ref_dxdp_ha_op], feed_dict={x_ph: x0})
 
-    #     x_final_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
+        x = np.copy(x0) # this copy is super important else it just modifies everything in place
+        for step in range(num_steps):
+            [dx_val, dxdp_val] = sess.run([dx_op, dxdps_op], feed_dict={x_ph: x})
+            x += dx_val
+        test_dxdp = dxdp_val
+        test_x_final_val = x
 
-    #     l0 = loss(ref_x_final_op)
-    #     l1 = loss(x_final_ph)
+        np.testing.assert_array_almost_equal(ref_x_final, test_x_final_val, decimal=14)
+        np.testing.assert_array_almost_equal(np.concatenate([ref_dxdp_hb, ref_dxdp_ha]), test_dxdp, decimal=14) # BAD, restore to 13
 
-    #     ref_dLdp_op = tf.gradients(l0, self.hb.params+self.ha.params) # goes through reference integrator
-    #     test_dLdx_op = tf.gradients(l1, x_final_ph)
-    #     test_dLdp_op_gvs = test_intg.grads_and_vars(test_dLdx_op[0]) # multiply with dxdp
+        # test grads_and_vars and computation of higher derivatives
+        x_opt = np.array([
+            [-0.0070, -0.0100, 0.0000],
+            [-0.1604,  0.4921, 0.0000],
+            [ 0.5175,  0.0128, 0.0000],
+        ], dtype=np.float64) # idealized geometry
 
-    #     # need to fix this test. 
-    #     ref_dLdp = sess.run(ref_dLdp_op, feed_dict={x_ph: self.x0})
-    #     test_dLdp = sess.run([a[0] for a in test_dLdp_op_gvs], feed_dict={x_final_ph: test_x_final_val})
+        def loss(pred_x):
 
-    #     np.testing.assert_array_almost_equal(ref_dLdp, test_dLdp)
+            # Compute pairwise distances
+            def dij(x):
+                v01 = x[0]-x[1]
+                v02 = x[0]-x[2]
+                v12 = x[1]-x[2]
+                return tf.stack([tf.norm(v01), tf.norm(v02), tf.norm(v12)])
+
+            return tf.norm(dij(x_opt) - dij(pred_x))
+
+        x_final_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
+
+        l0 = loss(ref_x_final_op)
+        l1 = loss(x_final_ph)
+
+        ref_dLdp_op = tf.gradients(l0, hb.params+ha.params) # goes through reference integrator
+        test_dLdx_op = tf.gradients(l1, x_final_ph)
+        test_dLdp_op_gvs = test_intg.grads_and_vars(test_dLdx_op[0]) # multiply with dxdp
+
+        # need to fix this test. 
+        ref_dLdp = sess.run(ref_dLdp_op, feed_dict={x_ph: x0})
+        test_dLdp = sess.run([a[0] for a in test_dLdp_op_gvs], feed_dict={x_final_ph: test_x_final_val})
+
+        np.testing.assert_array_almost_equal(ref_dLdp, test_dLdp)
 
 
 if __name__ == "__main__":

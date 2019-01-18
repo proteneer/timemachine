@@ -113,7 +113,6 @@ class Electrostatic(Force):
         if box is None:
             return direct_nrg
         else:
-            print(self.reciprocal_energy(conf, box).shape, direct_nrg.shape, exclusion_nrg.shape, self.self_energy(conf).shape)
             return self.reciprocal_energy(conf, box) + direct_nrg - exclusion_nrg - self.self_energy(conf)
 
     def self_energy(self, conf):

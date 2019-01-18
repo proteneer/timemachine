@@ -29,6 +29,9 @@ class LangevinIntegrator():
         x_t: (N, 3) tf.placeholder
             Used to feed in the geometry of the system
 
+        b_t: (3,) or None
+            If not None then we expect this to be a rectangular-size lattice.
+
         energies: list of timemachine.ConservativeForces
             Various energies of the system
 
@@ -49,8 +52,6 @@ class LangevinIntegrator():
             If None then we estimate the buffer size required for convergence automatically.
             Otherwise we try and compute the buffer analytically.
 
-        b_t: None
-            If not None then we also compute box-vector hessians and mixed partials.
 
         This is inspired by ReferenceStochasticDynamics.cpp from OpenMM.
 
@@ -85,19 +86,13 @@ class LangevinIntegrator():
             epsilon = 1e-14
             buffer_size = np.int64(np.log(epsilon)/np.log(self.vscale)+1)
             print("Setting buffer_size to:", buffer_size)
-            # buffer_size = 4000 # guestimate later
 
         # pre-compute scaled prefactors once at the beginning
         self.scale = (1-tf.pow(self.ca, tf.range(buffer_size, dtype=precision)+1))/(1-self.ca)
         self.scale = tf.reverse(self.scale, [0])
         self.scale = tf.reshape(self.scale, (-1, 1, 1, 1))
-
         self.num_atoms = len(masses)
         self.energies = energies
-
-        # print(self.energies[0])
-
-        # assert 0
 
         self.num_params = sum([e.total_params() for e in energies])
         
@@ -158,8 +153,6 @@ class LangevinIntegrator():
                 dtype=precision,
                 initializer=tf.initializers.zeros)
             self.initializers.append(self.converged_Dps_box.initializer)
-
-
 
             all_dE_db = []
             all_d2E_db2 = []
@@ -278,7 +271,6 @@ class LangevinIntegrator():
         for e_idx, nrg in enumerate(self.energies):
             for p_idx, p in enumerate(nrg.get_params()):
                 cur_shape = self.param_shapes[e_idx][p_idx]
-                print("cur_shape", cur_shape)
                 tot_size = np.prod(cur_shape[:-2], dtype=np.int32) # last two dims are Nx3
                 end_idx += tot_size
                 jacs = self.dxdp_t[start_idx:end_idx]
@@ -302,8 +294,6 @@ class LangevinIntegrator():
         for jac, param in self.jacs_and_vars():
             # (ytz): We can probably optimize away two of these reshapes, but
             # they should be relatively cheap so whatever.
-            # print(jac.shape)
-            # print(dLdx.shape)
             left = tf.reshape(dLdx, jac.get_shape())
             dLdx_dxdp = tf.multiply(left, jac)
             dxdp = tf.reduce_sum(dLdx_dxdp, axis=[-1, -2])
@@ -340,7 +330,6 @@ class LangevinIntegrator():
 
         noise = self.normal.sample((num_atoms, num_dims))
 
-        print(self.fscale,self.invMasses,self.dE_dx.shape)
         # assert 0
         new_v_t = self.vscale*self.v_t - self.fscale*self.invMasses*self.dE_dx + self.nscale*self.sqrtInvMasses*noise
         v_t_assign = tf.assign(self.v_t, new_v_t)
@@ -387,8 +376,7 @@ class LangevinIntegrator():
         # compute Dp_t for time t
         # a:  0 1 2 3            0 1 2
         # h: [N,3,N,3], dxdp_t: [p,N,3], contraction: [p,N,3], mp: [p,N,3]
-        print(self.d2E_dx2.shape, self.dxdp_t.shape)
-        # assert 0
+
         Dx_t = tf.einsum('ijkl,mkl->mij', self.d2E_dx2, self.dxdp_t)
         Dx_t += self.d2E_dxdp
 
@@ -396,6 +384,8 @@ class LangevinIntegrator():
 
         control_deps = []
 
+        # If box vectors are not None, then we have periodic boundary conditions that will
+        # affect the equations of motion.
         if self.b_t is not None:
             Dx_t += tf.einsum('ijk,mk->mij', self.d2E_dxdb, self.dbdp_t)
             Db_t = tf.einsum('ij,mj->mi', self.d2E_db2, self.dbdp_t)
@@ -419,22 +409,17 @@ class LangevinIntegrator():
         new_dxdp_t += converged_Dx_assign * self.scale[0][0][0][0]
         new_dxdp_t *= -self.cbs
 
-
-        control_deps = [new_dxdp_t]
-
-        # To avoid a race condition, we want to make sure the above are complete before we overwrite 
-        # so we fully use the old d*dp valuesx
+        # To avoid a race condition, we want to make sure the code is complete before we return.
         if self.b_t is not None:
 
             with tf.control_dependencies([new_dxdp_t, new_dbdp_t]):
                 dxdp_t_assign = tf.assign(self.dxdp_t, new_dxdp_t)
                 dbdp_t_assign = tf.assign(self.dbdp_t, new_dbdp_t)
-
                 return [dx, dxdp_t_assign], [dbox, dbdp_t_assign]
 
         else:
 
+            # this probably not necessary if there's only one dependency
             with tf.control_dependencies([new_dxdp_t]):
                 dxdp_t_assign = tf.assign(self.dxdp_t, new_dxdp_t)
-
                 return [dx, dxdp_t_assign]
