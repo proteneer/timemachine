@@ -242,6 +242,8 @@ class TestLangevinIntegrator(unittest.TestCase):
         test_x_final_val = x
 
         np.testing.assert_array_almost_equal(test_x_final_val, a, decimal=13)
+        np.testing.assert_array_almost_equal(dxdp_val, np.transpose(c, (2,0,1)), decimal=13) # PASSED WTf
+
 
 
     # def test_ten_steps(self):
