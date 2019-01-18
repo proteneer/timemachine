@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 import inspect
 from timemachine.derivatives import list_jacobian
+from tensorflow.python.ops.parallel_for.gradients import jacobian
 from timemachine.constants import BOLTZ
 
 class LangevinIntegrator():
@@ -94,6 +95,10 @@ class LangevinIntegrator():
         self.num_atoms = len(masses)
         self.energies = energies
 
+        # print(self.energies[0])
+
+        # assert 0
+
         self.num_params = sum([e.total_params() for e in energies])
         
         self.initializers = []
@@ -138,9 +143,10 @@ class LangevinIntegrator():
 
         if b_t is not None:
             # buffer for current step's dxdp
+            b_t_shape = b_t.get_shape().as_list()
             self.dbdp_t = tf.get_variable(
-                "buffer_dxdp",
-                shape=[self.num_params] + b_t.get_shape(),
+                "buffer_dbdp",
+                shape=[self.num_params] + b_t_shape,
                 dtype=precision,
                 initializer=tf.initializers.zeros)
             self.initializers.append(self.dbdp_t.initializer)
@@ -148,12 +154,12 @@ class LangevinIntegrator():
             # buffer for converged Dps
             self.converged_Dps_box = tf.get_variable(
                 "converged_Dps_box",
-                shape=[self.num_params] + b_t.get_shape(),
+                shape=[self.num_params] + b_t_shape,
                 dtype=precision,
                 initializer=tf.initializers.zeros)
             self.initializers.append(self.converged_Dps_box.initializer)
 
-            b_t_shape = b_t.get_shape().as_list()
+
 
             all_dE_db = []
             all_d2E_db2 = []
@@ -170,7 +176,7 @@ class LangevinIntegrator():
 
         for nrg in self.energies:
             
-            if supports_box(nrg):
+            if supports_box(nrg) and b_t is not None:
                 E = nrg.energy(x_t, b_t)
             else:
                 E = nrg.energy(x_t)
@@ -179,7 +185,13 @@ class LangevinIntegrator():
             dE_dx = tf.gradients(E, x_t)[0]
 
             offs = []
-            for r in list_jacobian(dE_dx, nrg.params):
+
+            if isinstance(nrg.params, tf.Tensor):
+                n_params = [nrg.params]
+            else:
+                n_params = nrg.params
+
+            for r in list_jacobian(dE_dx, n_params):
                 r_shape = tf.reshape(r, shape=(-1, num_atoms, 3))
                 offs.append(r.get_shape().as_list())
                 all_d2E_dxdp.append(r_shape)
@@ -188,23 +200,20 @@ class LangevinIntegrator():
             all_dE_dx.append(dE_dx)
             all_d2E_dx2.append(tf.hessians(E, x_t)[0])
 
-
-            if supports_box(nrg):
-                dE_db = tf.gradients(E, b_t)
+            if supports_box(nrg) and b_t is not None:
+                dE_db = tf.gradients(E, b_t)[0]
                 all_dE_db.append(dE_db)
                 all_d2E_db2.append(tf.hessians(E, b_t)[0])
-                all_d2E_dxdb.append(tf.jacobians(dE_dx, b_t))
-                all_d2E_dbdx.append(tf.jacobians(dE_db, x_t))
+                all_d2E_dxdb.append(jacobian(dE_dx, b_t, use_pfor=False)) # this uses the tf jacobian
+                all_d2E_dbdx.append(jacobian(dE_db, x_t, use_pfor=False)) # this uses the tf jacobian
 
-                for r in list_jacobian(dE_db, nrg.params):
+                for r in list_jacobian(dE_db, n_params): # ? ADJUST
                     all_d2E_dbdp.append(tf.reshape(r, shape=(-1, 3))) # (ytz): needs to be changed for 3x3 box sizes!
 
         self.all_Es = tf.reduce_sum(tf.stack(all_Es), axis=0) # scalar
         self.dE_dx = tf.reduce_sum(tf.stack(all_dE_dx), axis=0) # [N, 3]
         self.d2E_dx2 = tf.reduce_sum(tf.stack(all_d2E_dx2), axis=0) # [N, 3, N, 3]
         self.d2E_dxdp = tf.concat(all_d2E_dxdp, axis=0) # [p, N, 3]
-
-
 
         if b_t is not None:
             self.dE_db = tf.reduce_sum(tf.stack(all_dE_db), axis=0)
@@ -331,14 +340,21 @@ class LangevinIntegrator():
 
         noise = self.normal.sample((num_atoms, num_dims))
 
+        print(self.fscale,self.invMasses,self.dE_dx.shape)
+        # assert 0
         new_v_t = self.vscale*self.v_t - self.fscale*self.invMasses*self.dE_dx + self.nscale*self.sqrtInvMasses*noise
         v_t_assign = tf.assign(self.v_t, new_v_t)
 
         # compute dxs
         dx = v_t_assign * self.dt
+        
+        if self.b_t is None:
+            dbox = None
+        else:
+            dbox = -self.dt*self.dE_db
 
         if inference:
-            return dx, None
+            return dx, dbox
 
         # The Algorithm:
 
@@ -380,15 +396,13 @@ class LangevinIntegrator():
 
         control_deps = []
 
-        if self.b_t:
-
-            Dx_t += tf.einsum('ijkl,mkl->mij', self.d2E_dxdb, self.dbdp_t)
-
-            Db_t = tf.einsum('ijkl,mkl->mij', self.d2E_db2, self.dbdp_t)
+        if self.b_t is not None:
+            Dx_t += tf.einsum('ijk,mk->mij', self.d2E_dxdb, self.dbdp_t)
+            Db_t = tf.einsum('ij,mj->mi', self.d2E_db2, self.dbdp_t)
             Db_t += self.d2E_dbdp
-            Db_t += tf.einsum('ijkl,mkl->mij', self.d2E_dbdx, self.dxdp_t)
+            Db_t += tf.einsum('ijk,mjk->mi', self.d2E_dbdx, self.dxdp_t)
 
-            converged_Db_assign = tf.assign_add(self.converged_Db, Db_t)
+            converged_Db_assign = tf.assign_add(self.converged_Dps_box, Db_t)
 
             new_dbdp_t = -self.dt*converged_Db_assign
 
@@ -410,17 +424,17 @@ class LangevinIntegrator():
 
         # To avoid a race condition, we want to make sure the above are complete before we overwrite 
         # so we fully use the old d*dp valuesx
-        if self.b_t:
+        if self.b_t is not None:
 
             with tf.control_dependencies([new_dxdp_t, new_dbdp_t]):
                 dxdp_t_assign = tf.assign(self.dxdp_t, new_dxdp_t)
                 dbdp_t_assign = tf.assign(self.dbdp_t, new_dbdp_t)
 
-            return dx, [dxdp_t_assign, dxdp_t_assign]
+                return [dx, dxdp_t_assign], [dbox, dbdp_t_assign]
 
         else:
 
             with tf.control_dependencies([new_dxdp_t]):
                 dxdp_t_assign = tf.assign(self.dxdp_t, new_dxdp_t)
 
-            return dx, [dxdp_t_assign]
+                return [dx, dxdp_t_assign]
