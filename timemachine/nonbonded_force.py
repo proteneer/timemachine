@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from timemachine.force import ConservativeForce
+from timemachine.force import Force
 from timemachine.constants import ONE_4PI_EPS0
 
 
@@ -24,11 +24,9 @@ def generate_inclusion_exclusion_masks(exclusions):
     exclusions = tf.cast(tf.matrix_band_part(exclusions, 0, -1), dtype=tf.int32)
     return (mask_a - mask_b) - exclusions, exclusions
 
+class LeonnardJones(Force):
 
-class LeonnardJonesForce(ConservativeForce):
-
-
-    def __init__(self, params, param_idxs, exclusions, box=None):
+    def __init__(self, params, param_idxs, exclusions):
         """
         Implements a non-periodic LJ612 potential using the Lorentz−Berthelot terms,
         where sig_ij = sig_i + sig_j and eps_ij = eps_i * eps_j.
@@ -58,7 +56,7 @@ class LeonnardJonesForce(ConservativeForce):
         self.keep_mask = generate_exclusion_masks(exclusions)
         self.box = box
 
-    def energy(self, conf):
+    def energy(self, conf, box=None):
         A = tf.gather(self.params, self.param_idxs[:, 0])
         C = tf.gather(self.params, self.param_idxs[:, 1])
 
@@ -96,7 +94,7 @@ class LeonnardJonesForce(ConservativeForce):
 
         return tf.reduce_sum(energy, axis=-1)
 
-class ElectrostaticForce(ConservativeForce):
+class Electrostatic(Force):
 
     def __init__(self, params, param_idxs, exclusions, box=None, kmax=10):
         self.params = params
@@ -110,12 +108,12 @@ class ElectrostaticForce(ConservativeForce):
         self.box = box # we probably want this to be variable when we start to work on barostats
         self.kmax = kmax
 
-    def energy(self, conf):
+    def energy(self, conf, box=None):
         direct_nrg, exclusion_nrg = self.direct_and_exclusion_energy(conf)
-        if self.box is None:
+        if box is None:
             return direct_nrg
         else:
-            return self.reciprocal_energy(conf) + direct_nrg - exclusion_nrg - self.self_energy(conf)
+            return self.reciprocal_energy(conf, box) + direct_nrg - exclusion_nrg - self.self_energy(conf)
 
     def self_energy(self, conf):
         return tf.reduce_sum(ONE_4PI_EPS0 * tf.pow(self.charges, 2) * self.alphaEwald/np.sqrt(np.pi))
@@ -161,10 +159,10 @@ class ElectrostaticForce(ConservativeForce):
         else:
             return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1), None
 
-    def reciprocal_energy(self, conf):
-        assert self.box is not None
+    def reciprocal_energy(self, conf, box):
+        assert box is not None
 
-        recipBoxSize = (2*np.pi)/self.box
+        recipBoxSize = (2*np.pi)/box
 
         mg = []
         lowry = 0
@@ -193,7 +191,7 @@ class ElectrostaticForce(ConservativeForce):
         factorEwald = -1/(4*self.alphaEwald*self.alphaEwald)
         ak = tf.exp(k2*factorEwald)/k2 # [nk]
         nrg = tf.reduce_sum(ak * n2Sk)
-        recipCoeff = (ONE_4PI_EPS0*4*np.pi)/(self.box[0]*self.box[1]*self.box[2])
+        recipCoeff = (ONE_4PI_EPS0*4*np.pi)/(box[0]*box[1]*box[2])
 
         return recipCoeff * nrg
 

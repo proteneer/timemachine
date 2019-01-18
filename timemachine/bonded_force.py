@@ -1,7 +1,7 @@
 import tensorflow as tf
-from timemachine.force import ConservativeForce
+from timemachine.force import Force
 
-class PeriodicTorsionForce(ConservativeForce):
+class PeriodicTorsion(Force):
 
     def __init__(self,
         params,
@@ -79,7 +79,7 @@ class PeriodicTorsionForce(ConservativeForce):
         e2 = k2s*(1+tf.cos(3 * angle - t2s))
         return tf.reduce_sum(e0+e1+e2, axis=-1)
 
-class HarmonicAngleForce(ConservativeForce):
+class HarmonicAngle(Force):
 
     def __init__(self,
         params,
@@ -133,7 +133,7 @@ class HarmonicAngleForce(ConservativeForce):
         return tf.reduce_sum(energies, -1)  # reduce over all angles
 
 
-class HarmonicBondForce(ConservativeForce):
+class HarmonicBond(Force):
 
     def __init__(self,
         params,
