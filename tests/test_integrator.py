@@ -176,7 +176,7 @@ class TestLangevinIntegrator(unittest.TestCase):
             ], dtype=np.bool)
 
         box_ph = tf.placeholder(shape=(3), dtype=tf.float64)
-        electrostatic = Electrostatic(params, param_idxs, exclusions, box_ph)
+        electrostatic = Electrostatic(params, param_idxs, exclusions)
 
         sess = tf.Session()
         
