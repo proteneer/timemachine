@@ -1,0 +1,2623 @@
+<?xml version="1.0" ?>
+<System openmmVersion="7.3" type="System" version="1">
+	<PeriodicBoxVectors>
+		<A x="1.864" y="0" z="0"/>
+		<B x="0" y="1.864" z="0"/>
+		<C x="0" y="0" z="1.864"/>
+	</PeriodicBoxVectors>
+	<Particles>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="15.99943"/>
+		<Particle mass="1.007947"/>
+		<Particle mass="1.007947"/>
+	</Particles>
+	<Constraints/>
+	<Forces>
+		<Force forceGroup="0" type="HarmonicBondForce" usesPeriodic="0" version="2">
+			<Bonds>
+				<Bond d=".09572" k="462750.4" p1="1" p2="0"/>
+				<Bond d=".09572" k="462750.4" p1="2" p2="0"/>
+				<Bond d=".09572" k="462750.4" p1="4" p2="3"/>
+				<Bond d=".09572" k="462750.4" p1="5" p2="3"/>
+				<Bond d=".09572" k="462750.4" p1="7" p2="6"/>
+				<Bond d=".09572" k="462750.4" p1="8" p2="6"/>
+				<Bond d=".09572" k="462750.4" p1="10" p2="9"/>
+				<Bond d=".09572" k="462750.4" p1="11" p2="9"/>
+				<Bond d=".09572" k="462750.4" p1="13" p2="12"/>
+				<Bond d=".09572" k="462750.4" p1="14" p2="12"/>
+				<Bond d=".09572" k="462750.4" p1="16" p2="15"/>
+				<Bond d=".09572" k="462750.4" p1="17" p2="15"/>
+				<Bond d=".09572" k="462750.4" p1="19" p2="18"/>
+				<Bond d=".09572" k="462750.4" p1="20" p2="18"/>
+				<Bond d=".09572" k="462750.4" p1="22" p2="21"/>
+				<Bond d=".09572" k="462750.4" p1="23" p2="21"/>
+				<Bond d=".09572" k="462750.4" p1="25" p2="24"/>
+				<Bond d=".09572" k="462750.4" p1="26" p2="24"/>
+				<Bond d=".09572" k="462750.4" p1="28" p2="27"/>
+				<Bond d=".09572" k="462750.4" p1="29" p2="27"/>
+				<Bond d=".09572" k="462750.4" p1="31" p2="30"/>
+				<Bond d=".09572" k="462750.4" p1="32" p2="30"/>
+				<Bond d=".09572" k="462750.4" p1="34" p2="33"/>
+				<Bond d=".09572" k="462750.4" p1="35" p2="33"/>
+				<Bond d=".09572" k="462750.4" p1="37" p2="36"/>
+				<Bond d=".09572" k="462750.4" p1="38" p2="36"/>
+				<Bond d=".09572" k="462750.4" p1="40" p2="39"/>
+				<Bond d=".09572" k="462750.4" p1="41" p2="39"/>
+				<Bond d=".09572" k="462750.4" p1="43" p2="42"/>
+				<Bond d=".09572" k="462750.4" p1="44" p2="42"/>
+				<Bond d=".09572" k="462750.4" p1="46" p2="45"/>
+				<Bond d=".09572" k="462750.4" p1="47" p2="45"/>
+				<Bond d=".09572" k="462750.4" p1="49" p2="48"/>
+				<Bond d=".09572" k="462750.4" p1="50" p2="48"/>
+				<Bond d=".09572" k="462750.4" p1="52" p2="51"/>
+				<Bond d=".09572" k="462750.4" p1="53" p2="51"/>
+				<Bond d=".09572" k="462750.4" p1="55" p2="54"/>
+				<Bond d=".09572" k="462750.4" p1="56" p2="54"/>
+				<Bond d=".09572" k="462750.4" p1="58" p2="57"/>
+				<Bond d=".09572" k="462750.4" p1="59" p2="57"/>
+				<Bond d=".09572" k="462750.4" p1="61" p2="60"/>
+				<Bond d=".09572" k="462750.4" p1="62" p2="60"/>
+				<Bond d=".09572" k="462750.4" p1="64" p2="63"/>
+				<Bond d=".09572" k="462750.4" p1="65" p2="63"/>
+				<Bond d=".09572" k="462750.4" p1="67" p2="66"/>
+				<Bond d=".09572" k="462750.4" p1="68" p2="66"/>
+				<Bond d=".09572" k="462750.4" p1="70" p2="69"/>
+				<Bond d=".09572" k="462750.4" p1="71" p2="69"/>
+				<Bond d=".09572" k="462750.4" p1="73" p2="72"/>
+				<Bond d=".09572" k="462750.4" p1="74" p2="72"/>
+				<Bond d=".09572" k="462750.4" p1="76" p2="75"/>
+				<Bond d=".09572" k="462750.4" p1="77" p2="75"/>
+				<Bond d=".09572" k="462750.4" p1="79" p2="78"/>
+				<Bond d=".09572" k="462750.4" p1="80" p2="78"/>
+				<Bond d=".09572" k="462750.4" p1="82" p2="81"/>
+				<Bond d=".09572" k="462750.4" p1="83" p2="81"/>
+				<Bond d=".09572" k="462750.4" p1="85" p2="84"/>
+				<Bond d=".09572" k="462750.4" p1="86" p2="84"/>
+				<Bond d=".09572" k="462750.4" p1="88" p2="87"/>
+				<Bond d=".09572" k="462750.4" p1="89" p2="87"/>
+				<Bond d=".09572" k="462750.4" p1="91" p2="90"/>
+				<Bond d=".09572" k="462750.4" p1="92" p2="90"/>
+				<Bond d=".09572" k="462750.4" p1="94" p2="93"/>
+				<Bond d=".09572" k="462750.4" p1="95" p2="93"/>
+				<Bond d=".09572" k="462750.4" p1="97" p2="96"/>
+				<Bond d=".09572" k="462750.4" p1="98" p2="96"/>
+				<Bond d=".09572" k="462750.4" p1="100" p2="99"/>
+				<Bond d=".09572" k="462750.4" p1="101" p2="99"/>
+				<Bond d=".09572" k="462750.4" p1="103" p2="102"/>
+				<Bond d=".09572" k="462750.4" p1="104" p2="102"/>
+				<Bond d=".09572" k="462750.4" p1="106" p2="105"/>
+				<Bond d=".09572" k="462750.4" p1="107" p2="105"/>
+				<Bond d=".09572" k="462750.4" p1="109" p2="108"/>
+				<Bond d=".09572" k="462750.4" p1="110" p2="108"/>
+				<Bond d=".09572" k="462750.4" p1="112" p2="111"/>
+				<Bond d=".09572" k="462750.4" p1="113" p2="111"/>
+				<Bond d=".09572" k="462750.4" p1="115" p2="114"/>
+				<Bond d=".09572" k="462750.4" p1="116" p2="114"/>
+				<Bond d=".09572" k="462750.4" p1="118" p2="117"/>
+				<Bond d=".09572" k="462750.4" p1="119" p2="117"/>
+				<Bond d=".09572" k="462750.4" p1="121" p2="120"/>
+				<Bond d=".09572" k="462750.4" p1="122" p2="120"/>
+				<Bond d=".09572" k="462750.4" p1="124" p2="123"/>
+				<Bond d=".09572" k="462750.4" p1="125" p2="123"/>
+				<Bond d=".09572" k="462750.4" p1="127" p2="126"/>
+				<Bond d=".09572" k="462750.4" p1="128" p2="126"/>
+				<Bond d=".09572" k="462750.4" p1="130" p2="129"/>
+				<Bond d=".09572" k="462750.4" p1="131" p2="129"/>
+				<Bond d=".09572" k="462750.4" p1="133" p2="132"/>
+				<Bond d=".09572" k="462750.4" p1="134" p2="132"/>
+				<Bond d=".09572" k="462750.4" p1="136" p2="135"/>
+				<Bond d=".09572" k="462750.4" p1="137" p2="135"/>
+				<Bond d=".09572" k="462750.4" p1="139" p2="138"/>
+				<Bond d=".09572" k="462750.4" p1="140" p2="138"/>
+				<Bond d=".09572" k="462750.4" p1="142" p2="141"/>
+				<Bond d=".09572" k="462750.4" p1="143" p2="141"/>
+				<Bond d=".09572" k="462750.4" p1="145" p2="144"/>
+				<Bond d=".09572" k="462750.4" p1="146" p2="144"/>
+				<Bond d=".09572" k="462750.4" p1="148" p2="147"/>
+				<Bond d=".09572" k="462750.4" p1="149" p2="147"/>
+				<Bond d=".09572" k="462750.4" p1="151" p2="150"/>
+				<Bond d=".09572" k="462750.4" p1="152" p2="150"/>
+				<Bond d=".09572" k="462750.4" p1="154" p2="153"/>
+				<Bond d=".09572" k="462750.4" p1="155" p2="153"/>
+				<Bond d=".09572" k="462750.4" p1="157" p2="156"/>
+				<Bond d=".09572" k="462750.4" p1="158" p2="156"/>
+				<Bond d=".09572" k="462750.4" p1="160" p2="159"/>
+				<Bond d=".09572" k="462750.4" p1="161" p2="159"/>
+				<Bond d=".09572" k="462750.4" p1="163" p2="162"/>
+				<Bond d=".09572" k="462750.4" p1="164" p2="162"/>
+				<Bond d=".09572" k="462750.4" p1="166" p2="165"/>
+				<Bond d=".09572" k="462750.4" p1="167" p2="165"/>
+				<Bond d=".09572" k="462750.4" p1="169" p2="168"/>
+				<Bond d=".09572" k="462750.4" p1="170" p2="168"/>
+				<Bond d=".09572" k="462750.4" p1="172" p2="171"/>
+				<Bond d=".09572" k="462750.4" p1="173" p2="171"/>
+				<Bond d=".09572" k="462750.4" p1="175" p2="174"/>
+				<Bond d=".09572" k="462750.4" p1="176" p2="174"/>
+				<Bond d=".09572" k="462750.4" p1="178" p2="177"/>
+				<Bond d=".09572" k="462750.4" p1="179" p2="177"/>
+				<Bond d=".09572" k="462750.4" p1="181" p2="180"/>
+				<Bond d=".09572" k="462750.4" p1="182" p2="180"/>
+				<Bond d=".09572" k="462750.4" p1="184" p2="183"/>
+				<Bond d=".09572" k="462750.4" p1="185" p2="183"/>
+				<Bond d=".09572" k="462750.4" p1="187" p2="186"/>
+				<Bond d=".09572" k="462750.4" p1="188" p2="186"/>
+				<Bond d=".09572" k="462750.4" p1="190" p2="189"/>
+				<Bond d=".09572" k="462750.4" p1="191" p2="189"/>
+				<Bond d=".09572" k="462750.4" p1="193" p2="192"/>
+				<Bond d=".09572" k="462750.4" p1="194" p2="192"/>
+				<Bond d=".09572" k="462750.4" p1="196" p2="195"/>
+				<Bond d=".09572" k="462750.4" p1="197" p2="195"/>
+				<Bond d=".09572" k="462750.4" p1="199" p2="198"/>
+				<Bond d=".09572" k="462750.4" p1="200" p2="198"/>
+				<Bond d=".09572" k="462750.4" p1="202" p2="201"/>
+				<Bond d=".09572" k="462750.4" p1="203" p2="201"/>
+				<Bond d=".09572" k="462750.4" p1="205" p2="204"/>
+				<Bond d=".09572" k="462750.4" p1="206" p2="204"/>
+				<Bond d=".09572" k="462750.4" p1="208" p2="207"/>
+				<Bond d=".09572" k="462750.4" p1="209" p2="207"/>
+				<Bond d=".09572" k="462750.4" p1="211" p2="210"/>
+				<Bond d=".09572" k="462750.4" p1="212" p2="210"/>
+				<Bond d=".09572" k="462750.4" p1="214" p2="213"/>
+				<Bond d=".09572" k="462750.4" p1="215" p2="213"/>
+				<Bond d=".09572" k="462750.4" p1="217" p2="216"/>
+				<Bond d=".09572" k="462750.4" p1="218" p2="216"/>
+				<Bond d=".09572" k="462750.4" p1="220" p2="219"/>
+				<Bond d=".09572" k="462750.4" p1="221" p2="219"/>
+				<Bond d=".09572" k="462750.4" p1="223" p2="222"/>
+				<Bond d=".09572" k="462750.4" p1="224" p2="222"/>
+				<Bond d=".09572" k="462750.4" p1="226" p2="225"/>
+				<Bond d=".09572" k="462750.4" p1="227" p2="225"/>
+				<Bond d=".09572" k="462750.4" p1="229" p2="228"/>
+				<Bond d=".09572" k="462750.4" p1="230" p2="228"/>
+				<Bond d=".09572" k="462750.4" p1="232" p2="231"/>
+				<Bond d=".09572" k="462750.4" p1="233" p2="231"/>
+				<Bond d=".09572" k="462750.4" p1="235" p2="234"/>
+				<Bond d=".09572" k="462750.4" p1="236" p2="234"/>
+				<Bond d=".09572" k="462750.4" p1="238" p2="237"/>
+				<Bond d=".09572" k="462750.4" p1="239" p2="237"/>
+				<Bond d=".09572" k="462750.4" p1="241" p2="240"/>
+				<Bond d=".09572" k="462750.4" p1="242" p2="240"/>
+				<Bond d=".09572" k="462750.4" p1="244" p2="243"/>
+				<Bond d=".09572" k="462750.4" p1="245" p2="243"/>
+				<Bond d=".09572" k="462750.4" p1="247" p2="246"/>
+				<Bond d=".09572" k="462750.4" p1="248" p2="246"/>
+				<Bond d=".09572" k="462750.4" p1="250" p2="249"/>
+				<Bond d=".09572" k="462750.4" p1="251" p2="249"/>
+				<Bond d=".09572" k="462750.4" p1="253" p2="252"/>
+				<Bond d=".09572" k="462750.4" p1="254" p2="252"/>
+				<Bond d=".09572" k="462750.4" p1="256" p2="255"/>
+				<Bond d=".09572" k="462750.4" p1="257" p2="255"/>
+				<Bond d=".09572" k="462750.4" p1="259" p2="258"/>
+				<Bond d=".09572" k="462750.4" p1="260" p2="258"/>
+				<Bond d=".09572" k="462750.4" p1="262" p2="261"/>
+				<Bond d=".09572" k="462750.4" p1="263" p2="261"/>
+				<Bond d=".09572" k="462750.4" p1="265" p2="264"/>
+				<Bond d=".09572" k="462750.4" p1="266" p2="264"/>
+				<Bond d=".09572" k="462750.4" p1="268" p2="267"/>
+				<Bond d=".09572" k="462750.4" p1="269" p2="267"/>
+				<Bond d=".09572" k="462750.4" p1="271" p2="270"/>
+				<Bond d=".09572" k="462750.4" p1="272" p2="270"/>
+				<Bond d=".09572" k="462750.4" p1="274" p2="273"/>
+				<Bond d=".09572" k="462750.4" p1="275" p2="273"/>
+				<Bond d=".09572" k="462750.4" p1="277" p2="276"/>
+				<Bond d=".09572" k="462750.4" p1="278" p2="276"/>
+				<Bond d=".09572" k="462750.4" p1="280" p2="279"/>
+				<Bond d=".09572" k="462750.4" p1="281" p2="279"/>
+				<Bond d=".09572" k="462750.4" p1="283" p2="282"/>
+				<Bond d=".09572" k="462750.4" p1="284" p2="282"/>
+				<Bond d=".09572" k="462750.4" p1="286" p2="285"/>
+				<Bond d=".09572" k="462750.4" p1="287" p2="285"/>
+				<Bond d=".09572" k="462750.4" p1="289" p2="288"/>
+				<Bond d=".09572" k="462750.4" p1="290" p2="288"/>
+				<Bond d=".09572" k="462750.4" p1="292" p2="291"/>
+				<Bond d=".09572" k="462750.4" p1="293" p2="291"/>
+				<Bond d=".09572" k="462750.4" p1="295" p2="294"/>
+				<Bond d=".09572" k="462750.4" p1="296" p2="294"/>
+				<Bond d=".09572" k="462750.4" p1="298" p2="297"/>
+				<Bond d=".09572" k="462750.4" p1="299" p2="297"/>
+				<Bond d=".09572" k="462750.4" p1="301" p2="300"/>
+				<Bond d=".09572" k="462750.4" p1="302" p2="300"/>
+				<Bond d=".09572" k="462750.4" p1="304" p2="303"/>
+				<Bond d=".09572" k="462750.4" p1="305" p2="303"/>
+				<Bond d=".09572" k="462750.4" p1="307" p2="306"/>
+				<Bond d=".09572" k="462750.4" p1="308" p2="306"/>
+				<Bond d=".09572" k="462750.4" p1="310" p2="309"/>
+				<Bond d=".09572" k="462750.4" p1="311" p2="309"/>
+				<Bond d=".09572" k="462750.4" p1="313" p2="312"/>
+				<Bond d=".09572" k="462750.4" p1="314" p2="312"/>
+				<Bond d=".09572" k="462750.4" p1="316" p2="315"/>
+				<Bond d=".09572" k="462750.4" p1="317" p2="315"/>
+				<Bond d=".09572" k="462750.4" p1="319" p2="318"/>
+				<Bond d=".09572" k="462750.4" p1="320" p2="318"/>
+				<Bond d=".09572" k="462750.4" p1="322" p2="321"/>
+				<Bond d=".09572" k="462750.4" p1="323" p2="321"/>
+				<Bond d=".09572" k="462750.4" p1="325" p2="324"/>
+				<Bond d=".09572" k="462750.4" p1="326" p2="324"/>
+				<Bond d=".09572" k="462750.4" p1="328" p2="327"/>
+				<Bond d=".09572" k="462750.4" p1="329" p2="327"/>
+				<Bond d=".09572" k="462750.4" p1="331" p2="330"/>
+				<Bond d=".09572" k="462750.4" p1="332" p2="330"/>
+				<Bond d=".09572" k="462750.4" p1="334" p2="333"/>
+				<Bond d=".09572" k="462750.4" p1="335" p2="333"/>
+				<Bond d=".09572" k="462750.4" p1="337" p2="336"/>
+				<Bond d=".09572" k="462750.4" p1="338" p2="336"/>
+				<Bond d=".09572" k="462750.4" p1="340" p2="339"/>
+				<Bond d=".09572" k="462750.4" p1="341" p2="339"/>
+				<Bond d=".09572" k="462750.4" p1="343" p2="342"/>
+				<Bond d=".09572" k="462750.4" p1="344" p2="342"/>
+				<Bond d=".09572" k="462750.4" p1="346" p2="345"/>
+				<Bond d=".09572" k="462750.4" p1="347" p2="345"/>
+				<Bond d=".09572" k="462750.4" p1="349" p2="348"/>
+				<Bond d=".09572" k="462750.4" p1="350" p2="348"/>
+				<Bond d=".09572" k="462750.4" p1="352" p2="351"/>
+				<Bond d=".09572" k="462750.4" p1="353" p2="351"/>
+				<Bond d=".09572" k="462750.4" p1="355" p2="354"/>
+				<Bond d=".09572" k="462750.4" p1="356" p2="354"/>
+				<Bond d=".09572" k="462750.4" p1="358" p2="357"/>
+				<Bond d=".09572" k="462750.4" p1="359" p2="357"/>
+				<Bond d=".09572" k="462750.4" p1="361" p2="360"/>
+				<Bond d=".09572" k="462750.4" p1="362" p2="360"/>
+				<Bond d=".09572" k="462750.4" p1="364" p2="363"/>
+				<Bond d=".09572" k="462750.4" p1="365" p2="363"/>
+				<Bond d=".09572" k="462750.4" p1="367" p2="366"/>
+				<Bond d=".09572" k="462750.4" p1="368" p2="366"/>
+				<Bond d=".09572" k="462750.4" p1="370" p2="369"/>
+				<Bond d=".09572" k="462750.4" p1="371" p2="369"/>
+				<Bond d=".09572" k="462750.4" p1="373" p2="372"/>
+				<Bond d=".09572" k="462750.4" p1="374" p2="372"/>
+				<Bond d=".09572" k="462750.4" p1="376" p2="375"/>
+				<Bond d=".09572" k="462750.4" p1="377" p2="375"/>
+				<Bond d=".09572" k="462750.4" p1="379" p2="378"/>
+				<Bond d=".09572" k="462750.4" p1="380" p2="378"/>
+				<Bond d=".09572" k="462750.4" p1="382" p2="381"/>
+				<Bond d=".09572" k="462750.4" p1="383" p2="381"/>
+				<Bond d=".09572" k="462750.4" p1="385" p2="384"/>
+				<Bond d=".09572" k="462750.4" p1="386" p2="384"/>
+				<Bond d=".09572" k="462750.4" p1="388" p2="387"/>
+				<Bond d=".09572" k="462750.4" p1="389" p2="387"/>
+				<Bond d=".09572" k="462750.4" p1="391" p2="390"/>
+				<Bond d=".09572" k="462750.4" p1="392" p2="390"/>
+				<Bond d=".09572" k="462750.4" p1="394" p2="393"/>
+				<Bond d=".09572" k="462750.4" p1="395" p2="393"/>
+				<Bond d=".09572" k="462750.4" p1="397" p2="396"/>
+				<Bond d=".09572" k="462750.4" p1="398" p2="396"/>
+				<Bond d=".09572" k="462750.4" p1="400" p2="399"/>
+				<Bond d=".09572" k="462750.4" p1="401" p2="399"/>
+				<Bond d=".09572" k="462750.4" p1="403" p2="402"/>
+				<Bond d=".09572" k="462750.4" p1="404" p2="402"/>
+				<Bond d=".09572" k="462750.4" p1="406" p2="405"/>
+				<Bond d=".09572" k="462750.4" p1="407" p2="405"/>
+				<Bond d=".09572" k="462750.4" p1="409" p2="408"/>
+				<Bond d=".09572" k="462750.4" p1="410" p2="408"/>
+				<Bond d=".09572" k="462750.4" p1="412" p2="411"/>
+				<Bond d=".09572" k="462750.4" p1="413" p2="411"/>
+				<Bond d=".09572" k="462750.4" p1="415" p2="414"/>
+				<Bond d=".09572" k="462750.4" p1="416" p2="414"/>
+				<Bond d=".09572" k="462750.4" p1="418" p2="417"/>
+				<Bond d=".09572" k="462750.4" p1="419" p2="417"/>
+				<Bond d=".09572" k="462750.4" p1="421" p2="420"/>
+				<Bond d=".09572" k="462750.4" p1="422" p2="420"/>
+				<Bond d=".09572" k="462750.4" p1="424" p2="423"/>
+				<Bond d=".09572" k="462750.4" p1="425" p2="423"/>
+				<Bond d=".09572" k="462750.4" p1="427" p2="426"/>
+				<Bond d=".09572" k="462750.4" p1="428" p2="426"/>
+				<Bond d=".09572" k="462750.4" p1="430" p2="429"/>
+				<Bond d=".09572" k="462750.4" p1="431" p2="429"/>
+				<Bond d=".09572" k="462750.4" p1="433" p2="432"/>
+				<Bond d=".09572" k="462750.4" p1="434" p2="432"/>
+				<Bond d=".09572" k="462750.4" p1="436" p2="435"/>
+				<Bond d=".09572" k="462750.4" p1="437" p2="435"/>
+				<Bond d=".09572" k="462750.4" p1="439" p2="438"/>
+				<Bond d=".09572" k="462750.4" p1="440" p2="438"/>
+				<Bond d=".09572" k="462750.4" p1="442" p2="441"/>
+				<Bond d=".09572" k="462750.4" p1="443" p2="441"/>
+				<Bond d=".09572" k="462750.4" p1="445" p2="444"/>
+				<Bond d=".09572" k="462750.4" p1="446" p2="444"/>
+				<Bond d=".09572" k="462750.4" p1="448" p2="447"/>
+				<Bond d=".09572" k="462750.4" p1="449" p2="447"/>
+				<Bond d=".09572" k="462750.4" p1="451" p2="450"/>
+				<Bond d=".09572" k="462750.4" p1="452" p2="450"/>
+				<Bond d=".09572" k="462750.4" p1="454" p2="453"/>
+				<Bond d=".09572" k="462750.4" p1="455" p2="453"/>
+				<Bond d=".09572" k="462750.4" p1="457" p2="456"/>
+				<Bond d=".09572" k="462750.4" p1="458" p2="456"/>
+				<Bond d=".09572" k="462750.4" p1="460" p2="459"/>
+				<Bond d=".09572" k="462750.4" p1="461" p2="459"/>
+				<Bond d=".09572" k="462750.4" p1="463" p2="462"/>
+				<Bond d=".09572" k="462750.4" p1="464" p2="462"/>
+				<Bond d=".09572" k="462750.4" p1="466" p2="465"/>
+				<Bond d=".09572" k="462750.4" p1="467" p2="465"/>
+				<Bond d=".09572" k="462750.4" p1="469" p2="468"/>
+				<Bond d=".09572" k="462750.4" p1="470" p2="468"/>
+				<Bond d=".09572" k="462750.4" p1="472" p2="471"/>
+				<Bond d=".09572" k="462750.4" p1="473" p2="471"/>
+				<Bond d=".09572" k="462750.4" p1="475" p2="474"/>
+				<Bond d=".09572" k="462750.4" p1="476" p2="474"/>
+				<Bond d=".09572" k="462750.4" p1="478" p2="477"/>
+				<Bond d=".09572" k="462750.4" p1="479" p2="477"/>
+				<Bond d=".09572" k="462750.4" p1="481" p2="480"/>
+				<Bond d=".09572" k="462750.4" p1="482" p2="480"/>
+				<Bond d=".09572" k="462750.4" p1="484" p2="483"/>
+				<Bond d=".09572" k="462750.4" p1="485" p2="483"/>
+				<Bond d=".09572" k="462750.4" p1="487" p2="486"/>
+				<Bond d=".09572" k="462750.4" p1="488" p2="486"/>
+				<Bond d=".09572" k="462750.4" p1="490" p2="489"/>
+				<Bond d=".09572" k="462750.4" p1="491" p2="489"/>
+				<Bond d=".09572" k="462750.4" p1="493" p2="492"/>
+				<Bond d=".09572" k="462750.4" p1="494" p2="492"/>
+				<Bond d=".09572" k="462750.4" p1="496" p2="495"/>
+				<Bond d=".09572" k="462750.4" p1="497" p2="495"/>
+				<Bond d=".09572" k="462750.4" p1="499" p2="498"/>
+				<Bond d=".09572" k="462750.4" p1="500" p2="498"/>
+				<Bond d=".09572" k="462750.4" p1="502" p2="501"/>
+				<Bond d=".09572" k="462750.4" p1="503" p2="501"/>
+				<Bond d=".09572" k="462750.4" p1="505" p2="504"/>
+				<Bond d=".09572" k="462750.4" p1="506" p2="504"/>
+				<Bond d=".09572" k="462750.4" p1="508" p2="507"/>
+				<Bond d=".09572" k="462750.4" p1="509" p2="507"/>
+				<Bond d=".09572" k="462750.4" p1="511" p2="510"/>
+				<Bond d=".09572" k="462750.4" p1="512" p2="510"/>
+				<Bond d=".09572" k="462750.4" p1="514" p2="513"/>
+				<Bond d=".09572" k="462750.4" p1="515" p2="513"/>
+				<Bond d=".09572" k="462750.4" p1="517" p2="516"/>
+				<Bond d=".09572" k="462750.4" p1="518" p2="516"/>
+				<Bond d=".09572" k="462750.4" p1="520" p2="519"/>
+				<Bond d=".09572" k="462750.4" p1="521" p2="519"/>
+				<Bond d=".09572" k="462750.4" p1="523" p2="522"/>
+				<Bond d=".09572" k="462750.4" p1="524" p2="522"/>
+				<Bond d=".09572" k="462750.4" p1="526" p2="525"/>
+				<Bond d=".09572" k="462750.4" p1="527" p2="525"/>
+				<Bond d=".09572" k="462750.4" p1="529" p2="528"/>
+				<Bond d=".09572" k="462750.4" p1="530" p2="528"/>
+				<Bond d=".09572" k="462750.4" p1="532" p2="531"/>
+				<Bond d=".09572" k="462750.4" p1="533" p2="531"/>
+				<Bond d=".09572" k="462750.4" p1="535" p2="534"/>
+				<Bond d=".09572" k="462750.4" p1="536" p2="534"/>
+				<Bond d=".09572" k="462750.4" p1="538" p2="537"/>
+				<Bond d=".09572" k="462750.4" p1="539" p2="537"/>
+				<Bond d=".09572" k="462750.4" p1="541" p2="540"/>
+				<Bond d=".09572" k="462750.4" p1="542" p2="540"/>
+				<Bond d=".09572" k="462750.4" p1="544" p2="543"/>
+				<Bond d=".09572" k="462750.4" p1="545" p2="543"/>
+				<Bond d=".09572" k="462750.4" p1="547" p2="546"/>
+				<Bond d=".09572" k="462750.4" p1="548" p2="546"/>
+				<Bond d=".09572" k="462750.4" p1="550" p2="549"/>
+				<Bond d=".09572" k="462750.4" p1="551" p2="549"/>
+				<Bond d=".09572" k="462750.4" p1="553" p2="552"/>
+				<Bond d=".09572" k="462750.4" p1="554" p2="552"/>
+				<Bond d=".09572" k="462750.4" p1="556" p2="555"/>
+				<Bond d=".09572" k="462750.4" p1="557" p2="555"/>
+				<Bond d=".09572" k="462750.4" p1="559" p2="558"/>
+				<Bond d=".09572" k="462750.4" p1="560" p2="558"/>
+				<Bond d=".09572" k="462750.4" p1="562" p2="561"/>
+				<Bond d=".09572" k="462750.4" p1="563" p2="561"/>
+				<Bond d=".09572" k="462750.4" p1="565" p2="564"/>
+				<Bond d=".09572" k="462750.4" p1="566" p2="564"/>
+				<Bond d=".09572" k="462750.4" p1="568" p2="567"/>
+				<Bond d=".09572" k="462750.4" p1="569" p2="567"/>
+				<Bond d=".09572" k="462750.4" p1="571" p2="570"/>
+				<Bond d=".09572" k="462750.4" p1="572" p2="570"/>
+				<Bond d=".09572" k="462750.4" p1="574" p2="573"/>
+				<Bond d=".09572" k="462750.4" p1="575" p2="573"/>
+				<Bond d=".09572" k="462750.4" p1="577" p2="576"/>
+				<Bond d=".09572" k="462750.4" p1="578" p2="576"/>
+				<Bond d=".09572" k="462750.4" p1="580" p2="579"/>
+				<Bond d=".09572" k="462750.4" p1="581" p2="579"/>
+				<Bond d=".09572" k="462750.4" p1="583" p2="582"/>
+				<Bond d=".09572" k="462750.4" p1="584" p2="582"/>
+				<Bond d=".09572" k="462750.4" p1="586" p2="585"/>
+				<Bond d=".09572" k="462750.4" p1="587" p2="585"/>
+				<Bond d=".09572" k="462750.4" p1="589" p2="588"/>
+				<Bond d=".09572" k="462750.4" p1="590" p2="588"/>
+				<Bond d=".09572" k="462750.4" p1="592" p2="591"/>
+				<Bond d=".09572" k="462750.4" p1="593" p2="591"/>
+				<Bond d=".09572" k="462750.4" p1="595" p2="594"/>
+				<Bond d=".09572" k="462750.4" p1="596" p2="594"/>
+				<Bond d=".09572" k="462750.4" p1="598" p2="597"/>
+				<Bond d=".09572" k="462750.4" p1="599" p2="597"/>
+				<Bond d=".09572" k="462750.4" p1="601" p2="600"/>
+				<Bond d=".09572" k="462750.4" p1="602" p2="600"/>
+				<Bond d=".09572" k="462750.4" p1="604" p2="603"/>
+				<Bond d=".09572" k="462750.4" p1="605" p2="603"/>
+				<Bond d=".09572" k="462750.4" p1="607" p2="606"/>
+				<Bond d=".09572" k="462750.4" p1="608" p2="606"/>
+				<Bond d=".09572" k="462750.4" p1="610" p2="609"/>
+				<Bond d=".09572" k="462750.4" p1="611" p2="609"/>
+				<Bond d=".09572" k="462750.4" p1="613" p2="612"/>
+				<Bond d=".09572" k="462750.4" p1="614" p2="612"/>
+				<Bond d=".09572" k="462750.4" p1="616" p2="615"/>
+				<Bond d=".09572" k="462750.4" p1="617" p2="615"/>
+				<Bond d=".09572" k="462750.4" p1="619" p2="618"/>
+				<Bond d=".09572" k="462750.4" p1="620" p2="618"/>
+				<Bond d=".09572" k="462750.4" p1="622" p2="621"/>
+				<Bond d=".09572" k="462750.4" p1="623" p2="621"/>
+				<Bond d=".09572" k="462750.4" p1="625" p2="624"/>
+				<Bond d=".09572" k="462750.4" p1="626" p2="624"/>
+				<Bond d=".09572" k="462750.4" p1="628" p2="627"/>
+				<Bond d=".09572" k="462750.4" p1="629" p2="627"/>
+				<Bond d=".09572" k="462750.4" p1="631" p2="630"/>
+				<Bond d=".09572" k="462750.4" p1="632" p2="630"/>
+				<Bond d=".09572" k="462750.4" p1="634" p2="633"/>
+				<Bond d=".09572" k="462750.4" p1="635" p2="633"/>
+				<Bond d=".09572" k="462750.4" p1="637" p2="636"/>
+				<Bond d=".09572" k="462750.4" p1="638" p2="636"/>
+				<Bond d=".09572" k="462750.4" p1="640" p2="639"/>
+				<Bond d=".09572" k="462750.4" p1="641" p2="639"/>
+				<Bond d=".09572" k="462750.4" p1="643" p2="642"/>
+				<Bond d=".09572" k="462750.4" p1="644" p2="642"/>
+				<Bond d=".09572" k="462750.4" p1="646" p2="645"/>
+				<Bond d=".09572" k="462750.4" p1="647" p2="645"/>
+			</Bonds>
+		</Force>
+		<Force forceGroup="0" type="HarmonicAngleForce" usesPeriodic="0" version="2">
+			<Angles>
+				<Angle a="1.82421813418" k="836.8" p1="1" p2="0" p3="2"/>
+				<Angle a="1.82421813418" k="836.8" p1="4" p2="3" p3="5"/>
+				<Angle a="1.82421813418" k="836.8" p1="7" p2="6" p3="8"/>
+				<Angle a="1.82421813418" k="836.8" p1="10" p2="9" p3="11"/>
+				<Angle a="1.82421813418" k="836.8" p1="13" p2="12" p3="14"/>
+				<Angle a="1.82421813418" k="836.8" p1="16" p2="15" p3="17"/>
+				<Angle a="1.82421813418" k="836.8" p1="19" p2="18" p3="20"/>
+				<Angle a="1.82421813418" k="836.8" p1="22" p2="21" p3="23"/>
+				<Angle a="1.82421813418" k="836.8" p1="25" p2="24" p3="26"/>
+				<Angle a="1.82421813418" k="836.8" p1="28" p2="27" p3="29"/>
+				<Angle a="1.82421813418" k="836.8" p1="31" p2="30" p3="32"/>
+				<Angle a="1.82421813418" k="836.8" p1="34" p2="33" p3="35"/>
+				<Angle a="1.82421813418" k="836.8" p1="37" p2="36" p3="38"/>
+				<Angle a="1.82421813418" k="836.8" p1="40" p2="39" p3="41"/>
+				<Angle a="1.82421813418" k="836.8" p1="43" p2="42" p3="44"/>
+				<Angle a="1.82421813418" k="836.8" p1="46" p2="45" p3="47"/>
+				<Angle a="1.82421813418" k="836.8" p1="49" p2="48" p3="50"/>
+				<Angle a="1.82421813418" k="836.8" p1="52" p2="51" p3="53"/>
+				<Angle a="1.82421813418" k="836.8" p1="55" p2="54" p3="56"/>
+				<Angle a="1.82421813418" k="836.8" p1="58" p2="57" p3="59"/>
+				<Angle a="1.82421813418" k="836.8" p1="61" p2="60" p3="62"/>
+				<Angle a="1.82421813418" k="836.8" p1="64" p2="63" p3="65"/>
+				<Angle a="1.82421813418" k="836.8" p1="67" p2="66" p3="68"/>
+				<Angle a="1.82421813418" k="836.8" p1="70" p2="69" p3="71"/>
+				<Angle a="1.82421813418" k="836.8" p1="73" p2="72" p3="74"/>
+				<Angle a="1.82421813418" k="836.8" p1="76" p2="75" p3="77"/>
+				<Angle a="1.82421813418" k="836.8" p1="79" p2="78" p3="80"/>
+				<Angle a="1.82421813418" k="836.8" p1="82" p2="81" p3="83"/>
+				<Angle a="1.82421813418" k="836.8" p1="85" p2="84" p3="86"/>
+				<Angle a="1.82421813418" k="836.8" p1="88" p2="87" p3="89"/>
+				<Angle a="1.82421813418" k="836.8" p1="91" p2="90" p3="92"/>
+				<Angle a="1.82421813418" k="836.8" p1="94" p2="93" p3="95"/>
+				<Angle a="1.82421813418" k="836.8" p1="97" p2="96" p3="98"/>
+				<Angle a="1.82421813418" k="836.8" p1="100" p2="99" p3="101"/>
+				<Angle a="1.82421813418" k="836.8" p1="103" p2="102" p3="104"/>
+				<Angle a="1.82421813418" k="836.8" p1="106" p2="105" p3="107"/>
+				<Angle a="1.82421813418" k="836.8" p1="109" p2="108" p3="110"/>
+				<Angle a="1.82421813418" k="836.8" p1="112" p2="111" p3="113"/>
+				<Angle a="1.82421813418" k="836.8" p1="115" p2="114" p3="116"/>
+				<Angle a="1.82421813418" k="836.8" p1="118" p2="117" p3="119"/>
+				<Angle a="1.82421813418" k="836.8" p1="121" p2="120" p3="122"/>
+				<Angle a="1.82421813418" k="836.8" p1="124" p2="123" p3="125"/>
+				<Angle a="1.82421813418" k="836.8" p1="127" p2="126" p3="128"/>
+				<Angle a="1.82421813418" k="836.8" p1="130" p2="129" p3="131"/>
+				<Angle a="1.82421813418" k="836.8" p1="133" p2="132" p3="134"/>
+				<Angle a="1.82421813418" k="836.8" p1="136" p2="135" p3="137"/>
+				<Angle a="1.82421813418" k="836.8" p1="139" p2="138" p3="140"/>
+				<Angle a="1.82421813418" k="836.8" p1="142" p2="141" p3="143"/>
+				<Angle a="1.82421813418" k="836.8" p1="145" p2="144" p3="146"/>
+				<Angle a="1.82421813418" k="836.8" p1="148" p2="147" p3="149"/>
+				<Angle a="1.82421813418" k="836.8" p1="151" p2="150" p3="152"/>
+				<Angle a="1.82421813418" k="836.8" p1="154" p2="153" p3="155"/>
+				<Angle a="1.82421813418" k="836.8" p1="157" p2="156" p3="158"/>
+				<Angle a="1.82421813418" k="836.8" p1="160" p2="159" p3="161"/>
+				<Angle a="1.82421813418" k="836.8" p1="163" p2="162" p3="164"/>
+				<Angle a="1.82421813418" k="836.8" p1="166" p2="165" p3="167"/>
+				<Angle a="1.82421813418" k="836.8" p1="169" p2="168" p3="170"/>
+				<Angle a="1.82421813418" k="836.8" p1="172" p2="171" p3="173"/>
+				<Angle a="1.82421813418" k="836.8" p1="175" p2="174" p3="176"/>
+				<Angle a="1.82421813418" k="836.8" p1="178" p2="177" p3="179"/>
+				<Angle a="1.82421813418" k="836.8" p1="181" p2="180" p3="182"/>
+				<Angle a="1.82421813418" k="836.8" p1="184" p2="183" p3="185"/>
+				<Angle a="1.82421813418" k="836.8" p1="187" p2="186" p3="188"/>
+				<Angle a="1.82421813418" k="836.8" p1="190" p2="189" p3="191"/>
+				<Angle a="1.82421813418" k="836.8" p1="193" p2="192" p3="194"/>
+				<Angle a="1.82421813418" k="836.8" p1="196" p2="195" p3="197"/>
+				<Angle a="1.82421813418" k="836.8" p1="199" p2="198" p3="200"/>
+				<Angle a="1.82421813418" k="836.8" p1="202" p2="201" p3="203"/>
+				<Angle a="1.82421813418" k="836.8" p1="205" p2="204" p3="206"/>
+				<Angle a="1.82421813418" k="836.8" p1="208" p2="207" p3="209"/>
+				<Angle a="1.82421813418" k="836.8" p1="211" p2="210" p3="212"/>
+				<Angle a="1.82421813418" k="836.8" p1="214" p2="213" p3="215"/>
+				<Angle a="1.82421813418" k="836.8" p1="217" p2="216" p3="218"/>
+				<Angle a="1.82421813418" k="836.8" p1="220" p2="219" p3="221"/>
+				<Angle a="1.82421813418" k="836.8" p1="223" p2="222" p3="224"/>
+				<Angle a="1.82421813418" k="836.8" p1="226" p2="225" p3="227"/>
+				<Angle a="1.82421813418" k="836.8" p1="229" p2="228" p3="230"/>
+				<Angle a="1.82421813418" k="836.8" p1="232" p2="231" p3="233"/>
+				<Angle a="1.82421813418" k="836.8" p1="235" p2="234" p3="236"/>
+				<Angle a="1.82421813418" k="836.8" p1="238" p2="237" p3="239"/>
+				<Angle a="1.82421813418" k="836.8" p1="241" p2="240" p3="242"/>
+				<Angle a="1.82421813418" k="836.8" p1="244" p2="243" p3="245"/>
+				<Angle a="1.82421813418" k="836.8" p1="247" p2="246" p3="248"/>
+				<Angle a="1.82421813418" k="836.8" p1="250" p2="249" p3="251"/>
+				<Angle a="1.82421813418" k="836.8" p1="253" p2="252" p3="254"/>
+				<Angle a="1.82421813418" k="836.8" p1="256" p2="255" p3="257"/>
+				<Angle a="1.82421813418" k="836.8" p1="259" p2="258" p3="260"/>
+				<Angle a="1.82421813418" k="836.8" p1="262" p2="261" p3="263"/>
+				<Angle a="1.82421813418" k="836.8" p1="265" p2="264" p3="266"/>
+				<Angle a="1.82421813418" k="836.8" p1="268" p2="267" p3="269"/>
+				<Angle a="1.82421813418" k="836.8" p1="271" p2="270" p3="272"/>
+				<Angle a="1.82421813418" k="836.8" p1="274" p2="273" p3="275"/>
+				<Angle a="1.82421813418" k="836.8" p1="277" p2="276" p3="278"/>
+				<Angle a="1.82421813418" k="836.8" p1="280" p2="279" p3="281"/>
+				<Angle a="1.82421813418" k="836.8" p1="283" p2="282" p3="284"/>
+				<Angle a="1.82421813418" k="836.8" p1="286" p2="285" p3="287"/>
+				<Angle a="1.82421813418" k="836.8" p1="289" p2="288" p3="290"/>
+				<Angle a="1.82421813418" k="836.8" p1="292" p2="291" p3="293"/>
+				<Angle a="1.82421813418" k="836.8" p1="295" p2="294" p3="296"/>
+				<Angle a="1.82421813418" k="836.8" p1="298" p2="297" p3="299"/>
+				<Angle a="1.82421813418" k="836.8" p1="301" p2="300" p3="302"/>
+				<Angle a="1.82421813418" k="836.8" p1="304" p2="303" p3="305"/>
+				<Angle a="1.82421813418" k="836.8" p1="307" p2="306" p3="308"/>
+				<Angle a="1.82421813418" k="836.8" p1="310" p2="309" p3="311"/>
+				<Angle a="1.82421813418" k="836.8" p1="313" p2="312" p3="314"/>
+				<Angle a="1.82421813418" k="836.8" p1="316" p2="315" p3="317"/>
+				<Angle a="1.82421813418" k="836.8" p1="319" p2="318" p3="320"/>
+				<Angle a="1.82421813418" k="836.8" p1="322" p2="321" p3="323"/>
+				<Angle a="1.82421813418" k="836.8" p1="325" p2="324" p3="326"/>
+				<Angle a="1.82421813418" k="836.8" p1="328" p2="327" p3="329"/>
+				<Angle a="1.82421813418" k="836.8" p1="331" p2="330" p3="332"/>
+				<Angle a="1.82421813418" k="836.8" p1="334" p2="333" p3="335"/>
+				<Angle a="1.82421813418" k="836.8" p1="337" p2="336" p3="338"/>
+				<Angle a="1.82421813418" k="836.8" p1="340" p2="339" p3="341"/>
+				<Angle a="1.82421813418" k="836.8" p1="343" p2="342" p3="344"/>
+				<Angle a="1.82421813418" k="836.8" p1="346" p2="345" p3="347"/>
+				<Angle a="1.82421813418" k="836.8" p1="349" p2="348" p3="350"/>
+				<Angle a="1.82421813418" k="836.8" p1="352" p2="351" p3="353"/>
+				<Angle a="1.82421813418" k="836.8" p1="355" p2="354" p3="356"/>
+				<Angle a="1.82421813418" k="836.8" p1="358" p2="357" p3="359"/>
+				<Angle a="1.82421813418" k="836.8" p1="361" p2="360" p3="362"/>
+				<Angle a="1.82421813418" k="836.8" p1="364" p2="363" p3="365"/>
+				<Angle a="1.82421813418" k="836.8" p1="367" p2="366" p3="368"/>
+				<Angle a="1.82421813418" k="836.8" p1="370" p2="369" p3="371"/>
+				<Angle a="1.82421813418" k="836.8" p1="373" p2="372" p3="374"/>
+				<Angle a="1.82421813418" k="836.8" p1="376" p2="375" p3="377"/>
+				<Angle a="1.82421813418" k="836.8" p1="379" p2="378" p3="380"/>
+				<Angle a="1.82421813418" k="836.8" p1="382" p2="381" p3="383"/>
+				<Angle a="1.82421813418" k="836.8" p1="385" p2="384" p3="386"/>
+				<Angle a="1.82421813418" k="836.8" p1="388" p2="387" p3="389"/>
+				<Angle a="1.82421813418" k="836.8" p1="391" p2="390" p3="392"/>
+				<Angle a="1.82421813418" k="836.8" p1="394" p2="393" p3="395"/>
+				<Angle a="1.82421813418" k="836.8" p1="397" p2="396" p3="398"/>
+				<Angle a="1.82421813418" k="836.8" p1="400" p2="399" p3="401"/>
+				<Angle a="1.82421813418" k="836.8" p1="403" p2="402" p3="404"/>
+				<Angle a="1.82421813418" k="836.8" p1="406" p2="405" p3="407"/>
+				<Angle a="1.82421813418" k="836.8" p1="409" p2="408" p3="410"/>
+				<Angle a="1.82421813418" k="836.8" p1="412" p2="411" p3="413"/>
+				<Angle a="1.82421813418" k="836.8" p1="415" p2="414" p3="416"/>
+				<Angle a="1.82421813418" k="836.8" p1="418" p2="417" p3="419"/>
+				<Angle a="1.82421813418" k="836.8" p1="421" p2="420" p3="422"/>
+				<Angle a="1.82421813418" k="836.8" p1="424" p2="423" p3="425"/>
+				<Angle a="1.82421813418" k="836.8" p1="427" p2="426" p3="428"/>
+				<Angle a="1.82421813418" k="836.8" p1="430" p2="429" p3="431"/>
+				<Angle a="1.82421813418" k="836.8" p1="433" p2="432" p3="434"/>
+				<Angle a="1.82421813418" k="836.8" p1="436" p2="435" p3="437"/>
+				<Angle a="1.82421813418" k="836.8" p1="439" p2="438" p3="440"/>
+				<Angle a="1.82421813418" k="836.8" p1="442" p2="441" p3="443"/>
+				<Angle a="1.82421813418" k="836.8" p1="445" p2="444" p3="446"/>
+				<Angle a="1.82421813418" k="836.8" p1="448" p2="447" p3="449"/>
+				<Angle a="1.82421813418" k="836.8" p1="451" p2="450" p3="452"/>
+				<Angle a="1.82421813418" k="836.8" p1="454" p2="453" p3="455"/>
+				<Angle a="1.82421813418" k="836.8" p1="457" p2="456" p3="458"/>
+				<Angle a="1.82421813418" k="836.8" p1="460" p2="459" p3="461"/>
+				<Angle a="1.82421813418" k="836.8" p1="463" p2="462" p3="464"/>
+				<Angle a="1.82421813418" k="836.8" p1="466" p2="465" p3="467"/>
+				<Angle a="1.82421813418" k="836.8" p1="469" p2="468" p3="470"/>
+				<Angle a="1.82421813418" k="836.8" p1="472" p2="471" p3="473"/>
+				<Angle a="1.82421813418" k="836.8" p1="475" p2="474" p3="476"/>
+				<Angle a="1.82421813418" k="836.8" p1="478" p2="477" p3="479"/>
+				<Angle a="1.82421813418" k="836.8" p1="481" p2="480" p3="482"/>
+				<Angle a="1.82421813418" k="836.8" p1="484" p2="483" p3="485"/>
+				<Angle a="1.82421813418" k="836.8" p1="487" p2="486" p3="488"/>
+				<Angle a="1.82421813418" k="836.8" p1="490" p2="489" p3="491"/>
+				<Angle a="1.82421813418" k="836.8" p1="493" p2="492" p3="494"/>
+				<Angle a="1.82421813418" k="836.8" p1="496" p2="495" p3="497"/>
+				<Angle a="1.82421813418" k="836.8" p1="499" p2="498" p3="500"/>
+				<Angle a="1.82421813418" k="836.8" p1="502" p2="501" p3="503"/>
+				<Angle a="1.82421813418" k="836.8" p1="505" p2="504" p3="506"/>
+				<Angle a="1.82421813418" k="836.8" p1="508" p2="507" p3="509"/>
+				<Angle a="1.82421813418" k="836.8" p1="511" p2="510" p3="512"/>
+				<Angle a="1.82421813418" k="836.8" p1="514" p2="513" p3="515"/>
+				<Angle a="1.82421813418" k="836.8" p1="517" p2="516" p3="518"/>
+				<Angle a="1.82421813418" k="836.8" p1="520" p2="519" p3="521"/>
+				<Angle a="1.82421813418" k="836.8" p1="523" p2="522" p3="524"/>
+				<Angle a="1.82421813418" k="836.8" p1="526" p2="525" p3="527"/>
+				<Angle a="1.82421813418" k="836.8" p1="529" p2="528" p3="530"/>
+				<Angle a="1.82421813418" k="836.8" p1="532" p2="531" p3="533"/>
+				<Angle a="1.82421813418" k="836.8" p1="535" p2="534" p3="536"/>
+				<Angle a="1.82421813418" k="836.8" p1="538" p2="537" p3="539"/>
+				<Angle a="1.82421813418" k="836.8" p1="541" p2="540" p3="542"/>
+				<Angle a="1.82421813418" k="836.8" p1="544" p2="543" p3="545"/>
+				<Angle a="1.82421813418" k="836.8" p1="547" p2="546" p3="548"/>
+				<Angle a="1.82421813418" k="836.8" p1="550" p2="549" p3="551"/>
+				<Angle a="1.82421813418" k="836.8" p1="553" p2="552" p3="554"/>
+				<Angle a="1.82421813418" k="836.8" p1="556" p2="555" p3="557"/>
+				<Angle a="1.82421813418" k="836.8" p1="559" p2="558" p3="560"/>
+				<Angle a="1.82421813418" k="836.8" p1="562" p2="561" p3="563"/>
+				<Angle a="1.82421813418" k="836.8" p1="565" p2="564" p3="566"/>
+				<Angle a="1.82421813418" k="836.8" p1="568" p2="567" p3="569"/>
+				<Angle a="1.82421813418" k="836.8" p1="571" p2="570" p3="572"/>
+				<Angle a="1.82421813418" k="836.8" p1="574" p2="573" p3="575"/>
+				<Angle a="1.82421813418" k="836.8" p1="577" p2="576" p3="578"/>
+				<Angle a="1.82421813418" k="836.8" p1="580" p2="579" p3="581"/>
+				<Angle a="1.82421813418" k="836.8" p1="583" p2="582" p3="584"/>
+				<Angle a="1.82421813418" k="836.8" p1="586" p2="585" p3="587"/>
+				<Angle a="1.82421813418" k="836.8" p1="589" p2="588" p3="590"/>
+				<Angle a="1.82421813418" k="836.8" p1="592" p2="591" p3="593"/>
+				<Angle a="1.82421813418" k="836.8" p1="595" p2="594" p3="596"/>
+				<Angle a="1.82421813418" k="836.8" p1="598" p2="597" p3="599"/>
+				<Angle a="1.82421813418" k="836.8" p1="601" p2="600" p3="602"/>
+				<Angle a="1.82421813418" k="836.8" p1="604" p2="603" p3="605"/>
+				<Angle a="1.82421813418" k="836.8" p1="607" p2="606" p3="608"/>
+				<Angle a="1.82421813418" k="836.8" p1="610" p2="609" p3="611"/>
+				<Angle a="1.82421813418" k="836.8" p1="613" p2="612" p3="614"/>
+				<Angle a="1.82421813418" k="836.8" p1="616" p2="615" p3="617"/>
+				<Angle a="1.82421813418" k="836.8" p1="619" p2="618" p3="620"/>
+				<Angle a="1.82421813418" k="836.8" p1="622" p2="621" p3="623"/>
+				<Angle a="1.82421813418" k="836.8" p1="625" p2="624" p3="626"/>
+				<Angle a="1.82421813418" k="836.8" p1="628" p2="627" p3="629"/>
+				<Angle a="1.82421813418" k="836.8" p1="631" p2="630" p3="632"/>
+				<Angle a="1.82421813418" k="836.8" p1="634" p2="633" p3="635"/>
+				<Angle a="1.82421813418" k="836.8" p1="637" p2="636" p3="638"/>
+				<Angle a="1.82421813418" k="836.8" p1="640" p2="639" p3="641"/>
+				<Angle a="1.82421813418" k="836.8" p1="643" p2="642" p3="644"/>
+				<Angle a="1.82421813418" k="836.8" p1="646" p2="645" p3="647"/>
+			</Angles>
+		</Force>
+		<Force alpha="0" cutoff=".85" dispersionCorrection="1" ewaldTolerance=".0005" forceGroup="0" ljAlpha="0" ljnx="0" ljny="0" ljnz="0" method="3" nx="0" ny="0" nz="0" recipForceGroup="-1" rfDielectric="78.3" switchingDistance="-1" type="NonbondedForce" useSwitchingFunction="0" version="3">
+			<GlobalParameters/>
+			<ParticleOffsets/>
+			<ExceptionOffsets/>
+			<Particles>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps=".635968" q="-.834" sig=".3150752406575124"/>
+				<Particle eps="0" q=".417" sig="1"/>
+				<Particle eps="0" q=".417" sig="1"/>
+			</Particles>
+			<Exceptions>
+				<Exception eps="0" p1="0" p2="1" q="0" sig="1"/>
+				<Exception eps="0" p1="0" p2="2" q="0" sig="1"/>
+				<Exception eps="0" p1="1" p2="2" q="0" sig="1"/>
+				<Exception eps="0" p1="3" p2="4" q="0" sig="1"/>
+				<Exception eps="0" p1="3" p2="5" q="0" sig="1"/>
+				<Exception eps="0" p1="4" p2="5" q="0" sig="1"/>
+				<Exception eps="0" p1="6" p2="7" q="0" sig="1"/>
+				<Exception eps="0" p1="6" p2="8" q="0" sig="1"/>
+				<Exception eps="0" p1="7" p2="8" q="0" sig="1"/>
+				<Exception eps="0" p1="9" p2="10" q="0" sig="1"/>
+				<Exception eps="0" p1="9" p2="11" q="0" sig="1"/>
+				<Exception eps="0" p1="10" p2="11" q="0" sig="1"/>
+				<Exception eps="0" p1="12" p2="13" q="0" sig="1"/>
+				<Exception eps="0" p1="12" p2="14" q="0" sig="1"/>
+				<Exception eps="0" p1="13" p2="14" q="0" sig="1"/>
+				<Exception eps="0" p1="15" p2="16" q="0" sig="1"/>
+				<Exception eps="0" p1="15" p2="17" q="0" sig="1"/>
+				<Exception eps="0" p1="16" p2="17" q="0" sig="1"/>
+				<Exception eps="0" p1="18" p2="19" q="0" sig="1"/>
+				<Exception eps="0" p1="18" p2="20" q="0" sig="1"/>
+				<Exception eps="0" p1="19" p2="20" q="0" sig="1"/>
+				<Exception eps="0" p1="21" p2="22" q="0" sig="1"/>
+				<Exception eps="0" p1="21" p2="23" q="0" sig="1"/>
+				<Exception eps="0" p1="22" p2="23" q="0" sig="1"/>
+				<Exception eps="0" p1="24" p2="25" q="0" sig="1"/>
+				<Exception eps="0" p1="24" p2="26" q="0" sig="1"/>
+				<Exception eps="0" p1="25" p2="26" q="0" sig="1"/>
+				<Exception eps="0" p1="27" p2="28" q="0" sig="1"/>
+				<Exception eps="0" p1="27" p2="29" q="0" sig="1"/>
+				<Exception eps="0" p1="28" p2="29" q="0" sig="1"/>
+				<Exception eps="0" p1="30" p2="31" q="0" sig="1"/>
+				<Exception eps="0" p1="30" p2="32" q="0" sig="1"/>
+				<Exception eps="0" p1="31" p2="32" q="0" sig="1"/>
+				<Exception eps="0" p1="33" p2="34" q="0" sig="1"/>
+				<Exception eps="0" p1="33" p2="35" q="0" sig="1"/>
+				<Exception eps="0" p1="34" p2="35" q="0" sig="1"/>
+				<Exception eps="0" p1="36" p2="37" q="0" sig="1"/>
+				<Exception eps="0" p1="36" p2="38" q="0" sig="1"/>
+				<Exception eps="0" p1="37" p2="38" q="0" sig="1"/>
+				<Exception eps="0" p1="39" p2="40" q="0" sig="1"/>
+				<Exception eps="0" p1="39" p2="41" q="0" sig="1"/>
+				<Exception eps="0" p1="40" p2="41" q="0" sig="1"/>
+				<Exception eps="0" p1="42" p2="43" q="0" sig="1"/>
+				<Exception eps="0" p1="42" p2="44" q="0" sig="1"/>
+				<Exception eps="0" p1="43" p2="44" q="0" sig="1"/>
+				<Exception eps="0" p1="45" p2="46" q="0" sig="1"/>
+				<Exception eps="0" p1="45" p2="47" q="0" sig="1"/>
+				<Exception eps="0" p1="46" p2="47" q="0" sig="1"/>
+				<Exception eps="0" p1="48" p2="49" q="0" sig="1"/>
+				<Exception eps="0" p1="48" p2="50" q="0" sig="1"/>
+				<Exception eps="0" p1="49" p2="50" q="0" sig="1"/>
+				<Exception eps="0" p1="51" p2="52" q="0" sig="1"/>
+				<Exception eps="0" p1="51" p2="53" q="0" sig="1"/>
+				<Exception eps="0" p1="52" p2="53" q="0" sig="1"/>
+				<Exception eps="0" p1="54" p2="55" q="0" sig="1"/>
+				<Exception eps="0" p1="54" p2="56" q="0" sig="1"/>
+				<Exception eps="0" p1="55" p2="56" q="0" sig="1"/>
+				<Exception eps="0" p1="57" p2="58" q="0" sig="1"/>
+				<Exception eps="0" p1="57" p2="59" q="0" sig="1"/>
+				<Exception eps="0" p1="58" p2="59" q="0" sig="1"/>
+				<Exception eps="0" p1="60" p2="61" q="0" sig="1"/>
+				<Exception eps="0" p1="60" p2="62" q="0" sig="1"/>
+				<Exception eps="0" p1="61" p2="62" q="0" sig="1"/>
+				<Exception eps="0" p1="63" p2="64" q="0" sig="1"/>
+				<Exception eps="0" p1="63" p2="65" q="0" sig="1"/>
+				<Exception eps="0" p1="64" p2="65" q="0" sig="1"/>
+				<Exception eps="0" p1="66" p2="67" q="0" sig="1"/>
+				<Exception eps="0" p1="66" p2="68" q="0" sig="1"/>
+				<Exception eps="0" p1="67" p2="68" q="0" sig="1"/>
+				<Exception eps="0" p1="69" p2="70" q="0" sig="1"/>
+				<Exception eps="0" p1="69" p2="71" q="0" sig="1"/>
+				<Exception eps="0" p1="70" p2="71" q="0" sig="1"/>
+				<Exception eps="0" p1="72" p2="73" q="0" sig="1"/>
+				<Exception eps="0" p1="72" p2="74" q="0" sig="1"/>
+				<Exception eps="0" p1="73" p2="74" q="0" sig="1"/>
+				<Exception eps="0" p1="75" p2="76" q="0" sig="1"/>
+				<Exception eps="0" p1="75" p2="77" q="0" sig="1"/>
+				<Exception eps="0" p1="76" p2="77" q="0" sig="1"/>
+				<Exception eps="0" p1="78" p2="79" q="0" sig="1"/>
+				<Exception eps="0" p1="78" p2="80" q="0" sig="1"/>
+				<Exception eps="0" p1="79" p2="80" q="0" sig="1"/>
+				<Exception eps="0" p1="81" p2="82" q="0" sig="1"/>
+				<Exception eps="0" p1="81" p2="83" q="0" sig="1"/>
+				<Exception eps="0" p1="82" p2="83" q="0" sig="1"/>
+				<Exception eps="0" p1="84" p2="85" q="0" sig="1"/>
+				<Exception eps="0" p1="84" p2="86" q="0" sig="1"/>
+				<Exception eps="0" p1="85" p2="86" q="0" sig="1"/>
+				<Exception eps="0" p1="87" p2="88" q="0" sig="1"/>
+				<Exception eps="0" p1="87" p2="89" q="0" sig="1"/>
+				<Exception eps="0" p1="88" p2="89" q="0" sig="1"/>
+				<Exception eps="0" p1="90" p2="91" q="0" sig="1"/>
+				<Exception eps="0" p1="90" p2="92" q="0" sig="1"/>
+				<Exception eps="0" p1="91" p2="92" q="0" sig="1"/>
+				<Exception eps="0" p1="93" p2="94" q="0" sig="1"/>
+				<Exception eps="0" p1="93" p2="95" q="0" sig="1"/>
+				<Exception eps="0" p1="94" p2="95" q="0" sig="1"/>
+				<Exception eps="0" p1="96" p2="97" q="0" sig="1"/>
+				<Exception eps="0" p1="96" p2="98" q="0" sig="1"/>
+				<Exception eps="0" p1="97" p2="98" q="0" sig="1"/>
+				<Exception eps="0" p1="99" p2="100" q="0" sig="1"/>
+				<Exception eps="0" p1="99" p2="101" q="0" sig="1"/>
+				<Exception eps="0" p1="100" p2="101" q="0" sig="1"/>
+				<Exception eps="0" p1="102" p2="103" q="0" sig="1"/>
+				<Exception eps="0" p1="102" p2="104" q="0" sig="1"/>
+				<Exception eps="0" p1="103" p2="104" q="0" sig="1"/>
+				<Exception eps="0" p1="105" p2="106" q="0" sig="1"/>
+				<Exception eps="0" p1="105" p2="107" q="0" sig="1"/>
+				<Exception eps="0" p1="106" p2="107" q="0" sig="1"/>
+				<Exception eps="0" p1="108" p2="109" q="0" sig="1"/>
+				<Exception eps="0" p1="108" p2="110" q="0" sig="1"/>
+				<Exception eps="0" p1="109" p2="110" q="0" sig="1"/>
+				<Exception eps="0" p1="111" p2="112" q="0" sig="1"/>
+				<Exception eps="0" p1="111" p2="113" q="0" sig="1"/>
+				<Exception eps="0" p1="112" p2="113" q="0" sig="1"/>
+				<Exception eps="0" p1="114" p2="115" q="0" sig="1"/>
+				<Exception eps="0" p1="114" p2="116" q="0" sig="1"/>
+				<Exception eps="0" p1="115" p2="116" q="0" sig="1"/>
+				<Exception eps="0" p1="117" p2="118" q="0" sig="1"/>
+				<Exception eps="0" p1="117" p2="119" q="0" sig="1"/>
+				<Exception eps="0" p1="118" p2="119" q="0" sig="1"/>
+				<Exception eps="0" p1="120" p2="121" q="0" sig="1"/>
+				<Exception eps="0" p1="120" p2="122" q="0" sig="1"/>
+				<Exception eps="0" p1="121" p2="122" q="0" sig="1"/>
+				<Exception eps="0" p1="123" p2="124" q="0" sig="1"/>
+				<Exception eps="0" p1="123" p2="125" q="0" sig="1"/>
+				<Exception eps="0" p1="124" p2="125" q="0" sig="1"/>
+				<Exception eps="0" p1="126" p2="127" q="0" sig="1"/>
+				<Exception eps="0" p1="126" p2="128" q="0" sig="1"/>
+				<Exception eps="0" p1="127" p2="128" q="0" sig="1"/>
+				<Exception eps="0" p1="129" p2="130" q="0" sig="1"/>
+				<Exception eps="0" p1="129" p2="131" q="0" sig="1"/>
+				<Exception eps="0" p1="130" p2="131" q="0" sig="1"/>
+				<Exception eps="0" p1="132" p2="133" q="0" sig="1"/>
+				<Exception eps="0" p1="132" p2="134" q="0" sig="1"/>
+				<Exception eps="0" p1="133" p2="134" q="0" sig="1"/>
+				<Exception eps="0" p1="135" p2="136" q="0" sig="1"/>
+				<Exception eps="0" p1="135" p2="137" q="0" sig="1"/>
+				<Exception eps="0" p1="136" p2="137" q="0" sig="1"/>
+				<Exception eps="0" p1="138" p2="139" q="0" sig="1"/>
+				<Exception eps="0" p1="138" p2="140" q="0" sig="1"/>
+				<Exception eps="0" p1="139" p2="140" q="0" sig="1"/>
+				<Exception eps="0" p1="141" p2="142" q="0" sig="1"/>
+				<Exception eps="0" p1="141" p2="143" q="0" sig="1"/>
+				<Exception eps="0" p1="142" p2="143" q="0" sig="1"/>
+				<Exception eps="0" p1="144" p2="145" q="0" sig="1"/>
+				<Exception eps="0" p1="144" p2="146" q="0" sig="1"/>
+				<Exception eps="0" p1="145" p2="146" q="0" sig="1"/>
+				<Exception eps="0" p1="147" p2="148" q="0" sig="1"/>
+				<Exception eps="0" p1="147" p2="149" q="0" sig="1"/>
+				<Exception eps="0" p1="148" p2="149" q="0" sig="1"/>
+				<Exception eps="0" p1="150" p2="151" q="0" sig="1"/>
+				<Exception eps="0" p1="150" p2="152" q="0" sig="1"/>
+				<Exception eps="0" p1="151" p2="152" q="0" sig="1"/>
+				<Exception eps="0" p1="153" p2="154" q="0" sig="1"/>
+				<Exception eps="0" p1="153" p2="155" q="0" sig="1"/>
+				<Exception eps="0" p1="154" p2="155" q="0" sig="1"/>
+				<Exception eps="0" p1="156" p2="157" q="0" sig="1"/>
+				<Exception eps="0" p1="156" p2="158" q="0" sig="1"/>
+				<Exception eps="0" p1="157" p2="158" q="0" sig="1"/>
+				<Exception eps="0" p1="159" p2="160" q="0" sig="1"/>
+				<Exception eps="0" p1="159" p2="161" q="0" sig="1"/>
+				<Exception eps="0" p1="160" p2="161" q="0" sig="1"/>
+				<Exception eps="0" p1="162" p2="163" q="0" sig="1"/>
+				<Exception eps="0" p1="162" p2="164" q="0" sig="1"/>
+				<Exception eps="0" p1="163" p2="164" q="0" sig="1"/>
+				<Exception eps="0" p1="165" p2="166" q="0" sig="1"/>
+				<Exception eps="0" p1="165" p2="167" q="0" sig="1"/>
+				<Exception eps="0" p1="166" p2="167" q="0" sig="1"/>
+				<Exception eps="0" p1="168" p2="169" q="0" sig="1"/>
+				<Exception eps="0" p1="168" p2="170" q="0" sig="1"/>
+				<Exception eps="0" p1="169" p2="170" q="0" sig="1"/>
+				<Exception eps="0" p1="171" p2="172" q="0" sig="1"/>
+				<Exception eps="0" p1="171" p2="173" q="0" sig="1"/>
+				<Exception eps="0" p1="172" p2="173" q="0" sig="1"/>
+				<Exception eps="0" p1="174" p2="175" q="0" sig="1"/>
+				<Exception eps="0" p1="174" p2="176" q="0" sig="1"/>
+				<Exception eps="0" p1="175" p2="176" q="0" sig="1"/>
+				<Exception eps="0" p1="177" p2="178" q="0" sig="1"/>
+				<Exception eps="0" p1="177" p2="179" q="0" sig="1"/>
+				<Exception eps="0" p1="178" p2="179" q="0" sig="1"/>
+				<Exception eps="0" p1="180" p2="181" q="0" sig="1"/>
+				<Exception eps="0" p1="180" p2="182" q="0" sig="1"/>
+				<Exception eps="0" p1="181" p2="182" q="0" sig="1"/>
+				<Exception eps="0" p1="183" p2="184" q="0" sig="1"/>
+				<Exception eps="0" p1="183" p2="185" q="0" sig="1"/>
+				<Exception eps="0" p1="184" p2="185" q="0" sig="1"/>
+				<Exception eps="0" p1="186" p2="187" q="0" sig="1"/>
+				<Exception eps="0" p1="186" p2="188" q="0" sig="1"/>
+				<Exception eps="0" p1="187" p2="188" q="0" sig="1"/>
+				<Exception eps="0" p1="189" p2="190" q="0" sig="1"/>
+				<Exception eps="0" p1="189" p2="191" q="0" sig="1"/>
+				<Exception eps="0" p1="190" p2="191" q="0" sig="1"/>
+				<Exception eps="0" p1="192" p2="193" q="0" sig="1"/>
+				<Exception eps="0" p1="192" p2="194" q="0" sig="1"/>
+				<Exception eps="0" p1="193" p2="194" q="0" sig="1"/>
+				<Exception eps="0" p1="195" p2="196" q="0" sig="1"/>
+				<Exception eps="0" p1="195" p2="197" q="0" sig="1"/>
+				<Exception eps="0" p1="196" p2="197" q="0" sig="1"/>
+				<Exception eps="0" p1="198" p2="199" q="0" sig="1"/>
+				<Exception eps="0" p1="198" p2="200" q="0" sig="1"/>
+				<Exception eps="0" p1="199" p2="200" q="0" sig="1"/>
+				<Exception eps="0" p1="201" p2="202" q="0" sig="1"/>
+				<Exception eps="0" p1="201" p2="203" q="0" sig="1"/>
+				<Exception eps="0" p1="202" p2="203" q="0" sig="1"/>
+				<Exception eps="0" p1="204" p2="205" q="0" sig="1"/>
+				<Exception eps="0" p1="204" p2="206" q="0" sig="1"/>
+				<Exception eps="0" p1="205" p2="206" q="0" sig="1"/>
+				<Exception eps="0" p1="207" p2="208" q="0" sig="1"/>
+				<Exception eps="0" p1="207" p2="209" q="0" sig="1"/>
+				<Exception eps="0" p1="208" p2="209" q="0" sig="1"/>
+				<Exception eps="0" p1="210" p2="211" q="0" sig="1"/>
+				<Exception eps="0" p1="210" p2="212" q="0" sig="1"/>
+				<Exception eps="0" p1="211" p2="212" q="0" sig="1"/>
+				<Exception eps="0" p1="213" p2="214" q="0" sig="1"/>
+				<Exception eps="0" p1="213" p2="215" q="0" sig="1"/>
+				<Exception eps="0" p1="214" p2="215" q="0" sig="1"/>
+				<Exception eps="0" p1="216" p2="217" q="0" sig="1"/>
+				<Exception eps="0" p1="216" p2="218" q="0" sig="1"/>
+				<Exception eps="0" p1="217" p2="218" q="0" sig="1"/>
+				<Exception eps="0" p1="219" p2="220" q="0" sig="1"/>
+				<Exception eps="0" p1="219" p2="221" q="0" sig="1"/>
+				<Exception eps="0" p1="220" p2="221" q="0" sig="1"/>
+				<Exception eps="0" p1="222" p2="223" q="0" sig="1"/>
+				<Exception eps="0" p1="222" p2="224" q="0" sig="1"/>
+				<Exception eps="0" p1="223" p2="224" q="0" sig="1"/>
+				<Exception eps="0" p1="225" p2="226" q="0" sig="1"/>
+				<Exception eps="0" p1="225" p2="227" q="0" sig="1"/>
+				<Exception eps="0" p1="226" p2="227" q="0" sig="1"/>
+				<Exception eps="0" p1="228" p2="229" q="0" sig="1"/>
+				<Exception eps="0" p1="228" p2="230" q="0" sig="1"/>
+				<Exception eps="0" p1="229" p2="230" q="0" sig="1"/>
+				<Exception eps="0" p1="231" p2="232" q="0" sig="1"/>
+				<Exception eps="0" p1="231" p2="233" q="0" sig="1"/>
+				<Exception eps="0" p1="232" p2="233" q="0" sig="1"/>
+				<Exception eps="0" p1="234" p2="235" q="0" sig="1"/>
+				<Exception eps="0" p1="234" p2="236" q="0" sig="1"/>
+				<Exception eps="0" p1="235" p2="236" q="0" sig="1"/>
+				<Exception eps="0" p1="237" p2="238" q="0" sig="1"/>
+				<Exception eps="0" p1="237" p2="239" q="0" sig="1"/>
+				<Exception eps="0" p1="238" p2="239" q="0" sig="1"/>
+				<Exception eps="0" p1="240" p2="241" q="0" sig="1"/>
+				<Exception eps="0" p1="240" p2="242" q="0" sig="1"/>
+				<Exception eps="0" p1="241" p2="242" q="0" sig="1"/>
+				<Exception eps="0" p1="243" p2="244" q="0" sig="1"/>
+				<Exception eps="0" p1="243" p2="245" q="0" sig="1"/>
+				<Exception eps="0" p1="244" p2="245" q="0" sig="1"/>
+				<Exception eps="0" p1="246" p2="247" q="0" sig="1"/>
+				<Exception eps="0" p1="246" p2="248" q="0" sig="1"/>
+				<Exception eps="0" p1="247" p2="248" q="0" sig="1"/>
+				<Exception eps="0" p1="249" p2="250" q="0" sig="1"/>
+				<Exception eps="0" p1="249" p2="251" q="0" sig="1"/>
+				<Exception eps="0" p1="250" p2="251" q="0" sig="1"/>
+				<Exception eps="0" p1="252" p2="253" q="0" sig="1"/>
+				<Exception eps="0" p1="252" p2="254" q="0" sig="1"/>
+				<Exception eps="0" p1="253" p2="254" q="0" sig="1"/>
+				<Exception eps="0" p1="255" p2="256" q="0" sig="1"/>
+				<Exception eps="0" p1="255" p2="257" q="0" sig="1"/>
+				<Exception eps="0" p1="256" p2="257" q="0" sig="1"/>
+				<Exception eps="0" p1="258" p2="259" q="0" sig="1"/>
+				<Exception eps="0" p1="258" p2="260" q="0" sig="1"/>
+				<Exception eps="0" p1="259" p2="260" q="0" sig="1"/>
+				<Exception eps="0" p1="261" p2="262" q="0" sig="1"/>
+				<Exception eps="0" p1="261" p2="263" q="0" sig="1"/>
+				<Exception eps="0" p1="262" p2="263" q="0" sig="1"/>
+				<Exception eps="0" p1="264" p2="265" q="0" sig="1"/>
+				<Exception eps="0" p1="264" p2="266" q="0" sig="1"/>
+				<Exception eps="0" p1="265" p2="266" q="0" sig="1"/>
+				<Exception eps="0" p1="267" p2="268" q="0" sig="1"/>
+				<Exception eps="0" p1="267" p2="269" q="0" sig="1"/>
+				<Exception eps="0" p1="268" p2="269" q="0" sig="1"/>
+				<Exception eps="0" p1="270" p2="271" q="0" sig="1"/>
+				<Exception eps="0" p1="270" p2="272" q="0" sig="1"/>
+				<Exception eps="0" p1="271" p2="272" q="0" sig="1"/>
+				<Exception eps="0" p1="273" p2="274" q="0" sig="1"/>
+				<Exception eps="0" p1="273" p2="275" q="0" sig="1"/>
+				<Exception eps="0" p1="274" p2="275" q="0" sig="1"/>
+				<Exception eps="0" p1="276" p2="277" q="0" sig="1"/>
+				<Exception eps="0" p1="276" p2="278" q="0" sig="1"/>
+				<Exception eps="0" p1="277" p2="278" q="0" sig="1"/>
+				<Exception eps="0" p1="279" p2="280" q="0" sig="1"/>
+				<Exception eps="0" p1="279" p2="281" q="0" sig="1"/>
+				<Exception eps="0" p1="280" p2="281" q="0" sig="1"/>
+				<Exception eps="0" p1="282" p2="283" q="0" sig="1"/>
+				<Exception eps="0" p1="282" p2="284" q="0" sig="1"/>
+				<Exception eps="0" p1="283" p2="284" q="0" sig="1"/>
+				<Exception eps="0" p1="285" p2="286" q="0" sig="1"/>
+				<Exception eps="0" p1="285" p2="287" q="0" sig="1"/>
+				<Exception eps="0" p1="286" p2="287" q="0" sig="1"/>
+				<Exception eps="0" p1="288" p2="289" q="0" sig="1"/>
+				<Exception eps="0" p1="288" p2="290" q="0" sig="1"/>
+				<Exception eps="0" p1="289" p2="290" q="0" sig="1"/>
+				<Exception eps="0" p1="291" p2="292" q="0" sig="1"/>
+				<Exception eps="0" p1="291" p2="293" q="0" sig="1"/>
+				<Exception eps="0" p1="292" p2="293" q="0" sig="1"/>
+				<Exception eps="0" p1="294" p2="295" q="0" sig="1"/>
+				<Exception eps="0" p1="294" p2="296" q="0" sig="1"/>
+				<Exception eps="0" p1="295" p2="296" q="0" sig="1"/>
+				<Exception eps="0" p1="297" p2="298" q="0" sig="1"/>
+				<Exception eps="0" p1="297" p2="299" q="0" sig="1"/>
+				<Exception eps="0" p1="298" p2="299" q="0" sig="1"/>
+				<Exception eps="0" p1="300" p2="301" q="0" sig="1"/>
+				<Exception eps="0" p1="300" p2="302" q="0" sig="1"/>
+				<Exception eps="0" p1="301" p2="302" q="0" sig="1"/>
+				<Exception eps="0" p1="303" p2="304" q="0" sig="1"/>
+				<Exception eps="0" p1="303" p2="305" q="0" sig="1"/>
+				<Exception eps="0" p1="304" p2="305" q="0" sig="1"/>
+				<Exception eps="0" p1="306" p2="307" q="0" sig="1"/>
+				<Exception eps="0" p1="306" p2="308" q="0" sig="1"/>
+				<Exception eps="0" p1="307" p2="308" q="0" sig="1"/>
+				<Exception eps="0" p1="309" p2="310" q="0" sig="1"/>
+				<Exception eps="0" p1="309" p2="311" q="0" sig="1"/>
+				<Exception eps="0" p1="310" p2="311" q="0" sig="1"/>
+				<Exception eps="0" p1="312" p2="313" q="0" sig="1"/>
+				<Exception eps="0" p1="312" p2="314" q="0" sig="1"/>
+				<Exception eps="0" p1="313" p2="314" q="0" sig="1"/>
+				<Exception eps="0" p1="315" p2="316" q="0" sig="1"/>
+				<Exception eps="0" p1="315" p2="317" q="0" sig="1"/>
+				<Exception eps="0" p1="316" p2="317" q="0" sig="1"/>
+				<Exception eps="0" p1="318" p2="319" q="0" sig="1"/>
+				<Exception eps="0" p1="318" p2="320" q="0" sig="1"/>
+				<Exception eps="0" p1="319" p2="320" q="0" sig="1"/>
+				<Exception eps="0" p1="321" p2="322" q="0" sig="1"/>
+				<Exception eps="0" p1="321" p2="323" q="0" sig="1"/>
+				<Exception eps="0" p1="322" p2="323" q="0" sig="1"/>
+				<Exception eps="0" p1="324" p2="325" q="0" sig="1"/>
+				<Exception eps="0" p1="324" p2="326" q="0" sig="1"/>
+				<Exception eps="0" p1="325" p2="326" q="0" sig="1"/>
+				<Exception eps="0" p1="327" p2="328" q="0" sig="1"/>
+				<Exception eps="0" p1="327" p2="329" q="0" sig="1"/>
+				<Exception eps="0" p1="328" p2="329" q="0" sig="1"/>
+				<Exception eps="0" p1="330" p2="331" q="0" sig="1"/>
+				<Exception eps="0" p1="330" p2="332" q="0" sig="1"/>
+				<Exception eps="0" p1="331" p2="332" q="0" sig="1"/>
+				<Exception eps="0" p1="333" p2="334" q="0" sig="1"/>
+				<Exception eps="0" p1="333" p2="335" q="0" sig="1"/>
+				<Exception eps="0" p1="334" p2="335" q="0" sig="1"/>
+				<Exception eps="0" p1="336" p2="337" q="0" sig="1"/>
+				<Exception eps="0" p1="336" p2="338" q="0" sig="1"/>
+				<Exception eps="0" p1="337" p2="338" q="0" sig="1"/>
+				<Exception eps="0" p1="339" p2="340" q="0" sig="1"/>
+				<Exception eps="0" p1="339" p2="341" q="0" sig="1"/>
+				<Exception eps="0" p1="340" p2="341" q="0" sig="1"/>
+				<Exception eps="0" p1="342" p2="343" q="0" sig="1"/>
+				<Exception eps="0" p1="342" p2="344" q="0" sig="1"/>
+				<Exception eps="0" p1="343" p2="344" q="0" sig="1"/>
+				<Exception eps="0" p1="345" p2="346" q="0" sig="1"/>
+				<Exception eps="0" p1="345" p2="347" q="0" sig="1"/>
+				<Exception eps="0" p1="346" p2="347" q="0" sig="1"/>
+				<Exception eps="0" p1="348" p2="349" q="0" sig="1"/>
+				<Exception eps="0" p1="348" p2="350" q="0" sig="1"/>
+				<Exception eps="0" p1="349" p2="350" q="0" sig="1"/>
+				<Exception eps="0" p1="351" p2="352" q="0" sig="1"/>
+				<Exception eps="0" p1="351" p2="353" q="0" sig="1"/>
+				<Exception eps="0" p1="352" p2="353" q="0" sig="1"/>
+				<Exception eps="0" p1="354" p2="355" q="0" sig="1"/>
+				<Exception eps="0" p1="354" p2="356" q="0" sig="1"/>
+				<Exception eps="0" p1="355" p2="356" q="0" sig="1"/>
+				<Exception eps="0" p1="357" p2="358" q="0" sig="1"/>
+				<Exception eps="0" p1="357" p2="359" q="0" sig="1"/>
+				<Exception eps="0" p1="358" p2="359" q="0" sig="1"/>
+				<Exception eps="0" p1="360" p2="361" q="0" sig="1"/>
+				<Exception eps="0" p1="360" p2="362" q="0" sig="1"/>
+				<Exception eps="0" p1="361" p2="362" q="0" sig="1"/>
+				<Exception eps="0" p1="363" p2="364" q="0" sig="1"/>
+				<Exception eps="0" p1="363" p2="365" q="0" sig="1"/>
+				<Exception eps="0" p1="364" p2="365" q="0" sig="1"/>
+				<Exception eps="0" p1="366" p2="367" q="0" sig="1"/>
+				<Exception eps="0" p1="366" p2="368" q="0" sig="1"/>
+				<Exception eps="0" p1="367" p2="368" q="0" sig="1"/>
+				<Exception eps="0" p1="369" p2="370" q="0" sig="1"/>
+				<Exception eps="0" p1="369" p2="371" q="0" sig="1"/>
+				<Exception eps="0" p1="370" p2="371" q="0" sig="1"/>
+				<Exception eps="0" p1="372" p2="373" q="0" sig="1"/>
+				<Exception eps="0" p1="372" p2="374" q="0" sig="1"/>
+				<Exception eps="0" p1="373" p2="374" q="0" sig="1"/>
+				<Exception eps="0" p1="375" p2="376" q="0" sig="1"/>
+				<Exception eps="0" p1="375" p2="377" q="0" sig="1"/>
+				<Exception eps="0" p1="376" p2="377" q="0" sig="1"/>
+				<Exception eps="0" p1="378" p2="379" q="0" sig="1"/>
+				<Exception eps="0" p1="378" p2="380" q="0" sig="1"/>
+				<Exception eps="0" p1="379" p2="380" q="0" sig="1"/>
+				<Exception eps="0" p1="381" p2="382" q="0" sig="1"/>
+				<Exception eps="0" p1="381" p2="383" q="0" sig="1"/>
+				<Exception eps="0" p1="382" p2="383" q="0" sig="1"/>
+				<Exception eps="0" p1="384" p2="385" q="0" sig="1"/>
+				<Exception eps="0" p1="384" p2="386" q="0" sig="1"/>
+				<Exception eps="0" p1="385" p2="386" q="0" sig="1"/>
+				<Exception eps="0" p1="387" p2="388" q="0" sig="1"/>
+				<Exception eps="0" p1="387" p2="389" q="0" sig="1"/>
+				<Exception eps="0" p1="388" p2="389" q="0" sig="1"/>
+				<Exception eps="0" p1="390" p2="391" q="0" sig="1"/>
+				<Exception eps="0" p1="390" p2="392" q="0" sig="1"/>
+				<Exception eps="0" p1="391" p2="392" q="0" sig="1"/>
+				<Exception eps="0" p1="393" p2="394" q="0" sig="1"/>
+				<Exception eps="0" p1="393" p2="395" q="0" sig="1"/>
+				<Exception eps="0" p1="394" p2="395" q="0" sig="1"/>
+				<Exception eps="0" p1="396" p2="397" q="0" sig="1"/>
+				<Exception eps="0" p1="396" p2="398" q="0" sig="1"/>
+				<Exception eps="0" p1="397" p2="398" q="0" sig="1"/>
+				<Exception eps="0" p1="399" p2="400" q="0" sig="1"/>
+				<Exception eps="0" p1="399" p2="401" q="0" sig="1"/>
+				<Exception eps="0" p1="400" p2="401" q="0" sig="1"/>
+				<Exception eps="0" p1="402" p2="403" q="0" sig="1"/>
+				<Exception eps="0" p1="402" p2="404" q="0" sig="1"/>
+				<Exception eps="0" p1="403" p2="404" q="0" sig="1"/>
+				<Exception eps="0" p1="405" p2="406" q="0" sig="1"/>
+				<Exception eps="0" p1="405" p2="407" q="0" sig="1"/>
+				<Exception eps="0" p1="406" p2="407" q="0" sig="1"/>
+				<Exception eps="0" p1="408" p2="409" q="0" sig="1"/>
+				<Exception eps="0" p1="408" p2="410" q="0" sig="1"/>
+				<Exception eps="0" p1="409" p2="410" q="0" sig="1"/>
+				<Exception eps="0" p1="411" p2="412" q="0" sig="1"/>
+				<Exception eps="0" p1="411" p2="413" q="0" sig="1"/>
+				<Exception eps="0" p1="412" p2="413" q="0" sig="1"/>
+				<Exception eps="0" p1="414" p2="415" q="0" sig="1"/>
+				<Exception eps="0" p1="414" p2="416" q="0" sig="1"/>
+				<Exception eps="0" p1="415" p2="416" q="0" sig="1"/>
+				<Exception eps="0" p1="417" p2="418" q="0" sig="1"/>
+				<Exception eps="0" p1="417" p2="419" q="0" sig="1"/>
+				<Exception eps="0" p1="418" p2="419" q="0" sig="1"/>
+				<Exception eps="0" p1="420" p2="421" q="0" sig="1"/>
+				<Exception eps="0" p1="420" p2="422" q="0" sig="1"/>
+				<Exception eps="0" p1="421" p2="422" q="0" sig="1"/>
+				<Exception eps="0" p1="423" p2="424" q="0" sig="1"/>
+				<Exception eps="0" p1="423" p2="425" q="0" sig="1"/>
+				<Exception eps="0" p1="424" p2="425" q="0" sig="1"/>
+				<Exception eps="0" p1="426" p2="427" q="0" sig="1"/>
+				<Exception eps="0" p1="426" p2="428" q="0" sig="1"/>
+				<Exception eps="0" p1="427" p2="428" q="0" sig="1"/>
+				<Exception eps="0" p1="429" p2="430" q="0" sig="1"/>
+				<Exception eps="0" p1="429" p2="431" q="0" sig="1"/>
+				<Exception eps="0" p1="430" p2="431" q="0" sig="1"/>
+				<Exception eps="0" p1="432" p2="433" q="0" sig="1"/>
+				<Exception eps="0" p1="432" p2="434" q="0" sig="1"/>
+				<Exception eps="0" p1="433" p2="434" q="0" sig="1"/>
+				<Exception eps="0" p1="435" p2="436" q="0" sig="1"/>
+				<Exception eps="0" p1="435" p2="437" q="0" sig="1"/>
+				<Exception eps="0" p1="436" p2="437" q="0" sig="1"/>
+				<Exception eps="0" p1="438" p2="439" q="0" sig="1"/>
+				<Exception eps="0" p1="438" p2="440" q="0" sig="1"/>
+				<Exception eps="0" p1="439" p2="440" q="0" sig="1"/>
+				<Exception eps="0" p1="441" p2="442" q="0" sig="1"/>
+				<Exception eps="0" p1="441" p2="443" q="0" sig="1"/>
+				<Exception eps="0" p1="442" p2="443" q="0" sig="1"/>
+				<Exception eps="0" p1="444" p2="445" q="0" sig="1"/>
+				<Exception eps="0" p1="444" p2="446" q="0" sig="1"/>
+				<Exception eps="0" p1="445" p2="446" q="0" sig="1"/>
+				<Exception eps="0" p1="447" p2="448" q="0" sig="1"/>
+				<Exception eps="0" p1="447" p2="449" q="0" sig="1"/>
+				<Exception eps="0" p1="448" p2="449" q="0" sig="1"/>
+				<Exception eps="0" p1="450" p2="451" q="0" sig="1"/>
+				<Exception eps="0" p1="450" p2="452" q="0" sig="1"/>
+				<Exception eps="0" p1="451" p2="452" q="0" sig="1"/>
+				<Exception eps="0" p1="453" p2="454" q="0" sig="1"/>
+				<Exception eps="0" p1="453" p2="455" q="0" sig="1"/>
+				<Exception eps="0" p1="454" p2="455" q="0" sig="1"/>
+				<Exception eps="0" p1="456" p2="457" q="0" sig="1"/>
+				<Exception eps="0" p1="456" p2="458" q="0" sig="1"/>
+				<Exception eps="0" p1="457" p2="458" q="0" sig="1"/>
+				<Exception eps="0" p1="459" p2="460" q="0" sig="1"/>
+				<Exception eps="0" p1="459" p2="461" q="0" sig="1"/>
+				<Exception eps="0" p1="460" p2="461" q="0" sig="1"/>
+				<Exception eps="0" p1="462" p2="463" q="0" sig="1"/>
+				<Exception eps="0" p1="462" p2="464" q="0" sig="1"/>
+				<Exception eps="0" p1="463" p2="464" q="0" sig="1"/>
+				<Exception eps="0" p1="465" p2="466" q="0" sig="1"/>
+				<Exception eps="0" p1="465" p2="467" q="0" sig="1"/>
+				<Exception eps="0" p1="466" p2="467" q="0" sig="1"/>
+				<Exception eps="0" p1="468" p2="469" q="0" sig="1"/>
+				<Exception eps="0" p1="468" p2="470" q="0" sig="1"/>
+				<Exception eps="0" p1="469" p2="470" q="0" sig="1"/>
+				<Exception eps="0" p1="471" p2="472" q="0" sig="1"/>
+				<Exception eps="0" p1="471" p2="473" q="0" sig="1"/>
+				<Exception eps="0" p1="472" p2="473" q="0" sig="1"/>
+				<Exception eps="0" p1="474" p2="475" q="0" sig="1"/>
+				<Exception eps="0" p1="474" p2="476" q="0" sig="1"/>
+				<Exception eps="0" p1="475" p2="476" q="0" sig="1"/>
+				<Exception eps="0" p1="477" p2="478" q="0" sig="1"/>
+				<Exception eps="0" p1="477" p2="479" q="0" sig="1"/>
+				<Exception eps="0" p1="478" p2="479" q="0" sig="1"/>
+				<Exception eps="0" p1="480" p2="481" q="0" sig="1"/>
+				<Exception eps="0" p1="480" p2="482" q="0" sig="1"/>
+				<Exception eps="0" p1="481" p2="482" q="0" sig="1"/>
+				<Exception eps="0" p1="483" p2="484" q="0" sig="1"/>
+				<Exception eps="0" p1="483" p2="485" q="0" sig="1"/>
+				<Exception eps="0" p1="484" p2="485" q="0" sig="1"/>
+				<Exception eps="0" p1="486" p2="487" q="0" sig="1"/>
+				<Exception eps="0" p1="486" p2="488" q="0" sig="1"/>
+				<Exception eps="0" p1="487" p2="488" q="0" sig="1"/>
+				<Exception eps="0" p1="489" p2="490" q="0" sig="1"/>
+				<Exception eps="0" p1="489" p2="491" q="0" sig="1"/>
+				<Exception eps="0" p1="490" p2="491" q="0" sig="1"/>
+				<Exception eps="0" p1="492" p2="493" q="0" sig="1"/>
+				<Exception eps="0" p1="492" p2="494" q="0" sig="1"/>
+				<Exception eps="0" p1="493" p2="494" q="0" sig="1"/>
+				<Exception eps="0" p1="495" p2="496" q="0" sig="1"/>
+				<Exception eps="0" p1="495" p2="497" q="0" sig="1"/>
+				<Exception eps="0" p1="496" p2="497" q="0" sig="1"/>
+				<Exception eps="0" p1="498" p2="499" q="0" sig="1"/>
+				<Exception eps="0" p1="498" p2="500" q="0" sig="1"/>
+				<Exception eps="0" p1="499" p2="500" q="0" sig="1"/>
+				<Exception eps="0" p1="501" p2="502" q="0" sig="1"/>
+				<Exception eps="0" p1="501" p2="503" q="0" sig="1"/>
+				<Exception eps="0" p1="502" p2="503" q="0" sig="1"/>
+				<Exception eps="0" p1="504" p2="505" q="0" sig="1"/>
+				<Exception eps="0" p1="504" p2="506" q="0" sig="1"/>
+				<Exception eps="0" p1="505" p2="506" q="0" sig="1"/>
+				<Exception eps="0" p1="507" p2="508" q="0" sig="1"/>
+				<Exception eps="0" p1="507" p2="509" q="0" sig="1"/>
+				<Exception eps="0" p1="508" p2="509" q="0" sig="1"/>
+				<Exception eps="0" p1="510" p2="511" q="0" sig="1"/>
+				<Exception eps="0" p1="510" p2="512" q="0" sig="1"/>
+				<Exception eps="0" p1="511" p2="512" q="0" sig="1"/>
+				<Exception eps="0" p1="513" p2="514" q="0" sig="1"/>
+				<Exception eps="0" p1="513" p2="515" q="0" sig="1"/>
+				<Exception eps="0" p1="514" p2="515" q="0" sig="1"/>
+				<Exception eps="0" p1="516" p2="517" q="0" sig="1"/>
+				<Exception eps="0" p1="516" p2="518" q="0" sig="1"/>
+				<Exception eps="0" p1="517" p2="518" q="0" sig="1"/>
+				<Exception eps="0" p1="519" p2="520" q="0" sig="1"/>
+				<Exception eps="0" p1="519" p2="521" q="0" sig="1"/>
+				<Exception eps="0" p1="520" p2="521" q="0" sig="1"/>
+				<Exception eps="0" p1="522" p2="523" q="0" sig="1"/>
+				<Exception eps="0" p1="522" p2="524" q="0" sig="1"/>
+				<Exception eps="0" p1="523" p2="524" q="0" sig="1"/>
+				<Exception eps="0" p1="525" p2="526" q="0" sig="1"/>
+				<Exception eps="0" p1="525" p2="527" q="0" sig="1"/>
+				<Exception eps="0" p1="526" p2="527" q="0" sig="1"/>
+				<Exception eps="0" p1="528" p2="529" q="0" sig="1"/>
+				<Exception eps="0" p1="528" p2="530" q="0" sig="1"/>
+				<Exception eps="0" p1="529" p2="530" q="0" sig="1"/>
+				<Exception eps="0" p1="531" p2="532" q="0" sig="1"/>
+				<Exception eps="0" p1="531" p2="533" q="0" sig="1"/>
+				<Exception eps="0" p1="532" p2="533" q="0" sig="1"/>
+				<Exception eps="0" p1="534" p2="535" q="0" sig="1"/>
+				<Exception eps="0" p1="534" p2="536" q="0" sig="1"/>
+				<Exception eps="0" p1="535" p2="536" q="0" sig="1"/>
+				<Exception eps="0" p1="537" p2="538" q="0" sig="1"/>
+				<Exception eps="0" p1="537" p2="539" q="0" sig="1"/>
+				<Exception eps="0" p1="538" p2="539" q="0" sig="1"/>
+				<Exception eps="0" p1="540" p2="541" q="0" sig="1"/>
+				<Exception eps="0" p1="540" p2="542" q="0" sig="1"/>
+				<Exception eps="0" p1="541" p2="542" q="0" sig="1"/>
+				<Exception eps="0" p1="543" p2="544" q="0" sig="1"/>
+				<Exception eps="0" p1="543" p2="545" q="0" sig="1"/>
+				<Exception eps="0" p1="544" p2="545" q="0" sig="1"/>
+				<Exception eps="0" p1="546" p2="547" q="0" sig="1"/>
+				<Exception eps="0" p1="546" p2="548" q="0" sig="1"/>
+				<Exception eps="0" p1="547" p2="548" q="0" sig="1"/>
+				<Exception eps="0" p1="549" p2="550" q="0" sig="1"/>
+				<Exception eps="0" p1="549" p2="551" q="0" sig="1"/>
+				<Exception eps="0" p1="550" p2="551" q="0" sig="1"/>
+				<Exception eps="0" p1="552" p2="553" q="0" sig="1"/>
+				<Exception eps="0" p1="552" p2="554" q="0" sig="1"/>
+				<Exception eps="0" p1="553" p2="554" q="0" sig="1"/>
+				<Exception eps="0" p1="555" p2="556" q="0" sig="1"/>
+				<Exception eps="0" p1="555" p2="557" q="0" sig="1"/>
+				<Exception eps="0" p1="556" p2="557" q="0" sig="1"/>
+				<Exception eps="0" p1="558" p2="559" q="0" sig="1"/>
+				<Exception eps="0" p1="558" p2="560" q="0" sig="1"/>
+				<Exception eps="0" p1="559" p2="560" q="0" sig="1"/>
+				<Exception eps="0" p1="561" p2="562" q="0" sig="1"/>
+				<Exception eps="0" p1="561" p2="563" q="0" sig="1"/>
+				<Exception eps="0" p1="562" p2="563" q="0" sig="1"/>
+				<Exception eps="0" p1="564" p2="565" q="0" sig="1"/>
+				<Exception eps="0" p1="564" p2="566" q="0" sig="1"/>
+				<Exception eps="0" p1="565" p2="566" q="0" sig="1"/>
+				<Exception eps="0" p1="567" p2="568" q="0" sig="1"/>
+				<Exception eps="0" p1="567" p2="569" q="0" sig="1"/>
+				<Exception eps="0" p1="568" p2="569" q="0" sig="1"/>
+				<Exception eps="0" p1="570" p2="571" q="0" sig="1"/>
+				<Exception eps="0" p1="570" p2="572" q="0" sig="1"/>
+				<Exception eps="0" p1="571" p2="572" q="0" sig="1"/>
+				<Exception eps="0" p1="573" p2="574" q="0" sig="1"/>
+				<Exception eps="0" p1="573" p2="575" q="0" sig="1"/>
+				<Exception eps="0" p1="574" p2="575" q="0" sig="1"/>
+				<Exception eps="0" p1="576" p2="577" q="0" sig="1"/>
+				<Exception eps="0" p1="576" p2="578" q="0" sig="1"/>
+				<Exception eps="0" p1="577" p2="578" q="0" sig="1"/>
+				<Exception eps="0" p1="579" p2="580" q="0" sig="1"/>
+				<Exception eps="0" p1="579" p2="581" q="0" sig="1"/>
+				<Exception eps="0" p1="580" p2="581" q="0" sig="1"/>
+				<Exception eps="0" p1="582" p2="583" q="0" sig="1"/>
+				<Exception eps="0" p1="582" p2="584" q="0" sig="1"/>
+				<Exception eps="0" p1="583" p2="584" q="0" sig="1"/>
+				<Exception eps="0" p1="585" p2="586" q="0" sig="1"/>
+				<Exception eps="0" p1="585" p2="587" q="0" sig="1"/>
+				<Exception eps="0" p1="586" p2="587" q="0" sig="1"/>
+				<Exception eps="0" p1="588" p2="589" q="0" sig="1"/>
+				<Exception eps="0" p1="588" p2="590" q="0" sig="1"/>
+				<Exception eps="0" p1="589" p2="590" q="0" sig="1"/>
+				<Exception eps="0" p1="591" p2="592" q="0" sig="1"/>
+				<Exception eps="0" p1="591" p2="593" q="0" sig="1"/>
+				<Exception eps="0" p1="592" p2="593" q="0" sig="1"/>
+				<Exception eps="0" p1="594" p2="595" q="0" sig="1"/>
+				<Exception eps="0" p1="594" p2="596" q="0" sig="1"/>
+				<Exception eps="0" p1="595" p2="596" q="0" sig="1"/>
+				<Exception eps="0" p1="597" p2="598" q="0" sig="1"/>
+				<Exception eps="0" p1="597" p2="599" q="0" sig="1"/>
+				<Exception eps="0" p1="598" p2="599" q="0" sig="1"/>
+				<Exception eps="0" p1="600" p2="601" q="0" sig="1"/>
+				<Exception eps="0" p1="600" p2="602" q="0" sig="1"/>
+				<Exception eps="0" p1="601" p2="602" q="0" sig="1"/>
+				<Exception eps="0" p1="603" p2="604" q="0" sig="1"/>
+				<Exception eps="0" p1="603" p2="605" q="0" sig="1"/>
+				<Exception eps="0" p1="604" p2="605" q="0" sig="1"/>
+				<Exception eps="0" p1="606" p2="607" q="0" sig="1"/>
+				<Exception eps="0" p1="606" p2="608" q="0" sig="1"/>
+				<Exception eps="0" p1="607" p2="608" q="0" sig="1"/>
+				<Exception eps="0" p1="609" p2="610" q="0" sig="1"/>
+				<Exception eps="0" p1="609" p2="611" q="0" sig="1"/>
+				<Exception eps="0" p1="610" p2="611" q="0" sig="1"/>
+				<Exception eps="0" p1="612" p2="613" q="0" sig="1"/>
+				<Exception eps="0" p1="612" p2="614" q="0" sig="1"/>
+				<Exception eps="0" p1="613" p2="614" q="0" sig="1"/>
+				<Exception eps="0" p1="615" p2="616" q="0" sig="1"/>
+				<Exception eps="0" p1="615" p2="617" q="0" sig="1"/>
+				<Exception eps="0" p1="616" p2="617" q="0" sig="1"/>
+				<Exception eps="0" p1="618" p2="619" q="0" sig="1"/>
+				<Exception eps="0" p1="618" p2="620" q="0" sig="1"/>
+				<Exception eps="0" p1="619" p2="620" q="0" sig="1"/>
+				<Exception eps="0" p1="621" p2="622" q="0" sig="1"/>
+				<Exception eps="0" p1="621" p2="623" q="0" sig="1"/>
+				<Exception eps="0" p1="622" p2="623" q="0" sig="1"/>
+				<Exception eps="0" p1="624" p2="625" q="0" sig="1"/>
+				<Exception eps="0" p1="624" p2="626" q="0" sig="1"/>
+				<Exception eps="0" p1="625" p2="626" q="0" sig="1"/>
+				<Exception eps="0" p1="627" p2="628" q="0" sig="1"/>
+				<Exception eps="0" p1="627" p2="629" q="0" sig="1"/>
+				<Exception eps="0" p1="628" p2="629" q="0" sig="1"/>
+				<Exception eps="0" p1="630" p2="631" q="0" sig="1"/>
+				<Exception eps="0" p1="630" p2="632" q="0" sig="1"/>
+				<Exception eps="0" p1="631" p2="632" q="0" sig="1"/>
+				<Exception eps="0" p1="633" p2="634" q="0" sig="1"/>
+				<Exception eps="0" p1="633" p2="635" q="0" sig="1"/>
+				<Exception eps="0" p1="634" p2="635" q="0" sig="1"/>
+				<Exception eps="0" p1="636" p2="637" q="0" sig="1"/>
+				<Exception eps="0" p1="636" p2="638" q="0" sig="1"/>
+				<Exception eps="0" p1="637" p2="638" q="0" sig="1"/>
+				<Exception eps="0" p1="639" p2="640" q="0" sig="1"/>
+				<Exception eps="0" p1="639" p2="641" q="0" sig="1"/>
+				<Exception eps="0" p1="640" p2="641" q="0" sig="1"/>
+				<Exception eps="0" p1="642" p2="643" q="0" sig="1"/>
+				<Exception eps="0" p1="642" p2="644" q="0" sig="1"/>
+				<Exception eps="0" p1="643" p2="644" q="0" sig="1"/>
+				<Exception eps="0" p1="645" p2="646" q="0" sig="1"/>
+				<Exception eps="0" p1="645" p2="647" q="0" sig="1"/>
+				<Exception eps="0" p1="646" p2="647" q="0" sig="1"/>
+			</Exceptions>
+		</Force>
+		<Force forceGroup="0" frequency="1" type="CMMotionRemover" version="1"/>
+	</Forces>
+</System>
