@@ -54,7 +54,6 @@ class LeonnardJones(Force):
         self.params = params
         self.param_idxs = param_idxs
         self.keep_mask = generate_exclusion_masks(exclusions)
-        self.box = box
 
     def energy(self, conf, box=None):
         A = tf.gather(self.params, self.param_idxs[:, 0])
@@ -71,10 +70,10 @@ class LeonnardJones(Force):
         ri = tf.expand_dims(conf, 0)
         rj = tf.expand_dims(conf, 1)
 
-        if self.box is not None:
+        if box is not None:
             # periodic distance
             rij = ri - rj
-            base = tf.floor(rij/self.box + 0.5)*self.box # (ytz): can we differentiate through this?
+            base = tf.floor(rij/box + 0.5)*box # (ytz): can we differentiate through this?
             dxdydz = tf.pow(rij-base, 2)
             d2ij = tf.reduce_sum(dxdydz, axis=-1)
         else:
@@ -96,7 +95,7 @@ class LeonnardJones(Force):
 
 class Electrostatic(Force):
 
-    def __init__(self, params, param_idxs, exclusions, box=None, kmax=10):
+    def __init__(self, params, param_idxs, exclusions, kmax=10):
         self.params = params
         self.param_idxs = param_idxs # length N
         self.num_atoms = len(self.param_idxs)
@@ -105,11 +104,10 @@ class Electrostatic(Force):
         self.exclusions = exclusions
         self.alphaEwald = 1.0
         self.direct_mask, self.exclusion_mask = generate_inclusion_exclusion_masks(exclusions)
-        self.box = box # we probably want this to be variable when we start to work on barostats
         self.kmax = kmax
 
     def energy(self, conf, box=None):
-        direct_nrg, exclusion_nrg = self.direct_and_exclusion_energy(conf)
+        direct_nrg, exclusion_nrg = self.direct_and_exclusion_energy(conf, box)
         if box is None:
             return direct_nrg
         else:
@@ -118,7 +116,7 @@ class Electrostatic(Force):
     def self_energy(self, conf):
         return tf.reduce_sum(ONE_4PI_EPS0 * tf.pow(self.charges, 2) * self.alphaEwald/np.sqrt(np.pi))
 
-    def direct_and_exclusion_energy(self, conf):
+    def direct_and_exclusion_energy(self, conf, box):
         charges = tf.gather(self.params, self.param_idxs)
         qi = tf.expand_dims(charges, 0)
         qj = tf.expand_dims(charges, 1)
@@ -127,9 +125,9 @@ class Electrostatic(Force):
         ri = tf.expand_dims(conf, 0)
         rj = tf.expand_dims(conf, 1)
 
-        if self.box is not None:
+        if box is not None:
             rij = ri - rj
-            base = tf.floor(rij/self.box + 0.5)*self.box # (ytz): can we differentiate through this?
+            base = tf.floor(rij/box + 0.5)*box # (ytz): can we differentiate through this?
             dxdydz = tf.pow(rij-base, 2)
             d2ij = tf.reduce_sum(dxdydz, axis=-1)
         else:
@@ -144,7 +142,7 @@ class Electrostatic(Force):
         r_direct = tf.sqrt(d2ij_direct_mask)
         eij_direct = qij_direct_mask/r_direct
 
-        if self.box is not None:
+        if box is not None:
             # We adjust direct by the erfc, and adjust the reciprocal space's
             # exclusionary contribution by the direction space weighted by erf
             eij_direct *= tf.erfc(self.alphaEwald*r_direct)
@@ -194,65 +192,3 @@ class Electrostatic(Force):
         recipCoeff = (ONE_4PI_EPS0*4*np.pi)/(box[0]*box[1]*box[2])
 
         return recipCoeff * nrg
-
-# class ElectrostaticForce(ConservativeForce):
-
-
-#     def __init__(self, params, param_idxs, exclusions):
-#         """
-#         Implements a non-periodic point charge electrostatic potential.
-
-#         Parameters:
-#         -----------
-#         params: tf.float64 variable
-#             charge list, eg. [q_C, q_C+, q_C-, q_H-]
-
-#         param_idxs: tf.int32 (N,)    
-#             table of indexes into each charge type.
-
-#         exclusions: tf.bool (N, N)
-#             boolean mask denoting if interaction e[i,j] should be
-#             excluded or not. If e[i,j] is 1 then the interaction
-#             is excluded, 0 implies it is kept. Note that only the upper
-#             right triangular portion of this is used.
-
-#         """
-#         # (ytz) TODO: implement Ewald/PME
-#         self.params = params
-#         self.param_idxs = param_idxs
-#         self.keep_mask = generate_exclusion_masks(exclusions)
-
-
-#     def energy(self, conf):
-
-#         charges = tf.gather(self.params, self.param_idxs)
-#         qi = tf.expand_dims(charges, 0)
-#         qj = tf.expand_dims(charges, 1)
-#         qij = tf.multiply(qi, qj)
-
-#         ri = tf.expand_dims(conf, 0)
-#         rj = tf.expand_dims(conf, 1)
-#         d2ij = tf.reduce_sum(tf.pow(ri-rj, 2), axis=-1)
-
-#         qij_mask = tf.boolean_mask(qij, self.keep_mask)
-#         d2ij_mask = tf.boolean_mask(d2ij, self.keep_mask)
-
-#         # (ytz): we move the sqrt to outside of the mask
-#         # to avoid nans in autograd.
-#         eij = qij_mask/tf.sqrt(d2ij_mask)
-
-#         return ONE_4PI_EPS0*tf.reduce_sum(eij, axis=-1)
-
-if __name__ == "__main__":
-
-    # phi_dir
-    box_vectors = np.array([6.0, 5.5, 4.5], dtype=np.float64)
-
-    coords = np.array([1.9, 3.4, 2.2], dtype=np.float64)
-
-    beta = 0.5
-
-    tf.erfc(beta*tf.norm(r+n))/tf.norm(r+n)
-
-
-    # phi_rec
