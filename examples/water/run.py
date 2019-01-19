@@ -18,7 +18,8 @@ system = forcefield.createSystem(
 
 integrator = LangevinIntegrator(300*u.kelvin, 1.0/u.picosecond, 2.0*u.femtosecond)
 
-simulation = Simulation(pdb.topology, system, integrator)
+platform = Platform.getPlatformByName('Reference')
+simulation = Simulation(pdb.topology, system, integrator, platform)
 
 simulation.context.setPositions(pdb.positions)
 
@@ -28,7 +29,8 @@ simulation.minimizeEnergy()
 simulation.context.setVelocitiesToTemperature(300*unit.kelvin)
 print('Equilibrating...')
 # simulation.step(100000)
-simulation.step(100)
+simulation.step(2)
+assert 0
 
 state = simulation.context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True, getParameters=True, getParameterDerivatives=True, enforcePeriodicBox=True)
 with open('state.xml', 'w') as f: f.write(XmlSerializer.serialize(state))
