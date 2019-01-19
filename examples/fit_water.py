@@ -183,7 +183,7 @@ for step in range(10000):
         all_xyz += make_xyz(masses, x)
     dx_val, db_val = sess.run([dx_op, db_op], feed_dict={x_ph: x, box_ph: b})
     x += dx_val
-    b -= (dt/((1+1+16)/3))*db_val
+    b -= dt*db_val
 
 with open("frames.xyz", "w") as fd:
     fd.write(all_xyz)
