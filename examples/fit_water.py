@@ -1,4 +1,4 @@
-import py3Dmol
+import os
 import numpy as np
 import tensorflow as tf
 
@@ -9,8 +9,10 @@ from timemachine import integrator
 import xmltodict
 import time
 
+file_dir = os.path.dirname(__file__)
+
 def get_box_and_conf():
-    with open('/Users/hessian/Code/timemachine/examples/water/state.xml') as fd:
+    with open(os.path.join(file_dir, 'water/state.xml')) as fd:
         doc = xmltodict.parse(fd.read())
         box = doc['State']['PeriodicBoxVectors']
         x = np.float64(box['A']['@x'])
@@ -29,7 +31,7 @@ def get_box_and_conf():
 # epis ii, epis jj: eps: 2.54387
 
 def get_system():
-    with open('/Users/hessian/Code/timemachine/examples/water/system.xml') as fd:
+    with open(os.path.join(file_dir, 'water/system.xml')) as fd:
         doc = xmltodict.parse(fd.read())
         sys = doc['System']
         masses = []
