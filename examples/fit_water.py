@@ -172,8 +172,8 @@ x = x0.copy()
 b = box.copy()
 all_xyz = ""
 s_time = time.time()
-for step in range(100000):
-    if step % 100 == 0 or step < 100:
+for step in range(1000000):
+    if step % 1000 == 0 or step < 10:
         print("step", step, "box", b, "volume", np.prod(b), "density", density(b), ", ns/day", (step * dt * 86400) / ((time.time() - s_time) * 1000))
         all_xyz += make_xyz(masses, x)
 
