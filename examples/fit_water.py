@@ -62,11 +62,6 @@ def get_system():
 
         lj_idxs = np.array(lj_idxs)
         print(lj_idxs)
-
-
-
-
-
             
         masses = np.array(masses)
         num_atoms = masses.shape[0]
@@ -159,8 +154,8 @@ num_atoms = x0.shape[0]
 
 x_ph = tf.placeholder(name="x", shape=(num_atoms, 3), dtype=tf.float64)
 
-friction = 5.0
-dt = 0.0025
+friction = 1.0
+dt = 0.002
 temp = 300
 
 box_ph = tf.placeholder(shape=(3,), dtype=np.float64)
@@ -178,12 +173,18 @@ b = box.copy()
 all_xyz = ""
 s_time = time.time()
 for step in range(10000):
-    if step % 100 == 0:
+    if step % 100 == 0 or step < 100:
         print("step", step, "box", b, "volume", np.prod(b), "density", density(b), ", ns/day", (step * dt * 86400) / ((time.time() - s_time) * 1000))
         all_xyz += make_xyz(masses, x)
+
+        # DEBUG
+        with open("frames.xyz", "w") as fd:
+            fd.write(all_xyz)
+
+
     dx_val, db_val = sess.run([dx_op, db_op], feed_dict={x_ph: x, box_ph: b})
     x += dx_val
-    b -= dt*db_val
+    b -= (dt*db_val)/100
 
 with open("frames.xyz", "w") as fd:
     fd.write(all_xyz)
