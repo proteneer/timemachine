@@ -333,6 +333,7 @@ class LangevinIntegrator():
         noise = self.normal.sample((num_atoms, num_dims))
 
         # assert 0
+        # print("fscale", self.fscale, "fscale*invMasses", self.fscale*self.invMasses)
         new_v_t = self.vscale*self.v_t - self.fscale*self.invMasses*self.dE_dx + self.nscale*self.sqrtInvMasses*noise
         v_t_assign = tf.assign(self.v_t, new_v_t)
 

@@ -1,6 +1,9 @@
 import os
 import numpy as np
 import tensorflow as tf
+import pint
+
+ureg = pint.UnitRegistry()
 
 tf.reset_default_graph()
 
@@ -35,8 +38,12 @@ def get_system():
         doc = xmltodict.parse(fd.read())
         sys = doc['System']
         masses = []
+
+
+
         charge_params = tf.convert_to_tensor(np.array([.417, -.834], dtype=np.float64))
         charge_idxs = []
+
         # oxygen, H
 
         # lj_params = tf.convert_to_tensor(np.array([.3150752406575124, .635968, 1, 0], dtype=np.float64))
@@ -55,6 +62,11 @@ def get_system():
 
         lj_idxs = np.array(lj_idxs)
         print(lj_idxs)
+
+
+
+
+
             
         masses = np.array(masses)
         num_atoms = masses.shape[0]
@@ -129,7 +141,19 @@ def make_xyz(masses, coords):
     
 
 box, x0 = get_box_and_conf()
+
+
+
 masses, energies = get_system()
+
+total_mass = 0
+for m in masses:
+    total_mass += m * ureg.amu
+
+def density(box):
+    raw = total_mass.to('kg')/((box[0]*ureg.nm) * (box[1]*ureg.nm) * (box[2]*ureg.nm))
+    return raw.to(ureg.kg/(ureg.meter*ureg.meter*ureg.meter))
+
 
 num_atoms = x0.shape[0]
 
@@ -154,12 +178,12 @@ b = box.copy()
 all_xyz = ""
 s_time = time.time()
 for step in range(10000):
+    if step % 100 == 0:
+        print("step", step, "box", b, "volume", np.prod(b), "density", density(b), ", ns/day", (step * dt * 86400) / ((time.time() - s_time) * 1000))
+        all_xyz += make_xyz(masses, x)
     dx_val, db_val = sess.run([dx_op, db_op], feed_dict={x_ph: x, box_ph: b})
     x += dx_val
-    b -= dt*db_val
-    if step % 100 == 0:
-        print("step", step, "box", b, "volume", np.prod(b), "ns/day", (step * dt * 86400) / ((time.time() - s_time) * 1000))
-        all_xyz += make_xyz(masses, x)
+    b -= (dt/((1+1+16)/3))*db_val
 
 with open("frames.xyz", "w") as fd:
     fd.write(all_xyz)
