@@ -137,7 +137,7 @@ x_ph = tf.placeholder(name="x", shape=(num_atoms, 3), dtype=tf.float64)
 
 friction = 5.0
 dt = 0.0025
-temp = 100
+temp = 300
 
 box_ph = tf.placeholder(shape=(3,), dtype=np.float64)
 
@@ -153,7 +153,7 @@ x = x0.copy()
 b = box.copy()
 all_xyz = ""
 s_time = time.time()
-for step in range(1000):
+for step in range(10000):
     dx_val, db_val = sess.run([dx_op, db_op], feed_dict={x_ph: x, box_ph: b})
     x += dx_val
     b -= dt*db_val
