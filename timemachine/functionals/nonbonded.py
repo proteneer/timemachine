@@ -61,11 +61,11 @@ class LeonnardJones(Energy):
 
         sig_i = tf.expand_dims(A, 0)
         sig_j = tf.expand_dims(A, 1)
-        sig_ij = sig_i + sig_j
+        sig_ij = (sig_i + sig_j)/2
 
         eps_i = tf.expand_dims(C, 0)
         eps_j = tf.expand_dims(C, 1)
-        eps_ij = eps_i * eps_j
+        eps_ij = tf.sqrt(eps_i * eps_j)
 
         ri = tf.expand_dims(conf, 0)
         rj = tf.expand_dims(conf, 1)
@@ -95,7 +95,7 @@ class LeonnardJones(Energy):
 
 class Electrostatic(Energy):
 
-    def __init__(self, params, param_idxs, exclusions, kmax=10):
+    def __init__(self, params, param_idxs, exclusions, kmax=2):
         self.params = params
         self.param_idxs = param_idxs # length N
         self.num_atoms = len(self.param_idxs)
