@@ -173,7 +173,7 @@ b = box.copy()
 all_xyz = ""
 s_time = time.time()
 for step in range(1000000):
-    if step % 1000 == 0 or step < 10:
+    if step % 1000 == 0 or step < 1000:
         print("step", step, "box", b, "volume", np.prod(b), "density", density(b), ", ns/day", (step * dt * 86400) / ((time.time() - s_time) * 1000))
         all_xyz += make_xyz(masses, x)
 
@@ -186,8 +186,10 @@ for step in range(1000000):
                 fd.write(all_xyz)      
 
     dx_val, db_val = sess.run([dx_op, db_op], feed_dict={x_ph: x, box_ph: b})
+    # print("dpvNRT", dpvNRT, "dEdbbase", dEdbbase)
+
     x += dx_val
-    b -= (dt*db_val)/(num_atoms)
+    b -= (dt*db_val)/(num_atoms) # increase the free energy?
 
 with open("frames.xyz", "w") as fd:
     fd.write(all_xyz)

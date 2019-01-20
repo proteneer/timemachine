@@ -211,7 +211,22 @@ class LangevinIntegrator():
         self.d2E_dxdp = tf.concat(all_d2E_dxdp, axis=0) # [p, N, 3]
 
         if b_t is not None:
-            self.dE_db = tf.reduce_sum(tf.stack(all_dE_db), axis=0)
+            self.dE_db_base = tf.reduce_sum(tf.stack(all_dE_db), axis=0)
+
+            # pressure = 1.0 #bar
+            V = self.b_t[0]*self.b_t[1]*self.b_t[2]
+
+            pressure = 0.0602214*1.0
+            num_mols = 216
+            kT = 2.49435 # includes temp already
+
+            # -0.00335234 216 2.49435 6.47646
+            self.pvNRT = pressure * V - num_mols * kT * tf.log(V)
+
+            # self.dE_db_base = self.dE_db
+            self.dE_db_pvNRT = tf.gradients(self.pvNRT, b_t)[0]
+            self.dE_db = self.dE_db_base + self.dE_db_pvNRT
+
             self.d2E_db2 = tf.reduce_sum(tf.stack(all_d2E_db2), axis=0)
             self.d2E_dxdb = tf.reduce_sum(tf.stack(all_d2E_dxdb), axis=0)
             self.d2E_dbdx = tf.reduce_sum(tf.stack(all_d2E_dbdx), axis=0)

@@ -17,6 +17,8 @@ system = forcefield.createSystem(
 )
 
 integrator = LangevinIntegrator(300*u.kelvin, 1.0/u.picosecond, 2.0*u.femtosecond)
+barostat = MonteCarloBarostat(1.0*u.bar, 300.0*u.kelvin, 25)
+system.addForce(barostat)
 
 platform = Platform.getPlatformByName('Reference')
 simulation = Simulation(pdb.topology, system, integrator, platform)
@@ -29,7 +31,7 @@ simulation.minimizeEnergy()
 simulation.context.setVelocitiesToTemperature(300*unit.kelvin)
 print('Equilibrating...')
 # simulation.step(100000)
-simulation.step(2)
+simulation.step(30)
 assert 0
 
 state = simulation.context.getState(getPositions=True, getVelocities=True, getForces=True, getEnergy=True, getParameters=True, getParameterDerivatives=True, enforcePeriodicBox=True)
