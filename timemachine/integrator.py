@@ -216,18 +216,19 @@ class LangevinIntegrator():
             # pressure = 1.0 #bar
             V = self.b_t[0]*self.b_t[1]*self.b_t[2]
 
-            pressure = 0.0602214*1.0
+            pressure = 0.0602214
             num_mols = 216
             kT = BOLTZ * self.temperature # includes temp already
 
             # -0.00335234 216 2.49435 6.47646
             self.pv = pressure * V
-            self.NRT = num_mols * kT * tf.log(V)
+            self.NRT = num_mols * kT * tf.log(V) * 10
             self.pvNRT = self.pv - self.NRT
 
-            # self.dE_db_base = self.dE_db
             self.dE_db_pvNRT = tf.gradients(self.pvNRT, b_t)[0]
             self.dE_db = self.dE_db_base + self.dE_db_pvNRT
+
+            # self.dE_db = self.dE_db_base
 
             # self.dV_db = tf.gradients(V, b_t)[0]
             # alternative to generate a move that should always decrease the free energy
@@ -236,7 +237,7 @@ class LangevinIntegrator():
 
             # self.dE_db = self.dE_db_base
 
-            self.virial = tf.reduce_sum(self.dE_dx * self.x_t)
+            # self.virial = tf.reduce_sum(self.dE_dx * self.x_t) # incorrect
 
             self.d2E_db2 = tf.reduce_sum(tf.stack(all_d2E_db2), axis=0)
             self.d2E_dxdb = tf.reduce_sum(tf.stack(all_d2E_dxdb), axis=0)

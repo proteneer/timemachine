@@ -170,7 +170,7 @@ b = box.copy()
 all_xyz = ""
 s_time = time.time()
 for step in range(1000000):
-    dx_val, db_val, db_base, tot_E, e_pv, e_NRT = sess.run([dx_op, db_op, intg.dE_db_base, intg.all_Es, intg.pv, intg.NRT], feed_dict={x_ph: x, box_ph: b})
+    dx_val, db_val, db_base, tot_E, e_pv, e_NRT = sess.run([dx_op, db_op, intg.dE_db, intg.all_Es, intg.pv, intg.NRT], feed_dict={x_ph: x, box_ph: b})
     if step % 100 == 0 or step < 100:
         print("step", step, "box", b, "volume", np.prod(b), "density", density(b), ", ns/day", (step * dt * 86400) / ((time.time() - s_time) * 1000), "E:", tot_E, 'E_pv', e_pv, 'E_NRT', e_NRT, 'E_free', tot_E + e_pv - e_NRT)
         all_xyz += make_xyz(masses, x)
@@ -184,10 +184,9 @@ for step in range(1000000):
                 fd.write(all_xyz)      
 
 
-
-
     x += dx_val
-    b += db_val/(num_atoms*10)
+    # do we need to scale the coordinates?
+    b += db_val/(num_atoms*100)
 
 with open("frames.xyz", "w") as fd:
     fd.write(all_xyz)
