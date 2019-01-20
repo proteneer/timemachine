@@ -185,8 +185,10 @@ for step in range(1000000):
 
 
     x += dx_val
-    # do we need to scale the coordinates?
-    b += db_val/(num_atoms*100)
+    # (ytz) possibly scale coordinates
+    isotropic_db = np.array([np.mean(db_val), np.mean(db_val), np.mean(db_val)])
+    # b += db_val/(num_atoms*100)
+    b += isotropic_db/(num_atoms*100)
 
 with open("frames.xyz", "w") as fd:
     fd.write(all_xyz)
