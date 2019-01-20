@@ -191,7 +191,7 @@ for step in range(1000000):
 
 
     x += dx_val
-    b -= (dt*db_val)/(num_atoms) # increase the free energy?
+    b += (dt*db_val)/(num_atoms) # increase the free energy? # OMFG
 
 with open("frames.xyz", "w") as fd:
     fd.write(all_xyz)
