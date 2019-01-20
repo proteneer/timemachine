@@ -222,12 +222,18 @@ class LangevinIntegrator():
 
             # -0.00335234 216 2.49435 6.47646
             self.pv = pressure * V
-            self.NRT = num_mols * kT * tf.log(V) * 5
+            self.NRT = num_mols * kT * tf.log(V)
             self.pvNRT = self.pv - self.NRT
 
             # self.dE_db_base = self.dE_db
             self.dE_db_pvNRT = tf.gradients(self.pvNRT, b_t)[0]
             self.dE_db = self.dE_db_base + self.dE_db_pvNRT
+
+            # self.dV_db = tf.gradients(V, b_t)[0]
+            # alternative to generate a move that should always decrease the free energy
+            # self.dE_db = self.dE_db_base + pressure * self.dV_db - num_mols * kT * (tf.log(self.dV_db) - tf.log(V))
+
+
             # self.dE_db = self.dE_db_base
 
             self.virial = tf.reduce_sum(self.dE_dx * self.x_t)
