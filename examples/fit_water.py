@@ -185,8 +185,8 @@ for step in range(1000000):
             with open("frames.xyz", "w") as fd:
                 fd.write(all_xyz)      
 
-    dx_val, db_val = sess.run([dx_op, db_op], feed_dict={x_ph: x, box_ph: b})
-    # print("dpvNRT", dpvNRT, "dEdbbase", dEdbbase)
+    dx_val, db_val, db_base = sess.run([dx_op, db_op, intg.dE_db_base], feed_dict={x_ph: x, box_ph: b})
+    print("db_base", db_base, "db_val", db_val)
 
     x += dx_val
     b -= (dt*db_val)/(num_atoms) # increase the free energy?
