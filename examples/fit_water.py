@@ -175,9 +175,8 @@ s_time = time.time()
 for step in range(1000000):
     dx_val, db_val, db_base = sess.run([dx_op, db_op, intg.dE_db_base], feed_dict={x_ph: x, box_ph: b})
     if step % 1000 == 0 or step < 1000:
-        print("step", step, "box", b, "volume", np.prod(b), "density", density(b), ", ns/day", (step * dt * 86400) / ((time.time() - s_time) * 1000))
+        print("step", step, "box", b, "volume", np.prod(b), "density", density(b), ", ns/day", (step * dt * 86400) / ((time.time() - s_time) * 1000), "db_val", db_val/(num_atoms*10))
         all_xyz += make_xyz(masses, x)
-        print("db_base", db_base, "db_val", db_val)
 
         # DEBUG
         # with open("frames.xyz", "w") as fd:
