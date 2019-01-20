@@ -221,12 +221,14 @@ class LangevinIntegrator():
             kT = BOLTZ * self.temperature # includes temp already
 
             # -0.00335234 216 2.49435 6.47646
-            self.pvNRT = pressure * V - num_mols * kT * tf.log(V)
+            self.pv = pressure * V
+            self.NRT = num_mols * kT * tf.log(V) * 5
+            self.pvNRT = self.pv - self.NRT
 
             # self.dE_db_base = self.dE_db
             self.dE_db_pvNRT = tf.gradients(self.pvNRT, b_t)[0]
-            # self.dE_db = self.dE_db_base + self.dE_db_pvNRT
-            self.dE_db = self.dE_db_base
+            self.dE_db = self.dE_db_base + self.dE_db_pvNRT
+            # self.dE_db = self.dE_db_base
 
             self.virial = tf.reduce_sum(self.dE_dx * self.x_t)
 
