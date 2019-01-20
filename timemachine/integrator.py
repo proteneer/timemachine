@@ -225,8 +225,10 @@ class LangevinIntegrator():
 
             # self.dE_db_base = self.dE_db
             self.dE_db_pvNRT = tf.gradients(self.pvNRT, b_t)[0]
-            self.dE_db = self.dE_db_base + self.dE_db_pvNRT
-            # self.dE_db = self.dE_db_base
+            # self.dE_db = self.dE_db_base + self.dE_db_pvNRT
+            self.dE_db = self.dE_db_base
+
+            self.virial = tf.reduce_sum(self.dE_dx * self.x_t)
 
             self.d2E_db2 = tf.reduce_sum(tf.stack(all_d2E_db2), axis=0)
             self.d2E_dxdb = tf.reduce_sum(tf.stack(all_d2E_dxdb), axis=0)
