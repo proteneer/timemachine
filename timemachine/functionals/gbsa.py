@@ -12,7 +12,10 @@ class GBSAOBC(Energy):
         cutoffDistance=2.0,
         alphaObc=1.0,
         betaObc=0.8,
-        gammaObc=4.85):
+        gammaObc=4.85,
+        soluteDielectric=1.0,
+        solventDielectric=78.3,
+        electricConstant=-69.467728):
 
         self.params = params
         self.param_idxs = param_idxs 
@@ -22,6 +25,9 @@ class GBSAOBC(Energy):
         self.alphaObc = alphaObc
         self.betaObc = betaObc
         self.gammaObc = gammaObc
+        self.soluteDielectric = soluteDielectric
+        self.solventDielectric = solventDielectric
+        self.electricConstant = electricConstant
 
     def compute_born_radii(self, conf):
 
@@ -39,7 +45,6 @@ class GBSAOBC(Energy):
         r_ij = r_i - r_j
 
         d_ij = tf.norm(r_ij, axis=-1)
-
         d2_ij = tf.reduce_sum(tf.pow(r_ij, 2), axis=-1)
 
         # (ytz): This is a trick used to remove the diagonal elements that would
@@ -83,3 +88,52 @@ class GBSAOBC(Energy):
 
         return bornRadii
 
+    def energy(self, conf):
+
+        num_atoms = conf.shape[0]
+
+        if self.soluteDielectric != 0.0 and self.solventDielectric != 0.0:
+            prefactor = 2.0 * self.electricConstant * (1.0/self.soluteDielectric) - 1/self.solventDielectric
+        else:
+            prefactor = 0.0
+
+        bornRadii = self.compute_born_radii(conf)
+
+        charges = self.params[self.param_idxs[:, 0]]
+
+        r_i = tf.expand_dims(conf, axis=0)
+        r_j = tf.expand_dims(conf, axis=1)
+
+        q_i = tf.expand_dims(charges, axis=0)
+        q_j = tf.expand_dims(charges, axis=1)
+        q_ij = q_i*q_j
+
+        br_i = tf.expand_dims(bornRadii, axis=0)
+        br_j = tf.expand_dims(bornRadii, axis=1)
+
+        r2 = tf.reduce_sum(tf.pow(r_i - r_j, 2), axis=-1)
+        alpha2_ij = br_i * br_j
+        D_ij = r2/(4.0*alpha2_ij)
+        expTerm = tf.exp(-D_ij)
+        denom2 = r2 + alpha2_ij*expTerm
+        denom = tf.sqrt(denom2)
+        pq_ij = prefactor*q_ij
+        Gpol = pq_ij/denom
+        energy = Gpol
+
+        # separate in diag and off diag parts
+        ones_mask = tf.ones(shape=[num_atoms, num_atoms], dtype=tf.int32)
+        on_diag_mask = tf.matrix_band_part(ones_mask, 0, 0)
+        off_diag_mask = tf.cast(ones_mask - on_diag_mask, dtype=tf.bool)
+
+        on_diag_E = tf.boolean_mask(energy, on_diag_mask)
+        on_diag_E *= 0.5
+
+        off_diag_E = tf.boolean_mask(energy, off_diag_mask)
+
+        if self.cutoffDistance is not None:
+            off_diag_pq_ij = tf.boolean_mask(pq_ij, off_diag_mask)
+            off_diag_E -= off_diag_pq_ij/self.cutoffDistance
+
+        tot_e = tf.reduce_sum(on_diag_E) + tf.reduce_sum(off_diag_E)
+        return tot_e

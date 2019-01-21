@@ -108,9 +108,7 @@ class ReferenceGBSAOBCEnergy():
 
     def openmm_energy(self, conf):
         num_atoms = conf.shape[0]
-
         cutoffDistance = self.cutoffDistance
-
         charges = self.params[self.param_idxs[:, 0]]
 
         if self.soluteDielectric != 0.0 and self.solventDielectric != 0.0:
@@ -184,20 +182,28 @@ class TestGBSA(unittest.TestCase):
         x_ph = tf.placeholder(shape=(5, 3), dtype=np.float64)
 
         test_radii_op = nrg.compute_born_radii(x_ph)
-        test_grad_op = tf.gradients(test_radii_op, x_ph)
-        test_hess_op = tf.hessians(test_radii_op, x_ph)
+        test_radii_grad_op = tf.gradients(test_radii_op, x_ph)
+        test_radii_hess_op = tf.hessians(test_radii_op, x_ph)
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
 
-        test_radii_val, test_grad_val, test_hess_val = sess.run([test_radii_op, test_grad_op, test_hess_op], feed_dict={x_ph: x0})
+        test_radii_val, test_grad_val, test_hess_val = sess.run([test_radii_op, test_radii_grad_op, test_radii_hess_op], feed_dict={x_ph: x0})
         np.testing.assert_array_almost_equal(ref_radii, test_radii_val, decimal=13)
 
         assert not np.any(np.isnan(test_grad_val))
         assert not np.any(np.isnan(test_hess_val))
 
         ref_nrg = ref_nrg.openmm_energy(x0)
-        print(ref_nrg)
+        test_nrg_op = nrg.energy(x_ph)
+        test_nrg_grad_op = tf.gradients(test_nrg_op, x_ph)
+        test_nrg_hess_op = tf.hessians(test_nrg_op, x_ph)
+
+        test_nrg, test_nrg_grad, test_nrg_hess = sess.run([test_nrg_op, test_nrg_grad_op, test_nrg_hess_op], feed_dict={x_ph: x0})
+        assert not np.any(np.isnan(test_nrg_grad))
+        assert not np.any(np.isnan(test_nrg_hess))
+
+        np.testing.assert_array_almost_equal(ref_nrg, test_nrg, decimal=13)
 
 
 if __name__ == '__main__':
