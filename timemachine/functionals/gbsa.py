@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 
 from timemachine.functionals import Energy
@@ -24,6 +25,7 @@ class GBSAOBC(Energy):
 
     def compute_born_radii(self, conf):
 
+        num_atoms = conf.shape[0]
         atomicRadii = self.params[self.param_idxs[:, 1]]
         scaledRadiusFactor = self.params[self.param_idxs[:, 2]]
 
@@ -38,15 +40,20 @@ class GBSAOBC(Energy):
 
         d_ij = tf.norm(r_ij, axis=-1)
 
+        d2_ij = tf.reduce_sum(tf.pow(r_ij, 2), axis=-1)
+
+        # (ytz): This is a trick used to remove the diagonal elements that would
+        # otherwise introduce nans into the calculation.
+        mask = tf.ones(shape=[num_atoms, num_atoms], dtype=tf.int32)
+        mask = tf.cast(mask - tf.matrix_band_part(mask, 0, 0), dtype=tf.bool)
+        d2_ij = tf.where(mask, d2_ij, tf.zeros_like(d2_ij))
+
+        d_ij = tf.sqrt(d2_ij)
+
         oRI = atomicRadii - dielectricOffset
         oRJ = oRI
         sRJ = oRJ * scaledRadiusFactor
-
-        # print(d_ij.shape, sRJ.shape)
-
         rSRJ = d_ij + sRJ
-
-        diff = oRI - rSRJ
 
         mask0 = tf.less(d_ij, self.cutoffDistance)
         mask1 = tf.less(oRI, rSRJ)
@@ -62,16 +69,10 @@ class GBSAOBC(Energy):
         u_ij2 = u_ij * u_ij
 
         ratio = tf.log(u_ij/l_ij)
-
         term = l_ij - u_ij + 0.25*d_ij*(u_ij2 - l_ij2)  + (0.5*d_ij_inv*ratio) + (0.25*sRJ*sRJ*d_ij_inv)*(l_ij2 - u_ij2);
-
-
         term_masked = tf.where(mask_final, term, tf.zeros_like(term))
 
-
         summ = tf.reduce_sum(term_masked, axis=-1) # need to keep one of the dimension
-
-
 
         summ *= 0.5 * oRI
         sum2 = summ*summ
@@ -82,5 +83,3 @@ class GBSAOBC(Energy):
 
         return bornRadii
 
-
-        # bornRadii = np.zeros(shape=(num_atoms,))

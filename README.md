@@ -14,14 +14,15 @@ This code is under heavy development. Expect everything to break every time you 
 
 # Supported Functional Forms
 
-We currently support a subset of the standard forcefield:
+We currently support the following functional forms:
 
 - Harmonic Bonds (bonded_force.py)
 - Harmonic Angles (bonded_force.py)
-- CHARMM Torsions (bonded_force.py)
+- Periodic Torsions (bonded_force.py)
 - Ewald Electrostatics (nonbonded_force.py)
 - Ewald Leonnard Jones (nonbonded_force.py)
 - Tensorfield Networks (nn_force.py)
+- GBSA OBC (gbsa.py)
 
  Their various derivatives are implemented by their energy functions, whose derivatives of various orders are subsequently generated automatically via reverse-mode automatic differentiation.
 

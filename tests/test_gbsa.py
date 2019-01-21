@@ -7,8 +7,6 @@ from timemachine.functionals.gbsa import GBSAOBC
 class ReferenceGBSAOBCEnergy():
     """
     Taken from ReferenceObc.cpp in OpenMM
-
-
     """
     def __init__(self,
         params, # 
@@ -17,7 +15,10 @@ class ReferenceGBSAOBCEnergy():
         cutoffDistance=2.0,
         alphaObc=1.0,
         betaObc=0.8,
-        gammaObc=4.85):
+        gammaObc=4.85,
+        soluteDielectric=1.0,
+        solventDielectric=78.3,
+        electricConstant=-69.467728):
 
         self.params = params
         self.param_idxs = param_idxs 
@@ -27,7 +28,9 @@ class ReferenceGBSAOBCEnergy():
         self.alphaObc = alphaObc
         self.betaObc = betaObc
         self.gammaObc = gammaObc
-
+        self.soluteDielectric = soluteDielectric
+        self.solventDielectric = solventDielectric
+        self.electricConstant = electricConstant
 
     def openmm_born_radii(self, conf):
         num_atoms = conf.shape[0]
@@ -99,9 +102,6 @@ class ReferenceGBSAOBCEnergy():
             sum3 = summ*sum2
 
             tanhSum = np.tanh(alphaObc*summ - betaObc*sum2 + gammaObc*sum3)
-
-            print("ref bornRadii", 1.0/(1.0/oRI - tanhSum/radiusI))
-
             bornRadii[a_idx] = 1.0/(1.0/oRI - tanhSum/radiusI)
 
         return bornRadii
@@ -109,19 +109,43 @@ class ReferenceGBSAOBCEnergy():
     def openmm_energy(self, conf):
         num_atoms = conf.shape[0]
 
-        dielectricOffset = self.dielectricOffset
         cutoffDistance = self.cutoffDistance
-        soluteDielectric = self.soluteDielectric
-        solventDielectric = self.solventDielectric
-        dielectricConstant = self.dielectricConstant
 
-        if soluteDielectric != 0.0 and solventDielectric != 0.0:
-            prefactor = 2.0 * dielectricConstant * (1.0/soluteDielectric) - 1/solventDielectric
+        charges = self.params[self.param_idxs[:, 0]]
+
+        if self.soluteDielectric != 0.0 and self.solventDielectric != 0.0:
+            prefactor = 2.0 * self.electricConstant * (1.0/self.soluteDielectric) - 1/self.solventDielectric
         else:
             prefactor = 0.0
 
+        bornRadii = self.openmm_born_radii(conf)
 
-tf.enable_eager_execution()
+        total_nrg = 0
+
+        for a_idx in range(num_atoms):
+            partialChargeI = prefactor * charges[a_idx]
+
+            for b_idx in range(num_atoms):
+                partialChargeJ = charges[b_idx]
+
+                r2 = np.sum(np.power(conf[a_idx] - conf[b_idx], 2), axis=-1)
+                alpha2_ij = bornRadii[a_idx]*bornRadii[b_idx];
+                D_ij = r2/(4.0*alpha2_ij);
+                expTerm = np.exp(-D_ij);
+                denominator2 = r2 + alpha2_ij*expTerm; 
+                denominator = np.sqrt(denominator2); 
+                Gpol = (partialChargeI*partialChargeJ)/denominator;           
+                energy = Gpol;
+
+                if a_idx != b_idx:
+                    if self.cutoffDistance is not None:
+                        energy -= (partialChargeI * partialChargeJ)/cutoffDistance
+                else:
+                    energy *= 0.5
+                total_nrg += energy
+
+        return total_nrg
+
 
 class TestGBSA(unittest.TestCase):
 
@@ -152,15 +176,29 @@ class TestGBSA(unittest.TestCase):
         ref_nrg = ReferenceGBSAOBCEnergy(
             params,
             param_idxs,
-            )
+        )
 
         ref_radii = ref_nrg.openmm_born_radii(x0)
-
-
         nrg = GBSAOBC(params, param_idxs)
 
-        test_radii = nrg.compute_born_radii(x0)
-        np.testing.assert_array_almost_equal(ref_radii, test_radii)
+        x_ph = tf.placeholder(shape=(5, 3), dtype=np.float64)
+
+        test_radii_op = nrg.compute_born_radii(x_ph)
+        test_grad_op = tf.gradients(test_radii_op, x_ph)
+        test_hess_op = tf.hessians(test_radii_op, x_ph)
+
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
+
+        test_radii_val, test_grad_val, test_hess_val = sess.run([test_radii_op, test_grad_op, test_hess_op], feed_dict={x_ph: x0})
+        np.testing.assert_array_almost_equal(ref_radii, test_radii_val, decimal=13)
+
+        assert not np.any(np.isnan(test_grad_val))
+        assert not np.any(np.isnan(test_hess_val))
+
+        ref_nrg = ref_nrg.openmm_energy(x0)
+        print(ref_nrg)
+
 
 if __name__ == '__main__':
     unittest.main()
