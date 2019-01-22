@@ -93,6 +93,8 @@ class ReferenceGBSAOBCEnergy():
                             assert 0
                             term += 2.0*(radiusIInverse - l_ij);
 
+
+
                         summ += term;
                     else:
                         print("skipping", a_idx, b_idx)

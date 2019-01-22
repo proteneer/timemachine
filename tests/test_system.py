@@ -4,6 +4,7 @@ import unittest
 import tensorflow as tf
 
 from timemachine.functionals import bonded
+from timemachine.functionals import gbsa
 from timemachine.derivatives import densify
 # OpenMM nonbonded terms
 # NoCutoff = 0,
@@ -14,7 +15,6 @@ from timemachine.derivatives import densify
 # LJPME = 5
 
 import xml.etree.ElementTree as ET
-
 
 
 def deserialize_system(xml_file):
@@ -65,15 +65,45 @@ def deserialize_system(xml_file):
                     param_idxs = np.array(param_idxs)
                     bond_idxs = np.array(bond_idxs)
 
-                    hb = bonded.HarmonicBond(params, bond_idxs, param_idxs)
-                    all_nrgs.append(hb)
+                    all_nrgs.append(bonded.HarmonicBond(params, bond_idxs, param_idxs))
+                elif force_type == 'HarmonicAngleForce':
+                    print('HarmonicAngleForce not fully implemented yet')
+
+                elif force_type == 'PeriodicTorsionForce':
+
+                    params = []
+                    param_idxs = []
+                    torsion_idxs = []
+
+                    for tors in subchild:
+                        for tor in tors:
+                            k = np.float64(tor.attrib['k'])
+                            phase = np.float64(tor.attrib['phase'])
+                            periodicity = np.float64(tor.attrib['periodicity'])
+                            p1 = np.int32(tor.attrib['p1'])
+                            p2 = np.int32(tor.attrib['p2'])
+                            p3 = np.int32(tor.attrib['p3'])
+                            p4 = np.int32(tor.attrib['p4'])
+
+                            p_idx_k = len(params)
+                            params.append(k)
+                            p_idx_phase = len(params)
+                            params.append(phase)
+                            p_idx_period = len(params)
+                            params.append(periodicity)
+
+                            param_idxs.append((p_idx_k, p_idx_phase, p_idx_period))
+                            torsion_idxs.append((p1, p2, p3, p4))
+
+                    params = np.array(params)
+                    param_idxs = np.array(param_idxs)
+                    torsion_idxs = np.array(torsion_idxs)
+                    all_nrgs.append(bonded.PeriodicTorsion(params, torsion_idxs, param_idxs))
 
 
                 # elif force_type == 'HarmonicAngleForce':
                 #     force_periodic = tags['usesPeriodic']
 
-                # elif force_type == 'PeriodicTorsionForce':
-                #     force_periodic = tags['usesPeriodic']
 
                 # elif force_type == 'NonbondedForce':
                 #     method = np.int32(tags['method'])
@@ -90,7 +120,38 @@ def deserialize_system(xml_file):
 
 
                 #     : '0', 'ljnx': '0', 'ljny': '0', 'ljnz': '0', 'method': '1', 'nx': '0', 'ny': '0', 'nz': '0', 'recipForceGroup': '-1', 'rfDielectric': '1', 'switchingDistance': '-1', 'type': 'NonbondedForce', 'useSwitchingFunction': '0', 'version': '3'}
-                # elif force_type == 'GBSAOBCForce'
+                elif force_type == 'GBSAOBCForce':
+
+                    soluteDielectric = np.float64(tags['soluteDielectric'])
+                    solventDielectric = np.float64(tags['solventDielectric'])
+                    surfaceAreaEnergy = np.float64(tags['surfaceAreaEnergy'])
+                    cutoff = np.float64(tags['cutoff'])
+                    # ignore surface area term in non-polar approximation
+
+                    params = []
+                    param_idxs = []
+
+                    for particles in subchild:
+                        for particle in particles:
+                            q_idx = len(params)
+                            params.append(np.float64(particle.attrib['q']))
+                            r_idx = len(params)
+                            params.append(np.float64(particle.attrib['r']))
+                            s_idx = len(params)
+                            params.append(np.float64(particle.attrib['scale']))
+
+                            param_idxs.append((q_idx, r_idx, s_idx))
+
+                    params = np.array(params)
+                    param_idxs = np.array(param_idxs)
+
+                    all_nrgs.append(gbsa.GBSAOBC(
+                        params,
+                        param_idxs,
+                        cutoffDistance=cutoff,
+                        soluteDielectric=soluteDielectric,
+                        solventDielectric=solventDielectric,
+                        surfaceAreaEnergy=surfaceAreaEnergy))
 
                 # else:
                 #     raise TypeError("Unsupported force type:", force_type)
@@ -130,8 +191,10 @@ def deserialize_state(xml_file):
 
     return pot_nrg, np.array(coords), np.array(velocities), np.array(forces)
 
+
 def get_test_file(fname):
     return os.path.join(os.path.dirname(__file__), 'data', fname)
+
 
 class TestAlaAlaAla(unittest.TestCase):
 
@@ -150,14 +213,28 @@ class TestAlaAlaAla(unittest.TestCase):
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
 
+        # bonded
         nrg_op = nrgs[0].energy(x_ph)
         grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
-
         nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
-
         np.testing.assert_almost_equal(ref_nrg, nrg_val)
         np.testing.assert_almost_equal(ref_forces, grad_val*-1)
 
+        # torsion
+        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_test_file('state2.xml'))
+        nrg_op = nrgs[1].energy(x_ph)
+        grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
+        nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
+        np.testing.assert_almost_equal(ref_nrg, nrg_val)
+        np.testing.assert_almost_equal(ref_forces, grad_val*-1)
+
+        # GBSA
+        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_test_file('state4.xml'))
+        nrg_op = nrgs[2].energy(x_ph)
+        grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
+        nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
+        np.testing.assert_almost_equal(ref_nrg, nrg_val)
+        np.testing.assert_almost_equal(ref_forces, grad_val*-1)
 
 
 
