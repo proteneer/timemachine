@@ -1,0 +1,115 @@
+<?xml version="1.0" ?>
+<State openmmVersion="7.3" time="0" type="State" version="1">
+	<PeriodicBoxVectors>
+		<A x="2" y="0" z="0"/>
+		<B x="0" y="2" z="0"/>
+		<C x="0" y="0" z="2"/>
+	</PeriodicBoxVectors>
+	<Parameters/>
+	<Energies KineticEnergy="0" PotentialEnergy="0"/>
+	<Positions>
+		<Position x=".0024000000000000002" y="-.0103" z="-.010100000000000001"/>
+		<Position x=".0027" y="-.1132" z="-.0239"/>
+		<Position x="-.08050000000000002" y=".016300000000000002" z=".0471"/>
+		<Position x="-.0059" y=".038400000000000004" z="-.10189999999999999"/>
+		<Position x=".12470000000000002" y=".037500000000000006" z=".0636"/>
+		<Position x=".0814" y=".08610000000000001" z=".14950000000000002"/>
+		<Position x=".2057" y="-.0772" z=".1289"/>
+		<Position x=".31360000000000005" y="-.0752" z=".10320000000000001"/>
+		<Position x=".199" y="-.0641" z=".23950000000000002"/>
+		<Position x=".1656" y="-.17820000000000003" z=".1063"/>
+		<Position x=".1956" y=".1579" z=".0036"/>
+		<Position x=".12190000000000001" y=".2525" z="-.020100000000000003"/>
+		<Position x=".3289" y=".16310000000000002" z="-.020200000000000003"/>
+		<Position x=".39390000000000003" y=".0868" z="-.0174"/>
+		<Position x=".399" y=".2909" z="-.021500000000000002"/>
+		<Position x=".37420000000000003" y=".34400000000000003" z=".06949999999999999"/>
+		<Position x=".3662" y=".38020000000000004" z="-.1434"/>
+		<Position x=".4192" y=".4778" z="-.1358"/>
+		<Position x=".3956" y=".3311" z="-.23820000000000002"/>
+		<Position x=".2577" y=".40270000000000006" z="-.14670000000000002"/>
+		<Position x=".5487000000000001" y=".2654" z="-.0128"/>
+		<Position x=".5889000000000001" y=".1489" z="-.013700000000000002"/>
+		<Position x=".6275000000000001" y=".3733" z="-.0037"/>
+		<Position x=".5963" y=".4691" z="-.0028000000000000004"/>
+		<Position x=".7707" y=".38020000000000004" z=".0068000000000000005"/>
+		<Position x=".8160000000000001" y=".34180000000000005" z="-.0833"/>
+		<Position x=".8233000000000001" y=".3093" z=".1333"/>
+		<Position x=".9342000000000001" y=".3149" z=".13560000000000003"/>
+		<Position x=".7835000000000001" y=".3593" z=".22400000000000003"/>
+		<Position x=".7923" y=".20299999999999999" z=".1332"/>
+		<Position x=".8018000000000001" y=".5323000000000001" z=".013600000000000001"/>
+		<Position x=".7032" y=".6119" z=".012700000000000001"/>
+		<Position x=".9218999999999999" y=".5692" z=".0188"/>
+	</Positions>
+	<Velocities>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+		<Velocity x="0" y="0" z="0"/>
+	</Velocities>
+	<Forces>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+		<Force x="0" y="0" z="0"/>
+	</Forces>
+</State>

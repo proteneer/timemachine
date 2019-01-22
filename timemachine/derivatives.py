@@ -2,6 +2,16 @@
 import tensorflow as tf
 from tensorflow.python.ops.parallel_for.gradients import jacobian
 
+def densify(op):
+    if isinstance(op, tf.IndexedSlices):
+        return tf.unsorted_segment_sum(
+            op.values,
+            op.indices,
+            op.dense_shape[0])
+    else:
+        return op
+
+
 
 def list_jacobian(outputs, inputs):
     """
@@ -23,11 +33,7 @@ def list_jacobian(outputs, inputs):
     # for sparse gradients as well as automatically reshaping the results if outputs is a list.
 
     # taken from tf src gradients_impl.py _IndexedSlicesToTensor 
-    if isinstance(outputs, tf.IndexedSlices):
-        outputs = tf.unsorted_segment_sum(
-            outputs.values,
-            outputs.indices,
-            outputs.dense_shape[0])
+    densify(outputs)
 
     output_dims = list(range(len(outputs.get_shape().as_list()))) # [0,1]
     n_out_dims = len(output_dims)

@@ -148,7 +148,7 @@ class ReferenceGBSAOBCEnergy():
 class TestGBSA(unittest.TestCase):
 
     def test_gbsa(self):
-
+        """ Testing the GBSA OBC model. """
         masses = np.array([6.0, 1.0, 1.0, 1.0, 1.0])
         x0 = np.array([
             [ 0.0637,   0.0126,   0.2203],
