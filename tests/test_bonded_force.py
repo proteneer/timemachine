@@ -12,7 +12,7 @@ class PeriodicTorsionForceOpenMM():
         param_idxs,
         precision=tf.float64):
         """
-        Implements the OpenMM version of PeriodicTorsionForce
+        Implements the OpenMM version of PeriodicTorsionForce 
         """
         self.params = params
         self.torsion_idxs = torsion_idxs
@@ -45,19 +45,15 @@ class PeriodicTorsionForceOpenMM():
         ck = tf.gather(conf, self.torsion_idxs[:, 2])
         cl = tf.gather(conf, self.torsion_idxs[:, 3])
 
-        k0s = tf.gather(self.params, self.param_idxs[:, 0])
-        k1s = tf.gather(self.params, self.param_idxs[:, 1])
-        k2s = tf.gather(self.params, self.param_idxs[:, 2])
-        t0s = tf.gather(self.params, self.param_idxs[:, 3])
-        t1s = tf.gather(self.params, self.param_idxs[:, 4])
-        t2s = tf.gather(self.params, self.param_idxs[:, 5])
+        ks = tf.gather(self.params, self.param_idxs[:, 0])
+        phase = tf.gather(self.params, self.param_idxs[:, 1])
+        period = tf.gather(self.params, self.param_idxs[:, 2])
 
-        angle = self.get_signed_angle(ci, cj, ck, cl)
+        angle = self.get_signed_angle(ci, cj, ck, cl) # should have shape (4,)
+        # angle = tf.reduce_sum(ci+cj+ck+cl)
 
-        e0 = k0s*(1+tf.cos(1 * angle - t0s)) # cos(a) cos(t0) + sin(a) sin(t0)
-        e1 = k1s*(1+tf.cos(2 * angle - t1s)) # cos(2a) cos(t1) + sin(2a) sin(t1) -> (2*cos(a)^2 - 1) cos(t1) + (2*sin(a)*cos(a)) sin(t1s)
-        e2 = k2s*(1+tf.cos(3 * angle - t2s)) # cos(3a) cos(t2) + sin(3a) sin(t2) -> (4*cos(a)^3 - 3 cos(a)) cos(t2) + (3 sin(a) - 4 * sin(a)^3) sin(t2)
-        return tf.reduce_sum(e0+e1+e2, axis=-1)
+        e0 = ks*(1+tf.cos(period * angle - phase)) # cos(a) cos(t0) + sin(a) sin(t0)
+        return tf.reduce_sum(e0, axis=-1)
 
 
 class TestBondedForce(unittest.TestCase):
@@ -111,19 +107,26 @@ class TestBondedForce(unittest.TestCase):
 
         torsion_idxs = np.array([
             [0, 1, 2, 3],
+            [0, 1, 2, 3],
+            [0, 1, 2, 3],
         ], dtype=np.int32)
 
-        params = tf.get_variable(name="parameters", dtype=tf.float64, shape=(6,), initializer=tf.constant_initializer([
+        params = tf.get_variable(name="parameters", dtype=tf.float64, shape=(9,), initializer=tf.constant_initializer([
             2.3, # k0
             5.4, # k1
             9.0, # k2
             0.0, # t0
             3.0, # t1
             5.8, # t2
+            1.0, # n0
+            2.0, # n1
+            3.0  # n2
         ]))
 
         param_idxs = np.array([
-            [0, 1, 2, 3, 4, 5]
+            [0, 3, 6],
+            [1, 4, 7],
+            [2, 5, 8]
         ], dtype=np.int32)
 
         x_ph = tf.placeholder(shape=(4, 3), dtype=tf.float64)
@@ -144,20 +147,21 @@ class TestBondedForce(unittest.TestCase):
 
             t0, t1, t2, t3, r0, r1, r2, r3 = sess.run([
                 test_nrg,
-                test_grad,
+                derivatives.densify(test_grad),
                 test_hessian,
                 test_mixed,
                 ref_nrg,
-                ref_grad,
+                derivatives.densify(ref_grad),
                 ref_hessian,
                 ref_mixed], feed_dict={x_ph: conf})
 
             np.testing.assert_array_almost_equal(t0, r0, decimal=14) # energy
-            t1, r1 = t1.values[t1.indices], r1.values[r1.indices]
             np.testing.assert_array_almost_equal(t1, r1, decimal=13) # grad
             np.testing.assert_array_almost_equal(t2, r2, decimal=12) # hessian
             np.testing.assert_array_almost_equal(t3, r3, decimal=13) # mixed partials
 
+            # net force should be zero
+            np.testing.assert_almost_equal(np.sum(t1, axis=0), [0,0,0], decimal=14)
 
         # OpenMM's vanilla implementation of the energy is non-differentiable when
         # the angle is equal to zero. The atan2 version is numerically stable since
@@ -166,16 +170,16 @@ class TestBondedForce(unittest.TestCase):
 
             t0, t1, t2, t3, r0, r1, r2, r3 = sess.run([
                 test_nrg,
-                test_grad,
+                derivatives.densify(test_grad),
                 test_hessian,
                 test_mixed,
                 ref_nrg,
-                ref_grad,
+                derivatives.densify(ref_grad),
                 ref_hessian,
                 ref_mixed], feed_dict={x_ph: conf})
 
             np.testing.assert_array_almost_equal(t0, r0, decimal=14) # energy
-            t1, r1 = t1.values[t1.indices], r1.values[r1.indices]
+
             assert not np.any(np.isnan(t1))
             # assert np.any(np.isnan(r1))
             assert not np.any(np.isnan(t2))

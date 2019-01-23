@@ -33,7 +33,7 @@ def list_jacobian(outputs, inputs):
     # for sparse gradients as well as automatically reshaping the results if outputs is a list.
 
     # taken from tf src gradients_impl.py _IndexedSlicesToTensor 
-    densify(outputs)
+    outputs = densify(outputs)
 
     output_dims = list(range(len(outputs.get_shape().as_list()))) # [0,1]
     n_out_dims = len(output_dims)
@@ -55,7 +55,7 @@ def compute_ghm(energy_op, x, params):
     """
     Computes gradients, hessians, mixed_partials in one go
     """
-    grads = tf.gradients(energy_op, x)[0]
-    hess = tf.hessians(energy_op, x)[0]
+    grads = densify(tf.gradients(energy_op, x)[0])
+    hess = densify(tf.hessians(energy_op, x)[0])
     mp = list_jacobian(grads, params)
     return grads, hess, mp

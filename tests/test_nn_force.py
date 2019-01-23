@@ -32,7 +32,7 @@ class TestTensorfield(unittest.TestCase):
 
     def test_tensorfield_force(self):
         """
-        Test an implementation of the nn force
+        Testing an implementation of the nn force
         """
         x0 = np.array([
             [ 0.0637,   0.0126,   0.2203],

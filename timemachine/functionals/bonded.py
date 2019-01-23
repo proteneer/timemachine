@@ -59,7 +59,6 @@ class PeriodicTorsion(Energy):
         return tf.atan2(y, x)
 
     def energy(self, conf):
-
         ci = tf.gather(conf, self.torsion_idxs[:, 0])
         cj = tf.gather(conf, self.torsion_idxs[:, 1])
         ck = tf.gather(conf, self.torsion_idxs[:, 2])
@@ -68,9 +67,7 @@ class PeriodicTorsion(Energy):
         ks = tf.gather(self.params, self.param_idxs[:, 0])
         phase = tf.gather(self.params, self.param_idxs[:, 1])
         period = tf.gather(self.params, self.param_idxs[:, 2])
-
         angle = self.get_signed_angle(ci, cj, ck, cl)
-
         nrg = ks*(1+tf.cos(period * angle - phase))
         return tf.reduce_sum(nrg, axis=-1)
 
