@@ -192,7 +192,7 @@ def deserialize_state(xml_file):
     return pot_nrg, np.array(coords), np.array(velocities), np.array(forces)
 
 
-def get_test_file(fname):
+def get_data(fname):
     return os.path.join(os.path.dirname(__file__), 'data', fname)
 
 
@@ -203,8 +203,8 @@ class TestAlaAlaAla(unittest.TestCase):
 
     def test_ala(self):
 
-        masses, nrgs = deserialize_system(get_test_file('system.xml'))
-        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_test_file('state0.xml'))
+        masses, nrgs = deserialize_system(get_data('system.xml'))
+        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state0.xml'))
 
         num_atoms = x0.shape[0]
 
@@ -221,7 +221,7 @@ class TestAlaAlaAla(unittest.TestCase):
         np.testing.assert_almost_equal(ref_forces, grad_val*-1)
 
         # torsion
-        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_test_file('state2.xml'))
+        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state2.xml'))
         nrg_op = nrgs[1].energy(x_ph)
         grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
         nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
@@ -229,7 +229,7 @@ class TestAlaAlaAla(unittest.TestCase):
         np.testing.assert_almost_equal(ref_forces, grad_val*-1)
 
         # GBSA
-        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_test_file('state4.xml'))
+        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state4.xml'))
         nrg_op = nrgs[2].energy(x_ph)
         grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
         nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
