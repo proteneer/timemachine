@@ -1,11 +1,13 @@
 [![CircleCI](https://circleci.com/gh/proteneer/timemachine.svg?style=svg&circle-token=d4635916d6394573ebda0aa17a63540bc8b449fc)](https://circleci.com/gh/proteneer/timemachine)
 
-# The Time Machine
+# Time Machine
 
 This package is designed with two goals in mind:
 
 1. Enable rapid prototyping of novel energy functions and automatic generation of gradients, hessians, and mixed partials.
 2. Computes exact analytic derivatives of the trajectory with respect to model parameter, also known as backpropagation through time.
+
+The code is implemented against the reference OpenMM Force classes, and is rigorously tested for accuracy up to machine precision.
 
 # Example Code
 
@@ -51,8 +53,7 @@ test_nrg, test_nrg_grad, test_nrg_hess = sess.run([test_nrg_op, test_nrg_grad_op
 # similar things can be easily done for the derivatives with respect to params
 ```
 
-
-This is not meant to be a replacement for any production MD engine, since it's horrendously slow. For a more detailed explanation of the underlying mathematics, refer to the paper under docs for more information.
+This is not meant to be a replacement for any production MD engine, since it's about 10-50x slower than OpenMM. For a more detailed explanation of the underlying mathematics, refer to the paper under docs for more information.
 
 # Warning
 
@@ -60,7 +61,7 @@ This code is under heavy development. Expect everything to break every time you 
 
 # Supported Functional Forms
 
-We currently support the following functional forms:
+We currently support the following functional forms and their derivatives:
 
 - Harmonic Bonds (bonded_force.py)
 - Harmonic Angles (bonded_force.py)
@@ -74,8 +75,6 @@ We currently support the following functional forms:
 
 - Langevin Dynamics
 - Gradient Descent
-
- Their various derivatives are implemented by their energy functions, whose derivatives of various orders are subsequently generated automatically via reverse-mode automatic differentiation.
 
 # Requirements
 
