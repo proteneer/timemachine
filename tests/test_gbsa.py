@@ -18,7 +18,9 @@ class ReferenceGBSAOBCEnergy():
         gammaObc=4.85,
         soluteDielectric=1.0,
         solventDielectric=78.3,
-        electricConstant=-69.467728):
+        electricConstant=-69.467728,
+        probeRadius=0.14,
+        surfaceAreaEnergy=2.25936):
 
         self.params = params
         self.param_idxs = param_idxs 
@@ -31,6 +33,9 @@ class ReferenceGBSAOBCEnergy():
         self.soluteDielectric = soluteDielectric
         self.solventDielectric = solventDielectric
         self.electricConstant = electricConstant
+
+        self.probeRadius = probeRadius
+        self.pi4Asolv = 4*np.pi*surfaceAreaEnergy
 
     def openmm_born_radii(self, conf):
         num_atoms = conf.shape[0]
@@ -106,27 +111,45 @@ class ReferenceGBSAOBCEnergy():
 
         return bornRadii
 
+    def openmm_non_polar_energy(self, born_radii):
+        atomic_radii = self.params[self.param_idxs[:, 1]]
+
+        summand = 0
+        for radius, born in zip(atomic_radii, born_radii):
+            r = radius + self.probeRadius
+            ratio6 = np.power(radius/born, 6)
+            summand += self.pi4Asolv*r*r*ratio6
+
+        return summand
+
     def openmm_energy(self, conf):
         num_atoms = conf.shape[0]
         cutoffDistance = self.cutoffDistance
         charges = self.params[self.param_idxs[:, 0]]
 
         if self.soluteDielectric != 0.0 and self.solventDielectric != 0.0:
-            prefactor = 2.0 * self.electricConstant * (1.0/self.soluteDielectric) - 1/self.solventDielectric
+            prefactor = 2.0 * self.electricConstant * ((1.0/self.soluteDielectric) - 1/self.solventDielectric)
         else:
             prefactor = 0.0
 
         bornRadii = self.openmm_born_radii(conf)
+
+        surfaceEnergy = self.openmm_non_polar_energy(bornRadii)
 
         total_nrg = 0
 
         for a_idx in range(num_atoms):
             partialChargeI = prefactor * charges[a_idx]
 
-            for b_idx in range(num_atoms):
+            for b_idx in range(a_idx, num_atoms):
                 partialChargeJ = charges[b_idx]
 
                 r2 = np.sum(np.power(conf[a_idx] - conf[b_idx], 2), axis=-1)
+                r = np.sqrt(r2)
+
+                if self.cutoffDistance is not None and r > self.cutoffDistance:
+                    continue
+
                 alpha2_ij = bornRadii[a_idx]*bornRadii[b_idx];
                 D_ij = r2/(4.0*alpha2_ij);
                 expTerm = np.exp(-D_ij);
@@ -142,13 +165,13 @@ class ReferenceGBSAOBCEnergy():
                     energy *= 0.5
                 total_nrg += energy
 
-        return total_nrg
+        return total_nrg + surfaceEnergy
 
 
 class TestGBSA(unittest.TestCase):
 
     def test_gbsa(self):
-
+        """ Testing the GBSA OBC model. """
         masses = np.array([6.0, 1.0, 1.0, 1.0, 1.0])
         x0 = np.array([
             [ 0.0637,   0.0126,   0.2203],

@@ -4,7 +4,7 @@ from tensorflow.python.ops.parallel_for.gradients import jacobian
 import inspect
 
 
-from timemachine.derivatives import list_jacobian
+from timemachine.derivatives import list_jacobian, densify
 from timemachine.constants import BOLTZ
 
 class LangevinIntegrator():
@@ -177,7 +177,7 @@ class LangevinIntegrator():
                 E = nrg.energy(x_t)
 
             all_Es.append(E)
-            dE_dx = tf.gradients(E, x_t)[0]
+            dE_dx = densify(tf.gradients(E, x_t)[0])
 
             offs = []
 
@@ -196,7 +196,7 @@ class LangevinIntegrator():
             all_d2E_dx2.append(tf.hessians(E, x_t)[0])
 
             if supports_box(nrg) and b_t is not None:
-                dE_db = tf.gradients(E, b_t)[0]
+                dE_db = densify(tf.gradients(E, b_t)[0])
                 all_dE_db.append(dE_db)
                 all_d2E_db2.append(tf.hessians(E, b_t)[0])
                 all_d2E_dxdb.append(jacobian(dE_dx, b_t, use_pfor=False)) # this uses the tf jacobian

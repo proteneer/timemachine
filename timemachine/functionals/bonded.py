@@ -23,7 +23,7 @@ class PeriodicTorsion(Energy):
             as the angle of the plane defined by the three bond vectors a-b, b-c, c-d. 
 
         param_idxs: [num_torsions, 6] np.array
-            each element (k0_idx, k1_idx, k2_idx, t0_idx, t1_idx, t2_idx) maps into params for angle constants and ideal angles
+            each element (k, phase, periodicity) maps into params for angle constants and ideal angles
 
         """
         self.params = params
@@ -53,31 +53,23 @@ class PeriodicTorsion(Energy):
         rhs = tf.norm(n2, axis=-1)
         bot = lhs * rhs
 
-        y = tf.reduce_sum(tf.multiply(tf.cross(n1, n2), rkj/tf.norm(rkj, axis=-1)), axis=-1)
+        y = tf.reduce_sum(tf.multiply(tf.cross(n1, n2), rkj/tf.norm(rkj, axis=-1, keepdims=True)), axis=-1)
         x = tf.reduce_sum(tf.multiply(n1, n2), -1)
 
         return tf.atan2(y, x)
 
     def energy(self, conf):
-
         ci = tf.gather(conf, self.torsion_idxs[:, 0])
         cj = tf.gather(conf, self.torsion_idxs[:, 1])
         ck = tf.gather(conf, self.torsion_idxs[:, 2])
         cl = tf.gather(conf, self.torsion_idxs[:, 3])
 
-        k0s = tf.gather(self.params, self.param_idxs[:, 0])
-        k1s = tf.gather(self.params, self.param_idxs[:, 1])
-        k2s = tf.gather(self.params, self.param_idxs[:, 2])
-        t0s = tf.gather(self.params, self.param_idxs[:, 3])
-        t1s = tf.gather(self.params, self.param_idxs[:, 4])
-        t2s = tf.gather(self.params, self.param_idxs[:, 5])
-
+        ks = tf.gather(self.params, self.param_idxs[:, 0])
+        phase = tf.gather(self.params, self.param_idxs[:, 1])
+        period = tf.gather(self.params, self.param_idxs[:, 2])
         angle = self.get_signed_angle(ci, cj, ck, cl)
-
-        e0 = k0s*(1+tf.cos(1 * angle - t0s))
-        e1 = k1s*(1+tf.cos(2 * angle - t1s))
-        e2 = k2s*(1+tf.cos(3 * angle - t2s))
-        return tf.reduce_sum(e0+e1+e2, axis=-1)
+        nrg = ks*(1+tf.cos(period * angle - phase))
+        return tf.reduce_sum(nrg, axis=-1)
 
 class HarmonicAngle(Energy):
 

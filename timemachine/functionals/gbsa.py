@@ -15,7 +15,9 @@ class GBSAOBC(Energy):
         gammaObc=4.85,
         soluteDielectric=1.0,
         solventDielectric=78.3,
-        electricConstant=-69.467728):
+        electricConstant=-69.467728,
+        probeRadius=0.14,
+        surfaceAreaEnergy=2.25936):
 
         self.params = params
         self.param_idxs = param_idxs 
@@ -28,6 +30,17 @@ class GBSAOBC(Energy):
         self.soluteDielectric = soluteDielectric
         self.solventDielectric = solventDielectric
         self.electricConstant = electricConstant
+
+        self.probeRadius = probeRadius
+        self.pi4Asolv = 4*np.pi*surfaceAreaEnergy
+
+    def compute_non_polar_ace(self, born_radii):
+        atomic_radii = self.params[self.param_idxs[:, 1]]
+        r = atomic_radii + self.probeRadius
+        ratio6 = tf.pow(atomic_radii/born_radii, 6)
+        saTerm = self.pi4Asolv*r*r*ratio6
+        return tf.reduce_sum(saTerm)
+
 
     def compute_born_radii(self, conf):
 
@@ -55,8 +68,11 @@ class GBSAOBC(Energy):
 
         d_ij = tf.sqrt(d2_ij)
 
-        oRI = atomicRadii - dielectricOffset
-        oRJ = oRI
+        oR = atomicRadii - dielectricOffset
+        oRI = tf.expand_dims(oR, axis=1) # rows
+        oRJ = tf.expand_dims(oR, axis=0) # columns
+
+        # oRJ = oRI
         sRJ = oRJ * scaledRadiusFactor
         rSRJ = d_ij + sRJ
 
@@ -79,12 +95,12 @@ class GBSAOBC(Energy):
 
         summ = tf.reduce_sum(term_masked, axis=-1) # need to keep one of the dimension
 
-        summ *= 0.5 * oRI
+        summ *= 0.5 * oR
         sum2 = summ*summ
         sum3 = summ*sum2
         tanhSum = tf.tanh(alphaObc*summ - betaObc*sum2 + gammaObc*sum3)
 
-        bornRadii = 1.0/(1.0/oRI - tanhSum/atomicRadii)
+        bornRadii = 1.0/(1.0/oR - tanhSum/atomicRadii)
 
         return bornRadii
 
@@ -93,11 +109,13 @@ class GBSAOBC(Energy):
         num_atoms = conf.shape[0]
 
         if self.soluteDielectric != 0.0 and self.solventDielectric != 0.0:
-            prefactor = 2.0 * self.electricConstant * (1.0/self.soluteDielectric) - 1/self.solventDielectric
+            prefactor = 2.0 * self.electricConstant * (1.0/self.soluteDielectric - 1.0/self.solventDielectric)
         else:
             prefactor = 0.0
 
         bornRadii = self.compute_born_radii(conf)
+
+        nonpolar_nrg = self.compute_non_polar_ace(bornRadii)
 
         charges = self.params[self.param_idxs[:, 0]]
 
@@ -118,13 +136,22 @@ class GBSAOBC(Energy):
         denom2 = r2 + alpha2_ij*expTerm
         denom = tf.sqrt(denom2)
         pq_ij = prefactor*q_ij
+
+        if self.cutoffDistance is not None:
+            # mask cutoff atoms
+            r = tf.sqrt(r2)
+            pq_ij = tf.where(r < self.cutoffDistance, pq_ij, tf.zeros_like(pq_ij))
+
+
         Gpol = pq_ij/denom
         energy = Gpol
 
-        # separate in diag and off diag parts
+        # separate into on diag and off diag parts
         ones_mask = tf.ones(shape=[num_atoms, num_atoms], dtype=tf.int32)
         on_diag_mask = tf.matrix_band_part(ones_mask, 0, 0)
-        off_diag_mask = tf.cast(ones_mask - on_diag_mask, dtype=tf.bool)
+        # use only upper right triangular portion
+        urt = tf.matrix_band_part(ones_mask, 0, -1) # Upper triangular matrix of 0s and 1s
+        off_diag_mask = tf.cast(urt - on_diag_mask, dtype=tf.bool)
 
         on_diag_E = tf.boolean_mask(energy, on_diag_mask)
         on_diag_E *= 0.5
@@ -136,4 +163,5 @@ class GBSAOBC(Energy):
             off_diag_E -= off_diag_pq_ij/self.cutoffDistance
 
         tot_e = tf.reduce_sum(on_diag_E) + tf.reduce_sum(off_diag_E)
-        return tot_e
+
+        return nonpolar_nrg + tot_e

@@ -57,7 +57,9 @@ class TestObservable(unittest.TestCase):
     #     print(sess.run([loss, dfdp], feed_dict={x_ph: x_opt}))
 
     def test_dense_sorted_dij(self):
-
+        """
+        Testing sorted distance matrix observables implemented correctly
+        """
         x0 = np.array([
             [-0.0070, -0.0100, 0.0000],
             [-0.1604,  0.4921, 0.0000],
