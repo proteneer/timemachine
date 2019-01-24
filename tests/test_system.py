@@ -4,8 +4,10 @@ import unittest
 import tensorflow as tf
 
 from timemachine.functionals import bonded
+from timemachine.functionals import nonbonded
 from timemachine.functionals import gbsa
 from timemachine.derivatives import densify
+from timemachine.constants import ONE_4PI_EPS0
 # OpenMM nonbonded terms
 # NoCutoff = 0,
 # CutoffNonPeriodic = 1,
@@ -16,6 +18,13 @@ from timemachine.derivatives import densify
 
 import xml.etree.ElementTree as ET
 
+
+def addExclusionsToSet(bonded12, exclusions, baseParticle, fromParticle, currentLevel):
+    for i in bonded12[fromParticle]:
+        if i != baseParticle:
+            exclusions.add(i)
+        if currentLevel > 0:
+            addExclusionsToSet(bonded12, exclusions, baseParticle, i, currentLevel-1)
 
 def deserialize_system(xml_file):
     """
@@ -33,6 +42,7 @@ def deserialize_system(xml_file):
         if child.tag == 'Particles':
             for subchild in child:
                 masses.append(np.float64(subchild.attrib['mass']))
+            num_atoms = len(masses)
         if child.tag == 'Forces':
             for subchild in child:
                 tags = subchild.attrib
@@ -67,6 +77,34 @@ def deserialize_system(xml_file):
 
                     all_nrgs.append(bonded.HarmonicBond(params, bond_idxs, param_idxs))
                 elif force_type == 'HarmonicAngleForce':
+
+                    force_periodic = tags['usesPeriodic']
+
+                    params = []
+                    param_idxs = []
+                    angle_idxs = []
+
+                    for bonds in subchild:
+                        for bond in bonds:
+                            a = np.float64(bond.attrib['a'])
+                            k = np.float64(bond.attrib['k'])
+                            src = np.int32(bond.attrib['p1'])
+                            mid = np.int32(bond.attrib['p2'])
+                            dst = np.int32(bond.attrib['p3'])
+
+                            p_idx_a = len(params)
+                            params.append(a)
+                            p_idx_k = len(params)
+                            params.append(k)
+
+                            param_idxs.append((p_idx_k, p_idx_a))
+                            angle_idxs.append((src, mid, dst))
+
+                    params = np.array(params)
+                    param_idxs = np.array(param_idxs)
+                    angle_idxs = np.array(angle_idxs)
+
+                    # all_nrgs.append(bonded.HarmonicBond(params, bond_idxs, param_idxs))
                     print('HarmonicAngleForce not fully implemented yet')
 
                 elif force_type == 'PeriodicTorsionForce':
@@ -100,33 +138,111 @@ def deserialize_system(xml_file):
                     torsion_idxs = np.array(torsion_idxs)
                     all_nrgs.append(bonded.PeriodicTorsion(params, torsion_idxs, param_idxs))
 
+                elif force_type == 'NonbondedForce':
 
-                # elif force_type == 'HarmonicAngleForce':
-                #     force_periodic = tags['usesPeriodic']
+                    assert len(bond_idxs) > 0
+                    assert len(angle_idxs) > 0
+                    assert len(torsion_idxs) > 0
+
+                    method = np.int32(tags['method'])
+
+                    if method != 1:
+                        raise TypeError('Only nonperiodic cutoff Nonbonded is supported for now.')
+
+                    alpha = np.float64(tags['alpha'])
+                    cutoff = np.float64(tags['cutoff'])
+                    dispersionCorrection = np.bool(tags['dispersionCorrection'])
+                    ewaldTolerance = np.float64(tags['ewaldTolerance'])
+                    ljAlpha = np.float64(tags['ljAlpha'])
+
+                    coulomb14scale = 0.833333
+                    lj14scale = 0.5
+
+                    lj_eps_scales = np.ones(shape=(num_atoms, num_atoms), dtype=np.float64)
+                    charge_scales = np.ones(shape=(num_atoms, num_atoms), dtype=np.float64)
+
+                    exclusions = []
+                    bonded12 = []
+                    for a_idx in range(num_atoms):
+
+                        lj_eps_scales[a_idx][a_idx] = 0.0
+                        charge_scales[a_idx][a_idx] = 0.0
+
+                        exclusions.append(set())
+                        bonded12.append(set())
+
+                    # taken from openmm's createExceptionsFromBonds()
+                    for first, second in bond_idxs:
+                        bonded12[first].add(second)
+                        bonded12[second].add(first)
+
+                    for i in range(num_atoms):
+                        addExclusionsToSet(bonded12, exclusions[i], i, i, 2)
 
 
-                # elif force_type == 'NonbondedForce':
-                #     method = np.int32(tags['method'])
+                    for i in range(num_atoms):
+                        bonded13 = set()
+                        addExclusionsToSet(bonded12, bonded13, i, i, 1)
+                        for j in exclusions[i]:
+                            if j < i:
+                                if j not in bonded13:
+                                    lj_eps_scales[i][j] = lj14scale
+                                    lj_eps_scales[j][i] = lj14scale
+                                    charge_scales[i][j] = coulomb14scale
+                                    charge_scales[j][i] = coulomb14scale
+                                else:
+                                    lj_eps_scales[i][j] = 0.0
+                                    lj_eps_scales[j][i] = 0.0
+                                    charge_scales[i][j] = 0.0
+                                    charge_scales[j][i] = 0.0
 
-                #     if method != 0 and method != 1:
-                #         raise TypeError('Only nonperiodic systems are supported for now.')
+                    charge_params = []
+                    charge_param_idxs = []
 
-                #     alpha = np.float64(tags['alpha'])
-                #     cutoff = np.float64(tags['cutoff'])
-                #     dispersionCorrection = np.bool(tags['dispersionCorrection'])
-                #     ewaldTolerance = np.float64(tags['ewaldTolerance'])
-                #     ljAlpha = np.float64(tags['ljAlpha'])
+                    lj_params = []
+                    lj_param_idxs = []
 
+                    for group in subchild:
+                        if group.tag == 'Particles':
+                            for p_idx, particle in enumerate(group):
+                                q_idx = len(charge_params)
+                                charge_params.append(np.float64(particle.attrib['q']))
 
+                                sig_idx = len(lj_params)
+                                lj_params.append(np.float64(particle.attrib['sig']))
 
-                #     : '0', 'ljnx': '0', 'ljny': '0', 'ljnz': '0', 'method': '1', 'nx': '0', 'ny': '0', 'nz': '0', 'recipForceGroup': '-1', 'rfDielectric': '1', 'switchingDistance': '-1', 'type': 'NonbondedForce', 'useSwitchingFunction': '0', 'version': '3'}
+                                eps_idx = len(lj_params)
+                                lj_params.append(np.float64(particle.attrib['eps']))
+
+                                charge_param_idxs.append(q_idx)
+                                lj_param_idxs.append((sig_idx, eps_idx))
+
+                    charge_params = np.array(charge_params)
+                    charge_param_idxs = np.array(charge_param_idxs)
+
+                    lj_params = np.array(lj_params)
+                    lj_param_idxs = np.array(lj_param_idxs)
+
+                    lj = nonbonded.LeonnardJones(lj_params, lj_param_idxs, lj_eps_scales, cutoff)
+                    es = nonbonded.Electrostatic(charge_params, charge_param_idxs, charge_scales, cutoff)
+
+                    all_nrgs.extend([lj, es])
+
                 elif force_type == 'GBSAOBCForce':
+
+                    method = np.int32(tags['method'])
+
+                    if method != 1:
+                        raise TypeError('Only nonperiodic cutoff GBSA is supported for now.')
 
                     soluteDielectric = np.float64(tags['soluteDielectric'])
                     solventDielectric = np.float64(tags['solventDielectric'])
                     surfaceAreaEnergy = np.float64(tags['surfaceAreaEnergy'])
                     cutoff = np.float64(tags['cutoff'])
-                    # ignore surface area term in non-polar approximation
+
+                    # (ytz): infer coloumb 1-4 scale and lj 1-4 scale
+                    coloumb14Scale = 0.833333
+                    lj14scale = 0.5
 
                     params = []
                     param_idxs = []
@@ -148,16 +264,11 @@ def deserialize_system(xml_file):
                     all_nrgs.append(gbsa.GBSAOBC(
                         params,
                         param_idxs,
-                        cutoffDistance=cutoff,
+                        cutoff=cutoff,
                         soluteDielectric=soluteDielectric,
                         solventDielectric=solventDielectric,
                         surfaceAreaEnergy=surfaceAreaEnergy))
 
-                # else:
-                #     raise TypeError("Unsupported force type:", force_type)
-
-                # print(tags)
-        # print(child.tag, child.attrib)
 
     return masses, all_nrgs
 
@@ -174,8 +285,6 @@ def deserialize_state(xml_file):
     for child in root:
         if child.tag == 'Energies':
             pot_nrg = np.float64(child.attrib['PotentialEnergy'])
-            # for subchild in child:
-                # masses.append(np.float64(subchild.attrib['mass']))
         elif child.tag == 'Positions':
             for subchild in child:
                 x, y, z = np.float64(subchild.attrib['x']), np.float64(subchild.attrib['y']), np.float64(subchild.attrib['z'])
@@ -228,9 +337,21 @@ class TestAlaAlaAla(unittest.TestCase):
         np.testing.assert_almost_equal(ref_nrg, nrg_val)
         np.testing.assert_almost_equal(ref_forces, grad_val*-1)
 
+        # nonbonded
+        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state3.xml'))
+        lj_nrg_op = nrgs[2].energy(x_ph)
+        es_nrg_op = nrgs[3].energy(x_ph)
+        lj_grad_op = densify(tf.gradients(lj_nrg_op, x_ph)[0])
+        es_grad_op = densify(tf.gradients(es_nrg_op, x_ph)[0])
+        lj_nrg_val, lj_grad_val, es_nrg_val, es_grad_val = sess.run([lj_nrg_op, lj_grad_op, es_nrg_op, es_grad_op], feed_dict={x_ph: x0})
+        tot_e = lj_nrg_val + es_nrg_val
+        np.testing.assert_almost_equal(ref_nrg, tot_e)
+        grad_val = lj_grad_val + es_grad_val
+        np.testing.assert_almost_equal(ref_forces, grad_val*-1)
+
         # GBSA
         ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state4.xml'))
-        nrg_op = nrgs[2].energy(x_ph)
+        nrg_op = nrgs[4].energy(x_ph)
         grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
         nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
         np.testing.assert_almost_equal(ref_nrg, nrg_val)

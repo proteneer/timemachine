@@ -71,6 +71,7 @@ class PeriodicTorsion(Energy):
         nrg = ks*(1+tf.cos(period * angle - phase))
         return tf.reduce_sum(nrg, axis=-1)
 
+
 class HarmonicAngle(Energy):
 
     def __init__(self,
@@ -86,7 +87,7 @@ class HarmonicAngle(Energy):
         params: list of tf.Variables
             an opaque array of parameters used by param_idxs for indexing into
 
-        angle_idxs: [num_angles, 3] np.array
+        angle_idxs: [num_angles, 3] np.array # (ytz): FIX ME TO BE CONSISTENT WITH OPENMM
             each element (a, b, c) is a unique angle in the conformation. The angle is defined
             as between the two bond vectors a-b and c-b
 
