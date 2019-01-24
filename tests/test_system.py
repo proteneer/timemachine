@@ -77,20 +77,19 @@ def deserialize_system(xml_file):
 
                     all_nrgs.append(bonded.HarmonicBond(params, bond_idxs, param_idxs))
                 elif force_type == 'HarmonicAngleForce':
-
                     force_periodic = tags['usesPeriodic']
 
                     params = []
                     param_idxs = []
                     angle_idxs = []
 
-                    for bonds in subchild:
-                        for bond in bonds:
-                            a = np.float64(bond.attrib['a'])
-                            k = np.float64(bond.attrib['k'])
-                            src = np.int32(bond.attrib['p1'])
-                            mid = np.int32(bond.attrib['p2'])
-                            dst = np.int32(bond.attrib['p3'])
+                    for angles in subchild:
+                        for angle in angles:
+                            a = np.float64(angle.attrib['a'])
+                            k = np.float64(angle.attrib['k'])
+                            src = np.int32(angle.attrib['p1'])
+                            mid = np.int32(angle.attrib['p2'])
+                            dst = np.int32(angle.attrib['p3'])
 
                             p_idx_a = len(params)
                             params.append(a)
@@ -104,9 +103,7 @@ def deserialize_system(xml_file):
                     param_idxs = np.array(param_idxs)
                     angle_idxs = np.array(angle_idxs)
 
-                    # all_nrgs.append(bonded.HarmonicBond(params, bond_idxs, param_idxs))
-                    print('HarmonicAngleForce not fully implemented yet')
-
+                    all_nrgs.append(bonded.HarmonicAngle(params, angle_idxs, param_idxs, fudge_factor=1.0))
                 elif force_type == 'PeriodicTorsionForce':
 
                     params = []
@@ -322,8 +319,16 @@ class TestAlaAlaAla(unittest.TestCase):
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
 
-        # bonded
+        # bonds
         nrg_op = nrgs[0].energy(x_ph)
+        grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
+        nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
+        np.testing.assert_almost_equal(ref_nrg, nrg_val)
+        np.testing.assert_almost_equal(ref_forces, grad_val*-1)
+
+        # angles
+        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state1.xml'))
+        nrg_op = nrgs[1].energy(x_ph)
         grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
         nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
         np.testing.assert_almost_equal(ref_nrg, nrg_val)
@@ -331,7 +336,7 @@ class TestAlaAlaAla(unittest.TestCase):
 
         # torsion
         ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state2.xml'))
-        nrg_op = nrgs[1].energy(x_ph)
+        nrg_op = nrgs[2].energy(x_ph)
         grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
         nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
         np.testing.assert_almost_equal(ref_nrg, nrg_val)
@@ -339,8 +344,8 @@ class TestAlaAlaAla(unittest.TestCase):
 
         # nonbonded
         ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state3.xml'))
-        lj_nrg_op = nrgs[2].energy(x_ph)
-        es_nrg_op = nrgs[3].energy(x_ph)
+        lj_nrg_op = nrgs[3].energy(x_ph)
+        es_nrg_op = nrgs[4].energy(x_ph)
         lj_grad_op = densify(tf.gradients(lj_nrg_op, x_ph)[0])
         es_grad_op = densify(tf.gradients(es_nrg_op, x_ph)[0])
         lj_nrg_val, lj_grad_val, es_nrg_val, es_grad_val = sess.run([lj_nrg_op, lj_grad_op, es_nrg_op, es_grad_op], feed_dict={x_ph: x0})
@@ -351,7 +356,7 @@ class TestAlaAlaAla(unittest.TestCase):
 
         # GBSA
         ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state4.xml'))
-        nrg_op = nrgs[4].energy(x_ph)
+        nrg_op = nrgs[5].energy(x_ph)
         grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
         nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
         np.testing.assert_almost_equal(ref_nrg, nrg_val)

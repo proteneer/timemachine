@@ -78,7 +78,7 @@ class HarmonicAngle(Energy):
         params,
         angle_idxs,
         param_idxs,
-        precision=tf.float64):
+        fudge_factor=0.98):
         """
         This implements a harmonic angle potential: V(t) = k*(t - t0)^2. 
 
@@ -87,38 +87,43 @@ class HarmonicAngle(Energy):
         params: list of tf.Variables
             an opaque array of parameters used by param_idxs for indexing into
 
-        angle_idxs: [num_angles, 3] np.array # (ytz): FIX ME TO BE CONSISTENT WITH OPENMM
-            each element (a, b, c) is a unique angle in the conformation. The angle is defined
-            as between the two bond vectors a-b and c-b
+        angle_idxs: [num_angles, 3] np.array
+            each element (a, b, c) is a unique angle in the conformation. atom b is defined
+            to be the middle atom.
 
         param_idxs: [num_angles, 2] np.array
             each element (k_idx, t_idx) maps into params for angle constants and ideal angles
+
+        fudge_factor: np.float64
+            a fudge factor deal with singularities when a chain is linear. This is applied to the
+            u.v/(|u||v) so it's never exactly 1.
 
         """
         self.params = params
         self.angle_idxs = angle_idxs
         self.param_idxs = param_idxs
+        self.fudge_factor = fudge_factor
 
     def energy(self, conf):
         """
         Compute the harmonic bond energy given a collection of molecules.
         """
-        cj = tf.gather(conf, self.angle_idxs[:, 0])
-        ci = tf.gather(conf, self.angle_idxs[:, 1])
+        ci = tf.gather(conf, self.angle_idxs[:, 0])
+        cj = tf.gather(conf, self.angle_idxs[:, 1])
         ck = tf.gather(conf, self.angle_idxs[:, 2])
 
         kas = tf.gather(self.params, self.param_idxs[:, 0])
         a0s = tf.gather(self.params, self.param_idxs[:, 1])
 
         vij = cj - ci
-        vik = ck - ci
+        vkj = cj - ck
 
-        top = tf.reduce_sum(tf.multiply(vij, vik), -1)
-        bot = tf.norm(vij, axis=-1)*tf.norm(vik, axis=-1)
+        top = tf.reduce_sum(tf.multiply(vij, vkj), -1)
+        bot = tf.norm(vij, axis=-1)*tf.norm(vkj, axis=-1)
 
         # (ytz): 1.0 nans, 0.975 nans but 0.98 is okay? (wtf?)
         # we really need another functional form for this
-        cos_angles = 0.98*(top/bot)
+        cos_angles = self.fudge_factor*(top/bot)
         angle = tf.acos(cos_angles)
 
         # (ytz): we used the squared version so that we make this energy being strictly positive

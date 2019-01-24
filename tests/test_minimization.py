@@ -46,7 +46,7 @@ class TestMinimization(unittest.TestCase):
 
         ha = bonded.HarmonicAngle(
             params=angle_params,
-            angle_idxs=np.array([[1,0,2]], dtype=np.int32),
+            angle_idxs=np.array([[0,1,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
         )
 
@@ -123,7 +123,7 @@ class TestMinimization(unittest.TestCase):
 
         ha = bonded.HarmonicAngle(
             params=angle_params,
-            angle_idxs=np.array([[1,0,2],[1,0,3],[1,0,4],[2,0,3],[2,0,4],[3,0,4]], dtype=np.int32),
+            angle_idxs=np.array([[0,1,2],[0,1,3],[0,1,4],[0,1,3],[0,1,4],[0,1,4]], dtype=np.int32),
             param_idxs=np.array([[0,1],[0,1],[0,1],[0,1],[0,1],[0,1]], dtype=np.int32)
         )
 
