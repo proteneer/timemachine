@@ -97,7 +97,7 @@ class TestLangevinIntegrator(unittest.TestCase):
 
         ha = bonded.HarmonicAngle(
             params=angle_params,
-            angle_idxs=np.array([[1,0,2]], dtype=np.int32),
+            angle_idxs=np.array([[0,1,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
         )
 
@@ -278,7 +278,7 @@ class TestLangevinIntegrator(unittest.TestCase):
 
         ha = bonded.HarmonicAngle(
             params=angle_params,
-            angle_idxs=np.array([[1,0,2]], dtype=np.int32),
+            angle_idxs=np.array([[0,1,2]], dtype=np.int32),
             param_idxs=np.array([[0,1]], dtype=np.int32)
         )
 
