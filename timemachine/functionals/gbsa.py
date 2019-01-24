@@ -9,7 +9,7 @@ class GBSAOBC(Energy):
         params, # 
         param_idxs, # (N, 3), (q, r, s)
         dielectricOffset=0.009,
-        cutoffDistance=2.0,
+        cutoff=2.0,
         alphaObc=1.0,
         betaObc=0.8,
         gammaObc=4.85,
@@ -23,7 +23,7 @@ class GBSAOBC(Energy):
         self.param_idxs = param_idxs 
 
         self.dielectricOffset = dielectricOffset
-        self.cutoffDistance = cutoffDistance
+        self.cutoff = cutoff
         self.alphaObc = alphaObc
         self.betaObc = betaObc
         self.gammaObc = gammaObc
@@ -76,7 +76,7 @@ class GBSAOBC(Energy):
         sRJ = oRJ * scaledRadiusFactor
         rSRJ = d_ij + sRJ
 
-        mask0 = tf.less(d_ij, self.cutoffDistance)
+        mask0 = tf.less(d_ij, self.cutoff)
         mask1 = tf.less(oRI, rSRJ)
         mask_final = tf.logical_and(mask0, mask1)
 
@@ -137,10 +137,10 @@ class GBSAOBC(Energy):
         denom = tf.sqrt(denom2)
         pq_ij = prefactor*q_ij
 
-        if self.cutoffDistance is not None:
+        if self.cutoff is not None:
             # mask cutoff atoms
             r = tf.sqrt(r2)
-            pq_ij = tf.where(r < self.cutoffDistance, pq_ij, tf.zeros_like(pq_ij))
+            pq_ij = tf.where(r < self.cutoff, pq_ij, tf.zeros_like(pq_ij))
 
 
         Gpol = pq_ij/denom
@@ -158,9 +158,9 @@ class GBSAOBC(Energy):
 
         off_diag_E = tf.boolean_mask(energy, off_diag_mask)
 
-        if self.cutoffDistance is not None:
+        if self.cutoff is not None:
             off_diag_pq_ij = tf.boolean_mask(pq_ij, off_diag_mask)
-            off_diag_E -= off_diag_pq_ij/self.cutoffDistance
+            off_diag_E -= off_diag_pq_ij/self.cutoff
 
         tot_e = tf.reduce_sum(on_diag_E) + tf.reduce_sum(off_diag_E)
 

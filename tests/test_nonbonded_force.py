@@ -90,7 +90,7 @@ class TestNonbondedForce(unittest.TestCase):
 
         net_force = np.sum(test_grads, axis=0)
         # this also checks that there are no NaNs
-        np.testing.assert_almost_equal(net_force, [0,0,0], decimal=7)
+        np.testing.assert_almost_equal(net_force, [0, 0, 0], decimal=7)
 
         assert not np.any(np.isnan(sess.run(tf.hessians(test_nrg_op, x_ph), feed_dict={x_ph: x0})))
         mixed_partials = sess.run(derivatives.list_jacobian(test_grads_op, [lj.get_params()]), feed_dict={x_ph: x0})
