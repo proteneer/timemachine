@@ -63,11 +63,16 @@ class LangevinIntegrator():
         self.dt = dt
         self.friction = friction # dissipation (how fast we forget)
         self.temperature = temp  # temperature
-        self.vscale = np.exp(-self.dt*self.friction)
 
-        if self.friction == 0:
+
+        if self.friction is None:
+            self.vscale = 0.0
+            self.fscale = self.dt
+        elif self.friction == 0.0:
+            self.vscale = np.exp(-self.dt*self.friction)
             self.fscale = self.dt
         else:
+            self.vscale = np.exp(-self.dt*self.friction)
             self.fscale = (1-self.vscale)/self.friction
 
         kT = BOLTZ * self.temperature

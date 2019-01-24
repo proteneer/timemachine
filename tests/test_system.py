@@ -103,7 +103,7 @@ def deserialize_system(xml_file):
                     param_idxs = np.array(param_idxs)
                     angle_idxs = np.array(angle_idxs)
 
-                    all_nrgs.append(bonded.HarmonicAngle(params, angle_idxs, param_idxs, fudge_factor=1.0))
+                    all_nrgs.append(bonded.HarmonicAngle(params, angle_idxs, param_idxs, cos_angles=False))
                 elif force_type == 'PeriodicTorsionForce':
 
                     params = []

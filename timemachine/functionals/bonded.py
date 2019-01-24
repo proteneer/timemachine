@@ -78,9 +78,9 @@ class HarmonicAngle(Energy):
         params,
         angle_idxs,
         param_idxs,
-        fudge_factor=0.98):
+        cos_angles=True):
         """
-        This implements a harmonic angle potential: V(t) = k*(t - t0)^2. 
+        This implements a harmonic angle potential: V(t) = k*(t - t0)^2 or V(t) = k*(cos(t)-cos(t0))^2
 
         Parameters:
         -----------
@@ -94,15 +94,15 @@ class HarmonicAngle(Energy):
         param_idxs: [num_angles, 2] np.array
             each element (k_idx, t_idx) maps into params for angle constants and ideal angles
 
-        fudge_factor: np.float64
-            a fudge factor deal with singularities when a chain is linear. This is applied to the
-            u.v/(|u||v) so it's never exactly 1.
+        cos_angles: True (default)
+            if True, then this instead implements V(t) = k*(cos(t)-cos(t0))^2. This is far more
+            numerically stable if your system can become linear.
 
         """
         self.params = params
         self.angle_idxs = angle_idxs
         self.param_idxs = param_idxs
-        self.fudge_factor = fudge_factor
+        self.cos_angles = cos_angles
 
     def energy(self, conf):
         """
@@ -116,18 +116,22 @@ class HarmonicAngle(Energy):
         a0s = tf.gather(self.params, self.param_idxs[:, 1])
 
         vij = cj - ci
-        vkj = cj - ck
+        vjk = cj - ck
 
-        top = tf.reduce_sum(tf.multiply(vij, vkj), -1)
-        bot = tf.norm(vij, axis=-1)*tf.norm(vkj, axis=-1)
+        top = tf.reduce_sum(tf.multiply(vij, vjk), -1)
+        bot = tf.norm(vij, axis=-1)*tf.norm(vjk, axis=-1)
 
         # (ytz): 1.0 nans, 0.975 nans but 0.98 is okay? (wtf?)
         # we really need another functional form for this
-        cos_angles = self.fudge_factor*(top/bot)
-        angle = tf.acos(cos_angles)
+        cos_angles = top/bot
+
 
         # (ytz): we used the squared version so that we make this energy being strictly positive
-        energies = kas/2*tf.pow(angle - a0s, 2)
+        if self.cos_angles:
+            energies = kas/2*tf.pow(cos_angles - tf.cos(a0s), 2)
+        else:
+            angle = tf.acos(cos_angles)
+            energies = kas/2*tf.pow(angle - a0s, 2)
         return tf.reduce_sum(energies, -1)  # reduce over all angles
 
 
