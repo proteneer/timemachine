@@ -144,8 +144,12 @@ class Electrostatic(Energy):
         else:
             d2ij = tf.reduce_sum(tf.pow(ri-rj, 2), axis=-1)
 
-        d2ij = tf.where(d2ij != 0.0, d2ij, tf.zeros_like(d2ij))
-        dij_inverse = 1/tf.sqrt(d2ij)
+        ones_mask = tf.ones(shape=[self.num_atoms, self.num_atoms], dtype=tf.int32)
+        on_diag_mask = tf.matrix_band_part(ones_mask, 0, 0)
+
+        # mask = d2ij != 0.0 doesn't work because gradients propagate through the first arg
+        d2ij_where = tf.where(tf.cast(ones_mask - on_diag_mask, dtype=tf.bool), d2ij, tf.zeros_like(d2ij))
+        dij_inverse = 1/tf.sqrt(d2ij_where)
 
         if self.cutoff is not None:
             # apply only to fully non-excepted terms
@@ -159,21 +163,25 @@ class Electrostatic(Energy):
         dij_inverse_mask =  tf.boolean_mask(dij_inverse, direct_mask)
         eij_direct = qij_direct_mask * dij_inverse_mask
 
-        if box is not None:
-            # We adjust direct by the erfc, and adjust the reciprocal space's
-            # exclusionary contribution by the direction space weighted by erf
-            eij_direct *= tf.erfc(self.alphaEwald*r_direct)
-            # exclusions to subtract from reciprocal space
-            qij_exclusion_mask = tf.boolean_mask(qij, self.exclusion_mask)
-            d2ij_exclusion_mask = tf.boolean_mask(d2ij, self.exclusion_mask)
-            r_exclusion = tf.sqrt(d2ij_exclusion_mask)
-            eij_exclusion = qij_exclusion_mask/r_exclusion
-            eij_exclusion *= tf.erf(self.alphaEwald*r_exclusion)
+        # return tf.gradients(eij_direct, d2ij)
 
-            # extra factor of 2 is to deal with the fact that we compute the full matrix as opposed to the upper right
-            return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1)/2, ONE_4PI_EPS0*tf.reduce_sum(eij_exclusion, axis=-1)
-        else:
-            return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1)/2, None
+        return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1)/2, None
+
+        # if box is not None:
+        #     # We adjust direct by the erfc, and adjust the reciprocal space's
+        #     # exclusionary contribution by the direction space weighted by erf
+        #     eij_direct *= tf.erfc(self.alphaEwald*r_direct)
+        #     # exclusions to subtract from reciprocal space
+        #     qij_exclusion_mask = tf.boolean_mask(qij, self.exclusion_mask)
+        #     d2ij_exclusion_mask = tf.boolean_mask(d2ij, self.exclusion_mask)
+        #     r_exclusion = tf.sqrt(d2ij_exclusion_mask)
+        #     eij_exclusion = qij_exclusion_mask/r_exclusion
+        #     eij_exclusion *= tf.erf(self.alphaEwald*r_exclusion)
+
+        #     # extra factor of 2 is to deal with the fact that we compute the full matrix as opposed to the upper right
+        #     return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1)/2, ONE_4PI_EPS0*tf.reduce_sum(eij_exclusion, axis=-1)
+        # else:
+        #     return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1)/2, None
 
     def reciprocal_energy(self, conf, box):
         assert box is not None

@@ -26,17 +26,6 @@ def addExclusionsToSet(bonded12, exclusions, baseParticle, fromParticle, current
         if currentLevel > 0:
             addExclusionsToSet(bonded12, exclusions, baseParticle, i, currentLevel-1)
 
-
-# void NonbondedForce::addExclusionsToSet(const vector<set<int> >& bonded12, set<int>& exclusions, int baseParticle, int fromParticle, int currentLevel) const {
-#     for (int i : bonded12[fromParticle]) {
-#         if (i != baseParticle)
-#             exclusions.insert(i);
-#         if (currentLevel > 0)
-#             addExclusionsToSet(bonded12, exclusions, baseParticle, i, currentLevel-1);
-#     }
-# }
-
-
 def deserialize_system(xml_file):
     """
     Deserialize an openmm XML file into a set of functional forms
@@ -48,10 +37,6 @@ def deserialize_system(xml_file):
     masses = []
 
     all_nrgs = []
-
-    # all_bonds = []
-    # all_angles = []
-    # all_torsions = []
 
     for child in root:
         if child.tag == 'Particles':
@@ -300,8 +285,6 @@ def deserialize_state(xml_file):
     for child in root:
         if child.tag == 'Energies':
             pot_nrg = np.float64(child.attrib['PotentialEnergy'])
-            # for subchild in child:
-                # masses.append(np.float64(subchild.attrib['mass']))
         elif child.tag == 'Positions':
             for subchild in child:
                 x, y, z = np.float64(subchild.attrib['x']), np.float64(subchild.attrib['y']), np.float64(subchild.attrib['z'])
@@ -363,6 +346,8 @@ class TestAlaAlaAla(unittest.TestCase):
         lj_nrg_val, lj_grad_val, es_nrg_val, es_grad_val = sess.run([lj_nrg_op, lj_grad_op, es_nrg_op, es_grad_op], feed_dict={x_ph: x0})
         tot_e = lj_nrg_val + es_nrg_val
         np.testing.assert_almost_equal(ref_nrg, tot_e)
+        grad_val = lj_grad_val + es_grad_val
+        np.testing.assert_almost_equal(ref_forces, grad_val*-1)
 
         # GBSA
         ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state4.xml'))
