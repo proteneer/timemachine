@@ -339,7 +339,7 @@ class TestAlaAlaAla(unittest.TestCase):
 
         # nonbonded
         ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state3.xml'))
-        lj_nrg_op, eps, sig, energy = nrgs[2].energy(x_ph)
+        lj_nrg_op = nrgs[2].energy(x_ph)
         es_nrg_op = nrgs[3].energy(x_ph)
         lj_grad_op = densify(tf.gradients(lj_nrg_op, x_ph)[0])
         es_grad_op = densify(tf.gradients(es_nrg_op, x_ph)[0])

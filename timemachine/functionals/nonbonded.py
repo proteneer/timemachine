@@ -29,25 +29,24 @@ class LeonnardJones(Energy):
     def __init__(self, params, param_idxs, scale_matrix, cutoff=None):
         """
         Implements a non-periodic LJ612 potential using the Lorentz−Berthelot terms,
-        where sig_ij = sig_i + sig_j and eps_ij = eps_i * eps_j.
+        where sig_ij = (sig_i + sig_j)/2 and eps_ij = sqrt(eps_i * eps_j).
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         params: tf.float64 variable
             list of parameters for sig and eps in LB combining rules
 
         param_idxs: tf.int32 (N,2)
             each tuple (sig, eps) is used as part of the combining rules
 
-        scale_matrix: tf.bool (N, N)
-            boolean mask denoting if interaction e[i,j] should be
-            excluded or not. If e[i,j] is 1 then the interaction
-            is excluded, 0 implies it is kept. Note that only the upper
-            right triangular portion of this is used.
+        scale_matrix: tf.float64 (N, N)
+            scale mask denoting how we should scale interaction e[i,j].
+            The elements should be between [0, 1]. If e[i,j] is 1 then the interaction
+            is fully included, 0 implies it is discarded.
 
-        box: np.array (3,)
-            Rectangular box definitions. If None then we assume the system
-            to be aperiodic. Otherwise we enforce periodic boundary conditions
+        cutoff: tf.float64
+            Whether or not we apply cutoffs to the system. Any interactions
+            greater than cutoff is fully discarded.
 
         """
         self.params = params
@@ -101,11 +100,39 @@ class LeonnardJones(Energy):
 
         energy = 4*eps_ij*(sig6-1.0)*sig6
         # divide by two to deal with symmetry
-        return tf.reduce_sum(energy, axis=-1)/2, 4*eps_ij_raw, sig_ij_raw, energy
+        return tf.reduce_sum(energy, axis=-1)/2
 
 class Electrostatic(Energy):
 
     def __init__(self, params, param_idxs, scale_matrix, cutoff=None, crf=1.0, kmax=10):
+        """
+        Implements electrostatic potential based on coloumb's law.
+
+        Parameters
+        ----------
+        params: tf.Tensor or numpy array
+            values used to look for param_idxs
+
+        param_idxs: (N,) tf.Tensor
+            indices into params for each atom corresponding to the charge
+
+        scale_matrix: (N, N) tf.Tensor
+            how much we scale each interaction by. Note that we follow OpenMM's convention,
+            if the scale_matrix[i,j] is exactly 1.0 and the cutoff is not None, then we apply
+            the crf correction. The scale matrices should be set to zero for 1-2 and 1-3 ixns.
+
+        cutoff: None or float > 0
+            whether or not we use cutoffs.
+
+        crf: float
+            how much we adjust the 1/dij in the event that we use cutoff and
+            the scale_matrix[i, j] == 1.0 
+
+        """
+
+        if cutoff is not None and cutoff <= 0.0:
+            raise ValueError("cutoff cannot be <= 0.0, did you mean None?")
+
         self.params = params
         self.param_idxs = param_idxs # length N
         self.num_atoms = len(self.param_idxs)
@@ -156,14 +183,10 @@ class Electrostatic(Energy):
             dij_inverse = tf.where(self.scale_matrix == 1.0, dij_inverse - self.crf, dij_inverse)
             qij = tf.where(d2ij < self.cutoff*self.cutoff, qij, tf.zeros_like(qij))
 
-        # (ytz): we move the sqrt to outside of the mask
-        # to avoid nans in autograd.
         direct_mask = self.scale_matrix > 0
         qij_direct_mask = tf.boolean_mask(qij, direct_mask)
         dij_inverse_mask =  tf.boolean_mask(dij_inverse, direct_mask)
         eij_direct = qij_direct_mask * dij_inverse_mask
-
-        # return tf.gradients(eij_direct, d2ij)
 
         return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1)/2, None
 
