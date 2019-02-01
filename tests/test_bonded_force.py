@@ -2,7 +2,10 @@ import unittest
 import numpy as np
 import tensorflow as tf
 from timemachine.functionals import bonded
+from tensorflow.python.ops.parallel_for.gradients import jacobian
 from timemachine import derivatives
+from timemachine.cpu_functionals import energy
+
 
 class PeriodicTorsionForceOpenMM():
 
@@ -56,6 +59,55 @@ class PeriodicTorsionForceOpenMM():
         return tf.reduce_sum(e0, axis=-1)
 
 
+class TestBonded(unittest.TestCase):
+
+    def test_harmonic_bond(self):
+        x0 = np.array([
+            [1.0, 0.2, 3.3], # H 
+            [-0.5,-1.1,-0.9], # C
+        ], dtype=np.float64)
+
+        dxdp = np.array([
+            [[1.0, 0.5, 3.3], # H 
+            [-0.5,-1.3,-0.9]], # C
+
+            [[0.3, 0.2, 3.1], # H 
+            [ 0.8,-1.1,-0.2]], # C
+
+        ], dtype=np.float64)
+
+        bond_params_np = np.array([10.0, 3.0], dtype=np.float64)
+        bond_params_tf = tf.convert_to_tensor(bond_params_np)
+        param_idxs = np.array([[0,1]], dtype=np.int32)
+        bond_idxs = np.array([[0,1]], dtype=np.int32)
+
+        ref_hb = bonded.HarmonicBond(
+            params=bond_params_tf,
+            param_idxs=param_idxs,
+            bond_idxs=bond_idxs,
+        )
+
+        test_hb = energy.HarmonicBond_double(
+            bond_params_np.reshape(-1).tolist(),
+            param_idxs.reshape(-1).tolist(),
+            bond_idxs.reshape(-1).tolist(),
+        )
+
+        x_ph = tf.placeholder(shape=(2,3), dtype=np.float64)
+        nrg_op = ref_hb.energy(x_ph)
+        ref_grad, ref_hessians, ref_mixed_partials = derivatives.compute_ghm(nrg_op, x_ph, [bond_params_tf])
+        test_nrg, test_grads, test_totals = test_hb.total_derivative(x0, dxdp)
+
+        sess = tf.Session()
+        np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
+        np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=13)
+
+        td_op = derivatives.total_derivative(ref_hessians, dxdp, ref_mixed_partials)
+        total_deriv = sess.run(td_op, feed_dict={x_ph: x0})
+        np.testing.assert_array_almost_equal(total_deriv, test_totals)
+
+
+
 class TestBondedForce(unittest.TestCase):
 
     def setUp(self):
@@ -100,6 +152,7 @@ class TestBondedForce(unittest.TestCase):
     def tearDown(self):
         tf.reset_default_graph()
 
+    @unittest.skip("fast")
     def test_torsions_with_openmm(self):
         """
         Test agreement of torsions with OpenMM's implementation of torsion terms.
