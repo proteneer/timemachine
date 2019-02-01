@@ -42,8 +42,6 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
             py_grads.mutable_data(),
             py_totals.mutable_data()
         );
-        // std::cout << "done" << std::endl;
-        // std::memcpy(py_hessians.mutable_data(), &hessians[0], hessian_size);
         return py::make_tuple(energy, py_grads, py_totals);
     });
 
