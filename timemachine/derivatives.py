@@ -59,3 +59,6 @@ def compute_ghm(energy_op, x, params):
     hess = densify(tf.hessians(energy_op, x)[0])
     mp = list_jacobian(grads, params)
     return grads, hess, mp
+
+def total_derivative(hessian, dxdp, mixed_partials):
+    return tf.einsum('ijkl,mkl->mij', hessian, tf.convert_to_tensor(dxdp)) + mixed_partials[0]
