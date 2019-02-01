@@ -64,10 +64,10 @@ public:
         ParamType kb = params[0];
         ParamType b0 = params[1];
 
-        auto dx = x0-x1;
-        auto dy = y0-y1;
-        auto dz = z0-z1;
-        auto dij = sqrt(dx*dx+dy*dy+dz*dz);
+        CoordType dx = x0-x1;
+        CoordType dy = y0-y1;
+        CoordType dz = z0-z1;
+        CoordType dij = sqrt(dx*dx+dy*dy+dz*dz);
         auto db = dij-b0;
         dxs[0] = kb*db*dx/dij;
         dxs[1] = kb*db*dy/dij;
