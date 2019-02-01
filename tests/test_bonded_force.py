@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import tensorflow as tf
 from timemachine.functionals import bonded
+from tensorflow.python.ops.parallel_for.gradients import jacobian
 from timemachine import derivatives
 
 class PeriodicTorsionForceOpenMM():
@@ -54,6 +55,47 @@ class PeriodicTorsionForceOpenMM():
 
         e0 = ks*(1+tf.cos(period * angle - phase)) # cos(a) cos(t0) + sin(a) sin(t0)
         return tf.reduce_sum(e0, axis=-1)
+
+class TestBonded(unittest.TestCase):
+
+    def tearDown(self):
+        tf.reset_default_graph()
+
+    def test_harmonic_bond(self):
+        x0 = np.array([
+            [1.0, 0.2, 3.3], # H 
+            [-0.5,-1.1,-0.9], # C
+        ], dtype=np.float64)
+
+        bond_params = [
+            tf.get_variable("HC_kb", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(10.0)),
+            tf.get_variable("HC_b0", shape=tuple(), dtype=tf.float64, initializer=tf.constant_initializer(3.0))
+        ]
+
+        hb = bonded.HarmonicBond(
+            params=bond_params,
+            bond_idxs=np.array([[0,1]], dtype=np.int32),
+            param_idxs=np.array([[0,1]], dtype=np.int32)
+        )
+
+        x_ph = tf.placeholder(shape=(2,3), dtype=np.float64)
+
+        nrg_op = hb.energy(x_ph)
+
+        hess_op = tf.hessians(nrg_op, x_ph)
+
+
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
+
+        jac_op = jacobian(derivatives.densify(tf.gradients(nrg_op, x_ph)[0]), bond_params, use_pfor=False)
+
+        print(sess.run(hess_op, feed_dict={x_ph: x0})[0].reshape((2, -1)))
+
+        print(sess.run(jac_op, feed_dict={x_ph: x0})[0].reshape((2, -1)))
+        print(sess.run(jac_op, feed_dict={x_ph: x0})[1].reshape((2, -1)))
+
+
 
 
 class TestBondedForce(unittest.TestCase):
