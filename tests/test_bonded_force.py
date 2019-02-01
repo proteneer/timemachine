@@ -152,7 +152,6 @@ class TestBondedForce(unittest.TestCase):
     def tearDown(self):
         tf.reset_default_graph()
 
-    @unittest.skip("fast")
     def test_torsions_with_openmm(self):
         """
         Test agreement of torsions with OpenMM's implementation of torsion terms.
