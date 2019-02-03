@@ -1,19 +1,15 @@
 #include <vector>
 #include <iostream>
+#include <set>
 #include <cmath>
 #include "utils.hpp"
 
-std::vector<double> r_i_real(5, 0);
-std::vector<bool> r_i_flag(5, 0);
-
-std::vector<std::complex<double> > r_i_complex(5, 0);
-std::vector<bool> r_i_flag_complex(5, 0);
 
 template<typename NumericType>
-NumericType radii(NumericType x_i, std::vector<NumericType> xs) {
+NumericType compute_radii(size_t i_idx, std::vector<NumericType> xs) {
     NumericType sum = 0;
     for(auto j=0; j < xs.size(); j++) {
-        NumericType dx = x_i - xs[j];
+        NumericType dx = xs[i_idx] - 0.5*xs[j];
         sum += dx*dx;
     }
     return sum;
@@ -21,77 +17,169 @@ NumericType radii(NumericType x_i, std::vector<NumericType> xs) {
 
 template<typename NumericType>
 NumericType energy(
-    size_t idx,
-    size_t jdx,
-    std::vector<NumericType> all_xs) {
-    
-    if(!r_i_flag[idx]) {
-        r_i_real[idx] = radii(all_xs[idx], all_xs);
-    }
-    if(!r_i_flag[jdx]) {
-        r_i_real[jdx] = radii(all_xs[jdx], all_xs);
-    }
-    NumericType r_i = r_i_real[idx];
-    NumericType r_j = r_i_real[jdx];
-
-    NumericType dx = r_i - r_j;
-    NumericType dij = sqrt(dx*dx);
-
-    return r_i * r_j * dij;
+    NumericType ri,
+    NumericType rj) {
+    NumericType dx = ri - 1.5*rj;
+    NumericType d2ij = dx*dx;
+    return d2ij;
 }
 
 template<typename NumericType>
-NumericType energy_complex(
-    size_t idx,
-    size_t jdx,
-    std::vector<NumericType> all_xs) {
-    
-    if(!r_i_flag_complex[idx]) {
-        r_i_complex[idx] = radii(all_xs[idx], all_xs);
+std::vector<NumericType> dRi_dxall(size_t i_idx, std::vector<NumericType> xs) {
+    std::vector<NumericType> grads(xs.size());
+    for(auto j=0; j < xs.size(); j++) {
+        NumericType dx = xs[i_idx] - 0.5*xs[j];
+        grads[i_idx] += 2*dx*1;
+        grads[j] += 2*dx*(-0.5);
     }
-    if(!r_i_flag_complex[jdx]) {
-        r_i_complex[jdx] = radii(all_xs[jdx], all_xs);
-    }
-    NumericType r_i = r_i_complex[idx];
-    NumericType r_j = r_i_complex[jdx];
-
-    NumericType dx = r_i - r_j;
-    NumericType dij = sqrt(dx*dx);
-
-    return r_i * r_j * dij;
+    return grads;
 }
+
 
 template<typename NumericType>
 NumericType outer_loop(std::vector<NumericType> xs) {
     NumericType nrg_sum = 0;
-    std::vector<std::complex<NumericType> > cxs = timemachine::convert_to_complex<NumericType>(xs);
-    NumericType step = 1e-100;
+    
+    double step = 1e-100;
+
+    std::vector<NumericType> R(xs.size(), 0);
+    for(size_t i=0; i < xs.size(); i++) {
+        R[i] = compute_radii(i, xs);
+    }
+    // std::cout << "---" << std::endl;
+    std::vector<NumericType> dE_dxs(xs.size(), 0.0);
+
+    // derivative of energy with respect to each radii
+
+    // for(size_t i=0; i < xs.size(); i++) {
+    //     std::complex<NumericType> cR_i = std::complex<NumericType>(R[i], step);
+    //     std::complex<NumericType> cR_j = std::complex<NumericType>(R[j], 0);
+    //     auto nrg = energy(cR_i, cR_j);
+    //     dE_dRi[i] = nrg.imag()/step;
+
+    //     cR_i = std::complex<NumericType>(R[i], 0);
+    //     cR_j = std::complex<NumericType>(R[j], step);
+    //     nrg = energy(cR_i, cR_j);
+    //     dE_dRj[i] = nrg.imag()/step;
+    // }
+    
+    std::complex<NumericType> cR_i;
+    std::complex<NumericType> cR_j;
+    std::vector<std::complex<NumericType> > cxs;
+
+    std::vector<NumericType> dRs(xs.size(), 0.0);
+
+
+    std::set<NumericType> Ri_uniques;
+    std::set<NumericType> Rj_uniques;
+
+    std::vector<std::vector<NumericType> > all_dris; // [N, N]
+    for(size_t i=0; i < xs.size(); i++) {
+        all_dris.push_back(dRi_dxall(i, xs));
+    }
+
+    std::vector<NumericType> dE_dRi_sum(xs.size(), 0);
+    std::vector<NumericType> dE_dRj_sum(xs.size(), 0);
+
+    // O(N^2) method. The tricky part is that we'd need to compute the Hessian in an efficient way as well.
+
+    // compute the derivative of the energy with respect to each radii
     for(size_t i=0; i < xs.size(); i++) {
         for(size_t j=0; j < xs.size(); j++) {
-            if(i == j) {
-                continue;
-            }
-            
-            // energy
-            nrg_sum += energy(i, j, xs);
 
-            // dE/dxi
-            cxs[i] = std::complex<NumericType>(xs[i], step);
-            std::complex<NumericType> dE_dxi = energy_complex(i, j, cxs);
+            // each interaction contributes not only to xi and xj, but also xk indirectly:
+            // dE/dRi (dRi/dxi + dRi/dxj + dRi/dxk + ... + dRi/dxn)
+            // dE/dRj (dRj/dxi + dRj/dxj + dRj/dxk + ... + dRj/dxn)
 
-            std::cout << dE_dxi.imag()/step << std::endl;
-            // dE/dxj
+            auto ixn_nrg = energy(R[i], R[j]);
+            nrg_sum += ixn_nrg;
 
+            // this part is cheap to compute but they're unique
+            cR_i = std::complex<NumericType>(R[i], step);
+            cR_j = std::complex<NumericType>(R[j], 0);
+            auto dE_dRi = energy(cR_i, cR_j).imag()/step;
 
 
+            cR_i = std::complex<NumericType>(R[i], 0);
+            cR_j = std::complex<NumericType>(R[j], step);
+            auto dE_dRj = energy(cR_i, cR_j).imag()/step;
+
+            dE_dRi_sum[i] += dE_dRi;
+            dE_dRj_sum[j] += dE_dRj;
 
         }
     }
+
+    // accumulate the energies 
+    for(size_t i=0; i < xs.size(); i++) {
+        for(size_t k=0; k < xs.size(); k++) {
+
+            auto drik = all_dris[i][k];
+            dE_dxs[k] += drik*dE_dRi_sum[i] + drik*dE_dRj_sum[i];
+
+
+            // even the analytic expression is O(N^3)
+            // auto dri = all_dris[i];
+            // auto drj = all_dris[j];
+
+
+            // for(size_t k=0; k < xs.size(); k++) {
+                // dE_dxs[k] += dE_dRi * dri[k] + dE_dRj * drj[k];
+            // }
+
+            // dE_dxs[k] += dE_dRi*drik_sum + dE_dRj*drjk_sum;
+            
+            // compute dRi_dxk - O(N^4) even less efficient!
+            // for(size_t k=0; k < xs.size(); k++) {
+            //     cxs = timemachine::convert_to_complex<NumericType>(xs);
+            //     cxs[k] = std::complex<NumericType>(xs[k], step);
+            //     auto dRi_dk = compute_radii(i, cxs).imag()/step;
+            //     auto dRj_dk = compute_radii(j, cxs).imag()/step;
+
+            //     Ri_uniques.insert(dRi_dk);
+            //     Rj_uniques.insert(dRj_dk);
+            //     std::cout << i << " " << j << " | " << k << " " << dRi_dk << " " << dRj_dk << std::endl;
+            //     dE_dxs[k] += dE_dRi*dRi_dk + dE_dRj*dRj_dk;
+            // }
+
+        }
+    }
+
+    for(auto i : Ri_uniques) {
+        std::cout << i << " ";
+    }
+    std::cout << std::endl;
+
+    for(auto j : Rj_uniques) {
+        std::cout << j << " ";
+    }
+    std::cout << std::endl;
+
+    for(size_t i=0; i < dE_dxs.size(); i++){
+        std::cout << dE_dxs[i] << " " << std::endl;
+    }
+
+    std::cout << "NRG" << nrg_sum << std::endl;
+
     return nrg_sum;
 }
 
 
 int main() {
-    std::vector<double> input({1.0, 2.0, 5.5, 1.0, 5.0});
-    std::cout << outer_loop(input) << std::endl;
+
+    // std::vector<double> xs({1.0, 2.3, 0.4, -0.3, 1.2}); // only O(N^2) unique ones
+    std::vector<double> xs({1.0, 2.3, 0.4});
+    // std::vector<double> xs({1.0, 2.3});
+    outer_loop(xs);
+
+
+    // double step = 1e-100;
+    // std::vector<std::complex<double> > cxs = timemachine::convert_to_complex<double>(xs);
+    // for(auto i=0; i < xs.size(); i++) {
+    //     cxs[i] = std::complex<double>(xs[i], step);
+    //     std::cout << outer_loop(cxs).imag()/step << std::endl;
+    //     cxs[i] = std::complex<double>(xs[i], 0);
+    // }
+
+    
 }
