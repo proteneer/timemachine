@@ -1,6 +1,5 @@
 import tensorflow as tf
 
-
 def compute_radii(xs):
     xi = tf.expand_dims(xs, 1)
     xj = tf.expand_dims(xs, 0)
@@ -19,7 +18,7 @@ def outer_loop(xs):
 if __name__ == "__main__":
     sess = tf.Session()
     # xs = tf.convert_to_tensor([1.0, 2.3, 0.4, -0.3, 1.2])
-    xs = tf.convert_to_tensor([1.0, 2.3, 0.4], dtype=tf.float64)
+    xs = tf.convert_to_tensor([1.0, 2.3, 0.4 ], dtype=tf.float64)
     # xs = tf.convert_to_tensor([1.0, 2.3], dtype=tf.float64)
     radii_op = compute_radii(xs)
     nrg_op, dE_drs = outer_loop(xs)
@@ -28,6 +27,8 @@ if __name__ == "__main__":
     
     dRdxi = tf.gradients(radii_op[0], xs)
     dRdxj = tf.gradients(radii_op[1], xs)
+
+    tf.jacobiantf.gradients(radii_op, xs)
 
     # print(sess.run([radii_op, dE_drs, dRdxi, dRdxj]))
 
