@@ -30,7 +30,7 @@ std::vector<NumericType> dRi_dxall(size_t i_idx, std::vector<NumericType> xs) {
     for(auto j=0; j < xs.size(); j++) {
         NumericType dx = xs[i_idx] - 0.5*xs[j];
         grads[i_idx] += 2*dx*1;
-        grads[j] += 2*dx*(-0.5);
+        grads[j] += 2*dx*(-0.5); // (ytz): haha i'm so smart
     }
     return grads;
 }
@@ -73,9 +73,10 @@ NumericType outer_loop(std::vector<NumericType> xs) {
     std::set<NumericType> Ri_uniques;
     std::set<NumericType> Rj_uniques;
 
-    std::vector<std::vector<NumericType> > all_dris; // [N, N]
+    // derivative of each particular Ri with respect to all the x
+    std::vector<std::vector<NumericType> > all_dr_x; // [N, N]
     for(size_t i=0; i < xs.size(); i++) {
-        all_dris.push_back(dRi_dxall(i, xs));
+        all_dr_x.push_back(dRi_dxall(i, xs));
     }
 
     std::vector<NumericType> dE_dRi_sum(xs.size(), 0);
@@ -94,11 +95,9 @@ NumericType outer_loop(std::vector<NumericType> xs) {
             auto ixn_nrg = energy(R[i], R[j]);
             nrg_sum += ixn_nrg;
 
-            // this part is cheap to compute but they're unique
             cR_i = std::complex<NumericType>(R[i], step);
             cR_j = std::complex<NumericType>(R[j], 0);
             auto dE_dRi = energy(cR_i, cR_j).imag()/step;
-
 
             cR_i = std::complex<NumericType>(R[i], 0);
             cR_j = std::complex<NumericType>(R[j], step);
@@ -114,8 +113,8 @@ NumericType outer_loop(std::vector<NumericType> xs) {
     for(size_t i=0; i < xs.size(); i++) {
         for(size_t k=0; k < xs.size(); k++) {
 
-            auto drik = all_dris[i][k];
-            dE_dxs[k] += drik*dE_dRi_sum[i] + drik*dE_dRj_sum[i];
+            auto drik = all_dr_x[i][k];
+            dE_dxs[k] += drik*(dE_dRi_sum[i] + dE_dRj_sum[i]);
 
 
             // even the analytic expression is O(N^3)
