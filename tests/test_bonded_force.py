@@ -2,7 +2,122 @@ import unittest
 import numpy as np
 import tensorflow as tf
 from timemachine.functionals import bonded
+from tensorflow.python.ops.parallel_for.gradients import jacobian
 from timemachine import derivatives
+from timemachine.cpu_functionals import energy
+
+
+class TestAngles(unittest.TestCase):
+
+    def test_harmonic_angle(self):
+        masses = np.array([6.0, 1.0, 1.0, 1.0, 1.0])
+        x0 = np.array([
+            [ 0.0637,   0.0126,   0.2203], # C
+            [ 1.0573,  -0.2011,   1.2864], # H
+            [ 2.3928,   1.2209,  -0.2230], # H
+            [-0.6891,   1.6983,   0.0780], # H
+            [-0.6312,  -1.6261,  -0.2601], # H
+        ], dtype=np.float64)
+        num_atoms = len(masses)
+        angle_params_np = np.array([75, 1.91, 0.45], dtype=np.float64)
+        angle_params_tf = tf.convert_to_tensor(angle_params_np)
+
+
+        angle_idxs = np.array([[1,0,2],[1,0,3],[1,0,4],[2,0,3],[2,0,4],[3,0,4]])
+        param_idxs = np.array([[0,1],[0,1],[0,2],[0,1],[0,1],[0,2]])
+
+        ref_ha = bonded.HarmonicAngle(
+            params=angle_params_tf,
+            angle_idxs=angle_idxs,
+            param_idxs=param_idxs,
+            cos_angles=True
+        )
+
+        test_ha = energy.HarmonicAngle_double(
+            angle_params_np.reshape(-1).tolist(),
+            param_idxs.reshape(-1).tolist(),
+            angle_idxs.reshape(-1).tolist(),
+            True,
+        )
+
+        dxdp = np.random.rand(angle_params_np.shape[0], len(masses), 3)
+
+        x_ph = tf.placeholder(shape=x0.shape, dtype=np.float64)
+        nrg_op = ref_ha.energy(x_ph)
+        ref_grad, ref_hessians, ref_mixed_partials = derivatives.compute_ghm(nrg_op, x_ph, [angle_params_tf])
+        test_nrg, test_grads, test_totals = test_ha.total_derivative(x0, dxdp)
+
+        sess = tf.Session()
+        np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
+        np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=13)
+
+        td_op = derivatives.total_derivative(ref_hessians, dxdp, ref_mixed_partials)
+        total_deriv = sess.run(td_op, feed_dict={x_ph: x0})
+        np.testing.assert_array_almost_equal(total_deriv, test_totals)
+
+
+class TestBonded(unittest.TestCase):
+
+    def test_harmonic_bond(self):
+        x0 = np.array([
+            [1.0, 0.2, 3.3], # H 
+            [-0.5,-1.1,-0.9], # C
+            [3.4, 5.5, 0.2], # H 
+        ], dtype=np.float64)
+
+        dxdp = np.array([
+            [
+             [1.0, 0.5, 3.3], # H 
+             [-0.5,-1.3,-0.9],
+             [-0.7,0.4,0.5],
+            ], # C
+
+            [
+             [0.3, 0.2, 3.1], # H 
+             [0.8,-1.1,-0.2],
+             [-0.2,0.1,0.9]
+            ],
+
+            [
+             [0.5, 0.7, 3.5], # H 
+             [0.2,-1.8,-0.2],
+             [-0.3,0.9, 0.5]
+            ], # C
+
+        ], dtype=np.float64)
+
+        bond_params_np = np.array([10.0, 3.0, 5.5], dtype=np.float64)
+        bond_params_tf = tf.convert_to_tensor(bond_params_np)
+        param_idxs = np.array([
+            [0,1],
+            [1,2],
+        ], dtype=np.int32)
+        bond_idxs = np.array([[0,1], [1,2]], dtype=np.int32)
+
+        ref_hb = bonded.HarmonicBond(
+            params=bond_params_tf,
+            param_idxs=param_idxs,
+            bond_idxs=bond_idxs,
+        )
+
+        test_hb = energy.HarmonicBond_double(
+            bond_params_np.reshape(-1).tolist(),
+            param_idxs.reshape(-1).tolist(),
+            bond_idxs.reshape(-1).tolist(),
+        )
+
+        x_ph = tf.placeholder(shape=x0.shape, dtype=np.float64)
+        nrg_op = ref_hb.energy(x_ph)
+        ref_grad, ref_hessians, ref_mixed_partials = derivatives.compute_ghm(nrg_op, x_ph, [bond_params_tf])
+        test_nrg, test_grads, test_totals = test_hb.total_derivative(x0, dxdp)
+
+        sess = tf.Session()
+        np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
+        np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=13)
+
+        td_op = derivatives.total_derivative(ref_hessians, dxdp, ref_mixed_partials)
+        total_deriv = sess.run(td_op, feed_dict={x_ph: x0})
+        np.testing.assert_array_almost_equal(total_deriv, test_totals)
 
 class PeriodicTorsionForceOpenMM():
 
@@ -56,7 +171,7 @@ class PeriodicTorsionForceOpenMM():
         return tf.reduce_sum(e0, axis=-1)
 
 
-class TestBondedForce(unittest.TestCase):
+class TestPeriodicTorsion(unittest.TestCase):
 
     def setUp(self):
         self.conformers = np.array([
@@ -99,6 +214,63 @@ class TestBondedForce(unittest.TestCase):
 
     def tearDown(self):
         tf.reset_default_graph()
+
+    def test_cpp_torsions(self):
+        """
+        Test agreement of torsions with OpenMM's implementation of torsion terms.
+        """
+
+        torsion_idxs = np.array([
+            [0, 1, 2, 3],
+            # [0, 1, 2, 3],
+            # [0, 1, 2, 3],
+        ], dtype=np.int32)
+
+        params_np = np.array([
+            2.3, # k0
+            5.4, # k1
+            9.0, # k2
+            0.0, # t0
+            3.0, # t1
+            5.8, # t2
+            1.0, # n0
+            2.0, # n1
+            3.0  # n2
+        ])
+        params_tf = tf.convert_to_tensor(params_np)
+
+        param_idxs = np.array([
+            [0, 3, 6],
+            # [1, 4, 7],
+            # [2, 5, 8]
+        ], dtype=np.int32)
+
+        x_ph = tf.placeholder(shape=(4, 3), dtype=tf.float64)
+
+        test_torsion = energy.PeriodicTorsion_double(
+            params_np.reshape(-1),
+            param_idxs.reshape(-1),
+            torsion_idxs.reshape(-1)
+        )
+        ref_nrg = bonded.PeriodicTorsion(params=params_tf, param_idxs=param_idxs, torsion_idxs=torsion_idxs)
+
+        for conf_idx, conf in enumerate(self.conformers):
+            x_ph = tf.placeholder(shape=conf.shape, dtype=np.float64)
+            nrg_op = ref_nrg.energy(x_ph)
+            angle_op = ref_nrg.angles(x_ph)
+            ref_grad, ref_hessians, ref_mixed_partials = derivatives.compute_ghm(nrg_op, x_ph, [params_tf])
+
+            # np.random.seed(0)
+            dxdp = np.random.rand(params_np.shape[0], conf.shape[0], 3)
+
+            test_nrg, test_grads, test_totals = test_torsion.total_derivative(conf, dxdp)
+            sess = tf.Session()
+            np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: conf}), decimal=13)
+            np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: conf}), decimal=13)
+
+            td_op = derivatives.total_derivative(ref_hessians, dxdp, ref_mixed_partials)
+            total_deriv = sess.run(td_op, feed_dict={x_ph: conf})
+            np.testing.assert_array_almost_equal(total_deriv, test_totals)
 
     def test_torsions_with_openmm(self):
         """
