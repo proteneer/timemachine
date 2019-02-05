@@ -62,3 +62,4 @@ def compute_ghm(energy_op, x, params):
 
 def total_derivative(hessian, dxdp, mixed_partials):
     return tf.einsum('ijkl,mkl->mij', hessian, tf.convert_to_tensor(dxdp)) + mixed_partials[0]
+
