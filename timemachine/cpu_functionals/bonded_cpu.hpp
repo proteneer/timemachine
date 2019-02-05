@@ -34,6 +34,7 @@ class PeriodicTorsion {
 private:
 
     const std::vector<NumericType> params_;
+    const std::vector<size_t> global_param_idxs_;
     const std::vector<size_t> param_idxs_;
     const std::vector<size_t> tors_idxs_;
 
@@ -42,9 +43,11 @@ public:
 
     PeriodicTorsion(
         std::vector<NumericType> params,
+        std::vector<size_t> global_param_idxs,
         std::vector<size_t> param_idxs,
         std::vector<size_t> tors_idxs
-    ) : params_(params), 
+    ) : params_(params),
+        global_param_idxs_(global_param_idxs),
         param_idxs_(param_idxs),
         tors_idxs_(tors_idxs) {};
 
@@ -219,7 +222,6 @@ public:
 
     /*
     Implements the total derivative of the gradient at a point in time. We
-declare_harmonic_bond<float>(m, "float");
     use raw pointers to make it easier to interface with the wrapper layers and
     to maintain some level of consistency with the C++ code.
     */
@@ -292,7 +294,7 @@ declare_harmonic_bond<float>(m, "float");
                 for(int k=0; k < 12; k++) {
                     ddxs[k] = dcxs[k].imag() / step;
                 }
-                size_t p_idx = param_idxs_[i*3+j];
+                size_t p_idx = global_param_idxs_[param_idxs_[i*3+j]];
                 total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += ddxs[0];
                 total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += ddxs[1];
                 total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += ddxs[2];
@@ -352,6 +354,7 @@ class HarmonicAngle {
 private:
 
     const std::vector<NumericType> params_;
+    const std::vector<size_t> global_param_idxs_;
     const std::vector<size_t> param_idxs_;
     const std::vector<size_t> angle_idxs_;
     bool cos_angles_;
@@ -361,10 +364,12 @@ public:
 
     HarmonicAngle(
         std::vector<NumericType> params,
+        std::vector<size_t> global_param_idxs,
         std::vector<size_t> param_idxs,
         std::vector<size_t> angle_idxs,
         bool cos_angles=true
     ) : params_(params), 
+        global_param_idxs_(global_param_idxs),
         param_idxs_(param_idxs),
         angle_idxs_(angle_idxs),
         cos_angles_(cos_angles) {};
@@ -533,7 +538,7 @@ public:
                 for(int k=0; k < 9; k++) {
                     ddxs[k] = dcxs[k].imag() / step;
                 }
-                size_t p_idx = param_idxs_[i*2+j];
+                size_t p_idx = global_param_idxs_[param_idxs_[i*2+j]];
                 total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += ddxs[0];
                 total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += ddxs[1];
                 total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += ddxs[2];
@@ -586,6 +591,7 @@ class HarmonicBond {
 private:
 
     const std::vector<NumericType> params_;
+    const std::vector<size_t> global_param_idxs_; // scatter_idxs
     const std::vector<size_t> param_idxs_;
     const std::vector<size_t> bond_idxs_;
 
@@ -593,9 +599,11 @@ public:
 
     HarmonicBond(
         std::vector<NumericType> params,
+        std::vector<size_t> global_param_idxs,
         std::vector<size_t> param_idxs,
         std::vector<size_t> bond_idxs
-    ) : params_(params), 
+    ) : params_(params),
+        global_param_idxs_(global_param_idxs),
         param_idxs_(param_idxs),
         bond_idxs_(bond_idxs) {};
 
@@ -725,7 +733,7 @@ public:
                 for(int k=0; k < 6; k++) {
                     ddxs[k] = dcxs[k].imag() / step;
                 }
-                size_t p_idx = param_idxs_[i*2+j];
+                size_t p_idx = global_param_idxs_[param_idxs_[i*2+j]];
                 total_out[p_idx*n_atoms*3 + s_atom_idx*3 + 0] += ddxs[0];
                 total_out[p_idx*n_atoms*3 + s_atom_idx*3 + 1] += ddxs[1];
                 total_out[p_idx*n_atoms*3 + s_atom_idx*3 + 2] += ddxs[2];

@@ -16,6 +16,7 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<NumericType>, // params
+        std::vector<size_t>, // global_param_idxs
         std::vector<size_t>, // param_idxs
         std::vector<size_t> // bond_idxs
     >())
@@ -56,6 +57,7 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<NumericType>, // params
+        std::vector<size_t>, // global_param_idxs
         std::vector<size_t>, // param_idxs
         std::vector<size_t>, // angle_idxs
         bool // whether or not we use cosine angles
@@ -97,6 +99,7 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<NumericType>, // params
+        std::vector<size_t>, // global_param_idxs
         std::vector<size_t>, // param_idxs
         std::vector<size_t>  // torsion_idxs
     >())
@@ -137,6 +140,7 @@ void declare_electrostatics(py::module &m, const char *typestr) {
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<NumericType>, // params
+        std::vector<size_t>, // global_param_idxs
         std::vector<size_t>, // param_idxs
         std::vector<NumericType>  // NxN scale_matrix
     >())
@@ -177,6 +181,7 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<NumericType>, // params
+        std::vector<size_t>, // global_param_idxs
         std::vector<size_t>, // param_idxs
         std::vector<NumericType>  // NxN scale_matrix
     >())

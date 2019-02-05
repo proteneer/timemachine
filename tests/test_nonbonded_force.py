@@ -84,6 +84,7 @@ class TestLennardJones(unittest.TestCase):
 
         test_nrg = energy.LennardJones_double(
             params_np.reshape(-1).tolist(),
+            list(range(params_np.shape[0])),
             param_idxs.reshape(-1).tolist(),
             scale_matrix.reshape(-1).tolist()
         )
@@ -261,6 +262,7 @@ class TestElectrostatics(unittest.TestCase):
 
         test_nrg = energy.Electrostatics_double(
             params_np.reshape(-1).tolist(),
+            list(range(params_np.shape[0])),
             param_idxs.reshape(-1).tolist(),
             scale_matrix.reshape(-1).tolist()
         )

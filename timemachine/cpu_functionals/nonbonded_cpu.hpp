@@ -13,6 +13,7 @@ class Electrostatics {
 private:
 
     const std::vector<NumericType> params_;
+    const std::vector<size_t> global_param_idxs_;
     const std::vector<size_t> param_idxs_;
     const std::vector<NumericType> scale_matrix_;
 
@@ -21,9 +22,11 @@ public:
 
     Electrostatics(
         std::vector<NumericType> params,
+        std::vector<size_t> global_param_idxs,
         std::vector<size_t> param_idxs,
         std::vector<NumericType> scale_matrix
-    ) : params_(params), 
+    ) : params_(params),
+        global_param_idxs_(global_param_idxs),
         param_idxs_(param_idxs),
         scale_matrix_(scale_matrix) {};
 
@@ -156,7 +159,7 @@ public:
                         ddxs[k] = dcxs[k].imag() / step;
                     }
 
-                    size_t p_idx = pidx[j];
+                    size_t p_idx = global_param_idxs_[pidx[j]];
 
                     total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += scale*ddxs[0];
                     total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += scale*ddxs[1];
@@ -204,6 +207,7 @@ class LennardJones {
 private:
 
     const std::vector<NumericType> params_;
+    const std::vector<size_t> global_param_idxs_;
     const std::vector<size_t> param_idxs_; // [N, 2] for sig eps
     const std::vector<NumericType> scale_matrix_;
 
@@ -212,9 +216,11 @@ public:
 
     LennardJones(
         std::vector<NumericType> params,
+        std::vector<size_t> global_param_idxs,
         std::vector<size_t> param_idxs,
         std::vector<NumericType> scale_matrix
     ) : params_(params), 
+        global_param_idxs_(global_param_idxs),
         param_idxs_(param_idxs),
         scale_matrix_(scale_matrix) {};
 
@@ -386,7 +392,7 @@ public:
                         ddxs[k] = dcxs[k].imag() / step;
                     }
 
-                    size_t p_idx = pidx[j];
+                    size_t p_idx = global_param_idxs_[pidx[j]];
 
                     total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += scale*ddxs[0];
                     total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += scale*ddxs[1];

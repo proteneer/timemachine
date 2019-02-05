@@ -35,6 +35,7 @@ class TestAngles(unittest.TestCase):
 
         test_ha = energy.HarmonicAngle_double(
             angle_params_np.reshape(-1).tolist(),
+            list(range(angle_params_np.shape[0])),
             param_idxs.reshape(-1).tolist(),
             angle_idxs.reshape(-1).tolist(),
             True,
@@ -102,6 +103,7 @@ class TestBonded(unittest.TestCase):
 
         test_hb = energy.HarmonicBond_double(
             bond_params_np.reshape(-1).tolist(),
+            list(range(bond_params_np.shape[0])),
             param_idxs.reshape(-1).tolist(),
             bond_idxs.reshape(-1).tolist(),
         )
@@ -222,8 +224,8 @@ class TestPeriodicTorsion(unittest.TestCase):
 
         torsion_idxs = np.array([
             [0, 1, 2, 3],
-            # [0, 1, 2, 3],
-            # [0, 1, 2, 3],
+            [0, 1, 2, 3],
+            [0, 1, 2, 3],
         ], dtype=np.int32)
 
         params_np = np.array([
@@ -241,14 +243,15 @@ class TestPeriodicTorsion(unittest.TestCase):
 
         param_idxs = np.array([
             [0, 3, 6],
-            # [1, 4, 7],
-            # [2, 5, 8]
+            [1, 4, 7],
+            [2, 5, 8]
         ], dtype=np.int32)
 
         x_ph = tf.placeholder(shape=(4, 3), dtype=tf.float64)
 
         test_torsion = energy.PeriodicTorsion_double(
             params_np.reshape(-1),
+            list(range(params_np.shape[0])),
             param_idxs.reshape(-1),
             torsion_idxs.reshape(-1)
         )
