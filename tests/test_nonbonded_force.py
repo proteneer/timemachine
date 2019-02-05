@@ -2,9 +2,9 @@ import unittest
 import numpy as np
 import tensorflow as tf
 from timemachine.functionals.nonbonded import Electrostatic, LeonnardJones
+from timemachine.cpu_functionals import energy
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine import derivatives
-
 
 
 class ReferenceLJEnergy():
@@ -171,6 +171,55 @@ class TestElectrostatics(unittest.TestCase):
 
     def tearDown(self):
         tf.reset_default_graph()
+
+    def test_electrostatics_cpu(self):
+        x0 = np.array([
+            [ 0.0637,   0.0126,   0.2203],
+            [ 1.0573,  -0.2011,   1.2864],
+            [ 2.3928,   1.2209,  -0.2230],
+            [-0.6891,   1.6983,   0.0780],
+            [-0.6312,  -1.6261,  -0.2601]
+        ], dtype=np.float64)
+
+        x_ph = tf.placeholder(shape=(5, 3), dtype=np.float64)
+
+        params_np = np.array([1.3, 0.3], dtype=np.float64)
+        params_tf = tf.convert_to_tensor(params_np)
+        param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
+        scale_matrix = np.array([
+            [  0,  1,  1,  1,0.5],
+            [  1,  0,  0,  1,  1],
+            [  1,  0,  0,  0,0.2],
+            [  1,  1,  0,  0,  1],
+            [0.5,  1,0.2,  1,  0],
+        ], dtype=np.float64)
+
+        cutoff = None
+        crf = 0.0
+
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
+
+        ref_nrg = Electrostatic(params_tf, param_idxs, scale_matrix, cutoff=cutoff, crf=crf)
+        nrg_op = ref_nrg.energy(x_ph)
+
+        test_nrg = energy.Electrostatics_double(
+            params_np.reshape(-1).tolist(),
+            param_idxs.reshape(-1).tolist(),
+            scale_matrix.reshape(-1).tolist()
+        )
+        dxdp = np.random.rand(params_np.shape[0], x0.shape[0], 3)
+
+        ref_grad, ref_hessians, ref_mixed_partials = derivatives.compute_ghm(nrg_op, x_ph, [params_tf])
+        test_nrg, test_grads, test_totals = test_nrg.total_derivative(x0, dxdp)
+
+        sess = tf.Session()
+        np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
+        np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=13)
+
+        td_op = derivatives.total_derivative(ref_hessians, dxdp, ref_mixed_partials)
+        total_deriv = sess.run(td_op, feed_dict={x_ph: x0})
+        np.testing.assert_array_almost_equal(total_deriv, test_totals)
 
     def test_electrostatics(self):
         """

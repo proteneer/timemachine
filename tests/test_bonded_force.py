@@ -260,7 +260,7 @@ class TestPeriodicTorsion(unittest.TestCase):
             angle_op = ref_nrg.angles(x_ph)
             ref_grad, ref_hessians, ref_mixed_partials = derivatives.compute_ghm(nrg_op, x_ph, [params_tf])
 
-            np.random.seed(0)
+            # np.random.seed(0)
             dxdp = np.random.rand(params_np.shape[0], conf.shape[0], 3)
 
             test_nrg, test_grads, test_totals = test_torsion.total_derivative(conf, dxdp)

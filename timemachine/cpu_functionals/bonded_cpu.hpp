@@ -7,17 +7,6 @@
 
 namespace timemachine {
 
-template<typename RealType>
-std::complex<RealType> sign(std::complex<RealType> arg) {
-    if(arg.real() == 0 && arg.imag() == 0) {
-        return std::complex<RealType>(0.0, 0.0);
-    } else {
-        auto res = arg/analytic_abs(arg);
-        std::cout << "RES: " << arg << " " << analytic_abs(arg) << " | " << res << std::endl;
-        return res;
-    }
-}
-
 float complex_atan2(float z1, float z2) {
     return std::atan2(z1, z2);
 }
@@ -38,16 +27,6 @@ std::complex<float> complex_atan2(std::complex<float> z1, std::complex<float> z2
     float imag_part = (z2.real()*z1.imag()-z1.real()*z2.imag())/(z1.real()*z1.real()+z2.real()*z2.real());
     return std::complex<float>(real_part, imag_part);
 }
-
-
-// template<typename RealType>
-// RealType sign(std::complex<RealType> arg) {
-//     if(arg.real() < 0.0) {
-//         return -1;
-//     } else {
-//         return 1;
-//     }
-// }
 
 template <typename NumericType>
 class PeriodicTorsion {
