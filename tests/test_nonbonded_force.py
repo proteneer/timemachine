@@ -82,25 +82,24 @@ class TestLennardJones(unittest.TestCase):
         ref_nrg = LeonnardJones(params_tf, param_idxs, scale_matrix, cutoff=cutoff)
         nrg_op = ref_nrg.energy(x_ph)
 
-        test_nrg = energy.LennardJones_double(
+        test_lj = energy.LennardJones_double(
             params_np.reshape(-1).tolist(),
             list(range(params_np.shape[0])),
             param_idxs.reshape(-1).tolist(),
             scale_matrix.reshape(-1).tolist()
         )
 
-        dxdp = np.random.rand(params_np.shape[0], x0.shape[0], 3)
 
-        ref_grad, ref_hessians, ref_mixed_partials = derivatives.compute_ghm(nrg_op, x_ph, [params_tf])
-        test_nrg, test_grads, test_totals = test_nrg.total_derivative(x0, dxdp)
+        ref_grad, ref_hessians, ref_mps = derivatives.compute_ghm(nrg_op, x_ph, [params_tf])
+        test_nrg, test_grads, test_hessians, test_mps = test_lj.total_derivative(x0, params_np.shape[0])
 
         sess = tf.Session()
         np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
         np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=12)
+        # tighten the tolerance for this later.
+        np.testing.assert_array_almost_equal(test_hessians, sess.run(ref_hessians, feed_dict={x_ph: x0}), decimal=11)
+        np.testing.assert_array_almost_equal(test_mps, sess.run(ref_mps[0], feed_dict={x_ph: x0}), decimal=12)
 
-        td_op = derivatives.total_derivative(ref_hessians, dxdp, ref_mixed_partials)
-        total_deriv = sess.run(td_op, feed_dict={x_ph: x0})
-        np.testing.assert_array_almost_equal(total_deriv, test_totals)
 
     def test_lj612(self):
         """
@@ -260,24 +259,21 @@ class TestElectrostatics(unittest.TestCase):
         ref_nrg = Electrostatic(params_tf, param_idxs, scale_matrix, cutoff=cutoff, crf=crf)
         nrg_op = ref_nrg.energy(x_ph)
 
-        test_nrg = energy.Electrostatics_double(
+        test_es = energy.Electrostatics_double(
             params_np.reshape(-1).tolist(),
             list(range(params_np.shape[0])),
             param_idxs.reshape(-1).tolist(),
             scale_matrix.reshape(-1).tolist()
         )
-        dxdp = np.random.rand(params_np.shape[0], x0.shape[0], 3)
 
-        ref_grad, ref_hessians, ref_mixed_partials = derivatives.compute_ghm(nrg_op, x_ph, [params_tf])
-        test_nrg, test_grads, test_totals = test_nrg.total_derivative(x0, dxdp)
+        ref_grad, ref_hessians, ref_mps = derivatives.compute_ghm(nrg_op, x_ph, [params_tf])
+        test_nrg, test_grads, test_hessians, test_mps = test_es.total_derivative(x0, params_np.shape[0])
 
         sess = tf.Session()
         np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
         np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=13)
-
-        td_op = derivatives.total_derivative(ref_hessians, dxdp, ref_mixed_partials)
-        total_deriv = sess.run(td_op, feed_dict={x_ph: x0})
-        np.testing.assert_array_almost_equal(total_deriv, test_totals)
+        np.testing.assert_array_almost_equal(test_hessians, sess.run(ref_hessians, feed_dict={x_ph: x0}), decimal=12)
+        np.testing.assert_array_almost_equal(test_mps, sess.run(ref_mps[0], feed_dict={x_ph: x0}), decimal=13)
 
     def test_electrostatics(self):
         """

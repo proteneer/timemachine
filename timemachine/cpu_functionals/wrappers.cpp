@@ -6,6 +6,10 @@
 #include "bonded_cpu.hpp"
 #include <iostream>
 
+
+#include <ctime>
+
+
 namespace py = pybind11;
 
 template<typename NumericType>
@@ -20,31 +24,38 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
         std::vector<size_t>, // param_idxs
         std::vector<size_t> // bond_idxs
     >())
-    .def("total_derivative", [](timemachine::HarmonicBond<NumericType> &hb,
+    .def("total_derivative", [](timemachine::HarmonicBond<NumericType> &nrg,
         const py::array_t<NumericType, py::array::c_style> coords,
-        const py::array_t<NumericType, py::array::c_style> dxdp) -> py::tuple {
+        ssize_t num_params) -> py::tuple {
 
-        const auto num_params = dxdp.shape()[0];
         const auto num_atoms = coords.shape()[0];
         const auto num_dims = coords.shape()[1];
 
         NumericType energy = 0;
-        py::array_t<NumericType, py::array::c_style> py_totals({num_params, num_atoms, num_dims});
         py::array_t<NumericType, py::array::c_style> py_grads({num_atoms, num_dims});
-        memset(py_totals.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
-        memset(py_grads.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims);
+        py::array_t<NumericType, py::array::c_style> py_hessians({num_atoms, num_dims, num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_mps({num_params, num_atoms, num_dims});
 
-        hb.total_derivative(
+        memset(py_grads.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims);
+        memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
+        memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+
+        std::clock_t start; double duration; start = std::clock();
+
+
+        nrg.total_derivative(
             num_atoms,
             num_params,
             coords.data(),
-            dxdp.data(),
             &energy,
             py_grads.mutable_data(),
-            py_totals.mutable_data()
+            py_hessians.mutable_data(),
+            py_mps.mutable_data()
         );
 
-        return py::make_tuple(energy, py_grads, py_totals);
+        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
+
+        return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
 
 }
@@ -62,30 +73,37 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
         std::vector<size_t>, // angle_idxs
         bool // whether or not we use cosine angles
     >())
-    .def("total_derivative", [](timemachine::HarmonicAngle<NumericType> &ha,
+    .def("total_derivative", [](timemachine::HarmonicAngle<NumericType> &nrg,
         const py::array_t<NumericType, py::array::c_style> coords,
-        const py::array_t<NumericType, py::array::c_style> dxdp) -> py::tuple {
+        ssize_t num_params) -> py::tuple {
 
-        const auto num_params = dxdp.shape()[0];
         const auto num_atoms = coords.shape()[0];
         const auto num_dims = coords.shape()[1];
 
         NumericType energy = 0;
-        py::array_t<NumericType, py::array::c_style> py_totals({num_params, num_atoms, num_dims});
         py::array_t<NumericType, py::array::c_style> py_grads({num_atoms, num_dims});
-        memset(py_totals.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
-        memset(py_grads.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims);
+        py::array_t<NumericType, py::array::c_style> py_hessians({num_atoms, num_dims, num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_mps({num_params, num_atoms, num_dims});
 
-        ha.total_derivative(
+        memset(py_grads.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims);
+        memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
+        memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+
+        std::clock_t start; double duration; start = std::clock();
+
+        nrg.total_derivative(
             num_atoms,
             num_params,
             coords.data(),
-            dxdp.data(),
             &energy,
             py_grads.mutable_data(),
-            py_totals.mutable_data()
+            py_hessians.mutable_data(),
+            py_mps.mutable_data()
         );
-        return py::make_tuple(energy, py_grads, py_totals);
+
+        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"angle: "<< duration <<'\n';
+
+        return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
 
 }
@@ -105,28 +123,35 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
     >())
     .def("total_derivative", [](timemachine::PeriodicTorsion<NumericType> &nrg,
         const py::array_t<NumericType, py::array::c_style> coords,
-        const py::array_t<NumericType, py::array::c_style> dxdp) -> py::tuple {
+        ssize_t num_params) -> py::tuple {
 
-        const auto num_params = dxdp.shape()[0];
         const auto num_atoms = coords.shape()[0];
         const auto num_dims = coords.shape()[1];
 
         NumericType energy = 0;
-        py::array_t<NumericType, py::array::c_style> py_totals({num_params, num_atoms, num_dims});
         py::array_t<NumericType, py::array::c_style> py_grads({num_atoms, num_dims});
-        memset(py_totals.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+        py::array_t<NumericType, py::array::c_style> py_hessians({num_atoms, num_dims, num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_mps({num_params, num_atoms, num_dims});
+
         memset(py_grads.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims);
+        memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
+        memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+
+        std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative(
             num_atoms,
             num_params,
             coords.data(),
-            dxdp.data(),
             &energy,
             py_grads.mutable_data(),
-            py_totals.mutable_data()
+            py_hessians.mutable_data(),
+            py_mps.mutable_data()
         );
-        return py::make_tuple(energy, py_grads, py_totals);
+
+        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"torsion: "<< duration <<'\n';
+
+        return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
 
 }
@@ -146,28 +171,36 @@ void declare_electrostatics(py::module &m, const char *typestr) {
     >())
     .def("total_derivative", [](timemachine::Electrostatics<NumericType> &nrg,
         const py::array_t<NumericType, py::array::c_style> coords,
-        const py::array_t<NumericType, py::array::c_style> dxdp) -> py::tuple {
+        ssize_t num_params) -> py::tuple {
 
-        const auto num_params = dxdp.shape()[0];
         const auto num_atoms = coords.shape()[0];
         const auto num_dims = coords.shape()[1];
 
         NumericType energy = 0;
-        py::array_t<NumericType, py::array::c_style> py_totals({num_params, num_atoms, num_dims});
         py::array_t<NumericType, py::array::c_style> py_grads({num_atoms, num_dims});
-        memset(py_totals.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+        py::array_t<NumericType, py::array::c_style> py_hessians({num_atoms, num_dims, num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_mps({num_params, num_atoms, num_dims});
+
         memset(py_grads.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims);
+        memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
+        memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+
+
+        std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative(
             num_atoms,
             num_params,
             coords.data(),
-            dxdp.data(),
             &energy,
             py_grads.mutable_data(),
-            py_totals.mutable_data()
+            py_hessians.mutable_data(),
+            py_mps.mutable_data()
         );
-        return py::make_tuple(energy, py_grads, py_totals);
+
+        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"lj612: "<< duration <<'\n';
+
+        return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
 
 }
@@ -187,28 +220,35 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
     >())
     .def("total_derivative", [](timemachine::LennardJones<NumericType> &nrg,
         const py::array_t<NumericType, py::array::c_style> coords,
-        const py::array_t<NumericType, py::array::c_style> dxdp) -> py::tuple {
+        ssize_t num_params) -> py::tuple {
 
-        const auto num_params = dxdp.shape()[0];
         const auto num_atoms = coords.shape()[0];
         const auto num_dims = coords.shape()[1];
 
         NumericType energy = 0;
-        py::array_t<NumericType, py::array::c_style> py_totals({num_params, num_atoms, num_dims});
         py::array_t<NumericType, py::array::c_style> py_grads({num_atoms, num_dims});
-        memset(py_totals.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+        py::array_t<NumericType, py::array::c_style> py_hessians({num_atoms, num_dims, num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_mps({num_params, num_atoms, num_dims});
+
         memset(py_grads.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims);
+        memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
+        memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+
+        std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative(
             num_atoms,
             num_params,
             coords.data(),
-            dxdp.data(),
             &energy,
             py_grads.mutable_data(),
-            py_totals.mutable_data()
+            py_hessians.mutable_data(),
+            py_mps.mutable_data()
         );
-        return py::make_tuple(energy, py_grads, py_totals);
+
+        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"es: "<< duration <<'\n';
+
+        return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
 
 }

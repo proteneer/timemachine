@@ -103,10 +103,10 @@ public:
         const size_t n_atoms,
         const size_t n_params,
         const NumericType* coords, // [N, 3]
-        const NumericType* dxdp, // [P, N, 3]
         NumericType* energy_out, // []
         NumericType* grad_out, // [N,3]
-        NumericType* total_out // [P, N, 3]
+        NumericType* hessian_out, // [N, 3, N, 3]
+        NumericType* mp_out // [P, N, 3]
     ) const {
 
         // use upper right symmetric later
@@ -160,13 +160,12 @@ public:
                     }
 
                     size_t p_idx = global_param_idxs_[pidx[j]];
-
-                    total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += scale*ddxs[0];
-                    total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += scale*ddxs[1];
-                    total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += scale*ddxs[2];
-                    total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 0] += scale*ddxs[3];
-                    total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 1] += scale*ddxs[4];
-                    total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 2] += scale*ddxs[5];
+                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += scale*ddxs[0];
+                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += scale*ddxs[1];
+                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += scale*ddxs[2];
+                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 0] += scale*ddxs[3];
+                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 1] += scale*ddxs[4];
+                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 2] += scale*ddxs[5];
                 }
 
                 std::array<size_t, 6> indices({
@@ -183,17 +182,18 @@ public:
                     std::array<std::complex<NumericType>, 6> cxs = timemachine::convert_to_complex(xs);
                     cxs[j] = std::complex<NumericType>(cxs[j].real(), step);
                     std::array<std::complex<NumericType>, 6> dcxs = ixn_gradient<std::complex<NumericType>, NumericType, std::complex<NumericType> >(cxs, params);
-                    std::array<NumericType, 6> ddxs;
+                    // std::array<NumericType, 6> ddxs;
                     for(int k=0; k < 6; k++) {
-                        ddxs[k] = scale*dcxs[k].imag() / step;
+                        // ddxs[k] = scale*dcxs[k].imag() / step;
+                        hessian_out[indices[j]*n_atoms*3 + indices[k]] += scale * (dcxs[k].imag() / step);
                     }
 
-                    for(size_t p=0; p < n_params; p++) {
-                        auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 0];
-                        auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 1];
-                        auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 2];
-                        total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
-                    }
+                    // for(size_t p=0; p < n_params; p++) {
+                    //     auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 0];
+                    //     auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 1];
+                    //     auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 2];
+                    //     total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
+                    // }
                 }
 
             }
@@ -328,10 +328,10 @@ public:
         const size_t n_atoms,
         const size_t n_params,
         const NumericType* coords, // [N, 3]
-        const NumericType* dxdp, // [P, N, 3]
         NumericType* energy_out, // []
         NumericType* grad_out, // [N,3]
-        NumericType* total_out // [P, N, 3]
+        NumericType* hessian_out, // [N, 3, N, 3]
+        NumericType* mp_out // [P, N, 3]
     ) const {
 
         // use upper right symmetric later
@@ -343,6 +343,7 @@ public:
             const NumericType sig0 = params_[param_idxs_[atom_0_idx*2+0]];
             const NumericType eps0 = params_[param_idxs_[atom_0_idx*2+1]];
 
+
             for(size_t atom_1_idx=atom_0_idx+1; atom_1_idx < n_atoms; atom_1_idx++ ) {
 
                 NumericType scale = scale_matrix_[atom_0_idx*n_atoms + atom_1_idx];
@@ -353,8 +354,20 @@ public:
                 const NumericType x1 = coords[atom_1_idx*3+0];
                 const NumericType y1 = coords[atom_1_idx*3+1];
                 const NumericType z1 = coords[atom_1_idx*3+2];
+
+                // NumericType dx = x0 - x1;
+                // NumericType dy = y0 - y1;
+                // NumericType dz = z0 - z1;
+
+                // NumericType dij = timemachine::norm(dx, dy, dz);
+
                 const NumericType sig1 = params_[param_idxs_[atom_1_idx*2+0]];
                 const NumericType eps1 = params_[param_idxs_[atom_1_idx*2+1]];
+
+                // NumericType sig = (sig0 + sig1)/2;
+                // if(dij > 2.5*sig) {
+                    // continue;
+                // }
 
                 std::array<NumericType, 6> xs({x0, y0, z0, x1, y1, z1});
                 std::array<NumericType, 4> params({sig0, eps0, sig1, eps1});
@@ -394,12 +407,12 @@ public:
 
                     size_t p_idx = global_param_idxs_[pidx[j]];
 
-                    total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += scale*ddxs[0];
-                    total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += scale*ddxs[1];
-                    total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += scale*ddxs[2];
-                    total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 0] += scale*ddxs[3];
-                    total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 1] += scale*ddxs[4];
-                    total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 2] += scale*ddxs[5];
+                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += scale*ddxs[0];
+                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += scale*ddxs[1];
+                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += scale*ddxs[2];
+                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 0] += scale*ddxs[3];
+                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 1] += scale*ddxs[4];
+                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 2] += scale*ddxs[5];
                 }
 
                 std::array<size_t, 6> indices({
@@ -419,14 +432,15 @@ public:
                     std::array<NumericType, 6> ddxs;
                     for(int k=0; k < 6; k++) {
                         ddxs[k] = scale*dcxs[k].imag() / step;
+                        hessian_out[indices[j]*n_atoms*3 + indices[k]] += scale*(dcxs[k].imag() / step);
                     }
 
-                    for(size_t p=0; p < n_params; p++) {
-                        auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 0];
-                        auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 1];
-                        auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 2];
-                        total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
-                    }
+                    // for(size_t p=0; p < n_params; p++) {
+                    //     auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 0];
+                    //     auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 1];
+                    //     auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 2];
+                    //     total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
+                    // }
                 }
 
             }
