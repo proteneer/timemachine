@@ -198,7 +198,7 @@ void declare_electrostatics(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"lj612: "<< duration <<'\n';
+        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"es: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -246,7 +246,7 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"es: "<< duration <<'\n';
+        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"lj612: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });

@@ -127,6 +127,11 @@ public:
                 const NumericType x1 = coords[atom_1_idx*3+0];
                 const NumericType y1 = coords[atom_1_idx*3+1];
                 const NumericType z1 = coords[atom_1_idx*3+2];
+
+                NumericType dx = x0-x1;
+                NumericType dy = y0-y1;
+                NumericType dz = z0-z1;
+
                 const NumericType q1 = params_[param_idxs_[atom_1_idx]];
 
                 std::array<NumericType, 6> xs({x0, y0, z0, x1, y1, z1});
@@ -144,57 +149,85 @@ public:
                 grad_out[atom_1_idx*3 + 1] += scale*grads[4];
                 grad_out[atom_1_idx*3 + 2] += scale*grads[5];
 
-                NumericType step = 1e-50;
+                const size_t i_idx = atom_0_idx;
+                const size_t j_idx = atom_1_idx;
+                const size_t x_dim = 0;
+                const size_t y_dim = 1;
+                const size_t z_dim = 2;
+                const size_t N = n_atoms;
 
-                // compute mixed partials, loop over all the parameters
-                // (ytz) TODO: unroll this
-                std::array<size_t, 2> pidx({param_idxs_[atom_0_idx], param_idxs_[atom_1_idx]});
-                for(size_t j=0; j < 2; j++) {
-                    std::array<std::complex<NumericType>, 2> cparams = timemachine::convert_to_complex(params);
-                    cparams[j] = std::complex<NumericType>(cparams[j].real(), step);
-                    std::array<std::complex<NumericType>, 6> dcxs = ixn_gradient<NumericType, std::complex<NumericType>, std::complex<NumericType> >(xs, cparams);
+                NumericType d2x = dx*dx;
+                NumericType d2y = dy*dy;
+                NumericType d2z = dz*dz;
 
-                    std::array<NumericType, 6> ddxs;
-                    for(int k=0; k < 6; k++) {
-                        ddxs[k] = dcxs[k].imag() / step;
-                    }
+                NumericType dij = timemachine::norm(dx, dy, dz);
+                NumericType d2ij = dij*dij;
+                NumericType d3ij = d2ij*dij;
+                NumericType d5ij = d3ij*d2ij;
 
-                    size_t p_idx = global_param_idxs_[pidx[j]];
-                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += scale*ddxs[0];
-                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += scale*ddxs[1];
-                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += scale*ddxs[2];
-                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 0] += scale*ddxs[3];
-                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 1] += scale*ddxs[4];
-                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 2] += scale*ddxs[5];
-                }
 
-                std::array<size_t, 6> indices({
-                    atom_0_idx*3+0,
-                    atom_0_idx*3+1,
-                    atom_0_idx*3+2,
-                    atom_1_idx*3+0,
-                    atom_1_idx*3+1,
-                    atom_1_idx*3+2
-                });
+                NumericType PREFACTOR_QI_GRAD = scale*ONE_4PI_EPS0*q1/d3ij;
+                NumericType PREFACTOR_QJ_GRAD = scale*ONE_4PI_EPS0*q0/d3ij;
 
-                for(size_t j=0; j < 6; j++) {
+                NumericType *mp_out_qi = mp_out + global_param_idxs_[param_idxs_[atom_0_idx]]*n_atoms*3;
+                NumericType *mp_out_qj = mp_out + global_param_idxs_[param_idxs_[atom_1_idx]]*n_atoms*3;
 
-                    std::array<std::complex<NumericType>, 6> cxs = timemachine::convert_to_complex(xs);
-                    cxs[j] = std::complex<NumericType>(cxs[j].real(), step);
-                    std::array<std::complex<NumericType>, 6> dcxs = ixn_gradient<std::complex<NumericType>, NumericType, std::complex<NumericType> >(cxs, params);
-                    // std::array<NumericType, 6> ddxs;
-                    for(int k=0; k < 6; k++) {
-                        // ddxs[k] = scale*dcxs[k].imag() / step;
-                        hessian_out[indices[j]*n_atoms*3 + indices[k]] += scale * (dcxs[k].imag() / step);
-                    }
+                // use symmetry later on
+                mp_out_qi[atom_0_idx*3 + 0] += PREFACTOR_QI_GRAD * (-dx);
+                mp_out_qi[atom_0_idx*3 + 1] += PREFACTOR_QI_GRAD * (-dy);
+                mp_out_qi[atom_0_idx*3 + 2] += PREFACTOR_QI_GRAD * (-dz);
+                mp_out_qi[atom_1_idx*3 + 0] += PREFACTOR_QI_GRAD * (dx);
+                mp_out_qi[atom_1_idx*3 + 1] += PREFACTOR_QI_GRAD * (dy);
+                mp_out_qi[atom_1_idx*3 + 2] += PREFACTOR_QI_GRAD * (dz);
 
-                    // for(size_t p=0; p < n_params; p++) {
-                    //     auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 0];
-                    //     auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 1];
-                    //     auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 2];
-                    //     total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
-                    // }
-                }
+                mp_out_qj[atom_0_idx*3 + 0] += PREFACTOR_QJ_GRAD * (-dx);
+                mp_out_qj[atom_0_idx*3 + 1] += PREFACTOR_QJ_GRAD * (-dy);
+                mp_out_qj[atom_0_idx*3 + 2] += PREFACTOR_QJ_GRAD * (-dz);
+                mp_out_qj[atom_1_idx*3 + 0] += PREFACTOR_QJ_GRAD * (dx);
+                mp_out_qj[atom_1_idx*3 + 1] += PREFACTOR_QJ_GRAD * (dy);
+                mp_out_qj[atom_1_idx*3 + 2] += PREFACTOR_QJ_GRAD * (dz);
+
+
+                NumericType inv_d5ij = 1/d5ij;
+                NumericType prefactor = scale*ONE_4PI_EPS0*q0*q1*inv_d5ij;
+
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + x_dim] += prefactor*(-d2ij + 3*d2x);
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + y_dim] += 3*prefactor*dx*dy;
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + z_dim] += 3*prefactor*dx*dz;
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + x_dim] += prefactor*(d2ij - 3*d2x);
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + y_dim] += -3*prefactor*dx*dy;
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + z_dim] += -3*prefactor*dx*dz;
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + x_dim] += 3*prefactor*dx*dy;
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + y_dim] += prefactor*(-d2ij + 3*d2y);
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + z_dim] += 3*prefactor*dy*dz;
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + x_dim] += -3*prefactor*dx*dy;
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + y_dim] += prefactor*(d2ij - 3*d2y);
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + z_dim] += -3*prefactor*dy*dz;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + x_dim] += 3*prefactor*dx*dz;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + y_dim] += 3*prefactor*dy*dz;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + z_dim] += prefactor*(-d2ij + 3*d2z);
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + x_dim] += -3*prefactor*dx*dz;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + y_dim] += -3*prefactor*dy*dz;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + z_dim] += prefactor*(d2ij - 3*d2z);
+
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + x_dim] += prefactor*(d2ij - 3*d2x);
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + y_dim] += -3*prefactor*dx*dy;
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + z_dim] += -3*prefactor*dx*dz;
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + x_dim] += prefactor*(-d2ij + 3*d2x);
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + y_dim] += 3*prefactor*dx*dy;
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + z_dim] += 3*prefactor*dx*dz;
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + x_dim] += -3*prefactor*dx*dy;
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + y_dim] += prefactor*(d2ij - 3*d2y);
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + z_dim] += -3*prefactor*dy*dz;
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + x_dim] += 3*prefactor*dx*dy;
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + y_dim] += prefactor*(-d2ij + 3*d2y);
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + z_dim] += 3*prefactor*dy*dz;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + x_dim] += -3*prefactor*dx*dz;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + y_dim] += -3*prefactor*dy*dz;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + z_dim] += prefactor*(d2ij - 3*d2z);
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + x_dim] += 3*prefactor*dx*dz;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + y_dim] += 3*prefactor*dy*dz;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + z_dim] += prefactor*(-d2ij + 3*d2z);
 
             }
         }
@@ -302,9 +335,9 @@ public:
         OutType sig12rij7 = sig12/rij7;
         OutType sig6rij4 = sig6/rij4;
 
-        OutType dEdx = 4*eps*(sig12rij7*12*dx - sig6rij4*6*dx);
-        OutType dEdy = 4*eps*(sig12rij7*12*dy - sig6rij4*6*dy);
-        OutType dEdz = 4*eps*(sig12rij7*12*dz - sig6rij4*6*dz);
+        OutType dEdx = 24*eps*dx*(sig12rij7*2 - sig6rij4);
+        OutType dEdy = 24*eps*dy*(sig12rij7*2 - sig6rij4);
+        OutType dEdz = 24*eps*dz*(sig12rij7*2 - sig6rij4);
 
         std::array<OutType, 6> grads;
 
@@ -364,7 +397,8 @@ public:
                 const NumericType sig1 = params_[param_idxs_[atom_1_idx*2+0]];
                 const NumericType eps1 = params_[param_idxs_[atom_1_idx*2+1]];
 
-                // NumericType sig = (sig0 + sig1)/2;
+                NumericType sig = (sig0 + sig1)/2;
+                NumericType eps = sqrt(eps0*eps1);
                 // if(dij > 2.5*sig) {
                     // continue;
                 // }
@@ -384,64 +418,131 @@ public:
                 grad_out[atom_1_idx*3 + 1] += scale*grads[4];
                 grad_out[atom_1_idx*3 + 2] += scale*grads[5];
 
-                NumericType step = 1e-50;
+                const size_t i_idx = atom_0_idx;
+                const size_t j_idx = atom_1_idx;
+                const size_t x_dim = 0;
+                const size_t y_dim = 1;
+                const size_t z_dim = 2;
+                const size_t N = n_atoms;
 
-                // compute mixed partials, loop over all the parameters
-                // (ytz) TODO: unroll this
-                std::array<size_t, 4> pidx({
-                    param_idxs_[atom_0_idx*2+0],
-                    param_idxs_[atom_0_idx*2+1],
-                    param_idxs_[atom_1_idx*2+0],
-                    param_idxs_[atom_1_idx*2+1]
-                });
+                NumericType dx = x0 - x1;
+                NumericType dy = y0 - y1;
+                NumericType dz = z0 - z1;
 
-                for(size_t j=0; j < 4; j++) {
-                    std::array<std::complex<NumericType>, 4> cparams = timemachine::convert_to_complex(params);
-                    cparams[j] = std::complex<NumericType>(cparams[j].real(), step);
-                    std::array<std::complex<NumericType>, 6> dcxs = ixn_gradient<NumericType, std::complex<NumericType>, std::complex<NumericType> >(xs, cparams);
+                NumericType dij = timemachine::norm(dx, dy, dz);
+                NumericType d2ij = dij*dij;
+                NumericType d4ij = d2ij*d2ij;
+                NumericType d6ij = d4ij*d2ij;
+                NumericType d8ij = d4ij*d4ij;
+                NumericType d16ij = d8ij*d8ij;
+                NumericType inv_d16ij = 1.0/d16ij;
 
-                    std::array<NumericType, 6> ddxs;
-                    for(int k=0; k < 6; k++) {
-                        ddxs[k] = dcxs[k].imag() / step;
-                    }
+                NumericType sig2 = sig*sig;
+                NumericType sig3 = sig2*sig;
+                NumericType sig5 = sig3*sig2;
+                NumericType sig6 = sig3*sig3;
+                NumericType sig11 = sig6*sig3*sig2;
+                NumericType sig12 = sig6*sig6;
 
-                    size_t p_idx = global_param_idxs_[pidx[j]];
+                NumericType prefactor = scale*eps*sig6;
 
-                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += scale*ddxs[0];
-                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += scale*ddxs[1];
-                    mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += scale*ddxs[2];
-                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 0] += scale*ddxs[3];
-                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 1] += scale*ddxs[4];
-                    mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 2] += scale*ddxs[5];
-                }
+                NumericType *mp_out_sig0 = mp_out + global_param_idxs_[param_idxs_[atom_0_idx*2+0]]*n_atoms*3;
+                NumericType *mp_out_eps0 = mp_out + global_param_idxs_[param_idxs_[atom_0_idx*2+1]]*n_atoms*3;
+                NumericType *mp_out_sig1 = mp_out + global_param_idxs_[param_idxs_[atom_1_idx*2+0]]*n_atoms*3;
+                NumericType *mp_out_eps1 = mp_out + global_param_idxs_[param_idxs_[atom_1_idx*2+1]]*n_atoms*3;
 
-                std::array<size_t, 6> indices({
-                    atom_0_idx*3+0,
-                    atom_0_idx*3+1,
-                    atom_0_idx*3+2,
-                    atom_1_idx*3+0,
-                    atom_1_idx*3+1,
-                    atom_1_idx*3+2
-                });
 
-                for(size_t j=0; j < 6; j++) {
+                NumericType rij = dx*dx + dy*dy + dz*dz;
+                NumericType rij3 = rij * rij * rij;
+                NumericType rij4 = rij3 * rij;
+                NumericType rij7 = rij4 * rij3;
 
-                    std::array<std::complex<NumericType>, 6> cxs = timemachine::convert_to_complex(xs);
-                    cxs[j] = std::complex<NumericType>(cxs[j].real(), step);
-                    std::array<std::complex<NumericType>, 6> dcxs = ixn_gradient<std::complex<NumericType>, NumericType, std::complex<NumericType> >(cxs, params);
-                    std::array<NumericType, 6> ddxs;
-                    for(int k=0; k < 6; k++) {
-                        ddxs[k] = scale*dcxs[k].imag() / step;
-                        hessian_out[indices[j]*n_atoms*3 + indices[k]] += scale*(dcxs[k].imag() / step);
-                    }
+                // (ytz): 99 % sure this loses precision so we need to refactor
+                NumericType sig12rij7 = sig12/rij7;
+                NumericType sig11rij7 = sig11/rij7;
+                NumericType sig6rij4 = sig6/rij4;
+                NumericType sig5rij4 = sig5/rij4;
 
-                    // for(size_t p=0; p < n_params; p++) {
-                    //     auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 0];
-                    //     auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 1];
-                    //     auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 2];
-                    //     total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
-                    // }
-                }
+                mp_out_eps0[atom_0_idx*3 + 0] += -scale*12*(eps1/eps)*dx*(sig12rij7*2 - sig6rij4);
+                mp_out_eps0[atom_0_idx*3 + 1] += -scale*12*(eps1/eps)*dy*(sig12rij7*2 - sig6rij4);
+                mp_out_eps0[atom_0_idx*3 + 2] += -scale*12*(eps1/eps)*dz*(sig12rij7*2 - sig6rij4);
+
+                mp_out_eps1[atom_0_idx*3 + 0] += -scale*12*(eps0/eps)*dx*(sig12rij7*2 - sig6rij4);
+                mp_out_eps1[atom_0_idx*3 + 1] += -scale*12*(eps0/eps)*dy*(sig12rij7*2 - sig6rij4);
+                mp_out_eps1[atom_0_idx*3 + 2] += -scale*12*(eps0/eps)*dz*(sig12rij7*2 - sig6rij4);
+
+                mp_out_eps0[atom_1_idx*3 + 0] +=  scale*12*(eps1/eps)*dx*(sig12rij7*2 - sig6rij4);
+                mp_out_eps0[atom_1_idx*3 + 1] +=  scale*12*(eps1/eps)*dy*(sig12rij7*2 - sig6rij4);
+                mp_out_eps0[atom_1_idx*3 + 2] +=  scale*12*(eps1/eps)*dz*(sig12rij7*2 - sig6rij4);
+
+                mp_out_eps1[atom_1_idx*3 + 0] +=  scale*12*(eps0/eps)*dx*(sig12rij7*2 - sig6rij4);
+                mp_out_eps1[atom_1_idx*3 + 1] +=  scale*12*(eps0/eps)*dy*(sig12rij7*2 - sig6rij4);
+                mp_out_eps1[atom_1_idx*3 + 2] +=  scale*12*(eps0/eps)*dz*(sig12rij7*2 - sig6rij4);
+
+                mp_out_sig0[atom_0_idx*3 + 0] += -scale*24*eps*dx*(12*sig11rij7 - 3*sig5rij4);
+                mp_out_sig0[atom_0_idx*3 + 1] += -scale*24*eps*dy*(12*sig11rij7 - 3*sig5rij4);
+                mp_out_sig0[atom_0_idx*3 + 2] += -scale*24*eps*dz*(12*sig11rij7 - 3*sig5rij4);
+
+                mp_out_sig1[atom_0_idx*3 + 0] += -scale*24*eps*dx*(12*sig11rij7 - 3*sig5rij4);
+                mp_out_sig1[atom_0_idx*3 + 1] += -scale*24*eps*dy*(12*sig11rij7 - 3*sig5rij4);
+                mp_out_sig1[atom_0_idx*3 + 2] += -scale*24*eps*dz*(12*sig11rij7 - 3*sig5rij4);
+
+                mp_out_sig0[atom_1_idx*3 + 0] +=  scale*24*eps*dx*(12*sig11rij7 - 3*sig5rij4);
+                mp_out_sig0[atom_1_idx*3 + 1] +=  scale*24*eps*dy*(12*sig11rij7 - 3*sig5rij4);
+                mp_out_sig0[atom_1_idx*3 + 2] +=  scale*24*eps*dz*(12*sig11rij7 - 3*sig5rij4);
+
+                mp_out_sig1[atom_1_idx*3 + 0] +=  scale*24*eps*dx*(12*sig11rij7 - 3*sig5rij4);
+                mp_out_sig1[atom_1_idx*3 + 1] +=  scale*24*eps*dy*(12*sig11rij7 - 3*sig5rij4);
+                mp_out_sig1[atom_1_idx*3 + 2] +=  scale*24*eps*dz*(12*sig11rij7 - 3*sig5rij4);
+
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + x_dim] += prefactor*24*(d8ij - 8*d6ij*pow(dx, 2) - 2*d2ij*sig6 + 28*pow(dx, 2)*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + y_dim] += prefactor*-96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + z_dim] += prefactor*-96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + x_dim] += prefactor*-24*(d8ij - 8*d6ij*pow(dx, 2) - 2*d2ij*sig6 + 28*pow(dx, 2)*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + y_dim] += prefactor*96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + z_dim] += prefactor*96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + x_dim] += prefactor*-96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + y_dim] += prefactor*24*(d8ij - 8*d6ij*pow(dy, 2) - 2*d2ij*sig6 + 28*pow(dy, 2)*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + z_dim] += prefactor*-96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + x_dim] += prefactor*96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + y_dim] += prefactor*-24*(d8ij - 8*d6ij*pow(dy, 2) - 2*d2ij*sig6 + 28*pow(dy, 2)*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + z_dim] += prefactor*96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + x_dim] += prefactor*-96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + y_dim] += prefactor*-96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + z_dim] += prefactor*24*(d8ij - 8*d6ij*pow(dz, 2) - 2*d2ij*sig6 + 28*pow(dz, 2)*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + x_dim] += prefactor*96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + y_dim] += prefactor*96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + z_dim] += prefactor*-24*(d8ij - 8*d6ij*pow(dz, 2) - 2*d2ij*sig6 + 28*pow(dz, 2)*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + x_dim] += prefactor*-24*(d8ij - 8*d6ij*pow(dx, 2) - 2*d2ij*sig6 + 28*pow(dx, 2)*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + y_dim] += prefactor*96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + z_dim] += prefactor*96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + x_dim] += prefactor*24*(d8ij - 8*d6ij*pow(dx, 2) - 2*d2ij*sig6 + 28*pow(dx, 2)*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + y_dim] += prefactor*-96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + z_dim] += prefactor*-96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + x_dim] += prefactor*96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + y_dim] += prefactor*-24*(d8ij - 8*d6ij*pow(dy, 2) - 2*d2ij*sig6 + 28*pow(dy, 2)*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + i_idx * 3 + z_dim] += prefactor*96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + x_dim] += prefactor*-96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + y_dim] += prefactor*24*(d8ij - 8*d6ij*pow(dy, 2) - 2*d2ij*sig6 + 28*pow(dy, 2)*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + z_dim] += prefactor*-96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + x_dim] += prefactor*96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + y_dim] += prefactor*96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + i_idx * 3 + z_dim] += prefactor*-24*(d8ij - 8*d6ij*pow(dz, 2) - 2*d2ij*sig6 + 28*pow(dz, 2)*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + x_dim] += prefactor*-96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + y_dim] += prefactor*-96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[j_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + z_dim] += prefactor*24*(d8ij - 8*d6ij*pow(dz, 2) - 2*d2ij*sig6 + 28*pow(dz, 2)*sig6)*inv_d16ij;
+
+                // for(size_t j=0; j < 6; j++) {
+
+                //     std::array<std::complex<NumericType>, 6> cxs = timemachine::convert_to_complex(xs);
+                //     cxs[j] = std::complex<NumericType>(cxs[j].real(), step);
+                //     std::array<std::complex<NumericType>, 6> dcxs = ixn_gradient<std::complex<NumericType>, NumericType, std::complex<NumericType> >(cxs, params);
+                //     std::array<NumericType, 6> ddxs;
+                //     for(int k=0; k < 6; k++) {
+                //         ddxs[k] = scale*dcxs[k].imag() / step;
+                //         hessian_out[indices[j]*n_atoms*3 + indices[k]] += scale*(dcxs[k].imag() / step);
+                //     }
+                // }
 
             }
         }
