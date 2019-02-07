@@ -350,8 +350,8 @@ class TestSpeed(unittest.TestCase):
 
     def test_ala(self):
 
-        masses, nrgs, n_params = deserialize_system('/Users/hessian/Code/timemachine/system.xml')
-        ref_nrg, x0, velocities, ref_forces = deserialize_state('/Users/hessian/Code/timemachine/state0.xml')
+        masses, nrgs, n_params = deserialize_system('/home/yutong/Code/timemachine/system.xml')
+        ref_nrg, x0, velocities, ref_forces = deserialize_state('/home/yutong/Code/timemachine/state0.xml')
 
         num_atoms = x0.shape[0]
 

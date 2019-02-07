@@ -15,6 +15,53 @@ inline void cublasAssert(cublasStatus_t code, const char *file, int line, bool a
    }
 }
 
+#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+{
+   if (code != cudaSuccess) 
+   {
+      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+      if (abort) exit(code);
+   }
+}
+
+template<typename NumericType>
+__global__ void reduce_total(
+    NumericType coeff_a,
+    NumericType *coeff_bs,
+    NumericType *buffer,
+    size_t k, // starting window slot
+    size_t W, // number of windows
+    size_t PN3 // PN3
+    ) {
+
+    NumericType prefactor = 0.0;
+    NumericType a_n = 1.0;
+    NumericType accum = 0.0;
+
+    // divide up in multiple grids
+    for(size_t w=k; w < W; w++) {
+
+        size_t w_pn3_idx = w*PN3 + blockIdx.x*blockDim.x + threadIdx.x;
+
+        // size_t pn3_idx = blockIdx.x*blockDim.x + threadIdx.x;
+        if(w_pn3_idx >= W * PN3) {
+            // happens on the last warp
+            return;
+        }
+
+ 
+        prefactor += a_n;
+        a_n *= coeff_a;
+        accum += prefactor*buffer[w_pn3_idx];
+    }
+    size_t pn3_idx = k*W*PN3 + blockIdx.x*blockDim.x + threadIdx.x;
+    // coeff_b's can be optimized into smaller chunks.
+    buffer[pn3_idx] = coeff_bs[pn3_idx] * accum;
+    // overwrite into w slot
+}
+
+
 namespace timemachine {
 
 template<typename NumericType>
@@ -56,6 +103,14 @@ public:
                     &beta,
                     d_C, N3));
     }
+
+    // void reduce_total_derivatives(
+    //     NumericType *d_A,
+    //     size_t W,
+    //     size_t B) {
+
+
+    // }
 
 };
 
