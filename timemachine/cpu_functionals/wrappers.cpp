@@ -2,6 +2,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
+#include "integrator.hpp"
 #include "nonbonded_cpu.hpp"
 #include "bonded_cpu.hpp"
 #include <iostream>
@@ -205,7 +206,6 @@ void declare_electrostatics(py::module &m, const char *typestr) {
 
 }
 
-
 template<typename NumericType>
 void declare_lennard_jones(py::module &m, const char *typestr) {
 
@@ -253,6 +253,55 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
 
 }
 
+
+template<typename NumericType>
+void declare_integrator(py::module &m, const char *typestr) {
+
+    using Class = timemachine::Integrator<NumericType>;
+    std::string pyclass_name = std::string("Integrator_") + typestr;
+    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    .def(py::init<
+        NumericType, // coeff_a, 
+        int, // W,
+        int, // N,
+        int, // P,
+        std::vector<NumericType> 
+    >())
+    .def("step", [](timemachine::Integrator<NumericType> &intg,
+    const py::array_t<NumericType, py::array::c_style> hessians,
+    const py::array_t<NumericType, py::array::c_style> mixed_partials) -> std::vector<NumericType> {
+        std::cout << "WTF" << std::endl;
+    });
+
+    // .def("step", [](timemachine::Integrator<NumericType> &intg,
+    //     const py::array_t<NumericType, py::array::c_style> hessians,
+    //     const py::array_t<NumericType, py::array::c_style> mixed_partials) -> std::vector<NumericType> {
+
+    //     const auto P = mixed_partials.shape()[0];
+    //     const auto N = mixed_partials.shape()[1];
+    //     const auto D = mixed_partials.shape()[2];
+
+    //     NumericType *d_hessians;
+    //     NumericType *d_mixed_partials;
+
+    //     gpuErrchk(cudaMalloc((void**)&d_hessians, N*3*N*3*sizeof(NumericType)));
+    //     gpuErrchk(cudaMalloc((void**)&d_mixed_partials, P*N*3*sizeof(NumericType)));
+
+    //     gpuErrchk(cudaMemcpy(d_hessians, hessians.data(), N*3*N*3*sizeof(NumericType), cudaMemcpyHostToDevice));
+    //     gpuErrchk(cudaMemcpy(d_mixed_partials, mixed_partials.data(), P*N*3*sizeof(NumericType), cudaMemcpyHostToDevice));
+
+    //     intg.step_gpu(d_hessians, d_mixed_partials);
+
+    //     gpuErrchk(cudaFree(d_hessians));
+    //     gpuErrchk(cudaFree(d_mixed_partials));
+
+    //     return intg.get_dxdp();
+
+    // });
+
+}
+
+
 PYBIND11_MODULE(energy, m) {
 
 declare_harmonic_bond<double>(m, "double");
@@ -269,5 +318,7 @@ declare_electrostatics<float>(m, "float");
 
 declare_lennard_jones<double>(m, "double");
 declare_lennard_jones<float>(m, "float");
+
+declare_integrator<float>(m, "float");
 
 }
