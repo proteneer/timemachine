@@ -9,6 +9,10 @@
 
 namespace timemachine {
 
+// Integrator owns *everything*. This design basically
+// goes against the design of almost every text-book pattern.
+// We store all memory intensive elements in here to make it easy
+// to keep track of pointers and estimate total ram use.    
 template<typename NumericType>
 class Integrator {
 
@@ -28,6 +32,9 @@ private:
     NumericType *d_converged_buffer_;
     NumericType *d_coeff_bs_;
 
+    NumericType *d_hessians_;
+    NumericType *d_mixed_partials_;
+
     NumericType coeff_a_;
 
     void reduce_buffers(const NumericType *d_Dx_t, int window_k);
@@ -40,6 +47,14 @@ private:
 public:
 
     std::vector<NumericType> get_dxdp() const;
+
+    NumericType* get_device_hessians() {
+        return d_hessians_;
+    };
+
+    NumericType* get_device_mixed_partials() {
+        return d_mixed_partials_;
+    };
 
     Integrator(
         NumericType coeff_a,

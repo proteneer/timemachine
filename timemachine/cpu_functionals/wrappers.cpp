@@ -269,40 +269,16 @@ void declare_integrator(py::module &m, const char *typestr) {
     >())
     .def("step", [](timemachine::Integrator<NumericType> &intg,
     const py::array_t<NumericType, py::array::c_style> hessians,
-    const py::array_t<NumericType, py::array::c_style> mixed_partials) -> std::vector<NumericType> {
-        std::cout << "WTF" << std::endl;
+    const py::array_t<NumericType, py::array::c_style> mixed_partials) -> void {
+        intg.step_cpu(hessians.data(), mixed_partials.data());
+    })
+    .def("get_dxdp", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
+        return intg.get_dxdp();
     });
-
-    // .def("step", [](timemachine::Integrator<NumericType> &intg,
-    //     const py::array_t<NumericType, py::array::c_style> hessians,
-    //     const py::array_t<NumericType, py::array::c_style> mixed_partials) -> std::vector<NumericType> {
-
-    //     const auto P = mixed_partials.shape()[0];
-    //     const auto N = mixed_partials.shape()[1];
-    //     const auto D = mixed_partials.shape()[2];
-
-    //     NumericType *d_hessians;
-    //     NumericType *d_mixed_partials;
-
-    //     gpuErrchk(cudaMalloc((void**)&d_hessians, N*3*N*3*sizeof(NumericType)));
-    //     gpuErrchk(cudaMalloc((void**)&d_mixed_partials, P*N*3*sizeof(NumericType)));
-
-    //     gpuErrchk(cudaMemcpy(d_hessians, hessians.data(), N*3*N*3*sizeof(NumericType), cudaMemcpyHostToDevice));
-    //     gpuErrchk(cudaMemcpy(d_mixed_partials, mixed_partials.data(), P*N*3*sizeof(NumericType), cudaMemcpyHostToDevice));
-
-    //     intg.step_gpu(d_hessians, d_mixed_partials);
-
-    //     gpuErrchk(cudaFree(d_hessians));
-    //     gpuErrchk(cudaFree(d_mixed_partials));
-
-    //     return intg.get_dxdp();
-
-    // });
 
 }
 
-
-PYBIND11_MODULE(energy, m) {
+PYBIND11_MODULE(custom_ops, m) {
 
 declare_harmonic_bond<double>(m, "double");
 declare_harmonic_bond<float>(m, "float");

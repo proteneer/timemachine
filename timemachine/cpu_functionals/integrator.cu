@@ -70,6 +70,7 @@ __global__ void reduce_total(
         int slot_idx = slot*PN3 + blockIdx.x*blockDim.x + threadIdx.x;
         prefactor += a_n;
         a_n *= coeff_a;
+        printf("%d %d %f\n", i, blockIdx.x*blockDim.x + threadIdx.x, total_buffer[slot_idx]);
         accum += prefactor*total_buffer[slot_idx];
     }
 
@@ -109,11 +110,13 @@ Integrator<NumericType>::Integrator(
     gpuErrchk(cudaMalloc((void**)&d_converged_buffer_, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_coeff_bs_, P_*N_*3*sizeof(NumericType)));
 
+    gpuErrchk(cudaMalloc((void**)&d_hessians_, N_*3*N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMalloc((void**)&d_mixed_partials_, P_*N_*3*sizeof(NumericType)));
     // 2. Memset
     gpuErrchk(cudaMemset(d_dxdp_t_, 0.0, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_total_buffer_, 0.0, W_*P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_converged_buffer_, 0.0, P_*N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMemcpy(d_coeff_bs_, &coeff_bs[0], P*N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_coeff_bs_, &coeff_bs[0], P_*N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
     cublasErrchk(cublasCreate(&cb_handle_));
 
@@ -127,17 +130,32 @@ Integrator<NumericType>::~Integrator() {
     gpuErrchk(cudaFree(d_converged_buffer_));
     gpuErrchk(cudaFree(d_coeff_bs_));
 
+    gpuErrchk(cudaFree(d_hessians_));
+    gpuErrchk(cudaFree(d_mixed_partials_));
+
     cublasErrchk(cublasDestroy(cb_handle_));
 }
 
+
+// dangerous! not exception safe.
+template<typename NumericType> 
+void Integrator<NumericType>::step_cpu(
+    const NumericType *h_hessians,
+    const NumericType *h_mixed_partials) {
+
+    gpuErrchk(cudaMemcpy(d_hessians_, h_hessians, N_*3*N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_mixed_partials_, h_mixed_partials, P_*N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
+
+    step_gpu(d_hessians_, d_mixed_partials_);
+}
 
 template<typename NumericType> 
 void Integrator<NumericType>::step_gpu(
     const NumericType *d_hessians,
     NumericType *d_mixed_partials) {
 
-    hessian_vector_product(d_hessians, d_dxdp_t_, d_mixed_partials);
-    reduce_buffers(d_mixed_partials, step_ % W_);
+    // hessian_vector_product(d_hessians_, d_dxdp_t_, d_mixed_partials);
+    reduce_buffers(d_mixed_partials_, step_ % W_);
 
 }
 
