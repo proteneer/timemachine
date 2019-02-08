@@ -27,8 +27,6 @@ Each thread processes 1 out of [P,N,3] elements.
 
 */
 
-
-
 template<typename NumericType>
 __global__ void reduce_total(
     NumericType coeff_a,
@@ -70,17 +68,18 @@ __global__ void reduce_total(
         int slot_idx = slot*PN3 + blockIdx.x*blockDim.x + threadIdx.x;
         prefactor += a_n;
         a_n *= coeff_a;
-        printf("%d %d %f\n", i, blockIdx.x*blockDim.x + threadIdx.x, total_buffer[slot_idx]);
+        // printf("%d %d %f\n", i, blockIdx.x*blockDim.x + threadIdx.x, total_buffer[slot_idx]);
+        // printf("%d %d %f\n", i, blockIdx.x*blockDim.x + threadIdx.x, total_buffer[slot_idx]);
         accum += prefactor*total_buffer[slot_idx];
     }
 
     // 5. Compute new dxdp_t
     // (ytz). coeff_b's can be optimized into smaller chunks.
-    dxdp_t[local_idx] = coeff_bs[local_idx] * accum + prefactor * converged_buffer[local_idx];
+    dxdp_t[local_idx] = -coeff_bs[local_idx] * (accum + prefactor * converged_buffer[local_idx]);
 
 }
 
-
+#include <iostream>
 namespace timemachine {
 
 
@@ -104,6 +103,19 @@ Integrator<NumericType>::Integrator(
     step_(0),
     coeff_a_(coeff_a) {
 
+    if(coeff_bs.size() != N) {
+        throw(std::runtime_error("Expected coeffbs to be PxNx3 shape"));
+    }
+
+    std::vector<NumericType> expanded_coeff_bs(P*N*3);
+    for(size_t p=0; p < P; p++) {
+        for(size_t n=0; n < N; n++) {
+            for(size_t d=0; d < 3; d++) {
+                expanded_coeff_bs[p*N*3+n*3+d] = coeff_bs[n];
+            }
+        }
+    }
+
     // 1. Allocate memory on the GPU
     gpuErrchk(cudaMalloc((void**)&d_dxdp_t_, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_total_buffer_, W_*P_*N_*3*sizeof(NumericType)));
@@ -116,7 +128,7 @@ Integrator<NumericType>::Integrator(
     gpuErrchk(cudaMemset(d_dxdp_t_, 0.0, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_total_buffer_, 0.0, W_*P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_converged_buffer_, 0.0, P_*N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMemcpy(d_coeff_bs_, &coeff_bs[0], P_*N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_coeff_bs_, &expanded_coeff_bs[0], P_*N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
     cublasErrchk(cublasCreate(&cb_handle_));
 
@@ -154,8 +166,19 @@ void Integrator<NumericType>::step_gpu(
     const NumericType *d_hessians,
     NumericType *d_mixed_partials) {
 
-    // hessian_vector_product(d_hessians_, d_dxdp_t_, d_mixed_partials);
+    hessian_vector_product(d_hessians_, d_dxdp_t_, d_mixed_partials);
+
+    // std::vector<NumericType> debug(P_*N_*3);
+    // gpuErrchk(cudaMemcpy(&debug[0], d_mixed_partials, sizeof(float)*P_*N_*3, cudaMemcpyDeviceToHost));
+    // for(size_t i=0; i < P_*N_*3; i++) {
+    //     std::cout << "hvp:" << debug[i] << " " << std::endl;
+    // }
+
+    std::cout << "STEPPING INTO: " << step_ % W_ << std::endl;
+
     reduce_buffers(d_mixed_partials_, step_ % W_);
+
+    step_ += 1;
 
 }
 
