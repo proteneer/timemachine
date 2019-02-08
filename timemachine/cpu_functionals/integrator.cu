@@ -70,6 +70,11 @@ __global__ void reduce_total(
         a_n *= coeff_a;
         // printf("%d %d %f\n", i, blockIdx.x*blockDim.x + threadIdx.x, total_buffer[slot_idx]);
         // printf("%d %d %f\n", i, blockIdx.x*blockDim.x + threadIdx.x, total_buffer[slot_idx]);
+
+        if(local_idx == 0) {
+            printf("w: %d, pref: %f, tot_buf: %f\n", i, prefactor, total_buffer[slot_idx]);
+        }
+
         accum += prefactor*total_buffer[slot_idx];
     }
 
@@ -191,8 +196,8 @@ void Integrator<NumericType>::reduce_buffers(const NumericType *d_Dx_t, int wind
 
     reduce_total<NumericType><<<n_blocks, tpb>>>(
         coeff_a_,
-        d_Dx_t,
         d_coeff_bs_,
+        d_Dx_t,
         d_total_buffer_,
         d_converged_buffer_,
         d_dxdp_t_,
@@ -216,8 +221,8 @@ void Integrator<NumericType>::hessian_vector_product(
  
     const size_t N3 = N_*3;
 
-    // replace with DGEMM later
-    cublasErrchk(cublasSgemm(cb_handle_,
+    // replace with SGEMM later
+    cublasErrchk(cublasDgemm(cb_handle_,
         CUBLAS_OP_N, CUBLAS_OP_N, // whether or not we transpose A
         N3, P_, N3,
         &alpha,
@@ -229,5 +234,5 @@ void Integrator<NumericType>::hessian_vector_product(
 
 }
 
-template class timemachine::Integrator<float>;
-// template class timemachine::Integrator<double>;
+// template class timemachine::Integrator<float>;
+template class timemachine::Integrator<double>;
