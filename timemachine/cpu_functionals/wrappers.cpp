@@ -261,20 +261,39 @@ void declare_integrator(py::module &m, const char *typestr) {
     std::string pyclass_name = std::string("Integrator_") + typestr;
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
-        NumericType, // coeff_a, 
+        NumericType, // dt
         int, // W,
         int, // N,
         int, // P,
-        std::vector<NumericType> 
+        NumericType, // coeff_a, 
+        std::vector<NumericType>,  // coeff_Bs
+        std::vector<NumericType>  // coeff_Css
     >())
     .def("step", [](timemachine::Integrator<NumericType> &intg,
+    const py::array_t<NumericType, py::array::c_style> grads,
     const py::array_t<NumericType, py::array::c_style> hessians,
     const py::array_t<NumericType, py::array::c_style> mixed_partials) -> void {
-        intg.step_cpu(hessians.data(), mixed_partials.data());
+        intg.step_cpu(grads.data(), hessians.data(), mixed_partials.data());
     })
     .def("get_dxdp", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
         return intg.get_dxdp();
+    })
+    .def("get_noise", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
+        return intg.get_noise();
+    })
+    .def("get_coordinates", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
+        return intg.get_coordinates();
+    })
+    .def("get_velocities", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
+        return intg.get_velocities();
+    })
+    .def("set_coordinates", [](timemachine::Integrator<NumericType> &intg, std::vector<NumericType> arg) -> void {
+        return intg.set_coordinates(arg);
+    })
+    .def("set_velocities", [](timemachine::Integrator<NumericType> &intg, std::vector<NumericType> arg) -> void {
+        return intg.set_velocities(arg);
     });
+
 
 }
 

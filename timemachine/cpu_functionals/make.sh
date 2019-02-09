@@ -13,4 +13,4 @@ fi
 
 nvcc -Xcompiler="-fPIC" -std=c++11 integrator.cu -c
 
-g++ -O3 -march=native -Wall -shared -std=c++11 -fPIC $PLATFORM_FLAGS `python3 -m pybind11 --includes` -L/usr/local/cuda-9.0/lib64/ -I/usr/local/cuda-9.0/include/ wrappers.cpp integrator.o -o custom_ops`python3-config --extension-suffix` -lcublas -lcudart
+g++ -O3 -march=native -Wall -shared -std=c++11 -fPIC $PLATFORM_FLAGS `python3 -m pybind11 --includes` -L/usr/local/cuda-9.0/lib64/ -I/usr/local/cuda-9.0/include/ wrappers.cpp integrator.o -o custom_ops`python3-config --extension-suffix` -lcurand -lcublas -lcudart

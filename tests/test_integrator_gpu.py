@@ -8,13 +8,22 @@ from timemachine.cpu_functionals import custom_ops
 class ReferenceIntegrator():
 
     def __init__(self,
+        x_t,
+        v_t,
+        noise,
         grads,
         hessians,
         mixed_partials,
+        dt,
         coeff_a,
         coeff_bs,
+        coeff_cs,
         buffer_size,
         precision=tf.float64):
+
+        self.x_t = x_t
+        self.v_t = v_t
+        self.dt = dt
 
         self.num_params = mixed_partials.shape[0]
         self.num_atoms = mixed_partials.shape[1]
@@ -23,6 +32,7 @@ class ReferenceIntegrator():
         self.d2E_dxdp = mixed_partials
         self.ca = coeff_a
         self.cbs = coeff_bs
+        self.ccs = coeff_cs
 
         self.scale = (1-tf.pow(self.ca, tf.range(buffer_size, dtype=precision)+1))/(1-self.ca)
         self.scale = tf.reverse(self.scale, [0])
@@ -53,6 +63,7 @@ class ReferenceIntegrator():
             dtype=precision,
             initializer=tf.initializers.zeros)
 
+
         self.initializers.append(self.converged_Dps.initializer)
 
         num_dims = 3
@@ -79,6 +90,11 @@ class ReferenceIntegrator():
 
         self.dxdp_t_assign = tf.assign(self.dxdp_t, new_dxdp_t)
 
+        self.new_v_t = self.ca*self.v_t - self.cbs*self.dE_dx + self.ccs*noise
+        self.new_x_t = self.x_t + self.new_v_t * self.dt
+
+
+
 class TestReduction(unittest.TestCase):
 
     def tearDown(self):
@@ -95,6 +111,8 @@ class TestReduction(unittest.TestCase):
         num_atoms = masses.shape[0]
 
         x_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
+        v_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
+        noise_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
         grad_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
         hessian_ph = tf.placeholder(shape=(num_atoms, 3, num_atoms, 3), dtype=np.float64)
         mixed_partial_ph = tf.placeholder(shape=(5, num_atoms, 3), dtype=np.float64)
@@ -103,29 +121,44 @@ class TestReduction(unittest.TestCase):
 
         coeff_a = np.float64(0.5)
         coeff_bs = np.expand_dims(np.array(masses), axis=1)
+        coeff_cs = np.expand_dims(1/np.array(masses), axis=1)
         buffer_size = 3
+        dt = 0.03
 
         ref_intg = ReferenceIntegrator(
+            x_ph,
+            v_ph,
+            noise_ph,
             grad_ph,
             hessian_ph,
             mixed_partial_ph,
+            dt,
             coeff_a,
             coeff_bs,
+            coeff_cs,
             buffer_size,
             precision=tf.float64)
 
         gpu_intg = custom_ops.Integrator_double(
-            coeff_a,
+            dt,
             buffer_size,
             num_atoms,
             num_params,
-            coeff_bs.reshape(-1).tolist()
+            coeff_a,
+            coeff_bs.reshape(-1).tolist(),
+            coeff_cs.reshape(-1).tolist()
         )
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
 
         num_steps = 10
+
+        x_t = np.random.rand(num_atoms,3).astype(dtype=np.float64)-0.5
+        v_t = np.random.rand(num_atoms,3).astype(dtype=np.float64)-0.5
+
+        gpu_intg.set_coordinates(x_t.reshape(-1).tolist());
+        gpu_intg.set_velocities(v_t.reshape(-1).tolist());
 
         for step in range(num_steps):
             # -0.5 is to avoid exccess accumulation
@@ -136,19 +169,33 @@ class TestReduction(unittest.TestCase):
             hessian = hessian.reshape((num_atoms, 3, num_atoms, 3))
             mixed_partial = np.random.rand(num_params,num_atoms,3).astype(dtype=np.float64)-0.5
 
-            ref_dxdp_val = sess.run(ref_intg.dxdp_t_assign, feed_dict={
+            gpu_intg.step(grad, hessian, mixed_partial)
+            test_dxdp_val = gpu_intg.get_dxdp()
+            test_x_t_val = gpu_intg.get_coordinates()
+            test_v_t_val = gpu_intg.get_velocities()
+            test_noise = gpu_intg.get_noise()
+
+            new_x, new_v, ref_dxdp_val = sess.run([ref_intg.new_x_t, ref_intg.new_v_t, ref_intg.dxdp_t_assign], feed_dict={
+                x_ph: x_t,
+                v_ph: v_t,
+                noise_ph: np.array(test_noise).reshape(num_atoms, 3),
                 grad_ph: grad,
                 hessian_ph: hessian,
-                mixed_partial_ph: mixed_partial})
+                mixed_partial_ph: mixed_partial
+            })
 
-            gpu_intg.step(hessian, mixed_partial)
-            test_dxdp_val = gpu_intg.get_dxdp()
+            np.testing.assert_allclose(test_v_t_val, new_v.reshape(-1))
+            np.testing.assert_allclose(test_x_t_val, new_x.reshape(-1))
+
+            x_t = new_x
+            v_t = new_v
 
             np.testing.assert_allclose(
                 test_dxdp_val,
                 ref_dxdp_val.reshape(-1)
             )
 
+            # assert 0
 
 
 if __name__ == "__main__":
