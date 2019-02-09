@@ -226,9 +226,6 @@ class TestGPUIntegrator(unittest.TestCase):
             cpu_hess = np.array(cpu_hess0) + np.array(cpu_hess1)
             cpu_mixed = np.array(cpu_mixed0) + np.array(cpu_mixed1)
 
-
-            print(step, "cpu_hess", cpu_hess.shape)
-
             gpu_intg.step(cpu_grad, cpu_hess, cpu_mixed)
             xt = np.reshape(gpu_intg.get_coordinates(), (num_atoms, 3))
 
@@ -244,68 +241,8 @@ class TestGPUIntegrator(unittest.TestCase):
         cpu_dxdp = np.array(gpu_intg.get_dxdp()).reshape(total_params, num_atoms, 3)
         ref_dxdp_bonds, ref_dxdp_angles = sess.run([ref_dxdp_hb_op, ref_dxdp_ha_op], feed_dict={x_ph: x0})
 
-        print(cpu_dxdp[2:], ref_dxdp_angles)
-
         np.testing.assert_array_almost_equal(cpu_dxdp[:2], ref_dxdp_bonds)
         np.testing.assert_array_almost_equal(cpu_dxdp[2:], ref_dxdp_angles)
-            # test_v_t_val = gpu_intg.get_velocities()
-            # test_noise = gpu_intg.get_noise()
-
-
-
-
-
-        # test_intg = integrator.LangevinIntegrator(masses, x_ph, None, [hb, ha], dt, friction, temp)
-        # dx_op, dxdps_op = test_intg.step_op()
-        # # dxdps_op = tf.reduce_sum(dxdps_op, axis=[1,2])
-
-        # sess = tf.Session()
-        # sess.run(tf.initializers.global_variables())
-
-        # ref_x_final, ref_dxdp_hb, ref_dxdp_ha = sess.run([ref_x_final_op, ref_dxdp_hb_op, ref_dxdp_ha_op], feed_dict={x_ph: x0})
-
-        # x = np.copy(x0) # this copy is super important else it just modifies everything in place
-        # for step in range(num_steps):
-        #     [dx_val, dxdp_val] = sess.run([dx_op, dxdps_op], feed_dict={x_ph: x})
-        #     x += dx_val
-        # test_dxdp = dxdp_val
-        # test_x_final_val = x
-
-        # np.testing.assert_array_almost_equal(ref_x_final, test_x_final_val, decimal=14)
-        # np.testing.assert_array_almost_equal(np.concatenate([ref_dxdp_hb, ref_dxdp_ha]), test_dxdp, decimal=14) # BAD, restore to 13
-
-        # # test grads_and_vars and computation of higher derivatives
-        # x_opt = np.array([
-        #     [-0.0070, -0.0100, 0.0000],
-        #     [-0.1604,  0.4921, 0.0000],
-        #     [ 0.5175,  0.0128, 0.0000],
-        # ], dtype=np.float64) # idealized geometry
-
-        # def loss(pred_x):
-
-        #     # Compute pairwise distances
-        #     def dij(x):
-        #         v01 = x[0]-x[1]
-        #         v02 = x[0]-x[2]
-        #         v12 = x[1]-x[2]
-        #         return tf.stack([tf.norm(v01), tf.norm(v02), tf.norm(v12)])
-
-        #     return tf.norm(dij(x_opt) - dij(pred_x))
-
-        # x_final_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
-
-        # l0 = loss(ref_x_final_op)
-        # l1 = loss(x_final_ph)
-
-        # ref_dLdp_op = tf.gradients(l0, hb.params+ha.params) # goes through reference integrator
-        # test_dLdx_op = tf.gradients(l1, x_final_ph)
-        # test_dLdp_op_gvs = test_intg.grads_and_vars(test_dLdx_op[0]) # multiply with dxdp
-
-        # # need to fix this test. 
-        # ref_dLdp = sess.run(ref_dLdp_op, feed_dict={x_ph: x0})
-        # test_dLdp = sess.run([a[0] for a in test_dLdp_op_gvs], feed_dict={x_final_ph: test_x_final_val})
-
-        # np.testing.assert_array_almost_equal(ref_dLdp, test_dLdp)
 
 
     def test_gpu_integrator(self):

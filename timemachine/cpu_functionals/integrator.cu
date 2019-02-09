@@ -25,7 +25,6 @@ Each thread processes 1 out of [P,N,3] elements.
 
 */
 
-
 template <typename NumericType>
 __global__ void reduce_velocities(
     const NumericType *noise,
@@ -292,16 +291,6 @@ void Integrator<NumericType>::step_gpu(
         d_x_t_,
         d_v_t_,
         N_*3);
-
-    //     const NumericType *noise,
-    // const NumericType coeff_a,
-    // const NumericType *coeff_bs, // N x 3, not P x N x 3, but we could just pass in the first index
-    // const NumericType *coeff_cs,
-    // const NumericType *grads,
-    // const NumericType d_t,
-    // NumericType *x_t,
-    // NumericType *v_t,
-    // int N3
 
     step_ += 1;
 

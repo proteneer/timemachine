@@ -1,5 +1,9 @@
 #pragma once
 
+#include <cstdio>
+#include "cublas_v2.h"
+#include "curand.h"
+
 cublasStatus_t templateGemm(cublasHandle_t handle,
    cublasOperation_t transa, cublasOperation_t transb,
    int m, int n, int k,
@@ -7,16 +11,7 @@ cublasStatus_t templateGemm(cublasHandle_t handle,
    const float           *A, int lda,
    const float           *B, int ldb,
    const float           *beta,
-   float           *C, int ldc) {
-   return cublasSgemm(handle,
-   transa, transb,
-   m, n, k,
-   alpha,
-   A, lda,
-   B, ldb,
-   beta,
-   C, ldc);
-}
+   float           *C, int ldc);
 
 cublasStatus_t templateGemm(cublasHandle_t handle,
    cublasOperation_t transa, cublasOperation_t transb,
@@ -25,30 +20,17 @@ cublasStatus_t templateGemm(cublasHandle_t handle,
    const double           *A, int lda,
    const double           *B, int ldb,
    const double           *beta,
-   double           *C, int ldc) {
-   return cublasDgemm(handle,
-   transa, transb,
-   m, n, k,
-   alpha,
-   A, lda,
-   B, ldb,
-   beta,
-   C, ldc);
-}
+   double           *C, int ldc);
 
 curandStatus_t templateCurandNormal(
     curandGenerator_t generator, 
     float *outputPtr, size_t n, 
-    float mean, float stddev) {
-    return curandGenerateNormal(generator, outputPtr, n, mean, stddev);
-}
+    float mean, float stddev);
 
 curandStatus_t templateCurandNormal(
     curandGenerator_t generator, 
     double *outputPtr, size_t n, 
-    double mean, double stddev) {
-    return curandGenerateNormalDouble(generator, outputPtr, n, mean, stddev);
-}
+    double mean, double stddev);
 
 
 #define cublasErrchk(ans) { cublasAssert((ans), __FILE__, __LINE__); }
