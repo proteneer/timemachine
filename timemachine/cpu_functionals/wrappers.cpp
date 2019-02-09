@@ -296,5 +296,6 @@ declare_lennard_jones<double>(m, "double");
 declare_lennard_jones<float>(m, "float");
 
 declare_integrator<double>(m, "double");
+declare_integrator<float>(m, "float");
 
 }

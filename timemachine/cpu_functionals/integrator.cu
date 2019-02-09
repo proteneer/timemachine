@@ -27,6 +27,42 @@ Each thread processes 1 out of [P,N,3] elements.
 
 */
 
+cublasStatus_t templateGemm(cublasHandle_t handle,
+   cublasOperation_t transa, cublasOperation_t transb,
+   int m, int n, int k,
+   const float           *alpha,
+   const float           *A, int lda,
+   const float           *B, int ldb,
+   const float           *beta,
+   float           *C, int ldc) {
+   return cublasSgemm(handle,
+   transa, transb,
+   m, n, k,
+   alpha,
+   A, lda,
+   B, ldb,
+   beta,
+   C, ldc);
+}
+
+cublasStatus_t templateGemm(cublasHandle_t handle,
+   cublasOperation_t transa, cublasOperation_t transb,
+   int m, int n, int k,
+   const double           *alpha,
+   const double           *A, int lda,
+   const double           *B, int ldb,
+   const double           *beta,
+   double           *C, int ldc) {
+   return cublasDgemm(handle,
+   transa, transb,
+   m, n, k,
+   alpha,
+   A, lda,
+   B, ldb,
+   beta,
+   C, ldc);
+}
+
 template<typename NumericType>
 __global__ void reduce_total(
     NumericType coeff_a,
@@ -68,13 +104,6 @@ __global__ void reduce_total(
         int slot_idx = slot*PN3 + blockIdx.x*blockDim.x + threadIdx.x;
         prefactor += a_n;
         a_n *= coeff_a;
-        // printf("%d %d %f\n", i, blockIdx.x*blockDim.x + threadIdx.x, total_buffer[slot_idx]);
-        // printf("%d %d %f\n", i, blockIdx.x*blockDim.x + threadIdx.x, total_buffer[slot_idx]);
-
-        if(local_idx == 0) {
-            printf("w: %d, pref: %f, tot_buf: %f\n", i, prefactor, total_buffer[slot_idx]);
-        }
-
         accum += prefactor*total_buffer[slot_idx];
     }
 
@@ -172,15 +201,6 @@ void Integrator<NumericType>::step_gpu(
     NumericType *d_mixed_partials) {
 
     hessian_vector_product(d_hessians_, d_dxdp_t_, d_mixed_partials);
-
-    // std::vector<NumericType> debug(P_*N_*3);
-    // gpuErrchk(cudaMemcpy(&debug[0], d_mixed_partials, sizeof(float)*P_*N_*3, cudaMemcpyDeviceToHost));
-    // for(size_t i=0; i < P_*N_*3; i++) {
-    //     std::cout << "hvp:" << debug[i] << " " << std::endl;
-    // }
-
-    std::cout << "STEPPING INTO: " << step_ % W_ << std::endl;
-
     reduce_buffers(d_mixed_partials_, step_ % W_);
 
     step_ += 1;
@@ -221,8 +241,7 @@ void Integrator<NumericType>::hessian_vector_product(
  
     const size_t N3 = N_*3;
 
-    // replace with SGEMM later
-    cublasErrchk(cublasDgemm(cb_handle_,
+    cublasErrchk(templateGemm(cb_handle_,
         CUBLAS_OP_N, CUBLAS_OP_N, // whether or not we transpose A
         N3, P_, N3,
         &alpha,
@@ -234,5 +253,5 @@ void Integrator<NumericType>::hessian_vector_product(
 
 }
 
-// template class timemachine::Integrator<float>;
+template class timemachine::Integrator<float>;
 template class timemachine::Integrator<double>;
