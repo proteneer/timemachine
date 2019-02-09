@@ -327,7 +327,8 @@ void declare_electrostatics_gpu(py::module &m, const char *typestr) {
 
         std::clock_t start; double duration; start = std::clock();
 
-        nrg.total_derivative(
+
+        nrg.total_derivative_cpu(
             num_atoms,
             num_params,
             coords.data(),

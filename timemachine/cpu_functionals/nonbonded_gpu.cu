@@ -2,6 +2,8 @@
 #include "constants.hpp"
 #include "gpu_utils.cuh"
 
+#include <iostream>
+
 namespace timemachine {
 
 template<typename NumericType>
@@ -19,7 +21,7 @@ __global__ void electrostatics_total_derivative(
     int N) {
 
     auto i_idx = blockDim.x*blockIdx.x + threadIdx.x;
-    if(i_idx > N) {
+    if(i_idx >= N) {
         return;
     }
 
@@ -76,8 +78,8 @@ __global__ void electrostatics_total_derivative(
         atomicAdd(grad_out + j_idx*3 + 2, grad_prefactor*dz);
 
         const int x_dim = 0;
-        const int y_dim = 0;
-        const int z_dim = 0;
+        const int y_dim = 1;
+        const int z_dim = 2;
 
         hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + x_dim] += hess_prefactor*(-d2ij + 3*d2x);
         hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + i_idx * 3 + y_dim] += 3*hess_prefactor*dx*dy;
@@ -204,6 +206,58 @@ void ElectrostaticsGPU<NumericType>::total_derivative(
         d_mp_out,
         n_params,
         n_atoms);
+
+};
+
+
+template <typename NumericType>
+void ElectrostaticsGPU<NumericType>::total_derivative_cpu(
+    const size_t N,
+    const size_t P,
+    const NumericType* coords, // [N, 3]
+    NumericType* energy_out, // []
+    NumericType* grad_out, // [N,3]
+    NumericType* hessian_out, // [N, 3, N, 3]
+    NumericType* mp_out // [P, N, 3]
+) {
+
+    NumericType* d_coords; // []
+    NumericType* d_energy_out; // []
+    NumericType* d_grad_out; // [N,3]
+    NumericType* d_hessian_out; // [N, 3, N, 3]
+    NumericType* d_mp_out; // [P, N, 3]
+
+    // this is a debugging function.
+
+    gpuErrchk(cudaMalloc((void**)&d_coords, N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMalloc((void**)&d_energy_out, sizeof(NumericType)));
+    gpuErrchk(cudaMalloc((void**)&d_grad_out, N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMalloc((void**)&d_hessian_out, N*3*N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMalloc((void**)&d_mp_out, P*N*3*sizeof(NumericType)));
+
+    gpuErrchk(cudaMemcpy(d_coords, coords, N*3*sizeof(NumericType), cudaMemcpyHostToDevice));
+
+    std::cout << "CALLING" << std::endl;
+
+    total_derivative(
+    	N,
+    	P,
+    	d_coords,
+    	d_energy_out,
+    	d_grad_out,
+    	d_hessian_out,
+    	d_mp_out);
+
+    gpuErrchk(cudaMemcpy(energy_out, d_energy_out, sizeof(NumericType), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(grad_out, d_grad_out, N*3*sizeof(NumericType), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(hessian_out, d_hessian_out, N*3*N*3*sizeof(NumericType), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(mp_out, d_mp_out, P*N*3*sizeof(NumericType), cudaMemcpyDeviceToHost));
+
+    gpuErrchk(cudaFree(d_coords));
+    gpuErrchk(cudaFree(d_energy_out));
+    gpuErrchk(cudaFree(d_grad_out));
+    gpuErrchk(cudaFree(d_hessian_out));
+    gpuErrchk(cudaFree(d_mp_out));
 
 };
 
