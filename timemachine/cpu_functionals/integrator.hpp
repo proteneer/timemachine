@@ -62,6 +62,11 @@ public:
 
 
     // these *HAVE* to be refactored out to be out of this class.
+    NumericType* get_device_grads() {
+        return d_grads_;
+    };
+
+    // these *HAVE* to be refactored out to be out of this class.
     NumericType* get_device_hessians() {
         return d_hessians_;
     };
@@ -69,6 +74,14 @@ public:
     NumericType* get_device_mixed_partials() {
         return d_mixed_partials_;
     };
+
+    int num_params() {
+      return P_;
+    }
+
+    int num_atoms() {
+      return N_;
+    }
 
     std::vector<NumericType> get_dxdp() const;
 

@@ -30,6 +30,10 @@ class ReferenceLangevinIntegrator():
         self.invMasses = (1.0/masses).reshape((-1, 1))
         self.sqrtInvMasses = np.sqrt(self.invMasses)
 
+        self.coeff_a = self.vscale
+        self.coeff_bs = self.fscale*self.invMasses
+        self.coeff_cs = self.nscale*self.sqrtInvMasses
+
     def step(self, grads):
         num_atoms = len(self.invMasses)
         num_dims = 3

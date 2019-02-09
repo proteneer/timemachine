@@ -53,8 +53,9 @@ __global__ void reduce_total(
     const NumericType *coeff_bs,
     const NumericType *Dx_t,
     NumericType *total_buffer,
-    NumericType *converged_buffer,        
+    NumericType *converged_buffer,
     NumericType *dxdp_t,
+    NumericType dt,
     int t, // starting window slot
     int W, // number of windows
     int PN3 // PN3
@@ -93,7 +94,7 @@ __global__ void reduce_total(
 
     // 5. Compute new dxdp_t
     // (ytz). coeff_b's can be optimized into smaller chunks.
-    dxdp_t[local_idx] = -coeff_bs[local_idx] * (accum + prefactor * converged_buffer[local_idx]);
+    dxdp_t[local_idx] = -coeff_bs[local_idx] * dt * (accum + prefactor * converged_buffer[local_idx]);
 
 }
 
@@ -242,6 +243,8 @@ void Integrator<NumericType>::step_cpu(
     gpuErrchk(cudaMemcpy(d_mixed_partials_, h_mixed_partials, P_*N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
     step_gpu(d_grads_, d_hessians_, d_mixed_partials_);
+
+    cudaDeviceSynchronize();
 }
 
 template<typename NumericType> 
@@ -267,6 +270,7 @@ void Integrator<NumericType>::step_gpu(
         d_total_buffer_,
         d_converged_buffer_,
         d_dxdp_t_,
+        dt_,
         window_k,
         W_,
         P_*N_*3

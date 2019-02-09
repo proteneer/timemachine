@@ -4,7 +4,7 @@ import tensorflow as tf
 from timemachine.functionals import bonded
 from tensorflow.python.ops.parallel_for.gradients import jacobian
 from timemachine import derivatives
-from timemachine.cpu_functionals import energy
+from timemachine.cpu_functionals import custom_ops
 
 
 class TestAngles(unittest.TestCase):
@@ -33,7 +33,7 @@ class TestAngles(unittest.TestCase):
             cos_angles=True
         )
 
-        test_angle = energy.HarmonicAngle_double(
+        test_angle = custom_ops.HarmonicAngle_double(
             angle_params_np.reshape(-1).tolist(),
             list(range(angle_params_np.shape[0])),
             param_idxs.reshape(-1).tolist(),
@@ -55,7 +55,7 @@ class TestAngles(unittest.TestCase):
 
 class TestBonded(unittest.TestCase):
 
-    def test_harmonic_bond(self):
+    def test_cpu_harmonic_bond(self):
         x0 = np.array([
             [1.0, 0.2, 3.3], # H 
             [-0.5,-1.1,-0.9], # C
@@ -76,7 +76,7 @@ class TestBonded(unittest.TestCase):
             bond_idxs=bond_idxs,
         )
 
-        test_bond = energy.HarmonicBond_double(
+        test_bond = custom_ops.HarmonicBond_double(
             bond_params_np.reshape(-1).tolist(),
             list(range(bond_params_np.shape[0])),
             param_idxs.reshape(-1).tolist(),
@@ -222,7 +222,7 @@ class TestPeriodicTorsion(unittest.TestCase):
 
         x_ph = tf.placeholder(shape=(4, 3), dtype=tf.float64)
 
-        test_torsion = energy.PeriodicTorsion_double(
+        test_torsion = custom_ops.PeriodicTorsion_double(
             params_np.reshape(-1),
             list(range(params_np.shape[0])),
             param_idxs.reshape(-1),

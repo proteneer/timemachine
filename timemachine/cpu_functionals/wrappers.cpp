@@ -294,8 +294,27 @@ void declare_integrator(py::module &m, const char *typestr) {
         return intg.set_velocities(arg);
     });
 
-
 }
+
+
+// template<typename NumericType>
+// void declare_context(py::module &m, const char *typestr) {
+
+//     using Class = timemachine::Context<NumericType>;
+//     std::string pyclass_name = std::string("Context") + typestr;
+//     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+//     .def(py::init<
+//         std::vector<Energy*>,
+//         Integrator*
+//     >())
+//     .def("step", [](timemachine::Integrator<NumericType> &intg,
+//     const py::array_t<NumericType, py::array::c_style> grads,
+//     const py::array_t<NumericType, py::array::c_style> hessians,
+//     const py::array_t<NumericType, py::array::c_style> mixed_partials) -> void {
+//         intg.step_cpu(grads.data(), hessians.data(), mixed_partials.data());
+//     });
+
+// }
 
 PYBIND11_MODULE(custom_ops, m) {
 
@@ -316,5 +335,9 @@ declare_lennard_jones<float>(m, "float");
 
 declare_integrator<double>(m, "double");
 declare_integrator<float>(m, "float");
+
+// declare_context<double>(m, "double");
+// declare_context<float>(m, "float");
+
 
 }
