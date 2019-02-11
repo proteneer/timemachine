@@ -44,7 +44,6 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 
         std::clock_t start; double duration; start = std::clock();
 
-
         nrg.total_derivative(
             num_atoms,
             num_params,

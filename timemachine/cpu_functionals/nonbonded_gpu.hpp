@@ -11,8 +11,8 @@ class ElectrostaticsGPU {
 private:
 
     NumericType* d_params_;
-    size_t* d_global_param_idxs_;
-    size_t* d_param_idxs_;
+    int* d_global_param_idxs_;
+    int* d_param_idxs_;
     NumericType* d_scale_matrix_;
 
 public:
