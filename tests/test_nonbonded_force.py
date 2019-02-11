@@ -230,7 +230,7 @@ class TestElectrostatics(unittest.TestCase):
 
     def test_electrostatics_large(self):
         np.random.seed(0)
-        x0 = np.random.rand(37, 3).astype(np.float64)
+        x0 = np.random.rand(253, 3).astype(np.float64)
         print(x0)
 
         N = x0.shape[0]
