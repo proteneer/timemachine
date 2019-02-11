@@ -228,34 +228,33 @@ class TestElectrostatics(unittest.TestCase):
     def tearDown(self):
         tf.reset_default_graph()
 
-    def test_electrostatics_gpu(self):
-        x0 = np.array([
-            [ 0.0637,   0.0126,   0.2203],
-            [ 1.0573,  -0.2011,   1.2864],
-            [ 2.3928,   1.2209,  -0.2230],
-            [-0.6891,   1.6983,   0.0780],
-            [-0.6312,  -1.6261,  -0.2601]
-        ], dtype=np.float64)
+    def test_electrostatics_large(self):
+        np.random.seed(0)
+        x0 = np.random.rand(68, 3).astype(np.float64)
+        print(x0)
 
         N = x0.shape[0]
 
         x_ph = tf.placeholder(shape=(N, 3), dtype=np.float64)
 
-        params_np = np.array([1.3, 0.3], dtype=np.float64)
+
+        num_params = 25
+
+        params_np = np.random.rand(num_params).astype(np.float64)
         params_tf = tf.convert_to_tensor(params_np)
-        param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
-        scale_matrix = np.array([
-            [  0,  1,  1,  1,0.5],
-            [  1,  0,  0,  1,  1],
-            [  1,  0,  0,  0,0.2],
-            [  1,  1,  0,  0,  1],
-            [0.5,  1,0.2,  1,  0],
-        ], dtype=np.float64)
+        param_idxs = np.random.randint(num_params, size=(N,), dtype=np.int32)
+        scale_matrix = np.random.rand(N, N).astype(np.float64)
+        scale_matrix = (scale_matrix + scale_matrix.T)/2
+        np.fill_diagonal(scale_matrix, 0.0)
 
         cutoff = None
         crf = 0.0
 
-        sess = tf.Session()
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        sess = tf.Session(config=config)
+
+        # sess = tf.Session()
         sess.run(tf.initializers.global_variables())
 
         ref_nrg = Electrostatic(params_tf, param_idxs, scale_matrix, cutoff=cutoff, crf=crf)
@@ -272,22 +271,61 @@ class TestElectrostatics(unittest.TestCase):
         test_nrg, test_grads, test_hessians, test_mps = test_es.total_derivative(x0, params_np.shape[0])
 
         sess = tf.Session()
-        np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=13)
+        np.testing.assert_allclose(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), rtol=1e-11)
+
+        ref_h_val = sess.run(ref_hessians, feed_dict={x_ph: x0}).reshape(N*3, N*3)
+        test_h_val = test_hessians.reshape(N*3, N*3)
+        np.testing.assert_allclose(np.tril(ref_h_val), np.tril(test_h_val), rtol=1e-11)
 
 
+    # def test_electrostatics_gpu(self):
+    #     x0 = np.array([
+    #         [ 0.0637,   0.0126,   0.2203],
+    #         [ 1.0573,  -0.2011,   1.2864],
+    #         [ 2.3928,   1.2209,  -0.2230],
+    #         [-0.6891,   1.6983,   0.0780],
+    #         [-0.6312,  -1.6261,  -0.2601]
+    #     ], dtype=np.float64)
 
+    #     N = x0.shape[0]
 
-        # ref_h = sess.run(ref_hessians, feed_dict={x_ph: x0}).reshape((N*3, N*3))
-        # test_h = test_hessians.reshape((N*3, N*3))
+    #     x_ph = tf.placeholder(shape=(N, 3), dtype=np.float64)
 
-        # print(np.triu(test_h))
-        # print("00000000000")
-        # print(np.triu(ref_h))
-        # assert 0
+    #     params_np = np.array([1.3, 0.3], dtype=np.float64)
+    #     params_tf = tf.convert_to_tensor(params_np)
+    #     param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
+    #     scale_matrix = np.array([
+    #         [  0,  1,  1,  1,0.5],
+    #         [  1,  0,  0,  1,  1],
+    #         [  1,  0,  0,  0,0.2],
+    #         [  1,  1,  0,  0,  1],
+    #         [0.5,  1,0.2,  1,  0],
+    #     ], dtype=np.float64)
 
-        np.testing.assert_array_almost_equal(test_hessians, sess.run(ref_hessians, feed_dict={x_ph: x0}), decimal=11)
-        np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
-        np.testing.assert_array_almost_equal(test_mps, sess.run(ref_mps[0], feed_dict={x_ph: x0}), decimal=13)
+    #     cutoff = None
+    #     crf = 0.0
+
+    #     sess = tf.Session()
+    #     sess.run(tf.initializers.global_variables())
+
+    #     ref_nrg = Electrostatic(params_tf, param_idxs, scale_matrix, cutoff=cutoff, crf=crf)
+    #     nrg_op = ref_nrg.energy(x_ph)
+
+    #     test_es = custom_ops.ElectrostaticsGPU_double(
+    #         params_np.reshape(-1).tolist(),
+    #         list(range(params_np.shape[0])),
+    #         param_idxs.reshape(-1).tolist(),
+    #         scale_matrix.reshape(-1).tolist()
+    #     )
+
+    #     ref_grad, ref_hessians, ref_mps = derivatives.compute_ghm(nrg_op, x_ph, [params_tf])
+    #     test_nrg, test_grads, test_hessians, test_mps = test_es.total_derivative(x0, params_np.shape[0])
+
+    #     sess = tf.Session()
+    #     np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=13)
+    #     np.testing.assert_array_almost_equal(test_hessians, sess.run(ref_hessians, feed_dict={x_ph: x0}), decimal=11)
+        # np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
+        # np.testing.assert_array_almost_equal(test_mps, sess.run(ref_mps[0], feed_dict={x_ph: x0}), decimal=13)
 
 
     # def test_electrostatics_cpu(self):
