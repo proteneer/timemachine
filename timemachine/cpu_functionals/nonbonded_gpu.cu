@@ -20,6 +20,11 @@ inline __device__ double gpuSqrt(double arg) {
 }
 
 
+#define HESS_3N3N(i,j,N,di,dj) (di*N*3*N + i*3*N + dj*N + j)
+#define HESS_N3N3(i,j,N,di,dj) (i*3*N*3 + di*N*3 + j*3 + dj)
+// #define HESS_N3N3(i,j,N,di,dj) ((((j)-1)*(ld))+((i)-1))
+
+
 /*
 (ytz): The shuffling nonbonded algorithm
 
@@ -152,7 +157,6 @@ __global__ void electrostatics_total_derivative(
         // load diagonal elements exactly once, shuffle the rest
         int j_idx = tile_y_idx*WARP_SIZE + threadIdx.x;
 
-
         if(j_idx >= n_atoms) {
             x1 = 0.0;
             y1 = 0.0;
@@ -166,20 +170,78 @@ __global__ void electrostatics_total_derivative(
         }
 
 
-        // if(blockIdx.x == 0) {
-            // printf("blockIdx.x %d threadIdx.x %d | I_IDX J_IDX  %d %d | xyz %f %f %f | shfl accum %f %f %f \n", blockIdx.x, threadIdx.x, i_idx, j_idx, x1, y1, z1, shfl_grad_dx, shfl_grad_dy, shfl_grad_dz);
-        // }
+        // off diagonal
 
-        // printf("tid x1 y1 z1, %f %f %f\n", x0, y0, z0);
+        // iterate over a block of i's
+        for(int round=0; round < WARP_SIZE; round++) {
+            NumericType xi = __shfl_sync(0xffffffff, x0, round);
+            NumericType yi = __shfl_sync(0xffffffff, y0, round);
+            NumericType zi = __shfl_sync(0xffffffff, z0, round);
+            NumericType qi = __shfl_sync(0xffffffff, q0, round);
 
-        // #pragma unroll 4
+            int hess_i_idx = blockIdx.x*WARP_SIZE + round;
+            int hess_j_idx = j_idx;
+
+            NumericType dx = xi - x1;
+            NumericType dy = yi - y1;
+            NumericType dz = zi - z1;
+            NumericType d2x = dx*dx;
+            NumericType d2y = dy*dy;
+            NumericType d2z = dz*dz;
+
+            NumericType d2ij = d2x + d2y + d2z;
+            NumericType dij = sqrt(d2ij);
+            NumericType d3ij = d2ij*dij;
+            NumericType d5ij = d3ij*d2ij;
+
+            NumericType sij = 0;
+            if(hess_i_idx < n_atoms && hess_j_idx < n_atoms) {
+                sij = scale_matrix[hess_i_idx*n_atoms + hess_j_idx];
+            } else {
+                sij = 0;
+            }
+
+            NumericType so4eq01 = sij*ONE_4PI_EPS0*qi*q1;
+            NumericType grad_prefactor = so4eq01/d3ij;
+            NumericType hess_prefactor = so4eq01/d5ij;
+
+            if(hess_j_idx < hess_i_idx && hess_i_idx < n_atoms && hess_j_idx < n_atoms) {
+                const size_t x_dim = 0;
+                const size_t y_dim = 1;
+                const size_t z_dim = 2;
+
+                NumericType prefactor = hess_prefactor;
+                printf("OFF DIAGONAL HESSIAN %d %d\n:", hess_i_idx, hess_j_idx);
+                // hessian_out[HESS_N3N3(i_idx, j_idx, N, 0, 0)] += prefactor*(d2ij - 3*d2x);
+                // hessian_out[HESS_N3N3(i_idx, j_idx, N, 0, 1)] += -3*prefactor*dx*dy;
+                // hessian_out[HESS_N3N3(i_idx, j_idx, N, 0, 2)] += -3*prefactor*dx*dz;
+                // hessian_out[HESS_N3N3(i_idx, j_idx, N, 1, 0)] += -3*prefactor*dx*dy;
+                // hessian_out[HESS_N3N3(i_idx, j_idx, N, 1, 1)] += prefactor*(d2ij - 3*d2y);
+                // hessian_out[HESS_N3N3(i_idx, j_idx, N, 1, 2)] += -3*prefactor*dy*dz;
+                // hessian_out[HESS_N3N3(i_idx, j_idx, N, 2, 0)] += -3*prefactor*dx*dz;
+                // hessian_out[HESS_N3N3(i_idx, j_idx, N, 2, 1)] += -3*prefactor*dy*dz;
+                // hessian_out[HESS_N3N3(i_idx, j_idx, N, 2, 2)] += prefactor*(d2ij - 3*d2z);
+
+
+                hessian_out[hess_i_idx * 3 * N * 3 + x_dim * N * 3 + hess_j_idx * 3 + x_dim] += prefactor*(d2ij - 3*d2x);
+                hessian_out[hess_i_idx * 3 * N * 3 + x_dim * N * 3 + hess_j_idx * 3 + y_dim] += -3*prefactor*dx*dy;
+                hessian_out[hess_i_idx * 3 * N * 3 + x_dim * N * 3 + hess_j_idx * 3 + z_dim] += -3*prefactor*dx*dz;
+                hessian_out[hess_i_idx * 3 * N * 3 + y_dim * N * 3 + hess_j_idx * 3 + x_dim] += -3*prefactor*dx*dy;
+                hessian_out[hess_i_idx * 3 * N * 3 + y_dim * N * 3 + hess_j_idx * 3 + y_dim] += prefactor*(d2ij - 3*d2y);
+                hessian_out[hess_i_idx * 3 * N * 3 + y_dim * N * 3 + hess_j_idx * 3 + z_dim] += -3*prefactor*dy*dz;
+                hessian_out[hess_i_idx * 3 * N * 3 + z_dim * N * 3 + hess_j_idx * 3 + x_dim] += -3*prefactor*dx*dz;
+                hessian_out[hess_i_idx * 3 * N * 3 + z_dim * N * 3 + hess_j_idx * 3 + y_dim] += -3*prefactor*dy*dz;
+                hessian_out[hess_i_idx * 3 * N * 3 + z_dim * N * 3 + hess_j_idx * 3 + z_dim] += prefactor*(d2ij - 3*d2z);
+            }
+
+        }
+
+        j_idx = tile_y_idx*WARP_SIZE + threadIdx.x;
+
+        // on diagonal
         for(int round=0; round < WARP_SIZE; round++) {
 
             j_idx = tile_y_idx*WARP_SIZE + j_idx % WARP_SIZE;
-
-            // if(blockIdx.x == 1) {
-            //     printf("round blockIdx.x, %d %d |I_IDX J_IDX  %d %d\n", round, blockIdx.x, i_idx, j_idx);
-            // }
 
             NumericType dx = x0 - x1;
             NumericType dy = y0 - y1;
@@ -193,23 +255,15 @@ __global__ void electrostatics_total_derivative(
             NumericType d3ij = d2ij*dij;
             NumericType d5ij = d3ij*d2ij;
 
-            // printf("round %d tid %d dij %f x1 %f y1 %f z1%f\n", round, threadIdx.x, dij, x1, y1, z1);
-
-            // todo: optimize
             NumericType sij = 0;
             if(i_idx < n_atoms && j_idx < n_atoms) {
                 sij = scale_matrix[i_idx*n_atoms + j_idx];
-                // sij = 0.5f;
             } else {
                 sij = 0;
             }
 
 
             NumericType so4eq01 = sij*ONE_4PI_EPS0*q0*q1;
-
-            // atom_nrg += so4eq01/dij;
-            // compute gradients.
-
             NumericType grad_prefactor = so4eq01/d3ij;
             NumericType hess_prefactor = so4eq01/d5ij;
 
@@ -230,7 +284,6 @@ __global__ void electrostatics_total_derivative(
                 NumericType prefactor = hess_prefactor;
 
                 // compute lower triangular
-
                 hess_xx += hess_prefactor*(-d2ij + 3*d2x);
                 // hess_xy += 3*hess_prefactor*dx*dy;
                 // hess_xz += 3*hess_prefactor*dx*dz;
@@ -265,15 +318,15 @@ __global__ void electrostatics_total_derivative(
                 // hessian_out[2*N*3*N + i_idx*3*N + 1*N + j_idx] += -3*prefactor*dy*dz;
                 // hessian_out[2*N*3*N + i_idx*3*N + 2*N + j_idx] += prefactor*(d2ij - 3*d2z);
 
-                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + x_dim] += prefactor*(d2ij - 3*d2x);
-                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + y_dim] += -3*prefactor*dx*dy;
-                hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + z_dim] += -3*prefactor*dx*dz;
-                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + x_dim] += -3*prefactor*dx*dy;
-                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + y_dim] += prefactor*(d2ij - 3*d2y);
-                hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + z_dim] += -3*prefactor*dy*dz;
-                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + x_dim] += -3*prefactor*dx*dz;
-                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + y_dim] += -3*prefactor*dy*dz;
-                hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + z_dim] += prefactor*(d2ij - 3*d2z);
+                // hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + x_dim] += prefactor*(d2ij - 3*d2x);
+                // hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + y_dim] += -3*prefactor*dx*dy;
+                // hessian_out[i_idx * 3 * N * 3 + x_dim * N * 3 + j_idx * 3 + z_dim] += -3*prefactor*dx*dz;
+                // hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + x_dim] += -3*prefactor*dx*dy;
+                // hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + y_dim] += prefactor*(d2ij - 3*d2y);
+                // hessian_out[i_idx * 3 * N * 3 + y_dim * N * 3 + j_idx * 3 + z_dim] += -3*prefactor*dy*dz;
+                // hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + x_dim] += -3*prefactor*dx*dz;
+                // hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + y_dim] += -3*prefactor*dy*dz;
+                // hessian_out[i_idx * 3 * N * 3 + z_dim * N * 3 + j_idx * 3 + z_dim] += prefactor*(d2ij - 3*d2z);
 
 
                 // j < i

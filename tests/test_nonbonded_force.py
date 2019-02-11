@@ -230,7 +230,7 @@ class TestElectrostatics(unittest.TestCase):
 
     def test_electrostatics_large(self):
         np.random.seed(0)
-        x0 = np.random.rand(68, 3).astype(np.float64)
+        x0 = np.random.rand(5, 3).astype(np.float64)
         print(x0)
 
         N = x0.shape[0]
@@ -274,7 +274,12 @@ class TestElectrostatics(unittest.TestCase):
         np.testing.assert_allclose(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), rtol=1e-11)
 
         ref_h_val = sess.run(ref_hessians, feed_dict={x_ph: x0}).reshape(N*3, N*3)
+
+
+
         test_h_val = test_hessians.reshape(N*3, N*3)
+
+        print(np.tril(ref_h_val), np.tril(test_h_val))
         np.testing.assert_allclose(np.tril(ref_h_val), np.tril(test_h_val), rtol=1e-11)
 
 
