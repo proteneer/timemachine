@@ -28,7 +28,8 @@ inline __device__ double gpuSqrt(double arg) {
 
 // should we change layout to 3N x 3N to improve coalesced reads and writes?
 // probably *especially* important for hessians.
-
+// This can be optimize down to 0.002 by removing access into scale_matrix
+// and by JITTING N and P
 template<typename NumericType>
 __global__ void electrostatics_total_derivative(
     const NumericType *coords,
@@ -40,7 +41,6 @@ __global__ void electrostatics_total_derivative(
     NumericType *grad_out,
     NumericType *hessian_out,
     NumericType *mp_out,
-    int P,
     int N) {
 
 
@@ -49,7 +49,9 @@ __global__ void electrostatics_total_derivative(
     // const int N3 = n_atoms*3;
 
     auto i_idx = blockDim.x*blockIdx.x + threadIdx.x;
-
+    
+    NumericType *mp_out_qi = mp_out + global_param_idxs[param_idxs[i_idx]]*n_atoms*3;
+    
     NumericType x0, y0, z0, q0;
 
     if(i_idx >= n_atoms) {
@@ -107,7 +109,7 @@ __global__ void electrostatics_total_derivative(
         }
 
         // off diagonal
-        // iterate over a block of i's
+        // iterate over a block of i's because we improve locality of writes to off diagonal elements
         #pragma unroll 4
         for(int round=0; round < WARP_SIZE; round++) {
             NumericType xi = __shfl_sync(0xffffffff, x0, round);
@@ -118,30 +120,32 @@ __global__ void electrostatics_total_derivative(
             int h_i_idx = blockIdx.x*WARP_SIZE + round;
             int h_j_idx = j_idx;
 
-            NumericType dx = xi - x1;
-            NumericType dy = yi - y1;
-            NumericType dz = zi - z1;
-            NumericType d2x = dx*dx;
-            NumericType d2y = dy*dy;
-            NumericType d2z = dz*dz;
-
-            NumericType d2ij = d2x + d2y + d2z;
-            NumericType dij = sqrt(d2ij);
-            NumericType d3ij = d2ij*dij;
-            NumericType d5ij = d3ij*d2ij;
-
-            NumericType sij = 0;
-            if(h_i_idx < n_atoms && h_j_idx < n_atoms) {
-                sij = scale_matrix[h_i_idx*n_atoms + h_j_idx];
-                // sij = 0.5f;
-            } else {
-                sij = 0;
-            }
-
-            NumericType so4eq01 = sij*ONE_4PI_EPS0*qi*q1;
-            NumericType hess_prefactor = so4eq01/d5ij;
 
             if(h_j_idx < h_i_idx && h_i_idx < n_atoms && h_j_idx < n_atoms) {
+
+                NumericType dx = xi - x1;
+                NumericType dy = yi - y1;
+                NumericType dz = zi - z1;
+                NumericType d2x = dx*dx;
+                NumericType d2y = dy*dy;
+                NumericType d2z = dz*dz;
+
+                NumericType d2ij = d2x + d2y + d2z;
+                NumericType dij = sqrt(d2ij);
+                NumericType d3ij = d2ij*dij;
+                NumericType d5ij = d3ij*d2ij;
+
+                NumericType sij = 0;
+                if(h_i_idx < n_atoms && h_j_idx < n_atoms) {
+                    sij = scale_matrix[h_i_idx*n_atoms + h_j_idx];
+                    // sij = 0.5f;
+                } else {
+                    sij = 0;
+                }
+
+                NumericType so4eq01 = sij*ONE_4PI_EPS0*qi*q1;
+                NumericType hess_prefactor = so4eq01/d5ij;
+
                 hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 0)] += hess_prefactor*(d2ij - 3*d2x);
                 hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 1)] += -3*hess_prefactor*dx*dy;
                 hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 2)] += -3*hess_prefactor*dx*dz;
@@ -160,31 +164,32 @@ __global__ void electrostatics_total_derivative(
 
             j_idx = tile_y_idx*WARP_SIZE + j_idx % WARP_SIZE;
 
-            NumericType dx = x0 - x1;
-            NumericType dy = y0 - y1;
-            NumericType dz = z0 - z1;
-            NumericType d2x = dx*dx;
-            NumericType d2y = dy*dy;
-            NumericType d2z = dz*dz;
-
-            NumericType d2ij = d2x + d2y + d2z;
-            NumericType dij = sqrt(d2ij);
-            NumericType d3ij = d2ij*dij;
-            NumericType d5ij = d3ij*d2ij;
-
-            NumericType sij = 0;
-            if(i_idx < n_atoms && j_idx < n_atoms) {
-                sij = scale_matrix[i_idx*n_atoms + j_idx];
-                // sij = 0.5f;
-            } else {
-                sij = 0;
-            }
-
-            NumericType so4eq01 = sij*ONE_4PI_EPS0*q0*q1;
-            NumericType grad_prefactor = so4eq01/d3ij;
-            NumericType hess_prefactor = so4eq01/d5ij;
-
             if(j_idx < i_idx && i_idx < n_atoms && j_idx < n_atoms) {
+
+                NumericType dx = x0 - x1;
+                NumericType dy = y0 - y1;
+                NumericType dz = z0 - z1;
+                NumericType d2x = dx*dx;
+                NumericType d2y = dy*dy;
+                NumericType d2z = dz*dz;
+
+                NumericType d2ij = d2x + d2y + d2z;
+                NumericType dij = sqrt(d2ij);
+                NumericType d3ij = d2ij*dij;
+                NumericType inv_d3ij = 1/d3ij;
+                NumericType d5ij = d3ij*d2ij;
+
+                NumericType sij = 0;
+                if(i_idx < n_atoms && j_idx < n_atoms) {
+                    sij = scale_matrix[i_idx*n_atoms + j_idx];
+                    // sij = 0.5f;
+                } else {
+                    sij = 0;
+                }
+
+                NumericType so4eq01 = sij*ONE_4PI_EPS0*q0*q1;
+                NumericType grad_prefactor = so4eq01*inv_d3ij;
+                NumericType hess_prefactor = so4eq01/d5ij;
 
                 grad_dx -= grad_prefactor*dx;
                 grad_dy -= grad_prefactor*dy;
@@ -194,14 +199,15 @@ __global__ void electrostatics_total_derivative(
                 shfl_grad_dy += grad_prefactor*dy;
                 shfl_grad_dz += grad_prefactor*dz;
 
-
-                NumericType *mp_out_qi = mp_out + global_param_idxs[param_idxs[i_idx]]*n_atoms*3;
                 NumericType *mp_out_qj = mp_out + global_param_idxs[param_idxs[j_idx]]*n_atoms*3;
 
-                NumericType PREFACTOR_QI_GRAD = sij*ONE_4PI_EPS0*q1/d3ij;
-                NumericType PREFACTOR_QJ_GRAD = sij*ONE_4PI_EPS0*q0/d3ij;
+                NumericType mp_prefactor = sij*ONE_4PI_EPS0*inv_d3ij;
 
-                // use symmetry later on
+                NumericType PREFACTOR_QI_GRAD = mp_prefactor*q1;
+                NumericType PREFACTOR_QJ_GRAD = mp_prefactor*q0;
+
+
+               // use symmetry later on
                 atomicAdd(mp_out_qi + i_idx*3 + 0, PREFACTOR_QI_GRAD * (-dx));
                 atomicAdd(mp_out_qi + i_idx*3 + 1, PREFACTOR_QI_GRAD * (-dy));
                 atomicAdd(mp_out_qi + i_idx*3 + 2, PREFACTOR_QI_GRAD * (-dz));
@@ -357,7 +363,6 @@ void ElectrostaticsGPU<NumericType>::total_derivative(
         d_grad_out,
         d_hessian_out,
         d_mp_out,
-        n_params,
         n_atoms);
 
 };
