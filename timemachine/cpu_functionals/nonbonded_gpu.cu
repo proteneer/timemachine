@@ -131,17 +131,15 @@ __global__ void electrostatics_total_derivative(
                 NumericType d2z = dz*dz;
 
                 NumericType d2ij = d2x + d2y + d2z;
-                NumericType dij = sqrt(d2ij);
+                NumericType dij = gpuSqrt(d2ij);
                 NumericType d3ij = d2ij*dij;
                 NumericType d5ij = d3ij*d2ij;
 
-                NumericType sij = 0;
-                if(h_i_idx < n_atoms && h_j_idx < n_atoms) {
-                    sij = scale_matrix[h_i_idx*n_atoms + h_j_idx];
+                NumericType sij = scale_matrix[h_i_idx*n_atoms + h_j_idx];
                     // sij = 0.5f;
-                } else {
-                    sij = 0;
-                }
+                // } else {
+                    // sij = 0;
+                // }
 
                 NumericType so4eq01 = sij*ONE_4PI_EPS0*qi*q1;
                 NumericType hess_prefactor = so4eq01/d5ij;
@@ -179,13 +177,11 @@ __global__ void electrostatics_total_derivative(
                 NumericType inv_d3ij = 1/d3ij;
                 NumericType d5ij = d3ij*d2ij;
 
-                NumericType sij = 0;
-                if(i_idx < n_atoms && j_idx < n_atoms) {
-                    sij = scale_matrix[i_idx*n_atoms + j_idx];
+                NumericType sij = scale_matrix[i_idx*n_atoms + j_idx];
                     // sij = 0.5f;
-                } else {
-                    sij = 0;
-                }
+                // } else {
+                    // sij = 0;
+                // }
 
                 NumericType so4eq01 = sij*ONE_4PI_EPS0*q0*q1;
                 NumericType grad_prefactor = so4eq01*inv_d3ij;
@@ -207,7 +203,7 @@ __global__ void electrostatics_total_derivative(
                 NumericType PREFACTOR_QJ_GRAD = mp_prefactor*q0;
 
 
-               // use symmetry later on
+                // use symmetry later on
                 atomicAdd(mp_out_qi + i_idx*3 + 0, PREFACTOR_QI_GRAD * (-dx));
                 atomicAdd(mp_out_qi + i_idx*3 + 1, PREFACTOR_QI_GRAD * (-dy));
                 atomicAdd(mp_out_qi + i_idx*3 + 2, PREFACTOR_QI_GRAD * (-dz));
