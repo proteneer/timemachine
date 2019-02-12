@@ -62,6 +62,8 @@ class LeonnardJones(Energy):
         sig_j = tf.expand_dims(sig, 1)
         sig_ij = (sig_i + sig_j)/2
 
+
+
         sig_ij_raw = sig_ij
 
         eps_i = tf.expand_dims(eps, 0)
@@ -90,6 +92,9 @@ class LeonnardJones(Energy):
 
         sig_ij = tf.boolean_mask(sig_ij, keep_mask)
         eps_ij = tf.boolean_mask(eps_ij, keep_mask)
+
+        d2ij_raw = d2ij
+
         d2ij = tf.boolean_mask(d2ij, keep_mask)
 
         dij = tf.sqrt(d2ij)

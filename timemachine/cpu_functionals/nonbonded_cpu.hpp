@@ -399,9 +399,6 @@ public:
 
                 NumericType sig = (sig0 + sig1)/2;
                 NumericType eps = sqrt(eps0*eps1);
-                // if(dij > 2.5*sig) {
-                    // continue;
-                // }
 
                 std::array<NumericType, 6> xs({x0, y0, z0, x1, y1, z1});
                 std::array<NumericType, 4> params({sig0, eps0, sig1, eps1});
