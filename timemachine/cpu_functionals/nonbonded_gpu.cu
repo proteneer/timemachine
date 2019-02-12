@@ -133,6 +133,7 @@ __global__ void electrostatics_total_derivative(
             NumericType sij = 0;
             if(h_i_idx < n_atoms && h_j_idx < n_atoms) {
                 sij = scale_matrix[h_i_idx*n_atoms + h_j_idx];
+                // sij = 0.5f;
             } else {
                 sij = 0;
             }
@@ -154,7 +155,7 @@ __global__ void electrostatics_total_derivative(
 
         }
 
-        // diagonal elements
+        // diagonal elements and mixed partials
         for(int round=0; round < WARP_SIZE; round++) {
 
             j_idx = tile_y_idx*WARP_SIZE + j_idx % WARP_SIZE;
@@ -174,6 +175,7 @@ __global__ void electrostatics_total_derivative(
             NumericType sij = 0;
             if(i_idx < n_atoms && j_idx < n_atoms) {
                 sij = scale_matrix[i_idx*n_atoms + j_idx];
+                // sij = 0.5f;
             } else {
                 sij = 0;
             }
@@ -191,6 +193,29 @@ __global__ void electrostatics_total_derivative(
                 shfl_grad_dx += grad_prefactor*dx;
                 shfl_grad_dy += grad_prefactor*dy;
                 shfl_grad_dz += grad_prefactor*dz;
+
+
+                NumericType *mp_out_qi = mp_out + global_param_idxs[param_idxs[i_idx]]*n_atoms*3;
+                NumericType *mp_out_qj = mp_out + global_param_idxs[param_idxs[j_idx]]*n_atoms*3;
+
+                NumericType PREFACTOR_QI_GRAD = sij*ONE_4PI_EPS0*q1/d3ij;
+                NumericType PREFACTOR_QJ_GRAD = sij*ONE_4PI_EPS0*q0/d3ij;
+
+                // use symmetry later on
+                atomicAdd(mp_out_qi + i_idx*3 + 0, PREFACTOR_QI_GRAD * (-dx));
+                atomicAdd(mp_out_qi + i_idx*3 + 1, PREFACTOR_QI_GRAD * (-dy));
+                atomicAdd(mp_out_qi + i_idx*3 + 2, PREFACTOR_QI_GRAD * (-dz));
+                atomicAdd(mp_out_qi + j_idx*3 + 0, PREFACTOR_QI_GRAD * (dx));
+                atomicAdd(mp_out_qi + j_idx*3 + 1, PREFACTOR_QI_GRAD * (dy));
+                atomicAdd(mp_out_qi + j_idx*3 + 2, PREFACTOR_QI_GRAD * (dz));
+
+                atomicAdd(mp_out_qj + i_idx*3 + 0, PREFACTOR_QJ_GRAD * (-dx));
+                atomicAdd(mp_out_qj + i_idx*3 + 1, PREFACTOR_QJ_GRAD * (-dy));
+                atomicAdd(mp_out_qj + i_idx*3 + 2, PREFACTOR_QJ_GRAD * (-dz));
+                atomicAdd(mp_out_qj + j_idx*3 + 0, PREFACTOR_QJ_GRAD * (dx));
+                atomicAdd(mp_out_qj + j_idx*3 + 1, PREFACTOR_QJ_GRAD * (dy));
+                atomicAdd(mp_out_qj + j_idx*3 + 2, PREFACTOR_QJ_GRAD * (dz));
+
 
                 // compute lower triangular elements
                 hess_xx += hess_prefactor*(-d2ij + 3*d2x);

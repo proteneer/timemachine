@@ -229,8 +229,8 @@ class TestElectrostatics(unittest.TestCase):
         tf.reset_default_graph()
 
     def test_electrostatics_large(self):
-        np.random.seed(0)
-        x0 = np.random.rand(253, 3).astype(np.float64)
+        # np.random.seed(0)
+        x0 = np.random.rand(99, 3).astype(np.float64)
         print(x0)
 
         N = x0.shape[0]
@@ -238,7 +238,7 @@ class TestElectrostatics(unittest.TestCase):
         x_ph = tf.placeholder(shape=(N, 3), dtype=np.float64)
 
 
-        num_params = 25
+        num_params = 35
 
         params_np = np.random.rand(num_params).astype(np.float64)
         params_tf = tf.convert_to_tensor(params_np)
@@ -274,14 +274,17 @@ class TestElectrostatics(unittest.TestCase):
         np.testing.assert_allclose(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), rtol=1e-11)
 
         ref_h_val = sess.run(ref_hessians, feed_dict={x_ph: x0}).reshape(N*3, N*3)
-
-
-
         test_h_val = test_hessians.reshape(N*3, N*3)
 
-        print(np.tril(ref_h_val), np.tril(test_h_val))
+
+        # these tolerances vary as a function of system size.
         np.testing.assert_allclose(np.tril(ref_h_val), np.tril(test_h_val), rtol=1e-11)
 
+        ref_mp_val = sess.run(ref_mps[0], feed_dict={x_ph: x0})
+        diff = test_mps - ref_mp_val
+        print(diff.shape, np.amax(diff))
+
+        np.testing.assert_allclose(test_mps, ref_mp_val, rtol=1e-11)
 
     # def test_electrostatics_gpu(self):
     #     x0 = np.array([
