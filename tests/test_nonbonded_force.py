@@ -110,7 +110,7 @@ class TestLennardJones(unittest.TestCase):
 
         num_params = 4
         # params_np = (np.random.rand(num_params)+1.0).astype(dtype=np.float64)
-        params_np = np.array([3.0, 2.0, 1.0, 1.4])
+        params_np = np.array([3.0, 2.0, 1.0, 1.4, 2.0, 2.0])
         params_tf = tf.convert_to_tensor(params_np)
         param_idxs = np.random.randint(num_params, size=(N,2))
 

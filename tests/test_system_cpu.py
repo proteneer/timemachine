@@ -248,7 +248,7 @@ def deserialize_system(xml_file):
                     lj_params = np.array(lj_params)
                     lj_param_idxs = np.array(lj_param_idxs)
 
-                    lj = custom_ops.LennardJones_float(
+                    lj = custom_ops.LennardJonesGPU_float(
                         lj_params.astype(np.float32).reshape(-1).tolist(),
                         list(range(start_params, start_params+n_lj_params)),
                         lj_param_idxs.reshape(-1).tolist(),

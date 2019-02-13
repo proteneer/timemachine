@@ -7,6 +7,7 @@ This kernel is very similar to electrostatics.cuh, please read from that for add
 
 */
 
+
 template<typename NumericType>
 __global__ void lennard_jones_total_derivative(
     const NumericType *coords,
@@ -51,6 +52,14 @@ __global__ void lennard_jones_total_derivative(
     NumericType grad_dy = 0;
     NumericType grad_dz = 0;
 
+    NumericType mixed_dx_sig = 0;
+    NumericType mixed_dy_sig = 0;
+    NumericType mixed_dz_sig = 0;
+
+    NumericType mixed_dx_eps = 0;
+    NumericType mixed_dy_eps = 0;
+    NumericType mixed_dz_eps = 0;
+
     NumericType hess_xx = 0;
     NumericType hess_yx = 0;
     NumericType hess_yy = 0;
@@ -63,9 +72,18 @@ __global__ void lennard_jones_total_derivative(
     for(int tile_y_idx = 0; tile_y_idx < num_y_tiles; tile_y_idx++) {
 
         NumericType x1, y1, z1, sig1, eps1;
+        int sig1_g_idx, eps1_g_idx;
         NumericType shfl_grad_dx = 0;
         NumericType shfl_grad_dy = 0;
         NumericType shfl_grad_dz = 0;
+
+        NumericType shfl_mixed_dx_sig = 0;
+        NumericType shfl_mixed_dy_sig = 0;
+        NumericType shfl_mixed_dz_sig = 0;
+
+        NumericType shfl_mixed_dx_eps = 0;
+        NumericType shfl_mixed_dy_eps = 0;
+        NumericType shfl_mixed_dz_eps = 0;
 
         NumericType shfl_hess_xx = 0;
         NumericType shfl_hess_yx = 0;
@@ -87,13 +105,14 @@ __global__ void lennard_jones_total_derivative(
             x1 = coords[j_idx*3+0];
             y1 = coords[j_idx*3+1];
             z1 = coords[j_idx*3+2];
+            sig1_g_idx = global_param_idxs[param_idxs[j_idx*2+0]]*n_atoms*3;
+            eps1_g_idx = global_param_idxs[param_idxs[j_idx*2+1]]*n_atoms*3;
             sig1 = params[param_idxs[j_idx*2+0]];
             eps1 = params[param_idxs[j_idx*2+1]];
         }
 
         // off diagonal
         // iterate over a block of i's because we improve locality of writes to off diagonal elements
-        #pragma unroll 4
         for(int round=0; round < WARP_SIZE; round++) {
             NumericType xi = __shfl_sync(0xffffffff, x0, round);
             NumericType yi = __shfl_sync(0xffffffff, y0, round);
@@ -116,7 +135,7 @@ __global__ void lennard_jones_total_derivative(
 
                 NumericType sij = scale_matrix[h_i_idx*n_atoms + h_j_idx];
 
-                NumericType eps = sqrt(epsi * eps1);
+                NumericType eps = gpuSqrt(epsi * eps1);
                 NumericType sig = (sigi + sig1)/2;
 
                 NumericType d2ij = d2x + d2y + d2z;
@@ -132,29 +151,19 @@ __global__ void lennard_jones_total_derivative(
                 NumericType sig6 = sig3*sig3;
                 NumericType prefactor = sij*eps*sig6;
 
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, N, 0, 0)] += prefactor*-24*(d8ij - 8*d6ij*pow(dx, 2) - 2*d2ij*sig6 + 28*pow(dx, 2)*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, N, 0, 1)] += prefactor*96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, N, 0, 2)] += prefactor*96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                NumericType common = prefactor*96*(2*d6ij - 7*sig6)*inv_d16ij;
 
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, N, 1, 0)] += prefactor*96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, N, 1, 1)] += prefactor*-24*(d8ij - 8*d6ij*pow(dy, 2) - 2*d2ij*sig6 + 28*pow(dy, 2)*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, N, 1, 2)] += prefactor*96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
+                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 0)] += prefactor*-24*inv_d16ij*(d8ij- 2*d2ij*sig6 + d2x*(28*sig6 - 8*d6ij));
+                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 1)] += common*dx*dy;
+                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 2)] += common*dx*dz;
 
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, N, 2, 0)] += prefactor*96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, N, 2, 1)] += prefactor*96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, N, 2, 2)] += prefactor*-24*(d8ij - 8*d6ij*pow(dz, 2) - 2*d2ij*sig6 + 28*pow(dz, 2)*sig6)*inv_d16ij;
+                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 0)] += common*dx*dy;
+                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 1)] += prefactor*-24*inv_d16ij*(d8ij- 2*d2ij*sig6 + d2y*(28*sig6 - 8*d6ij));
+                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 2)] += common*dy*dz;
 
-                hessian_out[HESS_IDX(h_j_idx, h_i_idx, N, 0, 0)] += prefactor*-24*(d8ij - 8*d6ij*pow(dx, 2) - 2*d2ij*sig6 + 28*pow(dx, 2)*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_j_idx, h_i_idx, N, 0, 1)] += prefactor*96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_j_idx, h_i_idx, N, 0, 2)] += prefactor*96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
-
-                hessian_out[HESS_IDX(h_j_idx, h_i_idx, N, 1, 0)] += prefactor*96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_j_idx, h_i_idx, N, 1, 1)] += prefactor*-24*(d8ij - 8*d6ij*pow(dy, 2) - 2*d2ij*sig6 + 28*pow(dy, 2)*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_j_idx, h_i_idx, N, 1, 2)] += prefactor*96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
-
-                hessian_out[HESS_IDX(h_j_idx, h_i_idx, N, 2, 0)] += prefactor*96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_j_idx, h_i_idx, N, 2, 1)] += prefactor*96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
-                hessian_out[HESS_IDX(h_j_idx, h_i_idx, N, 2, 2)] += prefactor*-24*(d8ij - 8*d6ij*pow(dz, 2) - 2*d2ij*sig6 + 28*pow(dz, 2)*sig6)*inv_d16ij;
+                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 0)] += common*dx*dz;
+                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 1)] += common*dy*dz;
+                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 2)] += prefactor*-24*inv_d16ij*(d8ij- 2*d2ij*sig6 + d2z*(28*sig6 - 8*d6ij));
 
             }
 
@@ -190,15 +199,14 @@ __global__ void lennard_jones_total_derivative(
                 NumericType sig3 = sig2*sig;
                 NumericType sig5 = sig3*sig2;
                 NumericType sig6 = sig3*sig3;
-                NumericType sig11 = sig6*sig3*sig2;
+                // NumericType sig11 = sig6*sig3*sig2;
                 NumericType sig12 = sig6*sig6;
 
-                // rij = d2ij, avoids a square root.
-                NumericType rij = dx*dx + dy*dy + dz*dz;
-                // printf("i_idx %d j_idx %d eps %f sig %f\n", i_idx, j_idx, eps, sig);
-                NumericType rij3 = rij * rij * rij;
-                NumericType rij4 = rij3 * rij;
+                NumericType rij = d2ij;
+                NumericType rij3 = d6ij;
+                NumericType rij4 = d8ij;
                 NumericType rij7 = rij4 * rij3;
+
 
                 // (ytz): 99 % sure this loses precision so we need to refactor
                 NumericType sig1rij1 = sig/rij;
@@ -210,10 +218,6 @@ __global__ void lennard_jones_total_derivative(
 
 
                 NumericType sig12rij7 = sig12/rij7;
-                NumericType sig11rij7 = sig11/rij7;
-
-                // NumericType sig6rij4 = sig6/rij4;
-                // NumericType sig5rij4 = sig5/rij4;
 
                 NumericType dEdx = 24*eps*dx*(sig12rij7*2 - sig6rij4);
                 NumericType dEdy = 24*eps*dy*(sig12rij7*2 - sig6rij4);
@@ -229,93 +233,62 @@ __global__ void lennard_jones_total_derivative(
                 shfl_grad_dy += sij*dEdy;
                 shfl_grad_dz += sij*dEdz;
 
-                NumericType *mp_out_sig1 = mp_out + global_param_idxs[param_idxs[j_idx*2+0]]*n_atoms*3;
-                NumericType *mp_out_eps1 = mp_out + global_param_idxs[param_idxs[j_idx*2+1]]*n_atoms*3;
+                NumericType *mp_out_sig1 = mp_out + sig1_g_idx;
+                NumericType *mp_out_eps1 = mp_out + eps1_g_idx;
 
-                printf("sig6/rij4 %f sig12 %f, rij4 %f\n", sig6rij4, sig6, rij4);
+                NumericType EPS_PREFACTOR = sij*12/eps*(sig6rij4)*(2*sig6rij3 - 1);
 
-                atomicAdd(mp_out_eps0 + i_idx*3 + 0, -sij*12*(eps1/eps)*dx*(sig6rij4)*(2*sig6rij3 - 1));
-                atomicAdd(mp_out_eps0 + i_idx*3 + 1, -sij*12*(eps1/eps)*dy*(sig6rij4)*(2*sig6rij3 - 1));
-                atomicAdd(mp_out_eps0 + i_idx*3 + 2, -sij*12*(eps1/eps)*dz*(sig6rij4)*(2*sig6rij3 - 1));
+                mixed_dx_eps += -EPS_PREFACTOR*eps1*dx;
+                mixed_dy_eps += -EPS_PREFACTOR*eps1*dy;
+                mixed_dz_eps += -EPS_PREFACTOR*eps1*dz;
 
-                atomicAdd(mp_out_eps1 + i_idx*3 + 0, -sij*12*(eps0/eps)*dx*(sig6rij4)*(2*sig6rij3 - 1));
-                atomicAdd(mp_out_eps1 + i_idx*3 + 1, -sij*12*(eps0/eps)*dy*(sig6rij4)*(2*sig6rij3 - 1));
-                atomicAdd(mp_out_eps1 + i_idx*3 + 2, -sij*12*(eps0/eps)*dz*(sig6rij4)*(2*sig6rij3 - 1));
+                atomicAdd(mp_out_eps1 + i_idx*3 + 0, -EPS_PREFACTOR*eps0*dx);
+                atomicAdd(mp_out_eps1 + i_idx*3 + 1, -EPS_PREFACTOR*eps0*dy);
+                atomicAdd(mp_out_eps1 + i_idx*3 + 2, -EPS_PREFACTOR*eps0*dz);
 
-                atomicAdd(mp_out_eps0 + j_idx*3 + 0,  sij*12*(eps1/eps)*dx*(sig6rij4)*(2*sig6rij3 - 1));
-                atomicAdd(mp_out_eps0 + j_idx*3 + 1,  sij*12*(eps1/eps)*dy*(sig6rij4)*(2*sig6rij3 - 1));
-                atomicAdd(mp_out_eps0 + j_idx*3 + 2,  sij*12*(eps1/eps)*dz*(sig6rij4)*(2*sig6rij3 - 1));
+                atomicAdd(mp_out_eps0 + j_idx*3 + 0,  EPS_PREFACTOR*eps1*dx);
+                atomicAdd(mp_out_eps0 + j_idx*3 + 1,  EPS_PREFACTOR*eps1*dy);
+                atomicAdd(mp_out_eps0 + j_idx*3 + 2,  EPS_PREFACTOR*eps1*dz);
 
-                atomicAdd(mp_out_eps1 + j_idx*3 + 0,  sij*12*(eps0/eps)*dx*(sig6rij4)*(2*sig6rij3 - 1));
-                atomicAdd(mp_out_eps1 + j_idx*3 + 1,  sij*12*(eps0/eps)*dy*(sig6rij4)*(2*sig6rij3 - 1));
-                atomicAdd(mp_out_eps1 + j_idx*3 + 2,  sij*12*(eps0/eps)*dz*(sig6rij4)*(2*sig6rij3 - 1));
+                shfl_mixed_dx_eps += EPS_PREFACTOR*eps0*dx;
+                shfl_mixed_dy_eps += EPS_PREFACTOR*eps0*dy;
+                shfl_mixed_dz_eps += EPS_PREFACTOR*eps0*dz;
 
-                atomicAdd(mp_out_sig0 + i_idx*3 + 0, -sij*24*eps*dx*(sig5/rij4)*(12*sig6rij3 - 3));
-                atomicAdd(mp_out_sig0 + i_idx*3 + 1, -sij*24*eps*dy*(sig5/rij4)*(12*sig6rij3 - 3));
-                atomicAdd(mp_out_sig0 + i_idx*3 + 2, -sij*24*eps*dz*(sig5/rij4)*(12*sig6rij3 - 3));
+                NumericType SIG_PREFACTOR = sij*24*eps*(sig5/rij4)*(12*sig6rij3 - 3);
 
-                atomicAdd(mp_out_sig1 + i_idx*3 + 0, -sij*24*eps*dx*(sig5/rij4)*(12*sig6rij3 - 3));
-                atomicAdd(mp_out_sig1 + i_idx*3 + 1, -sij*24*eps*dy*(sig5/rij4)*(12*sig6rij3 - 3));
-                atomicAdd(mp_out_sig1 + i_idx*3 + 2, -sij*24*eps*dz*(sig5/rij4)*(12*sig6rij3 - 3));
+                mixed_dx_sig += -SIG_PREFACTOR*dx;
+                mixed_dy_sig += -SIG_PREFACTOR*dy;
+                mixed_dz_sig += -SIG_PREFACTOR*dz;
 
-                atomicAdd(mp_out_sig0 + j_idx*3 + 0,  sij*24*eps*dx*(sig5/rij4)*(12*sig6rij3 - 3));
-                atomicAdd(mp_out_sig0 + j_idx*3 + 1,  sij*24*eps*dy*(sig5/rij4)*(12*sig6rij3 - 3));
-                atomicAdd(mp_out_sig0 + j_idx*3 + 2,  sij*24*eps*dz*(sig5/rij4)*(12*sig6rij3 - 3));
+                atomicAdd(mp_out_sig1 + i_idx*3 + 0, -SIG_PREFACTOR*dx);
+                atomicAdd(mp_out_sig1 + i_idx*3 + 1, -SIG_PREFACTOR*dy);
+                atomicAdd(mp_out_sig1 + i_idx*3 + 2, -SIG_PREFACTOR*dz);
 
-                atomicAdd(mp_out_sig1 + j_idx*3 + 0,  sij*24*eps*dx*(sig5/rij4)*(12*sig6rij3 - 3));
-                atomicAdd(mp_out_sig1 + j_idx*3 + 1,  sij*24*eps*dy*(sig5/rij4)*(12*sig6rij3 - 3));
-                atomicAdd(mp_out_sig1 + j_idx*3 + 2,  sij*24*eps*dz*(sig5/rij4)*(12*sig6rij3 - 3));
+                atomicAdd(mp_out_sig0 + j_idx*3 + 0,  SIG_PREFACTOR*dx);
+                atomicAdd(mp_out_sig0 + j_idx*3 + 1,  SIG_PREFACTOR*dy);
+                atomicAdd(mp_out_sig0 + j_idx*3 + 2,  SIG_PREFACTOR*dz);
 
-
-
-
-                // atomicAdd(mp_out_eps0 + i_idx*3 + 0, -sij*12*(eps1/eps)*dx*(sig12rij7*2 - sig6rij4));
-                // atomicAdd(mp_out_eps0 + i_idx*3 + 1, -sij*12*(eps1/eps)*dy*(sig12rij7*2 - sig6rij4));
-                // atomicAdd(mp_out_eps0 + i_idx*3 + 2, -sij*12*(eps1/eps)*dz*(sig12rij7*2 - sig6rij4));
-
-                // atomicAdd(mp_out_eps1 + i_idx*3 + 0, -sij*12*(eps0/eps)*dx*(sig12rij7*2 - sig6rij4));
-                // atomicAdd(mp_out_eps1 + i_idx*3 + 1, -sij*12*(eps0/eps)*dy*(sig12rij7*2 - sig6rij4));
-                // atomicAdd(mp_out_eps1 + i_idx*3 + 2, -sij*12*(eps0/eps)*dz*(sig12rij7*2 - sig6rij4));
-
-                // atomicAdd(mp_out_eps0 + j_idx*3 + 0,  sij*12*(eps1/eps)*dx*(sig12rij7*2 - sig6rij4));
-                // atomicAdd(mp_out_eps0 + j_idx*3 + 1,  sij*12*(eps1/eps)*dy*(sig12rij7*2 - sig6rij4));
-                // atomicAdd(mp_out_eps0 + j_idx*3 + 2,  sij*12*(eps1/eps)*dz*(sig12rij7*2 - sig6rij4));
-
-                // atomicAdd(mp_out_eps1 + j_idx*3 + 0,  sij*12*(eps0/eps)*dx*(sig12rij7*2 - sig6rij4));
-                // atomicAdd(mp_out_eps1 + j_idx*3 + 1,  sij*12*(eps0/eps)*dy*(sig12rij7*2 - sig6rij4));
-                // atomicAdd(mp_out_eps1 + j_idx*3 + 2,  sij*12*(eps0/eps)*dz*(sig12rij7*2 - sig6rij4));
-
-                // atomicAdd(mp_out_sig0 + i_idx*3 + 0, -sij*24*eps*dx*(12*sig11rij7 - 3*sig5rij4));
-                // atomicAdd(mp_out_sig0 + i_idx*3 + 1, -sij*24*eps*dy*(12*sig11rij7 - 3*sig5rij4));
-                // atomicAdd(mp_out_sig0 + i_idx*3 + 2, -sij*24*eps*dz*(12*sig11rij7 - 3*sig5rij4));
-
-                // atomicAdd(mp_out_sig1 + i_idx*3 + 0, -sij*24*eps*dx*(12*sig11rij7 - 3*sig5rij4));
-                // atomicAdd(mp_out_sig1 + i_idx*3 + 1, -sij*24*eps*dy*(12*sig11rij7 - 3*sig5rij4));
-                // atomicAdd(mp_out_sig1 + i_idx*3 + 2, -sij*24*eps*dz*(12*sig11rij7 - 3*sig5rij4));
-
-                // atomicAdd(mp_out_sig0 + j_idx*3 + 0,  sij*24*eps*dx*(12*sig11rij7 - 3*sig5rij4));
-                // atomicAdd(mp_out_sig0 + j_idx*3 + 1,  sij*24*eps*dy*(12*sig11rij7 - 3*sig5rij4));
-                // atomicAdd(mp_out_sig0 + j_idx*3 + 2,  sij*24*eps*dz*(12*sig11rij7 - 3*sig5rij4));
-
-                // atomicAdd(mp_out_sig1 + j_idx*3 + 0,  sij*24*eps*dx*(12*sig11rij7 - 3*sig5rij4));
-                // atomicAdd(mp_out_sig1 + j_idx*3 + 1,  sij*24*eps*dy*(12*sig11rij7 - 3*sig5rij4));
-                // atomicAdd(mp_out_sig1 + j_idx*3 + 2,  sij*24*eps*dz*(12*sig11rij7 - 3*sig5rij4));
+                shfl_mixed_dx_sig += SIG_PREFACTOR*dx;
+                shfl_mixed_dy_sig += SIG_PREFACTOR*dy;
+                shfl_mixed_dz_sig += SIG_PREFACTOR*dz;
 
                 NumericType prefactor = sij*eps*sig6;
 
-                hess_xx += prefactor*24*(d8ij - 8*d6ij*pow(dx, 2) - 2*d2ij*sig6 + 28*pow(dx, 2)*sig6)*inv_d16ij;
-                hess_yx += prefactor*-96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
-                hess_yy += prefactor*24*(d8ij - 8*d6ij*pow(dy, 2) - 2*d2ij*sig6 + 28*pow(dy, 2)*sig6)*inv_d16ij;                
-                hess_zx += prefactor*-96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
-                hess_zy += prefactor*-96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
-                hess_zz += prefactor*24*(d8ij - 8*d6ij*pow(dz, 2) - 2*d2ij*sig6 + 28*pow(dz, 2)*sig6)*inv_d16ij;
+                NumericType diagonal_prefactor = prefactor*-96*(2*d6ij - 7*sig6)*inv_d16ij;
+
+                hess_xx += prefactor*24*(d8ij - 8*d6ij*d2x - 2*d2ij*sig6 + 28*d2x*sig6)*inv_d16ij;
+                hess_yx += diagonal_prefactor*dx*dy;
+                hess_yy += prefactor*24*(d8ij - 8*d6ij*d2y - 2*d2ij*sig6 + 28*d2y*sig6)*inv_d16ij;
+                hess_zx += diagonal_prefactor*dx*dz;
+                hess_zy += diagonal_prefactor*dy*dz;
+                hess_zz += prefactor*24*(d8ij - 8*d6ij*d2z - 2*d2ij*sig6 + 28*d2z*sig6)*inv_d16ij;
                 
-                shfl_hess_xx += prefactor*24*(d8ij - 8*d6ij*pow(dx, 2) - 2*d2ij*sig6 + 28*pow(dx, 2)*sig6)*inv_d16ij;
-                shfl_hess_yx += prefactor*-96*dx*dy*(2*d6ij - 7*sig6)*inv_d16ij;
-                shfl_hess_yy += prefactor*24*(d8ij - 8*d6ij*pow(dy, 2) - 2*d2ij*sig6 + 28*pow(dy, 2)*sig6)*inv_d16ij;
-                shfl_hess_zx += prefactor*-96*dx*dz*(2*d6ij - 7*sig6)*inv_d16ij;
-                shfl_hess_zy += prefactor*-96*dy*dz*(2*d6ij - 7*sig6)*inv_d16ij;
-                shfl_hess_zz += prefactor*24*(d8ij - 8*d6ij*pow(dz, 2) - 2*d2ij*sig6 + 28*pow(dz, 2)*sig6)*inv_d16ij;
+                shfl_hess_xx += prefactor*24*(d8ij - 8*d6ij*d2x - 2*d2ij*sig6 + 28*d2x*sig6)*inv_d16ij;
+                shfl_hess_yx += diagonal_prefactor*dx*dy;
+                shfl_hess_yy += prefactor*24*(d8ij - 8*d6ij*d2y - 2*d2ij*sig6 + 28*d2y*sig6)*inv_d16ij;
+                shfl_hess_zx += diagonal_prefactor*dx*dz;
+                shfl_hess_zy += diagonal_prefactor*dy*dz;
+                shfl_hess_zz += prefactor*24*(d8ij - 8*d6ij*d2z - 2*d2ij*sig6 + 28*d2z*sig6)*inv_d16ij;
 
             }
 
@@ -326,10 +299,20 @@ __global__ void lennard_jones_total_derivative(
             z1 = __shfl_sync(0xffffffff, z1, srcLane);
             sig1 = __shfl_sync(0xffffffff, sig1, srcLane);
             eps1 = __shfl_sync(0xffffffff, eps1, srcLane);
+            sig1_g_idx = __shfl_sync(0xffffffff, sig1_g_idx, srcLane);
+            eps1_g_idx = __shfl_sync(0xffffffff, eps1_g_idx, srcLane);
 
             shfl_grad_dx = __shfl_sync(0xffffffff, shfl_grad_dx, srcLane);
             shfl_grad_dy = __shfl_sync(0xffffffff, shfl_grad_dy, srcLane);
             shfl_grad_dz = __shfl_sync(0xffffffff, shfl_grad_dz, srcLane);
+
+            shfl_mixed_dx_sig = __shfl_sync(0xffffffff, shfl_mixed_dx_sig, srcLane);
+            shfl_mixed_dy_sig = __shfl_sync(0xffffffff, shfl_mixed_dy_sig, srcLane);
+            shfl_mixed_dz_sig = __shfl_sync(0xffffffff, shfl_mixed_dz_sig, srcLane);
+
+            shfl_mixed_dx_eps = __shfl_sync(0xffffffff, shfl_mixed_dx_eps, srcLane);
+            shfl_mixed_dy_eps = __shfl_sync(0xffffffff, shfl_mixed_dy_eps, srcLane);
+            shfl_mixed_dz_eps = __shfl_sync(0xffffffff, shfl_mixed_dz_eps, srcLane);
 
             shfl_hess_xx = __shfl_sync(0xffffffff, shfl_hess_xx, srcLane);
             shfl_hess_yx = __shfl_sync(0xffffffff, shfl_hess_yx, srcLane);
@@ -349,6 +332,16 @@ __global__ void lennard_jones_total_derivative(
             atomicAdd(grad_out + target_idx*3 + 1, shfl_grad_dy);
             atomicAdd(grad_out + target_idx*3 + 2, shfl_grad_dz);
 
+            NumericType *mp_out_sig1 = mp_out + sig1_g_idx;
+            atomicAdd(mp_out_sig1 + target_idx*3 + 0, shfl_mixed_dx_sig);
+            atomicAdd(mp_out_sig1 + target_idx*3 + 1, shfl_mixed_dy_sig);
+            atomicAdd(mp_out_sig1 + target_idx*3 + 2, shfl_mixed_dz_sig);
+
+            NumericType *mp_out_eps1 = mp_out + eps1_g_idx;
+            atomicAdd(mp_out_eps1 + target_idx*3 + 0, shfl_mixed_dx_eps);
+            atomicAdd(mp_out_eps1 + target_idx*3 + 1, shfl_mixed_dy_eps);
+            atomicAdd(mp_out_eps1 + target_idx*3 + 2, shfl_mixed_dz_eps);
+
             atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 0, 0), shfl_hess_xx);
             atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 1, 0), shfl_hess_yx);
             atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 1, 1), shfl_hess_yy);
@@ -363,6 +356,14 @@ __global__ void lennard_jones_total_derivative(
         atomicAdd(grad_out + i_idx*3 + 0, grad_dx);
         atomicAdd(grad_out + i_idx*3 + 1, grad_dy);
         atomicAdd(grad_out + i_idx*3 + 2, grad_dz);
+
+        atomicAdd(mp_out_sig0 + i_idx*3 + 0, mixed_dx_sig);
+        atomicAdd(mp_out_sig0 + i_idx*3 + 1, mixed_dy_sig);
+        atomicAdd(mp_out_sig0 + i_idx*3 + 2, mixed_dz_sig);
+
+        atomicAdd(mp_out_eps0 + i_idx*3 + 0, mixed_dx_eps);
+        atomicAdd(mp_out_eps0 + i_idx*3 + 1, mixed_dy_eps);
+        atomicAdd(mp_out_eps0 + i_idx*3 + 2, mixed_dz_eps);
 
         atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 0, 0), hess_xx);
         atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 1, 0), hess_yx);

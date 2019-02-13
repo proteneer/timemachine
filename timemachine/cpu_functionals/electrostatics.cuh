@@ -75,6 +75,10 @@ __global__ void electrostatics_total_derivative(
     NumericType grad_dy = 0;
     NumericType grad_dz = 0;
 
+    NumericType mixed_dx = 0;
+    NumericType mixed_dy = 0;
+    NumericType mixed_dz = 0;
+
     NumericType hess_xx = 0;
     NumericType hess_yx = 0;
     NumericType hess_yy = 0;
@@ -87,9 +91,14 @@ __global__ void electrostatics_total_derivative(
     for(int tile_y_idx = 0; tile_y_idx < num_y_tiles; tile_y_idx++) {
 
         NumericType x1, y1, z1, q1;
+        int q1_g_idx;
         NumericType shfl_grad_dx = 0;
         NumericType shfl_grad_dy = 0;
         NumericType shfl_grad_dz = 0;
+
+        NumericType shfl_mixed_dx = 0;
+        NumericType shfl_mixed_dy = 0;
+        NumericType shfl_mixed_dz = 0;
 
         NumericType shfl_hess_xx = 0;
         NumericType shfl_hess_yx = 0;
@@ -111,6 +120,7 @@ __global__ void electrostatics_total_derivative(
             y1 = coords[j_idx*3+1];
             z1 = coords[j_idx*3+2];
             q1 = params[param_idxs[j_idx]];
+            q1_g_idx = global_param_idxs[param_idxs[j_idx]]*n_atoms*3;
         }
 
         // off diagonal
@@ -124,7 +134,6 @@ __global__ void electrostatics_total_derivative(
 
             int h_i_idx = blockIdx.x*WARP_SIZE + round;
             int h_j_idx = j_idx;
-
 
             if(h_j_idx < h_i_idx && h_i_idx < n_atoms && h_j_idx < n_atoms) {
 
@@ -190,20 +199,19 @@ __global__ void electrostatics_total_derivative(
                 shfl_grad_dy += grad_prefactor*dy;
                 shfl_grad_dz += grad_prefactor*dz;
 
-                NumericType *mp_out_qj = mp_out + global_param_idxs[param_idxs[j_idx]]*n_atoms*3;
+                // we can shuffle this as well.
+                NumericType *mp_out_qj = mp_out + q1_g_idx;
 
                 NumericType mp_prefactor = sij*ONE_4PI_EPS0*inv_d3ij;
 
                 NumericType PREFACTOR_QI_GRAD = mp_prefactor*q1;
                 NumericType PREFACTOR_QJ_GRAD = mp_prefactor*q0;
 
-                // (ytz): We can optimize this further by assuming that every particle has
-                // its own parameter, there by forming a (2N*N*3 mixed partial buffer), followed
-                // by a segmented sum to accumuluate the shared results. For the sake of simplicity,
-                // we use atomicAdds for now.
-                atomicAdd(mp_out_qi + i_idx*3 + 0, PREFACTOR_QI_GRAD * (-dx));
-                atomicAdd(mp_out_qi + i_idx*3 + 1, PREFACTOR_QI_GRAD * (-dy));
-                atomicAdd(mp_out_qi + i_idx*3 + 2, PREFACTOR_QI_GRAD * (-dz));
+                // (ytz): We can further optimize the off-diagonal elements if desired.
+                mixed_dx += PREFACTOR_QI_GRAD * (-dx);
+                mixed_dy += PREFACTOR_QI_GRAD * (-dy);
+                mixed_dz += PREFACTOR_QI_GRAD * (-dz);
+
                 atomicAdd(mp_out_qi + j_idx*3 + 0, PREFACTOR_QI_GRAD * (dx));
                 atomicAdd(mp_out_qi + j_idx*3 + 1, PREFACTOR_QI_GRAD * (dy));
                 atomicAdd(mp_out_qi + j_idx*3 + 2, PREFACTOR_QI_GRAD * (dz));
@@ -211,9 +219,10 @@ __global__ void electrostatics_total_derivative(
                 atomicAdd(mp_out_qj + i_idx*3 + 0, PREFACTOR_QJ_GRAD * (-dx));
                 atomicAdd(mp_out_qj + i_idx*3 + 1, PREFACTOR_QJ_GRAD * (-dy));
                 atomicAdd(mp_out_qj + i_idx*3 + 2, PREFACTOR_QJ_GRAD * (-dz));
-                atomicAdd(mp_out_qj + j_idx*3 + 0, PREFACTOR_QJ_GRAD * (dx));
-                atomicAdd(mp_out_qj + j_idx*3 + 1, PREFACTOR_QJ_GRAD * (dy));
-                atomicAdd(mp_out_qj + j_idx*3 + 2, PREFACTOR_QJ_GRAD * (dz));
+
+                shfl_mixed_dx += PREFACTOR_QJ_GRAD * dx;
+                shfl_mixed_dy += PREFACTOR_QJ_GRAD * dy;
+                shfl_mixed_dz += PREFACTOR_QJ_GRAD * dz;
 
                 // compute lower triangular elements
                 hess_xx += hess_prefactor*(-d2ij + 3*d2x);
@@ -238,10 +247,15 @@ __global__ void electrostatics_total_derivative(
             y1 = __shfl_sync(0xffffffff, y1, srcLane);
             z1 = __shfl_sync(0xffffffff, z1, srcLane);
             q1 = __shfl_sync(0xffffffff, q1, srcLane);
+            q1_g_idx = __shfl_sync(0xffffffff, q1_g_idx, srcLane);
 
             shfl_grad_dx = __shfl_sync(0xffffffff, shfl_grad_dx, srcLane);
             shfl_grad_dy = __shfl_sync(0xffffffff, shfl_grad_dy, srcLane);
             shfl_grad_dz = __shfl_sync(0xffffffff, shfl_grad_dz, srcLane);
+
+            shfl_mixed_dx = __shfl_sync(0xffffffff, shfl_mixed_dx, srcLane);
+            shfl_mixed_dy = __shfl_sync(0xffffffff, shfl_mixed_dy, srcLane);
+            shfl_mixed_dz = __shfl_sync(0xffffffff, shfl_mixed_dz, srcLane);
 
             shfl_hess_xx = __shfl_sync(0xffffffff, shfl_hess_xx, srcLane);
             shfl_hess_yx = __shfl_sync(0xffffffff, shfl_hess_yx, srcLane);
@@ -261,6 +275,12 @@ __global__ void electrostatics_total_derivative(
             atomicAdd(grad_out + target_idx*3 + 1, shfl_grad_dy);
             atomicAdd(grad_out + target_idx*3 + 2, shfl_grad_dz);
 
+            // optimize
+            NumericType *mp_out_qj = mp_out + q1_g_idx;
+            atomicAdd(mp_out_qj + target_idx*3 + 0, shfl_mixed_dx);
+            atomicAdd(mp_out_qj + target_idx*3 + 1, shfl_mixed_dy);
+            atomicAdd(mp_out_qj + target_idx*3 + 2, shfl_mixed_dz);
+
             atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 0, 0), shfl_hess_xx);
             atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 1, 0), shfl_hess_yx);
             atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 1, 1), shfl_hess_yy);
@@ -275,6 +295,10 @@ __global__ void electrostatics_total_derivative(
         atomicAdd(grad_out + i_idx*3 + 0, grad_dx);
         atomicAdd(grad_out + i_idx*3 + 1, grad_dy);
         atomicAdd(grad_out + i_idx*3 + 2, grad_dz);
+
+        atomicAdd(mp_out_qi + i_idx*3 + 0, mixed_dx);
+        atomicAdd(mp_out_qi + i_idx*3 + 1, mixed_dy);
+        atomicAdd(mp_out_qi + i_idx*3 + 2, mixed_dz);
 
         atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 0, 0), hess_xx);
         atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 1, 0), hess_yx);
