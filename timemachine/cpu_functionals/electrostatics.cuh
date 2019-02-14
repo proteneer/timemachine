@@ -40,8 +40,8 @@ Two additional improvements can be made;
 template<typename NumericType>
 __global__ void electrostatics_total_derivative(
     const NumericType *coords,
-    const NumericType *params, // change to int later?
-    const int *global_param_idxs, // change to int later?
+    const NumericType *params,
+    const int *global_param_idxs,
     const int *param_idxs,
     const NumericType *scale_matrix,
     NumericType *energy_out,

@@ -6,6 +6,7 @@
 #include "nonbonded_cpu.hpp"
 #include "nonbonded_gpu.hpp"
 #include "bonded_cpu.hpp"
+#include "bonded_gpu.hpp"
 #include <iostream>
 
 
@@ -45,6 +46,54 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
         std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative(
+            num_atoms,
+            num_params,
+            coords.data(),
+            &energy,
+            py_grads.mutable_data(),
+            py_hessians.mutable_data(),
+            py_mps.mutable_data()
+        );
+
+        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
+
+        return py::make_tuple(energy, py_grads, py_hessians, py_mps);
+    });
+
+}
+
+
+template<typename NumericType>
+void declare_harmonic_bond_gpu(py::module &m, const char *typestr) {
+
+    using Class = timemachine::HarmonicBondGPU<NumericType>;
+    std::string pyclass_name = std::string("HarmonicBondGPU_") + typestr;
+    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    .def(py::init<
+        std::vector<NumericType>, // params
+        std::vector<size_t>, // global_param_idxs
+        std::vector<size_t>, // param_idxs
+        std::vector<size_t> // bond_idxs
+    >())
+    .def("total_derivative", [](timemachine::HarmonicBondGPU<NumericType> &nrg,
+        const py::array_t<NumericType, py::array::c_style> coords,
+        ssize_t num_params) -> py::tuple {
+
+        const auto num_atoms = coords.shape()[0];
+        const auto num_dims = coords.shape()[1];
+
+        NumericType energy = 0;
+        py::array_t<NumericType, py::array::c_style> py_grads({num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_hessians({num_atoms, num_dims, num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_mps({num_params, num_atoms, num_dims});
+
+        memset(py_grads.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims);
+        memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
+        memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+
+        std::clock_t start; double duration; start = std::clock();
+
+        nrg.total_derivative_cpu(
             num_atoms,
             num_params,
             coords.data(),
@@ -103,6 +152,54 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
         );
 
         duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"angle: "<< duration <<'\n';
+
+        return py::make_tuple(energy, py_grads, py_hessians, py_mps);
+    });
+
+}
+
+
+template<typename NumericType>
+void declare_harmonic_angle_gpu(py::module &m, const char *typestr) {
+
+    using Class = timemachine::HarmonicAngleGPU<NumericType>;
+    std::string pyclass_name = std::string("HarmonicAngleGPU_") + typestr;
+    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    .def(py::init<
+        std::vector<NumericType>, // params
+        std::vector<size_t>, // global_param_idxs
+        std::vector<size_t>, // param_idxs
+        std::vector<size_t> // angle_idxs
+    >())
+    .def("total_derivative", [](timemachine::HarmonicAngleGPU<NumericType> &nrg,
+        const py::array_t<NumericType, py::array::c_style> coords,
+        ssize_t num_params) -> py::tuple {
+
+        const auto num_atoms = coords.shape()[0];
+        const auto num_dims = coords.shape()[1];
+
+        NumericType energy = 0;
+        py::array_t<NumericType, py::array::c_style> py_grads({num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_hessians({num_atoms, num_dims, num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_mps({num_params, num_atoms, num_dims});
+
+        memset(py_grads.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims);
+        memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
+        memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+
+        std::clock_t start; double duration; start = std::clock();
+
+        nrg.total_derivative_cpu(
+            num_atoms,
+            num_params,
+            coords.data(),
+            &energy,
+            py_grads.mutable_data(),
+            py_hessians.mutable_data(),
+            py_mps.mutable_data()
+        );
+
+        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -398,8 +495,14 @@ PYBIND11_MODULE(custom_ops, m) {
 declare_harmonic_bond<double>(m, "double");
 declare_harmonic_bond<float>(m, "float");
 
+declare_harmonic_bond_gpu<double>(m, "double");
+declare_harmonic_bond_gpu<float>(m, "float");
+
 declare_harmonic_angle<double>(m, "double");
 declare_harmonic_angle<float>(m, "float");
+
+declare_harmonic_angle_gpu<double>(m, "double");
+declare_harmonic_angle_gpu<float>(m, "float");
 
 declare_periodic_torsion<double>(m, "double");
 declare_periodic_torsion<float>(m, "float");
@@ -418,9 +521,5 @@ declare_lennard_jones_gpu<float>(m, "float");
 
 declare_integrator<double>(m, "double");
 declare_integrator<float>(m, "float");
-
-// declare_context<double>(m, "double");
-// declare_context<float>(m, "float");
-
 
 }

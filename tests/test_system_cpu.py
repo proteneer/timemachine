@@ -73,7 +73,7 @@ def deserialize_system(xml_file):
                     param_idxs = np.array(param_idxs)
                     bond_idxs = np.array(bond_idxs)
 
-                    all_nrgs.append(custom_ops.HarmonicBond_float(
+                    all_nrgs.append(custom_ops.HarmonicBondGPU_float(
                         params.astype(np.float32).reshape(-1).tolist(),
                         list(range(start_params, start_params+n_params)),
                         param_idxs.reshape(-1).tolist(),
@@ -110,12 +110,11 @@ def deserialize_system(xml_file):
                     param_idxs = np.array(param_idxs)
                     angle_idxs = np.array(angle_idxs)
 
-                    all_nrgs.append(custom_ops.HarmonicAngle_float(
+                    all_nrgs.append(custom_ops.HarmonicAngleGPU_float(
                         params.astype(np.float32).reshape(-1).tolist(),
                         list(range(start_params, start_params+n_params)),
                         param_idxs.reshape(-1).tolist(),
-                        angle_idxs.reshape(-1).tolist(),
-                        True)
+                        angle_idxs.reshape(-1).tolist())
                     )
 
                     start_params += n_params
@@ -350,8 +349,8 @@ class TestSpeed(unittest.TestCase):
 
     def test_ala(self):
 
-        masses, nrgs, n_params = deserialize_system('/home/yutong/Code/timemachine/system.xml')
-        ref_nrg, x0, velocities, ref_forces = deserialize_state('/home/yutong/Code/timemachine/state0.xml')
+        masses, nrgs, n_params = deserialize_system('/home/yzhao/Code/timemachine/system.xml')
+        ref_nrg, x0, velocities, ref_forces = deserialize_state('/home/yzhao/Code/timemachine/state0.xml')
 
         num_atoms = x0.shape[0]
 
