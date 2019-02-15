@@ -110,6 +110,12 @@ void ElectrostaticsGPU<NumericType>::total_derivative_cpu(
 
     gpuErrchk(cudaMemcpy(d_coords, coords, N*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
+    gpuErrchk(cudaMemset(d_energy_out, 0, sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_grad_out, 0, N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_hessian_out, 0, N*3*N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_mp_out, 0, P*N*3*sizeof(NumericType)));
+
+    cudaDeviceSynchronize();
     std::clock_t start; double duration; start = std::clock();
 
     total_derivative(
@@ -234,7 +240,14 @@ void LennardJonesGPU<NumericType>::total_derivative_cpu(
 
     gpuErrchk(cudaMemcpy(d_coords, coords, N*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
+    gpuErrchk(cudaMemset(d_energy_out, 0, sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_grad_out, 0, N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_hessian_out, 0, N*3*N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_mp_out, 0, P*N*3*sizeof(NumericType)));
+
+    cudaDeviceSynchronize();
     std::clock_t start; double duration; start = std::clock();
+
 
     total_derivative(
         N,
@@ -247,7 +260,7 @@ void LennardJonesGPU<NumericType>::total_derivative_cpu(
 
     cudaDeviceSynchronize();
 
-    duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"ES_DURATION: "<< duration <<'\n';
+    duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"LJ_DURATION: "<< duration <<'\n';
 
     gpuErrchk(cudaMemcpy(energy_out, d_energy_out, sizeof(NumericType), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(grad_out, d_grad_out, N*3*sizeof(NumericType), cudaMemcpyDeviceToHost));

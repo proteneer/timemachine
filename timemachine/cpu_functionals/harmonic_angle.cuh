@@ -1,5 +1,63 @@
 #pragma once
 
+// #include <cstdio>
+#include "surreal.cuh"
+
+template <typename CoordType, typename ParamType, typename OutType> 
+inline __device__ void gradient(
+    const CoordType *xs,
+    const ParamType *params,
+    OutType *grads) {
+    CoordType x0 = xs[0];
+    CoordType y0 = xs[1];
+    CoordType z0 = xs[2];
+    CoordType x1 = xs[3];
+    CoordType y1 = xs[4];
+    CoordType z1 = xs[5];
+    CoordType x2 = xs[6];
+    CoordType y2 = xs[7];
+    CoordType z2 = xs[8];
+    ParamType ka = params[0];
+    ParamType a0 = params[1];
+
+    CoordType vij_x = x1 - x0;
+    CoordType vij_y = y1 - y0;
+    CoordType vij_z = z1 - z0;
+
+
+    CoordType vjk_x = x1 - x2;
+    CoordType vjk_y = y1 - y2;
+    CoordType vjk_z = z1 - z2;
+
+    CoordType nij = sqrt(vij_x*vij_x + vij_y*vij_y + vij_z*vij_z);
+    CoordType njk = sqrt(vjk_x*vjk_x + vjk_y*vjk_y + vjk_z*vjk_z);
+
+    CoordType dij = nij;
+    CoordType djk = njk;
+
+    CoordType nijk = nij*njk;
+    CoordType n3ij = nij*nij*nij;
+    CoordType n3jk = njk*njk*njk;
+
+    CoordType top = vij_x*vjk_x + vij_y*vjk_y + vij_z*vjk_z;
+    // CoordType dijk = dij*djk;
+
+    ParamType cos_a0 = cos(a0);
+    OutType delta = top/nijk - cos(a0);
+
+    grads[0*3+0] = ka*delta*((-x0 + x1)*(top)/(n3ij*njk) + (-x1 + x2)/(nijk));
+    grads[1*3+0] = ka*delta*((x0 - x1)*(top)/(n3ij*njk) + (-x1 + x2)*(top)/(nij*n3jk) + (-x0 + 2.0*x1 - x2)/(nijk));
+    grads[2*3+0] = ka*((x0 - x1)/(nijk) + (x1 - x2)*(top)/(nij*n3jk))*delta;
+    grads[0*3+1] = ka*delta*((-y0 + y1)*(top)/(n3ij*njk) + (-y1 + y2)/(nijk));
+    grads[1*3+1] = ka*delta*((y0 - y1)*(top)/(n3ij*njk) + (-y1 + y2)*(top)/(nij*n3jk) + (-y0 + 2.0*y1 - y2)/(nijk));
+    grads[2*3+1] = ka*((y0 - y1)/(nijk) + (y1 - y2)*(top)/(nij*n3jk))*delta;
+    grads[0*3+2] = ka*delta*((-z0 + z1)*(top)/(n3ij*njk) + (-z1 + z2)/(nijk));
+    grads[1*3+2] = ka*delta*((z0 - z1)*(top)/(n3ij*njk) + (-z1 + z2)*(top)/(nij*n3jk) + (-z0 + 2.0*z1 - z2)/(nijk));
+    grads[2*3+2] = ka*((z0 - z1)/(nijk) + (z1 - z2)*(top)/(nij*n3jk))*delta;
+
+
+}
+
 template <typename NumericType>
 __global__ void harmonic_angle_total_derivative(
     const NumericType *coords,
@@ -18,165 +76,91 @@ __global__ void harmonic_angle_total_derivative(
 
     if(a_idx < A) {
 
-        size_t atom_0_idx = angle_idxs[a_idx*3+0];
-        size_t atom_1_idx = angle_idxs[a_idx*3+1];
-        size_t atom_2_idx = angle_idxs[a_idx*3+2];
+        int atom_0_idx = angle_idxs[a_idx*3+0];
+        int atom_1_idx = angle_idxs[a_idx*3+1];
+        int atom_2_idx = angle_idxs[a_idx*3+2];
 
-        NumericType x0 = coords[atom_0_idx*3+0];
-        NumericType y0 = coords[atom_0_idx*3+1];
-        NumericType z0 = coords[atom_0_idx*3+2];
+        NumericType xs[9];
+        xs[0] = coords[atom_0_idx*3+0];
+        xs[1] = coords[atom_0_idx*3+1];
+        xs[2] = coords[atom_0_idx*3+2];
+        xs[3] = coords[atom_1_idx*3+0];
+        xs[4] = coords[atom_1_idx*3+1];
+        xs[5] = coords[atom_1_idx*3+2];
+        xs[6] = coords[atom_2_idx*3+0];
+        xs[7] = coords[atom_2_idx*3+1];
+        xs[8] = coords[atom_2_idx*3+2];
+        NumericType ps[2];
+        ps[0] = params[param_idxs[a_idx*2+0]];
+        ps[1] = params[param_idxs[a_idx*2+1]];
+        NumericType dxs[9];
 
-        NumericType x1 = coords[atom_1_idx*3+0];
-        NumericType y1 = coords[atom_1_idx*3+1];
-        NumericType z1 = coords[atom_1_idx*3+2];
+        gradient<NumericType, NumericType, NumericType>(xs, ps, dxs);
 
-        NumericType x2 = coords[atom_2_idx*3+0];
-        NumericType y2 = coords[atom_2_idx*3+1];
-        NumericType z2 = coords[atom_2_idx*3+2];
+        const int indices[9] = {
+            atom_0_idx*3+0,
+            atom_0_idx*3+1,
+            atom_0_idx*3+2,
+            atom_1_idx*3+0,
+            atom_1_idx*3+1,
+            atom_1_idx*3+2,
+            atom_2_idx*3+0,
+            atom_2_idx*3+1,
+            atom_2_idx*3+2
+        };
 
-        NumericType ka = params[param_idxs[a_idx*2+0]];
-        NumericType a0 = params[param_idxs[a_idx*2+1]];
+        #pragma unroll
+        for(int i=0; i < 9; i++) {
+            atomicAdd(grad_out + indices[i], dxs[i]);
+        }
 
-        NumericType vij_x = x1 - x0;
-        NumericType vij_y = y1 - y0;
-        NumericType vij_z = z1 - z0;
+        NumericType step = 1e-35;
 
 
-        NumericType vjk_x = x1 - x2;
-        NumericType vjk_y = y1 - y2;
-        NumericType vjk_z = z1 - z2;
 
-        NumericType nij = sqrt(vij_x*vij_x + vij_y*vij_y + vij_z*vij_z);
-        NumericType njk = sqrt(vjk_x*vjk_x + vjk_y*vjk_y + vjk_z*vjk_z);
+        Surreal<NumericType> cps[2] = {
+            ps[0],
+            ps[1]
+        };
 
-        NumericType dij = nij;
-        NumericType djk = njk;
+        // #pragma unroll
+        for(int j=0; j < 2; j++) {
+            cps[j].deriv = step;
+            Surreal<NumericType> dcxs[9];
+            gradient<NumericType, Surreal<NumericType>, Surreal<NumericType> >(xs, cps, dcxs);
+            int gp_idx = global_param_idxs[param_idxs[a_idx*2+j]];
+            #pragma unroll
+            for(int k=0; k < 9; k++) {
+                atomicAdd(mp_out + gp_idx*N*3 + indices[k], dcxs[k].deriv / step);
+            }
+            cps[j].deriv = 0.0;
+        }
 
-        NumericType d3ij = dij*dij*dij;
-        NumericType d3jk = djk*djk*djk;
 
-        NumericType d5ij = dij*dij*dij*dij*dij;
-        NumericType d5jk = djk*djk*djk*djk*djk;
 
-        NumericType n3ij = nij*nij*nij;
-        NumericType n3jk = njk*njk*njk;
+        // #pragma unroll
+        for(int j=0; j < 9; j++) {
 
-        NumericType top = vij_x*vjk_x + vij_y*vjk_y + vij_z*vjk_z;
-        NumericType dijk = dij*djk;
-
-        atomicAdd(grad_out + atom_0_idx*3+0, 0.5*ka*((top)/(nij*njk) - cos(a0))*(2.0*(-x0 + x1)*(top)/(n3ij*njk) + 2.0*(-x1 + x2)/(nij*njk)));
-        atomicAdd(grad_out + atom_1_idx*3+0, 0.5*ka*((top)/(nij*njk) - cos(a0))*(2.0*(x0 - x1)*(top)/(n3ij*njk) + 2.0*(-x1 + x2)*(top)/(nij*n3jk) + 2.0*(-x0 + 2.0*x1 - x2)/(nij*njk)));
-        atomicAdd(grad_out + atom_2_idx*3+0, 0.5*ka*(2.0*(x0 - x1)/(nij*njk) + 2.0*(x1 - x2)*(top)/(nij*n3jk))*((top)/(nij*njk) - cos(a0)));
-        atomicAdd(grad_out + atom_0_idx*3+1, 0.5*ka*((top)/(nij*njk) - cos(a0))*(2.0*(-y0 + y1)*(top)/(n3ij*njk) + 2.0*(-y1 + y2)/(nij*njk)));
-        atomicAdd(grad_out + atom_1_idx*3+1, 0.5*ka*((top)/(nij*njk) - cos(a0))*(2.0*(y0 - y1)*(top)/(n3ij*njk) + 2.0*(-y1 + y2)*(top)/(nij*n3jk) + 2.0*(-y0 + 2.0*y1 - y2)/(nij*njk)));
-        atomicAdd(grad_out + atom_2_idx*3+1, 0.5*ka*(2.0*(y0 - y1)/(nij*njk) + 2.0*(y1 - y2)*(top)/(nij*n3jk))*((top)/(nij*njk) - cos(a0)));
-        atomicAdd(grad_out + atom_0_idx*3+2, 0.5*ka*((top)/(nij*njk) - cos(a0))*(2.0*(-z0 + z1)*(top)/(n3ij*njk) + 2.0*(-z1 + z2)/(nij*njk)));
-        atomicAdd(grad_out + atom_1_idx*3+2, 0.5*ka*((top)/(nij*njk) - cos(a0))*(2.0*(z0 - z1)*(top)/(n3ij*njk) + 2.0*(-z1 + z2)*(top)/(nij*n3jk) + 2.0*(-z0 + 2.0*z1 - z2)/(nij*njk)));
-        atomicAdd(grad_out + atom_2_idx*3+2, 0.5*ka*(2.0*(z0 - z1)/(nij*njk) + 2.0*(z1 - z2)*(top)/(nij*n3jk))*((top)/(nij*njk) - cos(a0)));
-
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 0*N*3 + atom_0_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*x0 + 3*x1)*(vij_x)*top/(d5ij*djk) + 4*(vij_x)*(-vjk_x)/(d3ij*djk) - 2*top/(d3ij*djk)) + 0.5*ka*((vij_x)*top/(d3ij*djk) + (-vjk_x)/dijk)*(2*(vij_x)*top/(d3ij*djk) + 2*(-vjk_x)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 0*N*3 + atom_0_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(-3*y0 + 3*y1)*top/(d5ij*djk) + 2*(vij_x)*(-vjk_y)/(d3ij*djk) + 2*(-vjk_x)*(vij_y)/(d3ij*djk)) + 0.5*ka*(2*(vij_x)*top/(d3ij*djk) + 2*(-vjk_x)/dijk)*((vij_y)*top/(d3ij*djk) + (-vjk_y)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 0*N*3 + atom_0_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(-3*z0 + 3*z1)*top/(d5ij*djk) + 2*(vij_x)*(-vjk_z)/(d3ij*djk) + 2*(-vjk_x)*(vij_z)/(d3ij*djk)) + 0.5*ka*(2*(vij_x)*top/(d3ij*djk) + 2*(-vjk_x)/dijk)*((vij_z)*top/(d3ij*djk) + (-vjk_z)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 0*N*3 + atom_1_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(3*x0 - 3*x1)*top/(d5ij*djk) + 2*(vij_x)*(-vjk_x)*top/(d3ij*d3jk) + 2*(vij_x)*(-x0 + 2*x1 - x2)/(d3ij*djk) + 2*(-vij_x)*(-vjk_x)/(d3ij*djk) + 2*pow(-vjk_x, 2)/(dij*d3jk) + 2*top/(d3ij*djk) - 2/dijk) + 0.5*ka*(2*(vij_x)*top/(d3ij*djk) + 2*(-vjk_x)/dijk)*((-vij_x)*top/(d3ij*djk) + (-vjk_x)*top/(dij*d3jk) + (-x0 + 2*x1 - x2)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 0*N*3 + atom_1_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(3*y0 - 3*y1)*top/(d5ij*djk) + 2*(vij_x)*(-vjk_y)*top/(d3ij*d3jk) + 2*(vij_x)*(-y0 + 2*y1 - y2)/(d3ij*djk) + 2*(-vjk_x)*(-vij_y)/(d3ij*djk) + 2*(-vjk_x)*(-vjk_y)/(dij*d3jk)) + 0.5*ka*(2*(vij_x)*top/(d3ij*djk) + 2*(-vjk_x)/dijk)*((-vij_y)*top/(d3ij*djk) + (-vjk_y)*top/(dij*d3jk) + (-y0 + 2*y1 - y2)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 0*N*3 + atom_1_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(3*z0 - 3*z1)*top/(d5ij*djk) + 2*(vij_x)*(-vjk_z)*top/(d3ij*d3jk) + 2*(vij_x)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(-vjk_x)*(-vij_z)/(d3ij*djk) + 2*(-vjk_x)*(-vjk_z)/(dij*d3jk)) + 0.5*ka*(2*(vij_x)*top/(d3ij*djk) + 2*(-vjk_x)/dijk)*((-vij_z)*top/(d3ij*djk) + (-vjk_z)*top/(dij*d3jk) + (-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 0*N*3 + atom_2_idx*3 + 0, 0.5*ka*((-vij_x)/dijk + (x1 - x2)*top/(dij*d3jk))*(2*(vij_x)*top/(d3ij*djk) + 2*(-vjk_x)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(-vij_x)/(d3ij*djk) + 2*(vij_x)*(x1 - x2)*top/(d3ij*d3jk) + 2*(-vjk_x)*(x1 - x2)/(dij*d3jk) + 2/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 0*N*3 + atom_2_idx*3 + 1, 0.5*ka*((-vij_y)/dijk + (y1 - y2)*top/(dij*d3jk))*(2*(vij_x)*top/(d3ij*djk) + 2*(-vjk_x)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(-vij_y)/(d3ij*djk) + 2*(vij_x)*(y1 - y2)*top/(d3ij*d3jk) + 2*(-vjk_x)*(y1 - y2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 0*N*3 + atom_2_idx*3 + 2, 0.5*ka*((-vij_z)/dijk + (z1 - z2)*top/(dij*d3jk))*(2*(vij_x)*top/(d3ij*djk) + 2*(-vjk_x)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(-vij_z)/(d3ij*djk) + 2*(vij_x)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-vjk_x)*(z1 - z2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 1*N*3 + atom_0_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*x0 + 3*x1)*(vij_y)*top/(d5ij*djk) + 2*(vij_x)*(-vjk_y)/(d3ij*djk) + 2*(-vjk_x)*(vij_y)/(d3ij*djk)) + 0.5*ka*((vij_x)*top/(d3ij*djk) + (-vjk_x)/dijk)*(2*(vij_y)*top/(d3ij*djk) + 2*(-vjk_y)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 1*N*3 + atom_0_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*y0 + 3*y1)*(vij_y)*top/(d5ij*djk) + 4*(vij_y)*(-vjk_y)/(d3ij*djk) - 2*top/(d3ij*djk)) + 0.5*ka*((vij_y)*top/(d3ij*djk) + (-vjk_y)/dijk)*(2*(vij_y)*top/(d3ij*djk) + 2*(-vjk_y)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 1*N*3 + atom_0_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(vij_y)*(-3*z0 + 3*z1)*top/(d5ij*djk) + 2*(vij_y)*(-vjk_z)/(d3ij*djk) + 2*(-vjk_y)*(vij_z)/(d3ij*djk)) + 0.5*ka*(2*(vij_y)*top/(d3ij*djk) + 2*(-vjk_y)/dijk)*((vij_z)*top/(d3ij*djk) + (-vjk_z)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 1*N*3 + atom_1_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vjk_y)/(d3ij*djk) + 2*(3*x0 - 3*x1)*(vij_y)*top/(d5ij*djk) + 2*(-vjk_x)*(vij_y)*top/(d3ij*d3jk) + 2*(-vjk_x)*(-vjk_y)/(dij*d3jk) + 2*(vij_y)*(-x0 + 2*x1 - x2)/(d3ij*djk)) + 0.5*ka*(2*(vij_y)*top/(d3ij*djk) + 2*(-vjk_y)/dijk)*((-vij_x)*top/(d3ij*djk) + (-vjk_x)*top/(dij*d3jk) + (-x0 + 2*x1 - x2)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 1*N*3 + atom_1_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(vij_y)*(3*y0 - 3*y1)*top/(d5ij*djk) + 2*(vij_y)*(-vjk_y)*top/(d3ij*d3jk) + 2*(vij_y)*(-y0 + 2*y1 - y2)/(d3ij*djk) + 2*(-vij_y)*(-vjk_y)/(d3ij*djk) + 2*pow(-vjk_y, 2)/(dij*d3jk) + 2*top/(d3ij*djk) - 2/dijk) + 0.5*ka*(2*(vij_y)*top/(d3ij*djk) + 2*(-vjk_y)/dijk)*((-vij_y)*top/(d3ij*djk) + (-vjk_y)*top/(dij*d3jk) + (-y0 + 2*y1 - y2)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 1*N*3 + atom_1_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(vij_y)*(3*z0 - 3*z1)*top/(d5ij*djk) + 2*(vij_y)*(-vjk_z)*top/(d3ij*d3jk) + 2*(vij_y)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(-vjk_y)*(-vij_z)/(d3ij*djk) + 2*(-vjk_y)*(-vjk_z)/(dij*d3jk)) + 0.5*ka*(2*(vij_y)*top/(d3ij*djk) + 2*(-vjk_y)/dijk)*((-vij_z)*top/(d3ij*djk) + (-vjk_z)*top/(dij*d3jk) + (-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 1*N*3 + atom_2_idx*3 + 0, 0.5*ka*((-vij_x)/dijk + (x1 - x2)*top/(dij*d3jk))*(2*(vij_y)*top/(d3ij*djk) + 2*(-vjk_y)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(vij_y)/(d3ij*djk) + 2*(x1 - x2)*(vij_y)*top/(d3ij*d3jk) + 2*(x1 - x2)*(-vjk_y)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 1*N*3 + atom_2_idx*3 + 1, 0.5*ka*((-vij_y)/dijk + (y1 - y2)*top/(dij*d3jk))*(2*(vij_y)*top/(d3ij*djk) + 2*(-vjk_y)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_y)*(-vij_y)/(d3ij*djk) + 2*(vij_y)*(y1 - y2)*top/(d3ij*d3jk) + 2*(-vjk_y)*(y1 - y2)/(dij*d3jk) + 2/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 1*N*3 + atom_2_idx*3 + 2, 0.5*ka*((-vij_z)/dijk + (z1 - z2)*top/(dij*d3jk))*(2*(vij_y)*top/(d3ij*djk) + 2*(-vjk_y)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_y)*(-vij_z)/(d3ij*djk) + 2*(vij_y)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-vjk_y)*(z1 - z2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 2*N*3 + atom_0_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*x0 + 3*x1)*(vij_z)*top/(d5ij*djk) + 2*(vij_x)*(-vjk_z)/(d3ij*djk) + 2*(-vjk_x)*(vij_z)/(d3ij*djk)) + 0.5*ka*((vij_x)*top/(d3ij*djk) + (-vjk_x)/dijk)*(2*(vij_z)*top/(d3ij*djk) + 2*(-vjk_z)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 2*N*3 + atom_0_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*y0 + 3*y1)*(vij_z)*top/(d5ij*djk) + 2*(vij_y)*(-vjk_z)/(d3ij*djk) + 2*(-vjk_y)*(vij_z)/(d3ij*djk)) + 0.5*ka*((vij_y)*top/(d3ij*djk) + (-vjk_y)/dijk)*(2*(vij_z)*top/(d3ij*djk) + 2*(-vjk_z)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 2*N*3 + atom_0_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*z0 + 3*z1)*(vij_z)*top/(d5ij*djk) + 4*(vij_z)*(-vjk_z)/(d3ij*djk) - 2*top/(d3ij*djk)) + 0.5*ka*((vij_z)*top/(d3ij*djk) + (-vjk_z)/dijk)*(2*(vij_z)*top/(d3ij*djk) + 2*(-vjk_z)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 2*N*3 + atom_1_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vjk_z)/(d3ij*djk) + 2*(3*x0 - 3*x1)*(vij_z)*top/(d5ij*djk) + 2*(-vjk_x)*(vij_z)*top/(d3ij*d3jk) + 2*(-vjk_x)*(-vjk_z)/(dij*d3jk) + 2*(vij_z)*(-x0 + 2*x1 - x2)/(d3ij*djk)) + 0.5*ka*(2*(vij_z)*top/(d3ij*djk) + 2*(-vjk_z)/dijk)*((-vij_x)*top/(d3ij*djk) + (-vjk_x)*top/(dij*d3jk) + (-x0 + 2*x1 - x2)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 2*N*3 + atom_1_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(-vjk_z)/(d3ij*djk) + 2*(3*y0 - 3*y1)*(vij_z)*top/(d5ij*djk) + 2*(-vjk_y)*(vij_z)*top/(d3ij*d3jk) + 2*(-vjk_y)*(-vjk_z)/(dij*d3jk) + 2*(vij_z)*(-y0 + 2*y1 - y2)/(d3ij*djk)) + 0.5*ka*(2*(vij_z)*top/(d3ij*djk) + 2*(-vjk_z)/dijk)*((-vij_y)*top/(d3ij*djk) + (-vjk_y)*top/(dij*d3jk) + (-y0 + 2*y1 - y2)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 2*N*3 + atom_1_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(vij_z)*(3*z0 - 3*z1)*top/(d5ij*djk) + 2*(vij_z)*(-vjk_z)*top/(d3ij*d3jk) + 2*(vij_z)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(-vij_z)*(-vjk_z)/(d3ij*djk) + 2*pow(-vjk_z, 2)/(dij*d3jk) + 2*top/(d3ij*djk) - 2/dijk) + 0.5*ka*(2*(vij_z)*top/(d3ij*djk) + 2*(-vjk_z)/dijk)*((-vij_z)*top/(d3ij*djk) + (-vjk_z)*top/(dij*d3jk) + (-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 2*N*3 + atom_2_idx*3 + 0, 0.5*ka*((-vij_x)/dijk + (x1 - x2)*top/(dij*d3jk))*(2*(vij_z)*top/(d3ij*djk) + 2*(-vjk_z)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(vij_z)/(d3ij*djk) + 2*(x1 - x2)*(vij_z)*top/(d3ij*d3jk) + 2*(x1 - x2)*(-vjk_z)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 2*N*3 + atom_2_idx*3 + 1, 0.5*ka*((-vij_y)/dijk + (y1 - y2)*top/(dij*d3jk))*(2*(vij_z)*top/(d3ij*djk) + 2*(-vjk_z)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(vij_z)/(d3ij*djk) + 2*(y1 - y2)*(vij_z)*top/(d3ij*d3jk) + 2*(y1 - y2)*(-vjk_z)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_0_idx*3*N*3 + 2*N*3 + atom_2_idx*3 + 2, 0.5*ka*((-vij_z)/dijk + (z1 - z2)*top/(dij*d3jk))*(2*(vij_z)*top/(d3ij*djk) + 2*(-vjk_z)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_z)*(-vij_z)/(d3ij*djk) + 2*(vij_z)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-vjk_z)*(z1 - z2)/(dij*d3jk) + 2/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 0*N*3 + atom_0_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*x0 + 3*x1)*(-vij_x)*top/(d5ij*djk) + 2*(vij_x)*(-vjk_x)*top/(d3ij*d3jk) + 2*(vij_x)*(-x0 + 2*x1 - x2)/(d3ij*djk) + 2*(-vij_x)*(-vjk_x)/(d3ij*djk) + 2*pow(-vjk_x, 2)/(dij*d3jk) + 2*top/(d3ij*djk) - 2/dijk) + 0.5*ka*((vij_x)*top/(d3ij*djk) + (-vjk_x)/dijk)*(2*(-vij_x)*top/(d3ij*djk) + 2*(-vjk_x)*top/(dij*d3jk) + 2*(-x0 + 2*x1 - x2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 0*N*3 + atom_0_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-3*y0 + 3*y1)*top/(d5ij*djk) + 2*(-vij_x)*(-vjk_y)/(d3ij*djk) + 2*(-vjk_x)*(vij_y)*top/(d3ij*d3jk) + 2*(-vjk_x)*(-vjk_y)/(dij*d3jk) + 2*(vij_y)*(-x0 + 2*x1 - x2)/(d3ij*djk)) + 0.5*ka*((vij_y)*top/(d3ij*djk) + (-vjk_y)/dijk)*(2*(-vij_x)*top/(d3ij*djk) + 2*(-vjk_x)*top/(dij*d3jk) + 2*(-x0 + 2*x1 - x2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 0*N*3 + atom_0_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-3*z0 + 3*z1)*top/(d5ij*djk) + 2*(-vij_x)*(-vjk_z)/(d3ij*djk) + 2*(-vjk_x)*(vij_z)*top/(d3ij*d3jk) + 2*(-vjk_x)*(-vjk_z)/(dij*d3jk) + 2*(vij_z)*(-x0 + 2*x1 - x2)/(d3ij*djk)) + 0.5*ka*((vij_z)*top/(d3ij*djk) + (-vjk_z)/dijk)*(2*(-vij_x)*top/(d3ij*djk) + 2*(-vjk_x)*top/(dij*d3jk) + 2*(-x0 + 2*x1 - x2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 0*N*3 + atom_1_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(3*x0 - 3*x1)*top/(d5ij*djk) + 4*(-vij_x)*(-vjk_x)*top/(d3ij*d3jk) + 4*(-vij_x)*(-x0 + 2*x1 - x2)/(d3ij*djk) + 2*(-3*x1 + 3*x2)*(-vjk_x)*top/(dij*d5jk) + 4*(-vjk_x)*(-x0 + 2*x1 - x2)/(dij*d3jk) - 2*top/(dij*d3jk) - 2*top/(d3ij*djk) + 4/dijk) + 0.5*ka*((-vij_x)*top/(d3ij*djk) + (-vjk_x)*top/(dij*d3jk) + (-x0 + 2*x1 - x2)/dijk)*(2*(-vij_x)*top/(d3ij*djk) + 2*(-vjk_x)*top/(dij*d3jk) + 2*(-x0 + 2*x1 - x2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 0*N*3 + atom_1_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(3*y0 - 3*y1)*top/(d5ij*djk) + 2*(-vij_x)*(-vjk_y)*top/(d3ij*d3jk) + 2*(-vij_x)*(-y0 + 2*y1 - y2)/(d3ij*djk) + 2*(-vjk_x)*(-vij_y)*top/(d3ij*d3jk) + 2*(-vjk_x)*(-3*y1 + 3*y2)*top/(dij*d5jk) + 2*(-vjk_x)*(-y0 + 2*y1 - y2)/(dij*d3jk) + 2*(-vij_y)*(-x0 + 2*x1 - x2)/(d3ij*djk) + 2*(-vjk_y)*(-x0 + 2*x1 - x2)/(dij*d3jk)) + 0.5*ka*(2*(-vij_x)*top/(d3ij*djk) + 2*(-vjk_x)*top/(dij*d3jk) + 2*(-x0 + 2*x1 - x2)/dijk)*((-vij_y)*top/(d3ij*djk) + (-vjk_y)*top/(dij*d3jk) + (-y0 + 2*y1 - y2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 0*N*3 + atom_1_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(3*z0 - 3*z1)*top/(d5ij*djk) + 2*(-vij_x)*(-vjk_z)*top/(d3ij*d3jk) + 2*(-vij_x)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(-vjk_x)*(-vij_z)*top/(d3ij*d3jk) + 2*(-vjk_x)*(-3*z1 + 3*z2)*top/(dij*d5jk) + 2*(-vjk_x)*(-z0 + 2*z1 - z2)/(dij*d3jk) + 2*(-vij_z)*(-x0 + 2*x1 - x2)/(d3ij*djk) + 2*(-vjk_z)*(-x0 + 2*x1 - x2)/(dij*d3jk)) + 0.5*ka*(2*(-vij_x)*top/(d3ij*djk) + 2*(-vjk_x)*top/(dij*d3jk) + 2*(-x0 + 2*x1 - x2)/dijk)*((-vij_z)*top/(d3ij*djk) + (-vjk_z)*top/(dij*d3jk) + (-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 0*N*3 + atom_2_idx*3 + 0, 0.5*ka*((-vij_x)/dijk + (x1 - x2)*top/(dij*d3jk))*(2*(-vij_x)*top/(d3ij*djk) + 2*(-vjk_x)*top/(dij*d3jk) + 2*(-x0 + 2*x1 - x2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*pow(-vij_x, 2)/(d3ij*djk) + 2*(-vij_x)*(-vjk_x)/(dij*d3jk) + 2*(-vij_x)*(x1 - x2)*top/(d3ij*d3jk) + 2*(-vjk_x)*(3*x1 - 3*x2)*top/(dij*d5jk) + 2*(x1 - x2)*(-x0 + 2*x1 - x2)/(dij*d3jk) + 2*top/(dij*d3jk) - 2/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 0*N*3 + atom_2_idx*3 + 1, 0.5*ka*((-vij_y)/dijk + (y1 - y2)*top/(dij*d3jk))*(2*(-vij_x)*top/(d3ij*djk) + 2*(-vjk_x)*top/(dij*d3jk) + 2*(-x0 + 2*x1 - x2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vij_y)/(d3ij*djk) + 2*(-vij_x)*(y1 - y2)*top/(d3ij*d3jk) + 2*(-vjk_x)*(-vij_y)/(dij*d3jk) + 2*(-vjk_x)*(3*y1 - 3*y2)*top/(dij*d5jk) + 2*(y1 - y2)*(-x0 + 2*x1 - x2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 0*N*3 + atom_2_idx*3 + 2, 0.5*ka*((-vij_z)/dijk + (z1 - z2)*top/(dij*d3jk))*(2*(-vij_x)*top/(d3ij*djk) + 2*(-vjk_x)*top/(dij*d3jk) + 2*(-x0 + 2*x1 - x2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vij_z)/(d3ij*djk) + 2*(-vij_x)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-vjk_x)*(-vij_z)/(dij*d3jk) + 2*(-vjk_x)*(3*z1 - 3*z2)*top/(dij*d5jk) + 2*(z1 - z2)*(-x0 + 2*x1 - x2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 1*N*3 + atom_0_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*x0 + 3*x1)*(-vij_y)*top/(d5ij*djk) + 2*(vij_x)*(-vjk_y)*top/(d3ij*d3jk) + 2*(vij_x)*(-y0 + 2*y1 - y2)/(d3ij*djk) + 2*(-vjk_x)*(-vij_y)/(d3ij*djk) + 2*(-vjk_x)*(-vjk_y)/(dij*d3jk)) + 0.5*ka*((vij_x)*top/(d3ij*djk) + (-vjk_x)/dijk)*(2*(-vij_y)*top/(d3ij*djk) + 2*(-vjk_y)*top/(dij*d3jk) + 2*(-y0 + 2*y1 - y2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 1*N*3 + atom_0_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*y0 + 3*y1)*(-vij_y)*top/(d5ij*djk) + 2*(vij_y)*(-vjk_y)*top/(d3ij*d3jk) + 2*(vij_y)*(-y0 + 2*y1 - y2)/(d3ij*djk) + 2*(-vij_y)*(-vjk_y)/(d3ij*djk) + 2*pow(-vjk_y, 2)/(dij*d3jk) + 2*top/(d3ij*djk) - 2/dijk) + 0.5*ka*((vij_y)*top/(d3ij*djk) + (-vjk_y)/dijk)*(2*(-vij_y)*top/(d3ij*djk) + 2*(-vjk_y)*top/(dij*d3jk) + 2*(-y0 + 2*y1 - y2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 1*N*3 + atom_0_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(-3*z0 + 3*z1)*top/(d5ij*djk) + 2*(-vij_y)*(-vjk_z)/(d3ij*djk) + 2*(-vjk_y)*(vij_z)*top/(d3ij*d3jk) + 2*(-vjk_y)*(-vjk_z)/(dij*d3jk) + 2*(vij_z)*(-y0 + 2*y1 - y2)/(d3ij*djk)) + 0.5*ka*((vij_z)*top/(d3ij*djk) + (-vjk_z)/dijk)*(2*(-vij_y)*top/(d3ij*djk) + 2*(-vjk_y)*top/(dij*d3jk) + 2*(-y0 + 2*y1 - y2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 1*N*3 + atom_1_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vjk_y)*top/(d3ij*d3jk) + 2*(-vij_x)*(-y0 + 2*y1 - y2)/(d3ij*djk) + 2*(3*x0 - 3*x1)*(-vij_y)*top/(d5ij*djk) + 2*(-3*x1 + 3*x2)*(-vjk_y)*top/(dij*d5jk) + 2*(-vjk_x)*(-vij_y)*top/(d3ij*d3jk) + 2*(-vjk_x)*(-y0 + 2*y1 - y2)/(dij*d3jk) + 2*(-vij_y)*(-x0 + 2*x1 - x2)/(d3ij*djk) + 2*(-vjk_y)*(-x0 + 2*x1 - x2)/(dij*d3jk)) + 0.5*ka*((-vij_x)*top/(d3ij*djk) + (-vjk_x)*top/(dij*d3jk) + (-x0 + 2*x1 - x2)/dijk)*(2*(-vij_y)*top/(d3ij*djk) + 2*(-vjk_y)*top/(dij*d3jk) + 2*(-y0 + 2*y1 - y2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 1*N*3 + atom_1_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(3*y0 - 3*y1)*top/(d5ij*djk) + 4*(-vij_y)*(-vjk_y)*top/(d3ij*d3jk) + 4*(-vij_y)*(-y0 + 2*y1 - y2)/(d3ij*djk) + 2*(-3*y1 + 3*y2)*(-vjk_y)*top/(dij*d5jk) + 4*(-vjk_y)*(-y0 + 2*y1 - y2)/(dij*d3jk) - 2*top/(dij*d3jk) - 2*top/(d3ij*djk) + 4/dijk) + 0.5*ka*((-vij_y)*top/(d3ij*djk) + (-vjk_y)*top/(dij*d3jk) + (-y0 + 2*y1 - y2)/dijk)*(2*(-vij_y)*top/(d3ij*djk) + 2*(-vjk_y)*top/(dij*d3jk) + 2*(-y0 + 2*y1 - y2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 1*N*3 + atom_1_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(3*z0 - 3*z1)*top/(d5ij*djk) + 2*(-vij_y)*(-vjk_z)*top/(d3ij*d3jk) + 2*(-vij_y)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(-vjk_y)*(-vij_z)*top/(d3ij*d3jk) + 2*(-vjk_y)*(-3*z1 + 3*z2)*top/(dij*d5jk) + 2*(-vjk_y)*(-z0 + 2*z1 - z2)/(dij*d3jk) + 2*(-vij_z)*(-y0 + 2*y1 - y2)/(d3ij*djk) + 2*(-vjk_z)*(-y0 + 2*y1 - y2)/(dij*d3jk)) + 0.5*ka*(2*(-vij_y)*top/(d3ij*djk) + 2*(-vjk_y)*top/(dij*d3jk) + 2*(-y0 + 2*y1 - y2)/dijk)*((-vij_z)*top/(d3ij*djk) + (-vjk_z)*top/(dij*d3jk) + (-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 1*N*3 + atom_2_idx*3 + 0, 0.5*ka*((-vij_x)/dijk + (x1 - x2)*top/(dij*d3jk))*(2*(-vij_y)*top/(d3ij*djk) + 2*(-vjk_y)*top/(dij*d3jk) + 2*(-y0 + 2*y1 - y2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vij_y)/(d3ij*djk) + 2*(-vij_x)*(-vjk_y)/(dij*d3jk) + 2*(x1 - x2)*(-vij_y)*top/(d3ij*d3jk) + 2*(x1 - x2)*(-y0 + 2*y1 - y2)/(dij*d3jk) + 2*(3*x1 - 3*x2)*(-vjk_y)*top/(dij*d5jk)) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 1*N*3 + atom_2_idx*3 + 1, 0.5*ka*((-vij_y)/dijk + (y1 - y2)*top/(dij*d3jk))*(2*(-vij_y)*top/(d3ij*djk) + 2*(-vjk_y)*top/(dij*d3jk) + 2*(-y0 + 2*y1 - y2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*pow(-vij_y, 2)/(d3ij*djk) + 2*(-vij_y)*(-vjk_y)/(dij*d3jk) + 2*(-vij_y)*(y1 - y2)*top/(d3ij*d3jk) + 2*(-vjk_y)*(3*y1 - 3*y2)*top/(dij*d5jk) + 2*(y1 - y2)*(-y0 + 2*y1 - y2)/(dij*d3jk) + 2*top/(dij*d3jk) - 2/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 1*N*3 + atom_2_idx*3 + 2, 0.5*ka*((-vij_z)/dijk + (z1 - z2)*top/(dij*d3jk))*(2*(-vij_y)*top/(d3ij*djk) + 2*(-vjk_y)*top/(dij*d3jk) + 2*(-y0 + 2*y1 - y2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(-vij_z)/(d3ij*djk) + 2*(-vij_y)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-vjk_y)*(-vij_z)/(dij*d3jk) + 2*(-vjk_y)*(3*z1 - 3*z2)*top/(dij*d5jk) + 2*(z1 - z2)*(-y0 + 2*y1 - y2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 2*N*3 + atom_0_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*x0 + 3*x1)*(-vij_z)*top/(d5ij*djk) + 2*(vij_x)*(-vjk_z)*top/(d3ij*d3jk) + 2*(vij_x)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(-vjk_x)*(-vij_z)/(d3ij*djk) + 2*(-vjk_x)*(-vjk_z)/(dij*d3jk)) + 0.5*ka*((vij_x)*top/(d3ij*djk) + (-vjk_x)/dijk)*(2*(-vij_z)*top/(d3ij*djk) + 2*(-vjk_z)*top/(dij*d3jk) + 2*(-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 2*N*3 + atom_0_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*y0 + 3*y1)*(-vij_z)*top/(d5ij*djk) + 2*(vij_y)*(-vjk_z)*top/(d3ij*d3jk) + 2*(vij_y)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(-vjk_y)*(-vij_z)/(d3ij*djk) + 2*(-vjk_y)*(-vjk_z)/(dij*d3jk)) + 0.5*ka*((vij_y)*top/(d3ij*djk) + (-vjk_y)/dijk)*(2*(-vij_z)*top/(d3ij*djk) + 2*(-vjk_z)*top/(dij*d3jk) + 2*(-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 2*N*3 + atom_0_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(-3*z0 + 3*z1)*(-vij_z)*top/(d5ij*djk) + 2*(vij_z)*(-vjk_z)*top/(d3ij*d3jk) + 2*(vij_z)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(-vij_z)*(-vjk_z)/(d3ij*djk) + 2*pow(-vjk_z, 2)/(dij*d3jk) + 2*top/(d3ij*djk) - 2/dijk) + 0.5*ka*((vij_z)*top/(d3ij*djk) + (-vjk_z)/dijk)*(2*(-vij_z)*top/(d3ij*djk) + 2*(-vjk_z)*top/(dij*d3jk) + 2*(-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 2*N*3 + atom_1_idx*3 + 0, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vjk_z)*top/(d3ij*d3jk) + 2*(-vij_x)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(3*x0 - 3*x1)*(-vij_z)*top/(d5ij*djk) + 2*(-3*x1 + 3*x2)*(-vjk_z)*top/(dij*d5jk) + 2*(-vjk_x)*(-vij_z)*top/(d3ij*d3jk) + 2*(-vjk_x)*(-z0 + 2*z1 - z2)/(dij*d3jk) + 2*(-vij_z)*(-x0 + 2*x1 - x2)/(d3ij*djk) + 2*(-vjk_z)*(-x0 + 2*x1 - x2)/(dij*d3jk)) + 0.5*ka*((-vij_x)*top/(d3ij*djk) + (-vjk_x)*top/(dij*d3jk) + (-x0 + 2*x1 - x2)/dijk)*(2*(-vij_z)*top/(d3ij*djk) + 2*(-vjk_z)*top/(dij*d3jk) + 2*(-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 2*N*3 + atom_1_idx*3 + 1, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(-vjk_z)*top/(d3ij*d3jk) + 2*(-vij_y)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(3*y0 - 3*y1)*(-vij_z)*top/(d5ij*djk) + 2*(-3*y1 + 3*y2)*(-vjk_z)*top/(dij*d5jk) + 2*(-vjk_y)*(-vij_z)*top/(d3ij*d3jk) + 2*(-vjk_y)*(-z0 + 2*z1 - z2)/(dij*d3jk) + 2*(-vij_z)*(-y0 + 2*y1 - y2)/(d3ij*djk) + 2*(-vjk_z)*(-y0 + 2*y1 - y2)/(dij*d3jk)) + 0.5*ka*((-vij_y)*top/(d3ij*djk) + (-vjk_y)*top/(dij*d3jk) + (-y0 + 2*y1 - y2)/dijk)*(2*(-vij_z)*top/(d3ij*djk) + 2*(-vjk_z)*top/(dij*d3jk) + 2*(-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 2*N*3 + atom_1_idx*3 + 2, 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_z)*(3*z0 - 3*z1)*top/(d5ij*djk) + 4*(-vij_z)*(-vjk_z)*top/(d3ij*d3jk) + 4*(-vij_z)*(-z0 + 2*z1 - z2)/(d3ij*djk) + 2*(-3*z1 + 3*z2)*(-vjk_z)*top/(dij*d5jk) + 4*(-vjk_z)*(-z0 + 2*z1 - z2)/(dij*d3jk) - 2*top/(dij*d3jk) - 2*top/(d3ij*djk) + 4/dijk) + 0.5*ka*((-vij_z)*top/(d3ij*djk) + (-vjk_z)*top/(dij*d3jk) + (-z0 + 2*z1 - z2)/dijk)*(2*(-vij_z)*top/(d3ij*djk) + 2*(-vjk_z)*top/(dij*d3jk) + 2*(-z0 + 2*z1 - z2)/dijk) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 2*N*3 + atom_2_idx*3 + 0, 0.5*ka*((-vij_x)/dijk + (x1 - x2)*top/(dij*d3jk))*(2*(-vij_z)*top/(d3ij*djk) + 2*(-vjk_z)*top/(dij*d3jk) + 2*(-z0 + 2*z1 - z2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vij_z)/(d3ij*djk) + 2*(-vij_x)*(-vjk_z)/(dij*d3jk) + 2*(x1 - x2)*(-vij_z)*top/(d3ij*d3jk) + 2*(x1 - x2)*(-z0 + 2*z1 - z2)/(dij*d3jk) + 2*(3*x1 - 3*x2)*(-vjk_z)*top/(dij*d5jk)) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 2*N*3 + atom_2_idx*3 + 1, 0.5*ka*((-vij_y)/dijk + (y1 - y2)*top/(dij*d3jk))*(2*(-vij_z)*top/(d3ij*djk) + 2*(-vjk_z)*top/(dij*d3jk) + 2*(-z0 + 2*z1 - z2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(-vij_z)/(d3ij*djk) + 2*(-vij_y)*(-vjk_z)/(dij*d3jk) + 2*(y1 - y2)*(-vij_z)*top/(d3ij*d3jk) + 2*(y1 - y2)*(-z0 + 2*z1 - z2)/(dij*d3jk) + 2*(3*y1 - 3*y2)*(-vjk_z)*top/(dij*d5jk)) );
-        atomicAdd(hessian_out + atom_1_idx*3*N*3 + 2*N*3 + atom_2_idx*3 + 2, 0.5*ka*((-vij_z)/dijk + (z1 - z2)*top/(dij*d3jk))*(2*(-vij_z)*top/(d3ij*djk) + 2*(-vjk_z)*top/(dij*d3jk) + 2*(-z0 + 2*z1 - z2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*pow(-vij_z, 2)/(d3ij*djk) + 2*(-vij_z)*(-vjk_z)/(dij*d3jk) + 2*(-vij_z)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-vjk_z)*(3*z1 - 3*z2)*top/(dij*d5jk) + 2*(z1 - z2)*(-z0 + 2*z1 - z2)/(dij*d3jk) + 2*top/(dij*d3jk) - 2/dijk) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 0*N*3 + atom_0_idx*3 + 0, 0.5*ka*(2*(-vij_x)/dijk + 2*(x1 - x2)*top/(dij*d3jk))*((vij_x)*top/(d3ij*djk) + (-vjk_x)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(-vij_x)/(d3ij*djk) + 2*(vij_x)*(x1 - x2)*top/(d3ij*d3jk) + 2*(-vjk_x)*(x1 - x2)/(dij*d3jk) + 2/dijk) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 0*N*3 + atom_0_idx*3 + 1, 0.5*ka*(2*(-vij_x)/dijk + 2*(x1 - x2)*top/(dij*d3jk))*((vij_y)*top/(d3ij*djk) + (-vjk_y)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(vij_y)/(d3ij*djk) + 2*(x1 - x2)*(vij_y)*top/(d3ij*d3jk) + 2*(x1 - x2)*(-vjk_y)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 0*N*3 + atom_0_idx*3 + 2, 0.5*ka*(2*(-vij_x)/dijk + 2*(x1 - x2)*top/(dij*d3jk))*((vij_z)*top/(d3ij*djk) + (-vjk_z)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(vij_z)/(d3ij*djk) + 2*(x1 - x2)*(vij_z)*top/(d3ij*d3jk) + 2*(x1 - x2)*(-vjk_z)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 0*N*3 + atom_1_idx*3 + 0, 0.5*ka*(2*(-vij_x)/dijk + 2*(x1 - x2)*top/(dij*d3jk))*((-vij_x)*top/(d3ij*djk) + (-vjk_x)*top/(dij*d3jk) + (-x0 + 2*x1 - x2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*pow(-vij_x, 2)/(d3ij*djk) + 2*(-vij_x)*(-vjk_x)/(dij*d3jk) + 2*(-vij_x)*(x1 - x2)*top/(d3ij*d3jk) + 2*(-3*x1 + 3*x2)*(x1 - x2)*top/(dij*d5jk) + 2*(x1 - x2)*(-x0 + 2*x1 - x2)/(dij*d3jk) + 2*top/(dij*d3jk) - 2/dijk) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 0*N*3 + atom_1_idx*3 + 1, 0.5*ka*(2*(-vij_x)/dijk + 2*(x1 - x2)*top/(dij*d3jk))*((-vij_y)*top/(d3ij*djk) + (-vjk_y)*top/(dij*d3jk) + (-y0 + 2*y1 - y2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vij_y)/(d3ij*djk) + 2*(-vij_x)*(-vjk_y)/(dij*d3jk) + 2*(x1 - x2)*(-vij_y)*top/(d3ij*d3jk) + 2*(x1 - x2)*(-3*y1 + 3*y2)*top/(dij*d5jk) + 2*(x1 - x2)*(-y0 + 2*y1 - y2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 0*N*3 + atom_1_idx*3 + 2, 0.5*ka*(2*(-vij_x)/dijk + 2*(x1 - x2)*top/(dij*d3jk))*((-vij_z)*top/(d3ij*djk) + (-vjk_z)*top/(dij*d3jk) + (-z0 + 2*z1 - z2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vij_z)/(d3ij*djk) + 2*(-vij_x)*(-vjk_z)/(dij*d3jk) + 2*(x1 - x2)*(-vij_z)*top/(d3ij*d3jk) + 2*(x1 - x2)*(-3*z1 + 3*z2)*top/(dij*d5jk) + 2*(x1 - x2)*(-z0 + 2*z1 - z2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 0*N*3 + atom_2_idx*3 + 0, 0.5*ka*((-vij_x)/dijk + (x1 - x2)*top/(dij*d3jk))*(2*(-vij_x)/dijk + 2*(x1 - x2)*top/(dij*d3jk)) + 0.5*ka*(top/dijk - cos(a0))*(4*(-vij_x)*(x1 - x2)/(dij*d3jk) + 2*(x1 - x2)*(3*x1 - 3*x2)*top/(dij*d5jk) - 2*top/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 0*N*3 + atom_2_idx*3 + 1, 0.5*ka*(2*(-vij_x)/dijk + 2*(x1 - x2)*top/(dij*d3jk))*((-vij_y)/dijk + (y1 - y2)*top/(dij*d3jk)) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(y1 - y2)/(dij*d3jk) + 2*(x1 - x2)*(-vij_y)/(dij*d3jk) + 2*(x1 - x2)*(3*y1 - 3*y2)*top/(dij*d5jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 0*N*3 + atom_2_idx*3 + 2, 0.5*ka*(2*(-vij_x)/dijk + 2*(x1 - x2)*top/(dij*d3jk))*((-vij_z)/dijk + (z1 - z2)*top/(dij*d3jk)) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(z1 - z2)/(dij*d3jk) + 2*(x1 - x2)*(-vij_z)/(dij*d3jk) + 2*(x1 - x2)*(3*z1 - 3*z2)*top/(dij*d5jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 1*N*3 + atom_0_idx*3 + 0, 0.5*ka*(2*(-vij_y)/dijk + 2*(y1 - y2)*top/(dij*d3jk))*((vij_x)*top/(d3ij*djk) + (-vjk_x)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(-vij_y)/(d3ij*djk) + 2*(vij_x)*(y1 - y2)*top/(d3ij*d3jk) + 2*(-vjk_x)*(y1 - y2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 1*N*3 + atom_0_idx*3 + 1, 0.5*ka*(2*(-vij_y)/dijk + 2*(y1 - y2)*top/(dij*d3jk))*((vij_y)*top/(d3ij*djk) + (-vjk_y)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_y)*(-vij_y)/(d3ij*djk) + 2*(vij_y)*(y1 - y2)*top/(d3ij*d3jk) + 2*(-vjk_y)*(y1 - y2)/(dij*d3jk) + 2/dijk) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 1*N*3 + atom_0_idx*3 + 2, 0.5*ka*(2*(-vij_y)/dijk + 2*(y1 - y2)*top/(dij*d3jk))*((vij_z)*top/(d3ij*djk) + (-vjk_z)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(vij_z)/(d3ij*djk) + 2*(y1 - y2)*(vij_z)*top/(d3ij*d3jk) + 2*(y1 - y2)*(-vjk_z)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 1*N*3 + atom_1_idx*3 + 0, 0.5*ka*(2*(-vij_y)/dijk + 2*(y1 - y2)*top/(dij*d3jk))*((-vij_x)*top/(d3ij*djk) + (-vjk_x)*top/(dij*d3jk) + (-x0 + 2*x1 - x2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vij_y)/(d3ij*djk) + 2*(-vij_x)*(y1 - y2)*top/(d3ij*d3jk) + 2*(-3*x1 + 3*x2)*(y1 - y2)*top/(dij*d5jk) + 2*(-vjk_x)*(-vij_y)/(dij*d3jk) + 2*(y1 - y2)*(-x0 + 2*x1 - x2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 1*N*3 + atom_1_idx*3 + 1, 0.5*ka*(2*(-vij_y)/dijk + 2*(y1 - y2)*top/(dij*d3jk))*((-vij_y)*top/(d3ij*djk) + (-vjk_y)*top/(dij*d3jk) + (-y0 + 2*y1 - y2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*pow(-vij_y, 2)/(d3ij*djk) + 2*(-vij_y)*(-vjk_y)/(dij*d3jk) + 2*(-vij_y)*(y1 - y2)*top/(d3ij*d3jk) + 2*(-3*y1 + 3*y2)*(y1 - y2)*top/(dij*d5jk) + 2*(y1 - y2)*(-y0 + 2*y1 - y2)/(dij*d3jk) + 2*top/(dij*d3jk) - 2/dijk) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 1*N*3 + atom_1_idx*3 + 2, 0.5*ka*(2*(-vij_y)/dijk + 2*(y1 - y2)*top/(dij*d3jk))*((-vij_z)*top/(d3ij*djk) + (-vjk_z)*top/(dij*d3jk) + (-z0 + 2*z1 - z2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(-vij_z)/(d3ij*djk) + 2*(-vij_y)*(-vjk_z)/(dij*d3jk) + 2*(y1 - y2)*(-vij_z)*top/(d3ij*d3jk) + 2*(y1 - y2)*(-3*z1 + 3*z2)*top/(dij*d5jk) + 2*(y1 - y2)*(-z0 + 2*z1 - z2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 1*N*3 + atom_2_idx*3 + 0, 0.5*ka*((-vij_x)/dijk + (x1 - x2)*top/(dij*d3jk))*(2*(-vij_y)/dijk + 2*(y1 - y2)*top/(dij*d3jk)) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(y1 - y2)/(dij*d3jk) + 2*(x1 - x2)*(-vij_y)/(dij*d3jk) + 2*(3*x1 - 3*x2)*(y1 - y2)*top/(dij*d5jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 1*N*3 + atom_2_idx*3 + 1, 0.5*ka*((-vij_y)/dijk + (y1 - y2)*top/(dij*d3jk))*(2*(-vij_y)/dijk + 2*(y1 - y2)*top/(dij*d3jk)) + 0.5*ka*(top/dijk - cos(a0))*(4*(-vij_y)*(y1 - y2)/(dij*d3jk) + 2*(y1 - y2)*(3*y1 - 3*y2)*top/(dij*d5jk) - 2*top/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 1*N*3 + atom_2_idx*3 + 2, 0.5*ka*(2*(-vij_y)/dijk + 2*(y1 - y2)*top/(dij*d3jk))*((-vij_z)/dijk + (z1 - z2)*top/(dij*d3jk)) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(z1 - z2)/(dij*d3jk) + 2*(y1 - y2)*(-vij_z)/(dij*d3jk) + 2*(y1 - y2)*(3*z1 - 3*z2)*top/(dij*d5jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 2*N*3 + atom_0_idx*3 + 0, 0.5*ka*(2*(-vij_z)/dijk + 2*(z1 - z2)*top/(dij*d3jk))*((vij_x)*top/(d3ij*djk) + (-vjk_x)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_x)*(-vij_z)/(d3ij*djk) + 2*(vij_x)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-vjk_x)*(z1 - z2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 2*N*3 + atom_0_idx*3 + 1, 0.5*ka*(2*(-vij_z)/dijk + 2*(z1 - z2)*top/(dij*d3jk))*((vij_y)*top/(d3ij*djk) + (-vjk_y)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_y)*(-vij_z)/(d3ij*djk) + 2*(vij_y)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-vjk_y)*(z1 - z2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 2*N*3 + atom_0_idx*3 + 2, 0.5*ka*(2*(-vij_z)/dijk + 2*(z1 - z2)*top/(dij*d3jk))*((vij_z)*top/(d3ij*djk) + (-vjk_z)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(vij_z)*(-vij_z)/(d3ij*djk) + 2*(vij_z)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-vjk_z)*(z1 - z2)/(dij*d3jk) + 2/dijk) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 2*N*3 + atom_1_idx*3 + 0, 0.5*ka*(2*(-vij_z)/dijk + 2*(z1 - z2)*top/(dij*d3jk))*((-vij_x)*top/(d3ij*djk) + (-vjk_x)*top/(dij*d3jk) + (-x0 + 2*x1 - x2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(-vij_z)/(d3ij*djk) + 2*(-vij_x)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-3*x1 + 3*x2)*(z1 - z2)*top/(dij*d5jk) + 2*(-vjk_x)*(-vij_z)/(dij*d3jk) + 2*(z1 - z2)*(-x0 + 2*x1 - x2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 2*N*3 + atom_1_idx*3 + 1, 0.5*ka*(2*(-vij_z)/dijk + 2*(z1 - z2)*top/(dij*d3jk))*((-vij_y)*top/(d3ij*djk) + (-vjk_y)*top/(dij*d3jk) + (-y0 + 2*y1 - y2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(-vij_z)/(d3ij*djk) + 2*(-vij_y)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-3*y1 + 3*y2)*(z1 - z2)*top/(dij*d5jk) + 2*(-vjk_y)*(-vij_z)/(dij*d3jk) + 2*(z1 - z2)*(-y0 + 2*y1 - y2)/(dij*d3jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 2*N*3 + atom_1_idx*3 + 2, 0.5*ka*(2*(-vij_z)/dijk + 2*(z1 - z2)*top/(dij*d3jk))*((-vij_z)*top/(d3ij*djk) + (-vjk_z)*top/(dij*d3jk) + (-z0 + 2*z1 - z2)/dijk) + 0.5*ka*(top/dijk - cos(a0))*(2*pow(-vij_z, 2)/(d3ij*djk) + 2*(-vij_z)*(-vjk_z)/(dij*d3jk) + 2*(-vij_z)*(z1 - z2)*top/(d3ij*d3jk) + 2*(-3*z1 + 3*z2)*(z1 - z2)*top/(dij*d5jk) + 2*(z1 - z2)*(-z0 + 2*z1 - z2)/(dij*d3jk) + 2*top/(dij*d3jk) - 2/dijk) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 2*N*3 + atom_2_idx*3 + 0, 0.5*ka*((-vij_x)/dijk + (x1 - x2)*top/(dij*d3jk))*(2*(-vij_z)/dijk + 2*(z1 - z2)*top/(dij*d3jk)) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_x)*(z1 - z2)/(dij*d3jk) + 2*(x1 - x2)*(-vij_z)/(dij*d3jk) + 2*(3*x1 - 3*x2)*(z1 - z2)*top/(dij*d5jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 2*N*3 + atom_2_idx*3 + 1, 0.5*ka*((-vij_y)/dijk + (y1 - y2)*top/(dij*d3jk))*(2*(-vij_z)/dijk + 2*(z1 - z2)*top/(dij*d3jk)) + 0.5*ka*(top/dijk - cos(a0))*(2*(-vij_y)*(z1 - z2)/(dij*d3jk) + 2*(y1 - y2)*(-vij_z)/(dij*d3jk) + 2*(3*y1 - 3*y2)*(z1 - z2)*top/(dij*d5jk)) );
-        atomicAdd(hessian_out + atom_2_idx*3*N*3 + 2*N*3 + atom_2_idx*3 + 2, 0.5*ka*((-vij_z)/dijk + (z1 - z2)*top/(dij*d3jk))*(2*(-vij_z)/dijk + 2*(z1 - z2)*top/(dij*d3jk)) + 0.5*ka*(top/dijk - cos(a0))*(4*(-vij_z)*(z1 - z2)/(dij*d3jk) + 2*(z1 - z2)*(3*z1 - 3*z2)*top/(dij*d5jk) - 2*top/(dij*d3jk)) );
-
-        int ka_idx = global_param_idxs[param_idxs[a_idx*2+0]];
-        int a0_idx = global_param_idxs[param_idxs[a_idx*2+1]];
-
-        atomicAdd(mp_out + ka_idx*N*3 + atom_0_idx*3 + 0, (1.0/2.0)*(((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) - cos(a0))*(2*(-x0 + x1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-x1 + x2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2)))) );
-        atomicAdd(mp_out + a0_idx*N*3 + atom_0_idx*3 + 0, (1.0/2.0)*ka*(2*(-x0 + x1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-x1 + x2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))))*sin(a0) );
-        atomicAdd(mp_out + ka_idx*N*3 + atom_0_idx*3 + 1, (1.0/2.0)*(((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) - cos(a0))*(2*(-y0 + y1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-y1 + y2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2)))) );
-        atomicAdd(mp_out + a0_idx*N*3 + atom_0_idx*3 + 1, (1.0/2.0)*ka*(2*(-y0 + y1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-y1 + y2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))))*sin(a0) );
-        atomicAdd(mp_out + ka_idx*N*3 + atom_0_idx*3 + 2, (1.0/2.0)*(((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) - cos(a0))*(2*(-z0 + z1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-z1 + z2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2)))) );
-        atomicAdd(mp_out + a0_idx*N*3 + atom_0_idx*3 + 2, (1.0/2.0)*ka*(2*(-z0 + z1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-z1 + z2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))))*sin(a0) );
-        atomicAdd(mp_out + ka_idx*N*3 + atom_1_idx*3 + 0, (1.0/2.0)*(((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) - cos(a0))*(2*(x0 - x1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-x1 + x2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)) + 2*(-x0 + 2*x1 - x2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2)))) );
-        atomicAdd(mp_out + a0_idx*N*3 + atom_1_idx*3 + 0, (1.0/2.0)*ka*(2*(x0 - x1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-x1 + x2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)) + 2*(-x0 + 2*x1 - x2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))))*sin(a0) );
-        atomicAdd(mp_out + ka_idx*N*3 + atom_1_idx*3 + 1, (1.0/2.0)*(((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) - cos(a0))*(2*(y0 - y1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-y1 + y2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)) + 2*(-y0 + 2*y1 - y2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2)))) );
-        atomicAdd(mp_out + a0_idx*N*3 + atom_1_idx*3 + 1, (1.0/2.0)*ka*(2*(y0 - y1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-y1 + y2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)) + 2*(-y0 + 2*y1 - y2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))))*sin(a0) );
-        atomicAdd(mp_out + ka_idx*N*3 + atom_1_idx*3 + 2, (1.0/2.0)*(((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) - cos(a0))*(2*(z0 - z1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-z1 + z2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)) + 2*(-z0 + 2*z1 - z2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2)))) );
-        atomicAdd(mp_out + a0_idx*N*3 + atom_1_idx*3 + 2, (1.0/2.0)*ka*(2*(z0 - z1)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(pow(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2), 3.0/2.0)*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(-z1 + z2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)) + 2*(-z0 + 2*z1 - z2)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))))*sin(a0) );
-        atomicAdd(mp_out + ka_idx*N*3 + atom_2_idx*3 + 0, (1.0/2.0)*(2*(x0 - x1)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(x1 - x2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)))*(((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) - cos(a0)) );
-        atomicAdd(mp_out + a0_idx*N*3 + atom_2_idx*3 + 0, (1.0/2.0)*ka*(2*(x0 - x1)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(x1 - x2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)))*sin(a0) );
-        atomicAdd(mp_out + ka_idx*N*3 + atom_2_idx*3 + 1, (1.0/2.0)*(2*(y0 - y1)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(y1 - y2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)))*(((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) - cos(a0)) );
-        atomicAdd(mp_out + a0_idx*N*3 + atom_2_idx*3 + 1, (1.0/2.0)*ka*(2*(y0 - y1)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(y1 - y2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)))*sin(a0) );
-        atomicAdd(mp_out + ka_idx*N*3 + atom_2_idx*3 + 2, (1.0/2.0)*(2*(z0 - z1)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(z1 - z2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)))*(((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) - cos(a0)) );
-        atomicAdd(mp_out + a0_idx*N*3 + atom_2_idx*3 + 2, (1.0/2.0)*ka*(2*(z0 - z1)/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2))) + 2*(z1 - z2)*((-x0 + x1)*(x1 - x2) + (-y0 + y1)*(y1 - y2) + (-z0 + z1)*(z1 - z2))/(sqrt(pow(-x0 + x1, 2) + pow(-y0 + y1, 2) + pow(-z0 + z1, 2))*pow(pow(x1 - x2, 2) + pow(y1 - y2, 2) + pow(z1 - z2, 2), 3.0/2.0)))*sin(a0) );
+            Surreal<NumericType> cxs[9] = {
+                coords[atom_0_idx*3+0],
+                coords[atom_0_idx*3+1],
+                coords[atom_0_idx*3+2],
+                coords[atom_1_idx*3+0],
+                coords[atom_1_idx*3+1],
+                coords[atom_1_idx*3+2],
+                coords[atom_2_idx*3+0],
+                coords[atom_2_idx*3+1],
+                coords[atom_2_idx*3+2]
+            };
+            cxs[j].deriv = step;
+            Surreal<NumericType> dcxs[9];
+            gradient<Surreal<NumericType>, NumericType, Surreal<NumericType> >(cxs, ps, dcxs);
+            #pragma unroll
+            for(int k=0; k < 9; k++) {
+                atomicAdd(hessian_out + indices[j]*N*3 + indices[k], dcxs[k].deriv / step);
+            }
+            cxs[j].deriv = 0;
+        }
 
 
     }

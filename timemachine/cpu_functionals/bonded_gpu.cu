@@ -117,6 +117,12 @@ void HarmonicBondGPU<NumericType>::total_derivative_cpu(
 
     gpuErrchk(cudaMemcpy(d_coords, coords, N*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
+    gpuErrchk(cudaMemset(d_energy_out, 0, sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_grad_out, 0, N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_hessian_out, 0, N*3*N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_mp_out, 0, P*N*3*sizeof(NumericType)));
+
+    cudaDeviceSynchronize();
     std::clock_t start; double duration; start = std::clock();
 
     total_derivative(
@@ -250,6 +256,12 @@ void HarmonicAngleGPU<NumericType>::total_derivative_cpu(
 
     gpuErrchk(cudaMemcpy(d_coords, coords, N*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
+    gpuErrchk(cudaMemset(d_energy_out, 0, sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_grad_out, 0, N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_hessian_out, 0, N*3*N*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_mp_out, 0, P*N*3*sizeof(NumericType)));
+
+    cudaDeviceSynchronize();
     std::clock_t start; double duration; start = std::clock();
 
     total_derivative(
@@ -263,7 +275,7 @@ void HarmonicAngleGPU<NumericType>::total_derivative_cpu(
 
     cudaDeviceSynchronize();
 
-    duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"BOND_DURATION: "<< duration <<'\n';
+    duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"ANGLE_DURATION: "<< duration <<'\n';
 
     gpuErrchk(cudaMemcpy(energy_out, d_energy_out, sizeof(NumericType), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(grad_out, d_grad_out, N*3*sizeof(NumericType), cudaMemcpyDeviceToHost));
@@ -384,12 +396,12 @@ void PeriodicTorsionGPU<NumericType>::total_derivative_cpu(
 
     gpuErrchk(cudaMemcpy(d_coords, coords, N*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
-    std::clock_t start; double duration; start = std::clock();
-
     gpuErrchk(cudaMemset(d_energy_out, 0, sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_grad_out, 0, N*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_hessian_out, 0, N*3*N*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_mp_out, 0, P*N*3*sizeof(NumericType)));
+
+    std::clock_t start; double duration; start = std::clock();
 
     total_derivative(
         N,
@@ -427,5 +439,5 @@ template class timemachine::HarmonicBondGPU<double>;
 template class timemachine::HarmonicAngleGPU<float>;
 template class timemachine::HarmonicAngleGPU<double>;
 
-template class timemachine::PeriodicTorsionGPU<float>;
-template class timemachine::PeriodicTorsionGPU<double>;
+// template class timemachine::PeriodicTorsionGPU<float>;
+// template class timemachine::PeriodicTorsionGPU<double>;

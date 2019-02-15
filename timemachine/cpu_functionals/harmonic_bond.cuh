@@ -101,18 +101,18 @@ __global__ void harmonic_bond_total_derivative(
         int kb_idx = global_param_idxs[param_idxs[bond_idx*2+0]];
         int b0_idx = global_param_idxs[param_idxs[bond_idx*2+1]];
 
-        atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 0, (-b0 + sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)))*(x0 - x1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 0, -kb*(x0 - x1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 1, (-b0 + sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)))*(y0 - y1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 1, -kb*(y0 - y1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 2, (-b0 + sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)))*(z0 - z1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 2, -kb*(z0 - z1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 0, (-b0 + sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)))*(-x0 + x1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 0, -kb*(-x0 + x1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 1, (-b0 + sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)))*(-y0 + y1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 1, -kb*(-y0 + y1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 2, (-b0 + sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)))*(-z0 + z1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
-        atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 2, -kb*(-z0 + z1)/sqrt(pow(x0 - x1, 2) + pow(y0 - y1, 2) + pow(z0 - z1, 2)) );
+        atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 0, db*(x0 - x1)/dij );
+        atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 0, -kb*(x0 - x1)/dij );
+        atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 1, db*(y0 - y1)/dij );
+        atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 1, -kb*(y0 - y1)/dij );
+        atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 2, db*(z0 - z1)/dij );
+        atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 2, -kb*(z0 - z1)/dij );
+        atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 0, db*(-x0 + x1)/dij );
+        atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 0, -kb*(-x0 + x1)/dij );
+        atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 1, db*(-y0 + y1)/dij );
+        atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 1, -kb*(-y0 + y1)/dij );
+        atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 2, db*(-z0 + z1)/dij );
+        atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 2, -kb*(-z0 + z1)/dij );
 
 
     }
