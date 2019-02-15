@@ -175,9 +175,6 @@ class TestGPUIntegrator(unittest.TestCase):
         ref_dxdp_hb_op = tf.transpose(ref_dxdp_hb_op, perm=[2,0,1])
         ref_dxdp_ha_op = tf.transpose(ref_dxdp_ha_op, perm=[2,0,1])
 
-
-        print("MIXED PARTIALS SIZE", ref_dxdp_hb_op.shape, ref_dxdp_ha_op.shape)
-
         buffer_size = 100 # just make something large
 
         global_bond_param_idxs = np.arange(bond_params_np.shape[0], dtype=np.int32)

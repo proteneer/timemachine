@@ -150,12 +150,12 @@ def deserialize_system(xml_file):
                     param_idxs = np.array(param_idxs)
                     torsion_idxs = np.array(torsion_idxs)
 
-                    # all_nrgs.append(custom_ops.PeriodicTorsionGPU_float(
-                    #     params.astype(np.float32).reshape(-1).tolist(),
-                    #     list(range(start_params, start_params+n_params)),
-                    #     param_idxs.reshape(-1).tolist(),
-                    #     torsion_idxs.reshape(-1).tolist()
-                    # ))
+                    all_nrgs.append(custom_ops.PeriodicTorsionGPU_float(
+                        params.astype(np.float32).reshape(-1).tolist(),
+                        list(range(start_params, start_params+n_params)),
+                        param_idxs.reshape(-1).tolist(),
+                        torsion_idxs.reshape(-1).tolist()
+                    ))
 
                     start_params += n_params
 

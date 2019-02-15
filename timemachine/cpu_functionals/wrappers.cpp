@@ -556,8 +556,8 @@ declare_harmonic_angle_gpu<float>(m, "float");
 declare_periodic_torsion<double>(m, "double");
 declare_periodic_torsion<float>(m, "float");
 
-// declare_periodic_torsion_gpu<double>(m, "double");
-// declare_periodic_torsion_gpu<float>(m, "float");
+declare_periodic_torsion_gpu<double>(m, "double");
+declare_periodic_torsion_gpu<float>(m, "float");
 
 declare_electrostatics<double>(m, "double");
 declare_electrostatics<float>(m, "float");

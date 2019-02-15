@@ -401,6 +401,8 @@ void PeriodicTorsionGPU<NumericType>::total_derivative_cpu(
     gpuErrchk(cudaMemset(d_hessian_out, 0, N*3*N*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_mp_out, 0, P*N*3*sizeof(NumericType)));
 
+
+    cudaDeviceSynchronize();
     std::clock_t start; double duration; start = std::clock();
 
     total_derivative(
@@ -439,5 +441,5 @@ template class timemachine::HarmonicBondGPU<double>;
 template class timemachine::HarmonicAngleGPU<float>;
 template class timemachine::HarmonicAngleGPU<double>;
 
-// template class timemachine::PeriodicTorsionGPU<float>;
-// template class timemachine::PeriodicTorsionGPU<double>;
+template class timemachine::PeriodicTorsionGPU<float>;
+template class timemachine::PeriodicTorsionGPU<double>;
