@@ -255,6 +255,55 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 }
 
 
+
+template<typename NumericType>
+void declare_periodic_torsion_gpu(py::module &m, const char *typestr) {
+
+    using Class = timemachine::PeriodicTorsionGPU<NumericType>;
+    std::string pyclass_name = std::string("PeriodicTorsionGPU_") + typestr;
+    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    .def(py::init<
+        std::vector<NumericType>, // params
+        std::vector<size_t>, // global_param_idxs
+        std::vector<size_t>, // param_idxs
+        std::vector<size_t> // angle_idxs
+    >())
+    .def("total_derivative", [](timemachine::PeriodicTorsionGPU<NumericType> &nrg,
+        const py::array_t<NumericType, py::array::c_style> coords,
+        ssize_t num_params) -> py::tuple {
+
+        const auto num_atoms = coords.shape()[0];
+        const auto num_dims = coords.shape()[1];
+
+        NumericType energy = 0;
+        py::array_t<NumericType, py::array::c_style> py_grads({num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_hessians({num_atoms, num_dims, num_atoms, num_dims});
+        py::array_t<NumericType, py::array::c_style> py_mps({num_params, num_atoms, num_dims});
+
+        memset(py_grads.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims);
+        memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
+        memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
+
+        std::clock_t start; double duration; start = std::clock();
+
+        nrg.total_derivative_cpu(
+            num_atoms,
+            num_params,
+            coords.data(),
+            &energy,
+            py_grads.mutable_data(),
+            py_hessians.mutable_data(),
+            py_mps.mutable_data()
+        );
+
+        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
+
+        return py::make_tuple(energy, py_grads, py_hessians, py_mps);
+    });
+
+}
+
+
 template<typename NumericType>
 void declare_electrostatics(py::module &m, const char *typestr) {
 
@@ -506,6 +555,9 @@ declare_harmonic_angle_gpu<float>(m, "float");
 
 declare_periodic_torsion<double>(m, "double");
 declare_periodic_torsion<float>(m, "float");
+
+declare_periodic_torsion_gpu<double>(m, "double");
+declare_periodic_torsion_gpu<float>(m, "float");
 
 declare_electrostatics<double>(m, "double");
 declare_electrostatics<float>(m, "float");

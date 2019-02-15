@@ -3,6 +3,7 @@ import sympy as sp
 x0, y0, z0 = sp.symbols("x0 y0 z0")
 x1, y1, z1 = sp.symbols("x1 y1 z1")
 x2, y2, z2 = sp.symbols("x2 y2 z2")
+x3, y3, z3 = sp.symbols("x3 y3 z3")
 
 def get_dim(arg):
     if arg[0] == "x":
@@ -131,4 +132,93 @@ def angle_grads():
             print(out_str, ccode, ");")
 
 
-angle_grads()
+def cross_product(
+    a1, a2, a3,
+    b1, b2, b3):
+
+    s1 = a2*b3 - a3*b2;
+    s2 = a3*b1 - a1*b3;
+    s3 = a1*b2 - a2*b1;
+
+    return s1, s2, s3
+
+def norm(x, y, z):
+    return sp.sqrt(x*x + y*y + z*z)
+
+def dot_product(
+    x0, y0, z0,
+    x1, y1, z1):
+    return x0*x1 + y0*y1 + z0*z1
+
+def torsion_grads():
+
+    k, period, phase = sp.symbols("k period phase")
+
+    rij_x = x0 - x1;
+    rij_y = y0 - y1;
+    rij_z = z0 - z1;
+
+    rkj_x = x2 - x1;
+    rkj_y = y2 - y1;
+    rkj_z = z2 - z1;
+
+    rkl_x = x2 - x3;
+    rkl_y = y2 - y3;
+    rkl_z = z2 - z3;
+
+
+    n1_x, n1_y, n1_z = cross_product(rij_x, rij_y, rij_z, rkj_x, rkj_y, rkj_z)
+    n2_x, n2_y, n2_z = cross_product(rkj_x, rkj_y, rkj_z, rkl_x, rkl_y, rkl_z)
+    n3_x, n3_y, n3_z = cross_product(n1_x, n1_y, n1_z, n2_x, n2_y, n2_z)
+
+    rkj_n = norm(rkj_x, rkj_y, rkj_z);
+
+    rkj_x /= rkj_n;
+    rkj_y /= rkj_n;
+    rkj_z /= rkj_n;
+
+    y = dot_product(n3_x, n3_y, n3_z, rkj_x, rkj_y, rkj_z);
+    x = dot_product(n1_x, n1_y, n1_z, n2_x, n2_y, n2_z);
+    angle = sp.atan2(y, x);
+
+    nrg = k*(1+sp.cos(period*angle - phase));
+
+    variables = [x0,y0,z0,x1,y1,z1,x2,y2,z2,x3,y3,z3]
+
+    parameters = [k, period, phase]
+
+    def get_idx(arg):
+        if arg[1] == "0":
+            return "atom_0_idx"
+        elif arg[1] == "1":
+            return "atom_1_idx"
+        elif arg[1] == "2":
+            return "atom_2_idx"
+        elif arg[1] == "3":
+            return "atom_3_idx"
+
+    # # rows
+    # for v0 in variables:
+    #     # cols
+    #     idx0 = get_idx(v0.name)
+    #     dim0 = get_dim(v0.name)
+    #     for v1 in variables:
+    #         idx1 = get_idx(v1.name)
+    #         dim1 = get_dim(v1.name)
+
+    #         out_str = "atomicAdd(hessian_out + "+idx0+"*3*N*3 + " + dim0 + "*N*3 + " + idx1+"*3 + " + dim1 + ","
+    #         ccode = sp.ccode(sp.diff(sp.diff(nrg, v0), v1))
+    #         print(out_str, ccode, ");\n")
+
+    for v0 in variables:
+        # cols
+        idx0 = get_idx(v0.name)
+        dim0 = get_dim(v0.name)
+        for p0 in parameters:
+            p0_idx = get_param_idx(p0.name)
+
+            out_str = "atomicAdd(mp_out + "+p0_idx+"*N*3 + "+idx0+"*3 + " + dim0 + ","
+            ccode = sp.ccode(sp.diff(sp.diff(nrg, v0), p0))
+            print(out_str, ccode, ");")
+
+torsion_grads()
