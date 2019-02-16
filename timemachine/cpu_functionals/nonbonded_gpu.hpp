@@ -1,12 +1,13 @@
 #pragma once
 
 #include <vector>
+#include "energy.hpp"
 
 namespace timemachine {
 
 
 template <typename NumericType>
-class ElectrostaticsGPU {
+class ElectrostaticsGPU: public EnergyGPU<NumericType> {
 
 private:
 
@@ -51,7 +52,7 @@ public:
 
 
 template <typename NumericType>
-class LennardJonesGPU {
+class LennardJonesGPU: public EnergyGPU<NumericType> {
 
 private:
 

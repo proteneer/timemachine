@@ -60,6 +60,10 @@ private:
 
 public:
 
+    // these *HAVE* to be refactored out to be out of this class.
+    NumericType* get_device_coords() {
+        return d_x_t_;
+    };
 
     // these *HAVE* to be refactored out to be out of this class.
     NumericType* get_device_grads() {
@@ -75,11 +79,11 @@ public:
         return d_mixed_partials_;
     };
 
-    int num_params() {
+    int num_params() const {
       return P_;
     }
 
-    int num_atoms() {
+    int num_atoms() const {
       return N_;
     }
 

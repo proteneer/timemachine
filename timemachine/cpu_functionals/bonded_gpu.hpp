@@ -1,12 +1,13 @@
 #pragma once
 
+#include "energy.hpp"
 #include <vector>
 
 namespace timemachine {
 
 
 template <typename NumericType>
-class HarmonicBondGPU {
+class HarmonicBondGPU: public EnergyGPU<NumericType> {
 
 private:
 
@@ -51,7 +52,7 @@ public:
 
 
 template <typename NumericType>
-class HarmonicAngleGPU {
+class HarmonicAngleGPU: public EnergyGPU<NumericType> {
 
 private:
 
@@ -96,7 +97,7 @@ public:
 
 
 template <typename NumericType>
-class PeriodicTorsionGPU {
+class PeriodicTorsionGPU: public EnergyGPU<NumericType> {
 
 private:
 

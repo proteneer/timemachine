@@ -7,9 +7,11 @@
 #include "nonbonded_gpu.hpp"
 #include "bonded_cpu.hpp"
 #include "bonded_gpu.hpp"
+#include "context.hpp"
+#include "energy.hpp"
+
+
 #include <iostream>
-
-
 #include <ctime>
 
 
@@ -401,48 +403,6 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
 
 
 template<typename NumericType>
-void declare_integrator(py::module &m, const char *typestr) {
-
-    using Class = timemachine::Integrator<NumericType>;
-    std::string pyclass_name = std::string("Integrator_") + typestr;
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-    .def(py::init<
-        NumericType, // dt
-        int, // W,
-        int, // N,
-        int, // P,
-        NumericType, // coeff_a, 
-        std::vector<NumericType>,  // coeff_Bs
-        std::vector<NumericType>  // coeff_Css
-    >())
-    .def("step", [](timemachine::Integrator<NumericType> &intg,
-    const py::array_t<NumericType, py::array::c_style> grads,
-    const py::array_t<NumericType, py::array::c_style> hessians,
-    const py::array_t<NumericType, py::array::c_style> mixed_partials) -> void {
-        intg.step_cpu(grads.data(), hessians.data(), mixed_partials.data());
-    })
-    .def("get_dxdp", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
-        return intg.get_dxdp();
-    })
-    .def("get_noise", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
-        return intg.get_noise();
-    })
-    .def("get_coordinates", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
-        return intg.get_coordinates();
-    })
-    .def("get_velocities", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
-        return intg.get_velocities();
-    })
-    .def("set_coordinates", [](timemachine::Integrator<NumericType> &intg, std::vector<NumericType> arg) -> void {
-        return intg.set_coordinates(arg);
-    })
-    .def("set_velocities", [](timemachine::Integrator<NumericType> &intg, std::vector<NumericType> arg) -> void {
-        return intg.set_velocities(arg);
-    });
-
-}
-
-template<typename NumericType>
 void declare_electrostatics_gpu(py::module &m, const char *typestr) {
 
     using Class = timemachine::ElectrostaticsGPU<NumericType>;
@@ -539,6 +499,63 @@ void declare_lennard_jones_gpu(py::module &m, const char *typestr) {
 
 
 
+template<typename NumericType>
+void declare_integrator(py::module &m, const char *typestr) {
+
+    using Class = timemachine::Integrator<NumericType>;
+    std::string pyclass_name = std::string("Integrator_") + typestr;
+    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    .def(py::init<
+        NumericType, // dt
+        int, // W,
+        int, // N,
+        int, // P,
+        NumericType, // coeff_a, 
+        std::vector<NumericType>,  // coeff_Bs
+        std::vector<NumericType>  // coeff_Css
+    >())
+    .def("step", [](timemachine::Integrator<NumericType> &intg,
+    const py::array_t<NumericType, py::array::c_style> grads,
+    const py::array_t<NumericType, py::array::c_style> hessians,
+    const py::array_t<NumericType, py::array::c_style> mixed_partials) -> void {
+        intg.step_cpu(grads.data(), hessians.data(), mixed_partials.data());
+    })
+    .def("get_dxdp", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
+        return intg.get_dxdp();
+    })
+    .def("get_noise", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
+        return intg.get_noise();
+    })
+    .def("get_coordinates", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
+        return intg.get_coordinates();
+    })
+    .def("get_velocities", [](timemachine::Integrator<NumericType> &intg) -> std::vector<NumericType> {
+        return intg.get_velocities();
+    })
+    .def("set_coordinates", [](timemachine::Integrator<NumericType> &intg, std::vector<NumericType> arg) -> void {
+        return intg.set_coordinates(arg);
+    })
+    .def("set_velocities", [](timemachine::Integrator<NumericType> &intg, std::vector<NumericType> arg) -> void {
+        return intg.set_velocities(arg);
+    });
+
+}
+
+template<typename NumericType>
+void declare_context(py::module &m, const char *typestr) {
+
+    using Class = timemachine::Context<NumericType>;
+    std::string pyclass_name = std::string("Context_") + typestr;
+    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    .def(py::init<
+        std::vector<timemachine::EnergyGPU<NumericType> *>, // dt
+        timemachine::Integrator<NumericType>*
+    >());
+
+}
+
+
+
 PYBIND11_MODULE(custom_ops, m) {
 
 declare_harmonic_bond<double>(m, "double");
@@ -573,5 +590,8 @@ declare_lennard_jones_gpu<float>(m, "float");
 
 declare_integrator<double>(m, "double");
 declare_integrator<float>(m, "float");
+
+declare_context<double>(m, "double");
+declare_context<float>(m, "float");
 
 }
