@@ -349,8 +349,8 @@ class TestSpeed(unittest.TestCase):
 
     def test_ala(self):
 
-        masses, nrgs, n_params = deserialize_system('/home/yzhao/Code/timemachine/system.xml')
-        ref_nrg, x0, velocities, ref_forces = deserialize_state('/home/yzhao/Code/timemachine/state0.xml')
+        masses, nrgs, n_params = deserialize_system('/home/yutong/Code/timemachine/system.xml')
+        ref_nrg, x0, velocities, ref_forces = deserialize_state('/home/yutong/Code/timemachine/state0.xml')
 
         num_atoms = x0.shape[0]
 
@@ -364,6 +364,23 @@ class TestSpeed(unittest.TestCase):
         return
         assert 0
 
+
+        # coeff_a = np.float32(0.5)
+        # coeff_bs = np.expand_dims(np.array(masses), axis=1)
+        # coeff_cs = np.expand_dims(1/np.array(masses), axis=1)
+        # buffer_size = 100
+        # dt = 0.03
+
+
+        # gpu_intg = custom_ops.Integrator_float(
+        #     dt,
+        #     buffer_size,
+        #     num_atoms,
+        #     num_params,
+        #     coeff_a,
+        #     coeff_bs.reshape(-1).tolist(),
+        #     coeff_cs.reshape(-1).tolist()
+        # )
 
         nrg_op = nrgs[0].energy(x_ph)
         grad_op = densify(tf.gradients(nrg_op, x_ph)[0])

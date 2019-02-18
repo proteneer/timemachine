@@ -163,10 +163,14 @@ class TestGPUIntegrator(unittest.TestCase):
             bond_idxs.reshape(-1).tolist(),
         )
 
-        custom_ops.Context_double(
+        context = custom_ops.Context_double(
             [hb_gpu],
             gpu_intg
         )
+
+        for s in range(1000):
+            print(s)
+            context.step();
 
     # def test_analytic_integration(self):
     #     """

@@ -5,6 +5,8 @@ namespace timemachine {
 template <typename NumericType>
 class EnergyGPU {
 
+public:
+
     virtual void total_derivative(
         const size_t n_atoms,
         const size_t n_params,

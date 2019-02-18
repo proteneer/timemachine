@@ -22,7 +22,6 @@ void Context<NumericType>::step() {
     for(size_t i=0; i < energies_.size(); i++) {
     	EnergyGPU<NumericType>* nrg = energies_[i];
 
-
     	nrg->total_derivative(
     		N,
     		P,
@@ -40,3 +39,6 @@ void Context<NumericType>::step() {
 }
 
 }
+
+template class timemachine::Context<double>;
+template class timemachine::Context<float>;

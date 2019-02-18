@@ -17,6 +17,17 @@
 
 namespace py = pybind11;
 
+template <typename NumericType>
+void declare_energy_gpu(py::module &m, const char *typestr) {
+
+    using Class = timemachine::EnergyGPU<NumericType>;
+    std::string pyclass_name = std::string("EnergyGPU_") + typestr;
+    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr());
+
+}
+
+
+// needs to subclass!
 template<typename NumericType>
 void declare_harmonic_bond(py::module &m, const char *typestr) {
 
@@ -70,7 +81,7 @@ void declare_harmonic_bond_gpu(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicBondGPU<NumericType>;
     std::string pyclass_name = std::string("HarmonicBondGPU_") + typestr;
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, timemachine::EnergyGPU<NumericType> >(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<NumericType>, // params
         std::vector<size_t>, // global_param_idxs
@@ -550,13 +561,17 @@ void declare_context(py::module &m, const char *typestr) {
     .def(py::init<
         std::vector<timemachine::EnergyGPU<NumericType> *>, // dt
         timemachine::Integrator<NumericType>*
-    >());
-
+    >())
+    .def("step", &timemachine::Context<NumericType>::step);
 }
 
 
 
 PYBIND11_MODULE(custom_ops, m) {
+
+
+declare_energy_gpu<double>(m, "double");
+declare_energy_gpu<float>(m, "float");
 
 declare_harmonic_bond<double>(m, "double");
 declare_harmonic_bond<float>(m, "float");

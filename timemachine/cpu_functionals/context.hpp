@@ -17,9 +17,9 @@ private:
 public:
 
 	Context(
-		std::vector<EnergyGPU<NumericType>*> energies,
+		std::vector<EnergyGPU<NumericType>* > energies,
 		Integrator<NumericType>* intg
-	) : energies_(energies), integrator_(intg) {
+	) :  energies_(energies), integrator_(intg) {
 
 	};
 
