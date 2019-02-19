@@ -9,6 +9,26 @@
 #include "integrator.hpp"
 #include "gpu_utils.cuh"
 
+// template <typename NumericType>
+// __global__ void symmetrize_matrix(
+//     NumericType *mat,
+//     int size) {
+
+//     int col = blockDim.x*blockIdx.x + threadIdx.x;
+
+//     if(col >= size) {
+//         return;
+//     }
+
+//     // stupid simple one-pass 
+//     for(int row=0; row < size; row++) {
+
+//         mat[col]
+
+//     }
+
+// }
+
 /*
 
 Buffer operations:
@@ -296,29 +316,6 @@ void Integrator<NumericType>::step_gpu(
 
 }
 
-// template<typename NumericType> 
-// void Integrator<NumericType>::reduce_total_derivatives(const NumericType *d_Dx_t, int window_k) {
-
-//     size_t tpb = 32;
-//     const size_t tot = P_*N_*3;
-//     size_t n_blocks = (tot + tpb - 1) / tpb;
-
-//     reduce_total<NumericType><<<n_blocks, tpb>>>(
-//         coeff_a_,
-//         d_coeff_bs_,
-//         d_Dx_t,
-//         d_total_buffer_,
-//         d_converged_buffer_,
-//         d_dxdp_t_,
-//         window_k,
-//         W_,
-//         P_*N_*3
-//     );
-
-//     gpuErrchk(cudaPeekAtLastError());
-
-// };
-
 template<typename NumericType> 
 void Integrator<NumericType>::hessian_vector_product(
     const NumericType *d_A,
@@ -330,17 +327,19 @@ void Integrator<NumericType>::hessian_vector_product(
  
     const size_t N3 = N_*3;
 
-    cublasErrchk(templateGemm(cb_handle_,
-        CUBLAS_OP_N, CUBLAS_OP_N, // whether or not we transpose A
-        N3, P_, N3,
+    // this is set to UPPER because of fortran ordering
+    cublasErrchk(templateSymm(cb_handle_,
+        CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER,
+        N3, P_,
         &alpha,
         d_A, N3,
         d_B, N3,
         &beta,
         d_C, N3));
-}
 
 }
 
-template class timemachine::Integrator<float>;
+}
+
 template class timemachine::Integrator<double>;
+template class timemachine::Integrator<float>;

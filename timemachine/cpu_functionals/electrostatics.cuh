@@ -232,7 +232,7 @@ __global__ void electrostatics_total_derivative(
                 shfl_grad_dz += grad_prefactor*dz;
 
                 // we can shuffle this as well.
-                NumericType *mp_out_qj = mp_out + q1_g_idx;
+                // NumericType *mp_out_qj = mp_out + q1_g_idx;
 
                 NumericType mp_prefactor = sij*ONE_4PI_EPS0*inv_d3ij;
 

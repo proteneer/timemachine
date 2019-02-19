@@ -3,7 +3,7 @@ import tensorflow as tf
 import unittest
 
 from tensorflow.python.ops.parallel_for.gradients import jacobian
-from timemachine.functionals import bonded
+from timemachine.functionals import bonded, nonbonded
 from timemachine.cpu_functionals import custom_ops
 from tests.test_integrator import ReferenceLangevinIntegrator
 
@@ -100,6 +100,130 @@ class TestGPUIntegrator(unittest.TestCase):
     def tearDown(self):
         # (ytz): needed to clear variables
         tf.reset_default_graph()
+
+
+
+    def test_gpu_electrostatic_analytic_integration(self):
+        """
+        Testing that lower triangular hessians are working as intended. This is because for the
+        non-bonded kernels we compute only the lower right triangular portion
+        """
+        x0 = np.array([
+            [ 0.0637,   0.0126,   0.2203],
+            [ 1.0573,  -0.2011,   1.2864],
+            [ 2.3928,   1.2209,  -0.2230],
+            [-0.6891,   1.6983,   0.0780],
+            [-0.6312,  -1.6261,  -0.2601]
+        ], dtype=np.float64)
+
+        N = x0.shape[0]
+
+        x_ph = tf.placeholder(shape=(N, 3), dtype=np.float64)
+
+        params_np = np.array([1.3, 0.3], dtype=np.float64)
+        params_tf = tf.convert_to_tensor(params_np)
+        param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
+        scale_matrix = np.array([
+            [  0,  1,  1,  1,0.5],
+            [  1,  0,  0,  1,  1],
+            [  1,  0,  0,  0,0.2],
+            [  1,  1,  0,  0,  1],
+            [0.5,  1,0.2,  1,  0],
+        ], dtype=np.float64)
+
+        cutoff = None
+        crf = 0.0
+
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
+
+        ref_nrg = nonbonded.Electrostatic(params_tf, param_idxs, scale_matrix, cutoff=cutoff, crf=crf)
+        nrg_op = ref_nrg.energy(x_ph)
+
+        es_gpu = custom_ops.ElectrostaticsGPU_double(
+            params_np.reshape(-1).tolist(),
+            list(range(params_np.shape[0])),
+            param_idxs.reshape(-1).tolist(),
+            scale_matrix.reshape(-1).tolist()
+        )
+
+        masses = np.array([6.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float64)
+
+        friction = 10.0
+        dt = 0.01
+        temp = 0.0
+        num_atoms = len(masses)
+        x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
+
+        ref_intg = ReferenceLangevinIntegrator(masses, dt, friction, temp)
+
+        num_steps = 5
+
+        x = x_ph
+
+        for step in range(num_steps):
+            print("step", step)
+            all_grads = []
+            for nrg in [ref_nrg]:
+                all_grads.append(tf.gradients(nrg.energy(x), x)[0])
+            all_grads = tf.stack(all_grads, axis=0)
+            grads = tf.reduce_sum(all_grads, axis=0)
+            dx = ref_intg.step(grads)
+            x += dx
+
+        ref_x_final_op = x
+
+        # verify correctness of jacobians through time
+        ref_dxdp_es_op = jacobian(ref_x_final_op, ref_nrg.get_params(), use_pfor=False) # (N, 3, P)
+        # ref_dxdp_ha_op = jacobian(ref_x_final_op, ha.get_params(), use_pfor=False) # (N, 3, P)
+        ref_dxdp_es_op = tf.transpose(ref_dxdp_es_op, perm=[2,0,1])
+        # ref_dxdp_ha_op = tf.transpose(ref_dxdp_ha_op, perm=[2,0,1])
+
+        buffer_size = 100 # just make something large
+
+        total_params = params_np.shape[0]
+        # global_angle_param_idxs = np.arange(angle_params_np.shape[0], dtype=np.int32) + global_bond_param_idxs.shape[0]
+        # total_params = bond_params_np.shape[0] + angle_params_np.shape[0]
+
+        gpu_intg = custom_ops.Integrator_double(
+            dt,
+            buffer_size,
+            num_atoms,
+            total_params,
+            ref_intg.coeff_a,
+            ref_intg.coeff_bs.reshape(-1).tolist(),
+            ref_intg.coeff_cs.reshape(-1).tolist()
+        )
+
+        gpu_intg.set_coordinates(x0.reshape(-1).tolist())
+        gpu_intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
+
+        xt = x0
+
+        context = custom_ops.Context_double(
+            [es_gpu],
+            gpu_intg
+        )
+
+        for step in range(num_steps):
+            context.step()
+
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
+ 
+        cpu_final_x_t_val = gpu_intg.get_coordinates()
+        # test consistency of geometry
+        np.testing.assert_array_almost_equal(
+            cpu_final_x_t_val,
+            sess.run(ref_x_final_op, feed_dict={x_ph: x0}).reshape(-1),
+            decimal=13)
+
+        gpu_dxdp = np.array(gpu_intg.get_dxdp()).reshape(total_params, num_atoms, 3)
+        ref_dxdp_es = sess.run(ref_dxdp_es_op, feed_dict={x_ph: x0})
+
+        np.testing.assert_array_almost_equal(gpu_dxdp, ref_dxdp_es)
+        # np.testing.assert_array_almost_equal(gpu_dxdp[2:], ref_dxdp_angles)
+
 
     def test_gpu_analytic_integration(self):
 
