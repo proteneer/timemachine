@@ -177,7 +177,7 @@ void declare_harmonic_angle_gpu(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicAngleGPU<NumericType>;
     std::string pyclass_name = std::string("HarmonicAngleGPU_") + typestr;
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, timemachine::EnergyGPU<NumericType> >(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<NumericType>, // params
         std::vector<size_t>, // global_param_idxs
@@ -274,7 +274,7 @@ void declare_periodic_torsion_gpu(py::module &m, const char *typestr) {
 
     using Class = timemachine::PeriodicTorsionGPU<NumericType>;
     std::string pyclass_name = std::string("PeriodicTorsionGPU_") + typestr;
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, timemachine::EnergyGPU<NumericType> >(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<NumericType>, // params
         std::vector<size_t>, // global_param_idxs
@@ -418,7 +418,7 @@ void declare_electrostatics_gpu(py::module &m, const char *typestr) {
 
     using Class = timemachine::ElectrostaticsGPU<NumericType>;
     std::string pyclass_name = std::string("ElectrostaticsGPU_") + typestr;
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, timemachine::EnergyGPU<NumericType> >(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<NumericType>, // params
         std::vector<size_t>, // global_param_idxs
@@ -466,7 +466,7 @@ void declare_lennard_jones_gpu(py::module &m, const char *typestr) {
 
     using Class = timemachine::LennardJonesGPU<NumericType>;
     std::string pyclass_name = std::string("LennardJonesGPU_") + typestr;
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, timemachine::EnergyGPU<NumericType> >(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<NumericType>, // params
         std::vector<size_t>, // global_param_idxs
