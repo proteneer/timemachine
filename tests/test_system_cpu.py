@@ -1,13 +1,8 @@
 import numpy as np
 import os
 import unittest
-import tensorflow as tf
 
-from timemachine.functionals import bonded
-from timemachine.functionals import nonbonded
-from timemachine.functionals import gbsa
-from timemachine.derivatives import densify
-from timemachine.constants import ONE_4PI_EPS0
+from timemachine.cpu_functionals import custom_ops
 # OpenMM nonbonded terms
 # NoCutoff = 0,
 # CutoffNonPeriodic = 1,
@@ -38,6 +33,8 @@ def deserialize_system(xml_file):
 
     all_nrgs = []
 
+    start_params = 0
+
     for child in root:
         if child.tag == 'Particles':
             for subchild in child:
@@ -45,15 +42,11 @@ def deserialize_system(xml_file):
             num_atoms = len(masses)
         if child.tag == 'Forces':
             for subchild in child:
-
-
-
                 tags = subchild.attrib
                 force_group = np.int32(tags['forceGroup'])
                 force_version = np.int32(tags['version'])
                 force_type = tags['type']
                 if force_type == 'HarmonicBondForce':
-                    unique_bonds = set()
                     force_periodic = tags['usesPeriodic']
 
                     params = []
@@ -72,24 +65,29 @@ def deserialize_system(xml_file):
                             p_idx_k = len(params)
                             params.append(k)
 
-                            unique_bonds.add((d,k))
-
                             param_idxs.append((p_idx_k, p_idx_d))
                             bond_idxs.append((src, dst))
 
+                    n_params = len(params)
                     params = np.array(params)
                     param_idxs = np.array(param_idxs)
                     bond_idxs = np.array(bond_idxs)
 
-                    all_nrgs.append(bonded.HarmonicBond(params, bond_idxs, param_idxs))
+                    all_nrgs.append(custom_ops.HarmonicBondGPU_float(
+                        params.astype(np.float32).reshape(-1).tolist(),
+                        list(range(start_params, start_params+n_params)),
+                        param_idxs.reshape(-1).tolist(),
+                        bond_idxs.reshape(-1).tolist()
+                    ))
+
+                    start_params += n_params
+
                 elif force_type == 'HarmonicAngleForce':
                     force_periodic = tags['usesPeriodic']
 
                     params = []
                     param_idxs = []
                     angle_idxs = []
-
-                    unique_angles = set()
 
                     for angles in subchild:
                         for angle in angles:
@@ -99,8 +97,6 @@ def deserialize_system(xml_file):
                             mid = np.int32(angle.attrib['p2'])
                             dst = np.int32(angle.attrib['p3'])
 
-                            unique_angles.add((a, k))
-
                             p_idx_a = len(params)
                             params.append(a)
                             p_idx_k = len(params)
@@ -109,27 +105,31 @@ def deserialize_system(xml_file):
                             param_idxs.append((p_idx_k, p_idx_a))
                             angle_idxs.append((src, mid, dst))
 
+                    n_params = len(params)
                     params = np.array(params)
                     param_idxs = np.array(param_idxs)
                     angle_idxs = np.array(angle_idxs)
 
-                    all_nrgs.append(bonded.HarmonicAngle(params, angle_idxs, param_idxs, cos_angles=False))
+                    all_nrgs.append(custom_ops.HarmonicAngleGPU_float(
+                        params.astype(np.float32).reshape(-1).tolist(),
+                        list(range(start_params, start_params+n_params)),
+                        param_idxs.reshape(-1).tolist(),
+                        angle_idxs.reshape(-1).tolist())
+                    )
+
+                    start_params += n_params
+
                 elif force_type == 'PeriodicTorsionForce':
 
                     params = []
                     param_idxs = []
                     torsion_idxs = []
 
-                    unique_torsions = set()
-
                     for tors in subchild:
                         for tor in tors:
                             k = np.float64(tor.attrib['k'])
                             phase = np.float64(tor.attrib['phase'])
                             periodicity = np.float64(tor.attrib['periodicity'])
-
-                            unique_torsions.add((k, phase, periodicity))
-
                             p1 = np.int32(tor.attrib['p1'])
                             p2 = np.int32(tor.attrib['p2'])
                             p3 = np.int32(tor.attrib['p3'])
@@ -145,19 +145,25 @@ def deserialize_system(xml_file):
                             param_idxs.append((p_idx_k, p_idx_phase, p_idx_period))
                             torsion_idxs.append((p1, p2, p3, p4))
 
+                    n_params = len(params)
                     params = np.array(params)
                     param_idxs = np.array(param_idxs)
                     torsion_idxs = np.array(torsion_idxs)
-                    all_nrgs.append(bonded.PeriodicTorsion(params, torsion_idxs, param_idxs))
+
+                    all_nrgs.append(custom_ops.PeriodicTorsionGPU_float(
+                        params.astype(np.float32).reshape(-1).tolist(),
+                        list(range(start_params, start_params+n_params)),
+                        param_idxs.reshape(-1).tolist(),
+                        torsion_idxs.reshape(-1).tolist()
+                    ))
+
+                    start_params += n_params
 
                 elif force_type == 'NonbondedForce':
 
                     assert len(bond_idxs) > 0
                     assert len(angle_idxs) > 0
                     assert len(torsion_idxs) > 0
-
-                    unique_lj = set()
-                    unique_charges = set()
 
                     method = np.int32(tags['method'])
 
@@ -221,7 +227,6 @@ def deserialize_system(xml_file):
                         if group.tag == 'Particles':
                             for p_idx, particle in enumerate(group):
                                 q_idx = len(charge_params)
-                                unique_charges.add(particle.attrib['q'])
                                 charge_params.append(np.float64(particle.attrib['q']))
 
                                 sig_idx = len(lj_params)
@@ -230,10 +235,11 @@ def deserialize_system(xml_file):
                                 eps_idx = len(lj_params)
                                 lj_params.append(np.float64(particle.attrib['eps']))
 
-                                unique_lj.add((particle.attrib['sig'], particle.attrib['eps']))
-
                                 charge_param_idxs.append(q_idx)
                                 lj_param_idxs.append((sig_idx, eps_idx))
+
+                    n_charge_params = len(charge_params)
+                    n_lj_params = len(lj_params)
 
                     charge_params = np.array(charge_params)
                     charge_param_idxs = np.array(charge_param_idxs)
@@ -241,12 +247,28 @@ def deserialize_system(xml_file):
                     lj_params = np.array(lj_params)
                     lj_param_idxs = np.array(lj_param_idxs)
 
-                    lj = nonbonded.LeonnardJones(lj_params, lj_param_idxs, lj_eps_scales, cutoff)
-                    es = nonbonded.Electrostatic(charge_params, charge_param_idxs, charge_scales, cutoff)
+                    lj = custom_ops.LennardJonesGPU_float(
+                        lj_params.astype(np.float32).reshape(-1).tolist(),
+                        list(range(start_params, start_params+n_lj_params)),
+                        lj_param_idxs.reshape(-1).tolist(),
+                        lj_eps_scales.reshape(-1).tolist()
+                    )
+                    start_params += n_lj_params
+
+                    es = custom_ops.ElectrostaticsGPU_float(
+                        charge_params.astype(np.float32).reshape(-1).tolist(),
+                        list(range(start_params, start_params+n_charge_params)),
+                        charge_param_idxs.reshape(-1).tolist(),
+                        charge_scales.reshape(-1).tolist()
+                    )
+                    start_params += n_charge_params
 
                     all_nrgs.extend([lj, es])
 
                 elif force_type == 'GBSAOBCForce':
+
+                    # GBSA not implemented yet.
+                    continue
 
                     method = np.int32(tags['method'])
 
@@ -287,16 +309,8 @@ def deserialize_system(xml_file):
                         solventDielectric=solventDielectric,
                         surfaceAreaEnergy=surfaceAreaEnergy))
 
-    print("unique_bonds", len(unique_bonds)*2)
-    print("unique_angles", len(unique_angles)*2)
-    print("unique_torsions", len(unique_angles)*3)
-    print("unique_charges", len(unique_charges))
-    print("unique_lj", len(unique_lj)*2)
 
-    tot = len(unique_bonds)*2 + len(unique_angles)*2 + len(unique_angles)*3 + len(unique_charges) + len(unique_lj)*2
-    print("total unique parameters.", tot)
-
-    return masses, all_nrgs
+    return masses, all_nrgs, start_params
 
 def deserialize_state(xml_file):
 
@@ -331,24 +345,43 @@ def get_data(fname):
     return os.path.join(os.path.dirname(__file__), 'data', fname)
 
 
-class TestAlaAlaAla(unittest.TestCase):
-
-    def tearDown(self):
-        tf.reset_default_graph()
+class TestSpeed(unittest.TestCase):
 
     def test_ala(self):
 
-        masses, nrgs = deserialize_system('/Users/hessian/Code/timemachine/system.xml')
-        ref_nrg, x0, velocities, ref_forces = deserialize_state('/Users/hessian/Code/timemachine/state0.xml')
+        masses, nrgs, n_params = deserialize_system('/home/yutong/Code/timemachine/system.xml')
+        ref_nrg, x0, velocities, ref_forces = deserialize_state('/home/yutong/Code/timemachine/state0.xml')
 
         num_atoms = x0.shape[0]
 
-        x_ph = tf.placeholder(shape=(num_atoms, 3), dtype=tf.float64)
+        dxdp = np.random.rand(n_params, num_atoms, 3)
+        print("dxdp shape", dxdp.shape)
 
-        sess = tf.Session()
-        sess.run(tf.initializers.global_variables())
+        for nrg in nrgs:
+            print(nrg)
+            e, grad, hess, mixed_partials = nrg.total_derivative(x0.astype(np.float32), n_params)
+            print(e)
+        return
+        assert 0
 
-        # bonds
+
+        # coeff_a = np.float32(0.5)
+        # coeff_bs = np.expand_dims(np.array(masses), axis=1)
+        # coeff_cs = np.expand_dims(1/np.array(masses), axis=1)
+        # buffer_size = 100
+        # dt = 0.03
+
+
+        # gpu_intg = custom_ops.Integrator_float(
+        #     dt,
+        #     buffer_size,
+        #     num_atoms,
+        #     num_params,
+        #     coeff_a,
+        #     coeff_bs.reshape(-1).tolist(),
+        #     coeff_cs.reshape(-1).tolist()
+        # )
+
         nrg_op = nrgs[0].energy(x_ph)
         grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
         nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
@@ -384,12 +417,12 @@ class TestAlaAlaAla(unittest.TestCase):
         np.testing.assert_almost_equal(ref_forces, grad_val*-1)
 
         # GBSA
-        ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state4.xml'))
-        nrg_op = nrgs[5].energy(x_ph)
-        grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
-        nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
-        np.testing.assert_almost_equal(ref_nrg, nrg_val)
-        np.testing.assert_almost_equal(ref_forces, grad_val*-1)
+        # ref_nrg, x0, velocities, ref_forces = deserialize_state(get_data('state4.xml'))
+        # nrg_op = nrgs[5].energy(x_ph)
+        # grad_op = densify(tf.gradients(nrg_op, x_ph)[0])
+        # nrg_val, grad_val = sess.run([nrg_op, grad_op], feed_dict={x_ph: x0})
+        # np.testing.assert_almost_equal(ref_nrg, nrg_val)
+        # np.testing.assert_almost_equal(ref_forces, grad_val*-1)
 
 
 

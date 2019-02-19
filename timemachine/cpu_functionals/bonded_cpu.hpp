@@ -34,6 +34,7 @@ class PeriodicTorsion {
 private:
 
     const std::vector<NumericType> params_;
+    const std::vector<size_t> global_param_idxs_;
     const std::vector<size_t> param_idxs_;
     const std::vector<size_t> tors_idxs_;
 
@@ -42,9 +43,11 @@ public:
 
     PeriodicTorsion(
         std::vector<NumericType> params,
+        std::vector<size_t> global_param_idxs,
         std::vector<size_t> param_idxs,
         std::vector<size_t> tors_idxs
-    ) : params_(params), 
+    ) : params_(params),
+        global_param_idxs_(global_param_idxs),
         param_idxs_(param_idxs),
         tors_idxs_(tors_idxs) {};
 
@@ -219,7 +222,6 @@ public:
 
     /*
     Implements the total derivative of the gradient at a point in time. We
-declare_harmonic_bond<float>(m, "float");
     use raw pointers to make it easier to interface with the wrapper layers and
     to maintain some level of consistency with the C++ code.
     */
@@ -227,10 +229,10 @@ declare_harmonic_bond<float>(m, "float");
         const size_t n_atoms,
         const size_t n_params,
         const NumericType* coords, // [N, 3]
-        const NumericType* dxdp, // [P, N, 3]
         NumericType* energy_out, // []
         NumericType* grad_out, // [N,3]
-        NumericType* total_out // [P, N, 3]
+        NumericType* hessian_out, // [N, 3, N, 3]
+        NumericType* mp_out // [P, N, 3]
     ) const {
 
         for(size_t i=0; i < numTorsions(); i++) {
@@ -292,19 +294,19 @@ declare_harmonic_bond<float>(m, "float");
                 for(int k=0; k < 12; k++) {
                     ddxs[k] = dcxs[k].imag() / step;
                 }
-                size_t p_idx = param_idxs_[i*3+j];
-                total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += ddxs[0];
-                total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += ddxs[1];
-                total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += ddxs[2];
-                total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 0] += ddxs[3];
-                total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 1] += ddxs[4];
-                total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 2] += ddxs[5];
-                total_out[p_idx*n_atoms*3 + atom_2_idx*3 + 0] += ddxs[6];
-                total_out[p_idx*n_atoms*3 + atom_2_idx*3 + 1] += ddxs[7];
-                total_out[p_idx*n_atoms*3 + atom_2_idx*3 + 2] += ddxs[8];
-                total_out[p_idx*n_atoms*3 + atom_3_idx*3 + 0] += ddxs[9];
-                total_out[p_idx*n_atoms*3 + atom_3_idx*3 + 1] += ddxs[10];
-                total_out[p_idx*n_atoms*3 + atom_3_idx*3 + 2] += ddxs[11];
+                size_t p_idx = global_param_idxs_[param_idxs_[i*3+j]];
+                mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += ddxs[0];
+                mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += ddxs[1];
+                mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += ddxs[2];
+                mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 0] += ddxs[3];
+                mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 1] += ddxs[4];
+                mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 2] += ddxs[5];
+                mp_out[p_idx*n_atoms*3 + atom_2_idx*3 + 0] += ddxs[6];
+                mp_out[p_idx*n_atoms*3 + atom_2_idx*3 + 1] += ddxs[7];
+                mp_out[p_idx*n_atoms*3 + atom_2_idx*3 + 2] += ddxs[8];
+                mp_out[p_idx*n_atoms*3 + atom_3_idx*3 + 0] += ddxs[9];
+                mp_out[p_idx*n_atoms*3 + atom_3_idx*3 + 1] += ddxs[10];
+                mp_out[p_idx*n_atoms*3 + atom_3_idx*3 + 2] += ddxs[11];
             }
 
             // compute hessian vector product, looping over all atoms and parameters
@@ -328,18 +330,19 @@ declare_harmonic_bond<float>(m, "float");
                 std::array<std::complex<NumericType>, 12> cxs = timemachine::convert_to_complex(xs);
                 cxs[j] = std::complex<NumericType>(cxs[j].real(), step);
                 std::array<std::complex<NumericType>, 12> dcxs = ixn_gradient<std::complex<NumericType>, NumericType, std::complex<NumericType> >(cxs, params);
-                std::array<NumericType, 12> ddxs;
+                // std::array<NumericType, 12> ddxs;
                 for(int k=0; k < 12; k++) {
-                    ddxs[k] = dcxs[k].imag() / step;
+                    // ddxs[k] = dcxs[k].imag() / step;
+                    hessian_out[indices[j]*n_atoms*3 + indices[k]] += dcxs[k].imag() / step;
                 }
 
                 // this loops over *all* params, not just the two params specific to an angle.     
-                for(size_t p=0; p < n_params; p++) {
-                    auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 0] + ddxs[6] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 0] + ddxs[9] * dxdp[p*n_atoms*3 + atom_3_idx*3 + 0];
-                    auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 1] + ddxs[7] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 1] + ddxs[10] * dxdp[p*n_atoms*3 + atom_3_idx*3 + 1];
-                    auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 2] + ddxs[8] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 2] + ddxs[11] * dxdp[p*n_atoms*3 + atom_3_idx*3 + 2];
-                    total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
-                }
+                // for(size_t p=0; p < n_params; p++) {
+                //     auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 0] + ddxs[6] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 0] + ddxs[9] * dxdp[p*n_atoms*3 + atom_3_idx*3 + 0];
+                //     auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 1] + ddxs[7] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 1] + ddxs[10] * dxdp[p*n_atoms*3 + atom_3_idx*3 + 1];
+                //     auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 2] + ddxs[8] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 2] + ddxs[11] * dxdp[p*n_atoms*3 + atom_3_idx*3 + 2];
+                //     total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
+                // }
             }
         }
     }
@@ -352,19 +355,21 @@ class HarmonicAngle {
 private:
 
     const std::vector<NumericType> params_;
+    const std::vector<size_t> global_param_idxs_;
     const std::vector<size_t> param_idxs_;
     const std::vector<size_t> angle_idxs_;
     bool cos_angles_;
-
 
 public:
 
     HarmonicAngle(
         std::vector<NumericType> params,
+        std::vector<size_t> global_param_idxs,
         std::vector<size_t> param_idxs,
         std::vector<size_t> angle_idxs,
         bool cos_angles=true
     ) : params_(params), 
+        global_param_idxs_(global_param_idxs),
         param_idxs_(param_idxs),
         angle_idxs_(angle_idxs),
         cos_angles_(cos_angles) {};
@@ -471,10 +476,10 @@ public:
         const size_t n_atoms,
         const size_t n_params,
         const NumericType* coords, // [N, 3]
-        const NumericType* dxdp, // [P, N, 3]
         NumericType* energy_out, // []
         NumericType* grad_out, // [N,3]
-        NumericType* total_out // [P, N, 3]
+        NumericType* hessian_out, // [N, 3, N, 3]
+        NumericType* mp_out // [P, N, 3]
     ) const {
 
         for(size_t i=0; i < numAngles(); i++) {
@@ -533,16 +538,16 @@ public:
                 for(int k=0; k < 9; k++) {
                     ddxs[k] = dcxs[k].imag() / step;
                 }
-                size_t p_idx = param_idxs_[i*2+j];
-                total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += ddxs[0];
-                total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += ddxs[1];
-                total_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += ddxs[2];
-                total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 0] += ddxs[3];
-                total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 1] += ddxs[4];
-                total_out[p_idx*n_atoms*3 + atom_1_idx*3 + 2] += ddxs[5];
-                total_out[p_idx*n_atoms*3 + atom_2_idx*3 + 0] += ddxs[6];
-                total_out[p_idx*n_atoms*3 + atom_2_idx*3 + 1] += ddxs[7];
-                total_out[p_idx*n_atoms*3 + atom_2_idx*3 + 2] += ddxs[8];
+                size_t p_idx = global_param_idxs_[param_idxs_[i*2+j]];
+                mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 0] += ddxs[0];
+                mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 1] += ddxs[1];
+                mp_out[p_idx*n_atoms*3 + atom_0_idx*3 + 2] += ddxs[2];
+                mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 0] += ddxs[3];
+                mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 1] += ddxs[4];
+                mp_out[p_idx*n_atoms*3 + atom_1_idx*3 + 2] += ddxs[5];
+                mp_out[p_idx*n_atoms*3 + atom_2_idx*3 + 0] += ddxs[6];
+                mp_out[p_idx*n_atoms*3 + atom_2_idx*3 + 1] += ddxs[7];
+                mp_out[p_idx*n_atoms*3 + atom_2_idx*3 + 2] += ddxs[8];
             }
 
             // compute hessian vector product, looping over all atoms and parameters
@@ -563,18 +568,19 @@ public:
                 std::array<std::complex<NumericType>, 9> cxs = timemachine::convert_to_complex(xs);
                 cxs[j] = std::complex<NumericType>(cxs[j].real(), step);
                 std::array<std::complex<NumericType>, 9> dcxs = ixn_gradient<std::complex<NumericType>, NumericType, std::complex<NumericType> >(cxs, params);
-                std::array<NumericType, 9> ddxs;
+                // std::array<NumericType, 9> ddxs;
                 for(int k=0; k < 9; k++) {
-                    ddxs[k] = dcxs[k].imag() / step;
+                    // ddxs[k] = dcxs[k].imag() / step;
+                    hessian_out[indices[j]*n_atoms*3 + indices[k]] += dcxs[k].imag() / step;
                 }
 
                 // this loops over *all* params, not just the two params specific to an angle.     
-                for(size_t p=0; p < n_params; p++) {
-                    auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 0] + ddxs[6] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 0];
-                    auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 1] + ddxs[7] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 1];
-                    auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 2] + ddxs[8] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 2];
-                    total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
-                }
+                // for(size_t p=0; p < n_params; p++) {
+                //     auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 0] + ddxs[6] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 0];
+                //     auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 1] + ddxs[7] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 1];
+                //     auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + atom_0_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + atom_1_idx*3 + 2] + ddxs[8] * dxdp[p*n_atoms*3 + atom_2_idx*3 + 2];
+                //     total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
+                // }
             }
         }
     }
@@ -586,6 +592,7 @@ class HarmonicBond {
 private:
 
     const std::vector<NumericType> params_;
+    const std::vector<size_t> global_param_idxs_; // scatter_idxs
     const std::vector<size_t> param_idxs_;
     const std::vector<size_t> bond_idxs_;
 
@@ -593,9 +600,11 @@ public:
 
     HarmonicBond(
         std::vector<NumericType> params,
+        std::vector<size_t> global_param_idxs,
         std::vector<size_t> param_idxs,
         std::vector<size_t> bond_idxs
-    ) : params_(params), 
+    ) : params_(params),
+        global_param_idxs_(global_param_idxs),
         param_idxs_(param_idxs),
         bond_idxs_(bond_idxs) {};
 
@@ -667,16 +676,13 @@ public:
         const size_t n_atoms,
         const size_t n_params,
         const NumericType* coords, // [N, 3]
-        const NumericType* dxdp, // [P, N, 3]
         NumericType* energy_out, // []
         NumericType* grad_out, // [N,3]
-        NumericType* total_out // [P, N, 3]
+        NumericType* hessian_out, // [N, 3, N, 3]
+        NumericType* mp_out // [P, N, 3]
     ) const {
 
-        std::vector<NumericType> hessians(n_atoms*3*n_atoms*3, 0.0);
-
         for(size_t i=0; i < numBonds(); i++) {
-
             size_t s_atom_idx = bond_idxs_[i*2+0];
             size_t e_atom_idx = bond_idxs_[i*2+1];
 
@@ -725,13 +731,13 @@ public:
                 for(int k=0; k < 6; k++) {
                     ddxs[k] = dcxs[k].imag() / step;
                 }
-                size_t p_idx = param_idxs_[i*2+j];
-                total_out[p_idx*n_atoms*3 + s_atom_idx*3 + 0] += ddxs[0];
-                total_out[p_idx*n_atoms*3 + s_atom_idx*3 + 1] += ddxs[1];
-                total_out[p_idx*n_atoms*3 + s_atom_idx*3 + 2] += ddxs[2];
-                total_out[p_idx*n_atoms*3 + e_atom_idx*3 + 0] += ddxs[3];
-                total_out[p_idx*n_atoms*3 + e_atom_idx*3 + 1] += ddxs[4];
-                total_out[p_idx*n_atoms*3 + e_atom_idx*3 + 2] += ddxs[5];
+                size_t p_idx = global_param_idxs_[param_idxs_[i*2+j]];
+                mp_out[p_idx*n_atoms*3 + s_atom_idx*3 + 0] += ddxs[0];
+                mp_out[p_idx*n_atoms*3 + s_atom_idx*3 + 1] += ddxs[1];
+                mp_out[p_idx*n_atoms*3 + s_atom_idx*3 + 2] += ddxs[2];
+                mp_out[p_idx*n_atoms*3 + e_atom_idx*3 + 0] += ddxs[3];
+                mp_out[p_idx*n_atoms*3 + e_atom_idx*3 + 1] += ddxs[4];
+                mp_out[p_idx*n_atoms*3 + e_atom_idx*3 + 2] += ddxs[5];
             }
 
             // compute hessian vector product, looping over all atoms and parameters
@@ -749,23 +755,37 @@ public:
                 cxs[j] = std::complex<NumericType>(cxs[j].real(), step);
 
                 std::array<std::complex<NumericType>, 6> dcxs = ixn_gradient<std::complex<NumericType>, NumericType, std::complex<NumericType> >(cxs, params);
-
-                std::array<NumericType, 6> ddxs;
+                // std::array<NumericType, 6> ddxs;
                 for(int k=0; k < 6; k++) {
-                    ddxs[k] = dcxs[k].imag() / step;
-                    hessians[indices[j]*n_atoms*3 + indices[k]] += dcxs[k].imag() / step;
+                    // ddxs[k] = dcxs[k].imag() / step;
+                    hessian_out[indices[j]*n_atoms*3 + indices[k]] += dcxs[k].imag() / step;
                 }
 
                 // this loops over *all* params, not just the two params specific to a bond.
-                for(size_t p=0; p < n_params; p++) {
-                    auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + s_atom_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + e_atom_idx*3 + 0];
-                    auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + s_atom_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + e_atom_idx*3 + 1];
-                    auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + s_atom_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + e_atom_idx*3 + 2];
-                    total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
-                }
+                // for(size_t p=0; p < n_params; p++) {
+                //     auto dx0 = ddxs[0] * dxdp[p*n_atoms*3 + s_atom_idx*3 + 0] + ddxs[3] * dxdp[p*n_atoms*3 + e_atom_idx*3 + 0];
+                //     auto dx1 = ddxs[1] * dxdp[p*n_atoms*3 + s_atom_idx*3 + 1] + ddxs[4] * dxdp[p*n_atoms*3 + e_atom_idx*3 + 1];
+                //     auto dx2 = ddxs[2] * dxdp[p*n_atoms*3 + s_atom_idx*3 + 2] + ddxs[5] * dxdp[p*n_atoms*3 + e_atom_idx*3 + 2];
+                //     total_out[p*n_atoms*3 + indices[j]] += dx0+dx1+dx2;
+                // }
 
             }
         }
+
+        // this loops over *all* params, not just the two params specific to a bond.
+        // this is even slower!
+        // for(size_t p=0; p < n_params; p++) {
+        //     std::cout << "explicit HvP: " << p << std::endl;
+        //     const NumericType *p_block = dxdp + p*n_atoms*3;
+        //     for(size_t row=0; row < n_atoms*3; row++) {
+        //         NumericType accum = 0;
+        //         NumericType *row_base = &hessians[0] + row*n_atoms*3;
+        //         for(size_t col=0; col < n_atoms*3; col++) {
+        //             accum += row_base[col] * p_block[col];
+        //         }
+        //         total_out[p*n_atoms*3 + row] += accum;
+        //     }
+        // }
 
     }
 };
