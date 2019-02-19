@@ -225,369 +225,369 @@ class TestGPUIntegrator(unittest.TestCase):
         # np.testing.assert_array_almost_equal(gpu_dxdp[2:], ref_dxdp_angles)
 
 
-    # def test_gpu_analytic_integration(self):
+    def test_gpu_analytic_integration(self):
 
-    #     masses = np.array([1.0, 12.0, 4.0])
-    #     x0 = np.array([
-    #         [1.0, 0.5, -0.5],
-    #         [0.2, 0.1, -0.3],
-    #         [0.5, 0.4, 0.3],
-    #     ], dtype=np.float64)
-    #     x0.setflags(write=False)
+        masses = np.array([1.0, 12.0, 4.0])
+        x0 = np.array([
+            [1.0, 0.5, -0.5],
+            [0.2, 0.1, -0.3],
+            [0.5, 0.4, 0.3],
+        ], dtype=np.float64)
+        x0.setflags(write=False)
 
-    #     bond_params_np = np.array([100.0, 2.0], dtype=np.float64)
-    #     bond_params_tf = tf.convert_to_tensor(bond_params_np)
+        bond_params_np = np.array([100.0, 2.0], dtype=np.float64)
+        bond_params_tf = tf.convert_to_tensor(bond_params_np)
 
-    #     bond_idxs = np.array([
-    #         [0, 1],
-    #         [1, 2]
-    #     ], dtype=np.int32)
+        bond_idxs = np.array([
+            [0, 1],
+            [1, 2]
+        ], dtype=np.int32)
 
-    #     bond_param_idxs = np.array([
-    #         [0, 1],
-    #         [0, 1],
-    #     ])
+        bond_param_idxs = np.array([
+            [0, 1],
+            [0, 1],
+        ])
 
-    #     hb = bonded.HarmonicBond(
-    #         bond_params_tf,
-    #         bond_idxs,
-    #         bond_param_idxs,
-    #     )
+        hb = bonded.HarmonicBond(
+            bond_params_tf,
+            bond_idxs,
+            bond_param_idxs,
+        )
 
-    #     angle_params_np = np.array([75, 1.81], dtype=np.float64)
-    #     angle_params_tf = tf.convert_to_tensor(angle_params_np)
+        angle_params_np = np.array([75, 1.81], dtype=np.float64)
+        angle_params_tf = tf.convert_to_tensor(angle_params_np)
 
-    #     angle_idxs = np.array([[0,1,2]], dtype=np.int32)
-    #     angle_param_idxs = np.array([[0,1,2]], dtype=np.int32)
+        angle_idxs = np.array([[0,1,2]], dtype=np.int32)
+        angle_param_idxs = np.array([[0,1,2]], dtype=np.int32)
 
-    #     ha = bonded.HarmonicAngle(
-    #         angle_params_tf,
-    #         angle_idxs,
-    #         angle_param_idxs,
-    #         cos_angles=True
-    #     )
+        ha = bonded.HarmonicAngle(
+            angle_params_tf,
+            angle_idxs,
+            angle_param_idxs,
+            cos_angles=True
+        )
 
-    #     friction = 10.0
-    #     dt = 0.01
-    #     temp = 0.0
-    #     num_atoms = len(masses)
-    #     x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
+        friction = 10.0
+        dt = 0.01
+        temp = 0.0
+        num_atoms = len(masses)
+        x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
 
-    #     ref_intg = ReferenceLangevinIntegrator(masses, dt, friction, temp)
+        ref_intg = ReferenceLangevinIntegrator(masses, dt, friction, temp)
 
-    #     num_steps = 5
+        num_steps = 5
 
-    #     x = x_ph
+        x = x_ph
 
-    #     for step in range(num_steps):
-    #         print("step", step)
-    #         all_grads = []
-    #         for nrg in [hb, ha]:
-    #             all_grads.append(tf.gradients(nrg.energy(x), x)[0])
-    #         all_grads = tf.stack(all_grads, axis=0)
-    #         grads = tf.reduce_sum(all_grads, axis=0)
-    #         dx = ref_intg.step(grads)
-    #         x += dx
+        for step in range(num_steps):
+            print("step", step)
+            all_grads = []
+            for nrg in [hb, ha]:
+                all_grads.append(tf.gradients(nrg.energy(x), x)[0])
+            all_grads = tf.stack(all_grads, axis=0)
+            grads = tf.reduce_sum(all_grads, axis=0)
+            dx = ref_intg.step(grads)
+            x += dx
 
-    #     ref_x_final_op = x
+        ref_x_final_op = x
 
-    #     # verify correctness of jacobians through time
-    #     ref_dxdp_hb_op = jacobian(ref_x_final_op, hb.get_params(), use_pfor=False) # (N, 3, P)
-    #     ref_dxdp_ha_op = jacobian(ref_x_final_op, ha.get_params(), use_pfor=False) # (N, 3, P)
-    #     ref_dxdp_hb_op = tf.transpose(ref_dxdp_hb_op, perm=[2,0,1])
-    #     ref_dxdp_ha_op = tf.transpose(ref_dxdp_ha_op, perm=[2,0,1])
+        # verify correctness of jacobians through time
+        ref_dxdp_hb_op = jacobian(ref_x_final_op, hb.get_params(), use_pfor=False) # (N, 3, P)
+        ref_dxdp_ha_op = jacobian(ref_x_final_op, ha.get_params(), use_pfor=False) # (N, 3, P)
+        ref_dxdp_hb_op = tf.transpose(ref_dxdp_hb_op, perm=[2,0,1])
+        ref_dxdp_ha_op = tf.transpose(ref_dxdp_ha_op, perm=[2,0,1])
 
-    #     buffer_size = 100 # just make something large
+        buffer_size = 100 # just make something large
 
-    #     global_bond_param_idxs = np.arange(bond_params_np.shape[0], dtype=np.int32)
-    #     global_angle_param_idxs = np.arange(angle_params_np.shape[0], dtype=np.int32) + global_bond_param_idxs.shape[0]
-    #     total_params = bond_params_np.shape[0] + angle_params_np.shape[0]
+        global_bond_param_idxs = np.arange(bond_params_np.shape[0], dtype=np.int32)
+        global_angle_param_idxs = np.arange(angle_params_np.shape[0], dtype=np.int32) + global_bond_param_idxs.shape[0]
+        total_params = bond_params_np.shape[0] + angle_params_np.shape[0]
 
-    #     gpu_intg = custom_ops.Integrator_double(
-    #         dt,
-    #         buffer_size,
-    #         num_atoms,
-    #         total_params,
-    #         ref_intg.coeff_a,
-    #         ref_intg.coeff_bs.reshape(-1).tolist(),
-    #         ref_intg.coeff_cs.reshape(-1).tolist()
-    #     )
+        gpu_intg = custom_ops.Integrator_double(
+            dt,
+            buffer_size,
+            num_atoms,
+            total_params,
+            ref_intg.coeff_a,
+            ref_intg.coeff_bs.reshape(-1).tolist(),
+            ref_intg.coeff_cs.reshape(-1).tolist()
+        )
 
-    #     hb_gpu = custom_ops.HarmonicBondGPU_double(
-    #         bond_params_np.reshape(-1).tolist(),
-    #         global_bond_param_idxs.tolist(),
-    #         bond_param_idxs.reshape(-1).tolist(),
-    #         bond_idxs.reshape(-1).tolist(),
-    #     )
+        hb_gpu = custom_ops.HarmonicBondGPU_double(
+            bond_params_np.reshape(-1).tolist(),
+            global_bond_param_idxs.tolist(),
+            bond_param_idxs.reshape(-1).tolist(),
+            bond_idxs.reshape(-1).tolist(),
+        )
 
-    #     ha_gpu = custom_ops.HarmonicAngleGPU_double(
-    #         angle_params_np.reshape(-1).tolist(),
-    #         global_angle_param_idxs.tolist(),
-    #         angle_param_idxs.reshape(-1).tolist(),
-    #         angle_idxs.reshape(-1).tolist(),
-    #     )
+        ha_gpu = custom_ops.HarmonicAngleGPU_double(
+            angle_params_np.reshape(-1).tolist(),
+            global_angle_param_idxs.tolist(),
+            angle_param_idxs.reshape(-1).tolist(),
+            angle_idxs.reshape(-1).tolist(),
+        )
 
-    #     gpu_intg.set_coordinates(x0.reshape(-1).tolist())
-    #     gpu_intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
+        gpu_intg.set_coordinates(x0.reshape(-1).tolist())
+        gpu_intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
 
-    #     xt = x0
+        xt = x0
 
-    #     context = custom_ops.Context_double(
-    #         [hb_gpu, ha_gpu],
-    #         gpu_intg
-    #     )
+        context = custom_ops.Context_double(
+            [hb_gpu, ha_gpu],
+            gpu_intg
+        )
 
-    #     for step in range(num_steps):
-    #         context.step()
+        for step in range(num_steps):
+            context.step()
 
-    #     sess = tf.Session()
-    #     sess.run(tf.initializers.global_variables())
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
  
-    #     cpu_final_x_t_val = gpu_intg.get_coordinates()
-    #     np.testing.assert_array_almost_equal(
-    #         cpu_final_x_t_val,
-    #         sess.run(ref_x_final_op, feed_dict={x_ph: x0}).reshape(-1),
-    #         decimal=13)
+        cpu_final_x_t_val = gpu_intg.get_coordinates()
+        np.testing.assert_array_almost_equal(
+            cpu_final_x_t_val,
+            sess.run(ref_x_final_op, feed_dict={x_ph: x0}).reshape(-1),
+            decimal=13)
 
-    #     gpu_dxdp = np.array(gpu_intg.get_dxdp()).reshape(total_params, num_atoms, 3)
-    #     ref_dxdp_bonds, ref_dxdp_angles = sess.run([ref_dxdp_hb_op, ref_dxdp_ha_op], feed_dict={x_ph: x0})
+        gpu_dxdp = np.array(gpu_intg.get_dxdp()).reshape(total_params, num_atoms, 3)
+        ref_dxdp_bonds, ref_dxdp_angles = sess.run([ref_dxdp_hb_op, ref_dxdp_ha_op], feed_dict={x_ph: x0})
 
-    #     np.testing.assert_array_almost_equal(gpu_dxdp[:2], ref_dxdp_bonds)
-    #     np.testing.assert_array_almost_equal(gpu_dxdp[2:], ref_dxdp_angles)
-
-
-
-    # def test_cpu_analytic_integration(self):
-    #     """
-    #     Testing against reference implementation.
-    #     """
-    #     masses = np.array([1.0, 12.0, 4.0])
-    #     x0 = np.array([
-    #         [1.0, 0.5, -0.5],
-    #         [0.2, 0.1, -0.3],
-    #         [0.5, 0.4, 0.3],
-    #     ], dtype=np.float64)
-    #     x0.setflags(write=False)
-
-    #     bond_params_np = np.array([100.0, 2.0], dtype=np.float64)
-    #     bond_params_tf = tf.convert_to_tensor(bond_params_np)
-
-    #     bond_idxs = np.array([
-    #         [0, 1],
-    #         [1, 2]
-    #     ], dtype=np.int32)
-
-    #     bond_param_idxs = np.array([
-    #         [0, 1],
-    #         [0, 1],
-    #     ])
-
-    #     hb = bonded.HarmonicBond(
-    #         bond_params_tf,
-    #         bond_idxs,
-    #         bond_param_idxs,
-    #     )
-
-    #     angle_params_np = np.array([75, 1.81], dtype=np.float64)
-    #     angle_params_tf = tf.convert_to_tensor(angle_params_np)
-
-    #     angle_idxs = np.array([[0,1,2]], dtype=np.int32)
-    #     angle_param_idxs = np.array([[0,1,2]], dtype=np.int32)
-
-    #     ha = bonded.HarmonicAngle(
-    #         angle_params_tf,
-    #         angle_idxs,
-    #         angle_param_idxs,
-    #         cos_angles=True
-    #     )
-
-    #     friction = 10.0
-    #     dt = 0.01
-    #     temp = 0.0
-    #     num_atoms = len(masses)
-    #     x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
-
-    #     ref_intg = ReferenceLangevinIntegrator(masses, dt, friction, temp)
-
-    #     num_steps = 5
-
-    #     x = x_ph
-
-    #     for step in range(num_steps):
-    #         print("step", step)
-    #         all_grads = []
-    #         for nrg in [hb, ha]:
-    #             all_grads.append(tf.gradients(nrg.energy(x), x)[0])
-    #         all_grads = tf.stack(all_grads, axis=0)
-    #         grads = tf.reduce_sum(all_grads, axis=0)
-    #         dx = ref_intg.step(grads)
-    #         x += dx
-
-    #     ref_x_final_op = x
-
-    #     # verify correctness of jacobians through time
-    #     ref_dxdp_hb_op = jacobian(ref_x_final_op, hb.get_params(), use_pfor=False) # (N, 3, P)
-    #     ref_dxdp_ha_op = jacobian(ref_x_final_op, ha.get_params(), use_pfor=False) # (N, 3, P)
-    #     ref_dxdp_hb_op = tf.transpose(ref_dxdp_hb_op, perm=[2,0,1])
-    #     ref_dxdp_ha_op = tf.transpose(ref_dxdp_ha_op, perm=[2,0,1])
-
-    #     buffer_size = 100 # just make something large
-
-    #     global_bond_param_idxs = np.arange(bond_params_np.shape[0], dtype=np.int32)
-    #     global_angle_param_idxs = np.arange(angle_params_np.shape[0], dtype=np.int32) + global_bond_param_idxs.shape[0]
-    #     total_params = bond_params_np.shape[0] + angle_params_np.shape[0]
-
-    #     gpu_intg = custom_ops.Integrator_double(
-    #         dt,
-    #         buffer_size,
-    #         num_atoms,
-    #         total_params,
-    #         ref_intg.coeff_a,
-    #         ref_intg.coeff_bs.reshape(-1).tolist(),
-    #         ref_intg.coeff_cs.reshape(-1).tolist()
-    #     )
-
-    #     hb_cpu = custom_ops.HarmonicBond_double(
-    #         bond_params_np.reshape(-1).tolist(),
-    #         global_bond_param_idxs.tolist(),
-    #         bond_param_idxs.reshape(-1).tolist(),
-    #         bond_idxs.reshape(-1).tolist(),
-    #     )
-
-    #     ha_cpu = custom_ops.HarmonicAngle_double(
-    #         angle_params_np.reshape(-1).tolist(),
-    #         global_angle_param_idxs.tolist(),
-    #         angle_param_idxs.reshape(-1).tolist(),
-    #         angle_idxs.reshape(-1).tolist(),
-    #         True
-    #     )
-
-    #     gpu_intg.set_coordinates(x0.reshape(-1).tolist())
-    #     gpu_intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
-
-    #     xt = x0
-
-    #     for step in range(num_steps):
-    #         cpu_e0, cpu_grad0, cpu_hess0, cpu_mixed0 = hb_cpu.total_derivative(xt, total_params)
-    #         cpu_e1, cpu_grad1, cpu_hess1, cpu_mixed1 = ha_cpu.total_derivative(xt, total_params)
-
-    #         cpu_e = np.array(cpu_e0) + np.array(cpu_e1)
-    #         cpu_grad = np.array(cpu_grad0) + np.array(cpu_grad1)
-    #         cpu_hess = np.array(cpu_hess0) + np.array(cpu_hess1)
-    #         cpu_mixed = np.array(cpu_mixed0) + np.array(cpu_mixed1)
-
-    #         gpu_intg.step(cpu_grad, cpu_hess, cpu_mixed)
-    #         xt = np.reshape(gpu_intg.get_coordinates(), (num_atoms, 3))
-
-    #     sess = tf.Session()
-    #     sess.run(tf.initializers.global_variables())
-
-    #     cpu_final_x_t_val = gpu_intg.get_coordinates()
-    #     np.testing.assert_array_almost_equal(
-    #         cpu_final_x_t_val,
-    #         sess.run(ref_x_final_op, feed_dict={x_ph: x0}).reshape(-1),
-    #         decimal=13)
-
-    #     cpu_dxdp = np.array(gpu_intg.get_dxdp()).reshape(total_params, num_atoms, 3)
-    #     ref_dxdp_bonds, ref_dxdp_angles = sess.run([ref_dxdp_hb_op, ref_dxdp_ha_op], feed_dict={x_ph: x0})
-
-    #     np.testing.assert_array_almost_equal(cpu_dxdp[:2], ref_dxdp_bonds)
-    #     np.testing.assert_array_almost_equal(cpu_dxdp[2:], ref_dxdp_angles)
+        np.testing.assert_array_almost_equal(gpu_dxdp[:2], ref_dxdp_bonds)
+        np.testing.assert_array_almost_equal(gpu_dxdp[2:], ref_dxdp_angles)
 
 
-    # def test_gpu_integrator(self):
-    #     """
-    #     Testing convergence of zetas.
-    #     """
 
-    #     masses = np.array([1.0, 12.0, 4.0, 2.0], dtype=np.float64)
+    def test_cpu_analytic_integration(self):
+        """
+        Testing against reference implementation.
+        """
+        masses = np.array([1.0, 12.0, 4.0])
+        x0 = np.array([
+            [1.0, 0.5, -0.5],
+            [0.2, 0.1, -0.3],
+            [0.5, 0.4, 0.3],
+        ], dtype=np.float64)
+        x0.setflags(write=False)
 
-    #     num_atoms = masses.shape[0]
+        bond_params_np = np.array([100.0, 2.0], dtype=np.float64)
+        bond_params_tf = tf.convert_to_tensor(bond_params_np)
 
-    #     x_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
-    #     v_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
-    #     noise_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
-    #     grad_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
-    #     hessian_ph = tf.placeholder(shape=(num_atoms, 3, num_atoms, 3), dtype=np.float64)
-    #     mixed_partial_ph = tf.placeholder(shape=(5, num_atoms, 3), dtype=np.float64)
+        bond_idxs = np.array([
+            [0, 1],
+            [1, 2]
+        ], dtype=np.int32)
 
-    #     num_params = mixed_partial_ph.shape[0]
+        bond_param_idxs = np.array([
+            [0, 1],
+            [0, 1],
+        ])
 
-    #     coeff_a = np.float64(0.5)
-    #     coeff_bs = np.expand_dims(np.array(masses), axis=1)
-    #     coeff_cs = np.expand_dims(1/np.array(masses), axis=1)
-    #     buffer_size = 3
-    #     dt = 0.03
+        hb = bonded.HarmonicBond(
+            bond_params_tf,
+            bond_idxs,
+            bond_param_idxs,
+        )
 
-    #     ref_intg = ReferenceIntegrator(
-    #         x_ph,
-    #         v_ph,
-    #         noise_ph,
-    #         grad_ph,
-    #         hessian_ph,
-    #         mixed_partial_ph,
-    #         dt,
-    #         coeff_a,
-    #         coeff_bs,
-    #         coeff_cs,
-    #         buffer_size,
-    #         precision=tf.float64)
+        angle_params_np = np.array([75, 1.81], dtype=np.float64)
+        angle_params_tf = tf.convert_to_tensor(angle_params_np)
 
-    #     gpu_intg = custom_ops.Integrator_double(
-    #         dt,
-    #         buffer_size,
-    #         num_atoms,
-    #         num_params,
-    #         coeff_a,
-    #         coeff_bs.reshape(-1).tolist(),
-    #         coeff_cs.reshape(-1).tolist()
-    #     )
+        angle_idxs = np.array([[0,1,2]], dtype=np.int32)
+        angle_param_idxs = np.array([[0,1,2]], dtype=np.int32)
 
-    #     sess = tf.Session()
-    #     sess.run(tf.initializers.global_variables())
+        ha = bonded.HarmonicAngle(
+            angle_params_tf,
+            angle_idxs,
+            angle_param_idxs,
+            cos_angles=True
+        )
 
-    #     num_steps = 10
+        friction = 10.0
+        dt = 0.01
+        temp = 0.0
+        num_atoms = len(masses)
+        x_ph = tf.placeholder(dtype=tf.float64, shape=(num_atoms, 3))
 
-    #     x_t = np.random.rand(num_atoms,3).astype(dtype=np.float64)-0.5
-    #     v_t = np.random.rand(num_atoms,3).astype(dtype=np.float64)-0.5
+        ref_intg = ReferenceLangevinIntegrator(masses, dt, friction, temp)
 
-    #     gpu_intg.set_coordinates(x_t.reshape(-1).tolist());
-    #     gpu_intg.set_velocities(v_t.reshape(-1).tolist());
+        num_steps = 5
 
-    #     for step in range(num_steps):
-    #         # -0.5 is to avoid exccess accumulation
-    #         grad = np.random.rand(num_atoms,3).astype(dtype=np.float64)-0.5
-    #         # this absolutely needs to be symmetric for things to work to avoid a transposition
-    #         hessian = np.random.rand(num_atoms*3,num_atoms*3).astype(dtype=np.float64)-0.5
-    #         hessian = (hessian + hessian.T)/2
-    #         hessian = hessian.reshape((num_atoms, 3, num_atoms, 3))
-    #         mixed_partial = np.random.rand(num_params,num_atoms,3).astype(dtype=np.float64)-0.5
+        x = x_ph
 
-    #         gpu_intg.step(grad, hessian, mixed_partial)
-    #         test_dxdp_val = gpu_intg.get_dxdp()
-    #         test_x_t_val = gpu_intg.get_coordinates()
-    #         test_v_t_val = gpu_intg.get_velocities()
-    #         test_noise = gpu_intg.get_noise()
+        for step in range(num_steps):
+            print("step", step)
+            all_grads = []
+            for nrg in [hb, ha]:
+                all_grads.append(tf.gradients(nrg.energy(x), x)[0])
+            all_grads = tf.stack(all_grads, axis=0)
+            grads = tf.reduce_sum(all_grads, axis=0)
+            dx = ref_intg.step(grads)
+            x += dx
 
-    #         new_x, new_v, ref_dxdp_val = sess.run([ref_intg.new_x_t, ref_intg.new_v_t, ref_intg.dxdp_t_assign], feed_dict={
-    #             x_ph: x_t,
-    #             v_ph: v_t,
-    #             noise_ph: np.array(test_noise).reshape(num_atoms, 3),
-    #             grad_ph: grad,
-    #             hessian_ph: hessian,
-    #             mixed_partial_ph: mixed_partial
-    #         })
+        ref_x_final_op = x
 
-    #         np.testing.assert_allclose(test_v_t_val, new_v.reshape(-1))
-    #         np.testing.assert_allclose(test_x_t_val, new_x.reshape(-1))
+        # verify correctness of jacobians through time
+        ref_dxdp_hb_op = jacobian(ref_x_final_op, hb.get_params(), use_pfor=False) # (N, 3, P)
+        ref_dxdp_ha_op = jacobian(ref_x_final_op, ha.get_params(), use_pfor=False) # (N, 3, P)
+        ref_dxdp_hb_op = tf.transpose(ref_dxdp_hb_op, perm=[2,0,1])
+        ref_dxdp_ha_op = tf.transpose(ref_dxdp_ha_op, perm=[2,0,1])
 
-    #         x_t = new_x
-    #         v_t = new_v
+        buffer_size = 100 # just make something large
 
-    #         np.testing.assert_allclose(
-    #             test_dxdp_val,
-    #             ref_dxdp_val.reshape(-1)
-    #         )
+        global_bond_param_idxs = np.arange(bond_params_np.shape[0], dtype=np.int32)
+        global_angle_param_idxs = np.arange(angle_params_np.shape[0], dtype=np.int32) + global_bond_param_idxs.shape[0]
+        total_params = bond_params_np.shape[0] + angle_params_np.shape[0]
+
+        gpu_intg = custom_ops.Integrator_double(
+            dt,
+            buffer_size,
+            num_atoms,
+            total_params,
+            ref_intg.coeff_a,
+            ref_intg.coeff_bs.reshape(-1).tolist(),
+            ref_intg.coeff_cs.reshape(-1).tolist()
+        )
+
+        hb_cpu = custom_ops.HarmonicBond_double(
+            bond_params_np.reshape(-1).tolist(),
+            global_bond_param_idxs.tolist(),
+            bond_param_idxs.reshape(-1).tolist(),
+            bond_idxs.reshape(-1).tolist(),
+        )
+
+        ha_cpu = custom_ops.HarmonicAngle_double(
+            angle_params_np.reshape(-1).tolist(),
+            global_angle_param_idxs.tolist(),
+            angle_param_idxs.reshape(-1).tolist(),
+            angle_idxs.reshape(-1).tolist(),
+            True
+        )
+
+        gpu_intg.set_coordinates(x0.reshape(-1).tolist())
+        gpu_intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
+
+        xt = x0
+
+        for step in range(num_steps):
+            cpu_e0, cpu_grad0, cpu_hess0, cpu_mixed0 = hb_cpu.total_derivative(xt, total_params)
+            cpu_e1, cpu_grad1, cpu_hess1, cpu_mixed1 = ha_cpu.total_derivative(xt, total_params)
+
+            cpu_e = np.array(cpu_e0) + np.array(cpu_e1)
+            cpu_grad = np.array(cpu_grad0) + np.array(cpu_grad1)
+            cpu_hess = np.array(cpu_hess0) + np.array(cpu_hess1)
+            cpu_mixed = np.array(cpu_mixed0) + np.array(cpu_mixed1)
+
+            gpu_intg.step(cpu_grad, cpu_hess, cpu_mixed)
+            xt = np.reshape(gpu_intg.get_coordinates(), (num_atoms, 3))
+
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
+
+        cpu_final_x_t_val = gpu_intg.get_coordinates()
+        np.testing.assert_array_almost_equal(
+            cpu_final_x_t_val,
+            sess.run(ref_x_final_op, feed_dict={x_ph: x0}).reshape(-1),
+            decimal=13)
+
+        cpu_dxdp = np.array(gpu_intg.get_dxdp()).reshape(total_params, num_atoms, 3)
+        ref_dxdp_bonds, ref_dxdp_angles = sess.run([ref_dxdp_hb_op, ref_dxdp_ha_op], feed_dict={x_ph: x0})
+
+        np.testing.assert_array_almost_equal(cpu_dxdp[:2], ref_dxdp_bonds)
+        np.testing.assert_array_almost_equal(cpu_dxdp[2:], ref_dxdp_angles)
+
+
+    def test_gpu_integrator(self):
+        """
+        Testing convergence of zetas.
+        """
+
+        masses = np.array([1.0, 12.0, 4.0, 2.0], dtype=np.float64)
+
+        num_atoms = masses.shape[0]
+
+        x_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
+        v_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
+        noise_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
+        grad_ph = tf.placeholder(shape=(num_atoms, 3), dtype=np.float64)
+        hessian_ph = tf.placeholder(shape=(num_atoms, 3, num_atoms, 3), dtype=np.float64)
+        mixed_partial_ph = tf.placeholder(shape=(5, num_atoms, 3), dtype=np.float64)
+
+        num_params = mixed_partial_ph.shape[0]
+
+        coeff_a = np.float64(0.5)
+        coeff_bs = np.expand_dims(np.array(masses), axis=1)
+        coeff_cs = np.expand_dims(1/np.array(masses), axis=1)
+        buffer_size = 3
+        dt = 0.03
+
+        ref_intg = ReferenceIntegrator(
+            x_ph,
+            v_ph,
+            noise_ph,
+            grad_ph,
+            hessian_ph,
+            mixed_partial_ph,
+            dt,
+            coeff_a,
+            coeff_bs,
+            coeff_cs,
+            buffer_size,
+            precision=tf.float64)
+
+        gpu_intg = custom_ops.Integrator_double(
+            dt,
+            buffer_size,
+            num_atoms,
+            num_params,
+            coeff_a,
+            coeff_bs.reshape(-1).tolist(),
+            coeff_cs.reshape(-1).tolist()
+        )
+
+        sess = tf.Session()
+        sess.run(tf.initializers.global_variables())
+
+        num_steps = 10
+
+        x_t = np.random.rand(num_atoms,3).astype(dtype=np.float64)-0.5
+        v_t = np.random.rand(num_atoms,3).astype(dtype=np.float64)-0.5
+
+        gpu_intg.set_coordinates(x_t.reshape(-1).tolist());
+        gpu_intg.set_velocities(v_t.reshape(-1).tolist());
+
+        for step in range(num_steps):
+            # -0.5 is to avoid exccess accumulation
+            grad = np.random.rand(num_atoms,3).astype(dtype=np.float64)-0.5
+            # this absolutely needs to be symmetric for things to work to avoid a transposition
+            hessian = np.random.rand(num_atoms*3,num_atoms*3).astype(dtype=np.float64)-0.5
+            hessian = (hessian + hessian.T)/2
+            hessian = hessian.reshape((num_atoms, 3, num_atoms, 3))
+            mixed_partial = np.random.rand(num_params,num_atoms,3).astype(dtype=np.float64)-0.5
+
+            gpu_intg.step(grad, hessian, mixed_partial)
+            test_dxdp_val = gpu_intg.get_dxdp()
+            test_x_t_val = gpu_intg.get_coordinates()
+            test_v_t_val = gpu_intg.get_velocities()
+            test_noise = gpu_intg.get_noise()
+
+            new_x, new_v, ref_dxdp_val = sess.run([ref_intg.new_x_t, ref_intg.new_v_t, ref_intg.dxdp_t_assign], feed_dict={
+                x_ph: x_t,
+                v_ph: v_t,
+                noise_ph: np.array(test_noise).reshape(num_atoms, 3),
+                grad_ph: grad,
+                hessian_ph: hessian,
+                mixed_partial_ph: mixed_partial
+            })
+
+            np.testing.assert_allclose(test_v_t_val, new_v.reshape(-1))
+            np.testing.assert_allclose(test_x_t_val, new_x.reshape(-1))
+
+            x_t = new_x
+            v_t = new_v
+
+            np.testing.assert_allclose(
+                test_dxdp_val,
+                ref_dxdp_val.reshape(-1)
+            )
 
 
 if __name__ == "__main__":
