@@ -32,8 +32,8 @@ inline __device__ void harmonic_angle_gradient(
     CoordType nij = sqrt(vij_x*vij_x + vij_y*vij_y + vij_z*vij_z);
     CoordType njk = sqrt(vjk_x*vjk_x + vjk_y*vjk_y + vjk_z*vjk_z);
 
-    CoordType dij = nij;
-    CoordType djk = njk;
+    // CoordType dij = nij;
+    // CoordType djk = njk;
 
     CoordType nijk = nij*njk;
     CoordType n3ij = nij*nij*nij;

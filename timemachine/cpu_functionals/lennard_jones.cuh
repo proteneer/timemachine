@@ -190,9 +190,9 @@ __global__ void lennard_jones_total_derivative(
                 // NumericType sig12 = sig6*sig6;
 
                 NumericType rij = d2ij;
-                NumericType rij3 = d6ij;
+                // NumericType rij3 = d6ij;
                 NumericType rij4 = d8ij;
-                NumericType rij7 = rij4 * rij3;
+                // NumericType rij7 = rij4 * rij3;
 
 
                 // (ytz): 99 % sure this loses precision so we need to refactor
@@ -290,8 +290,8 @@ __global__ void lennard_jones_total_derivative(
                 shfl_grad_dy += sij*dEdy;
                 shfl_grad_dz += sij*dEdz;
 
-                NumericType *mp_out_sig1 = mp_out + sig1_g_idx;
-                NumericType *mp_out_eps1 = mp_out + eps1_g_idx;
+                // NumericType *mp_out_sig1 = mp_out + sig1_g_idx;
+                // NumericType *mp_out_eps1 = mp_out + eps1_g_idx;
 
                 NumericType EPS_PREFACTOR = sij*12/eps*(sig6rij4)*(2*sig6rij3 - 1);
 
