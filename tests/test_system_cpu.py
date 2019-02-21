@@ -184,8 +184,8 @@ def deserialize_system(xml_file):
 
                     exclusions = []
                     bonded12 = []
+                    # diagonals
                     for a_idx in range(num_atoms):
-
                         lj_eps_scales[a_idx][a_idx] = 0.0
                         charge_scales[a_idx][a_idx] = 0.0
 
@@ -199,7 +199,6 @@ def deserialize_system(xml_file):
 
                     for i in range(num_atoms):
                         addExclusionsToSet(bonded12, exclusions[i], i, i, 2)
-
 
                     for i in range(num_atoms):
                         bonded13 = set()
