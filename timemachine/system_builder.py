@@ -87,6 +87,7 @@ def construct_energies(ff, mol):
     N = mol.NumAtoms()
     start_params = 0
     nrgs = []
+    offsets = []
     for mol_entry in range(len(labels)):
 
         for force in labels[mol_entry].keys():
@@ -119,6 +120,7 @@ def construct_energies(ff, mol):
 
                 nrgs.append(bond_nrg)
 
+                offsets.append(start_params)
                 start_params += len(bond_params_array)
             elif force == 'HarmonicAngleGenerator':
 
@@ -150,7 +152,7 @@ def construct_energies(ff, mol):
                 )
 
                 nrgs.append(angle_nrg)
-
+                offsets.append(start_params)
                 start_params += len(angle_params_array)
             elif force == 'PeriodicTorsionGenerator':
 
@@ -187,6 +189,8 @@ def construct_energies(ff, mol):
                                 period_idx = len(torsion_params_array)
                                 torsion_params_array.append(period)
 
+                                print(len(torsion_params_map), k, phase, period)
+
                                 torsion_params_map[pid] = (k_idx, phase_idx, period_idx)
 
                             torsion_params_idxs.extend(torsion_params_map[pid])
@@ -202,7 +206,7 @@ def construct_energies(ff, mol):
                 )
 
                 nrgs.append(torsion_nrg)
-
+                offsets.append(start_params)
                 start_params += len(torsion_params_array)
 
             elif force == 'NonbondedGenerator':
@@ -227,13 +231,14 @@ def construct_energies(ff, mol):
                         eps = np.float32(params['epsilon'])
                         sig_idx = len(lj_params_array)
                         lj_params_array.append(sigma)
-
                         eps_idx = len(lj_params_array)
                         lj_params_array.append(eps)
 
                         lj_params_map[pid] = (sig_idx, eps_idx)
 
                     lj_params_idxs.extend((lj_params_map[pid][0], lj_params_map[pid][1]))
+
+                print("LJ", len(lj_params_array))
 
                 lj_scale_matrix = generate_scale_matrix(np.array(bond_atom_idxs).reshape(-1, 2),  lj14scale, N)
 
@@ -245,7 +250,7 @@ def construct_energies(ff, mol):
                 )
 
                 nrgs.append(lj_nrg)
-
+                offsets.append(start_params)
                 start_params += len(lj_params_array)
 
-    return nrgs, start_params
+    return nrgs, start_params, offsets

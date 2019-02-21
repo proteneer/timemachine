@@ -66,17 +66,19 @@ class TestSmallMolecule(unittest.TestCase):
 
     def test_mol(self):
         mol = OEMol()
-        OEParseSmiles(mol, 'C1CCCC1CCCCC')
+        # OEParseSmiles(mol, 'CCOCCSCC')
+        OEParseSmiles(mol, 'C1CCC1O')
         OEAddExplicitHydrogens(mol)
         masses = get_masses(mol)
         num_atoms = mol.NumAtoms()
 
-        ff = ForceField(get_data_filename('forcefield/Frosst_AlkEthOH.offxml') )
+        # ff = ForceField(get_data_filename('forcefield/Frosst_AlkEthOH.offxml') )
+        ff = ForceField(get_data_filename('forcefield/smirnoff99Frosst.offxml') )
         labels = ff.labelMolecules( [mol], verbose = True )
 
-        nrgs, total_params = system_builder.construct_energies(ff, mol)
+        nrgs, total_params, offsets = system_builder.construct_energies(ff, mol)
 
-        dt = 0.0025
+        dt = 0.002
         friction = 10.0
         temperature = 300
 
@@ -108,7 +110,7 @@ class TestSmallMolecule(unittest.TestCase):
 
         x0 = mol_coords_to_numpy_array(mol)
 
-        num_steps = 1000
+        num_steps = 10000
 
         intg.set_coordinates(x0.reshape(-1).tolist())
         intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
@@ -116,10 +118,26 @@ class TestSmallMolecule(unittest.TestCase):
         start_time = time.time()
         for step in range(num_steps):
             context.step()
+
         print("time per step:", (time.time() - start_time)/num_steps)
 
+        print(offsets)
+
+        print("total number of parameters:", total_params)
         # looks pretty stable
-        intg.get_dxdp()
+        dxdp = np.array(intg.get_dxdp()).reshape((total_params, num_atoms, 3))
+
+        segments = np.split(dxdp, offsets)[1:]
+        for grads, force in zip(segments, nrgs):
+            print(force)
+            if isinstance(force, custom_ops.HarmonicBondGPU_float):
+                print(grads.reshape((-1, 2, num_atoms, 3)))
+            elif isinstance(force, custom_ops.HarmonicAngleGPU_float):
+                print(grads.reshape((-1, 2, num_atoms, 3)))
+            elif isinstance(force, custom_ops.PeriodicTorsionGPU_float):
+                print(grads.reshape((-1, 3, num_atoms, 3)))
+            elif isinstance(force, custom_ops.LennardJonesGPU_float):
+                print(grads.reshape((-1, 2, num_atoms, 3)))
 
         # visualize
 
