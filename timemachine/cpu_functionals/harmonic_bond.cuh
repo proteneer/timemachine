@@ -51,6 +51,8 @@ __global__ void harmonic_bond_total_derivative(
         NumericType dst_grad_dy = -src_grad_dy;
         NumericType dst_grad_dz = -src_grad_dz;
 
+        atomicAdd(energy_out, kb/2.0*db*db);
+
         atomicAdd(grad_out + src_idx*3 + 0, src_grad_dx);
         atomicAdd(grad_out + src_idx*3 + 1, src_grad_dy);
         atomicAdd(grad_out + src_idx*3 + 2, src_grad_dz);

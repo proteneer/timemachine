@@ -201,7 +201,7 @@ class TestLennardJones(unittest.TestCase):
         test_nrg, test_grads, test_hessians, test_mps = test_lj.total_derivative(x0, params_np.shape[0])
 
         sess = tf.Session()
-        # np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
+        np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
         np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=12)
         # tighten the tolerance for this later.
         # np.testing.assert_array_almost_equal(test_hessians, sess.run(ref_hessians, feed_dict={x_ph: x0}), decimal=11)
@@ -517,6 +517,7 @@ class TestElectrostatics(unittest.TestCase):
         test_nrg, test_grads, test_hessians, test_mps = test_es.total_derivative(x0, params_np.shape[0])
 
         sess = tf.Session()
+        np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
         np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=13)
         # broken need to do TRIL her
         # np.testing.assert_array_almost_equal(test_hessians, sess.run(ref_hessians, feed_dict={x_ph: x0}), decimal=11)

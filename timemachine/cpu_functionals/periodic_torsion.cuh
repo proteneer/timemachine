@@ -32,7 +32,7 @@ inline __device__ RealType norm(RealType x, RealType y, RealType z) {
 
 
 template <typename CoordType, typename ParamType, typename OutType> 
-inline __device__ void torsion_gradient(
+inline __device__ OutType torsion_gradient(
     const CoordType *xs,
     const ParamType *params,
     OutType *grads) {
@@ -129,6 +129,8 @@ inline __device__ void torsion_gradient(
     grads[3*3+1] = dangle_dR3_y * prefactor;
     grads[3*3+2] = dangle_dR3_z * prefactor;
 
+    return k*(1+cos(period*angle - phase));
+
 }
 
 
@@ -182,7 +184,9 @@ __global__ void periodic_torsion_total_derivative(
 
         NumericType ps[3] = {k, phase, period};
         NumericType dxs[12];
-        torsion_gradient<NumericType, NumericType, NumericType>(xs, ps, dxs);
+        NumericType energy = torsion_gradient<NumericType, NumericType, NumericType>(xs, ps, dxs);
+
+        atomicAdd(energy_out, energy);
 
         for(int i=0; i < 12; i++) {
             atomicAdd(grad_out + indices[i], dxs[i]);
