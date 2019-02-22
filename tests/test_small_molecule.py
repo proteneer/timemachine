@@ -78,7 +78,7 @@ class TestSmallMolecule(unittest.TestCase):
 
         mol = OEMol()
         # OEParseSmiles(mol, 'CCOCCSCC')
-        OEParseSmiles(mol, 'CCC')
+        OEParseSmiles(mol, 'CCCC')
         OEAddExplicitHydrogens(mol)
         masses = get_masses(mol)
         num_atoms = mol.NumAtoms()
@@ -103,14 +103,14 @@ class TestSmallMolecule(unittest.TestCase):
 
         nrgs, total_params, offsets = system_builder.construct_energies(ff, mol)
 
+        # dt = 0.0025
+        # friction = 10.0
+        # temperature = 300
+
+        # gradient descent
         dt = 0.001
         friction = 10.0
         temperature = 100
-
-        # gradient descent
-        # dt = 0.001
-        # friction = 100000.0
-        # temperature = 0
 
         a,b,c = get_abc_coefficents(masses, dt, friction, temperature)
 
@@ -143,7 +143,7 @@ class TestSmallMolecule(unittest.TestCase):
         # print(state.getPotentialEnergy())
 
 
-        # nrg_, grad_, hess_, mps_ = nrgs[-1].total_derivative(x0, 1000)
+        # nrg_, grad_, hess_, mps_ = nrgs[0].total_derivative(x0, 1000)
         # print(grad_)
         # print(nrg_)
 
@@ -166,30 +166,22 @@ class TestSmallMolecule(unittest.TestCase):
             intg
         )
 
-        # x0 = np.array([ [ 8.05472061e-02, -5.44342399e-02,  4.95790727e-02],
-        #                 [ 2.16504470e-01, -4.92023071e-03, -1.60400651e-03],
-        #                 [ 1.00858870e-03,  1.18017523e-03, -1.03775455e-04],
-        #                 [ 6.62027746e-02, -1.61187708e-01,  3.03640384e-02],
-        #                 [ 7.40195438e-02, -3.69146653e-02,  1.56997517e-01],
-        #                 [ 2.97981262e-01, -5.77684566e-02,  4.83387597e-02],
-        #                 [ 2.26062834e-01,  1.01577170e-01,  1.98065490e-02],
-        #                 [ 2.24628925e-01, -1.94601193e-02, -1.09533176e-01]], dtype=np.float32)
+        # it's very important that we start with equilibrium geometries
+        x0 = np.array([[ 0.06672798, -0.08789801,  0.17259836],
+             [ 0.16416019, -0.00393655,  0.25996411],
+             [ 0.22437823,  0.07365441,  0.1361862],
+             [ 0.13155428,  0.19842917,  0.15364743],
+             [ 0.00140648, -0.02683543,  0.10997669],
+             [ 0.12003344, -0.15992539,  0.11009348],
+             [ 0.0019258,  -0.14449902,  0.23957494],
+             [ 0.2228789,  -0.09036981,  0.29247978],
+             [ 0.23281977,  0.05531402,  0.32119114],
+             [ 0.31699611,  0.12723394,  0.15912026],
+             [ 0.28942673, -0.01347244,  0.12423653],
+             [ 0.19188221,  0.28887075,  0.16359857],
+             [ 0.07279447,  0.20940621,  0.06246885],
+             [ 0.06117841,  0.19766579,  0.23744114]])
 
-
-        # x0 = np.array([[ 0.04047876 ,-0.07297815,  0.07083304],
-        # [ 0.2542038  , 0.16208108,  0.29189807],
-        # [ 0.16372064 ,-0.01820499,  0.14100419],
-        # [ 0.13159984 , 0.10884641,  0.21945369],
-        # [-0.0018707  , 0.00117548,  0.00234415],
-        # [ 0.06478791 ,-0.16292682,  0.01338776],
-        # [-0.03638209 ,-0.09927345,  0.1441983 ],
-        # [ 0.29465136 , 0.08722229,  0.36077148],
-        # [ 0.22823274 , 0.25117514,  0.3499414 ],
-        # [ 0.33288103 , 0.18954685,  0.22090748],
-        # [ 0.20357928 ,-0.09469703,  0.2086626 ],
-        # [ 0.24129161 , 0.00267996,  0.06640348],
-        # [ 0.09366605 , 0.1860415 ,  0.1514599 ],
-        # [ 0.05258387 , 0.08845842,  0.29265663]])
 
         origin = np.sum(x0, axis=0)/x0.shape[0]
 
@@ -201,7 +193,7 @@ class TestSmallMolecule(unittest.TestCase):
         for atom in mol.GetAtoms():
             print(atom)
 
-        num_steps = 100000
+        num_steps = 1000000
 
         ofs = oechem.oemolostream("new_frames.xyz")
         ofs.SetFormat(oechem.OEFormat_XYZ)
