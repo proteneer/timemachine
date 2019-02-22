@@ -172,7 +172,11 @@ def construct_energies(ff, mol):
         assert 0
 
     def get_torsion_term(pid):
+        # print("PID", pid) # improper torsions
         for b in gens[2]._propertorsiontypes:
+            if b.pid == pid:
+                return b.k, b.phase, b.periodicity
+        for b in gens[2]._impropertorsiontypes:
             if b.pid == pid:
                 return b.k, b.phase, b.periodicity
         assert 0
@@ -272,6 +276,7 @@ def construct_energies(ff, mol):
 
                             all_terms.append((k_idx, phase_idx, period_idx))
 
+                        print("inserting torsional parameter", pid)
                         torsion_params_map[pid] = all_terms
 
                     for k_idx, phase_idx, period_idx in torsion_params_map[pid]:

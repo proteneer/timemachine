@@ -78,7 +78,8 @@ class TestSmallMolecule(unittest.TestCase):
 
         mol = OEMol()
         # OEParseSmiles(mol, 'CCOCCSCC')
-        OEParseSmiles(mol, 'CCCC')
+        # OEParseSmiles(mol, 'c1ccccc1')
+        OEParseSmiles(mol, 'CC')
         OEAddExplicitHydrogens(mol)
         masses = get_masses(mol)
         num_atoms = mol.NumAtoms()

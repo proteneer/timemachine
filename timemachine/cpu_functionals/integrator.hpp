@@ -40,6 +40,7 @@ private:
 
 
     // should these be owned by the context instead? we want them to be explicit
+    NumericType *d_energy_;
     NumericType *d_grads_;
     NumericType *d_hessians_;
     NumericType *d_mixed_partials_;
@@ -59,6 +60,10 @@ private:
         NumericType *d_C);
 
 public:
+
+    NumericType* get_device_energy() {
+      return d_energy_;
+    }
 
     // these *HAVE* to be refactored out to be out of this class.
     NumericType* get_device_coords() {

@@ -114,7 +114,6 @@ class TestLennardJones(unittest.TestCase):
         params_tf = tf.convert_to_tensor(params_np)
         param_idxs = np.random.randint(num_params, size=(N,2))
 
-
         scale_matrix = np.random.rand(N, N).astype(np.float64)
         scale_matrix = (scale_matrix + scale_matrix.T)/2
         np.fill_diagonal(scale_matrix, 0.0)

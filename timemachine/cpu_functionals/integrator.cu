@@ -139,6 +139,7 @@ Integrator<NumericType>::Integrator(
     }
 
     // 1. Allocate memory on the GPU
+    gpuErrchk(cudaMalloc((void**)&d_energy_, sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_x_t_, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_v_t_, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_dxdp_t_, P_*N_*3*sizeof(NumericType)));
@@ -155,6 +156,7 @@ Integrator<NumericType>::Integrator(
     gpuErrchk(cudaMalloc((void**)&d_rng_buffer_, N_*3*sizeof(NumericType)));
 
     // 2. Memset
+    gpuErrchk(cudaMemset(d_energy_, 0.0, sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_x_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_v_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_dxdp_t_, 0.0, P_*N_*3*sizeof(NumericType)));
