@@ -11,6 +11,7 @@ from openeye.oechem import OEFloatArray
 from openforcefield.utils import get_data_filename, generateTopologyFromOEMol
 from openforcefield.typing.engines.smirnoff import get_molecule_parameterIDs, ForceField
 
+from timemachine import minimizer
 from timemachine.constants import BOLTZ
 from timemachine import system_builder
 from timemachine.cpu_functionals import custom_ops
@@ -79,7 +80,7 @@ class TestSmallMolecule(unittest.TestCase):
         mol = OEMol()
         # OEParseSmiles(mol, 'CCOCCSCC')
         # OEParseSmiles(mol, 'c1ccccc1')
-        OEParseSmiles(mol, 'CC')
+        OEParseSmiles(mol, 'C1CCCCC1')
         OEAddExplicitHydrogens(mol)
         masses = get_masses(mol)
         num_atoms = mol.NumAtoms()
@@ -104,6 +105,7 @@ class TestSmallMolecule(unittest.TestCase):
 
         nrgs, total_params, offsets = system_builder.construct_energies(ff, mol)
 
+
         # dt = 0.0025
         # friction = 10.0
         # temperature = 300
@@ -126,30 +128,10 @@ class TestSmallMolecule(unittest.TestCase):
 
         if not omega(mol):
             assert 0
+
         x0 = mol_coords_to_numpy_array(mol)/10
 
-
-        # DEBUG
-        # test_sys = openmm.openmm.XmlSerializer.deserialize(open("debug_force.xml").read())
-        # timestep = 1.0
-        # integrator = openmm.VerletIntegrator(timestep)
-
-        # platform = openmm.Platform.getPlatformByName('Reference')
-        # context = openmm.Context(test_sys, integrator, platform)
-        # # state = openmm.openmm.State()
-        # # print(dir(state))
-        # context.setPositions(x0)
-        # state = context.getState(getEnergy=True, getForces=True)
-        # print(state.getForces(asNumpy=True))
-        # print(state.getPotentialEnergy())
-
-
-        # nrg_, grad_, hess_, mps_ = nrgs[0].total_derivative(x0, 1000)
-        # print(grad_)
-        # print(nrg_)
-
-        # assert 0
-
+        x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
 
         intg = custom_ops.Integrator_double(
             dt,
@@ -208,9 +190,6 @@ class TestSmallMolecule(unittest.TestCase):
 
         start_time = time.time()
 
-        # wriet out XYZ
-        # assert 0
-
 
         for step in range(num_steps):
 
@@ -219,37 +198,6 @@ class TestSmallMolecule(unittest.TestCase):
                 coords = np.array(intg.get_coordinates()).reshape((-1, 3))
                 print(coords)
                 center = np.sum(coords, axis=0)/coords.shape[0]
-
-                # void ReferenceRemoveCMMotionKernel::execute(ContextImpl& context) {
-                #     if (data.stepCount%frequency != 0)
-                #         return;
-                #     vector<Vec3>& velData = extractVelocities(context);
-                    
-                #     // Calculate the center of mass momentum.
-                    
-                #     double momentum[] = {0.0, 0.0, 0.0};
-                #     double mass = 0.0;
-                #     for (size_t i = 0; i < masses.size(); ++i) {
-                #         momentum[0] += masses[i]*velData[i][0];
-                #         momentum[1] += masses[i]*velData[i][1];
-                #         momentum[2] += masses[i]*velData[i][2];
-                #         mass += masses[i];
-                #     }
-                    
-                #     // Adjust the particle velocities.
-                    
-                #     momentum[0] /= mass;
-                #     momentum[1] /= mass;
-                #     momentum[2] /= mass;
-                #     for (size_t i = 0; i < masses.size(); ++i) {
-                #         if (masses[i] != 0.0) {
-                #             velData[i][0] -= momentum[0];
-                #             velData[i][1] -= momentum[1];
-                #             velData[i][2] -= momentum[2];
-                #         }
-                #     }
-                # }
-
 
                 dto = np.sqrt(np.sum(np.power(center - origin, 2)))
                 velocities = np.array(intg.get_velocities()).reshape((-1, 3))

@@ -3,7 +3,6 @@
 #include "cublas_v2.h"
 #include "curand.h"
 
-// #include <ctime>
 #include <vector>
 #include <stdexcept>
 #include <cstdio>
