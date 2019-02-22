@@ -9,26 +9,6 @@
 #include "integrator.hpp"
 #include "gpu_utils.cuh"
 
-// template <typename NumericType>
-// __global__ void symmetrize_matrix(
-//     NumericType *mat,
-//     int size) {
-
-//     int col = blockDim.x*blockIdx.x + threadIdx.x;
-
-//     if(col >= size) {
-//         return;
-//     }
-
-//     // stupid simple one-pass 
-//     for(int row=0; row < size; row++) {
-
-//         mat[col]
-
-//     }
-
-// }
-
 /*
 
 Buffer operations:
@@ -185,7 +165,7 @@ Integrator<NumericType>::Integrator(
 
     cublasErrchk(cublasCreate(&cb_handle_));
 
-    curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_MTGP32));
+    curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_PHILOX4_32_10));
 
     // curandSetPseudoRandomGeneratorSeed (&cr_rng_, 1234ULL);
 
@@ -272,8 +252,6 @@ void Integrator<NumericType>::step_gpu(
     const NumericType *d_hessians,
     NumericType *d_mixed_partials) {
 
-
-
     hessian_vector_product(d_hessians_, d_dxdp_t_, d_mixed_partials);
     // reduce_total_derivatives(d_mixed_partials_, step_ % W_);
 
@@ -300,6 +278,7 @@ void Integrator<NumericType>::step_gpu(
     n_blocks = (N_*3 + tpb - 1) / tpb;
 
     // generate new random numbers
+    // std::cout << step_ << std::endl;
     curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N_*3, 0.0, 1.0));
     reduce_velocities<NumericType><<<n_blocks, tpb>>>(
         d_rng_buffer_,

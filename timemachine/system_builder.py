@@ -66,6 +66,73 @@ def generate_scale_matrix(bond_idxs, scale, num_atoms):
 
     return scale_matrix
 
+
+def _ast_eval(node):
+    """
+    Performs an algebraic syntax tree evaluation of a unit.
+    """
+
+    operators = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul,
+        ast.Div: op.truediv, ast.Pow: op.pow, ast.BitXor: op.xor,
+        ast.USub: op.neg}
+
+    if isinstance(node, ast.Num): # <number>
+        return node.n
+    elif isinstance(node, ast.BinOp): # <left> <operator> <right>
+        return operators[type(node.op)](_ast_eval(node.left), _ast_eval(node.right))
+    elif isinstance(node, ast.UnaryOp): # <operator> <operand> e.g., -1
+        return operators[type(node.op)](_ast_eval(node.operand))
+    elif isinstance(node, ast.Name):
+        # see if this is a simtk unit
+        b = getattr(unit, node.id)
+        return b
+    else:
+        raise TypeError(node)
+
+def _extractQuantity(node, parent, name, unit_name=None):
+    """
+    Form a (potentially unit-bearing) quantity from the specified attribute name.
+
+    node : xml.etree.ElementTree.Element
+       Node of etree corresponding to force type entry.
+    parent : xml.etree.ElementTree.Element
+       Node of etree corresponding to parent Force.
+    name : str
+       Name of parameter to extract from attributes.
+    unit_name : str, optional, default=None
+       If specified, use this attribute name of 'parent' to look up units
+
+    """
+    print(node, parent, name, unit_name)
+    # Check for expected attributes
+    if name not in node.attrib:
+        if 'sourceline' in node.attrib:
+            raise Exception("Line %d : Expected XML attribute '%s' not found" % (node.attrib['sourceline'], name))
+        else:
+            raise Exception("Expected XML attribute '%s' not found" % (name))
+
+    # Most attributes will be converted to floats, but some are strings
+    string_names = ['parent_id', 'id']
+    # Handle case where this is a normal quantity
+    if name not in string_names:
+        quantity = float(node.attrib[name])
+    # Handle label or string
+    else:
+        quantity = node.attrib[name]
+        return quantity
+
+    if unit_name is None:
+        unit_name = name + '_unit'
+
+    if unit_name in parent.attrib:
+        a = node.attrib[name]
+        b = parent.attrib[unit_name]
+        parsed_units = _ast_eval(ast.parse(b, mode='eval').body)
+        result = float(a) * parsed_units
+        quantity = result.value_in_unit_system(unit.md_unit_system)
+
+    return quantity
+
 def construct_energies(ff, mol):
     """
     Construct energies given a forcefield and a molecule.
@@ -83,14 +150,43 @@ def construct_energies(ff, mol):
     list of energy object
 
     """
-    labels = ff.labelMolecules([mol], verbose=True)
+    labels = ff.labelMolecules([mol], verbose=False)
     N = mol.NumAtoms()
     start_params = 0
     nrgs = []
     offsets = []
+
+    gens = ff.getGenerators()
+
+    # very poorly thought out loops
+    def get_bonded_term(pid):
+        for b in gens[0]._bondtypes:
+            if b.pid == pid:
+                return b.k, b.length
+        assert 0
+
+    def get_angle_term(pid):
+        for b in gens[1]._angletypes:
+            if b.pid == pid:
+                return b.k, b.angle
+        assert 0
+
+    def get_torsion_term(pid):
+        for b in gens[2]._propertorsiontypes:
+            if b.pid == pid:
+                return b.k, b.phase, b.periodicity
+        assert 0
+
+    def get_nonbonded_term(pid):
+        for b in gens[3]._ljtypes:
+            if b.pid == pid:
+                return b.sigma, b.epsilon
+        assert 0
+
     for mol_entry in range(len(labels)):
 
         for force in labels[mol_entry].keys():
+            print("PARSING", force)
             if force == 'HarmonicBondGenerator':
                 bond_params_map = {}
                 bond_params_array = []
@@ -98,12 +194,10 @@ def construct_energies(ff, mol):
                 bond_atom_idxs = []
                 for (atom_indices, pid, smirks) in labels[mol_entry][force]:
                     if pid not in bond_params_map:
-                        params = ff.getParameter(paramID=pid)
-                        k = np.float32(params['k'])
+                        k, length = get_bonded_term(pid)
+                        print(k, length)
                         k_idx = len(bond_params_array)
                         bond_params_array.append(k)
-
-                        length = np.float32(params['length'])
                         length_idx = len(bond_params_array)
                         bond_params_array.append(length)
                         bond_params_map[pid] = (k_idx, length_idx)
@@ -111,7 +205,7 @@ def construct_energies(ff, mol):
                     bond_params_idxs.extend(bond_params_map[pid])
                     bond_atom_idxs.extend(atom_indices)
 
-                bond_nrg = custom_ops.HarmonicBondGPU_float(
+                bond_nrg = custom_ops.HarmonicBondGPU_double(
                     bond_params_array,
                     list(range(start_params, start_params+len(bond_params_array))),
                     bond_params_idxs,
@@ -123,7 +217,7 @@ def construct_energies(ff, mol):
                 offsets.append(start_params)
                 start_params += len(bond_params_array)
             elif force == 'HarmonicAngleGenerator':
-
+                # assert 0
                 angle_params_map = {}
                 angle_params_array = []
                 angle_params_idxs = []
@@ -131,12 +225,12 @@ def construct_energies(ff, mol):
 
                 for (atom_indices, pid, smirks) in labels[mol_entry][force]:
                     if pid not in angle_params_map:
-                        params = ff.getParameter(paramID=pid)
-                        k = np.float32(params['k'])
+
+                        k, angle = get_angle_term(pid)
+                        print(k, angle)
                         k_idx = len(angle_params_array)
                         angle_params_array.append(k)
 
-                        angle = np.float32(params['angle'])
                         angle_idx = len(angle_params_array)
                         angle_params_array.append(angle)
                         angle_params_map[pid] = (k_idx, angle_idx)
@@ -144,7 +238,7 @@ def construct_energies(ff, mol):
                     angle_params_idxs.extend(angle_params_map[pid])
                     angle_atom_idxs.extend(atom_indices)
 
-                angle_nrg = custom_ops.HarmonicAngleGPU_float(
+                angle_nrg = custom_ops.HarmonicAngleGPU_double(
                     angle_params_array,
                     list(range(start_params, start_params+len(angle_params_array))),
                     angle_params_idxs,
@@ -162,43 +256,29 @@ def construct_energies(ff, mol):
                 torsion_atom_idxs = []
 
                 for (atom_indices, pid, smirks) in labels[mol_entry][force]:
-                    # if pid not in torsion_params_map:
-                    params = ff.getParameter(paramID=pid)
-                    all_idxs = []
-                    for order in range(1, 10):
+                    # params = ff.getParameter(paramID=pid)
+                    if pid not in torsion_params_map:
+                        ks, phases, periods = get_torsion_term(pid)
+                        all_terms = []
+                        for k, phase, period in zip(ks, phases, periods):
+                            k_idx = len(torsion_params_array)
+                            torsion_params_array.append(k)
 
-                        k_str = "k"+str(order)
-                        idivf_str = "idivf"+str(order)
-                        phase_str = "phase"+str(order)
-                        period_str = "periodicity"+str(order)
+                            phase_idx = len(torsion_params_array)
+                            torsion_params_array.append(phase)
 
-                        if k_str in params:
+                            period_idx = len(torsion_params_array)
+                            torsion_params_array.append(period)
 
-                            if pid not in torsion_params_map:
+                            all_terms.append((k_idx, phase_idx, period_idx))
 
-                                k = np.float32(params[k_str])/np.float32(params[idivf_str])
-                                phase = np.float32(params[phase_str])
-                                period = np.float32(params[period_str])
+                        torsion_params_map[pid] = all_terms
 
-                                k_idx = len(torsion_params_array)
-                                torsion_params_array.append(k)
+                    for k_idx, phase_idx, period_idx in torsion_params_map[pid]:
+                        torsion_params_idxs.extend((k_idx, phase_idx, period_idx))
+                        torsion_atom_idxs.extend(atom_indices)
 
-                                phase_idx = len(torsion_params_array)
-                                torsion_params_array.append(phase)
-
-                                period_idx = len(torsion_params_array)
-                                torsion_params_array.append(period)
-
-                                print(len(torsion_params_map), k, phase, period)
-
-                                torsion_params_map[pid] = (k_idx, phase_idx, period_idx)
-
-                            torsion_params_idxs.extend(torsion_params_map[pid])
-                            torsion_atom_idxs.extend(atom_indices)
-                        else:
-                            break
-
-                torsion_nrg = custom_ops.PeriodicTorsionGPU_float(
+                torsion_nrg = custom_ops.PeriodicTorsionGPU_double(
                     torsion_params_array,
                     list(range(start_params, start_params+len(torsion_params_array))),
                     torsion_params_idxs,
@@ -210,6 +290,7 @@ def construct_energies(ff, mol):
                 start_params += len(torsion_params_array)
 
             elif force == 'NonbondedGenerator':
+                # continue
                 print("\n%s:" % force)
 
                 nbg = None
@@ -222,30 +303,26 @@ def construct_energies(ff, mol):
                 lj14scale = nbg.lj14scale
                 lj_params_map = {}
                 lj_params_array = []
-                lj_params_idxs = []
+                lj_params_idxs = [None]*N
 
+                # (ytz): JESUS CHRIST THIS ISN'T SORTED
                 for (atom_indices, pid, smirks) in labels[mol_entry][force]:
                     if pid not in lj_params_map:
-                        params = ff.getParameter(paramID=pid)
-                        sigma = convert_rmin_half_to_sigma(np.float32(params['rmin_half']))
-                        eps = np.float32(params['epsilon'])
+                        sigma, eps = get_nonbonded_term(pid)
                         sig_idx = len(lj_params_array)
                         lj_params_array.append(sigma)
                         eps_idx = len(lj_params_array)
                         lj_params_array.append(eps)
-
                         lj_params_map[pid] = (sig_idx, eps_idx)
 
-                    lj_params_idxs.extend((lj_params_map[pid][0], lj_params_map[pid][1]))
-
-                print("LJ", len(lj_params_array))
+                    lj_params_idxs[atom_indices[0]] = (lj_params_map[pid][0], lj_params_map[pid][1])
 
                 lj_scale_matrix = generate_scale_matrix(np.array(bond_atom_idxs).reshape(-1, 2),  lj14scale, N)
 
-                lj_nrg = custom_ops.LennardJonesGPU_float(
+                lj_nrg = custom_ops.LennardJonesGPU_double(
                     lj_params_array,
                     list(range(start_params, start_params+len(lj_params_array))),
-                    lj_params_idxs,
+                    np.array(lj_params_idxs).reshape(-1),
                     lj_scale_matrix.reshape(-1)
                 )
 
