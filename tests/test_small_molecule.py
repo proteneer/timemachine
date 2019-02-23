@@ -2,6 +2,12 @@ import time
 import numpy as np
 import unittest
 import ctypes
+import random
+
+import tensorflow as tf
+
+# tf.enable_eager_execution()
+
 
 from openeye import oechem
 from openeye.oechem import OEMol, OEParseSmiles, OEAddExplicitHydrogens, OEGetIsotopicWeight, OEGetAverageWeight
@@ -11,6 +17,7 @@ from openeye.oechem import OEFloatArray
 from openforcefield.utils import get_data_filename, generateTopologyFromOEMol
 from openforcefield.typing.engines.smirnoff import get_molecule_parameterIDs, ForceField
 
+from timemachine import observable
 from timemachine import minimizer
 from timemachine.constants import BOLTZ
 from timemachine import system_builder
@@ -75,7 +82,12 @@ class TestSmallMolecule(unittest.TestCase):
 
 
 
-    def test_mol(self):
+    def run_once(
+        self,
+        dt=0.001,
+        temperature=100,
+        n_steps=10000,
+        forcefield_file='forcefield/smirnoff99Frosst.offxml'):
 
         mol = OEMol()
         # OEParseSmiles(mol, 'CCOCCSCC')
@@ -86,13 +98,9 @@ class TestSmallMolecule(unittest.TestCase):
         masses = get_masses(mol)
         num_atoms = mol.NumAtoms()
 
-
         topology = generateTopologyFromOEMol(mol)
-
-
         # ff = ForceField(get_data_filename('forcefield/Frosst_AlkEthOH.offxml') )
-        ff = ForceField(get_data_filename('forcefield/smirnoff99Frosst.offxml') )
-        # labels = ff.labelMolecules( [mol], verbose = True )
+        ff = ForceField(get_data_filename(forcefield_file))
 
         omm_system = ff.createSystem(topology, [mol])
 
@@ -100,9 +108,6 @@ class TestSmallMolecule(unittest.TestCase):
         with open("system.xml", "w") as fh:
             fh.write(openmm.openmm.XmlSerializer.serialize(omm_system))
         # assert 0
-
-
-
 
         nrgs, total_params, offsets = system_builder.construct_energies(ff, mol)
 
@@ -112,16 +117,13 @@ class TestSmallMolecule(unittest.TestCase):
         # temperature = 300
 
         # gradient descent
-        dt = 0.001
+        dt = dt
         friction = 10.0
-        temperature = 100
+        temperature = temperature
 
         a,b,c = get_abc_coefficents(masses, dt, friction, temperature)
 
         buf_size = estimate_buffer_size(1e-16, a)
-        # print("BUFFER SIZE", buf_size)
-
-
 
         omegaOpts = oeomega.OEOmegaOptions()
         omegaOpts.SetMaxConfs(1)
@@ -145,52 +147,94 @@ class TestSmallMolecule(unittest.TestCase):
             c
         )
 
-
         context = custom_ops.Context_double(
             nrgs,
             intg
         )
 
-        # it's very important that we start with equilibrium geometries
-        # x0 = np.array([[ 0.06672798, -0.08789801,  0.17259836],
-        #      [ 0.16416019, -0.00393655,  0.25996411],
-        #      [ 0.22437823,  0.07365441,  0.1361862],
-        #      [ 0.13155428,  0.19842917,  0.15364743],
-        #      [ 0.00140648, -0.02683543,  0.10997669],
-        #      [ 0.12003344, -0.15992539,  0.11009348],
-        #      [ 0.0019258,  -0.14449902,  0.23957494],
-        #      [ 0.2228789,  -0.09036981,  0.29247978],
-        #      [ 0.23281977,  0.05531402,  0.32119114],
-        #      [ 0.31699611,  0.12723394,  0.15912026],
-        #      [ 0.28942673, -0.01347244,  0.12423653],
-        #      [ 0.19188221,  0.28887075,  0.16359857],
-        #      [ 0.07279447,  0.20940621,  0.06246885],
-        #      [ 0.06117841,  0.19766579,  0.23744114]])
-
-
         origin = np.sum(x0, axis=0)/x0.shape[0]
-
-
-        print("X0", x0)
-        print(np.sum(np.power(x0[0,: ] - x0[1,:], 2)))
-        # assert 0
 
         for atom in mol.GetAtoms():
             print(atom)
 
-        num_steps = 1000000
+        num_steps = n_steps
 
         ofs = oechem.oemolostream("new_frames.xyz")
         ofs.SetFormat(oechem.OEFormat_XYZ)
-
-        # for i in range(10):
-        #     write_xyz(ofs, mol, x0)
-        # assert 0
 
         intg.set_coordinates(x0.reshape(-1).tolist())
         intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
 
         start_time = time.time()
+
+        k = 500
+        reservoir = []
+        count = 0
+
+        for step in range(10000):
+
+            if count < k:
+                coords = intg.get_coordinates()
+                dxdps = intg.get_dxdp()
+                reservoir.append((np.array(coords).reshape((num_atoms, 3)), np.array(dxdps).reshape((total_params, num_atoms, 3))))
+            else:
+                j = random.randint(0, count)
+                if j < k:
+                    coords = intg.get_coordinates()
+                    dxdps = intg.get_dxdp()
+                    reservoir[j] = (np.array(coords).reshape((num_atoms, 3)), np.array(dxdps).reshape((total_params, num_atoms, 3)))
+
+            context.step()
+            count += 1
+
+        confs = []
+        for r in reservoir:
+            confs.append(r[0])
+        confs = np.array(confs)
+
+        dxdps = []
+        for r in reservoir:
+            dxdps.append(r[1])
+        dxdps = np.array(dxdps)
+
+        return confs, dxdps
+
+
+    def test_mol(self):
+
+        dx0, dxdp0 = self.run_once(dt=0.002, temperature=100)
+        dx1, dxdp1 = self.run_once()
+
+        x0 = tf.convert_to_tensor(dx0)
+        x1 = tf.convert_to_tensor(dx1)
+
+        obs0_rij = observable.sorted_squared_distances(x0)
+        obs1_rij = observable.sorted_squared_distances(x1)
+        loss = tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))
+
+        x0_grads, x1_grads = tf.gradients(loss, [x0, x1])
+
+        sess = tf.Session()
+        np_loss, x0g = sess.run([loss, x0_grads])
+        x0g = np.expand_dims(x0g, 1)
+        res = np.multiply(x0g, dxdp0)
+
+        print(np_loss, np.sum(res, axis=(0,2,3)))
+
+
+
+
+
+        assert 0
+
+# 
+        print(tape.gradient(loss, x0))
+
+        print("mutual loss", )
+
+
+        assert 0
+
 
 
         for step in range(num_steps):
@@ -242,6 +286,8 @@ class TestSmallMolecule(unittest.TestCase):
                         assert 0
                 if np.any(np.isnan(dxdp)):
                     assert 0
+
+
             context.step()
 
         print(x0)
