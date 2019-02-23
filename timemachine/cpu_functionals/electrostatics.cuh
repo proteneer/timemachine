@@ -91,6 +91,8 @@ __global__ void electrostatics_total_derivative(
     NumericType hess_zy = 0;
     NumericType hess_zz = 0;
 
+    NumericType energy = 0;
+
     int num_y_tiles = blockIdx.x + 1;
 
     for(int tile_y_idx = 0; tile_y_idx < num_y_tiles; tile_y_idx++) {
@@ -147,9 +149,6 @@ __global__ void electrostatics_total_derivative(
 
             if(h_j_idx < h_i_idx && h_i_idx < n_atoms && h_j_idx < n_atoms) {
 
-
-                // if(h_j_idx < h_i_idx) {
-
                 NumericType dx = xi - x1;
                 NumericType dy = yi - y1;
                 NumericType dz = zi - z1;
@@ -190,10 +189,6 @@ __global__ void electrostatics_total_derivative(
                 atomicAdd(mp_out_q_h_j + h_i_idx*3 + 1, PREFACTOR_QJ_GRAD * (-dy));
                 atomicAdd(mp_out_q_h_j + h_i_idx*3 + 2, PREFACTOR_QJ_GRAD * (-dz));
 
-                // }
-
-
-
             }
 
         }
@@ -223,6 +218,8 @@ __global__ void electrostatics_total_derivative(
                 NumericType grad_prefactor = so4eq01*inv_d3ij;
                 NumericType hess_prefactor = so4eq01/d5ij;
 
+                energy += (sij*ONE_4PI_EPS0*q0*q1)/dij;
+
                 grad_dx -= grad_prefactor*dx;
                 grad_dy -= grad_prefactor*dy;
                 grad_dz -= grad_prefactor*dz;
@@ -230,9 +227,6 @@ __global__ void electrostatics_total_derivative(
                 shfl_grad_dx += grad_prefactor*dx;
                 shfl_grad_dy += grad_prefactor*dy;
                 shfl_grad_dz += grad_prefactor*dz;
-
-                // we can shuffle this as well.
-                // NumericType *mp_out_qj = mp_out + q1_g_idx;
 
                 NumericType mp_prefactor = sij*ONE_4PI_EPS0*inv_d3ij;
 
@@ -243,14 +237,6 @@ __global__ void electrostatics_total_derivative(
                 mixed_dx += PREFACTOR_QI_GRAD * (-dx);
                 mixed_dy += PREFACTOR_QI_GRAD * (-dy);
                 mixed_dz += PREFACTOR_QI_GRAD * (-dz);
-
-                // atomicAdd(mp_out_qi + j_idx*3 + 0, PREFACTOR_QI_GRAD * (dx));
-                // atomicAdd(mp_out_qi + j_idx*3 + 1, PREFACTOR_QI_GRAD * (dy));
-                // atomicAdd(mp_out_qi + j_idx*3 + 2, PREFACTOR_QI_GRAD * (dz));
-
-                // atomicAdd(mp_out_qj + i_idx*3 + 0, PREFACTOR_QJ_GRAD * (-dx));
-                // atomicAdd(mp_out_qj + i_idx*3 + 1, PREFACTOR_QJ_GRAD * (-dy));
-                // atomicAdd(mp_out_qj + i_idx*3 + 2, PREFACTOR_QJ_GRAD * (-dz));
 
                 shfl_mixed_dx += PREFACTOR_QJ_GRAD * dx;
                 shfl_mixed_dy += PREFACTOR_QJ_GRAD * dy;
@@ -324,6 +310,8 @@ __global__ void electrostatics_total_derivative(
     }
 
     if(i_idx < n_atoms) {
+        atomicAdd(energy_out, energy);
+
         atomicAdd(grad_out + i_idx*3 + 0, grad_dx);
         atomicAdd(grad_out + i_idx*3 + 1, grad_dy);
         atomicAdd(grad_out + i_idx*3 + 2, grad_dz);

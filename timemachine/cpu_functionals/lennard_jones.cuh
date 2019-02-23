@@ -73,6 +73,8 @@ __global__ void lennard_jones_total_derivative(
     NumericType hess_zy = 0;
     NumericType hess_zz = 0;
 
+    NumericType energy = 0;
+
     int num_y_tiles = blockIdx.x + 1;
 
     for(int tile_y_idx = 0; tile_y_idx < num_y_tiles; tile_y_idx++) {
@@ -180,20 +182,9 @@ __global__ void lennard_jones_total_derivative(
                 hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 1)] += common*dy*dz;
                 hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 2)] += prefactor*-24*inv_d16ij*(d8ij- 2*d2ij*sig6 + d2z*(28*sig6 - 8*d6ij));
 
-
-
-                // NumericType sig2 = sig*sig;
-                // NumericType sig3 = sig2*sig;
                 NumericType sig5 = sig3*sig2;
-                // NumericType sig6 = sig3*sig3;
-                // // NumericType sig11 = sig6*sig3*sig2;
-                // NumericType sig12 = sig6*sig6;
-
                 NumericType rij = d2ij;
-                // NumericType rij3 = d6ij;
                 NumericType rij4 = d8ij;
-                // NumericType rij7 = rij4 * rij3;
-
 
                 // (ytz): 99 % sure this loses precision so we need to refactor
                 NumericType sig1rij1 = sig/rij;
@@ -257,7 +248,6 @@ __global__ void lennard_jones_total_derivative(
                 NumericType sig3 = sig2*sig;
                 NumericType sig5 = sig3*sig2;
                 NumericType sig6 = sig3*sig3;
-                // NumericType sig11 = sig6*sig3*sig2;
                 NumericType sig12 = sig6*sig6;
 
                 NumericType rij = d2ij;
@@ -265,6 +255,7 @@ __global__ void lennard_jones_total_derivative(
                 NumericType rij4 = d8ij;
                 NumericType rij7 = rij4 * rij3;
 
+                energy += sij*4*eps*(sig6/d6ij-1.0)*sig6/d6ij;
 
                 // (ytz): 99 % sure this loses precision so we need to refactor
                 NumericType sig1rij1 = sig/rij;
@@ -412,6 +403,8 @@ __global__ void lennard_jones_total_derivative(
     }
 
     if(i_idx < n_atoms) {
+        atomicAdd(energy_out, energy);
+
         atomicAdd(grad_out + i_idx*3 + 0, grad_dx);
         atomicAdd(grad_out + i_idx*3 + 1, grad_dy);
         atomicAdd(grad_out + i_idx*3 + 2, grad_dz);

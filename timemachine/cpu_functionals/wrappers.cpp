@@ -68,7 +68,7 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
+        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -116,7 +116,7 @@ void declare_harmonic_bond_gpu(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
+        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -164,7 +164,7 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"angle: "<< duration <<'\n';
+        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"angle: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -212,7 +212,7 @@ void declare_harmonic_angle_gpu(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
+        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -260,7 +260,7 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"torsion: "<< duration <<'\n';
+        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"torsion: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -309,7 +309,7 @@ void declare_periodic_torsion_gpu(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
+        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"bonded: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -358,7 +358,7 @@ void declare_electrostatics(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"es: "<< duration <<'\n';
+        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"es: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -405,7 +405,7 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"lj612: "<< duration <<'\n';
+        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"lj612: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -454,7 +454,7 @@ void declare_electrostatics_gpu(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"es GPU: "<< duration <<'\n';
+        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"es GPU: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });
@@ -501,7 +501,7 @@ void declare_lennard_jones_gpu(py::module &m, const char *typestr) {
             py_mps.mutable_data()
         );
 
-        duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"lj GPU: "<< duration <<'\n';
+        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC; std::cout<<"lj GPU: "<< duration <<'\n';
 
         return py::make_tuple(energy, py_grads, py_hessians, py_mps);
     });

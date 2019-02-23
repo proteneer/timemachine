@@ -6,6 +6,7 @@ namespace timemachine {
 template <typename NumericType>
 void Context<NumericType>::step() {
 
+    NumericType *de = integrator_->get_device_energy();
 	NumericType *dg = integrator_->get_device_grads();
 	NumericType *dh = integrator_->get_device_hessians();
 	NumericType *dm = integrator_->get_device_mixed_partials();
@@ -13,6 +14,7 @@ void Context<NumericType>::step() {
 	int N = integrator_->num_atoms();
 	int P = integrator_->num_params();
 
+    gpuErrchk(cudaMemset(de, 0, sizeof(NumericType)));
     gpuErrchk(cudaMemset(dg, 0, N*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(dh, 0, N*3*N*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(dm, 0, P*N*3*sizeof(NumericType)));
@@ -26,7 +28,7 @@ void Context<NumericType>::step() {
     		N,
     		P,
     		d_coords,
-    		nullptr,
+    		de,
     		dg,
     		dh,
     		dm);

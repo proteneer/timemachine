@@ -4,7 +4,7 @@
 #include "surreal.cuh"
 
 template <typename CoordType, typename ParamType, typename OutType> 
-inline __device__ void harmonic_angle_gradient(
+inline __device__ OutType harmonic_angle_gradient(
     const CoordType *xs,
     const ParamType *params,
     OutType *grads) {
@@ -55,6 +55,7 @@ inline __device__ void harmonic_angle_gradient(
     grads[1*3+2] = ka*delta*((z0 - z1)*(top)/(n3ij*njk) + (-z1 + z2)*(top)/(nij*n3jk) + (-z0 + 2.0*z1 - z2)/(nijk));
     grads[2*3+2] = ka*((z0 - z1)/(nijk) + (z1 - z2)*(top)/(nij*n3jk))*delta;
 
+    return ka/2*(delta*delta);
 
 }
 
@@ -104,7 +105,9 @@ __global__ void harmonic_angle_total_derivative(
         ps[1] = params[param_idxs[a_idx*2+1]];
         NumericType dxs[9];
 
-        harmonic_angle_gradient<NumericType, NumericType, NumericType>(xs, ps, dxs);
+        NumericType energy = harmonic_angle_gradient<NumericType, NumericType, NumericType>(xs, ps, dxs);
+
+        atomicAdd(energy_out, energy);
 
         for(int i=0; i < 9; i++) {
             atomicAdd(grad_out + indices[i], dxs[i]);

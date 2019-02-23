@@ -89,7 +89,7 @@ class TestAngles(unittest.TestCase):
         test_nrg, test_grads, test_hessians, test_mps = test_angle.total_derivative(x0, angle_params_np.shape[0])
 
         sess = tf.Session()
-        # np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
+        np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
         np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=13)
         np.testing.assert_array_almost_equal(test_hessians, sess.run(ref_hessians, feed_dict={x_ph: x0}), decimal=13)
         np.testing.assert_array_almost_equal(test_mps, sess.run(ref_mps[0], feed_dict={x_ph: x0}), decimal=13)
@@ -172,7 +172,7 @@ class TestBonded(unittest.TestCase):
         test_nrg, test_grads, test_hessians, test_mps = test_bond.total_derivative(x0, bond_params_np.shape[0])
 
         sess = tf.Session()
-        # np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
+        np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: x0}), decimal=13)
         np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: x0}), decimal=13)
         np.testing.assert_array_almost_equal(test_hessians, sess.run(ref_hessians, feed_dict={x_ph: x0}), decimal=13)
         np.testing.assert_array_almost_equal(test_mps, sess.run(ref_mps[0], feed_dict={x_ph: x0}), decimal=13)
@@ -323,8 +323,7 @@ class TestPeriodicTorsion(unittest.TestCase):
             test_nrg, test_grads, test_hessians, test_mps = test_torsion.total_derivative(conf, params_np.shape[0])
 
             sess = tf.Session()
-            # np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: conf}), decimal=13)
-
+            np.testing.assert_array_almost_equal(test_nrg, sess.run(nrg_op, feed_dict={x_ph: conf}), decimal=13)
             np.testing.assert_array_almost_equal(test_grads, sess.run(ref_grad, feed_dict={x_ph: conf}), decimal=12)
             np.testing.assert_array_almost_equal(test_hessians, sess.run(ref_hessians, feed_dict={x_ph: conf}), decimal=12)
             np.testing.assert_array_almost_equal(test_mps, sess.run(ref_mps[0], feed_dict={x_ph: conf}), decimal=12)
