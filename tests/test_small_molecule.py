@@ -80,7 +80,8 @@ class TestSmallMolecule(unittest.TestCase):
         mol = OEMol()
         # OEParseSmiles(mol, 'CCOCCSCC')
         # OEParseSmiles(mol, 'c1ccccc1')
-        OEParseSmiles(mol, 'C1CCCCC1')
+        # OEParseSmiles(mol, 'C1CCCCC1O')
+        OEParseSmiles(mol, 'C([C@@H]1[C@H]([C@@H]([C@H](C(O1)O)O)O)O)O')
         OEAddExplicitHydrogens(mol)
         masses = get_masses(mol)
         num_atoms = mol.NumAtoms()
@@ -125,6 +126,7 @@ class TestSmallMolecule(unittest.TestCase):
         omegaOpts = oeomega.OEOmegaOptions()
         omegaOpts.SetMaxConfs(1)
         omega = oeomega.OEOmega(omegaOpts)
+        omega.SetStrictStereo(False)
 
         if not omega(mol):
             assert 0
