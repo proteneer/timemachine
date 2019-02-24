@@ -168,19 +168,30 @@ Integrator<NumericType>::Integrator(
     cublasErrchk(cublasCreate(&cb_handle_));
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_PHILOX4_32_10));
 
-    // curandSetPseudoRandomGeneratorSeed (&cr_rng_, 1234ULL);
+    // (ytz): looks like by default cuRand always sets the default seed to 0.
+    curandSetPseudoRandomGeneratorSeed(cr_rng_, time(NULL));
 
 }
 
 
 template <typename NumericType>
 void Integrator<NumericType>::reset() {
+    std::cout << "RESETTING: " << N_ << " " << P_ << " " << W_ << " " << this << std::endl;
     step_ = 0;
     gpuErrchk(cudaMemset(d_x_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_v_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_dxdp_t_, 0.0, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_total_buffer_, 0.0, W_*P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_converged_buffer_, 0.0, P_*N_*3*sizeof(NumericType)));
+
+
+    gpuErrchk(cudaMemset(d_energy_, 0, sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_grads_, 0, N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_hessians_, 0, N_*3*N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_mixed_partials_, 0, P_*N_*3*sizeof(NumericType)));
+
+
+    cudaDeviceSynchronize();
 }
 
 
@@ -234,11 +245,17 @@ std::vector<NumericType> Integrator<NumericType>::get_velocities() const {
 
 template<typename NumericType> 
 void Integrator<NumericType>::set_coordinates(std::vector<NumericType> x) {
+    for(size_t i=0; i < x.size(); i++) {
+        // std::cout << "SC: " << x[i] << std::endl;
+    }
     gpuErrchk(cudaMemcpy(d_x_t_, &x[0], N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 };
 
 template<typename NumericType> 
 void Integrator<NumericType>::set_velocities(std::vector<NumericType> v) {
+    for(size_t i=0; i < v.size(); i++) {
+        // std::cout << "SV: " << v[i] << std::endl;
+    }
     gpuErrchk(cudaMemcpy(d_v_t_, &v[0], N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 };
 
@@ -270,7 +287,14 @@ void Integrator<NumericType>::step_gpu(
     int window_k = step_ % W_;
 
     size_t tpb = 32;
+
+
     size_t n_blocks = (P_*N_*3 + tpb - 1) / tpb;
+
+    if(step_ < 5) {
+        std::cout << "REDUCE_TOTAL: " << step_ << " " << window_k << " " << W_ << std::endl;
+    }
+
 
     reduce_total<NumericType><<<n_blocks, tpb>>>(
         coeff_a_,
@@ -302,6 +326,9 @@ void Integrator<NumericType>::step_gpu(
         d_x_t_,
         d_v_t_,
         N_*3);
+
+
+    gpuErrchk(cudaPeekAtLastError());
 
     step_ += 1;
 

@@ -14,6 +14,7 @@ void Context<NumericType>::step() {
 	int N = integrator_->num_atoms();
 	int P = integrator_->num_params();
 
+
     gpuErrchk(cudaMemset(de, 0, sizeof(NumericType)));
     gpuErrchk(cudaMemset(dg, 0, N*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(dh, 0, N*3*N*3*sizeof(NumericType)));

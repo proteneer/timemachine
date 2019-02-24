@@ -149,22 +149,13 @@ class TestSmallMolecule(unittest.TestCase):
 
         return nrgs, offsets, intg, context, x0, total_params
 
-    def run_once(self, nrgs, context, intg, x0, n_steps, total_params):
-
-
+    def run_once(self, nrgs, context, intg, x0, n_steps, total_params, ksize):
         # x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
-
         origin = np.sum(x0, axis=0)/x0.shape[0]
-
-
         num_atoms = x0.shape[0]
-        # for atom in mol.GetAtoms():
-            # print(atom)
-
         num_steps = n_steps
-
-        ofs = oechem.oemolostream("new_frames.xyz")
-        ofs.SetFormat(oechem.OEFormat_XYZ)
+        # ofs = oechem.oemolostream("new_frames.xyz")
+        # ofs.SetFormat(oechem.OEFormat_XYZ)
 
         intg.reset()
         intg.set_coordinates(x0.reshape(-1).tolist())
@@ -172,25 +163,24 @@ class TestSmallMolecule(unittest.TestCase):
 
         start_time = time.time()
 
-        k = 200
+        k = ksize
         reservoir = []
-        count = 0
 
         for step in range(n_steps):
-
-            if count < k:
+            # coords = intg.get_coordinates()
+            # dxdps = intg.get_dxdp()
+            # reservoir.append((np.array(coords).reshape((num_atoms, 3)), np.array(dxdps).reshape((total_params, num_atoms, 3))))
+            if step < k:
                 coords = intg.get_coordinates()
                 dxdps = intg.get_dxdp()
                 reservoir.append((np.array(coords).reshape((num_atoms, 3)), np.array(dxdps).reshape((total_params, num_atoms, 3))))
             else:
-                j = random.randint(0, count)
+                j = random.randint(0, step)
                 if j < k:
                     coords = intg.get_coordinates()
                     dxdps = intg.get_dxdp()
                     reservoir[j] = (np.array(coords).reshape((num_atoms, 3)), np.array(dxdps).reshape((total_params, num_atoms, 3)))
-
             context.step()
-            count += 1
 
         confs = []
         for r in reservoir:
@@ -207,59 +197,76 @@ class TestSmallMolecule(unittest.TestCase):
 
     def test_mol(self):
 
-        nrgs0, offsets0, intg0, context0, init_x_0, total_params_0 = self.initialize_system(dt=0.002, temperature=10)
-        nrgs1, offsets1, intg1, context1, init_x_1, total_params_1 = self.initialize_system(dt=0.002, temperature=50)
+
+        nrgs1, offsets1, intg1, context1, init_x_1, total_params_1 = self.initialize_system(dt=0.001, temperature=10)
 
         # generate the observable
         print("generating observable")
-        confs1, _ = self.run_once(nrgs1, context1, intg1, init_x_1, 40000, total_params_1) 
+        ksize = 400
+        confs1, _ = self.run_once(nrgs1, context1, intg1, init_x_1, 10000, total_params_1, ksize) 
+
+        print("PARAMS 1:")
+        for nrg in nrgs1:
+            print(nrg.get_params())
+
         x1 = tf.convert_to_tensor(confs1)
         obs1_rij = observable.sorted_squared_distances(x1)
 
         # train this secondary system
         print("starting training...")
-        bond_learning_rate = np.array([[0.01, 0.001]])
+        bond_learning_rate = np.array([[0.001, 0.001]])
         angle_learning_rate = np.array([[0.01, 0.001]])
         torsion_learning_rate = np.array([[0.01, 0.001, 0.0]])
         lj_learning_rate = np.array([[0.000, 0.000]])
 
-        for epoch in range(10):
+
+
+        nrgs0, offsets0, intg0, context0, init_x_0, total_params_0 = self.initialize_system(dt=0.001, temperature=10)
+
+
+        for epoch in range(1000): 
+
             print("starting epoch", epoch)
-            confs0, dxdp0 = self.run_once(nrgs0, context0, intg0, init_x_0, 20000, total_params_0)
+            confs0, dxdp0 = self.run_once(nrgs0, context0, intg0, init_x_0, 10000, total_params_0, ksize)
             x0 = tf.convert_to_tensor(confs0)
+
+            # print(confs0[-1], confs1[-1])
+            # assert 0
             obs0_rij = observable.sorted_squared_distances(x0)
-            loss = tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))
-            x0_grads, x1_grads = tf.gradients(loss, [x0, x1])
+            print(obs0_rij.shape, obs1_rij.shape)
+            loss = tf.sqrt(tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))/ksize) # RMSE
+            # x0_grads = tf.gradients(loss, [x0])
 
             sess = tf.Session()
-            np_loss, x0g = sess.run([loss, x0_grads])
+            # np_loss, x0g = sess.run([loss, x0_grads])
+            np_loss = sess.run(loss)
 
-            print("nploss", np_loss)
-            x0g = np.expand_dims(x0g, 1) # [B, 1, N, 3]
-            res = np.multiply(x0g, dxdp0) # dL/dx * dx/dp [B, P, N, 3]
+            print("------------------nploss", np_loss)
+            # x0g = np.expand_dims(x0g, 1) # [B, 1, N, 3]
+            # res = np.multiply(x0g, dxdp0) # dL/dx * dx/dp [B, P, N, 3]
 
-            dLdp = np.sum(res, axis=(0,2,3))
+            # dLdp = np.sum(res, axis=(0,2,3))
 
-            for dparams, nrg in zip(np.split(dLdp, offsets0)[1:], nrgs0):
+            # for dparams, nrg in zip(np.split(dLdp, offsets0)[1:], nrgs0):
 
-                if isinstance(nrg, custom_ops.HarmonicBondGPU_double):
-                    dp = bond_learning_rate * dparams.reshape((-1, 2))
-                    print("BOND CONSTANTS, LENGTHS", dp)
-                elif isinstance(nrg, custom_ops.HarmonicAngleGPU_double):
-                    dp = angle_learning_rate * dparams.reshape((-1, 2))
-                    print("ANGLE CONSTANTS, ANGLES", dp)
-                elif isinstance(nrg, custom_ops.PeriodicTorsionGPU_double):
-                    dp = torsion_learning_rate * dparams.reshape((-1, 3))
-                    print("TORSION CONSTANTS, PERIODS, PHASES", dp)
-                elif isinstance(nrg, custom_ops.LennardJonesGPU_double):
-                    dp = lj_learning_rate * dparams.reshape((-1, 2))
-                    print("LJ SIG, EPS", dp)
-                else:
-                    assert 0
+            #     if isinstance(nrg, custom_ops.HarmonicBondGPU_double):
+            #         dp = bond_learning_rate * dparams.reshape((-1, 2))
+            #         print("BOND CONSTANTS, LENGTHS", dp)
+            #     elif isinstance(nrg, custom_ops.HarmonicAngleGPU_double):
+            #         dp = angle_learning_rate * dparams.reshape((-1, 2))
+            #         print("ANGLE CONSTANTS, ANGLES", dp)
+            #     elif isinstance(nrg, custom_ops.PeriodicTorsionGPU_double):
+            #         dp = torsion_learning_rate * dparams.reshape((-1, 3))
+            #         print("TORSION CONSTANTS, PERIODS, PHASES", dp)
+            #     elif isinstance(nrg, custom_ops.LennardJonesGPU_double):
+            #         dp = lj_learning_rate * dparams.reshape((-1, 2))
+            #         print("LJ SIG, EPS", dp)
+            #     else:
+            #         assert 0
 
-                cp = nrg.get_params()
+            #     cp = nrg.get_params()
                 # nrg.set_params(cp - dp.reshape(-1))
-                nrg.set_params(cp)
+                # nrg.set_params(cp)
 
         assert 0
 

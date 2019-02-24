@@ -103,7 +103,7 @@ def _extractQuantity(node, parent, name, unit_name=None):
        If specified, use this attribute name of 'parent' to look up units
 
     """
-    print(node, parent, name, unit_name)
+    # print(node, parent, name, unit_name)
     # Check for expected attributes
     if name not in node.attrib:
         if 'sourceline' in node.attrib:
@@ -199,7 +199,7 @@ def construct_energies(ff, mol):
                 for (atom_indices, pid, smirks) in labels[mol_entry][force]:
                     if pid not in bond_params_map:
                         k, length = get_bonded_term(pid)
-                        print(k, length)
+                        # print(k, length)
                         k_idx = len(bond_params_array)
                         bond_params_array.append(k)
                         length_idx = len(bond_params_array)
@@ -208,6 +208,8 @@ def construct_energies(ff, mol):
 
                     bond_params_idxs.extend(bond_params_map[pid])
                     bond_atom_idxs.extend(atom_indices)
+
+                print(bond_params_array, list(range(start_params, start_params+len(bond_params_array))), bond_params_idxs, bond_atom_idxs)
 
                 bond_nrg = custom_ops.HarmonicBondGPU_double(
                     bond_params_array,
@@ -222,6 +224,7 @@ def construct_energies(ff, mol):
                 start_params += len(bond_params_array)
             elif force == 'HarmonicAngleGenerator':
                 # assert 0
+                continue
                 angle_params_map = {}
                 angle_params_array = []
                 angle_params_idxs = []
@@ -231,7 +234,7 @@ def construct_energies(ff, mol):
                     if pid not in angle_params_map:
 
                         k, angle = get_angle_term(pid)
-                        print(k, angle)
+                        # print(k, angle)
                         k_idx = len(angle_params_array)
                         angle_params_array.append(k)
 
@@ -241,6 +244,8 @@ def construct_energies(ff, mol):
 
                     angle_params_idxs.extend(angle_params_map[pid])
                     angle_atom_idxs.extend(atom_indices)
+
+                print(angle_params_array, list(range(start_params, start_params+len(angle_params_array))), angle_params_idxs, angle_atom_idxs)
 
                 angle_nrg = custom_ops.HarmonicAngleGPU_double(
                     angle_params_array,
@@ -253,7 +258,7 @@ def construct_energies(ff, mol):
                 offsets.append(start_params)
                 start_params += len(angle_params_array)
             elif force == 'PeriodicTorsionGenerator':
-
+                continue
                 torsion_params_map = {}
                 torsion_params_array = []
                 torsion_params_idxs = []
@@ -276,7 +281,7 @@ def construct_energies(ff, mol):
 
                             all_terms.append((k_idx, phase_idx, period_idx))
 
-                        print("inserting torsional parameter", pid)
+                        # print("inserting torsional parameter", pid)
                         torsion_params_map[pid] = all_terms
 
                     for k_idx, phase_idx, period_idx in torsion_params_map[pid]:
