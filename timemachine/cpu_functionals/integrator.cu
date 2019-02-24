@@ -176,7 +176,7 @@ Integrator<NumericType>::Integrator(
 
 template <typename NumericType>
 void Integrator<NumericType>::reset() {
-    std::cout << "RESETTING: " << N_ << " " << P_ << " " << W_ << " " << this << std::endl;
+    // std::cout << "RESETTING: " << N_ << " " << P_ << " " << W_ << " " << this << std::endl;
     step_ = 0;
     gpuErrchk(cudaMemset(d_x_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_v_t_, 0.0, N_*3*sizeof(NumericType)));
@@ -291,9 +291,9 @@ void Integrator<NumericType>::step_gpu(
 
     size_t n_blocks = (P_*N_*3 + tpb - 1) / tpb;
 
-    if(step_ < 5) {
-        std::cout << "REDUCE_TOTAL: " << step_ << " " << window_k << " " << W_ << std::endl;
-    }
+    // if(step_ < 5) {
+        // std::cout << "REDUCE_TOTAL: " << step_ << " " << window_k << " " << W_ << std::endl;
+    // }
 
 
     reduce_total<NumericType><<<n_blocks, tpb>>>(

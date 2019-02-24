@@ -93,8 +93,8 @@ class TestSmallMolecule(unittest.TestCase):
         mol = OEMol()
         # OEParseSmiles(mol, 'CCOCCSCC')
         # OEParseSmiles(mol, 'c1ccccc1')
-        # OEParseSmiles(mol, 'C1CCCCC1O')
-        OEParseSmiles(mol, 'C([C@@H]1[C@H]([C@@H]([C@H](C(O1)O)O)O)O)O')
+        OEParseSmiles(mol, 'C1CCCCC1')
+        # OEParseSmiles(mol, 'C([C@@H]1[C@H]([C@@H]([C@H](C(O1)O)O)O)O)O')
         OEAddExplicitHydrogens(mol)
         masses = get_masses(mol)
         num_atoms = mol.NumAtoms()
@@ -111,7 +111,7 @@ class TestSmallMolecule(unittest.TestCase):
 
         # gradient descent
         dt = dt
-        friction = 40.0
+        friction = 10.0
         temperature = temperature
 
         a,b,c = get_abc_coefficents(masses, dt, friction, temperature)
@@ -150,7 +150,7 @@ class TestSmallMolecule(unittest.TestCase):
         return nrgs, offsets, intg, context, x0, total_params
 
     def run_once(self, nrgs, context, intg, x0, n_steps, total_params, ksize):
-        # x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
+        x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
         origin = np.sum(x0, axis=0)/x0.shape[0]
         num_atoms = x0.shape[0]
         num_steps = n_steps
@@ -198,73 +198,68 @@ class TestSmallMolecule(unittest.TestCase):
     def test_mol(self):
 
 
-        nrgs1, offsets1, intg1, context1, init_x_1, total_params_1 = self.initialize_system(dt=0.001, temperature=10)
+        nrgs1, offsets1, intg1, context1, init_x_1, total_params_1 = self.initialize_system(dt=0.001, temperature=20, forcefield_file='forcefield/smirnoff99Frosst.offxml')
 
         # generate the observable
         print("generating observable")
-        ksize = 400
-        confs1, _ = self.run_once(nrgs1, context1, intg1, init_x_1, 10000, total_params_1, ksize) 
-
-        print("PARAMS 1:")
-        for nrg in nrgs1:
-            print(nrg.get_params())
-
+        ksize = 500
+        confs1, _ = self.run_once(nrgs1, context1, intg1, init_x_1, 40000, total_params_1, ksize) 
         x1 = tf.convert_to_tensor(confs1)
         obs1_rij = observable.sorted_squared_distances(x1)
 
         # train this secondary system
         print("starting training...")
-        bond_learning_rate = np.array([[0.001, 0.001]])
+        bond_learning_rate = np.array([[0.1, 0.0001]])
         angle_learning_rate = np.array([[0.01, 0.001]])
         torsion_learning_rate = np.array([[0.01, 0.001, 0.0]])
         lj_learning_rate = np.array([[0.000, 0.000]])
 
-
-
-        nrgs0, offsets0, intg0, context0, init_x_0, total_params_0 = self.initialize_system(dt=0.001, temperature=10)
-
+        nrgs0, offsets0, intg0, context0, init_x_0, total_params_0 = self.initialize_system(dt=0.001, temperature=20, forcefield_file='forcefield/smirnoff99Frosst_perturbed.offxml')
 
         for epoch in range(1000): 
 
             print("starting epoch", epoch)
-            confs0, dxdp0 = self.run_once(nrgs0, context0, intg0, init_x_0, 10000, total_params_0, ksize)
+            confs0, dxdp0 = self.run_once(nrgs0, context0, intg0, init_x_0, 40000, total_params_0, ksize)
             x0 = tf.convert_to_tensor(confs0)
-
-            # print(confs0[-1], confs1[-1])
-            # assert 0
             obs0_rij = observable.sorted_squared_distances(x0)
-            print(obs0_rij.shape, obs1_rij.shape)
             loss = tf.sqrt(tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))/ksize) # RMSE
-            # x0_grads = tf.gradients(loss, [x0])
+            x0_grads = tf.gradients(loss, x0)[0]
 
+            config = tf.ConfigProto()
+            config.gpu_options.allow_growth=True
             sess = tf.Session()
-            # np_loss, x0g = sess.run([loss, x0_grads])
-            np_loss = sess.run(loss)
+            np_loss, x0g = sess.run([loss, x0_grads])
+            # np_loss = sess.run(loss)
 
-            print("------------------nploss", np_loss)
-            # x0g = np.expand_dims(x0g, 1) # [B, 1, N, 3]
-            # res = np.multiply(x0g, dxdp0) # dL/dx * dx/dp [B, P, N, 3]
+            print("------------------LOSS", np_loss)
+            # print("x0g shape", x0g.shape)
+            # assert 0
+            x0g = np.expand_dims(x0g, 1) # [B, 1, N, 3]
+            res = np.multiply(x0g, dxdp0) # dL/dx * dx/dp [B, P, N, 3]
 
-            # dLdp = np.sum(res, axis=(0,2,3))
+            dLdp = np.sum(res, axis=(0,2,3))
 
-            # for dparams, nrg in zip(np.split(dLdp, offsets0)[1:], nrgs0):
+            for dparams, nrg in zip(np.split(dLdp, offsets0)[1:], nrgs0):
+                if isinstance(nrg, custom_ops.HarmonicBondGPU_double):
+                    cp = nrg.get_params()
+                    dp = bond_learning_rate * dparams.reshape((-1, 2))
+                    print("BOND PARAMS", cp)
+                    print("BOND CONSTANTS, LENGTHS", dp)
+                    nrg.set_params(cp - dp.reshape(-1))
+                elif isinstance(nrg, custom_ops.HarmonicAngleGPU_double):
+                    dp = angle_learning_rate * dparams.reshape((-1, 2))
+                    print("ANGLE CONSTANTS, ANGLES", dp)
+                elif isinstance(nrg, custom_ops.PeriodicTorsionGPU_double):
+                    dp = torsion_learning_rate * dparams.reshape((-1, 3))
+                    print("TORSION CONSTANTS, PERIODS, PHASES", dp)
+                elif isinstance(nrg, custom_ops.LennardJonesGPU_double):
+                    dp = lj_learning_rate * dparams.reshape((-1, 2))
+                    print("LJ SIG, EPS", dp)
+                else:
+                    assert 0
 
-            #     if isinstance(nrg, custom_ops.HarmonicBondGPU_double):
-            #         dp = bond_learning_rate * dparams.reshape((-1, 2))
-            #         print("BOND CONSTANTS, LENGTHS", dp)
-            #     elif isinstance(nrg, custom_ops.HarmonicAngleGPU_double):
-            #         dp = angle_learning_rate * dparams.reshape((-1, 2))
-            #         print("ANGLE CONSTANTS, ANGLES", dp)
-            #     elif isinstance(nrg, custom_ops.PeriodicTorsionGPU_double):
-            #         dp = torsion_learning_rate * dparams.reshape((-1, 3))
-            #         print("TORSION CONSTANTS, PERIODS, PHASES", dp)
-            #     elif isinstance(nrg, custom_ops.LennardJonesGPU_double):
-            #         dp = lj_learning_rate * dparams.reshape((-1, 2))
-            #         print("LJ SIG, EPS", dp)
-            #     else:
-            #         assert 0
 
-            #     cp = nrg.get_params()
+                
                 # nrg.set_params(cp - dp.reshape(-1))
                 # nrg.set_params(cp)
 
