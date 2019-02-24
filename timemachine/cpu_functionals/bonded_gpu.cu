@@ -19,7 +19,8 @@ HarmonicBondGPU<NumericType>::HarmonicBondGPU(
     std::vector<size_t> global_param_idxs,
     std::vector<size_t> param_idxs,
     std::vector<size_t> bond_idxs
-) : n_bonds_(bond_idxs.size()/2) {
+) : P_(params.size()),
+    n_bonds_(bond_idxs.size()/2) {
 
     // convert to int version
     std::vector<int> int_global_param_idxs;
@@ -58,6 +59,18 @@ HarmonicBondGPU<NumericType>::~HarmonicBondGPU() {
 
 };
 
+
+template <typename NumericType>
+void HarmonicBondGPU<NumericType>::set_params(const std::vector<NumericType> &params) {
+    gpuErrchk(cudaMemcpy(d_params_, &params[0], params.size()*sizeof(NumericType), cudaMemcpyHostToDevice));
+}
+
+template <typename NumericType>
+std::vector<NumericType> HarmonicBondGPU<NumericType>::get_params() const {
+    std::vector<NumericType> buf(P_);
+    gpuErrchk(cudaMemcpy(&buf[0], d_params_, P_*sizeof(NumericType), cudaMemcpyDeviceToHost));
+    return buf;
+}
 
 template <typename NumericType>
 void HarmonicBondGPU<NumericType>::total_derivative(
@@ -158,7 +171,8 @@ HarmonicAngleGPU<NumericType>::HarmonicAngleGPU(
     std::vector<size_t> global_param_idxs,
     std::vector<size_t> param_idxs,
     std::vector<size_t> angle_idxs
-) : n_angles_(angle_idxs.size()/3) {
+) : P_(params.size()),
+    n_angles_(angle_idxs.size()/3) {
 
     // convert to int version
     std::vector<int> int_global_param_idxs;
@@ -197,6 +211,17 @@ HarmonicAngleGPU<NumericType>::~HarmonicAngleGPU() {
 
 };
 
+template <typename NumericType>
+void HarmonicAngleGPU<NumericType>::set_params(const std::vector<NumericType> &params) {
+    gpuErrchk(cudaMemcpy(d_params_, &params[0], params.size()*sizeof(NumericType), cudaMemcpyHostToDevice));
+}
+
+template <typename NumericType>
+std::vector<NumericType> HarmonicAngleGPU<NumericType>::get_params() const {
+    std::vector<NumericType> buf(P_);
+    gpuErrchk(cudaMemcpy(&buf[0], d_params_, P_*sizeof(NumericType), cudaMemcpyDeviceToHost));
+    return buf;
+}
 
 template <typename NumericType>
 void HarmonicAngleGPU<NumericType>::total_derivative(
@@ -298,7 +323,8 @@ PeriodicTorsionGPU<NumericType>::PeriodicTorsionGPU(
     std::vector<size_t> global_param_idxs,
     std::vector<size_t> param_idxs,
     std::vector<size_t> torsion_idxs
-) : n_torsions_(torsion_idxs.size()/4) {
+) : P_(params.size()),
+    n_torsions_(torsion_idxs.size()/4) {
 
     // convert to int version
     std::vector<int> int_global_param_idxs;
@@ -337,6 +363,18 @@ PeriodicTorsionGPU<NumericType>::~PeriodicTorsionGPU() {
 
 };
 
+template <typename NumericType>
+void PeriodicTorsionGPU<NumericType>::set_params(const std::vector<NumericType> &params) {
+    gpuErrchk(cudaMemcpy(d_params_, &params[0], params.size()*sizeof(NumericType), cudaMemcpyHostToDevice));
+}
+
+
+template <typename NumericType>
+std::vector<NumericType> PeriodicTorsionGPU<NumericType>::get_params() const {
+    std::vector<NumericType> buf(P_);
+    gpuErrchk(cudaMemcpy(&buf[0], d_params_, P_*sizeof(NumericType), cudaMemcpyDeviceToHost));
+    return buf;
+}
 
 template <typename NumericType>
 void PeriodicTorsionGPU<NumericType>::total_derivative(

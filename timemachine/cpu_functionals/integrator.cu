@@ -99,6 +99,7 @@ __global__ void reduce_total(
 
 namespace timemachine {
 
+
 template<typename NumericType> 
 Integrator<NumericType>::Integrator(
     NumericType dt,
@@ -139,7 +140,6 @@ Integrator<NumericType>::Integrator(
     }
 
     // 1. Allocate memory on the GPU
-    gpuErrchk(cudaMalloc((void**)&d_energy_, sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_x_t_, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_v_t_, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_dxdp_t_, P_*N_*3*sizeof(NumericType)));
@@ -148,29 +148,39 @@ Integrator<NumericType>::Integrator(
     gpuErrchk(cudaMalloc((void**)&d_coeff_bs_, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_coeff_cs_, N_*3*sizeof(NumericType)));
 
-    // (ytz): these are uninitialized. It's up to the user to initialize them.
+    // 2. Per-step buffers
+    gpuErrchk(cudaMalloc((void**)&d_energy_, sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_grads_, N_*3*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_hessians_, N_*3*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_mixed_partials_, P_*N_*3*sizeof(NumericType)));
-
     gpuErrchk(cudaMalloc((void**)&d_rng_buffer_, N_*3*sizeof(NumericType)));
 
-    // 2. Memset
-    gpuErrchk(cudaMemset(d_energy_, 0.0, sizeof(NumericType)));
+    // 3. Memset
     gpuErrchk(cudaMemset(d_x_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_v_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_dxdp_t_, 0.0, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_total_buffer_, 0.0, W_*P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_converged_buffer_, 0.0, P_*N_*3*sizeof(NumericType)));
+
     gpuErrchk(cudaMemcpy(d_coeff_bs_, &expanded_coeff_bs[0], P_*N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_coeff_cs_, &expanded_coeff_cs[0], N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
     cublasErrchk(cublasCreate(&cb_handle_));
-
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_PHILOX4_32_10));
 
     // curandSetPseudoRandomGeneratorSeed (&cr_rng_, 1234ULL);
 
+}
+
+
+template <typename NumericType>
+void Integrator<NumericType>::reset() {
+    step_ = 0;
+    gpuErrchk(cudaMemset(d_x_t_, 0.0, N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_v_t_, 0.0, N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_dxdp_t_, 0.0, P_*N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_total_buffer_, 0.0, W_*P_*N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_converged_buffer_, 0.0, P_*N_*3*sizeof(NumericType)));
 }
 
 

@@ -78,15 +78,16 @@ def write_xyz(ofs, mol, coords):
 
 class TestSmallMolecule(unittest.TestCase):
 
-    # def test_openmm(self):
+    # omm_system = ff.createSystem(topology, [mol])
+    # print(type(omm_system))
+    # with open("system.xml", "w") as fh:
+    #     fh.write(openmm.openmm.XmlSerializer.serialize(omm_system))
 
-
-
-    def run_once(
+    # ff = ForceField(get_data_filename('forcefield/Frosst_AlkEthOH.offxml') )
+    def initialize_system(
         self,
         dt=0.001,
         temperature=100,
-        n_steps=10000,
         forcefield_file='forcefield/smirnoff99Frosst.offxml'):
 
         mol = OEMol()
@@ -99,18 +100,10 @@ class TestSmallMolecule(unittest.TestCase):
         num_atoms = mol.NumAtoms()
 
         topology = generateTopologyFromOEMol(mol)
-        # ff = ForceField(get_data_filename('forcefield/Frosst_AlkEthOH.offxml') )
+
         ff = ForceField(get_data_filename(forcefield_file))
 
-        omm_system = ff.createSystem(topology, [mol])
-
-        print(type(omm_system))
-        with open("system.xml", "w") as fh:
-            fh.write(openmm.openmm.XmlSerializer.serialize(omm_system))
-        # assert 0
-
         nrgs, total_params, offsets = system_builder.construct_energies(ff, mol)
-
 
         # dt = 0.0025
         # friction = 10.0
@@ -118,13 +111,14 @@ class TestSmallMolecule(unittest.TestCase):
 
         # gradient descent
         dt = dt
-        friction = 10.0
+        friction = 40.0
         temperature = temperature
 
         a,b,c = get_abc_coefficents(masses, dt, friction, temperature)
 
-        buf_size = estimate_buffer_size(1e-16, a)
+        buf_size = estimate_buffer_size(1e-10, a)
 
+        print("BUFFER SIZE", buf_size)
         omegaOpts = oeomega.OEOmegaOptions()
         omegaOpts.SetMaxConfs(1)
         omega = oeomega.OEOmega(omegaOpts)
@@ -135,7 +129,6 @@ class TestSmallMolecule(unittest.TestCase):
 
         x0 = mol_coords_to_numpy_array(mol)/10
 
-        x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
 
         intg = custom_ops.Integrator_double(
             dt,
@@ -152,26 +145,38 @@ class TestSmallMolecule(unittest.TestCase):
             intg
         )
 
+        x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
+
+        return nrgs, offsets, intg, context, x0, total_params
+
+    def run_once(self, nrgs, context, intg, x0, n_steps, total_params):
+
+
+        # x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
+
         origin = np.sum(x0, axis=0)/x0.shape[0]
 
-        for atom in mol.GetAtoms():
-            print(atom)
+
+        num_atoms = x0.shape[0]
+        # for atom in mol.GetAtoms():
+            # print(atom)
 
         num_steps = n_steps
 
         ofs = oechem.oemolostream("new_frames.xyz")
         ofs.SetFormat(oechem.OEFormat_XYZ)
 
+        intg.reset()
         intg.set_coordinates(x0.reshape(-1).tolist())
         intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
 
         start_time = time.time()
 
-        k = 500
+        k = 200
         reservoir = []
         count = 0
 
-        for step in range(10000):
+        for step in range(n_steps):
 
             if count < k:
                 coords = intg.get_coordinates()
@@ -202,40 +207,61 @@ class TestSmallMolecule(unittest.TestCase):
 
     def test_mol(self):
 
-        dx0, dxdp0 = self.run_once(dt=0.002, temperature=100)
-        dx1, dxdp1 = self.run_once()
+        nrgs0, offsets0, intg0, context0, init_x_0, total_params_0 = self.initialize_system(dt=0.002, temperature=10)
+        nrgs1, offsets1, intg1, context1, init_x_1, total_params_1 = self.initialize_system(dt=0.002, temperature=50)
 
-        x0 = tf.convert_to_tensor(dx0)
-        x1 = tf.convert_to_tensor(dx1)
-
-        obs0_rij = observable.sorted_squared_distances(x0)
+        # generate the observable
+        print("generating observable")
+        confs1, _ = self.run_once(nrgs1, context1, intg1, init_x_1, 40000, total_params_1) 
+        x1 = tf.convert_to_tensor(confs1)
         obs1_rij = observable.sorted_squared_distances(x1)
-        loss = tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))
 
-        x0_grads, x1_grads = tf.gradients(loss, [x0, x1])
+        # train this secondary system
+        print("starting training...")
+        bond_learning_rate = np.array([[0.01, 0.001]])
+        angle_learning_rate = np.array([[0.01, 0.001]])
+        torsion_learning_rate = np.array([[0.01, 0.001, 0.0]])
+        lj_learning_rate = np.array([[0.000, 0.000]])
 
-        sess = tf.Session()
-        np_loss, x0g = sess.run([loss, x0_grads])
-        x0g = np.expand_dims(x0g, 1)
-        res = np.multiply(x0g, dxdp0)
+        for epoch in range(10):
+            print("starting epoch", epoch)
+            confs0, dxdp0 = self.run_once(nrgs0, context0, intg0, init_x_0, 20000, total_params_0)
+            x0 = tf.convert_to_tensor(confs0)
+            obs0_rij = observable.sorted_squared_distances(x0)
+            loss = tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))
+            x0_grads, x1_grads = tf.gradients(loss, [x0, x1])
 
-        print(np_loss, np.sum(res, axis=(0,2,3)))
+            sess = tf.Session()
+            np_loss, x0g = sess.run([loss, x0_grads])
 
+            print("nploss", np_loss)
+            x0g = np.expand_dims(x0g, 1) # [B, 1, N, 3]
+            res = np.multiply(x0g, dxdp0) # dL/dx * dx/dp [B, P, N, 3]
 
+            dLdp = np.sum(res, axis=(0,2,3))
 
+            for dparams, nrg in zip(np.split(dLdp, offsets0)[1:], nrgs0):
 
+                if isinstance(nrg, custom_ops.HarmonicBondGPU_double):
+                    dp = bond_learning_rate * dparams.reshape((-1, 2))
+                    print("BOND CONSTANTS, LENGTHS", dp)
+                elif isinstance(nrg, custom_ops.HarmonicAngleGPU_double):
+                    dp = angle_learning_rate * dparams.reshape((-1, 2))
+                    print("ANGLE CONSTANTS, ANGLES", dp)
+                elif isinstance(nrg, custom_ops.PeriodicTorsionGPU_double):
+                    dp = torsion_learning_rate * dparams.reshape((-1, 3))
+                    print("TORSION CONSTANTS, PERIODS, PHASES", dp)
+                elif isinstance(nrg, custom_ops.LennardJonesGPU_double):
+                    dp = lj_learning_rate * dparams.reshape((-1, 2))
+                    print("LJ SIG, EPS", dp)
+                else:
+                    assert 0
+
+                cp = nrg.get_params()
+                # nrg.set_params(cp - dp.reshape(-1))
+                nrg.set_params(cp)
 
         assert 0
-
-# 
-        print(tape.gradient(loss, x0))
-
-        print("mutual loss", )
-
-
-        assert 0
-
-
 
         for step in range(num_steps):
 

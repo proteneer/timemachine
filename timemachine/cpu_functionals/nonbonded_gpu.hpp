@@ -15,6 +15,7 @@ private:
     int* d_global_param_idxs_;
     int* d_param_idxs_;
     NumericType* d_scale_matrix_;
+    int P_;
 
 public:
 
@@ -26,6 +27,10 @@ public:
     );
 
     ~ElectrostaticsGPU();
+
+    void set_params(const std::vector<NumericType> &new_params);
+
+    std::vector<NumericType> get_params() const;
 
     void total_derivative(
         const size_t n_atoms,
@@ -60,6 +65,7 @@ private:
     int* d_global_param_idxs_;
     int* d_param_idxs_;
     NumericType* d_scale_matrix_;
+    int P_;
 
 public:
 
@@ -71,6 +77,10 @@ public:
     );
 
     ~LennardJonesGPU();
+
+    void set_params(const std::vector<NumericType> &new_params);
+
+    std::vector<NumericType> get_params() const;
 
     void total_derivative(
         const size_t n_atoms,

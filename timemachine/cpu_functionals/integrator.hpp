@@ -60,6 +60,8 @@ private:
 
 public:
 
+    void reset();
+
     NumericType* get_device_energy() {
       return d_energy_;
     }

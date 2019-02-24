@@ -295,7 +295,7 @@ def construct_energies(ff, mol):
                 start_params += len(torsion_params_array)
 
             elif force == 'NonbondedGenerator':
-                # continue
+                continue
                 print("\n%s:" % force)
 
                 nbg = None
