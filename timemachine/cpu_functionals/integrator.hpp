@@ -116,8 +116,6 @@ public:
 
     ~Integrator();
 
-    void reset();
-
     void step_cpu(
         const NumericType *h_grads,
         const NumericType *h_hessians,

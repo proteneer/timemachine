@@ -103,7 +103,7 @@ class TestSmallMolecule(unittest.TestCase):
 
         ff = ForceField(get_data_filename(forcefield_file))
 
-        nrgs, total_params, offsets = system_builder.construct_energies(ff, mol)
+        nrgs, total_params, offsets = system_builder.construct_energies(ff, mol, False)
 
         # dt = 0.0025
         # friction = 10.0

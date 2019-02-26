@@ -166,10 +166,6 @@ Integrator<NumericType>::Integrator(
     gpuErrchk(cudaMemcpy(d_coeff_cs_, &expanded_coeff_cs[0], N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
     cublasErrchk(cublasCreate(&cb_handle_));
-<<<<<<< HEAD
-=======
-    // std::cout << "curand init" << std::endl;
->>>>>>> master
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_PHILOX4_32_10));
 
     // (ytz): looks like by default cuRand always sets the default seed to 0.
@@ -218,18 +214,6 @@ Integrator<NumericType>::~Integrator() {
     cublasErrchk(cublasDestroy(cb_handle_));
     curandErrchk(curandDestroyGenerator(cr_rng_));
 }
-
-
-template<typename NumericType> 
-void Integrator<NumericType>::reset() {
-    step_ = 0;
-    gpuErrchk(cudaMalloc((void**)&d_x_t_, N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMalloc((void**)&d_v_t_, N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMalloc((void**)&d_dxdp_t_, P_*N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMalloc((void**)&d_total_buffer_, W_*P_*N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMalloc((void**)&d_converged_buffer_, P_*N_*3*sizeof(NumericType)));
-}
-
 
 template<typename NumericType> 
 std::vector<NumericType> Integrator<NumericType>::get_dxdp() const {
