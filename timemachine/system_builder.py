@@ -1,3 +1,4 @@
+from simtk import unit
 
 from timemachine.cpu_functionals import custom_ops
 import numpy as np
@@ -133,7 +134,7 @@ def _extractQuantity(node, parent, name, unit_name=None):
 
     return quantity
 
-def construct_energies(ff, mol):
+def construct_energies(ff, mol, am1_charges=True):
     """
     Construct energies given a forcefield and a molecule.
 
@@ -144,6 +145,9 @@ def construct_energies(ff, mol):
 
     mol: oechem.OEMol
         OpenEye Mol object
+
+    charges: bool
+        Whether or not we apply charges 
 
     Returns
     -------
@@ -312,6 +316,7 @@ def construct_energies(ff, mol):
 
                 assert nbg is not None
 
+                es14scale = nbg.coulomb14scale
                 lj14scale = nbg.lj14scale
                 lj_params_map = {}
                 lj_params_array = []
@@ -341,5 +346,38 @@ def construct_energies(ff, mol):
                 nrgs.append(lj_nrg)
                 offsets.append(start_params)
                 start_params += len(lj_params_array)
+
+    if am1_charges:
+
+        for nrg in nrgs:
+            assert not isinstance(nrg, custom_ops.ElectrostaticsGPU_double)
+
+        ff._assignPartialCharges(mol, "OECharges_AM1BCCSym")
+
+        es_scale_matrix = generate_scale_matrix(
+            np.array(bond_atom_idxs).reshape(-1, 2),
+            es14scale,
+            N
+        )
+
+        charge_params = []
+        charge_idxs = []
+
+        for atom_idx, atom in enumerate(mol.GetAtoms()):
+            charge_params.append((atom.GetPartialCharge()*unit.elementary_charge).value_in_unit_system(unit.md_unit_system))
+            charge_idxs.append(atom_idx)
+
+        charge_nrg = custom_ops.ElectrostaticsGPU_double(
+            charge_params,
+            list(range(start_params, start_params+len(charge_params))),
+            charge_idxs,
+            es_scale_matrix.reshape(-1)
+        )
+
+        # print("CHARGE_PARAMS", charge_params, len(charge_params))
+
+        nrgs.append(charge_nrg)
+        offsets.append(start_params)
+        start_params += len(charge_params)
 
     return nrgs, start_params, offsets

@@ -166,6 +166,10 @@ Integrator<NumericType>::Integrator(
     gpuErrchk(cudaMemcpy(d_coeff_cs_, &expanded_coeff_cs[0], N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
 
     cublasErrchk(cublasCreate(&cb_handle_));
+<<<<<<< HEAD
+=======
+    // std::cout << "curand init" << std::endl;
+>>>>>>> master
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_PHILOX4_32_10));
 
     // (ytz): looks like by default cuRand always sets the default seed to 0.
@@ -214,6 +218,18 @@ Integrator<NumericType>::~Integrator() {
     cublasErrchk(cublasDestroy(cb_handle_));
     curandErrchk(curandDestroyGenerator(cr_rng_));
 }
+
+
+template<typename NumericType> 
+void Integrator<NumericType>::reset() {
+    step_ = 0;
+    gpuErrchk(cudaMalloc((void**)&d_x_t_, N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMalloc((void**)&d_v_t_, N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMalloc((void**)&d_dxdp_t_, P_*N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMalloc((void**)&d_total_buffer_, W_*P_*N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMalloc((void**)&d_converged_buffer_, P_*N_*3*sizeof(NumericType)));
+}
+
 
 template<typename NumericType> 
 std::vector<NumericType> Integrator<NumericType>::get_dxdp() const {
@@ -281,40 +297,32 @@ void Integrator<NumericType>::step_gpu(
     const NumericType *d_hessians,
     NumericType *d_mixed_partials) {
 
-    hessian_vector_product(d_hessians_, d_dxdp_t_, d_mixed_partials);
-    // reduce_total_derivatives(d_mixed_partials_, step_ % W_);
-
-    int window_k = step_ % W_;
-
     size_t tpb = 32;
 
+    if(d_hessians != nullptr && d_mixed_partials != nullptr) {
+        hessian_vector_product(d_hessians_, d_dxdp_t_, d_mixed_partials);
+        // reduce_total_derivatives(d_mixed_partials_, step_ % W_);
+        int window_k = step_ % W_;
+        
+        size_t n_blocks = (P_*N_*3 + tpb - 1) / tpb;
+        reduce_total<NumericType><<<n_blocks, tpb>>>(
+            coeff_a_,
+            d_coeff_bs_,
+            d_mixed_partials_,
+            d_total_buffer_,
+            d_converged_buffer_,
+            d_dxdp_t_,
+            dt_,
+            window_k,
+            W_,
+            P_*N_*3
+        );
+        gpuErrchk(cudaPeekAtLastError());
+    }
 
-    size_t n_blocks = (P_*N_*3 + tpb - 1) / tpb;
-
-    // if(step_ < 5) {
-        // std::cout << "REDUCE_TOTAL: " << step_ << " " << window_k << " " << W_ << std::endl;
-    // }
-
-
-    reduce_total<NumericType><<<n_blocks, tpb>>>(
-        coeff_a_,
-        d_coeff_bs_,
-        d_mixed_partials_,
-        d_total_buffer_,
-        d_converged_buffer_,
-        d_dxdp_t_,
-        dt_,
-        window_k,
-        W_,
-        P_*N_*3
-    );
-
-    gpuErrchk(cudaPeekAtLastError());
-
-    n_blocks = (N_*3 + tpb - 1) / tpb;
+    size_t n_blocks = (N_*3 + tpb - 1) / tpb;
 
     // generate new random numbers
-    // std::cout << step_ << std::endl;
     curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N_*3, 0.0, 1.0));
     reduce_velocities<NumericType><<<n_blocks, tpb>>>(
         d_rng_buffer_,

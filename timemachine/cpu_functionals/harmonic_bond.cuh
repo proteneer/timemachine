@@ -14,6 +14,8 @@ __global__ void harmonic_bond_total_derivative(
     int N,
     int B) {
 
+    const bool inference = (hessian_out == nullptr) || (mp_out == nullptr);
+
     auto bond_idx = blockDim.x*blockIdx.x + threadIdx.x;
 
     if(bond_idx < B) {
@@ -60,61 +62,66 @@ __global__ void harmonic_bond_total_derivative(
         atomicAdd(grad_out + dst_idx*3 + 1, dst_grad_dy);
         atomicAdd(grad_out + dst_idx*3 + 2, dst_grad_dz);
 
-        // hessians
-        // (ytz): this can be optimized pretty easily if the need ever arises.
-        atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + src_idx*3 + 0, kb*(db*-dx*dx/d3ij + db/dij + d2x/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + src_idx*3 + 1, kb*(db*dx*-dy/d3ij + dx*dy/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + src_idx*3 + 2, kb*(db*dx*-dz/d3ij + dx*dz/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + dst_idx*3 + 0, kb*(db*d2x/d3ij - db/dij + -dx*dx/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + dst_idx*3 + 1, kb*(db*dx*dy/d3ij + dx*-dy/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + dst_idx*3 + 2, kb*(db*dx*dz/d3ij + dx*-dz/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + src_idx*3 + 0, kb*(db*-dx*dy/d3ij + dx*dy/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + src_idx*3 + 1, kb*(db*-dy*dy/d3ij + db/dij + d2y/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + src_idx*3 + 2, kb*(db*dy*-dz/d3ij + dy*dz/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + dst_idx*3 + 0, kb*(db*dx*dy/d3ij + -dx*dy/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + dst_idx*3 + 1, kb*(db*d2y/d3ij - db/dij + -dy*dy/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + dst_idx*3 + 2, kb*(db*dy*dz/d3ij + dy*-dz/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + src_idx*3 + 0, kb*(db*-dx*dz/d3ij + dx*dz/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + src_idx*3 + 1, kb*(db*-dy*dz/d3ij + dy*dz/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + src_idx*3 + 2, kb*(db*-dz*dz/d3ij + db/dij + d2z/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + dst_idx*3 + 0, kb*(db*dx*dz/d3ij + -dx*dz/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + dst_idx*3 + 1, kb*(db*dy*dz/d3ij + -dy*dz/d2ij));
-        atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + dst_idx*3 + 2, kb*(db*d2z/d3ij - db/dij + -dz*dz/d2ij));
+        if(!inference) {
 
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + src_idx*3 + 0, kb*(db*d2x/d3ij - db/dij + -dx*dx/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + src_idx*3 + 1, kb*(db*-dx*-dy/d3ij + -dx*dy/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + src_idx*3 + 2, kb*(db*-dx*-dz/d3ij + -dx*dz/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + dst_idx*3 + 0, kb*(db*-dx*dx/d3ij + db/dij + d2x/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + dst_idx*3 + 1, kb*(db*-dx*dy/d3ij + -dx*-dy/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + dst_idx*3 + 2, kb*(db*-dx*dz/d3ij + -dx*-dz/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + src_idx*3 + 0, kb*(db*-dx*-dy/d3ij + dx*-dy/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + src_idx*3 + 1, kb*(db*d2y/d3ij - db/dij + -dy*dy/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + src_idx*3 + 2, kb*(db*-dy*-dz/d3ij + -dy*dz/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + dst_idx*3 + 0, kb*(db*dx*-dy/d3ij + -dx*-dy/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + dst_idx*3 + 1, kb*(db*-dy*dy/d3ij + db/dij + d2y/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + dst_idx*3 + 2, kb*(db*-dy*dz/d3ij + -dy*-dz/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + src_idx*3 + 0, kb*(db*-dx*-dz/d3ij + dx*-dz/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + src_idx*3 + 1, kb*(db*-dy*-dz/d3ij + dy*-dz/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + src_idx*3 + 2, kb*(db*d2z/d3ij - db/dij + -dz*dz/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + dst_idx*3 + 0, kb*(db*dx*-dz/d3ij + -dx*-dz/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + dst_idx*3 + 1, kb*(db*dy*-dz/d3ij + -dy*-dz/d2ij));
-        atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + dst_idx*3 + 2, kb*(db*-dz*dz/d3ij + db/dij + d2z/d2ij));
+            // hessians
+            // (ytz): this can be optimized pretty easily if the need ever arises.
+            atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + src_idx*3 + 0, kb*(db*-dx*dx/d3ij + db/dij + d2x/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + src_idx*3 + 1, kb*(db*dx*-dy/d3ij + dx*dy/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + src_idx*3 + 2, kb*(db*dx*-dz/d3ij + dx*dz/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + dst_idx*3 + 0, kb*(db*d2x/d3ij - db/dij + -dx*dx/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + dst_idx*3 + 1, kb*(db*dx*dy/d3ij + dx*-dy/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 0*N*3 + dst_idx*3 + 2, kb*(db*dx*dz/d3ij + dx*-dz/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + src_idx*3 + 0, kb*(db*-dx*dy/d3ij + dx*dy/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + src_idx*3 + 1, kb*(db*-dy*dy/d3ij + db/dij + d2y/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + src_idx*3 + 2, kb*(db*dy*-dz/d3ij + dy*dz/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + dst_idx*3 + 0, kb*(db*dx*dy/d3ij + -dx*dy/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + dst_idx*3 + 1, kb*(db*d2y/d3ij - db/dij + -dy*dy/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 1*N*3 + dst_idx*3 + 2, kb*(db*dy*dz/d3ij + dy*-dz/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + src_idx*3 + 0, kb*(db*-dx*dz/d3ij + dx*dz/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + src_idx*3 + 1, kb*(db*-dy*dz/d3ij + dy*dz/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + src_idx*3 + 2, kb*(db*-dz*dz/d3ij + db/dij + d2z/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + dst_idx*3 + 0, kb*(db*dx*dz/d3ij + -dx*dz/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + dst_idx*3 + 1, kb*(db*dy*dz/d3ij + -dy*dz/d2ij));
+            atomicAdd(hessian_out + src_idx*3*N*3 + 2*N*3 + dst_idx*3 + 2, kb*(db*d2z/d3ij - db/dij + -dz*dz/d2ij));
 
-        int kb_idx = global_param_idxs[param_idxs[bond_idx*2+0]];
-        int b0_idx = global_param_idxs[param_idxs[bond_idx*2+1]];
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + src_idx*3 + 0, kb*(db*d2x/d3ij - db/dij + -dx*dx/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + src_idx*3 + 1, kb*(db*-dx*-dy/d3ij + -dx*dy/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + src_idx*3 + 2, kb*(db*-dx*-dz/d3ij + -dx*dz/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + dst_idx*3 + 0, kb*(db*-dx*dx/d3ij + db/dij + d2x/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + dst_idx*3 + 1, kb*(db*-dx*dy/d3ij + -dx*-dy/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 0*N*3 + dst_idx*3 + 2, kb*(db*-dx*dz/d3ij + -dx*-dz/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + src_idx*3 + 0, kb*(db*-dx*-dy/d3ij + dx*-dy/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + src_idx*3 + 1, kb*(db*d2y/d3ij - db/dij + -dy*dy/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + src_idx*3 + 2, kb*(db*-dy*-dz/d3ij + -dy*dz/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + dst_idx*3 + 0, kb*(db*dx*-dy/d3ij + -dx*-dy/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + dst_idx*3 + 1, kb*(db*-dy*dy/d3ij + db/dij + d2y/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 1*N*3 + dst_idx*3 + 2, kb*(db*-dy*dz/d3ij + -dy*-dz/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + src_idx*3 + 0, kb*(db*-dx*-dz/d3ij + dx*-dz/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + src_idx*3 + 1, kb*(db*-dy*-dz/d3ij + dy*-dz/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + src_idx*3 + 2, kb*(db*d2z/d3ij - db/dij + -dz*dz/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + dst_idx*3 + 0, kb*(db*dx*-dz/d3ij + -dx*-dz/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + dst_idx*3 + 1, kb*(db*dy*-dz/d3ij + -dy*-dz/d2ij));
+            atomicAdd(hessian_out + dst_idx*3*N*3 + 2*N*3 + dst_idx*3 + 2, kb*(db*-dz*dz/d3ij + db/dij + d2z/d2ij));
 
-        atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 0, db*(x0 - x1)/dij );
-        atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 0, -kb*(x0 - x1)/dij );
-        atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 1, db*(y0 - y1)/dij );
-        atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 1, -kb*(y0 - y1)/dij );
-        atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 2, db*(z0 - z1)/dij );
-        atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 2, -kb*(z0 - z1)/dij );
-        atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 0, db*(-x0 + x1)/dij );
-        atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 0, -kb*(-x0 + x1)/dij );
-        atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 1, db*(-y0 + y1)/dij );
-        atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 1, -kb*(-y0 + y1)/dij );
-        atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 2, db*(-z0 + z1)/dij );
-        atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 2, -kb*(-z0 + z1)/dij );
+            int kb_idx = global_param_idxs[param_idxs[bond_idx*2+0]];
+            int b0_idx = global_param_idxs[param_idxs[bond_idx*2+1]];
+
+            atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 0, db*(x0 - x1)/dij );
+            atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 0, -kb*(x0 - x1)/dij );
+            atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 1, db*(y0 - y1)/dij );
+            atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 1, -kb*(y0 - y1)/dij );
+            atomicAdd(mp_out + kb_idx*N*3 + src_idx*3 + 2, db*(z0 - z1)/dij );
+            atomicAdd(mp_out + b0_idx*N*3 + src_idx*3 + 2, -kb*(z0 - z1)/dij );
+            atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 0, db*(-x0 + x1)/dij );
+            atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 0, -kb*(-x0 + x1)/dij );
+            atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 1, db*(-y0 + y1)/dij );
+            atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 1, -kb*(-y0 + y1)/dij );
+            atomicAdd(mp_out + kb_idx*N*3 + dst_idx*3 + 2, db*(-z0 + z1)/dij );
+            atomicAdd(mp_out + b0_idx*N*3 + dst_idx*3 + 2, -kb*(-z0 + z1)/dij );
+
+            
+        }
 
 
     }

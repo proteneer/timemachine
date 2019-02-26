@@ -50,7 +50,7 @@ __global__ void electrostatics_total_derivative(
     NumericType *mp_out,
     int N) {
 
-
+    const bool inference = (hessian_out == nullptr) || (mp_out == nullptr);
     const int n_atoms = N;
 
     auto i_idx = blockDim.x*blockIdx.x + threadIdx.x;
@@ -134,60 +134,64 @@ __global__ void electrostatics_total_derivative(
         // off diagonal
         // iterate over a block of i's because we improve locality of writes to off diagonal elements
         NumericType *mp_out_q_h_j = mp_out + q1_g_idx;
-        #pragma unroll 4
-        for(int round=0; round < WARP_SIZE; round++) {
-            NumericType xi = __shfl_sync(0xffffffff, x0, round);
-            NumericType yi = __shfl_sync(0xffffffff, y0, round);
-            NumericType zi = __shfl_sync(0xffffffff, z0, round);
-            NumericType qi = __shfl_sync(0xffffffff, q0, round);
-            int qi_g_idx = __shfl_sync(0xffffffff, q0_g_idx, round);
 
-            int h_i_idx = blockIdx.x*WARP_SIZE + round;
-            int h_j_idx = j_idx;
+        if(!inference) {
+            #pragma unroll 4
+            for(int round=0; round < WARP_SIZE; round++) {
+                NumericType xi = __shfl_sync(0xffffffff, x0, round);
+                NumericType yi = __shfl_sync(0xffffffff, y0, round);
+                NumericType zi = __shfl_sync(0xffffffff, z0, round);
+                NumericType qi = __shfl_sync(0xffffffff, q0, round);
+                int qi_g_idx = __shfl_sync(0xffffffff, q0_g_idx, round);
 
-            NumericType *mp_out_q_h_i = mp_out + qi_g_idx;
+                int h_i_idx = blockIdx.x*WARP_SIZE + round;
+                int h_j_idx = j_idx;
 
-            if(h_j_idx < h_i_idx && h_i_idx < n_atoms && h_j_idx < n_atoms) {
+                NumericType *mp_out_q_h_i = mp_out + qi_g_idx;
 
-                NumericType dx = xi - x1;
-                NumericType dy = yi - y1;
-                NumericType dz = zi - z1;
-                NumericType d2x = dx*dx;
-                NumericType d2y = dy*dy;
-                NumericType d2z = dz*dz;
+                if(h_j_idx < h_i_idx && h_i_idx < n_atoms && h_j_idx < n_atoms) {
 
-                NumericType d2ij = d2x + d2y + d2z;
-                NumericType dij = gpuSqrt(d2ij);
-                NumericType d3ij = d2ij*dij;
-                NumericType inv_d3ij = 1/d3ij;
-                NumericType d5ij = d3ij*d2ij;
+                    NumericType dx = xi - x1;
+                    NumericType dy = yi - y1;
+                    NumericType dz = zi - z1;
+                    NumericType d2x = dx*dx;
+                    NumericType d2y = dy*dy;
+                    NumericType d2z = dz*dz;
 
-                NumericType sij = scale_matrix[h_i_idx*n_atoms + h_j_idx];
-                NumericType so4eq01 = sij*ONE_4PI_EPS0*qi*q1;
-                NumericType hess_prefactor = so4eq01/d5ij;
+                    NumericType d2ij = d2x + d2y + d2z;
+                    NumericType dij = gpuSqrt(d2ij);
+                    NumericType d3ij = d2ij*dij;
+                    NumericType inv_d3ij = 1/d3ij;
+                    NumericType d5ij = d3ij*d2ij;
 
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 0)] += hess_prefactor*(d2ij - 3*d2x);
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 1)] += -3*hess_prefactor*dx*dy;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 2)] += -3*hess_prefactor*dx*dz;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 0)] += -3*hess_prefactor*dx*dy;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 1)] += hess_prefactor*(d2ij - 3*d2y);
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 2)] += -3*hess_prefactor*dy*dz;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 0)] += -3*hess_prefactor*dx*dz;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 1)] += -3*hess_prefactor*dy*dz;
-                hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 2)] += hess_prefactor*(d2ij - 3*d2z);
+                    NumericType sij = scale_matrix[h_i_idx*n_atoms + h_j_idx];
+                    NumericType so4eq01 = sij*ONE_4PI_EPS0*qi*q1;
+                    NumericType hess_prefactor = so4eq01/d5ij;
 
-                NumericType mp_prefactor = sij*ONE_4PI_EPS0*inv_d3ij;
+                    hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 0)] += hess_prefactor*(d2ij - 3*d2x);
+                    hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 1)] += -3*hess_prefactor*dx*dy;
+                    hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 2)] += -3*hess_prefactor*dx*dz;
+                    hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 0)] += -3*hess_prefactor*dx*dy;
+                    hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 1)] += hess_prefactor*(d2ij - 3*d2y);
+                    hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 2)] += -3*hess_prefactor*dy*dz;
+                    hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 0)] += -3*hess_prefactor*dx*dz;
+                    hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 1)] += -3*hess_prefactor*dy*dz;
+                    hessian_out[HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 2)] += hess_prefactor*(d2ij - 3*d2z);
 
-                NumericType PREFACTOR_QI_GRAD = mp_prefactor*q1;
-                NumericType PREFACTOR_QJ_GRAD = mp_prefactor*qi;
+                    NumericType mp_prefactor = sij*ONE_4PI_EPS0*inv_d3ij;
 
-                atomicAdd(mp_out_q_h_i + h_j_idx*3 + 0, PREFACTOR_QI_GRAD * (dx));
-                atomicAdd(mp_out_q_h_i + h_j_idx*3 + 1, PREFACTOR_QI_GRAD * (dy));
-                atomicAdd(mp_out_q_h_i + h_j_idx*3 + 2, PREFACTOR_QI_GRAD * (dz));
+                    NumericType PREFACTOR_QI_GRAD = mp_prefactor*q1;
+                    NumericType PREFACTOR_QJ_GRAD = mp_prefactor*qi;
 
-                atomicAdd(mp_out_q_h_j + h_i_idx*3 + 0, PREFACTOR_QJ_GRAD * (-dx));
-                atomicAdd(mp_out_q_h_j + h_i_idx*3 + 1, PREFACTOR_QJ_GRAD * (-dy));
-                atomicAdd(mp_out_q_h_j + h_i_idx*3 + 2, PREFACTOR_QJ_GRAD * (-dz));
+                    atomicAdd(mp_out_q_h_i + h_j_idx*3 + 0, PREFACTOR_QI_GRAD * (dx));
+                    atomicAdd(mp_out_q_h_i + h_j_idx*3 + 1, PREFACTOR_QI_GRAD * (dy));
+                    atomicAdd(mp_out_q_h_i + h_j_idx*3 + 2, PREFACTOR_QI_GRAD * (dz));
+
+                    atomicAdd(mp_out_q_h_j + h_i_idx*3 + 0, PREFACTOR_QJ_GRAD * (-dx));
+                    atomicAdd(mp_out_q_h_j + h_i_idx*3 + 1, PREFACTOR_QJ_GRAD * (-dy));
+                    atomicAdd(mp_out_q_h_j + h_i_idx*3 + 2, PREFACTOR_QJ_GRAD * (-dz));
+
+                }
 
             }
 
@@ -228,35 +232,38 @@ __global__ void electrostatics_total_derivative(
                 shfl_grad_dy += grad_prefactor*dy;
                 shfl_grad_dz += grad_prefactor*dz;
 
-                NumericType mp_prefactor = sij*ONE_4PI_EPS0*inv_d3ij;
+                if(!inference) {
 
-                NumericType PREFACTOR_QI_GRAD = mp_prefactor*q1;
-                NumericType PREFACTOR_QJ_GRAD = mp_prefactor*q0;
+                    NumericType mp_prefactor = sij*ONE_4PI_EPS0*inv_d3ij;
 
-                // (ytz): We can further optimize the off-diagonal elements if desired.
-                mixed_dx += PREFACTOR_QI_GRAD * (-dx);
-                mixed_dy += PREFACTOR_QI_GRAD * (-dy);
-                mixed_dz += PREFACTOR_QI_GRAD * (-dz);
+                    NumericType PREFACTOR_QI_GRAD = mp_prefactor*q1;
+                    NumericType PREFACTOR_QJ_GRAD = mp_prefactor*q0;
 
-                shfl_mixed_dx += PREFACTOR_QJ_GRAD * dx;
-                shfl_mixed_dy += PREFACTOR_QJ_GRAD * dy;
-                shfl_mixed_dz += PREFACTOR_QJ_GRAD * dz;
+                    // (ytz): We can further optimize the off-diagonal elements if desired.
+                    mixed_dx += PREFACTOR_QI_GRAD * (-dx);
+                    mixed_dy += PREFACTOR_QI_GRAD * (-dy);
+                    mixed_dz += PREFACTOR_QI_GRAD * (-dz);
 
-                // compute lower triangular elements
-                hess_xx += hess_prefactor*(-d2ij + 3*d2x);
-                hess_yx += 3*hess_prefactor*dx*dy;
-                hess_yy += hess_prefactor*(-d2ij + 3*d2y);
-                hess_zx += 3*hess_prefactor*dx*dz;
-                hess_zy += 3*hess_prefactor*dy*dz;
-                hess_zz += hess_prefactor*(-d2ij + 3*d2z);
+                    shfl_mixed_dx += PREFACTOR_QJ_GRAD * dx;
+                    shfl_mixed_dy += PREFACTOR_QJ_GRAD * dy;
+                    shfl_mixed_dz += PREFACTOR_QJ_GRAD * dz;
 
-                shfl_hess_xx += hess_prefactor*(-d2ij + 3*d2x);
-                shfl_hess_yx += 3*hess_prefactor*dx*dy;
-                shfl_hess_yy += hess_prefactor*(-d2ij + 3*d2y);
-                shfl_hess_zx += 3*hess_prefactor*dx*dz;
-                shfl_hess_zy += 3*hess_prefactor*dy*dz;
-                shfl_hess_zz += hess_prefactor*(-d2ij + 3*d2z);
+                    // compute lower triangular elements
+                    hess_xx += hess_prefactor*(-d2ij + 3*d2x);
+                    hess_yx += 3*hess_prefactor*dx*dy;
+                    hess_yy += hess_prefactor*(-d2ij + 3*d2y);
+                    hess_zx += 3*hess_prefactor*dx*dz;
+                    hess_zy += 3*hess_prefactor*dy*dz;
+                    hess_zz += hess_prefactor*(-d2ij + 3*d2z);
 
+                    shfl_hess_xx += hess_prefactor*(-d2ij + 3*d2x);
+                    shfl_hess_yx += 3*hess_prefactor*dx*dy;
+                    shfl_hess_yy += hess_prefactor*(-d2ij + 3*d2y);
+                    shfl_hess_zx += 3*hess_prefactor*dx*dz;
+                    shfl_hess_zy += 3*hess_prefactor*dy*dz;
+                    shfl_hess_zz += hess_prefactor*(-d2ij + 3*d2z);
+
+                }
             }
 
             int srcLane = (threadIdx.x + 1) % WARP_SIZE;
@@ -271,16 +278,18 @@ __global__ void electrostatics_total_derivative(
             shfl_grad_dy = __shfl_sync(0xffffffff, shfl_grad_dy, srcLane);
             shfl_grad_dz = __shfl_sync(0xffffffff, shfl_grad_dz, srcLane);
 
-            shfl_mixed_dx = __shfl_sync(0xffffffff, shfl_mixed_dx, srcLane);
-            shfl_mixed_dy = __shfl_sync(0xffffffff, shfl_mixed_dy, srcLane);
-            shfl_mixed_dz = __shfl_sync(0xffffffff, shfl_mixed_dz, srcLane);
+            if(!inference) {
+                shfl_mixed_dx = __shfl_sync(0xffffffff, shfl_mixed_dx, srcLane);
+                shfl_mixed_dy = __shfl_sync(0xffffffff, shfl_mixed_dy, srcLane);
+                shfl_mixed_dz = __shfl_sync(0xffffffff, shfl_mixed_dz, srcLane);
 
-            shfl_hess_xx = __shfl_sync(0xffffffff, shfl_hess_xx, srcLane);
-            shfl_hess_yx = __shfl_sync(0xffffffff, shfl_hess_yx, srcLane);
-            shfl_hess_yy = __shfl_sync(0xffffffff, shfl_hess_yy, srcLane);
-            shfl_hess_zx = __shfl_sync(0xffffffff, shfl_hess_zx, srcLane);
-            shfl_hess_zy = __shfl_sync(0xffffffff, shfl_hess_zy, srcLane);
-            shfl_hess_zz = __shfl_sync(0xffffffff, shfl_hess_zz, srcLane);
+                shfl_hess_xx = __shfl_sync(0xffffffff, shfl_hess_xx, srcLane);
+                shfl_hess_yx = __shfl_sync(0xffffffff, shfl_hess_yx, srcLane);
+                shfl_hess_yy = __shfl_sync(0xffffffff, shfl_hess_yy, srcLane);
+                shfl_hess_zx = __shfl_sync(0xffffffff, shfl_hess_zx, srcLane);
+                shfl_hess_zy = __shfl_sync(0xffffffff, shfl_hess_zy, srcLane);
+                shfl_hess_zz = __shfl_sync(0xffffffff, shfl_hess_zz, srcLane);
+            }
 
             j_idx += 1;
 
@@ -294,17 +303,20 @@ __global__ void electrostatics_total_derivative(
             atomicAdd(grad_out + target_idx*3 + 2, shfl_grad_dz);
 
             // optimize
-            NumericType *mp_out_qj = mp_out + q1_g_idx;
-            atomicAdd(mp_out_qj + target_idx*3 + 0, shfl_mixed_dx);
-            atomicAdd(mp_out_qj + target_idx*3 + 1, shfl_mixed_dy);
-            atomicAdd(mp_out_qj + target_idx*3 + 2, shfl_mixed_dz);
+            if(!inference) {
+                NumericType *mp_out_qj = mp_out + q1_g_idx;
+                atomicAdd(mp_out_qj + target_idx*3 + 0, shfl_mixed_dx);
+                atomicAdd(mp_out_qj + target_idx*3 + 1, shfl_mixed_dy);
+                atomicAdd(mp_out_qj + target_idx*3 + 2, shfl_mixed_dz);
 
-            atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 0, 0), shfl_hess_xx);
-            atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 1, 0), shfl_hess_yx);
-            atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 1, 1), shfl_hess_yy);
-            atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 2, 0), shfl_hess_zx);
-            atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 2, 1), shfl_hess_zy);
-            atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 2, 2), shfl_hess_zz);
+                atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 0, 0), shfl_hess_xx);
+                atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 1, 0), shfl_hess_yx);
+                atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 1, 1), shfl_hess_yy);
+                atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 2, 0), shfl_hess_zx);
+                atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 2, 1), shfl_hess_zy);
+                atomicAdd(hessian_out + HESS_IDX(target_idx, target_idx, n_atoms, 2, 2), shfl_hess_zz);                
+            }
+
         }
 
     }
@@ -316,17 +328,18 @@ __global__ void electrostatics_total_derivative(
         atomicAdd(grad_out + i_idx*3 + 1, grad_dy);
         atomicAdd(grad_out + i_idx*3 + 2, grad_dz);
 
-        atomicAdd(mp_out_qi + i_idx*3 + 0, mixed_dx);
-        atomicAdd(mp_out_qi + i_idx*3 + 1, mixed_dy);
-        atomicAdd(mp_out_qi + i_idx*3 + 2, mixed_dz);
+        if(!inference) {
+            atomicAdd(mp_out_qi + i_idx*3 + 0, mixed_dx);
+            atomicAdd(mp_out_qi + i_idx*3 + 1, mixed_dy);
+            atomicAdd(mp_out_qi + i_idx*3 + 2, mixed_dz);
 
-        atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 0, 0), hess_xx);
-        atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 1, 0), hess_yx);
-        atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 1, 1), hess_yy);
-        atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 2, 0), hess_zx);
-        atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 2, 1), hess_zy);
-        atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 2, 2), hess_zz);
-
+            atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 0, 0), hess_xx);
+            atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 1, 0), hess_yx);
+            atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 1, 1), hess_yy);
+            atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 2, 0), hess_zx);
+            atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 2, 1), hess_zy);
+            atomicAdd(hessian_out + HESS_IDX(i_idx, i_idx, n_atoms, 2, 2), hess_zz);          
+        } 
     }
 
 };

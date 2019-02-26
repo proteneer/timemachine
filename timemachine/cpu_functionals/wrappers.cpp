@@ -573,7 +573,7 @@ void declare_context(py::module &m, const char *typestr) {
         std::vector<timemachine::EnergyGPU<NumericType> *>, // dt
         timemachine::Integrator<NumericType>*
     >())
-    .def("step", &timemachine::Context<NumericType>::step);
+    .def("step", &timemachine::Context<NumericType>::step, py::arg("inference") = false);
 }
 
 

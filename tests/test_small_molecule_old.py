@@ -2,12 +2,6 @@ import time
 import numpy as np
 import unittest
 import ctypes
-import random
-
-import tensorflow as tf
-
-# tf.enable_eager_execution()
-
 
 from openeye import oechem
 from openeye.oechem import OEMol, OEParseSmiles, OEAddExplicitHydrogens, OEGetIsotopicWeight, OEGetAverageWeight
@@ -17,7 +11,6 @@ from openeye.oechem import OEFloatArray
 from openforcefield.utils import get_data_filename, generateTopologyFromOEMol
 from openforcefield.typing.engines.smirnoff import get_molecule_parameterIDs, ForceField
 
-from timemachine import observable
 from timemachine import minimizer
 from timemachine.constants import BOLTZ
 from timemachine import system_builder
@@ -78,57 +71,58 @@ def write_xyz(ofs, mol, coords):
 
 class TestSmallMolecule(unittest.TestCase):
 
-    # omm_system = ff.createSystem(topology, [mol])
-    # print(type(omm_system))
-    # with open("system.xml", "w") as fh:
-    #     fh.write(openmm.openmm.XmlSerializer.serialize(omm_system))
-
-    # ff = ForceField(get_data_filename('forcefield/Frosst_AlkEthOH.offxml') )
-    def initialize_system(
-        self,
-        dt=0.001,
-        temperature=100,
-        forcefield_file='forcefield/smirnoff99Frosst.offxml'):
+    def test_mol(self):
 
         mol = OEMol()
         # OEParseSmiles(mol, 'CCOCCSCC')
         # OEParseSmiles(mol, 'c1ccccc1')
-        OEParseSmiles(mol, 'C1CCCCC1')
-        # OEParseSmiles(mol, 'C([C@@H]1[C@H]([C@@H]([C@H](C(O1)O)O)O)O)O')
+        # OEParseSmiles(mol, 'C1CCCCC1O')
+        OEParseSmiles(mol, 'C([C@@H]1[C@H]([C@@H]([C@H](C(O1)O)O)O)O)O')
         OEAddExplicitHydrogens(mol)
         masses = get_masses(mol)
         num_atoms = mol.NumAtoms()
 
+
         topology = generateTopologyFromOEMol(mol)
 
-        ff = ForceField(get_data_filename(forcefield_file))
+
+        # ff = ForceField(get_data_filename('forcefield/Frosst_AlkEthOH.offxml') )
+        ff = ForceField(get_data_filename('forcefield/smirnoff99Frosst.offxml') )
+        # labels = ff.labelMolecules( [mol], verbose = True )
+
+        omm_system = ff.createSystem(topology, [mol])
+
+        print(type(omm_system))
+        with open("system.xml", "w") as fh:
+            fh.write(openmm.openmm.XmlSerializer.serialize(omm_system))
+
+        omegaOpts = oeomega.OEOmegaOptions()
+        omegaOpts.SetMaxConfs(800)
+        omega = oeomega.OEOmega(omegaOpts)
+        omega.SetStrictStereo(False)
+        omega.SetSampleHydrogens(True)
+        omega.SetEnergyWindow(15.0)
+        omega.SetRMSThreshold(1.0)
+
+        if not omega(mol):
+            assert 0
 
         nrgs, total_params, offsets = system_builder.construct_energies(ff, mol)
-
         # dt = 0.0025
         # friction = 10.0
         # temperature = 300
 
         # gradient descent
-        dt = dt
+        dt = 0.001
         friction = 10.0
-        temperature = temperature
+        temperature = 10
 
         a,b,c = get_abc_coefficents(masses, dt, friction, temperature)
 
-        buf_size = estimate_buffer_size(1e-10, a)
-
-        print("BUFFER SIZE", buf_size)
-        omegaOpts = oeomega.OEOmegaOptions()
-        omegaOpts.SetMaxConfs(1)
-        omega = oeomega.OEOmega(omegaOpts)
-        omega.SetStrictStereo(False)
-
-        if not omega(mol):
-            assert 0
-
+        buf_size = estimate_buffer_size(1e-16, a)
         x0 = mol_coords_to_numpy_array(mol)/10
 
+        x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
 
         intg = custom_ops.Integrator_double(
             dt,
@@ -140,145 +134,64 @@ class TestSmallMolecule(unittest.TestCase):
             c
         )
 
+
         context = custom_ops.Context_double(
             nrgs,
             intg
         )
 
-        x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
+        # it's very important that we start with equilibrium geometries
+        # x0 = np.array([[ 0.06672798, -0.08789801,  0.17259836],
+        #      [ 0.16416019, -0.00393655,  0.25996411],
+        #      [ 0.22437823,  0.07365441,  0.1361862],
+        #      [ 0.13155428,  0.19842917,  0.15364743],
+        #      [ 0.00140648, -0.02683543,  0.10997669],
+        #      [ 0.12003344, -0.15992539,  0.11009348],
+        #      [ 0.0019258,  -0.14449902,  0.23957494],
+        #      [ 0.2228789,  -0.09036981,  0.29247978],
+        #      [ 0.23281977,  0.05531402,  0.32119114],
+        #      [ 0.31699611,  0.12723394,  0.15912026],
+        #      [ 0.28942673, -0.01347244,  0.12423653],
+        #      [ 0.19188221,  0.28887075,  0.16359857],
+        #      [ 0.07279447,  0.20940621,  0.06246885],
+        #      [ 0.06117841,  0.19766579,  0.23744114]])
 
-        return nrgs, offsets, intg, context, x0, total_params
 
-    def run_once(self, nrgs, context, intg, x0, n_steps, total_params, ksize):
-        x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
         origin = np.sum(x0, axis=0)/x0.shape[0]
-        num_atoms = x0.shape[0]
-        num_steps = n_steps
-        # ofs = oechem.oemolostream("new_frames.xyz")
-        # ofs.SetFormat(oechem.OEFormat_XYZ)
 
-        intg.reset()
+
+        print("X0", x0)
+        print(np.sum(np.power(x0[0,: ] - x0[1,:], 2)))
+        # assert 0
+
+        for atom in mol.GetAtoms():
+            print(atom)
+
+        num_steps = 1000000
+
+        ofs = oechem.oemolostream("new_frames.xyz")
+        ofs.SetFormat(oechem.OEFormat_XYZ)
+
+        # for i in range(10):
+        #     write_xyz(ofs, mol, x0)
+        # assert 0
         intg.set_coordinates(x0.reshape(-1).tolist())
         intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
-
         start_time = time.time()
-
-        k = ksize
-        reservoir = []
-
-        for step in range(n_steps):
-            # coords = intg.get_coordinates()
-            # dxdps = intg.get_dxdp()
-            # reservoir.append((np.array(coords).reshape((num_atoms, 3)), np.array(dxdps).reshape((total_params, num_atoms, 3))))
-            if step < k:
-                coords = intg.get_coordinates()
-                dxdps = intg.get_dxdp()
-                reservoir.append((np.array(coords).reshape((num_atoms, 3)), np.array(dxdps).reshape((total_params, num_atoms, 3))))
-            else:
-                j = random.randint(0, step)
-                if j < k:
-                    coords = intg.get_coordinates()
-                    dxdps = intg.get_dxdp()
-                    reservoir[j] = (np.array(coords).reshape((num_atoms, 3)), np.array(dxdps).reshape((total_params, num_atoms, 3)))
-            context.step()
-
-        confs = []
-        for r in reservoir:
-            confs.append(r[0])
-        confs = np.array(confs)
-
-        dxdps = []
-        for r in reservoir:
-            dxdps.append(r[1])
-        dxdps = np.array(dxdps)
-
-        return confs, dxdps
-
-
-    def test_mol(self):
-
-
-        nrgs1, offsets1, intg1, context1, init_x_1, total_params_1 = self.initialize_system(dt=0.001, temperature=20, forcefield_file='forcefield/smirnoff99Frosst.offxml')
-
-        # generate the observable
-        print("generating observable")
-        ksize = 500
-        confs1, _ = self.run_once(nrgs1, context1, intg1, init_x_1, 40000, total_params_1, ksize) 
-        x1 = tf.convert_to_tensor(confs1)
-        obs1_rij = observable.sorted_squared_distances(x1)
-
-        # train this secondary system
-        print("starting training...")
-        bond_learning_rate = np.array([[0.1, 0.0001]])
-        angle_learning_rate = np.array([[0.01, 0.001]])
-        torsion_learning_rate = np.array([[0.01, 0.001, 0.0]])
-        lj_learning_rate = np.array([[0.000, 0.000]])
-
-        nrgs0, offsets0, intg0, context0, init_x_0, total_params_0 = self.initialize_system(dt=0.001, temperature=20, forcefield_file='forcefield/smirnoff99Frosst_perturbed.offxml')
-
-        for epoch in range(1000): 
-
-            print("starting epoch", epoch)
-            confs0, dxdp0 = self.run_once(nrgs0, context0, intg0, init_x_0, 40000, total_params_0, ksize)
-            x0 = tf.convert_to_tensor(confs0)
-            obs0_rij = observable.sorted_squared_distances(x0)
-            loss = tf.sqrt(tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))/ksize) # RMSE
-            x0_grads = tf.gradients(loss, x0)[0]
-
-            config = tf.ConfigProto()
-            config.gpu_options.allow_growth=True
-            sess = tf.Session()
-            np_loss, x0g = sess.run([loss, x0_grads])
-            # np_loss = sess.run(loss)
-
-            print("------------------LOSS", np_loss)
-            # print("x0g shape", x0g.shape)
-            # assert 0
-            x0g = np.expand_dims(x0g, 1) # [B, 1, N, 3]
-            res = np.multiply(x0g, dxdp0) # dL/dx * dx/dp [B, P, N, 3]
-
-            dLdp = np.sum(res, axis=(0,2,3))
-
-            for dparams, nrg in zip(np.split(dLdp, offsets0)[1:], nrgs0):
-                if isinstance(nrg, custom_ops.HarmonicBondGPU_double):
-                    cp = nrg.get_params()
-                    dp = bond_learning_rate * dparams.reshape((-1, 2))
-                    print("BOND PARAMS", cp)
-                    print("BOND CONSTANTS, LENGTHS", dp)
-                    nrg.set_params(cp - dp.reshape(-1))
-                elif isinstance(nrg, custom_ops.HarmonicAngleGPU_double):
-                    dp = angle_learning_rate * dparams.reshape((-1, 2))
-                    print("ANGLE CONSTANTS, ANGLES", dp)
-                elif isinstance(nrg, custom_ops.PeriodicTorsionGPU_double):
-                    dp = torsion_learning_rate * dparams.reshape((-1, 3))
-                    print("TORSION CONSTANTS, PERIODS, PHASES", dp)
-                elif isinstance(nrg, custom_ops.LennardJonesGPU_double):
-                    dp = lj_learning_rate * dparams.reshape((-1, 2))
-                    print("LJ SIG, EPS", dp)
-                else:
-                    assert 0
-
-
-                
-                # nrg.set_params(cp - dp.reshape(-1))
-                # nrg.set_params(cp)
-
-        assert 0
-
         for step in range(num_steps):
 
-            if step % 500 == 0:
+            if step % 1000 == 0:
                 # print(step)
                 coords = np.array(intg.get_coordinates()).reshape((-1, 3))
-                print(coords)
+
                 center = np.sum(coords, axis=0)/coords.shape[0]
 
                 dto = np.sqrt(np.sum(np.power(center - origin, 2)))
                 velocities = np.array(intg.get_velocities()).reshape((-1, 3))
+
+                print(coords, velocities)
                 net_mass = np.sum(masses)
-                # nv = np.sum(np.expand_dims(np.array(masses), axis=-1)*velocities, axis=0)
                 nv = np.sum(np.expand_dims(np.array(masses),axis=-1)*velocities, axis=0)
-                # assert 0
                 cc_bond_length = np.sqrt(np.sum(np.power(coords[0,: ] - coords[1,:], 2)))
 
                 write_xyz(ofs, mol, np.array(coords)*10)
@@ -286,6 +199,7 @@ class TestSmallMolecule(unittest.TestCase):
                 dxdp = np.array(intg.get_dxdp()).reshape((total_params, num_atoms, 3))
                 amax, amin = np.amax(dxdp), np.amin(dxdp)
                 print(step, "\tdto\t", dto, "\tnv\t", nv, "\tcc_bond_length\t", cc_bond_length, "\tamax/amin", amax, "\t", amin)
+                print("OFFSETS", offsets)
 
                 segments = np.split(dxdp, offsets)[1:]
                 for grads, force in zip(segments, nrgs):
@@ -310,12 +224,15 @@ class TestSmallMolecule(unittest.TestCase):
                         grads = grads.reshape((-1, 2, num_atoms, 3))
                         print("LJ sigma:", np.amax(grads[:, 0, :, :]), np.amin(grads[:, 0, :, :]))
                         print("LJ epsilon:",  np.amax(grads[:, 1, :, :]), np.amin(grads[:, 1, :, :]))
+                    elif isinstance(force, custom_ops.ElectrostaticsGPU_double):
+                        grads = grads.reshape((-1, num_atoms, num_atoms, 3))
+                        print("CHARGE amax/amin", np.amax(grads), np.amin(grads))
+                        # print("LJ sigma:", np.amax(grads[:, 0, :, :]), np.amin(grads[:, 0, :, :]))
+                        # print("LJ epsilon:",  np.amax(grads[:, 1, :, :]), np.amin(grads[:, 1, :, :]))
                     else:
                         assert 0
                 if np.any(np.isnan(dxdp)):
                     assert 0
-
-
             context.step()
 
         print(x0)

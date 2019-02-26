@@ -337,12 +337,27 @@ class TestGPUIntegrator(unittest.TestCase):
             gpu_intg
         )
 
+        # test inference first
         for step in range(num_steps):
-            context.step()
+            context.step(True)
 
         sess = tf.Session()
         sess.run(tf.initializers.global_variables())
  
+        cpu_final_x_t_val = gpu_intg.get_coordinates()
+        np.testing.assert_array_almost_equal(
+            cpu_final_x_t_val,
+            sess.run(ref_x_final_op, feed_dict={x_ph: x0}).reshape(-1),
+            decimal=13)
+
+        # reset state
+        gpu_intg.reset()
+        gpu_intg.set_coordinates(x0.reshape(-1).tolist())
+        gpu_intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
+
+        for step in range(num_steps):
+            context.step()
+
         cpu_final_x_t_val = gpu_intg.get_coordinates()
         np.testing.assert_array_almost_equal(
             cpu_final_x_t_val,
