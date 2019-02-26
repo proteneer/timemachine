@@ -525,6 +525,7 @@ void declare_integrator(py::module &m, const char *typestr) {
         std::vector<NumericType>,  // coeff_Bs
         std::vector<NumericType>  // coeff_Css
     >())
+    .def("reset", &timemachine::Integrator<NumericType>::reset)
     .def("step", [](timemachine::Integrator<NumericType> &intg,
     const py::array_t<NumericType, py::array::c_style> grads,
     const py::array_t<NumericType, py::array::c_style> hessians,
@@ -562,7 +563,7 @@ void declare_context(py::module &m, const char *typestr) {
         std::vector<timemachine::EnergyGPU<NumericType> *>, // dt
         timemachine::Integrator<NumericType>*
     >())
-    .def("step", &timemachine::Context<NumericType>::step);
+    .def("step", &timemachine::Context<NumericType>::step, py::arg("inference") = false);
 }
 
 

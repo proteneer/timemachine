@@ -32,9 +32,6 @@ inline __device__ OutType harmonic_angle_gradient(
     CoordType nij = sqrt(vij_x*vij_x + vij_y*vij_y + vij_z*vij_z);
     CoordType njk = sqrt(vjk_x*vjk_x + vjk_y*vjk_y + vjk_z*vjk_z);
 
-    // CoordType dij = nij;
-    // CoordType djk = njk;
-
     CoordType nijk = nij*njk;
     CoordType n3ij = nij*nij*nij;
     CoordType n3jk = njk*njk*njk;
@@ -73,6 +70,7 @@ __global__ void harmonic_angle_total_derivative(
     int N,
     int A) {
 
+    const bool inference = (hessian_out == nullptr) || (mp_out == nullptr);
     auto a_idx = blockDim.x*blockIdx.x + threadIdx.x;
 
     if(a_idx < A) {
@@ -113,43 +111,44 @@ __global__ void harmonic_angle_total_derivative(
             atomicAdd(grad_out + indices[i], dxs[i]);
         }
 
-        NumericType step = 1e-35;
+        if(!inference) {
 
-        Surreal<NumericType> cps[2] = {
-            ps[0],
-            ps[1]
-        };
+            NumericType step = 1e-35;
 
-        for(int j=0; j < 2; j++) {
-            cps[j].imag = step;
-            Surreal<NumericType> dcxs[9];
-            harmonic_angle_gradient<NumericType, Surreal<NumericType>, Surreal<NumericType> >(xs, cps, dcxs);
-            int gp_idx = global_param_idxs[param_idxs[a_idx*2+j]];
-            #pragma unroll
-            for(int k=0; k < 9; k++) {
-                atomicAdd(mp_out + gp_idx*N*3 + indices[k], dcxs[k].imag / step);
+            Surreal<NumericType> cps[2] = {
+                ps[0],
+                ps[1]
+            };
+
+            for(int j=0; j < 2; j++) {
+                cps[j].imag = step;
+                Surreal<NumericType> dcxs[9];
+                harmonic_angle_gradient<NumericType, Surreal<NumericType>, Surreal<NumericType> >(xs, cps, dcxs);
+                int gp_idx = global_param_idxs[param_idxs[a_idx*2+j]];
+                #pragma unroll
+                for(int k=0; k < 9; k++) {
+                    atomicAdd(mp_out + gp_idx*N*3 + indices[k], dcxs[k].imag / step);
+                }
+                cps[j].imag = 0.0;
             }
-            cps[j].imag = 0.0;
-        }
 
-        Surreal<NumericType> cxs[9];
-        #pragma unroll
-        for(int i=0; i < 9; i++) {
-            cxs[i] = xs[i];
-        }
-
-        for(int j=0; j < 9; j++) {
-            cxs[j].imag = step;
-            Surreal<NumericType> dcxs[9];
-            harmonic_angle_gradient<Surreal<NumericType>, NumericType, Surreal<NumericType> >(cxs, ps, dcxs);
+            Surreal<NumericType> cxs[9];
             #pragma unroll
-            for(int k=0; k < 9; k++) {
-                atomicAdd(hessian_out + indices[j]*N*3 + indices[k], dcxs[k].imag / step);
+            for(int i=0; i < 9; i++) {
+                cxs[i] = xs[i];
             }
-            cxs[j].imag = 0;
+
+            for(int j=0; j < 9; j++) {
+                cxs[j].imag = step;
+                Surreal<NumericType> dcxs[9];
+                harmonic_angle_gradient<Surreal<NumericType>, NumericType, Surreal<NumericType> >(cxs, ps, dcxs);
+                #pragma unroll
+                for(int k=0; k < 9; k++) {
+                    atomicAdd(hessian_out + indices[j]*N*3 + indices[k], dcxs[k].imag / step);
+                }
+                cxs[j].imag = 0;
+            }     
         }
-
-
     }
 
 }

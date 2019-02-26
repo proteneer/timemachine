@@ -4,20 +4,25 @@
 namespace timemachine {
 
 template <typename NumericType>
-void Context<NumericType>::step() {
+void Context<NumericType>::step(bool inference) {
+
+    int N = integrator_->num_atoms();
+    int P = integrator_->num_params();
 
     NumericType *de = integrator_->get_device_energy();
 	NumericType *dg = integrator_->get_device_grads();
-	NumericType *dh = integrator_->get_device_hessians();
-	NumericType *dm = integrator_->get_device_mixed_partials();
-
-	int N = integrator_->num_atoms();
-	int P = integrator_->num_params();
 
     gpuErrchk(cudaMemset(de, 0, sizeof(NumericType)));
     gpuErrchk(cudaMemset(dg, 0, N*3*sizeof(NumericType)));
-    gpuErrchk(cudaMemset(dh, 0, N*3*N*3*sizeof(NumericType)));
-    gpuErrchk(cudaMemset(dm, 0, P*N*3*sizeof(NumericType)));
+
+    NumericType *dh = nullptr;
+    NumericType *dm = nullptr;
+    if(!inference) {
+        dh = integrator_->get_device_hessians();
+        dm = integrator_->get_device_mixed_partials();
+        gpuErrchk(cudaMemset(dh, 0, N*3*N*3*sizeof(NumericType)));
+        gpuErrchk(cudaMemset(dm, 0, P*N*3*sizeof(NumericType)));     
+    }
 
     NumericType *d_coords = integrator_->get_device_coords();
 

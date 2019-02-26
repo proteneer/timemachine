@@ -148,6 +148,8 @@ __global__ void periodic_torsion_total_derivative(
     int N,
     int A) {
 
+    const bool inference = (hessian_out == nullptr) || (mp_out == nullptr);
+
     auto a_idx = blockDim.x*blockIdx.x + threadIdx.x;
 
     if(a_idx < A) {
@@ -191,44 +193,45 @@ __global__ void periodic_torsion_total_derivative(
         for(int i=0; i < 12; i++) {
             atomicAdd(grad_out + indices[i], dxs[i]);
         }
+        if(!inference) {
 
-        NumericType step = 1e-35;
+            NumericType step = 1e-35;
 
-        Surreal<NumericType> cps[3] = {
-            ps[0],
-            ps[1],
-            ps[2]
-        };
+            Surreal<NumericType> cps[3] = {
+                ps[0],
+                ps[1],
+                ps[2]
+            };
 
-        for(int j=0; j < 3; j++) {
-            cps[j].imag = step;
-            Surreal<NumericType> dcxs[12];
-            torsion_gradient<NumericType, Surreal<NumericType>, Surreal<NumericType> >(xs, cps, dcxs);
-            int gp_idx = global_param_idxs[param_idxs[a_idx*3+j]];
-            #pragma unroll
-            for(int k=0; k < 12; k++) {
-                atomicAdd(mp_out + gp_idx*N*3 + indices[k], dcxs[k].imag / step);
+            for(int j=0; j < 3; j++) {
+                cps[j].imag = step;
+                Surreal<NumericType> dcxs[12];
+                torsion_gradient<NumericType, Surreal<NumericType>, Surreal<NumericType> >(xs, cps, dcxs);
+                int gp_idx = global_param_idxs[param_idxs[a_idx*3+j]];
+                #pragma unroll
+                for(int k=0; k < 12; k++) {
+                    atomicAdd(mp_out + gp_idx*N*3 + indices[k], dcxs[k].imag / step);
+                }
+                cps[j].imag = 0.0;
             }
-            cps[j].imag = 0.0;
-        }
 
-        Surreal<NumericType> cxs[12];
-        for(int i=0; i < 12; i++) {
-            cxs[i] = xs[i];
-        }
-
-        for(int j=0; j < 12; j++) {
-            cxs[j].imag = step;
-            Surreal<NumericType> dcxs[12];
-            torsion_gradient<Surreal<NumericType>, NumericType, Surreal<NumericType> >(cxs, ps, dcxs);
-            #pragma unroll
-            for(int k=0; k < 12; k++) {
-                atomicAdd(hessian_out + indices[j]*N*3 + indices[k], dcxs[k].imag / step);
+            Surreal<NumericType> cxs[12];
+            for(int i=0; i < 12; i++) {
+                cxs[i] = xs[i];
             }
-            cxs[j].imag = 0;
+
+            for(int j=0; j < 12; j++) {
+                cxs[j].imag = step;
+                Surreal<NumericType> dcxs[12];
+                torsion_gradient<Surreal<NumericType>, NumericType, Surreal<NumericType> >(cxs, ps, dcxs);
+                #pragma unroll
+                for(int k=0; k < 12; k++) {
+                    atomicAdd(hessian_out + indices[j]*N*3 + indices[k], dcxs[k].imag / step);
+                }
+                cxs[j].imag = 0;
+            }
+
         }
-
-
 
     }
 

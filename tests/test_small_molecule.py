@@ -71,10 +71,6 @@ def write_xyz(ofs, mol, coords):
 
 class TestSmallMolecule(unittest.TestCase):
 
-    # def test_openmm(self):
-
-
-
     def test_mol(self):
 
         mol = OEMol()
@@ -99,14 +95,19 @@ class TestSmallMolecule(unittest.TestCase):
         print(type(omm_system))
         with open("system.xml", "w") as fh:
             fh.write(openmm.openmm.XmlSerializer.serialize(omm_system))
-        # assert 0
 
+        omegaOpts = oeomega.OEOmegaOptions()
+        omegaOpts.SetMaxConfs(800)
+        omega = oeomega.OEOmega(omegaOpts)
+        omega.SetStrictStereo(False)
+        omega.SetSampleHydrogens(True)
+        omega.SetEnergyWindow(15.0)
+        omega.SetRMSThreshold(1.0)
 
-
+        if not omega(mol):
+            assert 0
 
         nrgs, total_params, offsets = system_builder.construct_energies(ff, mol)
-
-
         # dt = 0.0025
         # friction = 10.0
         # temperature = 300
@@ -114,23 +115,11 @@ class TestSmallMolecule(unittest.TestCase):
         # gradient descent
         dt = 0.001
         friction = 10.0
-        temperature = 100
+        temperature = 10
 
         a,b,c = get_abc_coefficents(masses, dt, friction, temperature)
 
         buf_size = estimate_buffer_size(1e-16, a)
-        # print("BUFFER SIZE", buf_size)
-
-
-
-        omegaOpts = oeomega.OEOmegaOptions()
-        omegaOpts.SetMaxConfs(1)
-        omega = oeomega.OEOmega(omegaOpts)
-        omega.SetStrictStereo(False)
-
-        if not omega(mol):
-            assert 0
-
         x0 = mol_coords_to_numpy_array(mol)/10
 
         x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
@@ -186,27 +175,23 @@ class TestSmallMolecule(unittest.TestCase):
         # for i in range(10):
         #     write_xyz(ofs, mol, x0)
         # assert 0
-
         intg.set_coordinates(x0.reshape(-1).tolist())
         intg.set_velocities(np.zeros_like(x0).reshape(-1).tolist())
-
         start_time = time.time()
-
-
         for step in range(num_steps):
 
-            if step % 500 == 0:
+            if step % 1000 == 0:
                 # print(step)
                 coords = np.array(intg.get_coordinates()).reshape((-1, 3))
-                print(coords)
+
                 center = np.sum(coords, axis=0)/coords.shape[0]
 
                 dto = np.sqrt(np.sum(np.power(center - origin, 2)))
                 velocities = np.array(intg.get_velocities()).reshape((-1, 3))
+
+                print(coords, velocities)
                 net_mass = np.sum(masses)
-                # nv = np.sum(np.expand_dims(np.array(masses), axis=-1)*velocities, axis=0)
                 nv = np.sum(np.expand_dims(np.array(masses),axis=-1)*velocities, axis=0)
-                # assert 0
                 cc_bond_length = np.sqrt(np.sum(np.power(coords[0,: ] - coords[1,:], 2)))
 
                 write_xyz(ofs, mol, np.array(coords)*10)
@@ -214,6 +199,7 @@ class TestSmallMolecule(unittest.TestCase):
                 dxdp = np.array(intg.get_dxdp()).reshape((total_params, num_atoms, 3))
                 amax, amin = np.amax(dxdp), np.amin(dxdp)
                 print(step, "\tdto\t", dto, "\tnv\t", nv, "\tcc_bond_length\t", cc_bond_length, "\tamax/amin", amax, "\t", amin)
+                print("OFFSETS", offsets)
 
                 segments = np.split(dxdp, offsets)[1:]
                 for grads, force in zip(segments, nrgs):
@@ -238,6 +224,11 @@ class TestSmallMolecule(unittest.TestCase):
                         grads = grads.reshape((-1, 2, num_atoms, 3))
                         print("LJ sigma:", np.amax(grads[:, 0, :, :]), np.amin(grads[:, 0, :, :]))
                         print("LJ epsilon:",  np.amax(grads[:, 1, :, :]), np.amin(grads[:, 1, :, :]))
+                    elif isinstance(force, custom_ops.ElectrostaticsGPU_double):
+                        grads = grads.reshape((-1, num_atoms, num_atoms, 3))
+                        print("CHARGE amax/amin", np.amax(grads), np.amin(grads))
+                        # print("LJ sigma:", np.amax(grads[:, 0, :, :]), np.amin(grads[:, 0, :, :]))
+                        # print("LJ epsilon:",  np.amax(grads[:, 1, :, :]), np.amin(grads[:, 1, :, :]))
                     else:
                         assert 0
                 if np.any(np.isnan(dxdp)):

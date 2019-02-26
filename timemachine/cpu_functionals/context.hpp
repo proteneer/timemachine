@@ -23,7 +23,7 @@ public:
 
 	};
 
-	void step();
+	void step(bool inference=false);
 
 };
 
