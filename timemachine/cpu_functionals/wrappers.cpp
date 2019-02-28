@@ -431,6 +431,7 @@ void declare_electrostatics_gpu(py::module &m, const char *typestr) {
         std::vector<size_t>, // param_idxs
         std::vector<NumericType>  // NxN scale_matrix
     >())
+    .def("get_param_idxs", &timemachine::ElectrostaticsGPU<NumericType>::get_param_idxs)
     .def("get_params", &timemachine::ElectrostaticsGPU<NumericType>::get_params)
     .def("set_params", &timemachine::ElectrostaticsGPU<NumericType>::set_params)
     .def("total_derivative", [](timemachine::ElectrostaticsGPU<NumericType> &nrg,

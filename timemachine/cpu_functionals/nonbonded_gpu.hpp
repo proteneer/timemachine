@@ -16,6 +16,7 @@ private:
     int* d_param_idxs_;
     NumericType* d_scale_matrix_;
     int P_;
+    int N_;
 
 public:
 
@@ -31,6 +32,8 @@ public:
     void set_params(const std::vector<NumericType> &new_params);
 
     std::vector<NumericType> get_params() const;
+
+    std::vector<int> get_param_idxs() const;
 
     void total_derivative(
         const size_t n_atoms,

@@ -1,3 +1,4 @@
+import sys
 import time
 import numpy as np
 import argparse
@@ -206,10 +207,10 @@ def test_mol(smiles):
     config.gpu_options.allow_growth=True
     sess = tf.Session()
 
-    fh = open("charge_training_"+str(smiles)+".log", "w")
+    # fh = open("charge_training_"+str(smiles)+".log", "w")
 
     # generate the observable
-    print("generating observable", file=fh)
+    print("generating observable")
     ksize = 1000
     confs1, _ = run_once(nrgs1, context1, intg1, init_x_1, 80000, total_params_1, ksize, inference=True) 
 
@@ -232,7 +233,7 @@ def test_mol(smiles):
     # assert 0
 
     # train this secondary system
-    print("starting training...", file=fh)
+    print("starting training...")
     bond_learning_rate = np.array([[0.1, 0.0001]])
     angle_learning_rate = np.array([[0.01, 0.001]])
     torsion_learning_rate = np.array([[0.01, 0.001, 0.0]])
@@ -265,31 +266,36 @@ def test_mol(smiles):
         dLdp = np.sum(res, axis=(0,2,3))
 
         for dparams, nrg in zip(np.split(dLdp, offsets0)[1:], nrgs0):
-            if isinstance(nrg, custom_ops.HarmonicBondGPU_double):
-                cp = nrg.get_params()
-                dp = bond_learning_rate * dparams.reshape((-1, 2))
-                print("BOND PARAMS", cp)
-                print("BOND CONSTANTS, LENGTHS", dp)
-                # nrg.set_params(cp - dp.reshape(-1))
-            elif isinstance(nrg, custom_ops.HarmonicAngleGPU_double):
-                dp = angle_learning_rate * dparams.reshape((-1, 2))
-                print("ANGLE CONSTANTS, ANGLES", dp)
-            elif isinstance(nrg, custom_ops.PeriodicTorsionGPU_double):
-                dp = torsion_learning_rate * dparams.reshape((-1, 3))
-                print("TORSION CONSTANTS, PERIODS, PHASES", dp)
-            elif isinstance(nrg, custom_ops.LennardJonesGPU_double):
-                dp = lj_learning_rate * dparams.reshape((-1, 2))
-                print("LJ SIG, EPS", dp)
-            elif isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
+            # if isinstance(nrg, custom_ops.HarmonicBondGPU_double):
+            #     cp = nrg.get_params()
+            #     dp = bond_learning_rate * dparams.reshape((-1, 2))
+            #     print("BOND PARAMS", cp)
+            #     print("BOND CONSTANTS, LENGTHS", dp)
+            #     # nrg.set_params(cp - dp.reshape(-1))
+            # elif isinstance(nrg, custom_ops.HarmonicAngleGPU_double):
+            #     dp = angle_learning_rate * dparams.reshape((-1, 2))
+            #     print("ANGLE CONSTANTS, ANGLES", dp)
+            # elif isinstance(nrg, custom_ops.PeriodicTorsionGPU_double):
+            #     dp = torsion_learning_rate * dparams.reshape((-1, 3))
+            #     print("TORSION CONSTANTS, PERIODS, PHASES", dp)
+            # elif isinstance(nrg, custom_ops.LennardJonesGPU_double):
+            #     dp = lj_learning_rate * dparams.reshape((-1, 2))
+            #     print("LJ SIG, EPS", dp)
+            if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
                 dp = es_learning_rate * dparams.reshape((-1, 1))
-                cp = nrg.get_params()
-                print("ES PARAMS", cp)
-                print("ES", dp)
+                cp = np.array(nrg.get_params())
+                cpi = np.array(nrg.get_param_idxs())
+                print("ES BASE PARAMS", cp)
+                print("ES CHARGES", cp[cpi])
+                print("NET CHARGE", np.sum(cp[cpi]))
                 nrg.set_params(cp - dp.reshape(-1))
-            else:
-                assert 0
+            # else:
+                # assert 0
 
-        fh.flush()
+
+
+        sys.stdout.flush()
+        # fh.flush()
 
 
 if __name__ == "__main__":

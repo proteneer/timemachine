@@ -370,7 +370,7 @@ def construct_energies(ff, mol, am1_charges=True):
                         am1_charge_params.append((atom.GetPartialCharge()*unit.elementary_charge).value_in_unit_system(unit.md_unit_system))
                         am1_charge_idxs.append(atom_idx)
 
-                    print("am1 charge params", am1_charge_params)
+                    print("True am1 charge", am1_charge_params)
                     charge_nrg = custom_ops.ElectrostaticsGPU_double(
                         am1_charge_params,
                         list(range(start_params, start_params+len(am1_charge_params))),

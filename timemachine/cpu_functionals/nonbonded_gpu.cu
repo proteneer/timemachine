@@ -18,7 +18,7 @@ ElectrostaticsGPU<NumericType>::ElectrostaticsGPU(
     std::vector<size_t> global_param_idxs,
     std::vector<size_t> param_idxs,
     std::vector<NumericType> scale_matrix
-) : P_(params.size()) {
+) : P_(params.size()), N_(param_idxs.size()) {
 
     // convert to int version
     std::vector<int> int_global_param_idxs;
@@ -91,6 +91,13 @@ template <typename NumericType>
 std::vector<NumericType> ElectrostaticsGPU<NumericType>::get_params() const {
     std::vector<NumericType> buf(P_);
     gpuErrchk(cudaMemcpy(&buf[0], d_params_, P_*sizeof(NumericType), cudaMemcpyDeviceToHost));
+    return buf;
+}
+
+template <typename NumericType>
+std::vector<int> ElectrostaticsGPU<NumericType>::get_param_idxs() const {
+    std::vector<int> buf(N_);
+    gpuErrchk(cudaMemcpy(&buf[0], d_param_idxs_, N_*sizeof(int), cudaMemcpyDeviceToHost));
     return buf;
 }
 
