@@ -194,9 +194,7 @@ class TestSmallMolecule(unittest.TestCase):
 
         return confs, dxdps
 
-
     def test_mol(self):
-
 
         nrgs1, offsets1, intg1, context1, init_x_1, total_params_1 = self.initialize_system(dt=0.001, temperature=20, forcefield_file='forcefield/smirnoff99Frosst.offxml')
 

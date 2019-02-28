@@ -188,7 +188,7 @@ def construct_energies(ff, mol, am1_charges=True):
     def get_nonbonded_term(pid):
         for b in gens[3]._ljtypes:
             if b.pid == pid:
-                return b.sigma, b.epsilon
+                return b.sigma, b.epsilon, b.charge
         assert 0
 
     for mol_entry in range(len(labels)):
@@ -203,9 +203,7 @@ def construct_energies(ff, mol, am1_charges=True):
                 for (atom_indices, pid, smirks) in labels[mol_entry][force]:
 
                     if pid not in bond_params_map:
-                        print("PID", pid)
                         k, length = get_bonded_term(pid)
-                        # print(k, length)
                         k_idx = len(bond_params_array)
                         bond_params_array.append(k)
                         length_idx = len(bond_params_array)
@@ -238,9 +236,7 @@ def construct_energies(ff, mol, am1_charges=True):
 
                 for (atom_indices, pid, smirks) in labels[mol_entry][force]:
                     if pid not in angle_params_map:
-                        print("PID", pid)
                         k, angle = get_angle_term(pid)
-                        # print(k, angle)
                         k_idx = len(angle_params_array)
                         angle_params_array.append(k)
 
@@ -250,8 +246,6 @@ def construct_energies(ff, mol, am1_charges=True):
 
                     angle_params_idxs.extend(angle_params_map[pid])
                     angle_atom_idxs.extend(atom_indices)
-
-                # print(angle_params_array, list(range(start_params, start_params+len(angle_params_array))), angle_params_idxs, angle_atom_idxs)
 
                 angle_nrg = custom_ops.HarmonicAngleGPU_double(
                     angle_params_array,
@@ -264,7 +258,6 @@ def construct_energies(ff, mol, am1_charges=True):
                 offsets.append(start_params)
                 start_params += len(angle_params_array)
             elif force == 'PeriodicTorsionGenerator':
-                continue
                 torsion_params_map = {}
                 torsion_params_array = []
                 torsion_params_idxs = []
@@ -303,10 +296,10 @@ def construct_energies(ff, mol, am1_charges=True):
 
                 nrgs.append(torsion_nrg)
                 offsets.append(start_params)
-                start_params += len(torsion_params_array)
+                start_params += len(torsion_params_array)                                                                                                                                                       
 
             elif force == 'NonbondedGenerator':
-                continue
+                # continue
                 print("\n%s:" % force)
 
                 nbg = None
@@ -317,22 +310,32 @@ def construct_energies(ff, mol, am1_charges=True):
                 assert nbg is not None
 
                 es14scale = nbg.coulomb14scale
-                lj14scale = nbg.lj14scale
+                lj14scale = nbg.lj14scale                      
                 lj_params_map = {}
                 lj_params_array = []
                 lj_params_idxs = [None]*N
 
-                # (ytz): JESUS CHRIST THIS ISN'T SORTED
+                charge_params_map = {}
+                charge_params_array = []
+                charge_params_idxs = [None]*N
+
                 for (atom_indices, pid, smirks) in labels[mol_entry][force]:
                     if pid not in lj_params_map:
-                        sigma, eps = get_nonbonded_term(pid)
+                        sigma, eps, charge = get_nonbonded_term(pid)
                         sig_idx = len(lj_params_array)
                         lj_params_array.append(sigma)
                         eps_idx = len(lj_params_array)
                         lj_params_array.append(eps)
                         lj_params_map[pid] = (sig_idx, eps_idx)
 
+                        # if not am1_charges:
+                        charge_idx = len(charge_params_array)
+                        charge_params_array.append(charge)
+                        charge_params_map[pid] = charge_idx
+
                     lj_params_idxs[atom_indices[0]] = (lj_params_map[pid][0], lj_params_map[pid][1])
+                    charge_params_idxs[atom_indices[0]] = charge_params_map[pid]
+
 
                 lj_scale_matrix = generate_scale_matrix(np.array(bond_atom_idxs).reshape(-1, 2),  lj14scale, N)
 
@@ -347,37 +350,58 @@ def construct_energies(ff, mol, am1_charges=True):
                 offsets.append(start_params)
                 start_params += len(lj_params_array)
 
-    if am1_charges:
+                # generate charges using am1bcc
+                if am1_charges:
+                    print("Using am1 charges")
+                    ff._assignPartialCharges(mol, "OECharges_AM1BCCSym")
 
-        for nrg in nrgs:
-            assert not isinstance(nrg, custom_ops.ElectrostaticsGPU_double)
+                    es_scale_matrix = generate_scale_matrix(
+                        np.array(bond_atom_idxs).reshape(-1, 2),
+                        es14scale,
+                        N
+                    )
 
-        ff._assignPartialCharges(mol, "OECharges_AM1BCCSym")
+                    am1_charge_params = []
 
-        es_scale_matrix = generate_scale_matrix(
-            np.array(bond_atom_idxs).reshape(-1, 2),
-            es14scale,
-            N
-        )
 
-        charge_params = []
-        charge_idxs = []
+                    am1_charge_idxs = []
 
-        for atom_idx, atom in enumerate(mol.GetAtoms()):
-            charge_params.append((atom.GetPartialCharge()*unit.elementary_charge).value_in_unit_system(unit.md_unit_system))
-            charge_idxs.append(atom_idx)
+                    for atom_idx, atom in enumerate(mol.GetAtoms()):
+                        am1_charge_params.append((atom.GetPartialCharge()*unit.elementary_charge).value_in_unit_system(unit.md_unit_system))
+                        am1_charge_idxs.append(atom_idx)
 
-        charge_nrg = custom_ops.ElectrostaticsGPU_double(
-            charge_params,
-            list(range(start_params, start_params+len(charge_params))),
-            charge_idxs,
-            es_scale_matrix.reshape(-1)
-        )
+                    print("am1 charge params", am1_charge_params)
+                    charge_nrg = custom_ops.ElectrostaticsGPU_double(
+                        am1_charge_params,
+                        list(range(start_params, start_params+len(am1_charge_params))),
+                        am1_charge_idxs,
+                        es_scale_matrix.reshape(-1)
+                    )
 
-        # print("CHARGE_PARAMS", charge_params, len(charge_params))
+                    nrgs.append(charge_nrg)
+                    offsets.append(start_params)
+                    start_params += len(am1_charge_params)
 
-        nrgs.append(charge_nrg)
-        offsets.append(start_params)
-        start_params += len(charge_params)
+
+                # use vanilla charges
+                else:
+                    print("Using atom-typed charges", charge_params_array, charge_params_idxs)
+                    es_scale_matrix = generate_scale_matrix(
+                        np.array(bond_atom_idxs).reshape(-1, 2),
+                        es14scale,
+                        N
+                    )
+
+                    charge_nrg = custom_ops.ElectrostaticsGPU_double(
+                        charge_params_array,
+                        list(range(start_params, start_params+len(charge_params_array))),
+                        charge_params_idxs,
+                        es_scale_matrix.reshape(-1)
+                    )
+
+                    nrgs.append(charge_nrg)
+                    offsets.append(start_params)
+                    start_params += len(charge_params_array)
+
 
     return nrgs, start_params, offsets
