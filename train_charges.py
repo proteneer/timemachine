@@ -387,45 +387,44 @@ if __name__ == "__main__":
     #     "CCOCC"
     # ]
 
-    smiles = [
-        "C(C(C(O)O)O)O",
-        "C(C(CO)O)C(O)O",
-        "C(C(CO)O)O",
-        "C(C(O)O)(O)O",
-        "C(C(O)O)C(O)O",
-        "C(C(O)O)C(O)OCO",
-        "C(C(O)O)O",
-        "C(C(O)O)OCO",
-        "C(C(O)OC(O)O)O",
-        "C(C(O)OCO)O",
-        "C(CC(O)O)CO",
-        "C(CCO)CC(O)O",
-        "C(CCO)CCO",
-        "C(CCO)CO",
-        "C(CO)C(C(O)O)O",
-        "C(CO)C(CC(O)O)O",
-        "C(CO)C(CCO)O",
-        "C(CO)C(CO)O",
-        "C(CO)C(O)O",
-        "C(CO)C(O)OC(O)O",
-        "C(CO)C(O)OCO",
-        "C(CO)CO",
-        "C(CO)COCO",
-        "C(CO)O",
-        "C(COC(O)O)O",
-        "C(COCC(O)O)O",
-        "C(COCCO)O",
-        "C(COCO)C(O)O",
-        "C(COCO)O",
-        "C(O)(O)O",
-        "C(O)(O)OC(O)O",
-        "C(O)O",
-        "C(O)OC(C(O)O)O",
-        "C(O)OC(O)O"
-    ]
+    # smiles = [
+    #     "C(C(C(O)O)O)O",
+    #     "C(C(CO)O)C(O)O",
+    #     "C(C(CO)O)O",
+    #     "C(C(O)O)(O)O",
+    #     "C(C(O)O)C(O)O",
+    #     "C(C(O)O)C(O)OCO",
+    #     "C(C(O)O)O",
+    #     "C(C(O)O)OCO",
+    #     "C(C(O)OC(O)O)O",
+    #     "C(C(O)OCO)O",
+    #     "C(CC(O)O)CO",
+    #     "C(CCO)CC(O)O",
+    #     "C(CCO)CCO",
+    #     "C(CCO)CO",
+    #     "C(CO)C(C(O)O)O",
+    #     "C(CO)C(CC(O)O)O",
+    #     "C(CO)C(CCO)O",
+    #     "C(CO)C(CO)O",
+    #     "C(CO)C(O)O",
+    #     "C(CO)C(O)OC(O)O",
+    #     "C(CO)C(O)OCO",
+    #     "C(CO)CO",
+    #     "C(CO)COCO",
+    #     "C(CO)O",
+    #     "C(COC(O)O)O",
+    #     "C(COCC(O)O)O",
+    #     "C(COCCO)O",
+    #     "C(COCO)C(O)O",
+    #     "C(COCO)O",
+    #     "C(O)(O)O",
+    #     "C(O)(O)OC(O)O",
+    #     "C(O)O",
+    #     "C(O)OC(C(O)O)O",
+    #     "C(O)OC(O)O"
+    # ]
 
     smiles = [
-        "C",
         "C(C(C(O)O)O)O",
         "C(C(CO)O)C(O)O",
         "C(C(CO)O)O",
@@ -1726,8 +1725,7 @@ if __name__ == "__main__":
         "COCO",
         "COCOC",
         "COCOCCO",
-        "COCOCO",
-        "O"
+        "COCOCO"
     ]
 
     train_charges(smiles)
