@@ -35,11 +35,11 @@ from simtk import openmm
 from tensorflow.python.client import device_lib
 
 
-num_train_samples = 256
-ksize = 100 # reservoir size FIXME
-batch_size = 1 # number of GPUs
+num_train_samples = 64
+ksize = 200 # reservoir size FIXME
+batch_size = 4 # number of GPUs
 obs_steps = 400
-train_steps = 100
+train_steps = 400
 
 
 def get_available_gpus():
@@ -205,7 +205,7 @@ def generate_observables(args):
     mol = args[3]
 
     pid = multiprocessing.current_process().pid % batch_size
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+    # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
     nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
@@ -226,7 +226,7 @@ def train_molecule(args):
         charge_idxs = args[5]
 
         pid = multiprocessing.current_process().pid % batch_size
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+        # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
         nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
@@ -346,9 +346,7 @@ def train_charges(all_smiles):
 
     for epoch in range(1000):
         print("starting epoch...", epoch, "global params", global_params.tolist())
-        tf.reset_default_graph()
-        config = tf.ConfigProto(device_count={'GPU': 0})
-        sess = tf.Session()
+
 
         epoch_loss = 0
 
@@ -392,6 +390,9 @@ def train_charges(all_smiles):
 
             for conf, dxdp, gci, offset, nrgs, label_conf in zip(train_confs, train_dxdps, train_gcis, train_offsets, train_nrgs, batch_labels):
                 # print("processing...")
+
+                tf.reset_default_graph()
+                sess = tf.Session()
                 x0 = tf.convert_to_tensor(conf)
                 obs0_rij = observable.sorted_squared_distances(x0)
                 obs1_rij = observable.sorted_squared_distances(tf.convert_to_tensor(label_conf))
@@ -1776,13 +1777,13 @@ if __name__ == "__main__":
         "COCOCO"
     ]
 
-    smiles = [
-        "CCCCCOCCCC",
-        "CCOCCCCOCCC",
-        "CCCC",
-        "CCOCC(CCN)CC",
-        "CCOCC"
-    ]
+    # smiles = [
+    #     "CCCCCOCCCC",
+    #     "CCOCCCCOCCC",
+    #     "CCCC",
+    #     "CCOCC(CCN)CC",
+    #     "CCOCC"
+    # ]
 
     random.shuffle(smiles)
 
