@@ -195,7 +195,7 @@ def construct_energies(ff, mol, am1_charges=True):
     for mol_entry in range(len(labels)):
 
         for force in labels[mol_entry].keys():
-            # print("PARSING", force)
+            print("PARSING", force)
             if force == 'HarmonicBondGenerator':
                 bond_params_map = {}
                 bond_params_array = []
@@ -216,7 +216,8 @@ def construct_energies(ff, mol, am1_charges=True):
 
                 # print(bond_params_array, list(range(start_params, start_params+len(bond_params_array))), bond_params_idxs, bond_atom_idxs)
 
-                bond_nrg = custom_ops.HarmonicBondGPU_double(
+                bond_nrg = (
+                    # custom_ops.HarmonicBondGPU_double,
                     bond_params_array,
                     list(range(start_params, start_params+len(bond_params_array))),
                     bond_params_idxs,
@@ -224,6 +225,7 @@ def construct_energies(ff, mol, am1_charges=True):
                 )
 
                 nrgs.append(bond_nrg)
+
 
                 offsets.append(start_params)
                 start_params += len(bond_params_array)
@@ -248,7 +250,8 @@ def construct_energies(ff, mol, am1_charges=True):
                     angle_params_idxs.extend(angle_params_map[pid])
                     angle_atom_idxs.extend(atom_indices)
 
-                angle_nrg = custom_ops.HarmonicAngleGPU_double(
+                angle_nrg = (
+                    # custom_ops.HarmonicAngleGPU_double,
                     angle_params_array,
                     list(range(start_params, start_params+len(angle_params_array))),
                     angle_params_idxs,
@@ -288,7 +291,8 @@ def construct_energies(ff, mol, am1_charges=True):
                         torsion_params_idxs.extend((k_idx, phase_idx, period_idx))
                         torsion_atom_idxs.extend(atom_indices)
 
-                torsion_nrg = custom_ops.PeriodicTorsionGPU_double(
+                torsion_nrg = (
+                    # custom_ops.PeriodicTorsionGPU_double,
                     torsion_params_array,
                     list(range(start_params, start_params+len(torsion_params_array))),
                     torsion_params_idxs,
@@ -341,7 +345,8 @@ def construct_energies(ff, mol, am1_charges=True):
                     charge_params_idxs[atom_indices[0]] = charge_params_map[pid]
 
                 lj_scale_matrix = generate_scale_matrix(np.array(bond_atom_idxs).reshape(-1, 2),  lj14scale, N)
-                lj_nrg = custom_ops.LennardJonesGPU_double(
+                lj_nrg = (
+                    # custom_ops.LennardJonesGPU_double,
                     lj_params_array,
                     list(range(start_params, start_params+len(lj_params_array))),
                     np.array(lj_params_idxs).reshape(-1),
@@ -371,7 +376,8 @@ def construct_energies(ff, mol, am1_charges=True):
                         am1_charge_idxs.append(atom_idx)
 
                     print("True am1 charges:", am1_charge_params)
-                    charge_nrg = custom_ops.ElectrostaticsGPU_double(
+                    charge_nrg = (
+                        # custom_ops.ElectrostaticsGPU_double,
                         am1_charge_params,
                         list(range(start_params, start_params+len(am1_charge_params))),
                         am1_charge_idxs,
@@ -390,8 +396,8 @@ def construct_energies(ff, mol, am1_charges=True):
                         es14scale,
                         N
                     )
-
-                    charge_nrg = custom_ops.ElectrostaticsGPU_double(
+                    charge_nrg = (
+                        # custom_ops.ElectrostaticsGPU_double,
                         charge_params_array,
                         list(range(start_params, start_params+len(charge_params_array))),
                         charge_params_idxs,
