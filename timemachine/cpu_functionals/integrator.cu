@@ -143,7 +143,7 @@ Integrator<NumericType>::Integrator(
     gpuErrchk(cudaMalloc((void**)&d_x_t_, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_v_t_, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_dxdp_t_, P_*N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMalloc((void**)&d_total_buffer_, W_*P_*N_*3*sizeof(NumericType)));
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    gpuErrchk(cudaMalloc((void**)&d_total_buffer_, W_*P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_converged_buffer_, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_coeff_bs_, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_coeff_cs_, N_*3*sizeof(NumericType)));
@@ -197,6 +197,7 @@ void Integrator<NumericType>::reset() {
 
 template<typename NumericType> 
 Integrator<NumericType>::~Integrator() {
+    // std::cout <<" DESTROYING " << std::endl;
     gpuErrchk(cudaFree(d_x_t_));
     gpuErrchk(cudaFree(d_v_t_));
     gpuErrchk(cudaFree(d_dxdp_t_));

@@ -191,10 +191,11 @@ def construct_energies(ff, mol, am1_charges=True):
                 return b.sigma, b.epsilon, b.charge
         assert 0
 
+
     for mol_entry in range(len(labels)):
 
         for force in labels[mol_entry].keys():
-            print("PARSING", force)
+            # print("PARSING", force)
             if force == 'HarmonicBondGenerator':
                 bond_params_map = {}
                 bond_params_array = []
@@ -300,7 +301,7 @@ def construct_energies(ff, mol, am1_charges=True):
 
             elif force == 'NonbondedGenerator':
                 # continue
-                print("\n%s:" % force)
+                # print("\n%s:" % force)
 
                 nbg = None
                 for f in ff.getGenerators():
@@ -315,12 +316,15 @@ def construct_energies(ff, mol, am1_charges=True):
                 lj_params_array = []
                 lj_params_idxs = [None]*N
 
+                global_charge_idxs = []
+
                 charge_params_map = {}
                 charge_params_array = []
                 charge_params_idxs = [None]*N
 
                 for (atom_indices, pid, smirks) in labels[mol_entry][force]:
-                    if pid not in lj_params_map:
+                    if pid not in lj_params_map:                    
+                        global_charge_idxs.append(int(pid[1:])-1)
                         sigma, eps, charge = get_nonbonded_term(pid)
                         sig_idx = len(lj_params_array)
                         lj_params_array.append(sigma)
@@ -336,9 +340,7 @@ def construct_energies(ff, mol, am1_charges=True):
                     lj_params_idxs[atom_indices[0]] = (lj_params_map[pid][0], lj_params_map[pid][1])
                     charge_params_idxs[atom_indices[0]] = charge_params_map[pid]
 
-
                 lj_scale_matrix = generate_scale_matrix(np.array(bond_atom_idxs).reshape(-1, 2),  lj14scale, N)
-
                 lj_nrg = custom_ops.LennardJonesGPU_double(
                     lj_params_array,
                     list(range(start_params, start_params+len(lj_params_array))),
@@ -362,15 +364,13 @@ def construct_energies(ff, mol, am1_charges=True):
                     )
 
                     am1_charge_params = []
-
-
                     am1_charge_idxs = []
 
                     for atom_idx, atom in enumerate(mol.GetAtoms()):
                         am1_charge_params.append((atom.GetPartialCharge()*unit.elementary_charge).value_in_unit_system(unit.md_unit_system))
                         am1_charge_idxs.append(atom_idx)
 
-                    print("True am1 charge", am1_charge_params)
+                    print("True am1 charges:", am1_charge_params)
                     charge_nrg = custom_ops.ElectrostaticsGPU_double(
                         am1_charge_params,
                         list(range(start_params, start_params+len(am1_charge_params))),
@@ -382,10 +382,9 @@ def construct_energies(ff, mol, am1_charges=True):
                     offsets.append(start_params)
                     start_params += len(am1_charge_params)
 
-
                 # use vanilla charges
                 else:
-                    print("Using atom-typed charges", charge_params_array, charge_params_idxs)
+                    # print("Using atom-typed charges", charge_params_array, charge_params_idxs)
                     es_scale_matrix = generate_scale_matrix(
                         np.array(bond_atom_idxs).reshape(-1, 2),
                         es14scale,
@@ -403,5 +402,4 @@ def construct_energies(ff, mol, am1_charges=True):
                     offsets.append(start_params)
                     start_params += len(charge_params_array)
 
-
-    return nrgs, start_params, offsets
+    return nrgs, start_params, offsets, global_charge_idxs

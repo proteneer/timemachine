@@ -8,8 +8,9 @@ import random
 
 import tensorflow as tf
 
-# tf.enable_eager_execution()
 
+import multiprocessing
+from multiprocessing import Pool
 
 from openeye import oechem
 from openeye.oechem import OEMol, OEParseSmiles, OEAddExplicitHydrogens, OEGetIsotopicWeight, OEGetAverageWeight
@@ -26,6 +27,12 @@ from timemachine import system_builder
 from timemachine.cpu_functionals import custom_ops
 
 from simtk import openmm
+
+from tensorflow.python.client import device_lib
+
+def get_available_gpus():
+    local_device_protos = device_lib.list_local_devices()
+    return [x.name for x in local_device_protos if x.device_type == 'GPU']
 
 def get_abc_coefficents(
     masses,
@@ -86,6 +93,8 @@ def initialize_system(
     forcefield_file='forcefield/smirnoff99Frosst.offxml',
     am1_charges=True):
 
+
+
     mol = OEMol()
     # OEParseSmiles(mol, 'CCOCCSCC')
     # OEParseSmiles(mol, 'c1ccccc1')
@@ -107,7 +116,7 @@ def initialize_system(
 
     ff = ForceField(get_data_filename(forcefield_file))
 
-    nrgs, total_params, offsets = system_builder.construct_energies(ff, mol, am1_charges)
+    nrgs, total_params, offsets, charge_idxs = system_builder.construct_energies(ff, mol, am1_charges)
 
     # dt = 0.0025
     # friction = 10.0
@@ -121,12 +130,8 @@ def initialize_system(
     a,b,c = get_abc_coefficents(masses, dt, friction, temperature)
 
     buf_size = estimate_buffer_size(1e-10, a)
-
-    print("BUFFER SIZE", buf_size)
-
-
+    # print("BUFFER_SIZE", buf_size)
     x0 = mol_coords_to_numpy_array(mol)/10
-
 
     intg = custom_ops.Integrator_double(
         dt,
@@ -145,7 +150,7 @@ def initialize_system(
 
     x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
 
-    return nrgs, offsets, intg, context, x0, total_params
+    return nrgs, offsets, intg, context, x0, total_params, charge_idxs
 
 def run_once(nrgs, context, intg, x0, n_steps, total_params, ksize, inference):
     x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
@@ -192,9 +197,15 @@ def run_once(nrgs, context, intg, x0, n_steps, total_params, ksize, inference):
 
     return confs, dxdps
 
-def test_mol(smiles):
+ksize = 100 # reservoir size FIXME
 
-    nrgs1, offsets1, intg1, context1, init_x_1, total_params_1 = initialize_system(
+def generate_observables(smiles):
+
+    print(multiprocessing.current_process())
+    # generate observables once
+    # for smiles in all_smiles:
+
+    nrgs1, offsets1, intg1, context1, init_x_1, total_params_1, gci1 = initialize_system(
         smiles=smiles,
         dt=0.001,
         temperature=100,
@@ -202,45 +213,19 @@ def test_mol(smiles):
         am1_charges=True
     )
 
-
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth=True
-    sess = tf.Session()
-
-    # fh = open("charge_training_"+str(smiles)+".log", "w")
-
     # generate the observable
-    print("generating observable")
-    ksize = 1000
-    confs1, _ = run_once(nrgs1, context1, intg1, init_x_1, 80000, total_params_1, ksize, inference=True) 
+    print("generating observable for", smiles)
+    # FIXME
+    confs1, _ = run_once(nrgs1, context1, intg1, init_x_1, 4000, total_params_1, ksize, inference=True) 
 
-    for nrg in nrgs1:
-        print("Reference parameters:", nrg, nrg.get_params())
+    return confs1
 
-    x1 = tf.convert_to_tensor(confs1)
-    obs1_rij = observable.sorted_squared_distances(x1)
+def train_molecule(args):
+    smiles = args[0]
+    global_params = args[1]
 
-    intg1.reset()
 
-    confs2, _ = run_once(nrgs1, context1, intg1, init_x_1, 10000, total_params_1, ksize, inference=True) 
-    x2 = tf.convert_to_tensor(confs2)
-    obs2_rij = observable.sorted_squared_distances(x2)
-
-    mutual_loss = tf.sqrt(tf.reduce_sum(tf.pow(obs2_rij - obs1_rij, 2))/ksize) # RMSE
-
-    print("Mutual loss", sess.run(mutual_loss))
-
-    # assert 0
-
-    # train this secondary system
-    print("starting training...")
-    bond_learning_rate = np.array([[0.1, 0.0001]])
-    angle_learning_rate = np.array([[0.01, 0.001]])
-    torsion_learning_rate = np.array([[0.01, 0.001, 0.0]])
-    lj_learning_rate = np.array([[0.000, 0.000]])
-    es_learning_rate = np.array([[0.001]])
-
-    nrgs0, offsets0, intg0, context0, init_x_0, total_params_0 = initialize_system(
+    nrgs0, offsets0, intg0, context0, init_x_0, total_params_0, gci0 = initialize_system(
         smiles=smiles,
         dt=0.001,
         temperature=100,
@@ -248,59 +233,196 @@ def test_mol(smiles):
         am1_charges=False
     )
 
-    for epoch in range(1000): 
+    for nrg in nrgs0:
+        if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
+            new_params = []
+            for p_idx in gci0:
+                new_params.append(global_params[p_idx])
+            # print("setting new_params", new_params)
+            nrg.set_params(new_params)
+                # print("adjusting", p_idx, "by", p_grad)
+            
 
-        print("starting epoch", epoch)
-        confs0, dxdp0 = run_once(nrgs0, context0, intg0, init_x_0, 10000, total_params_0, ksize, inference=False)
-        x0 = tf.convert_to_tensor(confs0)
-        obs0_rij = observable.sorted_squared_distances(x0)
-        loss = tf.sqrt(tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))/ksize) # RMSE
-        x0_grads = tf.gradients(loss, x0)[0]
+            # global_params[p_idx] -= p_grad
 
-        np_loss, x0g = sess.run([loss, x0_grads])
 
-        print("------------------LOSS", np_loss)
-        x0g = np.expand_dims(x0g, 1) # [B, 1, N, 3]
-        res = np.multiply(x0g, dxdp0) # dL/dx * dx/dp [B, P, N, 3]
+    # FIXME *100
+    confs0, dxdp0 = run_once(nrgs0, context0, intg0, init_x_0, 1000, total_params_0, ksize, inference=False)
 
-        dLdp = np.sum(res, axis=(0,2,3))
+    return confs0, dxdp0, gci0, offsets0, nrgs0
 
-        for dparams, nrg in zip(np.split(dLdp, offsets0)[1:], nrgs0):
-            # if isinstance(nrg, custom_ops.HarmonicBondGPU_double):
-            #     cp = nrg.get_params()
-            #     dp = bond_learning_rate * dparams.reshape((-1, 2))
-            #     print("BOND PARAMS", cp)
-            #     print("BOND CONSTANTS, LENGTHS", dp)
-            #     # nrg.set_params(cp - dp.reshape(-1))
-            # elif isinstance(nrg, custom_ops.HarmonicAngleGPU_double):
-            #     dp = angle_learning_rate * dparams.reshape((-1, 2))
-            #     print("ANGLE CONSTANTS, ANGLES", dp)
-            # elif isinstance(nrg, custom_ops.PeriodicTorsionGPU_double):
-            #     dp = torsion_learning_rate * dparams.reshape((-1, 3))
-            #     print("TORSION CONSTANTS, PERIODS, PHASES", dp)
-            # elif isinstance(nrg, custom_ops.LennardJonesGPU_double):
-            #     dp = lj_learning_rate * dparams.reshape((-1, 2))
-            #     print("LJ SIG, EPS", dp)
-            if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
-                dp = es_learning_rate * dparams.reshape((-1, 1))
-                cp = np.array(nrg.get_params())
-                cpi = np.array(nrg.get_param_idxs())
-                print("ES BASE PARAMS", cp)
-                print("ES CHARGES", cp[cpi])
-                print("NET CHARGE", np.sum(cp[cpi]))
-                nrg.set_params(cp - dp.reshape(-1))
-            # else:
+
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]
+
+
+def train_charges(all_smiles):
+
+    all_observables = []
+    all_mutual_losses = []
+
+    batch_size = 2
+
+    global_params = np.array([
+        0.5,
+        0.2,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.5,
+        0.5,
+        0.15,
+        0.2,
+        0.2,
+        0.2,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.5
+    ])
+
+    with Pool(batch_size) as p:
+        label_confs = p.map(generate_observables, all_smiles)
+
+    print("starting training...")
+    es_learning_rate = np.array([[0.001]])
+
+    for epoch in range(1000):
+        print("starting epoch...", epoch, "global params", global_params)
+        tf.reset_default_graph()
+        config = tf.ConfigProto(device_count={'GPU': 0})
+        sess = tf.Session()
+
+
+        for batch_idxs in batch(range(0, len(all_smiles)), batch_size):
+            train_confs = []
+            train_dxdps = []
+            train_gcis = []
+            train_offsets = []
+            train_nrgs = []
+
+            batch_smiles_train = []
+            batch_label_confs = []
+
+            with Pool(batch_size) as p:
+
+                args = []
+                for idx in batch_idxs:
+                    args.append((all_smiles[idx], global_params))
+
+                results = p.map(train_molecule, args) # need to update parameters from global parameter pool
+                for r in results:
+                    train_confs.append(r[0])
+                    train_dxdps.append(r[1])
+                    train_gcis.append(r[2])
+                    train_offsets.append(r[3])
+                    train_nrgs.append(r[4])
+
+            batch_labels = []
+            for idx in batch_idxs:
+                batch_labels.append(label_confs[idx])
+
+            grads = np.zeros_like(global_params)
+            batch_loss = 0
+
+            for conf, dxdp, gci, offset, nrgs, label_conf in zip(train_confs, train_dxdps, train_gcis, train_offsets, train_nrgs, batch_labels):
+                # print("processing...")
+                x0 = tf.convert_to_tensor(conf)
+                obs0_rij = observable.sorted_squared_distances(x0)
+                obs1_rij = observable.sorted_squared_distances(tf.convert_to_tensor(label_conf))
+                loss = tf.sqrt(tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))/ksize) # RMSE
+                x0_grads = tf.gradients(loss, x0)[0]
+                loss_np, dLdx = sess.run([loss, x0_grads])
+                batch_loss += loss_np
+                dLdx = np.expand_dims(dLdx, 1) # [B, 1, N, 3]
+                dLdp = np.multiply(dLdx, dxdp) # dL/dx * dx/dp [B, P, N, 3]
+                dp = np.sum(dLdp, axis=(0,2,3))
+
+                for dparams, nrg in zip(np.split(dp, offset)[1:], nrgs):
+                    if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
+                        dp = es_learning_rate * dparams.reshape((-1, 1))
+
+                        for p_grad, p_idx in zip(dp, gci):
+                            # print("adjusting", p_idx, "by", p_grad)
+                            global_params[p_idx] -= p_grad
+
+            print("-----------Batch loss", batch_loss, batch_idxs)
+
+            # if epoch > 2:
                 # assert 0
-
-
-
-        sys.stdout.flush()
-        # fh.flush()
+            sys.stdout.flush()
 
 
 if __name__ == "__main__":
     
-    parser = argparse.ArgumentParser(description='Stability testing.')
-    parser.add_argument('--smiles', dest='smiles', help='what temperature we should run at')
-    args = parser.parse_args()
-    test_mol(args.smiles)
+    # parser = argparse.ArgumentParser(description='Stability testing.')
+    # parser.add_argument('--smiles', dest='smiles', help='what temperature we should run at')
+    # args = parser.parse_args()
+    smiles = [
+        "CCCCCOCCCC",
+        "CCOCCCCOCCC",
+        "CCCC",
+        "CCOCC(CCN)CC",
+        "CCOCC"
+    ]
+
+    # smiles = [
+    #     "C(C(C(O)O)O)O",
+    #     "C(C(CO)O)C(O)O",
+    #     "C(C(CO)O)O",
+    #     "C(C(O)O)(O)O",
+    #     "C(C(O)O)C(O)O",
+    #     "C(C(O)O)C(O)OCO",
+    #     "C(C(O)O)O",
+    #     "C(C(O)O)OCO",
+    #     "C(C(O)OC(O)O)O",
+    #     "C(C(O)OCO)O",
+    #     "C(CC(O)O)CO",
+    #     "C(CCO)CC(O)O",
+    #     "C(CCO)CCO",
+    #     "C(CCO)CO",
+    #     "C(CO)C(C(O)O)O",
+    #     "C(CO)C(CC(O)O)O",
+    #     "C(CO)C(CCO)O",
+    #     "C(CO)C(CO)O",
+    #     "C(CO)C(O)O",
+    #     "C(CO)C(O)OC(O)O",
+    #     "C(CO)C(O)OCO",
+    #     "C(CO)CO",
+    #     "C(CO)COCO",
+    #     "C(CO)O",
+    #     "C(COC(O)O)O",
+    #     "C(COCC(O)O)O",
+    #     "C(COCCO)O",
+    #     "C(COCO)C(O)O",
+    #     "C(COCO)O",
+    #     "C(O)(O)O",
+    #     "C(O)(O)OC(O)O",
+    #     "C(O)O",
+    #     "C(O)OC(C(O)O)O",
+    #     "C(O)OC(O)O"
+    # ]
+
+    train_charges(smiles)
