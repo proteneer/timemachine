@@ -34,7 +34,7 @@ from tensorflow.python.client import device_lib
 
 
 ksize = 200 # reservoir size FIXME
-batch_size = 3 # number of GPUs
+batch_size = 8 # number of GPUs
 
 
 def get_available_gpus():
@@ -208,8 +208,6 @@ def generate_observables(smiles):
 
     pid = multiprocessing.current_process().pid % batch_size
     os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
-    # generate observables once
-    # for smiles in all_smiles:
 
     nrgs1, offsets1, intg1, context1, init_x_1, total_params_1, gci1 = initialize_system(
         smiles=smiles,
@@ -230,6 +228,8 @@ def train_molecule(args):
     smiles = args[0]
     global_params = args[1]
 
+    pid = multiprocessing.current_process().pid % batch_size
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
     nrgs0, offsets0, intg0, context0, init_x_0, total_params_0, gci0 = initialize_system(
         smiles=smiles,
