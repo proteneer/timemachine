@@ -33,8 +33,8 @@ from simtk import openmm
 from tensorflow.python.client import device_lib
 
 
-ksize = 200 # reservoir size FIXME
-batch_size = 8 # number of GPUs
+ksize = 400 # reservoir size FIXME
+batch_size = 1 # number of GPUs
 
 
 def get_available_gpus():
@@ -220,7 +220,7 @@ def generate_observables(smiles):
     # generate the observable
     print("generating observable for", smiles)
     # FIXME
-    confs1, _ = run_once(nrgs1, context1, intg1, init_x_1, 4000, total_params_1, ksize, inference=True) 
+    confs1, _ = run_once(nrgs1, context1, intg1, init_x_1, 40000, total_params_1, ksize, inference=True) 
 
     return confs1
 
@@ -248,7 +248,7 @@ def train_molecule(args):
 
 
     # FIXME *100
-    confs0, dxdp0 = run_once(nrgs0, context0, intg0, init_x_0, 1000, total_params_0, ksize, inference=False)
+    confs0, dxdp0 = run_once(nrgs0, context0, intg0, init_x_0, 10000, total_params_0, ksize, inference=False)
 
     return confs0, dxdp0, gci0, offsets0, nrgs0
 
@@ -309,14 +309,16 @@ def train_charges(all_smiles):
     es_learning_rate = np.array([[0.001]])
 
     for epoch in range(1000):
-        print("starting epoch...", epoch, "global params", global_params)
+        print("starting epoch...", epoch, "global params", global_params.tolist())
         tf.reset_default_graph()
         config = tf.ConfigProto(device_count={'GPU': 0})
         sess = tf.Session()
 
+        epoch_loss = 0
+
         for batch_idxs in batch(range(0, len(all_smiles)), batch_size):
 
-            print("current params", global_params)
+            # print("current params", global_params)
             train_confs = []
             train_dxdps = []
             train_gcis = []
@@ -356,8 +358,9 @@ def train_charges(all_smiles):
                 x0_grads = tf.gradients(loss, x0)[0]
                 loss_np, dLdx = sess.run([loss, x0_grads])
                 batch_loss += loss_np
+                epoch_loss += loss_np
 
-                if loss_np > 100:
+                if loss_np > 10:
                     print("giant_loss detected, skipping", loss_np)
                     continue
 
@@ -372,7 +375,7 @@ def train_charges(all_smiles):
                             print("nan grad:", clipped_dp)
                             continue
                         amax, amin = np.amax(dp), np.amin(dp)
-                        if amax > 2e-3 or amin < -2e3:
+                        if amax > 1e-2 or amin < -1e2:
                             print("excessively large gradient:", dp)
                             continue
                         for p_grad, p_idx in zip(dp, gci):
@@ -384,19 +387,14 @@ def train_charges(all_smiles):
                 # assert 0
             sys.stdout.flush()
 
+        print('---average EPOCH loss---', epoch_loss/len(all_smiles))
 
 if __name__ == "__main__":
     
     # parser = argparse.ArgumentParser(description='Stability testing.')
     # parser.add_argument('--smiles', dest='smiles', help='what temperature we should run at')
     # args = parser.parse_args()
-    # smiles = [
-    #     "CCCCCOCCCC",
-    #     "CCOCCCCOCCC",
-    #     "CCCC",
-    #     "CCOCC(CCN)CC",
-    #     "CCOCC"
-    # ]
+
 
     # smiles = [
     #     "C(C(C(O)O)O)O",
@@ -1738,5 +1736,13 @@ if __name__ == "__main__":
         # "COCOCCO",
         # "COCOCO"
     ]
+
+    # smiles = [
+    #     "CCCCCOCCCC",
+    #     "CCOCCCCOCCC",
+    #     "CCCC",
+    #     "CCOCC(CCN)CC",
+    #     "CCOCC"
+    # ]
 
     train_charges(smiles)
