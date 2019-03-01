@@ -1,4 +1,6 @@
+import os
 import sys
+
 import time
 import numpy as np
 import argparse
@@ -29,6 +31,11 @@ from timemachine.cpu_functionals import custom_ops
 from simtk import openmm
 
 from tensorflow.python.client import device_lib
+
+
+ksize = 200 # reservoir size FIXME
+batch_size = 3 # number of GPUs
+
 
 def get_available_gpus():
     local_device_protos = device_lib.list_local_devices()
@@ -197,11 +204,10 @@ def run_once(nrgs, context, intg, x0, n_steps, total_params, ksize, inference):
 
     return confs, dxdps
 
-ksize = 100 # reservoir size FIXME
-
 def generate_observables(smiles):
 
-    print(multiprocessing.current_process())
+    pid = multiprocessing.current_process().pid % batch_size
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
     # generate observables once
     # for smiles in all_smiles:
 
@@ -216,7 +222,7 @@ def generate_observables(smiles):
     # generate the observable
     print("generating observable for", smiles)
     # FIXME
-    confs1, _ = run_once(nrgs1, context1, intg1, init_x_1, 4000, total_params_1, ksize, inference=True) 
+    confs1, _ = run_once(nrgs1, context1, intg1, init_x_1, 40000, total_params_1, ksize, inference=True) 
 
     return confs1
 
@@ -238,16 +244,11 @@ def train_molecule(args):
             new_params = []
             for p_idx in gci0:
                 new_params.append(global_params[p_idx])
-            # print("setting new_params", new_params)
             nrg.set_params(new_params)
-                # print("adjusting", p_idx, "by", p_grad)
-            
-
-            # global_params[p_idx] -= p_grad
 
 
     # FIXME *100
-    confs0, dxdp0 = run_once(nrgs0, context0, intg0, init_x_0, 1000, total_params_0, ksize, inference=False)
+    confs0, dxdp0 = run_once(nrgs0, context0, intg0, init_x_0, 10000, total_params_0, ksize, inference=False)
 
     return confs0, dxdp0, gci0, offsets0, nrgs0
 
@@ -262,8 +263,6 @@ def train_charges(all_smiles):
 
     all_observables = []
     all_mutual_losses = []
-
-    batch_size = 2
 
     global_params = np.array([
         0.5,
@@ -380,49 +379,49 @@ if __name__ == "__main__":
     # parser = argparse.ArgumentParser(description='Stability testing.')
     # parser.add_argument('--smiles', dest='smiles', help='what temperature we should run at')
     # args = parser.parse_args()
-    smiles = [
-        "CCCCCOCCCC",
-        "CCOCCCCOCCC",
-        "CCCC",
-        "CCOCC(CCN)CC",
-        "CCOCC"
-    ]
-
     # smiles = [
-    #     "C(C(C(O)O)O)O",
-    #     "C(C(CO)O)C(O)O",
-    #     "C(C(CO)O)O",
-    #     "C(C(O)O)(O)O",
-    #     "C(C(O)O)C(O)O",
-    #     "C(C(O)O)C(O)OCO",
-    #     "C(C(O)O)O",
-    #     "C(C(O)O)OCO",
-    #     "C(C(O)OC(O)O)O",
-    #     "C(C(O)OCO)O",
-    #     "C(CC(O)O)CO",
-    #     "C(CCO)CC(O)O",
-    #     "C(CCO)CCO",
-    #     "C(CCO)CO",
-    #     "C(CO)C(C(O)O)O",
-    #     "C(CO)C(CC(O)O)O",
-    #     "C(CO)C(CCO)O",
-    #     "C(CO)C(CO)O",
-    #     "C(CO)C(O)O",
-    #     "C(CO)C(O)OC(O)O",
-    #     "C(CO)C(O)OCO",
-    #     "C(CO)CO",
-    #     "C(CO)COCO",
-    #     "C(CO)O",
-    #     "C(COC(O)O)O",
-    #     "C(COCC(O)O)O",
-    #     "C(COCCO)O",
-    #     "C(COCO)C(O)O",
-    #     "C(COCO)O",
-    #     "C(O)(O)O",
-    #     "C(O)(O)OC(O)O",
-    #     "C(O)O",
-    #     "C(O)OC(C(O)O)O",
-    #     "C(O)OC(O)O"
+    #     "CCCCCOCCCC",
+    #     "CCOCCCCOCCC",
+    #     "CCCC",
+    #     "CCOCC(CCN)CC",
+    #     "CCOCC"
     # ]
+
+    smiles = [
+        "C(C(C(O)O)O)O",
+        "C(C(CO)O)C(O)O",
+        "C(C(CO)O)O",
+        "C(C(O)O)(O)O",
+        "C(C(O)O)C(O)O",
+        "C(C(O)O)C(O)OCO",
+        "C(C(O)O)O",
+        "C(C(O)O)OCO",
+        "C(C(O)OC(O)O)O",
+        "C(C(O)OCO)O",
+        "C(CC(O)O)CO",
+        "C(CCO)CC(O)O",
+        "C(CCO)CCO",
+        "C(CCO)CO",
+        "C(CO)C(C(O)O)O",
+        "C(CO)C(CC(O)O)O",
+        "C(CO)C(CCO)O",
+        "C(CO)C(CO)O",
+        "C(CO)C(O)O",
+        "C(CO)C(O)OC(O)O",
+        "C(CO)C(O)OCO",
+        "C(CO)CO",
+        "C(CO)COCO",
+        "C(CO)O",
+        "C(COC(O)O)O",
+        "C(COCC(O)O)O",
+        "C(COCCO)O",
+        "C(COCO)C(O)O",
+        "C(COCO)O",
+        "C(O)(O)O",
+        "C(O)(O)OC(O)O",
+        "C(O)O",
+        "C(O)OC(C(O)O)O",
+        "C(O)OC(O)O"
+    ]
 
     train_charges(smiles)
