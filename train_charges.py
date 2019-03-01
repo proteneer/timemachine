@@ -265,8 +265,26 @@ def train_charges(all_smiles):
     all_mutual_losses = []
 
     global_params = np.array([
-        0.5,
-        0.2,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        -0.1,
+        -0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        -0.2,
+        -0.2,
+        -0.2,
+        -0.1,
         0.1,
         0.1,
         0.1,
@@ -278,28 +296,10 @@ def train_charges(all_smiles):
         0.1,
         0.1,
         0.1,
-        0.5,
-        0.5,
-        0.15,
-        0.2,
-        0.2,
-        0.2,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5,
-        0.5
+        0.1,
+        0.1,
+        0.1,
+        0.1
     ])
 
     with Pool(batch_size) as p:
@@ -314,8 +314,9 @@ def train_charges(all_smiles):
         config = tf.ConfigProto(device_count={'GPU': 0})
         sess = tf.Session()
 
-
         for batch_idxs in batch(range(0, len(all_smiles)), batch_size):
+
+            print("current params", global_params)
             train_confs = []
             train_dxdps = []
             train_gcis = []
@@ -355,6 +356,11 @@ def train_charges(all_smiles):
                 x0_grads = tf.gradients(loss, x0)[0]
                 loss_np, dLdx = sess.run([loss, x0_grads])
                 batch_loss += loss_np
+
+                if loss_np > 100:
+                    print("giant_loss detected, skipping", loss_np)
+                    continue
+
                 dLdx = np.expand_dims(dLdx, 1) # [B, 1, N, 3]
                 dLdp = np.multiply(dLdx, dxdp) # dL/dx * dx/dp [B, P, N, 3]
                 dp = np.sum(dLdp, axis=(0,2,3))
@@ -362,17 +368,17 @@ def train_charges(all_smiles):
                 for dparams, nrg in zip(np.split(dp, offset)[1:], nrgs):
                     if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
                         dp = es_learning_rate * dparams.reshape((-1, 1))
-                        clipped_dp = np.copy(dp)
-                        np.clip(clipped_dp, -5e-3, 5e-3)
-                        if np.any(np.isnan(clipped_dp)):
-                            print("nan grad found:", clipped_dp)
+                        if np.any(np.isnan(dp)):
+                            print("nan grad:", clipped_dp)
                             continue
-                        if not np.array_equal(clipped_dp, dp):
-                            print("clipped", dp, "to", clipped_dp)
+                        amax, amin = np.amax(dp), np.amin(dp)
+                        if amax > 2e-3 or amin < -2e3:
+                            print("excessively large gradient:", dp)
+                            continue
                         for p_grad, p_idx in zip(dp, gci):
                             global_params[p_idx] -= p_grad
 
-            print("-----------Batch loss", batch_loss/batch_size, batch_idxs)
+            print("---average batch loss---", batch_loss/batch_size, batch_idxs)
 
             # if epoch > 2:
                 # assert 0
