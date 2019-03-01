@@ -364,14 +364,15 @@ def train_charges(all_smiles):
                         dp = es_learning_rate * dparams.reshape((-1, 1))
                         clipped_dp = np.copy(dp)
                         np.clip(clipped_dp, -5e-3, 5e-3)
-                        if not np.array_equal(clipped_dp, dp):
-                            print("clipped", dp, "to", clipped_dp)
                         if np.any(np.isnan(clipped_dp)):
                             print("nan grad found:", clipped_dp)
+                            continue
+                        if not np.array_equal(clipped_dp, dp):
+                            print("clipped", dp, "to", clipped_dp)
                         for p_grad, p_idx in zip(dp, gci):
                             global_params[p_idx] -= p_grad
 
-            print("-----------Batch loss", batch_loss, batch_idxs)
+            print("-----------Batch loss", batch_loss/batch_size, batch_idxs)
 
             # if epoch > 2:
                 # assert 0
