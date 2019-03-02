@@ -195,7 +195,7 @@ def construct_energies(ff, mol, am1_charges=True):
     for mol_entry in range(len(labels)):
 
         for force in labels[mol_entry].keys():
-            print("PARSING", force)
+            # print("PARSING", force)
             if force == 'HarmonicBondGenerator':
                 bond_params_map = {}
                 bond_params_array = []
@@ -359,7 +359,7 @@ def construct_energies(ff, mol, am1_charges=True):
 
                 # generate charges using am1bcc
                 if am1_charges:
-                    print("Using am1 charges")
+                    # print("Using am1 charges")
                     ff._assignPartialCharges(mol, "OECharges_AM1BCCSym")
 
                     es_scale_matrix = generate_scale_matrix(
@@ -375,7 +375,7 @@ def construct_energies(ff, mol, am1_charges=True):
                         am1_charge_params.append((atom.GetPartialCharge()*unit.elementary_charge).value_in_unit_system(unit.md_unit_system))
                         am1_charge_idxs.append(atom_idx)
 
-                    print("True am1 charges:", am1_charge_params)
+                    # print("True am1 charges:", am1_charge_params)
                     charge_nrg = (
                         # custom_ops.ElectrostaticsGPU_double,
                         am1_charge_params,

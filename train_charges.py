@@ -12,6 +12,9 @@ import unittest
 import ctypes
 import random
 
+import datetime
+
+
 import tensorflow as tf
 
 
@@ -37,11 +40,11 @@ from simtk import openmm
 from tensorflow.python.client import device_lib
 
 
-num_train_samples = 756 # 75% of this will be used for train, 25% will be used for test
-ksize = 200 # reservoir size
+num_train_samples = 60 # 75% of this will be used for train, 25% will be used for test
+ksize = 100 # reservoir size
 batch_size = 8 # number of GPUs
-obs_steps = 40000
-train_steps = 10000
+obs_steps = 400
+train_steps = 100
 
 
 def get_available_gpus():
@@ -207,7 +210,7 @@ def generate_observables(args):
     mol = args[3]
 
     pid = multiprocessing.current_process().pid % batch_size
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+    # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
     nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
@@ -260,7 +263,7 @@ def train_molecule(args):
         charge_idxs = args[5]
 
         pid = multiprocessing.current_process().pid % batch_size
-        # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
         nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
@@ -337,7 +340,8 @@ def train_charges(all_smiles):
     all_offset_idxs = []
     all_charge_idxs = []
 
-    for smiles in all_smiles:
+    for smi_idx, smiles in enumerate(all_smiles):
+        print("setting up", smiles, smi_idx, "/", len(all_smiles))
         mol = OEMol()
         OEParseSmiles(mol, smiles)
         OEAddExplicitHydrogens(mol)
@@ -381,7 +385,10 @@ def train_charges(all_smiles):
 
     for epoch in range(1000):
         print('--------------------')
-        print("starting epoch...", epoch, "global params", global_params.tolist())
+
+        date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+
+        print(date, "starting epoch...", epoch, "global params", global_params.tolist())
         train_epoch_loss = 0
         test_epoch_loss = 0
 
@@ -474,14 +481,16 @@ def train_charges(all_smiles):
                     batch_test_loss += test_loss
                     test_epoch_loss += test_loss
 
+            date = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S.%f")
+
             if bidx < train_batches:
-                print("avg train batch loss", batch_train_loss/len(batch_idxs), batch_idxs, "reduce_time:", time.time()-start_time, "train_time:", train_time)
+                print(date, "avg train batch loss", batch_train_loss/len(batch_idxs), batch_idxs, "reduce_time:", time.time()-start_time, "train_time:", train_time)
             else:
-                print("avg test batch loss", batch_test_loss/len(batch_idxs), batch_idxs, "reduce_time:", time.time()-start_time, "train_time:", train_time)
+                print(date, "avg test batch loss", batch_test_loss/len(batch_idxs), batch_idxs, "reduce_time:", time.time()-start_time, "train_time:", train_time)
 
             sys.stdout.flush()
 
-        print('epoch', epoch, 'train loss', train_epoch_loss/num_train_samples, 'test loss', test_epoch_loss/num_test_samples)
+        print(date, 'epoch', epoch, 'train loss', train_epoch_loss/num_train_samples, 'test loss', test_epoch_loss/num_test_samples)
 
 if __name__ == "__main__":
     
