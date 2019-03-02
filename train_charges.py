@@ -2,6 +2,7 @@ import os
 import sys
 
 import traceback
+import math
 
 import time
 import numpy as np
@@ -35,7 +36,7 @@ from simtk import openmm
 from tensorflow.python.client import device_lib
 
 
-num_train_samples = 64
+num_train_samples = 20
 ksize = 200 # reservoir size FIXME
 batch_size = 4 # number of GPUs
 obs_steps = 400
@@ -213,9 +214,41 @@ def generate_observables(args):
 
     return confs
 
-def train_molecule(args):
+def test_molecule(args):
 
-    # sys.stdout = unbuffered
+    try:
+        global_params = args[0]
+        nrg_params = args[1]
+        total_params = args[2]
+        masses = args[3]
+        mol = args[4]
+        charge_idxs = args[5]
+
+        pid = multiprocessing.current_process().pid % batch_size
+        # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+
+        nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
+
+        for nrg in nrgs:
+            if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
+                new_params = []
+                for p_idx in charge_idxs:
+                    new_params.append(global_params[p_idx])
+                nrg.set_params(new_params)
+
+        confs, none = run_once(nrgs, context, intg, x0, train_steps, total_params, ksize, inference=True)
+
+
+        return confs, none, nrgs
+
+    except Exception as e:
+
+        print("TRACEBACK")
+        traceback.print_exc()
+        print("EXCEPTION CAUGHT", e)
+        raise e
+
+def train_molecule(args):
 
     try:
         global_params = args[0]
@@ -299,9 +332,9 @@ def train_charges(all_smiles):
 
     # step 1. reference system generated using am1 charges and test systems generated using atom-typed charges
     reference_args = []
-    train_args = []
-    train_offset_idxs = []
-    train_charge_idxs = []
+    all_args = []
+    all_offset_idxs = []
+    all_charge_idxs = []
 
     for smiles in all_smiles:
         mol = OEMol()
@@ -331,10 +364,10 @@ def train_charges(all_smiles):
         # masses = args[3]
         # mol = args[4]
         # charge_idxs = args[5]
-        train_args.append((global_params, params[0], params[1], masses, mol, params[3]))
+        all_args.append((global_params, params[0], params[1], masses, mol, params[3]))
 
-        train_offset_idxs.append(params[2])
-        train_charge_idxs.append(params[3])
+        all_offset_idxs.append(params[2])
+        all_charge_idxs.append(params[3])
 
     # step 2. generate a collection of conformations from each molecules to train against
     with Pool(batch_size) as p:
@@ -344,13 +377,22 @@ def train_charges(all_smiles):
     print("starting training...")
     es_learning_rate = np.array([[0.001]])
 
+    num_batches = math.ceil(len(all_smiles) / batch_size)
+
+    train_batches = int(0.75*num_batches)
+    test_batches = num_batches - train_batches
+
+    num_train_samples = train_batches*batch_size
+    num_test_samples = len(all_smiles) - num_train_samples
+    print("num train batches:", train_batches, "num test batches:", test_batches)
+
     for epoch in range(1000):
+        print('--------------------')
         print("starting epoch...", epoch, "global params", global_params.tolist())
+        train_epoch_loss = 0
+        test_epoch_loss = 0
 
-
-        epoch_loss = 0
-
-        for batch_idxs in batch(range(0, len(all_smiles)), batch_size):
+        for bidx, batch_idxs in enumerate(batch(range(0, len(all_smiles)), batch_size)):
             train_confs = []
             train_dxdps = []
             train_gcis = []
@@ -362,21 +404,22 @@ def train_charges(all_smiles):
 
             start_time = time.time()
             with Pool(batch_size) as p:
-
                 args = []
                 for idx in batch_idxs:
-                    train_gcis.append(train_charge_idxs[idx])
-                    train_offsets.append(train_offset_idxs[idx])
-                    args.append(train_args[idx])
+                    train_gcis.append(all_charge_idxs[idx])
+                    train_offsets.append(all_offset_idxs[idx])
+                    args.append(all_args[idx])
                     # args.append((all_smiles[idx], global_params))
 
-                results = p.map(train_molecule, args) # need to update parameters from global parameter pool
+                if bidx < train_batches:
+                    results = p.map(train_molecule, args) # need to update parameters from global parameter pool
+                else:
+                    results = p.map(test_molecule, args)
+
                 for r in results:
                     train_confs.append(r[0])
                     train_dxdps.append(r[1])
                     train_nrgs.append(r[2])
-
-                # assert 0
 
             train_time = time.time() - start_time
             start_time = time.time()
@@ -386,7 +429,8 @@ def train_charges(all_smiles):
                 batch_labels.append(label_confs[idx])
 
             grads = np.zeros_like(global_params)
-            batch_loss = 0
+            batch_train_loss = 0
+            batch_test_loss = 0
 
             for conf, dxdp, gci, offset, nrgs, label_conf in zip(train_confs, train_dxdps, train_gcis, train_offsets, train_nrgs, batch_labels):
                 # print("processing...")
@@ -397,37 +441,46 @@ def train_charges(all_smiles):
                 obs0_rij = observable.sorted_squared_distances(x0)
                 obs1_rij = observable.sorted_squared_distances(tf.convert_to_tensor(label_conf))
                 loss = tf.sqrt(tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))/ksize) # RMSE
-                x0_grads = tf.gradients(loss, x0)[0]
-                loss_np, dLdx = sess.run([loss, x0_grads])
-                batch_loss += loss_np
-                epoch_loss += loss_np
 
-                if loss_np > 10:
-                    print("giant_loss detected, skipping", loss_np)
-                    continue
+                if bidx < train_batches:
+                    x0_grads = tf.gradients(loss, x0)[0]
+                    loss_np, dLdx = sess.run([loss, x0_grads])
+                    batch_train_loss += loss_np
+                    train_epoch_loss += loss_np
 
-                dLdx = np.expand_dims(dLdx, 1) # [B, 1, N, 3]
-                dLdp = np.multiply(dLdx, dxdp) # dL/dx * dx/dp [B, P, N, 3]
-                dp = np.sum(dLdp, axis=(0,2,3))
+                    if loss_np > 10:
+                        print("giant_loss detected, skipping", loss_np)
+                        continue
 
-                for dparams, nrg in zip(np.split(dp, offset)[1:], nrgs):
-                    if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
-                        dp = es_learning_rate * dparams.reshape((-1, 1))
-                        if np.any(np.isnan(dp)):
-                            print("nan grad:", clipped_dp)
-                            continue
-                        amax, amin = np.amax(dp), np.amin(dp)
-                        if amax > 1e-2 or amin < -1e2:
-                            print("excessively large gradient:", dp)
-                            continue
-                        for p_grad, p_idx in zip(dp, gci):
-                            global_params[p_idx] -= p_grad
+                    dLdx = np.expand_dims(dLdx, 1) # [B, 1, N, 3]
+                    dLdp = np.multiply(dLdx, dxdp) # dL/dx * dx/dp [B, P, N, 3]
+                    dp = np.sum(dLdp, axis=(0,2,3))
 
-            print("---average batch loss---", batch_loss/batch_size, batch_idxs, "reduce_time:", time.time()-start_time, "train_time:", train_time)
+                    for dparams, nrg in zip(np.split(dp, offset)[1:], nrgs):
+                        if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
+                            dp = es_learning_rate * dparams.reshape((-1, 1))
+                            if np.any(np.isnan(dp)):
+                                print("nan grad:", clipped_dp)
+                                continue
+                            amax, amin = np.amax(dp), np.amin(dp)
+                            if amax > 1e-2 or amin < -1e2:
+                                print("excessively large gradient:", dp)
+                                continue
+                            for p_grad, p_idx in zip(dp, gci):
+                                global_params[p_idx] -= p_grad
+                else:
+                    test_loss = sess.run(loss)
+                    batch_test_loss += test_loss
+                    test_epoch_loss += test_loss
+
+            if bidx < train_batches:
+                print("avg train batch loss", batch_train_loss/len(batch_idxs), batch_idxs, "reduce_time:", time.time()-start_time, "train_time:", train_time)
+            else:
+                print("avg test batch loss", batch_test_loss/len(batch_idxs), batch_idxs, "reduce_time:", time.time()-start_time, "train_time:", train_time)
 
             sys.stdout.flush()
 
-        print('---average EPOCH loss---', epoch_loss/len(all_smiles))
+        print('epoch', epoch, 'train loss', train_epoch_loss/num_train_samples, 'test loss', test_epoch_loss/num_test_samples)
 
 if __name__ == "__main__":
     
@@ -473,7 +526,7 @@ if __name__ == "__main__":
     #     "C(O)OC(O)O"
     # ]
 
-    smiles = [
+    smiles_train = [
         "C(C(C(O)O)O)O",
         "C(C(CO)O)C(O)O",
         "C(C(CO)O)O",
@@ -1624,7 +1677,7 @@ if __name__ == "__main__":
         "CCCOC(C)C",
         "CCCOC(C)O",
         "CCCOC(O)O",
-        "CCCOCC",
+        "CCCOCC"
         "CCCOCC(C)(C)C",
         "CCCOCC(C)(C)O",
         "CCCOCC(C)(O)O",
@@ -1785,6 +1838,8 @@ if __name__ == "__main__":
     #     "CCOCC"
     # ]
 
-    random.shuffle(smiles)
+    random.shuffle(smiles_train)
 
-    train_charges(smiles[:num_train_samples])
+    train_charges(
+        smiles_train[:num_train_samples]
+    )
