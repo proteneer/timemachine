@@ -14,11 +14,7 @@ import ctypes
 import random
 
 import datetime
-
-
 import tensorflow as tf
-
-
 import multiprocessing
 from multiprocessing import Pool
 
@@ -108,12 +104,12 @@ def initialize_system(
     nrglist,
     total_params,
     masses,
-    mol,
+    x0,
     dt=0.001,
     temperature=50,
     am1_charges=True):
 
-    num_atoms = mol.NumAtoms()
+    num_atoms = x0.shape[0]
     nrg_funcs = [
         custom_ops.HarmonicBondGPU_double,
         custom_ops.HarmonicAngleGPU_double,
@@ -136,10 +132,7 @@ def initialize_system(
     temperature = temperature
 
     a,b,c = get_abc_coefficents(masses, dt, friction, temperature)
-
     buf_size = estimate_buffer_size(1e-10, a)
-    # print("BUFFER_SIZE", buf_size)
-    x0 = mol_coords_to_numpy_array(mol)/10
 
     intg = custom_ops.Integrator_double(
         dt,
@@ -156,9 +149,9 @@ def initialize_system(
         intg
     )
 
-    x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
+    x0_min = minimizer.minimize_newton_cg(nrgs, x0, total_params)
 
-    return nrgs, intg, context, x0
+    return nrgs, intg, context, x0_min
 
 def run_once(nrgs, context, intg, x0, n_steps, total_params, ksize, inference):
     x0 = minimizer.minimize_newton_cg(nrgs, x0, total_params)
@@ -226,28 +219,19 @@ def test_molecule(args):
         nrg_params = args[1]
         total_params = args[2]
         masses = args[3]
-        mol = args[4]
+        x0 = args[4]
         charge_idxs = args[5]
 
         pid = multiprocessing.current_process().pid % batch_size
         os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
-
-        print("system init")
-        nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
-
-        print("set params")
+        nrgs, intg, context, x0_min = initialize_system(nrg_params, total_params, masses, x0)
         for nrg in nrgs:
             if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
                 new_params = []
                 for p_idx in charge_idxs:
                     new_params.append(global_params[p_idx])
                 nrg.set_params(new_params)
-
-
-        print("running once")
-        confs, none = run_once(nrgs, context, intg, x0, train_steps, total_params, ksize, inference=True)
-        print("run once done")
-
+        confs, none = run_once(nrgs, context, intg, x0_min, train_steps, total_params, ksize, inference=True)
         return confs, none, nrgs
 
     except Exception as e:
@@ -264,13 +248,13 @@ def train_molecule(args):
         nrg_params = args[1]
         total_params = args[2]
         masses = args[3]
-        mol = args[4]
+        x0 = args[4]
         charge_idxs = args[5]
 
         pid = multiprocessing.current_process().pid % batch_size
         os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
-        nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
+        nrgs, intg, context, x0_min = initialize_system(nrg_params, total_params, masses, x0)
 
         for nrg in nrgs:
             if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
@@ -279,7 +263,7 @@ def train_molecule(args):
                     new_params.append(global_params[p_idx])
                 nrg.set_params(new_params)
 
-        confs, dxdp = run_once(nrgs, context, intg, x0, train_steps, total_params, ksize, inference=False)
+        confs, dxdp = run_once(nrgs, context, intg, x0_min, train_steps, total_params, ksize, inference=False)
 
 
         return confs, dxdp, nrgs
@@ -366,14 +350,15 @@ def train_charges(all_smiles):
             if not omega(mol):
                 assert 0
 
+            x0 = mol_coords_to_numpy_array(mol)/10 # convert from angstroms to nanometers
             topology = generateTopologyFromOEMol(mol)
             reference_forcefield_file = 'forcefield/smirnoff99Frosst_perturbed.offxml'
             ff = ForceField(get_data_filename(reference_forcefield_file))
             params = system_builder.construct_energies(ff, mol, True)
-            reference_args.append((params[0], params[1], masses, mol))
+            reference_args.append((params[0], params[1], masses, x0))
 
             params = system_builder.construct_energies(ff, mol, False)
-            all_args.append((global_params, params[0], params[1], masses, mol, params[3]))
+            all_args.append((global_params, params[0], params[1], masses, x0, params[3]))
             all_offset_idxs.append(params[2])
             all_charge_idxs.append(params[3])
 
@@ -493,7 +478,7 @@ def train_charges(all_smiles):
                         if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
                             dp = es_learning_rate * dparams.reshape((-1, 1))
                             if np.any(np.isnan(dp)):
-                                print("nan grad:", clipped_dp)
+                                print("nan grad:", dp)
                                 continue
                             amax, amin = np.amax(dp), np.amin(dp)
                             if amax > 1e-2 or amin < -1e2:

@@ -46,18 +46,20 @@ def minimize_newton_cg(nrgs, x0, num_params):
 
     def energy(conf):
         conf = conf.reshape((N,3))
+        grads = np.zeros_like(conf)
         nrg = 0
         for e in nrgs:
-            test_nrg, _, _, _ = e.total_derivative(conf, num_params)
+            test_nrg, test_grads, _, _ = e.total_derivative(conf, num_params)
             nrg += test_nrg
-        return nrg
+            grads += test_grads
+        return nrg, grads.reshape(-1)
 
     res = minimize(
         energy,
         x0.reshape(-1),
         # method='Newton-CG',
         method='L-BFGS-B',
-        jac=gradient,
+        jac=True,
         # hess=hessian,
         # options={'xtol': 1e-8, 'disp': False}
     )
