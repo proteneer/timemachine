@@ -1,6 +1,7 @@
 import os
 import sys
 import sklearn
+import pickle
 
 import traceback
 import math
@@ -210,7 +211,7 @@ def generate_observables(args):
     mol = args[3]
 
     pid = multiprocessing.current_process().pid % batch_size
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+    # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
     nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
@@ -229,7 +230,7 @@ def test_molecule(args):
         charge_idxs = args[5]
 
         pid = multiprocessing.current_process().pid % batch_size
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+        # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
         print("system init")
         nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
@@ -267,7 +268,7 @@ def train_molecule(args):
         charge_idxs = args[5]
 
         pid = multiprocessing.current_process().pid % batch_size
-        os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+        # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
         nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
@@ -338,42 +339,60 @@ def train_charges(all_smiles):
         0.1
     ])
 
-    # step 1. reference system generated using am1 charges and test systems generated using atom-typed charges
-    reference_args = []
-    all_args = []
-    all_offset_idxs = []
-    all_charge_idxs = []
 
-    for smi_idx, smiles in enumerate(all_smiles):
-        print("setting up", smiles, smi_idx, "/", len(all_smiles))
-        mol = OEMol()
-        OEParseSmiles(mol, smiles)
-        OEAddExplicitHydrogens(mol)
-        masses = get_masses(mol)
-        num_atoms = mol.NumAtoms()
+    save_file = "save.pkl"
 
-        omegaOpts = oeomega.OEOmegaOptions()
-        omegaOpts.SetMaxConfs(1)
-        omega = oeomega.OEOmega(omegaOpts)
-        omega.SetStrictStereo(False)
+    if not os.path.exists(save_file):
 
-        if not omega(mol):
-            assert 0
+        # step 1. reference system generated using am1 charges and test systems generated using atom-typed charges
+        reference_args = []
+        all_args = []
+        all_offset_idxs = []
+        all_charge_idxs = []
 
-        topology = generateTopologyFromOEMol(mol)
-        reference_forcefield_file = 'forcefield/smirnoff99Frosst_perturbed.offxml'
-        ff = ForceField(get_data_filename(reference_forcefield_file))
-        params = system_builder.construct_energies(ff, mol, True)
-        reference_args.append((params[0], params[1], masses, mol))
+        for smi_idx, smiles in enumerate(all_smiles):
+            print("setting up", smiles, smi_idx, "/", len(all_smiles))
+            mol = OEMol()
+            OEParseSmiles(mol, smiles)
+            OEAddExplicitHydrogens(mol)
+            masses = get_masses(mol)
+            num_atoms = mol.NumAtoms()
 
-        params = system_builder.construct_energies(ff, mol, False)
-        all_args.append((global_params, params[0], params[1], masses, mol, params[3]))
-        all_offset_idxs.append(params[2])
-        all_charge_idxs.append(params[3])
+            omegaOpts = oeomega.OEOmegaOptions()
+            omegaOpts.SetMaxConfs(1)
+            omega = oeomega.OEOmega(omegaOpts)
+            omega.SetStrictStereo(False)
 
-    # step 2. generate a collection of conformations from each molecules to train against
-    with Pool(batch_size) as p:
-        label_confs = p.map(generate_observables, reference_args)
+            if not omega(mol):
+                assert 0
+
+            topology = generateTopologyFromOEMol(mol)
+            reference_forcefield_file = 'forcefield/smirnoff99Frosst_perturbed.offxml'
+            ff = ForceField(get_data_filename(reference_forcefield_file))
+            params = system_builder.construct_energies(ff, mol, True)
+            reference_args.append((params[0], params[1], masses, mol))
+
+            params = system_builder.construct_energies(ff, mol, False)
+            all_args.append((global_params, params[0], params[1], masses, mol, params[3]))
+            all_offset_idxs.append(params[2])
+            all_charge_idxs.append(params[3])
+
+        # step 2. generate a collection of conformations from each molecules to train against
+        with Pool(batch_size) as p:
+            label_confs = p.map(generate_observables, reference_args)
+
+        with open(save_file, "wb") as fh:
+            pickle.dump([label_confs, all_args, all_offset_idxs, all_charge_idxs], fh)
+
+
+    with open(save_file, "rb") as fh:
+        label_confs, all_args, all_offset_idxs, all_charge_idxs = pickle.load(fh)
+
+    # label_confs = cache["label_confs"]
+    # all_args = cache["all_args"]
+    # all_offset_idxs = cache["all_offset_idxs"]
+    # all_charge_idxs = cache["all_charge_idxs"]
+
 
     print("starting training...")
     es_learning_rate = np.array([[0.001]])
@@ -1854,7 +1873,7 @@ if __name__ == "__main__":
     #     "CCOCC"
     # ]
 
-    random.shuffle(smiles_train)
+    # random.shuffle(smiles_train)
 
     train_charges(
         smiles_train[:num_train_samples]
