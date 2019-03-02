@@ -231,8 +231,10 @@ def test_molecule(args):
         pid = multiprocessing.current_process().pid % batch_size
         os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
+        print("system init")
         nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
+        print("set params")
         for nrg in nrgs:
             if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
                 new_params = []
@@ -240,8 +242,10 @@ def test_molecule(args):
                     new_params.append(global_params[p_idx])
                 nrg.set_params(new_params)
 
-        confs, none = run_once(nrgs, context, intg, x0, train_steps, total_params, ksize, inference=True)
 
+        print("running once")
+        confs, none = run_once(nrgs, context, intg, x0, train_steps, total_params, ksize, inference=True)
+        print("run once done")
 
         return confs, none, nrgs
 
@@ -422,7 +426,9 @@ def train_charges(all_smiles):
                 if bidx < train_batches:
                     results = p.map(train_molecule, args) # need to update parameters from global parameter pool
                 else:
+                    print("start test")
                     results = p.map(test_molecule, args)
+                    print("end test")
 
                 for r in results:
                     train_confs.append(r[0])
