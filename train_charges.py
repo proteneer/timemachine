@@ -1,5 +1,6 @@
 import os
 import sys
+import sklearn
 
 import traceback
 import math
@@ -36,11 +37,11 @@ from simtk import openmm
 from tensorflow.python.client import device_lib
 
 
-num_train_samples = 20
-ksize = 200 # reservoir size FIXME
-batch_size = 4 # number of GPUs
-obs_steps = 400
-train_steps = 400
+num_train_samples = 756 # 75% of this will be used for train, 25% will be used for test
+ksize = 200 # reservoir size
+batch_size = 8 # number of GPUs
+obs_steps = 40000
+train_steps = 10000
 
 
 def get_available_gpus():
@@ -206,7 +207,7 @@ def generate_observables(args):
     mol = args[3]
 
     pid = multiprocessing.current_process().pid % batch_size
-    # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
     nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
@@ -225,7 +226,7 @@ def test_molecule(args):
         charge_idxs = args[5]
 
         pid = multiprocessing.current_process().pid % batch_size
-        # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
         nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
@@ -358,21 +359,13 @@ def train_charges(all_smiles):
         reference_args.append((params[0], params[1], masses, mol))
 
         params = system_builder.construct_energies(ff, mol, False)
-        # global_params = args[0]
-        # nrg_params = args[1]
-        # total_params = args[2]
-        # masses = args[3]
-        # mol = args[4]
-        # charge_idxs = args[5]
         all_args.append((global_params, params[0], params[1], masses, mol, params[3]))
-
         all_offset_idxs.append(params[2])
         all_charge_idxs.append(params[3])
 
     # step 2. generate a collection of conformations from each molecules to train against
     with Pool(batch_size) as p:
         label_confs = p.map(generate_observables, reference_args)
-
 
     print("starting training...")
     es_learning_rate = np.array([[0.001]])
@@ -391,6 +384,14 @@ def train_charges(all_smiles):
         print("starting epoch...", epoch, "global params", global_params.tolist())
         train_epoch_loss = 0
         test_epoch_loss = 0
+
+        all_perm = np.arange(len(all_smiles))
+        all_perm[:num_train_samples] = np.random.permutation(num_train_samples)
+
+        label_confs = [label_confs[i] for i in all_perm]
+        all_args = [all_args[i] for i in all_perm]
+        all_offset_idxs = [all_offset_idxs[i] for i in all_perm]
+        all_charge_idxs = [all_charge_idxs[i] for i in all_perm]
 
         for bidx, batch_idxs in enumerate(batch(range(0, len(all_smiles)), batch_size)):
             train_confs = []
