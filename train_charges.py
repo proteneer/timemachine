@@ -211,7 +211,7 @@ def generate_observables(args):
     mol = args[3]
 
     pid = multiprocessing.current_process().pid % batch_size
-    # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
     nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
@@ -230,7 +230,7 @@ def test_molecule(args):
         charge_idxs = args[5]
 
         pid = multiprocessing.current_process().pid % batch_size
-        # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
         print("system init")
         nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
@@ -268,7 +268,7 @@ def train_molecule(args):
         charge_idxs = args[5]
 
         pid = multiprocessing.current_process().pid % batch_size
-        # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
         nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
