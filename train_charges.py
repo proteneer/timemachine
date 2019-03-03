@@ -29,12 +29,12 @@ from simtk import openmm
 
 from tensorflow.python.client import device_lib
 
-num_train_samples = 64
+num_train_samples = 60
 num_test_samples = int(0.333*num_train_samples)
 ksize = 200 # reservoir size FIXME
 batch_size = 4 # number of GPUs
-obs_steps = 400
-train_steps = 400
+obs_steps = 4000
+train_steps = 4000
 
 def get_available_gpus():
     local_device_protos = device_lib.list_local_devices()
@@ -207,6 +207,117 @@ def generate_observables(args):
 
     return confs
 
+def iterbatches(input_args, input_offset_idxs, input_charge_idxs, input_label_confs, global_params, N, inference=False):
+    epoch_loss = 0
+    es_learning_rate = np.array([[0.001]])
+    for batch_idxs in batch(range(0, N), batch_size):
+        batch_confs = []
+        batch_dxdps = []
+        batch_gcis = []
+        batch_offsets = []
+        batch_nrgs = []
+
+        batch_smiles_train = []
+        batch_label_confs = []
+
+        start_time = time.time()
+
+        args = []
+        for idx in batch_idxs:
+            batch_gcis.append(input_charge_idxs[idx])
+            batch_offsets.append(input_offset_idxs[idx])
+            args.append(input_args[idx])
+
+
+        results = []
+        for arg in args:
+            global_params = arg[0]
+            nrg_params = arg[1]
+            total_params = arg[2]
+            masses = arg[3]
+            mol = arg[4]
+            charge_idxs = arg[5]
+            nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
+            for nrg in nrgs:
+                if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
+                    new_params = []
+                    for p_idx in charge_idxs:
+                        new_params.append(global_params[p_idx])
+                    nrg.set_params(new_params)
+
+            confs, dxdp = run_once(nrgs, context, intg, x0, train_steps, total_params, ksize, inference=inference)
+
+            results.append((confs, dxdp, nrgs))
+
+        for r in results:
+            batch_confs.append(r[0])
+            batch_dxdps.append(r[1])
+            batch_nrgs.append(r[2])
+
+        train_time = time.time() - start_time
+        start_time = time.time()
+
+        batch_labels = []
+        for idx in batch_idxs:
+            batch_labels.append(input_label_confs[idx])
+
+        grads = np.zeros_like(global_params)
+        batch_loss = 0
+
+        for conf, dxdp, gci, offset, nrgs, label_conf in zip(batch_confs, batch_dxdps, batch_gcis, batch_offsets, batch_nrgs, batch_labels):
+
+            tf.reset_default_graph()
+            sess = tf.Session()
+            x0 = tf.convert_to_tensor(conf)
+            obs0_rij = observable.sorted_squared_distances(x0)
+            obs1_rij = observable.sorted_squared_distances(tf.convert_to_tensor(label_conf))
+            loss = tf.sqrt(tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))/ksize) # RMSE
+            x0_grads = tf.gradients(loss, x0)[0]
+            loss_np, dLdx = sess.run([loss, x0_grads])
+            batch_loss += loss_np
+            epoch_loss += loss_np
+
+            if not inference:
+                if loss_np > 10:
+                    print("giant_loss detected, skipping", loss_np)
+                    continue
+
+                dLdx = np.expand_dims(dLdx, 1) # [B, 1, N, 3]
+                dLdp = np.multiply(dLdx, dxdp) # dL/dx * dx/dp [B, P, N, 3]
+                dp = np.sum(dLdp, axis=(0,2,3))
+
+                for dparams, nrg in zip(np.split(dp, offset)[1:], nrgs):
+                    if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
+                        dp = es_learning_rate * dparams.reshape((-1, 1))
+                        if np.any(np.isnan(dp)):
+                            print("nan grad:", clipped_dp)
+                            continue
+                        amax, amin = np.amax(dp), np.amin(dp)
+                        if amax > 1e-2 or amin < -1e2:
+                            print("excessively large gradient:", dp)
+                            continue
+
+                        for p_grad, p_idx in zip(dp, gci):
+                            global_params[p_idx] -= p_grad
+
+        if not inference:
+            print("train",end=" ")
+        else:
+            print("test",end=" ")
+
+
+        print("---average batch loss---", batch_loss/batch_size, batch_idxs, "reduce_time:", time.time()-start_time, "train_time:", train_time)
+
+        sys.stdout.flush()
+
+
+    if not inference:
+        print("train",end=" ")
+    else:
+        print("test",end=" ")
+
+    print('---average EPOCH loss---', epoch_loss/N)
+
 def train_molecule(args):
 
     # sys.stdout = unbuffered
@@ -229,8 +340,6 @@ def train_molecule(args):
                 nrg.set_params(new_params)
 
         confs, dxdp = run_once(nrgs, context, intg, x0, train_steps, total_params, ksize, inference=False)
-
-
         return confs, dxdp, nrgs
 
     except Exception as e:
@@ -239,8 +348,6 @@ def train_molecule(args):
         traceback.print_exc()
         print("EXCEPTION CAUGHT", e)
         raise e
-
-
 
 def batch(iterable, n=1):
     l = len(iterable)
@@ -333,87 +440,12 @@ def train_charges(train_smiles, test_smiles):
     test_args, test_offset_idxs, test_charge_idxs, test_label_confs = initialize(test_smiles, global_params)
 
     print("starting training...")
-    es_learning_rate = np.array([[0.001]])
+
 
     for epoch in range(1000):
         print("starting epoch...", epoch, "global params", global_params.tolist())
-        epoch_loss = 0
-
-        for batch_idxs in batch(range(0, len(train_smiles)), batch_size):
-            train_confs = []
-            train_dxdps = []
-            train_gcis = []
-            train_offsets = []
-            train_nrgs = []
-
-            batch_smiles_train = []
-            batch_label_confs = []
-
-            start_time = time.time()
-
-            args = []
-            for idx in batch_idxs:
-                train_gcis.append(train_charge_idxs[idx])
-                train_offsets.append(train_offset_idxs[idx])
-                args.append(train_args[idx])
-
-            results = [train_molecule(a) for a in args]
-
-            for r in results:
-                train_confs.append(r[0])
-                train_dxdps.append(r[1])
-                train_nrgs.append(r[2])
-
-            train_time = time.time() - start_time
-            start_time = time.time()
-
-            batch_labels = []
-            for idx in batch_idxs:
-                batch_labels.append(train_label_confs[idx])
-
-            grads = np.zeros_like(global_params)
-            batch_loss = 0
-
-            for conf, dxdp, gci, offset, nrgs, label_conf in zip(train_confs, train_dxdps, train_gcis, train_offsets, train_nrgs, batch_labels):
-
-                tf.reset_default_graph()
-                sess = tf.Session()
-                x0 = tf.convert_to_tensor(conf)
-                obs0_rij = observable.sorted_squared_distances(x0)
-                obs1_rij = observable.sorted_squared_distances(tf.convert_to_tensor(label_conf))
-                loss = tf.sqrt(tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))/ksize) # RMSE
-                x0_grads = tf.gradients(loss, x0)[0]
-                loss_np, dLdx = sess.run([loss, x0_grads])
-                batch_loss += loss_np
-                epoch_loss += loss_np
-
-                if loss_np > 10:
-                    print("giant_loss detected, skipping", loss_np)
-                    continue
-
-                dLdx = np.expand_dims(dLdx, 1) # [B, 1, N, 3]
-                dLdp = np.multiply(dLdx, dxdp) # dL/dx * dx/dp [B, P, N, 3]
-                dp = np.sum(dLdp, axis=(0,2,3))
-
-                for dparams, nrg in zip(np.split(dp, offset)[1:], nrgs):
-                    if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
-                        dp = es_learning_rate * dparams.reshape((-1, 1))
-                        if np.any(np.isnan(dp)):
-                            print("nan grad:", clipped_dp)
-                            continue
-                        amax, amin = np.amax(dp), np.amin(dp)
-                        if amax > 1e-2 or amin < -1e2:
-                            print("excessively large gradient:", dp)
-                            continue
-
-                        for p_grad, p_idx in zip(dp, gci):
-                            global_params[p_idx] -= p_grad
-
-            print("---average batch loss---", batch_loss/batch_size, batch_idxs, "reduce_time:", time.time()-start_time, "train_time:", train_time)
-
-            sys.stdout.flush()
-
-        print('---average EPOCH loss---', epoch_loss/len(train_smiles))
+        iterbatches(train_args, train_offset_idxs, train_charge_idxs, train_label_confs, global_params, len(train_smiles), inference=False)
+        iterbatches(test_args, test_offset_idxs, test_charge_idxs, test_label_confs, global_params, len(test_smiles), inference=True)
 
 if __name__ == "__main__":
     
