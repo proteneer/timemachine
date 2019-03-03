@@ -11,11 +11,6 @@ import ctypes
 import random
 
 import tensorflow as tf
-
-
-import multiprocessing
-from multiprocessing import Pool
-
 from openeye import oechem
 from openeye.oechem import OEMol, OEParseSmiles, OEAddExplicitHydrogens, OEGetIsotopicWeight, OEGetAverageWeight
 from openeye import oeomega
@@ -34,13 +29,12 @@ from simtk import openmm
 
 from tensorflow.python.client import device_lib
 
-
 num_train_samples = 64
+num_test_samples = int(0.333*num_train_samples)
 ksize = 200 # reservoir size FIXME
 batch_size = 4 # number of GPUs
 obs_steps = 400
 train_steps = 400
-
 
 def get_available_gpus():
     local_device_protos = device_lib.list_local_devices()
@@ -204,7 +198,7 @@ def generate_observables(args):
     masses = args[2]
     mol = args[3]
 
-    pid = multiprocessing.current_process().pid % batch_size
+    # pid = multiprocessing.current_process().pid % batch_size
     # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
     nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
@@ -224,9 +218,6 @@ def train_molecule(args):
         masses = args[3]
         mol = args[4]
         charge_idxs = args[5]
-
-        pid = multiprocessing.current_process().pid % batch_size
-        # os.environ["CUDA_VISIBLE_DEVICES"] = str(pid)
 
         nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
 
@@ -256,8 +247,49 @@ def batch(iterable, n=1):
     for ndx in range(0, l, n):
         yield iterable[ndx:min(ndx + n, l)]
 
+def initialize(input_smiles, gp):
+    train_reference_args = []
+    train_args = []
+    train_offset_idxs = []
+    train_charge_idxs = []
 
-def train_charges(all_smiles):
+    for smiles in input_smiles:
+        mol = OEMol()
+        OEParseSmiles(mol, smiles)
+        OEAddExplicitHydrogens(mol)
+        masses = get_masses(mol)
+        num_atoms = mol.NumAtoms()
+
+        omegaOpts = oeomega.OEOmegaOptions()
+        omegaOpts.SetMaxConfs(1)
+        omega = oeomega.OEOmega(omegaOpts)
+        omega.SetStrictStereo(False)
+
+        if not omega(mol):
+            assert 0
+
+        topology = generateTopologyFromOEMol(mol)
+        reference_forcefield_file = 'forcefield/smirnoff99Frosst_perturbed.offxml'
+        ff = ForceField(get_data_filename(reference_forcefield_file))
+        params = system_builder.construct_energies(ff, mol, True)
+        train_reference_args.append((params[0], params[1], masses, mol))
+
+        params = system_builder.construct_energies(ff, mol, False)
+        # global_params = args[0]
+        # nrg_params = args[1]
+        # total_params = args[2]
+        # masses = args[3]
+        # mol = args[4]
+        # charge_idxs = args[5]
+        train_args.append((gp, params[0], params[1], masses, mol, params[3]))
+        train_offset_idxs.append(params[2])
+        train_charge_idxs.append(params[3])
+
+    label_confs = [generate_observables(a) for a in train_reference_args]
+
+    return train_args, train_offset_idxs, train_charge_idxs, label_confs
+
+def train_charges(train_smiles, test_smiles):
 
     global_params = np.array([
         0.1,
@@ -297,60 +329,17 @@ def train_charges(all_smiles):
         0.1
     ])
 
-    # step 1. reference system generated using am1 charges and test systems generated using atom-typed charges
-    reference_args = []
-    train_args = []
-    train_offset_idxs = []
-    train_charge_idxs = []
-
-    for smiles in all_smiles:
-        mol = OEMol()
-        OEParseSmiles(mol, smiles)
-        OEAddExplicitHydrogens(mol)
-        masses = get_masses(mol)
-        num_atoms = mol.NumAtoms()
-
-        omegaOpts = oeomega.OEOmegaOptions()
-        omegaOpts.SetMaxConfs(1)
-        omega = oeomega.OEOmega(omegaOpts)
-        omega.SetStrictStereo(False)
-
-        if not omega(mol):
-            assert 0
-
-        topology = generateTopologyFromOEMol(mol)
-        reference_forcefield_file = 'forcefield/smirnoff99Frosst_perturbed.offxml'
-        ff = ForceField(get_data_filename(reference_forcefield_file))
-        params = system_builder.construct_energies(ff, mol, True)
-        reference_args.append((params[0], params[1], masses, mol))
-
-        params = system_builder.construct_energies(ff, mol, False)
-        # global_params = args[0]
-        # nrg_params = args[1]
-        # total_params = args[2]
-        # masses = args[3]
-        # mol = args[4]
-        # charge_idxs = args[5]
-        train_args.append((global_params, params[0], params[1], masses, mol, params[3]))
-
-        train_offset_idxs.append(params[2])
-        train_charge_idxs.append(params[3])
-
-    # step 2. generate a collection of conformations from each molecules to train against
-    with Pool(batch_size) as p:
-        label_confs = p.map(generate_observables, reference_args)
-
+    train_args, train_offset_idxs, train_charge_idxs, train_label_confs = initialize(train_smiles, global_params)
+    test_args, test_offset_idxs, test_charge_idxs, test_label_confs = initialize(test_smiles, global_params)
 
     print("starting training...")
     es_learning_rate = np.array([[0.001]])
 
     for epoch in range(1000):
         print("starting epoch...", epoch, "global params", global_params.tolist())
-
-
         epoch_loss = 0
 
-        for batch_idxs in batch(range(0, len(all_smiles)), batch_size):
+        for batch_idxs in batch(range(0, len(train_smiles)), batch_size):
             train_confs = []
             train_dxdps = []
             train_gcis = []
@@ -361,35 +350,31 @@ def train_charges(all_smiles):
             batch_label_confs = []
 
             start_time = time.time()
-            with Pool(batch_size) as p:
 
-                args = []
-                for idx in batch_idxs:
-                    train_gcis.append(train_charge_idxs[idx])
-                    train_offsets.append(train_offset_idxs[idx])
-                    args.append(train_args[idx])
-                    # args.append((all_smiles[idx], global_params))
+            args = []
+            for idx in batch_idxs:
+                train_gcis.append(train_charge_idxs[idx])
+                train_offsets.append(train_offset_idxs[idx])
+                args.append(train_args[idx])
 
-                results = p.map(train_molecule, args) # need to update parameters from global parameter pool
-                for r in results:
-                    train_confs.append(r[0])
-                    train_dxdps.append(r[1])
-                    train_nrgs.append(r[2])
+            results = [train_molecule(a) for a in args]
 
-                # assert 0
+            for r in results:
+                train_confs.append(r[0])
+                train_dxdps.append(r[1])
+                train_nrgs.append(r[2])
 
             train_time = time.time() - start_time
             start_time = time.time()
 
             batch_labels = []
             for idx in batch_idxs:
-                batch_labels.append(label_confs[idx])
+                batch_labels.append(train_label_confs[idx])
 
             grads = np.zeros_like(global_params)
             batch_loss = 0
 
             for conf, dxdp, gci, offset, nrgs, label_conf in zip(train_confs, train_dxdps, train_gcis, train_offsets, train_nrgs, batch_labels):
-                # print("processing...")
 
                 tf.reset_default_graph()
                 sess = tf.Session()
@@ -420,6 +405,7 @@ def train_charges(all_smiles):
                         if amax > 1e-2 or amin < -1e2:
                             print("excessively large gradient:", dp)
                             continue
+
                         for p_grad, p_idx in zip(dp, gci):
                             global_params[p_idx] -= p_grad
 
@@ -427,7 +413,7 @@ def train_charges(all_smiles):
 
             sys.stdout.flush()
 
-        print('---average EPOCH loss---', epoch_loss/len(all_smiles))
+        print('---average EPOCH loss---', epoch_loss/len(train_smiles))
 
 if __name__ == "__main__":
     
@@ -1787,4 +1773,4 @@ if __name__ == "__main__":
 
     random.shuffle(smiles)
 
-    train_charges(smiles[:num_train_samples])
+    train_charges(smiles[:num_train_samples], smiles[num_train_samples:num_train_samples+num_test_samples])
