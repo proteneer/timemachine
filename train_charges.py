@@ -29,12 +29,12 @@ from simtk import openmm
 
 from tensorflow.python.client import device_lib
 
-num_train_samples = 60
+num_train_samples = 24
 num_test_samples = int(0.333*num_train_samples)
 ksize = 200 # reservoir size FIXME
 batch_size = 4 # number of GPUs
 obs_steps = 4000
-train_steps = 4000
+train_steps = 600
 
 def get_available_gpus():
     local_device_protos = device_lib.list_local_devices()
@@ -191,7 +191,7 @@ def run_once(nrgs, context, intg, x0, n_steps, total_params, ksize, inference):
 
     return confs, dxdps
 
-def generate_observables(args):
+def generate_conformations(args):
 
     nrg_params = args[0]
     total_params = args[1]
@@ -269,8 +269,21 @@ def iterbatches(input_args, input_offset_idxs, input_charge_idxs, input_label_co
             tf.reset_default_graph()
             sess = tf.Session()
             x0 = tf.convert_to_tensor(conf)
-            obs0_rij = observable.sorted_squared_distances(x0)
-            obs1_rij = observable.sorted_squared_distances(tf.convert_to_tensor(label_conf))
+            
+            # obs0_rij = observable.sorted_squared_distances(x0)
+            # obs1_rij = observable.sorted_squared_distances(tf.convert_to_tensor(label_conf))
+            # es_learning_rate = 0.001
+
+            # print(conf)
+            # print(conf.shape)
+
+            # assert 0
+
+            obs0_rij = observable.radius_of_gyration(x0, conf.shape[1])
+            obs1_rij = observable.radius_of_gyration(tf.convert_to_tensor(label_conf), conf.shape[1])
+            es_learning_rate = 0.5
+
+
             loss = tf.sqrt(tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))/ksize) # RMSE
             x0_grads = tf.gradients(loss, x0)[0]
             loss_np, dLdx = sess.run([loss, x0_grads])
@@ -318,37 +331,6 @@ def iterbatches(input_args, input_offset_idxs, input_charge_idxs, input_label_co
 
     print('---average EPOCH loss---', epoch_loss/N)
 
-def train_molecule(args):
-
-    # sys.stdout = unbuffered
-
-    try:
-        global_params = args[0]
-        nrg_params = args[1]
-        total_params = args[2]
-        masses = args[3]
-        mol = args[4]
-        charge_idxs = args[5]
-
-        nrgs, intg, context, x0 = initialize_system(nrg_params, total_params, masses, mol)
-
-        for nrg in nrgs:
-            if isinstance(nrg, custom_ops.ElectrostaticsGPU_double):
-                new_params = []
-                for p_idx in charge_idxs:
-                    new_params.append(global_params[p_idx])
-                nrg.set_params(new_params)
-
-        confs, dxdp = run_once(nrgs, context, intg, x0, train_steps, total_params, ksize, inference=False)
-        return confs, dxdp, nrgs
-
-    except Exception as e:
-
-        print("TRACEBACK")
-        traceback.print_exc()
-        print("EXCEPTION CAUGHT", e)
-        raise e
-
 def batch(iterable, n=1):
     l = len(iterable)
     for ndx in range(0, l, n):
@@ -360,7 +342,8 @@ def initialize(input_smiles, gp):
     train_offset_idxs = []
     train_charge_idxs = []
 
-    for smiles in input_smiles:
+    for smi_idx, smiles in enumerate(input_smiles):
+        print("processing", smiles, smi_idx, "/", len(input_smiles))
         mol = OEMol()
         OEParseSmiles(mol, smiles)
         OEAddExplicitHydrogens(mol)
@@ -392,7 +375,7 @@ def initialize(input_smiles, gp):
         train_offset_idxs.append(params[2])
         train_charge_idxs.append(params[3])
 
-    label_confs = [generate_observables(a) for a in train_reference_args]
+    label_confs = [generate_conformations(a) for a in train_reference_args]
 
     return train_args, train_offset_idxs, train_charge_idxs, label_confs
 
@@ -444,8 +427,9 @@ def train_charges(train_smiles, test_smiles):
 
     for epoch in range(1000):
         print("starting epoch...", epoch, "global params", global_params.tolist())
-        iterbatches(train_args, train_offset_idxs, train_charge_idxs, train_label_confs, global_params, len(train_smiles), inference=False)
         iterbatches(test_args, test_offset_idxs, test_charge_idxs, test_label_confs, global_params, len(test_smiles), inference=True)
+        iterbatches(train_args, train_offset_idxs, train_charge_idxs, train_label_confs, global_params, len(train_smiles), inference=False)
+
 
 if __name__ == "__main__":
     

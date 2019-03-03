@@ -66,6 +66,15 @@ def vibrational_eigenvalues(conf, masses, energies):
     print("DEBUG", tf.gradients(eigenvalues, net_hessians))
     return VIBRATIONAL_CONSTANT*tf.sqrt(eigenvalues)
 
+
+def radius_of_gyration(confs, num_atoms):
+    com = tf.reduce_mean(confs, -2, keep_dims=True)
+    adj_xs = confs - com
+    squared_norms = tf.reduce_sum(tf.multiply(adj_xs, adj_xs), axis=-1)
+    ssn = tf.reduce_sum(squared_norms, -1)
+    rg = ssn/(2*num_atoms)
+    return rg
+
 class Rg():
     """
     Radius of gyration
