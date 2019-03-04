@@ -1,6 +1,6 @@
 import os
 import sys
-
+import sklearn
 import traceback
 
 import time
@@ -98,8 +98,7 @@ def initialize_system(
     masses,
     mol,
     dt=0.001,
-    temperature=50,
-    am1_charges=True):
+    temperature=50):
 
     num_atoms = mol.NumAtoms()
     nrg_funcs = [
@@ -209,7 +208,6 @@ def generate_conformations(args):
 
 def iterbatches(input_args, input_offset_idxs, input_charge_idxs, input_label_confs, global_params, N, inference=False):
     epoch_loss = 0
-    es_learning_rate = np.array([[0.001]])
     for batch_idxs in batch(range(0, N), batch_size):
         batch_confs = []
         batch_dxdps = []
@@ -281,7 +279,7 @@ def iterbatches(input_args, input_offset_idxs, input_charge_idxs, input_label_co
 
             obs0_rij = observable.radius_of_gyration(x0, conf.shape[1])
             obs1_rij = observable.radius_of_gyration(tf.convert_to_tensor(label_conf), conf.shape[1])
-            es_learning_rate = 0.5
+            es_learning_rate = 0.005
 
 
             loss = tf.sqrt(tf.reduce_sum(tf.pow(obs0_rij - obs1_rij, 2))/ksize) # RMSE
@@ -424,10 +422,10 @@ def train_charges(train_smiles, test_smiles):
 
     print("starting training...")
 
-
     for epoch in range(1000):
         print("starting epoch...", epoch, "global params", global_params.tolist())
         iterbatches(test_args, test_offset_idxs, test_charge_idxs, test_label_confs, global_params, len(test_smiles), inference=True)
+        sklearn.utils.shuffle(train_args, train_offset_idxs, train_charge_idxs, train_label_confs)
         iterbatches(train_args, train_offset_idxs, train_charge_idxs, train_label_confs, global_params, len(train_smiles), inference=False)
 
 
