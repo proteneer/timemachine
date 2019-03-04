@@ -68,11 +68,12 @@ def vibrational_eigenvalues(conf, masses, energies):
 
 
 def radius_of_gyration(confs, num_atoms):
+    # print("num_atoms", num_atoms)
     com = tf.reduce_mean(confs, -2, keep_dims=True)
     adj_xs = confs - com
     squared_norms = tf.reduce_sum(tf.multiply(adj_xs, adj_xs), axis=-1)
     ssn = tf.reduce_sum(squared_norms, -1)
-    rg = ssn/num_atoms
+    rg = tf.sqrt(ssn/num_atoms)
     return rg
 
 class Rg():
