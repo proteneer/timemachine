@@ -56,7 +56,7 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
         memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
         memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
 
-        std::clock_t start; double duration; start = std::clock();
+        // std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative(
             num_atoms,
@@ -88,6 +88,8 @@ void declare_harmonic_bond_gpu(py::module &m, const char *typestr) {
         std::vector<size_t>, // param_idxs
         std::vector<size_t> // bond_idxs
     >())
+    .def("get_params", &timemachine::HarmonicBondGPU<NumericType>::get_params)
+    .def("set_params", &timemachine::HarmonicBondGPU<NumericType>::set_params)
     .def("total_derivative", [](timemachine::HarmonicBondGPU<NumericType> &nrg,
         const py::array_t<NumericType, py::array::c_style> coords,
         ssize_t num_params) -> py::tuple {
@@ -104,7 +106,7 @@ void declare_harmonic_bond_gpu(py::module &m, const char *typestr) {
         memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
         memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
 
-        std::clock_t start; double duration; start = std::clock();
+        // std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative_cpu(
             num_atoms,
@@ -152,7 +154,7 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
         memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
         memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
 
-        std::clock_t start; double duration; start = std::clock();
+        // std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative(
             num_atoms,
@@ -184,6 +186,8 @@ void declare_harmonic_angle_gpu(py::module &m, const char *typestr) {
         std::vector<size_t>, // param_idxs
         std::vector<size_t> // angle_idxs
     >())
+    .def("get_params", &timemachine::HarmonicAngleGPU<NumericType>::get_params)
+    .def("set_params", &timemachine::HarmonicAngleGPU<NumericType>::set_params)
     .def("total_derivative", [](timemachine::HarmonicAngleGPU<NumericType> &nrg,
         const py::array_t<NumericType, py::array::c_style> coords,
         ssize_t num_params) -> py::tuple {
@@ -200,7 +204,7 @@ void declare_harmonic_angle_gpu(py::module &m, const char *typestr) {
         memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
         memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
 
-        std::clock_t start; double duration; start = std::clock();
+        // std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative_cpu(
             num_atoms,
@@ -248,7 +252,7 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
         memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
         memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
 
-        std::clock_t start; double duration; start = std::clock();
+        // std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative(
             num_atoms,
@@ -281,6 +285,8 @@ void declare_periodic_torsion_gpu(py::module &m, const char *typestr) {
         std::vector<size_t>, // param_idxs
         std::vector<size_t> // angle_idxs
     >())
+    .def("get_params", &timemachine::PeriodicTorsionGPU<NumericType>::get_params)
+    .def("set_params", &timemachine::PeriodicTorsionGPU<NumericType>::set_params)
     .def("total_derivative", [](timemachine::PeriodicTorsionGPU<NumericType> &nrg,
         const py::array_t<NumericType, py::array::c_style> coords,
         ssize_t num_params) -> py::tuple {
@@ -297,7 +303,7 @@ void declare_periodic_torsion_gpu(py::module &m, const char *typestr) {
         memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
         memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
 
-        std::clock_t start; double duration; start = std::clock();
+        // std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative_cpu(
             num_atoms,
@@ -346,7 +352,7 @@ void declare_electrostatics(py::module &m, const char *typestr) {
         memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
 
 
-        std::clock_t start; double duration; start = std::clock();
+        // std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative(
             num_atoms,
@@ -393,7 +399,7 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
         memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
         memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
 
-        std::clock_t start; double duration; start = std::clock();
+        // std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative(
             num_atoms,
@@ -425,6 +431,9 @@ void declare_electrostatics_gpu(py::module &m, const char *typestr) {
         std::vector<size_t>, // param_idxs
         std::vector<NumericType>  // NxN scale_matrix
     >())
+    .def("get_param_idxs", &timemachine::ElectrostaticsGPU<NumericType>::get_param_idxs)
+    .def("get_params", &timemachine::ElectrostaticsGPU<NumericType>::get_params)
+    .def("set_params", &timemachine::ElectrostaticsGPU<NumericType>::set_params)
     .def("total_derivative", [](timemachine::ElectrostaticsGPU<NumericType> &nrg,
         const py::array_t<NumericType, py::array::c_style> coords,
         ssize_t num_params) -> py::tuple {
@@ -441,7 +450,7 @@ void declare_electrostatics_gpu(py::module &m, const char *typestr) {
         memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
         memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
 
-        std::clock_t start; double duration; start = std::clock();
+        // std::clock_t start; double duration; start = std::clock();
 
 
         nrg.total_derivative_cpu(
@@ -473,6 +482,8 @@ void declare_lennard_jones_gpu(py::module &m, const char *typestr) {
         std::vector<size_t>, // param_idxs
         std::vector<NumericType>  // NxN scale_matrix
     >())
+    .def("get_params", &timemachine::LennardJonesGPU<NumericType>::get_params)
+    .def("set_params", &timemachine::LennardJonesGPU<NumericType>::set_params)
     .def("total_derivative", [](timemachine::LennardJonesGPU<NumericType> &nrg,
         const py::array_t<NumericType, py::array::c_style> coords,
         ssize_t num_params) -> py::tuple {
@@ -489,7 +500,7 @@ void declare_lennard_jones_gpu(py::module &m, const char *typestr) {
         memset(py_hessians.mutable_data(), 0.0, sizeof(NumericType)*num_atoms*num_dims*num_atoms*num_dims);
         memset(py_mps.mutable_data(), 0.0, sizeof(NumericType)*num_params*num_atoms*num_dims);
 
-        std::clock_t start; double duration; start = std::clock();
+        // std::clock_t start; double duration; start = std::clock();
 
         nrg.total_derivative_cpu(
             num_atoms,

@@ -16,6 +16,7 @@ private:
     int* d_param_idxs_;
     int* d_bond_idxs_;
     int n_bonds_;
+    int P_;
 
 public:
 
@@ -27,6 +28,10 @@ public:
     );
 
     ~HarmonicBondGPU();
+
+    void set_params(const std::vector<NumericType> &new_params);
+
+    std::vector<NumericType> get_params() const;
 
     void total_derivative(
         const size_t n_atoms,
@@ -61,6 +66,7 @@ private:
     int* d_param_idxs_;
     int* d_angle_idxs_;
     int n_angles_;
+    int P_;
 
 public:
 
@@ -72,6 +78,10 @@ public:
     );
 
     ~HarmonicAngleGPU();
+
+    void set_params(const std::vector<NumericType> &new_params);
+
+    std::vector<NumericType> get_params() const;
 
     void total_derivative(
         const size_t n_atoms,
@@ -106,6 +116,7 @@ private:
     int* d_param_idxs_;
     int* d_torsion_idxs_;
     int n_torsions_;
+    int P_;
 
 public:
 
@@ -117,6 +128,10 @@ public:
     );
 
     ~PeriodicTorsionGPU();
+
+    void set_params(const std::vector<NumericType> &new_params);
+
+    std::vector<NumericType> get_params() const;
 
     void total_derivative(
         const size_t n_atoms,

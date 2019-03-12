@@ -59,7 +59,7 @@ def minimize_newton_cg(nrgs, x0, num_params):
         method='L-BFGS-B',
         jac=gradient,
         # hess=hessian,
-        options={'xtol': 1e-8, 'disp': True}
+        # options={'xtol': 1e-8, 'disp': False}
     )
 
     # print("before and after")

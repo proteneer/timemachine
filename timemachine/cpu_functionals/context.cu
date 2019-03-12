@@ -12,6 +12,7 @@ void Context<NumericType>::step(bool inference) {
     NumericType *de = integrator_->get_device_energy();
 	NumericType *dg = integrator_->get_device_grads();
 
+
     gpuErrchk(cudaMemset(de, 0, sizeof(NumericType)));
     gpuErrchk(cudaMemset(dg, 0, N*3*sizeof(NumericType)));
 

@@ -18,7 +18,7 @@ ElectrostaticsGPU<NumericType>::ElectrostaticsGPU(
     std::vector<size_t> global_param_idxs,
     std::vector<size_t> param_idxs,
     std::vector<NumericType> scale_matrix
-) {
+) : P_(params.size()), N_(param_idxs.size()) {
 
     // convert to int version
     std::vector<int> int_global_param_idxs;
@@ -82,6 +82,24 @@ void ElectrostaticsGPU<NumericType>::total_derivative(
 
 };
 
+template <typename NumericType>
+void ElectrostaticsGPU<NumericType>::set_params(const std::vector<NumericType> &params) {
+    gpuErrchk(cudaMemcpy(d_params_, &params[0], params.size()*sizeof(NumericType), cudaMemcpyHostToDevice));
+}
+
+template <typename NumericType>
+std::vector<NumericType> ElectrostaticsGPU<NumericType>::get_params() const {
+    std::vector<NumericType> buf(P_);
+    gpuErrchk(cudaMemcpy(&buf[0], d_params_, P_*sizeof(NumericType), cudaMemcpyDeviceToHost));
+    return buf;
+}
+
+template <typename NumericType>
+std::vector<int> ElectrostaticsGPU<NumericType>::get_param_idxs() const {
+    std::vector<int> buf(N_);
+    gpuErrchk(cudaMemcpy(&buf[0], d_param_idxs_, N_*sizeof(int), cudaMemcpyDeviceToHost));
+    return buf;
+}
 
 template <typename NumericType>
 void ElectrostaticsGPU<NumericType>::total_derivative_cpu(
@@ -150,7 +168,7 @@ LennardJonesGPU<NumericType>::LennardJonesGPU(
     std::vector<size_t> global_param_idxs,
     std::vector<size_t> param_idxs,
     std::vector<NumericType> scale_matrix
-) {
+) : P_(params.size()) {
 
     // convert to int version
     std::vector<int> int_global_param_idxs;
@@ -184,6 +202,12 @@ LennardJonesGPU<NumericType>::~LennardJonesGPU() {
 
 };
 
+template <typename NumericType>
+void LennardJonesGPU<NumericType>::set_params(const std::vector<NumericType> &params) {
+    gpuErrchk(cudaMemcpy(d_params_, &params[0], params.size()*sizeof(NumericType), cudaMemcpyHostToDevice));
+}
+
+
 // refactor into interface class
 template <typename NumericType>
 void LennardJonesGPU<NumericType>::total_derivative(
@@ -212,6 +236,13 @@ void LennardJonesGPU<NumericType>::total_derivative(
         n_atoms);
 
 };
+
+template <typename NumericType>
+std::vector<NumericType> LennardJonesGPU<NumericType>::get_params() const {
+    std::vector<NumericType> buf(P_);
+    gpuErrchk(cudaMemcpy(&buf[0], d_params_, P_*sizeof(NumericType), cudaMemcpyDeviceToHost));
+    return buf;
+}
 
 template <typename NumericType>
 void LennardJonesGPU<NumericType>::total_derivative_cpu(

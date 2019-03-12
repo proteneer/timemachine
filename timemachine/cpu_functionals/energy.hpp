@@ -1,5 +1,7 @@
 #pragma once
 
+#include<vector>
+
 namespace timemachine {
 
 template <typename NumericType>
@@ -27,6 +29,12 @@ public:
         NumericType* d_mp_out // [P, N, 3]
     ) = 0;
 
+    virtual void set_params(
+        const std::vector<NumericType> &new_params
+    ) = 0;
+
+
+    virtual std::vector<NumericType> get_params() const = 0;
 
 };
 

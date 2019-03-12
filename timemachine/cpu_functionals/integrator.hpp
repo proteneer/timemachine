@@ -60,6 +60,8 @@ private:
 
 public:
 
+    void reset();
+
     NumericType* get_device_energy() {
       return d_energy_;
     }
@@ -113,8 +115,6 @@ public:
         const std::vector<NumericType> &coeff_cs);
 
     ~Integrator();
-
-    void reset();
 
     void step_cpu(
         const NumericType *h_grads,
