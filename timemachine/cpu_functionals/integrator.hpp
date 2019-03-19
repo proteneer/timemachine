@@ -21,7 +21,6 @@ private:
     cublasHandle_t cb_handle_;
     curandGenerator_t  cr_rng_;
 
-    const int W_;
     const int N_;
     const int P_;
 
@@ -108,7 +107,6 @@ public:
 
     Integrator(
         NumericType dt,
-        int W,
         int N,
         int P,
         const NumericType coeff_a,

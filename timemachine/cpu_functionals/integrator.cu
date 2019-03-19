@@ -60,14 +60,12 @@ namespace timemachine {
 template<typename NumericType> 
 Integrator<NumericType>::Integrator(
     NumericType dt,
-    int W,
     int N,
     int P,
     const NumericType coeff_a,
     const std::vector<NumericType> &coeff_bs,
     const std::vector<NumericType> &coeff_cs) :
     dt_(dt),
-    W_(W),
     N_(N),
     P_(P),
     step_(0),

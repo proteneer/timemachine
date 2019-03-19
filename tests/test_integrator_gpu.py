@@ -13,8 +13,6 @@ class TestGPUIntegrator(unittest.TestCase):
         # (ytz): needed to clear variables
         tf.reset_default_graph()
 
-
-
     def test_gpu_electrostatic_analytic_integration(self):
         """
         Testing that lower triangular hessians are working as intended. This is because for the
@@ -87,19 +85,12 @@ class TestGPUIntegrator(unittest.TestCase):
 
         # verify correctness of jacobians through time
         ref_dxdp_es_op = jacobian(ref_x_final_op, ref_nrg.get_params(), use_pfor=False) # (N, 3, P)
-        # ref_dxdp_ha_op = jacobian(ref_x_final_op, ha.get_params(), use_pfor=False) # (N, 3, P)
         ref_dxdp_es_op = tf.transpose(ref_dxdp_es_op, perm=[2,0,1])
-        # ref_dxdp_ha_op = tf.transpose(ref_dxdp_ha_op, perm=[2,0,1])
-
-        buffer_size = 100 # just make something large
 
         total_params = params_np.shape[0]
-        # global_angle_param_idxs = np.arange(angle_params_np.shape[0], dtype=np.int32) + global_bond_param_idxs.shape[0]
-        # total_params = bond_params_np.shape[0] + angle_params_np.shape[0]
 
         gpu_intg = custom_ops.Integrator_double(
             dt,
-            buffer_size,
             num_atoms,
             total_params,
             ref_intg.coeff_a,
@@ -209,15 +200,12 @@ class TestGPUIntegrator(unittest.TestCase):
         ref_dxdp_hb_op = tf.transpose(ref_dxdp_hb_op, perm=[2,0,1])
         ref_dxdp_ha_op = tf.transpose(ref_dxdp_ha_op, perm=[2,0,1])
 
-        buffer_size = 100 # just make something large
-
         global_bond_param_idxs = np.arange(bond_params_np.shape[0], dtype=np.int32)
         global_angle_param_idxs = np.arange(angle_params_np.shape[0], dtype=np.int32) + global_bond_param_idxs.shape[0]
         total_params = bond_params_np.shape[0] + angle_params_np.shape[0]
 
         gpu_intg = custom_ops.Integrator_double(
             dt,
-            buffer_size,
             num_atoms,
             total_params,
             ref_intg.coeff_a,
@@ -358,15 +346,12 @@ class TestGPUIntegrator(unittest.TestCase):
         ref_dxdp_hb_op = tf.transpose(ref_dxdp_hb_op, perm=[2,0,1])
         ref_dxdp_ha_op = tf.transpose(ref_dxdp_ha_op, perm=[2,0,1])
 
-        buffer_size = 100 # just make something large
-
         global_bond_param_idxs = np.arange(bond_params_np.shape[0], dtype=np.int32)
         global_angle_param_idxs = np.arange(angle_params_np.shape[0], dtype=np.int32) + global_bond_param_idxs.shape[0]
         total_params = bond_params_np.shape[0] + angle_params_np.shape[0]
 
         gpu_intg = custom_ops.Integrator_double(
             dt,
-            buffer_size,
             num_atoms,
             total_params,
             ref_intg.coeff_a,
