@@ -9,22 +9,6 @@
 #include "integrator.hpp"
 #include "gpu_utils.cuh"
 
-/*
-
-Buffer operations:
-
-Let W be the number of windows
-
-1. Compute the total derivative Dx_t, using dxdp_t, hessians, and mixed partials
-2. Add window_t into the converged window sums
-3. Replace window_t with Dx_t
-4. Reduce over all the windows and the converged buffer.
-5. Update dx/dp_t to t+1
-
-Each thread processes 1 out of [P,N,3] elements.
-
-*/
-
 template <typename NumericType>
 __global__ void reduce_velocities(
     const NumericType *noise,
@@ -46,56 +30,29 @@ __global__ void reduce_velocities(
     x_t[local_idx] += v_t[local_idx]*d_t;
 }
 
+
 template<typename NumericType>
-__global__ void reduce_total(
+__global__ void update_derivatives(
     NumericType coeff_a,
     const NumericType *coeff_bs,
-    const NumericType *Dx_t,
-    NumericType *total_buffer,
-    NumericType *converged_buffer,
+    const NumericType *hmp,
     NumericType *dxdp_t,
+    NumericType *dvdp_t,
     NumericType dt,
-    int t, // starting window slot
-    int W, // number of windows
-    int PN3 // PN3
+    int PN3 // num_params * num_atoms * 3
 ) {
 
-    // 1. Done by SGEMM call
     int local_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(local_idx >= PN3) {
         return;
     }
 
-    // 2. Add total_buffer[t] into converged buffer
-    int window_idx = t * PN3 + blockIdx.x * blockDim.x + threadIdx.x;
-    converged_buffer[local_idx] += total_buffer[window_idx];
-
-    // 3. Replace window_t with Dx_t
-    total_buffer[window_idx] = Dx_t[local_idx];
-
-    // 4. Reduce over all the windows.
-    NumericType prefactor = 0.0;
-    NumericType a_n = 1.0;
-    NumericType accum = 0.0;
-
-    //      iter i
-    // k=0  0 3 2 1
-    // k=1  1 0 3 2
-    // k=2  1 0 3 2
-    // k=3  2 1 0 3
-    for(int i=0; i < W; i++) {
-        int slot = t - i < 0 ? t - i + W : t - i;
-        int slot_idx = slot*PN3 + blockIdx.x*blockDim.x + threadIdx.x;
-        prefactor += a_n;
-        a_n *= coeff_a;
-        accum += prefactor*total_buffer[slot_idx];
-    }
-
-    // 5. Compute new dxdp_t
-    // (ytz). coeff_b's can be optimized into smaller chunks.
-    dxdp_t[local_idx] = -coeff_bs[local_idx] * dt * (accum + prefactor * converged_buffer[local_idx]);
+    NumericType tmp = coeff_a*dvdp_t[local_idx] - coeff_bs[local_idx]*hmp[local_idx];
+    dvdp_t[local_idx] = tmp;
+    dxdp_t[local_idx] += dt*tmp;
 
 }
+
 
 namespace timemachine {
 
@@ -143,8 +100,7 @@ Integrator<NumericType>::Integrator(
     gpuErrchk(cudaMalloc((void**)&d_x_t_, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_v_t_, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_dxdp_t_, P_*N_*3*sizeof(NumericType)));
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    gpuErrchk(cudaMalloc((void**)&d_total_buffer_, W_*P_*N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMalloc((void**)&d_converged_buffer_, P_*N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMalloc((void**)&d_dvdp_t_, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_coeff_bs_, P_*N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMalloc((void**)&d_coeff_cs_, N_*3*sizeof(NumericType)));
 
@@ -159,8 +115,7 @@ Integrator<NumericType>::Integrator(
     gpuErrchk(cudaMemset(d_x_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_v_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_dxdp_t_, 0.0, P_*N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMemset(d_total_buffer_, 0.0, W_*P_*N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMemset(d_converged_buffer_, 0.0, P_*N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_dvdp_t_, 0.0, P_*N_*3*sizeof(NumericType)));
 
     gpuErrchk(cudaMemcpy(d_coeff_bs_, &expanded_coeff_bs[0], P_*N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_coeff_cs_, &expanded_coeff_cs[0], N_*3*sizeof(NumericType), cudaMemcpyHostToDevice));
@@ -176,13 +131,11 @@ Integrator<NumericType>::Integrator(
 
 template <typename NumericType>
 void Integrator<NumericType>::reset() {
-    // std::cout << "RESETTING: " << N_ << " " << P_ << " " << W_ << " " << this << std::endl;
     step_ = 0;
     gpuErrchk(cudaMemset(d_x_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_v_t_, 0.0, N_*3*sizeof(NumericType)));
     gpuErrchk(cudaMemset(d_dxdp_t_, 0.0, P_*N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMemset(d_total_buffer_, 0.0, W_*P_*N_*3*sizeof(NumericType)));
-    gpuErrchk(cudaMemset(d_converged_buffer_, 0.0, P_*N_*3*sizeof(NumericType)));
+    gpuErrchk(cudaMemset(d_dvdp_t_, 0.0, P_*N_*3*sizeof(NumericType)));
 
 
     gpuErrchk(cudaMemset(d_energy_, 0, sizeof(NumericType)));
@@ -197,19 +150,16 @@ void Integrator<NumericType>::reset() {
 
 template<typename NumericType> 
 Integrator<NumericType>::~Integrator() {
-    // std::cout <<" DESTROYING " << std::endl;
     gpuErrchk(cudaFree(d_x_t_));
     gpuErrchk(cudaFree(d_v_t_));
     gpuErrchk(cudaFree(d_dxdp_t_));
-    gpuErrchk(cudaFree(d_total_buffer_));
-    gpuErrchk(cudaFree(d_converged_buffer_));
+    gpuErrchk(cudaFree(d_dvdp_t_));
     gpuErrchk(cudaFree(d_coeff_bs_));
     gpuErrchk(cudaFree(d_coeff_cs_));
 
     gpuErrchk(cudaFree(d_grads_));
     gpuErrchk(cudaFree(d_hessians_));
     gpuErrchk(cudaFree(d_mixed_partials_));
-
     gpuErrchk(cudaFree(d_rng_buffer_));
 
     cublasErrchk(cublasDestroy(cb_handle_));
@@ -286,20 +236,15 @@ void Integrator<NumericType>::step_gpu(
 
     if(d_hessians != nullptr && d_mixed_partials != nullptr) {
         hessian_vector_product(d_hessians_, d_dxdp_t_, d_mixed_partials);
-        // reduce_total_derivatives(d_mixed_partials_, step_ % W_);
-        int window_k = step_ % W_;
-        
         size_t n_blocks = (P_*N_*3 + tpb - 1) / tpb;
-        reduce_total<NumericType><<<n_blocks, tpb>>>(
+
+        update_derivatives<NumericType><<<n_blocks, tpb>>>(
             coeff_a_,
             d_coeff_bs_,
             d_mixed_partials_,
-            d_total_buffer_,
-            d_converged_buffer_,
             d_dxdp_t_,
+            d_dvdp_t_,
             dt_,
-            window_k,
-            W_,
             P_*N_*3
         );
         gpuErrchk(cudaPeekAtLastError());
