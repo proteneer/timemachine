@@ -124,13 +124,10 @@ def initialize_system(
 
     a,b,c = get_abc_coefficents(masses, dt, friction, temperature)
 
-    buf_size = estimate_buffer_size(1e-10, a)
-    # print("BUFFER_SIZE", buf_size)
     x0 = mol_coords_to_numpy_array(mol)/10
 
     intg = custom_ops.Integrator_double(
         dt,
-        buf_size,
         num_atoms,
         total_params,
         a,

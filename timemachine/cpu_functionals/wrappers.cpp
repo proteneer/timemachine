@@ -529,7 +529,6 @@ void declare_integrator(py::module &m, const char *typestr) {
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         NumericType, // dt
-        int, // W,
         int, // N,
         int, // P,
         NumericType, // coeff_a, 

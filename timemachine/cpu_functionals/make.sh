@@ -13,4 +13,4 @@ fi
 
 nvcc --use_fast_math --ptxas-options=-v -lineinfo -arch=sm_61 -O3 -Xcompiler="-fPIC" -std=c++11 integrator.cu nonbonded_gpu.cu bonded_gpu.cu gpu_utils.cu context.cu -c
 
-g++ -O3 -march=native -Wall -shared -std=c++11 -fPIC $PLATFORM_FLAGS `python3 -m pybind11 --includes` -L/usr/local/cuda-9.0/lib64/ -I/usr/local/cuda-9.0/include/ wrappers.cpp integrator.o nonbonded_gpu.o bonded_gpu.o gpu_utils.o context.o -o custom_ops`python3-config --extension-suffix` -lcurand -lcublas -lcudart
+g++ -O3 -march=native -Wall -shared -std=c++11 -fPIC $PLATFORM_FLAGS `python3 -m pybind11 --includes` -L/usr/local/cuda-10.0/lib64/ -I/usr/local/cuda-10.0/include/ wrappers.cpp integrator.o nonbonded_gpu.o bonded_gpu.o gpu_utils.o context.o -o custom_ops`python3-config --extension-suffix` -lcurand -lcublas -lcudart

@@ -21,7 +21,6 @@ private:
     cublasHandle_t cb_handle_;
     curandGenerator_t  cr_rng_;
 
-    const int W_;
     const int N_;
     const int P_;
 
@@ -34,8 +33,9 @@ private:
     NumericType *d_x_t_; // geometries
     NumericType *d_v_t_; // velocities
     NumericType *d_dxdp_t_; // derivatives of geometry wrt parameters
-    NumericType *d_total_buffer_; // total derivatives
-    NumericType *d_converged_buffer_;
+    NumericType *d_dvdp_t_; // derivatives of geometry wrt parameters
+    // NumericType *d_total_buffer_; // total derivatives
+    // NumericType *d_converged_buffer_;
 
 
     // should these be owned by the context instead? we want them to be explicit
@@ -107,7 +107,6 @@ public:
 
     Integrator(
         NumericType dt,
-        int W,
         int N,
         int P,
         const NumericType coeff_a,
