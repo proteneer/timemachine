@@ -66,6 +66,7 @@ def analytic_grad(coords, params):
 def nose_hoover_integrator(x0, params, dt=0.01, friction=1.0, temp=300.0):
 
     masses = np.array([12.0107, 1.0, 1.0, 1.0, 1.0], dtype=np.float64)
+    masses = masses.reshape((-1, 1))
 
     num_atoms = len(masses)
     num_dims = 3
@@ -85,7 +86,7 @@ def nose_hoover_integrator(x0, params, dt=0.01, friction=1.0, temp=300.0):
     kT = BOLTZ * temperature
     nscale = np.sqrt(kT*(1-vscale*vscale)) # noise scale
     # normal = tf.distributions.Normal(loc=0.0, scale=1.0)
-    invMasses = (1.0/masses).reshape((-1, 1))
+    invMasses = (1.0/masses)
     sqrtInvMasses = np.sqrt(invMasses)
 
     coeff_a = vscale
@@ -100,21 +101,21 @@ def nose_hoover_integrator(x0, params, dt=0.01, friction=1.0, temp=300.0):
     f_t = -agj(r_t, params)
 
     Q = friction # or vscale?
+    Q = vscale
 
     for step in range(10000):
 
         # f_t = -g
         r_dt = r_t + v_t*dt + (f_t*invMasses - z_t*v_t)*dt*dt/2
-        v_dt_2 = v_t + dt/2*(f_t*invMasses - z_t*v_t)
+        v_dt_2 = v_t + (dt/2)*(f_t*invMasses - z_t*v_t)
         f_dt = -agj(r_dt, params)
 
-        KE_dt = np.sum(0.5*v_t*v_t/invMasses)
-        KE_dt_2 = np.sum(0.5*v_dt_2*v_dt_2/invMasses)
+        KE_dt = np.sum(0.5*v_t*v_t*masses)
+        KE_dt_2 = np.sum(0.5*v_dt_2*v_dt_2*masses)
 
         z_dt_2 = z_t + (dt/(2*Q))*(KE_dt-kT*(3*num_atoms+1)/2)
         z_dt = z_dt_2 + (dt/(2*Q))*(KE_dt_2-kT*(3*num_atoms+1)/2)
-
-        v_dt = (v_dt_2+(dt/2)*(f_dt))/(1+(dt/2)*z_dt)
+        v_dt = (v_dt_2+(dt/2)*f_dt*invMasses)/(1+(dt/2)*z_dt)
 
         v_t = v_dt
         r_t = r_dt
@@ -123,9 +124,14 @@ def nose_hoover_integrator(x0, params, dt=0.01, friction=1.0, temp=300.0):
 
         PE = harmonic_bond_nrg(x0, params)
         # KE = np.sum(0.5*v_t*v_t/invMasses)
-        TE = (PE + KE_dt).aval
+        TE = (PE + KE_dt)
+        KE = TE - PE
 
-        print(step, "NH speed", (time.time() - start_time)/(step+1), np.amax(v_t).aval, "TE", TE, "Z_T", z_t.aval)
+        # print(dir(KE_dt), KE_dt.__array__())
+
+        # assert 0/
+
+        print(step, "NH speed", (time.time() - start_time)/(step+1), np.amax(v_t).aval, "TE", TE.aval, "KE", KE.aval, "Z_T", z_t.aval)
 
     return r_t
 
