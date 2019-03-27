@@ -63,7 +63,7 @@ def analytic_grad(coords, params):
 
     return res
 
-def nose_hoover_integrator(x0, params, dt=0.01, friction=1.0, temp=300.0):
+def nose_hoover_integrator(x0, params, dt=0.0025, friction=1.0, temp=300.0):
 
     masses = np.array([12.0107, 1.0, 1.0, 1.0, 1.0], dtype=np.float64)
     masses = masses.reshape((-1, 1))
@@ -103,7 +103,7 @@ def nose_hoover_integrator(x0, params, dt=0.01, friction=1.0, temp=300.0):
     Q = friction # or vscale?
     Q = vscale
 
-    for step in range(10000):
+    for step in range(5000):
 
         # f_t = -g
         r_dt = r_t + v_t*dt + (f_t*invMasses - z_t*v_t)*dt*dt/2
@@ -135,7 +135,7 @@ def nose_hoover_integrator(x0, params, dt=0.01, friction=1.0, temp=300.0):
 
     return r_t
 
-def integrator(x0, params, dt=0.01, friction=1.0, temp=300.0):
+def langevin_integrator(x0, params, dt=0.0025, friction=1.0, temp=300.0):
 
     masses = np.array([12.0107, 1.0, 1.0, 1.0, 1.0], dtype=np.float64)
 
@@ -167,7 +167,10 @@ def integrator(x0, params, dt=0.01, friction=1.0, temp=300.0):
     start_time = time.time()
 
     agj = jax.jit(analytic_grad)
-    for step in range(1000):
+
+    KEs = []
+
+    for step in range(5000):
 
         g = agj(x0, params)
 
@@ -175,24 +178,21 @@ def integrator(x0, params, dt=0.01, friction=1.0, temp=300.0):
         noise = vnp.random.normal(size=(num_atoms, num_dims)).astype(x0.dtype)
 
         # truncated normal
-        mu, sigma = 0, 1.0
-        lower, upper = -0.5*sigma, 0.5*sigma
-        X = stats.truncnorm(
-            (lower - mu) / sigma, (upper - mu) / sigma, loc=mu, scale=sigma)
-        noise = X.rvs(num_atoms*num_dims).reshape((num_atoms, num_dims))
-        nscale = 0
+        # mu, sigma = 0, 1.0
+        # lower, upper = -0.5*sigma, 0.5*sigma
+        # X = stats.truncnorm(
+        #     (lower - mu) / sigma, (upper - mu) / sigma, loc=mu, scale=sigma)
+        # noise = X.rvs(num_atoms*num_dims).reshape((num_atoms, num_dims))
+        # nscale = 0
+        # vscale = 1.0
         print("noise max/min mean", np.amax(noise), np.amin(noise), np.mean(noise))
 
         v_t = vscale*v_t - fscale*invMasses*g + nscale*sqrtInvMasses*noise
-
-
-        # nose-hoover
         dx = v_t * dt
 
         PE = harmonic_bond_nrg(x0, params)
         KE = np.sum(0.5*v_t*v_t/invMasses)
         TE = (PE + KE).aval
-
 
         print(step, "speed", (time.time() - start_time)/(step+1), np.amax(v_t).aval, "TE", TE)
         x0 += dx
@@ -211,7 +211,7 @@ if __name__ == "__main__":
         [-0.8292, -0.0852, -0.6123]
     ], dtype=np.float64)
 
-    theta = np.array([5000.0, 1.15], dtype=np.float64)
+    theta = np.array([284512.0, 1.15], dtype=np.float64)
 
 
     a = harmonic_bond_grad(x, theta)(x, theta)[0]
@@ -220,6 +220,6 @@ if __name__ == "__main__":
     print(a - b)
     # assert np.max(a-b) < 1e-7
 
-    dxdp = jax.jacfwd(nose_hoover_integrator, argnums=(1,))
+    dxdp = jax.jacfwd(langevin_integrator, argnums=(1,))
     res = dxdp(x, theta)[0]
     print(res, np.amax(res), np.amin(res))
