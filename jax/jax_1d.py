@@ -18,10 +18,10 @@ def harmonic_bond_nrg(
         coords,
         params):
     kb = params[0]
-    b0 = params[1]
+    b0 = params[1:]
 
-    src_idxs = [0, 0]
-    dst_idxs = [1, 2]
+    src_idxs = [0]
+    dst_idxs = [1]
 
     ci = coords[src_idxs]
     cj = coords[dst_idxs]
@@ -32,7 +32,7 @@ def harmonic_bond_nrg(
     # print("DIJ", dij)
     # energy = np.sum(kb*np.power(dij - b0, 2)/2)
     # energy = -kb*np.exp(-np.abs(dij-b0))
-    energy = kb*np.sin(dij-np.pi/2-b0)
+    energy = kb*np.sin(dx-np.pi/2-b0)
 
     print("energy", energy)
 
@@ -44,13 +44,13 @@ def harmonic_bond_grad(coords, params):
 
 def analytic_grad(coords, params):
     kb = params[0]
-    b0 = params[1]
+    b0 = params[1:]
 
     # src_idxs = [0, 0, 0, 0]
     # dst_idxs = [1, 2, 3, 4]
 
-    src_idxs = [0, 0]
-    dst_idxs = [1, 2]
+    src_idxs = [0]
+    dst_idxs = [1]
 
     ci = coords[src_idxs]
     cj = coords[dst_idxs]
@@ -62,14 +62,16 @@ def analytic_grad(coords, params):
     # lhs = np.expand_dims((db/np.abs(db))*kb*np.exp(-np.abs(db))/dij, axis=-1)
     # rhs = dx
 
-    lhs = np.expand_dims(kb*np.cos(dij-np.pi/2-b0)/dij, axis=-1)
-    rhs = dx
+    lhs = kb*np.cos(dx-np.pi/2-b0)
 
-    src_grad = lhs * rhs
+    # print(lhs.shape)
+    # assert 0
+
+    src_grad = lhs
     dst_grad = -src_grad
 
-    dx0 = np.sum(src_grad, axis=0, keepdims=True)
-    res = np.concatenate([dx0, dst_grad], axis=0)
+    # dx0 = np.sum(src_grad, axis=0, keepdims=True)
+    res = np.concatenate([src_grad, dst_grad], axis=0)
 
     return res
 
@@ -147,7 +149,8 @@ def analytic_grad(coords, params):
 
 def langevin_integrator(x0, params, dt=0.002, friction=1.0, temp=300.0):
 
-    masses = np.array([12.0107, 1.0, 1.0], dtype=np.float64)
+    # masses = np.array([12.0107, 1.0], dtype=np.float64)
+    masses = np.array([1.0, 1.0], dtype=np.float64)
 
     num_atoms = len(masses)
     num_dims = 3
@@ -184,7 +187,7 @@ def langevin_integrator(x0, params, dt=0.002, friction=1.0, temp=300.0):
 
     max_PE = 0
 
-    for step in range(1000):
+    for step in range(2500):
 
 
         # func = harmonic_bond_grad(x0, params)
@@ -194,25 +197,21 @@ def langevin_integrator(x0, params, dt=0.002, friction=1.0, temp=300.0):
         # random normal
         noise = vnp.random.normal(size=(num_atoms, num_dims)).astype(x0.dtype)
         # vscale = 0.0
-        nscale = 0.0 # NVE
-
+        # nscale = 0.0 # NVE
 
         # print(g)
-
+        # print("?", v_t.shape, g.shape)
+        # assert 0
         v_t = vscale*v_t - fscale*invMasses*g + nscale*sqrtInvMasses*noise
-
 
         # print("xt", x0)
         print("vt", v_t)
 
         # print(g, type(g), dir(g), g.aval, g.full_lower(), g.primal, g.tangent, dir(g.trace), g.trace.pure)
-
         # assert 0
 
         dx = v_t * dt
-
         PE = harmonic_bond_nrg(x0, params)
-
 
         if PE > max_PE:
             max_PE = PE
@@ -224,7 +223,6 @@ def langevin_integrator(x0, params, dt=0.002, friction=1.0, temp=300.0):
         x0 += dx
 
     print("MAX_PE", max_PE)
-
     print(coeff_a, coeff_bs, coeff_cs)
 
     return x0
@@ -234,14 +232,13 @@ if __name__ == "__main__":
     x = np.array([
         [-0.0036,  0.0222,  0.0912],
         [-0.0162, -0.8092,  0.7960],
-        [ 0.9404,  0.0222, -0.4538],
         # [-0.1092,  0.9610,  0.6348],
         # [-0.8292, -0.0852, -0.6123]
     ], dtype=np.float64)
 
     x = x/10;
 
-    theta = np.array([250000.0, 0.129], dtype=np.float64)
+    theta = np.array([250000.0, 0.129, 0.129, 0.129], dtype=np.float64)
     # theta = np.array([250000.0, 0.120], dtype=np.float64)
 
 
