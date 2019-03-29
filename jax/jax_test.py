@@ -20,8 +20,8 @@ def harmonic_bond_nrg(
     kb = params[0]
     b0 = params[1]
 
-    src_idxs = [0, 0, 0, 0]
-    dst_idxs = [1, 2, 3, 4]
+    src_idxs = [0, 0]
+    dst_idxs = [1, 2]
 
     ci = coords[src_idxs]
     cj = coords[dst_idxs]
@@ -29,11 +29,14 @@ def harmonic_bond_nrg(
     dx = ci - cj
     dij = np.linalg.norm(dx, axis=1)
 
+    # print("DIJ", dij)
+    # energy = np.sum(kb*np.power(dij - b0, 2)/2)
+    # energy = -kb*np.exp(-np.abs(dij-b0))
+    energy = kb*np.sin(dij-np.pi/2-b0)
 
-    # print("dij", dij, dij-b0)
-    energy = np.sum(kb*np.power(dij - b0, 2)/2)
+    print("energy", energy)
 
-    return energy
+    return np.sum(energy)
 
 
 def harmonic_bond_grad(coords, params):
@@ -43,8 +46,11 @@ def analytic_grad(coords, params):
     kb = params[0]
     b0 = params[1]
 
-    src_idxs = [0, 0, 0, 0]
-    dst_idxs = [1, 2, 3, 4]
+    # src_idxs = [0, 0, 0, 0]
+    # dst_idxs = [1, 2, 3, 4]
+
+    src_idxs = [0, 0]
+    dst_idxs = [1, 2]
 
     ci = coords[src_idxs]
     cj = coords[dst_idxs]
@@ -53,8 +59,12 @@ def analytic_grad(coords, params):
     dij = np.linalg.norm(dx, axis=1)
     db = dij - b0
 
-    lhs = np.expand_dims(kb*db/dij, axis=-1)
+    # lhs = np.expand_dims((db/np.abs(db))*kb*np.exp(-np.abs(db))/dij, axis=-1)
+    # rhs = dx
+
+    lhs = np.expand_dims(kb*np.cos(dij-np.pi/2-b0)/dij, axis=-1)
     rhs = dx
+
     src_grad = lhs * rhs
     dst_grad = -src_grad
 
@@ -63,81 +73,81 @@ def analytic_grad(coords, params):
 
     return res
 
-def nose_hoover_integrator(x0, params, dt=0.0025, friction=1.0, temp=300.0):
+# def nose_hoover_integrator(x0, params, dt=0.0025, friction=1.0, temp=300.0):
 
-    masses = np.array([12.0107, 1.0, 1.0, 1.0, 1.0], dtype=np.float64)
-    masses = masses.reshape((-1, 1))
+#     masses = np.array([12.0107, 1.0, 1.0, 1.0, 1.0], dtype=np.float64)
+#     masses = masses.reshape((-1, 1))
 
-    num_atoms = len(masses)
-    num_dims = 3
+#     num_atoms = len(masses)
+#     num_dims = 3
 
-    dt = dt
-    v_t = np.zeros((num_atoms, num_dims))
+#     dt = dt
+#     v_t = np.zeros((num_atoms, num_dims))
 
-    friction = friction # dissipation speed (how fast we forget)
-    temperature = temp           # temperature
+#     friction = friction # dissipation speed (how fast we forget)
+#     temperature = temp           # temperature
 
-    vscale = np.exp(-dt*friction)
+#     vscale = np.exp(-dt*friction)
 
-    if friction == 0:
-        fscale = dt
-    else:
-        fscale = (1-vscale)/friction
-    kT = BOLTZ * temperature
-    nscale = np.sqrt(kT*(1-vscale*vscale)) # noise scale
-    # normal = tf.distributions.Normal(loc=0.0, scale=1.0)
-    invMasses = (1.0/masses)
-    sqrtInvMasses = np.sqrt(invMasses)
+#     if friction == 0:
+#         fscale = dt
+#     else:
+#         fscale = (1-vscale)/friction
+#     kT = BOLTZ * temperature
+#     nscale = np.sqrt(kT*(1-vscale*vscale)) # noise scale
+#     # normal = tf.distributions.Normal(loc=0.0, scale=1.0)
+#     invMasses = (1.0/masses)
+#     sqrtInvMasses = np.sqrt(invMasses)
 
-    coeff_a = vscale
-    coeff_bs = fscale*invMasses
-    coeff_cs = nscale*sqrtInvMasses
+#     coeff_a = vscale
+#     coeff_bs = fscale*invMasses
+#     coeff_cs = nscale*sqrtInvMasses
 
-    start_time = time.time()
+#     start_time = time.time()
 
-    agj = jax.jit(analytic_grad)
-    r_t = x0
-    z_t = 0
-    f_t = -agj(r_t, params)
+#     agj = jax.jit(analytic_grad)
+#     r_t = x0
+#     z_t = 0
+#     f_t = -agj(r_t, params)
 
-    Q = friction # or vscale?
-    Q = vscale
+#     Q = friction # or vscale?
+#     Q = vscale
 
-    for step in range(5000):
+#     for step in range(5000):
 
-        # f_t = -g
-        r_dt = r_t + v_t*dt + (f_t*invMasses - z_t*v_t)*dt*dt/2
-        v_dt_2 = v_t + (dt/2)*(f_t*invMasses - z_t*v_t)
-        f_dt = -agj(r_dt, params)
+#         # f_t = -g
+#         r_dt = r_t + v_t*dt + (f_t*invMasses - z_t*v_t)*dt*dt/2
+#         v_dt_2 = v_t + (dt/2)*(f_t*invMasses - z_t*v_t)
+#         f_dt = -agj(r_dt, params)
 
-        KE_dt = np.sum(0.5*v_t*v_t*masses)
-        KE_dt_2 = np.sum(0.5*v_dt_2*v_dt_2*masses)
+#         KE_dt = np.sum(0.5*v_t*v_t*masses)
+#         KE_dt_2 = np.sum(0.5*v_dt_2*v_dt_2*masses)
 
-        z_dt_2 = z_t + (dt/(2*Q))*(KE_dt-kT*(3*num_atoms+1)/2)
-        z_dt = z_dt_2 + (dt/(2*Q))*(KE_dt_2-kT*(3*num_atoms+1)/2)
-        v_dt = (v_dt_2+(dt/2)*f_dt*invMasses)/(1+(dt/2)*z_dt)
+#         z_dt_2 = z_t + (dt/(2*Q))*(KE_dt-kT*(3*num_atoms+1)/2)
+#         z_dt = z_dt_2 + (dt/(2*Q))*(KE_dt_2-kT*(3*num_atoms+1)/2)
+#         v_dt = (v_dt_2+(dt/2)*f_dt*invMasses)/(1+(dt/2)*z_dt)
 
-        v_t = v_dt
-        r_t = r_dt
-        f_t = f_dt
-        z_t = z_dt
+#         v_t = v_dt
+#         r_t = r_dt
+#         f_t = f_dt
+#         z_t = z_dt
 
-        PE = harmonic_bond_nrg(x0, params)
-        # KE = np.sum(0.5*v_t*v_t/invMasses)
-        TE = (PE + KE_dt)
-        KE = TE - PE
+#         PE = harmonic_bond_nrg(x0, params)
+#         # KE = np.sum(0.5*v_t*v_t/invMasses)
+#         TE = (PE + KE_dt)
+#         KE = TE - PE
 
-        # print(dir(KE_dt), KE_dt.__array__())
+#         # print(dir(KE_dt), KE_dt.__array__())
 
-        # assert 0/
+#         # assert 0/
 
-        print(step, "NH speed", (time.time() - start_time)/(step+1), np.amax(v_t).aval, "TE", TE.aval, "KE", KE.aval, "Z_T", z_t.aval)
+#         print(step, "NH speed", (time.time() - start_time)/(step+1), np.amax(v_t).aval, "TE", TE.aval, "KE", KE.aval, "Z_T", z_t.aval)
 
-    return r_t
+#     return r_t
 
-def langevin_integrator(x0, params, dt=0.0025, friction=1.0, temp=300.0):
+def langevin_integrator(x0, params, dt=0.002, friction=1.0, temp=300.0):
 
-    masses = np.array([12.0107, 1.0, 1.0, 1.0, 1.0], dtype=np.float64)
+    masses = np.array([12.0107, 1.0, 1.0], dtype=np.float64)
 
     num_atoms = len(masses)
     num_dims = 3
@@ -166,36 +176,55 @@ def langevin_integrator(x0, params, dt=0.0025, friction=1.0, temp=300.0):
 
     start_time = time.time()
 
+    # agj = jax.jit(harmonic_bond_grad)
+
     agj = jax.jit(analytic_grad)
 
     KEs = []
 
-    for step in range(5000):
+    max_PE = 0
+
+    for step in range(1000):
+
+
+        # func = harmonic_bond_grad(x0, params)
+        # g = func(x0, params)[0]
 
         g = agj(x0, params)
-
         # random normal
         noise = vnp.random.normal(size=(num_atoms, num_dims)).astype(x0.dtype)
+        # vscale = 0.0
+        nscale = 0.0 # NVE
 
-        # truncated normal
-        # mu, sigma = 0, 1.0
-        # lower, upper = -0.5*sigma, 0.5*sigma
-        # X = stats.truncnorm(
-        #     (lower - mu) / sigma, (upper - mu) / sigma, loc=mu, scale=sigma)
-        # noise = X.rvs(num_atoms*num_dims).reshape((num_atoms, num_dims))
-        # nscale = 0
-        # vscale = 1.0
-        print("noise max/min mean", np.amax(noise), np.amin(noise), np.mean(noise))
+
+        # print(g)
 
         v_t = vscale*v_t - fscale*invMasses*g + nscale*sqrtInvMasses*noise
+
+
+        # print("xt", x0)
+        # print("vt", v_t)
+
+        # print(g, type(g), dir(g), g.aval, g.full_lower(), g.primal, g.tangent, dir(g.trace), g.trace.pure)
+
+        # assert 0
+
         dx = v_t * dt
 
         PE = harmonic_bond_nrg(x0, params)
+
+        # print(PE)
+
+        if PE > max_PE:
+            max_PE = PE
+
         KE = np.sum(0.5*v_t*v_t/invMasses)
         TE = (PE + KE).aval
 
-        print(step, "speed", (time.time() - start_time)/(step+1), np.amax(v_t).aval, "TE", TE)
+        print(step, "speed", (time.time() - start_time)/(step+1), np.amax(v_t).aval, "TE", TE, "PE", PE)
         x0 += dx
+
+    print("MAX_PE", max_PE)
 
     print(coeff_a, coeff_bs, coeff_cs)
 
@@ -207,18 +236,23 @@ if __name__ == "__main__":
         [-0.0036,  0.0222,  0.0912],
         [-0.0162, -0.8092,  0.7960],
         [ 0.9404,  0.0222, -0.4538],
-        [-0.1092,  0.9610,  0.6348],
-        [-0.8292, -0.0852, -0.6123]
+        # [-0.1092,  0.9610,  0.6348],
+        # [-0.8292, -0.0852, -0.6123]
     ], dtype=np.float64)
 
-    theta = np.array([284512.0, 1.15], dtype=np.float64)
+    x = x/10;
+
+    theta = np.array([250000.0, 0.129], dtype=np.float64)
+    # theta = np.array([250000.0, 0.120], dtype=np.float64)
 
 
     a = harmonic_bond_grad(x, theta)(x, theta)[0]
     b = analytic_grad(x, theta)
 
     print(a - b)
-    # assert np.max(a-b) < 1e-7
+    assert np.max(a-b) < 1e-7
+
+    # assert 0
 
     dxdp = jax.jacfwd(langevin_integrator, argnums=(1,))
     res = dxdp(x, theta)[0]
