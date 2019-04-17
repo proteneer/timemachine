@@ -3,8 +3,6 @@ import numpy as vnp
 from jax.config import config; config.update("jax_enable_x64", True)
 import jax
 import jax.numpy as np
-
-
 import scipy.stats as stats
 
 BOLTZMANN = 1.380658e-23
@@ -33,8 +31,6 @@ def harmonic_bond_nrg(
     # energy = np.sum(kb*np.power(dij - b0, 2)/2)
     # energy = -kb*np.exp(-np.abs(dij-b0))
     energy = kb*np.sin(dij-np.pi/2-b0)
-
-    print("energy", energy)
 
     return np.sum(energy)
 
@@ -194,25 +190,19 @@ def langevin_integrator(x0, params, dt=0.002, friction=1.0, temp=300.0):
         # random normal
         noise = vnp.random.normal(size=(num_atoms, num_dims)).astype(x0.dtype)
         # vscale = 0.0
-        nscale = 0.0 # NVE
-
+        # nscale = 0.0 # NVE
 
         # print(g)
-
         v_t = vscale*v_t - fscale*invMasses*g + nscale*sqrtInvMasses*noise
 
-
-        # print("xt", x0)
+        print("xt", x0)
         print("vt", v_t)
 
         # print(g, type(g), dir(g), g.aval, g.full_lower(), g.primal, g.tangent, dir(g.trace), g.trace.pure)
-
         # assert 0
 
         dx = v_t * dt
-
         PE = harmonic_bond_nrg(x0, params)
-
 
         if PE > max_PE:
             max_PE = PE
@@ -224,7 +214,6 @@ def langevin_integrator(x0, params, dt=0.002, friction=1.0, temp=300.0):
         x0 += dx
 
     print("MAX_PE", max_PE)
-
     print(coeff_a, coeff_bs, coeff_cs)
 
     return x0

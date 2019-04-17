@@ -18,7 +18,7 @@ def harmonic_bond_nrg(
         coords,
         params):
     kb = params[0]
-    b0 = params[1:]
+    b0 = params[1]
 
     src_idxs = [0]
     dst_idxs = [1]
@@ -27,12 +27,13 @@ def harmonic_bond_nrg(
     cj = coords[dst_idxs]
 
     dx = ci - cj
-    dij = np.linalg.norm(dx, axis=1)
+    d2ij = np.sum(dx*dx)
+    db = d2ij - b0
 
     # print("DIJ", dij)
     # energy = np.sum(kb*np.power(dij - b0, 2)/2)
     # energy = -kb*np.exp(-np.abs(dij-b0))
-    energy = kb*np.sin(dx-np.pi/2-b0)
+    energy = kb*np.power(d2ij-b0, 2)/2
 
     print("energy", energy)
 
@@ -44,7 +45,7 @@ def harmonic_bond_grad(coords, params):
 
 def analytic_grad(coords, params):
     kb = params[0]
-    b0 = params[1:]
+    b0 = params[1]
 
     # src_idxs = [0, 0, 0, 0]
     # dst_idxs = [1, 2, 3, 4]
@@ -56,13 +57,13 @@ def analytic_grad(coords, params):
     cj = coords[dst_idxs]
 
     dx = ci - cj
-    dij = np.linalg.norm(dx, axis=1)
-    db = dij - b0
+    d2ij = np.sum(dx*dx)
+    db = d2ij - b0
 
     # lhs = np.expand_dims((db/np.abs(db))*kb*np.exp(-np.abs(db))/dij, axis=-1)
     # rhs = dx
 
-    lhs = kb*np.cos(dx-np.pi/2-b0)
+    lhs = 2*kb*db*dx
 
     # print(lhs.shape)
     # assert 0
@@ -187,7 +188,7 @@ def langevin_integrator(x0, params, dt=0.002, friction=1.0, temp=300.0):
 
     max_PE = 0
 
-    for step in range(2500):
+    for step in range(2000):
 
 
         # func = harmonic_bond_grad(x0, params)
@@ -196,8 +197,8 @@ def langevin_integrator(x0, params, dt=0.002, friction=1.0, temp=300.0):
         g = agj(x0, params)
         # random normal
         noise = vnp.random.normal(size=(num_atoms, num_dims)).astype(x0.dtype)
-        vscale = 0.0
-        nscale = 0.0 # NVE
+        # vscale = 0.0
+        # nscale = 0.0 # NVE
 
         # print(g)
         # print("?", v_t.shape, g.shape)
@@ -240,7 +241,7 @@ if __name__ == "__main__":
 
     x = x/10;
 
-    theta = np.array([25000.0, 0.129, 0.129, 0.129], dtype=np.float64)
+    theta = np.array([25000.0, 0.129], dtype=np.float64)
     # theta = np.array([250000.0, 0.120], dtype=np.float64)
 
 

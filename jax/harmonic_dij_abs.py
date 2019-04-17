@@ -18,7 +18,7 @@ def harmonic_bond_nrg(
         coords,
         params):
     kb = params[0]
-    b0 = params[1:]
+    b0 = params[1]
 
     src_idxs = [0]
     dst_idxs = [1]
@@ -32,7 +32,7 @@ def harmonic_bond_nrg(
     # print("DIJ", dij)
     # energy = np.sum(kb*np.power(dij - b0, 2)/2)
     # energy = -kb*np.exp(-np.abs(dij-b0))
-    energy = kb*np.sin(dx-np.pi/2-b0)
+    energy = kb*np.abs(dij-b0)
 
     print("energy", energy)
 
@@ -44,7 +44,7 @@ def harmonic_bond_grad(coords, params):
 
 def analytic_grad(coords, params):
     kb = params[0]
-    b0 = params[1:]
+    b0 = params[1]
 
     # src_idxs = [0, 0, 0, 0]
     # dst_idxs = [1, 2, 3, 4]
@@ -62,7 +62,7 @@ def analytic_grad(coords, params):
     # lhs = np.expand_dims((db/np.abs(db))*kb*np.exp(-np.abs(db))/dij, axis=-1)
     # rhs = dx
 
-    lhs = kb*np.cos(dx-np.pi/2-b0)
+    lhs = kb*((dij-b0)/np.abs(dij-b0))*dx/dij
 
     # print(lhs.shape)
     # assert 0
@@ -187,31 +187,21 @@ def langevin_integrator(x0, params, dt=0.002, friction=1.0, temp=300.0):
 
     max_PE = 0
 
-    for step in range(2500):
-
-
+    for step in range(1000):
         # func = harmonic_bond_grad(x0, params)
         # g = func(x0, params)[0]
-
         g = agj(x0, params)
         # random normal
         noise = vnp.random.normal(size=(num_atoms, num_dims)).astype(x0.dtype)
-        vscale = 0.0
-        nscale = 0.0 # NVE
 
-        # print(g)
-        # print("?", v_t.shape, g.shape)
-        # assert 0
+        # vscale = 0.0
+        # nscale = 0.0 # NVE
         v_t = vscale*v_t - fscale*invMasses*g + nscale*sqrtInvMasses*noise
 
-        # print("xt", x0)
-        # print("vt", v_t)
+        # print(v_t*dt)
 
-        # print(g, type(g), dir(g), g.aval, g.full_lower(), g.primal, g.tangent, dir(g.trace), g.trace.pure)
-        # assert 0
 
-        print(v_t*dt)
-
+        print("X0", x0)
         dx = v_t * dt
         PE = harmonic_bond_nrg(x0, params)
 
@@ -240,7 +230,7 @@ if __name__ == "__main__":
 
     x = x/10;
 
-    theta = np.array([25000.0, 0.129, 0.129, 0.129], dtype=np.float64)
+    theta = np.array([2500.0, 0.129], dtype=np.float64)
     # theta = np.array([250000.0, 0.120], dtype=np.float64)
 
 
