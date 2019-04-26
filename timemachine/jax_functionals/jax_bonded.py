@@ -1,4 +1,3 @@
-import jax
 import jax.numpy as np
 
 from timemachine.jax_functionals import Energy
@@ -31,8 +30,6 @@ class HarmonicBond(Energy):
         dij = np.linalg.norm(ci - cj, axis=-1) # don't ever use norm, just always do 2x and less r0*r0 instead
         kbs = params[self.param_idxs[:, 0]]
         r0s = params[self.param_idxs[:, 1]]
-
-        # (ytz): we used the squared version so that we make this energy being strictly positive
         energy = np.sum(kbs/2 * np.power(dij - r0s, 2.0))
 
         return energy
@@ -58,7 +55,7 @@ class HarmonicAngle(Energy):
 
         cos_angles: True (default)
             if True, then this instead implements V(t) = k*(cos(t)-cos(t0))^2. This is far more
-            numerically stable if your system can become linear.
+            numerically stable when the angle is pi.
 
         """
         self.angle_idxs = angle_idxs
@@ -92,3 +89,80 @@ class HarmonicAngle(Energy):
             angle = np.arccos(cos_angles)
             energies = kas/2*np.power(angle - a0s, 2)
         return np.sum(energies, -1)  # reduce over all angles
+
+
+class PeriodicTorsion(Energy):
+
+    def __init__(self,
+        torsion_idxs,
+        param_idxs):
+        """
+        This implements a periodic torsional potential expanded out into three terms:
+
+        V(a) = k0*(1+cos(1 * a - t0)) + k1*(1+cos(2 * a - t1)) + k2*(1+cos(3 * a - t2))
+
+        Parameters:
+        -----------
+        torsion_idxs: [num_torsions, 4] np.array
+            each element (a, b, c, d) is a torsion of four atoms, defined as
+            as the angle of the plane defined by the three bond vectors a-b, b-c, c-d. 
+
+        param_idxs: [num_torsions, 6] np.array
+            each element (k, phase, periodicity) maps into params for angle constants and ideal angles
+
+        """
+        self.torsion_idxs = torsion_idxs
+        self.param_idxs = param_idxs
+
+    @staticmethod
+    def get_signed_angle(ci, cj, ck, cl):
+        """
+        The torsion angle between two planes should be periodic but not
+        necessarily symmetric. We use an identical but numerically stable arctan2
+        implementation as opposed to the OpenMM energy function to avoid a
+        singularity when the angle is zero.
+        """
+
+        # Taken from the wikipedia arctan2 implementation:
+        # https://en.wikipedia.org/wiki/Dihedral_angle
+
+        rij = ci - cj
+        rkj = ck - cj
+        rkl = ck - cl
+
+        n1 = np.cross(rij, rkj)
+        n2 = np.cross(rkj, rkl)
+
+        lhs = np.linalg.norm(n1, axis=-1)
+        rhs = np.linalg.norm(n2, axis=-1)
+        bot = lhs * rhs
+
+        y = np.sum(np.multiply(np.cross(n1, n2), rkj/np.linalg.norm(rkj, axis=-1, keepdims=True)), axis=-1)
+        x = np.sum(np.multiply(n1, n2), -1)
+
+        return np.arctan2(y, x)
+
+    def angles(self, conf):
+        ci = conf[self.torsion_idxs[:, 0]]
+        cj = conf[self.torsion_idxs[:, 1]]
+        ck = conf[self.torsion_idxs[:, 2]]
+        cl = conf[self.torsion_idxs[:, 3]]
+
+        angle = self.get_signed_angle(ci, cj, ck, cl)
+        return angle
+
+    def energy(self, conf, params):
+        """
+        Compute the torsional energy.
+        """
+        ci = conf[self.torsion_idxs[:, 0]]
+        cj = conf[self.torsion_idxs[:, 1]]
+        ck = conf[self.torsion_idxs[:, 2]]
+        cl = conf[self.torsion_idxs[:, 3]]
+
+        ks = params[self.param_idxs[:, 0]]
+        phase = params[self.param_idxs[:, 1]]
+        period = params[self.param_idxs[:, 2]]
+        angle = self.get_signed_angle(ci, cj, ck, cl)
+        nrg = ks*(1+np.cos(period * angle - phase))
+        return np.sum(nrg, axis=-1)
