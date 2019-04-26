@@ -9,7 +9,6 @@ from timemachine.jax_functionals import jax_bonded
 class TestAngles(unittest.TestCase):
 
     def test_jax_harmonic_angle(self):
-        masses = np.array([6.0, 1.0, 1.0, 1.0, 1.0])
         x0 = np.array([
             [ 0.0637,   0.0126,   0.2203], # C
             [ 1.0573,  -0.2011,   1.2864], # H
@@ -17,7 +16,7 @@ class TestAngles(unittest.TestCase):
             [-0.6891,   1.6983,   0.0780], # H
             [-0.6312,  -1.6261,  -0.2601], # H
         ], dtype=np.float64)
-        num_atoms = len(masses)
+        num_atoms = x0.shape[0]
         params = np.array([75, 1.91, 0.45], dtype=np.float64)
 
         angle_idxs = np.array([[1,0,2],[1,0,3],[1,0,4],[2,0,3],[2,0,4],[3,0,4]])
@@ -45,9 +44,17 @@ class TestAngles(unittest.TestCase):
         nrg = ref_ha.energy(x0, params)
         grads = ref_ha.gradient(x0, params)
 
-        check_grads(ref_ha.energy, (x0, params), order=1)
-        check_grads(ref_ha.energy, (x0, params), order=2)
+        check_grads(ref_ha.energy, (x0, params), order=1, eps=1e-5)
+        check_grads(ref_ha.energy, (x0, params), order=2, eps=1e-7)
 
+        box = np.array([
+            [2.0, 0.5, 0.6],
+            [0.6, 1.6, 0.3],
+            [0.4, 0.7, 1.1]
+        ], dtype=np.float64)
+
+        check_grads(ref_ha.energy, (x0, params, box), order=1, eps=1e-5)
+        check_grads(ref_ha.energy, (x0, params, box), order=2, eps=1e-7)
 
 class TestBonded(unittest.TestCase):
 
@@ -79,8 +86,17 @@ class TestBonded(unittest.TestCase):
         nrg = ref_hb.energy(x0, params)
         grads = ref_hb.gradient(x0, params)
 
-        check_grads(ref_hb.energy, (x0, params), order=1)
-        check_grads(ref_hb.energy, (x0, params), order=2)
+        check_grads(ref_hb.energy, (x0, params), order=1, eps=1e-5)
+        check_grads(ref_hb.energy, (x0, params), order=2, eps=1e-7)
+
+        box = np.array([
+            [2.0, 0.5, 0.6],
+            [0.6, 1.6, 0.3],
+            [0.4, 0.7, 1.1]
+        ], dtype=np.float64)
+
+        check_grads(ref_hb.energy, (x0, params, box), order=1, eps=1e-5)
+        check_grads(ref_hb.energy, (x0, params, box), order=2, eps=1e-7)
 
 
 class TestPeriodicTorsion(unittest.TestCase):
@@ -135,7 +151,7 @@ class TestPeriodicTorsion(unittest.TestCase):
             [0, 1, 2, 3],
         ], dtype=np.int32)
 
-        params_np = np.array([
+        params = np.array([
             2.3, # k0
             5.4, # k1
             9.0, # k2
@@ -161,14 +177,23 @@ class TestPeriodicTorsion(unittest.TestCase):
         # there's no good finite difference tests that we can do for the nan_conformers
         # so instead we compare against the CPU implementation later on
         for conf_idx, conf in enumerate(np.concatenate([self.conformers])):
-            nrg = ref_nrg.energy(conf, params_np)
+            nrg = ref_nrg.energy(conf, params)
             angles = ref_nrg.angles(conf)
 
             check_grads(ref_nrg.angles, (conf,), order=1, eps=1e-5)
             check_grads(ref_nrg.angles, (conf,), order=2, eps=1e-7)
 
-            check_grads(ref_nrg.energy, (conf, params_np), order=1, eps=1e-5)
-            check_grads(ref_nrg.energy, (conf, params_np), order=2, eps=1e-7)
+            check_grads(ref_nrg.energy, (conf, params), order=1, eps=1e-5)
+            check_grads(ref_nrg.energy, (conf, params), order=2, eps=1e-7)
+
+            box = np.array([
+                [2.0, 0.5, 0.6],
+                [0.6, 1.6, 0.3],
+                [0.4, 0.7, 1.1]
+            ], dtype=np.float64)
+
+            check_grads(ref_nrg.energy, (conf, params, box), order=1, eps=1e-5)
+            check_grads(ref_nrg.energy, (conf, params, box), order=2, eps=1e-7)
 
 if __name__ == "__main__":
     unittest.main()
