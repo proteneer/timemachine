@@ -1,5 +1,7 @@
 import unittest
 import numpy as np
+import jax
+import functools
 from jax.config import config; config.update("jax_enable_x64", True)
 from timemachine.jax_functionals import jax_nonbonded
 
@@ -37,6 +39,50 @@ class ReferenceLJEnergy():
                 ref_nrg += vdwEnergy
 
         return ref_nrg
+
+
+class TestElectrostatics(unittest.TestCase):
+
+    def test_periodic_electrostatics(self):
+        conf = np.array([
+            [ 0.0637,   0.0126,   0.2203],
+            [ 1.0573,  -0.2011,   1.2864],
+            [ 2.3928,   1.2209,  -0.2230],
+            [-0.6891,   1.6983,   0.0780],
+            [-0.6312,  -1.6261,  -0.2601]
+        ], dtype=np.float64)
+
+        params = np.array([1.3, 0.3], dtype=np.float64)
+        param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
+        scale_matrix = np.array([
+            [  0,  1,  1,  1,0.5],
+            [  1,  0,  0,  1,  1],
+            [  1,  0,  0,  0,0.2],
+            [  1,  1,  0,  0,  1],
+            [0.5,  1,0.2,  1,  0],
+        ], dtype=np.float64)
+
+        # warning: non net-neutral cell
+        ref_nrg = jax_nonbonded.Electrostatics(param_idxs, scale_matrix)
+
+        box = np.array([
+            [2.0, 0.0, 0.0],
+            [0.6, 1.6, 0.0],
+            [0.4, 0.7, 1.1]
+        ], dtype=np.float64)
+
+        wrapped_nrg = functools.partial(ref_nrg.energy, params=params, box=box, cutoff=0.5, alpha=1.0, kmax=10)
+        check_grads(wrapped_nrg, (conf,), order=1, eps=1e-5)
+        check_grads(wrapped_nrg, (conf,), order=2, eps=1e-7)
+
+        wrapped_nrg = functools.partial(ref_nrg.energy, conf, box=box, cutoff=0.5, alpha=1.0, kmax=10)
+        check_grads(wrapped_nrg, (params,), order=1, eps=1e-5)
+        check_grads(wrapped_nrg, (params,), order=2, eps=1e-7)
+
+        wrapped_nrg = functools.partial(ref_nrg.energy, box=box, cutoff=0.5, alpha=1.0, kmax=10)
+        check_grads(wrapped_nrg, (conf, params), order=1, eps=1e-5)
+        check_grads(wrapped_nrg, (conf, params), order=2, eps=1e-7)
+
 
 class TestLennardJones(unittest.TestCase):
 

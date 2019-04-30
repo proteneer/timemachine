@@ -9,67 +9,20 @@ This package is designed with two goals in mind:
 
 The code is implemented against the reference OpenMM Force classes, and is rigorously tested for accuracy up to machine precision.
 
-# Example Code
-
-The following snippet shows how one can easily compute the GBSA derivatives.
-
-```python
-import numpy as np
-import tensorflow as tf
-from timemachine.functionals.gbsa import GBSAOBC
-
-masses = np.array([6.0, 1.0, 1.0, 1.0, 1.0])
-x0 = np.array([
-    [ 0.0637,   0.0126,   0.2203],
-    [ 1.0573,  -0.2011,   1.2864],
-    [ 2.3928,   1.2209,  -0.2230],
-    [-0.6891,   1.6983,   0.0780],
-    [-0.6312,  -1.6261,  -0.2601]
-], dtype=np.float64)
-
-params = np.array([
-    .1984, .115, .85, # H (q, r, s)
-    0.0221, .19, .72  # C (q, r, s)
-])
-
-param_idxs = np.array([
-    [3, 4, 5],
-    [0, 1, 2],
-    [0, 1, 2],
-    [0, 1, 2],
-    [0, 1, 2],
-])
-
-ref_radii = ref_nrg.openmm_born_radii(x0)
-nrg = GBSAOBC(params, param_idxs)
-
-x_ph = tf.placeholder(shape=(5, 3), dtype=np.float64)
-test_nrg_op = nrg.energy(x_ph)
-test_nrg_grad_op = tf.gradients(test_nrg_op, x_ph)
-test_nrg_hess_op = tf.hessians(test_nrg_op, x_ph)
-
-test_nrg, test_nrg_grad, test_nrg_hess = sess.run([test_nrg_op, test_nrg_grad_op, test_nrg_hess_op], feed_dict={x_ph: x0})
-
-# similar things can be easily done for the derivatives with respect to params
-```
-
-This is not meant to be a replacement for any production MD engine, since it's about 10-50x slower than OpenMM. For a more detailed explanation of the underlying mathematics, refer to the paper under docs for more information.
-
 # Warning
 
-This code is under heavy development. Expect everything to break every time you pull. An alpha release is anticipated for end of March.
+This code is under heavy development and barely working.  Expect everything to break every time you pull. An alpha release is anticipated for end of May.
 
 # Supported Functional Forms
 
 We currently support the following functional forms and their derivatives:
 
-- Harmonic Bonds (bonded_force.py)
-- Harmonic Angles (bonded_force.py)
-- Periodic Torsions (bonded_force.py)
-- Ewald Electrostatics (nonbonded_force.py)
-- Ewald Leonnard Jones (nonbonded_force.py)
-- Tensorfield Networks (nn_force.py)
-- GBSA OBC (gbsa.py)
+- (Periodic) Harmonic Bonds
+- (Periodic) Harmonic Angles
+- (Periodic) Periodic Torsions
+- (Periodic) Electrostatics
+- (Periodic) Leonnard Jones
+- GBSA OBC
 
 # Supported Integrators
 

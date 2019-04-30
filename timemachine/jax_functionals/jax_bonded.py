@@ -1,7 +1,7 @@
 import jax.numpy as np
 
 from timemachine.jax_functionals import Energy
-
+from timemachine.jax_functionals.jax_utils import distance, delta_r
 
 class HarmonicBond(Energy):
 
@@ -24,10 +24,10 @@ class HarmonicBond(Energy):
         self.param_idxs = param_idxs
         super().__init__()
 
-    def energy(self, conf, params):    
+    def energy(self, conf, params, box=None):   
         ci = conf[self.bond_idxs[:, 0]]
         cj = conf[self.bond_idxs[:, 1]]
-        dij = np.linalg.norm(ci - cj, axis=-1) # don't ever use norm, just always do 2x and less r0*r0 instead
+        dij = distance(ci, cj, box)
         kbs = params[self.param_idxs[:, 0]]
         r0s = params[self.param_idxs[:, 1]]
         energy = np.sum(kbs/2 * np.power(dij - r0s, 2.0))
@@ -63,10 +63,11 @@ class HarmonicAngle(Energy):
         self.cos_angles = cos_angles
         super().__init__()
 
-    def energy(self, conf, params):
+    def energy(self, conf, params, box=None):
         """
         Compute the harmonic bond energy given a collection of molecules.
         """
+
         ci = conf[self.angle_idxs[:, 0]]
         cj = conf[self.angle_idxs[:, 1]]
         ck = conf[self.angle_idxs[:, 2]]
@@ -74,8 +75,8 @@ class HarmonicAngle(Energy):
         kas = params[self.param_idxs[:, 0]]
         a0s = params[self.param_idxs[:, 1]]
 
-        vij = cj - ci
-        vjk = cj - ck
+        vij = delta_r(ci, cj, box)
+        vjk = delta_r(ck, cj, box)
 
         top = np.sum(np.multiply(vij, vjk), -1)
         bot = np.linalg.norm(vij, axis=-1)*np.linalg.norm(vjk, axis=-1)
@@ -113,6 +114,7 @@ class PeriodicTorsion(Energy):
         """
         self.torsion_idxs = torsion_idxs
         self.param_idxs = param_idxs
+        super().__init__()
 
     @staticmethod
     def get_signed_angle(ci, cj, ck, cl):
@@ -126,9 +128,9 @@ class PeriodicTorsion(Energy):
         # Taken from the wikipedia arctan2 implementation:
         # https://en.wikipedia.org/wiki/Dihedral_angle
 
-        rij = ci - cj
-        rkj = ck - cj
-        rkl = ck - cl
+        rij = delta_r(cj, ci)
+        rkj = delta_r(cj, ck)
+        rkl = delta_r(cl, ck)
 
         n1 = np.cross(rij, rkj)
         n2 = np.cross(rkj, rkl)
@@ -151,7 +153,7 @@ class PeriodicTorsion(Energy):
         angle = self.get_signed_angle(ci, cj, ck, cl)
         return angle
 
-    def energy(self, conf, params):
+    def energy(self, conf, params, box=None):
         """
         Compute the torsional energy.
         """
