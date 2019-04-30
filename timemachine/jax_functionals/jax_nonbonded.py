@@ -1,7 +1,9 @@
+import numpy as onp
 import jax.numpy as np
+from jax.scipy.special import erf, erfc
 
-from timemachine.jax_functionals import Energy
 from timemachine.constants import ONE_4PI_EPS0
+from timemachine.jax_functionals import Energy
 from timemachine.jax_functionals.jax_utils import delta_r, distance
 
 class LeonnardJones(Energy):
@@ -28,9 +30,8 @@ class LeonnardJones(Energy):
         """
         self.param_idxs = param_idxs
         self.scale_matrix = scale_matrix
-        self.cutoff = cutoff
+        self.cutoff = cutoff # this probably shouldn't be used
         super().__init__()
-
 
     def energy(self, conf, params, box=None):
         """
@@ -74,142 +75,156 @@ class LeonnardJones(Energy):
         # divide by two to deal with symmetry
         return np.sum(energy, axis=-1)/2
 
-# class Electrostatic(Energy):
 
-#     def __init__(self, params, param_idxs, scale_matrix, cutoff=None, crf=1.0, kmax=10):
-#         """
-#         Implements electrostatic potential based on coloumb's law.
+class Electrostatics(Energy):
 
-#         Parameters
-#         ----------
-#         params: tf.Tensor or numpy array
-#             values used to look for param_idxs
+    def __init__(self, param_idxs, scale_matrix):
+        """
+        Implements electrostatic potential based on coloumb's law. For an in-depth theory guide,
+        please refer to:
 
-#         param_idxs: (N,) tf.Tensor
-#             indices into params for each atom corresponding to the charge
+        http://docs.openmm.org/latest/userguide/theory.html#coulomb-interaction-with-ewald-summation
 
-#         scale_matrix: (N, N) tf.Tensor
-#             how much we scale each interaction by. Note that we follow OpenMM's convention,
-#             if the scale_matrix[i,j] is exactly 1.0 and the cutoff is not None, then we apply
-#             the crf correction. The scale matrices should be set to zero for 1-2 and 1-3 ixns.
+        Parameters
+        ----------
+        param_idxs: (N,) tf.Tensor
+            indices into params for each atom corresponding to the charge
 
-#         cutoff: None or float > 0
-#             whether or not we use cutoffs.
+        scale_matrix: (N, N) tf.Tensor
+            how much we scale each interaction by. Note that we follow OpenMM's convention,
+            if the scale_matrix[i,j] is exactly 1.0 and the cutoff is not None, then we apply
+            the crf correction. The scale matrices should be set to zero for 1-2 and 1-3 ixns.
 
-#         crf: float
-#             how much we adjust the 1/dij in the event that we use cutoff and
-#             the scale_matrix[i, j] == 1.0 
+        """
+        self.param_idxs = param_idxs # length N
+        self.num_atoms = len(self.param_idxs)
+        self.scale_matrix = scale_matrix
+        super().__init__()
 
-#         """
+    def energy(self, conf, params, box=None, cutoff=None, alpha=None, kmax=None):
+        """
+        Parameters
+        ----------
 
-#         if cutoff is not None and cutoff <= 0.0:
-#             raise ValueError("cutoff cannot be <= 0.0, did you mean None?")
+        confs: np.array
+            an Nx3 set of conformations
 
-#         self.params = params
-#         self.param_idxs = param_idxs # length N
-#         self.num_atoms = len(self.param_idxs)
-#         self.charges = tf.gather(self.params, self.param_idxs)
-#         self.charges = tf.reshape(self.charges, shape=(1, -1))
-#         self.scale_matrix = scale_matrix
-#         self.alphaEwald = 1.0
-#         self.cutoff = cutoff
-#         self.kmax = kmax
-#         self.crf = crf
+        params: np.array
+            parameters used by param_idxs to index into the charges
 
-#     def energy(self, conf, box=None):
-#         direct_nrg, exclusion_nrg = self.direct_and_exclusion_energy(conf, box)
-#         if box is None:
-#             return direct_nrg
-#         else:
-#             return self.reciprocal_energy(conf, box) + direct_nrg - exclusion_nrg - self.self_energy(conf)
+        box: np.array
+            3x3 set of vectors, where box is [[a_x, 0, 0], [b_x, b_y, 0], [c_x, c_y, c_z]]
+        
+        cutoff: float
+            must be less than half the periodic boundary condition for each dim
 
-#     def self_energy(self, conf):
-#         return tf.reduce_sum(ONE_4PI_EPS0 * tf.pow(self.charges, 2) * self.alphaEwald/np.sqrt(np.pi))
+        alpha: float
+            alpha term controlling the erf adjustment
 
-#     def direct_and_exclusion_energy(self, conf, box):
-#         charges = tf.gather(self.params, self.param_idxs)
-#         qi = tf.expand_dims(charges, 0)
-#         qj = tf.expand_dims(charges, 1)
-#         qij = self.scale_matrix * tf.multiply(qi, qj)
+        kmax: int
+            number of images by which we tile out reciprocal space.
 
-#         ri = tf.expand_dims(conf, 0)
-#         rj = tf.expand_dims(conf, 1)
+        """
+        charges = params[self.param_idxs]
+        charges = np.reshape(charges, (1, -1))
 
-#         if box is not None:
-#             rij = ri - rj
-#             base = tf.floor(rij/box + 0.5)*box # (ytz): can we differentiate through this?
-#             dxdydz = tf.pow(rij-base, 2)
-#             d2ij = tf.reduce_sum(dxdydz, axis=-1)
-#         else:
-#             d2ij = tf.reduce_sum(tf.pow(ri-rj, 2), axis=-1)
+        # if we use periodic boundary conditions, then the following three parameters
+        # must be set in order for Ewald to make sense.
+        if box is not None:
+            # note that periodic boundary conditions are subject to the following
+            # convention and constraints:
+            # http://docs.openmm.org/latest/userguide/theory.html#periodic-boundary-conditions
 
-#         ones_mask = tf.ones(shape=[self.num_atoms, self.num_atoms], dtype=tf.int32)
-#         on_diag_mask = tf.matrix_band_part(ones_mask, 0, 0)
+            box_lengths = np.linalg.norm(box, axis=-1)
+            assert cutoff is not None and cutoff >= 0.00
+            assert alpha is not None
+            assert kmax is not None
 
-#         # mask = d2ij != 0.0 doesn't work because gradients propagate through the first arg
-#         d2ij_where = tf.where(tf.cast(ones_mask - on_diag_mask, dtype=tf.bool), d2ij, tf.zeros_like(d2ij))
-#         dij_inverse = 1/tf.sqrt(d2ij_where)
+            # this is an implicit assumption in the Ewald calculation. If it were any larger
+            # then there may be more than N^2 number of interactions.
+            if np.any(box_lengths < 2*cutoff):
+                raise ValueError("Box lengths cannot be smaller than twice the cutoff.")
 
-#         if self.cutoff is not None:
-#             # apply only to fully non-excepted terms
-#             dij_inverse = tf.where(self.scale_matrix == 1.0, dij_inverse - self.crf, dij_inverse)
-#             qij = tf.where(d2ij < self.cutoff*self.cutoff, qij, tf.zeros_like(qij))
+            return self.ewald_energy(conf, box, charges, cutoff, alpha, kmax)
 
-#         direct_mask = self.scale_matrix > 0
-#         qij_direct_mask = tf.boolean_mask(qij, direct_mask)
-#         dij_inverse_mask =  tf.boolean_mask(dij_inverse, direct_mask)
-#         eij_direct = qij_direct_mask * dij_inverse_mask
+        else:
+            raise Exception("Box is not None")
 
-#         return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1)/2, None
+    def self_energy(self, conf, charges, alpha):
+        return np.sum(ONE_4PI_EPS0 * np.power(charges, 2) * alpha/np.sqrt(np.pi))
 
-#         # if box is not None:
-#         #     # We adjust direct by the erfc, and adjust the reciprocal space's
-#         #     # exclusionary contribution by the direction space weighted by erf
-#         #     eij_direct *= tf.erfc(self.alphaEwald*r_direct)
-#         #     # exclusions to subtract from reciprocal space
-#         #     qij_exclusion_mask = tf.boolean_mask(qij, self.exclusion_mask)
-#         #     d2ij_exclusion_mask = tf.boolean_mask(d2ij, self.exclusion_mask)
-#         #     r_exclusion = tf.sqrt(d2ij_exclusion_mask)
-#         #     eij_exclusion = qij_exclusion_mask/r_exclusion
-#         #     eij_exclusion *= tf.erf(self.alphaEwald*r_exclusion)
+    def ewald_energy(self, conf, box, charges, cutoff, alpha, kmax):
+        qi = np.expand_dims(charges, 0) # (1, N)
+        qj = np.expand_dims(charges, 1) # (N, 1)
+        qij = np.multiply(qi, qj)
+        ri = np.expand_dims(conf, 0)
+        rj = np.expand_dims(conf, 1)
+        dij = distance(ri, rj, box)
 
-#         #     # extra factor of 2 is to deal with the fact that we compute the full matrix as opposed to the upper right
-#         #     return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1)/2, ONE_4PI_EPS0*tf.reduce_sum(eij_exclusion, axis=-1)
-#         # else:
-#         #     return ONE_4PI_EPS0*tf.reduce_sum(eij_direct, axis=-1)/2, None
+        # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
+        keep_mask = 1 - np.eye(conf.shape[0])
+        qij = np.where(keep_mask, qij, np.zeros_like(qij))
+        dij = np.where(keep_mask, dij, np.zeros_like(dij))
+        eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
 
-#     def reciprocal_energy(self, conf, box):
-#         assert box is not None
+        assert cutoff is not None
 
-#         recipBoxSize = (2*np.pi)/box
+        # 1. Assume scale matrix is not used at all (no exceptions, no exclusions)
+        # 1a. Direct Space
+        eij_direct = np.where(dij > cutoff, np.zeros_like(eij), eij)
+        eij_direct *= erfc(alpha*eij_direct)
+        eij_direct = ONE_4PI_EPS0*np.sum(eij_direct)/2
 
-#         mg = []
-#         lowry = 0
-#         lowrz = 1
+        # 1b. Reciprocal Space
+        eij_recip = self.reciprocal_energy(conf, box, charges, alpha, kmax)
 
-#         numRx, numRy, numRz = self.kmax, self.kmax, self.kmax
+        # 2. Remove over estimated scale matrix contribution
+        # 2a. Remove the diagonal elements again
+        eij_offset = (1-self.scale_matrix) * eij
+        eij_offset *= erf(alpha*eij_offset)
+        eij_offset = ONE_4PI_EPS0*np.sum(eij_offset)/2
 
-#         for rx in range(numRx):
-#             for ry in range(lowry, numRy):
-#                 for rz in range(lowrz, numRz):
-#                     mg.append((rx, ry, rz))
-#                     lowrz = 1 - numRz
-#                 lowry = 1 - numRy
+        return eij_direct + eij_recip - eij_offset - self.self_energy(conf, charges, alpha)
 
-#         # lattice vectors
-#         ki = tf.expand_dims(recipBoxSize, axis=0) * mg # [nk, 3]
-#         ri = tf.expand_dims(conf, axis=0) # [1, N, 3]
-#         rik = tf.reduce_sum(tf.multiply(ri, tf.expand_dims(ki, axis=1)), axis=-1) # [nk, N]
-#         real = tf.cos(rik)
-#         imag = tf.sin(rik)
-#         eikr = tf.complex(real, imag) # [nk, N]
-#         qi = tf.complex(self.charges, np.float64(0.0))
-#         Sk = tf.reduce_sum(qi*eikr, axis=-1)  # [nk]
-#         n2Sk = tf.pow(tf.abs(Sk), 2)
-#         k2 = tf.reduce_sum(tf.multiply(ki, ki), axis=-1) # [nk]
-#         factorEwald = -1/(4*self.alphaEwald*self.alphaEwald)
-#         ak = tf.exp(k2*factorEwald)/k2 # [nk]
-#         nrg = tf.reduce_sum(ak * n2Sk)
-#         recipCoeff = (ONE_4PI_EPS0*4*np.pi)/(box[0]*box[1]*box[2])
+    def reciprocal_energy(self, conf, box, charges, alpha, kmax):
 
-#         return recipCoeff * nrg
+        assert kmax > 0
+        assert box is not None
+        assert alpha > 0
+
+        recipBoxSize = (2*np.pi)/np.diag(box)
+
+        mg = []
+        lowry = 0
+        lowrz = 1
+
+        numRx, numRy, numRz = kmax, kmax, kmax
+
+        for rx in range(numRx):
+            for ry in range(lowry, numRy):
+                for rz in range(lowrz, numRz):
+                    mg.append([rx, ry, rz])
+                    lowrz = 1 - numRz
+                lowry = 1 - numRy
+
+        mg = np.array(onp.array(mg))
+
+        # lattice vectors
+        ki = np.expand_dims(recipBoxSize, axis=0) * mg # [nk, 3]
+        ri = np.expand_dims(conf, axis=0) # [1, N, 3]
+        rik = np.sum(np.multiply(ri, np.expand_dims(ki, axis=1)), axis=-1) # [nk, N]
+        real = np.cos(rik)
+        imag = np.sin(rik)
+        eikr = real + 1j*imag # [nk, N]
+        qi = charges +0j
+        Sk = np.sum(qi*eikr, axis=-1)  # [nk]
+        n2Sk = np.power(np.abs(Sk), 2)
+        k2 = np.sum(np.multiply(ki, ki), axis=-1) # [nk]
+        factorEwald = -1/(4*alpha*alpha)
+        ak = np.exp(k2*factorEwald)/k2 # [nk]
+        nrg = np.sum(ak * n2Sk)
+        # the following volume calculation assumes the reduced PBC convention consistent
+        # with that of OpenMM
+        recipCoeff = (ONE_4PI_EPS0*4*np.pi)/(box[0][0]*box[1][1]*box[2][2]) 
+
+        return recipCoeff * nrg
