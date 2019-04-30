@@ -40,6 +40,7 @@ class ReferenceLJEnergy():
 
         return ref_nrg
 
+
 class TestElectrostatics(unittest.TestCase):
 
     def test_periodic_electrostatics(self):
@@ -81,6 +82,7 @@ class TestElectrostatics(unittest.TestCase):
         wrapped_nrg = functools.partial(ref_nrg.energy, box=box, cutoff=0.5, alpha=1.0, kmax=10)
         check_grads(wrapped_nrg, (conf, params), order=1, eps=1e-5)
         check_grads(wrapped_nrg, (conf, params), order=2, eps=1e-7)
+
 
 class TestLennardJones(unittest.TestCase):
 
