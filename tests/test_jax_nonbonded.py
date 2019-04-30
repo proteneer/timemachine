@@ -70,13 +70,17 @@ class TestElectrostatics(unittest.TestCase):
             [0.4, 0.7, 1.1]
         ], dtype=np.float64)
 
-        wrapped_nrg = functools.partial(ref_nrg.energy, params=params, box=box, cutoff=0.5, alphaEwald=1.0, kmax=10)
+        wrapped_nrg = functools.partial(ref_nrg.energy, params=params, box=box, cutoff=0.5, alpha=1.0, kmax=10)
         check_grads(wrapped_nrg, (conf,), order=1, eps=1e-5)
         check_grads(wrapped_nrg, (conf,), order=2, eps=1e-7)
 
-        wrapped_nrg = functools.partial(ref_nrg.energy, conf, box=box, cutoff=0.5, alphaEwald=1.0, kmax=10)
+        wrapped_nrg = functools.partial(ref_nrg.energy, conf, box=box, cutoff=0.5, alpha=1.0, kmax=10)
         check_grads(wrapped_nrg, (params,), order=1, eps=1e-5)
         check_grads(wrapped_nrg, (params,), order=2, eps=1e-7)
+
+        wrapped_nrg = functools.partial(ref_nrg.energy, box=box, cutoff=0.5, alpha=1.0, kmax=10)
+        check_grads(wrapped_nrg, (conf, params), order=1, eps=1e-5)
+        check_grads(wrapped_nrg, (conf, params), order=2, eps=1e-7)
 
 class TestLennardJones(unittest.TestCase):
 
