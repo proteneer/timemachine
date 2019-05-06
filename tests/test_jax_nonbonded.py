@@ -1,11 +1,13 @@
 import unittest
 import numpy as np
-import jax
 import functools
+
 from jax.config import config; config.update("jax_enable_x64", True)
-from timemachine.jax_functionals import jax_nonbonded
+import jax
 
 from jax.test_util import check_grads
+
+from timemachine.jax_functionals import jax_nonbonded
 
 class ReferenceLJEnergy():
 
