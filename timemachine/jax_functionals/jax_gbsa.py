@@ -23,10 +23,8 @@ class GBSA(Energy):
         """
         Implements the Generalized Born Surface Area implicit solvation model.
         
-        Note that this uses a full O(N^2) energy computation to compute the
-        GB energy.
+        Note that this is an O(N^2) as we don't use cutoffs.
         """
-
         self.param_idxs = param_idxs 
 
         self.dielectric_offset = dielectric_offset
@@ -163,10 +161,15 @@ class GBSA(Energy):
         else:
             prefactor = 0.0
 
+
+        # (ytz): The rough sketch of the algorithm is as follows:
+        # 1. Compute the adjusted GB radii
+        # 2. Use the adjusted radiis to compute the shielded electrostatic potential
+        # 3. Compute the non-polar contribution using the GB radii
+
         atomic_radii = params[self.param_idxs[:, 1]]
         scaled_factors = params[self.param_idxs[:, 2]]
         born_radii = self.born_radii(conf, atomic_radii, scaled_factors)
-        nonpolar_nrg = self.non_polar_ace(born_radii, atomic_radii)
 
         charges = params[self.param_idxs[:, 0]]
 
@@ -190,5 +193,7 @@ class GBSA(Energy):
 
         Gpol = pq_ij/denom
         energy = Gpol
+
+        nonpolar_nrg = self.non_polar_ace(born_radii, atomic_radii)
 
         return np.sum(np.triu(energy)) + np.diagonal(energy)/2.0 + nonpolar_nrg
