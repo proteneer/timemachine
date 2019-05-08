@@ -1,6 +1,5 @@
 import jax.numpy as np
 
-
 def rescale_coordinates(
     conf,
     indices,
