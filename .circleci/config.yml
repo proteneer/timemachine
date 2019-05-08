@@ -24,7 +24,7 @@ jobs:
 
       # Download and cache dependencies
       - restore_cache:
-          keys:
+          keys:/
           - v1-dependencies-{{ checksum "requirements.txt" }}
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies-
@@ -33,6 +33,7 @@ jobs:
           name: install dependencies
           no_output_timeout: 30m
           command: |
+            ls -l  /usr/lib/libstdc++.so.6
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
