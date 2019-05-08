@@ -50,6 +50,7 @@ jobs:
           name: run tests
           command: |
             . venv/bin/activate
+            export PYTHONPATH=$PWD
             pytest -v tests
 
       - store_artifacts:
