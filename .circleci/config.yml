@@ -10,7 +10,7 @@ jobs:
       # use `-browsers` prefix for selenium tests, e.g. `3.6.1-browsers`
 
       - image: circleci/python:3.7.1
-      # - image: circleci/buildpack-deps:bionic
+      - image: circleci/buildpack-deps:bionic
       
       # Specify service dependencies here if necessary
       # CircleCI maintains a library of pre-built images
@@ -33,7 +33,6 @@ jobs:
           name: install dependencies
           no_output_timeout: 30m
           command: |
-            ls -l  /usr/lib/libstdc++.so.6
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
