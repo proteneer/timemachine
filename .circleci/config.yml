@@ -33,7 +33,6 @@ jobs:
           name: install dependencies
           no_output_timeout: 30m
           command: |
-            lsb_release -a 
             ls -l  /usr/lib/libstdc++.so.6
             python3 -m venv venv
             . venv/bin/activate
