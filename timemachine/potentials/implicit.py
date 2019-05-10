@@ -111,8 +111,31 @@ def gbsa(conf,
     electric_constant=-69.467728,
     probe_radius=0.14,
     surface_area_energy=2.25936):
+    """
+    Computes the GBSA energy with support for full OBC style parameters.
 
+    For detailed notes on the values of the undocumented keyword args, please
+    refer to the OpenMM theory manual:
 
+    http://docs.openmm.org/latest/userguide/theory.html#gbsaobcforce
+
+    Parameters
+    ----------
+    conf: shape [num_atoms, 3] np.array
+        atomic coordinates
+
+    params: shape [num_params,] np.array
+        unique parameters
+
+    box: shape [3, 3] np.array
+        periodic boundary vectors, if not None
+    
+    param_idxs: shape [num_atoms, 3]
+        a list of 3-tuple parameter indices, where the
+        0th index indicate charges, 1st indicates radii
+        and 2nd indicates scale_factors
+
+    """
 
     if box is not None:
         raise ValueError("Periodic GBSA is not supported.")
@@ -124,14 +147,15 @@ def gbsa(conf,
     else:
         prefactor = 0.0
 
-
     # (ytz): The rough sketch of the algorithm is as follows:
     # 1. Compute the adjusted GB radii
     # 2. Use the adjusted radiis to compute the shielded electrostatic potential
     # 3. Compute the non-polar contribution using the GB radii
 
+    charges = params[param_idxs[:, 0]]
     atomic_radii = params[param_idxs[:, 1]]
     scaled_factors = params[param_idxs[:, 2]]
+
     br = born_radii(
         conf,
         atomic_radii,
@@ -140,8 +164,6 @@ def gbsa(conf,
         alpha_obc,
         beta_obc,
         gamma_obc)
-
-    charges = params[param_idxs[:, 0]]
 
     r_i = np.expand_dims(conf, axis=0)
     r_j = np.expand_dims(conf, axis=1)
@@ -172,4 +194,5 @@ def gbsa(conf,
         probe_radius,
         pi4Asolv)
 
+    # compute using only the upper triangle
     return np.sum(np.triu(energy)) + np.diagonal(energy)/2.0 + nonpolar_nrg
