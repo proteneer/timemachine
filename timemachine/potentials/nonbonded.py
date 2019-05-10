@@ -157,7 +157,6 @@ def electrostatic(conf, params, box, param_idxs, scale_matrix, cutoff=None, alph
     else:    
         # non periodic electrostatics is straightforward.
         # note that we do not support reaction field approximations.
-
         eij = pairwise_energy(conf, box, charges, cutoff)
 
         return ONE_4PI_EPS0*np.sum(eij)/2
@@ -174,7 +173,6 @@ def ewald_energy(conf, box, charges, scale_matrix, cutoff, alpha, kmax):
 
     # 1. Assume scale matrix is not used at all (no exceptions, no exclusions)
     # 1a. Direct Space
-    # eij_direct = np.where(dij > cutoff, np.zeros_like(eij), eij)
     eij_direct = eij * erfc(alpha*eij)
     eij_direct = ONE_4PI_EPS0*np.sum(eij_direct)/2
 
