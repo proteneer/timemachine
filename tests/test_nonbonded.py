@@ -4,10 +4,10 @@ import functools
 
 from jax.config import config; config.update("jax_enable_x64", True)
 import jax
-
 from jax.test_util import check_grads
 
-from timemachine.jax_functionals import jax_nonbonded
+from tests.invariances import assert_potential_invariance
+from timemachine.potentials import nonbonded
 
 class ReferenceLJEnergy():
 
@@ -43,9 +43,9 @@ class ReferenceLJEnergy():
         return ref_nrg
 
 
-class TestElectrostatics(unittest.TestCase):
+class TestElectrostatic(unittest.TestCase):
 
-    def test_periodic_electrostatics(self):
+    def test_periodic_electrostatic(self):
         conf = np.array([
             [ 0.0637,   0.0126,   0.2203],
             [ 1.0573,  -0.2011,   1.2864],
@@ -65,7 +65,7 @@ class TestElectrostatics(unittest.TestCase):
         ], dtype=np.float64)
 
         # warning: non net-neutral cell
-        ref_nrg = jax_nonbonded.Electrostatics(param_idxs, scale_matrix)
+        # ref_nrg = nonbonded.electrostatic(param_idxs, scale_matrix)
 
         box = np.array([
             [2.0, 0.0, 0.0],
@@ -73,18 +73,15 @@ class TestElectrostatics(unittest.TestCase):
             [0.4, 0.7, 1.1]
         ], dtype=np.float64)
 
-        wrapped_nrg = functools.partial(ref_nrg.energy, params=params, box=box, cutoff=0.5, alpha=1.0, kmax=10)
-        check_grads(wrapped_nrg, (conf,), order=1, eps=1e-5)
-        check_grads(wrapped_nrg, (conf,), order=2, eps=1e-7)
+        energy_fn = functools.partial(
+            nonbonded.electrostatic,
+            param_idxs=param_idxs,
+            scale_matrix=scale_matrix,
+            cutoff=0.5,
+            alpha=1.0,
+            kmax=10)
 
-        wrapped_nrg = functools.partial(ref_nrg.energy, conf, box=box, cutoff=0.5, alpha=1.0, kmax=10)
-        check_grads(wrapped_nrg, (params,), order=1, eps=1e-5)
-        check_grads(wrapped_nrg, (params,), order=2, eps=1e-7)
-
-        wrapped_nrg = functools.partial(ref_nrg.energy, box=box, cutoff=0.5, alpha=1.0, kmax=10)
-        check_grads(wrapped_nrg, (conf, params), order=1, eps=1e-5)
-        check_grads(wrapped_nrg, (conf, params), order=2, eps=1e-7)
-
+        assert_potential_invariance(energy_fn, conf, params, box)
 
 class TestLennardJones(unittest.TestCase):
 
@@ -191,7 +188,8 @@ class TestLennardJones(unittest.TestCase):
     #     # print("MAX DIFF", np.amax(diff), ref_h_val.reshape(-1)[np.argmax(diff)])
     #     np.testing.assert_allclose(np.tril(ref_h_val), np.tril(test_h_val), rtol=1e-10)
     #     np.testing.assert_allclose(test_mps, sess.run(ref_mps[0], feed_dict={x_ph: x0}), rtol=1e-9)
-    def test_lj612(self):
+
+    def test_lj612_small(self):
 
         x0 = np.array([
             [ 0.0637,   0.0126,   0.2203],
@@ -217,21 +215,25 @@ class TestLennardJones(unittest.TestCase):
             [  0,  1,0.2,  1,  0],
         ], dtype=np.float64)
 
-        cutoff = None
-
-        ref = jax_nonbonded.LeonnardJones(param_idxs, scale_matrix, cutoff=cutoff)
-
-        check_grads(ref.energy, (x0, params), order=1)
-        check_grads(ref.energy, (x0, params), order=2)
-
         box = np.array([
             [2.0, 0.5, 0.6],
             [0.6, 1.6, 0.3],
             [0.4, 0.7, 1.1]
         ], dtype=np.float64)
 
-        check_grads(ref.energy, (x0, params, box), order=1, eps=1e-5)
-        check_grads(ref.energy, (x0, params, box), order=2, eps=1e-7)
+        energy_fn = functools.partial(nonbonded.lennard_jones,
+            scale_matrix=scale_matrix,
+            param_idxs=param_idxs,
+            cutoff=None)
+
+        assert_potential_invariance(energy_fn, x0, params, box)
+
+        # check_grads(ref.energy, (x0, params), order=1)
+        # check_grads(ref.energy, (x0, params), order=2)
+
+
+        # check_grads(ref.energy, (x0, params, box), order=1, eps=1e-5)
+        # check_grads(ref.energy, (x0, params, box), order=2, eps=1e-7)
 
 
 if __name__ == "__main__":
