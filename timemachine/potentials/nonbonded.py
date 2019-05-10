@@ -74,35 +74,34 @@ def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
     return np.sum(energy, axis=-1)/2
 
 
-# class Electrostatics(Energy):
+def pairwise_energy(conf, box, charges, cutoff):
+    """
+    Numerically stable implementation of the pairwise term:
+    
+    eij = qi*qj/dij
 
-#     def __init__(self, param_idxs, scale_matrix):
-#         """
-#         Implements electrostatic potential based on coloumb's law. For an in-depth theory guide,
-#         please refer to:
+    """
+    qi = np.expand_dims(charges, 0) # (1, N)
+    qj = np.expand_dims(charges, 1) # (N, 1)
+    qij = np.multiply(qi, qj)
+    ri = np.expand_dims(conf, 0)
+    rj = np.expand_dims(conf, 1)
+    dij = distance(ri, rj, box)
 
-#         http://docs.openmm.org/latest/userguide/theory.html#coulomb-interaction-with-ewald-summation
+    # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
+    keep_mask = 1 - np.eye(conf.shape[0])
+    qij = np.where(keep_mask, qij, np.zeros_like(qij))
+    dij = np.where(keep_mask, dij, np.zeros_like(dij))
+    eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
 
-#         Parameters
-#         ----------
-#         param_idxs: (N,) tf.Tensor
-#             indices into params for each atom corresponding to the charge
+    if cutoff is not None:
+        eij = np.where(dij > cutoff, np.zeros_like(eij), eij)
 
-#         scale_matrix: (N, N) tf.Tensor
-#             how much we scale each interaction by. Note that we follow OpenMM's convention,
-#             if the scale_matrix[i,j] is exactly 1.0 and the cutoff is not None, then we apply
-#             the crf correction. The scale matrices should be set to zero for 1-2 and 1-3 ixns.
-
-#         """
-#         self.param_idxs = param_idxs # length N
-#         self.num_atoms = len(self.param_idxs)
-#         self.scale_matrix = scale_matrix
-#         super().__init__()
+    return eij
 
 def electrostatic(conf, params, box, param_idxs, scale_matrix, cutoff=None, alpha=None, kmax=None):
     """
-    Compute the electrostatic potential.
-
+    Compute the electrostatic potential: sum_ij qi*qj/dij
 
     Parameters
     ----------
@@ -155,9 +154,12 @@ def electrostatic(conf, params, box, param_idxs, scale_matrix, cutoff=None, alph
 
         return ewald_energy(conf, box, charges, scale_matrix, cutoff, alpha, kmax)
 
-    else:
-        # (ytz: implement me)
-        return 0.0
+    else:    
+        # non periodic electrostatics is straightforward.
+        # note that we do not support reaction field approximations.
+        eij = pairwise_energy(conf, box, charges, cutoff)
+
+        return ONE_4PI_EPS0*np.sum(eij)/2
 
 
 def self_energy(conf, charges, alpha):
@@ -165,32 +167,19 @@ def self_energy(conf, charges, alpha):
 
 
 def ewald_energy(conf, box, charges, scale_matrix, cutoff, alpha, kmax):
-    qi = np.expand_dims(charges, 0) # (1, N)
-    qj = np.expand_dims(charges, 1) # (N, 1)
-    qij = np.multiply(qi, qj)
-    ri = np.expand_dims(conf, 0)
-    rj = np.expand_dims(conf, 1)
-    dij = distance(ri, rj, box)
-
-    # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
-    keep_mask = 1 - np.eye(conf.shape[0])
-    qij = np.where(keep_mask, qij, np.zeros_like(qij))
-    dij = np.where(keep_mask, dij, np.zeros_like(dij))
-    eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
+    eij = pairwise_energy(conf, box, charges, cutoff)
 
     assert cutoff is not None
 
     # 1. Assume scale matrix is not used at all (no exceptions, no exclusions)
     # 1a. Direct Space
-    eij_direct = np.where(dij > cutoff, np.zeros_like(eij), eij)
-    eij_direct *= erfc(alpha*eij_direct)
+    eij_direct = eij * erfc(alpha*eij)
     eij_direct = ONE_4PI_EPS0*np.sum(eij_direct)/2
 
     # 1b. Reciprocal Space
     eij_recip = reciprocal_energy(conf, box, charges, alpha, kmax)
 
-    # 2. Remove over estimated scale matrix contribution
-    # 2a. Remove the diagonal elements again
+    # 2. Remove over estimated scale matrix contribution scaled by erf
     eij_offset = (1-scale_matrix) * eij
     eij_offset *= erf(alpha*eij_offset)
     eij_offset = ONE_4PI_EPS0*np.sum(eij_offset)/2

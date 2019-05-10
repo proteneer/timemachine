@@ -6,7 +6,7 @@ from jax.config import config; config.update("jax_enable_x64", True)
 from jax.test_util import check_grads
 
 from timemachine.potentials import implicit
-from tests.invariances import assert_potential_invariance_aperiodic
+from tests.invariances import assert_potential_invariance
 
 class TestGBSA(unittest.TestCase):
 
@@ -37,20 +37,9 @@ class TestGBSA(unittest.TestCase):
 
         atomic_radii = params[param_idxs[:, 1]]
         scale_factors = params[param_idxs[:, 2]]
-
         energy_fn = functools.partial(implicit.gbsa, param_idxs=param_idxs)
 
-        assert_potential_invariance_aperiodic(energy_fn, conf, params)
-
-        # gb_radii = gb_nrg.born_radii(conf, atomic_radii, scale_factors)
-
-        # check_grads(gb_nrg.born_radii, (conf, atomic_radii, scale_factors), order=1)
-        # check_grads(gb_nrg.born_radii, (conf, atomic_radii, scale_factors), order=2)
-
-        # gb_e = gb_nrg.energy(conf, params)
-
-        # check_grads(gb_nrg.energy, (conf, params), order=1, eps=1e-6)
-        # check_grads(gb_nrg.energy, (conf, params), order=2, eps=1e-8)
+        assert_potential_invariance(energy_fn, conf, params)
 
 if __name__ == "__main__":
     unittest.main()
