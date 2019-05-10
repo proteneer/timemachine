@@ -219,7 +219,7 @@ class TestLennardJones(unittest.TestCase):
 
         cutoff = None
 
-        ref = jax_nonbonded.LeonnardJones(param_idxs, scale_matrix, cutoff=cutoff)
+        ref = jax_nonbonded.LennardJones(param_idxs, scale_matrix, cutoff=cutoff)
 
         check_grads(ref.energy, (x0, params), order=1)
         check_grads(ref.energy, (x0, params), order=2)

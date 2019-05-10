@@ -6,7 +6,7 @@ from timemachine.constants import ONE_4PI_EPS0
 from timemachine.jax_functionals import Energy
 from timemachine.jax_functionals.jax_utils import delta_r, distance
 
-class LeonnardJones(Energy):
+class LennardJones(Energy):
 
     def __init__(self, param_idxs, scale_matrix, cutoff=None):
         """
