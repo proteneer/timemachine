@@ -49,7 +49,7 @@ dedx_fn(x0, params, box=None)
 
 # dE/dparams, shape [3,]:
 dedp_fn = jax.grad(energy_fn, argnums=(1,))
-dedp_fn(x0, params, box)
+dedp_fn(x0, params, box=None)
 
 # d^2E/dx^2, shape [N,3,N,3]:
 d2edx2_fn = jax.hessian(energy_fn, argnums=(0,))
