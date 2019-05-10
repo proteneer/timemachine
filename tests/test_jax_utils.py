@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from timemachine.jax_functionals import jax_utils
+from timemachine.potentials import jax_utils
 
 def reference_periodic_distance(ri, rj, box):
     diff = rj - ri
