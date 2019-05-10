@@ -1,10 +1,12 @@
 import unittest
 import numpy as np
 
+import functools
 from jax.config import config; config.update("jax_enable_x64", True)
 from jax.test_util import check_grads
 
-from timemachine.jax_functionals import jax_gbsa
+from timemachine.potentials import implicit
+from tests.invariances import assert_potential_invariance_aperiodic
 
 class TestGBSA(unittest.TestCase):
 
@@ -31,20 +33,24 @@ class TestGBSA(unittest.TestCase):
             [0, 1, 2],
         ])
 
-        gb_nrg = jax_gbsa.GBSA(param_idxs)
+        # gb_nrg = implicit.gbsa(param_idxs)
 
         atomic_radii = params[param_idxs[:, 1]]
         scale_factors = params[param_idxs[:, 2]]
 
-        gb_radii = gb_nrg.born_radii(conf, atomic_radii, scale_factors)
+        energy_fn = functools.partial(implicit.gbsa, param_idxs=param_idxs)
 
-        check_grads(gb_nrg.born_radii, (conf, atomic_radii, scale_factors), order=1)
-        check_grads(gb_nrg.born_radii, (conf, atomic_radii, scale_factors), order=2)
+        assert_potential_invariance_aperiodic(energy_fn, conf, params)
 
-        gb_e = gb_nrg.energy(conf, params)
+        # gb_radii = gb_nrg.born_radii(conf, atomic_radii, scale_factors)
 
-        check_grads(gb_nrg.energy, (conf, params), order=1, eps=1e-6)
-        check_grads(gb_nrg.energy, (conf, params), order=2, eps=1e-8)
+        # check_grads(gb_nrg.born_radii, (conf, atomic_radii, scale_factors), order=1)
+        # check_grads(gb_nrg.born_radii, (conf, atomic_radii, scale_factors), order=2)
+
+        # gb_e = gb_nrg.energy(conf, params)
+
+        # check_grads(gb_nrg.energy, (conf, params), order=1, eps=1e-6)
+        # check_grads(gb_nrg.energy, (conf, params), order=2, eps=1e-8)
 
 if __name__ == "__main__":
     unittest.main()

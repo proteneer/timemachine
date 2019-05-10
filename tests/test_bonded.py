@@ -1,9 +1,12 @@
 import unittest
 import numpy as np
-from jax.config import config; config.update("jax_enable_x64", True)
+import functools
 
+from jax.config import config; config.update("jax_enable_x64", True)
 from jax.test_util import check_grads
-from timemachine.jax_functionals import jax_bonded
+
+from tests.invariances import assert_potential_invariance
+from timemachine.potentials import bonded
 
 
 class TestAngles(unittest.TestCase):
@@ -22,30 +25,11 @@ class TestAngles(unittest.TestCase):
         angle_idxs = np.array([[1,0,2],[1,0,3],[1,0,4],[2,0,3],[2,0,4],[3,0,4]])
         param_idxs = np.array([[0,1],[0,1],[0,2],[0,1],[0,1],[0,2]])
 
-        ref_ha = jax_bonded.HarmonicAngle(
+        # enable cos angles
+        energy_fn = functools.partial(bonded.harmonic_angle,
             angle_idxs=angle_idxs,
             param_idxs=param_idxs,
-            cos_angles=True
-        )
-
-        nrg = ref_ha.energy(x0, params)
-        grads = ref_ha.gradient(x0, params)
-
-        check_grads(ref_ha.energy, (x0, params), order=1)
-        check_grads(ref_ha.energy, (x0, params), order=2)
-
-        # re-enable when atan2 is turned on.
-        ref_ha = jax_bonded.HarmonicAngle(
-            angle_idxs=angle_idxs,
-            param_idxs=param_idxs,
-            cos_angles=False
-        )
-
-        nrg = ref_ha.energy(x0, params)
-        grads = ref_ha.gradient(x0, params)
-
-        check_grads(ref_ha.energy, (x0, params), order=1, eps=1e-5)
-        check_grads(ref_ha.energy, (x0, params), order=2, eps=1e-7)
+            cos_angles=True)
 
         box = np.array([
             [2.0, 0.5, 0.6],
@@ -53,8 +37,16 @@ class TestAngles(unittest.TestCase):
             [0.4, 0.7, 1.1]
         ], dtype=np.float64)
 
-        check_grads(ref_ha.energy, (x0, params, box), order=1, eps=1e-5)
-        check_grads(ref_ha.energy, (x0, params, box), order=2, eps=1e-7)
+        assert_potential_invariance(energy_fn, x0, params, box)
+
+        # disable cos angles
+        energy_fn = functools.partial(bonded.harmonic_angle,
+            angle_idxs=angle_idxs,
+            param_idxs=param_idxs,
+            cos_angles=False)
+
+        assert_potential_invariance(energy_fn, x0, params, box)
+
 
 class TestBonded(unittest.TestCase):
 
@@ -77,17 +69,7 @@ class TestBonded(unittest.TestCase):
             [1,2]
         ], dtype=np.int32)
 
-
-        ref_hb = jax_bonded.HarmonicBond(
-            param_idxs=param_idxs,
-            bond_idxs=bond_idxs,
-        )
-
-        nrg = ref_hb.energy(x0, params)
-        grads = ref_hb.gradient(x0, params)
-
-        check_grads(ref_hb.energy, (x0, params), order=1, eps=1e-5)
-        check_grads(ref_hb.energy, (x0, params), order=2, eps=1e-7)
+        energy_fn = functools.partial(bonded.harmonic_bond, param_idxs=param_idxs, bond_idxs=bond_idxs)
 
         box = np.array([
             [2.0, 0.5, 0.6],
@@ -95,8 +77,7 @@ class TestBonded(unittest.TestCase):
             [0.4, 0.7, 1.1]
         ], dtype=np.float64)
 
-        check_grads(ref_hb.energy, (x0, params, box), order=1, eps=1e-5)
-        check_grads(ref_hb.energy, (x0, params, box), order=2, eps=1e-7)
+        assert_potential_invariance(energy_fn, x0, params, box)
 
 
 class TestPeriodicTorsion(unittest.TestCase):
@@ -169,31 +150,21 @@ class TestPeriodicTorsion(unittest.TestCase):
             [2, 5, 8]
         ], dtype=np.int32)
 
-        ref_nrg = jax_bonded.PeriodicTorsion(
+        box = np.array([
+            [2.0, 0.5, 0.6],
+            [0.6, 1.6, 0.3],
+            [0.4, 0.7, 1.1]
+        ], dtype=np.float64)
+
+        energy_fn = functools.partial(
+            bonded.periodic_torsion,
             param_idxs=param_idxs,
-            torsion_idxs=torsion_idxs
-        )
+            torsion_idxs=torsion_idxs)
 
         # there's no good finite difference tests that we can do for the nan_conformers
-        # so instead we compare against the CPU implementation later on
-        for conf_idx, conf in enumerate(np.concatenate([self.conformers])):
-            nrg = ref_nrg.energy(conf, params)
-            angles = ref_nrg.angles(conf)
-
-            check_grads(ref_nrg.angles, (conf,), order=1, eps=1e-5)
-            check_grads(ref_nrg.angles, (conf,), order=2, eps=1e-7)
-
-            check_grads(ref_nrg.energy, (conf, params), order=1, eps=1e-5)
-            check_grads(ref_nrg.energy, (conf, params), order=2, eps=1e-7)
-
-            box = np.array([
-                [2.0, 0.5, 0.6],
-                [0.6, 1.6, 0.3],
-                [0.4, 0.7, 1.1]
-            ], dtype=np.float64)
-
-            check_grads(ref_nrg.energy, (conf, params, box), order=1, eps=1e-5)
-            check_grads(ref_nrg.energy, (conf, params, box), order=2, eps=1e-7)
+        # so instead we compare against OpenMM implementation later on
+        for conf_idx, conf in enumerate(self.conformers):
+            assert_potential_invariance(energy_fn, conf, params, box)
 
 if __name__ == "__main__":
     unittest.main()
