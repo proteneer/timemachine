@@ -68,11 +68,11 @@ This code is under heavy development. APIs for potential energies are fairly sta
 
 We currently support the following functional forms:
 
-- (Periodic) Harmonic Bonds
-- (Periodic) Harmonic Angles
-- (Periodic) Periodic Torsions
-- (Periodic) Electrostatics
-- (Periodic) Leonnard Jones
+- (Periodic) Harmonic Bond
+- (Periodic) Harmonic Angle
+- (Periodic) Periodic Torsion
+- (Periodic) Electrostatic
+- (Periodic) Lennard-Jones
 - GBSA OBC
 
 # Requirements
