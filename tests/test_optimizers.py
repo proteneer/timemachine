@@ -49,10 +49,17 @@ class TestOptimizeGeometry(unittest.TestCase):
 
             grad_fn = jax.jit(jax.grad(energy_fn, argnums=(0,)))
             opt_state = opt_init(x0)
-            # minimize geometries
-            for i in range(75):
-                g = grad_fn(get_params(opt_state))[0]
-                opt_state = opt_update(i, g, opt_state)
+
+            # use lax.scan, way faster compilation times.
+            def apply_carry(x, i):
+                g = grad_fn(get_params(x))[0]
+                # opt_update requires iteration count
+                return opt_update(i, g, x), i
+            opt_state, _ = jax.lax.scan(apply_carry, opt_state, jnp.arange(75))
+
+            # for i in range(75):
+            #     g = grad_fn(get_params(opt_state))[0]
+            #     opt_state = opt_update(i, g, opt_state)
 
             x_final = get_params(opt_state)
             test_b0 = jnp.linalg.norm(x_final[1] - x_final[0])
