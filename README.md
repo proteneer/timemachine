@@ -2,17 +2,17 @@
 
 # Time Machine
 
-This package is designed with two goals in mind:
+This package is designed with three goals in mind:
 
-1. Enable rapid prototyping of novel energy functions and automatic generation of gradients, hessians, and mixed partials.
-2. Computes exact analytic derivatives of the trajectory with respect to model parameter, also known as backpropagation through time.
+1. Enable rapid prototyping of potential functions and automatic generation of gradients of arbitrary order.
+2. Generate performant code using a [jax/xla](github.com/google/jax) backend that can be run on CPUs, GPUs, and TPUs.
+2. Meta-optimization of optimizers and integrators, allowing one to generate analytic derivatives of a trajectory.
 
-The code is implemented against the reference OpenMM Force classes, and is rigorously tested for accuracy up to machine precision.
+The code is implemented against OpenMM for numerical accuracy.
 
 # Example Code:
 
 ``` python
-
 import functools
 import numpy as np
 import jax
@@ -58,9 +58,7 @@ d2edx2_fn(x0, params, box=None)
 # d^2E/dxde, shape [N,3,3]:
 d2edxde_fn = jax.jacfwd(jax.jacrev(energy_fn, argnums=(0,)), argnums=(1,))
 d2edxde_fn(x0, params, box=None)
-
 ```
-
 
 # Warning
 
@@ -70,25 +68,16 @@ This code is under heavy development. APIs for potential energies are fairly sta
 
 We currently support the following functional forms:
 
-- (Periodic) Harmonic Bonds
-- (Periodic) Harmonic Angles
-- (Periodic) Periodic Torsions
-- (Periodic) Electrostatics
-- (Periodic) Leonnard Jones
+- (Periodic) Harmonic Bond
+- (Periodic) Harmonic Angle
+- (Periodic) Periodic Torsion
+- (Periodic) Electrostatic
+- (Periodic) Lennard-Jones
 - GBSA OBC
-
-# Supported Integrators
-
-- Langevin Dynamics
-- Gradient Descent
 
 # Requirements
 
-Dependencies are easily pip-installable. See requirements.txt for the full list.
-
-# Contributions
-
-If you'd like to contribute, either email Yutong directly via githubusername@gmail.com or find him via the Open Forcefield Slack channel.
+See requirements.txt
 
 # License
 
