@@ -17,7 +17,6 @@ def rescale_coordinates(
 
     return conf + offset[indices]
 
-
 def delta_r(ri, rj, box=None):
     diff = ri - rj # this can be either N,N,3 or B,3
     if box is not None:
@@ -32,3 +31,14 @@ def distance(ri, rj, box=None):
     dij = np.sqrt(np.sum(dxdydz, axis=-1))
     return dij
 
+def total_energy_wrapper(nrg_fns):
+    """
+    Returns a function that calls all functions in nrg_fns and sums them
+    """
+    def wrapped(*args, **kwargs):
+        nrgs = []
+        for fn in nrg_fns:
+            nrgs.append(fn(*args, **kwargs))
+        return jnp.sum(nrgs)
+
+    return wrapped

@@ -39,7 +39,6 @@ class TestOptimizeGeometry(unittest.TestCase):
         ], dtype=onp.int32)
 
         def minimize_structure(test_params):
-
             energy_fn = functools.partial(
                 bonded.harmonic_bond,
                 params=test_params,
@@ -49,17 +48,28 @@ class TestOptimizeGeometry(unittest.TestCase):
 
             grad_fn = jax.jit(jax.grad(energy_fn, argnums=(0,)))
             opt_state = opt_init(x0)
-            # minimize geometries
-            for i in range(75):
-                g = grad_fn(get_params(opt_state))[0]
-                opt_state = opt_update(i, g, opt_state)
 
-            x_final = get_params(opt_state)
+            # use lax.scan, way faster compilation times.
+            def apply_carry(carry, _):
+                i, x = carry
+                g = grad_fn(get_params(x))[0]
+                new_state = opt_update(i, g, x)
+                new_carry = (i+1, new_state)
+                return new_carry, _
+
+            carry_final, _ = jax.lax.scan(apply_carry, (jnp.array(0), opt_state), jnp.zeros((75, 0)))
+
+            trip, opt_final = carry_final
+
+            assert trip == 75
+
+            x_final = get_params(opt_final)
             test_b0 = jnp.linalg.norm(x_final[1] - x_final[0])
             test_b1 = jnp.linalg.norm(x_final[2] - x_final[1])
 
             return test_b0, test_b1
 
+        # this is fine
         tb0, tb1 = minimize_structure(initial_params)
 
         onp.testing.assert_almost_equal(b0, tb0, decimal=2)
@@ -80,7 +90,8 @@ class TestOptimizeGeometry(unittest.TestCase):
         # very slow for long loops (> 80s), since JITing is super-linear
         # (ytz): we can speed this up significantly when jax.while_loop is
         # differentiable.
-        loss_grad_fn = jax.jit(jax.grad(loss, argnums=(0,)))
+        # loss_grad_fn = jax.jit(jax.grad(loss, argnums=(0,)))
+        loss_grad_fn = jax.grad(loss, argnums=(0,))
         loss_opt_state = loss_opt_init(initial_params)
 
         for epoch in range(1000):
