@@ -51,22 +51,26 @@ class TestOptimizeGeometry(unittest.TestCase):
             opt_state = opt_init(x0)
 
             # use lax.scan, way faster compilation times.
-            def apply_carry(x, i):
+            def apply_carry(carry, _):
+                i, x = carry
                 g = grad_fn(get_params(x))[0]
-                # opt_update requires iteration count
-                return opt_update(i, g, x), i
-            opt_state, _ = jax.lax.scan(apply_carry, opt_state, jnp.arange(75))
+                new_state = opt_update(i, g, x)
+                new_carry = (i+1, new_state)
+                return new_carry, _
 
-            # for i in range(75):
-            #     g = grad_fn(get_params(opt_state))[0]
-            #     opt_state = opt_update(i, g, opt_state)
+            carry_final, _ = jax.lax.scan(apply_carry, (jnp.array(0), opt_state), jnp.zeros((75, 0)))
 
-            x_final = get_params(opt_state)
+            trip, opt_final = carry_final
+
+            assert trip == 75
+
+            x_final = get_params(opt_final)
             test_b0 = jnp.linalg.norm(x_final[1] - x_final[0])
             test_b1 = jnp.linalg.norm(x_final[2] - x_final[1])
 
             return test_b0, test_b1
 
+        # this is fine
         tb0, tb1 = minimize_structure(initial_params)
 
         onp.testing.assert_almost_equal(b0, tb0, decimal=2)
@@ -87,7 +91,8 @@ class TestOptimizeGeometry(unittest.TestCase):
         # very slow for long loops (> 80s), since JITing is super-linear
         # (ytz): we can speed this up significantly when jax.while_loop is
         # differentiable.
-        loss_grad_fn = jax.jit(jax.grad(loss, argnums=(0,)))
+        # loss_grad_fn = jax.jit(jax.grad(loss, argnums=(0,)))
+        loss_grad_fn = jax.grad(loss, argnums=(0,))
         loss_opt_state = loss_opt_init(initial_params)
 
         for epoch in range(1000):
