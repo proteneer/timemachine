@@ -92,7 +92,7 @@ class TestOptimizeGeometry(unittest.TestCase):
 
         loss_opt_init, loss_opt_update, loss_get_params = optimizers.sgd(5e-2)
 
-        loss_grad_fn = jax.jit(jax.grad(loss, argnums=(0,)))
+        loss_grad_fn = jax.jit(jax.jacfwd(loss, argnums=(0,)))
         loss_opt_state = loss_opt_init(initial_params)
 
         for epoch in range(1000):

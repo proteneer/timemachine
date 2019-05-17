@@ -44,6 +44,7 @@ def parameterize(mol, forcefield):
     nrg_fns = []
 
     for handler in forcefield._parameter_handlers.items():
+
         handler_name, handler_params = handler
 
         if handler_name == 'Bonds':

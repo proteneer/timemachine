@@ -44,6 +44,13 @@ class TestForcefield(unittest.TestCase):
 
             return wrapped
 
+
+        def total_energy_fn(*args, **kwargs):
+            return 
+
+        # generate a reduce set of potentials
+        print("NRG_FNs", nrg_fns)
+
         total_nrg_fn = total_energy_wrapper(nrg_fns)
         conf = conf_to_onp(mol.GetConformer(0))
         total_nrg = total_nrg_fn(
@@ -52,28 +59,53 @@ class TestForcefield(unittest.TestCase):
             box=None
         )
 
-        true_conf = conf_to_onp(mol.GetConformer(1))
+        # true_conf = conf_to_onp(mol.GetConformer(1))
+        true_conf = onp.array([
+            [4.8256, -1.0016, -2.0249],
+            [4.9784, -0.1068, -0.7656],
+            [3.6325,  0.5405, -0.3506],
+            [2.9916,  1.3180, -1.5284],
+            [2.8322,  0.4279, -2.7902],
+            [4.1821, -0.2272, -3.2161],
+            [4.0064, -1.1384, -4.4603],
+            [4.2110, -1.8708, -1.7720],
+            [5.8137, -1.3686, -2.3167],
+            [5.7094,  0.6814, -0.9704],
+            [5.3607, -0.7077,  0.0635],
+            [3.8029,  1.2249,  0.4841],
+            [2.9436, -0.2371, -0.0086],
+            [2.0120,  1.6938, -1.2222],
+            [3.6178,  2.1814, -1.7735],
+            [2.4491,  1.0443, -3.6084],
+            [2.0903, -0.3500, -2.5862],
+            [4.8685,  0.5760, -3.5035],
+            [3.3285, -1.9674, -4.2433],
+            [4.9721, -1.5463, -4.7663],
+            [3.5991, -0.5616, -5.2934]
+        ], dtype=onp.float64)
 
         def loss_fn(iter_params):
             opt_conf = minimizer.minimize_structure(
-                functools.partial(nrg_fns[0], params=iter_params, box=None),
+                functools.partial(total_nrg_fn, params=iter_params, box=None),
                 functools.partial(optimizers.sgd, 1e-6),
                 conf=conf,
-                iterations=500
+                iterations=200,
             )
+            # return jnp.sum(opt_conf)
             l = rmsd.opt_rot_rmsd(opt_conf, true_conf)
             return l
 
-        loss_grad_fn = jax.jit(jax.grad(loss_fn, argnums=(0,)))
+        # loss_grad_fn = jax.jit(jax.grad(loss_fn, argnums=(0,)))
+        loss_grad_fn = jax.jacfwd(loss_fn, argnums=(0,))
         loss_opt_init, loss_opt_update, loss_get_params = optimizers.sgd(1e-4)
         loss_opt_state = loss_opt_init(params)
 
         print("before", loss_fn(loss_get_params(loss_opt_state)))
 
-
         for epoch in range(1000):
             epoch_params = loss_get_params(loss_opt_state)
+            print(epoch)
             loss_grad = loss_grad_fn(epoch_params)[0]
             loss_opt_state = loss_opt_update(epoch, loss_grad, loss_opt_state)
 
-        print("before", loss_fn(loss_get_params(loss_opt_state)))
+        print("after", loss_fn(loss_get_params(loss_opt_state)))
