@@ -1,9 +1,9 @@
 import numpy as onp
 import jax.numpy as jnp
+import jax
 import unittest
 from rdkit import Chem
 from rdkit.Chem import AllChem
-
 
 import functools
 
@@ -12,6 +12,7 @@ from timemachine import minimizer
 from openforcefield.typing.engines.smirnoff import ForceField
 
 from jax.experimental import optimizers
+from timemachine.observables import rmsd
 
 def conf_to_onp(conformer):
     coords = []
@@ -29,11 +30,12 @@ class TestForcefield(unittest.TestCase):
         ffo = ForceField('smirnoff99Frosst.offxml')
         nrg_fns, params = forcefield.parameterize(mol, ffo)
 
+        params = jnp.array(params)
+
         def total_energy_wrapper(nrg_fns):
             """
             Returns a function that calls all functions in nrg_fns and sums them
             """
-
             def wrapped(*args, **kwargs):
                 nrgs = []
                 for fn in nrg_fns:
@@ -50,41 +52,28 @@ class TestForcefield(unittest.TestCase):
             box=None
         )
 
-        def loss(params):
+        true_conf = conf_to_onp(mol.GetConformer(1))
 
+        def loss_fn(iter_params):
             opt_conf = minimizer.minimize_structure(
-                functools.partial(total_nrg_fn, params=params, box=None),
+                functools.partial(nrg_fns[0], params=iter_params, box=None),
                 functools.partial(optimizers.sgd, 1e-6),
                 conf=conf,
-                iterations=5000
+                iterations=500
             )
-            opt_total_nrg = total_nrg_fn(
-                conf=opt_conf,
-                params=params,
-                box=None
-            )
+            l = rmsd.opt_rot_rmsd(opt_conf, true_conf)
+            return l
 
-            print(total_nrg, conf)
-            print(opt_total_nrg, opt_conf)
+        loss_grad_fn = jax.jit(jax.grad(loss_fn, argnums=(0,)))
+        loss_opt_init, loss_opt_update, loss_get_params = optimizers.sgd(1e-4)
+        loss_opt_state = loss_opt_init(params)
 
-        # test optimization of forcefield parameters.
+        print("before", loss_fn(loss_get_params(loss_opt_state)))
 
 
+        for epoch in range(1000):
+            epoch_params = loss_get_params(loss_opt_state)
+            loss_grad = loss_grad_fn(epoch_params)[0]
+            loss_opt_state = loss_opt_update(epoch, loss_grad, loss_opt_state)
 
-        # print(conf)
-
-        # print("OPT_CONF", onp.asarray(opt_conf))
-
-        # opt_total_nrg = total_nrg_fn(
-        #     conf=opt_conf,
-        #     params=params,
-        #     box=None
-        # )
-
-
-
-        # print(total_nrg, opt_total_nrg)
-
-        # assert total_nrg > 0
-
-
+        print("before", loss_fn(loss_get_params(loss_opt_state)))

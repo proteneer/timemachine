@@ -50,20 +50,26 @@ class TestOptimizeGeometry(unittest.TestCase):
             opt_state = opt_init(x0)
 
             # use lax.scan, way faster compilation times.
-            def apply_carry(carry, _):
-                i, x = carry
+            # def apply_carry(carry, _):
+            #     i, x = carry
+            #     g = grad_fn(get_params(x))[0]
+            #     new_state = opt_update(i, g, x)
+            #     new_carry = (i+1, new_state)
+            #     return new_carry, _
+
+            def apply_carry(x, i):
                 g = grad_fn(get_params(x))[0]
-                new_state = opt_update(i, g, x)
-                new_carry = (i+1, new_state)
-                return new_carry, _
+                return opt_update(i, g, x), i
 
-            carry_final, _ = jax.lax.scan(apply_carry, (jnp.array(0), opt_state), jnp.zeros((75, 0)))
+            opt_state, _ = jax.lax.scan(
+                apply_carry,
+                opt_state,
+                jnp.arange(75)
+            )
 
-            trip, opt_final = carry_final
+            # assert trip == 75
 
-            assert trip == 75
-
-            x_final = get_params(opt_final)
+            x_final = get_params(opt_state)
             test_b0 = jnp.linalg.norm(x_final[1] - x_final[0])
             test_b1 = jnp.linalg.norm(x_final[2] - x_final[1])
 
@@ -86,16 +92,11 @@ class TestOptimizeGeometry(unittest.TestCase):
 
         loss_opt_init, loss_opt_update, loss_get_params = optimizers.sgd(5e-2)
 
-        # minimze loss
-        # very slow for long loops (> 80s), since JITing is super-linear
-        # (ytz): we can speed this up significantly when jax.while_loop is
-        # differentiable.
-        # loss_grad_fn = jax.jit(jax.grad(loss, argnums=(0,)))
-        loss_grad_fn = jax.grad(loss, argnums=(0,))
+        loss_grad_fn = jax.jit(jax.grad(loss, argnums=(0,)))
         loss_opt_state = loss_opt_init(initial_params)
 
         for epoch in range(1000):
-            # print("epoch", epoch, "parameters", loss_get_params(loss_opt_state))
+            print("epoch", epoch, "parameters", loss_get_params(loss_opt_state))
             loss_grad = loss_grad_fn(loss_get_params(loss_opt_state))[0]
             loss_opt_state = loss_opt_update(epoch, loss_grad, loss_opt_state)
 
