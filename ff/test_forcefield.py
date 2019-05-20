@@ -38,9 +38,7 @@ class TestForcefield(unittest.TestCase):
         nrg_fns, params = forcefield.parameterize(mol, ffo)
 
         params = jnp.array(params)
-
         conf = conf_to_onp(mol.GetConformer(0))
-
 
         def total_energy_wrapper(nrg_fns):
             """
@@ -54,50 +52,11 @@ class TestForcefield(unittest.TestCase):
 
             return wrapped
 
-
         # generate a reduce set of potentials
         print("NRG_FNs", nrg_fns)
 
         total_nrg_fn = total_energy_wrapper(nrg_fns)
         total_nrg_fn = functools.partial(total_nrg_fn, box=None)
-        # # compute mixed partial
-        # # dF/dp
-        # dEdx = jax.grad(total_nrg_fn, argnums=(0,))
-
-        # # hessian vector product
-        # @jax.jit
-        # def hvp(c, p):
-        #     mp_fn = jax.jacfwd(jax.grad(total_nrg_fn, argnums=(0,)), argnums=(1,))
-        #     hess_fn = jax.jacfwd(jax.grad(total_nrg_fn, argnums=(0,)), argnums=(0,))
-        #     return jnp.sum(mp_fn(c, p)) + jnp.sum(mp_fn(c, p))
-
-        # @jax.jit
-        # def run_jvp(c, p):
-        #     jax.jvp(dEdx, (c, p), (jnp.ones_like(c), jnp.ones_like(p)))
-
-        # for i in range(100):
-        #     s = time.time()
-        #     run_jvp(conf, params)
-        #     print(time.time() - s, i)
-        # print(FVJP)
-
-        # assert 0
-
-
-        # dFdp = jax.jacfwd(jax.grad(total_nrg_fn, argnums=(0,)), argnums=(1,))
-        # dFdp = jax.jit(dFdp)
-
-        # # E: (n,3), (p) -> ()
-        # # dE/dx: (n,3), (p) -> (n,3)
-        # # dF/dp: (n,3), (p) -> (n,3,p)
-
-        # jax.jvp()
-
-        # for i in range(100):
-        #     res = dFdp(conf, params, box=None)[0][0]
-        #     print(i, res.shape)
-
-        # assert 0
 
         total_nrg = total_nrg_fn(
             conf=conf,
@@ -132,14 +91,23 @@ class TestForcefield(unittest.TestCase):
 
         def loss_fn(iter_params):
             opt_conf = minimizer.minimize_structure(
-                functools.partial(total_nrg_fn, params=iter_params, box=None),
+                functools.partial(total_nrg_fn, box=None),
                 functools.partial(optimizers.sgd, 1e-6),
                 conf=conf,
-                iterations=10,
+                params=iter_params,
+                iterations=10000,
             )
             # return jnp.sum(opt_conf)
-            l = rmsd.opt_rot_rmsd(opt_conf, true_conf)
-            return l
+            return rmsd.opt_rot_rmsd(opt_conf, true_conf)
+
+        print("START")
+
+        for epoch in range(100):
+            st = time.time()
+            loss_fn(params)
+            print(epoch, time.time()-st)
+
+        assert 0
 
         loss_grad_fn = jax.jit(jax.grad(loss_fn, argnums=(0,)))
         # loss_grad_fn = jax.jit(jax.jacfwd(loss_fn, argnums=(0,)))

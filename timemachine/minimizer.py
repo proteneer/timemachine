@@ -5,13 +5,10 @@ def minimize_structure(
     energy_fn,
     optimizer,
     conf,
+    params,
     iterations=200):
     opt_init, opt_update, get_params = optimizer()
     opt_update = jax.jit(opt_update)
-
-    # this is jitting dE/dx
-    # how do we also jit d/dp of dE/dx
-    # grad of jit vs jit of grad
 
     grad_fn = jax.jit(jax.grad(energy_fn, argnums=(0,)))
     opt_state = opt_init(conf)
@@ -34,19 +31,49 @@ def minimize_structure(
     # trip, opt_final = carry_final
 
     # v1
-    def apply_carry(x, i):
-        g = grad_fn(get_params(x))[0]
-        return opt_update(i, g, x), i
+    # def apply_carry(x, i):
+    #     g = grad_fn(get_params(x))[0]
+    #     return opt_update(i, g, x), i
 
-    opt_state, _ = jax.lax.scan(
-        apply_carry,
-        opt_state,
-        jnp.arange(iterations)
-    )
+    # opt_state, _ = jax.lax.scan(
+    #     apply_carry,
+    #     opt_state,
+    #     jnp.arange(iterations)
+    # )
 
     # v2
-    # for i in range(iterations):
+    # @jax.jit
+    # def apply_update(opt_state, i):
     #     g = grad_fn(get_params(opt_state))[0]
-    #     opt_state = opt_update(i, g, opt_state)
+    #     return opt_update(i, g, opt_state)
 
-    return get_params(opt_state)
+    # for i in range(iterations):
+    #     print("inner", i)
+    #     opt_state = apply_update(opt_state, i)
+
+    # v3
+    learning_rate = 1e-4
+
+    x_new = conf
+    x_grad = jnp.zeros(shape=(params.shape[0], conf.shape[0], conf.shape[1]))
+
+    def update(x_new, params):
+        return learning_rate*grad_fn(x_new, params)[0]
+
+    @jax.jit
+    def batch_mult_jvp(x, p, dxdp):
+        dpdp = jnp.eye(p.shape[0])
+        def apply_one(dxdp_i, dpdp_i):
+            return jax.jvp(
+                grad_fn,
+                (x, p),
+                (dxdp_i, dpdp_i)
+            )
+        _, grads = jax.vmap(apply_one)(dxdp, dpdp)
+        return grads[0]
+
+    for i in range(iterations):
+        x_new = x_new + update(x_new, params)
+        x_grad = x_grad + learning_rate*batch_mult_jvp(x_new, params, x_grad)
+
+    return x_new, x_grad

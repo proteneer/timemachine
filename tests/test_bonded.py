@@ -166,6 +166,7 @@ class TestPeriodicTorsion(unittest.TestCase):
         for conf_idx, conf in enumerate(self.conformers):
             assert_potential_invariance(energy_fn, conf, params, box)
 
+
 if __name__ == "__main__":
     unittest.main()
 
