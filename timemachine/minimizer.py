@@ -7,6 +7,12 @@ def minimize_structure(
     conf,
     iterations=200):
     opt_init, opt_update, get_params = optimizer()
+    opt_update = jax.jit(opt_update)
+
+    # this is jitting dE/dx
+    # how do we also jit d/dp of dE/dx
+    # grad of jit vs jit of grad
+
     grad_fn = jax.jit(jax.grad(energy_fn, argnums=(0,)))
     opt_state = opt_init(conf)
     # use lax.scan, way faster compilation times.
@@ -28,21 +34,19 @@ def minimize_structure(
     # trip, opt_final = carry_final
 
     # v1
-    # def apply_carry(x, i):
-    #     g = grad_fn(get_params(x))[0]
-    #     return opt_update(i, g, x), i
+    def apply_carry(x, i):
+        g = grad_fn(get_params(x))[0]
+        return opt_update(i, g, x), i
 
-    # opt_state, _ = jax.lax.scan(
-    #     apply_carry,
-    #     opt_state,
-    #     jnp.arange(iterations)
-    # )
-
-    # opt_final = opt_state
+    opt_state, _ = jax.lax.scan(
+        apply_carry,
+        opt_state,
+        jnp.arange(iterations)
+    )
 
     # v2
-    for i in range(iterations):
-        g = grad_fn(get_params(opt_state))[0]
-        opt_state = opt_update(i, g, opt_state)
+    # for i in range(iterations):
+    #     g = grad_fn(get_params(opt_state))[0]
+    #     opt_state = opt_update(i, g, opt_state)
 
     return get_params(opt_state)

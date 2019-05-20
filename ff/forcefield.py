@@ -51,7 +51,9 @@ def parameterize(mol, forcefield):
 
             vd = ValenceDict()
             for p in handler_params.parameters:
+
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
+                print(p.smirks, matches)
                 for m in matches:
                     vd[m] = (add_param(to_md_units(p.k)), add_param(to_md_units(p.length)))
 
