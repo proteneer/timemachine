@@ -52,28 +52,35 @@ def minimize_structure(
     #     opt_state = apply_update(opt_state, i)
 
     # v3
-    learning_rate = 1e-4
+    learning_rate = 1e-6
 
-    x_new = conf
     x_grad = jnp.zeros(shape=(params.shape[0], conf.shape[0], conf.shape[1]))
 
-    def update(x_new, params):
-        return learning_rate*grad_fn(x_new, params)[0]
+    def update_fn(x_new, params):
+        return -learning_rate*grad_fn(x_new, params)[0]
 
     @jax.jit
     def batch_mult_jvp(x, p, dxdp):
         dpdp = jnp.eye(p.shape[0])
         def apply_one(dxdp_i, dpdp_i):
             return jax.jvp(
-                grad_fn,
+                update_fn,
                 (x, p),
                 (dxdp_i, dpdp_i)
             )
         _, grads = jax.vmap(apply_one)(dxdp, dpdp)
-        return grads[0]
+
+        # print("grads", grads[0], grads[0].shape)
+
+        return grads
+
+    x_new = conf
 
     for i in range(iterations):
-        x_new = x_new + update(x_new, params)
-        x_grad = x_grad + learning_rate*batch_mult_jvp(x_new, params, x_grad)
+        print(i, energy_fn(x_new, params), "xg max/min", jnp.amax(x_grad), jnp.amin(x_grad))
+        x_new = x_new + update_fn(x_new, params)
+        x_grad = x_grad + batch_mult_jvp(x_new, params, x_grad)
+
+    # print("xg max/min", jnp.amax(x_grad), jnp.amin(x_grad))
 
     return x_new, x_grad

@@ -1,4 +1,5 @@
 import numpy as onp
+from jax.config import config; config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import jax
 import unittest
@@ -14,6 +15,8 @@ from openforcefield.typing.engines.smirnoff import ForceField
 
 from jax.experimental import optimizers
 from timemachine.observables import rmsd
+
+
 
 def conf_to_onp(conformer):
     coords = []
@@ -90,39 +93,43 @@ class TestForcefield(unittest.TestCase):
         ], dtype=onp.float64)
 
         def loss_fn(iter_params):
-            opt_conf = minimizer.minimize_structure(
+            opt_conf, opt_grad = minimizer.minimize_structure(
                 functools.partial(total_nrg_fn, box=None),
                 functools.partial(optimizers.sgd, 1e-6),
                 conf=conf,
                 params=iter_params,
-                iterations=10000,
+                iterations=100,
             )
+            print("OC", opt_conf)
             # return jnp.sum(opt_conf)
             return rmsd.opt_rot_rmsd(opt_conf, true_conf)
 
-        print("START")
-
-        for epoch in range(100):
-            st = time.time()
-            loss_fn(params)
-            print(epoch, time.time()-st)
-
+        print("LOSS", loss_fn(params))
         assert 0
 
-        loss_grad_fn = jax.jit(jax.grad(loss_fn, argnums=(0,)))
-        # loss_grad_fn = jax.jit(jax.jacfwd(loss_fn, argnums=(0,)))
-        # loss_grad_fn = jax.jacfwd(loss_fn, argnums=(0,))
-        loss_opt_init, loss_opt_update, loss_get_params = optimizers.sgd(1e-4)
-        loss_opt_state = loss_opt_init(params)
+    # print("START")
 
-        print("before", loss_fn(loss_get_params(loss_opt_state)))
+    #     for epoch in range(100):
+    #         st = time.time()
+    #         loss_fn(params)
+    #         print(epoch, time.time()-st)
 
-        for epoch in range(100):
-            start_time = time.time()
-            epoch_params = loss_get_params(loss_opt_state)
-            print(epoch)
-            loss_grad = loss_grad_fn(epoch_params)[0]
-            loss_opt_state = loss_opt_update(epoch, loss_grad, loss_opt_state)
-            print("time per epoch:", time.time() - start_time)
+    #     assert 0
 
-        print("after", loss_fn(loss_get_params(loss_opt_state)))
+    #     loss_grad_fn = jax.jit(jax.grad(loss_fn, argnums=(0,)))
+    #     # loss_grad_fn = jax.jit(jax.jacfwd(loss_fn, argnums=(0,)))
+    #     # loss_grad_fn = jax.jacfwd(loss_fn, argnums=(0,))
+    #     loss_opt_init, loss_opt_update, loss_get_params = optimizers.sgd(1e-4)
+    #     loss_opt_state = loss_opt_init(params)
+
+    #     print("before", loss_fn(loss_get_params(loss_opt_state)))
+
+    #     for epoch in range(100):
+    #         start_time = time.time()
+    #         epoch_params = loss_get_params(loss_opt_state)
+    #         print(epoch)
+    #         loss_grad = loss_grad_fn(epoch_params)[0]
+    #         loss_opt_state = loss_opt_update(epoch, loss_grad, loss_opt_state)
+    #         print("time per epoch:", time.time() - start_time)
+
+    #     print("after", loss_fn(loss_get_params(loss_opt_state)))
