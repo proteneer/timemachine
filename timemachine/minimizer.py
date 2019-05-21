@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import time
 
 def minimize_structure(
     energy_fn,
@@ -8,7 +9,7 @@ def minimize_structure(
     params,
     iterations=200):
     opt_init, opt_update, get_params = optimizer()
-    opt_update = jax.jit(opt_update)
+    # opt_update = jax.jit(opt_update)
 
     grad_fn = jax.jit(jax.grad(energy_fn, argnums=(0,)))
     opt_state = opt_init(conf)
@@ -52,14 +53,15 @@ def minimize_structure(
     #     opt_state = apply_update(opt_state, i)
 
     # v3
-    learning_rate = 1e-6
+    learning_rate = 2e-6
 
     x_grad = jnp.zeros(shape=(params.shape[0], conf.shape[0], conf.shape[1]))
 
     def update_fn(x_new, params):
         return -learning_rate*grad_fn(x_new, params)[0]
 
-    @jax.jit
+    update_fn = jax.jit(update_fn)
+
     def batch_mult_jvp(x, p, dxdp):
         dpdp = jnp.eye(p.shape[0])
         def apply_one(dxdp_i, dpdp_i):
@@ -68,18 +70,33 @@ def minimize_structure(
                 (x, p),
                 (dxdp_i, dpdp_i)
             )
-        _, grads = jax.vmap(apply_one)(dxdp, dpdp)
 
-        # print("grads", grads[0], grads[0].shape)
+        apply_one = jax.jit(apply_one)
+        a, b = jax.jit(jax.vmap(apply_one))(dxdp, dpdp)
+        return b
 
-        return grads
+    batch_mult_jvp = jax.jit(batch_mult_jvp)
+
+    # @jax.jit
+    # def batch_mult_jvp(x, p, dxdp):
+    #     h_fn = jax.hessian(energy_fn, argnums=(0,))
+    #     mp_fn = jax.jacfwd(
+    #         jax.grad(energy_fn, argnums=(1,)),
+    #         argnums=(0,))
+    #     return jnp.einsum('ijkl,mkl->mij', h_fn(x, p)[0][0], dxdp) + mp_fn(x, p)[0][0]
+
 
     x_new = conf
 
+    st = time.time()
     for i in range(iterations):
         print(i, energy_fn(x_new, params), "xg max/min", jnp.amax(x_grad), jnp.amin(x_grad))
         x_new = x_new + update_fn(x_new, params)
         x_grad = x_grad + batch_mult_jvp(x_new, params, x_grad)
+        # x_d, x_g = batch_mult_jvp(x_new, params, x_grad)
+        # x_new = x_new + x_d
+        # x_grad = x_grad + x_g
+    print("time/iter", (time.time() - st)/iterations)
 
     # print("xg max/min", jnp.amax(x_grad), jnp.amin(x_grad))
 

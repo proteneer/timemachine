@@ -51,11 +51,12 @@ def parameterize(mol, forcefield):
 
             vd = ValenceDict()
             for p in handler_params.parameters:
-
+                k_idx, l_idx = add_param(to_md_units(p.k)), add_param(to_md_units(p.length))
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
-                print(p.smirks, matches)
+                # print(p.smirks, matches)
+                
                 for m in matches:
-                    vd[m] = (add_param(to_md_units(p.k)), add_param(to_md_units(p.length)))
+                    vd[m] = (k_idx, l_idx)
 
             bond_idxs = []
             bond_param_idxs = []
@@ -76,9 +77,10 @@ def parameterize(mol, forcefield):
 
             vd = ValenceDict()
             for p in handler_params.parameters:
+                k_idx, a_idx = add_param(to_md_units(p.k)), add_param(to_md_units(p.angle))
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
                 for m in matches:
-                    vd[m] = (add_param(to_md_units(p.k)), add_param(to_md_units(p.angle)))
+                    vd[m] = (k_idx, a_idx)
 
             angle_idxs = []
             angle_param_idxs = []
@@ -99,16 +101,26 @@ def parameterize(mol, forcefield):
 
             vd = ValenceDict()
             for all_params in handler_params.parameters:
+                
+
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, all_params.smirks)
+
+                print("torsion", all_params.smirks, matches)
+                all_k_idxs = []
+                all_phase_idxs = []
+                all_period_idxs = []
+
+                for k, phase, period in zip(all_params.k, all_params.phase, all_params.periodicity):
+                    k_idx, phase_idx, period_idx = add_param(to_md_units(k)), add_param(to_md_units(phase)), add_param(period),
+                    all_k_idxs.append(k_idx)
+                    all_phase_idxs.append(phase_idx)
+                    all_period_idxs.append(period_idx)
+
                 for m in matches:
                     t_p = []
-
-                    for k, phase, period in zip(all_params.k, all_params.phase, all_params.periodicity):
-                        t_p.append((
-                            add_param(to_md_units(k)),
-                            add_param(to_md_units(phase)),
-                            add_param(period),
-                        ))
+                    for k_idx, phase_idx, period_idx in zip(all_k_idxs, all_phase_idxs, all_period_idxs):
+                        # k_idx, phase_idx, period_idx = add_param(to_md_units(k)), add_param(to_md_units(phase)), add_param(period),
+                        t_p.append((k_idx, phase_idx, period_idx))
                     vd[m] = t_p
 
             torsion_idxs = []
