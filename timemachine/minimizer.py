@@ -11,7 +11,7 @@ def minimize_structure(
     opt_init, opt_update, get_params = optimizer()
     # opt_update = jax.jit(opt_update)
 
-    grad_fn = jax.jit(jax.grad(energy_fn, argnums=(0,)))
+    grad_fn = jax.grad(energy_fn, argnums=(0,))
     opt_state = opt_init(conf)
     # use lax.scan, way faster compilation times.
 
@@ -62,6 +62,7 @@ def minimize_structure(
 
     update_fn = jax.jit(update_fn)
 
+    @jax.jit
     def batch_mult_jvp(x, p, dxdp):
         dpdp = jnp.eye(p.shape[0])
         def apply_one(dxdp_i, dpdp_i):
@@ -71,9 +72,8 @@ def minimize_structure(
                 (dxdp_i, dpdp_i)
             )
 
-        apply_one = jax.jit(apply_one)
-        a, b = jax.jit(jax.vmap(apply_one))(dxdp, dpdp)
-        return b
+        a, b = jax.vmap(apply_one)(dxdp, dpdp)
+        return a[0], b
 
     batch_mult_jvp = jax.jit(batch_mult_jvp)
 
@@ -91,11 +91,11 @@ def minimize_structure(
     st = time.time()
     for i in range(iterations):
         print(i, energy_fn(x_new, params), "xg max/min", jnp.amax(x_grad), jnp.amin(x_grad))
-        x_new = x_new + update_fn(x_new, params)
-        x_grad = x_grad + batch_mult_jvp(x_new, params, x_grad)
-        # x_d, x_g = batch_mult_jvp(x_new, params, x_grad)
-        # x_new = x_new + x_d
-        # x_grad = x_grad + x_g
+        # x_new = x_new + update_fn(x_new, params)
+        # x_grad = x_grad + batch_mult_jvp(x_new, params, x_grad)
+        x_d, x_g = batch_mult_jvp(x_new, params, x_grad)
+        x_new = x_new + x_d
+        x_grad = x_grad + x_g
     print("time/iter", (time.time() - st)/iterations)
 
     # print("xg max/min", jnp.amax(x_grad), jnp.amin(x_grad))
