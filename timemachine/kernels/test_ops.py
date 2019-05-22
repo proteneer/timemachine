@@ -36,18 +36,25 @@ bond_idxs = np.array([
 
 dxdps = np.random.rand(3, 3, 3).astype(np.float64)
 
-d_a, d_b = custom_ops.harmonic_bond_hmp_gpu_r64(
+hb = custom_ops.HarmonicBond_f64(
+    bond_idxs.reshape(-1).tolist(),
+    param_idxs.reshape(-1).tolist()
+)
+
+test_e, test_de_dp, test_de_dx, test_d2e_dx2 = hb.derivatives(
     x0,
     params,
-    dxdps,
-    bond_idxs,
-    param_idxs
+    dxdps
 )
 
 energy_fn = functools.partial(bonded.harmonic_bond, box=None, param_idxs=param_idxs, bond_idxs=bond_idxs)
+
 grad_fn = jax.grad(energy_fn, argnums=(0,))
 
-a, b = batch_mult_jvp(grad_fn, x0, params, dxdps)
+ref_de_dx, ref_d2e_dx2 = batch_mult_jvp(grad_fn, x0, params, dxdps)
+ref_e, ref_de_dp = batch_mult_jvp(energy_fn, x0, params, dxdps)
 
-np.testing.assert_almost_equal(d_a, a[0])
-np.testing.assert_almost_equal(d_b, b[0])
+np.testing.assert_almost_equal(test_e, ref_e)
+np.testing.assert_almost_equal(test_de_dp, ref_de_dp)
+np.testing.assert_almost_equal(test_de_dx, ref_de_dx[0])
+np.testing.assert_almost_equal(test_d2e_dx2, ref_d2e_dx2[0])

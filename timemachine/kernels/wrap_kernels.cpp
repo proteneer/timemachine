@@ -2,158 +2,62 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
-#include "cpu/bonded_kernels.hpp"
+#include "gpu/custom_bonded_gpu.hpp"
 
 namespace py = pybind11;
 
-// hessian matrix product
+
+// needs to subclass!
 template<typename RealType>
-py::tuple declare_harmonic_bond_hmp(
-    const py::array_t<RealType, py::array::c_style> &coords,
-    const py::array_t<RealType, py::array::c_style> &params,
-    const py::array_t<RealType, py::array::c_style> &dxdps,
-    py::array_t<int, py::array::c_style> bond_idxs,
-    py::array_t<int, py::array::c_style> param_idxs) {
+void declare_harmonic_bond(py::module &m, const char *typestr) {
 
-    const auto num_atoms = coords.shape()[0];
-    const auto num_dims = coords.shape()[1];
-    const auto num_params = params.shape()[0];
-    const int num_bonds = bond_idxs.shape()[0];
-    const auto total_params = dxdps.shape()[0];
+    using Class = timemachine::HarmonicBond<RealType>;
+    std::string pyclass_name = std::string("HarmonicBond_") + typestr;
+    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    .def(py::init<
+        std::vector<int>, // bond_idxs
+        std::vector<int> // param_idxs
+    >())
+    .def("derivatives", [](timemachine::HarmonicBond<RealType> &nrg,
+        const py::array_t<RealType, py::array::c_style> &coords,
+        const py::array_t<RealType, py::array::c_style> &params,
+        const py::array_t<RealType, py::array::c_style> &dxdps
+        ) -> py::tuple {
 
-    if(total_params != num_params) {
-        throw std::runtime_error("Shape inconsistency between dxdps and params");
-    }
+        const long unsigned int num_atoms = coords.shape()[0];
+        const long unsigned int num_dims = coords.shape()[1];
+        const long unsigned int num_params = params.shape()[0];
 
-    const RealType step_size = 1e-7;
-    std::vector<std::complex<RealType> > complex_params(coords.size());
+        py::array_t<RealType, py::array::c_style> py_E({1});
+        py::array_t<RealType, py::array::c_style> py_dE_dp({num_params});
+        py::array_t<RealType, py::array::c_style> py_dE_dx({num_atoms, num_dims});
+        py::array_t<RealType, py::array::c_style> py_d2E_dxdp({num_params, num_atoms, num_dims});
 
-    for(int p=0; p < num_params; p++) {
-        complex_params[p] = std::complex<RealType>(params.data()[p], 0);
-    }
+        memset(py_E.mutable_data(), 0.0, sizeof(RealType));
+        memset(py_dE_dp.mutable_data(), 0.0, sizeof(RealType)*num_params);
+        memset(py_dE_dx.mutable_data(), 0.0, sizeof(RealType)*num_atoms*num_dims);
+        memset(py_d2E_dxdp.mutable_data(), 0.0, sizeof(RealType)*num_params*num_atoms*num_dims);
 
-    std::vector<std::complex<RealType> > hmp_grads(num_params*num_atoms*num_dims, std::complex<RealType>(0, 0));
-
-    for(int p=0; p < num_params; p++) {
-        complex_params[p] = std::complex<RealType>(complex_params[p].real(), step_size);
-        std::vector<std::complex<RealType> > complex_coords(coords.size());
-        for(int i=0; i < coords.size(); i++) {
-            complex_coords[i] = std::complex<RealType>(
-                coords.data()[i],
-                dxdps.data()[p*num_atoms*num_dims+i]*step_size
-            );
-        }
-
-        harmonic_bond_grad(
+        nrg.derivatives_host(
             num_atoms,
             num_params,
-            complex_coords.data(),
-            complex_params.data(),
-            num_bonds,
-            bond_idxs.data(),
-            param_idxs.data(),
-            &hmp_grads[0] + p*num_atoms*num_dims
+            coords.data(),
+            params.data(),
+            dxdps.data(),
+            py_E.mutable_data(),
+            py_dE_dp.mutable_data(),
+            py_dE_dx.mutable_data(),
+            py_d2E_dxdp.mutable_data()
         );
-        // restore p
-        complex_params[p] = std::complex<RealType>(complex_params[p].real(), 0.0);
-    }
 
-    py::array_t<RealType, py::array::c_style> py_grads({num_atoms, num_dims});
-    memset(py_grads.mutable_data(), 0.0, sizeof(RealType)*num_atoms*num_dims);
-    for(int i=0; i < py_grads.size(); i++) {
-        py_grads.mutable_data()[i] = hmp_grads[i].real();
-    }
-
-    py::array_t<RealType, py::array::c_style> py_hvp({num_params, num_atoms, num_dims});
-    memset(py_hvp.mutable_data(), 0.0, sizeof(RealType)*num_params*num_atoms*num_dims);
-    for(size_t i=0; i < hmp_grads.size(); i++) {
-        py_hvp.mutable_data()[i] = hmp_grads[i].imag()/step_size;
-    }
-
-    // also return real part
-    return py::make_tuple(py_grads, py_hvp);
-
-}
-
-
-template<typename NumericType>
-void harmonic_bond_hmp_gpu(
-    const int num_atoms,
-    const int num_params,
-    const NumericType *coords,
-    const NumericType *params,
-    const NumericType *dxdps,
-    const int num_bonds,
-    const int *bond_idxs,
-    const int *param_idxs,
-    NumericType *grads,
-    NumericType *hmps);
-
-
-template<typename RealType>
-py::tuple declare_harmonic_bond_hmp_gpu(
-    const py::array_t<RealType, py::array::c_style> &coords,
-    const py::array_t<RealType, py::array::c_style> &params,
-    const py::array_t<RealType, py::array::c_style> &dxdps,
-    py::array_t<int, py::array::c_style> bond_idxs,
-    py::array_t<int, py::array::c_style> param_idxs) {
-
-    const auto num_atoms = coords.shape()[0];
-    const auto num_dims = coords.shape()[1];
-    const auto num_params = params.shape()[0];
-    const int num_bonds = bond_idxs.shape()[0];
-    const auto total_params = dxdps.shape()[0];
-
-    py::array_t<RealType, py::array::c_style> py_hvp({num_params, num_atoms, num_dims});
-    memset(py_hvp.mutable_data(), 0.0, sizeof(RealType)*num_params*num_atoms*num_dims);
-
-    py::array_t<RealType, py::array::c_style> py_grad({num_atoms, num_dims});
-    memset(py_grad.mutable_data(), 0.0, sizeof(RealType)*num_atoms*num_dims);
-
-    harmonic_bond_hmp_gpu<RealType>(
-        num_atoms,
-        num_params,
-        coords.data(),
-        params.data(),
-        dxdps.data(),
-        num_bonds,
-        bond_idxs.data(),
-        param_idxs.data(),
-        py_grad.mutable_data(),
-        py_hvp.mutable_data()
-    );
-
-    // also return real part
-    return py::make_tuple(py_grad, py_hvp);
+        return py::make_tuple(py_E, py_dE_dp, py_dE_dx, py_d2E_dxdp);
+    });
 
 }
 
 PYBIND11_MODULE(custom_ops, m) {
 
-m.def("harmonic_bond_hmp_r32", &declare_harmonic_bond_hmp<float>, "hbg_r32");
-m.def("harmonic_bond_hmp_r64", &declare_harmonic_bond_hmp<double>, "hbg_r64");
-
-m.def("harmonic_bond_hmp_gpu_r32", &declare_harmonic_bond_hmp_gpu<float>, "hbg_gpu_r32");
-m.def("harmonic_bond_hmp_gpu_r64", &declare_harmonic_bond_hmp_gpu<double>, "hbg_gpu_r64");
-
-// m.def("harmonic_bond_grad_r32",
-//     &declare_harmonic_bond_grad<float>,
-//     "hbg_r32"
-// );
-// m.def("harmonic_bond_grad_r64",
-//     &declare_harmonic_bond_grad<double>,
-//     "hbg_r64"
-// );
-// m.def("harmonic_bond_grad_c64",
-//     &declare_harmonic_bond_grad<std::complex<float> >,
-//     "hbg_c64"
-// );
-// m.def("harmonic_bond_grad_c128",
-//     &declare_harmonic_bond_grad<std::complex<double> >,
-//     "hbg_c128"
-// );
+declare_harmonic_bond<float>(m, "f32");
+declare_harmonic_bond<double>(m, "f64");
 
 }
-
-
-// g++ -O3 -march=native -Wall -shared -std=c++11 -fPIC `python3 -m pybind11 --includes` wrap_kernels.cpp -o custom_ops`python3-config --extension-suffix`
