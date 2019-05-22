@@ -1,10 +1,12 @@
+#pragma once
+
+#include "potential.hpp"
 #include <vector>
 
 namespace timemachine {
 
-
 template <typename RealType>
-class HarmonicBond {
+class HarmonicBond : public Potential<RealType> {
 
 private:
 
@@ -21,19 +23,16 @@ public:
 
     ~HarmonicBond();
 
-    // void set_params(const std::vector<RealType> &new_params);
-    // std::vector<RealType> get_params() const;
-
-    virtual void derivatives_host(
+    virtual void derivatives_device(
         const int num_atoms,
         const int num_params,
-        const RealType *coords,
-        const RealType *params,
-        const RealType *dxdps,
-        RealType *E,
-        RealType *dE_dp,
-        RealType *dE_dx,
-        RealType *d2E_dxdp) const;
+        const RealType *d_coords,
+        const RealType *d_params,
+        const RealType *d_dxdps,
+        RealType *d_E,
+        RealType *d_dE_dp,
+        RealType *d_dE_dx,
+        RealType *d_d2E_dxdp) const override;
 
 };
 

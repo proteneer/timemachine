@@ -2,10 +2,20 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
+#include "gpu/potential.hpp"
 #include "gpu/custom_bonded_gpu.hpp"
 
 namespace py = pybind11;
 
+
+template <typename RealType>
+void declare_potential(py::module &m, const char *typestr) {
+
+    using Class = timemachine::Potential<RealType>;
+    std::string pyclass_name = std::string("Potential") + typestr;
+    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr());
+
+}
 
 // needs to subclass!
 template<typename RealType>
@@ -13,7 +23,7 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicBond<RealType>;
     std::string pyclass_name = std::string("HarmonicBond_") + typestr;
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+    py::class_<Class, timemachine::Potential<RealType> >(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
     .def(py::init<
         std::vector<int>, // bond_idxs
         std::vector<int> // param_idxs
@@ -56,6 +66,9 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 }
 
 PYBIND11_MODULE(custom_ops, m) {
+
+declare_potential<float>(m, "f32");
+declare_potential<double>(m, "f64");
 
 declare_harmonic_bond<float>(m, "f32");
 declare_harmonic_bond<double>(m, "f64");
