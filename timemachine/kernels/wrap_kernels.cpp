@@ -17,17 +17,27 @@ void declare_potential(py::module &m, const char *typestr) {
 
 }
 
-// needs to subclass!
 template<typename RealType>
 void declare_harmonic_bond(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicBond<RealType>;
     std::string pyclass_name = std::string("HarmonicBond_") + typestr;
-    py::class_<Class, timemachine::Potential<RealType> >(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-    .def(py::init<
-        std::vector<int>, // bond_idxs
-        std::vector<int> // param_idxs
-    >())
+    py::class_<Class, timemachine::Potential<RealType> >(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &bi, // bond_idxs
+        const py::array_t<int, py::array::c_style> &pi// param_idxs
+    ) {
+        std::vector<int> bond_idxs(bi.size());
+        std::memcpy(bond_idxs.data(), bi.data(), bi.size()*sizeof(int));
+        std::vector<int> param_idxs(pi.size());
+        std::memcpy(param_idxs.data(), pi.data(), pi.size()*sizeof(int));
+        return new timemachine::HarmonicBond<RealType>(bond_idxs, param_idxs);
+    }))
     .def("derivatives", [](timemachine::HarmonicBond<RealType> &nrg,
         const py::array_t<RealType, py::array::c_style> &coords,
         const py::array_t<RealType, py::array::c_style> &params,

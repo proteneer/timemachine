@@ -37,8 +37,8 @@ bond_idxs = np.array([
 dxdps = np.random.rand(3, 3, 3).astype(np.float64)
 
 hb = custom_ops.HarmonicBond_f64(
-    bond_idxs.reshape(-1).tolist(),
-    param_idxs.reshape(-1).tolist()
+    bond_idxs,
+    param_idxs
 )
 
 test_e, test_de_dp, test_de_dx, test_d2e_dx2 = hb.derivatives(
