@@ -49,6 +49,7 @@ void Potential<RealType>::derivatives_host(
         gpuErrchk(cudaMalloc((void**)&d_d2E_dxdp, P*N*3*sizeof(RealType)));
     }
 
+
     this->derivatives_device(
         N,
         P,

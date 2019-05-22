@@ -1,7 +1,6 @@
 #pragma once
 
 #include "surreal.cuh"
-#include "stdio.h"
 
 /*
 

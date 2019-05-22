@@ -34,27 +34,51 @@ bond_idxs = np.array([
     [1,2]
 ], dtype=np.int32)
 
-dxdps = np.random.rand(3, 3, 3).astype(np.float64)
+# dxdps = np.random.rand(3, 3, 3).astype(np.float64)
 
-hb = custom_ops.HarmonicBond_f64(
-    bond_idxs,
-    param_idxs
-)
 
-test_e, test_de_dp, test_de_dx, test_d2e_dx2 = hb.derivatives(
-    x0,
-    params,
-    dxdps
-)
+def test_derivatives(dxdps):
 
-energy_fn = functools.partial(bonded.harmonic_bond, box=None, param_idxs=param_idxs, bond_idxs=bond_idxs)
+    hb = custom_ops.HarmonicBond_f64(
+        bond_idxs,
+        param_idxs
+    )
 
-grad_fn = jax.grad(energy_fn, argnums=(0,))
+    if np.prod(dxdps) == 0:
+        extra_arg = None
+    else:
+        extra_arg = dxdps
 
-ref_de_dx, ref_d2e_dx2 = batch_mult_jvp(grad_fn, x0, params, dxdps)
-ref_e, ref_de_dp = batch_mult_jvp(energy_fn, x0, params, dxdps)
+    print("EXTRA_ARG", extra_arg)
 
-np.testing.assert_almost_equal(test_e, ref_e)
-np.testing.assert_almost_equal(test_de_dp, ref_de_dp)
-np.testing.assert_almost_equal(test_de_dx, ref_de_dx[0])
-np.testing.assert_almost_equal(test_d2e_dx2, ref_d2e_dx2[0])
+    test_e, test_de_dp, test_de_dx, test_d2e_dx2 = hb.derivatives(
+        x0,
+        params,
+        extra_arg
+    )
+
+    # print(test_e, test_de_dp, test_de_dx, test_d2e_dx2)
+
+    # assert 0
+
+    energy_fn = functools.partial(
+        bonded.harmonic_bond,
+        box=None,
+        param_idxs=param_idxs,
+        bond_idxs=bond_idxs
+    )
+
+    grad_fn = jax.grad(energy_fn, argnums=(0,))
+
+    ref_de_dx, ref_d2e_dx2 = batch_mult_jvp(grad_fn, x0, params, dxdps)
+    ref_e, ref_de_dp = batch_mult_jvp(energy_fn, x0, params, dxdps)
+
+    np.testing.assert_almost_equal(test_e, ref_e)
+    np.testing.assert_almost_equal(test_de_dp, ref_de_dp)
+    np.testing.assert_almost_equal(test_de_dx, ref_de_dx[0])
+    np.testing.assert_almost_equal(test_d2e_dx2, ref_d2e_dx2[0])
+
+# print("OKAY")
+# test_derivatives(np.random.rand(3, 3, 3).astype(np.float64))
+# print("NO")
+test_derivatives(np.zeros(shape=(3, 3, 3)).astype(np.float64))

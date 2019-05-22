@@ -17,6 +17,8 @@ void declare_potential(py::module &m, const char *typestr) {
 
 }
 
+#include<iostream>
+
 template<typename RealType>
 void declare_harmonic_bond(py::module &m, const char *typestr) {
 
@@ -58,12 +60,22 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
         memset(py_dE_dx.mutable_data(), 0.0, sizeof(RealType)*num_atoms*num_dims);
         memset(py_d2E_dxdp.mutable_data(), 0.0, sizeof(RealType)*num_params*num_atoms*num_dims);
 
+        RealType *dxdps_ptr = nullptr;
+
+        if(dxdps.size() > 0) {
+
+            // this is dangerously safe since it then gets passed into a function
+            // that takes in a const RealType * again
+            dxdps_ptr = const_cast<RealType *>(dxdps.data());
+            std::cout << "SETTING ACTUAL DATA" << dxdps.size() << " " << dxdps.shape() << " " << dxdps.data()[0] << std::endl;
+        } 
+
         nrg.derivatives_host(
             num_atoms,
             num_params,
             coords.data(),
             params.data(),
-            dxdps.data(),
+            dxdps_ptr,
             py_E.mutable_data(),
             py_dE_dp.mutable_data(),
             py_dE_dx.mutable_data(),
@@ -71,7 +83,10 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
         );
 
         return py::make_tuple(py_E, py_dE_dp, py_dE_dx, py_d2E_dxdp);
-    });
+    },
+    py::arg("coords").none(false),
+    py::arg("params").none(false),
+    py::arg("dxdps").none(true));
 
 }
 
