@@ -24,42 +24,36 @@ x0 = np.array([
     [-0.5,-1.1,-0.9], # C
     [3.4, 5.5, 0.2], # H 
 ], dtype=np.float64)
+
 params = np.array([10.0, 3.0, 5.5], dtype=np.float64)
 param_idxs = np.array([
     [0,1],
     [1,2],
 ], dtype=np.int32)
+
 bond_idxs = np.array([
     [0,1],
     [1,2]
 ], dtype=np.int32)
 
-# dxdps = np.random.rand(3, 3, 3).astype(np.float64)
-
-
-def test_derivatives(dxdps):
+def test_derivatives(dx_dp):
 
     hb = custom_ops.HarmonicBond_f64(
         bond_idxs,
         param_idxs
     )
 
-    if np.prod(dxdps) == 0:
-        extra_arg = None
+    if np.prod(dx_dp) == 0:
+        extra_arg = np.empty(shape=(0,))
     else:
-        extra_arg = dxdps
+        extra_arg = dx_dp
 
-    print("EXTRA_ARG", extra_arg)
-
-    test_e, test_de_dp, test_de_dx, test_d2e_dx2 = hb.derivatives(
+    test_e, test_de_dx, test_de_dp, test_d2e_dx2 = hb.derivatives(
         x0,
         params,
-        extra_arg
+        dx_dp=extra_arg,
+        dp_idxs=np.array([0], dtype=np.int32),
     )
-
-    # print(test_e, test_de_dp, test_de_dx, test_d2e_dx2)
-
-    # assert 0
 
     energy_fn = functools.partial(
         bonded.harmonic_bond,
@@ -70,15 +64,13 @@ def test_derivatives(dxdps):
 
     grad_fn = jax.grad(energy_fn, argnums=(0,))
 
-    ref_de_dx, ref_d2e_dx2 = batch_mult_jvp(grad_fn, x0, params, dxdps)
-    ref_e, ref_de_dp = batch_mult_jvp(energy_fn, x0, params, dxdps)
+    ref_de_dx, ref_d2e_dx2 = batch_mult_jvp(grad_fn, x0, params, dx_dp)
+    ref_e, ref_de_dp = batch_mult_jvp(energy_fn, x0, params, dx_dp)
 
     np.testing.assert_almost_equal(test_e, ref_e)
     np.testing.assert_almost_equal(test_de_dp, ref_de_dp)
     np.testing.assert_almost_equal(test_de_dx, ref_de_dx[0])
     np.testing.assert_almost_equal(test_d2e_dx2, ref_d2e_dx2[0])
 
-# print("OKAY")
-# test_derivatives(np.random.rand(3, 3, 3).astype(np.float64))
-# print("NO")
+test_derivatives(np.random.rand(3, 3, 3).astype(np.float64))
 test_derivatives(np.zeros(shape=(3, 3, 3)).astype(np.float64))

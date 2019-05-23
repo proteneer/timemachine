@@ -1,3 +1,5 @@
+#include <stdexcept>
+
 #include "custom_bonded_gpu.hpp"
 #include "k_harmonic_bond.cuh"
 #include "kernel_utils.cuh"
@@ -29,10 +31,13 @@ void HarmonicBond<RealType>::derivatives_device(
         const int num_params,
         const RealType *d_coords,
         const RealType *d_params,
-        const RealType *d_dxdps,
         RealType *d_E,
-        RealType *d_dE_dp,
         RealType *d_dE_dx,
+
+        const RealType *d_dx_dp,
+        const int *d_dp_idxs,
+        const int num_dp_idxs,
+        RealType *d_dE_dp,
         RealType *d_d2E_dxdp) const {
 
     const auto N = num_atoms;
@@ -41,12 +46,17 @@ void HarmonicBond<RealType>::derivatives_device(
 
     int tpb = 32;
     int n_blocks = (B + tpb - 1) / tpb;
-    int dim_y = P;
+    int dim_y = 1;
 
-    // we don't need the other derivatives if we don't need
-    // parameter derivatives
-    if(d_dE_dp == nullptr && d_d2E_dxdp == nullptr) {
+    // zero dimension dim_ys are *not* allowed.
+    if(num_dp_idxs == 0) {
+        // inference mode
         dim_y = 1;
+        if(d_dp_idxs != nullptr) {
+            throw std::runtime_error("d_dp_idxs is not null but num_dp_idxs == 0!");
+        }
+    } else {
+        dim_y = num_dp_idxs;
     }
 
     dim3 dimBlock(tpb);
@@ -59,13 +69,15 @@ void HarmonicBond<RealType>::derivatives_device(
         P,
         d_coords,
         d_params,
-        d_dxdps,
         B,
         d_bond_idxs_,
         d_param_idxs_,
         d_E,
-        d_dE_dp,
         d_dE_dx,
+        // parameter derivatives
+        d_dx_dp,
+        d_dp_idxs,
+        d_dE_dp,
         d_d2E_dxdp
     );
 

@@ -20,10 +20,13 @@ public:
         const int num_params,
         const RealType *h_coords,
         const RealType *h_params,
-        const RealType *h_dxdps,
         RealType *h_E,
-        RealType *h_dE_dp,
         RealType *h_dE_dx,
+
+        const RealType *h_dx_dp,
+        const int *h_dp_idxs,
+        const int num_dp_idxs,
+        RealType *h_dE_dp,
         RealType *h_d2E_dxdp) const;
     /*
 
@@ -35,10 +38,13 @@ public:
         const int num_params,
         const RealType *d_coords,
         const RealType *d_params,
-        const RealType *d_dxdps,
         RealType *d_E,
-        RealType *d_dE_dp,
         RealType *d_dE_dx,
+
+        const RealType *d_dx_dp,
+        const int *d_dp_idxs,
+        const int num_dp_idxs,
+        RealType *d_dE_dp,
         RealType *d_d2E_dxdp) const = 0;
 
 };
