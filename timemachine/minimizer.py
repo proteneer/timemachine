@@ -16,20 +16,22 @@ def minimize_structure(
     # use lax.scan, way faster compilation times.
 
     # v0
-    # def apply_carry(carry, _):
-    #     i, x = carry
-    #     g = grad_fn(get_params(x))[0]
-    #     new_state = opt_update(i, g, x)
-    #     new_carry = (i+1, new_state)
-    #     return new_carry, _
+    def apply_carry(carry, _):
+        i, x = carry
+        g = grad_fn(get_params(x), params)[0]
+        new_state = opt_update(i, g, x)
+        new_carry = (i+1, new_state)
+        return new_carry, _
 
-    # carry_final, _ = jax.lax.scan(
-    #     apply_carry,
-    #     (jnp.array(0), opt_state),
-    #     jnp.zeros((iterations, 0))
-    # )
+    carry_final, _ = jax.lax.scan(
+        apply_carry,
+        (jnp.array(0), opt_state),
+        jnp.zeros((iterations, 0))
+    )
 
-    # trip, opt_final = carry_final
+    trip, opt_final = carry_final
+
+    return get_params(opt_final)
 
     # v1
     # def apply_carry(x, i):

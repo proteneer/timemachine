@@ -37,7 +37,7 @@ def test_minimization():
     mol = Chem.MolFromSmiles("CC1CCCCC1")
     mol = Chem.AddHs(mol)
     ids = AllChem.EmbedMultipleConfs(mol, numConfs=10, params=AllChem.ETKDG())
-    ffo = ForceField('smirnoff99Frosst.offxml')
+    ffo = ForceField('test_forcefields/smirnoff99Frosst.offxml')
     nrg_fns, params = forcefield.parameterize(mol, ffo)
 
     print("number of params:", len(params))
@@ -95,7 +95,7 @@ def test_minimization():
     ], dtype=onp.float64)
 
     def loss_fn(iter_params):
-        opt_conf, opt_grad = minimizer.minimize_structure(
+        opt_conf = minimizer.minimize_structure(
             functools.partial(total_nrg_fn, box=None),
             functools.partial(optimizers.sgd, 1e-6),
             conf=conf,
@@ -103,38 +103,47 @@ def test_minimization():
             iterations=1000,
         )
         print("OC", opt_conf)
-        # return jnp.sum(opt_conf)
-        return rmsd.opt_rot_rmsd(opt_conf, true_conf)
+        return jnp.sum(opt_conf)
+        # return rmsd.opt_rot_rmsd(opt_conf, true_conf)
 
     print("LOSS", loss_fn(params))
-    assert 0
+    # assert 0
 
 
-test_minimization()
+# test_minimization()
 
     # print("START")
 
-    #     for epoch in range(100):
-    #         st = time.time()
-    #         loss_fn(params)
-    #         print(epoch, time.time()-st)
+    # for epoch in range(100):
+    #     st = time.time()
+    #     loss_fn(params)
+    #     print(epoch, time.time()-st)
 
-    #     assert 0
+    # assert 0
 
-    #     loss_grad_fn = jax.jit(jax.grad(loss_fn, argnums=(0,)))
-    #     # loss_grad_fn = jax.jit(jax.jacfwd(loss_fn, argnums=(0,)))
-    #     # loss_grad_fn = jax.jacfwd(loss_fn, argnums=(0,))
-    #     loss_opt_init, loss_opt_update, loss_get_params = optimizers.sgd(1e-4)
-    #     loss_opt_state = loss_opt_init(params)
 
-    #     print("before", loss_fn(loss_get_params(loss_opt_state)))
+    # @jax.jit
+    # def loss_grad_fn(params):
+        # return jax.jvp(loss_fn, (params,), (jnp.zeros_like(params),))
 
-    #     for epoch in range(100):
-    #         start_time = time.time()
-    #         epoch_params = loss_get_params(loss_opt_state)
-    #         print(epoch)
-    #         loss_grad = loss_grad_fn(epoch_params)[0]
-    #         loss_opt_state = loss_opt_update(epoch, loss_grad, loss_opt_state)
-    #         print("time per epoch:", time.time() - start_time)
+    loss_grad_fn = jax.jit(jax.grad(loss_fn, argnums=(0,)))
 
-    #     print("after", loss_fn(loss_get_params(loss_opt_state)))
+    loss_grad_fn(params)
+
+    assert 0
+    # loss_grad_fn = jax.jit(jax.jacfwd(loss_fn, argnums=(0,)))
+    # loss_grad_fn = jax.jacfwd(loss_fn, argnums=(0,))
+    loss_opt_init, loss_opt_update, loss_get_params = optimizers.sgd(1e-4)
+    loss_opt_state = loss_opt_init(params)
+
+    print("before", loss_fn(loss_get_params(loss_opt_state)))
+
+    for epoch in range(100):
+        start_time = time.time()
+        epoch_params = loss_get_params(loss_opt_state)
+        print(epoch)
+        loss_grad = loss_grad_fn(epoch_params)[0]
+        loss_opt_state = loss_opt_update(epoch, loss_grad, loss_opt_state)
+        print("time per epoch:", time.time() - start_time)
+
+    print("after", loss_fn(loss_get_params(loss_opt_state)))
