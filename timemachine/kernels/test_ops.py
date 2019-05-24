@@ -26,7 +26,9 @@ class CustomOpsTest(unittest.TestCase):
     def assert_derivatives(self, conf, params, ref_nrg, test_nrg):
 
         # This is a messy unit test that tests for:
-        # correctness of the derivatives against the reference implementation
+        # correctness of the 4 derivatives against the reference implementation
+        # sparse scattered indices
+        # using an empty null array to denote zero dx_dp
         all_dxdps = [
             np.random.rand(params.shape[0], conf.shape[0], conf.shape[1]),
             np.zeros(shape=(params.shape[0], conf.shape[0], conf.shape[1]))
@@ -45,6 +47,7 @@ class CustomOpsTest(unittest.TestCase):
 
             for dp_idxs in all_dp_idxs:
                 dp_idxs = dp_idxs.astype(np.int32)
+
                 test_e, test_de_dx, test_de_dp, test_d2e_dxdp = test_nrg.derivatives(
                     conf,
                     params,
@@ -75,6 +78,7 @@ class CustomOpsTest(unittest.TestCase):
 class TestHarmonicBond(CustomOpsTest):
 
     def test_derivatives(self):
+
         x0 = np.array([
             [1.0, 0.2, 3.3], # H 
             [-0.5,-1.1,-0.9], # C
@@ -109,6 +113,43 @@ class TestHarmonicBond(CustomOpsTest):
             params,
             energy_fn,
             hb
+        )
+
+class TestHarmonicAngle(CustomOpsTest):
+    
+    def test_derivatives(self):
+
+        x0 = np.array([
+            [ 0.0637,   0.0126,   0.2203], # C
+            [ 1.0573,  -0.2011,   1.2864], # H
+            [ 2.3928,   1.2209,  -0.2230], # H
+            [-0.6891,   1.6983,   0.0780], # H
+            [-0.6312,  -1.6261,  -0.2601], # H
+        ], dtype=np.float64)
+        num_atoms = x0.shape[0]
+        params = np.array([75, 1.91, 0.45], dtype=np.float64)
+
+        angle_idxs = np.array([[1,0,2],[1,0,3],[1,0,4],[2,0,3],[2,0,4],[3,0,4]], dtype=np.int32)
+        param_idxs = np.array([[0,1],[0,1],[0,2],[0,1],[0,1],[0,2]], dtype=np.int32)
+
+        # enable cos angles
+        energy_fn = functools.partial(
+            bonded.harmonic_angle,
+            box=None,
+            angle_idxs=angle_idxs,
+            param_idxs=param_idxs,
+            cos_angles=True)
+
+        ha = custom_ops.HarmonicAngle_f64(
+            angle_idxs,
+            param_idxs
+        )
+
+        self.assert_derivatives(
+            x0,
+            params,
+            energy_fn,
+            ha
         )
 
 # test_derivatives(np.random.rand(3, 3, 3).astype(np.float64))

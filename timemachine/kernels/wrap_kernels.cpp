@@ -20,7 +20,7 @@ void declare_potential(py::module &m, const char *typestr) {
         pyclass_name.c_str(),
         py::buffer_protocol(),
         py::dynamic_attr())
-    .def("derivatives", [](timemachine::HarmonicBond<RealType> &nrg,
+    .def("derivatives", [](timemachine::Potential<RealType> &nrg,
         const py::array_t<RealType, py::array::c_style> &coords,
         const py::array_t<RealType, py::array::c_style> &params,
         const py::array_t<RealType, py::array::c_style> &dx_dp,
@@ -30,8 +30,6 @@ void declare_potential(py::module &m, const char *typestr) {
             // E + dE_dx, set dp_idxs = []
             // E + dE_dp, set second_order False and dp_idxs > 0
             // E + dE_dp 
-
-
             const long unsigned int num_atoms = coords.shape()[0];
             const long unsigned int num_dims = coords.shape()[1];
             const long unsigned int num_params = params.shape()[0];
@@ -93,7 +91,7 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
     )
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &bi, // bond_idxs
-        const py::array_t<int, py::array::c_style> &pi// param_idxs
+        const py::array_t<int, py::array::c_style> &pi  // param_idxs
     ) {
         std::vector<int> bond_idxs(bi.size());
         std::memcpy(bond_idxs.data(), bi.data(), bi.size()*sizeof(int));
@@ -104,6 +102,32 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 
 }
 
+
+template<typename RealType>
+void declare_harmonic_angle(py::module &m, const char *typestr) {
+
+    using Class = timemachine::HarmonicAngle<RealType>;
+    std::string pyclass_name = std::string("HarmonicAngle_") + typestr;
+    py::class_<Class, timemachine::Potential<RealType> >(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &ai, // bond_idxs
+        const py::array_t<int, py::array::c_style> &pi  // param_idxs
+    ) {
+        std::vector<int> angle_idxs(ai.size());
+        std::memcpy(angle_idxs.data(), ai.data(), ai.size()*sizeof(int));
+        std::vector<int> param_idxs(pi.size());
+        std::memcpy(param_idxs.data(), pi.data(), pi.size()*sizeof(int));
+        return new timemachine::HarmonicAngle<RealType>(angle_idxs, param_idxs);
+    }));
+
+}
+
+
 PYBIND11_MODULE(custom_ops, m) {
 
     declare_potential<float>(m, "f32");
@@ -111,5 +135,8 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_harmonic_bond<float>(m, "f32");
     declare_harmonic_bond<double>(m, "f64");
+
+    declare_harmonic_angle<float>(m, "f32");
+    declare_harmonic_angle<double>(m, "f64");
 
 }

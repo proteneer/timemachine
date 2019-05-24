@@ -24,10 +24,8 @@ E + dE_dx + d2E_dxdp: timemachine time travelling (this is not asymptotically ef
 
 */
 
-// #include <cstdio>
-
 template<typename RealType>
-void __global__ harmonic_bond_derivatives(
+void __global__ k_harmonic_bond_derivatives(
     const int num_atoms,    // n
     const int num_params,   // p
     const RealType *coords, // [n, 3]
