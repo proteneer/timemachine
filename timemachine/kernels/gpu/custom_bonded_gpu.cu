@@ -5,6 +5,8 @@
 #include "k_harmonic_angle.cuh"
 #include "kernel_utils.cuh"
 
+#include <iostream>
+
 namespace timemachine {
 
 template <typename RealType>
@@ -28,6 +30,7 @@ HarmonicBond<RealType>::~HarmonicBond() {
 
 template <typename RealType>
 void HarmonicBond<RealType>::derivatives_device(
+        const int num_confs,
         const int num_atoms,
         const int num_params,
         const RealType *d_coords,
@@ -41,6 +44,7 @@ void HarmonicBond<RealType>::derivatives_device(
         RealType *d_dE_dp,
         RealType *d_d2E_dxdp) const {
 
+    const auto C = num_confs;
     const auto N = num_atoms;
     const auto P = num_params;
     const auto B = n_bonds_;
@@ -61,7 +65,7 @@ void HarmonicBond<RealType>::derivatives_device(
     }
 
     dim3 dimBlock(tpb);
-    dim3 dimGrid(n_blocks, dim_y); // x, y
+    dim3 dimGrid(n_blocks, dim_y, C); // x, y, z dims
 
     k_harmonic_bond_derivatives<<<dimGrid, dimBlock>>>(
         N,
@@ -108,6 +112,7 @@ HarmonicAngle<RealType>::~HarmonicAngle() {
 
 template <typename RealType>
 void HarmonicAngle<RealType>::derivatives_device(
+        const int num_confs,
         const int num_atoms,
         const int num_params,
         const RealType *d_coords,
@@ -121,6 +126,7 @@ void HarmonicAngle<RealType>::derivatives_device(
         RealType *d_dE_dp,
         RealType *d_d2E_dxdp) const {
 
+    const auto C = num_confs;
     const auto N = num_atoms;
     const auto P = num_params;
 
@@ -140,7 +146,7 @@ void HarmonicAngle<RealType>::derivatives_device(
     }
 
     dim3 dimBlock(tpb);
-    dim3 dimGrid(n_blocks, dim_y); // x, y
+    dim3 dimGrid(n_blocks, dim_y, C); // x, y, z
 
     k_harmonic_angle_derivatives<<<dimGrid, dimBlock>>>(
         N,

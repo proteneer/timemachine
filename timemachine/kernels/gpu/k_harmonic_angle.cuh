@@ -20,6 +20,8 @@ void __global__ k_harmonic_angle_derivatives(
     RealType *d2E_dxdp      // [dp, n, 3] or null
 ) {
 
+    auto conf_idx = blockIdx.z;
+
     // note that dp == gridDim.y
     const bool compute_dp = (dp_idxs != nullptr);
     auto a_idx = blockDim.x*blockIdx.x + threadIdx.x;
@@ -32,17 +34,17 @@ void __global__ k_harmonic_angle_derivatives(
     int atom_1_idx = angle_idxs[a_idx*3+1];
     int atom_2_idx = angle_idxs[a_idx*3+2];
 
-    RealType rx0 = coords[atom_0_idx*3+0];
-    RealType ry0 = coords[atom_0_idx*3+1];
-    RealType rz0 = coords[atom_0_idx*3+2];
+    RealType rx0 = coords[conf_idx*num_atoms*3+atom_0_idx*3+0];
+    RealType ry0 = coords[conf_idx*num_atoms*3+atom_0_idx*3+1];
+    RealType rz0 = coords[conf_idx*num_atoms*3+atom_0_idx*3+2];
 
-    RealType rx1 = coords[atom_1_idx*3+0];
-    RealType ry1 = coords[atom_1_idx*3+1];
-    RealType rz1 = coords[atom_1_idx*3+2];
+    RealType rx1 = coords[conf_idx*num_atoms*3+atom_1_idx*3+0];
+    RealType ry1 = coords[conf_idx*num_atoms*3+atom_1_idx*3+1];
+    RealType rz1 = coords[conf_idx*num_atoms*3+atom_1_idx*3+2];
 
-    RealType rx2 = coords[atom_2_idx*3+0];
-    RealType ry2 = coords[atom_2_idx*3+1];
-    RealType rz2 = coords[atom_2_idx*3+2];
+    RealType rx2 = coords[conf_idx*num_atoms*3+atom_2_idx*3+0];
+    RealType ry2 = coords[conf_idx*num_atoms*3+atom_2_idx*3+1];
+    RealType rz2 = coords[conf_idx*num_atoms*3+atom_2_idx*3+2];
 
     RealType ix0 = 0;
     RealType iy0 = 0;
@@ -63,6 +65,7 @@ void __global__ k_harmonic_angle_derivatives(
     RealType ia0 = 0;
 
     const auto dp_idx = blockIdx.y;
+    const auto num_dp = gridDim.y;
 
     // (ytz): this a complex step size, not a standard finite difference step size.
     // the error decays quadratically as opposed to linearly w.r.t. step size.
@@ -72,17 +75,17 @@ void __global__ k_harmonic_angle_derivatives(
 
         // complex-step coordinates
         if(dx_dp != nullptr) {
-            ix0 = dx_dp[dp_idx*num_atoms*3+atom_0_idx*3+0]*step_size;
-            iy0 = dx_dp[dp_idx*num_atoms*3+atom_0_idx*3+1]*step_size;
-            iz0 = dx_dp[dp_idx*num_atoms*3+atom_0_idx*3+2]*step_size;
+            ix0 = dx_dp[conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_0_idx*3+0]*step_size;
+            iy0 = dx_dp[conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_0_idx*3+1]*step_size;
+            iz0 = dx_dp[conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_0_idx*3+2]*step_size;
 
-            ix1 = dx_dp[dp_idx*num_atoms*3+atom_1_idx*3+0]*step_size;
-            iy1 = dx_dp[dp_idx*num_atoms*3+atom_1_idx*3+1]*step_size;
-            iz1 = dx_dp[dp_idx*num_atoms*3+atom_1_idx*3+2]*step_size;
+            ix1 = dx_dp[conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_1_idx*3+0]*step_size;
+            iy1 = dx_dp[conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_1_idx*3+1]*step_size;
+            iz1 = dx_dp[conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_1_idx*3+2]*step_size;
 
-            ix2 = dx_dp[dp_idx*num_atoms*3+atom_2_idx*3+0]*step_size;
-            iy2 = dx_dp[dp_idx*num_atoms*3+atom_2_idx*3+1]*step_size;
-            iz2 = dx_dp[dp_idx*num_atoms*3+atom_2_idx*3+2]*step_size;
+            ix2 = dx_dp[conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_2_idx*3+0]*step_size;
+            iy2 = dx_dp[conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_2_idx*3+1]*step_size;
+            iz2 = dx_dp[conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_2_idx*3+2]*step_size;
         }
 
         // complex-step parameters 
@@ -145,39 +148,39 @@ void __global__ k_harmonic_angle_derivatives(
 
     // E is never null
     if(blockIdx.y == 0) {
-        atomicAdd(E, energy.real);
+        atomicAdd(E + conf_idx, energy.real);
     }
 
     if(blockIdx.y == 0 && dE_dx != nullptr) {
-        atomicAdd(dE_dx + atom_0_idx*3 + 0, atom_0_grad_x.real);
-        atomicAdd(dE_dx + atom_0_idx*3 + 1, atom_0_grad_y.real);
-        atomicAdd(dE_dx + atom_0_idx*3 + 2, atom_0_grad_z.real);
+        atomicAdd(dE_dx+conf_idx*num_atoms*3+atom_0_idx*3+0, atom_0_grad_x.real);
+        atomicAdd(dE_dx+conf_idx*num_atoms*3+atom_0_idx*3+1, atom_0_grad_y.real);
+        atomicAdd(dE_dx+conf_idx*num_atoms*3+atom_0_idx*3+2, atom_0_grad_z.real);
 
-        atomicAdd(dE_dx + atom_1_idx*3 + 0, atom_1_grad_x.real);
-        atomicAdd(dE_dx + atom_1_idx*3 + 1, atom_1_grad_y.real);
-        atomicAdd(dE_dx + atom_1_idx*3 + 2, atom_1_grad_z.real);
+        atomicAdd(dE_dx+conf_idx*num_atoms*3+atom_1_idx*3+0, atom_1_grad_x.real);
+        atomicAdd(dE_dx+conf_idx*num_atoms*3+atom_1_idx*3+1, atom_1_grad_y.real);
+        atomicAdd(dE_dx+conf_idx*num_atoms*3+atom_1_idx*3+2, atom_1_grad_z.real);
 
-        atomicAdd(dE_dx + atom_2_idx*3 + 0, atom_2_grad_x.real);
-        atomicAdd(dE_dx + atom_2_idx*3 + 1, atom_2_grad_y.real);
-        atomicAdd(dE_dx + atom_2_idx*3 + 2, atom_2_grad_z.real);
+        atomicAdd(dE_dx+conf_idx*num_atoms*3+atom_2_idx*3+0, atom_2_grad_x.real);
+        atomicAdd(dE_dx+conf_idx*num_atoms*3+atom_2_idx*3+1, atom_2_grad_y.real);
+        atomicAdd(dE_dx+conf_idx*num_atoms*3+atom_2_idx*3+2, atom_2_grad_z.real);
     }
 
     if(compute_dp && dE_dp != nullptr) {
-        atomicAdd(dE_dp + dp_idx, energy.imag/step_size);
+        atomicAdd(dE_dp+conf_idx*num_dp+dp_idx, energy.imag/step_size);
     }
 
     if(compute_dp && d2E_dxdp != nullptr) {
-        atomicAdd(d2E_dxdp + dp_idx*num_atoms*3 + atom_0_idx*3 + 0, atom_0_grad_x.imag/step_size);
-        atomicAdd(d2E_dxdp + dp_idx*num_atoms*3 + atom_0_idx*3 + 1, atom_0_grad_y.imag/step_size);
-        atomicAdd(d2E_dxdp + dp_idx*num_atoms*3 + atom_0_idx*3 + 2, atom_0_grad_z.imag/step_size);
+        atomicAdd(d2E_dxdp+conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_0_idx*3 + 0, atom_0_grad_x.imag/step_size);
+        atomicAdd(d2E_dxdp+conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_0_idx*3 + 1, atom_0_grad_y.imag/step_size);
+        atomicAdd(d2E_dxdp+conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_0_idx*3 + 2, atom_0_grad_z.imag/step_size);
 
-        atomicAdd(d2E_dxdp + dp_idx*num_atoms*3 + atom_1_idx*3 + 0, atom_1_grad_x.imag/step_size);
-        atomicAdd(d2E_dxdp + dp_idx*num_atoms*3 + atom_1_idx*3 + 1, atom_1_grad_y.imag/step_size);
-        atomicAdd(d2E_dxdp + dp_idx*num_atoms*3 + atom_1_idx*3 + 2, atom_1_grad_z.imag/step_size);
+        atomicAdd(d2E_dxdp+conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_1_idx*3 + 0, atom_1_grad_x.imag/step_size);
+        atomicAdd(d2E_dxdp+conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_1_idx*3 + 1, atom_1_grad_y.imag/step_size);
+        atomicAdd(d2E_dxdp+conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_1_idx*3 + 2, atom_1_grad_z.imag/step_size);
 
-        atomicAdd(d2E_dxdp + dp_idx*num_atoms*3 + atom_2_idx*3 + 0, atom_2_grad_x.imag/step_size);
-        atomicAdd(d2E_dxdp + dp_idx*num_atoms*3 + atom_2_idx*3 + 1, atom_2_grad_y.imag/step_size);
-        atomicAdd(d2E_dxdp + dp_idx*num_atoms*3 + atom_2_idx*3 + 2, atom_2_grad_z.imag/step_size);
+        atomicAdd(d2E_dxdp+conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_2_idx*3 + 0, atom_2_grad_x.imag/step_size);
+        atomicAdd(d2E_dxdp+conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_2_idx*3 + 1, atom_2_grad_y.imag/step_size);
+        atomicAdd(d2E_dxdp+conf_idx*num_dp*num_atoms*3+dp_idx*num_atoms*3+atom_2_idx*3 + 2, atom_2_grad_z.imag/step_size);
     }
 
 }

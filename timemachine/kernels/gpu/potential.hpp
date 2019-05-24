@@ -16,6 +16,7 @@ public:
 
     */
     void derivatives_host(
+        const int num_confs,
         const int num_atoms,
         const int num_params,
         const RealType *h_coords,
@@ -28,12 +29,14 @@ public:
         const int num_dp_idxs,
         RealType *h_dE_dp,
         RealType *h_d2E_dxdp) const;
+
     /*
 
     Computes the various derivatives of the energy with respect to the arguments.
 
     */
     virtual void derivatives_device(
+        const int num_confs,
         const int num_atoms,
         const int num_params,
         const RealType *d_coords,

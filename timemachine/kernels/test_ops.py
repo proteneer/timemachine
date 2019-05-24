@@ -25,13 +25,19 @@ class CustomOpsTest(unittest.TestCase):
 
     def assert_derivatives(self, conf, params, ref_nrg, test_nrg):
 
+        num_confs = np.random.randint(1, 10)
+        num_confs = 2
+        confs = np.repeat(conf[np.newaxis, :, :], num_confs, axis=0)
+        # confs += np.random.rand(*confs.shape)
+        # todo: perturb by a small amount
+
         # This is a messy unit test that tests for:
         # correctness of the 4 derivatives against the reference implementation
         # sparse scattered indices
         # using an empty null array to denote zero dx_dp
         all_dxdps = [
-            np.random.rand(params.shape[0], conf.shape[0], conf.shape[1]),
-            np.zeros(shape=(params.shape[0], conf.shape[0], conf.shape[1]))
+            np.random.rand(confs.shape[0], params.shape[0], confs.shape[1], confs.shape[2]),
+            # np.zeros(shape=(confs.shape[0], params.shape[0], confs.shape[1], confs.shape[2]))
         ]
 
         all_dp_idxs = [
@@ -40,39 +46,59 @@ class CustomOpsTest(unittest.TestCase):
             np.arange(len(params))
         ]
 
-        for dx_dp in all_dxdps:
-            ref_e, ref_de_dp = batch_mult_jvp(ref_nrg, conf, params, dx_dp)
-            grad_fn = jax.grad(ref_nrg, argnums=(0,))
-            ref_de_dx, ref_d2e_dx2 = batch_mult_jvp(grad_fn, conf, params, dx_dp)
+        for batch_dx_dp in all_dxdps:
+
+            all_ref_es = []
+            all_ref_de_dps = []
+            all_ref_de_dxs = []
+            all_ref_d2e_dxdps = []
+
+            for conf_idx, conf in enumerate(confs):
+                # print("input_dxdp", batch_dx_dp[conf_idx])
+                ref_e, ref_de_dp = batch_mult_jvp(ref_nrg, conf, params, batch_dx_dp[conf_idx])
+                grad_fn = jax.grad(ref_nrg, argnums=(0,))
+                ref_de_dx, ref_d2e_dxdp = batch_mult_jvp(grad_fn, conf, params, batch_dx_dp[conf_idx])
+                
+                all_ref_es.append(ref_e)
+                all_ref_de_dps.append(ref_de_dp)
+                all_ref_de_dxs.append(ref_de_dx[0])
+                all_ref_d2e_dxdps.append(ref_d2e_dxdp[0])
+
+            all_ref_es = np.stack(all_ref_es)
+            all_ref_de_dps = np.stack(all_ref_de_dps)
+            all_ref_de_dxs = np.stack(all_ref_de_dxs)
+            all_ref_d2e_dxdps = np.stack(all_ref_d2e_dxdps)
 
             for dp_idxs in all_dp_idxs:
                 dp_idxs = dp_idxs.astype(np.int32)
 
                 test_e, test_de_dx, test_de_dp, test_d2e_dxdp = test_nrg.derivatives(
-                    conf,
+                    confs,
                     params,
-                    dx_dp=dx_dp,
+                    dx_dp=batch_dx_dp[:, dp_idxs, :, :], # gatjer the ones we care about
                     dp_idxs=dp_idxs
                 )
-                np.testing.assert_almost_equal(test_e, ref_e)
-                np.testing.assert_almost_equal(test_de_dp, ref_de_dp[dp_idxs])
-                np.testing.assert_almost_equal(test_de_dx, ref_de_dx[0])
-                np.testing.assert_almost_equal(test_d2e_dxdp, ref_d2e_dx2[0][dp_idxs])
 
-                if np.prod(dx_dp) == 0:
+                np.testing.assert_almost_equal(test_e, all_ref_es)
+                np.testing.assert_almost_equal(test_de_dp, all_ref_de_dps[:, dp_idxs]) # [C, P]
+                np.testing.assert_almost_equal(test_de_dx, all_ref_de_dxs)
+                np.testing.assert_almost_equal(test_d2e_dxdp, all_ref_d2e_dxdps[:, dp_idxs, :, :]) # [C, P, N, 3]
 
-                    dx_dp = np.empty(shape=(0,))
+                if np.prod(batch_dx_dp) == 0:
+
+                    batch_dx_dp = np.empty(shape=(0,))
 
                     test_e, test_de_dx, test_de_dp, test_d2e_dxdp = test_nrg.derivatives(
-                        conf,
+                        confs,
                         params,
-                        dx_dp=dx_dp,
+                        dx_dp=batch_dx_dp[:, dp_idxs, :, :],
                         dp_idxs=dp_idxs
                     )
-                    np.testing.assert_almost_equal(test_e, ref_e)
-                    np.testing.assert_almost_equal(test_de_dp, ref_de_dp[dp_idxs])
-                    np.testing.assert_almost_equal(test_de_dx, ref_de_dx[0])
-                    np.testing.assert_almost_equal(test_d2e_dxdp, ref_d2e_dx2[0][dp_idxs])
+
+                    np.testing.assert_almost_equal(test_e, all_ref_es)
+                    np.testing.assert_almost_equal(test_de_dp, all_ref_de_dps[:, dp_idxs]) # [C, P]
+                    np.testing.assert_almost_equal(test_de_dx, all_ref_de_dxs)
+                    np.testing.assert_almost_equal(test_d2e_dxdp, all_ref_d2e_dxdps[:, dp_idxs, :, :]) # [C, P, N, 3]
 
 
 class TestHarmonicBond(CustomOpsTest):
@@ -151,6 +177,3 @@ class TestHarmonicAngle(CustomOpsTest):
             energy_fn,
             ha
         )
-
-# test_derivatives(np.random.rand(3, 3, 3).astype(np.float64))
-# test_derivatives(np.zeros(shape=(3, 3, 3)).astype(np.float64))

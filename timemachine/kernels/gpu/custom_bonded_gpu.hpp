@@ -24,6 +24,7 @@ public:
     ~HarmonicBond();
 
     virtual void derivatives_device(
+        const int num_confs,
         const int num_atoms,
         const int num_params,
         const RealType *d_coords,
@@ -58,6 +59,7 @@ public:
     ~HarmonicAngle();
 
     virtual void derivatives_device(
+        const int num_confs,
         const int num_atoms,
         const int num_params,
         const RealType *d_coords,

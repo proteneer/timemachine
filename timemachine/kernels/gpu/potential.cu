@@ -1,10 +1,11 @@
 #include "potential.hpp"
 #include "kernel_utils.cuh"
-
+#include <iostream>
 namespace timemachine {
 
 template<typename RealType>
 void Potential<RealType>::derivatives_host(
+    const int num_confs,
     const int num_atoms,
     const int num_params,
     const RealType *h_coords, // not null
@@ -18,6 +19,7 @@ void Potential<RealType>::derivatives_host(
     RealType *h_dE_dp,
     RealType *h_d2E_dxdp) const {
 
+    const auto C = num_confs;
     const auto N = num_atoms;
     const auto P = num_params;
     const auto DP = num_dp_idxs;
@@ -33,10 +35,10 @@ void Potential<RealType>::derivatives_host(
     RealType* d_dE_dp = nullptr;
     RealType* d_d2E_dxdp = nullptr;
 
-    gpuErrchk(cudaMalloc((void**)&d_coords, N*3*sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_coords, C*N*3*sizeof(RealType)));
     gpuErrchk(cudaMalloc((void**)&d_params, P*sizeof(RealType)));
 
-    gpuErrchk(cudaMemcpy(d_coords, h_coords, N*3*sizeof(RealType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_coords, h_coords, C*N*3*sizeof(RealType), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_params, h_params, P*sizeof(RealType), cudaMemcpyHostToDevice));
 
     if(num_dp_idxs > 0) {
@@ -46,27 +48,28 @@ void Potential<RealType>::derivatives_host(
     }
 
     if(h_dx_dp != nullptr) {
-        gpuErrchk(cudaMalloc((void**)&d_dx_dp, DP*N*3*sizeof(RealType)));
-        gpuErrchk(cudaMemcpy(d_dx_dp, h_dx_dp, DP*N*3*sizeof(RealType), cudaMemcpyHostToDevice));
+        gpuErrchk(cudaMalloc((void**)&d_dx_dp, C*DP*N*3*sizeof(RealType)));
+        gpuErrchk(cudaMemcpy(d_dx_dp, h_dx_dp, C*DP*N*3*sizeof(RealType), cudaMemcpyHostToDevice));
     }
 
-    gpuErrchk(cudaMalloc((void**)&d_E, sizeof(RealType)));
-    gpuErrchk(cudaMemset(d_E, 0, sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_E, C*sizeof(RealType)));
+    gpuErrchk(cudaMemset(d_E, 0, C*sizeof(RealType)));
 
     if(h_dE_dx != nullptr) {
-        gpuErrchk(cudaMalloc((void**)&d_dE_dx, N*3*sizeof(RealType)));
-        gpuErrchk(cudaMemset(d_dE_dx, 0, N*3*sizeof(RealType)));
+        gpuErrchk(cudaMalloc((void**)&d_dE_dx, C*N*3*sizeof(RealType)));
+        gpuErrchk(cudaMemset(d_dE_dx, 0, C*N*3*sizeof(RealType)));
     }
     if(h_dE_dp != nullptr) {
-        gpuErrchk(cudaMalloc((void**)&d_dE_dp, DP*sizeof(RealType)));
-        gpuErrchk(cudaMemset(d_dE_dp, 0, DP*sizeof(RealType)));
+        gpuErrchk(cudaMalloc((void**)&d_dE_dp, C*DP*sizeof(RealType)));
+        gpuErrchk(cudaMemset(d_dE_dp, 0, C*DP*sizeof(RealType)));
     }
     if(h_d2E_dxdp != nullptr) {
-        gpuErrchk(cudaMalloc((void**)&d_d2E_dxdp, DP*N*3*sizeof(RealType)));
-        gpuErrchk(cudaMemset(d_d2E_dxdp, 0, DP*N*3*sizeof(RealType)));
+        gpuErrchk(cudaMalloc((void**)&d_d2E_dxdp, C*DP*N*3*sizeof(RealType)));
+        gpuErrchk(cudaMemset(d_d2E_dxdp, 0, C*DP*N*3*sizeof(RealType)));
     }
 
     this->derivatives_device(
+        C,
         N,
         P,
         d_coords,
@@ -83,16 +86,16 @@ void Potential<RealType>::derivatives_host(
     );
 
     gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaMemcpy(h_E, d_E, sizeof(RealType), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(h_E, d_E, C*sizeof(RealType), cudaMemcpyDeviceToHost));
 
     if(h_dE_dx != nullptr) {
-        gpuErrchk(cudaMemcpy(h_dE_dx, d_dE_dx, N*3*sizeof(RealType), cudaMemcpyDeviceToHost));        
+        gpuErrchk(cudaMemcpy(h_dE_dx, d_dE_dx, C*N*3*sizeof(RealType), cudaMemcpyDeviceToHost));        
     }
     if(h_dE_dp != nullptr) {
-        gpuErrchk(cudaMemcpy(h_dE_dp, d_dE_dp, DP*sizeof(RealType), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(h_dE_dp, d_dE_dp, C*DP*sizeof(RealType), cudaMemcpyDeviceToHost));
     }
     if(h_d2E_dxdp != nullptr) {
-        gpuErrchk(cudaMemcpy(h_d2E_dxdp, d_d2E_dxdp, DP*N*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(h_d2E_dxdp, d_d2E_dxdp, C*DP*N*3*sizeof(RealType), cudaMemcpyDeviceToHost));
     }
 
     cudaFree(d_coords);
