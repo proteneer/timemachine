@@ -26,20 +26,26 @@ void declare_potential(py::module &m, const char *typestr) {
         const py::array_t<RealType, py::array::c_style> &dx_dp,
         const py::array_t<int, py::array::c_style> &dp_idxs) -> py::tuple {
 
+            // For:
+            // E + dE_dx, set dp_idxs = []
+            // E + dE_dp, set second_order False and dp_idxs > 0
+            // E + dE_dp 
+
+
             const long unsigned int num_atoms = coords.shape()[0];
             const long unsigned int num_dims = coords.shape()[1];
             const long unsigned int num_params = params.shape()[0];
             const long unsigned int num_dp_idxs = dp_idxs.shape()[0];
 
             py::array_t<RealType, py::array::c_style> py_E({1});
-            py::array_t<RealType, py::array::c_style> py_dE_dp({num_params});
+            py::array_t<RealType, py::array::c_style> py_dE_dp({num_dp_idxs});
             py::array_t<RealType, py::array::c_style> py_dE_dx({num_atoms, num_dims});
-            py::array_t<RealType, py::array::c_style> py_d2E_dxdp({num_params, num_atoms, num_dims});
+            py::array_t<RealType, py::array::c_style> py_d2E_dxdp({num_dp_idxs, num_atoms, num_dims});
 
             memset(py_E.mutable_data(), 0.0, sizeof(RealType));
-            memset(py_dE_dp.mutable_data(), 0.0, sizeof(RealType)*num_params);
+            memset(py_dE_dp.mutable_data(), 0.0, sizeof(RealType)*num_dp_idxs);
             memset(py_dE_dx.mutable_data(), 0.0, sizeof(RealType)*num_atoms*num_dims);
-            memset(py_d2E_dxdp.mutable_data(), 0.0, sizeof(RealType)*num_params*num_atoms*num_dims);
+            memset(py_d2E_dxdp.mutable_data(), 0.0, sizeof(RealType)*num_dp_idxs*num_atoms*num_dims);
 
             RealType *dx_dp_ptr = nullptr;
 

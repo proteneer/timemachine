@@ -51,15 +51,19 @@ void Potential<RealType>::derivatives_host(
     }
 
     gpuErrchk(cudaMalloc((void**)&d_E, sizeof(RealType)));
+    gpuErrchk(cudaMemset(d_E, 0, sizeof(RealType)));
 
     if(h_dE_dx != nullptr) {
         gpuErrchk(cudaMalloc((void**)&d_dE_dx, N*3*sizeof(RealType)));
+        gpuErrchk(cudaMemset(d_dE_dx, 0, N*3*sizeof(RealType)));
     }
     if(h_dE_dp != nullptr) {
         gpuErrchk(cudaMalloc((void**)&d_dE_dp, DP*sizeof(RealType)));
+        gpuErrchk(cudaMemset(d_dE_dp, 0, DP*sizeof(RealType)));
     }
     if(h_d2E_dxdp != nullptr) {
         gpuErrchk(cudaMalloc((void**)&d_d2E_dxdp, DP*N*3*sizeof(RealType)));
+        gpuErrchk(cudaMemset(d_d2E_dxdp, 0, DP*N*3*sizeof(RealType)));
     }
 
     this->derivatives_device(

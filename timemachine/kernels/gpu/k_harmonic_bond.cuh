@@ -1,7 +1,7 @@
 #pragma once
 
 #include "surreal.cuh"
-
+// #include <cstdio>
 /*
 
 Consider an energy function function E(x,p): R^(3N), R^P -> R, this kernel computes
@@ -77,10 +77,9 @@ void __global__ harmonic_bond_derivatives(
     RealType ikb = 0;
     RealType ib0 = 0;
 
-    const auto dp_idx = blockIdx.y; // this is invalid if dp_idxs isn't used, basically makes it easy
-    // for us to hunt down bugs
+    const auto dp_idx = blockIdx.y;
 
-    // ytz: this a complex step size, not a standard finite difference step size.
+    // (ytz): this a complex step size, not a standard finite difference step size.
     // the error decays quadratically as opposed to linearly w.r.t. step size.
     const RealType step_size = 1e-7;
 

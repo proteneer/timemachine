@@ -53,7 +53,7 @@ void HarmonicBond<RealType>::derivatives_device(
         // inference mode
         dim_y = 1;
         if(d_dp_idxs != nullptr) {
-            throw std::runtime_error("d_dp_idxs is not null but num_dp_idxs == 0!");
+            throw std::runtime_error("d_dp_idxs is not null but num_dp_idxs == 0");
         }
     } else {
         dim_y = num_dp_idxs;
@@ -62,8 +62,6 @@ void HarmonicBond<RealType>::derivatives_device(
     dim3 dimBlock(tpb);
     dim3 dimGrid(n_blocks, dim_y); // x, y
 
-    // if timing, be sure check only this and call cudaDeviceSynchronize() after
-    // also: ensure compiling with -O2 to get standard optimizations
     harmonic_bond_derivatives<<<dimGrid, dimBlock>>>(
         N,
         P,
