@@ -125,6 +125,33 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 
 }
 
+#include <iostream>
+
+template<typename RealType>
+void declare_periodic_torsion(py::module &m, const char *typestr) {
+
+    using Class = timemachine::PeriodicTorsion<RealType>;
+    std::string pyclass_name = std::string("PeriodicTorsion_") + typestr;
+    py::class_<Class, timemachine::Potential<RealType> >(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &ti, // torsion_idxs
+        const py::array_t<int, py::array::c_style> &pi  // param_idxs
+    ) {
+
+        std::vector<int> torsion_idxs(ti.size());
+        std::memcpy(torsion_idxs.data(), ti.data(), ti.size()*sizeof(int));
+        std::vector<int> param_idxs(pi.size());
+        std::memcpy(param_idxs.data(), pi.data(), pi.size()*sizeof(int));
+
+        return new timemachine::PeriodicTorsion<RealType>(torsion_idxs, param_idxs);
+    }));
+
+}
 
 PYBIND11_MODULE(custom_ops, m) {
 
@@ -136,5 +163,8 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_harmonic_angle<float>(m, "f32");
     declare_harmonic_angle<double>(m, "f64");
+
+    declare_periodic_torsion<float>(m, "f32");
+    declare_periodic_torsion<double>(m, "f64");
 
 }

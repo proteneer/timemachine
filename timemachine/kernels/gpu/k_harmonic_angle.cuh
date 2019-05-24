@@ -9,7 +9,7 @@ void __global__ k_harmonic_angle_derivatives(
     const RealType *coords, // [n, 3]
     const RealType *params, // [p,]
     const int num_angles,    // a
-    const int *angle_idxs,   // [a, 2]
+    const int *angle_idxs,   // [a, 3]
     const int *param_idxs,  // [a, 2]
     RealType *E,            // [,] never null
     RealType *dE_dx,        // [n,3] or null

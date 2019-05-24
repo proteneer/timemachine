@@ -25,19 +25,22 @@ class CustomOpsTest(unittest.TestCase):
 
     def assert_derivatives(self, conf, params, ref_nrg, test_nrg):
 
-        num_confs = np.random.randint(1, 10)
-        num_confs = 2
-        confs = np.repeat(conf[np.newaxis, :, :], num_confs, axis=0)
-        # confs += np.random.rand(*confs.shape)
+        if conf.ndim == 2:
+            num_confs = np.random.randint(1, 10)
+            confs = np.repeat(conf[np.newaxis, :, :], num_confs, axis=0)
+            confs += np.random.rand(*confs.shape)
+        else:
+            confs = conf
+
         # todo: perturb by a small amount
 
         # This is a messy unit test that tests for:
         # correctness of the 4 derivatives against the reference implementation
         # sparse scattered indices
         # using an empty null array to denote zero dx_dp
-        all_dxdps = [
+        all_dx_dps = [
             np.random.rand(confs.shape[0], params.shape[0], confs.shape[1], confs.shape[2]),
-            # np.zeros(shape=(confs.shape[0], params.shape[0], confs.shape[1], confs.shape[2]))
+            None, # special case to check when we don't provide an explicit dx_dp
         ]
 
         all_dp_idxs = [
@@ -46,7 +49,7 @@ class CustomOpsTest(unittest.TestCase):
             np.arange(len(params))
         ]
 
-        for batch_dx_dp in all_dxdps:
+        for batch_dx_dp in all_dx_dps:
 
             all_ref_es = []
             all_ref_de_dps = []
@@ -54,10 +57,15 @@ class CustomOpsTest(unittest.TestCase):
             all_ref_d2e_dxdps = []
 
             for conf_idx, conf in enumerate(confs):
-                # print("input_dxdp", batch_dx_dp[conf_idx])
-                ref_e, ref_de_dp = batch_mult_jvp(ref_nrg, conf, params, batch_dx_dp[conf_idx])
+
+                if batch_dx_dp is None:
+                    test_dx_dp = np.zeros(shape=(params.shape[0], confs.shape[1], confs.shape[2]))
+                else:
+                    test_dx_dp = batch_dx_dp[conf_idx]
+
+                ref_e, ref_de_dp = batch_mult_jvp(ref_nrg, conf, params, test_dx_dp)
                 grad_fn = jax.grad(ref_nrg, argnums=(0,))
-                ref_de_dx, ref_d2e_dxdp = batch_mult_jvp(grad_fn, conf, params, batch_dx_dp[conf_idx])
+                ref_de_dx, ref_d2e_dxdp = batch_mult_jvp(grad_fn, conf, params, test_dx_dp)
                 
                 all_ref_es.append(ref_e)
                 all_ref_de_dps.append(ref_de_dp)
@@ -72,10 +80,16 @@ class CustomOpsTest(unittest.TestCase):
             for dp_idxs in all_dp_idxs:
                 dp_idxs = dp_idxs.astype(np.int32)
 
+                if batch_dx_dp is None:
+                    test_dx_dp = np.empty(shape=(0,))
+                else:
+                    test_dx_dp = batch_dx_dp[:, dp_idxs, :, :]
+
+
                 test_e, test_de_dx, test_de_dp, test_d2e_dxdp = test_nrg.derivatives(
                     confs,
                     params,
-                    dx_dp=batch_dx_dp[:, dp_idxs, :, :], # gatjer the ones we care about
+                    dx_dp=test_dx_dp, # gather the ones we care about
                     dp_idxs=dp_idxs
                 )
 
@@ -83,22 +97,6 @@ class CustomOpsTest(unittest.TestCase):
                 np.testing.assert_almost_equal(test_de_dp, all_ref_de_dps[:, dp_idxs]) # [C, P]
                 np.testing.assert_almost_equal(test_de_dx, all_ref_de_dxs)
                 np.testing.assert_almost_equal(test_d2e_dxdp, all_ref_d2e_dxdps[:, dp_idxs, :, :]) # [C, P, N, 3]
-
-                if np.prod(batch_dx_dp) == 0:
-
-                    batch_dx_dp = np.empty(shape=(0,))
-
-                    test_e, test_de_dx, test_de_dp, test_d2e_dxdp = test_nrg.derivatives(
-                        confs,
-                        params,
-                        dx_dp=batch_dx_dp[:, dp_idxs, :, :],
-                        dp_idxs=dp_idxs
-                    )
-
-                    np.testing.assert_almost_equal(test_e, all_ref_es)
-                    np.testing.assert_almost_equal(test_de_dp, all_ref_de_dps[:, dp_idxs]) # [C, P]
-                    np.testing.assert_almost_equal(test_de_dx, all_ref_de_dxs)
-                    np.testing.assert_almost_equal(test_d2e_dxdp, all_ref_d2e_dxdps[:, dp_idxs, :, :]) # [C, P, N, 3]
 
 
 class TestHarmonicBond(CustomOpsTest):
@@ -176,4 +174,116 @@ class TestHarmonicAngle(CustomOpsTest):
             params,
             energy_fn,
             ha
+        )
+
+
+class TestPeriodicTorsion(CustomOpsTest):
+    
+    def test_derivatives(self):
+
+        x0 = np.array([
+            [[-0.6000563454193615, 0.376172954382274 ,-0.2487295756125901],
+             [ 0.561317027011325 , 0.2066950040043141, 0.3670430960815993],
+             [-1.187055522272264 ,-0.3415864358441354, 0.0871382207830652],
+             [ 0.9399773448903637,-0.6888774474110431, 0.2104211949995816]],
+            [[-0.6000563454193615, 0.376172954382274 ,-0.2487295756125901],
+             [ 0.5613170270113252, 0.2066950040043142, 0.3670430960815993],
+             [-1.187055522272264 ,-0.3415864358441354, 0.0871382207830652],
+             [ 1.283345455745044 ,-0.0356257425880843,-0.2573923896494185]],
+            [[-0.6000563454193615, 0.376172954382274 ,-0.2487295756125901],
+             [ 0.561317027011325 , 0.2066950040043142, 0.3670430960815992],
+             [-1.187055522272264 ,-0.3415864358441354, 0.0871382207830652],
+             [ 1.263820400176392 , 0.7964992122869241, 0.0084568741589791]],
+            [[-0.6000563454193615, 0.376172954382274 ,-0.2487295756125901],
+             [ 0.5613170270113252, 0.2066950040043142, 0.3670430960815992],
+             [-1.187055522272264 ,-0.3415864358441354, 0.0871382207830652],
+             [ 0.8993534242298198, 1.042445571242743 , 0.7635483993060286]],
+            [[-0.6000563454193615, 0.376172954382274 ,-0.2487295756125901],
+             [ 0.5613170270113255, 0.2066950040043142, 0.3670430960815993],
+             [-1.187055522272264 ,-0.3415864358441354, 0.0871382207830652],
+             [ 0.5250337847650304, 0.476091386095139 , 1.3136545198545133]],
+            [[-0.6000563454193615, 0.376172954382274 ,-0.2487295756125901],
+             [ 0.5613170270113255, 0.2066950040043141, 0.3670430960815993],
+             [-1.187055522272264 ,-0.3415864358441354, 0.0871382207830652],
+             [ 0.485009232042489 ,-0.3818599172073237, 1.1530102055165103]],
+            [[-0.6000563454193615, 0.376172954382274 ,-0.2487295756125901],
+             [ 0.5613170270113252, 0.2066950040043142, 0.3670430960815993],
+             [-1.187055522272264 ,-0.3415864358441354, 0.0871382207830652],
+             [ 1.2278668040866427, 0.8805184219394547, 0.099391329616366 ]],
+            [[-0.6000563454193615, 0.376172954382274 ,-0.2487295756125901],
+             [ 0.561317027011325 , 0.206695004004314 , 0.3670430960815994],
+             [-1.187055522272264 ,-0.3415864358441354, 0.0871382207830652],
+             [ 0.5494071252089705,-0.5626592973923106, 0.9817919758125693]],
+
+            ], dtype=np.float64)
+
+        torsion_idxs = np.array([
+            [0, 1, 2, 3],
+            [0, 1, 2, 3],
+            [0, 1, 2, 3],
+        ], dtype=np.int32)
+
+        params = np.array([
+            2.3, # k0
+            5.4, # k1
+            9.0, # k2
+            0.0, # t0
+            3.0, # t1
+            5.8, # t2
+            1.0, # n0
+            2.0, # n1
+            3.0  # n2
+        ])
+
+        param_idxs = np.array([
+            [0, 3, 6],
+            [1, 4, 7],
+            [2, 5, 8]
+        ], dtype=np.int32)
+
+        energy_fn = functools.partial(
+            bonded.periodic_torsion,
+            param_idxs=param_idxs,
+            torsion_idxs=torsion_idxs,
+            box=None)
+
+        pt = custom_ops.PeriodicTorsion_f64(
+            torsion_idxs,
+            param_idxs
+        )
+
+        # (ytz): keep sanity snippet
+        # from simtk import openmm
+
+        # sys = openmm.System()
+        # force = openmm.PeriodicTorsionForce()
+        # force.addTorsion(
+        #     0, 1, 2, 3,
+        #     1, 0.5, 2.3
+        # )
+        # sys.addForce(force)
+        # sys.addParticle(1.0)
+        # sys.addParticle(1.0)
+        # sys.addParticle(1.0)
+        # sys.addParticle(1.0)
+
+        # ctxt = openmm.Context(sys, openmm.LangevinIntegrator(1.0, 1.0, 1.0))
+
+        # ctxt.setPositions(x0)
+        # ctxt.setPeriodicBoxVectors(
+        #     [10.0,  0.0,  0.0],
+        #     [ 0.0, 10.0,  0.0],
+        #     [ 0.0,  0.0, 10.0]
+        # )
+
+        # s = ctxt.getState(getEnergy=True, getForces=True)
+        # print("OpenMM energy:", s.getPotentialEnergy())
+        # for f in s.getForces():
+        #     print("OpenMM forces", f)
+
+        self.assert_derivatives(
+            x0,
+            params,
+            energy_fn,
+            pt
         )

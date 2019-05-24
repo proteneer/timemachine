@@ -1,8 +1,10 @@
+
 #include <stdexcept>
 
 #include "custom_bonded_gpu.hpp"
 #include "k_harmonic_bond.cuh"
 #include "k_harmonic_angle.cuh"
+#include "k_periodic_torsion.cuh"
 #include "kernel_utils.cuh"
 
 #include <iostream>
@@ -169,8 +171,93 @@ void HarmonicAngle<RealType>::derivatives_device(
 
 };
 
-
 template class HarmonicAngle<float>;
 template class HarmonicAngle<double>;
+
+template <typename RealType>
+PeriodicTorsion<RealType>::PeriodicTorsion(
+    std::vector<int> torsion_idxs,
+    std::vector<int> param_idxs
+) : n_torsions_(torsion_idxs.size()/4),
+    d_torsion_idxs_(nullptr),
+    d_param_idxs_(nullptr) {
+
+    gpuErrchk(cudaMalloc((void**)&d_param_idxs_, param_idxs.size()*sizeof(*d_param_idxs_)));
+    gpuErrchk(cudaMalloc((void**)&d_torsion_idxs_, torsion_idxs.size()*sizeof(*d_torsion_idxs_)));
+    gpuErrchk(cudaMemcpy(d_param_idxs_, &param_idxs[0], param_idxs.size()*sizeof(*d_param_idxs_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], torsion_idxs.size()*sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
+
+
+};
+
+template <typename RealType>
+PeriodicTorsion<RealType>::~PeriodicTorsion() {
+    gpuErrchk(cudaFree(d_torsion_idxs_));
+    gpuErrchk(cudaFree(d_param_idxs_));
+};
+
+template <typename RealType>
+void PeriodicTorsion<RealType>::derivatives_device(
+        const int num_confs,
+        const int num_atoms,
+        const int num_params,
+        const RealType *d_coords,
+        const RealType *d_params,
+        RealType *d_E,
+        RealType *d_dE_dx,
+
+        const RealType *d_dx_dp,
+        const int *d_dp_idxs,
+        const int num_dp_idxs,
+        RealType *d_dE_dp,
+        RealType *d_d2E_dxdp) const {
+
+    const auto C = num_confs;
+    const auto N = num_atoms;
+    const auto P = num_params;
+
+    int tpb = 32;
+    int n_blocks = (n_torsions_ + tpb - 1) / tpb;
+    int dim_y = 1;
+
+    // zero dimension dim_ys are *not* allowed.
+    if(num_dp_idxs == 0) {
+        // inference mode
+        dim_y = 1;
+        if(d_dp_idxs != nullptr) {
+            throw std::runtime_error("d_dp_idxs is not null but num_dp_idxs == 0");
+        }
+    } else {
+        dim_y = num_dp_idxs;
+    }
+
+    dim3 dimBlock(tpb);
+    dim3 dimGrid(n_blocks, dim_y, C); // x, y, z
+
+    k_periodic_torsion_derivatives<<<dimGrid, dimBlock>>>(
+        N,
+        P,
+        d_coords,
+        d_params,
+        n_torsions_,
+        d_torsion_idxs_,
+        d_param_idxs_,
+        d_E,
+        d_dE_dx,
+        // parameter derivatives
+        d_dx_dp,
+        d_dp_idxs,
+        d_dE_dp,
+        d_d2E_dxdp
+    );
+
+    gpuErrchk(cudaPeekAtLastError());
+
+};
+
+
+template class PeriodicTorsion<float>;
+template class PeriodicTorsion<double>;
+
 
 } // namespace timemachine

@@ -9,6 +9,8 @@ class Potential {
 
 public:
 
+    virtual ~Potential() {};
+
     /*
 
     Convenience function that wraps around the derivatives_device by allocating,
