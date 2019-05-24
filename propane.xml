@@ -1,0 +1,57 @@
+<ForceField>
+	<Residues>
+		<Residue name="PRP">
+			<Atom name="C1" type="prp-c"/>
+			<Atom name="C2" type="prp-c"/>
+			<Atom name="C3" type="prp-c"/>
+			<Atom name="H1" type="prp-h"/>
+			<Atom name="H2" type="prp-h"/>
+			<Atom name="H3" type="prp-h"/>
+			<Atom name="H4" type="prp-h"/>
+			<Atom name="H5" type="prp-h"/>
+			<Atom name="H6" type="prp-h"/>
+			<Atom name="H7" type="prp-h"/>
+			<Atom name="H8" type="prp-h"/>
+			<Bond from="0" to="1"/>
+			<Bond from="0" to="3"/>
+			<Bond from="0" to="4"/>
+			<Bond from="0" to="5"/>
+			<Bond from="1" to="2"/>
+			<Bond from="1" to="6"/>
+			<Bond from="1" to="7"/>
+			<Bond from="2" to="8"/>
+			<Bond from="2" to="9"/>
+			<Bond from="2" to="10"/>
+		</Residue>
+	</Residues>
+	<AtomTypes>
+		<Type name="prp-c" class="C" element="C" mass="12.01"/>
+		<Type name="prp-h" class="H" element="H" mass="1.008"/>
+	</AtomTypes>
+	<NonbondedForce coulomb14scale="0.833333" lj14scale="0.5">
+		<Atom type="prp-c" charge="-0.200" sigma="0" epsilon="0"/>
+		<Atom type="prp-h" charge="0.075" sigma="0" epsilon="0"/>
+		<!--
+		<Atom type="prp-c" charge="-0.000" sigma="0.350" epsilon="0.276"/>
+		<Atom type="prp-h" charge="0.000" sigma="0.250" epsilon="0.126"/>
+		-->
+	</NonbondedForce>
+	<GBSAOBCForce>
+		<Atom type="prp-c" charge="-0.200" radius="0.170" scale="0.79"/>
+		<Atom type="prp-h" charge="0.075" radius="0.115" scale="0.85"/>
+	</GBSAOBCForce>
+	<!--
+	<HarmonicBondForce>
+		<Bond class1="C" class2="H" length=".1091" k="5000"/>
+		<Bond class1="C" class2="C" length=".1540" k="5000"/>
+	</HarmonicBondForce>
+	<HarmonicAngleForce>
+		<Angle class1="H" class2="C" class3="H" angle="1.9111355" k="7.5"/>
+		<Angle class1="H" class2="C" class3="C" angle="1.9111355" k="7.5"/>
+		<Angle class1="C" class2="C" class3="C" angle="1.9111355" k="7.5"/>
+	</HarmonicAngleForce>
+	<PeriodicTorsionForce>
+                <Improper class1="C" class2="O" class3="H" class4="H" periodicity1="2" phase1="3.1" k1="4.6024"/>
+	</PeriodicTorsionForce>
+	-->
+</ForceField>

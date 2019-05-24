@@ -1,0 +1,22 @@
+<ForceField>
+	<Residues>
+		<Residue name="HYD">
+			<Atom name="H1" type="hyd-h"/>
+			<Atom name="H2" type="hyd-h"/>
+			<Bond from="0" to="1"/>
+		</Residue>
+	</Residues>
+	<AtomTypes>
+		<Type name="hyd-h" class="H" element="H" mass="1.008"/>
+	</AtomTypes>
+	<NonbondedForce coulomb14scale="0.83333" lj14scale="0.5">
+		<Atom type="hyd-h" charge="0.000" sigma="0.242" epsilon="0.063"/>
+	</NonbondedForce>
+	<HarmonicBondForce>
+		<Bond class1="H" class2="H" length=".050" k="5000"/>
+	</HarmonicBondForce>
+	<HarmonicAngleForce>
+		<Angle class1="H" class2="H" angle="3.1415926" k="100"/>
+	</HarmonicAngleForce>
+</ForceField>
+

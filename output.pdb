@@ -1,0 +1,9 @@
+REMARK   1 CREATED WITH OPENMM 7.4, 2019-05-21
+MODEL        1
+HETATM    1  H1  HYD A   1      -8.644   2.246  -0.740  1.00  0.00           H  
+HETATM    2  H2  HYD A   1       9.971  -1.439   0.882  1.00  0.00           H  
+TER       3      HYD A   1
+ENDMDL
+CONECT    1    2
+CONECT    2    1
+END

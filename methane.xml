@@ -1,0 +1,30 @@
+<ForceField>
+	<Residues>
+		<Residue name="MET">
+			<Atom name="C" type="met-c"/>
+			<Atom name="H1" type="met-h"/>
+			<Atom name="H2" type="met-h"/>
+			<Atom name="H3" type="met-h"/>
+			<Atom name="H4" type="met-h"/>
+			<Bond from="0" to="1"/>
+			<Bond from="0" to="2"/>
+			<Bond from="0" to="3"/>
+			<Bond from="0" to="4"/>
+		</Residue>
+	</Residues>
+	<AtomTypes>
+		<Type name="met-c" class="C" element="C" mass="12.00"/>
+		<Type name="met-h" class="H" element="H" mass="1.008"/>
+	</AtomTypes>
+	<NonbondedForce coulomb14scale="0.83333" lj14scale="0.5">
+		<Atom type="met-c" charge="0.000" sigma="0.350" epsilon=".066"/>
+		<Atom type="met-h" charge="0.000" sigma="0.250" epsilon="0.030"/>
+	</NonbondedForce>
+	<HarmonicBondForce>
+		<Bond class1="C" class2="H" length=".1091" k="5000"/>
+	</HarmonicBondForce>
+	<HarmonicAngleForce>
+		<Angle class1="H" class2="C" class3="H" angle="1.9111355" k="7.5"/>
+	</HarmonicAngleForce>
+</ForceField>
+

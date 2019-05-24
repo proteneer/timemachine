@@ -74,7 +74,7 @@ def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
     return np.sum(energy, axis=-1)/2
 
 
-def pairwise_energy(conf, box, charges, cutoff):
+def pairwise_energy(conf, box, charges, cutoff, scale_matrix):
     """
     Numerically stable implementation of the pairwise term:
     
@@ -84,6 +84,8 @@ def pairwise_energy(conf, box, charges, cutoff):
     qi = np.expand_dims(charges, 0) # (1, N)
     qj = np.expand_dims(charges, 1) # (N, 1)
     qij = np.multiply(qi, qj)
+    #qij = scale_matrix * np.multiply(qi, qj)
+    #print(qij)
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
     dij = distance(ri, rj, box)
@@ -92,6 +94,7 @@ def pairwise_energy(conf, box, charges, cutoff):
     keep_mask = 1 - np.eye(conf.shape[0])
     qij = np.where(keep_mask, qij, np.zeros_like(qij))
     dij = np.where(keep_mask, dij, np.zeros_like(dij))
+    #print(qij)
     eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
 
     if cutoff is not None:
@@ -157,7 +160,9 @@ def electrostatic(conf, params, box, param_idxs, scale_matrix, cutoff=None, alph
     else:    
         # non periodic electrostatics is straightforward.
         # note that we do not support reaction field approximations.
-        eij = pairwise_energy(conf, box, charges, cutoff)
+        eij = pairwise_energy(conf, box, charges, cutoff, scale_matrix)
+        
+        #eij = eij * scale_matrix
 
         return ONE_4PI_EPS0*np.sum(eij)/2
 

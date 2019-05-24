@@ -1,0 +1,47 @@
+<ForceField>
+	<Residues>
+		<Residue name="UNK">
+			<Atom name="A" type="a"/>
+			<Atom name="B" type="b"/>
+			<Atom name="C" type="c"/>
+			<Atom name="D" type="d"/>
+			<Bond from="0" to="1"/>
+			<Bond from="1" to="2"/>
+			<Bond from="2" to="3"/>
+		</Residue>
+	</Residues>
+	<AtomTypes>
+		<Type name="a" class="A" element="C" mass="12.01"/>
+		<Type name="b" class="B" element="C" mass="12.01"/>
+		<Type name="c" class="C" element="C" mass="12.01"/>
+		<Type name="d" class="D" element="C" mass="12.01"/>
+	</AtomTypes>
+	<NonbondedForce coulomb14scale="0.833333" lj14scale="0.5">
+		<Atom type="a" charge="0.000" sigma="0" epsilon="0"/>
+		<Atom type="b" charge="0.000" sigma="0" epsilon="0"/>
+		<Atom type="c" charge="0.000" sigma="0" epsilon="0"/>
+		<Atom type="d" charge="0.000" sigma="0" epsilon="0"/>
+		<!--
+		<Atom type="prp-c" charge="-0.000" sigma="0.350" epsilon="0.276"/>
+		<Atom type="prp-h" charge="0.000" sigma="0.250" epsilon="0.126"/>
+		-->
+	</NonbondedForce>
+	<!--
+	<GBSAOBCForce>
+		<Atom type="prp-c" charge="-0.200" radius="0.170" scale="0.79"/>
+		<Atom type="prp-h" charge="0.075" radius="0.115" scale="0.85"/>
+	</GBSAOBCForce>
+	<HarmonicBondForce>
+		<Bond class1="C" class2="H" length=".1091" k="5000"/>
+		<Bond class1="C" class2="C" length=".1540" k="5000"/>
+	</HarmonicBondForce>
+	<HarmonicAngleForce>
+		<Angle class1="H" class2="C" class3="H" angle="1.9111355" k="7.5"/>
+		<Angle class1="H" class2="C" class3="C" angle="1.9111355" k="7.5"/>
+		<Angle class1="C" class2="C" class3="C" angle="1.9111355" k="7.5"/>
+	</HarmonicAngleForce>
+	-->
+	<PeriodicTorsionForce>
+                <Proper class1="A" class2="B" class3="C" class4="D" periodicity1="1" phase1="0.0" k1="2.3"/>
+	</PeriodicTorsionForce>
+</ForceField>

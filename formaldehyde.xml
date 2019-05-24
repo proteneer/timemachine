@@ -1,0 +1,35 @@
+<ForceField>
+	<Residues>
+		<Residue name="FM1">
+			<Atom name="C" type="fml-c"/>
+			<Atom name="O" type="fml-o"/>
+			<Atom name="H1" type="fml-h"/>
+			<Atom name="H2" type="fml-h"/>
+			<Bond from="0" to="1"/>
+			<Bond from="0" to="2"/>
+			<Bond from="0" to="3"/>
+		</Residue>
+	</Residues>
+	<AtomTypes>
+		<Type name="fml-c" class="C" element="C" mass="12.00"/>
+		<Type name="fml-o" class="O" element="O" mass="16.00"/>
+		<Type name="fml-h" class="H" element="H" mass="1.008"/>
+	</AtomTypes>
+	<NonbondedForce coulomb14scale="0.83333" lj14scale="0.5">
+		<Atom type="fml-c" charge="0.000" sigma="0.000" epsilon="0.000"/>
+		<Atom type="fml-o" charge="-0.000" sigma="0.000" epsilon="0.000"/>
+		<Atom type="fml-h" charge="0.000" sigma="0.000" epsilon="0.000"/>
+	</NonbondedForce>
+	<HarmonicBondForce>
+		<Bond class1="C" class2="O" length="0.12290" k="476976.0"/>
+		<Bond class1="C" class2="H" length="0.10900" k="284512.0"/>
+	</HarmonicBondForce>
+	<HarmonicAngleForce>
+		<Angle class1="H" class2="C" class3="O" angle="2.0943985" k="265.73"/>
+		<Angle class1="H" class2="C" class3="H" angle="2.0943985" k="265.74"/>
+	</HarmonicAngleForce>
+	<PeriodicTorsionForce>
+		<Improper class1="C" class2="O" class3="H" class4="H" periodicity1="2" phase1="3.1" k1="4.6024"/>
+	</PeriodicTorsionForce>
+</ForceField>
+

@@ -1,0 +1,11 @@
+HETATM    1  C   MET     0      0.300   -0.400    0.000  1.00  0.00           C
+HETATM    2  H1  MET     0      0.300    0.700    0.000  1.00  0.00           H
+HETATM    3  H2  MET     0      0.800   -0.700    0.900  1.00  0.00           H
+HETATM    4  H3  MET     0      0.800   -0.700   -0.900  1.00  0.00           H
+HETATM    5  H4  MET     0     -0.800   -0.700    0.000  1.00  0.00           H
+CONECT    1    2    3    4    5     
+CONECT    2    1
+CONECT    3    1
+CONECT    4    1
+CONECT    5    1
+END   
