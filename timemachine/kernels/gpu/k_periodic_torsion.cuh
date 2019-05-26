@@ -129,13 +129,13 @@ void __global__ k_periodic_torsion_derivatives(
         }
 
         // complex-step parameters 
-        if(param_idxs[a_idx*3+0] == dp_idxs[dp_idx]){
+        if(param_idxs[a_idx*3+0] == dp_idxs[dp_idx]) {
             ik = step_size;
         }
-        if(param_idxs[a_idx*3+1] == dp_idxs[dp_idx]){
+        if(param_idxs[a_idx*3+1] == dp_idxs[dp_idx]) {
             iphase = step_size;
         }
-        if(param_idxs[a_idx*3+2] == dp_idxs[dp_idx]){
+        if(param_idxs[a_idx*3+2] == dp_idxs[dp_idx]) {
             iperiod = step_size;
         }   
     }

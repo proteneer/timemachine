@@ -71,7 +71,7 @@ def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
     energy = np.where(keep_mask, energy, np.zeros_like(energy))
 
     # divide by two to deal with symmetry
-    return np.sum(energy, axis=-1)/2
+    return np.sum(energy)/2
 
 
 def pairwise_energy(conf, box, charges, cutoff):
