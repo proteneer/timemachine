@@ -6,7 +6,7 @@ from simtk.openmm import app
 from simtk import openmm as mm
 from simtk import unit
 
-from timemachine.potentials import bonded
+from timemachine.potentials import bonded, nonbonded
 from timemachine.kernels import custom_ops
 
 from jax.config import config; config.update("jax_enable_x64", True)
@@ -151,9 +151,60 @@ def create_system(file_path):
             test_potentials.append(test_ha)
 
 
+        if isinstance(force, mm.NonbondedForce):
+
+            num_atoms = force.getNumParticles()
+            scale_matrix = np.ones((num_atoms, num_atoms)) - np.eye(num_atoms)
+
+            charge_param_idxs = []
+            lj_param_idxs = []
+
+            for a_dx in range(num_atoms):
+                charge, sig, eps = force.getParticleParameters(a_idx)
+
+                charge = value(charge)
+                sig = value(sig)
+                eps = value(eps)
+
+                charge_idx = upsert_parameter(charge)
+                sig_idx = upsert_parameter(sig)
+                eps_idx = upsert_parameter(eps)
+
+                charge_param_idxs.append(charge_idx)
+                lj_param_idxs.append([sig_idx, eps_idx])
+
+            for a_idx in range(force.getNumExceptions()):
+
+                src, dst, _, _, _ = force.getExceptionParameters(a_idx)
+                scale_matrix[src][dst] = 0
+                scale_matrix[dst][src] = 0
+
+            charge_param_idxs = np.array(charge_param_idxs, dtype=np.int32)
+            lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
+
+            ref_lj = functools.partial(
+                nonbonded.lennard_jones,
+                scale_matrix=scale_matrix,
+                param_idxs=lj_param_idxs,
+                box=None
+            )
+
+            test_lj = custom_ops.LennardJones_f64(
+                scale_matrix,
+                lj_param_idxs
+            )
+
+            ref_potentials.append(ref_lj)
+            test_potentials.append(test_lj)
+
+    # assert 0
+
+
     return ref_potentials, test_potentials, np.array(value(pdb.positions), dtype=np.float64), np.array(global_params, np.float64)
 
 all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/5dfr_minimized.pdb")
+
+print("number of parameters", len(params))
 
 def batch_mult_jvp(fn, x, p, dxdp):
     dpdp = np.eye(p.shape[0])
@@ -168,23 +219,35 @@ def batch_mult_jvp(fn, x, p, dxdp):
 
 def test_energy(ref_e_fn, test_e_fn, coords, params):
 
-    print("comparing", ref_e_fn, "against", test_e_fn)
+    print("testing", test_e_fn)
 
     dxdp = np.random.rand(params.shape[0], coords.shape[0], coords.shape[1])
     ref_e = ref_e_fn(coords, params)
-    ref_de_dx_fn = jax.grad(ref_e_fn, argnums=(0,))
+    ref_de_dx_fn = jax.jit(jax.grad(ref_e_fn, argnums=(0,)))
     ref_de_dx = ref_de_dx_fn(coords, params)
-    _, ref_de_dp_jvp = batch_mult_jvp(ref_e_fn, coords, params, dxdp)
-    _, ref_d2e_dxdp_jvp = batch_mult_jvp(ref_de_dx_fn, coords, params, dxdp)
 
-    dxdp = np.expand_dims(dxdp, axis=0)
-    coords = np.expand_dims(coords, axis=0)
+    # # @jax.jit
+    # def e_jvp(a, b, c):
+    #     return batch_mult_jvp(ref_e_fn, a, b, c)
 
-    test_e, test_de_dx, test_de_dp_jvp, test_d2e_dxdp_jvp = test_e_fn.derivatives(coords, params, dxdp, np.arange(len(params), dtype=np.int32))
+    # # @jax.jit
+    # def g_jvp(a, b, c):
+    #     return batch_mult_jvp(ref_de_dx_fn, a, b, c)
 
-    np.testing.assert_almost_equal(ref_e, test_e)
-    np.testing.assert_almost_equal(ref_de_dx, test_de_dx)
-    np.testing.assert_almost_equal(ref_de_dp_jvp, test_de_dp_jvp[0])
+    # _, ref_de_dp_jvp = e_jvp(coords, params, dxdp)
+    # _, ref_d2e_dxdp_jvp = g_jvp(coords, params, dxdp)
+
+    batched_dxdp = np.expand_dims(dxdp, axis=0)
+    batched_coords = np.expand_dims(coords, axis=0)
+
+    test_e, test_de_dx, test_de_dp_jvp, test_d2e_dxdp_jvp = test_e_fn.derivatives(batched_coords, params, batched_dxdp, np.arange(len(params), dtype=np.int32))
+
+    # np.testing.assert_almost_equal(ref_e, test_e)
+    # np.testing.assert_almost_equal(ref_de_dx, test_de_dx)
+    # np.testing.assert_almost_equal(ref_de_dp_jvp, test_de_dp_jvp[0])
+
+    # timings
+
     # test_energies(all_ref, all_test, coords, params)
 
 for ref_e_fn, test_e_fn in zip(all_ref, all_test):

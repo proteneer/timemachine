@@ -5,6 +5,8 @@
 #include "k_lennard_jones.cuh"
 #include "kernel_utils.cuh"
 
+#include <chrono>  // for high_resolution_clock
+#include <iostream>
 namespace timemachine {
 
 template <typename RealType>
@@ -25,6 +27,7 @@ LennardJones<RealType>::~LennardJones() {
     gpuErrchk(cudaFree(d_param_idxs_));
     gpuErrchk(cudaFree(d_scale_matrix_));
 };
+
 
 template <typename RealType>
 void LennardJones<RealType>::derivatives_device(
@@ -65,6 +68,7 @@ void LennardJones<RealType>::derivatives_device(
     dim3 dimBlock(tpb);
     dim3 dimGrid(n_blocks, dim_y, C); // x, y, z dims
 
+    auto start = std::chrono::high_resolution_clock::now();
     k_lennard_jones<<<dimGrid, dimBlock>>>(
         N,
         P,
@@ -80,6 +84,10 @@ void LennardJones<RealType>::derivatives_device(
         d_dE_dp,
         d_d2E_dxdp
     );
+    cudaDeviceSynchronize();
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = finish - start;
+    std::cout << "LJ Elapsed time: " << elapsed.count() << " s\n";
 
     gpuErrchk(cudaPeekAtLastError());
 
