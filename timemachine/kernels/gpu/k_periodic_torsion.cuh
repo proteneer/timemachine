@@ -224,23 +224,24 @@ void __global__ k_periodic_torsion_derivatives(
     }
 
     if(dE_dp || d2E_dxdp) {
-
         Surreal<RealType> cps[3] = {
             ps[0],
             ps[1],
             ps[2]
         };
-
         for(int j=0; j < 3; j++) {
+            int gp_idx = param_gather_idxs[param_idxs[a_idx*3+j]]
+            if(gp_idx < 0) {
+                continue;
+            }
             cps[j].imag = step;
             Surreal<RealType> dcxs[12];
             Surreal<RealType> denergy = torsion_gradient<RealType, Surreal<RealType>, Surreal<RealType> >(xs, cps, dcxs);
-            int gp_idx = param_gather_idxs[param_idxs[a_idx*3+j]];
-            if(dE_dp && gp_idx >= 0) {
+            if(dE_dp) {
                 atomicAdd(dE_dp + conf_idx*DP + gp_idx, denergy.imag/step);
             }
 
-            if(d2E_dxdp && gp_idx >= 0) {
+            if(d2E_dxdp) {
                 #pragma unroll
                 for(int k=0; k < 12; k++) {
                     atomicAdd(d2E_dxdp + conf_idx*DP*N*3 + gp_idx*N*3 + indices[k], dcxs[k].imag / step);

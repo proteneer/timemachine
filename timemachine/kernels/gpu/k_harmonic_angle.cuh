@@ -151,14 +151,17 @@ void __global__ k_harmonic_angle_derivatives(
         };
 
         for(int j=0; j < 2; j++) {
+            int gp_idx = param_gather_idxs[param_idxs[a_idx*2+j]];
+            if(gp_idx < 0) {
+                continue;
+            }
             cps[j].imag = step;
             Surreal<RealType> dcxs[9];
             Surreal<RealType> denergy = harmonic_angle_gradient<RealType, Surreal<RealType>, Surreal<RealType> >(xs, cps, dcxs);
-            int gp_idx = param_gather_idxs[param_idxs[a_idx*2+j]];
-            if(dE_dp && gp_idx >= 0) {
+            if(dE_dp) {
                 atomicAdd(dE_dp + conf_idx*DP + gp_idx, denergy.imag/step);
             }
-            if(d2E_dxdp && gp_idx >= 0) {
+            if(d2E_dxdp) {
                 #pragma unroll
                 for(int k=0; k < 9; k++) {
                     atomicAdd(d2E_dxdp + conf_idx*DP*N*3 + gp_idx*N*3 + indices[k], dcxs[k].imag / step);
