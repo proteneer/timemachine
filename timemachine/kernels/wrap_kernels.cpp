@@ -6,7 +6,7 @@
 #include "gpu/custom_bonded_gpu.hpp"
 #include "gpu/custom_nonbonded_gpu.hpp"
 
-#include<iostream>
+#include <iostream>
 
 namespace py = pybind11;
 
@@ -24,7 +24,6 @@ void declare_potential(py::module &m, const char *typestr) {
     .def("derivatives", [](timemachine::Potential<RealType> &nrg,
         const py::array_t<RealType, py::array::c_style> &coords,
         const py::array_t<RealType, py::array::c_style> &params,
-        const py::array_t<RealType, py::array::c_style> &dx_dp,
         const py::array_t<int, py::array::c_style> &dp_idxs) -> py::tuple {
 
             const long unsigned int num_confs = coords.shape()[0];
@@ -36,20 +35,26 @@ void declare_potential(py::module &m, const char *typestr) {
             py::array_t<RealType, py::array::c_style> py_E({num_confs});
             py::array_t<RealType, py::array::c_style> py_dE_dp({num_confs, num_dp_idxs});
             py::array_t<RealType, py::array::c_style> py_dE_dx({num_confs, num_atoms, num_dims});
+            py::array_t<RealType, py::array::c_style> py_d2E_dx2({num_confs, num_atoms, num_dims, num_atoms, num_dims});
             py::array_t<RealType, py::array::c_style> py_d2E_dxdp({num_confs, num_dp_idxs, num_atoms, num_dims});
 
             memset(py_E.mutable_data(), 0.0, sizeof(RealType)*num_confs);
             memset(py_dE_dp.mutable_data(), 0.0, sizeof(RealType)*num_confs*num_dp_idxs);
             memset(py_dE_dx.mutable_data(), 0.0, sizeof(RealType)*num_confs*num_atoms*num_dims);
+            memset(py_d2E_dx2.mutable_data(), 0.0, sizeof(RealType)*num_confs*num_atoms*num_dims*num_atoms*num_dims);
             memset(py_d2E_dxdp.mutable_data(), 0.0, sizeof(RealType)*num_confs*num_dp_idxs*num_atoms*num_dims);
 
-            RealType *dx_dp_ptr = nullptr;
+            std::vector<int> param_gather_idxs(num_params, -1);
+            for(size_t i=0; i < num_dp_idxs; i++) {
+                if(param_gather_idxs[dp_idxs.data()[i]] != -1) {
+                    throw std::runtime_error("dp_idxs must contain only unique indices.");
+                }
+                param_gather_idxs[dp_idxs.data()[i]] = i;
+            }
 
-            if(dx_dp.size() > 0) {
-                // (ytz):this is a safe const_cast since the resulting pointer gets passed
-                // immediately into a function that takes in a const RealType * again
-                dx_dp_ptr = const_cast<RealType *>(dx_dp.data());
-            } 
+            // for(size_t i=0; i < param_gather_idxs.size(); i++) {
+            //     std::cout <<  "debug " << i << " " << param_gather_idxs[i] << std::endl;
+            // }
 
             nrg.derivatives_host(
                 num_confs,
@@ -59,18 +64,18 @@ void declare_potential(py::module &m, const char *typestr) {
                 params.data(),
                 py_E.mutable_data(),
                 py_dE_dx.mutable_data(),
-                dx_dp_ptr,
-                dp_idxs.data(),
+                py_d2E_dx2.mutable_data(),
+
                 num_dp_idxs,
+                &param_gather_idxs[0],
                 py_dE_dp.mutable_data(),
                 py_d2E_dxdp.mutable_data()
             );
 
-            return py::make_tuple(py_E, py_dE_dx, py_dE_dp, py_d2E_dxdp);
+            return py::make_tuple(py_E, py_dE_dx, py_d2E_dx2, py_dE_dp, py_d2E_dxdp);
         }, 
             py::arg("coords").none(false),
             py::arg("params").none(false),
-            py::arg("dx_dp").none(false),
             py::arg("dp_idxs").none(false)
         );
 
@@ -154,31 +159,31 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 }
 
 
-template<typename RealType>
-void declare_lennard_jones(py::module &m, const char *typestr) {
+// template<typename RealType>
+// void declare_lennard_jones(py::module &m, const char *typestr) {
 
-    using Class = timemachine::LennardJones<RealType>;
-    std::string pyclass_name = std::string("LennardJones_") + typestr;
-    py::class_<Class, timemachine::Potential<RealType> >(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        const py::array_t<RealType, py::array::c_style> &sm, // scale_matrix
-        const py::array_t<int, py::array::c_style> &pi  // param_idxs
-    ) {
+//     using Class = timemachine::LennardJones<RealType>;
+//     std::string pyclass_name = std::string("LennardJones_") + typestr;
+//     py::class_<Class, timemachine::Potential<RealType> >(
+//         m,
+//         pyclass_name.c_str(),
+//         py::buffer_protocol(),
+//         py::dynamic_attr()
+//     )
+//     .def(py::init([](
+//         const py::array_t<RealType, py::array::c_style> &sm, // scale_matrix
+//         const py::array_t<int, py::array::c_style> &pi  // param_idxs
+//     ) {
 
-        std::vector<RealType> scale_matrix(sm.size());
-        std::memcpy(scale_matrix.data(), sm.data(), sm.size()*sizeof(RealType));
-        std::vector<int> param_idxs(pi.size());
-        std::memcpy(param_idxs.data(), pi.data(), pi.size()*sizeof(int));
+//         std::vector<RealType> scale_matrix(sm.size());
+//         std::memcpy(scale_matrix.data(), sm.data(), sm.size()*sizeof(RealType));
+//         std::vector<int> param_idxs(pi.size());
+//         std::memcpy(param_idxs.data(), pi.data(), pi.size()*sizeof(int));
 
-        return new timemachine::LennardJones<RealType>(scale_matrix, param_idxs);
-    }));
+//         return new timemachine::LennardJones<RealType>(scale_matrix, param_idxs);
+//     }));
 
-}
+// }
 
 PYBIND11_MODULE(custom_ops, m) {
 
@@ -194,7 +199,7 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_periodic_torsion<float>(m, "f32");
     declare_periodic_torsion<double>(m, "f64");
 
-    declare_lennard_jones<float>(m, "f32");
-    declare_lennard_jones<double>(m, "f64");
+    // declare_lennard_jones<float>(m, "f32");
+    // declare_lennard_jones<double>(m, "f64");
 
 }
