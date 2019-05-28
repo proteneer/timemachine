@@ -94,8 +94,6 @@ def pairwise_energy(conf, box, charges, cutoff):
     dij = np.where(keep_mask, dij, np.zeros_like(dij))
     eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
 
-    #print(qij)
-
     if cutoff is not None:
         eij = np.where(dij > cutoff, np.zeros_like(eij), eij)
 
@@ -161,7 +159,7 @@ def electrostatic(conf, params, box, param_idxs, scale_matrix, cutoff=None, alph
         # note that we do not support reaction field approximations.
         eij = pairwise_energy(conf, box, charges, cutoff)
 
-        #eij = scale_matrix * eij
+        eij = scale_matrix * eij
 
         return ONE_4PI_EPS0*np.sum(eij)/2
 
