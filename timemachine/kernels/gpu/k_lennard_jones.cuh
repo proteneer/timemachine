@@ -174,7 +174,8 @@ void __global__ k_lennard_jones(
                 Surreal<RealType> rij4 = d8ij;
                 Surreal<RealType> rij7 = rij4 * rij3;
 
-                energy += sij*4*eps*(sig6/d6ij-1.0)*sig6/d6ij;
+                // energy += sij*4*eps*(sig6/d6ij-1.0)*sig6/d6ij;
+                energy += 0;
 
                 // loss of precision?
                 Surreal<RealType> sig1rij1 = sig/rij;

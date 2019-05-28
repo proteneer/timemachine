@@ -240,7 +240,12 @@ def test_energy(ref_e_fn, test_e_fn, coords, params):
     batched_dxdp = np.expand_dims(dxdp, axis=0)
     batched_coords = np.expand_dims(coords, axis=0)
 
-    test_e, test_de_dx, test_de_dp_jvp, test_d2e_dxdp_jvp = test_e_fn.derivatives(batched_coords, params, batched_dxdp, np.arange(len(params), dtype=np.int32))
+    test_e, test_de_dx, test_de_dp_jvp, test_d2e_dxdp_jvp = test_e_fn.derivatives(
+        batched_coords,
+        params,
+        batched_dxdp,
+        np.arange(len(params), dtype=np.int32)
+        )
 
     # np.testing.assert_almost_equal(ref_e, test_e)
     # np.testing.assert_almost_equal(ref_de_dx, test_de_dx)

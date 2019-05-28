@@ -7,6 +7,7 @@
 #include "k_periodic_torsion.cuh"
 #include "kernel_utils.cuh"
 
+#include <chrono>
 #include <iostream>
 
 namespace timemachine {
@@ -234,6 +235,7 @@ void PeriodicTorsion<RealType>::derivatives_device(
     dim3 dimBlock(tpb);
     dim3 dimGrid(n_blocks, dim_y, C); // x, y, z
 
+    auto start = std::chrono::high_resolution_clock::now();
     k_periodic_torsion_derivatives<<<dimGrid, dimBlock>>>(
         N,
         P,
@@ -250,6 +252,11 @@ void PeriodicTorsion<RealType>::derivatives_device(
         d_dE_dp,
         d_d2E_dxdp
     );
+
+    cudaDeviceSynchronize();
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = finish - start;
+    std::cout << "TORSION Elapsed time: " << elapsed.count() << " s\n";
 
     gpuErrchk(cudaPeekAtLastError());
 
