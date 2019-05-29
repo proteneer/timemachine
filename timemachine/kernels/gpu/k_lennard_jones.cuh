@@ -1,13 +1,14 @@
 #pragma once
+
 #include "kernel_utils.cuh"
 
 // adds support for __shfling complex numbers
-template<typename RealType>
-__device__ inline Surreal<RealType> __shfl_sync(unsigned mask, Surreal<RealType> var, int srcLane, int width=warpSize) {
-    var.real = __shfl_sync(mask, var.real, srcLane, width);
-    var.imag = __shfl_sync(mask, var.imag, srcLane, width);
-    return var;
-}
+// template<typename RealType>
+// __device__ inline Surreal<RealType> __shfl_sync(unsigned mask, Surreal<RealType> var, int srcLane, int width=warpSize) {
+//     var.real = __shfl_sync(mask, var.real, srcLane, width);
+//     var.imag = __shfl_sync(mask, var.imag, srcLane, width);
+//     return var;
+// }
 
 
 template<typename RealType>
@@ -33,13 +34,10 @@ void __global__ k_lennard_jones(
 
     auto i_idx = blockDim.x*blockIdx.x + threadIdx.x;
     
-    RealType *mp_out_sig0 = nullptr;
-    RealType *mp_out_eps0 = nullptr;
-
     RealType x0, y0, z0, sig0, eps0;
     int sig0_g_idx, eps0_g_idx;
 
-    if(i_idx >= n_atoms) {
+    if(i_idx >= N) {
         x0 = 0.0;
         y0 = 0.0;
         z0 = 0.0;
@@ -86,6 +84,7 @@ void __global__ k_lennard_jones(
 
         RealType x1, y1, z1, sig1, eps1;
         int sig1_g_idx, eps1_g_idx;
+
         RealType shfl_grad_dx = 0;
         RealType shfl_grad_dy = 0;
         RealType shfl_grad_dz = 0;
@@ -108,7 +107,7 @@ void __global__ k_lennard_jones(
         // load diagonal elements exactly once, shuffle the rest
         int j_idx = tile_y_idx*WARP_SIZE + threadIdx.x;
 
-        if(j_idx >= n_atoms) {
+        if(j_idx >= N) {
             x1 = 0.0;
             y1 = 0.0;
             z1 = 0.0;
@@ -131,64 +130,66 @@ void __global__ k_lennard_jones(
         // RealType *mp_out_sig_h_j = d2E_dxdp + conf_idx*DP*N*3 + sig1_g_idx*N*3;
         // RealType *mp_out_eps_h_j = d2E_dxdp + conf_idx*DP*N*3 + eps1_g_idx*N*3;
 
-        if(dE_dp || d2E_dxdp) {
-            for(int round=0; round < WARP_SIZE; round++) {
-                RealType xi = __shfl_sync(0xffffffff, x0, round);
-                RealType yi = __shfl_sync(0xffffffff, y0, round);
-                RealType zi = __shfl_sync(0xffffffff, z0, round);
-                RealType sigi = __shfl_sync(0xffffffff, sig0, round);
-                RealType epsi = __shfl_sync(0xffffffff, eps0, round);
-                int sigi_g_idx = __shfl_sync(0xffffffff, sig0_g_idx, round);
-                int epsi_g_idx = __shfl_sync(0xffffffff, eps0_g_idx, round);
+        // run only if inference
+        // if(dE_dp || d2E_dxdp) {
+        for(int round=0; round < WARP_SIZE; round++) {
+            RealType xi = __shfl_sync(0xffffffff, x0, round);
+            RealType yi = __shfl_sync(0xffffffff, y0, round);
+            RealType zi = __shfl_sync(0xffffffff, z0, round);
+            RealType sigi = __shfl_sync(0xffffffff, sig0, round);
+            RealType epsi = __shfl_sync(0xffffffff, eps0, round);
+            int sigi_g_idx = __shfl_sync(0xffffffff, sig0_g_idx, round);
+            int epsi_g_idx = __shfl_sync(0xffffffff, eps0_g_idx, round);
 
-                int h_i_idx = blockIdx.x*WARP_SIZE + round;
-                int h_j_idx = j_idx;
+            int h_i_idx = blockIdx.x*WARP_SIZE + round;
+            int h_j_idx = j_idx;
 
-                // RealType *mp_out_sig_h_i = d2E_dxdp + conf_idx*DP*N*3 + sigi_g_idx;
-                // RealType *mp_out_eps_h_i = d2E_dxdp + conf_idx*DP*N*3 + epsi_g_idx;
+            if(h_j_idx < h_i_idx && h_i_idx < N && h_j_idx < N) {
 
-                if(h_j_idx < h_i_idx && h_i_idx < n_atoms && h_j_idx < n_atoms) {
+                RealType dx = xi - x1;
+                RealType dy = yi - y1;
+                RealType dz = zi - z1;
+                RealType d2x = dx*dx;
+                RealType d2y = dy*dy;
+                RealType d2z = dz*dz;
 
-                    RealType dx = xi - x1;
-                    RealType dy = yi - y1;
-                    RealType dz = zi - z1;
-                    RealType d2x = dx*dx;
-                    RealType d2y = dy*dy;
-                    RealType d2z = dz*dz;
+                RealType sij = scale_matrix[h_i_idx*N + h_j_idx];
 
-                    RealType sij = scale_matrix[h_i_idx*n_atoms + h_j_idx];
+                RealType eps = sqrt(epsi * eps1);
+                RealType sig = (sigi + sig1)/2;
 
-                    RealType eps = gpuSqrt(epsi * eps1);
-                    RealType sig = (sigi + sig1)/2;
+                RealType d2ij = d2x + d2y + d2z;
+                RealType dij = sqrt(d2ij);
+                RealType d4ij = d2ij*d2ij;
+                RealType d6ij = d4ij*d2ij;
+                RealType d8ij = d4ij*d4ij;
+                RealType d16ij = d8ij*d8ij;
+                RealType inv_d16ij = 1.0/d16ij;
 
-                    RealType d2ij = d2x + d2y + d2z;
-                    RealType dij = gpuSqrt(d2ij);
-                    RealType d4ij = d2ij*d2ij;
-                    RealType d6ij = d4ij*d2ij;
-                    RealType d8ij = d4ij*d4ij;
-                    RealType d16ij = d8ij*d8ij;
-                    RealType inv_d16ij = 1.0/d16ij;
+                RealType sig2 = sig*sig;
+                RealType sig3 = sig2*sig;
+                RealType sig6 = sig3*sig3;
+                RealType prefactor = sij*eps*sig6;
 
-                    RealType sig2 = sig*sig;
-                    RealType sig3 = sig2*sig;
-                    RealType sig6 = sig3*sig3;
-                    RealType prefactor = sij*eps*sig6;
+                RealType common = prefactor*96*(2*d6ij - 7*sig6)*inv_d16ij;
 
-                    RealType common = prefactor*96*(2*d6ij - 7*sig6)*inv_d16ij;
+                if(d2E_dx2) {
+                    printf("ADD1 between %d %d\n", h_i_idx, h_j_idx);
+                    // don't need atomic adds because these are unique diagonals
+                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 0, 0)] += prefactor*-24*inv_d16ij*(d8ij- 2*d2ij*sig6 + d2x*(28*sig6 - 8*d6ij));
+                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 0, 1)] += common*dx*dy;
+                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 0, 2)] += common*dx*dz;
 
-                    if(d2E_dx2) {
-                        hessian_out[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 0)] += prefactor*-24*inv_d16ij*(d8ij- 2*d2ij*sig6 + d2x*(28*sig6 - 8*d6ij));
-                        hessian_out[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 1)] += common*dx*dy;
-                        hessian_out[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, n_atoms, 0, 2)] += common*dx*dz;
+                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 1, 0)] += common*dx*dy;
+                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 1, 1)] += prefactor*-24*inv_d16ij*(d8ij- 2*d2ij*sig6 + d2y*(28*sig6 - 8*d6ij));
+                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 1, 2)] += common*dy*dz;
 
-                        hessian_out[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 0)] += common*dx*dy;
-                        hessian_out[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 1)] += prefactor*-24*inv_d16ij*(d8ij- 2*d2ij*sig6 + d2y*(28*sig6 - 8*d6ij));
-                        hessian_out[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, n_atoms, 1, 2)] += common*dy*dz;
+                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 2, 0)] += common*dx*dz;
+                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 2, 1)] += common*dy*dz;
+                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 2, 2)] += prefactor*-24*inv_d16ij*(d8ij- 2*d2ij*sig6 + d2z*(28*sig6 - 8*d6ij));
+                }
 
-                        hessian_out[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 0)] += common*dx*dz;
-                        hessian_out[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 1)] += common*dy*dz;
-                        hessian_out[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, n_atoms, 2, 2)] += prefactor*-24*inv_d16ij*(d8ij- 2*d2ij*sig6 + d2z*(28*sig6 - 8*d6ij));
-                    }
+                if(d2E_dxdp) {
 
                     RealType sig5 = sig3*sig2;
                     RealType rij = d2ij;
@@ -205,47 +206,45 @@ void __global__ k_lennard_jones(
                     RealType EPS_PREFACTOR = sij*12/eps*(sig6rij4)*(2*sig6rij3 - 1);
                     RealType SIG_PREFACTOR = sij*24*eps*(sig5/rij4)*(12*sig6rij3 - 3);
 
-                    if(d2E_dxdp) {
-                        if(sigi_g_idx >= 0) {
-                            RealType *mp_out_sig_h_i = d2E_dxdp + conf_idx*DP*N*3 + sigi_g_idx*N*3;
-                            atomicAdd(mp_out_sig_h_i + h_j_idx*3 + 0,  SIG_PREFACTOR*dx);
-                            atomicAdd(mp_out_sig_h_i + h_j_idx*3 + 1,  SIG_PREFACTOR*dy);
-                            atomicAdd(mp_out_sig_h_i + h_j_idx*3 + 2,  SIG_PREFACTOR*dz);
-                        }
+                    if(sigi_g_idx >= 0) {
+                        RealType *mp_out_sig_h_i = d2E_dxdp + conf_idx*DP*N*3 + sigi_g_idx*N*3;
+                        atomicAdd(mp_out_sig_h_i + h_j_idx*3 + 0,  SIG_PREFACTOR*dx);
+                        atomicAdd(mp_out_sig_h_i + h_j_idx*3 + 1,  SIG_PREFACTOR*dy);
+                        atomicAdd(mp_out_sig_h_i + h_j_idx*3 + 2,  SIG_PREFACTOR*dz);
+                    }
 
-                        if(sig1_g_idx >= 0) {
-                            RealType *mp_out_sig_h_j = d2E_dxdp + conf_idx*DP*N*3 + sig1_g_idx*N*3;
-                            atomicAdd(mp_out_sig_h_j + h_i_idx*3 + 0, -SIG_PREFACTOR*dx);
-                            atomicAdd(mp_out_sig_h_j + h_i_idx*3 + 1, -SIG_PREFACTOR*dy);
-                            atomicAdd(mp_out_sig_h_j + h_i_idx*3 + 2, -SIG_PREFACTOR*dz); 
-                        }
+                    if(sig1_g_idx >= 0) {
+                        RealType *mp_out_sig_h_j = d2E_dxdp + conf_idx*DP*N*3 + sig1_g_idx*N*3;
+                        atomicAdd(mp_out_sig_h_j + h_i_idx*3 + 0, -SIG_PREFACTOR*dx);
+                        atomicAdd(mp_out_sig_h_j + h_i_idx*3 + 1, -SIG_PREFACTOR*dy);
+                        atomicAdd(mp_out_sig_h_j + h_i_idx*3 + 2, -SIG_PREFACTOR*dz); 
+                    }
 
-                        if(epsi_g_idx >= 0) {
-                            RealType *mp_out_eps_h_i = d2E_dxdp + conf_idx*DP*N*3 + epsi_g_idx*N*3;
-                            atomicAdd(mp_out_eps_h_i + h_j_idx*3 + 0,  EPS_PREFACTOR*eps1*dx);
-                            atomicAdd(mp_out_eps_h_i + h_j_idx*3 + 1,  EPS_PREFACTOR*eps1*dy);
-                            atomicAdd(mp_out_eps_h_i + h_j_idx*3 + 2,  EPS_PREFACTOR*eps1*dz);
-                        }
+                    if(epsi_g_idx >= 0) {
+                        RealType *mp_out_eps_h_i = d2E_dxdp + conf_idx*DP*N*3 + epsi_g_idx*N*3;
+                        atomicAdd(mp_out_eps_h_i + h_j_idx*3 + 0,  EPS_PREFACTOR*eps1*dx);
+                        atomicAdd(mp_out_eps_h_i + h_j_idx*3 + 1,  EPS_PREFACTOR*eps1*dy);
+                        atomicAdd(mp_out_eps_h_i + h_j_idx*3 + 2,  EPS_PREFACTOR*eps1*dz);
+                    }
 
-                        if(eps1_g_idx >= 0) {
-                            RealType *mp_out_eps_h_j = d2E_dxdp + conf_idx*DP*N*3 + eps1_g_idx*N*3;
-                            atomicAdd(mp_out_eps_h_j + h_i_idx*3 + 0, -EPS_PREFACTOR*epsi*dx);
-                            atomicAdd(mp_out_eps_h_j + h_i_idx*3 + 1, -EPS_PREFACTOR*epsi*dy);
-                            atomicAdd(mp_out_eps_h_j + h_i_idx*3 + 2, -EPS_PREFACTOR*epsi*dz);                            
-                        }
+                    if(eps1_g_idx >= 0) {
+                        RealType *mp_out_eps_h_j = d2E_dxdp + conf_idx*DP*N*3 + eps1_g_idx*N*3;
+                        atomicAdd(mp_out_eps_h_j + h_i_idx*3 + 0, -EPS_PREFACTOR*epsi*dx);
+                        atomicAdd(mp_out_eps_h_j + h_i_idx*3 + 1, -EPS_PREFACTOR*epsi*dy);
+                        atomicAdd(mp_out_eps_h_j + h_i_idx*3 + 2, -EPS_PREFACTOR*epsi*dz);                            
                     }
                 }
-
             }
-
         }
+
+    
 
         // diagonal elements and mixed partials
         for(int round=0; round < WARP_SIZE; round++) {
 
             j_idx = tile_y_idx*WARP_SIZE + j_idx % WARP_SIZE;
 
-            if(j_idx < i_idx && i_idx < n_atoms && j_idx < n_atoms) {
+            if(j_idx < i_idx && i_idx < N && j_idx < N) {
 
                 RealType dx = x0 - x1;
                 RealType dy = y0 - y1;
@@ -254,16 +253,16 @@ void __global__ k_lennard_jones(
                 RealType d2y = dy*dy;
                 RealType d2z = dz*dz;
 
-                RealType sij = scale_matrix[i_idx*n_atoms + j_idx];
+                RealType sij = scale_matrix[i_idx*N + j_idx];
                 RealType d2ij = d2x + d2y + d2z;
-                RealType dij = gpuSqrt(d2ij);
+                RealType dij = sqrt(d2ij);
                 RealType d4ij = d2ij*d2ij;
                 RealType d6ij = d4ij*d2ij;
                 RealType d8ij = d4ij*d4ij;
                 RealType d16ij = d8ij*d8ij;
                 RealType inv_d16ij = 1.0/d16ij;
 
-                RealType eps = gpuSqrt(eps0*eps1);
+                RealType eps = sqrt(eps0*eps1);
                 RealType sig = (sig0 + sig1)/2;
 
                 RealType sig2 = sig*sig;
@@ -277,6 +276,7 @@ void __global__ k_lennard_jones(
                 RealType rij4 = d8ij;
                 RealType rij7 = rij4 * rij3;
 
+                // printf("adding %f\n", energy);
                 energy += sij*4*eps*(sig6/d6ij-1.0)*sig6/d6ij;
 
                 // (ytz): 99 % sure this loses precision so we need to refactor
@@ -303,7 +303,8 @@ void __global__ k_lennard_jones(
                 shfl_grad_dy += sij*dEdy;
                 shfl_grad_dz += sij*dEdz;
 
-                if(!inference) {
+                // (ytz) todo: optimize for individual dxdps
+                if(d2E_dxdp) {
 
                     RealType EPS_PREFACTOR = sij*12/eps*(sig6rij4)*(2*sig6rij3 - 1);
 
@@ -325,8 +326,12 @@ void __global__ k_lennard_jones(
                     shfl_mixed_dy_sig += SIG_PREFACTOR*dy;
                     shfl_mixed_dz_sig += SIG_PREFACTOR*dz;
 
-                    RealType prefactor = sij*eps*sig6;
+                }
+                    // hessians
+                if(d2E_dx2) {
 
+                    printf("ADD2\n");
+                    RealType prefactor = sij*eps*sig6;
                     RealType diagonal_prefactor = prefactor*-96*(2*d6ij - 7*sig6)*inv_d16ij;
 
                     hess_xx += prefactor*24*(d8ij - 8*d6ij*d2x - 2*d2ij*sig6 + 28*d2x*sig6)*inv_d16ij;
@@ -349,11 +354,17 @@ void __global__ k_lennard_jones(
 
             int srcLane = (threadIdx.x + 1) % WARP_SIZE;
 
+            // we should shuffle no matter what
+
+
             x1 = __shfl_sync(0xffffffff, x1, srcLane);
             y1 = __shfl_sync(0xffffffff, y1, srcLane);
             z1 = __shfl_sync(0xffffffff, z1, srcLane);
             sig1 = __shfl_sync(0xffffffff, sig1, srcLane);
             eps1 = __shfl_sync(0xffffffff, eps1, srcLane);
+
+            // add conditionals
+
             sig1_g_idx = __shfl_sync(0xffffffff, sig1_g_idx, srcLane);
             eps1_g_idx = __shfl_sync(0xffffffff, eps1_g_idx, srcLane);
 
@@ -361,22 +372,20 @@ void __global__ k_lennard_jones(
             shfl_grad_dy = __shfl_sync(0xffffffff, shfl_grad_dy, srcLane);
             shfl_grad_dz = __shfl_sync(0xffffffff, shfl_grad_dz, srcLane);
 
-            if(!inference) {
-                shfl_mixed_dx_sig = __shfl_sync(0xffffffff, shfl_mixed_dx_sig, srcLane);
-                shfl_mixed_dy_sig = __shfl_sync(0xffffffff, shfl_mixed_dy_sig, srcLane);
-                shfl_mixed_dz_sig = __shfl_sync(0xffffffff, shfl_mixed_dz_sig, srcLane);
+            shfl_mixed_dx_sig = __shfl_sync(0xffffffff, shfl_mixed_dx_sig, srcLane);
+            shfl_mixed_dy_sig = __shfl_sync(0xffffffff, shfl_mixed_dy_sig, srcLane);
+            shfl_mixed_dz_sig = __shfl_sync(0xffffffff, shfl_mixed_dz_sig, srcLane);
 
-                shfl_mixed_dx_eps = __shfl_sync(0xffffffff, shfl_mixed_dx_eps, srcLane);
-                shfl_mixed_dy_eps = __shfl_sync(0xffffffff, shfl_mixed_dy_eps, srcLane);
-                shfl_mixed_dz_eps = __shfl_sync(0xffffffff, shfl_mixed_dz_eps, srcLane);
+            shfl_mixed_dx_eps = __shfl_sync(0xffffffff, shfl_mixed_dx_eps, srcLane);
+            shfl_mixed_dy_eps = __shfl_sync(0xffffffff, shfl_mixed_dy_eps, srcLane);
+            shfl_mixed_dz_eps = __shfl_sync(0xffffffff, shfl_mixed_dz_eps, srcLane);
 
-                shfl_hess_xx = __shfl_sync(0xffffffff, shfl_hess_xx, srcLane);
-                shfl_hess_yx = __shfl_sync(0xffffffff, shfl_hess_yx, srcLane);
-                shfl_hess_yy = __shfl_sync(0xffffffff, shfl_hess_yy, srcLane);
-                shfl_hess_zx = __shfl_sync(0xffffffff, shfl_hess_zx, srcLane);
-                shfl_hess_zy = __shfl_sync(0xffffffff, shfl_hess_zy, srcLane);
-                shfl_hess_zz = __shfl_sync(0xffffffff, shfl_hess_zz, srcLane);
-            }
+            shfl_hess_xx = __shfl_sync(0xffffffff, shfl_hess_xx, srcLane);
+            shfl_hess_yx = __shfl_sync(0xffffffff, shfl_hess_yx, srcLane);
+            shfl_hess_yy = __shfl_sync(0xffffffff, shfl_hess_yy, srcLane);
+            shfl_hess_zx = __shfl_sync(0xffffffff, shfl_hess_zx, srcLane);
+            shfl_hess_zy = __shfl_sync(0xffffffff, shfl_hess_zy, srcLane);
+            shfl_hess_zz = __shfl_sync(0xffffffff, shfl_hess_zz, srcLane);
 
             j_idx += 1;
 
@@ -384,7 +393,7 @@ void __global__ k_lennard_jones(
 
         int target_idx = tile_y_idx*WARP_SIZE + j_idx % WARP_SIZE;
 
-        if(target_idx < n_atoms) {
+        if(target_idx < N) {
 
             if(dE_dx) {
                 atomicAdd(dE_dx + conf_idx*N*3 + target_idx*3 + 0, shfl_grad_dx);
@@ -411,22 +420,23 @@ void __global__ k_lennard_jones(
             }
 
             if(d2E_dx2) {
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, n_atoms, 0, 0), shfl_hess_xx);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, n_atoms, 1, 0), shfl_hess_yx);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, n_atoms, 1, 1), shfl_hess_yy);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, n_atoms, 2, 0), shfl_hess_zx);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, n_atoms, 2, 1), shfl_hess_zy);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, n_atoms, 2, 2), shfl_hess_zz);                
+                printf("ADD3 between %d %d\n", target_idx, target_idx);
+                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 0, 0), shfl_hess_xx);
+                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 1, 0), shfl_hess_yx);
+                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 1, 1), shfl_hess_yy);
+                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 2, 0), shfl_hess_zx);
+                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 2, 1), shfl_hess_zy);
+                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 2, 2), shfl_hess_zz);                
             }
 
         }
 
     }
 
-    if(i_idx < n_atoms) {
+    if(i_idx < N) {
 
         if(E) {
-            atomicAdd(energy_out, energy);   
+            atomicAdd(E + conf_idx, energy);   
         }
 
         if(dE_dx) {
@@ -454,12 +464,13 @@ void __global__ k_lennard_jones(
         }
 
         if(d2E_dx2) {
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, n_atoms, 0, 0), hess_xx);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, n_atoms, 1, 0), hess_yx);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, n_atoms, 1, 1), hess_yy);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, n_atoms, 2, 0), hess_zx);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, n_atoms, 2, 1), hess_zy);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, n_atoms, 2, 2), hess_zz);            
+            printf("ADD4 between %d %d\n", i_idx, i_idx);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 0, 0), hess_xx);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 1, 0), hess_yx);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 1, 1), hess_yy);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 0), hess_zx);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 1), hess_zy);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 2), hess_zz);            
         }
     }
 

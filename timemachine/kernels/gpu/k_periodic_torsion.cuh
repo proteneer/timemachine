@@ -230,7 +230,7 @@ void __global__ k_periodic_torsion_derivatives(
             ps[2]
         };
         for(int j=0; j < 3; j++) {
-            int gp_idx = param_gather_idxs[param_idxs[a_idx*3+j]]
+            int gp_idx = param_gather_idxs[param_idxs[a_idx*3+j]];
             if(gp_idx < 0) {
                 continue;
             }

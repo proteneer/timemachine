@@ -33,37 +33,23 @@ template <typename RealType>
 void LennardJones<RealType>::derivatives_device(
     const int num_confs,
     const int num_atoms,
-    const int num_params,
     const RealType *d_coords,
     const RealType *d_params,
     RealType *d_E,
     RealType *d_dE_dx,
+    RealType *d_d2E_dx2,
     // parameter derivatives
-    const RealType *d_dx_dp,
-    const int *d_dp_idxs,
-    const int num_dp_idxs,
+    const int num_dp,
+    const int *d_param_gather_idxs,
     RealType *d_dE_dp,
     RealType *d_d2E_dxdp) const {
 
-
     const auto C = num_confs;
     const auto N = num_atoms;
-    const auto P = num_params;
 
     int tpb = 32;
     int n_blocks = (num_atoms + tpb - 1) / tpb;
     int dim_y = 1;
-
-    // zero dimension dim_ys are *not* allowed.
-    if(num_dp_idxs == 0) {
-        // inference mode
-        dim_y = 1;
-        if(d_dp_idxs != nullptr) {
-            throw std::runtime_error("d_dp_idxs is not null but num_dp_idxs == 0");
-        }
-    } else {
-        dim_y = num_dp_idxs;
-    }
 
     dim3 dimBlock(tpb);
     dim3 dimGrid(n_blocks, dim_y, C); // x, y, z dims
@@ -71,16 +57,16 @@ void LennardJones<RealType>::derivatives_device(
     auto start = std::chrono::high_resolution_clock::now();
     k_lennard_jones<<<dimGrid, dimBlock>>>(
         N,
-        P,
         d_coords,
         d_params,
         d_scale_matrix_,
         d_param_idxs_,
         d_E,
         d_dE_dx,
+        d_d2E_dx2,
         // parameter derivatives
-        d_dx_dp,
-        d_dp_idxs,
+        num_dp,
+        d_param_gather_idxs,
         d_dE_dp,
         d_d2E_dxdp
     );
