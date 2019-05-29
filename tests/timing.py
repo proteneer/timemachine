@@ -194,15 +194,15 @@ def create_system(file_path):
             test_potentials.append(test_lj)
 
             ref_es = functools.partial(
-                nonbonded.lennard_jones,
+                nonbonded.electrostatics,
                 scale_matrix=scale_matrix,
-                param_idxs=param_idxs,
+                param_idxs=charge_param_idxs,
                 box=None
             )
 
             test_es = custom_ops.Electrostatics_f64(
                 scale_matrix,
-                es_param_idxs,
+                charge_param_idxs,
             )
 
             ref_potentials.append(ref_es)
@@ -211,8 +211,8 @@ def create_system(file_path):
 
     return ref_potentials, test_potentials, np.array(value(pdb.positions), dtype=np.float64), np.array(global_params, np.float64)
 
-# all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/5dfr_minimized.pdb")
-all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/ala_ala_ala.pdb")
+all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/5dfr_minimized.pdb")
+# all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/ala_ala_ala.pdb")
 
 print("number of parameters", len(params))
 

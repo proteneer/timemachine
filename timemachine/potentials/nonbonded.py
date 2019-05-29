@@ -81,6 +81,8 @@ def pairwise_energy(conf, box, charges, cutoff):
     eij = qi*qj/dij
 
     """
+
+
     qi = np.expand_dims(charges, 0) # (1, N)
     qj = np.expand_dims(charges, 1) # (N, 1)
     qij = np.multiply(qi, qj)
@@ -133,7 +135,6 @@ def electrostatics(conf, params, box, param_idxs, scale_matrix, cutoff=None, alp
 
     """
     charges = params[param_idxs]
-
 
     # if we use periodic boundary conditions, then the following three parameters
     # must be set in order for Ewald to make sense.
