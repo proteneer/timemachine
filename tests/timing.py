@@ -12,7 +12,6 @@ from timemachine.kernels import custom_ops
 from jax.config import config; config.update("jax_enable_x64", True)
 import jax
 
-
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
@@ -45,7 +44,7 @@ def create_system(file_path):
 
     for force in system.getForces():
         if isinstance(force, mm.HarmonicBondForce):
-
+            continue
             bond_idxs = []
             param_idxs = []
 
@@ -79,7 +78,7 @@ def create_system(file_path):
             test_potentials.append(test_hb)
 
         if isinstance(force, mm.HarmonicAngleForce):
-
+            continue
             angle_idxs = []
             param_idxs = []
 
@@ -114,7 +113,7 @@ def create_system(file_path):
             test_potentials.append(test_ha)
 
         if isinstance(force, mm.PeriodicTorsionForce):
-
+            continue
             torsion_idxs = []
             param_idxs = []
 
@@ -159,7 +158,7 @@ def create_system(file_path):
             charge_param_idxs = []
             lj_param_idxs = []
 
-            for a_dx in range(num_atoms):
+            for a_idx in range(num_atoms):
                 charge, sig, eps = force.getParticleParameters(a_idx)
 
                 charge = value(charge)
@@ -240,10 +239,9 @@ def test_energy(ref_e_fn, test_e_fn, coords, params):
     batched_dxdp = np.expand_dims(dxdp, axis=0)
     batched_coords = np.expand_dims(coords, axis=0)
 
-    test_e, test_de_dx, test_de_dp_jvp, test_d2e_dxdp_jvp = test_e_fn.derivatives(
+    test_e, test_de_dx, test_d2e_dx2, test_de_dp_jvp, test_d2e_dxdp_jvp = test_e_fn.derivatives(
         batched_coords,
         params,
-        batched_dxdp,
         np.arange(len(params), dtype=np.int32)
         )
 
@@ -251,9 +249,6 @@ def test_energy(ref_e_fn, test_e_fn, coords, params):
     # np.testing.assert_almost_equal(ref_de_dx, test_de_dx)
     # np.testing.assert_almost_equal(ref_de_dp_jvp, test_de_dp_jvp[0])
 
-    # timings
-
-    # test_energies(all_ref, all_test, coords, params)
 
 for ref_e_fn, test_e_fn in zip(all_ref, all_test):
     test_energy(ref_e_fn, test_e_fn, coords, params)
