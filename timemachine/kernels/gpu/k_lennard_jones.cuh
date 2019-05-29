@@ -52,6 +52,9 @@ void __global__ k_lennard_jones(
     RealType grad_dy = 0;
     RealType grad_dz = 0;
 
+    RealType dE_dp_sig = 0;
+    RealType dE_dp_eps = 0;
+
     RealType mixed_dx_sig = 0;
     RealType mixed_dy_sig = 0;
     RealType mixed_dz_sig = 0;
@@ -79,6 +82,9 @@ void __global__ k_lennard_jones(
         RealType shfl_grad_dx = 0;
         RealType shfl_grad_dy = 0;
         RealType shfl_grad_dz = 0;
+
+        RealType shfl_dE_dp_sig = 0;
+        RealType shfl_dE_dp_eps = 0;
 
         RealType shfl_mixed_dx_sig = 0;
         RealType shfl_mixed_dy_sig = 0;
@@ -269,35 +275,12 @@ void __global__ k_lennard_jones(
                 }
 
                 if(dE_dp) {
-                    // dE/deps
-
-                    // RealType eps = sqrt(epsi * eps1);
                     RealType dE_deps = sij*4*(sig6/d6ij-1.0)*sig6/d6ij;
-                    RealType dE_deps0 = dE_deps*eps1/(2*eps);
-                    RealType dE_deps1 = dE_deps*eps0/(2*eps);
-
-                    // RealType sig = (sigi + sig1)/2;
+                    dE_dp_eps += dE_deps*eps1/(2*eps);
+                    shfl_dE_dp_eps += dE_deps*eps0/(2*eps);
                     RealType dE_dsig = sij*24*eps*(2*sig6/d6ij-1)*(sig5/d6ij);
-                    RealType dE_dsig0 = dE_dsig/2;
-                    RealType dE_dsig1 = dE_dsig/2;
-
-                    // (ytz): shuffle these
-
-                    if(eps0_g_idx >= 0) {
-                        atomicAdd(dE_dp + conf_idx*DP + eps0_g_idx, dE_deps0);
-                    }
-                    if(eps1_g_idx >= 0) {
-                        atomicAdd(dE_dp + conf_idx*DP + eps1_g_idx, dE_deps1);
-                    }
-
-                    if(sig0_g_idx >= 0) {
-                        atomicAdd(dE_dp + conf_idx*DP + sig0_g_idx, dE_dsig0);
-                    }
-
-                    if(sig1_g_idx >= 0) {
-                        atomicAdd(dE_dp + conf_idx*DP + sig1_g_idx, dE_dsig1);
-                    }
-
+                    dE_dp_sig += dE_dsig/2;
+                    shfl_dE_dp_sig += dE_dsig/2;
                 }
 
                 // (ytz): 99% sure this loses precision so we need to refactor
@@ -375,18 +358,18 @@ void __global__ k_lennard_jones(
             int srcLane = (threadIdx.x + 1) % WARP_SIZE;
 
             // we should shuffle no matter what
-
-
             x1 = __shfl_sync(0xffffffff, x1, srcLane);
             y1 = __shfl_sync(0xffffffff, y1, srcLane);
             z1 = __shfl_sync(0xffffffff, z1, srcLane);
             sig1 = __shfl_sync(0xffffffff, sig1, srcLane);
             eps1 = __shfl_sync(0xffffffff, eps1, srcLane);
 
-            // add conditionals
-
+            // add conditionals depending on if we do certain ops
             sig1_g_idx = __shfl_sync(0xffffffff, sig1_g_idx, srcLane);
             eps1_g_idx = __shfl_sync(0xffffffff, eps1_g_idx, srcLane);
+
+            shfl_dE_dp_sig = __shfl_sync(0xffffffff, shfl_dE_dp_sig, srcLane);
+            shfl_dE_dp_eps = __shfl_sync(0xffffffff, shfl_dE_dp_eps, srcLane);
 
             shfl_grad_dx = __shfl_sync(0xffffffff, shfl_grad_dx, srcLane);
             shfl_grad_dy = __shfl_sync(0xffffffff, shfl_grad_dy, srcLane);
@@ -421,31 +404,41 @@ void __global__ k_lennard_jones(
                 atomicAdd(dE_dx + conf_idx*N*3 + target_idx*3 + 2, shfl_grad_dz);                
             }
 
-            if(d2E_dxdp) {
-                // optimize for only parameters we care about
-                if(sig1_g_idx >= 0) {
-                    RealType *mp_out_sig1 = d2E_dxdp + conf_idx*DP*N*3 + sig1_g_idx*N*3;
-                    atomicAdd(mp_out_sig1 + target_idx*3 + 0, shfl_mixed_dx_sig);
-                    atomicAdd(mp_out_sig1 + target_idx*3 + 1, shfl_mixed_dy_sig);
-                    atomicAdd(mp_out_sig1 + target_idx*3 + 2, shfl_mixed_dz_sig);                    
-                }
-
-                if(eps1_g_idx >= 0) {
-                    RealType *mp_out_eps1 = d2E_dxdp + conf_idx*DP*N*3 + eps1_g_idx*N*3;
-                    atomicAdd(mp_out_eps1 + target_idx*3 + 0, shfl_mixed_dx_eps);
-                    atomicAdd(mp_out_eps1 + target_idx*3 + 1, shfl_mixed_dy_eps);
-                    atomicAdd(mp_out_eps1 + target_idx*3 + 2, shfl_mixed_dz_eps);                    
-                }
-
-            }
-
             if(d2E_dx2) {
                 atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 0, 0), shfl_hess_xx);
                 atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 1, 0), shfl_hess_yx);
                 atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 1, 1), shfl_hess_yy);
                 atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 2, 0), shfl_hess_zx);
                 atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 2, 1), shfl_hess_zy);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 2, 2), shfl_hess_zz);                
+                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 2, 2), shfl_hess_zz);
+            }
+
+            if(dE_dp) {
+                if(sig1_g_idx >= 0) {
+                    atomicAdd(dE_dp + conf_idx*DP + sig1_g_idx, shfl_dE_dp_sig);
+                }
+
+                if(eps1_g_idx >= 0) {
+                    atomicAdd(dE_dp + conf_idx*DP + eps1_g_idx, shfl_dE_dp_eps);
+                }
+            }
+
+            if(d2E_dxdp) {
+                // optimize for only parameters we care about
+                if(sig1_g_idx >= 0) {
+                    RealType *mp_out_sig1 = d2E_dxdp + conf_idx*DP*N*3 + sig1_g_idx*N*3;
+                    atomicAdd(mp_out_sig1 + target_idx*3 + 0, shfl_mixed_dx_sig);
+                    atomicAdd(mp_out_sig1 + target_idx*3 + 1, shfl_mixed_dy_sig);
+                    atomicAdd(mp_out_sig1 + target_idx*3 + 2, shfl_mixed_dz_sig);
+                }
+
+                if(eps1_g_idx >= 0) {
+                    RealType *mp_out_eps1 = d2E_dxdp + conf_idx*DP*N*3 + eps1_g_idx*N*3;
+                    atomicAdd(mp_out_eps1 + target_idx*3 + 0, shfl_mixed_dx_eps);
+                    atomicAdd(mp_out_eps1 + target_idx*3 + 1, shfl_mixed_dy_eps);
+                    atomicAdd(mp_out_eps1 + target_idx*3 + 2, shfl_mixed_dz_eps);
+                }
+
             }
 
         }
@@ -464,6 +457,24 @@ void __global__ k_lennard_jones(
             atomicAdd(dE_dx + conf_idx*N*3 + i_idx*3 + 2, grad_dz);            
         }
 
+        if(d2E_dx2) {
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 0, 0), hess_xx);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 1, 0), hess_yx);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 1, 1), hess_yy);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 0), hess_zx);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 1), hess_zy);
+            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 2), hess_zz);            
+        }
+
+        if(dE_dp) {
+            if(sig0_g_idx >= 0) {
+                atomicAdd(dE_dp + conf_idx*DP + sig0_g_idx, dE_dp_sig);
+            }
+
+            if(eps0_g_idx >= 0) {
+                atomicAdd(dE_dp + conf_idx*DP + eps0_g_idx, dE_dp_eps);
+            }
+        }
 
         if(d2E_dxdp) {
             if(sig0_g_idx >= 0) {
@@ -479,17 +490,8 @@ void __global__ k_lennard_jones(
                 atomicAdd(mp_out_eps0 + i_idx*3 + 1, mixed_dy_eps);
                 atomicAdd(mp_out_eps0 + i_idx*3 + 2, mixed_dz_eps);
             }
-
         }
 
-        if(d2E_dx2) {
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 0, 0), hess_xx);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 1, 0), hess_yx);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 1, 1), hess_yy);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 0), hess_zx);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 1), hess_zy);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 2), hess_zz);            
-        }
     }
 
 }

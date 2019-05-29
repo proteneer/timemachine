@@ -44,7 +44,6 @@ def create_system(file_path):
 
     for force in system.getForces():
         if isinstance(force, mm.HarmonicBondForce):
-            continue
             bond_idxs = []
             param_idxs = []
 
@@ -78,7 +77,6 @@ def create_system(file_path):
             test_potentials.append(test_hb)
 
         if isinstance(force, mm.HarmonicAngleForce):
-            continue
             angle_idxs = []
             param_idxs = []
 
@@ -113,7 +111,6 @@ def create_system(file_path):
             test_potentials.append(test_ha)
 
         if isinstance(force, mm.PeriodicTorsionForce):
-            continue
             torsion_idxs = []
             param_idxs = []
 
@@ -201,53 +198,48 @@ def create_system(file_path):
 
     return ref_potentials, test_potentials, np.array(value(pdb.positions), dtype=np.float64), np.array(global_params, np.float64)
 
-all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/5dfr_minimized.pdb")
+# all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/5dfr_minimized.pdb")
+all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/ala_ala_ala.pdb")
 
 print("number of parameters", len(params))
 
-def batch_mult_jvp(fn, x, p, dxdp):
-    dpdp = np.eye(p.shape[0])
-    def apply_one(dxdp_i, dpdp_i):
-        return jax.jvp(
-            fn,
-            (x, p),
-            (dxdp_i, dpdp_i)
-        )
-    a, b = jax.vmap(apply_one)(dxdp, dpdp)
-    return a[0], b
-
 def test_energy(ref_e_fn, test_e_fn, coords, params):
+
+    num_atoms = coords.shape[0]
 
     print("testing", test_e_fn)
 
-    dxdp = np.random.rand(params.shape[0], coords.shape[0], coords.shape[1])
-    ref_e = ref_e_fn(coords, params)
-    ref_de_dx_fn = jax.jit(jax.grad(ref_e_fn, argnums=(0,)))
-    ref_de_dx = ref_de_dx_fn(coords, params)
-
-    # # @jax.jit
-    # def e_jvp(a, b, c):
-    #     return batch_mult_jvp(ref_e_fn, a, b, c)
-
-    # # @jax.jit
-    # def g_jvp(a, b, c):
-    #     return batch_mult_jvp(ref_de_dx_fn, a, b, c)
-
-    # _, ref_de_dp_jvp = e_jvp(coords, params, dxdp)
-    # _, ref_d2e_dxdp_jvp = g_jvp(coords, params, dxdp)
-
-    batched_dxdp = np.expand_dims(dxdp, axis=0)
     batched_coords = np.expand_dims(coords, axis=0)
 
-    test_e, test_de_dx, test_d2e_dx2, test_de_dp_jvp, test_d2e_dxdp_jvp = test_e_fn.derivatives(
+    test_E, test_dE_dx, test_d2E_dx2, test_dE_dp, test_d2E_dxdp = test_e_fn.derivatives(
         batched_coords,
         params,
         np.arange(len(params), dtype=np.int32)
-        )
+    )
 
-    # np.testing.assert_almost_equal(ref_e, test_e)
-    # np.testing.assert_almost_equal(ref_de_dx, test_de_dx)
-    # np.testing.assert_almost_equal(ref_de_dp_jvp, test_de_dp_jvp[0])
+    if num_atoms >= 1000:
+        print("Skipping tests due to large system size.\n")
+        return
+
+    ref_E = ref_e_fn(coords, params)
+    ref_dE_dx_fn = jax.grad(ref_e_fn, argnums=(0,))
+    ref_dE_dx = ref_dE_dx_fn(coords, params)[0]
+
+    ref_d2E_dx2_fn = jax.jacfwd(ref_dE_dx_fn, argnums=(0,))
+    ref_d2E_dx2 = ref_d2E_dx2_fn(coords, params)[0][0]
+    ref_dE_dp_fn = jax.grad(ref_e_fn, argnums=(1,))
+    ref_dE_dp = ref_dE_dp_fn(coords, params)[0]
+    ref_d2E_dxdp_fn = jax.jacfwd(ref_dE_dp_fn, argnums=(0,))
+    ref_d2E_dxdp = ref_d2E_dxdp_fn(coords, params)[0][0]
+
+    np.testing.assert_almost_equal(ref_E, test_E)
+    np.testing.assert_almost_equal(ref_dE_dx, test_dE_dx[0])
+    np.testing.assert_almost_equal(ref_dE_dp, test_dE_dp[0])
+    np.testing.assert_almost_equal(ref_d2E_dxdp, test_d2E_dxdp[0])
+
+    test_tril = np.tril(np.reshape(ref_d2E_dx2, (num_atoms*3, num_atoms*3)))
+    ref_tril = np.tril(np.reshape(test_d2E_dx2, (num_atoms*3, num_atoms*3)))
+    np.testing.assert_almost_equal(test_tril, ref_tril)
 
 
 for ref_e_fn, test_e_fn in zip(all_ref, all_test):
