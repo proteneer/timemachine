@@ -211,14 +211,16 @@ def create_system(file_path):
 
     return ref_potentials, test_potentials, np.array(value(pdb.positions), dtype=np.float64), np.array(global_params, np.float64)
 
-all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/5dfr_minimized.pdb")
-# all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/ala_ala_ala.pdb")
+# all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/5dfr_minimized.pdb")
+# useful for testing accuracy.
+all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/ala_ala_ala.pdb")
 
 print("number of parameters", len(params))
 
 def test_energy(ref_e_fn, test_e_fn, coords, params):
 
     num_atoms = coords.shape[0]
+    print("number of atoms", num_atoms)
 
     print("testing", test_e_fn)
 
