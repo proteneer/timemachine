@@ -1,5 +1,5 @@
 import functools
-
+import time
 import numpy as np
 
 from simtk.openmm import app
@@ -161,6 +161,12 @@ def create_system(file_path):
                 charge = value(charge)
                 sig = value(sig)
                 eps = value(eps)
+                if sig == 0 or eps == 0:
+                    print("WARNING: invalid sig eps detected", sig, eps, "adjusting to 0.1 and 0.1")
+                    assert eps == 0.0
+                    sig = 0.1
+                    eps = 0.1
+
 
                 charge_idx = upsert_parameter(charge)
                 sig_idx = upsert_parameter(sig)
@@ -205,24 +211,24 @@ def create_system(file_path):
                 charge_param_idxs,
             )
 
-            ref_potentials.append(ref_es)
-            test_potentials.append(test_es)
+            # ref_potentials.append(ref_es)
+            # test_potentials.append(test_es)
 
 
     return ref_potentials, test_potentials, np.array(value(pdb.positions), dtype=np.float64), np.array(global_params, np.float64)
 
-# all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/5dfr_minimized.pdb")
-# useful for testing accuracy.
-all_ref, all_test, coords, params = create_system("/home/yutong/Code/openmm/examples/ala_ala_ala.pdb")
+# all_ref, all_test, coords, params = create_system("examples/5dfr_minimized.pdb") # Jax wants to allocate 1 TB of ram for this..
+# all_ref, all_test, coords, params = create_system("examples/ala_ala_ala.pdb")
+all_ref, all_test, coords, params = create_system("examples/PEPTIDE_V3.pdb")
 
 print("number of parameters", len(params))
+print("number of atoms", coords.shape[0])
 
 def test_energy(ref_e_fn, test_e_fn, coords, params):
 
     num_atoms = coords.shape[0]
-    print("number of atoms", num_atoms)
 
-    print("testing", test_e_fn)
+    # print("testing", test_e_fn)
 
     batched_coords = np.expand_dims(coords, axis=0)
 
@@ -232,21 +238,26 @@ def test_energy(ref_e_fn, test_e_fn, coords, params):
         np.arange(len(params), dtype=np.int32)
     )
 
+    if np.any(np.isnan(test_dE_dp)):
+        print("NaNs found on test")
+
     if num_atoms >= 1000:
         print("Skipping tests due to large system size.\n")
         return
 
+    ref_e_fn = jax.jit(ref_e_fn)
     ref_E = ref_e_fn(coords, params)
-    ref_dE_dx_fn = jax.grad(ref_e_fn, argnums=(0,))
+    ref_dE_dx_fn = jax.jit(jax.grad(ref_e_fn, argnums=(0,)))
     ref_dE_dx = ref_dE_dx_fn(coords, params)[0]
 
-    ref_d2E_dx2_fn = jax.jacfwd(ref_dE_dx_fn, argnums=(0,))
+    ref_d2E_dx2_fn = jax.jit(jax.jacfwd(ref_dE_dx_fn, argnums=(0,)))
     ref_d2E_dx2 = ref_d2E_dx2_fn(coords, params)[0][0]
-    ref_dE_dp_fn = jax.grad(ref_e_fn, argnums=(1,))
+    ref_dE_dp_fn = jax.jit(jax.grad(ref_e_fn, argnums=(1,)))
     ref_dE_dp = ref_dE_dp_fn(coords, params)[0]
-    ref_d2E_dxdp_fn = jax.jacfwd(ref_dE_dp_fn, argnums=(0,))
+    ref_d2E_dxdp_fn = jax.jit(jax.jacfwd(ref_dE_dp_fn, argnums=(0,)))
     ref_d2E_dxdp = ref_d2E_dxdp_fn(coords, params)[0][0]
 
+    # ensure_accuracy
     np.testing.assert_almost_equal(ref_E, test_E)
     np.testing.assert_almost_equal(ref_dE_dx, test_dE_dx[0])
     np.testing.assert_almost_equal(ref_dE_dp, test_dE_dp[0])
@@ -256,6 +267,17 @@ def test_energy(ref_e_fn, test_e_fn, coords, params):
     ref_tril = np.tril(np.reshape(test_d2E_dx2, (num_atoms*3, num_atoms*3)))
     np.testing.assert_almost_equal(test_tril, ref_tril)
 
+    count = 25
+    start = time.time()
+    for _ in range(count):
+        res0 = ref_e_fn(coords, params)
+        res1 = ref_dE_dx_fn(coords, params)
+        res2 = ref_dE_dp_fn(coords, params)
+        res3 = ref_d2E_dx2_fn(coords, params)
+        res4 = ref_d2E_dxdp_fn(coords, params)
+
+    print("Reference timing:", type(ref_e_fn).__name__, (time.time()-start)/count)
+    print("----------")
 
 for ref_e_fn, test_e_fn in zip(all_ref, all_test):
     test_energy(ref_e_fn, test_e_fn, coords, params)

@@ -57,6 +57,8 @@ void HarmonicBond<RealType>::derivatives_device(
     dim3 dimBlock(tpb);
     dim3 dimGrid(n_blocks, dim_y, C); // x, y, z dims
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     k_harmonic_bond_derivatives<<<dimGrid, dimBlock>>>(
         N,
         d_coords,
@@ -73,6 +75,11 @@ void HarmonicBond<RealType>::derivatives_device(
         d_dE_dp,
         d_d2E_dxdp
     );
+
+    cudaDeviceSynchronize();
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = finish - start;
+    std::cout << "Custom harmonic angles elapsed time: " << elapsed.count() << " s\n";
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -125,6 +132,8 @@ void HarmonicAngle<RealType>::derivatives_device(
     dim3 dimBlock(tpb);
     dim3 dimGrid(n_blocks, dim_y, C); // x, y, z
 
+    auto start = std::chrono::high_resolution_clock::now();
+
     k_harmonic_angle_derivatives<<<dimGrid, dimBlock>>>(
         N,
         d_coords,
@@ -141,6 +150,11 @@ void HarmonicAngle<RealType>::derivatives_device(
         d_dE_dp,
         d_d2E_dxdp
     );
+
+    cudaDeviceSynchronize();
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = finish - start;
+    std::cout << "Custom harmonic angles elapsed time: " << elapsed.count() << " s\n";
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -217,7 +231,7 @@ void PeriodicTorsion<RealType>::derivatives_device(
     cudaDeviceSynchronize();
     auto finish = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = finish - start;
-    std::cout << "TORSION Elapsed time: " << elapsed.count() << " s\n";
+    std::cout << "Custom torsions elapsed time: " << elapsed.count() << " s\n";
 
     gpuErrchk(cudaPeekAtLastError());
 

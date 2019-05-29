@@ -74,7 +74,7 @@ void LennardJones<RealType>::derivatives_device(
     cudaDeviceSynchronize();
     auto finish = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = finish - start;
-    std::cout << "LJ Elapsed time: " << elapsed.count() << " s\n";
+    std::cout << "Custom LennardJones Elapsed time: " << elapsed.count() << " s\n";
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -148,7 +148,7 @@ void Electrostatics<RealType>::derivatives_device(
     cudaDeviceSynchronize();
     auto finish = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed = finish - start;
-    std::cout << "ES Elapsed time: " << elapsed.count() << " s\n";
+    std::cout << "Custom Electrostatics Elapsed time: " << elapsed.count() << " s\n";
 
     gpuErrchk(cudaPeekAtLastError());
 
