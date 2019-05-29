@@ -124,11 +124,8 @@ void __global__ k_lennard_jones(
 
         // off diagonal
         // iterate over a block of i's because we improve locality of writes to off diagonal elements
-        // RealType *mp_out_sig_h_j = d2E_dxdp + conf_idx*DP*N*3 + sig1_g_idx*N*3;
-        // RealType *mp_out_eps_h_j = d2E_dxdp + conf_idx*DP*N*3 + eps1_g_idx*N*3;
 
-        // run only if inference
-        // if(dE_dp || d2E_dxdp) {
+        // add a conditional for inference mode. (if d2E_dx2 and d2E_dxdp)
         for(int round=0; round < WARP_SIZE; round++) {
             RealType xi = __shfl_sync(0xffffffff, x0, round);
             RealType yi = __shfl_sync(0xffffffff, y0, round);

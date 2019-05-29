@@ -193,7 +193,20 @@ def create_system(file_path):
             ref_potentials.append(ref_lj)
             test_potentials.append(test_lj)
 
-    # assert 0
+            ref_es = functools.partial(
+                nonbonded.lennard_jones,
+                scale_matrix=scale_matrix,
+                param_idxs=param_idxs,
+                box=None
+            )
+
+            test_es = custom_ops.Electrostatics_f64(
+                scale_matrix,
+                es_param_idxs,
+            )
+
+            ref_potentials.append(ref_es)
+            test_potentials.append(test_es)
 
 
     return ref_potentials, test_potentials, np.array(value(pdb.positions), dtype=np.float64), np.array(global_params, np.float64)

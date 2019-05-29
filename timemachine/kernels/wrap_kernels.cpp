@@ -185,6 +185,32 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
 
 }
 
+template<typename RealType>
+void declare_electrostatics(py::module &m, const char *typestr) {
+
+    using Class = timemachine::Electrostatics<RealType>;
+    std::string pyclass_name = std::string("Electrostatics_") + typestr;
+    py::class_<Class, timemachine::Potential<RealType> >(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<RealType, py::array::c_style> &sm, // scale_matrix
+        const py::array_t<int, py::array::c_style> &pi  // param_idxs
+    ) {
+
+        std::vector<RealType> scale_matrix(sm.size());
+        std::memcpy(scale_matrix.data(), sm.data(), sm.size()*sizeof(RealType));
+        std::vector<int> param_idxs(pi.size());
+        std::memcpy(param_idxs.data(), pi.data(), pi.size()*sizeof(int));
+
+        return new timemachine::Electrostatics<RealType>(scale_matrix, param_idxs);
+    }));
+
+}
+
 PYBIND11_MODULE(custom_ops, m) {
 
     declare_potential<float>(m, "f32");
@@ -201,5 +227,8 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_lennard_jones<float>(m, "f32");
     declare_lennard_jones<double>(m, "f64");
+
+    declare_electrostatics<float>(m, "f32");
+    declare_electrostatics<double>(m, "f64");
 
 }

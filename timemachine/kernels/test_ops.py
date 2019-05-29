@@ -140,6 +140,7 @@ class TestHarmonicBond(CustomOpsTest):
             hb
         )
 
+
 class TestHarmonicAngle(CustomOpsTest):
     
     def test_derivatives(self):
@@ -289,6 +290,7 @@ class TestPeriodicTorsion(CustomOpsTest):
             pt
         )
 
+
 class TestLennardJones(CustomOpsTest):
 
     def test_derivatives(self):
@@ -339,4 +341,55 @@ class TestLennardJones(CustomOpsTest):
             params,
             energy_fn,
             lj
+        )
+
+
+class TestElectrostatics(CustomOpsTest):
+
+    def test_aperiodic_electrostatics(self):
+        conf = np.array([
+            [ 0.0637,   0.0126,   0.2203],
+            [ 1.0573,  -0.2011,   1.2864],
+            [ 2.3928,   1.2209,  -0.2230],
+            [-0.6891,   1.6983,   0.0780],
+            [-0.6312,  -1.6261,  -0.2601]
+        ], dtype=np.float64)
+
+        params = np.array([1.3, 0.3], dtype=np.float64)
+        param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
+        # scale_matrix = np.array([
+        #     [  0,  1,  1,  1,0.5],
+        #     [  1,  0,  0,  1,  1],
+        #     [  1,  0,  0,  0,0.2],
+        #     [  1,  1,  0,  0,  1],
+        #     [0.5,  1,0.2,  1,  0],
+        # ], dtype=np.float64)
+
+        scale_matrix = np.array([
+            [  0,  1,  1,  1,  1],
+            [  1,  0,  0,  1,  1],
+            [  1,  0,  0,  0,  1],
+            [  1,  1,  0,  0,  1],
+            [  1,  1,  1,  1,  0],
+        ], dtype=np.float64)
+
+        # warning: non net-neutral cell
+        # ref_nrg = nonbonded.electrostatic(param_idxs, scale_matrix)
+
+        energy_fn = functools.partial(
+            nonbonded.electrostatics,
+            param_idxs=param_idxs,
+            scale_matrix=scale_matrix,
+            box=None)
+
+        es = custom_ops.Electrostatics_f64(
+            scale_matrix,
+            param_idxs
+        )
+
+        self.assert_derivatives(
+            conf,
+            params,
+            energy_fn,
+            es
         )
