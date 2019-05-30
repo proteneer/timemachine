@@ -71,7 +71,7 @@ def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
     energy = np.where(keep_mask, energy, np.zeros_like(energy))
 
     # divide by two to deal with symmetry
-    return np.sum(energy, axis=-1)/2
+    return np.sum(energy)/2
 
 
 def pairwise_energy(conf, box, charges, cutoff):
@@ -81,6 +81,8 @@ def pairwise_energy(conf, box, charges, cutoff):
     eij = qi*qj/dij
 
     """
+
+
     qi = np.expand_dims(charges, 0) # (1, N)
     qj = np.expand_dims(charges, 1) # (N, 1)
     qij = np.multiply(qi, qj)
@@ -99,7 +101,7 @@ def pairwise_energy(conf, box, charges, cutoff):
 
     return eij
 
-def electrostatic(conf, params, box, param_idxs, scale_matrix, cutoff=None, alpha=None, kmax=None):
+def electrostatics(conf, params, box, param_idxs, scale_matrix, cutoff=None, alpha=None, kmax=None):
     """
     Compute the electrostatic potential: sum_ij qi*qj/dij
 
@@ -133,7 +135,6 @@ def electrostatic(conf, params, box, param_idxs, scale_matrix, cutoff=None, alph
 
     """
     charges = params[param_idxs]
-    charges = np.reshape(charges, (1, -1))
 
     # if we use periodic boundary conditions, then the following three parameters
     # must be set in order for Ewald to make sense.
@@ -157,9 +158,7 @@ def electrostatic(conf, params, box, param_idxs, scale_matrix, cutoff=None, alph
     else:    
         # non periodic electrostatics is straightforward.
         # note that we do not support reaction field approximations.
-        eij = pairwise_energy(conf, box, charges, cutoff)
-
-        eij = scale_matrix * eij
+        eij = scale_matrix*pairwise_energy(conf, box, charges, cutoff)
 
         return ONE_4PI_EPS0*np.sum(eij)/2
 

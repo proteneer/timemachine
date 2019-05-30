@@ -43,9 +43,9 @@ class ReferenceLJEnergy():
         return ref_nrg
 
 
-class TestElectrostatic(unittest.TestCase):
+class TestElectrostatics(unittest.TestCase):
 
-    def test_periodic_electrostatic(self):
+    def test_periodic_electrostatics(self):
         conf = np.array([
             [ 0.0637,   0.0126,   0.2203],
             [ 1.0573,  -0.2011,   1.2864],
@@ -74,7 +74,7 @@ class TestElectrostatic(unittest.TestCase):
         ], dtype=np.float64)
 
         energy_fn = functools.partial(
-            nonbonded.electrostatic,
+            nonbonded.electrostatics,
             param_idxs=param_idxs,
             scale_matrix=scale_matrix,
             cutoff=0.5,

@@ -8,6 +8,7 @@ inline __device__ OutType harmonic_angle_gradient(
     const CoordType *xs,
     const ParamType *params,
     OutType *grads) {
+
     CoordType x0 = xs[0];
     CoordType y0 = xs[1];
     CoordType z0 = xs[2];
