@@ -160,8 +160,6 @@ def electrostatics(conf, params, box, param_idxs, scale_matrix, cutoff=None, alp
         # note that we do not support reaction field approximations.
         eij = scale_matrix*pairwise_energy(conf, box, charges, cutoff)
 
-        eij = scale_matrix * eij
-
         return ONE_4PI_EPS0*np.sum(eij)/2
 
 
