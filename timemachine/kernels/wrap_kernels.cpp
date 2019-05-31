@@ -2,6 +2,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
+#include "optimizers/context.hpp"
 #include "optimizers/optimizer.hpp"
 #include "optimizers/langevin.hpp"
 #include "gpu/potential.hpp"
@@ -11,6 +12,55 @@
 #include <iostream>
 
 namespace py = pybind11;
+
+template <typename RealType>
+void declare_context(py::module &m, const char *typestr) {
+
+    using Class = timemachine::Context<RealType>;
+    std::string pyclass_name = std::string("Context_") + typestr;
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const std::vector<timemachine::Potential<RealType> *> system,
+        const timemachine::Optimizer<RealType> *optimizer,
+        const py::array_t<RealType, py::array::c_style> &params,
+        const py::array_t<RealType, py::array::c_style> &x0,
+        const py::array_t<RealType, py::array::c_style> &v0,
+        const py::array_t<RealType, py::array::c_style> &dp_idxs
+    ) {
+
+        const int N = x0.shape()[0];
+        const int P = params.shape()[0];
+        const int DP = dp_idxs.size();
+
+        std::vector<int> gather_param_idxs(P, -1);
+        for(int i=0; i < DP; i++) {
+            if(gather_param_idxs[dp_idxs.data()[i]] != -1) {
+                throw std::runtime_error("dp_idxs must contain only unique indices.");
+            }
+            gather_param_idxs[dp_idxs.data()[i]] = i;
+        }
+
+        return new timemachine::Context<RealType>(
+            system,
+            optimizer,
+            params.data(),
+            x0.data(),
+            v0.data(),
+            N,
+            P,
+            gather_param_idxs.data(),
+            DP
+        );
+
+    }));
+
+}
+
 
 
 template <typename RealType>
@@ -120,16 +170,16 @@ void declare_potential(py::module &m, const char *typestr) {
             memset(py_d2E_dx2.mutable_data(), 0.0, sizeof(RealType)*num_confs*num_atoms*num_dims*num_atoms*num_dims);
             memset(py_d2E_dxdp.mutable_data(), 0.0, sizeof(RealType)*num_confs*num_dp_idxs*num_atoms*num_dims);
 
-            std::vector<int> param_gather_idxs(num_params, -1);
+            std::vector<int> gather_param_idxs(num_params, -1);
             for(size_t i=0; i < num_dp_idxs; i++) {
-                if(param_gather_idxs[dp_idxs.data()[i]] != -1) {
+                if(gather_param_idxs[dp_idxs.data()[i]] != -1) {
                     throw std::runtime_error("dp_idxs must contain only unique indices.");
                 }
-                param_gather_idxs[dp_idxs.data()[i]] = i;
+                gather_param_idxs[dp_idxs.data()[i]] = i;
             }
 
-            // for(size_t i=0; i < param_gather_idxs.size(); i++) {
-            //     std::cout <<  "debug " << i << " " << param_gather_idxs[i] << std::endl;
+            // for(size_t i=0; i < gather_param_idxs.size(); i++) {
+            //     std::cout <<  "debug " << i << " " << gather_param_idxs[i] << std::endl;
             // }
 
             nrg.derivatives_host(
@@ -143,7 +193,7 @@ void declare_potential(py::module &m, const char *typestr) {
                 py_d2E_dx2.mutable_data(),
 
                 num_dp_idxs,
-                &param_gather_idxs[0],
+                &gather_param_idxs[0],
                 py_dE_dp.mutable_data(),
                 py_d2E_dxdp.mutable_data()
             );
@@ -288,6 +338,11 @@ void declare_electrostatics(py::module &m, const char *typestr) {
 }
 
 PYBIND11_MODULE(custom_ops, m) {
+
+    // context
+
+    declare_context<float>(m, "f32");
+    declare_context<double>(m, "f64");
 
     // optimizers
 

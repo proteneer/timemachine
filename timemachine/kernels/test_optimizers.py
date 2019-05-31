@@ -68,7 +68,7 @@ class TestOptimizers(unittest.TestCase):
         coeff_cs = np.random.rand(num_atoms)
 
         for _ in range(10):
-            
+
             dE_dx = np.random.rand(num_atoms, 3)
             d2E_dx2 = np.random.rand(num_atoms*3, num_atoms*3)
             d2E_dx2 = np.tril(d2E_dx2) + np.tril(d2E_dx2, -1).T
