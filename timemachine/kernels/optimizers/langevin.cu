@@ -137,7 +137,6 @@ void LangevinOptimizer<RealType>::step(
         curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N*3, 0.0, 1.0));
         d_noise_buf = d_rng_buffer_;
     } else {
-        std::cout << "using noise buffer" << std::endl;
         d_noise_buf = d_input_noise_buffer;
     }
 

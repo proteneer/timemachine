@@ -50,7 +50,6 @@ void declare_optimizer(py::module &m, const char *typestr) {
             );
 
             return py::none();
-            // return py::make_tuple(py_E, py_dE_dx, py_d2E_dx2, py_dE_dp, py_d2E_dxdp);
         });
 
 }
