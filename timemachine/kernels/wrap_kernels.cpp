@@ -2,6 +2,8 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
+#include "optimizers/optimizer.hpp"
+#include "optimizers/langevin.hpp"
 #include "gpu/potential.hpp"
 #include "gpu/custom_bonded_gpu.hpp"
 #include "gpu/custom_nonbonded_gpu.hpp"
@@ -12,10 +14,85 @@ namespace py = pybind11;
 
 
 template <typename RealType>
+void declare_optimizer(py::module &m, const char *typestr) {
+
+    using Class = timemachine::Optimizer<RealType>;
+    std::string pyclass_name = std::string("Optimizer_") + typestr;
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr())
+    .def("step", [](timemachine::Optimizer<RealType> &opt,
+        const py::array_t<RealType, py::array::c_style> &dE_dx,
+        const py::array_t<RealType, py::array::c_style> &d2E_dx2,
+        const py::array_t<RealType, py::array::c_style> &d2E_dxdp,
+        py::array_t<RealType, py::array::c_style> &x_t,
+        py::array_t<RealType, py::array::c_style> &v_t,
+        py::array_t<RealType, py::array::c_style> &dx_dp_t,
+        py::array_t<RealType, py::array::c_style> &dv_dp_t,
+        const py::array_t<RealType, py::array::c_style> &noise_buffer) -> py::none {
+
+            const long unsigned int num_atoms = dE_dx.shape()[0];
+            const long unsigned int num_params = d2E_dxdp.shape()[0];
+
+            opt.step_host(
+                num_atoms,
+                num_params,
+                dE_dx.data(),
+                d2E_dx2.data(),
+                d2E_dxdp.data(),
+                x_t.mutable_data(),
+                v_t.mutable_data(),
+                dx_dp_t.mutable_data(),
+                dv_dp_t.mutable_data(),
+                noise_buffer.data()
+            );
+
+            return py::none();
+            // return py::make_tuple(py_E, py_dE_dx, py_d2E_dx2, py_dE_dp, py_d2E_dxdp);
+        });
+
+}
+
+
+template<typename RealType>
+void declare_langevin_optimizer(py::module &m, const char *typestr) {
+
+    using Class = timemachine::LangevinOptimizer<RealType>;
+    std::string pyclass_name = std::string("LangevinOptimizer_") + typestr;
+    py::class_<Class, timemachine::Optimizer<RealType> >(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const RealType dt,
+        const RealType ca,
+        const py::array_t<RealType, py::array::c_style> &cb, // bond_idxs
+        const py::array_t<RealType, py::array::c_style> &cc  // param_idxs
+    ) {
+        std::vector<RealType> coeff_bs(cb.size());
+        std::memcpy(coeff_bs.data(), cb.data(), cb.size()*sizeof(RealType));
+        std::vector<RealType> coeff_cs(cc.size());
+        std::memcpy(coeff_cs.data(), cc.data(), cc.size()*sizeof(RealType));
+        return new timemachine::LangevinOptimizer<RealType>(dt, ca, coeff_bs, coeff_cs);
+    }),
+
+        py::arg("dt").none(false),
+        py::arg("ca").none(false),
+        py::arg("cb").none(false),
+        py::arg("cc").none(false)
+    );
+
+}
+
+template <typename RealType>
 void declare_potential(py::module &m, const char *typestr) {
 
     using Class = timemachine::Potential<RealType>;
-    std::string pyclass_name = std::string("Potential") + typestr;
+    std::string pyclass_name = std::string("Potential_") + typestr;
     py::class_<Class>(
         m,
         pyclass_name.c_str(),
@@ -212,6 +289,16 @@ void declare_electrostatics(py::module &m, const char *typestr) {
 }
 
 PYBIND11_MODULE(custom_ops, m) {
+
+    // optimizers
+
+    declare_optimizer<float>(m, "f32");
+    declare_optimizer<double>(m, "f64");
+
+    declare_langevin_optimizer<float>(m, "f32");
+    declare_langevin_optimizer<double>(m, "f64");
+
+    // potentials
 
     declare_potential<float>(m, "f32");
     declare_potential<double>(m, "f64");
