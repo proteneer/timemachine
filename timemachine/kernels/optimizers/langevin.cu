@@ -85,6 +85,8 @@ LangevinOptimizer<RealType>::LangevinOptimizer(
     cublasErrchk(cublasCreate(&cb_handle_));
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_PHILOX4_32_10));
 
+    gpuErrchk(cudaMalloc((void**)&d_rng_buffer_, coeff_bs.size()*3*sizeof(RealType)));
+
     curandSetPseudoRandomGeneratorSeed(cr_rng_, time(NULL));
 
 }
