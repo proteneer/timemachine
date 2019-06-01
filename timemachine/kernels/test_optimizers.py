@@ -88,8 +88,9 @@ class TestOptimizers(unittest.TestCase):
         grad_fn = jax.jacfwd(integrate, argnums=(2))
 
         dx_dp_f, dv_dp_f = grad_fn(x0, v0, params)
-        dx_dp_f = np.transpose(dx_dp_f, (2,0,1))
-        dv_dp_f = np.transpose(dv_dp_f, (2,0,1))
+        # asarray is so we can index into them
+        dx_dp_f = np.asarray(np.transpose(dx_dp_f, (2,0,1)))
+        dv_dp_f = np.asarray(np.transpose(dv_dp_f, (2,0,1)))
 
         # 2. Custom Ops Integration
 
@@ -129,6 +130,27 @@ class TestOptimizers(unittest.TestCase):
 
         np.testing.assert_almost_equal(dx_dp_f, ctxt.get_dx_dp())
         np.testing.assert_almost_equal(dv_dp_f, ctxt.get_dv_dp())
+
+        # test partial indices
+        dp_idxs = np.random.permutation(np.arange(len(params)))[:np.random.randint(len(params))]
+
+        ctxt = custom_ops.Context_f64(
+            [test_hb, test_ha],
+            lo,
+            params,
+            x0,
+            v0,
+            dp_idxs
+        )
+
+        for i in range(100):
+            ctxt.step()
+
+        np.testing.assert_almost_equal(x_f, ctxt.get_x())
+        np.testing.assert_almost_equal(v_f, ctxt.get_v())
+
+        np.testing.assert_almost_equal(dx_dp_f[dp_idxs], ctxt.get_dx_dp())
+        np.testing.assert_almost_equal(dv_dp_f[dp_idxs], ctxt.get_dv_dp())
 
 
     def test_langevin_step(self):

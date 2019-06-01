@@ -86,18 +86,9 @@ void Context<RealType>::step() {
         );
     }
 
-
-    // std::vector<RealType> debug(N_*3);
-    // gpuErrchk(cudaMemcpy(&debug[0], d_dE_dx_, N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
-    // for(size_t i=0; i < debug.size(); i++) {
-    //     std::cout << debug[i] << std::endl;
-    // }
-    // std::cout << "--grads--" << std::endl;
-
-
     optimizer_->step(
         N_,
-        P_,
+        DP_,
         d_dE_dx_,
         d_d2E_dx2_,
         d_d2E_dxdp_,

@@ -105,7 +105,7 @@ LangevinOptimizer<RealType>::~LangevinOptimizer() {
 template<typename RealType> 
 void LangevinOptimizer<RealType>::step(
     const int N,
-    const int P,
+    const int DP,
     const RealType *dE_dx,
     const RealType *d2E_dx2,
     RealType *d2E_dxdp, // this is modified in place
@@ -118,9 +118,9 @@ void LangevinOptimizer<RealType>::step(
     size_t tpb = 32;
     size_t n_blocks = (N*3 + tpb - 1) / tpb;
     if(d2E_dx2 != nullptr && d2E_dxdp != nullptr) {
-        hessian_vector_product(N, P, d2E_dx2, d_dx_dp_t, d2E_dxdp);
+        hessian_vector_product(N, DP, d2E_dx2, d_dx_dp_t, d2E_dxdp);
 
-        dim3 dimGrid_dxdp(n_blocks, 3, P); // x, y, z dims
+        dim3 dimGrid_dxdp(n_blocks, 3, DP); // x, y, z dims
         update_derivatives<RealType><<<dimGrid_dxdp, tpb>>>(
             coeff_a_,
             d_coeff_bs_,
@@ -162,7 +162,7 @@ void LangevinOptimizer<RealType>::step(
 template<typename RealType> 
 void LangevinOptimizer<RealType>::hessian_vector_product(
     const int N,
-    const int P,
+    const int DP,
     const RealType *d_A,
     RealType *d_B,
     RealType *d_C) const {
@@ -175,7 +175,7 @@ void LangevinOptimizer<RealType>::hessian_vector_product(
     // this is set to UPPER because of fortran ordering
     cublasErrchk(templateSymm(cb_handle_,
         CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER,
-        N3, P,
+        N3, DP,
         &alpha,
         d_A, N3,
         d_B, N3,
