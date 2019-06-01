@@ -9,6 +9,7 @@ from timemachine.potentials import bonded
 import jax
 from jax.config import config; config.update("jax_enable_x64", True)
 
+
 class ReferenceLangevin():
 
     def __init__(self, dt, ca, cb, cc):
@@ -23,6 +24,7 @@ class ReferenceLangevin():
         v_t_1 = self.coeff_a*v_t - np.expand_dims(self.coeff_bs, axis=-1)*dE_dx + np.expand_dims(self.coeff_cs, axis=-1)*noise
         x_t_1 = x_t + v_t_1*self.dt
         return x_t_1, v_t_1
+
 
 class TestOptimizers(unittest.TestCase):
 
@@ -74,7 +76,6 @@ class TestOptimizers(unittest.TestCase):
 
         intg = ReferenceLangevin(dt, ca, cb, cc)
 
-        # x0 = x0.copy()
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
 
         def integrate(x_t, v_t, params):
@@ -83,8 +84,12 @@ class TestOptimizers(unittest.TestCase):
             return x_t, v_t
 
         x_f, v_f = integrate(x0, v0, params)
+        
+        grad_fn = jax.jacfwd(integrate, argnums=(2))
 
-        print(x_f, v_f)
+        dx_dp_f, dv_dp_f = grad_fn(x0, v0, params)
+        dx_dp_f = np.transpose(dx_dp_f, (2,0,1))
+        dv_dp_f = np.transpose(dv_dp_f, (2,0,1))
 
         # 2. Custom Ops Integration
 
@@ -101,7 +106,7 @@ class TestOptimizers(unittest.TestCase):
         )
 
         test_ha = custom_ops.HarmonicAngle_f64(
-            bond_idxs,
+            angle_idxs,
             angle_param_idxs
         )
 
@@ -117,27 +122,14 @@ class TestOptimizers(unittest.TestCase):
         )
 
         for i in range(100):
-            print("I", i)
             ctxt.step()
 
-        assert 0
+        np.testing.assert_almost_equal(x_f, ctxt.get_x())
+        np.testing.assert_almost_equal(v_f, ctxt.get_v())
 
-        # friction = 10.0
-        # dt = 0.08
-        # temp = 0.0
+        np.testing.assert_almost_equal(dx_dp_f, ctxt.get_dx_dp())
+        np.testing.assert_almost_equal(dv_dp_f, ctxt.get_dv_dp())
 
-        # num_atoms = x0.shape[0]
-
-        # x0 = onp.array([
-        #     [1.0, 0.2, 3.3], # H 
-        #     [-0.5,-1.1,-0.9], # C
-        #     [3.4, 5.5, 0.2], # H 
-        # ], dtype=onp.float64)
-
-        # # ideal bond lengths are 3.0 and 5.5
-        # k = 10.0
-        # b0 = 3.0
-        # b1 = 5.5
 
     def test_langevin_step(self):
         """

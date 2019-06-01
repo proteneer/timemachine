@@ -1,3 +1,4 @@
+#include <iostream>
 #include "context.hpp"
 #include "gpu_utils.cuh"
 
@@ -85,6 +86,15 @@ void Context<RealType>::step() {
         );
     }
 
+
+    // std::vector<RealType> debug(N_*3);
+    // gpuErrchk(cudaMemcpy(&debug[0], d_dE_dx_, N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+    // for(size_t i=0; i < debug.size(); i++) {
+    //     std::cout << debug[i] << std::endl;
+    // }
+    // std::cout << "--grads--" << std::endl;
+
+
     optimizer_->step(
         N_,
         P_,
@@ -98,6 +108,26 @@ void Context<RealType>::step() {
     );
     step_++;
 
+}
+
+template<typename RealType>
+void Context<RealType>::get_x(RealType *buffer) const {
+    gpuErrchk(cudaMemcpy(buffer, d_x_t_, N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+}
+
+template<typename RealType>
+void Context<RealType>::get_v(RealType *buffer) const {
+    gpuErrchk(cudaMemcpy(buffer, d_v_t_, N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+}
+
+template<typename RealType>
+void Context<RealType>::get_dx_dp(RealType *buffer) const {
+    gpuErrchk(cudaMemcpy(buffer, d_dx_dp_t_, DP_*N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+}
+
+template<typename RealType>
+void Context<RealType>::get_dv_dp(RealType *buffer) const {
+    gpuErrchk(cudaMemcpy(buffer, d_dv_dp_t_, DP_*N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
 }
 
 template class Context<float>;

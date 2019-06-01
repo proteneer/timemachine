@@ -54,7 +54,21 @@ public:
         const int *h_param_gather_idxs,
         const int DP);
 
+    int num_atoms() const { return N_; };
+
+    int num_params() const { return P_; };
+
+    int num_dparams() const { return DP_; };
+
     void step();
+
+    void get_x(RealType *buffer) const;
+
+    void get_v(RealType *buffer) const;
+
+    void get_dx_dp(RealType *buffer) const;
+
+    void get_dv_dp(RealType *buffer) const;
 
     ~Context();
 
