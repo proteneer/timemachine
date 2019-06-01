@@ -1,13 +1,11 @@
 import unittest
 
 import numpy as np
-import custom_ops
-
-# (ytz): TBD test in both modes.
+import jax
 from jax.config import config; config.update("jax_enable_x64", True)
 import functools
 
-import jax
+from timemachine.lib import custom_ops
 from timemachine.potentials import bonded
 from timemachine.potentials import nonbonded
 

@@ -2,8 +2,8 @@ import functools
 import unittest
 
 import numpy as np
-import custom_ops
 
+from timemachine.lib import custom_ops
 from timemachine.potentials import bonded
 
 import jax

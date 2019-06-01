@@ -2,12 +2,12 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
-#include "optimizers/context.hpp"
-#include "optimizers/optimizer.hpp"
-#include "optimizers/langevin.hpp"
-#include "gpu/potential.hpp"
-#include "gpu/custom_bonded_gpu.hpp"
-#include "gpu/custom_nonbonded_gpu.hpp"
+#include "context.hpp"
+#include "optimizer.hpp"
+#include "langevin.hpp"
+#include "potential.hpp"
+#include "custom_bonded_gpu.hpp"
+#include "custom_nonbonded_gpu.hpp"
 
 #include <iostream>
 
