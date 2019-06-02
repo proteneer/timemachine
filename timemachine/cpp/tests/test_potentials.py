@@ -1,27 +1,13 @@
 import unittest
 
 import numpy as np
-import custom_ops
-
-# (ytz): TBD test in both modes.
+import jax
 from jax.config import config; config.update("jax_enable_x64", True)
 import functools
 
-import jax
+from timemachine.lib import custom_ops
 from timemachine.potentials import bonded
 from timemachine.potentials import nonbonded
-
-# def batch_mult_jvp(grad_fn, x, p, dxdp):
-#     dpdp = np.eye(p.shape[0])
-#     def apply_one(dxdp_i, dpdp_i):
-#         return jax.jvp(
-#             grad_fn,
-#             (x, p),
-#             (dxdp_i, dpdp_i)
-#         )
-#     a, b = jax.vmap(apply_one)(dxdp, dpdp)
-#     return a[0], b
-
 
 def generate_derivatives(energy_fn, confs, params):
     E_fn = energy_fn

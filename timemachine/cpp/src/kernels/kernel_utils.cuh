@@ -18,3 +18,12 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
       if (abort) exit(code);
    }
 }
+
+
+inline __device__ float gpuSqrt(float arg) {
+  return sqrtf(arg);
+}
+
+inline __device__ double gpuSqrt(double arg) {
+  return sqrt(arg);
+}

@@ -1,6 +1,6 @@
 #include "potential.hpp"
 #include "kernel_utils.cuh"
-#include <iostream>
+
 namespace timemachine {
 
 template<typename RealType>

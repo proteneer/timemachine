@@ -2,20 +2,173 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
-#include "gpu/potential.hpp"
-#include "gpu/custom_bonded_gpu.hpp"
-#include "gpu/custom_nonbonded_gpu.hpp"
+#include "context.hpp"
+#include "optimizer.hpp"
+#include "langevin.hpp"
+#include "potential.hpp"
+#include "custom_bonded_gpu.hpp"
+#include "custom_nonbonded_gpu.hpp"
 
 #include <iostream>
 
 namespace py = pybind11;
 
+template <typename RealType>
+void declare_context(py::module &m, const char *typestr) {
+
+    using Class = timemachine::Context<RealType>;
+    std::string pyclass_name = std::string("Context_") + typestr;
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const std::vector<timemachine::Potential<RealType> *> system,
+        const timemachine::Optimizer<RealType> *optimizer,
+        const py::array_t<RealType, py::array::c_style> &params,
+        const py::array_t<RealType, py::array::c_style> &x0,
+        const py::array_t<RealType, py::array::c_style> &v0,
+        const py::array_t<RealType, py::array::c_style> &dp_idxs
+    ) {
+        const int N = x0.shape()[0];
+        const int P = params.shape()[0];
+        const int DP = dp_idxs.size();
+
+        std::vector<int> gather_param_idxs(P, -1);
+        for(int i=0; i < DP; i++) {
+            if(gather_param_idxs[dp_idxs.data()[i]] != -1) {
+                throw std::runtime_error("dp_idxs must contain only unique indices.");
+            }
+            gather_param_idxs[dp_idxs.data()[i]] = i;
+        }
+
+        return new timemachine::Context<RealType>(
+            system,
+            optimizer,
+            params.data(),
+            x0.data(),
+            v0.data(),
+            N,
+            P,
+            gather_param_idxs.data(),
+            DP
+        );
+
+    }))
+    .def("step", &timemachine::Context<RealType>::step)
+    .def("get_x", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
+      auto N = ctxt.num_atoms();
+      py::array_t<RealType, py::array::c_style> buffer({N, 3});
+      ctxt.get_x(buffer.mutable_data());
+      return buffer;
+    })
+    .def("get_v", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
+      auto N = ctxt.num_atoms();
+      py::array_t<RealType, py::array::c_style> buffer({N, 3});
+      ctxt.get_v(buffer.mutable_data());
+      return buffer;
+    })
+    .def("get_dx_dp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
+      auto DP = ctxt.num_dparams();
+      auto N = ctxt.num_atoms();
+      py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
+      ctxt.get_dx_dp(buffer.mutable_data());
+      return buffer;
+    })
+    .def("get_dv_dp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
+      auto DP = ctxt.num_dparams();
+      auto N = ctxt.num_atoms();
+      py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
+      ctxt.get_dv_dp(buffer.mutable_data());
+      return buffer;
+    });
+
+
+}
+
+
+
+template <typename RealType>
+void declare_optimizer(py::module &m, const char *typestr) {
+
+    using Class = timemachine::Optimizer<RealType>;
+    std::string pyclass_name = std::string("Optimizer_") + typestr;
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr())
+    .def("step", [](timemachine::Optimizer<RealType> &opt,
+        const py::array_t<RealType, py::array::c_style> &dE_dx,
+        const py::array_t<RealType, py::array::c_style> &d2E_dx2,
+        const py::array_t<RealType, py::array::c_style> &d2E_dxdp,
+        py::array_t<RealType, py::array::c_style> &x_t,
+        py::array_t<RealType, py::array::c_style> &v_t,
+        py::array_t<RealType, py::array::c_style> &dx_dp_t,
+        py::array_t<RealType, py::array::c_style> &dv_dp_t,
+        const py::array_t<RealType, py::array::c_style> &noise_buffer) -> py::none {
+
+            const long unsigned int num_atoms = dE_dx.shape()[0];
+            const long unsigned int num_params = d2E_dxdp.shape()[0];
+
+            opt.step_host(
+                num_atoms,
+                num_params,
+                dE_dx.data(),
+                d2E_dx2.data(),
+                d2E_dxdp.data(),
+                x_t.mutable_data(),
+                v_t.mutable_data(),
+                dx_dp_t.mutable_data(),
+                dv_dp_t.mutable_data(),
+                noise_buffer.data()
+            );
+
+            return py::none();
+        });
+
+}
+
+
+template<typename RealType>
+void declare_langevin_optimizer(py::module &m, const char *typestr) {
+
+    using Class = timemachine::LangevinOptimizer<RealType>;
+    std::string pyclass_name = std::string("LangevinOptimizer_") + typestr;
+    py::class_<Class, timemachine::Optimizer<RealType> >(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const RealType dt,
+        const RealType ca,
+        const py::array_t<RealType, py::array::c_style> &cb, // bond_idxs
+        const py::array_t<RealType, py::array::c_style> &cc  // param_idxs
+    ) {
+        std::vector<RealType> coeff_bs(cb.size());
+        std::memcpy(coeff_bs.data(), cb.data(), cb.size()*sizeof(RealType));
+        std::vector<RealType> coeff_cs(cc.size());
+        std::memcpy(coeff_cs.data(), cc.data(), cc.size()*sizeof(RealType));
+        return new timemachine::LangevinOptimizer<RealType>(dt, ca, coeff_bs, coeff_cs);
+    }),
+
+        py::arg("dt").none(false),
+        py::arg("ca").none(false),
+        py::arg("cb").none(false),
+        py::arg("cc").none(false)
+    );
+
+}
 
 template <typename RealType>
 void declare_potential(py::module &m, const char *typestr) {
 
     using Class = timemachine::Potential<RealType>;
-    std::string pyclass_name = std::string("Potential") + typestr;
+    std::string pyclass_name = std::string("Potential_") + typestr;
     py::class_<Class>(
         m,
         pyclass_name.c_str(),
@@ -44,16 +197,16 @@ void declare_potential(py::module &m, const char *typestr) {
             memset(py_d2E_dx2.mutable_data(), 0.0, sizeof(RealType)*num_confs*num_atoms*num_dims*num_atoms*num_dims);
             memset(py_d2E_dxdp.mutable_data(), 0.0, sizeof(RealType)*num_confs*num_dp_idxs*num_atoms*num_dims);
 
-            std::vector<int> param_gather_idxs(num_params, -1);
+            std::vector<int> gather_param_idxs(num_params, -1);
             for(size_t i=0; i < num_dp_idxs; i++) {
-                if(param_gather_idxs[dp_idxs.data()[i]] != -1) {
+                if(gather_param_idxs[dp_idxs.data()[i]] != -1) {
                     throw std::runtime_error("dp_idxs must contain only unique indices.");
                 }
-                param_gather_idxs[dp_idxs.data()[i]] = i;
+                gather_param_idxs[dp_idxs.data()[i]] = i;
             }
 
-            // for(size_t i=0; i < param_gather_idxs.size(); i++) {
-            //     std::cout <<  "debug " << i << " " << param_gather_idxs[i] << std::endl;
+            // for(size_t i=0; i < gather_param_idxs.size(); i++) {
+            //     std::cout <<  "debug " << i << " " << gather_param_idxs[i] << std::endl;
             // }
 
             nrg.derivatives_host(
@@ -67,7 +220,7 @@ void declare_potential(py::module &m, const char *typestr) {
                 py_d2E_dx2.mutable_data(),
 
                 num_dp_idxs,
-                &param_gather_idxs[0],
+                &gather_param_idxs[0],
                 py_dE_dp.mutable_data(),
                 py_d2E_dxdp.mutable_data()
             );
@@ -212,6 +365,21 @@ void declare_electrostatics(py::module &m, const char *typestr) {
 }
 
 PYBIND11_MODULE(custom_ops, m) {
+
+    // context
+
+    declare_context<float>(m, "f32");
+    declare_context<double>(m, "f64");
+
+    // optimizers
+
+    declare_optimizer<float>(m, "f32");
+    declare_optimizer<double>(m, "f64");
+
+    declare_langevin_optimizer<float>(m, "f32");
+    declare_langevin_optimizer<double>(m, "f64");
+
+    // potentials
 
     declare_potential<float>(m, "f32");
     declare_potential<double>(m, "f64");
