@@ -17,17 +17,17 @@ def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
 
-def create_system(file_path):
+def create_system(filepath):
 
-    filename, file_extension = os.path.splitext(file_path)
+    filename, file_extension = os.path.splitext(filepath)
 
     if file_extension == ".xml":
-        sys_xml = open(file_path, 'r').read()
+        sys_xml = open(filepath, 'r').read()
         system = mm.XmlSerializer.deserialize(sys_xml)
         coords = np.loadtxt(filename + '.xyz').astype(np.float64)
     elif file_extension == ".pdb":
         ff = app.ForceField('amber99sb.xml', 'amber99_obc.xml')
-        pdb = app.PDBFile(file_path)
+        pdb = app.PDBFile(filepath)
         system = ff.createSystem(
             pdb.topology,
             nonbondedMethod=app.NoCutoff,
@@ -222,8 +222,8 @@ def create_system(file_path):
                 charge_param_idxs,
             )
 
-            # ref_potentials.append(ref_es)
-            # test_potentials.append(test_es)
+            ref_potentials.append(ref_es)
+            test_potentials.append(test_es)
 
     return ref_potentials, test_potentials, coords, np.array(global_params, np.float64)
 
