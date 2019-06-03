@@ -85,7 +85,6 @@ void declare_context(py::module &m, const char *typestr) {
       return buffer;
     });
 
-
 }
 
 
@@ -108,7 +107,7 @@ void declare_optimizer(py::module &m, const char *typestr) {
         py::array_t<RealType, py::array::c_style> &v_t,
         py::array_t<RealType, py::array::c_style> &dx_dp_t,
         py::array_t<RealType, py::array::c_style> &dv_dp_t,
-        const py::array_t<RealType, py::array::c_style> &noise_buffer) -> py::none {
+        const py::array_t<RealType, py::array::c_style> &noise_buffer) {
 
             const long unsigned int num_atoms = dE_dx.shape()[0];
             const long unsigned int num_params = d2E_dxdp.shape()[0];
@@ -125,8 +124,6 @@ void declare_optimizer(py::module &m, const char *typestr) {
                 dv_dp_t.mutable_data(),
                 noise_buffer.data()
             );
-
-            return py::none();
         });
 
 }
@@ -155,12 +152,28 @@ void declare_langevin_optimizer(py::module &m, const char *typestr) {
         std::memcpy(coeff_cs.data(), cc.data(), cc.size()*sizeof(RealType));
         return new timemachine::LangevinOptimizer<RealType>(dt, ca, coeff_bs, coeff_cs);
     }),
-
         py::arg("dt").none(false),
         py::arg("ca").none(false),
         py::arg("cb").none(false),
         py::arg("cc").none(false)
-    );
+    )
+    .def("set_dt", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const RealType dt) {
+        lo.set_dt(dt);
+    })
+    .def("set_ca", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const RealType ca) {
+        lo.set_coeff_a(ca);
+    })
+    .def("set_cb", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const py::array_t<RealType, py::array::c_style> &cb) {
+        lo.set_coeff_b(cb.shape()[0], cb.data());
+    })
+    .def("set_cc", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const py::array_t<RealType, py::array::c_style> &cc) {
+        lo.set_coeff_c(cc.shape()[0], cc.data());
+    });
+
 
 }
 

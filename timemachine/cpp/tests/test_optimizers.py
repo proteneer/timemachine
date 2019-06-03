@@ -28,7 +28,7 @@ class ReferenceLangevin():
 
 class TestOptimizers(unittest.TestCase):
 
-    def test_context(self):
+    def setup_system(self):
 
         masses = np.array([1.0, 12.0, 4.0])
         x0 = np.array([
@@ -63,43 +63,7 @@ class TestOptimizers(unittest.TestCase):
 
         def total_nrg(conf, params):
             return ref_hb(conf, params) + ref_ha(conf, params)
-
-        ref_dE_dx_fn = jax.grad(total_nrg, argnums=(0,))
-        ref_dE_dx_fn = jax.jit(ref_dE_dx_fn)
-        # print(ref_dE_dx_fn(x0, params))
-
-        dt = 0.002
-        ca = 0.95
-        cb = np.random.rand(num_atoms)
-        # coeff_cs = np.random.rand(num_atoms)
-        cc = np.zeros(num_atoms, dtype=np.float64)
-
-        intg = ReferenceLangevin(dt, ca, cb, cc)
-
-        v0 = np.random.rand(x0.shape[0], x0.shape[1])
-
-        def integrate(x_t, v_t, params):
-            for _ in range(100):
-                x_t, v_t = intg.step(x_t, v_t, ref_dE_dx_fn(x_t, params)[0])
-            return x_t, v_t
-
-        x_f, v_f = integrate(x0, v0, params)
-        
-        grad_fn = jax.jacfwd(integrate, argnums=(2))
-
-        dx_dp_f, dv_dp_f = grad_fn(x0, v0, params)
-        # asarray is so we can index into them
-        dx_dp_f = np.asarray(np.transpose(dx_dp_f, (2,0,1)))
-        dv_dp_f = np.asarray(np.transpose(dv_dp_f, (2,0,1)))
-
-        # 2. Custom Ops Integration
-
-        lo = custom_ops.LangevinOptimizer_f64(
-            dt,
-            ca,
-            cb,
-            cc
-        )
+    
 
         test_hb = custom_ops.HarmonicBond_f64(
             bond_idxs,
@@ -111,10 +75,54 @@ class TestOptimizers(unittest.TestCase):
             angle_param_idxs
         )
 
+        return total_nrg, x0, params, masses, [test_hb, test_ha]
+
+
+    def test_context(self):
+
+        ref_total_nrg_fn, x0, params, masses, test_energies = self.setup_system()
+
+        num_atoms = len(masses)
+        ref_dE_dx_fn = jax.grad(ref_total_nrg_fn, argnums=(0,))
+        ref_dE_dx_fn = jax.jit(ref_dE_dx_fn)
+
+        dt = 0.002
+        ca = 0.95
+        cb = np.random.rand(num_atoms)
+        cc = np.zeros(num_atoms, dtype=np.float64)
+
+        intg = ReferenceLangevin(dt, ca, cb, cc)
+
+        # set random velocities
+        v0 = np.random.rand(x0.shape[0], x0.shape[1])
+
+        def integrate(x_t, v_t, params):
+            for _ in range(100):
+                x_t, v_t = intg.step(x_t, v_t, ref_dE_dx_fn(x_t, params)[0])
+            return x_t, v_t
+
+        x_f, v_f = integrate(x0, v0, params)
+
+        grad_fn = jax.jacfwd(integrate, argnums=(2))
+
+        dx_dp_f, dv_dp_f = grad_fn(x0, v0, params)
+        # jax returns a different shape than the timemachine so we have to transpose
+        # asarray is so we can index into them
+        dx_dp_f = np.asarray(np.transpose(dx_dp_f, (2,0,1)))
+        dv_dp_f = np.asarray(np.transpose(dv_dp_f, (2,0,1)))
+
+        # 2. Custom Ops Integration
+        lo = custom_ops.LangevinOptimizer_f64(
+            dt,
+            ca,
+            cb,
+            cc
+        )
+
         dp_idxs = np.arange(len(params)).astype(dtype=np.int32)
 
         ctxt = custom_ops.Context_f64(
-            [test_hb, test_ha],
+            test_energies,
             lo,
             params,
             x0,
@@ -135,7 +143,7 @@ class TestOptimizers(unittest.TestCase):
         dp_idxs = np.random.permutation(np.arange(len(params)))[:np.random.randint(len(params))]
 
         ctxt = custom_ops.Context_f64(
-            [test_hb, test_ha],
+            test_energies,
             lo,
             params,
             x0,
@@ -152,6 +160,57 @@ class TestOptimizers(unittest.TestCase):
         np.testing.assert_almost_equal(dx_dp_f[dp_idxs], ctxt.get_dx_dp())
         np.testing.assert_almost_equal(dv_dp_f[dp_idxs], ctxt.get_dv_dp())
 
+        # test a second set of integration steps
+
+        dt2 = 0.01
+        ca2 = 0.5
+        cb2 = np.random.rand(num_atoms)
+        cc2 = np.zeros(num_atoms, dtype=np.float64)
+
+        # re-initialize just for safety
+        intg = ReferenceLangevin(dt, ca, cb, cc)
+        intg2 = ReferenceLangevin(dt2, ca2, cb2, cc2)
+        ctxt = custom_ops.Context_f64(
+            test_energies,
+            lo,
+            params,
+            x0,
+            v0,
+            dp_idxs
+        )
+
+        # 3. test mixed integration, swap out coefficients mid-way
+        def integrate_mixed(x_t, v_t, params):
+            for _ in range(25):
+                x_t, v_t = intg.step(x_t, v_t, ref_dE_dx_fn(x_t, params)[0])
+            for _ in range(25):
+                x_t, v_t = intg2.step(x_t, v_t, ref_dE_dx_fn(x_t, params)[0])
+            return x_t, v_t
+
+        x_f, v_f = integrate_mixed(x0, v0, params)
+        grad_fn = jax.jacfwd(integrate_mixed, argnums=(2))
+        dx_dp_f, dv_dp_f = grad_fn(x0, v0, params)
+
+        for i in range(25):
+            ctxt.step()
+
+        lo.set_dt(dt2)
+        lo.set_coeff_a(ca2)
+        lo.set_coeff_b(cb2)
+        lo.set_coeff_c(cc2)
+
+        for i in range(25):
+            ctxt.step()
+
+        np.testing.assert_almost_equal(x_f, ctxt.get_x())
+        np.testing.assert_almost_equal(v_f, ctxt.get_v())
+
+        dx_dp_f, dv_dp_f = grad_fn(x0, v0, params)
+        dx_dp_f = np.asarray(np.transpose(dx_dp_f, (2,0,1)))
+        dv_dp_f = np.asarray(np.transpose(dv_dp_f, (2,0,1)))
+
+        np.testing.assert_almost_equal(dx_dp_f[dp_idxs], ctxt.get_dx_dp())
+        np.testing.assert_almost_equal(dv_dp_f[dp_idxs], ctxt.get_dv_dp())
 
     def test_langevin_step(self):
         """
