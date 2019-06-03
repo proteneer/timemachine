@@ -101,7 +101,6 @@ def create_system(file_path):
                 a_idx = upsert_parameter(angle)
 
                 param_idxs.append([k_idx, a_idx])
-                # print(src_idx, mid_idx, dst_idx)
                 angle_idxs.append([src_idx, mid_idx, dst_idx])
 
             angle_idxs = np.array(angle_idxs, dtype=np.int32)
@@ -166,8 +165,6 @@ def create_system(file_path):
 
             charge_param_idxs = []
             lj_param_idxs = []
-
-            print(num_atoms)
 
             for a_idx in range(num_atoms):
                 charge, sig, eps = force.getParticleParameters(a_idx)
