@@ -7,10 +7,7 @@ from simtk.openmm import app
 from simtk import openmm as mm
 from simtk import unit
 
-
-from timemachine.potentials import bonded, nonbonded
 from timemachine.lib import custom_ops
-
 from timemachine.integrator import langevin_coefficients
 
 
@@ -20,30 +17,33 @@ def value(quantity):
 
 class TestOverFit(unittest.TestCase):
 
+
     def test_overfit_host_acd(self):
         potentials, coords, (params, param_groups), masses = self.deserialize_system('examples/host_acd.xml')
 
-
         num_atoms = coords.shape[0]
-        dt = 0.0005
 
+        dt = 0.001
         ca, cb, cc = langevin_coefficients(
-            temperature=5.0,
+            temperature=100.0,
             dt=dt,
-            friction=100,
+            friction=75,
             masses=masses
         )
 
-        # print("coefficients", ca, cb, cc)
-        cc = np.zeros_like(masses)
+        # minimization coefficients
+        m_dt, m_ca, m_cb, m_cc = dt, 0.5, cb, np.zeros_like(masses)
 
         friction = 1.0
 
+        print(m_dt, m_ca, m_cb, m_cc)
+
+        # assert 0
         opt = custom_ops.LangevinOptimizer_f64(
-            dt,
-            ca,
-            cb,
-            cc
+            m_dt,
+            m_ca,
+            m_cb,
+            m_cc
         )
 
         # test getting charges
@@ -59,21 +59,44 @@ class TestOverFit(unittest.TestCase):
             dp_idxs
         )
 
-        for i in range(1000):
-            print(i)
+        # minimize the system
+        for i in range(10000):
             ctxt.step()
-
-        print(ctxt.get_x())
+            if i % 100 == 0:
+                print(i, ctxt.get_E())
 
         print(ctxt.get_dx_dp())
 
+        opt.set_dt(dt)
+        opt.set_coeff_a(ca)
+        opt.set_coeff_b(cb)
+        opt.set_coeff_c(cc)
+
+        for i in range(10000):
+            ctxt.step()
+            if i % 100 == 0:
+                print(i, ctxt.get_E())
+            
+        print(ctxt.get_dx_dp())
+        # print(ctxt.get_x())
+        # print(ctxt.get_dx_dp())
+
 
     def deserialize_system(self, filepath):
+        """
+        Deserialize an OpenMM XML file
 
+        Parameters
+        ----------
+        filepath: str
+            Location to an existing xml file to be deserialized
+
+        """
         filename, file_extension = os.path.splitext(filepath)
         sys_xml = open(filepath, 'r').read()
         system = mm.XmlSerializer.deserialize(sys_xml)
         coords = np.loadtxt(filename + '.xyz').astype(np.float64)
+        coords = coords/10
 
         global_params = []
         global_param_groups = []

@@ -58,31 +58,36 @@ void declare_context(py::module &m, const char *typestr) {
 
     }))
     .def("step", &timemachine::Context<RealType>::step)
+    .def("get_E", [](timemachine::Context<RealType> &ctxt) -> RealType {
+        RealType E;
+        ctxt.get_E(&E);
+        return E;
+    })
     .def("get_x", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
-      auto N = ctxt.num_atoms();
-      py::array_t<RealType, py::array::c_style> buffer({N, 3});
-      ctxt.get_x(buffer.mutable_data());
-      return buffer;
+        auto N = ctxt.num_atoms();
+        py::array_t<RealType, py::array::c_style> buffer({N, 3});
+        ctxt.get_x(buffer.mutable_data());
+        return buffer;
     })
     .def("get_v", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
-      auto N = ctxt.num_atoms();
-      py::array_t<RealType, py::array::c_style> buffer({N, 3});
-      ctxt.get_v(buffer.mutable_data());
-      return buffer;
+        auto N = ctxt.num_atoms();
+        py::array_t<RealType, py::array::c_style> buffer({N, 3});
+        ctxt.get_v(buffer.mutable_data());
+        return buffer;
     })
     .def("get_dx_dp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
-      auto DP = ctxt.num_dparams();
-      auto N = ctxt.num_atoms();
-      py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
-      ctxt.get_dx_dp(buffer.mutable_data());
-      return buffer;
+        auto DP = ctxt.num_dparams();
+        auto N = ctxt.num_atoms();
+        py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
+        ctxt.get_dx_dp(buffer.mutable_data());
+        return buffer;
     })
     .def("get_dv_dp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
-      auto DP = ctxt.num_dparams();
-      auto N = ctxt.num_atoms();
-      py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
-      ctxt.get_dv_dp(buffer.mutable_data());
-      return buffer;
+        auto DP = ctxt.num_dparams();
+        auto N = ctxt.num_atoms();
+        py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
+        ctxt.get_dv_dp(buffer.mutable_data());
+        return buffer;
     });
 
 }
@@ -161,15 +166,15 @@ void declare_langevin_optimizer(py::module &m, const char *typestr) {
         const RealType dt) {
         lo.set_dt(dt);
     })
-    .def("set_ca", [](timemachine::LangevinOptimizer<RealType> &lo,
+    .def("set_coeff_a", [](timemachine::LangevinOptimizer<RealType> &lo,
         const RealType ca) {
         lo.set_coeff_a(ca);
     })
-    .def("set_cb", [](timemachine::LangevinOptimizer<RealType> &lo,
+    .def("set_coeff_b", [](timemachine::LangevinOptimizer<RealType> &lo,
         const py::array_t<RealType, py::array::c_style> &cb) {
         lo.set_coeff_b(cb.shape()[0], cb.data());
     })
-    .def("set_cc", [](timemachine::LangevinOptimizer<RealType> &lo,
+    .def("set_coeff_c", [](timemachine::LangevinOptimizer<RealType> &lo,
         const py::array_t<RealType, py::array::c_style> &cc) {
         lo.set_coeff_c(cc.shape()[0], cc.data());
     });

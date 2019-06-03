@@ -62,6 +62,8 @@ public:
 
     void step();
 
+    void get_E(RealType *buffer) const;
+
     void get_x(RealType *buffer) const;
 
     void get_v(RealType *buffer) const;

@@ -39,7 +39,7 @@ def langevin_coefficients(
         fscale = (1-vscale)/friction
     kT = BOLTZ * temperature
     nscale = np.sqrt(kT*(1-vscale*vscale)) # noise scale
-    invMasses = (1.0/masses).reshape((-1, 1))
+    invMasses = 1.0/masses
     sqrtInvMasses = np.sqrt(invMasses)
 
     ca = vscale
