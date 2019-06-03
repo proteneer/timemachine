@@ -85,28 +85,5 @@ def assert_potential_invariance(energy_fn, x0, params, box=None):
             np.testing.assert_array_almost_equal(trans_forces, forces,decimal=5)
             np.testing.assert_array_almost_equal(trans_dEdp,dparam,decimal=5)
             np.testing.assert_array_almost_equal(trans_mixed, mixed,decimal=5)
-        
-#         for _ in range(3):,decimal=5
-#             rot_matrix = special_ortho_group.rvs(3)
-#             rot_x = np.matmul(x0, rot_matrix)
-#             rot_energy = energy_fn(rot_x,params,box)
-#             rot_forces = force_fn(rot_x,params,box)[0]
-#             rot_mixed = d2Edxdp(rot_x,params,box)[0][0]
-#             np.testing.assert_almost_equal(rot_energy,energy,decimal=5)
-#             np.testing.assert_array_almost_equal(rot_forces,np.matmul(forces,rot_matrix),decimal=5)
-#             np.testing.assert_array_almost_equal(rot_dEdp,dparam,decimal=5)
-#             for i in range(rot_mixed.shape[0]):
-#                 np.testing.assert_array_almost_equal(rot_mixed[i],np.matmul(mixed[i],rot_matrix),decimal=5) 
-            
-#         for _ in range(3):
-#             trans_vector = np.random.rand(3)
-#             rot_matrix = special_ortho_group.rvs(3)
-#             comp_x = np.matmul(x0,rot_matrix) + trans_vector
-#             comp_energy = energy_fn(comp_x,params,box)
-#             comp_forces = force_fn(comp_x,params,box)[0]
-#             comp_mixed = d2Edxdp(trans_x,params,box)[0][0]
-#             np.testing.assert_almost_equal(comp_energy,energy,decimal=5)
-#             np.testing.assert_array_almost_equal(comp_forces,np.matmul(forces,rot_matrix),decimal=5)
-#             np.testing.assert_array_almost_equal(rot_dEdp,dparam,decimal=5)
-#             for i in range(comp_mixed.shape[0]):
-#                 np.testing.assert_array_almost_equal(comp_mixed[i],np.matmul(mixed[i],rot_matrix),decimal=5) 
+       
+       # timemachine does not support testing rotations on periodic systems
