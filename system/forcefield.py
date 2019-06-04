@@ -61,7 +61,7 @@ def combiner(
         a_args = a[1]
         b_name = b[0]
         b_args = b[1]
-        print(a_name, b_name)
+        # print(a_name, b_name)
         assert a_name == b_name
         if a_name == custom_ops.HarmonicBond_f64:
             bond_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
@@ -79,7 +79,6 @@ def combiner(
             lj_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=np.float64)
             lj_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
             lj_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
-            print(lj_scale_matrix)
             lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((custom_ops.LennardJones_f64, (lj_scale_matrix, lj_param_idxs)))
         elif a_name == custom_ops.Electrostatics_f64:
@@ -326,8 +325,6 @@ def parameterize(mol, forcefield):
     charge_param_idxs = []
     for k, v in vd.items():
         charge_param_idxs.append(v)
-
-    print("CPI", charge_param_idxs)
 
     nrg_fns.append((
         custom_ops.Electrostatics_f64,
