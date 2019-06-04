@@ -6,6 +6,9 @@ from system import serialize
 from system import forcefield
 from openforcefield.typing.engines.smirnoff import ForceField
 
+from timemachine.lib import custom_ops
+from timemachine.integrator import langevin_coefficients
+
 host_potentials, host_conf, (host_params, host_param_groups), host_masses = serialize.deserialize_system('examples/host_acd.xml')
 
 test_sdf = """@<TRIPOS>MOLECULE
@@ -58,16 +61,70 @@ smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
 guest_potentials, guest_params, guest_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
 
-combined_potentials = forcefield.combiner(
+combined_potentials, combined_params, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
     host_potentials, guest_potentials,
     host_params, guest_params,
     host_param_groups, guest_param_groups,
     host_conf, guest_conf,
     host_masses, guest_masses)
 
+num_atoms = combined_conf.shape[0]
+
+dt = 0.001
+ca, cb, cc = langevin_coefficients(
+    temperature=100.0,
+    dt=dt,
+    friction=75,
+    masses=combined_masses
+)
+
+
+m_dt, m_ca, m_cb, m_cc = dt, 0.5, cb, np.zeros_like(combined_masses)
+
+friction = 1.0
+
+opt = custom_ops.LangevinOptimizer_f64(
+    m_dt,
+    m_ca,
+    m_cb,
+    m_cc
+)
+
+# test getting charges
+dp_idxs = np.argwhere(combined_param_groups == 7).reshape(-1)
+
+ctxt = custom_ops.Context_f64(
+    combined_potentials,
+    opt,
+    combined_params,
+    combined_conf, # x0
+    np.zeros_like(combined_conf), # v0
+    # np.arange(len(params))
+    dp_idxs
+)
+
+# minimize the system
+for i in range(10000):
+    ctxt.step()
+    if i % 100 == 0:
+        print(i, ctxt.get_E())
+
+print(ctxt.get_dx_dp())
+
+opt.set_dt(dt)
+opt.set_coeff_a(ca)
+opt.set_coeff_b(cb)
+opt.set_coeff_c(cc)
+
+# tdb reservoir sampler
+for i in range(10000):
+    ctxt.step()
+    if i % 100 == 0:
+        print(i, ctxt.get_E())
+    
+print(ctxt.get_dx_dp())
+
 
 c = mol.GetConformer(0)
 conf = np.array(c.GetPositions(), dtype=np.float64)
 
-print(conf)
-print(potentials)

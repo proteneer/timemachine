@@ -64,6 +64,8 @@ def combiner(
             es_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
             es_param_idxs = np.concatenate([a_args[1], b_args[1] + num_a_atoms], axis=0)
             c_nrgs.append(custom_ops.Electrostatics_f64(es_scale_matrix, es_param_idxs))
+        else:
+            raise Exception("Unknown potential", a_name)
 
     return c_nrgs, c_params, c_param_groups, c_conf, c_masses
 
@@ -301,6 +303,8 @@ def parameterize(mol, forcefield):
     charge_param_idxs = []
     for k, v in vd.items():
         charge_param_idxs.append(v)
+
+    print("CPI", charge_param_idxs)
 
     nrg_fns.append((
         custom_ops.Electrostatics_f64,

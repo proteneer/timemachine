@@ -28,9 +28,6 @@ class TestOverFit(unittest.TestCase):
 
         friction = 1.0
 
-        print(m_dt, m_ca, m_cb, m_cc)
-
-        # assert 0
         opt = custom_ops.LangevinOptimizer_f64(
             m_dt,
             m_ca,
