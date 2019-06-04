@@ -1,6 +1,5 @@
 import os
 import unittest
-
 import numpy as np
 
 from simtk.openmm import app
@@ -78,8 +77,6 @@ class TestOverFit(unittest.TestCase):
                 print(i, ctxt.get_E())
             
         print(ctxt.get_dx_dp())
-        # print(ctxt.get_x())
-        # print(ctxt.get_dx_dp())
 
 
     def deserialize_system(self, filepath):
@@ -92,6 +89,7 @@ class TestOverFit(unittest.TestCase):
             Location to an existing xml file to be deserialized
 
         """
+
         filename, file_extension = os.path.splitext(filepath)
         sys_xml = open(filepath, 'r').read()
         system = mm.XmlSerializer.deserialize(sys_xml)
