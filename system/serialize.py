@@ -139,6 +139,7 @@ def deserialize_system(filepath):
             lj_param_idxs = []
 
             for a_idx in range(num_atoms):
+                scale_matrix[a_idx][a_idx] = 0
                 charge, sig, eps = force.getParticleParameters(a_idx)
 
                 charge = value(charge)

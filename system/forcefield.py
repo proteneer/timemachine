@@ -19,18 +19,17 @@ def merge_potentials(nrgs):
         a_name = a[0]
         a_args = a[1]
         if a_name == custom_ops.HarmonicBond_f64:
-            print(a_args[0], a_args[1])
             c_nrgs.append(custom_ops.HarmonicBond_f64(a_args[0], a_args[1]))
         elif a_name == custom_ops.HarmonicAngle_f64:
             c_nrgs.append(custom_ops.HarmonicAngle_f64(a_args[0], a_args[1]))
         elif a_name == custom_ops.PeriodicTorsion_f64:
-            c_nrgs.append(custom_ops.HarmonicAngle_f64(a_args[0], a_args[1]))
+            c_nrgs.append(custom_ops.PeriodicTorsion_f64(a_args[0], a_args[1]))
         elif a_name == custom_ops.LennardJones_f64:
             c_nrgs.append(custom_ops.LennardJones_f64(a_args[0], a_args[1]))
         elif a_name == custom_ops.Electrostatics_f64:
             c_nrgs.append(custom_ops.Electrostatics_f64(a_args[0], a_args[1]))
-        else:
-            raise Exception("Unknown potential", a_name)
+        # else:
+        #     raise Exception("Unknown potential", a_name)
 
     return c_nrgs  
 
@@ -54,6 +53,8 @@ def combiner(
     a_nrgs.sort(key=str)
     b_nrgs.sort(key=str)
 
+
+
     c_nrgs = []
     for a, b in zip(a_nrgs, b_nrgs):
         a_name = a[0]
@@ -65,27 +66,28 @@ def combiner(
         if a_name == custom_ops.HarmonicBond_f64:
             bond_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             bond_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append(custom_ops.HarmonicBond_f64(bond_idxs, bond_param_idxs))
+            c_nrgs.append((custom_ops.HarmonicBond_f64, (bond_idxs, bond_param_idxs)))
         elif a_name == custom_ops.HarmonicAngle_f64:
             angle_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             angle_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append(custom_ops.HarmonicAngle_f64(angle_idxs, angle_param_idxs))
+            c_nrgs.append((custom_ops.HarmonicAngle_f64, (angle_idxs, angle_param_idxs)))
         elif a_name == custom_ops.PeriodicTorsion_f64:
             torsion_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append(custom_ops.HarmonicAngle_f64(torsion_idxs, torsion_param_idxs))
+            c_nrgs.append((custom_ops.PeriodicTorsion_f64, (torsion_idxs, torsion_param_idxs)))
         elif a_name == custom_ops.LennardJones_f64:
             lj_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=np.float64)
             lj_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
             lj_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
-            lj_param_idxs = np.concatenate([a_args[1], b_args[1] + num_a_atoms], axis=0)
-            c_nrgs.append(custom_ops.LennardJones_f64(lj_scale_matrix, lj_param_idxs))
+            print(lj_scale_matrix)
+            lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
+            c_nrgs.append((custom_ops.LennardJones_f64, (lj_scale_matrix, lj_param_idxs)))
         elif a_name == custom_ops.Electrostatics_f64:
             es_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=np.float64)
             es_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
             es_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
-            es_param_idxs = np.concatenate([a_args[1], b_args[1] + num_a_atoms], axis=0)
-            c_nrgs.append(custom_ops.Electrostatics_f64(es_scale_matrix, es_param_idxs))
+            es_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
+            c_nrgs.append((custom_ops.Electrostatics_f64, (es_scale_matrix, es_param_idxs)))
         else:
             raise Exception("Unknown potential", a_name)
 

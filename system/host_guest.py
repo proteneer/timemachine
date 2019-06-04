@@ -4,10 +4,10 @@ from rdkit import Chem
 
 from system import serialize
 from system import forcefield
+from system import simulation
 from openforcefield.typing.engines.smirnoff import ForceField
 
 from timemachine.lib import custom_ops
-from timemachine.integrator import langevin_coefficients
 
 host_potentials, host_conf, (host_params, host_param_groups), host_masses = serialize.deserialize_system('examples/host_acd.xml')
 
@@ -68,77 +68,34 @@ combined_potentials, combined_params, combined_param_groups, combined_conf, comb
     host_conf, guest_conf,
     host_masses, guest_masses)
 
-# num_atoms = combined_conf.shape[0]
+# print(host_conf)
+print(len(host_params))
+print(len(host_param_groups))
+# assert 0
 
-print(guest_params)
-print(guest_masses)
-print(guest_conf)
-print(guest_param_groups)
-
-dt = 0.001
-ca, cb, cc = langevin_coefficients(
-    temperature=100.0,
-    dt=dt,
-    friction=75,
-    masses=guest_masses
+x, dx_dp = simulation.run_simulation(
+    host_potentials,
+    host_params,
+    host_param_groups,
+    host_conf,
+    host_masses,
+    np.argwhere(host_param_groups == 7).reshape(-1)
 )
 
-m_dt, m_ca, m_cb, m_cc = dt, 0.5, cb, np.zeros_like(guest_masses)
-
-print(m_cb.shape, m_cc.shape)
-
-friction = 1.0
-
-opt = custom_ops.LangevinOptimizer_f64(
-    m_dt,
-    m_ca,
-    m_cb,
-    m_cc
-)
-
-# test charge training
-dp_idxs = np.argwhere(guest_param_groups == 0).reshape(-1)
-
-all_potentials = forcefield.merge_potentials(guest_potentials) # can't be a temporary
-
-ctxt = custom_ops.Context_f64(
-    all_potentials,
-    opt,
+x, dx_dp = simulation.run_simulation(
+    guest_potentials,
     guest_params,
-    guest_conf, # x0
-    np.zeros_like(guest_conf), # v0
-    # np.arange(len(params))
-    dp_idxs
+    guest_param_groups,
+    guest_conf,
+    guest_masses,
+    np.argwhere(guest_param_groups == 7).reshape(-1)
 )
 
-ctxt.step()
-
-# minimize the system
-for i in range(10000):
-    ctxt.step()
-    if i % 100 == 0:
-        print(i, ctxt.get_E())
-
-print(ctxt.get_dx_dp())
-
-assert 0
-
-
-print(ctxt.get_dx_dp())
-
-opt.set_dt(dt)
-opt.set_coeff_a(ca)
-opt.set_coeff_b(cb)
-opt.set_coeff_c(cc)
-
-# todo: reservoir sampler
-for i in range(10000):
-    ctxt.step()
-    if i % 100 == 0:
-        print(i, ctxt.get_E())
-    
-print(ctxt.get_dx_dp())
-
-c = mol.GetConformer(0)
-conf = np.array(c.GetPositions(), dtype=np.float64)
-
+x, dx_dp = simulation.run_simulation(
+    combined_potentials,
+    combined_params,
+    combined_param_groups,
+    combined_conf,
+    combined_masses,
+    np.argwhere(guest_param_groups == 7).reshape(-1)
+)
