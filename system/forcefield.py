@@ -13,6 +13,28 @@ from openforcefield.topology import ValenceDict
 
 from timemachine.lib import custom_ops
 
+def merge_potentials(nrgs):
+    c_nrgs = []
+    for a in nrgs:
+        a_name = a[0]
+        a_args = a[1]
+        if a_name == custom_ops.HarmonicBond_f64:
+            print(a_args[0], a_args[1])
+            c_nrgs.append(custom_ops.HarmonicBond_f64(a_args[0], a_args[1]))
+        elif a_name == custom_ops.HarmonicAngle_f64:
+            c_nrgs.append(custom_ops.HarmonicAngle_f64(a_args[0], a_args[1]))
+        elif a_name == custom_ops.PeriodicTorsion_f64:
+            c_nrgs.append(custom_ops.HarmonicAngle_f64(a_args[0], a_args[1]))
+        elif a_name == custom_ops.LennardJones_f64:
+            c_nrgs.append(custom_ops.LennardJones_f64(a_args[0], a_args[1]))
+        elif a_name == custom_ops.Electrostatics_f64:
+            c_nrgs.append(custom_ops.Electrostatics_f64(a_args[0], a_args[1]))
+        else:
+            raise Exception("Unknown potential", a_name)
+
+    return c_nrgs  
+
+# todo generalize to N nrg_functionals
 def combiner(
     a_nrgs, b_nrgs,
     a_params, b_params,
@@ -246,7 +268,7 @@ def parameterize(mol, forcefield):
                 for m in matches:
                     vd[m] = (s_idx, e_idx)
 
-                scale_matrix = np.ones(shape=(num_atoms, num_atoms), dtype=np.float64)
+                scale_matrix = np.ones(shape=(num_atoms, num_atoms), dtype=np.float64) - np.eye(num_atoms)
 
                 # fully exclude 1-2, 1-3, tbd: 1-4
                 for (src, dst) in bond_idxs:
@@ -285,8 +307,7 @@ def parameterize(mol, forcefield):
         for m in matches:
             vd[m] = c_idx
 
-        scale_matrix = np.ones(shape=(num_atoms, num_atoms), dtype=np.float64)
-
+        scale_matrix = np.ones(shape=(num_atoms, num_atoms), dtype=np.float64) - np.eye(num_atoms)
         # fully exclude 1-2, 1-3, tbd: 1-4
         for (src, dst) in bond_idxs:
             scale_matrix[src][dst] = 0
@@ -316,11 +337,12 @@ def parameterize(mol, forcefield):
 
     c = mol.GetConformer(0)
     conf = np.array(c.GetPositions(), dtype=np.float64)
+    conf = conf/10 # convert to md_units
 
     masses = []
     for atom in mol.GetAtoms():
         masses.append(atom.GetMass())
     masses = np.array(masses, dtype=np.float64)
 
-    return nrg_fns, np.array(global_params), global_param_groups, conf, masses
+    return nrg_fns, np.array(global_params), np.array(global_param_groups, dtype=np.int32), conf, masses
 
