@@ -195,4 +195,4 @@ def gbsa(conf,
         pi4Asolv)
 
     # compute using only the upper triangle
-    return np.sum(np.triu(energy)) + np.diagonal(energy)/2.0 + nonpolar_nrg
+    return np.sum(np.triu(energy)) + np.sum(np.diagonal(energy)/2.0) + nonpolar_nrg
