@@ -73,29 +73,41 @@ print(len(host_params))
 print(len(host_param_groups))
 # assert 0
 
-x, dx_dp = simulation.run_simulation(
+R = simulation.run_simulation(
     host_potentials,
     host_params,
     host_param_groups,
     host_conf,
     host_masses,
-    np.argwhere(host_param_groups == 7).reshape(-1)
+    np.argwhere(host_param_groups == 7).reshape(-1),
+    250,
+    10000
 )
 
-x, dx_dp = simulation.run_simulation(
+print(len(R))
+
+R = simulation.run_simulation(
     guest_potentials,
     guest_params,
     guest_param_groups,
     guest_conf,
     guest_masses,
-    np.argwhere(guest_param_groups == 7).reshape(-1)
+    np.argwhere(guest_param_groups == 7).reshape(-1),
+    250,
+    10000
 )
 
-x, dx_dp = simulation.run_simulation(
+print(len(R))
+
+R = simulation.run_simulation(
     combined_potentials,
     combined_params,
     combined_param_groups,
     combined_conf,
     combined_masses,
-    np.argwhere(guest_param_groups == 7).reshape(-1)
+    np.argwhere(guest_param_groups == 7).reshape(-1),
+    250,
+    10000
 )
+
+print(len(R))
