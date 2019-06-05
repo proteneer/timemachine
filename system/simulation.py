@@ -98,8 +98,8 @@ def run_simulation(
         else:
             j = random.randint(0, count)
             if j < k:
-
                 R[j] = get_reservoir_item()
+
         ctxt.step()
         if count % 400 == 0:
             print(count, ctxt.get_E())

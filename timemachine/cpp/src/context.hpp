@@ -64,6 +64,8 @@ public:
 
     void get_E(RealType *buffer) const;
 
+    void get_dE_dx(RealType *buffer) const;
+
     void get_x(RealType *buffer) const;
 
     void get_v(RealType *buffer) const;

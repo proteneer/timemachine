@@ -112,6 +112,11 @@ void Context<RealType>::get_x(RealType *buffer) const {
 }
 
 template<typename RealType>
+void Context<RealType>::get_dE_dx(RealType *buffer) const {
+    gpuErrchk(cudaMemcpy(buffer, d_dE_dx_, N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+}
+
+template<typename RealType>
 void Context<RealType>::get_v(RealType *buffer) const {
     gpuErrchk(cudaMemcpy(buffer, d_v_t_, N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
 }
