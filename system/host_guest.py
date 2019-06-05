@@ -68,46 +68,70 @@ combined_potentials, combined_params, combined_param_groups, combined_conf, comb
     host_conf, guest_conf,
     host_masses, guest_masses)
 
-# print(host_conf)
 print(len(host_params))
 print(len(host_param_groups))
-# assert 0
 
-R = simulation.run_simulation(
+host_dp_idxs = np.argwhere(host_param_groups == 7).reshape(-1)
+RH = simulation.run_simulation(
     host_potentials,
     host_params,
     host_param_groups,
     host_conf,
     host_masses,
-    np.argwhere(host_param_groups == 7).reshape(-1),
+    host_dp_idxs,
     250,
     10000
 )
 
-print(len(R))
+H_E, H_derivs = simulation.ensemble_E_and_derivs(RH) # [P,N,3]
 
-R = simulation.run_simulation(
+guest_dp_idxs = np.argwhere(guest_param_groups == 7).reshape(-1)
+RG = simulation.run_simulation(
     guest_potentials,
     guest_params,
     guest_param_groups,
     guest_conf,
     guest_masses,
-    np.argwhere(guest_param_groups == 7).reshape(-1),
+    guest_dp_idxs,
     250,
     10000
 )
 
-print(len(R))
+G_E, G_derivs = simulation.ensemble_E_and_derivs(RG) # [P,N,3]
 
-R = simulation.run_simulation(
+combined_dp_idxs = np.argwhere(combined_param_groups == 7).reshape(-1)
+RHG = simulation.run_simulation(
     combined_potentials,
     combined_params,
     combined_param_groups,
     combined_conf,
     combined_masses,
-    np.argwhere(guest_param_groups == 7).reshape(-1),
+    combined_dp_idxs,
     250,
     10000
 )
 
-print(len(R))
+HG_E, HG_derivs = simulation.ensemble_E_and_derivs(RHG) # [P,N,3]
+
+pred_enthalpy = HG_E - (G_E + H_E)
+true_enthalpy = 0.5
+delta_enthalpy = true_enthalpy - pred_enthalpy
+loss = delta_enthalpy**2
+
+# flatten since we go into linear scaling afterwards
+HG_derivs = np.sum(HG_derivs, axis=(1,2)) # [DP_HG]
+G_derivs = np.sum(G_derivs, axis=(1,2)) # [DP_H]
+H_derivs = np.sum(H_derivs, axis=(1,2)) # [DP]
+
+# fancy index into the full derivative set
+full_derivs = np.zeros_like(combined_params)
+# rember its HG - H - G
+full_derivs[combined_dp_idxs] += HG_derivs
+full_derivs[host_dp_idxs] -= H_derivs
+full_derivs[guest_dp_idxs + len(host_params)] -= G_derivs
+
+dL_derivs = 2*delta_enthalpy*full_derivs
+
+assert dL_derivs.shape == combined_params.shape
+
+print("loss", loss, "dL/dp", dL_derivs[combined_dp_idxs])

@@ -5,6 +5,23 @@ from system import forcefield
 from timemachine.lib import custom_ops
 from timemachine.integrator import langevin_coefficients
 
+
+def ensemble_E_and_derivs(triples):
+    """
+    Compute the derivative of <dE/dtheta> = <dE/dx.dx/dtheta>
+    """
+    running_sum_derivs = None
+    running_sum_E = 0
+    n_triples = len(triples)
+    for E, dE_dx, dx_dp in triples:
+        if running_sum_derivs is None:
+            running_sum_derivs = np.zeros_like(dx_dp)    
+        # broadcast multiply [1, N, 3] by [P, N, e]
+        running_sum_derivs += np.expand_dims(dE_dx, 0)*dx_dp
+        running_sum_E += E
+    return E/n_triples, running_sum_derivs/n_triples
+
+
 def run_simulation(
     potentials,
     params,
@@ -84,14 +101,14 @@ def run_simulation(
         # closure around R, and ctxt
         def get_reservoir_item():
             E = ctxt.get_E()
-            x = ctxt.get_x()
+            dE_dx = ctxt.get_dE_dx()
             dx_dp = ctxt.get_dx_dp()
             min_dx = np.amin(dx_dp)
             max_dx = np.amax(dx_dp)
-            limits = 1e-3
+            limits = 1e3
             if min_dx < -limits or max_dx > limits:
                 raise Exception("Derivatives blew up:", min_dx, max_dx)
-            return [E, x, dx_dp]
+            return [E, dE_dx, dx_dp]
 
         if count < k:
             R.append(get_reservoir_item())

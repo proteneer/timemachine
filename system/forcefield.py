@@ -53,8 +53,6 @@ def combiner(
     a_nrgs.sort(key=str)
     b_nrgs.sort(key=str)
 
-
-
     c_nrgs = []
     for a, b in zip(a_nrgs, b_nrgs):
         a_name = a[0]
