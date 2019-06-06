@@ -17,7 +17,7 @@ def run_simulation(
 
     potentials = forcefield.merge_potentials(potentials)
         
-    dt = 0.001
+    dt = 0.001 
     ca, cb, cc = langevin_coefficients(
         temperature=100.0,
         dt=dt,
@@ -46,6 +46,8 @@ def run_simulation(
         dp_idxs
     )
 
+    converge = 'success'
+
     # minimization
     # call system converged when the delta is .25 kcal)
     last_E = None
@@ -59,11 +61,13 @@ def run_simulation(
         else:
             last_E = ctxt.get_E()
 
-        if i % 100 == 0:
-            print(i, ctxt.get_E())
+        # if i % 100 == 0:
+#        print(i, ctxt.get_E())
 
     if i == max_iter-1:
-        raise Exception("Energy minimization failed to converge in ", i, "steps")
+        converge = 'failed'
+        print("Energy minimization failed to converge in ", i, "steps")
+        # raise Exception("Energy minimization failed to converge in ", i, "steps")
     else:
         print("Minimization converged in", i, "steps")
 
@@ -88,10 +92,13 @@ def run_simulation(
             dx_dp = ctxt.get_dx_dp()
             min_dx = np.amin(dx_dp)
             max_dx = np.amax(dx_dp)
-            limits = 1e-3
+            limits = 1e3
             if min_dx < -limits or max_dx > limits:
-                raise Exception("Derivatives blew up:", min_dx, max_dx)
-            return [E, x, dx_dp]
+                print("Derivatives blew up:", min_dx,max_dx)
+                converge = 'failed'
+                # raise Exception("Derivatives blew up:", min_dx, max_dx)
+            # return [E, x, dx_dp]
+            return E
 
         if count < k:
             R.append(get_reservoir_item())
@@ -100,8 +107,11 @@ def run_simulation(
             if j < k:
                 R[j] = get_reservoir_item()
 
+        if 'failed' in converge:
+            break
+
         ctxt.step()
         if count % 400 == 0:
             print(count, ctxt.get_E())
 
-    return R
+    return R, converge
