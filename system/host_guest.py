@@ -1,3 +1,5 @@
+import os
+import sys
 import numpy as np
 
 from rdkit import Chem
@@ -56,82 +58,116 @@ No Charge or Current Charge
 @<TRIPOS>SUBSTRUCTURE
 1 MOL 1 TEMP 0 **** **** 0 ROOT"""
 
-mol = Chem.MolFromMol2Block(test_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
-smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
-guest_potentials, guest_params, guest_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
+def run_system(sdf_file):
 
-combined_potentials, combined_params, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
-    host_potentials, guest_potentials,
-    host_params, guest_params,
-    host_param_groups, guest_param_groups,
-    host_conf, guest_conf,
-    host_masses, guest_masses)
+    mol = Chem.MolFromMol2Block(sdf_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
-print(len(host_params))
-print(len(host_param_groups))
+    guest_potentials, guest_params, guest_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
 
-host_dp_idxs = np.argwhere(host_param_groups == 7).reshape(-1)
-RH = simulation.run_simulation(
-    host_potentials,
-    host_params,
-    host_param_groups,
-    host_conf,
-    host_masses,
-    host_dp_idxs,
-    250,
-    10000
-)
+    combined_potentials, combined_params, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
+        host_potentials, guest_potentials,
+        host_params, guest_params,
+        host_param_groups, guest_param_groups,
+        host_conf, guest_conf,
+        host_masses, guest_masses)
 
-H_E, H_derivs = simulation.ensemble_E_and_derivs(RH) # [P,N,3]
+    host_dp_idxs = np.argwhere(host_param_groups == 7).reshape(-1)
+    guest_dp_idxs = np.argwhere(guest_param_groups == 7).reshape(-1)
+    combined_dp_idxs = np.argwhere(combined_param_groups == 7).reshape(-1)
 
-guest_dp_idxs = np.argwhere(guest_param_groups == 7).reshape(-1)
-RG = simulation.run_simulation(
-    guest_potentials,
-    guest_params,
-    guest_param_groups,
-    guest_conf,
-    guest_masses,
-    guest_dp_idxs,
-    250,
-    10000
-)
+    def run_simulation(host_params, guest_params, combined_params):
 
-G_E, G_derivs = simulation.ensemble_E_and_derivs(RG) # [P,N,3]
+        RH = simulation.run_simulation(
+            host_potentials,
+            host_params,
+            host_param_groups,
+            host_conf,
+            host_masses,
+            host_dp_idxs,
+            100,
+            4000
+        )
 
-combined_dp_idxs = np.argwhere(combined_param_groups == 7).reshape(-1)
-RHG = simulation.run_simulation(
-    combined_potentials,
-    combined_params,
-    combined_param_groups,
-    combined_conf,
-    combined_masses,
-    combined_dp_idxs,
-    250,
-    10000
-)
+        H_E, H_derivs = simulation.average_E_and_derivatives(RH) # [host_dp_idxs,]
 
-HG_E, HG_derivs = simulation.ensemble_E_and_derivs(RHG) # [P,N,3]
+        RG = simulation.run_simulation(
+            guest_potentials,
+            guest_params,
+            guest_param_groups,
+            guest_conf,
+            guest_masses,
+            guest_dp_idxs,
+            100,
+            4000
+        )
 
-pred_enthalpy = HG_E - (G_E + H_E)
-true_enthalpy = 0.5
-delta_enthalpy = true_enthalpy - pred_enthalpy
-loss = delta_enthalpy**2
+        G_E, G_derivs = simulation.average_E_and_derivatives(RG) # [guest_dp_idxs,]
 
-# flatten since we go into linear scaling afterwards
-HG_derivs = np.sum(HG_derivs, axis=(1,2)) # [DP_HG]
-G_derivs = np.sum(G_derivs, axis=(1,2)) # [DP_H]
-H_derivs = np.sum(H_derivs, axis=(1,2)) # [DP]
+        RHG = simulation.run_simulation(
+            combined_potentials,
+            combined_params,
+            combined_param_groups,
+            combined_conf,
+            combined_masses,
+            combined_dp_idxs,
+            100,
+            4000
+        )
 
-# fancy index into the full derivative set
-full_derivs = np.zeros_like(combined_params)
-# rember its HG - H - G
-full_derivs[combined_dp_idxs] += HG_derivs
-full_derivs[host_dp_idxs] -= H_derivs
-full_derivs[guest_dp_idxs + len(host_params)] -= G_derivs
+        HG_E, HG_derivs = simulation.average_E_and_derivatives(RHG) # [combined_dp_idxs,]
 
-dL_derivs = 2*delta_enthalpy*full_derivs
+        pred_enthalpy = HG_E - (G_E + H_E)
+        true_enthalpy = -10.5
+        delta_enthalpy = pred_enthalpy - true_enthalpy
+        loss = delta_enthalpy**2
 
-assert dL_derivs.shape == combined_params.shape
+        print("-----------True, Pred, Loss", true_enthalpy, pred_enthalpy, loss)
+        # fancy index into the full derivative set
+        combined_derivs = np.zeros_like(combined_params)
+        # remember its HG - H - G
+        combined_derivs[combined_dp_idxs] += HG_derivs
+        combined_derivs[host_dp_idxs] -= H_derivs
+        combined_derivs[guest_dp_idxs + len(host_params)] -= G_derivs
+        combined_derivs = 2*delta_enthalpy*combined_derivs
 
-print("loss", loss, "dL/dp", dL_derivs[combined_dp_idxs])
+        host_derivs = combined_derivs[:len(host_params)]
+        guest_derivs = combined_derivs[len(host_params):]
+
+        return host_derivs, guest_derivs, combined_derivs, pred_enthalpy
+
+    res = run_simulation(host_params, guest_params, combined_params)
+    return res[-1]
+
+
+base_dir = "/home/yutong/Code/benchmarksets/input_files/cd-set1/mol2"
+
+results = []
+for filename in os.listdir(base_dir):
+
+    if 'guest' in filename:
+        file_path = os.path.join(base_dir, filename)
+        file_data = open(file_path, "r").read()
+        pred_enthalpy = run_system(file_data)
+        print(filename, pred_enthalpy)
+        results.append([filename, pred_enthalpy])
+
+print(results)
+
+# for _ in range(20):
+
+#     print("current_params", combined_params[combined_dp_idxs])
+
+#     host_derivs, guest_derivs, combined_derivs = run_simulation(host_params, guest_params, combined_params)
+#     lr = 1e-6
+#     host_params -= lr*host_derivs
+#     guest_params -= lr*guest_derivs
+#     combined_params -= lr*combined_derivs
+
+
+
+#     np.testing.assert_almost_equal(np.concatenate([host_params, guest_params]), combined_params)
+
+#     # host_params
+#     # guest_params 

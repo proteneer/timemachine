@@ -6,20 +6,38 @@ from timemachine.lib import custom_ops
 from timemachine.integrator import langevin_coefficients
 
 
-def ensemble_E_and_derivs(triples):
+
+def average_E_and_derivatives(quartets):
     """
-    Compute the derivative of <dE/dtheta> = <dE/dx.dx/dtheta>
+    Compute the average energy and derivatives
+
+    Parameters
+    ----------
+    quartets: list of quartets
+        [
+            [E, dE_dx, dx_dp, dE_dp],
+            [E, dE_dx, dx_dp, dE_dp],
+            ...
+        ]
+
+    Returns
+    -------
+    compute the average energy and total derivative.
+
     """
     running_sum_derivs = None
     running_sum_E = 0
-    n_triples = len(triples)
-    for E, dE_dx, dx_dp in triples:
+    n_quartets = len(quartets)
+
+    for E, dE_dx, dx_dp, dE_dp in quartets:
         if running_sum_derivs is None:
-            running_sum_derivs = np.zeros_like(dx_dp)    
-        # broadcast multiply [1, N, 3] by [P, N, e]
-        running_sum_derivs += np.expand_dims(dE_dx, 0)*dx_dp
+            running_sum_derivs = np.zeros_like(dE_dp)    
+        # tensor contract [N,3] with [P, N, 3] and dE_d
+        total_dE_dp = np.einsum('kl,mkl->m', dE_dx, dx_dp) + dE_dp
+        running_sum_derivs += total_dE_dp
         running_sum_E += E
-    return E/n_triples, running_sum_derivs/n_triples
+
+    return E/n_quartets, running_sum_derivs/n_quartets
 
 
 def run_simulation(
@@ -36,9 +54,9 @@ def run_simulation(
         
     dt = 0.001
     ca, cb, cc = langevin_coefficients(
-        temperature=100.0,
+        temperature=40.0,
         dt=dt,
-        friction=75,
+        friction=150,
         masses=masses
     )
 
@@ -91,7 +109,6 @@ def run_simulation(
     opt.set_coeff_c(cc)
 
     # dynamics via reservoir sampling
-
     k = n_samples # number of samples we want to keep
     R = []
     count = 0
@@ -103,12 +120,13 @@ def run_simulation(
             E = ctxt.get_E()
             dE_dx = ctxt.get_dE_dx()
             dx_dp = ctxt.get_dx_dp()
+            dE_dp = ctxt.get_dE_dp()
             min_dx = np.amin(dx_dp)
             max_dx = np.amax(dx_dp)
             limits = 1e3
             if min_dx < -limits or max_dx > limits:
                 raise Exception("Derivatives blew up:", min_dx, max_dx)
-            return [E, dE_dx, dx_dp]
+            return [E, dE_dx, dx_dp, dE_dp]
 
         if count < k:
             R.append(get_reservoir_item())
