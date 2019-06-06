@@ -52,7 +52,7 @@ def run_simulation(
 
     potentials = forcefield.merge_potentials(potentials)
         
-    dt = 0.001
+    dt = 0.0005
     ca, cb, cc = langevin_coefficients(
         temperature=40.0,
         dt=dt,
