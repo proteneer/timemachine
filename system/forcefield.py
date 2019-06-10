@@ -41,14 +41,16 @@ def combiner(
     a_conf, b_conf,
     a_masses, b_masses):
     """
-    Combine two systems into one.
+    Combine two systems with two distinct parameter sets into one.
     """
 
-    num_a_atoms = len(a_masses)
-    c_masses = np.concatenate([a_masses, b_masses])
-    c_conf = np.concatenate([a_conf, b_conf])
-    c_params = np.concatenate([a_params, b_params])
-    c_param_groups = np.concatenate([a_param_groups, b_param_groups])
+    num_a_atoms = len(a_masses)                     # offset by number of atoms in a
+    c_masses = np.concatenate([a_masses, b_masses]) # combined masses
+    c_conf = np.concatenate([a_conf, b_conf])       # combined geometry
+    c_params = np.concatenate([a_params, b_params]) # combined parameters
+    c_param_groups = np.concatenate([a_param_groups, b_param_groups]) # combine parameter groups
+
+    assert len(a_nrgs) == len(b_nrgs)
 
     a_nrgs.sort(key=str)
     b_nrgs.sort(key=str)
@@ -60,7 +62,7 @@ def combiner(
         a_args = a[1]
         b_name = b[0]
         b_args = b[1]
-        # print(a_name, b_name)
+
         assert a_name == b_name
         if a_name == custom_ops.HarmonicBond_f64:
             bond_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
@@ -91,8 +93,10 @@ def combiner(
 
     return c_nrgs, c_params, c_param_groups, c_conf, c_masses
 
+
 def to_md_units(q):
     return q.value_in_unit_system(simtk.unit.md_unit_system)
+
 
 def match_bonds(mol, triples):
     """
