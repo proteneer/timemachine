@@ -7,50 +7,6 @@ from timemachine.integrator import langevin_coefficients
 
 from timemachine import constants
 
-
-class Simulation():
-
-    def __init__(self, potentials, conf, masses):
-        """
-        Initialize a Simulation object.
-
-        Parameters
-        ----------
-        potentials: list of merged timemachine.Potentials
-            List of energy functions
-
-        conf: [N,3] np.array 
-            Numpy array of shape [N,3]
-
-        masses: [N] np.array
-            Masses of N objects
-
-        """
-        assert conf.shape[0] == len(masses)
-        assert conf.shape[1] == 3
-
-        self.potentials = potentials
-        self.conf = conf
-        self.masses = masses
-
-        self._optimizer = custom_ops.LangevinOptimizer_f64(
-            m_dt,
-            m_ca,
-            m_cb,
-            cc
-        )
-
-    def run(self, params, param_groups, dp_idxs):
-
-        dt = 0.0015
-        ca, cb, cc = langevin_coefficients(
-            temperature=25.0,
-            dt=dt,
-            friction=50,
-            masses=masses
-        )
-
-
 def average_E_and_derivatives(quartets):
     """
     Compute the average energy and derivatives

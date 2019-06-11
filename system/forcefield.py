@@ -28,8 +28,8 @@ def merge_potentials(nrgs):
             c_nrgs.append(custom_ops.LennardJones_f64(a_args[0], a_args[1]))
         elif a_name == custom_ops.Electrostatics_f64:
             c_nrgs.append(custom_ops.Electrostatics_f64(a_args[0], a_args[1]))
-        # else:
-        #     raise Exception("Unknown potential", a_name)
+        else:
+            raise Exception("Unknown potential", a_name)
 
     return c_nrgs  
 
