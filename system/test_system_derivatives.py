@@ -45,7 +45,7 @@ class ReferenceLangevin():
 class TestEnthalpyDerivatives(unittest.TestCase):
 
     def test_system_derivatives(self):
-        sdf_file = open("examples/guest-1.mol2").read()
+        sdf_file = open("examples/host-acd.mol2").read()
         smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
         mol = Chem.MolFromMol2Block(sdf_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
 

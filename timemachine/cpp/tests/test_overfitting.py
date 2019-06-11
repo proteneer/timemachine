@@ -11,7 +11,11 @@ class TestOverFit(unittest.TestCase):
 
 
     def test_overfit_host_acd(self):
-        potentials, coords, (params, param_groups), masses = serialize.deserialize_system('examples/host_acd.xml')
+        raw_potentials, coords, (params, param_groups), masses = serialize.deserialize_system('examples/host_acd.xml')
+
+        potentials = []
+        for p, args in raw_potentials:
+            potentials.append(p(*args))
 
         num_atoms = coords.shape[0]
 
@@ -54,7 +58,6 @@ class TestOverFit(unittest.TestCase):
             if i % 100 == 0:
                 print(i, ctxt.get_E())
 
-        print(ctxt.get_dx_dp())
 
         opt.set_dt(dt)
         opt.set_coeff_a(ca)
@@ -67,4 +70,3 @@ class TestOverFit(unittest.TestCase):
             if i % 100 == 0:
                 print(i, ctxt.get_E())
             
-        print(ctxt.get_dx_dp())
