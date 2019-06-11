@@ -33,8 +33,6 @@ def run_system(sdf_file):
 
     def run_simulation(host_params, guest_params, combined_params):
 
-        # num_atoms = combined_conf.shape[0]
-
         RH = simulation.run_simulation(
             host_potentials,
             host_params,
@@ -42,57 +40,53 @@ def run_system(sdf_file):
             host_conf,
             host_masses,
             host_dp_idxs,
-            1000,
-            1000000
+            500,
+            25000
         )
 
-        H_E, H_derivs = simulation.average_E_and_derivatives(RH) # [host_dp_idxs,]
+        H_E, H_analytic_derivs, H_thermo_derivs = simulation.average_E_and_derivatives(RH) # [host_dp_idxs,]
 
-        assert 0
+        RG = simulation.run_simulation(
+            guest_potentials,
+            guest_params,
+            guest_param_groups,
+            guest_conf,
+            guest_masses,
+            guest_dp_idxs,
+            500,
+            25000
+        )
 
-        # RG = simulation.run_simulation(
-        #     guest_potentials,
-        #     guest_params,
-        #     guest_param_groups,
-        #     guest_conf,
-        #     guest_masses,
-        #     guest_dp_idxs,
-        #     1000,
-        #     500000
-        # )
+        G_E, G_analytic_derivs, H_thermo_derivs = simulation.average_E_and_derivatives(RG) # [guest_dp_idxs,]
 
-        # G_E, G_derivs = simulation.average_E_and_derivatives(RG) # [guest_dp_idxs,]
+        RHG = simulation.run_simulation(
+            combined_potentials,
+            combined_params,
+            combined_param_groups,
+            combined_conf,
+            combined_masses,
+            combined_dp_idxs,
+            500,
+            25000
+        )
 
-        # assert 0
-
-        # assert 0
-
-        # RHG = simulation.run_simulation(
-        #     combined_potentials,
-        #     combined_params,
-        #     combined_param_groups,
-        #     combined_conf,
-        #     combined_masses,
-        #     combined_dp_idxs,
-        #     1,
-        #     20000
-        # )
-
-        HG_E, HG_derivs = simulation.average_E_and_derivatives(RHG) # [combined_dp_idxs,]
+        HG_E, HG_analytic_derivs, H_thermo_derivs = simulation.average_E_and_derivatives(RHG) # [combined_dp_idxs,]
 
         pred_enthalpy = HG_E - (G_E + H_E)
         # true_enthalpy = -20 # kilojoules
         true_enthalpy = 50 # kilojoules
         delta_enthalpy = pred_enthalpy - true_enthalpy
+        num_atoms = combined_conf.shape[0]
+
         loss = delta_enthalpy**2/num_atoms
 
         print("-----------True, Pred, Loss (in kcal/mol)", true_enthalpy, pred_enthalpy, np.abs(delta_enthalpy)/4.184)
         # fancy index into the full derivative set
         combined_derivs = np.zeros_like(combined_params)
         # remember its HG - H - G
-        combined_derivs[combined_dp_idxs] += HG_derivs
-        combined_derivs[host_dp_idxs] -= H_derivs
-        combined_derivs[guest_dp_idxs + len(host_params)] -= G_derivs
+        combined_derivs[combined_dp_idxs] += HG_thermo_derivs
+        combined_derivs[host_dp_idxs] -= H_thermo_derivs
+        combined_derivs[guest_dp_idxs + len(host_params)] -= G_thermo_derivs
         combined_derivs = (2*delta_enthalpy*combined_derivs)/num_atoms
 
         host_derivs = combined_derivs[:len(host_params)]
