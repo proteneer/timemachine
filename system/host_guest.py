@@ -57,7 +57,7 @@ def run_system(sdf_file):
             25000
         )
 
-        G_E, G_analytic_derivs, H_thermo_derivs = simulation.average_E_and_derivatives(RG) # [guest_dp_idxs,]
+        G_E, G_analytic_derivs, G_thermo_derivs = simulation.average_E_and_derivatives(RG) # [guest_dp_idxs,]
 
         RHG = simulation.run_simulation(
             combined_potentials,
@@ -70,7 +70,7 @@ def run_system(sdf_file):
             25000
         )
 
-        HG_E, HG_analytic_derivs, H_thermo_derivs = simulation.average_E_and_derivatives(RHG) # [combined_dp_idxs,]
+        HG_E, HG_analytic_derivs, HG_thermo_derivs = simulation.average_E_and_derivatives(RHG) # [combined_dp_idxs,]
 
         pred_enthalpy = HG_E - (G_E + H_E)
         # true_enthalpy = -20 # kilojoules
