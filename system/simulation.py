@@ -7,6 +7,50 @@ from timemachine.integrator import langevin_coefficients
 
 from timemachine import constants
 
+
+class Simulation():
+
+    def __init__(self, potentials, conf, masses):
+        """
+        Initialize a Simulation object.
+
+        Parameters
+        ----------
+        potentials: list of merged timemachine.Potentials
+            List of energy functions
+
+        conf: [N,3] np.array 
+            Numpy array of shape [N,3]
+
+        masses: [N] np.array
+            Masses of N objects
+
+        """
+        assert conf.shape[0] == len(masses)
+        assert conf.shape[1] == 3
+
+        self.potentials = potentials
+        self.conf = conf
+        self.masses = masses
+
+        self._optimizer = custom_ops.LangevinOptimizer_f64(
+            m_dt,
+            m_ca,
+            m_cb,
+            cc
+        )
+
+    def run(self, params, param_groups, dp_idxs):
+
+        dt = 0.0015
+        ca, cb, cc = langevin_coefficients(
+            temperature=25.0,
+            dt=dt,
+            friction=50,
+            masses=masses
+        )
+
+
 def average_E_and_derivatives(quartets):
     """
     Compute the average energy and derivatives
@@ -71,7 +115,7 @@ def run_simulation(
         
     dt = 0.0015
     ca, cb, cc = langevin_coefficients(
-        temperature=50.0,
+        temperature=25.0,
         dt=dt,
         friction=50,
         masses=masses
@@ -145,7 +189,7 @@ def run_simulation(
 
             # print(step, total_dE_dp)
 
-            limits = 1e3
+            limits = 1e5
             if min_dx < -limits or max_dx > limits:
                 raise Exception("Derivatives blew up:", min_dx, max_dx)
             return [E, dE_dx, dx_dp, dE_dp, step]
@@ -160,9 +204,9 @@ def run_simulation(
                 _, d, td = average_E_and_derivatives(R)
                 np.set_printoptions(suppress=True)
                 print(count)
-                print(d[:10])
-                print(td[:10])
-                print(td[:10]/d[:10])
+                print(d[:30])
+                print(td[:30])
+                print(td[:100]/d[:100])
 
         ctxt.step()
         # if count % 1000 == 0:

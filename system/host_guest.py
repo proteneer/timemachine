@@ -27,43 +27,43 @@ def run_system(sdf_file):
         host_conf, guest_conf,
         host_masses, guest_masses)
 
-    host_dp_idxs = np.argwhere(host_param_groups == 5).reshape(-1)
-    guest_dp_idxs = np.argwhere(guest_param_groups == 5).reshape(-1)
-    combined_dp_idxs = np.argwhere(combined_param_groups == 5).reshape(-1)
+    host_dp_idxs = np.argwhere(host_param_groups == 7).reshape(-1)
+    guest_dp_idxs = np.argwhere(guest_param_groups == 7).reshape(-1)
+    combined_dp_idxs = np.argwhere(combined_param_groups == 7).reshape(-1)
 
     def run_simulation(host_params, guest_params, combined_params):
 
         # num_atoms = combined_conf.shape[0]
 
-        # RH = simulation.run_simulation(
-        #     host_potentials,
-        #     host_params,
-        #     host_param_groups,
-        #     host_conf,
-        #     host_masses,
-        #     host_dp_idxs,
-        #     1000,
-        #     50000
-        # )
-
-        # H_E, H_derivs = simulation.average_E_and_derivatives(RH) # [host_dp_idxs,]
-
-        # assert 0
-
-        RG = simulation.run_simulation(
-            guest_potentials,
-            guest_params,
-            guest_param_groups,
-            guest_conf,
-            guest_masses,
-            guest_dp_idxs,
+        RH = simulation.run_simulation(
+            host_potentials,
+            host_params,
+            host_param_groups,
+            host_conf,
+            host_masses,
+            host_dp_idxs,
             1000,
-            500000
+            1000000
         )
 
-        G_E, G_derivs = simulation.average_E_and_derivatives(RG) # [guest_dp_idxs,]
+        H_E, H_derivs = simulation.average_E_and_derivatives(RH) # [host_dp_idxs,]
 
         assert 0
+
+        # RG = simulation.run_simulation(
+        #     guest_potentials,
+        #     guest_params,
+        #     guest_param_groups,
+        #     guest_conf,
+        #     guest_masses,
+        #     guest_dp_idxs,
+        #     1000,
+        #     500000
+        # )
+
+        # G_E, G_derivs = simulation.average_E_and_derivatives(RG) # [guest_dp_idxs,]
+
+        # assert 0
 
         # assert 0
 
