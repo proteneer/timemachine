@@ -2,6 +2,7 @@ import os
 import sys
 import numpy as np
 import datetime
+import sklearn.metrics
 
 from scipy import stats
 from rdkit import Chem
@@ -14,10 +15,48 @@ from openforcefield.typing.engines.smirnoff import ForceField
 from timemachine.lib import custom_ops
 from jax.experimental import optimizers
 
+import multiprocessing
 
-def run_simulation(host_params, host_steps, smirnoff_params, guest_steps, combined_params, combined_steps, prev_loss):
-    
-    global true_free_energy
+num_gpus = 2
+base_dir = "/home/yutong/Code/benchmarksets/input_files/cd-set1/mol2"
+
+def run_simulation(params):
+
+    p = multiprocessing.current_process()
+
+    combined_params, guest_sdf_file, label, idx = params
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % num_gpus)
+
+    print("processing", guest_sdf_file)
+    host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses = serialize.deserialize_system('examples/host_acd.xml')
+    host_params = combined_params[:len(dummy_host_params)]
+
+    guest_sdf = open(os.path.join(base_dir, guest_sdf_file), "r").read()
+
+    mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+
+    guest_potentials, _, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
+    smirnoff_params = combined_params[len(dummy_host_params):]
+
+    combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
+        host_potentials, guest_potentials,
+        host_params, smirnoff_params,
+        host_param_groups, smirnoff_param_groups,
+        host_conf, guest_conf,
+        host_masses, guest_masses)
+
+
+    def filter_groups(param_groups, groups):
+        roll = np.zeros_like(param_groups)
+        for g in groups:
+            roll = np.logical_or(roll, param_groups == g)
+        return roll
+
+    host_dp_idxs = np.argwhere(filter_groups(host_param_groups, [7,4,5,0,1,2,3])).reshape(-1)
+    guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7,4,5,0,1,2,3])).reshape(-1)
+    combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [7,4,5,0,1,2,3])).reshape(-1)
 
     RH = simulation.run_simulation(
         host_potentials,
@@ -27,7 +66,7 @@ def run_simulation(host_params, host_steps, smirnoff_params, guest_steps, combin
         host_masses,
         host_dp_idxs,
         1000,
-        host_steps
+        None
     )
 
     H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH) # [host_dp_idxs,]
@@ -40,7 +79,7 @@ def run_simulation(host_params, host_steps, smirnoff_params, guest_steps, combin
         guest_masses,
         guest_dp_idxs,
         1000,
-        guest_steps,
+        None
     )
 
     G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG) # [guest_dp_idxs,]
@@ -53,13 +92,13 @@ def run_simulation(host_params, host_steps, smirnoff_params, guest_steps, combin
         combined_masses,
         combined_dp_idxs,
         1000,
-        combined_steps,
+        None
     )
 
     HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG) # [combined_dp_idxs,]
     
     pred_enthalpy = HG_E - (G_E + H_E)
-    delta = pred_enthalpy - true_free_energy
+    delta = pred_enthalpy - label
     num_atoms = len(combined_masses)
     loss = delta**2
     
@@ -71,180 +110,106 @@ def run_simulation(host_params, host_steps, smirnoff_params, guest_steps, combin
     combined_derivs[guest_dp_idxs + len(host_params)] -= G_derivs
     # combined_derivs = 2*delta*combined_derivs # L2 derivative
     combined_derivs = (delta/np.abs(delta))*combined_derivs # L1 derivative
-    prev_loss = loss
 
-    host_derivs = combined_derivs[:len(host_params)]
-    guest_derivs = combined_derivs[len(host_params):]
-    
-    print("---------------------True, Pred, Loss", true_free_energy, pred_enthalpy, loss)
-    file.write("---------------------True, Pred, Loss {} {} {}\n".format(true_free_energy, pred_enthalpy, loss))
-    data.write("---------------------True, Pred, Loss {} {} {}\n".format(true_free_energy, pred_enthalpy, loss))
+    return combined_derivs, pred_enthalpy, label
 
-    return host_derivs, guest_derivs, combined_derivs, pred_enthalpy, prev_loss
+training_data = [
+    ['guest-1.mol2', -2.17*4.184],
+    ['guest-2.mol2', -4.19*4.184],
+    ['guest-3.mol2', -5.46*4.184],
+    ['guest-4.mol2', -2.74*4.184],
+    ['guest-5.mol2', -2.99*4.184],
+    ['guest-6.mol2', -2.53*4.184],
+    ['guest-7.mol2', -3.4*4.184],
+    ['guest-8.mol2', -4.89*4.184],
+    ['guest-s9.mol2', -2.57*4.184],
+    ['guest-s10.mol2', -2.68*4.184],
+    ['guest-s11.mol2', -3.28*4.184],
+    ['guest-s12.mol2', -4.2*4.184],
+    ['guest-s13.mol2', -4.28*4.184],
+    ['guest-s14.mol2', -4.66*4.184],
+    ['guest-s15.mol2', -4.74*4.184],
+    ['guest-s16.mol2', -2.75*4.184],
+    ['guest-s17.mol2', -0.93*4.184],
+    ['guest-s18.mol2', -2.75*4.184],
+    ['guest-s19.mol2', -4.12*4.184],
+    ['guest-s20.mol2', -3.36*4.184],
+    ['guest-s21.mol2', -4.19*4.184],
+    ['guest-s22.mol2', -4.48*4.184]
+]
 
-expected = {
-    'guest-1.mol2':-2.17*4.184,
-    'guest-2.mol2':-4.19*4.184,
-    'guest-3.mol2':-5.46*4.184,
-    'guest-4.mol2':-2.74*4.184,
-    'guest-5.mol2':-2.99*4.184,
-    'guest-6.mol2':-2.53*4.184,
-    'guest-7.mol2':-3.4*4.184,
-    'guest-8.mol2':-4.89*4.184,
-    'guest-s9.mol2':-2.57*4.184,
-    'guest-s10.mol2':-2.68*4.184,
-    'guest-s11.mol2':-3.28*4.184,
-    'guest-s12.mol2':-4.2*4.184,
-    'guest-s13.mol2':-4.28*4.184,
-    'guest-s14.mol2':-4.66*4.184,
-    'guest-s15.mol2':-4.74*4.184,
-    'guest-s16.mol2':-2.75*4.184,
-    'guest-s17.mol2':-0.93*4.184,
-    'guest-s18.mol2':-2.75*4.184,
-    'guest-s19.mol2':-4.12*4.184,
-    'guest-s20.mol2':-3.36*4.184,
-    'guest-s21.mol2':-4.19*4.184,
-    'guest-s22.mol2':-4.48*4.184
-}
 
-base_dir = "/home/yutong/Code/benchmarksets/input_files/cd-set1/mol2"
+def initialize_parameters():
 
-data = open("/home/yutong/Code/timemachine/system/data_adam.csv","a+")
-file = open("/home/yutong/Code/timemachine/system/output_adam.txt","a+")
-plot = open("/home/yutong/Code/timemachine/system/plot_adam.csv","a+")
-loss_plot = open("/home/yutong/Code/timemachine/system/loss_plot_adam.csv","a+")
+    _, _, (host_params, _), _ = serialize.deserialize_system('examples/host_acd.xml')
 
-files = np.array(['guest-s12.mol2', 'guest-s14.mol2', 'guest-s16.mol2', 'guest-s20.mol2', 'guest-s19.mol2', 'guest-2.mol2', 'guest-4.mol2', 'guest-s22.mol2', 'guest-6.mol2', 'guest-5.mol2', 'guest-s11.mol2', 'guest-3.mol2', 'guest-8.mol2', 'guest-s17.mol2', 'guest-s10.mol2', 'guest-s21.mol2', 'guest-7.mol2', 'guest-s13.mol2', 'guest-1.mol2', 'guest-s18.mol2', 'guest-s9.mol2', 'guest-s15.mol2'])
-# files = np.array(['guest-1.mol2', 'guest-2.mol2'])
+    # setting general smirnoff parameters for guest
+    sdf_file = open(os.path.join(base_dir, 'guest-1.mol2'),'r').read()
+    mol = Chem.MolFromMol2Block(sdf_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
-host_potentials, host_conf, (host_params, host_param_groups), host_masses = serialize.deserialize_system('/home/yutong/Code/timemachine/examples/host_acd.xml')
+    _, smirnoff_params, _, _, _ = forcefield.parameterize(mol, smirnoff)
 
-# setting general smirnoff parameters for guest
-sdf_file = open('/home/yutong/Code/benchmarksets/input_files/cd-set1/mol2/guest-1.mol2','r').read()
-mol = Chem.MolFromMol2Block(sdf_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
-smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
-
-guest_potentials, smirnoff_params, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
-
-combined_potentials, combined_params, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
-            host_potentials, guest_potentials,
-            host_params, smirnoff_params,
-            host_param_groups, smirnoff_param_groups,
-            host_conf, guest_conf,
-            host_masses, guest_masses)
-
-def filter_groups(param_groups, groups):
-    roll = np.zeros_like(param_groups)
-    for g in groups:
-        roll = np.logical_or(roll, param_groups == g)
-    return roll
-
-host_dp_idxs = np.argwhere(filter_groups(host_param_groups, [7,4,5,0,1,2,3])).reshape(-1)
-guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7,4,5,0,1,2,3])).reshape(-1)
-combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [7,4,5,0,1,2,3])).reshape(-1)
+    epoch_combined_params = np.concatenate([host_params, smirnoff_params])
+    return epoch_combined_params
 
 lr = .0005
 
-plot.write('epoch,guest,true enthalpy,computed enthalpy\n')
-loss_plot.write('epoch,r2,mae,loss\n')
+# plot.write('epoch,guest,true enthalpy,computed enthalpy\n')
+# loss_plot.write('epoch,r2,mae,loss\n')
 
 prev_loss = None
 
-count = 0
-
-init_params = combined_params
+init_params = initialize_parameters()
 opt_init, opt_update, get_params = optimizers.adam(lr)
 opt_state = opt_init(init_params)
 
-for t in range(35):
-    print('epoch:', datetime.datetime.now(), t)
+num_data_points = len(training_data)
+batch_size = num_gpus
+num_batches = int(np.ceil(num_data_points/batch_size))
+
+pool = multiprocessing.Pool(batch_size)
+
+count = 0
+
+for epoch in range(100):
+
+    print('----epoch:', epoch, "started at", datetime.datetime.now(), '----')
     
-    np.random.shuffle(files)
-    
-    x = np.array([])
-    y = np.array([])
-    errors = np.array([])
-    losses = np.array([])
-    
-    for filename in files:
-        
-        pred_enthalpy = None
-        
-        true_free_energy = expected[filename]
+    np.random.shuffle(training_data)
 
-        sdf_file = open('/home/yutong/Code/benchmarksets/input_files/cd-set1/mol2/' + filename,'r').read()
-        mol = Chem.MolFromMol2Block(sdf_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    epoch_predictions = []
+    epoch_labels = []
+    epoch_filenames = []
 
-        guest_potentials, _, _, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
+    for fn in training_data:
+        epoch_filenames.append(fn)
 
-        combined_potentials, _, _, combined_conf, combined_masses = forcefield.combiner(
-            host_potentials, guest_potentials,
-            host_params, smirnoff_params,
-            host_param_groups, smirnoff_param_groups,
-            host_conf, guest_conf,
-            host_masses, guest_masses)
+    for b_idx in range(num_batches):
+        start_idx = b_idx*batch_size
+        end_idx = min((b_idx+1)*batch_size, num_data_points)
+        batch_data = training_data[start_idx:end_idx]
 
-        print('--------------------running simulation for {} in host-acd, temp = 5 K, all charges & torsions, alpha=.0005--------------------'.format(filename))
-        file.write('---------------------running simulation for {} in host-acd, temp = 5 K, all charges & torsions, alpha=.0005--------------------\n'.format(filename))
-        data.write('---------------------running simulation for {} in host-acd, temp = 5 K, all charges & torsions, alpha=.0005--------------------\n'.format(filename))
+        args = []
 
-        # try:        
-            # for t in range(50):
-            
-            # opt_state, pred_enthalpy, prev_loss = step(count, opt_state)
-            # def step(i, opt_state):   
-                # global prev_loss, combined_params, host_params, smirnoff_params
-            
-        combined_params = get_params(opt_state)
-        host_params = combined_params[:len(host_params)]
-        smirnoff_params = combined_params[len(host_params):]
-        
-        np.set_printoptions(suppress=True)
-        print("current_params, {}".format(combined_params[combined_dp_idxs]))
-        np.savetxt("param.npy", combined_params)
-        file.write('current_params, {}\n'.format(combined_params[combined_dp_idxs]))
-        
-        host_derivs, guest_derivs, combined_derivs, pred_enthalpy, prev_loss = run_simulation(host_params, 15000, smirnoff_params, 7500, combined_params, 30000, prev_loss)
-        plot.write('{},{},{},{}\n'.format(t,filename,true_free_energy,pred_enthalpy))
-        
-        opt_state = opt_update(count,combined_derivs,opt_state)
+        for b_idx, b in enumerate(batch_data):
+            args.append([get_params(opt_state), b[0], b[1], b_idx])
 
-        # return opt_update(i, combined_derivs, opt_state), pred_enthalpy, prev_loss
-        
-        x = np.append(x,true_free_energy)
-        y = np.append(y,pred_enthalpy)
-        errors = np.append(errors, abs(true_free_energy - pred_enthalpy))
-        losses = np.append(losses, prev_loss)
-        
+        results = pool.map(run_simulation, args)
+
+        batch_dp = np.zeros_like(init_params)
+
+        for grads, preds, labels in results:
+            batch_dp += grads
+            epoch_predictions.append(preds)
+            epoch_labels.append(labels)
+
         count += 1
+        opt_state = opt_update(count, batch_dp, opt_state)
 
-        # except Exception as e:
-        #     converged = 'fail'
-        #     print("simulation failed {} for {}".format(e, filename))
-        #     file.write("simulation failed {} for {}\n".format(e, filename))
+    epoch_predictions = np.array(epoch_predictions)
+    epoch_labels = np.array(epoch_labels)
 
-    r2 = (stats.pearsonr(x,y)[0])**2
-    mae = np.mean(errors)
-    average_loss = np.mean(losses)
-    data.write('r^2 for epoch {}: {}\n'.format(t,r2))
-    data.write('MAE for epoch {}: {}\n'.format(t,mae))
-    loss_plot.write('{},{},{}\n'.format(t,r2,mae,average_loss))
-    print('r^2 for epoch {}: {}\n'.format(t,r2))
-    print('MAE for epoch {}: {}\n'.format(t,mae))
-            
-
-            # Gradient Descent Optimizer
-    #         def gd_opt(lr):
-    #             for _ in range(25):
-    #                 # print("current_params", combined_params[combined_dp_idxs])
-    #                 print('learning rate: {}'.format(lr))
-    #                 np.set_printoptions(suppress=True)
-    #                 file.write("current_params, {}\n".format(combined_params[combined_dp_idxs]))
-    #                 host_derivs, guest_derivs, combined_derivs, pred_enthalpy, prev_loss = run_simulation(host_params, 5000, smirnoff_params, 5000, combined_params, 5000, prev_loss)
-    #                 host_params -= lr*host_derivs
-    #                 smirnoff_params -= lr*guest_derivs
-    #                 combined_params -= lr*combined_derivs
-    #                 np.testing.assert_almost_equal(np.concatenate([host_params, smirnoff_params]), combined_params)
-    #                 if (_ - 1) % 4 == 0:
-    #                     lr = lr / 2
-#             return pred_enthalpy
+    np.savez("run_"+str(epoch)+".npz", preds=epoch_predictions, labels=epoch_labels, filenames=fn)
+    
+    print("pearsonr", stats.pearsonr(epoch_predictions, epoch_labels), "r2_score:", sklearn.metrics.r2_score(epoch_predictions, epoch_labels), "mae:", np.mean(np.abs(epoch_predictions-epoch_labels)))

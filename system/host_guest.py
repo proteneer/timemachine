@@ -10,7 +10,10 @@ from openforcefield.typing.engines.smirnoff import ForceField
 from timemachine.lib import custom_ops
 
 import os
+
+
 def run_system(sdf_file):
+
 
     host_potentials, host_conf, (host_params, host_param_groups), host_masses = serialize.deserialize_system('examples/host_acd.xml')
 
@@ -122,6 +125,9 @@ for filename in sorted(os.listdir(base_dir)):
         file_path = os.path.join(base_dir, filename)
         file_data = open(file_path, "r").read()
         print("processing", filename)
+
+
+
         pred_enthalpy = run_system(file_data)
         print(filename, pred_enthalpy)
         results.append([filename, pred_enthalpy])

@@ -110,8 +110,8 @@ def run_simulation(
             window_std = np.std(minimization_energies[-window_size:])
             if window_std < 1.046/2:
                 break
-        if i % 1000 == 0:
-            print("minimization", i, E)
+        # if i % 1000 == 0:
+            # print("minimization", i, E)
 
     if i == max_iter-1:
         raise Exception("Energy minimization failed to converge in ", i, "steps")

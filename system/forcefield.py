@@ -173,7 +173,6 @@ def parameterize(mol, forcefield):
     for handler in forcefield._parameter_handlers.items():
 
         handler_name, handler_params = handler
-        print(handler_name)
 
         if handler_name == 'Bonds':
 
