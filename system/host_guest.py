@@ -10,84 +10,129 @@ from openforcefield.typing.engines.smirnoff import ForceField
 from timemachine.lib import custom_ops
 
 import os
+def run_system(sdf_file):
 
-host_potentials, host_conf, (host_params, host_param_groups), host_masses = serialize.deserialize_system('/home/ubuntu/Relay/Code/timemachine/examples/host_systems/host-acd/host-acd.xml')
+    host_potentials, host_conf, (host_params, host_param_groups), host_masses = serialize.deserialize_system('examples/host_acd.xml')
 
-# data = open("/home/ubuntu/Relay/Code/timemachine/system/data.csv","a")
+    mol = Chem.MolFromMol2Block(sdf_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
-directory = "/home/ubuntu/Relay/Code/timemachine/examples/guest_systems/"
+    guest_potentials, guest_params, guest_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
 
-# for filename in os.listdir(directory):
-#     if "_" not in filename:
-mol2path = directory + "guest-s17" + "/" + "guest-s17" + ".mol2"
-print(mol2path)
+    combined_potentials, combined_params, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
+        host_potentials, guest_potentials,
+        host_params, guest_params,
+        host_param_groups, guest_param_groups,
+        host_conf, guest_conf,
+        host_masses, guest_masses)
 
-f = open(mol2path,"r")
-test_sdf = f.read()
+    host_dp_idxs = np.argwhere(host_param_groups == 7).reshape(-1)
+    guest_dp_idxs = np.argwhere(guest_param_groups == 7).reshape(-1)
+    combined_dp_idxs = np.argwhere(combined_param_groups == 7).reshape(-1)
 
-mol = Chem.MolFromMol2Block(test_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
-smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+    def run_simulation(host_params, guest_params, combined_params):
 
-guest_potentials, guest_params, guest_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
+        RH = simulation.run_simulation(
+            host_potentials,
+            host_params,
+            host_param_groups,
+            host_conf,
+            host_masses,
+            host_dp_idxs,
+            500,
+            25000
+        )
 
-combined_potentials, combined_params, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
-    host_potentials, guest_potentials,
-    host_params, guest_params,
-    host_param_groups, guest_param_groups,
-    host_conf, guest_conf,
-    host_masses, guest_masses)
+        H_E, H_analytic_derivs, H_thermo_derivs = simulation.average_E_and_derivatives(RH) # [host_dp_idxs,]
 
-# print(host_conf)
-# print(len(host_params))
-# print(len(host_param_groups))
-# assert 0
-for _ in range(5):
-    R_host, host_converge = simulation.run_simulation(
-        host_potentials,
-        host_params,
-        host_param_groups,
-        host_conf,
-        host_masses,
-        np.argwhere(host_param_groups == 7).reshape(-1),
-        250,
-        50000
-    )
+        RG = simulation.run_simulation(
+            guest_potentials,
+            guest_params,
+            guest_param_groups,
+            guest_conf,
+            guest_masses,
+            guest_dp_idxs,
+            500,
+            25000
+        )
 
-    # print(len(R))
+        G_E, G_analytic_derivs, G_thermo_derivs = simulation.average_E_and_derivatives(RG) # [guest_dp_idxs,]
 
-    R_guest, guest_converge = simulation.run_simulation(
-        guest_potentials,
-        guest_params,
-        guest_param_groups,
-        guest_conf,
-        guest_masses,
-        np.argwhere(guest_param_groups == 7).reshape(-1),
-        250,
-        20000
-    )
+        RHG = simulation.run_simulation(
+            combined_potentials,
+            combined_params,
+            combined_param_groups,
+            combined_conf,
+            combined_masses,
+            combined_dp_idxs,
+            500,
+            25000
+        )
 
-    # print(len(R))
+        HG_E, HG_analytic_derivs, HG_thermo_derivs = simulation.average_E_and_derivatives(RHG) # [combined_dp_idxs,]
 
-    R_comb, comb_converge = simulation.run_simulation(
-        combined_potentials,
-        combined_params,
-        combined_param_groups,
-        combined_conf,
-        combined_masses,
-        np.argwhere(guest_param_groups == 7).reshape(-1),
-        250,
-        100000
-    )
+        pred_enthalpy = HG_E - (G_E + H_E)
+        # true_enthalpy = -20 # kilojoules
+        true_enthalpy = 50 # kilojoules
+        delta_enthalpy = pred_enthalpy - true_enthalpy
+        num_atoms = combined_conf.shape[0]
 
-    # print(len(R))
+        loss = delta_enthalpy**2/num_atoms
 
-    host_avg_E = np.sum(np.array(R_host)) / len(R_host) 
-    guest_avg_E = np.sum(np.array(R_guest)) / len(R_guest)
-    comb_avg_E = np.sum(np.array(R_comb)) / len(R_comb)
-    enthalpy = comb_avg_E - (host_avg_E + guest_avg_E)
-    print('{},{},{},{},{},{},{},{}\n'.format("guest-s17",host_avg_E,host_converge,guest_avg_E,guest_converge,comb_avg_E,comb_converge,enthalpy))
-    
-    
-# print('host: {}'.format(host_avg_E))
-# print('guest: {}'.format(guest_avg_E))
-# print('combined: {}'.format(comb_avg_E))
+        print("-----------True, Pred, Loss (in kcal/mol)", true_enthalpy, pred_enthalpy, np.abs(delta_enthalpy)/4.184)
+        # fancy index into the full derivative set
+        combined_derivs = np.zeros_like(combined_params)
+        # remember its HG - H - G
+        combined_derivs[combined_dp_idxs] += HG_thermo_derivs
+        combined_derivs[host_dp_idxs] -= H_thermo_derivs
+        combined_derivs[guest_dp_idxs + len(host_params)] -= G_thermo_derivs
+        combined_derivs = (2*delta_enthalpy*combined_derivs)/num_atoms
+
+        host_derivs = combined_derivs[:len(host_params)]
+        guest_derivs = combined_derivs[len(host_params):]
+
+        return host_derivs, guest_derivs, combined_derivs
+
+    for _ in range(500):
+
+        print("current_params", combined_params[combined_dp_idxs])
+
+        host_derivs, guest_derivs, combined_derivs = run_simulation(host_params, guest_params, combined_params)
+        lr = 1e-6
+        host_params -= lr*host_derivs
+        guest_params -= lr*guest_derivs
+        combined_params -= lr*combined_derivs
+
+
+    return res[-1]
+
+base_dir = "/home/yutong/Code/benchmarksets/input_files/cd-set1/mol2"
+
+results = []
+for filename in sorted(os.listdir(base_dir)):
+    if filename != 'guest-1.mol2':
+        continue
+    if 'guest' in filename:
+
+        file_path = os.path.join(base_dir, filename)
+        file_data = open(file_path, "r").read()
+        print("processing", filename)
+        pred_enthalpy = run_system(file_data)
+        print(filename, pred_enthalpy)
+        results.append([filename, pred_enthalpy])
+
+# print(results)
+
+# for _ in range(20):
+
+#     print("current_params", combined_params[combined_dp_idxs])
+
+#     host_derivs, guest_derivs, combined_derivs = run_simulation(host_params, guest_params, combined_params)
+#     lr = 1e-6
+#     host_params -= lr*host_derivs
+#     guest_params -= lr*guest_derivs
+#     combined_params -= lr*combined_derivs
+
+
+
+#     np.testing.assert_almost_equal(np.concatenate([host_params, guest_params]), combined_params)
