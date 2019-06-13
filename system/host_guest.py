@@ -1,5 +1,3 @@
-import os
-import sys
 import numpy as np
 
 from rdkit import Chem
@@ -11,6 +9,7 @@ from openforcefield.typing.engines.smirnoff import ForceField
 
 from timemachine.lib import custom_ops
 
+import os
 def run_system(sdf_file):
 
     host_potentials, host_conf, (host_params, host_param_groups), host_masses = serialize.deserialize_system('examples/host_acd.xml')
@@ -142,6 +141,3 @@ for filename in sorted(os.listdir(base_dir)):
 
 
 #     np.testing.assert_almost_equal(np.concatenate([host_params, guest_params]), combined_params)
-
-#     # host_params
-#     # guest_params 

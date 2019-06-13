@@ -69,12 +69,6 @@ void declare_context(py::module &m, const char *typestr) {
         ctxt.get_dE_dx(buffer.mutable_data());
         return buffer;
     })
-    .def("get_dE_dp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
-        unsigned int DP = ctxt.num_dparams();
-        py::array_t<RealType, py::array::c_style> buffer({DP});
-        ctxt.get_dE_dp(buffer.mutable_data());
-        return buffer;
-    })
     .def("get_x", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
         auto N = ctxt.num_atoms();
         py::array_t<RealType, py::array::c_style> buffer({N, 3});

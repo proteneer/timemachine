@@ -55,8 +55,9 @@ def combiner(
     a_nrgs.sort(key=str)
     b_nrgs.sort(key=str)
 
-    c_nrgs = []
 
+
+    c_nrgs = []
     for a, b in zip(a_nrgs, b_nrgs):
         a_name = a[0]
         a_args = a[1]
@@ -172,6 +173,7 @@ def parameterize(mol, forcefield):
     for handler in forcefield._parameter_handlers.items():
 
         handler_name, handler_params = handler
+        print(handler_name)
 
         if handler_name == 'Bonds':
 
