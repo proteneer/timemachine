@@ -64,7 +64,7 @@ def deserialize_system(filepath):
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
             test_hb = (
-                custom_ops.HarmonicBond_f64,
+                custom_ops.HarmonicBond_f32,
                 (
                     bond_idxs,
                     param_idxs
@@ -91,7 +91,7 @@ def deserialize_system(filepath):
             angle_idxs = np.array(angle_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
-            test_ha = (custom_ops.HarmonicAngle_f64,
+            test_ha = (custom_ops.HarmonicAngle_f32,
                 (
                     angle_idxs,
                     param_idxs
@@ -121,7 +121,7 @@ def deserialize_system(filepath):
             torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
-            test_ha = (custom_ops.PeriodicTorsion_f64,
+            test_ha = (custom_ops.PeriodicTorsion_f32,
                 (
                     torsion_idxs,
                     param_idxs
@@ -168,7 +168,7 @@ def deserialize_system(filepath):
             charge_param_idxs = np.array(charge_param_idxs, dtype=np.int32)
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
 
-            test_lj = (custom_ops.LennardJones_f64,
+            test_lj = (custom_ops.LennardJones_f32,
                 (
                     scale_matrix,
                     lj_param_idxs
@@ -177,7 +177,7 @@ def deserialize_system(filepath):
 
             test_potentials.append(test_lj)
 
-            test_es = (custom_ops.Electrostatics_f64,
+            test_es = (custom_ops.Electrostatics_f32,
                 (
                     scale_matrix,
                     charge_param_idxs,

@@ -30,7 +30,7 @@ void declare_context(py::module &m, const char *typestr) {
         const py::array_t<RealType, py::array::c_style> &params,
         const py::array_t<RealType, py::array::c_style> &x0,
         const py::array_t<RealType, py::array::c_style> &v0,
-        const py::array_t<RealType, py::array::c_style> &dp_idxs
+        const py::array_t<int, py::array::c_style> &dp_idxs
     ) {
         const int N = x0.shape()[0];
         const int P = params.shape()[0];

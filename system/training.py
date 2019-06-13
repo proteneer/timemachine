@@ -1,6 +1,7 @@
 import os
 import sys
 import numpy as np
+import datetime
 
 from scipy import stats
 from rdkit import Chem
@@ -114,9 +115,8 @@ file = open("/home/yutong/Code/timemachine/system/output_adam.txt","a+")
 plot = open("/home/yutong/Code/timemachine/system/plot_adam.csv","a+")
 loss_plot = open("/home/yutong/Code/timemachine/system/loss_plot_adam.csv","a+")
 
-# files = np.array(['guest-s12.mol2', 'guest-s14.mol2', 'guest-s16.mol2', 'guest-s20.mol2', 'guest-s19.mol2', 'guest-2.mol2', 'guest-4.mol2', 'guest-s22.mol2', 'guest-6.mol2', 'guest-5.mol2', 'guest-s11.mol2', 'guest-3.mol2', 'guest-8.mol2', 'guest-s17.mol2', 'guest-s10.mol2', 'guest-s21.mol2', 'guest-7.mol2', 'guest-s13.mol2', 'guest-1.mol2', 'guest-s18.mol2', 'guest-s9.mol2', 'guest-s15.mol2'])
-
-files = np.array(['guest-1.mol2', 'guest-2.mol2'])
+files = np.array(['guest-s12.mol2', 'guest-s14.mol2', 'guest-s16.mol2', 'guest-s20.mol2', 'guest-s19.mol2', 'guest-2.mol2', 'guest-4.mol2', 'guest-s22.mol2', 'guest-6.mol2', 'guest-5.mol2', 'guest-s11.mol2', 'guest-3.mol2', 'guest-8.mol2', 'guest-s17.mol2', 'guest-s10.mol2', 'guest-s21.mol2', 'guest-7.mol2', 'guest-s13.mol2', 'guest-1.mol2', 'guest-s18.mol2', 'guest-s9.mol2', 'guest-s15.mol2'])
+# files = np.array(['guest-1.mol2', 'guest-2.mol2'])
 
 host_potentials, host_conf, (host_params, host_param_groups), host_masses = serialize.deserialize_system('/home/yutong/Code/timemachine/examples/host_acd.xml')
 
@@ -158,7 +158,7 @@ opt_init, opt_update, get_params = optimizers.adam(lr)
 opt_state = opt_init(init_params)
 
 for t in range(35):
-    print('epoch:',t)
+    print('epoch:', datetime.datetime.now(), t)
     
     np.random.shuffle(files)
     
@@ -202,6 +202,7 @@ for t in range(35):
         
         np.set_printoptions(suppress=True)
         print("current_params, {}".format(combined_params[combined_dp_idxs]))
+        np.savetxt("param.npy", combined_params)
         file.write('current_params, {}\n'.format(combined_params[combined_dp_idxs]))
         
         host_derivs, guest_derivs, combined_derivs, pred_enthalpy, prev_loss = run_simulation(host_params, 15000, smirnoff_params, 7500, combined_params, 30000, prev_loss)

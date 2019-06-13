@@ -68,7 +68,7 @@ def run_simulation(
 
     potentials = forcefield.merge_potentials(potentials)
         
-    dt = 0.002
+    dt = 0.0005
     ca, cb, cc = langevin_coefficients(
         temperature=25.0,
         dt=dt,
@@ -78,28 +78,28 @@ def run_simulation(
 
     m_dt, m_ca, m_cb, m_cc = dt, 0.5, cb, np.zeros_like(masses)
 
-    opt = custom_ops.LangevinOptimizer_f64(
+    opt = custom_ops.LangevinOptimizer_f32(
         m_dt,
         m_ca,
-        m_cb,
-        m_cc
+        m_cb.astype(np.float32),
+        m_cc.astype(np.float32)
     )
 
     v0 = np.zeros_like(conf)
     dp_idxs = dp_idxs.astype(np.int32)
 
-    ctxt = custom_ops.Context_f64(
+    ctxt = custom_ops.Context_f32(
         potentials,
         opt,
-        params,
-        conf, # x0
-        v0, # v0
+        params.astype(np.float32),
+        conf.astype(np.float32), # x0
+        v0.astype(np.float32), # v0
         dp_idxs
     )
 
     # Minimize the system and carry the gradient over
     # call system converged when the delta is .25 kcal)
-    max_iter = 10000
+    max_iter = 25000
     window_size = 150
     minimization_energies = []
     for i in range(max_iter):
@@ -108,7 +108,7 @@ def run_simulation(
         minimization_energies.append(E)
         if len(minimization_energies) > window_size:
             window_std = np.std(minimization_energies[-window_size:])
-            if window_std < 1.046:
+            if window_std < 1.046/2:
                 break
         if i % 1000 == 0:
             print("minimization", i, E)
