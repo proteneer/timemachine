@@ -68,7 +68,7 @@ def run_simulation(
 
     potentials = forcefield.merge_potentials(potentials)
         
-    dt = 0.0015
+    dt = 0.002
     ca, cb, cc = langevin_coefficients(
         temperature=25.0,
         dt=dt,
@@ -110,54 +110,64 @@ def run_simulation(
             window_std = np.std(minimization_energies[-window_size:])
             if window_std < 1.046:
                 break
+        if i % 1000 == 0:
+            print("minimization", i, E)
 
     if i == max_iter-1:
         raise Exception("Energy minimization failed to converge in ", i, "steps")
     else:
-        print("Minimization converged in", i, "steps")
+        print("Minimization converged in", i, "steps to", E)
 
-    #modify integrator to do dynamics
-    opt.set_dt(dt)
-    opt.set_coeff_a(ca)
-    opt.set_coeff_b(cb)
-    opt.set_coeff_c(cc)
+    # #modify integrator to do dynamics
+    # opt.set_dt(dt)
+    # opt.set_coeff_a(ca)
+    # opt.set_coeff_b(cb)
+    # opt.set_coeff_c(cc)
 
-    # dynamics via reservoir sampling
-    k = n_samples # number of samples we want to keep
-    R = []
-    count = 0
+    # # dynamics via reservoir sampling
+    # k = n_samples # number of samples we want to keep
+    # R = []
+    # count = 0
 
-    for count in range(n_steps):
+    # for count in range(n_steps):
 
-        # closure around R, and ctxt
-        def get_reservoir_item(step):
-            E = ctxt.get_E()
-            dE_dx = ctxt.get_dE_dx()
-            dx_dp = ctxt.get_dx_dp()
-            dE_dp = ctxt.get_dE_dp()
-            min_dx = np.amin(dx_dp)
-            max_dx = np.amax(dx_dp)
-            lhs = np.einsum('kl,mkl->m', dE_dx, dx_dp)
-            total_dE_dp = lhs + dE_dp
+    #     # closure around R, and ctxt
+    #     def get_reservoir_item(step):
+    #         E = ctxt.get_E()
+    #         dE_dx = ctxt.get_dE_dx()
+    #         dx_dp = ctxt.get_dx_dp()
+    #         dE_dp = ctxt.get_dE_dp()
+    #         min_dx = np.amin(dx_dp)
+    #         max_dx = np.amax(dx_dp)
+    #         lhs = np.einsum('kl,mkl->m', dE_dx, dx_dp)
+    #         total_dE_dp = lhs + dE_dp
 
-            # print(step, total_dE_dp)
+    #         # print(step, total_dE_dp)
 
-            limits = 1e5
-            # if min_dx < -limits or max_dx > limits:
-                # raise Exception("Derivatives blew up:", min_dx, max_dx)
-            return [E, dE_dx, dx_dp, dE_dp, step]
+    #         limits = 1e5
+    #         # if min_dx < -limits or max_dx > limits:
+    #             # raise Exception("Derivatives blew up:", min_dx, max_dx)
+    #         return [E, dE_dx, dx_dp, dE_dp, step]
 
-        if count < k:
-            R.append(get_reservoir_item(count))
-        else:
-            j = random.randint(0, count)
-            if j < k:
-                R[j] = get_reservoir_item(count)
-                np.set_printoptions(suppress=True)
+    #     if count < k:
+    #         R.append(get_reservoir_item(count))
+    #     else:
+    #         j = random.randint(0, count)
+    #         if j < k:
+    #             R[j] = get_reservoir_item(count)
+    #             np.set_printoptions(suppress=True)
 
-        if count % 5000 == 0:
-            print("count", count)
+    #     if count % 5000 == 0:
+    #         print("count", count)
 
-        ctxt.step()
+    #     ctxt.step()
+
+    R = [[
+        ctxt.get_E(),
+        ctxt.get_dE_dx(),
+        ctxt.get_dx_dp(),
+        ctxt.get_dE_dp(),
+        0
+    ]]
 
     return R

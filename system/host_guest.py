@@ -27,9 +27,13 @@ def run_system(sdf_file):
         host_conf, guest_conf,
         host_masses, guest_masses)
 
-    host_dp_idxs = np.argwhere(host_param_groups == 7).reshape(-1)
-    guest_dp_idxs = np.argwhere(guest_param_groups == 7).reshape(-1)
-    combined_dp_idxs = np.argwhere(combined_param_groups == 7).reshape(-1)
+    # host_dp_idxs = np.argwhere(host_param_groups == 7).reshape(-1)
+    # guest_dp_idxs = np.argwhere(guest_param_groups == 7).reshape(-1)
+    # combined_dp_idxs = np.argwhere(combined_param_groups == 7).reshape(-1)
+
+    host_dp_idxs = np.argwhere(np.logical_or(host_param_groups == 7, host_param_groups == 5)).reshape(-1)
+    guest_dp_idxs = np.argwhere(np.logical_or(guest_param_groups == 7, guest_param_groups == 5)).reshape(-1)
+    combined_dp_idxs = np.argwhere(np.logical_or(combined_param_groups == 7, combined_param_groups == 5)).reshape(-1)
 
     def run_simulation(host_params, guest_params, combined_params):
 
@@ -83,10 +87,10 @@ def run_system(sdf_file):
         print("-----------True, Pred, Loss (in kcal/mol)", true_enthalpy, pred_enthalpy, np.abs(delta_enthalpy)/4.184)
         # fancy index into the full derivative set
         combined_derivs = np.zeros_like(combined_params)
-        # remember its HG - H - G
-        combined_derivs[combined_dp_idxs] += HG_thermo_derivs
-        combined_derivs[host_dp_idxs] -= H_thermo_derivs
-        combined_derivs[guest_dp_idxs + len(host_params)] -= G_thermo_derivs
+        # remember its HG - (H + G)
+        combined_derivs[combined_dp_idxs] += HG_analytic_derivs
+        combined_derivs[host_dp_idxs] -= H_analytic_derivs
+        combined_derivs[guest_dp_idxs + len(host_params)] -= G_analytic_derivs
         combined_derivs = (2*delta_enthalpy*combined_derivs)/num_atoms
 
         host_derivs = combined_derivs[:len(host_params)]
@@ -94,9 +98,10 @@ def run_system(sdf_file):
 
         return host_derivs, guest_derivs, combined_derivs
 
-    for _ in range(500):
+    for epoch in range(500):
 
-        print("current_params", combined_params[combined_dp_idxs])
+        print("starting epoch", epoch)
+        # print("current_params", epoch, combined_params[combined_dp_idxs])
 
         host_derivs, guest_derivs, combined_derivs = run_simulation(host_params, guest_params, combined_params)
         lr = 1e-6
