@@ -23,8 +23,7 @@ def deserialize_system(filepath):
     filename, file_extension = os.path.splitext(filepath)
     sys_xml = open(filepath, 'r').read()
     system = mm.XmlSerializer.deserialize(sys_xml)
-    # coords = np.loadtxt(filename + '.xyz').astype(np.float64)
-    coords = np.loadtxt(filename + '.xyz',skiprows=2,usecols=(1,2,3)).astype(np.float64)
+    coords = np.loadtxt(filename + '.xyz').astype(np.float64)
     coords = coords/10
 
     global_params = []

@@ -82,31 +82,30 @@ def run_simulation(host_params, host_steps, smirnoff_params, guest_steps, combin
 
     return host_derivs, guest_derivs, combined_derivs, pred_enthalpy, prev_loss
 
-# res = run_simulation(host_params, smirnoff_params, combined_params)
-# return res[-1]
-
-expected = {'guest-1.mol2':-2.17*4.184,
-'guest-2.mol2':-4.19*4.184,
-'guest-3.mol2':-5.46*4.184,
-'guest-4.mol2':-2.74*4.184,
-'guest-5.mol2':-2.99*4.184,
-'guest-6.mol2':-2.53*4.184,
-'guest-7.mol2':-3.4*4.184,
-'guest-8.mol2':-4.89*4.184,
-'guest-s9.mol2':-2.57*4.184,
-'guest-s10.mol2':-2.68*4.184,
-'guest-s11.mol2':-3.28*4.184,
-'guest-s12.mol2':-4.2*4.184,
-'guest-s13.mol2':-4.28*4.184,
-'guest-s14.mol2':-4.66*4.184,
-'guest-s15.mol2':-4.74*4.184,
-'guest-s16.mol2':-2.75*4.184,
-'guest-s17.mol2':-0.93*4.184,
-'guest-s18.mol2':-2.75*4.184,
-'guest-s19.mol2':-4.12*4.184,
-'guest-s20.mol2':-3.36*4.184,
-'guest-s21.mol2':-4.19*4.184,
-'guest-s22.mol2':-4.48*4.184,}
+expected = {
+    'guest-1.mol2':-2.17*4.184,
+    'guest-2.mol2':-4.19*4.184,
+    'guest-3.mol2':-5.46*4.184,
+    'guest-4.mol2':-2.74*4.184,
+    'guest-5.mol2':-2.99*4.184,
+    'guest-6.mol2':-2.53*4.184,
+    'guest-7.mol2':-3.4*4.184,
+    'guest-8.mol2':-4.89*4.184,
+    'guest-s9.mol2':-2.57*4.184,
+    'guest-s10.mol2':-2.68*4.184,
+    'guest-s11.mol2':-3.28*4.184,
+    'guest-s12.mol2':-4.2*4.184,
+    'guest-s13.mol2':-4.28*4.184,
+    'guest-s14.mol2':-4.66*4.184,
+    'guest-s15.mol2':-4.74*4.184,
+    'guest-s16.mol2':-2.75*4.184,
+    'guest-s17.mol2':-0.93*4.184,
+    'guest-s18.mol2':-2.75*4.184,
+    'guest-s19.mol2':-4.12*4.184,
+    'guest-s20.mol2':-3.36*4.184,
+    'guest-s21.mol2':-4.19*4.184,
+    'guest-s22.mol2':-4.48*4.184
+}
 
 base_dir = "/home/yutong/Code/benchmarksets/input_files/cd-set1/mol2"
 
