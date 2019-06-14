@@ -210,6 +210,6 @@ for epoch in range(100):
     epoch_predictions = np.array(epoch_predictions)
     epoch_labels = np.array(epoch_labels)
 
-    np.savez("run_"+str(epoch)+".npz", preds=epoch_predictions, labels=epoch_labels, filenames=fn)
+    np.savez("run_"+str(epoch)+".npz", preds=epoch_predictions, labels=epoch_labels, filenames=fn, params=get_params(opt_state))
     
     print("pearsonr", stats.pearsonr(epoch_predictions, epoch_labels), "r2_score:", sklearn.metrics.r2_score(epoch_predictions, epoch_labels), "mae:", np.mean(np.abs(epoch_predictions-epoch_labels)))
