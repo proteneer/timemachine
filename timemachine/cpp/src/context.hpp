@@ -33,6 +33,7 @@ private:
 
     RealType *d_E_;
     RealType *d_dE_dx_;
+    RealType *d_dE_dp_;
     RealType *d_d2E_dx2_;
     RealType *d_d2E_dxdp_;
 
@@ -61,6 +62,12 @@ public:
     int num_dparams() const { return DP_; };
 
     void step();
+
+    void get_E(RealType *buffer) const;
+
+    void get_dE_dx(RealType *buffer) const;
+
+    void get_dE_dp(RealType *buffer) const;
 
     void get_x(RealType *buffer) const;
 

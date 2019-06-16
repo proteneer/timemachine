@@ -55,7 +55,7 @@ void LennardJones<RealType>::derivatives_device(
     dim3 dimBlock(tpb);
     dim3 dimGrid(n_blocks, dim_y, C); // x, y, z dims
 
-    auto start = std::chrono::high_resolution_clock::now();
+    // auto start = std::chrono::high_resolution_clock::now();
     k_lennard_jones<<<dimGrid, dimBlock>>>(
         N,
         d_coords,
@@ -71,10 +71,10 @@ void LennardJones<RealType>::derivatives_device(
         d_dE_dp,
         d_d2E_dxdp
     );
-    cudaDeviceSynchronize();
-    auto finish = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = finish - start;
-    std::cout << "Custom LennardJones Elapsed time: " << elapsed.count() << " s\n";
+    // cudaDeviceSynchronize();
+    // auto finish = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double> elapsed = finish - start;
+    // std::cout << "Custom LennardJones Elapsed time: " << elapsed.count() << " s\n";
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -129,7 +129,7 @@ void Electrostatics<RealType>::derivatives_device(
     dim3 dimBlock(tpb);
     dim3 dimGrid(n_blocks, dim_y, C); // x, y, z dims
 
-    auto start = std::chrono::high_resolution_clock::now();
+    // auto start = std::chrono::high_resolution_clock::now();
     k_electrostatics<<<dimGrid, dimBlock>>>(
         N,
         d_coords,
@@ -145,10 +145,10 @@ void Electrostatics<RealType>::derivatives_device(
         d_dE_dp,
         d_d2E_dxdp
     );
-    cudaDeviceSynchronize();
-    auto finish = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = finish - start;
-    std::cout << "Custom Electrostatics Elapsed time: " << elapsed.count() << " s\n";
+    // cudaDeviceSynchronize();
+    // auto finish = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double> elapsed = finish - start;
+    // std::cout << "Custom Electrostatics Elapsed time: " << elapsed.count() << " s\n";
 
     gpuErrchk(cudaPeekAtLastError());
 

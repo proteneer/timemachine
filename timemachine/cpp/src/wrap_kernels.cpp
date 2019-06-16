@@ -30,7 +30,7 @@ void declare_context(py::module &m, const char *typestr) {
         const py::array_t<RealType, py::array::c_style> &params,
         const py::array_t<RealType, py::array::c_style> &x0,
         const py::array_t<RealType, py::array::c_style> &v0,
-        const py::array_t<RealType, py::array::c_style> &dp_idxs
+        const py::array_t<int, py::array::c_style> &dp_idxs
     ) {
         const int N = x0.shape()[0];
         const int P = params.shape()[0];
@@ -58,33 +58,49 @@ void declare_context(py::module &m, const char *typestr) {
 
     }))
     .def("step", &timemachine::Context<RealType>::step)
+    .def("get_E", [](timemachine::Context<RealType> &ctxt) -> RealType {
+        RealType E;
+        ctxt.get_E(&E);
+        return E;
+    })
+    .def("get_dE_dx", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
+        auto N = ctxt.num_atoms();
+        py::array_t<RealType, py::array::c_style> buffer({N, 3});
+        ctxt.get_dE_dx(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_dE_dp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
+        unsigned int DP = ctxt.num_dparams();
+        py::array_t<RealType, py::array::c_style> buffer({DP});
+        ctxt.get_dE_dp(buffer.mutable_data());
+        return buffer;
+    })
     .def("get_x", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
-      auto N = ctxt.num_atoms();
-      py::array_t<RealType, py::array::c_style> buffer({N, 3});
-      ctxt.get_x(buffer.mutable_data());
-      return buffer;
+        auto N = ctxt.num_atoms();
+        py::array_t<RealType, py::array::c_style> buffer({N, 3});
+        ctxt.get_x(buffer.mutable_data());
+        return buffer;
     })
     .def("get_v", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
-      auto N = ctxt.num_atoms();
-      py::array_t<RealType, py::array::c_style> buffer({N, 3});
-      ctxt.get_v(buffer.mutable_data());
-      return buffer;
+        auto N = ctxt.num_atoms();
+        py::array_t<RealType, py::array::c_style> buffer({N, 3});
+        ctxt.get_v(buffer.mutable_data());
+        return buffer;
     })
     .def("get_dx_dp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
-      auto DP = ctxt.num_dparams();
-      auto N = ctxt.num_atoms();
-      py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
-      ctxt.get_dx_dp(buffer.mutable_data());
-      return buffer;
+        auto DP = ctxt.num_dparams();
+        auto N = ctxt.num_atoms();
+        py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
+        ctxt.get_dx_dp(buffer.mutable_data());
+        return buffer;
     })
     .def("get_dv_dp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
-      auto DP = ctxt.num_dparams();
-      auto N = ctxt.num_atoms();
-      py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
-      ctxt.get_dv_dp(buffer.mutable_data());
-      return buffer;
+        auto DP = ctxt.num_dparams();
+        auto N = ctxt.num_atoms();
+        py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
+        ctxt.get_dv_dp(buffer.mutable_data());
+        return buffer;
     });
-
 
 }
 
@@ -108,7 +124,7 @@ void declare_optimizer(py::module &m, const char *typestr) {
         py::array_t<RealType, py::array::c_style> &v_t,
         py::array_t<RealType, py::array::c_style> &dx_dp_t,
         py::array_t<RealType, py::array::c_style> &dv_dp_t,
-        const py::array_t<RealType, py::array::c_style> &noise_buffer) -> py::none {
+        const py::array_t<RealType, py::array::c_style> &noise_buffer) {
 
             const long unsigned int num_atoms = dE_dx.shape()[0];
             const long unsigned int num_params = d2E_dxdp.shape()[0];
@@ -125,8 +141,6 @@ void declare_optimizer(py::module &m, const char *typestr) {
                 dv_dp_t.mutable_data(),
                 noise_buffer.data()
             );
-
-            return py::none();
         });
 
 }
@@ -155,12 +169,28 @@ void declare_langevin_optimizer(py::module &m, const char *typestr) {
         std::memcpy(coeff_cs.data(), cc.data(), cc.size()*sizeof(RealType));
         return new timemachine::LangevinOptimizer<RealType>(dt, ca, coeff_bs, coeff_cs);
     }),
-
         py::arg("dt").none(false),
         py::arg("ca").none(false),
         py::arg("cb").none(false),
         py::arg("cc").none(false)
-    );
+    )
+    .def("set_dt", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const RealType dt) {
+        lo.set_dt(dt);
+    })
+    .def("set_coeff_a", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const RealType ca) {
+        lo.set_coeff_a(ca);
+    })
+    .def("set_coeff_b", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const py::array_t<RealType, py::array::c_style> &cb) {
+        lo.set_coeff_b(cb.shape()[0], cb.data());
+    })
+    .def("set_coeff_c", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const py::array_t<RealType, py::array::c_style> &cc) {
+        lo.set_coeff_c(cc.shape()[0], cc.data());
+    });
+
 
 }
 

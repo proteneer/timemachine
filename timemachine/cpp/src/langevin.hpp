@@ -40,6 +40,14 @@ public:
         const std::vector<RealType> &coeff_cs
     );
 
+    void set_coeff_a(RealType a);
+
+    void set_coeff_b(int num_atoms, const RealType *cb);
+
+    void set_coeff_c(int num_atoms, const RealType *cc);
+
+    void set_dt(RealType ndt);
+
     virtual void step(
         const int num_atoms,
         const int num_params,

@@ -184,6 +184,26 @@ void LangevinOptimizer<RealType>::hessian_vector_product(
 
 }
 
+template<typename RealType>
+void LangevinOptimizer<RealType>::set_coeff_a(RealType a) {
+    coeff_a_ = a;
+}
+
+template<typename RealType>
+void LangevinOptimizer<RealType>::set_coeff_b(int num_atoms, const RealType *cb) {
+    gpuErrchk(cudaMemcpy(d_coeff_bs_, cb, num_atoms*sizeof(RealType), cudaMemcpyHostToDevice));
+}
+
+template<typename RealType>
+void LangevinOptimizer<RealType>::set_coeff_c(int num_atoms, const RealType *cc) {
+    gpuErrchk(cudaMemcpy(d_coeff_cs_, cc, num_atoms*sizeof(RealType), cudaMemcpyHostToDevice));
+}
+
+template<typename RealType>
+void LangevinOptimizer<RealType>::set_dt(RealType ndt) {
+    dt_ = ndt;
+}
+
 }
 
 template class timemachine::LangevinOptimizer<double>;

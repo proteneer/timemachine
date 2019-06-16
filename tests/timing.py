@@ -1,3 +1,4 @@
+import os
 import functools
 import time
 import numpy as np
@@ -7,7 +8,7 @@ from simtk import openmm as mm
 from simtk import unit
 
 from timemachine.potentials import bonded, nonbonded
-from timemachine.kernels import custom_ops
+from timemachine.lib import custom_ops
 
 from jax.config import config; config.update("jax_enable_x64", True)
 import jax
@@ -16,14 +17,25 @@ def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
 
-def create_system(file_path):
-    ff = app.ForceField('amber99sb.xml', 'amber99_obc.xml')
-    pdb = app.PDBFile(file_path)
-    system = ff.createSystem(
-        pdb.topology,
-        nonbondedMethod=app.NoCutoff,
-        constraints=None,
-    )
+def create_system(filepath):
+
+    filename, file_extension = os.path.splitext(filepath)
+
+    if file_extension == ".xml":
+        sys_xml = open(filepath, 'r').read()
+        system = mm.XmlSerializer.deserialize(sys_xml)
+        coords = np.loadtxt(filename + '.xyz').astype(np.float64)
+    elif file_extension == ".pdb":
+        ff = app.ForceField('amber99sb.xml', 'amber99_obc.xml')
+        pdb = app.PDBFile(filepath)
+        system = ff.createSystem(
+            pdb.topology,
+            nonbondedMethod=app.NoCutoff,
+            constraints=None,
+        )
+        coords = np.array(value(pdb.positions), dtype=np.float64)
+    else:
+        raise ValueError("Unknown filetype.")
 
     global_params = []
 
@@ -89,7 +101,6 @@ def create_system(file_path):
                 a_idx = upsert_parameter(angle)
 
                 param_idxs.append([k_idx, a_idx])
-                # print(src_idx, mid_idx, dst_idx)
                 angle_idxs.append([src_idx, mid_idx, dst_idx])
 
             angle_idxs = np.array(angle_idxs, dtype=np.int32)
@@ -211,15 +222,15 @@ def create_system(file_path):
                 charge_param_idxs,
             )
 
-            # ref_potentials.append(ref_es)
-            # test_potentials.append(test_es)
+            ref_potentials.append(ref_es)
+            test_potentials.append(test_es)
 
-
-    return ref_potentials, test_potentials, np.array(value(pdb.positions), dtype=np.float64), np.array(global_params, np.float64)
+    return ref_potentials, test_potentials, coords, np.array(global_params, np.float64)
 
 # all_ref, all_test, coords, params = create_system("examples/5dfr_minimized.pdb") # Jax wants to allocate 1 TB of ram for this..
 # all_ref, all_test, coords, params = create_system("examples/ala_ala_ala.pdb")
-all_ref, all_test, coords, params = create_system("examples/PEPTIDE_V3.pdb")
+# all_ref, all_test, coords, params = create_system("examples/PEPTIDE_V3.pdb")
+all_ref, all_test, coords, params = create_system("examples/host_acd.xml")
 
 print("number of parameters", len(params))
 print("number of atoms", coords.shape[0])
