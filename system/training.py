@@ -17,8 +17,8 @@ from jax.experimental import optimizers
 
 import multiprocessing
 
-num_gpus = 2
-base_dir = "/home/yutong/Code/benchmarksets/input_files/cd-set1/mol2"
+num_gpus = 4
+base_dir = "/home/ubuntu/Relay/Code/benchmarksets/input_files/cd-set1/mol2"
 
 def run_simulation(params):
 
@@ -100,7 +100,8 @@ def run_simulation(params):
     pred_enthalpy = HG_E - (G_E + H_E)
     delta = pred_enthalpy - label
     num_atoms = len(combined_masses)
-    loss = delta**2
+    # loss = delta**2 # L2
+    # loss = abs(delta) # L1
     
     # fancy index into the full derivative set
     combined_derivs = np.zeros_like(combined_params)
@@ -113,19 +114,20 @@ def run_simulation(params):
 
     return combined_derivs, pred_enthalpy, label
 
+# alpha cyclodextrin
 training_data = [
     ['guest-1.mol2', -2.17*4.184],
     ['guest-2.mol2', -4.19*4.184],
     ['guest-3.mol2', -5.46*4.184],
     ['guest-4.mol2', -2.74*4.184],
     ['guest-5.mol2', -2.99*4.184],
-    ['guest-6.mol2', -2.53*4.184],
-    ['guest-7.mol2', -3.4*4.184],
-    ['guest-8.mol2', -4.89*4.184],
-    ['guest-s9.mol2', -2.57*4.184],
-    ['guest-s10.mol2', -2.68*4.184],
-    ['guest-s11.mol2', -3.28*4.184],
-    ['guest-s12.mol2', -4.2*4.184],
+#     ['guest-6.mol2', -2.53*4.184],
+#     ['guest-7.mol2', -3.4*4.184],
+#     ['guest-8.mol2', -4.89*4.184],
+#     ['guest-s9.mol2', -2.57*4.184],
+#     ['guest-s10.mol2', -2.68*4.184],
+#     ['guest-s11.mol2', -3.28*4.184],
+#     ['guest-s12.mol2', -4.2*4.184],
     ['guest-s13.mol2', -4.28*4.184],
     ['guest-s14.mol2', -4.66*4.184],
     ['guest-s15.mol2', -4.74*4.184],
@@ -138,6 +140,30 @@ training_data = [
     ['guest-s22.mol2', -4.48*4.184]
 ]
 
+# beta cyclodextrin
+# training_data = [
+#     ['guest-1.mol2', 0.6*4.184],
+#     ['guest-2.mol2', -0.48*4.184],
+#     ['guest-3.mol2', -1.09*4.184],
+#     ['guest-4.mol2', -2.17*4.184],
+#     ['guest-5.mol2', -2.96*4.184],
+#     ['guest-6.mol2', 1.89*4.184],
+#     ['guest-7.mol2', 0.42*4.184],
+#     ['guest-8.mol2', -2.51*4.184],
+#     ['guest-9.mol2', -1.79*4.184],
+#     ['guest-10.mol2', -2.89*4.184],
+#     ['guest-11.mol2', -1.96*4.184],
+#     ['guest-12.mol2', -2.82*4.184],
+#     ['guest-s13.mol2', 0.47*4.184],
+#     ['guest-s14.mol2', 0.88*4.184],
+#     ['guest-s15.mol2', -2.29*4.184],
+#     ['guest-s16.mol2', -2.27*4.184],
+#     ['guest-s17.mol2', -3.92*4.184],
+#     ['guest-s18.mol2', 1.31*4.184],
+#     ['guest-s19.mol2', -2.75*4.184],
+#     ['guest-s20.mol2', -2.93*4.184],
+#     ['guest-s21.mol2', -2.25*4.184]
+# ]
 
 def initialize_parameters():
 
@@ -155,11 +181,6 @@ def initialize_parameters():
 
 lr = .0005
 
-# plot.write('epoch,guest,true enthalpy,computed enthalpy\n')
-# loss_plot.write('epoch,r2,mae,loss\n')
-
-prev_loss = None
-
 init_params = initialize_parameters()
 opt_init, opt_update, get_params = optimizers.adam(lr)
 opt_state = opt_init(init_params)
@@ -172,6 +193,55 @@ pool = multiprocessing.Pool(batch_size)
 
 count = 0
 
+test_set = [
+    ['guest-6.mol2', -2.53*4.184],
+    ['guest-7.mol2', -3.4*4.184],
+    ['guest-8.mol2', -4.89*4.184],
+    ['guest-s9.mol2', -2.57*4.184],
+    ['guest-s10.mol2', -2.68*4.184],
+    ['guest-s11.mol2', -3.28*4.184],
+    ['guest-s12.mol2', -4.2*4.184]
+           ]
+
+'''
+TESTING INITIAL PARAMS
+'''
+print('----testing initial params', "started at", datetime.datetime.now(), '----')
+
+initial_predictions = []
+initial_labels = []
+initial_filenames = []
+
+for fn in training_data:
+    final_filenames.append(fn)
+
+for b_idx in range(num_batches):
+    start_idx = b_idx*batch_size
+    end_idx = min((b_idx+1)*batch_size, num_data_points)
+    batch_data = training_data[start_idx:end_idx]
+
+    args = []
+
+    for b_idx, b in enumerate(batch_data):
+        args.append([get_params(opt_state), b[0], b[1], b_idx])
+
+    results = pool.map(run_simulation, args)
+
+    for grads, preds, labels in results:
+        initial_predictions.append(preds)
+        initial_labels.append(labels)
+
+initial_predictions = np.array(final_predictions)
+initial_labels = np.array(final_labels)
+
+np.savez("test_init"+".npz", preds=initial_predictions, labels=initial_labels, filenames=inital_filenames, params=get_params(opt_state))
+
+print("pearsonr", stats.pearsonr(initial_predictions, initial_labels), "r2_score:", sklearn.metrics.r2_score(initial_predictions, initial_labels), "mae:", np.mean(np.abs(initial_predictions-initial_labels)))
+
+
+'''
+TRAINING
+'''
 for epoch in range(100):
 
     print('----epoch:', epoch, "started at", datetime.datetime.now(), '----')
@@ -203,13 +273,51 @@ for epoch in range(100):
             batch_dp += grads
             epoch_predictions.append(preds)
             epoch_labels.append(labels)
-
+        
         count += 1
         opt_state = opt_update(count, batch_dp, opt_state)
 
     epoch_predictions = np.array(epoch_predictions)
     epoch_labels = np.array(epoch_labels)
 
-    np.savez("run_"+str(epoch)+".npz", preds=epoch_predictions, labels=epoch_labels, filenames=fn, params=get_params(opt_state))
+    np.savez("run_"+str(epoch)+".npz", preds=epoch_predictions, labels=epoch_labels, filenames=epoch_filenames, params=get_params(opt_state))
     
     print("pearsonr", stats.pearsonr(epoch_predictions, epoch_labels), "r2_score:", sklearn.metrics.r2_score(epoch_predictions, epoch_labels), "mae:", np.mean(np.abs(epoch_predictions-epoch_labels)))
+    
+    
+'''
+TESTING TRAINED PARAMS
+''' 
+print('----testing trained params', "started at", datetime.datetime.now(), '----')
+
+final_predictions = []
+final_labels = []
+final_filenames = []
+
+for fn in training_data:
+    final_filenames.append(fn)
+
+for b_idx in range(num_batches):
+    start_idx = b_idx*batch_size
+    end_idx = min((b_idx+1)*batch_size, num_data_points)
+    batch_data = training_data[start_idx:end_idx]
+
+    args = []
+
+    for b_idx, b in enumerate(batch_data):
+        args.append([get_params(opt_state), b[0], b[1], b_idx])
+
+    results = pool.map(run_simulation, args)
+
+    for grads, preds, labels in results:
+        final_predictions.append(preds)
+        final_labels.append(labels)
+
+final_predictions = np.array(final_predictions)
+final_labels = np.array(final_labels)
+
+np.savez("test_trained"+".npz", preds=final_predictions, labels=final_labels, filenames=final_filenames, params=get_params(opt_state))
+
+print("pearsonr", stats.pearsonr(final_predictions, final_labels), "r2_score:", sklearn.metrics.r2_score(final_predictions, final_labels), "mae:", np.mean(np.abs(final_predictions-final_labels)))
+    
+    
