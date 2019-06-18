@@ -63,6 +63,14 @@ void declare_context(py::module &m, const char *typestr) {
         ctxt.get_E(&E);
         return E;
     })
+    .def("debug_compute_dE_dx", [](timemachine::Context<RealType> &ctxt,
+        const py::array_t<RealType, py::array::c_style> &host_x) -> py::tuple {
+        auto N = ctxt.num_atoms();
+        py::array_t<RealType, py::array::c_style> out_E({1});
+        py::array_t<RealType, py::array::c_style> out_dE_dx({N, 3});
+        ctxt.debug_compute_dE_dx(host_x.data(), out_E.mutable_data(), out_dE_dx.mutable_data());
+        return py::make_tuple(out_E, out_dE_dx);
+    })
     .def("get_dE_dx", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
         auto N = ctxt.num_atoms();
         py::array_t<RealType, py::array::c_style> buffer({N, 3});
