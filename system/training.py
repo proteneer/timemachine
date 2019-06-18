@@ -17,22 +17,20 @@ from jax.experimental import optimizers
 
 import multiprocessing
 
-num_gpus = 2
+num_gpus = 1
 base_dir = "/home/yutong/Code/benchmarksets/input_files/cd-set1/mol2"
 
 def run_simulation(params):
 
     p = multiprocessing.current_process()
-
     combined_params, guest_sdf_file, label, idx = params
-
     os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % num_gpus)
 
-    print("processing", guest_sdf_file)
-    host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses = serialize.deserialize_system('examples/host_acd.xml')
+    host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses, pdb = serialize.deserialize_system()
     host_params = combined_params[:len(dummy_host_params)]
-
     guest_sdf = open(os.path.join(base_dir, guest_sdf_file), "r").read()
+
+    print(pdb)
 
     mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
@@ -47,16 +45,16 @@ def run_simulation(params):
         host_conf, guest_conf,
         host_masses, guest_masses)
 
-
     def filter_groups(param_groups, groups):
         roll = np.zeros_like(param_groups)
         for g in groups:
             roll = np.logical_or(roll, param_groups == g)
         return roll
 
-    host_dp_idxs = np.argwhere(filter_groups(host_param_groups, [7,4,5,0,1,2,3])).reshape(-1)
-    guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7,4,5,0,1,2,3])).reshape(-1)
-    combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [7,4,5,0,1,2,3])).reshape(-1)
+    res = np.argwhere(filter_groups(host_param_groups, [7])).reshape(-1)
+
+    # host_dp_idxs = np.argwhere(filter_groups(host_param_groups, [7])).reshape(-1)
+    host_dp_idxs = np.array([1])
 
     RH = simulation.run_simulation(
         host_potentials,
@@ -66,8 +64,13 @@ def run_simulation(params):
         host_masses,
         host_dp_idxs,
         1000,
-        None
+        pdb
     )
+
+    assert 0
+
+    guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7])).reshape(-1)
+    combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [7])).reshape(-1)
 
     H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH) # [host_dp_idxs,]
 
@@ -139,9 +142,11 @@ training_data = [
 ]
 
 
+# 2.6440834433941504e+16
+
 def initialize_parameters():
 
-    _, _, (host_params, _), _ = serialize.deserialize_system('examples/host_acd.xml')
+    _, _, (host_params, _), _, _ = serialize.deserialize_system()
 
     # setting general smirnoff parameters for guest
     sdf_file = open(os.path.join(base_dir, 'guest-1.mol2'),'r').read()
@@ -195,7 +200,9 @@ for epoch in range(100):
         for b_idx, b in enumerate(batch_data):
             args.append([get_params(opt_state), b[0], b[1], b_idx])
 
-        results = pool.map(run_simulation, args)
+        run_simulation(args[0])
+
+        assert 0
 
         batch_dp = np.zeros_like(init_params)
 

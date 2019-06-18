@@ -61,6 +61,11 @@ public:
 
     int num_dparams() const { return DP_; };
 
+    void debug_compute_dE_dx(
+        const RealType *new_x,
+        RealType *E,
+        RealType *dE_dx);
+
     void step();
 
     void get_E(RealType *buffer) const;
