@@ -228,13 +228,24 @@ class TestLennardJones(unittest.TestCase):
 
         assert_potential_invariance(energy_fn, x0, params, box)
 
-        # check_grads(ref.energy, (x0, params), order=1)
-        # check_grads(ref.energy, (x0, params), order=2)
+        # try different soft-core potentials
+        energy_fn = functools.partial(nonbonded.lennard_jones,
+            scale_matrix=scale_matrix,
+            param_idxs=param_idxs,
+            cutoff=None,
+            lamb=0.0)
 
+        assert_potential_invariance(energy_fn, x0, params, box)
 
-        # check_grads(ref.energy, (x0, params, box), order=1, eps=1e-5)
-        # check_grads(ref.energy, (x0, params, box), order=2, eps=1e-7)
+        energy_fn = functools.partial(nonbonded.lennard_jones,
+            scale_matrix=scale_matrix,
+            param_idxs=param_idxs,
+            cutoff=None,
+            lamb=1,
+            n=4,
+            m=2)
 
+        assert_potential_invariance(energy_fn, x0, params, box)
 
 if __name__ == "__main__":
     unittest.main()
