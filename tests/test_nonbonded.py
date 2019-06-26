@@ -247,5 +247,27 @@ class TestLennardJones(unittest.TestCase):
 
         assert_potential_invariance(energy_fn, x0, params, box)
 
+        def softcore_lj(params, lamb):
+            return nonbonded.lennard_jones(
+                x0,
+                params,
+                param_idxs=param_idxs,
+                scale_matrix=scale_matrix,
+                box=None,
+                cutoff=None,
+                lamb=lamb,
+                n=1, # broken if n=4
+                m=1  # broken if m=2
+            )
+
+        check_grads(softcore_lj, (params, 0.0,), order=1, eps=1e-6)
+        check_grads(softcore_lj, (params, 0.6,), order=1, eps=1e-6)
+        check_grads(softcore_lj, (params, 0.99,), order=1, eps=1e-6) # weird AD numerical instability if lambda=1.0 exactly
+
+        check_grads(softcore_lj, (params, 0.0), order=2, eps=1e-7)
+        check_grads(softcore_lj, (params, 0.6), order=2, eps=1e-7)
+        check_grads(softcore_lj, (params, 0.99), order=2, eps=1e-7)
+
+
 if __name__ == "__main__":
     unittest.main()

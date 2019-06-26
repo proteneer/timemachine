@@ -4,7 +4,7 @@ from jax.scipy.special import erf, erfc
 
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.potentials.jax_utils import delta_r, distance
-
+ 
 
 def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None,
     lamb=1.0, alpha=0.5, n=1, m=1):
@@ -80,7 +80,9 @@ def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None,
     eps_ij = np.where(keep_mask, eps_ij, np.zeros_like(eps_ij))
 
     ds_ij = d_ij/sig_ij
-    inner = alpha*np.power(1-lamb, m) + np.power(ds_ij, 6)
+    inner_lamb = 1-lamb
+    inner_lamb = np.where(inner_lamb > 0, inner_lamb, 0)
+    inner = alpha*np.power(inner_lamb, m) + np.power(ds_ij, 6)
     energy = 4*eps_ij*np.power(lamb, n) * (np.power(inner, -2) - np.power(inner, -1))
     energy = np.where(keep_mask, energy, np.zeros_like(energy))
 
