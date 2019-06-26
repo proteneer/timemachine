@@ -6,10 +6,14 @@ from timemachine.constants import ONE_4PI_EPS0
 from timemachine.potentials.jax_utils import delta_r, distance
 
 
-def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
+def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None,
+    lamb=1.0, alpha=0.5, n=1, m=1):
     """
     Implements a non-periodic LJ612 potential using the Lorentz−Berthelot combining
-    rules, where sig_ij = (sig_i + sig_j)/2 and eps_ij = sqrt(eps_i * eps_j).
+    rules, where sig_ij = (sig_i + sig_j)/2 and eps_ij = sqrt(eps_i * eps_j). The
+    softcore potential is defined by the equations in:
+
+    http://www.alchemistry.org/wiki/Constructing_a_Pathway_of_Intermediate_States
 
     Parameters
     ----------
@@ -34,6 +38,18 @@ def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
         Whether or not we apply cutoffs to the system. Any interactions
         greater than cutoff is fully discarded.
     
+    lamb: soft-core float
+        lambda value
+
+    alpha: soft-core float
+        soft-core scale factor
+
+    n: soft-core integer (or float)
+        prefactor lambda exponential
+
+    m: soft-core integer (or float)
+        complement (1-lambda) exponential
+
     """
     sig = params[param_idxs[:, 0]]
     eps = params[param_idxs[:, 1]]
@@ -52,22 +68,20 @@ def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
 
-    dij = distance(ri, rj, box)
+    d_ij = distance(ri, rj, box)
 
     if cutoff is not None:
-        eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
+        eps_ij = np.where(d_ij < cutoff, eps_ij, np.zeros_like(eps_ij))
 
     keep_mask = scale_matrix > 0
 
     # (ytz): this avoids a nan in the gradient in both jax and tensorflow
-    sig_ij = np.where(keep_mask, sig_ij, np.zeros_like(sig_ij))
+    d_ij = np.where(keep_mask, d_ij, np.zeros_like(d_ij))
     eps_ij = np.where(keep_mask, eps_ij, np.zeros_like(eps_ij))
 
-    sig2 = sig_ij/dij
-    sig2 *= sig2
-    sig6 = sig2*sig2*sig2
-
-    energy = 4*eps_ij*(sig6-1.0)*sig6
+    ds_ij = d_ij/sig_ij
+    inner = alpha*np.power(1-lamb, m) + np.power(ds_ij, 6)
+    energy = 4*eps_ij*np.power(lamb, n) * (np.power(inner, -2) - np.power(inner, -1))
     energy = np.where(keep_mask, energy, np.zeros_like(energy))
 
     # divide by two to deal with symmetry
