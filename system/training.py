@@ -167,8 +167,7 @@ def train(num_epochs, opt_init, opt_update, get_params, init_params):
         print('--- epoch:', epoch, "started at", datetime.datetime.now(), '----')
 
         np.random.shuffle(training_data)
-        np.random.shuffle(mol_idxs)
-
+        
         epoch_predictions = []
         epoch_labels = []
         epoch_filenames = []
