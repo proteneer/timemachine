@@ -26,7 +26,10 @@ def run_simulation(params):
 
     p = multiprocessing.current_process()
     combined_params, guest_sdf_file, label, idx = params
-    gpu_offset = np.where('gpu_offset' in properties, properties['gpu_offset'], 0)
+    if 'gpu_offset' in properties:
+    	gpu_offset = properties['gpu_offset']
+	else:
+		gpu_offset = 0
     os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % properties['batch_size'] + gpu_offset)
 
     host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses, pdb = serialize.deserialize_system(properties['host_path'])
@@ -125,13 +128,21 @@ def initialize_parameters(host_path):
     _, _, (host_params, _), _, _ = serialize.deserialize_system(host_path)
 
     # setting general smirnoff parameters for guest
-    sdf_file = open(os.path.join(properties['guest_directory'], properties['guest_template']),'r').read()
-    mol = Chem.MolFromMol2Block(sdf_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
-    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+    structure_file = open(os.path.join(properties['guest_directory'], properties['guest_template']),'r').read()
+    if '.mol2' in properties['guest_template']:
+		mol = Chem.MolFromMol2Block(mol2_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
+	if '.sdf' in properties['guest_template']:
+		supply = Chem.SDMolSupplier(structure_file, sanitize=True, removeHs=False)
+		mol = supply[0]
+		print(mol.getNumAtoms())		
 
+	smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+    
     _, smirnoff_params, _, _, _ = forcefield.parameterize(mol, smirnoff)
     
     epoch_combined_params = np.concatenate([host_params, smirnoff_params])
+
+    assert 0
     
     return epoch_combined_params
 
