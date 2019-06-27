@@ -27,19 +27,21 @@ def run_simulation(params):
     p = multiprocessing.current_process()
     combined_params, guest_sdf_file, label, idx = params
     if 'gpu_offset' in properties:
-    	gpu_offset = properties['gpu_offset']
-	else:
-		gpu_offset = 0
+        gpu_offset = properties['gpu_offset']
+    else:
+        gpu_offset = 0
     os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % properties['batch_size'] + gpu_offset)
 
     host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses, pdb = serialize.deserialize_system(properties['host_path'])
     host_params = combined_params[:len(dummy_host_params)]
-    
     guest_sdf = open(os.path.join(properties['guest_directory'], guest_sdf_file), "r").read()
-
     print("processing",guest_sdf_file)
-
-    mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    
+    if '.mol2' in guest_sdf_file:
+        mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    elif '.mol' in guest_sdf_file:
+        for i in range(mol_number):
+            pass
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
     guest_potentials, _, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
@@ -60,9 +62,14 @@ def run_simulation(params):
     
     dp_idxs = properties['dp_idxs']
     
-    host_dp_idxs = np.argwhere(filter_groups(host_param_groups, dp_idxs)).reshape(-1)
-    guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, dp_idxs)).reshape(-1)
-    combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, dp_idxs)).reshape(-1)
+    if len(dp_idxs) == 0:
+        host_dp_idxs = np.array([0])
+        guest_dp_idxs = np.array([0])
+        combined_dp_idxs = np.array([0])
+    else:
+        host_dp_idxs = np.argwhere(filter_groups(host_param_groups, dp_idxs)).reshape(-1)
+        guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, dp_idxs)).reshape(-1)
+        combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, dp_idxs)).reshape(-1)
 
     RH = simulation.run_simulation(
         host_potentials,
@@ -128,21 +135,18 @@ def initialize_parameters(host_path):
     _, _, (host_params, _), _, _ = serialize.deserialize_system(host_path)
 
     # setting general smirnoff parameters for guest
-    structure_file = open(os.path.join(properties['guest_directory'], properties['guest_template']),'r').read()
+    structure_path = os.path.join(properties['guest_directory'], properties['guest_template'])
     if '.mol2' in properties['guest_template']:
-		mol = Chem.MolFromMol2Block(mol2_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
-	if '.sdf' in properties['guest_template']:
-		supply = Chem.SDMolSupplier(structure_file, sanitize=True, removeHs=False)
-		mol = supply[0]
-		print(mol.getNumAtoms())		
+        structure_file = open(structure_path,'r').read()
+        mol = Chem.MolFromMol2Block(structure_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    else:
+        raise Exception('only mol2 files currently supported for ligand training')
 
-	smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
     
     _, smirnoff_params, _, _, _ = forcefield.parameterize(mol, smirnoff)
     
     epoch_combined_params = np.concatenate([host_params, smirnoff_params])
-
-    assert 0
     
     return epoch_combined_params
 
@@ -163,6 +167,7 @@ def train(num_epochs, opt_init, opt_update, get_params, init_params):
         print('--- epoch:', epoch, "started at", datetime.datetime.now(), '----')
 
         np.random.shuffle(training_data)
+        np.random.shuffle(mol_idxs)
 
         epoch_predictions = []
         epoch_labels = []
