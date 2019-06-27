@@ -7,9 +7,11 @@ from timemachine.integrator import langevin_coefficients
 
 from timemachine import constants
 
-from simtk.openmm.app import PDBFile
+from simtk.openmm.app import PDBFile, DCDFile, Topology
 
 import scipy
+
+from collections import namedtuple
 
 def average_E_and_derivatives(reservoir):
     """
@@ -59,14 +61,11 @@ def average_E_and_derivatives(reservoir):
 
     return running_sum_E/n_reservoir, running_sum_total_derivs/n_reservoir, -constants.BOLTZ*(thermo_deriv/n_reservoir)/(100)
 
-
-
-from collections import namedtuple
-
 class FireDescentState(namedtuple(
     'FireDescentState',
     ['position', 'velocity', 'force', 'dt', 'alpha', 'n_pos'])):
-  """A tuple containing state information for the Fire Descent minimizer.
+  """
+  A tuple containing state information for the Fire Descent minimizer.
   Attributes:
     position: The current position of particles. An ndarray of floats
       with shape [n, spatial_dimension].
@@ -86,8 +85,8 @@ class FireDescentState(namedtuple(
 
 
 def fire_descent(
-    force_fn, dt_start=0.00025,
-    dt_max=0.00075, n_min=5, f_inc=1.1, f_dec=0.5, alpha_start=0.1, f_alpha=0.99):
+    force_fn, dt_start=0.00001,
+    dt_max=0.00005, n_min=5, f_inc=1.1, f_dec=0.5, alpha_start=0.1, f_alpha=0.99):
     """Defines FIRE minimization.
     This code implements the "Fast Inertial Relaxation Engine" from [1].
     Args:
@@ -135,16 +134,29 @@ def fire_descent(
 
         V = V + alpha * (F * V_norm / F_norm - V)
 
+#         def sigmoid(x):
+#             k = 100
+#             return 1 / (1 + np.exp(-k*x))
+            
+#         sig = sigmoid(1000 * P)
+        
+
         # NOTE(schsam): Can we clean this up at all?
-        n_pos = np.where(P >= 0, n_pos + 1.0, 0)
+        n_pos = np.where(P >= 0, n_pos + 1.0, 0.0)
+#         n_pos = (n_pos + 1) * sig
         dt_choice = np.array([dt * f_inc, dt_max])
         dt = np.where(
             P > 0, np.where(n_pos > n_min, np.min(dt_choice), dt), dt)
+#         dt = min(dt_max, min(dt_max, dt * f_inc * sig + dt * (1-sig)) * sigmoid((n_pos - n_min) * 1000)+ dt * (1 - sigmoid((n_pos - n_min) * 1000)))
         dt = np.where(P < 0, dt * f_dec, dt)
+#         dt = dt * sig + dt * f_dec * (1 - sig) 
         alpha = np.where(
             P > 0, np.where(n_pos > n_min, alpha * f_alpha, alpha), alpha)
+#         alpha = alpha * f_alpha * sig + alpha * (1 - sig) * sigmoid((n_pos - n_min) * 1000) + alpha * (1 - sigmoid((n_pos - n_min) * 1000))
         alpha = np.where(P < 0, alpha_start, alpha)
+#         alpha = alpha_start * (1 - sig) + alpha * sig
         V = (P < 0) * np.zeros_like(V) + (P >= 0) * V
+#         V = (1 - sig) * np.zeros_like(V) + (sig) * V
 
         return FireDescentState(R, V, F, dt, alpha, n_pos)
 
@@ -181,13 +193,27 @@ def run_simulation(
     masses,
     dp_idxs,
     n_samples,
-    pdb):
+    pdb=None,
+    ):
 
     num_atoms = len(masses)
+    
+#     num_host_atoms = 2035
 
+#     custom_electrostatics = None
+#     if num_atoms > 2035:
+#         for p, args in potentials:
+#             if p == custom_ops.Electrostatics_f32:
+#                 old_scale_matrix = args[0]
+#                 new_scale_matrix = np.zeros_like(old_scale_matrix)
+#                 new_scale_matrix[:num_host_atoms, :num_host_atoms] = old_scale_matrix[:num_host_atoms, :num_host_atoms]
+#                 new_scale_matrix[num_host_atoms:, num_host_atoms:] = old_scale_matrix[num_host_atoms:, num_host_atoms:]
+
+#                 custom_electrostatics = p(new_scale_matrix.astype(np.float32), args[1])
+    
     potentials = forcefield.merge_potentials(potentials)
         
-    dt = 0.0005
+    dt = 0.000001
     ca, cb, cc = langevin_coefficients(
         temperature=25.0,
         dt=dt,
@@ -195,8 +221,10 @@ def run_simulation(
         masses=masses
     )
 
-    m_dt, m_ca, m_cb, m_cc = dt, 0.5, cb, np.zeros_like(masses)
+    # m_dt, m_ca, m_cb, m_cc = dt, 0.5, cb, np.zeros_like(masses)
 
+    m_dt, m_ca, m_cb, m_cc = dt, 0.9, np.ones_like(cb)/10000, np.zeros_like(masses)
+    
     opt = custom_ops.LangevinOptimizer_f32(
         m_dt,
         m_ca,
@@ -233,91 +261,140 @@ def run_simulation(
     # # scipy.optimize.minimize(fun, conf.reshape(-1), method='Newton-CG', jac=True, hess=hess, options={"disp": True})
 
     # assert 0
-
-    tolerance = 10
+    
+#     tot_dE_dx = 0
+    tolerance = 10.0
 
     def mean_norm(conf):
-        tolerance = 10.0
         norm_x = np.dot(conf.reshape(-1), conf.reshape(-1))/num_atoms
-        if norm_x < 1:
-            raise ValueError("Starting norm is less than one")
+#         if norm_x < 1:
+#             raise ValueError("Starting norm is less than one")
         return np.sqrt(norm_x)
+    
+    x_norm = mean_norm(conf)
+    x_norm = np.where(x_norm < 1, 1, x_norm)
+    epsilon = tolerance/x_norm
 
-    epsilon = tolerance/mean_norm(conf)
+#     def force_fn(conf):
+#         nonlocal tot_dE_dx
+#         _, tot_dE_dx = ctxt.debug_compute_dE_dx(
+#             conf.astype(np.float32),
+#         )        
+#         # print(tot_dE_dx)
+#         return -tot_dE_dx
 
-    def force_fn(conf):
-        tot_E, tot_dE_dx = ctxt.debug_compute_dE_dx(
-            conf.astype(np.float32),
-        )
+#     init_fn, update_fn = fire_descent(force_fn)
 
-        x_norm = mean_norm(conf)
-        g_norm = mean_norm(tot_dE_dx)
-            
-        print("energy", tot_E, "|g|", g_norm, "tol", epsilon*x_norm)
-        # print(tot_dE_dx)
-        return -tot_dE_dx
+#     state = init_fn(conf)
+    
+#     if pdb is not None:
+#         outfile = open('md.dcd','wb')
+# #         outfile = open("md.pdb", "w")
+#         dcd = DCDFile(outfile, pdb.topology, .0001)
+# #         PDBFile.writeHeader(pdb.topology, outfile)
+    
+#     state = update_fn(state)
+    
+# #     count = 0
 
-    init_fn, update_fn = fire_descent(force_fn)
+#     init_fn, update_fn = fire_descent(force_fn, dt_start=0.0005,dt_max=0.001)
 
-    state = init_fn(conf)
-
-    # vector<Vec3> initialPos = context.getState(State::Positions).getPositions();
-    # double norm = 0.0;
-    # for (int i = 0; i < numParticles; i++) {
-    #     x[3*i] = initialPos[i][0];
-    #     x[3*i+1] = initialPos[i][1];
-    #     x[3*i+2] = initialPos[i][2];
-    #     norm += initialPos[i].dot(initialPos[i]);
-    # }
-    # norm /= numParticles;
-    # norm = (norm < 1 ? 1 : sqrt(norm));
-    # param.epsilon = tolerance/norm;
-
-    outfile = open("md.pdb", "w")
-    PDBFile.writeHeader(pdb.topology, outfile)
-    print("start minimization")
-    count = 0
-    for step in range(5000):
-        print("step", step)
-        state = update_fn(state)
-        if step % 10 == 0:
-            PDBFile.writeModel(pdb.topology, state.position*10, outfile, count)
-            count += 1
-
-    assert 0
+#     for step in range(max_iter):
+# #         print("step", step)
+#         state = update_fn(state)
+#         g_norm = mean_norm(tot_dE_dx)
+#         if g_norm < epsilon:
+#             break
+#         if step % 400 == 0:
+#             print("step", step, "energy", ctxt.get_E(), "|g|", g_norm, "eps", epsilon)
+#         if pdb is not None: 
+#             if step % 50 == 0:
+# #                 print(state.position.shape, len(pdb.getPositions()))
+# #                 assert 0
+#                 dcd.writeModel(state.position)
+# #                 PDBFile.writeModel(pdb.topology, state.position*10, outfile, count)
+# #                 count += 1
 
     # PDBFile.writeHeader(simulation.topology, self._out)
 
-
-
-    PDBFile.writeHeader(pdb.topology, outfile)
-    count = 0
-    for i in range(max_iter):
-
-        ctxt.step()
-        E = ctxt.get_E()
-        print("i", i, E)
-        minimization_energies.append(E)
-        if len(minimization_energies) > window_size:
-            window_std = np.std(minimization_energies[-window_size:])
-            if window_std < 1.046/2:
-                break
-        if i % 25 == 0:
-            PDBFile.writeModel(pdb.topology, ctxt.get_x()*10, outfile, count)
-            count += 1
-            # PDBFile.write()
-            # fh.write(write(ctxt.get_x()*10, masses))
-            # print("minimization", i, E)
-        if i > 5000:
-            break
+#     PDBFile.writeHeader(pdb.topology, outfile)
+#     count = 0
     
-    PDBFile.writeFooter(pdb.topology, outfile)
-    outfile.flush()
 
+    count = 0
+    max_iter = 10000
+    for i in range(max_iter):
+        dt *= 1.005
+        dt = min(dt, 0.015)
+        opt.set_dt(dt)
+        ctxt.step()
+        # minimization_energies.append(E)
+        # if len(minimization_energies) > window_size:
+            # window_std = np.std(minimization_energies[-window_size:])
+            # if window_std < 1.046/2:
+                # break
+#         if i % 1000 == 0:
+#             E = ctxt.get_E()
+#             print("i", i, dt, E)
+        if i % 100 == 0:
+            if np.isnan(ctxt.get_E()):
+                raise Exception("energy is nan")
+            dE_dx = ctxt.get_dE_dx()
+            g_norm = mean_norm(dE_dx)
+            x_norm = mean_norm(conf)
+            if g_norm < epsilon:
+                break
+                
+#     if custom_electrostatics is not None:
+        
+# #     for p in potentials:
+# #         conf = ctxt.get_x()
+#         conf = conf.reshape(1,-1,3)
+# #         if p == custom_ops.Electrostatics_f32:
+            
+#         res = custom_electrostatics.derivatives(conf.astype(np.float32), params.astype(np.float32), np.array([0]).astype(np.int32))
+#         print("electrostatic interaction energy", res[0])
+        
+#     for p in potentials:
+#         conf = ctxt.get_x()
+#         conf = conf.reshape(1,-1,3)
+#         res = p.derivatives(conf.astype(np.float32), params.astype(np.float32), np.array([0]).astype(np.int32))
+#         print(p, res[0])
+
+#     for step in range(max_iter):
+#         ctxt.step()
+#         g_norm = mean_norm(ctxt.get_dE_dx())
+#         if g_norm < epsilon:
+#             break
+#         if m_dt < .001:
+#             m_dt = m_dt * 1.1
+#             opt.set_dt(m_dt)
+#         if step % 1000 == 0:
+#             print("step", step, "energy", ctxt.get_E(), "|g|", g_norm, "eps", epsilon)
+#         minimization_energies.append(E)
+#         if len(minimization_energies) > window_size:
+#             window_std = np.std(minimization_energies[-window_size:])
+#             if window_std < 1.046/2:
+#                 break
+#         if i % 25 == 0:
+#             PDBFile.writeModel(pdb.topology, ctxt.get_x()*10, outfile, count)
+#             count += 1
+#             # PDBFile.write()
+#             # fh.write(write(ctxt.get_x()*10, masses))
+#             # print("minimization", i, E)
+#         if i > 5000:
+#             break
+    
+#     PDBFile.writeFooter(pdb.topology, outfile)
+#     outfile.flush()
+
+    if np.isnan(ctxt.get_E()):
+        raise Exception("energy is nan")
     if i == max_iter-1:
-        raise Exception("Energy minimization failed to converge in ", i, "steps")
+        print("Energy minimization failed to converge in ", i, "steps")
+#         raise Exception("Energy minimization failed to converge in ", step, "steps")
     else:
-        print("Minimization converged in", i, "steps to", E)
+        print("Minimization converged in", i, "steps to", ctxt.get_E())
 
     # #modify integrator to do dynamics
     # opt.set_dt(dt)
