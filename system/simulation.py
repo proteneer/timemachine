@@ -322,10 +322,10 @@ def run_simulation(
     
 
     count = 0
-    max_iter = 10000
+    max_iter = 15000
     for i in range(max_iter):
         dt *= 1.005
-        dt = min(dt, 0.015)
+        dt = min(dt, 0.0175)
         opt.set_dt(dt)
         ctxt.step()
         # minimization_energies.append(E)
