@@ -148,7 +148,9 @@ def initialize_parameters(host_path):
 
 def train(num_epochs, opt_init, opt_update, get_params, init_params):
     
-    training_data = properties['training_data']
+    data_file = open(properties['training_data'],'r')
+    data_reader = csv.reader(data_file, delimiter=',')
+    training_data = list(data_reader)
     
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
