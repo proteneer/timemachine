@@ -194,6 +194,7 @@ def run_simulation(
     dp_idxs,
     n_samples,
     pdb=None,
+    pdb_name=None
     ):
 
     num_atoms = len(masses)
@@ -213,7 +214,7 @@ def run_simulation(
     
     potentials = forcefield.merge_potentials(potentials)
         
-    dt = 0.000001
+    dt = 0.025
     ca, cb, cc = langevin_coefficients(
         temperature=25.0,
         dt=dt,
@@ -320,22 +321,23 @@ def run_simulation(
 #     PDBFile.writeHeader(pdb.topology, outfile)
 #     count = 0
     
-
-    count = 0
+    if pdb is not None:
+        outfile = open(pdb_name + '.dcd','wb')
+        dcd = DCDFile(outfile, pdb.topology, .0001)
     max_iter = 15000
     for i in range(max_iter):
-        dt *= 1.005
-        dt = min(dt, 0.0175)
-        opt.set_dt(dt)
+#         dt *= 1.005
+#         dt = min(dt, 0.02)
+#         opt.set_dt(dt)
         ctxt.step()
         # minimization_energies.append(E)
         # if len(minimization_energies) > window_size:
             # window_std = np.std(minimization_energies[-window_size:])
             # if window_std < 1.046/2:
                 # break
-#         if i % 1000 == 0:
-#             E = ctxt.get_E()
-#             print("i", i, dt, E)
+        if i % 500 == 0:
+            E = ctxt.get_E()
+            print("i", i, dt, E)
         if i % 100 == 0:
             if np.isnan(ctxt.get_E()):
                 raise Exception("energy is nan")
@@ -344,7 +346,10 @@ def run_simulation(
             x_norm = mean_norm(conf)
             if g_norm < epsilon:
                 break
-                
+        if pdb is not None:
+            if i % 50 == 0:
+                dcd.writeModel(ctxt.get_x())   
+            
 #     if custom_electrostatics is not None:
         
 # #     for p in potentials:
@@ -391,8 +396,8 @@ def run_simulation(
     if np.isnan(ctxt.get_E()):
         raise Exception("energy is nan")
     if i == max_iter-1:
-        print("Energy minimization failed to converge in ", i, "steps")
-#         raise Exception("Energy minimization failed to converge in ", step, "steps")
+#         print("Energy minimization failed to converge in ", i, "steps")
+        raise Exception("Energy minimization failed to converge in ", i, "steps")
     else:
         print("Minimization converged in", i, "steps to", ctxt.get_E())
 

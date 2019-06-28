@@ -329,7 +329,8 @@ def parameterize(mol, forcefield):
     for k, v in vd.items():
         charge_param_idxs.append(v)
 
-#     scale_matrix = scale_matrix * 0
+    # ELECTROSTATIC SCALE MATRIX
+    scale_matrix = scale_matrix * 0.5
     nrg_fns.append((
         custom_ops.Electrostatics_f32,
         (

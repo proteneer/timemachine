@@ -6,7 +6,6 @@ import sklearn.metrics
 import jax
 import scipy
 import json
-import re
 import glob
 
 from scipy import stats
@@ -32,16 +31,13 @@ def run_simulation(params):
         gpu_offset = 0
     os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % properties['batch_size'] + gpu_offset)
 
-    host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses, pdb = serialize.deserialize_system(properties['host_path'])
+    host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses, pdb = serialize.deserialize_system(properties['host_path'], guest_sdf_file.split('.')[0])
     host_params = combined_params[:len(dummy_host_params)]
     guest_sdf = open(os.path.join(properties['guest_directory'], guest_sdf_file), "r").read()
     print("processing",guest_sdf_file)
     
-    if '.mol2' in guest_sdf_file:
-        mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
-    elif '.mol' in guest_sdf_file:
-        for i in range(mol_number):
-            pass
+    mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
+        
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
     guest_potentials, _, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
@@ -78,7 +74,7 @@ def run_simulation(params):
         host_conf,
         host_masses,
         host_dp_idxs,
-        1000,
+        1000
     )
     
     H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH)
@@ -103,6 +99,8 @@ def run_simulation(params):
         combined_masses,
         combined_dp_idxs,
         1000,
+        pdb,
+        'capped_receptor_{}.pdb'.format(guest_sdf_file.split('.')[0])
     )
     
     HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG)
