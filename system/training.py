@@ -128,7 +128,7 @@ def run_simulation(params):
 
 def initialize_parameters(host_path):
 
-    _, _, (host_params, _), _, _ = serialize.deserialize_system(host_path)
+    _, _, (host_params, _), _ = serialize.deserialize_system(host_path)
 
     # setting general smirnoff parameters for guest
     structure_path = os.path.join(properties['guest_directory'], properties['guest_template'])
