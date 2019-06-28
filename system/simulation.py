@@ -214,7 +214,7 @@ def run_simulation(
     
     potentials = forcefield.merge_potentials(potentials)
         
-    dt = 0.025
+    dt = 0.001
     ca, cb, cc = langevin_coefficients(
         temperature=25.0,
         dt=dt,
@@ -324,11 +324,11 @@ def run_simulation(
     if pdb is not None:
         outfile = open(pdb_name + '.dcd','wb')
         dcd = DCDFile(outfile, pdb.topology, .0001)
-    max_iter = 15000
+    max_iter = 25000
     for i in range(max_iter):
-#         dt *= 1.005
-#         dt = min(dt, 0.02)
-#         opt.set_dt(dt)
+        dt *= 1.01
+        dt = min(dt, 0.02)
+        opt.set_dt(dt)
         ctxt.step()
         # minimization_energies.append(E)
         # if len(minimization_energies) > window_size:
