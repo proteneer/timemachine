@@ -215,6 +215,6 @@ def deserialize_system(filepath, ligand_name=None):
     global_param_groups = np.array(global_param_groups)
     
     if ligand_name is not None:
-        pdb = PDBFile('/home/ubuntu/Relay/structures/anon/complexes/capped_receptor_{}.pdb'.format(ligand_name))
+        pdb = PDBFile('/home/ubuntu/Relay/structures/path/to/structure'.format(ligand_name))
 
     return test_potentials, coords, (global_params, global_param_groups), np.array(masses), pdb

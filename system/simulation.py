@@ -321,9 +321,9 @@ def run_simulation(
 #     PDBFile.writeHeader(pdb.topology, outfile)
 #     count = 0
     
-    if pdb is not None:
-        outfile = open(pdb_name + '.dcd','wb')
-        dcd = DCDFile(outfile, pdb.topology, .0001)
+#     if pdb is not None:
+#         outfile = open(pdb_name + '.dcd','wb')
+#         dcd = DCDFile(outfile, pdb.topology, .0001)
     max_iter = 25000
     for i in range(max_iter):
         dt *= 1.01
@@ -335,7 +335,7 @@ def run_simulation(
             # window_std = np.std(minimization_energies[-window_size:])
             # if window_std < 1.046/2:
                 # break
-        if i % 500 == 0:
+        if i % 5000 == 0:
             E = ctxt.get_E()
             print("i", i, dt, E)
         if i % 100 == 0:
@@ -346,9 +346,9 @@ def run_simulation(
             x_norm = mean_norm(conf)
             if g_norm < epsilon:
                 break
-        if pdb is not None:
-            if i % 50 == 0:
-                dcd.writeModel(ctxt.get_x())   
+#         if pdb is not None:
+#             if i % 50 == 0:
+#                 dcd.writeModel(ctxt.get_x())   
             
 #     if custom_electrostatics is not None:
         

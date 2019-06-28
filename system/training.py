@@ -7,6 +7,7 @@ import jax
 import scipy
 import json
 import glob
+import csv
 
 from scipy import stats
 from rdkit import Chem
@@ -25,6 +26,8 @@ def run_simulation(params):
 
     p = multiprocessing.current_process()
     combined_params, guest_sdf_file, label, idx = params
+    label = float(label)
+
     if 'gpu_offset' in properties:
         gpu_offset = properties['gpu_offset']
     else:
@@ -99,8 +102,8 @@ def run_simulation(params):
         combined_masses,
         combined_dp_idxs,
         1000,
-        pdb,
-        'capped_receptor_{}.pdb'.format(guest_sdf_file.split('.')[0])
+#         pdb,
+#         'capped_receptor_{}'.format(guest_sdf_file.split('.')[0])
     )
     
     HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG)
@@ -150,8 +153,10 @@ def initialize_parameters(host_path):
 
 def train(num_epochs, opt_init, opt_update, get_params, init_params):
     
-    training_data = properties['training_data']
-    
+    data_file = open(properties['training_data'],'r')
+    data_reader = csv.reader(data_file, delimiter=',')
+    training_data = list(data_reader)
+       
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
     num_data_points = len(training_data)
