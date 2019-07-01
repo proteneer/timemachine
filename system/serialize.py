@@ -12,7 +12,7 @@ from simtk import unit
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
-def deserialize_system(filepath, ligand_name=None):
+def deserialize_system(filepath):
     """
     Deserialize an OpenMM XML file
 
@@ -213,8 +213,5 @@ def deserialize_system(filepath, ligand_name=None):
 
     global_params = np.array(global_params)
     global_param_groups = np.array(global_param_groups)
-    
-    if ligand_name is not None:
-        pdb = PDBFile('/home/ubuntu/Relay/structures/path/to/structure'.format(ligand_name))
 
-    return test_potentials, coords, (global_params, global_param_groups), np.array(masses), pdb
+    return test_potentials, coords, (global_params, global_param_groups), np.array(masses)

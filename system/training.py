@@ -8,6 +8,7 @@ import scipy
 import json
 import glob
 import csv
+import itertools
 
 from scipy import stats
 from rdkit import Chem
@@ -20,7 +21,7 @@ from openforcefield.typing.engines.smirnoff import ForceField
 from timemachine.lib import custom_ops
 from jax.experimental import optimizers
 
-import multiprocessing
+import multiprocessing 
 
 def run_simulation(params):
 
@@ -34,7 +35,7 @@ def run_simulation(params):
         gpu_offset = 0
     os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % properties['batch_size'] + gpu_offset)
 
-    host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses, pdb = serialize.deserialize_system(properties['host_path'], guest_sdf_file.split('.')[0])
+    host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses = serialize.deserialize_system(properties['host_path'], guest_sdf_file.split('.')[0])
     host_params = combined_params[:len(dummy_host_params)]
     guest_sdf = open(os.path.join(properties['guest_directory'], guest_sdf_file), "r").read()
     print("processing",guest_sdf_file)
@@ -70,18 +71,16 @@ def run_simulation(params):
         guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, dp_idxs)).reshape(-1)
         combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, dp_idxs)).reshape(-1)
 
-    RH = simulation.run_simulation(
-        host_potentials,
-        host_params,
-        host_param_groups,
-        host_conf,
-        host_masses,
-        host_dp_idxs,
-        1000
-    )
-    
-    H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH)
-
+    if properties['fit_method'] == 'absolute':
+        RH = simulation.run_simulation(
+            host_potentials,
+            host_params,
+            host_param_groups,
+            host_conf,
+            host_masses,
+            host_dp_idxs,
+            1000
+        )
     RG = simulation.run_simulation(
         guest_potentials,
         smirnoff_params,
@@ -89,10 +88,8 @@ def run_simulation(params):
         guest_conf,
         guest_masses,
         guest_dp_idxs,
-        1000,
+        1000
     )
-
-    G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG)
 
     RHG = simulation.run_simulation(
         combined_potentials,
@@ -101,11 +98,14 @@ def run_simulation(params):
         combined_conf,
         combined_masses,
         combined_dp_idxs,
-        1000,
-#         pdb,
-#         'capped_receptor_{}'.format(guest_sdf_file.split('.')[0])
-    )
+        1000
+    )        
     
+    return RH, RG, RHG
+
+def compute_derivatives(RH, RG, RHG, RG2=None, RHG2=None):
+    H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH)
+    G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG)
     HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG)
         
     pred_enthalpy = HG_E - (G_E + H_E)
@@ -133,7 +133,7 @@ def run_simulation(params):
 
 def initialize_parameters(host_path):
 
-    _, _, (host_params, _), _, _ = serialize.deserialize_system(host_path)
+    _, _, (host_params, _), _ = serialize.deserialize_system(host_path)
 
     # setting general smirnoff parameters for guest
     structure_path = os.path.join(properties['guest_directory'], properties['guest_template'])
@@ -156,6 +156,11 @@ def train(num_epochs, opt_init, opt_update, get_params, init_params):
     data_file = open(properties['training_data'],'r')
     data_reader = csv.reader(data_file, delimiter=',')
     training_data = list(data_reader)
+    
+    if properties['fit_method'] == 'relative':
+        training_data = list(itertools.combinations(training_data,2))
+    
+    assert 0
        
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
@@ -176,7 +181,9 @@ def train(num_epochs, opt_init, opt_update, get_params, init_params):
         epoch_filenames = []
 
         for fn in training_data:
-            epoch_filenames.append(fn[0])
+            epoch_filenames.append(fn[0][0],fn[1][0])
+            
+        print(epoch_filenames)
 
         for b_idx in range(num_batches):
             start_idx = b_idx*batch_size
@@ -189,6 +196,8 @@ def train(num_epochs, opt_init, opt_update, get_params, init_params):
                 args.append([get_params(opt_state), b[0], b[1], b_idx])
 
             results = pool.map(run_simulation, args)
+            print(results)
+            assert 0
 
             batch_dp = np.zeros_like(init_params)
 
