@@ -7,6 +7,7 @@ import jax
 import scipy
 import json
 import glob
+import csv
 
 from scipy import stats
 from rdkit import Chem
@@ -241,6 +242,8 @@ def initialize_optimizer(optimizer, lr):
         opt_init, opt_update, get_params = optimizers.adagrad(lr)
     elif optimizer == 'SM3':
         opt_init, opt_update, get_params = optimizers.sm3(lr)
+    else:
+        raise Exception('''No valid optimizer specified. Include "optimizer": "..." in config file''')
         
     return opt_init, opt_update, get_params
 
@@ -254,7 +257,7 @@ if __name__ == "__main__":
     with open(config_file[0], 'r') as file:
         config = json.load(file)
    
-    globals()['properties'] = config
+    properties = config
 
     init_params = initialize_parameters(properties['host_path'])
     opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
