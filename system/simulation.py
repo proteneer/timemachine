@@ -335,9 +335,9 @@ def run_simulation(
             # window_std = np.std(minimization_energies[-window_size:])
             # if window_std < 1.046/2:
                 # break
-        if i % 5000 == 0:
-            E = ctxt.get_E()
-            print("i", i, dt, E)
+#         if i % 100 == 0:
+#             E = ctxt.get_E()
+#             print("i", i, dt, E)
         if i % 100 == 0:
             if np.isnan(ctxt.get_E()):
                 raise Exception("energy is nan")
@@ -450,7 +450,8 @@ def run_simulation(
         ctxt.get_dE_dx(),
         ctxt.get_dx_dp(),
         ctxt.get_dE_dp(),
-        0
+#         0
+        ctxt.get_x()
     ]]
 
     return R

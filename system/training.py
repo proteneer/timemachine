@@ -9,6 +9,7 @@ import json
 import glob
 import csv
 import itertools
+import functools
 
 from scipy import stats
 from rdkit import Chem
@@ -19,7 +20,7 @@ from system import simulation
 
 from openforcefield.typing.engines.smirnoff import ForceField
 from timemachine.lib import custom_ops
-from jax.experimental import optimizers
+from jax.experimental import optimizers, stax
 
 import multiprocessing 
 
@@ -35,7 +36,7 @@ def run_simulation(params):
         gpu_offset = 0
     os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % properties['batch_size'] + gpu_offset)
 
-    host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses = serialize.deserialize_system(properties['host_path'], guest_sdf_file.split('.')[0])
+    host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses = serialize.deserialize_system(properties['host_path'])
     host_params = combined_params[:len(dummy_host_params)]
     guest_sdf = open(os.path.join(properties['guest_directory'], guest_sdf_file), "r").read()
     print("processing",guest_sdf_file)
@@ -53,6 +54,8 @@ def run_simulation(params):
         host_param_groups, smirnoff_param_groups,
         host_conf, guest_conf,
         host_masses, guest_masses)
+    
+    num_atoms = len(combined_masses)
 
     def filter_groups(param_groups, groups):
         roll = np.zeros_like(param_groups)
@@ -81,6 +84,9 @@ def run_simulation(params):
             host_dp_idxs,
             1000
         )
+    else:
+        RH = None
+        
     RG = simulation.run_simulation(
         guest_potentials,
         smirnoff_params,
@@ -90,6 +96,7 @@ def run_simulation(params):
         guest_dp_idxs,
         1000
     )
+    
 
     RHG = simulation.run_simulation(
         combined_potentials,
@@ -99,38 +106,101 @@ def run_simulation(params):
         combined_masses,
         combined_dp_idxs,
         1000
-    )        
+    )    
     
-    return RH, RG, RHG
+    return RH, RG, RHG, label, host_dp_idxs, guest_dp_idxs, combined_dp_idxs, num_atoms
 
-def compute_derivatives(RH, RG, RHG, RG2=None, RHG2=None):
-    H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH)
-    G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG)
-    HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG)
+def boltzmann_derivatives(reservoir):
+    running_sum_total_derivs = None
+    running_sum_E = 0
+    n_reservoir = len(reservoir)
+
+    running_sum_dE_dp = None
+    running_sum_EmultdE_dp = None
+
+    E= []
+    dE_dx = []
+    dx_d0 = []
+    dE_dp = []
+    for E_i, dE_dx_i, dx_dp_i, dE_dp_i, _ in reservoir:
+        E.append(E_i)
+        dE_dx.append(dE_dx_i)
+        dx_dp.append(dx_dp_i)
+        dE_dp.append(dE_dp_i)
+            
+    ds_de_fn = jax.jacfwd(stax.softmax, argnums=(0,))
+    ds_de = ds_de_fn(-E)
+
+    # tensor contract [C,C,N,3] with [C,N,3,P] and dE_dp
+    tot_dE_dp = np.einsum('ijkl,jklm->im', dE_dx, dx_dp) + dE_dp
+    s_e = stax.softmax(-E)
+
+    running_sum_total_derivs += np.matmul(-ds_de[0], tot_dE_dp)*np.expand_dims(E, 1) + np.expand_dims(s_e, axis=-1) * tot_dE_dp
+
+    running_sum_dE_dp = dE_dp
+
+    return np.sum(stax.softmax(-E)*E), np.sum(running_sum_dE_dp,axis=0)
+
+def compute_derivatives(params1,
+                        params2,
+                        host_params,
+                       combined_params):
+    
+    RH1, RG1, RHG1, label_1, host_dp_idxs, guest_dp_idxs_1, combined_dp_idxs_1, num_atoms = params1
+    G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG1)
+    HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG1)
         
-    pred_enthalpy = HG_E - (G_E + H_E)
-    delta = pred_enthalpy - label
-    
-    combined_derivs = np.zeros_like(combined_params)
-    combined_derivs[combined_dp_idxs] += HG_derivs
-    combined_derivs[host_dp_idxs] -= H_derivs
-    combined_derivs[guest_dp_idxs + len(host_params)] -= G_derivs
+    if properties['fit_method'] == 'absolute':
+        H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH1)
+        pred_enthalpy = HG_E - (G_E + H_E)
+        label = label_1
+        delta = pred_enthalpy - label
 
+        combined_derivs = np.zeros_like(combined_params)
+        combined_derivs[combined_dp_idxs_1] += HG_derivs
+        combined_derivs[host_dp_idxs] -= H_derivs
+        combined_derivs[guest_dp_idxs_1 + len(host_params)] -= G_derivs
+            
+    elif properties['fit_method'] == 'relative':
+        RH2, RG2, RHG2, label_2, host_dp_idxs, guest_dp_idxs_2, combined_dp_idxs_2, _ = params2
+        G_E_2, G_derivs_2, _ = simulation.average_E_and_derivatives(RG2)
+        HG_E_2, HG_derivs_2, _ = simulation.average_E_and_derivatives(RHG2)
+        
+        pred_enthalpy = HG_E - HG_E_2 - G_E + G_E_2
+        label = label_1 - label_2
+        delta = pred_enthalpy - label
+        
+        combined_derivs = np.zeros_like(combined_params)
+        combined_derivs[combined_dp_idxs_1] += HG_derivs
+        combined_derivs[combined_dp_idxs_2] -= HG_derivs_2
+        combined_derivs[guest_dp_idxs_1 + len(host_params)] -= G_derivs
+        combined_derivs[guest_dp_idxs_2 + len(host_params)] += G_derivs_2
+        
     if properties['loss_fn'] == 'L2':
+        '''
+        loss = (delta) ^ 2
+        '''
         combined_derivs = 2*delta*combined_derivs
     elif properties['loss_fn'] == 'L1':
+        '''
+        loss = |delta|
+        '''
         combined_derivs = (delta/np.abs(delta))*combined_derivs
     elif properties['loss_fn'] == 'Huber':
-        # Modified Huber Loss
-        # if abs(delta) < cutoff, loss = (delta^2)/ (2 * cutoff)
-        # if abs(delta) > cutoff, loss = abs(delta)
+        '''
+        if |delta| < cutoff, loss = (delta^2) / (2 * cutoff)
+        if |delta| > cutoff, loss = |delta|
+        '''
         huber_cutoff = np.where('huber_cutoff' in properties, properties['huber_cutoff'], 1)
         combined_derivs = np.where(abs(delta) < huber_cutoff, delta / huber_cutoff, delta/np.abs(delta)) * combined_derivs
     elif properties['loss_fn'] == 'log-cosh':
+        '''
+        loss = log(cosh(delta))
+        '''
         combined_derivs = (1 / np.cosh(delta)) * np.sinh(delta) * combined_derivs
 
     return combined_derivs, pred_enthalpy, label
-
+    
 def initialize_parameters(host_path):
 
     _, _, (host_params, _), _ = serialize.deserialize_system(host_path)
@@ -151,29 +221,31 @@ def initialize_parameters(host_path):
     
     return epoch_combined_params
 
-def train(num_epochs, opt_init, opt_update, get_params, init_params):
+def train(num_epochs, 
+          opt_init, 
+          opt_update, 
+          get_params, 
+          init_params):
     
     data_file = open(properties['training_data'],'r')
     data_reader = csv.reader(data_file, delimiter=',')
     training_data = list(data_reader)
-    
-    if properties['fit_method'] == 'relative':
-        training_data = list(itertools.combinations(training_data,2))
-    
-    assert 0
-       
+           
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
+    if properties['fit_method'] == 'relative':
+        batch_size -= 1
     num_data_points = len(training_data)
     num_batches = int(np.ceil(num_data_points/batch_size))
-    
+
     opt_state = opt_init(init_params)
     count = 0
+    
+    _, _, (dummy_host_params, host_param_groups), _ = serialize.deserialize_system(properties['host_path'])
     
     for epoch in range(num_epochs):
 
         print('--- epoch:', epoch, "started at", datetime.datetime.now(), '----')
-
         np.random.shuffle(training_data)
         
         epoch_predictions = []
@@ -181,10 +253,8 @@ def train(num_epochs, opt_init, opt_update, get_params, init_params):
         epoch_filenames = []
 
         for fn in training_data:
-            epoch_filenames.append(fn[0][0],fn[1][0])
-            
-        print(epoch_filenames)
-
+            epoch_filenames.append(fn[0])
+        
         for b_idx in range(num_batches):
             start_idx = b_idx*batch_size
             end_idx = min((b_idx+1)*batch_size, num_data_points)
@@ -192,16 +262,29 @@ def train(num_epochs, opt_init, opt_update, get_params, init_params):
 
             args = []
 
+            if properties['fit_method'] == 'relative':
+                args.append([get_params(opt_state), properties['relative_reference'][0], properties['relative_reference'][1], 0])
+            
             for b_idx, b in enumerate(batch_data):
-                args.append([get_params(opt_state), b[0], b[1], b_idx])
-
+                if properties['fit_method'] == 'relative':
+                    args.append([get_params(opt_state), b[0], b[1], b_idx + 1])
+                else:
+                    args.append([get_params(opt_state), b[0], b[1], b_idx])
+            
             results = pool.map(run_simulation, args)
-            print(results)
-            assert 0
-
+            
+            final_results = []
+            if properties['fit_method'] == 'absolute':
+                for params in results:
+                    final_results.append(compute_derivatives(params, None, dummy_host_params, get_params(opt_state)))
+            if properties['fit_method'] == 'relative':
+                params1 = results[0]
+                for i in range(1,len(results)):
+                    final_results.append(compute_derivatives(params1, results[i], dummy_host_params, get_params(opt_state)))
+                    
             batch_dp = np.zeros_like(init_params)
 
-            for grads, preds, labels in results:
+            for grads, preds, labels in final_results:
                 batch_dp += grads
                 epoch_predictions.append(preds)
                 epoch_labels.append(labels)    
@@ -243,7 +326,8 @@ Mean: {}
         
     return preds, labels, get_params(opt_state)
 
-def initialize_optimizer(optimizer, lr):
+def initialize_optimizer(optimizer, 
+                         lr):
     
     if optimizer == 'Adam':
         opt_init, opt_update, get_params = optimizers.adam(lr)
@@ -271,9 +355,10 @@ if __name__ == "__main__":
     globals()['properties'] = config
 
     init_params = initialize_parameters(properties['host_path'])
+    np.savez('init_params.npz', params=init_params)
+    
     opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
     
     preds, labels, final_params = train(properties['num_epochs'], opt_init, opt_update, get_params, init_params)
     
     np.savez('final_params.npz', params=final_params)
-    
