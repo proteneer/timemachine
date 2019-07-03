@@ -13,6 +13,7 @@ import functools
 
 from scipy import stats
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from system import serialize
 from system import forcefield
@@ -24,6 +25,13 @@ from jax.experimental import optimizers, stax
 
 import multiprocessing 
 
+def rescale_and_center(conf, scale_factor=1):
+    mol_com = np.sum(conf, axis=0)/conf.shape[0]
+    true_com = np.array([1.97698696, 1.90113478, 2.26042174]) # a-cd
+#     true_com = np.array([5.4108882, 4.75821426, 9.33421262]) # london
+    centered = conf - mol_com  # centered to origin
+    return true_com + centered/scale_factor
+    
 def run_simulation(params):
 
     p = multiprocessing.current_process()
@@ -42,92 +50,115 @@ def run_simulation(params):
     print("processing",guest_sdf_file)
     
     mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    
+    AllChem.EmbedMultipleConfs(mol, numConfs=50, randomSeed=1234, clearConfs=True)
         
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
     guest_potentials, _, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
     smirnoff_params = combined_params[len(dummy_host_params):]
 
-    combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
-        host_potentials, guest_potentials,
-        host_params, smirnoff_params,
-        host_param_groups, smirnoff_param_groups,
-        host_conf, guest_conf,
-        host_masses, guest_masses)
+    RH = []
+    RG = []
+    RHG = []
     
-    num_atoms = len(combined_masses)
+    for conf_idx in range(mol.GetNumConformers()):
+        c = mol.GetConformer(conf_idx)
+        conf = np.array(c.GetPositions(),dtype=np.float64)
+        guest_conf = conf/10
+        rot_matrix = stats.special_ortho_group.rvs(3).astype(dtype=np.float32)
+        guest_conf = np.matmul(guest_conf, rot_matrix)
+        guest_conf = rescale_and_center(guest_conf)
+        combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
+            host_potentials, guest_potentials,
+            host_params, smirnoff_params,
+            host_param_groups, smirnoff_param_groups,
+            host_conf, guest_conf,
+            host_masses, guest_masses)
 
-    def filter_groups(param_groups, groups):
-        roll = np.zeros_like(param_groups)
-        for g in groups:
-            roll = np.logical_or(roll, param_groups == g)
-        return roll
-    
-    dp_idxs = properties['dp_idxs']
-    
-    if len(dp_idxs) == 0:
-        host_dp_idxs = np.array([0])
-        guest_dp_idxs = np.array([0])
-        combined_dp_idxs = np.array([0])
-    else:
-        host_dp_idxs = np.argwhere(filter_groups(host_param_groups, dp_idxs)).reshape(-1)
-        guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, dp_idxs)).reshape(-1)
-        combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, dp_idxs)).reshape(-1)
+        num_atoms = len(combined_masses)
 
-    if properties['fit_method'] == 'absolute':
-        RH = simulation.run_simulation(
-            host_potentials,
-            host_params,
-            host_param_groups,
-            host_conf,
-            host_masses,
-            host_dp_idxs,
+        def filter_groups(param_groups, groups):
+            roll = np.zeros_like(param_groups)
+            for g in groups:
+                roll = np.logical_or(roll, param_groups == g)
+            return roll
+
+        dp_idxs = properties['dp_idxs']
+
+        if len(dp_idxs) == 0:
+            host_dp_idxs = np.array([0])
+            guest_dp_idxs = np.array([0])
+            combined_dp_idxs = np.array([0])
+        else:
+            host_dp_idxs = np.argwhere(filter_groups(host_param_groups, dp_idxs)).reshape(-1)
+            guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, dp_idxs)).reshape(-1)
+            combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, dp_idxs)).reshape(-1)
+
+        if properties['fit_method'] == 'absolute':
+            RH_i = simulation.run_simulation(
+                host_potentials,
+                host_params,
+                host_param_groups,
+                host_conf,
+                host_masses,
+                host_dp_idxs,
+                1000
+            )
+        else:
+            RH_i = None
+
+        RG_i = simulation.run_simulation(
+            guest_potentials,
+            smirnoff_params,
+            smirnoff_param_groups,
+            guest_conf,
+            guest_masses,
+            guest_dp_idxs,
             1000
         )
-    else:
-        RH = None
-        
-    RG = simulation.run_simulation(
-        guest_potentials,
-        smirnoff_params,
-        smirnoff_param_groups,
-        guest_conf,
-        guest_masses,
-        guest_dp_idxs,
-        1000
-    )
-    
 
-    RHG = simulation.run_simulation(
-        combined_potentials,
-        combined_params,
-        combined_param_groups,
-        combined_conf,
-        combined_masses,
-        combined_dp_idxs,
-        1000
-    )    
+        RHG_i = simulation.run_simulation(
+            combined_potentials,
+            combined_params,
+            combined_param_groups,
+            combined_conf,
+            combined_masses,
+            combined_dp_idxs,
+            1000
+        )    
+        RH.append(RH_i)
+        RG.append(RG_i)
+        RHG.append(RH_i)
     
     return RH, RG, RHG, label, host_dp_idxs, guest_dp_idxs, combined_dp_idxs, num_atoms
 
 def boltzmann_derivatives(reservoir):
-    running_sum_total_derivs = None
-    running_sum_E = 0
     n_reservoir = len(reservoir)
-
-    running_sum_dE_dp = None
-    running_sum_EmultdE_dp = None
+    num_atoms = len(reservoir[0][-1])
 
     E= []
+    dE_dx_temp = np.zeros((n_reservoir,n_reservoir,num_atoms,3))
     dE_dx = []
-    dx_d0 = []
+    dx_dp = []
     dE_dp = []
     for E_i, dE_dx_i, dx_dp_i, dE_dp_i, _ in reservoir:
         E.append(E_i)
         dE_dx.append(dE_dx_i)
         dx_dp.append(dx_dp_i)
         dE_dp.append(dE_dp_i)
-            
+    
+    E = np.array(E,dtype=np.float32)
+    dE_dx = np.array(dE_dx,dtype=np.float64)
+    dx_dp = np.array(dx_dp)
+    dx_dp = np.transpose(dx_dp,(0,2,3,1))
+    dE_dp = np.array(dE_dp) 
+    
+    for i in range(n_reservoir):
+        dE_dx_temp[i][i] = np.array(dE_dx[i])
+        
+    dE_dx = dE_dx_temp
+    
     ds_de_fn = jax.jacfwd(stax.softmax, argnums=(0,))
     ds_de = ds_de_fn(-E)
 
@@ -135,11 +166,9 @@ def boltzmann_derivatives(reservoir):
     tot_dE_dp = np.einsum('ijkl,jklm->im', dE_dx, dx_dp) + dE_dp
     s_e = stax.softmax(-E)
 
-    running_sum_total_derivs += np.matmul(-ds_de[0], tot_dE_dp)*np.expand_dims(E, 1) + np.expand_dims(s_e, axis=-1) * tot_dE_dp
+    total_derivs = np.matmul(-ds_de[0], tot_dE_dp)*np.expand_dims(E, 1) + np.expand_dims(s_e, axis=-1) * tot_dE_dp
 
-    running_sum_dE_dp = dE_dp
-
-    return np.sum(stax.softmax(-E)*E), np.sum(running_sum_dE_dp,axis=0)
+    return np.sum(stax.softmax(-E)*E), np.sum(total_derivs, axis=0)
 
 def compute_derivatives(params1,
                         params2,
@@ -147,8 +176,10 @@ def compute_derivatives(params1,
                        combined_params):
     
     RH1, RG1, RHG1, label_1, host_dp_idxs, guest_dp_idxs_1, combined_dp_idxs_1, num_atoms = params1
-    G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG1)
-    HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG1)
+    G_E, G_derivs, _ = boltzmann_derivatives(RG1)
+    HG_E, HG_derivs, _ = boltzmann_derivatives(RHG1)
+#     G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG1)
+#     HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG1)
         
     if properties['fit_method'] == 'absolute':
         H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH1)
@@ -163,8 +194,10 @@ def compute_derivatives(params1,
             
     elif properties['fit_method'] == 'relative':
         RH2, RG2, RHG2, label_2, host_dp_idxs, guest_dp_idxs_2, combined_dp_idxs_2, _ = params2
-        G_E_2, G_derivs_2, _ = simulation.average_E_and_derivatives(RG2)
-        HG_E_2, HG_derivs_2, _ = simulation.average_E_and_derivatives(RHG2)
+        G_E_2, G_derivs_2, _ = boltzmann_derivatives(RG2)
+        HG_E_2, HG_derivs_2, _ = boltzmann_derivatives(RHG2)
+#         G_E_2, G_derivs_2, _ = simulation.average_E_and_derivatives(RG2)
+#         HG_E_2, HG_derivs_2, _ = simulation.average_E_and_derivatives(RHG2)
         
         pred_enthalpy = HG_E - HG_E_2 - G_E + G_E_2
         label = label_1 - label_2
