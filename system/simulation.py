@@ -214,7 +214,7 @@ def run_simulation(
     
     potentials = forcefield.merge_potentials(potentials)
         
-    dt = 0.001
+    dt = 1e-10
     ca, cb, cc = langevin_coefficients(
         temperature=25.0,
         dt=dt,
@@ -324,9 +324,10 @@ def run_simulation(
 #     if pdb is not None:
 #         outfile = open(pdb_name + '.dcd','wb')
 #         dcd = DCDFile(outfile, pdb.topology, .0001)
+    nan = False
     max_iter = 25000
     for i in range(max_iter):
-        dt *= 1.01
+        dt *= 1.1
         dt = min(dt, 0.02)
         opt.set_dt(dt)
         ctxt.step()
@@ -340,7 +341,9 @@ def run_simulation(
 #             print("i", i, dt, E)
         if i % 100 == 0:
             if np.isnan(ctxt.get_E()):
-                raise Exception("energy is nan")
+                nan = True
+                break
+#                 raise Exception("energy is nan")
             dE_dx = ctxt.get_dE_dx()
             g_norm = mean_norm(dE_dx)
             x_norm = mean_norm(conf)
@@ -394,7 +397,8 @@ def run_simulation(
 #     outfile.flush()
 
     if np.isnan(ctxt.get_E()):
-        raise Exception("energy is nan")
+        nan = True
+#         raise Exception("energy is nan")
     if i == max_iter-1:
 #         print("Energy minimization failed to converge in ", i, "steps")
         raise Exception("Energy minimization failed to converge in ", i, "steps")
@@ -444,7 +448,6 @@ def run_simulation(
     #         print("count", count)
 
     #     ctxt.step()
-
     R = [[
         ctxt.get_E(),
         ctxt.get_dE_dx(),
@@ -453,5 +456,15 @@ def run_simulation(
 #         0
         ctxt.get_x()
     ]]
+    
+    if nan:
+        print("energy is nan")
+        R = [[
+            0,
+            np.zeros_like(ctxt.get_dE_dx()),
+            np.zeros_like(ctxt.get_dx_dp()),
+            np.zeros_like(ctxt.get_dE_dp()),
+            np.zeros_like(ctxt.get_x())
+        ]]
 
     return R

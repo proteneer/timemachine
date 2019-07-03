@@ -48,12 +48,12 @@ def run_simulation(params):
     host_params = combined_params[:len(dummy_host_params)]
     guest_sdf = open(os.path.join(properties['guest_directory'], guest_sdf_file), "r").read()
     print("processing",guest_sdf_file)
-    
-    mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
-    
-    AllChem.EmbedMultipleConfs(mol, numConfs=50, randomSeed=1234, clearConfs=True)
         
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+    
+    mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
+#     AllChem.EmbedMultipleConfs(mol, numConfs=5, randomSeed=1234, clearConfs=True)
+    AllChem.EmbedMultipleConfs(mol, numConfs=5, clearConfs=True)
 
     guest_potentials, _, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
     smirnoff_params = combined_params[len(dummy_host_params):]
@@ -95,6 +95,7 @@ def run_simulation(params):
             guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, dp_idxs)).reshape(-1)
             combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, dp_idxs)).reshape(-1)
 
+        RH_i = None
         if properties['fit_method'] == 'absolute':
             RH_i = simulation.run_simulation(
                 host_potentials,
@@ -105,8 +106,6 @@ def run_simulation(params):
                 host_dp_idxs,
                 1000
             )
-        else:
-            RH_i = None
 
         RG_i = simulation.run_simulation(
             guest_potentials,
@@ -127,9 +126,11 @@ def run_simulation(params):
             combined_dp_idxs,
             1000
         )    
-        RH.append(RH_i)
-        RG.append(RG_i)
-        RHG.append(RH_i)
+        if RH_i is not None:
+            RH.append(RH_i[0])
+            
+        RG.append(RG_i[0])
+        RHG.append(RHG_i[0])
     
     return RH, RG, RHG, label, host_dp_idxs, guest_dp_idxs, combined_dp_idxs, num_atoms
 
@@ -176,13 +177,17 @@ def compute_derivatives(params1,
                        combined_params):
     
     RH1, RG1, RHG1, label_1, host_dp_idxs, guest_dp_idxs_1, combined_dp_idxs_1, num_atoms = params1
-    G_E, G_derivs, _ = boltzmann_derivatives(RG1)
-    HG_E, HG_derivs, _ = boltzmann_derivatives(RHG1)
-#     G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG1)
-#     HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG1)
+    G_E, G_derivs = boltzmann_derivatives(RG1)
+    HG_E, HG_derivs = boltzmann_derivatives(RHG1)
+#     G_E_mean, _, _ = simulation.average_E_and_derivatives(RG1)
+#     HG_E_mean, _, _ = simulation.average_E_and_derivatives(RHG1)
+    
+#     print('boltzmann',G_E,HG_E)
+#     print('normal mean', G_E_mean,HG_E_mean)
         
     if properties['fit_method'] == 'absolute':
-        H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH1)
+#         H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH1)
+        H_E, H_derivs = boltzmann_derivatives(RH1)
         pred_enthalpy = HG_E - (G_E + H_E)
         label = label_1
         delta = pred_enthalpy - label
@@ -194,8 +199,8 @@ def compute_derivatives(params1,
             
     elif properties['fit_method'] == 'relative':
         RH2, RG2, RHG2, label_2, host_dp_idxs, guest_dp_idxs_2, combined_dp_idxs_2, _ = params2
-        G_E_2, G_derivs_2, _ = boltzmann_derivatives(RG2)
-        HG_E_2, HG_derivs_2, _ = boltzmann_derivatives(RHG2)
+        G_E_2, G_derivs_2 = boltzmann_derivatives(RG2)
+        HG_E_2, HG_derivs_2 = boltzmann_derivatives(RHG2)
 #         G_E_2, G_derivs_2, _ = simulation.average_E_and_derivatives(RG2)
 #         HG_E_2, HG_derivs_2, _ = simulation.average_E_and_derivatives(RHG2)
         
@@ -231,6 +236,10 @@ def compute_derivatives(params1,
         loss = log(cosh(delta))
         '''
         combined_derivs = (1 / np.cosh(delta)) * np.sinh(delta) * combined_derivs
+        
+    if np.amax(abs(combined_derivs)) * properties['learning_rate'] > 1e-1:
+        print("bad gradients")
+        combined_derivs *= 0
 
     return combined_derivs, pred_enthalpy, label
     
@@ -242,13 +251,13 @@ def initialize_parameters(host_path):
     structure_path = os.path.join(properties['guest_directory'], properties['guest_template'])
     if '.mol2' in properties['guest_template']:
         structure_file = open(structure_path,'r').read()
-        mol = Chem.MolFromMol2Block(structure_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
+        ref_mol = Chem.MolFromMol2Block(structure_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
     else:
         raise Exception('only mol2 files currently supported for ligand training')
 
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
     
-    _, smirnoff_params, _, _, _ = forcefield.parameterize(mol, smirnoff)
+    _, smirnoff_params, _, _, _ = forcefield.parameterize(ref_mol, smirnoff)
     
     epoch_combined_params = np.concatenate([host_params, smirnoff_params])
     
@@ -385,12 +394,18 @@ if __name__ == "__main__":
     with open(config_file[0], 'r') as file:
         config = json.load(file)
    
-    globals()['properties'] = config
+    properties = config
 
     init_params = initialize_parameters(properties['host_path'])
     np.savez('init_params.npz', params=init_params)
     
     opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
+    
+#     structure_path = os.path.join(properties['guest_directory'], properties['guest_template'])
+#     structure_file = open(structure_path,'r').read()
+#     mol = Chem.MolFromMol2Block(structure_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    
+#     AllChem.EmbedMultipleConfs(mol, numConfs=5, randomSeed=1234, clearConfs=True)
     
     preds, labels, final_params = train(properties['num_epochs'], opt_init, opt_update, get_params, init_params)
     

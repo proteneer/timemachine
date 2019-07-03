@@ -201,7 +201,7 @@ def deserialize_system(filepath):
 
             
             #ELECTROSTATIC SCALE MATRIX
-            scale_matrix = scale_matrix * 0.5
+#             scale_matrix = scale_matrix * 0.5
             test_es = (custom_ops.Electrostatics_f32,
                 (
                     scale_matrix,
