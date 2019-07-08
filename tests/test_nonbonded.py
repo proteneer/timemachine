@@ -189,6 +189,48 @@ class TestLennardJones(unittest.TestCase):
     #     np.testing.assert_allclose(np.tril(ref_h_val), np.tril(test_h_val), rtol=1e-10)
     #     np.testing.assert_allclose(test_mps, sess.run(ref_mps[0], feed_dict={x_ph: x0}), rtol=1e-9)
 
+
+    def test_lj612_small_4d(self):
+
+        x0 = np.array([
+            [ 0.0637,   0.0126,   0.2203, 0.5],
+            [ 1.0573,  -0.2011,   1.2864,-0.1],
+            [ 2.3928,   1.2209,  -0.2230, 0.2],
+            [-0.6891,   1.6983,   0.0780, 0.3],
+            [-0.6312,  -1.6261,  -0.2601, 0.5]
+        ], dtype=np.float64)
+
+        params = np.array([3.0, 2.0, 1.0, 1.4], dtype=np.float64)
+        param_idxs = np.array([
+            [0, 3],
+            [1, 2],
+            [1, 2],
+            [1, 2],
+            [1, 2]], dtype=np.int32)
+
+        scale_matrix = np.array([
+            [  0,  0,  1,0.5,  0],
+            [  0,  0,  0,  1,  1],
+            [  1,  0,  0,  0,0.2],
+            [0.5,  1,  0,  0,  1],
+            [  0,  1,0.2,  1,  0],
+        ], dtype=np.float64)
+
+        box = np.array([
+            [2.0, 0.5, 0.6],
+            [0.6, 1.6, 0.3],
+            [0.4, 0.7, 1.1]
+        ], dtype=np.float64)
+
+        energy_fn = functools.partial(nonbonded.lennard_jones,
+            scale_matrix=scale_matrix,
+            param_idxs=param_idxs,
+            cutoff=None)
+
+        check_grads(energy_fn, (x0, params, None), order=1, eps=1e-5)
+        check_grads(energy_fn, (x0, params, None), order=2, eps=1e-7)
+
+
     def test_lj612_small(self):
 
         x0 = np.array([

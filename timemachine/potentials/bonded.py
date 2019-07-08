@@ -162,6 +162,9 @@ def periodic_torsion(conf, params, box, torsion_idxs, param_idxs):
         indices into the params array denoting the force constant, phase, and period
     
     """
+
+    conf = conf[:, :3] # this is defined only in 3d
+
     ci = conf[torsion_idxs[:, 0]]
     cj = conf[torsion_idxs[:, 1]]
     ck = conf[torsion_idxs[:, 2]]
