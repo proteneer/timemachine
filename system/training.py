@@ -68,7 +68,7 @@ def run_simulation(params):
         guest_conf = conf/10
         rot_matrix = stats.special_ortho_group.rvs(3).astype(dtype=np.float32)
         guest_conf = np.matmul(guest_conf, rot_matrix)
-        guest_conf = rescale_and_center(guest_conf)
+        guest_conf = rescale_and_center(guest_conf, scale_factor=4)
         combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
             host_potentials, guest_potentials,
             host_params, smirnoff_params,
