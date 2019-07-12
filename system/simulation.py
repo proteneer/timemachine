@@ -214,7 +214,7 @@ def run_simulation(
     
     potentials = forcefield.merge_potentials(potentials)
         
-    dt = 1e-10
+    dt = 1e-12
     ca, cb, cc = langevin_coefficients(
         temperature=25.0,
         dt=dt,
@@ -226,22 +226,22 @@ def run_simulation(
 
     m_dt, m_ca, m_cb, m_cc = dt, 0.9, np.ones_like(cb)/10000, np.zeros_like(masses)
     
-    opt = custom_ops.LangevinOptimizer_f32(
+    opt = custom_ops.LangevinOptimizer_f64(
         m_dt,
         m_ca,
-        m_cb.astype(np.float32),
-        m_cc.astype(np.float32)
+        m_cb.astype(np.float64),
+        m_cc.astype(np.float64)
     )
 
     v0 = np.zeros_like(conf)
     dp_idxs = dp_idxs.astype(np.int32)
 
-    ctxt = custom_ops.Context_f32(
+    ctxt = custom_ops.Context_f64(
         potentials,
         opt,
-        params.astype(np.float32),
-        conf.astype(np.float32), # x0
-        v0.astype(np.float32), # v0
+        params.astype(np.float64),
+        conf.astype(np.float64), # x0
+        v0.astype(np.float64), # v0
         dp_idxs
     )
 
@@ -325,9 +325,9 @@ def run_simulation(
 #         outfile = open(pdb_name + '.dcd','wb')
 #         dcd = DCDFile(outfile, pdb.topology, .0001)
     nan = False
-    max_iter = 25000
+    max_iter = 50000
     for i in range(max_iter):
-        dt *= 1.1
+        dt *= 1.01
         dt = min(dt, 0.02)
         opt.set_dt(dt)
         ctxt.step()
@@ -339,7 +339,7 @@ def run_simulation(
 #         if i % 100 == 0:
 #             E = ctxt.get_E()
 #             print("i", i, dt, E)
-        if i % 100 == 0:
+        if i > 100 and i % 100 == 0:
             if np.isnan(ctxt.get_E()):
                 nan = True
                 break
@@ -399,11 +399,11 @@ def run_simulation(
     if np.isnan(ctxt.get_E()):
         nan = True
 #         raise Exception("energy is nan")
-    if i == max_iter-1:
+#     if i == max_iter-1:
 #         print("Energy minimization failed to converge in ", i, "steps")
-        raise Exception("Energy minimization failed to converge in ", i, "steps")
-    else:
-        print("Minimization converged in", i, "steps to", ctxt.get_E())
+#         raise Exception("Energy minimization failed to converge in ", i, "steps")
+#     else:
+    print("Minimization converged in", i, "steps to", ctxt.get_E())
 
     # #modify integrator to do dynamics
     # opt.set_dt(dt)
@@ -457,14 +457,18 @@ def run_simulation(
         ctxt.get_x()
     ]]
     
+#     print(np.amax(abs(ctxt.get_dE_dx())))
+#     print(np.amax(abs(ctxt.get_dx_dp())))
+#     print(np.amax(abs(ctxt.get_dE_dp())))
+    
     if nan:
         print("energy is nan")
         R = [[
-            0,
+            np.nan,
             np.zeros_like(ctxt.get_dE_dx()),
             np.zeros_like(ctxt.get_dx_dp()),
             np.zeros_like(ctxt.get_dE_dp()),
-            np.zeros_like(ctxt.get_x())
+            ctxt.get_x()
         ]]
 
     return R

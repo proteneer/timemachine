@@ -52,8 +52,8 @@ def run_simulation(params):
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
     
     mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
-#     AllChem.EmbedMultipleConfs(mol, numConfs=5, randomSeed=1234, clearConfs=True)
-    AllChem.EmbedMultipleConfs(mol, numConfs=5, clearConfs=True)
+    AllChem.EmbedMultipleConfs(mol, numConfs=5, randomSeed=1234, clearConfs=True)
+#     AllChem.EmbedMultipleConfs(mol, numConfs=1, clearConfs=True)
 
     guest_potentials, _, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
     smirnoff_params = combined_params[len(dummy_host_params):]
@@ -66,9 +66,11 @@ def run_simulation(params):
         c = mol.GetConformer(conf_idx)
         conf = np.array(c.GetPositions(),dtype=np.float64)
         guest_conf = conf/10
-        rot_matrix = stats.special_ortho_group.rvs(3).astype(dtype=np.float32)
-        guest_conf = np.matmul(guest_conf, rot_matrix)
+#         rot_matrix = stats.special_ortho_group.rvs(3).astype(dtype=np.float32)
+#         guest_conf = np.matmul(guest_conf, rot_matrix)
         guest_conf = rescale_and_center(guest_conf, scale_factor=4)
+#         host_conf = np.matmul(host_conf, rot_matrix)
+#         host_conf = rescale_and_center(host_conf, scale_factor=.25)
         combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
             host_potentials, guest_potentials,
             host_params, smirnoff_params,
@@ -117,6 +119,9 @@ def run_simulation(params):
             1000
         )
 
+        if np.isnan(RG_i[0][0]):
+            continue
+        
         RHG_i = simulation.run_simulation(
             combined_potentials,
             combined_params,
@@ -125,16 +130,19 @@ def run_simulation(params):
             combined_masses,
             combined_dp_idxs,
             1000
-        )    
+        )
         if RH_i is not None:
             RH.append(RH_i[0])
             
         RG.append(RG_i[0])
         RHG.append(RHG_i[0])
     
-    return RH, RG, RHG, label, host_dp_idxs, guest_dp_idxs, combined_dp_idxs, num_atoms
+    return RH_i, RG_i, RHG_i, label, host_dp_idxs, guest_dp_idxs, combined_dp_idxs, num_atoms
 
 def boltzmann_derivatives(reservoir):
+    if len(reservoir) == 0:
+        return 0,0
+    
     n_reservoir = len(reservoir)
     num_atoms = len(reservoir[0][-1])
 
@@ -179,11 +187,8 @@ def compute_derivatives(params1,
     RH1, RG1, RHG1, label_1, host_dp_idxs, guest_dp_idxs_1, combined_dp_idxs_1, num_atoms = params1
     G_E, G_derivs = boltzmann_derivatives(RG1)
     HG_E, HG_derivs = boltzmann_derivatives(RHG1)
-#     G_E_mean, _, _ = simulation.average_E_and_derivatives(RG1)
-#     HG_E_mean, _, _ = simulation.average_E_and_derivatives(RHG1)
-    
-#     print('boltzmann',G_E,HG_E)
-#     print('normal mean', G_E_mean,HG_E_mean)
+#     G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG1)
+#     HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG1)
         
     if properties['fit_method'] == 'absolute':
 #         H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH1)
@@ -209,10 +214,12 @@ def compute_derivatives(params1,
         delta = pred_enthalpy - label
         
         combined_derivs = np.zeros_like(combined_params)
-        combined_derivs[combined_dp_idxs_1] += HG_derivs
-        combined_derivs[combined_dp_idxs_2] -= HG_derivs_2
-        combined_derivs[guest_dp_idxs_1 + len(host_params)] -= G_derivs
-        combined_derivs[guest_dp_idxs_2 + len(host_params)] += G_derivs_2
+        
+        if type(G_derivs_2) is np.ndarray:
+            combined_derivs[combined_dp_idxs_1] += HG_derivs
+            combined_derivs[combined_dp_idxs_2] -= HG_derivs_2
+            combined_derivs[guest_dp_idxs_1 + len(host_params)] -= G_derivs
+            combined_derivs[guest_dp_idxs_2 + len(host_params)] += G_derivs_2
         
     if properties['loss_fn'] == 'L2':
         '''
@@ -237,9 +244,11 @@ def compute_derivatives(params1,
         '''
         combined_derivs = (1 / np.cosh(delta)) * np.sinh(delta) * combined_derivs
         
-    if np.amax(abs(combined_derivs)) * properties['learning_rate'] > 1e-1:
+    print(np.amax(abs(combined_derivs)) * properties['learning_rate'])
+    if np.isnan(combined_derivs).any() or np.amax(abs(combined_derivs)) * properties['learning_rate'] > 1e-1:
         print("bad gradients")
-        combined_derivs *= 0
+        combined_derivs = np.zeros_like(combined_derivs)
+        pred_enthalpy = np.nan
 
     return combined_derivs, pred_enthalpy, label
     
@@ -328,8 +337,9 @@ def train(num_epochs,
 
             for grads, preds, labels in final_results:
                 batch_dp += grads
-                epoch_predictions.append(preds)
-                epoch_labels.append(labels)    
+                if not np.isnan(preds):
+                    epoch_predictions.append(preds)
+                    epoch_labels.append(labels)    
 
             count += 1
             opt_state = opt_update(count, batch_dp, opt_state)
