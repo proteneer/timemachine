@@ -453,7 +453,6 @@ def run_simulation(
         ctxt.get_dE_dx(),
         ctxt.get_dx_dp(),
         ctxt.get_dE_dp(),
-#         0
         ctxt.get_x()
     ]]
     

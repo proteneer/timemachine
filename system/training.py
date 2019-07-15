@@ -52,7 +52,7 @@ def run_simulation(params):
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
     
     mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
-    AllChem.EmbedMultipleConfs(mol, numConfs=5, randomSeed=1234, clearConfs=True)
+    AllChem.EmbedMultipleConfs(mol, numConfs=10, randomSeed=1234, clearConfs=True)
 #     AllChem.EmbedMultipleConfs(mol, numConfs=1, clearConfs=True)
 
     guest_potentials, _, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
@@ -69,8 +69,6 @@ def run_simulation(params):
 #         rot_matrix = stats.special_ortho_group.rvs(3).astype(dtype=np.float32)
 #         guest_conf = np.matmul(guest_conf, rot_matrix)
         guest_conf = rescale_and_center(guest_conf, scale_factor=4)
-#         host_conf = np.matmul(host_conf, rot_matrix)
-#         host_conf = rescale_and_center(host_conf, scale_factor=.25)
         combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
             host_potentials, guest_potentials,
             host_params, smirnoff_params,
@@ -119,6 +117,7 @@ def run_simulation(params):
             1000
         )
 
+        # Don't add anything to reservoir if energy is nan
         if np.isnan(RG_i[0][0]):
             continue
         
@@ -131,15 +130,23 @@ def run_simulation(params):
             combined_dp_idxs,
             1000
         )
+        
+        # Don't add anything to reservoir if energy is nan
+        if np.isnan(RHG_i[0][0]):
+            continue
+            
         if RH_i is not None:
             RH.append(RH_i[0])
             
         RG.append(RG_i[0])
         RHG.append(RHG_i[0])
     
-    return RH_i, RG_i, RHG_i, label, host_dp_idxs, guest_dp_idxs, combined_dp_idxs, num_atoms
+    # RH, RG, and RHG are reservoirs containing N conformers each
+    return RH, RG, RHG, label, host_dp_idxs, guest_dp_idxs, combined_dp_idxs, num_atoms
 
 def boltzmann_derivatives(reservoir):
+    
+    # if reservoir is empty, return
     if len(reservoir) == 0:
         return 0,0
     
@@ -151,6 +158,8 @@ def boltzmann_derivatives(reservoir):
     dE_dx = []
     dx_dp = []
     dE_dp = []
+    
+    # energies and derivatives for each conformer
     for E_i, dE_dx_i, dx_dp_i, dE_dp_i, _ in reservoir:
         E.append(E_i)
         dE_dx.append(dE_dx_i)
@@ -215,11 +224,13 @@ def compute_derivatives(params1,
         
         combined_derivs = np.zeros_like(combined_params)
         
+        # if reservoir is empty, derivatives are all zero
         if type(G_derivs_2) is np.ndarray:
             combined_derivs[combined_dp_idxs_1] += HG_derivs
             combined_derivs[combined_dp_idxs_2] -= HG_derivs_2
             combined_derivs[guest_dp_idxs_1 + len(host_params)] -= G_derivs
             combined_derivs[guest_dp_idxs_2 + len(host_params)] += G_derivs_2
+            
         
     if properties['loss_fn'] == 'L2':
         '''
@@ -245,8 +256,8 @@ def compute_derivatives(params1,
         combined_derivs = (1 / np.cosh(delta)) * np.sinh(delta) * combined_derivs
         
     print(np.amax(abs(combined_derivs)) * properties['learning_rate'])
-    if np.isnan(combined_derivs).any() or np.amax(abs(combined_derivs)) * properties['learning_rate'] > 1e-1:
-        print("bad gradients")
+    if np.isnan(combined_derivs).any() or np.amax(abs(combined_derivs)) * properties['learning_rate'] > 1e-2 or np.amax(abs(combined_derivs)) == 0:
+        print("bad gradients/nan energy")
         combined_derivs = np.zeros_like(combined_derivs)
         pred_enthalpy = np.nan
 
@@ -339,7 +350,12 @@ def train(num_epochs,
                 batch_dp += grads
                 if not np.isnan(preds):
                     epoch_predictions.append(preds)
-                    epoch_labels.append(labels)    
+                    epoch_labels.append(labels)
+                    
+            # if everything is nan, terminate simulation
+            if len(epoch_predictions) == 0:
+                print("all energies are nan")
+                return
 
             count += 1
             opt_state = opt_update(count, batch_dp, opt_state)
@@ -410,12 +426,6 @@ if __name__ == "__main__":
     np.savez('init_params.npz', params=init_params)
     
     opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
-    
-#     structure_path = os.path.join(properties['guest_directory'], properties['guest_template'])
-#     structure_file = open(structure_path,'r').read()
-#     mol = Chem.MolFromMol2Block(structure_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
-    
-#     AllChem.EmbedMultipleConfs(mol, numConfs=5, randomSeed=1234, clearConfs=True)
     
     preds, labels, final_params = train(properties['num_epochs'], opt_init, opt_update, get_params, init_params)
     
