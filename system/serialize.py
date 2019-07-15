@@ -22,8 +22,7 @@ def deserialize_system(filepath):
         Location to an existing xml file to be deserialized
 
     """
-    
-    pdb = None
+
     if '.pdb' in os.path.splitext(filepath):
         pdb = PDBFile(filepath)
         forcefield = ff.ForceField('amber96.xml', 'tip3p.xml')

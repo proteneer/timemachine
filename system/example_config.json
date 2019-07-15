@@ -1,0 +1,13 @@
+{
+    "learning_rate": 0.0005, 
+    "optimizer": "Adam",
+    "num_epochs": 100, 
+    "batch_size": 4,
+    "loss_fn": "L1",
+    "guest_directory": "/home/ubuntu/Relay/Code/benchmarksets/input_files/cd-set1/mol2",
+    "host_path": "/home/ubuntu/Relay/Code/timemachine/examples/host_acd.xml",
+    "guest_template": "guest-1.mol2",
+    "dp_idxs": [0,1,2,3,4,5,7],
+    "training_data": "data.csv",
+    "gpu_offset": 0
+    }
