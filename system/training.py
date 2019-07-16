@@ -1,6 +1,7 @@
 import os
 import sys
 import numpy as np
+import time
 import datetime
 import sklearn.metrics
 import jax
@@ -20,11 +21,189 @@ from system import forcefield
 from system import simulation
 
 from openforcefield.typing.engines.smirnoff import ForceField
+from timemachine.observables import rmsd
 from timemachine.lib import custom_ops
 from jax.experimental import optimizers, stax
 
 import multiprocessing 
 
+def rmsd_run(params, batch_size=1):
+        
+    p = multiprocessing.current_process()
+    smirnoff_params, smiles_string, label, idx = params
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % batch_size)
+    
+    derivs = np.zeros_like(smirnoff_params)
+    losses = []
+
+    print('processing',smiles_string)
+    
+    mol = Chem.MolFromSmiles(smiles_string)
+    mol = Chem.AddHs(mol)
+    AllChem.EmbedMultipleConfs(mol,numConfs=5, randomSeed=1234, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
+    
+    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+
+    guest_potentials, _, smirnoff_param_groups, _, guest_masses = forcefield.parameterize(mol, smirnoff)
+
+    for conf_idx in range(mol.GetNumConformers()):
+        c = mol.GetConformer(conf_idx)
+        conf = np.array(c.GetPositions(),dtype=np.float64)
+        guest_conf = conf/10
+
+        def filter_groups(param_groups, groups):
+            roll = np.zeros_like(param_groups)
+            for g in groups:
+                roll = np.logical_or(roll, param_groups == g)
+            return roll
+
+        guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7,0,1,2,3,4,5])).reshape(-1)
+        
+        RG = simulation.run_simulation(
+            guest_potentials,
+            smirnoff_params,
+            smirnoff_param_groups,
+            guest_conf,
+            guest_masses,
+            guest_dp_idxs,
+            1000
+        )
+
+        dx_dp = RG[0][2]
+        conf = RG[0][-1]
+
+        loss = rmsd.opt_rot_rmsd(conf,label)
+        grad_fun = jax.grad(rmsd.opt_rot_rmsd,argnums=0)
+        grad_conf = grad_fun(conf,label)
+        combined_grad = np.einsum('kl,mkl->m', grad_conf, dx_dp)
+
+        derivs[guest_dp_idxs] += combined_grad
+        losses.append(loss)
+
+    losses = np.array(losses)
+
+    return derivs, np.mean(losses)
+
+def train_rmsd(num_epochs,
+               opt_init,
+               opt_update,
+               get_params,
+               init_params):
+
+#     training_data = []
+
+#     smiles_array = [
+#         'CCCC[NH3+]',
+#         'CCCCCC[NH3+]',
+#         'CCCCCCCC[NH3+]',
+#         'OC1CCCC1',
+#         'OC1CCCCCC1',
+#         'CCCC([O-])=O',
+#         'CCCCCC([O-])=O',
+#         'CCCCCCCC([O-])=O',
+#         'CCCC[NH2+]C',
+#         'CCCC(C)[NH3+]',
+#         'CCCCC[NH3+]',
+#         'CCCCCC[NH2+]C',
+#         'CCCCCC(C)[NH3+]',
+#         'CCCCCCC[NH3+]',
+#         'CCCCCCC(C)[NH3+]',
+#         'OC1CCC1',
+#         'OC1CCCCCCC1',
+#         'CCCCC([O-])=O',
+#         'CCC/C=C/C([O-])=O',
+#         'CC/C=C/CC([O-])=O',
+#         'CCCCCCC([O-])=O',
+#         '[O-]C(=O)CCCCC=C'
+#     ]
+    
+#     for smiles in smiles_array:
+
+#         ref_mol = Chem.MolFromSmiles(smiles)
+#         ref_mol = Chem.AddHs(ref_mol)
+#         AllChem.EmbedMolecule(ref_mol)
+
+#         smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+
+#         guest_potentials, smirnoff_params, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(ref_mol, smirnoff)
+
+#         RG = simulation.run_simulation(
+#                 guest_potentials,
+#                 smirnoff_params,
+#                 smirnoff_param_groups,
+#                 guest_conf,
+#                 guest_masses,
+#                 np.array([0]),
+#                 1000
+#             )
+
+#         training_data.append([smiles,RG[0][-1]])
+
+#     np.savez('training_data.npz',data=training_data,allow_pickle=True)
+    
+    training_data = np.load('training_data.npz',allow_pickle=True)['data']
+    
+    ref_mol = Chem.MolFromSmiles('CCCC[NH3+]')
+    ref_mol = Chem.AddHs(ref_mol)
+    AllChem.EmbedMolecule(ref_mol)
+
+    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+
+    guest_potentials, smirnoff_params, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(ref_mol, smirnoff)
+        
+    batch_size = 1
+    pool = multiprocessing.Pool(batch_size)
+    num_data_points = len(training_data)
+    num_batches = int(np.ceil(num_data_points/batch_size))
+    
+    opt_state = opt_init(smirnoff_params)
+    count = 0
+    
+    avg_loss = []
+    
+    for epoch in range(num_epochs):
+        start_time = time.time()
+
+        print('--- epoch:', epoch, "started at", datetime.datetime.now(), '----')
+        np.random.shuffle(training_data)
+        
+        losses = []
+        
+        for b_idx in range(num_batches):
+            
+            start_idx = b_idx*batch_size
+            end_idx = min((b_idx+1)*batch_size, num_data_points)
+            batch_data = training_data[start_idx:end_idx]
+
+            args = []
+    
+            for b_idx, b in enumerate(batch_data):
+                args.append([get_params(opt_state),b[0],b[1],b_idx])
+
+            results = pool.map(rmsd_run,args)
+            
+            batch_dp = np.zeros_like(get_params(opt_state))
+            
+            for grad, loss in results:
+                batch_dp += grad
+                losses.append(loss)
+
+            opt_state = opt_update(count, batch_dp, opt_state)
+            smirnoff_params = get_params(opt_state)
+            count += 1
+        
+        losses = np.array(losses)
+        mean_loss = np.mean(losses)
+        
+        np.savez('run_{}.npz'.format(epoch), loss=losses)
+        
+        print('''
+==============
+Mean Loss for Epoch {}: {}
+Elapsed time: {} seconds
+==============
+            '''.format(epoch,mean_loss,time.time()-start_time))
+        
 def rescale_and_center(conf, scale_factor=1):
     mol_com = np.sum(conf, axis=0)/conf.shape[0]
     true_com = np.array([1.97698696, 1.90113478, 2.26042174]) # a-cd
@@ -412,21 +591,24 @@ def initialize_optimizer(optimizer,
 
 if __name__ == "__main__":
     
-    config_file = glob.glob('*.json')
-    if len(config_file) == 0:
-        raise Exception('config file not found')
-    elif len(config_file) > 1:
-        raise Exception('multiple config files found')
-    with open(config_file[0], 'r') as file:
-        config = json.load(file)
+#     config_file = glob.glob('*.json')
+#     if len(config_file) == 0:
+#         raise Exception('config file not found')
+#     elif len(config_file) > 1:
+#         raise Exception('multiple config files found')
+#     with open(config_file[0], 'r') as file:
+#         config = json.load(file)
    
-    properties = config
+#     properties = config
 
-    init_params = initialize_parameters(properties['host_path'])
-    np.savez('init_params.npz', params=init_params)
+#     init_params = initialize_parameters(properties['host_path'])
+#     np.savez('init_params.npz', params=init_params)
     
-    opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
+#     opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
+
+    opt_init, opt_update, get_params = initialize_optimizer('Adam', 5e-4)
+    train_rmsd(100,opt_init,opt_update,get_params,None)
+
+#     preds, labels, final_params = train(properties['num_epochs'], opt_init, opt_update, get_params, init_params)
     
-    preds, labels, final_params = train(properties['num_epochs'], opt_init, opt_update, get_params, init_params)
-    
-    np.savez('final_params.npz', params=final_params)
+#     np.savez('final_params.npz', params=final_params)

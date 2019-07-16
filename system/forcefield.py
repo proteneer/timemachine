@@ -291,7 +291,7 @@ def parameterize(mol, forcefield, scale=1):
 
             for k, v in vd.items():
                 lj_param_idxs.append(v)
-
+                
             nrg_fns.append((
                 custom_ops.LennardJones_f64,
                 (
