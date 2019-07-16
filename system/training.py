@@ -27,11 +27,35 @@ from jax.experimental import optimizers, stax
 
 import multiprocessing 
 
-def rmsd_run(params, batch_size=1):
+def average_derivs(R, label):
+    running_sum_derivs = None
+    running_sum_confs = None
+
+    n_reservoir = len(R)
+    
+    grad_fun = jax.grad(rmsd.opt_rot_rmsd,argnums=0)
+    
+    for E, dE_dx, dx_dp, dE_dp, x in R:
+        if running_sum_derivs is None:
+            running_sum_derivs = np.zeros_like(dE_dp)
+        if running_sum_confs is None:
+            running_sum_confs = np.zeros_like(x)
+            
+        # this part is slow
+        grad_conf = grad_fun(x,label)
+        
+        combined_grad = np.einsum('kl,mkl->m', grad_conf, dx_dp)
+        
+        running_sum_derivs += combined_grad
+        running_sum_confs += x
+        
+    return running_sum_derivs/n_reservoir, running_sum_confs/n_reservoir
+
+def rmsd_run(params, batch_size=8):
         
     p = multiprocessing.current_process()
     smirnoff_params, smiles_string, label, idx = params
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % batch_size)
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % properties['batch_size'])
     
     derivs = np.zeros_like(smirnoff_params)
     losses = []
@@ -40,7 +64,7 @@ def rmsd_run(params, batch_size=1):
     
     mol = Chem.MolFromSmiles(smiles_string)
     mol = Chem.AddHs(mol)
-    AllChem.EmbedMultipleConfs(mol,numConfs=5, randomSeed=1234, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
+    AllChem.EmbedMultipleConfs(mol,numConfs=1, randomSeed=1234, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
     
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
@@ -57,7 +81,7 @@ def rmsd_run(params, batch_size=1):
                 roll = np.logical_or(roll, param_groups == g)
             return roll
 
-        guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7,0,1,2,3,4,5])).reshape(-1)
+        guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [4,5,7,8])).reshape(-1)
         
         RG = simulation.run_simulation(
             guest_potentials,
@@ -66,18 +90,14 @@ def rmsd_run(params, batch_size=1):
             guest_conf,
             guest_masses,
             guest_dp_idxs,
-            1000
+            500
         )
+        
+        G_deriv, G_conf = average_derivs(RG, label)
 
-        dx_dp = RG[0][2]
-        conf = RG[0][-1]
+        loss = rmsd.opt_rot_rmsd(G_conf,label)
 
-        loss = rmsd.opt_rot_rmsd(conf,label)
-        grad_fun = jax.grad(rmsd.opt_rot_rmsd,argnums=0)
-        grad_conf = grad_fun(conf,label)
-        combined_grad = np.einsum('kl,mkl->m', grad_conf, dx_dp)
-
-        derivs[guest_dp_idxs] += combined_grad
+        derivs[guest_dp_idxs] += G_deriv
         losses.append(loss)
 
     losses = np.array(losses)
@@ -139,7 +159,7 @@ def train_rmsd(num_epochs,
 
 #         training_data.append([smiles,RG[0][-1]])
 
-#     np.savez('training_data.npz',data=training_data,allow_pickle=True)
+#     np.savez('training_data.npz',data=training_data)
     
     training_data = np.load('training_data.npz',allow_pickle=True)['data']
     
@@ -151,7 +171,7 @@ def train_rmsd(num_epochs,
 
     guest_potentials, smirnoff_params, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(ref_mol, smirnoff)
         
-    batch_size = 1
+    batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
     num_data_points = len(training_data)
     num_batches = int(np.ceil(num_data_points/batch_size))
@@ -195,7 +215,7 @@ def train_rmsd(num_epochs,
         losses = np.array(losses)
         mean_loss = np.mean(losses)
         
-        np.savez('run_{}.npz'.format(epoch), loss=losses)
+        np.savez('run_{}.npz'.format(epoch), loss=losses,params=smirnoff_params)
         
         print('''
 ==============
@@ -535,7 +555,7 @@ def train(num_epochs,
             if len(epoch_predictions) == 0:
                 print("all energies are nan")
                 return
-
+            
             count += 1
             opt_state = opt_update(count, batch_dp, opt_state)
 
@@ -591,23 +611,23 @@ def initialize_optimizer(optimizer,
 
 if __name__ == "__main__":
     
-#     config_file = glob.glob('*.json')
-#     if len(config_file) == 0:
-#         raise Exception('config file not found')
-#     elif len(config_file) > 1:
-#         raise Exception('multiple config files found')
-#     with open(config_file[0], 'r') as file:
-#         config = json.load(file)
+    config_file = glob.glob('*.json')
+    if len(config_file) == 0:
+        raise Exception('config file not found')
+    elif len(config_file) > 1:
+        raise Exception('multiple config files found')
+    with open(config_file[0], 'r') as file:
+        config = json.load(file)
    
-#     properties = config
+    properties = config
 
 #     init_params = initialize_parameters(properties['host_path'])
 #     np.savez('init_params.npz', params=init_params)
     
 #     opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
 
-    opt_init, opt_update, get_params = initialize_optimizer('Adam', 5e-4)
-    train_rmsd(100,opt_init,opt_update,get_params,None)
+    opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
+    train_rmsd(properties['num_epochs'],opt_init,opt_update,get_params,None)
 
 #     preds, labels, final_params = train(properties['num_epochs'], opt_init, opt_update, get_params, init_params)
     
