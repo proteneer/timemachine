@@ -325,7 +325,7 @@ def run_simulation(
 #         outfile = open(pdb_name + '.dcd','wb')
 #         dcd = DCDFile(outfile, pdb.topology, .0001)
     nan = False
-    max_iter = 15000
+    max_iter = 10000
     for i in range(max_iter):
         dt *= 1.01
         dt = min(dt, 0.02)
@@ -406,55 +406,50 @@ def run_simulation(
     print("Minimization converged in", i, "steps to", ctxt.get_E())
 
     #modify integrator to do dynamics
-    opt.set_dt(1e-3)
-    opt.set_coeff_a(ca)
-    opt.set_coeff_b(cb)
-    opt.set_coeff_c(cc)
+#     opt.set_dt(1e-3)
+#     opt.set_coeff_a(ca)
+#     opt.set_coeff_b(cb)
+#     opt.set_coeff_c(cc)
 
-    # dynamics via reservoir sampling
-    k = n_samples # number of samples we want to keep
-    R = []
-    count = 0
+#     # dynamics via reservoir sampling
+#     k = n_samples # number of samples we want to keep
+#     R = []
+#     count = 0
 
-    for count in range(10000):
+#     for count in range(10000):
 
-        # closure around R, and ctxt
-        def get_reservoir_item(step):
-            E = ctxt.get_E()
-            dE_dx = ctxt.get_dE_dx()
-            dx_dp = ctxt.get_dx_dp()
-            dE_dp = ctxt.get_dE_dp()
-            x = ctxt.get_x()
+#         # closure around R, and ctxt
+#         def get_reservoir_item(step):
+#             E = ctxt.get_E()
+#             dE_dx = ctxt.get_dE_dx()
+#             dx_dp = ctxt.get_dx_dp()
+#             dE_dp = ctxt.get_dE_dp()
+#             x = ctxt.get_x()
 
-            limits = 1e5
-            # if min_dx < -limits or max_dx > limits:
-                # raise Exception("Derivatives blew up:", min_dx, max_dx)
-            return [E, dE_dx, dx_dp, dE_dp, x]
+#             limits = 1e5
+#             # if min_dx < -limits or max_dx > limits:
+#                 # raise Exception("Derivatives blew up:", min_dx, max_dx)
+#             return [E, dE_dx, dx_dp, dE_dp, x]
         
-        if count % 1000 == 0:
-            print(count, ctxt.get_E())
+#         if count % 1000 == 0:
+#             print(count, ctxt.get_E())
 
-        if count < k:
-            R.append(get_reservoir_item(count))
-        else:
-            j = random.randint(0, count)
-            if j < k:
-                R[j] = get_reservoir_item(count)
-                np.set_printoptions(suppress=True)
+#         if count < k:
+#             R.append(get_reservoir_item(count))
+#         else:
+#             j = random.randint(0, count)
+#             if j < k:
+#                 R[j] = get_reservoir_item(count)
 
-        ctxt.step()
+#         ctxt.step()
         
-#     R = [[
-#         ctxt.get_E(),
-#         ctxt.get_dE_dx(),
-#         ctxt.get_dx_dp(),
-#         ctxt.get_dE_dp(),
-#         ctxt.get_x()
-#     ]]
-    
-#     print(np.amax(abs(ctxt.get_dE_dx())))
-#     print(np.amax(abs(ctxt.get_dx_dp())))
-#     print(np.amax(abs(ctxt.get_dE_dp())))
+    R = [[
+        ctxt.get_E(),
+        ctxt.get_dE_dx(),
+        ctxt.get_dx_dp(),
+        ctxt.get_dE_dp(),
+        ctxt.get_x()
+    ]]
     
 #     if nan:
 #         print("energy is nan")
