@@ -191,6 +191,9 @@ def parameterize(mol, forcefield, scale=1):
             for k, v in vd.items():
                 bond_idxs.append(k)
                 bond_param_idxs.append(v)
+                
+            if len(bond_idxs) == 0:
+                raise Exception('no bonds')
 
             nrg_fns.append((
                 custom_ops.HarmonicBond_f64,
@@ -215,6 +218,9 @@ def parameterize(mol, forcefield, scale=1):
             for k, v in vd.items():
                 angle_idxs.append(k)
                 angle_param_idxs.append(v)
+                
+            if len(angle_idxs) == 0:
+                raise Exception('no angles')
 
             nrg_fns.append((
                 custom_ops.HarmonicAngle_f64,
@@ -255,6 +261,9 @@ def parameterize(mol, forcefield, scale=1):
                 for v in vv:
                     torsion_idxs.append(k)
                     torsion_param_idxs.append(v)
+                    
+            if len(torsion_idxs) == 0:
+                raise Exception('no torsions')
 
             nrg_fns.append((
                 custom_ops.PeriodicTorsion_f64,
