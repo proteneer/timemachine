@@ -81,7 +81,7 @@ def rmsd_test(num_epochs,
         
     return losses
 
-def average_derivs(R, label):
+def average_derivs(R, label, hydrogen_idxs=None):
     running_sum_derivs = None
     running_sum_confs = None
 
@@ -89,8 +89,20 @@ def average_derivs(R, label):
     
     if properties['run_type'] == 'train':
         grad_fun = jax.jit(jax.grad(rmsd.opt_rot_rmsd,argnums=0))
+        
+    if properties['remove_hydrogens'] ==  'True':
+        label = np.delete(label,hydrogen_idxs,axis=0)
     
     for E, dE_dx, dx_dp, dE_dp, x in R:
+
+        if properties['remove_hydrogens'] ==  'True':
+            # remove hydrogens from label conformation, predicted conformation, and dx/dp
+            new_dx_dp = []
+            for p in dx_dp:
+                new_dx_dp.append(np.delete(p,hydrogen_idxs,axis=0))
+            dx_dp = np.array(new_dx_dp)
+            x = np.delete(x,hydrogen_idxs,axis=0)
+            
         if running_sum_derivs is None:
             running_sum_derivs = np.zeros_like(dE_dp)
         if running_sum_confs is None:
@@ -113,7 +125,7 @@ def average_derivs(R, label):
             running_sum_derivs = np.zeros_like(running_sum_derivs)
             running_sum_confs *= np.nan
 
-    return running_sum_derivs/np.float32(n_reservoir), running_sum_confs/np.float32(n_reservoir)
+    return running_sum_derivs/np.float32(n_reservoir), running_sum_confs/np.float32(n_reservoir), label
 
 def rmsd_run(params):
         
@@ -169,7 +181,16 @@ def rmsd_run(params):
             100
         )
         
-        G_deriv, G_conf = average_derivs(RG, label)
+        if properties['remove_hydrogens'] ==  'True':
+            hydrogen_idxs = []
+            # find indices of hydrogen atoms
+            for i in range(len(guest_masses)):
+                if int(round(guest_masses[i])) == 1:
+                    hydrogen_idxs.append(i)
+            G_deriv, G_conf, label = average_derivs(RG, label, hydrogen_idxs)
+            
+        else:
+            G_deriv, G_conf, _ = average_derivs(RG, label)
 
         loss = rmsd.opt_rot_rmsd(G_conf,label)
         
@@ -191,7 +212,6 @@ def train_rmsd(num_epochs,
     # training data for RMSD must be .npz file
     training_data = np.load(properties['training_data'],allow_pickle=True)['data']
     
-    np.random.shuffle(training_data)
     training_data = training_data[:45000]
     
     batch_size = properties['batch_size']
