@@ -32,10 +32,10 @@ import traceback
 
 import signal
 
-def run_test(num_epochs,
+def rmsd_test(num_epochs,
              testing_params):
     training_data = np.load(properties['training_data'],allow_pickle=True)['data']
-    training_data = training_data[60000:]
+    training_data = training_data[45000:]
         
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
@@ -96,6 +96,7 @@ def average_derivs(R, label):
         if running_sum_confs is None:
             running_sum_confs = np.zeros_like(x)
         if np.isnan(E):
+            n_reservoir -= 1
             continue
            
         if properties['run_type'] == 'train':
@@ -106,13 +107,13 @@ def average_derivs(R, label):
         running_sum_confs += x
         
     if properties['run_type'] == 'train':
-        print(np.amax(abs(running_sum_derivs/n_reservoir)) * properties['learning_rate'])
-        if np.isnan(running_sum_derivs/n_reservoir).any() or np.amax(abs(running_sum_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1 or np.amax(abs(running_sum_derivs/n_reservoir)) == 0:
+        print(np.amax(abs(running_sum_derivs/np.float32(n_reservoir))) * properties['learning_rate'])
+        if np.isnan(running_sum_derivs/np.float32(n_reservoir)).any() or np.amax(abs(running_sum_derivs/np.float32(n_reservoir))) * properties['learning_rate'] > 1e-1:
             print("bad gradients/nan energy")
             running_sum_derivs = np.zeros_like(running_sum_derivs)
             running_sum_confs *= np.nan
 
-    return running_sum_derivs/n_reservoir, running_sum_confs/n_reservoir
+    return running_sum_derivs/np.float32(n_reservoir), running_sum_confs/np.float32(n_reservoir)
 
 def rmsd_run(params):
         
@@ -556,33 +557,6 @@ def compute_derivatives(params1,
         pred_enthalpy = np.nan
 
     return combined_derivs, pred_enthalpy, label
-    
-def initialize_parameters(host_path):
-
-    # setting general smirnoff parameters for guest
-    # random smiles string to initialize parameters
-    ref_mol = Chem.MolFromSmiles('CCCC')
-    ref_mol = Chem.AddHs(ref_mol)
-    AllChem.EmbedMolecule(ref_mol)
-
-    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
-
-    _, smirnoff_params, _, _, _ = forcefield.parameterize(ref_mol, smirnoff)
-                  
-#     structure_path = os.path.join(properties['guest_directory'], properties['guest_template'])
-#     if '.mol2' in properties['guest_template']:
-#         structure_file = open(structure_path,'r').read()
-#         ref_mol = Chem.MolFromMol2Block(structure_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
-#     else:
-#         raise Exception('only mol2 files currently supported for ligand training')
-
-    if properties['loss_type'] == 'Enthalpy':
-        _, _, (host_params, _), _ = serialize.deserialize_system(host_path)       
-        epoch_combined_params = np.concatenate([host_params, smirnoff_params])
-    else:
-        epoch_combined_params = None
-    
-    return epoch_combined_params, smirnoff_params
 
 def train(num_epochs, 
           opt_init, 
@@ -691,8 +665,46 @@ Mean: {}
         
     return preds, labels, get_params(opt_state)
 
+def initialize_parameters(host_path=None):
+    '''
+    Initializes parameters for training.
+    
+    host_path (string): path to host if training binding energies (default = None)
+    '''
+
+    # setting general smirnoff parameters for guest
+    # random smiles string to initialize parameters
+    ref_mol = Chem.MolFromSmiles('CCCC')
+    ref_mol = Chem.AddHs(ref_mol)
+    AllChem.EmbedMolecule(ref_mol)
+
+    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+
+    _, smirnoff_params, _, _, _ = forcefield.parameterize(ref_mol, smirnoff)
+                  
+#     structure_path = os.path.join(properties['guest_directory'], properties['guest_template'])
+#     if '.mol2' in properties['guest_template']:
+#         structure_file = open(structure_path,'r').read()
+#         ref_mol = Chem.MolFromMol2Block(structure_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
+#     else:
+#         raise Exception('only mol2 files currently supported for ligand training')
+
+    if properties['loss_type'] == 'Enthalpy':
+        _, _, (host_params, _), _ = serialize.deserialize_system(host_path)       
+        epoch_combined_params = np.concatenate([host_params, smirnoff_params])
+    else:
+        epoch_combined_params = None
+    
+    return epoch_combined_params, smirnoff_params
+
 def initialize_optimizer(optimizer, 
                          lr):
+    '''
+    Initializes JAX optimizer for gradient descent.
+    
+    optimizer (string): type of optimizer
+    lr (float): learning rate
+    '''
     
     if optimizer == 'Adam':
         opt_init, opt_update, get_params = optimizers.adam(lr)
@@ -723,7 +735,7 @@ if __name__ == "__main__":
         opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
 
         if properties['loss_type'] == 'RMSD':
-            _, init_params = initialize_parameters(None)
+            _, init_params = initialize_parameters()
             losses, final_params = train_rmsd(properties['num_epochs'],opt_init,opt_update,get_params,init_params)
 
         elif properties['loss_type'] == 'Enthalpy':
@@ -738,6 +750,6 @@ if __name__ == "__main__":
         if 'run_num' in properties:
             testing_params = np.load('run_{}.npz'.format(properties['run_num']))['params']
         else:
-            _, testing_params = initialize_parameters(None)
+            _, testing_params = initialize_parameters()
             
-        losses = run_test(properties['num_epochs'],testing_params)
+        losses = rmsd_test(properties['num_epochs'],testing_params)
