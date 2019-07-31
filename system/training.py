@@ -132,7 +132,85 @@ def average_derivs(R, label, hydrogen_idxs=None):
 def softmax(x):
     return stax.softmax(x)
 
-def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):    
+def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
+    
+    n_reservoir = len(R)
+    
+    kT = constants.BOLTZ * 298
+    
+    dE_dxs = []
+    dx_dps = []
+    dE_dps = []
+    xs = []
+    Es = []
+    
+    batch_rmsd = jax.vmap(rmsd.opt_rot_rmsd,(0,None))
+    
+    grad_fun = jax.grad(rmsd.opt_rot_rmsd,argnums=(0,))
+    batch_grad_fun = jax.vmap(grad_fun,(0,None))
+        
+    if properties['remove_hydrogens'] ==  'True':
+        label = np.delete(label,hydrogen_idxs,axis=0)
+              
+    for E, dE_dx, dx_dp, dE_dp, x in R:
+        
+        if properties['remove_hydrogens'] ==  'True':
+            # remove hydrogens from label conformation, predicted conformation, and dx/dp
+            inner = time.time()
+            dE_dx = np.delete(dE_dx,hydrogen_idxs,axis=0)
+            dx_dp = np.delete(dx_dp,hydrogen_idxs,axis=1)
+            x = np.delete(x,hydrogen_idxs,axis=0)
+            
+        if np.isnan(E):
+            n_reservoir -= 1
+            continue
+            
+        Es.append(E)
+        xs.append(x)
+        dx_dps.append(dx_dp)
+        dE_dxs.append(dE_dx)
+        dE_dps.append(dE_dp)
+    
+    if n_reservoir < 1:
+        return np.zeros_like(dE_dp), np.nan, label
+        
+    E = np.array(Es,dtype=np.float64)
+    confs = np.array(xs,dtype=np.float64)
+    dE_dx = np.array(dE_dxs,dtype=np.float64)
+    dx_dp = np.transpose(np.array(dx_dps,dtype=np.float64),(0,2,3,1))
+    dE_dp = np.array(dE_dps,dtype=np.float64)
+    
+    RMSD = batch_rmsd(confs,label)
+    
+    ds_dE_fn = jax.jacfwd(softmax,argnums=(0,))
+    ds_dE = ds_dRMSD_fn(-E / kT)[0]
+
+    s_E = softmax(-E / kT)
+
+    dRMSD_dx = batch_grad_fun(confs,label)[0]
+
+    tot_dRMSD_dp = np.einsum('ijk,ijkl->il',dRMSD_dx,dx_dp)
+    
+    tot_dE_dp = np.einsum('ijk,ijkl->il',dE_dx,dx_dp) + dE_dp
+
+    A = np.matmul(s_E, tot_dRMSD_dp)
+    B = np.matmul(np.matmul(RMSD,ds_dE), tot_dE_dp) / kT
+    
+    final_derivs = A - B
+    
+    loss = np.sum(s_E * RMSD)
+    
+#     print('mean:',np.mean(RMSD),'boltzmann:',loss)
+        
+    print(np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
+    if np.isnan(final_derivs/n_reservoir).any() or np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
+        print("bad gradients/nan energy")
+        final_derivs = np.zeros_like(final_derivs)
+        loss *= np.nan
+
+    return final_derivs, loss, label
+
+def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):    
 
     n_reservoir = len(R)
     
@@ -233,9 +311,9 @@ def rmsd_run(params):
 
     RG = []
     
-    guest_potentials, _, smirnoff_param_groups, _, guest_masses = forcefield.parameterize(mol, smirnoff)
-    
     for conf_idx in range(mol.GetNumConformers()):
+        guest_potentials, _, smirnoff_param_groups, _, guest_masses = forcefield.parameterize(mol, smirnoff)
+        
         c = mol.GetConformer(conf_idx)
         conf = np.array(c.GetPositions(),dtype=np.float64)
         guest_conf = conf/10
