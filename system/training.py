@@ -35,7 +35,7 @@ import signal
 def rmsd_test(num_epochs,
              testing_params):
     training_data = np.load(properties['training_data'],allow_pickle=True)['data']
-    training_data = training_data[45000:]
+    training_data = training_data[64:128]
         
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
@@ -82,37 +82,38 @@ def rmsd_test(num_epochs,
     return losses
 
 def average_derivs(R, label, hydrogen_idxs=None):
+    
     running_sum_derivs = None
     running_sum_confs = None
+    nan = False
 
     n_reservoir = len(R)
     
     if properties['run_type'] == 'train':
-        grad_fun = jax.jit(jax.grad(rmsd.opt_rot_rmsd,argnums=0))
+        grad_fun = jax.jit(jax.grad(rmsd.opt_rot_rmsd,argnums=(0,)))
         
     if properties['remove_hydrogens'] ==  'True':
         label = np.delete(label,hydrogen_idxs,axis=0)
     
     for E, dE_dx, dx_dp, dE_dp, x in R:
-
+        
         if properties['remove_hydrogens'] ==  'True':
             # remove hydrogens from label conformation, predicted conformation, and dx/dp
-            new_dx_dp = []
-            for p in dx_dp:
-                new_dx_dp.append(np.delete(p,hydrogen_idxs,axis=0))
-            dx_dp = np.array(new_dx_dp)
+            dx_dp = np.delete(dx_dp,hydrogen_idxs,axis=1)
             x = np.delete(x,hydrogen_idxs,axis=0)
-            
+                                   
         if running_sum_derivs is None:
             running_sum_derivs = np.zeros_like(dE_dp)
         if running_sum_confs is None:
             running_sum_confs = np.zeros_like(x)
+
         if np.isnan(E):
-            n_reservoir -= 1
-            continue
+            # TO DO: what if we start taking multiple samples? Don't throw out the entire reservoir
+            # find a better solution
+            nan = True
            
         if properties['run_type'] == 'train':
-            grad_conf = grad_fun(x,label)
+            grad_conf = grad_fun(x,label)[0]
             combined_grad = np.einsum('kl,mkl->m', grad_conf, dx_dp)
             running_sum_derivs += combined_grad
             
@@ -120,12 +121,169 @@ def average_derivs(R, label, hydrogen_idxs=None):
         
     if properties['run_type'] == 'train':
         print(np.amax(abs(running_sum_derivs/np.float32(n_reservoir))) * properties['learning_rate'])
-        if np.isnan(running_sum_derivs/np.float32(n_reservoir)).any() or np.amax(abs(running_sum_derivs/np.float32(n_reservoir))) * properties['learning_rate'] > 1e-1:
+        if nan or np.isnan(running_sum_derivs/n_reservoir).any() or np.amax(abs(running_sum_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
             print("bad gradients/nan energy")
             running_sum_derivs = np.zeros_like(running_sum_derivs)
             running_sum_confs *= np.nan
 
-    return running_sum_derivs/np.float32(n_reservoir), running_sum_confs/np.float32(n_reservoir), label
+    return running_sum_derivs/n_reservoir, running_sum_confs/n_reservoir, label
+
+@jax.jit
+def softmax(x):
+    return stax.softmax(x)
+
+def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
+    
+    n_reservoir = len(R)
+    
+    kT = constants.BOLTZ * 298
+    
+    dE_dxs = []
+    dx_dps = []
+    dE_dps = []
+    xs = []
+    Es = []
+    
+    batch_rmsd = jax.vmap(rmsd.opt_rot_rmsd,(0,None))
+    
+    grad_fun = jax.grad(rmsd.opt_rot_rmsd,argnums=(0,))
+    batch_grad_fun = jax.vmap(grad_fun,(0,None))
+        
+    if properties['remove_hydrogens'] ==  'True':
+        label = np.delete(label,hydrogen_idxs,axis=0)
+              
+    for E, dE_dx, dx_dp, dE_dp, x in R:
+        
+        if properties['remove_hydrogens'] ==  'True':
+            # remove hydrogens from label conformation, predicted conformation, and dx/dp
+            inner = time.time()
+            dE_dx = np.delete(dE_dx,hydrogen_idxs,axis=0)
+            dx_dp = np.delete(dx_dp,hydrogen_idxs,axis=1)
+            x = np.delete(x,hydrogen_idxs,axis=0)
+            
+        if np.isnan(E):
+            n_reservoir -= 1
+            continue
+            
+        Es.append(E)
+        xs.append(x)
+        dx_dps.append(dx_dp)
+        dE_dxs.append(dE_dx)
+        dE_dps.append(dE_dp)
+    
+    if n_reservoir < 1:
+        return np.zeros_like(dE_dp), np.nan, label
+        
+    E = np.array(Es,dtype=np.float64)
+    confs = np.array(xs,dtype=np.float64)
+    dE_dx = np.array(dE_dxs,dtype=np.float64)
+    dx_dp = np.transpose(np.array(dx_dps,dtype=np.float64),(0,2,3,1))
+    dE_dp = np.array(dE_dps,dtype=np.float64)
+    
+    RMSD = batch_rmsd(confs,label)
+    
+    ds_dE_fn = jax.jacfwd(softmax,argnums=(0,))
+    ds_dE = ds_dRMSD_fn(-E / kT)[0]
+
+    s_E = softmax(-E / kT)
+
+    dRMSD_dx = batch_grad_fun(confs,label)[0]
+
+    tot_dRMSD_dp = np.einsum('ijk,ijkl->il',dRMSD_dx,dx_dp)
+    
+    tot_dE_dp = np.einsum('ijk,ijkl->il',dE_dx,dx_dp) + dE_dp
+
+    A = np.matmul(s_E, tot_dRMSD_dp)
+    B = np.matmul(np.matmul(RMSD,ds_dE), tot_dE_dp) / kT
+    
+    final_derivs = A - B
+    
+    loss = np.sum(s_E * RMSD)
+    
+#     print('mean:',np.mean(RMSD),'boltzmann:',loss)
+        
+    print(np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
+    if np.isnan(final_derivs/n_reservoir).any() or np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
+        print("bad gradients/nan energy")
+        final_derivs = np.zeros_like(final_derivs)
+        loss *= np.nan
+
+    return final_derivs, loss, label
+
+def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):    
+
+    n_reservoir = len(R)
+    
+    dx_dps = []
+    xs = []
+    
+    batch_rmsd = jax.vmap(rmsd.opt_rot_rmsd,(0,None))
+    
+    if properties['run_type'] == 'train':
+        grad_fun = jax.grad(rmsd.opt_rot_rmsd,argnums=(0,))
+        batch_grad_fun = jax.vmap(grad_fun,(0,None))
+        
+    if properties['remove_hydrogens'] ==  'True':
+        start = time.time()
+        label = np.delete(label,hydrogen_idxs,axis=0)
+              
+    start = time.time()
+    for E, dE_dx, dx_dp, dE_dp, x in R:
+        
+        if properties['remove_hydrogens'] ==  'True':
+            # remove hydrogens from label conformation, predicted conformation, and dx/dp
+            inner = time.time()
+            dx_dp = np.delete(dx_dp,hydrogen_idxs,axis=1)
+            x = np.delete(x,hydrogen_idxs,axis=0)
+
+        if np.isnan(E):
+            n_reservoir -= 1
+            continue
+        
+        xs.append(x)
+        dx_dps.append(dx_dp)
+    
+    if n_reservoir < 1:
+        return np.zeros_like(dE_dp), np.nan, label
+        
+    confs = np.array(xs,dtype=np.float64)
+    dx_dp = np.transpose(dx_dps,(0,2,3,1))
+    
+#     start=time.time()
+    RMSD = batch_rmsd(confs,label)
+#     print('computing rmsd took:',time.time()-start)
+    
+    ds_dRMSD_fn = jax.jacfwd(softmax,argnums=(0,))
+#     start=time.time()
+    ds_dRMSD = ds_dRMSD_fn(RMSD)[0]
+#     print('computing ds/dRMSD took:',time.time()-start)
+
+#     start = time.time()
+    s_RMSD = softmax(-RMSD)
+#     print('computing s(-RMSD) took:',time.time()-start)
+#     start = time.time()
+    dRMSD_dx = batch_grad_fun(confs,label)[0]
+#     print('computing dRMSD/dx took:',time.time()-start)
+
+    tot_dRMSD_dp = np.einsum('ijk,ijkl->il',dRMSD_dx,dx_dp)
+
+    A = np.matmul(s_RMSD, tot_dRMSD_dp)
+    B = np.matmul(np.matmul(RMSD,ds_dRMSD), tot_dRMSD_dp)
+    
+    final_derivs = A - B
+    
+    loss = np.sum(s_RMSD * RMSD)
+    
+#     print('mean:',np.mean(RMSD),'boltzmann:',loss)
+        
+    if properties['run_type'] == 'train':
+        print(np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
+        if np.isnan(final_derivs/n_reservoir).any() or np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
+            print("bad gradients/nan energy")
+            final_derivs = np.zeros_like(final_derivs)
+            loss *= np.nan
+
+    return final_derivs, loss, label
 
 def rmsd_run(params):
         
@@ -145,11 +303,13 @@ def rmsd_run(params):
     
     # embed some bad conformers
     if properties['random'] == 'yes':
-        AllChem.EmbedMolecule(mol, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
+        AllChem.EmbedMultipleConfs(mol, numConfs=5, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
     else:
-        AllChem.EmbedMolecule(mol, randomSeed=1234, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
+        AllChem.EmbedMultipleConfs(mol, numConfs=5, randomSeed=1234, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
     
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+
+    RG = []
 
     for conf_idx in range(mol.GetNumConformers()):
         guest_potentials, _, smirnoff_param_groups, _, guest_masses = forcefield.parameterize(mol, smirnoff)
@@ -171,7 +331,8 @@ def rmsd_run(params):
         else:
             guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, dp_idxs)).reshape(-1)
                     
-        RG = simulation.run_simulation(
+
+        RG_i = simulation.run_simulation(
             guest_potentials,
             smirnoff_params,
             smirnoff_param_groups,
@@ -180,22 +341,39 @@ def rmsd_run(params):
             guest_dp_idxs,
             100
         )
+
+        RG.append(RG_i[0])
         
+    if len(RG) == 0:
+        return derivs, np.nan
+    
+    if properties['boltzmann'] == 'True':
+        if properties['remove_hydrogens'] ==  'True':
+            hydrogen_idxs = []
+            # find indices of hydrogen atoms
+            start = time.time()
+            for i in range(len(guest_masses)):
+                if int(round(guest_masses[i])) == 1:
+                    hydrogen_idxs.append(i)  
+#             print('finding hydrogen_idxs took:',time.time() - start)
+            G_deriv, loss, label = boltzmann_rmsd_derivs(RG, label, hydrogen_idxs)
+        else:
+            G_deriv, loss, label = boltzmann_rmsd_derivs(RG, label, hydrogen_idxs)
+    else:
         if properties['remove_hydrogens'] ==  'True':
             hydrogen_idxs = []
             # find indices of hydrogen atoms
             for i in range(len(guest_masses)):
                 if int(round(guest_masses[i])) == 1:
-                    hydrogen_idxs.append(i)
+                    hydrogen_idxs.append(i)    
             G_deriv, G_conf, label = average_derivs(RG, label, hydrogen_idxs)
-            
         else:
             G_deriv, G_conf, _ = average_derivs(RG, label)
-
         loss = rmsd.opt_rot_rmsd(G_conf,label)
         
-        derivs[guest_dp_idxs] += G_deriv
-        losses.append(loss)
+            
+    derivs[guest_dp_idxs] += G_deriv
+    losses.append(loss)
 
     # RMSD for each conformer generated
     losses = np.array(losses)
@@ -254,7 +432,7 @@ def train_rmsd(num_epochs,
     median_loss = np.median(losses)
 
     np.savez('run_0.npz', filename=epoch_filenames, loss=losses, params=get_params(opt_state))
-
+    
     print('''
 Initial
 ==============
@@ -273,7 +451,7 @@ Median RMSD: {}
 Elapsed time: {} seconds
 ==============
         '''.format(mean_loss,median_loss,time.time()-start_time))
-            
+
     for epoch in tqdm(range(num_epochs),desc="Total time"):
         
         start_time = time.time()
@@ -300,9 +478,10 @@ Elapsed time: {} seconds
             results = pool.map(rmsd_run,args)
             
             batch_dp = np.zeros_like(get_params(opt_state))
-            
             for grad, loss in results:
                 batch_dp += grad
+#                 if np.isnan(loss):
+#                     return
                 if not np.isnan(loss):
                     losses.append(loss)
 
@@ -343,7 +522,6 @@ Elapsed time: {} seconds
 def rescale_and_center(conf, scale_factor=1):
     mol_com = np.sum(conf, axis=0)/conf.shape[0]
     true_com = np.array([1.97698696, 1.90113478, 2.26042174]) # a-cd
-#     true_com = np.array([5.4108882, 4.75821426, 9.33421262]) # london
     centered = conf - mol_com  # centered to origin
     return true_com + centered/scale_factor
     
@@ -692,6 +870,7 @@ def initialize_parameters(host_path=None):
     host_path (string): path to host if training binding energies (default = None)
     '''
 
+>>>>>>> guowei/boltzmann_rmsd_training
     # setting general smirnoff parameters for guest
     # random smiles string to initialize parameters
     ref_mol = Chem.MolFromSmiles('CCCC')
@@ -767,8 +946,8 @@ if __name__ == "__main__":
         
     elif properties['run_type'] == 'test':
         # select the run_{}.npz file to grab parameters from
-        if 'run_num' in properties:
-            testing_params = np.load('run_{}.npz'.format(properties['run_num']))['params']
+        if 'param_file' in properties:
+            testing_params = np.load(properties['param_file'])['params']
         else:
             _, testing_params = initialize_parameters()
             

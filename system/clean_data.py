@@ -52,8 +52,8 @@ def create_data(params):
             raise Exception('not mol2')
         with open(os.path.join(directory,filename),'r') as f:
             structure_file = f.read()
-        if ' H ' not in structure_file:
-            raise Exception('no hydrogens')
+#         if ' H ' not in structure_file:
+#             raise Exception('no hydrogens')
         ref_mol = Chem.MolFromMol2Block(structure_file, sanitize=False, removeHs=False, cleanupSubstructures=True)
         Chem.SanitizeMol(ref_mol)
         AllChem.EmbedMolecule(ref_mol, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
