@@ -35,7 +35,7 @@ import signal
 def rmsd_test(num_epochs,
              testing_params):
     training_data = np.load(properties['training_data'],allow_pickle=True)['data']
-    training_data = training_data[45000:]
+    training_data = training_data[64:128]
         
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
@@ -233,9 +233,9 @@ def rmsd_run(params):
 
     RG = []
     
+    guest_potentials, _, smirnoff_param_groups, _, guest_masses = forcefield.parameterize(mol, smirnoff)
+    
     for conf_idx in range(mol.GetNumConformers()):
-        guest_potentials, _, smirnoff_param_groups, _, guest_masses = forcefield.parameterize(mol, smirnoff)
-        
         c = mol.GetConformer(conf_idx)
         conf = np.array(c.GetPositions(),dtype=np.float64)
         guest_conf = conf/10
@@ -264,6 +264,9 @@ def rmsd_run(params):
         )
         RG.append(RG_i[0])
         
+    if len(RG) == 0:
+        return derivs, np.nan
+    
     if properties['boltzmann'] == 'True':
         if properties['remove_hydrogens'] ==  'True':
             hydrogen_idxs = []
@@ -276,7 +279,6 @@ def rmsd_run(params):
             G_deriv, loss, label = boltzmann_rmsd_derivs(RG, label, hydrogen_idxs)
         else:
             G_deriv, loss, label = boltzmann_rmsd_derivs(RG, label, hydrogen_idxs)
-
     else:
         if properties['remove_hydrogens'] ==  'True':
             hydrogen_idxs = []
@@ -289,6 +291,7 @@ def rmsd_run(params):
             G_deriv, G_conf, _ = average_derivs(RG, label)
         loss = rmsd.opt_rot_rmsd(G_conf,label)
         
+            
     derivs[guest_dp_idxs] += G_deriv
     losses.append(loss)
 
@@ -307,7 +310,7 @@ def train_rmsd(num_epochs,
     # training data for RMSD must be .npz file
     training_data = np.load(properties['training_data'],allow_pickle=True)['data']
     
-    training_data = training_data[:640]
+    training_data = training_data[:45000]
     
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
@@ -862,8 +865,8 @@ if __name__ == "__main__":
         
     elif properties['run_type'] == 'test':
         # select the run_{}.npz file to grab parameters from
-        if 'run_num' in properties:
-            testing_params = np.load('run_{}.npz'.format(properties['run_num']))['params']
+        if 'param_file' in properties:
+            testing_params = np.load(properties['param_file'])['params']
         else:
             _, testing_params = initialize_parameters()
             
