@@ -1,7 +1,7 @@
 import sys
 import rdkit
 from rdkit import Chem
-
+import scipy.linalg
 import simtk
 import functools
 
@@ -11,29 +11,28 @@ from openforcefield.utils import toolkits
 from openforcefield.typing.engines.smirnoff import ForceField
 from openforcefield.topology import ValenceDict
 
-from timemachine.lib import custom_ops
+from timemachine.potentials import bonded, nonbonded
 
 def merge_potentials(nrgs):
     c_nrgs = []
     for a in nrgs:
         a_name = a[0]
         a_args = a[1]
-        if a_name == custom_ops.HarmonicBond_f32:
-            c_nrgs.append(custom_ops.HarmonicBond_f32(a_args[0], a_args[1]))
-        elif a_name == custom_ops.HarmonicAngle_f32:
-            c_nrgs.append(custom_ops.HarmonicAngle_f32(a_args[0], a_args[1]))
-        elif a_name == custom_ops.PeriodicTorsion_f32:
-            c_nrgs.append(custom_ops.PeriodicTorsion_f32(a_args[0], a_args[1]))
-        elif a_name == custom_ops.LennardJones_f32:
-            c_nrgs.append(custom_ops.LennardJones_f32(a_args[0].astype(np.float32), a_args[1]))
-        elif a_name == custom_ops.Electrostatics_f32:
-            c_nrgs.append(custom_ops.Electrostatics_f32(a_args[0].astype(np.float32), a_args[1]))
+        if a_name == bonded.harmonic_bond:
+            c_nrgs.append(functools.partial(bonded.harmonic_bond, bond_idxs=a_args[0], param_idxs=a_args[1], box=None))
+        elif a_name == bonded.harmonic_angle:
+            c_nrgs.append(functools.partial(bonded.harmonic_angle, angle_idxs=a_args[0], param_idxs=a_args[1], box=None))
+        elif a_name == bonded.periodic_torsion:
+            c_nrgs.append(functools.partial(bonded.periodic_torsion, torsion_idxs=a_args[0], param_idxs=a_args[1], box=None))
+        elif a_name == nonbonded.lennard_jones:
+            c_nrgs.append(functools.partial(nonbonded.lennard_jones, scale_matrix=a_args[0].astype(np.float32), param_idxs=a_args[1], box=None))
+        elif a_name == nonbonded.electrostatics:
+            c_nrgs.append(functools.partial(nonbonded.electrostatics, scale_matrix=a_args[0].astype(np.float32), param_idxs=a_args[1], box=None))
         else:
             raise Exception("Unknown potential", a_name)
 
     return c_nrgs  
 
-# todo generalize to N nrg_functionals
 def combiner(
     a_nrgs, b_nrgs,
     a_params, b_params,
@@ -54,10 +53,8 @@ def combiner(
 
     a_nrgs.sort(key=str)
     b_nrgs.sort(key=str)
-
-
-
     c_nrgs = []
+
     for a, b in zip(a_nrgs, b_nrgs):
         a_name = a[0]
         a_args = a[1]
@@ -65,30 +62,31 @@ def combiner(
         b_args = b[1]
 
         assert a_name == b_name
-        if a_name == custom_ops.HarmonicBond_f32:
+        if a_name == bonded.harmonic_bond:
             bond_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             bond_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append((custom_ops.HarmonicBond_f32, (bond_idxs, bond_param_idxs)))
-        elif a_name == custom_ops.HarmonicAngle_f32:
+            c_nrgs.append((bonded.harmonic_bond, (bond_idxs, bond_param_idxs)))
+        elif a_name == bonded.harmonic_angle:
             angle_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             angle_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append((custom_ops.HarmonicAngle_f32, (angle_idxs, angle_param_idxs)))
-        elif a_name == custom_ops.PeriodicTorsion_f32:
+            c_nrgs.append((bonded.harmonic_angle, (angle_idxs, angle_param_idxs)))
+        elif a_name == bonded.periodic_torsion:
             torsion_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append((custom_ops.PeriodicTorsion_f32, (torsion_idxs, torsion_param_idxs)))
-        elif a_name == custom_ops.LennardJones_f32:
+            c_nrgs.append((bonded.periodic_torsion, (torsion_idxs, torsion_param_idxs)))
+        elif a_name == nonbonded.lennard_jones:
             lj_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=np.float64)
             lj_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
             lj_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
             lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append((custom_ops.LennardJones_f32, (lj_scale_matrix, lj_param_idxs)))
-        elif a_name == custom_ops.Electrostatics_f32:
+            c_nrgs.append((nonbonded.lennard_jones, (lj_scale_matrix, lj_param_idxs)))
+        elif a_name == nonbonded.electrostatics:
+            # intermolecular
             es_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=np.float64)
             es_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
             es_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
             es_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append((custom_ops.Electrostatics_f32, (es_scale_matrix, es_param_idxs)))
+            c_nrgs.append((nonbonded.electrostatics, (es_scale_matrix, es_param_idxs)))
         else:
             raise Exception("Unknown potential", a_name)
 
@@ -179,9 +177,7 @@ def parameterize(mol, forcefield):
             vd = ValenceDict()
             for p in handler_params.parameters:
                 k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
-                matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
-                # print(p.smirks, matches)
-                
+                matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)               
                 for m in matches:
                     vd[m] = (k_idx, l_idx)
 
@@ -193,7 +189,7 @@ def parameterize(mol, forcefield):
                 bond_param_idxs.append(v)
 
             nrg_fns.append((
-                custom_ops.HarmonicBond_f32,
+                bonded.harmonic_bond,
                 (
                     np.array(bond_idxs, dtype=np.int32),
                     np.array(bond_param_idxs, dtype=np.int32)
@@ -217,7 +213,7 @@ def parameterize(mol, forcefield):
                 angle_param_idxs.append(v)
 
             nrg_fns.append((
-                custom_ops.HarmonicAngle_f32,
+                bonded.harmonic_angle,
                 (
                     np.array(angle_idxs, dtype=np.int32),
                     np.array(angle_param_idxs, dtype=np.int32)
@@ -257,16 +253,18 @@ def parameterize(mol, forcefield):
                     torsion_param_idxs.append(v)
 
             nrg_fns.append((
-                custom_ops.PeriodicTorsion_f32,
+                bonded.periodic_torsion,
                 (
                     np.array(torsion_idxs, dtype=np.int32),
                     np.array(torsion_param_idxs, dtype=np.int32)
                 )
             ))
+
         elif handler_name == "vdW":
             # lennardjones
             vd = ValenceDict()
             for param in handler_params.parameters:
+                # s_idx, e_idx = add_param(to_md_units(param.sigma), 8), add_param(to_md_units(param.epsilon), 9)
                 s_idx, e_idx = add_param(to_md_units(param.sigma), 8), add_param(to_md_units(param.epsilon), 9)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, param.smirks)
                 for m in matches:
@@ -293,7 +291,7 @@ def parameterize(mol, forcefield):
                 lj_param_idxs.append(v)
 
             nrg_fns.append((
-                custom_ops.LennardJones_f32,
+                nonbonded.lennard_jones,
                 [
                     np.array(scale_matrix, dtype=np.int32),
                     np.array(lj_param_idxs, dtype=np.int32)
@@ -330,21 +328,23 @@ def parameterize(mol, forcefield):
         charge_param_idxs.append(v)
 
     nrg_fns.append((
-        custom_ops.Electrostatics_f32,
+        nonbonded.electrostatics,
         (
-            np.array(scale_matrix, dtype=np.int32),
+            np.array(scale_matrix, dtype=np.float32),
             np.array(charge_param_idxs, dtype=np.int32)
         )
     ))
 
-    c = mol.GetConformer(0)
-    conf = np.array(c.GetPositions(), dtype=np.float64)
-    conf = conf/10 # convert to md_units
+    all_confs = []
+    for c_idx in range(mol.GetNumConformers()):
+        c = mol.GetConformer(c_idx)
+        conf = np.array(c.GetPositions(), dtype=np.float64)
+        conf = conf/10 # convert to md_units
+        all_confs.append(conf)
 
     masses = []
     for atom in mol.GetAtoms():
         masses.append(atom.GetMass())
     masses = np.array(masses, dtype=np.float64)
 
-    return nrg_fns, np.array(global_params), np.array(global_param_groups, dtype=np.int32), conf, masses
-
+    return nrg_fns, np.array(global_params), np.array(global_param_groups, dtype=np.int32), all_confs, masses

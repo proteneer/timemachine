@@ -81,8 +81,6 @@ def pairwise_energy(conf, box, charges, cutoff):
     eij = qi*qj/dij
 
     """
-
-
     qi = np.expand_dims(charges, 0) # (1, N)
     qj = np.expand_dims(charges, 1) # (N, 1)
     qij = np.multiply(qi, qj)
@@ -159,7 +157,6 @@ def electrostatics(conf, params, box, param_idxs, scale_matrix, cutoff=None, alp
         # non periodic electrostatics is straightforward.
         # note that we do not support reaction field approximations.
         eij = scale_matrix*pairwise_energy(conf, box, charges, cutoff)
-
         return ONE_4PI_EPS0*np.sum(eij)/2
 
 

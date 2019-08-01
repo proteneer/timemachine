@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from timemachine.lib import custom_ops
+from timemachine.potentials import bonded, nonbonded
 
 from simtk import openmm as mm
 from simtk.openmm import app
@@ -60,7 +60,7 @@ def deserialize_system(system, coords):
     for p in range(system.getNumParticles()):
         masses.append(value(system.getParticleMass(p)))
 
-    print(len(masses), coords.shape[0])
+    # print(len(masses), coords.shape[0])
 
     assert len(masses) == coords.shape[0]
 
@@ -84,7 +84,7 @@ def deserialize_system(system, coords):
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
             test_hb = (
-                custom_ops.HarmonicBond_f32,
+                bonded.harmonic_bond,
                 (
                     bond_idxs,
                     param_idxs
@@ -111,7 +111,7 @@ def deserialize_system(system, coords):
             angle_idxs = np.array(angle_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
-            test_ha = (custom_ops.HarmonicAngle_f32,
+            test_ha = (bonded.harmonic_angle,
                 (
                     angle_idxs,
                     param_idxs
@@ -141,7 +141,7 @@ def deserialize_system(system, coords):
             torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
-            test_ha = (custom_ops.PeriodicTorsion_f32,
+            test_ha = (bonded.periodic_torsion,
                 (
                     torsion_idxs,
                     param_idxs
@@ -153,8 +153,7 @@ def deserialize_system(system, coords):
         if isinstance(force, mm.NonbondedForce):
 
             num_atoms = force.getNumParticles()
-            scale_matrix = np.ones((num_atoms, num_atoms)) - np.eye(num_atoms)
-            scale_matrix /= 2 # DEBUG
+            scale_matrix = np.ones((num_atoms, num_atoms), dtype=np.float32) - np.eye(num_atoms)
 
             charge_param_idxs = []
             lj_param_idxs = []
@@ -189,7 +188,7 @@ def deserialize_system(system, coords):
             charge_param_idxs = np.array(charge_param_idxs, dtype=np.int32)
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
 
-            test_lj = (custom_ops.LennardJones_f32,
+            test_lj = (nonbonded.lennard_jones,
                 (
                     scale_matrix,
                     lj_param_idxs
@@ -198,7 +197,7 @@ def deserialize_system(system, coords):
 
             test_potentials.append(test_lj)
 
-            test_es = (custom_ops.Electrostatics_f32,
+            test_es = (nonbonded.electrostatics,
                 (
                     scale_matrix,
                     charge_param_idxs,
