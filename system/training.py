@@ -24,12 +24,11 @@ from system import simulation
 from openforcefield.typing.engines.smirnoff import ForceField
 from timemachine.observables import rmsd
 from timemachine.lib import custom_ops
+from timemachine import constants
 from jax.experimental import optimizers, stax
 
 import multiprocessing
-
 import traceback
-
 import signal
 
 def rmsd_test(num_epochs,
@@ -108,9 +107,8 @@ def average_derivs(R, label, hydrogen_idxs=None):
             running_sum_confs = np.zeros_like(x)
 
         if np.isnan(E):
-            # TO DO: what if we start taking multiple samples? Don't throw out the entire reservoir
-            # find a better solution
-            nan = True
+            n_reservoir -= 1
+            continue
            
         if properties['run_type'] == 'train':
             grad_conf = grad_fun(x,label)[0]
@@ -119,14 +117,19 @@ def average_derivs(R, label, hydrogen_idxs=None):
             
         running_sum_confs += x
         
+    if n_reservoir < 1:
+        return np.zeros_like(dE_dp), np.nan, label
+        
     if properties['run_type'] == 'train':
         print(np.amax(abs(running_sum_derivs/np.float32(n_reservoir))) * properties['learning_rate'])
         if nan or np.isnan(running_sum_derivs/n_reservoir).any() or np.amax(abs(running_sum_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
             print("bad gradients/nan energy")
             running_sum_derivs = np.zeros_like(running_sum_derivs)
-            running_sum_confs *= np.nan
+            return np.zeros_like(dE_dp), np.nan, label
 
-    return running_sum_derivs/n_reservoir, running_sum_confs/n_reservoir, label
+    loss = rmsd.opt_rot_rmsd(running_sum_confs/n_reservoir, label)
+            
+    return running_sum_derivs/n_reservoir, loss, label
 
 @jax.jit
 def softmax(x):
@@ -156,7 +159,6 @@ def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
         
         if properties['remove_hydrogens'] ==  'True':
             # remove hydrogens from label conformation, predicted conformation, and dx/dp
-            inner = time.time()
             dE_dx = np.delete(dE_dx,hydrogen_idxs,axis=0)
             dx_dp = np.delete(dx_dp,hydrogen_idxs,axis=1)
             x = np.delete(x,hydrogen_idxs,axis=0)
@@ -173,7 +175,7 @@ def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
     
     if n_reservoir < 1:
         return np.zeros_like(dE_dp), np.nan, label
-        
+    
     E = np.array(Es,dtype=np.float64)
     confs = np.array(xs,dtype=np.float64)
     dE_dx = np.array(dE_dxs,dtype=np.float64)
@@ -183,27 +185,27 @@ def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
     RMSD = batch_rmsd(confs,label)
     
     ds_dE_fn = jax.jacfwd(softmax,argnums=(0,))
-    ds_dE = ds_dRMSD_fn(-E / kT)[0]
-
+    ds_dE = ds_dE_fn(-E / kT)[0]
+    
     s_E = softmax(-E / kT)
-
+    
     dRMSD_dx = batch_grad_fun(confs,label)[0]
-
+    
     tot_dRMSD_dp = np.einsum('ijk,ijkl->il',dRMSD_dx,dx_dp)
     
     tot_dE_dp = np.einsum('ijk,ijkl->il',dE_dx,dx_dp) + dE_dp
 
     A = np.matmul(s_E, tot_dRMSD_dp)
-    B = np.matmul(np.matmul(RMSD,ds_dE), tot_dE_dp) / kT
+    B = np.matmul(np.matmul(RMSD,ds_dE), tot_dE_dp) / -kT
     
-    final_derivs = A - B
+    final_derivs = A + B
     
     loss = np.sum(s_E * RMSD)
     
-#     print('mean:',np.mean(RMSD),'boltzmann:',loss)
+    print('mean:',np.mean(RMSD),'boltzmann:',loss)
         
     print(np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
-    if np.isnan(final_derivs/n_reservoir).any() or np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
+    if np.isnan(final_derivs/n_reservoir).any() or np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'] > 1e-2:
         print("bad gradients/nan energy")
         final_derivs = np.zeros_like(final_derivs)
         loss *= np.nan
@@ -224,15 +226,12 @@ def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):
         batch_grad_fun = jax.vmap(grad_fun,(0,None))
         
     if properties['remove_hydrogens'] ==  'True':
-        start = time.time()
         label = np.delete(label,hydrogen_idxs,axis=0)
               
-    start = time.time()
     for E, dE_dx, dx_dp, dE_dp, x in R:
         
         if properties['remove_hydrogens'] ==  'True':
             # remove hydrogens from label conformation, predicted conformation, and dx/dp
-            inner = time.time()
             dx_dp = np.delete(dx_dp,hydrogen_idxs,axis=1)
             x = np.delete(x,hydrogen_idxs,axis=0)
 
@@ -249,21 +248,14 @@ def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):
     confs = np.array(xs,dtype=np.float64)
     dx_dp = np.transpose(dx_dps,(0,2,3,1))
     
-#     start=time.time()
     RMSD = batch_rmsd(confs,label)
-#     print('computing rmsd took:',time.time()-start)
     
     ds_dRMSD_fn = jax.jacfwd(softmax,argnums=(0,))
-#     start=time.time()
     ds_dRMSD = ds_dRMSD_fn(RMSD)[0]
-#     print('computing ds/dRMSD took:',time.time()-start)
 
-#     start = time.time()
     s_RMSD = softmax(-RMSD)
-#     print('computing s(-RMSD) took:',time.time()-start)
-#     start = time.time()
+
     dRMSD_dx = batch_grad_fun(confs,label)[0]
-#     print('computing dRMSD/dx took:',time.time()-start)
 
     tot_dRMSD_dp = np.einsum('ijk,ijkl->il',dRMSD_dx,dx_dp)
 
@@ -273,9 +265,7 @@ def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):
     final_derivs = A - B
     
     loss = np.sum(s_RMSD * RMSD)
-    
-#     print('mean:',np.mean(RMSD),'boltzmann:',loss)
-        
+            
     if properties['run_type'] == 'train':
         print(np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
         if np.isnan(final_derivs/n_reservoir).any() or np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
@@ -364,11 +354,9 @@ def rmsd_run(params):
             for i in range(len(guest_masses)):
                 if int(round(guest_masses[i])) == 1:
                     hydrogen_idxs.append(i)    
-            G_deriv, G_conf, label = average_derivs(RG, label, hydrogen_idxs)
+            G_deriv, loss, label = average_derivs(RG, label, hydrogen_idxs)
         else:
-            G_deriv, G_conf, _ = average_derivs(RG, label)
-        loss = rmsd.opt_rot_rmsd(G_conf,label)
-        
+            G_deriv, loss, _ = average_derivs(RG, label)
             
     derivs[guest_dp_idxs] += G_deriv
     losses.append(loss)
@@ -376,7 +364,7 @@ def rmsd_run(params):
     # RMSD for each conformer generated
     losses = np.array(losses)
 
-    # Return the mean RMSD among all conformers
+    # Return the mean RMSD among all compounds
     return derivs, np.mean(losses)
 
 def train_rmsd(num_epochs,
@@ -478,8 +466,6 @@ Elapsed time: {} seconds
             batch_dp = np.zeros_like(get_params(opt_state))
             for grad, loss in results:
                 batch_dp += grad
-#                 if np.isnan(loss):
-#                     return
                 if not np.isnan(loss):
                     losses.append(loss)
 
@@ -942,7 +928,7 @@ if __name__ == "__main__":
         np.savez('final_params.npz', params=final_params)
         
     elif properties['run_type'] == 'test':
-        # select the run_{}.npz file to grab parameters from
+        # select the .npz file to grab parameters from
         if 'param_file' in properties:
             testing_params = np.load(properties['param_file'])['params']
         else:

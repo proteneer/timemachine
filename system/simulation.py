@@ -186,6 +186,7 @@ def write(xyz, masses):
     return buf
 
 def run_simulation(
+#     conf,
     potentials,
     params,
     param_groups,
@@ -305,7 +306,7 @@ def run_simulation(
 #         outfile = open(pdb_name + '.dcd','wb')
 #         dcd = DCDFile(outfile, pdb.topology, .0001)
     nan = False
-    max_iter = 10000
+    max_iter = 5000
     for i in range(max_iter):
         dt *= 1.05
         dt = min(dt, 0.01)
@@ -444,3 +445,4 @@ def run_simulation(
 #         ]]
 
     return R
+#     return R[0]
