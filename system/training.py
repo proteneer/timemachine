@@ -435,8 +435,6 @@ Median RMSD: {}
 Elapsed time: {} seconds
 ==============
         '''.format(mean_loss,median_loss,time.time()-start_time))
-
-    assert 0
     
     for epoch in tqdm(range(num_epochs),desc="Total time"):
         
