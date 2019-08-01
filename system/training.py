@@ -163,13 +163,12 @@ def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
             
         if np.isnan(E):
             n_reservoir -= 1
-            continue
-            
-        Es.append(E)
-        xs.append(x)
-        dx_dps.append(dx_dp)
-        dE_dxs.append(dE_dx)
-        dE_dps.append(dE_dp)
+        else:
+            Es.append(E)
+            xs.append(x)
+            dx_dps.append(dx_dp)
+            dE_dxs.append(dE_dx)
+            dE_dps.append(dE_dp)
     
     if n_reservoir < 1:
         return np.zeros_like(dE_dp), np.nan, label
@@ -205,8 +204,7 @@ def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
     print(np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
     if np.isnan(final_derivs/n_reservoir).any() or np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'] > 1e-2:
         print("bad gradients/nan energy")
-        final_derivs = np.zeros_like(final_derivs)
-        loss *= np.nan
+        return np.zeros_like(final_derivs), np.nan, label
 
     return final_derivs, loss, label
 
@@ -268,8 +266,7 @@ def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):
         print(np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
         if np.isnan(final_derivs/n_reservoir).any() or np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
             print("bad gradients/nan energy")
-            final_derivs = np.zeros_like(final_derivs)
-            loss *= np.nan
+            return np.zeros_like(final_derivs), np.nan, label
 
     return final_derivs, loss, label
 
