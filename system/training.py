@@ -108,27 +108,25 @@ def average_derivs(R, label, hydrogen_idxs=None):
 
         if np.isnan(E):
             n_reservoir -= 1
-            continue
-           
-        if properties['run_type'] == 'train':
-            grad_conf = grad_fun(x,label)[0]
-            combined_grad = np.einsum('kl,mkl->m', grad_conf, dx_dp)
-            running_sum_derivs += combined_grad
-            
-        running_sum_confs += x
+        else:
+            if properties['run_type'] == 'train':
+                grad_conf = grad_fun(x,label)[0]
+                combined_grad = np.einsum('kl,mkl->m', grad_conf, dx_dp)
+                running_sum_derivs += combined_grad
+
+            running_sum_confs += x
         
     if n_reservoir < 1:
         return np.zeros_like(dE_dp), np.nan, label
         
     if properties['run_type'] == 'train':
         print(np.amax(abs(running_sum_derivs/np.float32(n_reservoir))) * properties['learning_rate'])
-        if nan or np.isnan(running_sum_derivs/n_reservoir).any() or np.amax(abs(running_sum_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
+        if np.isnan(running_sum_derivs/n_reservoir).any() or np.amax(abs(running_sum_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
             print("bad gradients/nan energy")
-            running_sum_derivs = np.zeros_like(running_sum_derivs)
-            return np.zeros_like(dE_dp), np.nan, label
-
+            return np.zeros_like(running_sum_derivs), np.nan, label
+    
     loss = rmsd.opt_rot_rmsd(running_sum_confs/n_reservoir, label)
-            
+
     return running_sum_derivs/n_reservoir, loss, label
 
 @jax.jit
@@ -293,9 +291,9 @@ def rmsd_run(params):
     
     # embed some bad conformers
     if properties['random'] == 'yes':
-        AllChem.EmbedMultipleConfs(mol, numConfs=5, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
+        AllChem.EmbedMultipleConfs(mol, numConfs=1, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
     else:
-        AllChem.EmbedMultipleConfs(mol, numConfs=5, randomSeed=1234, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
+        AllChem.EmbedMultipleConfs(mol, numConfs=1, randomSeed=1234, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
     
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
@@ -357,7 +355,7 @@ def rmsd_run(params):
             G_deriv, loss, label = average_derivs(RG, label, hydrogen_idxs)
         else:
             G_deriv, loss, _ = average_derivs(RG, label)
-            
+                        
     derivs[guest_dp_idxs] += G_deriv
     losses.append(loss)
 
@@ -438,6 +436,8 @@ Elapsed time: {} seconds
 ==============
         '''.format(mean_loss,median_loss,time.time()-start_time))
 
+    assert 0
+    
     for epoch in tqdm(range(num_epochs),desc="Total time"):
         
         start_time = time.time()
