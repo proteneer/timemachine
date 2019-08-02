@@ -9,8 +9,6 @@ import scipy
 import json
 import glob
 import csv
-import itertools
-import functools
 
 from tqdm import tqdm
 from scipy import stats
@@ -28,8 +26,16 @@ from timemachine import constants
 from jax.experimental import optimizers, stax
 
 import multiprocessing
-import traceback
-import signal
+
+config_file = glob.glob('*.json')
+
+if len(config_file) == 0:
+    raise Exception('config file not found')
+elif len(config_file) > 1:
+    raise Exception('multiple config files found')
+
+with open(config_file[0], 'r') as file:
+    properties = json.load(file)
 
 def rmsd_test(num_epochs,
              testing_params):
@@ -381,59 +387,59 @@ def train_rmsd(num_epochs,
     opt_state = opt_init(init_params)
     count = 0
     
-    start_time = time.time()
+#     start_time = time.time()
 
-    print('---- initial epoch started at', datetime.datetime.now(), '----')
-    np.random.shuffle(training_data)
+#     print('---- initial epoch started at', datetime.datetime.now(), '----')
+#     np.random.shuffle(training_data)
 
-    losses = []
-    epoch_filenames = []
+#     losses = []
+#     epoch_filenames = []
 
-    for fn in training_data:
-        epoch_filenames.append(fn[0])
+#     for fn in training_data:
+#         epoch_filenames.append(fn[0])
 
-    for b_idx in tqdm(range(num_batches)):            
-        start_idx = b_idx*batch_size
-        end_idx = min((b_idx+1)*batch_size, num_data_points)
-        batch_data = training_data[start_idx:end_idx]
+#     for b_idx in tqdm(range(num_batches)):            
+#         start_idx = b_idx*batch_size
+#         end_idx = min((b_idx+1)*batch_size, num_data_points)
+#         batch_data = training_data[start_idx:end_idx]
 
-        args = []
+#         args = []
 
-        for b_idx, b in enumerate(batch_data):
-            args.append([get_params(opt_state),b[0],b[1],b_idx])
+#         for b_idx, b in enumerate(batch_data):
+#             args.append([get_params(opt_state),b[0],b[1],b_idx])
 
-        results = pool.map(rmsd_run,args)
+#         results = pool.map(rmsd_run,args)
 
-        for _, loss in results:
-            if not np.isnan(loss):
-                losses.append(loss)
+#         for _, loss in results:
+#             if not np.isnan(loss):
+#                 losses.append(loss)
 
-    losses = np.array(losses)
-    mean_loss = np.mean(losses)
-    median_loss = np.median(losses)
+#     losses = np.array(losses)
+#     mean_loss = np.mean(losses)
+#     median_loss = np.median(losses)
 
-    np.savez('run_0.npz', filename=epoch_filenames, loss=losses, params=get_params(opt_state))
+#     np.savez('run_0.npz', filename=epoch_filenames, loss=losses, params=get_params(opt_state))
     
-    print('''
-Initial
-==============
-Mean RMSD: {}
-Median RMSD: {}
-Elapsed time: {} seconds
-==============
-        '''.format(mean_loss,median_loss,time.time()-start_time))
+#     print('''
+# Initial
+# ==============
+# Mean RMSD: {}
+# Median RMSD: {}
+# Elapsed time: {} seconds
+# ==============
+#         '''.format(mean_loss,median_loss,time.time()-start_time))
 
-    out_file = open("output.txt","a+")
-    out_file.write('''
-Initial
-==============
-Mean RMSD: {}
-Median RMSD: {}
-Elapsed time: {} seconds
-==============
-        '''.format(mean_loss,median_loss,time.time()-start_time))
+#     out_file = open("output.txt","a+")
+#     out_file.write('''
+# Initial
+# ==============
+# Mean RMSD: {}
+# Median RMSD: {}
+# Elapsed time: {} seconds
+# ==============
+#         '''.format(mean_loss,median_loss,time.time()-start_time))
     
-    for epoch in tqdm(range(num_epochs),desc="Total time"):
+    for epoch in tqdm(range(32,num_epochs),desc="Total time"):
         
         start_time = time.time()
 
@@ -848,7 +854,7 @@ def initialize_parameters(host_path=None):
     
     host_path (string): path to host if training binding energies (default = None)
     '''
-
+    
     # setting general smirnoff parameters for guest
     # random smiles string to initialize parameters
     ref_mol = Chem.MolFromSmiles('CCCC')
@@ -896,23 +902,15 @@ def initialize_optimizer(optimizer,
         
     return opt_init, opt_update, get_params
 
-if __name__ == "__main__":
-    
-    config_file = glob.glob('*.json')
-    if len(config_file) == 0:
-        raise Exception('config file not found')
-    elif len(config_file) > 1:
-        raise Exception('multiple config files found')
-    with open(config_file[0], 'r') as file:
-        config = json.load(file)
-   
-    properties = config
+def main():
     
     if properties['run_type'] == 'train':
         opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
 
         if properties['loss_type'] == 'RMSD':
             _, init_params = initialize_parameters()
+            # resume crashed simulation
+#             init_params = np.load('run_32.npz')['params']
             losses, final_params = train_rmsd(properties['num_epochs'],opt_init,opt_update,get_params,init_params)
 
         elif properties['loss_type'] == 'Enthalpy':
@@ -930,3 +928,6 @@ if __name__ == "__main__":
             _, testing_params = initialize_parameters()
             
         losses = rmsd_test(properties['num_epochs'],testing_params)
+
+if __name__ == "__main__":
+    main()
