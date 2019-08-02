@@ -294,9 +294,9 @@ def rmsd_run(params):
     
     # embed some bad conformers
     if properties['random'] == 'yes':
-        AllChem.EmbedMultipleConfs(mol, numConfs=1, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
+        AllChem.EmbedMultipleConfs(mol, numConfs=5, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
     else:
-        AllChem.EmbedMultipleConfs(mol, numConfs=1, randomSeed=1234, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
+        AllChem.EmbedMultipleConfs(mol, numConfs=5, randomSeed=1234, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
     
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
@@ -439,7 +439,7 @@ def train_rmsd(num_epochs,
 # ==============
 #         '''.format(mean_loss,median_loss,time.time()-start_time))
     
-    for epoch in tqdm(range(32,num_epochs),desc="Total time"):
+    for epoch in tqdm(range(num_epochs),desc="Total time"):
         
         start_time = time.time()
 
@@ -909,8 +909,6 @@ def main():
 
         if properties['loss_type'] == 'RMSD':
             _, init_params = initialize_parameters()
-            # resume crashed simulation
-#             init_params = np.load('run_32.npz')['params']
             losses, final_params = train_rmsd(properties['num_epochs'],opt_init,opt_update,get_params,init_params)
 
         elif properties['loss_type'] == 'Enthalpy':
