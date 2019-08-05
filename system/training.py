@@ -590,8 +590,16 @@ def run_simulation(params):
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
     
     mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
-    AllChem.EmbedMultipleConfs(mol, numConfs=10, randomSeed=1234, clearConfs=True)
-#     AllChem.EmbedMultipleConfs(mol, numConfs=1, clearConfs=True)
+    
+    if 'num_conformers' in properties:
+        num_conformers = properties['num_conformers']
+    else:
+        num_conformers = 1
+        
+    if properties['random'] == 'True':
+        AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, clearConfs=True)
+    else:
+        AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, randomSeed=1234, clearConfs=True)
 
     guest_potentials, _, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
     smirnoff_params = combined_params[len(dummy_host_params):]
