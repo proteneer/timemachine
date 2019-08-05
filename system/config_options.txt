@@ -1,3 +1,5 @@
+With a valid config file in the current directory, simply type the command "timemachine-train" to train force field parameters to experimental enthalpy or RMSD
+
 "run_type": "train" (training split) or "test" (testing split)
 "loss_type: "RMSD" (train to experimental RMSD) or "enthalpy (train to experimental enthalpy)
 "param_file" (optional): name of .npz file containing parameters for a testing split, if not specified then uses initial Open Force Field parameters
