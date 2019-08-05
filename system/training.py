@@ -27,18 +27,75 @@ from jax.experimental import optimizers, stax
 
 import multiprocessing
 
+# Reading config file
 config_file = glob.glob('*.json')
-
 if len(config_file) == 0:
     raise Exception('config file not found')
 elif len(config_file) > 1:
     raise Exception('multiple config files found')
-
 with open(config_file[0], 'r') as file:
     properties = json.load(file)
+    
+def cmdscale(D):
+    '''
+    D: distance matrix (N,N)
+    returns: coordinates given the distance matrix (N,3)
+    '''
+    # Generate Gramian Matrix (B)
+    n = len(D)                                                                       
+    H = np.eye(n) - np.ones((n, n))/n
+    B = -H.dot(D**2).dot(H)/2
+    
+    # Diagonalize matrix
+    evals, evecs = np.linalg.eigh(B)
+    
+    # Sort by eigenvalue in descending order                                                  
+    idx   = np.argsort(evals)[::-1]
+    evals = evals[idx]
+    evecs = evecs[:,idx]
+    
+    w,  = np.where(evals > 1e-5)
+    L  = np.diag(np.sqrt(evals[w]))
+    V  = evecs[:,w]
+    
+    # C = U * SQRT(S)
+    Y  = V.dot(L)
+    
+    conf = Y[:, :3]
+    
+    return conf
+
+def generate_conformer(mol):
+    '''
+    mol: RDKit molecule
+    returns: Conformation based only on the bounded distance matrix (shape N,3)
+    '''
+    num_atoms = mol.GetNumAtoms()
+    
+    dij = np.zeros((num_atoms, num_atoms))
+    
+    # Sample from upper/lower bound matrix
+    for i in range(num_atoms):
+        for j in range(i, num_atoms):
+            upper_bound = bm1[i][j]
+            lower_bound = bm1[j][i]
+            random_dij = np.random.uniform(lower_bound, upper_bound)
+            dij[i][j] = random_dij
+            dij[j][i] = random_dij
+            assert lower_bound <= upper_bound
+    
+    conf = csmscale(dij)
+    
+    return conf
 
 def rmsd_test(num_epochs,
              testing_params):
+    '''
+    Test a given parameter set on a series of test molecules
+    
+    num_epochs (int): number of tests to run
+    testing_params (numpy.ndarray, shape P): parameter set to use
+    '''
     training_data = np.load(properties['training_data'],allow_pickle=True)['data']
     training_data = training_data[64:128]
         
@@ -87,6 +144,18 @@ def rmsd_test(num_epochs,
     return losses
 
 def average_derivs(R, label, hydrogen_idxs=None):
+    '''
+    Compute average RMSD derivatives
+    
+    R: list of reservoir
+        [
+            [E, dE_dx, dx_dp, dE_dp, x],
+            [E, dE_dx, dx_dp, dE_dp, x],
+            ...
+        ]
+    label: experimental conformation
+    hydrogen_idxs: indices of hydrogen atoms in conformation (used to compute heavy atom-only RMSD)
+    '''
     
     running_sum_derivs = None
     running_sum_confs = None
@@ -140,6 +209,18 @@ def softmax(x):
     return stax.softmax(x)
 
 def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
+    '''
+    Compute Boltzmann weighted RMSD derivatives (weighted by lower energy using a softmax)
+    
+    R: list of reservoir
+        [
+            [E, dE_dx, dx_dp, dE_dp, x],
+            [E, dE_dx, dx_dp, dE_dp, x],
+            ...
+        ]
+    label: experimental conformation
+    hydrogen_idxs: indices of hydrogen atoms in conformation (used to compute heavy atom-only RMSD)
+    '''
     
     n_reservoir = len(R)
     
@@ -214,7 +295,19 @@ def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
 
     return final_derivs, loss, label
 
-def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):    
+def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):
+    '''
+    Compute weighted average RMSD derivatives (weighted by lower RMSD using a softmax)
+    
+    R: list of reservoir
+        [
+            [E, dE_dx, dx_dp, dE_dp, x],
+            [E, dE_dx, dx_dp, dE_dp, x],
+            ...
+        ]
+    label: experimental conformation
+    hydrogen_idxs: indices of hydrogen atoms in conformation (used to compute heavy atom-only RMSD)
+    '''
 
     n_reservoir = len(R)
     
@@ -277,7 +370,7 @@ def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):
     return final_derivs, loss, label
 
 def rmsd_run(params):
-        
+    
     p = multiprocessing.current_process()
     smirnoff_params, guest_sdf_file, label, idx = params
     os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % 8)
@@ -292,28 +385,23 @@ def rmsd_run(params):
     
     mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
     
-    # embed some bad conformers
-    if properties['random'] == 'yes':
-        AllChem.EmbedMultipleConfs(mol, numConfs=5, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
-    else:
-        AllChem.EmbedMultipleConfs(mol, numConfs=5, randomSeed=1234, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
-    
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
     RG = []
     
-    for conf_idx in range(mol.GetNumConformers()):
+    if 'num_conformers' in properties:
+        num_conformers = properties['num_conformers']
+    else:
+        num_conformers = 1
+        
+    if not properties['random'] == 'True':
+        np.random.seed(1234)
+    
+    for conf_idx in range(num_conformers):
         guest_potentials, _, smirnoff_param_groups, _, guest_masses = forcefield.parameterize(mol, smirnoff)
         
-        c = mol.GetConformer(conf_idx)
-        conf = np.array(c.GetPositions(),dtype=np.float64)
-        guest_conf = conf/10
-
-        def filter_groups(param_groups, groups):
-            roll = np.zeros_like(param_groups)
-            for g in groups:
-                roll = np.logical_or(roll, param_groups == g)
-            return roll
+        # generate conformation based only on distance matrix
+        guest_conf = generate_conformer(mol)
 
         dp_idxs = properties['dp_idxs']
         
@@ -336,37 +424,23 @@ def rmsd_run(params):
     if len(RG) == 0:
         return derivs, np.nan
     
-    if properties['boltzmann'] == 'True':
-        if properties['remove_hydrogens'] ==  'True':
-            hydrogen_idxs = []
-            # find indices of hydrogen atoms
-            start = time.time()
-            for i in range(len(guest_masses)):
-                if int(round(guest_masses[i])) == 1:
-                    hydrogen_idxs.append(i)  
-#             print('finding hydrogen_idxs took:',time.time() - start)
-            G_deriv, loss, label = boltzmann_rmsd_derivs(RG, label, hydrogen_idxs)
-        else:
-            G_deriv, loss, label = boltzmann_rmsd_derivs(RG, label, hydrogen_idxs)
+    if properties['remove_hydrogens'] ==  'True':
+        hydrogen_idxs = []
+        # find indices of hydrogen atoms
+        for i in range(len(guest_masses)):
+            if int(round(guest_masses[i])) == 1:
+                hydrogen_idxs.append(i)  
     else:
-        if properties['remove_hydrogens'] ==  'True':
-            hydrogen_idxs = []
-            # find indices of hydrogen atoms
-            for i in range(len(guest_masses)):
-                if int(round(guest_masses[i])) == 1:
-                    hydrogen_idxs.append(i)    
-            G_deriv, loss, label = average_derivs(RG, label, hydrogen_idxs)
-        else:
-            G_deriv, loss, _ = average_derivs(RG, label)
+        hydrogen_idxs = None
+        
+    if properties['boltzmann'] == 'True':
+        G_deriv, loss, label = boltzmann_rmsd_derivs(RG, label, hydrogen_idxs)
+    else:
+        G_deriv, loss, label = average_derivs(RG, label, hydrogen_idxs)
                         
     derivs[guest_dp_idxs] += G_deriv
-    losses.append(loss)
 
-    # RMSD for each conformer generated
-    losses = np.array(losses)
-
-    # Return the mean RMSD among all compounds
-    return derivs, np.mean(losses)
+    return derivs, loss
 
 def train_rmsd(num_epochs,
                opt_init,
@@ -387,63 +461,53 @@ def train_rmsd(num_epochs,
     opt_state = opt_init(init_params)
     count = 0
     
-#     start_time = time.time()
+    start_time = time.time()
 
-#     print('---- initial epoch started at', datetime.datetime.now(), '----')
-#     np.random.shuffle(training_data)
+    print('---- initial epoch started at', datetime.datetime.now(), '----')
+    np.random.shuffle(training_data)
 
-#     losses = []
-#     epoch_filenames = []
+    losses = []
+    epoch_filenames = []
 
-#     for fn in training_data:
-#         epoch_filenames.append(fn[0])
+    for fn in training_data:
+        epoch_filenames.append(fn[0])
 
-#     for b_idx in tqdm(range(num_batches)):            
-#         start_idx = b_idx*batch_size
-#         end_idx = min((b_idx+1)*batch_size, num_data_points)
-#         batch_data = training_data[start_idx:end_idx]
+    for b_idx in tqdm(range(num_batches)):            
+        start_idx = b_idx*batch_size
+        end_idx = min((b_idx+1)*batch_size, num_data_points)
+        batch_data = training_data[start_idx:end_idx]
 
-#         args = []
+        args = []
 
-#         for b_idx, b in enumerate(batch_data):
-#             args.append([get_params(opt_state),b[0],b[1],b_idx])
+        for b_idx, b in enumerate(batch_data):
+            args.append([get_params(opt_state),b[0],b[1],b_idx])
 
-#         results = pool.map(rmsd_run,args)
+        results = pool.map(rmsd_run,args)
 
-#         for _, loss in results:
-#             if not np.isnan(loss):
-#                 losses.append(loss)
+        for _, loss in results:
+            if not np.isnan(loss):
+                losses.append(loss)
 
-#     losses = np.array(losses)
-#     mean_loss = np.mean(losses)
-#     median_loss = np.median(losses)
+    losses = np.array(losses)
+    mean_loss = np.mean(losses)
+    median_loss = np.median(losses)
 
-#     np.savez('run_0.npz', filename=epoch_filenames, loss=losses, params=get_params(opt_state))
+    np.savez('run_0.npz', filename=epoch_filenames, loss=losses, params=get_params(opt_state))
     
-#     print('''
-# Initial
-# ==============
-# Mean RMSD: {}
-# Median RMSD: {}
-# Elapsed time: {} seconds
-# ==============
-#         '''.format(mean_loss,median_loss,time.time()-start_time))
-
-#     out_file = open("output.txt","a+")
-#     out_file.write('''
-# Initial
-# ==============
-# Mean RMSD: {}
-# Median RMSD: {}
-# Elapsed time: {} seconds
-# ==============
-#         '''.format(mean_loss,median_loss,time.time()-start_time))
+    print('''
+Initial
+==============
+Mean RMSD: {}
+Median RMSD: {}
+Elapsed time: {} seconds
+==============
+        '''.format(mean_loss,median_loss,time.time()-start_time))
     
     for epoch in tqdm(range(num_epochs),desc="Total time"):
         
         start_time = time.time()
 
-        print('--- epoch:', epoch, "started at", datetime.datetime.now(), '----')
+        print('---- epoch:', epoch, "started at", datetime.datetime.now(), '----')
         np.random.shuffle(training_data)
         
         losses = []
@@ -489,19 +553,6 @@ Elapsed time: {} seconds
 ==============
             '''.format(epoch,mean_loss,median_loss,time.time()-start_time))
         
-        out_file = open("output.txt","a+")
-        out_file.write('''
-Epoch: {}
-==============
-Mean RMSD: {}
-Median RMSD: {}
-Elapsed time: {} seconds
-==============
-            '''.format(epoch,mean_loss,median_loss,time.time()-start_time))
-        out_file.close()
-        
-        print(len(losses))
-        
     return losses, get_params(opt_state)
         
 def rescale_and_center(conf, scale_factor=1):
@@ -509,6 +560,15 @@ def rescale_and_center(conf, scale_factor=1):
     true_com = np.array([1.97698696, 1.90113478, 2.26042174]) # a-cd
     centered = conf - mol_com  # centered to origin
     return true_com + centered/scale_factor
+
+def filter_groups(param_groups, groups):
+    '''
+    return indices of specified param groups for setting dp idxs
+    '''
+    roll = np.zeros_like(param_groups)
+    for g in groups:
+        roll = np.logical_or(roll, param_groups == g)
+    return roll
     
 def run_simulation(params):
 
@@ -544,8 +604,10 @@ def run_simulation(params):
         c = mol.GetConformer(conf_idx)
         conf = np.array(c.GetPositions(),dtype=np.float64)
         guest_conf = conf/10
-#         rot_matrix = stats.special_ortho_group.rvs(3).astype(dtype=np.float32)
-#         guest_conf = np.matmul(guest_conf, rot_matrix)
+        # randomly rotate the guest conformation
+        rot_matrix = stats.special_ortho_group.rvs(3).astype(dtype=np.float32)
+        guest_conf = np.matmul(guest_conf, rot_matrix)
+        # center the guest conformation in the binding pocket
         guest_conf = rescale_and_center(guest_conf, scale_factor=4)
         combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
             host_potentials, guest_potentials,
@@ -555,12 +617,6 @@ def run_simulation(params):
             host_masses, guest_masses)
 
         num_atoms = len(combined_masses)
-
-        def filter_groups(param_groups, groups):
-            roll = np.zeros_like(param_groups)
-            for g in groups:
-                roll = np.logical_or(roll, param_groups == g)
-            return roll
 
         dp_idxs = properties['dp_idxs']
 
@@ -623,6 +679,16 @@ def run_simulation(params):
     return RH, RG, RHG, label, host_dp_idxs, guest_dp_idxs, combined_dp_idxs, num_atoms
 
 def boltzmann_derivatives(reservoir):
+    '''
+    Compute Boltzmann weighted energy derivatives (weighted by lower energy)
+    
+    reservoir: list of reservoir
+        [
+            [E, dE_dx, dx_dp, dE_dp, x],
+            [E, dE_dx, dx_dp, dE_dp, x],
+            ...
+        ]
+    '''
     
     # if reservoir is empty, return
     if len(reservoir) == 0:
@@ -736,8 +802,7 @@ def compute_derivatives(params1,
     print(np.amax(abs(combined_derivs)) * properties['learning_rate'])
     if np.isnan(combined_derivs).any() or np.amax(abs(combined_derivs)) * properties['learning_rate'] > 1e-2 or np.amax(abs(combined_derivs)) == 0:
         print("bad gradients/nan energy")
-        combined_derivs = np.zeros_like(combined_derivs)
-        pred_enthalpy = np.nan
+        return np.zeros_like(combined_derivs), np.nan
 
     return combined_derivs, pred_enthalpy, label
 
@@ -810,7 +875,7 @@ def train(num_epochs,
                     epoch_predictions.append(preds)
                     epoch_labels.append(labels)
                     
-            # if everything is nan, terminate simulation
+            # if everything is nan, terminate training
             if len(epoch_predictions) == 0:
                 print("all energies are nan")
                 return
@@ -855,8 +920,7 @@ def initialize_parameters(host_path=None):
     host_path (string): path to host if training binding energies (default = None)
     '''
     
-    # setting general smirnoff parameters for guest
-    # random smiles string to initialize parameters
+    # setting general smirnoff parameters for guest using random smiles string
     ref_mol = Chem.MolFromSmiles('CCCC')
     ref_mol = Chem.AddHs(ref_mol)
     AllChem.EmbedMolecule(ref_mol)
@@ -864,13 +928,6 @@ def initialize_parameters(host_path=None):
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
     _, smirnoff_params, _, _, _ = forcefield.parameterize(ref_mol, smirnoff)
-                  
-#     structure_path = os.path.join(properties['guest_directory'], properties['guest_template'])
-#     if '.mol2' in properties['guest_template']:
-#         structure_file = open(structure_path,'r').read()
-#         ref_mol = Chem.MolFromMol2Block(structure_file, sanitize=True, removeHs=False, cleanupSubstructures=True)
-#     else:
-#         raise Exception('only mol2 files currently supported for ligand training')
 
     if properties['loss_type'] == 'Enthalpy':
         _, _, (host_params, _), _ = serialize.deserialize_system(host_path)       
