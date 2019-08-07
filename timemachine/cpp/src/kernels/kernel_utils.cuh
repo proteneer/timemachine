@@ -22,6 +22,9 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
+inline __device__ int linearize(int i, int j, int d) {
+    return d*(d-1)/2 - (d-i) * (d-i-1)/2 +j;
+}
 
 inline __device__ float gpuSqrt(float arg) {
   return sqrtf(arg);

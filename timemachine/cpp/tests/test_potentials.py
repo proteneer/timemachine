@@ -331,6 +331,20 @@ class TestLennardJones(CustomOpsTest):
             lj
         )
 
+        conf4d = np.array([
+            [ 0.0637,   0.0126,   0.2203,  0.5],
+            [ 1.0573,  -0.2011,   1.2864, -0.2],
+            [ 2.3928,   1.2209,  -0.2230,  5.6],
+            [-0.6891,   1.6983,   0.0780,  2.3],
+            [-0.6312,  -1.6261,  -0.2601, -5.1]
+        ], dtype=np.float64)
+
+        self.assert_derivatives(
+            conf4d,
+            params,
+            energy_fn,
+            lj
+        )
 
 class TestElectrostatics(CustomOpsTest):
 

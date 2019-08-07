@@ -1,10 +1,5 @@
 #pragma once
-
 #include "kernel_utils.cuh"
-
-inline __device__ int linearize(int i, int j, int d) {
-    return d*(d-1)/2 - (d-i) * (d-i-1)/2 +j;
-}
 
 template<typename RealType, size_t NDIMS>
 void __global__ k_electrostatics(
@@ -29,7 +24,6 @@ void __global__ k_electrostatics(
 
     auto i_idx = blockDim.x*blockIdx.x + threadIdx.x;
     RealType q0;
-    // uninitialized
     RealType X0[NDIMS] = {0};
     int q0_g_idx;
 
@@ -49,8 +43,9 @@ void __global__ k_electrostatics(
 
     RealType grad_X[NDIMS] = {0};
     RealType mixed_X[NDIMS] = {0};
-    RealType dE_dp_q = 0;
     RealType hess_X[NDIMS*(NDIMS-1)] = {0};
+
+    RealType dE_dp_q = 0;
     RealType energy = 0;
 
     int num_y_tiles = blockIdx.x + 1;
@@ -58,7 +53,6 @@ void __global__ k_electrostatics(
     for(int tile_y_idx = 0; tile_y_idx < num_y_tiles; tile_y_idx++) {
 
         RealType X1[NDIMS] = {0};
-        // RealType x1, y1, z1, q1;
         RealType q1;
         int q1_g_idx;
 
@@ -72,9 +66,6 @@ void __global__ k_electrostatics(
         int j_idx = tile_y_idx*WARP_SIZE + threadIdx.x;
 
         if(j_idx >= N) {
-            // x1 = 0.0;
-            // y1 = 0.0;
-            // z1 = 0.0;
             q1 = 0.0;
             q1_g_idx = 0;
         } else {
@@ -105,17 +96,19 @@ void __global__ k_electrostatics(
 
                 RealType DX[NDIMS];
                 RealType D2X[NDIMS];
+                RealType d2ij = 0;
                 #pragma unroll
                 for(size_t d=0; d < NDIMS; d++) {
                     RealType dx = XI[d] - X1[d];
                     DX[d] = dx;
                     D2X[d] = dx*dx;
+                    d2ij += dx*dx;
                 }
 
-                RealType d2ij = 0;
-                for(size_t d=0; d < NDIMS; d++) {
-                    d2ij += D2X[d];
-                }
+
+                // for(size_t d=0; d < NDIMS; d++) {
+                //     d2ij += D2X[d];
+                // }
 
                 RealType dij = sqrt(d2ij);
                 RealType d3ij = d2ij*dij;
@@ -129,9 +122,6 @@ void __global__ k_electrostatics(
                 if(d2E_dx2) {
                     // don't need atomic adds because these are unique diagonals
                     // (ytz): this isn't necessary if we don't mind doing the diagonal twice.
-                    for(size_t d=0; d < NDIMS; d++) {
-                        d2E_dx2[conf_idx*N*NDIMS*N*NDIMS+HESS_IDX_ND(h_i_idx, h_j_idx, N, d, d, NDIMS)] += hess_prefactor*(d2ij - 3*D2X[d]);
-                    }
 
                     for(size_t d0=0; d0 < NDIMS; d0++) {
                         for(size_t d1=0; d1 < NDIMS; d1++) {
@@ -139,6 +129,7 @@ void __global__ k_electrostatics(
                                 d2E_dx2[conf_idx*N*NDIMS*N*NDIMS+HESS_IDX_ND(h_i_idx, h_j_idx, N, d0, d1, NDIMS)] += -3*hess_prefactor*DX[d0]*DX[d1];
                             }
                         }
+                        d2E_dx2[conf_idx*N*NDIMS*N*NDIMS+HESS_IDX_ND(h_i_idx, h_j_idx, N, d0, d0, NDIMS)] += hess_prefactor*(d2ij - 3*D2X[d0]);
                     }
 
                 }
@@ -177,16 +168,13 @@ void __global__ k_electrostatics(
 
                 RealType DX[NDIMS];
                 RealType D2X[NDIMS];
+                RealType d2ij = 0;
                 #pragma unroll
                 for(size_t d=0; d < NDIMS; d++) {
                     RealType dx = X0[d] - X1[d];
                     DX[d] = dx;
                     D2X[d] = dx*dx;
-                }
-
-                RealType d2ij = 0;
-                for(size_t d=0; d < NDIMS; d++) {
-                    d2ij += D2X[d];
+                    d2ij += dx*dx;
                 }
 
                 RealType dij = sqrt(d2ij);
@@ -273,7 +261,7 @@ void __global__ k_electrostatics(
 
             if(dE_dx) {
                 for(size_t d=0; d < NDIMS; d++) {
-                    atomicAdd(dE_dx + conf_idx*N*NDIMS + target_idx*NDIMS + d, shfl_grad_X[d]);                    
+                    atomicAdd(dE_dx + conf_idx*N*NDIMS + target_idx*NDIMS + d, shfl_grad_X[d]);
                 }             
             }
 
