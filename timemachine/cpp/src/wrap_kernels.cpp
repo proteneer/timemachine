@@ -242,6 +242,7 @@ void declare_potential(py::module &m, const char *typestr) {
             nrg.derivatives_host(
                 num_confs,
                 num_atoms,
+                num_dims,
                 num_params,
                 coords.data(),
                 params.data(),

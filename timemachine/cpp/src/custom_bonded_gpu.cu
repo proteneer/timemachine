@@ -35,6 +35,7 @@ template <typename RealType>
 void HarmonicBond<RealType>::derivatives_device(
         const int num_confs,
         const int num_atoms,
+        const int num_dims,
         const RealType *d_coords,
         const RealType *d_params,
         RealType *d_E,
@@ -110,6 +111,7 @@ template <typename RealType>
 void HarmonicAngle<RealType>::derivatives_device(
         const int num_confs,
         const int num_atoms,
+        const int num_dims,
         const RealType *d_coords,
         const RealType *d_params,
         RealType *d_E,
@@ -188,6 +190,7 @@ template <typename RealType>
 void PeriodicTorsion<RealType>::derivatives_device(
         const int num_confs,
         const int num_atoms,
+        const int num_dims,
         const RealType *d_coords,
         const RealType *d_params,
         RealType *d_E,

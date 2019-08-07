@@ -2,21 +2,25 @@
 
 #include "kernel_utils.cuh"
 
-template<typename RealType>
+inline __device__ int linearize(int i, int j, int d) {
+    return d*(d-1)/2 - (d-i) * (d-i-1)/2 +j;
+}
+
+template<typename RealType, size_t NDIMS>
 void __global__ k_electrostatics(
     const int num_atoms,    // n
-    const RealType *coords, // [n, 3]
+    const RealType *coords, // [n, D]
     const RealType *params, // [p,]
     const RealType *scale_matrix, // [n, n]
     const int *param_idxs,  // [n, 1] charge
     RealType *E,             // [,] or null
-    RealType *dE_dx,         // [n,3] or null
-    RealType *d2E_dx2,       // [C, n, 3, n, 3] or null, hessian
+    RealType *dE_dx,         // [n,D] or null
+    RealType *d2E_dx2,       // [C, n, D, n, D] or null, hessian
     // parameters used for computing derivatives
     const int num_dp,        // dp, number of parameters we're differentiating w.r.t. 
     const int *param_gather_idxs, // [p,] if -1, then we discard
     RealType *dE_dp,         // [C, dp,] or null
-    RealType *d2E_dxdp       // [C, dp, n, 3] or null
+    RealType *d2E_dxdp       // [C, dp, n, D] or null
 ) {
 
     const auto conf_idx = blockIdx.z;
@@ -24,81 +28,60 @@ void __global__ k_electrostatics(
     const int DP = num_dp;
 
     auto i_idx = blockDim.x*blockIdx.x + threadIdx.x;
-    
-    RealType x0, y0, z0, q0;
+    RealType q0;
+    // uninitialized
+    RealType X0[NDIMS] = {0};
     int q0_g_idx;
 
     if(i_idx >= N) {
-        x0 = 0.0;
-        y0 = 0.0;
-        z0 = 0.0;
         q0 = 0.0;
         q0_g_idx = 0;
     } else {
-        x0 = coords[conf_idx*N*3+i_idx*3+0];
-        y0 = coords[conf_idx*N*3+i_idx*3+1];
-        z0 = coords[conf_idx*N*3+i_idx*3+2];
+        #pragma unroll
+        for(size_t d=0; d < NDIMS; d++) {
+            X0[d] = coords[conf_idx*N*NDIMS+i_idx*NDIMS+d];
+        }
         q0 = params[param_idxs[i_idx]];
         q0_g_idx = param_gather_idxs[param_idxs[i_idx]];
 
     }
 
-    RealType grad_dx = 0;
-    RealType grad_dy = 0;
-    RealType grad_dz = 0;
 
+    RealType grad_X[NDIMS] = {0};
+    RealType mixed_X[NDIMS] = {0};
     RealType dE_dp_q = 0;
-
-    RealType mixed_dx = 0;
-    RealType mixed_dy = 0;
-    RealType mixed_dz = 0;
-
-    RealType hess_xx = 0;
-    RealType hess_yx = 0;
-    RealType hess_yy = 0;
-    RealType hess_zx = 0;
-    RealType hess_zy = 0;
-    RealType hess_zz = 0;
-
+    RealType hess_X[NDIMS*(NDIMS-1)] = {0};
     RealType energy = 0;
 
     int num_y_tiles = blockIdx.x + 1;
 
     for(int tile_y_idx = 0; tile_y_idx < num_y_tiles; tile_y_idx++) {
 
-        RealType x1, y1, z1, q1;
+        RealType X1[NDIMS] = {0};
+        // RealType x1, y1, z1, q1;
+        RealType q1;
         int q1_g_idx;
 
-        RealType shfl_grad_dx = 0;
-        RealType shfl_grad_dy = 0;
-        RealType shfl_grad_dz = 0;
+        RealType shfl_grad_X[NDIMS] = {0};
+        RealType shfl_mixed_X[NDIMS] = {0};
+        RealType shfl_hess_X[NDIMS*(NDIMS-1)] = {0};
 
         RealType shfl_dE_dp_q = 0;
-
-        RealType shfl_mixed_dx = 0;
-        RealType shfl_mixed_dy = 0;
-        RealType shfl_mixed_dz = 0;
-
-        RealType shfl_hess_xx = 0;
-        RealType shfl_hess_yx = 0;
-        RealType shfl_hess_yy = 0;
-        RealType shfl_hess_zx = 0;
-        RealType shfl_hess_zy = 0;
-        RealType shfl_hess_zz = 0;
 
         // load diagonal elements exactly once, shuffle the rest
         int j_idx = tile_y_idx*WARP_SIZE + threadIdx.x;
 
         if(j_idx >= N) {
-            x1 = 0.0;
-            y1 = 0.0;
-            z1 = 0.0;
+            // x1 = 0.0;
+            // y1 = 0.0;
+            // z1 = 0.0;
             q1 = 0.0;
             q1_g_idx = 0;
         } else {
-            x1 = coords[conf_idx*N*3+j_idx*3+0];
-            y1 = coords[conf_idx*N*3+j_idx*3+1];
-            z1 = coords[conf_idx*N*3+j_idx*3+2];
+            #pragma unroll
+            for(size_t d=0; d < NDIMS; d++) {
+                X1[d] = coords[conf_idx*N*NDIMS+j_idx*NDIMS+d];
+            }
             q1 = params[param_idxs[j_idx]];
             q1_g_idx = param_gather_idxs[param_idxs[j_idx]];
         }
@@ -107,9 +90,11 @@ void __global__ k_electrostatics(
         // iterate over a block of i's because we improve locality of writes to off diagonal elements
         // add a conditional for inference mode. (if d2E_dx2 and d2E_dxdp)
         for(int round=0; round < WARP_SIZE; round++) {
-            RealType xi = __shfl_sync(0xffffffff, x0, round);
-            RealType yi = __shfl_sync(0xffffffff, y0, round);
-            RealType zi = __shfl_sync(0xffffffff, z0, round);
+            RealType XI[NDIMS] = {0};
+            #pragma unroll
+            for(size_t d=0; d < NDIMS; d++) {
+                XI[d] = __shfl_sync(0xffffffff, X0[d], round);
+            }
             RealType qi = __shfl_sync(0xffffffff, q0, round);
             int qi_g_idx = __shfl_sync(0xffffffff, q0_g_idx, round);
 
@@ -118,14 +103,20 @@ void __global__ k_electrostatics(
 
             if(h_j_idx < h_i_idx && h_i_idx < N && h_j_idx < N) {
 
-                RealType dx = xi - x1;
-                RealType dy = yi - y1;
-                RealType dz = zi - z1;
-                RealType d2x = dx*dx;
-                RealType d2y = dy*dy;
-                RealType d2z = dz*dz;
+                RealType DX[NDIMS];
+                RealType D2X[NDIMS];
+                #pragma unroll
+                for(size_t d=0; d < NDIMS; d++) {
+                    RealType dx = XI[d] - X1[d];
+                    DX[d] = dx;
+                    D2X[d] = dx*dx;
+                }
 
-                RealType d2ij = d2x + d2y + d2z;
+                RealType d2ij = 0;
+                for(size_t d=0; d < NDIMS; d++) {
+                    d2ij += D2X[d];
+                }
+
                 RealType dij = sqrt(d2ij);
                 RealType d3ij = d2ij*dij;
                 RealType inv_d3ij = 1/d3ij;
@@ -137,17 +128,19 @@ void __global__ k_electrostatics(
 
                 if(d2E_dx2) {
                     // don't need atomic adds because these are unique diagonals
-                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 0, 0)] += hess_prefactor*(d2ij - 3*d2x);
-                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 0, 1)] += -3*hess_prefactor*dx*dy;
-                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 0, 2)] += -3*hess_prefactor*dx*dz;
+                    // (ytz): this isn't necessary if we don't mind doing the diagonal twice.
+                    for(size_t d=0; d < NDIMS; d++) {
+                        d2E_dx2[conf_idx*N*NDIMS*N*NDIMS+HESS_IDX_ND(h_i_idx, h_j_idx, N, d, d, NDIMS)] += hess_prefactor*(d2ij - 3*D2X[d]);
+                    }
 
-                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 1, 0)] += -3*hess_prefactor*dx*dy;
-                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 1, 1)] += hess_prefactor*(d2ij - 3*d2y);
-                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 1, 2)] += -3*hess_prefactor*dy*dz;
+                    for(size_t d0=0; d0 < NDIMS; d0++) {
+                        for(size_t d1=0; d1 < NDIMS; d1++) {
+                            if(d0 != d1) {
+                                d2E_dx2[conf_idx*N*NDIMS*N*NDIMS+HESS_IDX_ND(h_i_idx, h_j_idx, N, d0, d1, NDIMS)] += -3*hess_prefactor*DX[d0]*DX[d1];
+                            }
+                        }
+                    }
 
-                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 2, 0)] += -3*hess_prefactor*dx*dz;
-                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 2, 1)] += -3*hess_prefactor*dy*dz;
-                    d2E_dx2[conf_idx*N*3*N*3+HESS_IDX(h_i_idx, h_j_idx, N, 2, 2)] += hess_prefactor*(d2ij - 3*d2z);
                 }
 
                 if(d2E_dxdp) {
@@ -158,17 +151,17 @@ void __global__ k_electrostatics(
                     RealType PREFACTOR_QJ_GRAD = mp_prefactor*qi;
 
                     if(qi_g_idx >= 0) {
-                        RealType *mp_out_q_h_i = d2E_dxdp + conf_idx*DP*N*3 + qi_g_idx*N*3;
-                        atomicAdd(mp_out_q_h_i + h_j_idx*3 + 0, PREFACTOR_QI_GRAD * (dx));
-                        atomicAdd(mp_out_q_h_i + h_j_idx*3 + 1, PREFACTOR_QI_GRAD * (dy));
-                        atomicAdd(mp_out_q_h_i + h_j_idx*3 + 2, PREFACTOR_QI_GRAD * (dz));
+                        RealType *mp_out_q_h_i = d2E_dxdp + conf_idx*DP*N*NDIMS + qi_g_idx*N*NDIMS;
+                        for(size_t d=0; d < NDIMS; d++) {
+                            atomicAdd(mp_out_q_h_i + h_j_idx*NDIMS + d, PREFACTOR_QI_GRAD * DX[d]);
+                        }
                     }
 
                     if(q1_g_idx >= 0) {
-                        RealType *mp_out_q_h_j = d2E_dxdp + conf_idx*DP*N*3 + q1_g_idx*N*3;
-                        atomicAdd(mp_out_q_h_j + h_i_idx*3 + 0, PREFACTOR_QJ_GRAD * (-dx));
-                        atomicAdd(mp_out_q_h_j + h_i_idx*3 + 1, PREFACTOR_QJ_GRAD * (-dy));
-                        atomicAdd(mp_out_q_h_j + h_i_idx*3 + 2, PREFACTOR_QJ_GRAD * (-dz));; 
+                        RealType *mp_out_q_h_j = d2E_dxdp + conf_idx*DP*N*NDIMS + q1_g_idx*N*NDIMS;
+                        for(size_t d=0; d < NDIMS; d++) {
+                            atomicAdd(mp_out_q_h_j + h_i_idx*NDIMS + d, -PREFACTOR_QJ_GRAD * DX[d]);
+                        }
                     }
 
                 }
@@ -182,14 +175,20 @@ void __global__ k_electrostatics(
 
             if(j_idx < i_idx && i_idx < N && j_idx < N) {
 
-                RealType dx = x0 - x1;
-                RealType dy = y0 - y1;
-                RealType dz = z0 - z1;
-                RealType d2x = dx*dx;
-                RealType d2y = dy*dy;
-                RealType d2z = dz*dz;
+                RealType DX[NDIMS];
+                RealType D2X[NDIMS];
+                #pragma unroll
+                for(size_t d=0; d < NDIMS; d++) {
+                    RealType dx = X0[d] - X1[d];
+                    DX[d] = dx;
+                    D2X[d] = dx*dx;
+                }
 
-                RealType d2ij = d2x + d2y + d2z;
+                RealType d2ij = 0;
+                for(size_t d=0; d < NDIMS; d++) {
+                    d2ij += D2X[d];
+                }
+
                 RealType dij = sqrt(d2ij);
                 RealType d3ij = d2ij*dij;
                 RealType inv_d3ij = 1/d3ij;
@@ -209,13 +208,10 @@ void __global__ k_electrostatics(
                     shfl_dE_dp_q += (sij*ONE_4PI_EPS0*q0)/dij;
                 }
 
-                grad_dx -= grad_prefactor*dx;
-                grad_dy -= grad_prefactor*dy;
-                grad_dz -= grad_prefactor*dz;
-
-                shfl_grad_dx += grad_prefactor*dx;
-                shfl_grad_dy += grad_prefactor*dy;
-                shfl_grad_dz += grad_prefactor*dz;
+                for(size_t d=0; d < NDIMS; d++) {
+                    grad_X[d] -= grad_prefactor*DX[d];
+                    shfl_grad_X[d] += grad_prefactor*DX[d];
+                }
 
                 // (ytz) todo: optimize for individual dxdps
                 if(d2E_dxdp) {
@@ -226,32 +222,27 @@ void __global__ k_electrostatics(
                     RealType PREFACTOR_QJ_GRAD = mp_prefactor*q0;
 
                     // (ytz): We can further optimize the off-diagonal elements if desired.
-                    mixed_dx += PREFACTOR_QI_GRAD * (-dx);
-                    mixed_dy += PREFACTOR_QI_GRAD * (-dy);
-                    mixed_dz += PREFACTOR_QI_GRAD * (-dz);
-
-                    shfl_mixed_dx += PREFACTOR_QJ_GRAD * dx;
-                    shfl_mixed_dy += PREFACTOR_QJ_GRAD * dy;
-                    shfl_mixed_dz += PREFACTOR_QJ_GRAD * dz;
-
+                    for(size_t d=0; d < NDIMS; d++) {
+                        mixed_X[d] -= PREFACTOR_QI_GRAD * DX[d]; 
+                        shfl_mixed_X[d] += PREFACTOR_QJ_GRAD * DX[d];
+                    }
                 }
 
-                // hessians
+                // URT hessians
                 if(d2E_dx2) {
-                    hess_xx += hess_prefactor*(-d2ij + 3*d2x);
-                    hess_yx += 3*hess_prefactor*dx*dy;
-                    hess_yy += hess_prefactor*(-d2ij + 3*d2y);
-                    hess_zx += 3*hess_prefactor*dx*dz;
-                    hess_zy += 3*hess_prefactor*dy*dz;
-                    hess_zz += hess_prefactor*(-d2ij + 3*d2z);
 
-                    shfl_hess_xx += hess_prefactor*(-d2ij + 3*d2x);
-                    shfl_hess_yx += 3*hess_prefactor*dx*dy;
-                    shfl_hess_yy += hess_prefactor*(-d2ij + 3*d2y);
-                    shfl_hess_zx += 3*hess_prefactor*dx*dz;
-                    shfl_hess_zy += 3*hess_prefactor*dy*dz;
-                    shfl_hess_zz += hess_prefactor*(-d2ij + 3*d2z);
-
+                    // RENABLE
+                    for(size_t d0 = 0; d0 < NDIMS; d0++) {
+                        // off-diagonal
+                        for(size_t d1 = d0+1; d1 < NDIMS; d1++) {
+                            RealType delta_off = 3*hess_prefactor*DX[d0]*DX[d1];
+                            hess_X[linearize(d0,d1,NDIMS)] += delta_off;
+                            shfl_hess_X[linearize(d0,d1,NDIMS)] += delta_off;
+                        }
+                        RealType delta_on = hess_prefactor*(-d2ij + 3*D2X[d0]);
+                        hess_X[linearize(d0, d0, NDIMS)] += delta_on;
+                        shfl_hess_X[linearize(d0, d0, NDIMS)] += delta_on;
+                    }
                 }
 
             }
@@ -259,34 +250,19 @@ void __global__ k_electrostatics(
             int srcLane = (threadIdx.x + 1) % WARP_SIZE;
 
             // we should shuffle no matter what
-            x1 = __shfl_sync(0xffffffff, x1, srcLane);
-            y1 = __shfl_sync(0xffffffff, y1, srcLane);
-            z1 = __shfl_sync(0xffffffff, z1, srcLane);
-            q1 = __shfl_sync(0xffffffff, q1, srcLane);
+            for(size_t d=0; d < NDIMS; d++) {
+                X1[d] = __shfl_sync(0xffffffff, X1[d], srcLane);
+                shfl_grad_X[d] = __shfl_sync(0xffffffff, shfl_grad_X[d], srcLane);
+                shfl_mixed_X[d] = __shfl_sync(0xffffffff, shfl_mixed_X[d], srcLane);
+            }
 
-            // add conditionals depending on if we do certain ops
+            for(size_t d=0; d < NDIMS*(NDIMS-1); d++) {
+                shfl_hess_X[d] = __shfl_sync(0xffffffff, shfl_hess_X[d], srcLane);
+            }
+            q1 = __shfl_sync(0xffffffff, q1, srcLane);
             q1_g_idx = __shfl_sync(0xffffffff, q1_g_idx, srcLane);
-            // eps1_g_idx = __shfl_sync(0xffffffff, eps1_g_idx, srcLane);
 
             shfl_dE_dp_q = __shfl_sync(0xffffffff, shfl_dE_dp_q, srcLane);
-            // shfl_dE_dp_sig = __shfl_sync(0xffffffff, shfl_dE_dp_sig, srcLane);
-            // shfl_dE_dp_eps = __shfl_sync(0xffffffff, shfl_dE_dp_eps, srcLane);
-
-            shfl_grad_dx = __shfl_sync(0xffffffff, shfl_grad_dx, srcLane);
-            shfl_grad_dy = __shfl_sync(0xffffffff, shfl_grad_dy, srcLane);
-            shfl_grad_dz = __shfl_sync(0xffffffff, shfl_grad_dz, srcLane);
-
-            shfl_mixed_dx = __shfl_sync(0xffffffff, shfl_mixed_dx, srcLane);
-            shfl_mixed_dy = __shfl_sync(0xffffffff, shfl_mixed_dy, srcLane);
-            shfl_mixed_dz = __shfl_sync(0xffffffff, shfl_mixed_dz, srcLane);
-
-            shfl_hess_xx = __shfl_sync(0xffffffff, shfl_hess_xx, srcLane);
-            shfl_hess_yx = __shfl_sync(0xffffffff, shfl_hess_yx, srcLane);
-            shfl_hess_yy = __shfl_sync(0xffffffff, shfl_hess_yy, srcLane);
-            shfl_hess_zx = __shfl_sync(0xffffffff, shfl_hess_zx, srcLane);
-            shfl_hess_zy = __shfl_sync(0xffffffff, shfl_hess_zy, srcLane);
-            shfl_hess_zz = __shfl_sync(0xffffffff, shfl_hess_zz, srcLane);
-
             j_idx += 1;
 
         }
@@ -296,18 +272,17 @@ void __global__ k_electrostatics(
         if(target_idx < N) {
 
             if(dE_dx) {
-                atomicAdd(dE_dx + conf_idx*N*3 + target_idx*3 + 0, shfl_grad_dx);
-                atomicAdd(dE_dx + conf_idx*N*3 + target_idx*3 + 1, shfl_grad_dy);
-                atomicAdd(dE_dx + conf_idx*N*3 + target_idx*3 + 2, shfl_grad_dz);                
+                for(size_t d=0; d < NDIMS; d++) {
+                    atomicAdd(dE_dx + conf_idx*N*NDIMS + target_idx*NDIMS + d, shfl_grad_X[d]);                    
+                }             
             }
 
             if(d2E_dx2) {
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 0, 0), shfl_hess_xx);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 1, 0), shfl_hess_yx);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 1, 1), shfl_hess_yy);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 2, 0), shfl_hess_zx);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 2, 1), shfl_hess_zy);
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(target_idx, target_idx, N, 2, 2), shfl_hess_zz);
+                for(size_t d0=0; d0 < NDIMS; d0++) {
+                    for(size_t d1=d0; d1 < NDIMS; d1++) {
+                        atomicAdd(d2E_dx2 + conf_idx*N*NDIMS*N*NDIMS + HESS_IDX_ND(target_idx, target_idx, N, d1, d0, NDIMS), shfl_hess_X[linearize(d0, d1, NDIMS)]);                        
+                    }
+                }
             }
 
             if(dE_dp) {
@@ -317,12 +292,11 @@ void __global__ k_electrostatics(
             }
 
             if(d2E_dxdp) {
-                // optimize for only parameters we care about
                 if(q1_g_idx >= 0) {
-                    RealType *mp_out_q1 = d2E_dxdp + conf_idx*DP*N*3 + q1_g_idx*N*3;
-                    atomicAdd(mp_out_q1 + target_idx*3 + 0, shfl_mixed_dx);
-                    atomicAdd(mp_out_q1 + target_idx*3 + 1, shfl_mixed_dy);
-                    atomicAdd(mp_out_q1 + target_idx*3 + 2, shfl_mixed_dz);
+                    RealType *mp_out_q1 = d2E_dxdp + conf_idx*DP*N*NDIMS + q1_g_idx*N*NDIMS;
+                    for(size_t d=0; d < NDIMS; d++) {
+                        atomicAdd(mp_out_q1 + target_idx*NDIMS + d, shfl_mixed_X[d]);
+                    }
                 }
             }
 
@@ -337,18 +311,17 @@ void __global__ k_electrostatics(
         }
 
         if(dE_dx) {
-            atomicAdd(dE_dx + conf_idx*N*3 + i_idx*3 + 0, grad_dx);
-            atomicAdd(dE_dx + conf_idx*N*3 + i_idx*3 + 1, grad_dy);
-            atomicAdd(dE_dx + conf_idx*N*3 + i_idx*3 + 2, grad_dz);            
+            for(size_t d=0; d < NDIMS; d++) {
+                atomicAdd(dE_dx + conf_idx*N*NDIMS + i_idx*NDIMS + d, grad_X[d]);
+            }  
         }
 
         if(d2E_dx2) {
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 0, 0), hess_xx);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 1, 0), hess_yx);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 1, 1), hess_yy);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 0), hess_zx);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 1), hess_zy);
-            atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + HESS_IDX(i_idx, i_idx, N, 2, 2), hess_zz);            
+            for(size_t d0=0; d0 < NDIMS; d0++) {
+                for(size_t d1=d0; d1 < NDIMS; d1++) {
+                    atomicAdd(d2E_dx2 + conf_idx*N*NDIMS*N*NDIMS + HESS_IDX_ND(i_idx, i_idx, N, d1, d0, NDIMS), hess_X[linearize(d0, d1, NDIMS)]);
+                }
+            }
         }
 
         if(dE_dp) {
@@ -359,10 +332,10 @@ void __global__ k_electrostatics(
 
         if(d2E_dxdp) {
             if(q0_g_idx >= 0) {
-                RealType *mp_out_q0 = d2E_dxdp + conf_idx*DP*N*3 + q0_g_idx*N*3;                
-                atomicAdd(mp_out_q0 + i_idx*3 + 0, mixed_dx);
-                atomicAdd(mp_out_q0 + i_idx*3 + 1, mixed_dy);
-                atomicAdd(mp_out_q0 + i_idx*3 + 2, mixed_dz);
+                RealType *mp_out_q0 = d2E_dxdp + conf_idx*DP*N*NDIMS + q0_g_idx*N*NDIMS;
+                for(size_t d=0; d < NDIMS; d++) {
+                    atomicAdd(mp_out_q0 + i_idx*NDIMS + d, mixed_X[d]);
+                }
             }
         }
     }

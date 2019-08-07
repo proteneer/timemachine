@@ -77,6 +77,7 @@ void Context<RealType>::step() {
         nrg->derivatives_device(
             1, // one conformer when doing dynamics
             N_,
+            3, // FIX ME
             d_x_t_,
             d_params_,
             d_E_, // this is likely optional as well

@@ -34,6 +34,7 @@ template <typename RealType>
 void LennardJones<RealType>::derivatives_device(
     const int num_confs,
     const int num_atoms,
+    const int num_dims,
     const RealType *d_coords,
     const RealType *d_params,
     RealType *d_E,
@@ -108,6 +109,7 @@ template <typename RealType>
 void Electrostatics<RealType>::derivatives_device(
     const int num_confs,
     const int num_atoms,
+    const int num_dims,
     const RealType *d_coords,
     const RealType *d_params,
     RealType *d_E,
@@ -130,21 +132,42 @@ void Electrostatics<RealType>::derivatives_device(
     dim3 dimGrid(n_blocks, dim_y, C); // x, y, z dims
 
     // auto start = std::chrono::high_resolution_clock::now();
-    k_electrostatics<<<dimGrid, dimBlock>>>(
-        N,
-        d_coords,
-        d_params,
-        d_scale_matrix_,
-        d_param_idxs_,
-        d_E,
-        d_dE_dx,
-        d_d2E_dx2,
-        // parameter derivatives
-        num_dp,
-        d_param_gather_idxs,
-        d_dE_dp,
-        d_d2E_dxdp
-    );
+    if(num_dims == 3) {
+        k_electrostatics<RealType, 3><<<dimGrid, dimBlock>>>(
+            N,
+            d_coords,
+            d_params,
+            d_scale_matrix_,
+            d_param_idxs_,
+            d_E,
+            d_dE_dx,
+            d_d2E_dx2,
+            // parameter derivatives
+            num_dp,
+            d_param_gather_idxs,
+            d_dE_dp,
+            d_d2E_dxdp
+        );        
+    } else if (num_dims == 4) {
+        k_electrostatics<RealType, 4><<<dimGrid, dimBlock>>>(
+            N,
+            d_coords,
+            d_params,
+            d_scale_matrix_,
+            d_param_idxs_,
+            d_E,
+            d_dE_dx,
+            d_d2E_dx2,
+            // parameter derivatives
+            num_dp,
+            d_param_gather_idxs,
+            d_dE_dp,
+            d_d2E_dxdp
+        );    
+    } else {
+        throw std::runtime_error("Yell at ytz for not supporting truly arbitrary dimensions, also: what are you doing?");
+    }
+
     // cudaDeviceSynchronize();
     // auto finish = std::chrono::high_resolution_clock::now();
     // std::chrono::duration<double> elapsed = finish - start;

@@ -7,6 +7,9 @@
 #define HESS_N3N3(i,j,N,di,dj) (i*3*N*3 + di*N*3 + j*3 + dj)
 #define HESS_IDX HESS_N3N3
 
+#define HESS_NDND(i,j,N,di,dj,D) (i*D*N*D + di*N*D + j*D + dj)
+#define HESS_IDX_ND HESS_NDND
+
 #define ONE_4PI_EPS0 138.935456
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }

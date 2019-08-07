@@ -41,6 +41,8 @@ class CustomOpsTest(unittest.TestCase):
 
     def assert_derivatives(self, conf, params, ref_nrg, test_nrg):
 
+        ndims = conf.shape[-1]
+
         if conf.ndim == 2:
             num_confs = np.random.randint(1, 10)
             confs = np.repeat(conf[np.newaxis, :, :], num_confs, axis=0)
@@ -74,8 +76,8 @@ class CustomOpsTest(unittest.TestCase):
 
             # test symmetric hessians
             for t, r in zip(test_d2e_dx2, ref_d2e_dx2):
-                test_tril = np.tril(np.reshape(t, (num_atoms*3, num_atoms*3)))
-                ref_tril = np.tril(np.reshape(r, (num_atoms*3, num_atoms*3)))
+                test_tril = np.tril(np.reshape(t, (num_atoms*ndims, num_atoms*ndims)))
+                ref_tril = np.tril(np.reshape(r, (num_atoms*ndims, num_atoms*ndims)))
                 np.testing.assert_almost_equal(test_tril, ref_tril)
 
             # batch compare
@@ -343,21 +345,21 @@ class TestElectrostatics(CustomOpsTest):
 
         params = np.array([1.3, 0.3], dtype=np.float64)
         param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
-        # scale_matrix = np.array([
-        #     [  0,  1,  1,  1,0.5],
-        #     [  1,  0,  0,  1,  1],
-        #     [  1,  0,  0,  0,0.2],
-        #     [  1,  1,  0,  0,  1],
-        #     [0.5,  1,0.2,  1,  0],
-        # ], dtype=np.float64)
-
         scale_matrix = np.array([
-            [  0,  1,  1,  1,  1],
+            [  0,  1,  1,  1,0.5],
             [  1,  0,  0,  1,  1],
-            [  1,  0,  0,  0,  1],
+            [  1,  0,  0,  0,0.2],
             [  1,  1,  0,  0,  1],
-            [  1,  1,  1,  1,  0],
+            [0.5,  1,0.2,  1,  0],
         ], dtype=np.float64)
+
+        # scale_matrix = np.array([
+        #     [  0,  1,  1,  1,  1],
+        #     [  1,  0,  0,  1,  1],
+        #     [  1,  0,  0,  0,  1],
+        #     [  1,  1,  0,  0,  1],
+        #     [  1,  1,  1,  1,  0],
+        # ], dtype=np.float64)
 
         # warning: non net-neutral cell
         # ref_nrg = nonbonded.electrostatic(param_idxs, scale_matrix)
@@ -375,6 +377,22 @@ class TestElectrostatics(CustomOpsTest):
 
         self.assert_derivatives(
             conf,
+            params,
+            energy_fn,
+            es
+        )
+
+        # test 4 dimensional hessians
+        conf4d = np.array([
+            [ 0.0637,   0.0126,   0.2203,  0.5],
+            [ 1.0573,  -0.2011,   1.2864, -0.2],
+            [ 2.3928,   1.2209,  -0.2230,  5.6],
+            [-0.6891,   1.6983,   0.0780,  2.3],
+            [-0.6312,  -1.6261,  -0.2601, -5.1]
+        ], dtype=np.float64)
+
+        self.assert_derivatives(
+            conf4d,
             params,
             energy_fn,
             es
