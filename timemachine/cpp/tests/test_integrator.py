@@ -114,6 +114,7 @@ class TestOptimizers(unittest.TestCase):
         # 2. Custom Ops Integration
         lo = custom_ops.LangevinOptimizer_f64(
             dt,
+            3,
             ca,
             cb,
             cc
@@ -145,10 +146,10 @@ class TestOptimizers(unittest.TestCase):
         ctxt = custom_ops.Context_f64(
             test_energies,
             lo,
-            params,
-            x0,
-            v0,
-            dp_idxs
+            params.astype(np.float64),
+            x0.astype(np.float64),
+            v0.astype(np.float64),
+            dp_idxs.astype(np.int32)
         )
 
         for i in range(100):
@@ -173,10 +174,10 @@ class TestOptimizers(unittest.TestCase):
         ctxt = custom_ops.Context_f64(
             test_energies,
             lo,
-            params,
-            x0,
-            v0,
-            dp_idxs
+            params.astype(np.float64),
+            x0.astype(np.float64),
+            v0.astype(np.float64),
+            dp_idxs.astype(np.int32)
         )
 
         # 3. test mixed integration, swap out coefficients mid-way
@@ -239,6 +240,7 @@ class TestOptimizers(unittest.TestCase):
 
             lo = custom_ops.LangevinOptimizer_f64(
                 dt,
+                3,
                 coeff_a,
                 coeff_bs,
                 coeff_cs

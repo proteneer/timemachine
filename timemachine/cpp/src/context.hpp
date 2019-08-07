@@ -40,6 +40,7 @@ private:
     int step_;
     int N_;
     int P_;
+    int D_;
     int DP_;
 
 public:
@@ -51,11 +52,14 @@ public:
         const RealType *h_x0,
         const RealType *h_v0,
         const int N,
+        const int D,
         const int P,
         const int *h_param_gather_idxs,
         const int DP);
 
     int num_atoms() const { return N_; };
+
+    int num_dims() const { return D_; };
 
     int num_params() const { return P_; };
 

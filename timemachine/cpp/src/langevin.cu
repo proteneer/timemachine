@@ -19,6 +19,7 @@ __global__ void update_positions(
     const RealType *dE_dx,
     const RealType d_t,
     const int N,
+    const int D,
     RealType *x_t,
     RealType *v_t) {
 
@@ -28,7 +29,7 @@ __global__ void update_positions(
     }
 
     int d_idx = blockIdx.y;
-    int local_idx = atom_idx*3 + d_idx;
+    int local_idx = atom_idx*D + d_idx;
 
     v_t[local_idx] = coeff_a*v_t[local_idx] - coeff_bs[atom_idx]*dE_dx[local_idx] + coeff_cs[atom_idx]*noise[local_idx];
     x_t[local_idx] += v_t[local_idx]*d_t;
@@ -43,6 +44,7 @@ __global__ void update_derivatives(
     const RealType *d2E_dxdp, 
     const RealType dt,
     const int N,
+    const int D,
     RealType *dx_dp_t,
     RealType *dv_dp_t) {
 
@@ -53,7 +55,7 @@ __global__ void update_derivatives(
 
     int d_idx = blockIdx.y;
     int p_idx = blockIdx.z;
-    int local_idx = p_idx*N*3 + atom_idx*3 + d_idx;
+    int local_idx = p_idx*N*D + atom_idx*D + d_idx;
 
     // derivative of the above equation
     RealType tmp = coeff_a*dv_dp_t[local_idx] - coeff_bs[atom_idx]*d2E_dxdp[local_idx];
@@ -69,6 +71,7 @@ namespace timemachine {
 template<typename RealType> 
 LangevinOptimizer<RealType>::LangevinOptimizer(
     RealType dt,
+    const int num_dims,
     const RealType coeff_a,
     const std::vector<RealType> &coeff_bs,
     const std::vector<RealType> &coeff_cs) :
@@ -85,7 +88,7 @@ LangevinOptimizer<RealType>::LangevinOptimizer(
     cublasErrchk(cublasCreate(&cb_handle_));
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_PHILOX4_32_10));
 
-    gpuErrchk(cudaMalloc((void**)&d_rng_buffer_, coeff_bs.size()*3*sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_rng_buffer_, coeff_bs.size()*num_dims*sizeof(RealType)));
 
     curandSetPseudoRandomGeneratorSeed(cr_rng_, time(NULL));
 
@@ -105,6 +108,7 @@ LangevinOptimizer<RealType>::~LangevinOptimizer() {
 template<typename RealType> 
 void LangevinOptimizer<RealType>::step(
     const int N,
+    const int D,
     const int DP,
     const RealType *dE_dx,
     const RealType *d2E_dx2,
@@ -116,17 +120,18 @@ void LangevinOptimizer<RealType>::step(
     const RealType *d_input_noise_buffer) const {
 
     size_t tpb = 32;
-    size_t n_blocks = (N*3 + tpb - 1) / tpb;
+    size_t n_blocks = (N*D + tpb - 1) / tpb;
     if(d2E_dx2 != nullptr && d2E_dxdp != nullptr) {
-        hessian_vector_product(N, DP, d2E_dx2, d_dx_dp_t, d2E_dxdp);
+        hessian_vector_product(N, D, DP, d2E_dx2, d_dx_dp_t, d2E_dxdp);
 
-        dim3 dimGrid_dxdp(n_blocks, 3, DP); // x, y, z dims
+        dim3 dimGrid_dxdp(n_blocks, D, DP); // x, y, z dims
         update_derivatives<RealType><<<dimGrid_dxdp, tpb>>>(
             coeff_a_,
             d_coeff_bs_,
             d2E_dxdp,
             dt_,
             N,
+            D,
             d_dx_dp_t,
             d_dv_dp_t
         );
@@ -136,13 +141,13 @@ void LangevinOptimizer<RealType>::step(
     const RealType* d_noise_buf = nullptr;
 
     if(d_input_noise_buffer == nullptr) {
-        curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N*3, 0.0, 1.0));
+        curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N*D, 0.0, 1.0));
         d_noise_buf = d_rng_buffer_;
     } else {
         d_noise_buf = d_input_noise_buffer;
     }
 
-    dim3 dimGrid_dx(n_blocks, 3);
+    dim3 dimGrid_dx(n_blocks, D);
     update_positions<RealType><<<dimGrid_dx, tpb>>>(
         d_noise_buf,
         coeff_a_,
@@ -151,6 +156,7 @@ void LangevinOptimizer<RealType>::step(
         dE_dx,
         dt_,
         N,
+        D,
         d_x_t,
         d_v_t
     );
@@ -162,6 +168,7 @@ void LangevinOptimizer<RealType>::step(
 template<typename RealType> 
 void LangevinOptimizer<RealType>::hessian_vector_product(
     const int N,
+    const int D,
     const int DP,
     const RealType *d_A,
     RealType *d_B,
@@ -170,17 +177,17 @@ void LangevinOptimizer<RealType>::hessian_vector_product(
     RealType alpha = 1.0;
     RealType beta  = 1.0;
  
-    const size_t N3 = N*3;
+    const size_t ND = N*D;
 
     // this is set to UPPER because of fortran ordering
     cublasErrchk(templateSymm(cb_handle_,
         CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER,
-        N3, DP,
+        ND, DP,
         &alpha,
-        d_A, N3,
-        d_B, N3,
+        d_A, ND,
+        d_B, ND,
         &beta,
-        d_C, N3));
+        d_C, ND));
 
 }
 
