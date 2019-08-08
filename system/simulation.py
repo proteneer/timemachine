@@ -194,6 +194,10 @@ def run_simulation(
     masses,
     dp_idxs,
     n_samples,
+    start_dt=1e-6,
+    end_dt=1e-2,
+    scale=1.05,
+    convergence_tolerance=10,
     pdb=None,
     pdb_name=None
     ):
@@ -215,7 +219,7 @@ def run_simulation(
     
     potentials = forcefield.merge_potentials(potentials)
         
-    dt = 1e-4
+    dt = start_dt
     ca, cb, cc = langevin_coefficients(
         temperature=25.0,
         dt=dt,
@@ -247,7 +251,7 @@ def run_simulation(
     )
     
 #     tot_dE_dx = 0
-    tolerance = 10.0
+    tolerance = convergence_tolerance
 
     def mean_norm(conf):
         norm_x = np.dot(conf.reshape(-1), conf.reshape(-1))/num_atoms
@@ -306,10 +310,10 @@ def run_simulation(
 #         outfile = open(pdb_name + '.dcd','wb')
 #         dcd = DCDFile(outfile, pdb.topology, .0001)
     nan = False
-    max_iter = 5000
+    max_iter = 10000
     for i in range(max_iter):
-        dt *= 1.05
-        dt = min(dt, 0.01)
+        dt *= scale
+        dt = min(dt, end_dt)
         opt.set_dt(dt)
         ctxt.step()
         # minimization_energies.append(E)
@@ -320,7 +324,7 @@ def run_simulation(
 #         if i % 100 == 0:
 #             E = ctxt.get_E()
 #             print("i", i, dt, E)
-        if i > 100 and i % 100 == 0:
+        if i > 50 and i % 100 == 0:
             if np.isnan(ctxt.get_E()):
                 nan = True
                 break

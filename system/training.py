@@ -14,6 +14,8 @@ from tqdm import tqdm
 from scipy import stats
 from rdkit import Chem
 from rdkit.Chem import AllChem
+from rdkit.Chem import rdDistGeom
+import rdkit.DistanceGeometry as DG
 
 from system import serialize
 from system import forcefield
@@ -63,13 +65,17 @@ def cmdscale(D):
     
     conf = Y[:, :3]
     
-    return conf
+    return conf / 10
 
 def generate_conformer(mol):
     '''
     mol: RDKit molecule
     returns: Conformation based only on the bounded distance matrix (shape N,3)
     '''
+    bounds_mat = rdDistGeom.GetMoleculeBoundsMatrix(mol)
+    
+    DG.DoTriangleSmoothing(bounds_mat)
+    
     num_atoms = mol.GetNumAtoms()
     
     dij = np.zeros((num_atoms, num_atoms))
@@ -77,14 +83,16 @@ def generate_conformer(mol):
     # Sample from upper/lower bound matrix
     for i in range(num_atoms):
         for j in range(i, num_atoms):
-            upper_bound = bm1[i][j]
-            lower_bound = bm1[j][i]
+            upper_bound = bounds_mat[i][j]
+            lower_bound = bounds_mat[j][i]
             random_dij = np.random.uniform(lower_bound, upper_bound)
             dij[i][j] = random_dij
             dij[j][i] = random_dij
-            assert lower_bound <= upper_bound
+            # Warn if lower bound is greater than upper bound
+            if lower_bound > upper_bound:
+                print('WARNING: lower bound {} greater than upper bound {}'.format(lower_bound,upper_bound))
     
-    conf = csmscale(dij)
+    conf = cmdscale(dij)
     
     return conf
 
@@ -97,7 +105,7 @@ def rmsd_test(num_epochs,
     testing_params (numpy.ndarray, shape P): parameter set to use
     '''
     training_data = np.load(properties['training_data'],allow_pickle=True)['data']
-    training_data = training_data[64:128]
+    training_data = training_data[45000:]
         
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
@@ -285,10 +293,8 @@ def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
     final_derivs = A + B
     
     loss = np.sum(s_E * RMSD)
-    
-    print('mean:',np.mean(RMSD),'boltzmann:',loss)
-        
-    print(np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
+            
+    print('max gradient',np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
     if np.isnan(final_derivs/n_reservoir).any() or np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'] > 1e-2:
         print("bad gradients/nan energy")
         return np.zeros_like(final_derivs), np.nan, label
