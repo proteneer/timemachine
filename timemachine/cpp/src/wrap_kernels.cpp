@@ -223,6 +223,7 @@ void declare_potential(py::module &m, const char *typestr) {
             const long unsigned int num_confs = coords.shape()[0];
             const long unsigned int num_atoms = coords.shape()[1];
             const long unsigned int num_dims = coords.shape()[2];
+
             const long unsigned int num_params = params.shape()[0];
             const long unsigned int num_dp_idxs = dp_idxs.shape()[0];
 
