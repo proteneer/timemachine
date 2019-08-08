@@ -354,12 +354,23 @@ class TestPeriodicTorsion(CustomOpsTest):
         # for f in s.getForces():
         #     print("OpenMM forces", f)
 
+
         self.assert_derivatives(
             x0,
             params,
             energy_fn,
             pt
         )
+
+        x0_4d = np.zeros(shape=(8, 4, 4))
+        x0_4d[:,:,:3] = x0
+
+        self.assert_derivatives(
+            x0_4d,
+            params,
+            energy_fn,
+            pt
+        )  
 
 
 class TestLennardJones(CustomOpsTest):

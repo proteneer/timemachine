@@ -250,23 +250,41 @@ void PeriodicTorsion<RealType>::derivatives_device(
     dim3 dimBlock(tpb);
     dim3 dimGrid(n_blocks, dim_y, C); // x, y, z
 
-    // auto start = std::chrono::high_resolution_clock::now();
-    k_periodic_torsion_derivatives<<<dimGrid, dimBlock>>>(
-        N,
-        d_coords,
-        d_params,
-        n_torsions_,
-        d_torsion_idxs_,
-        d_param_idxs_,
-        d_E,
-        d_dE_dx,
-        d_d2E_dx2,
-        // parameter derivatives
-        num_dp,
-        d_param_gather_idxs,
-        d_dE_dp,
-        d_d2E_dxdp
-    );
+    if(num_dims == 3) {
+        k_periodic_torsion_derivatives<RealType, 3> <<<dimGrid, dimBlock>>>(
+            N,
+            d_coords,
+            d_params,
+            n_torsions_,
+            d_torsion_idxs_,
+            d_param_idxs_,
+            d_E,
+            d_dE_dx,
+            d_d2E_dx2,
+            // parameter derivatives
+            num_dp,
+            d_param_gather_idxs,
+            d_dE_dp,
+            d_d2E_dxdp
+        );
+    } else if (num_dims == 4) {
+        k_periodic_torsion_derivatives<RealType, 4> <<<dimGrid, dimBlock>>>(
+            N,
+            d_coords,
+            d_params,
+            n_torsions_,
+            d_torsion_idxs_,
+            d_param_idxs_,
+            d_E,
+            d_dE_dx,
+            d_d2E_dx2,
+            // parameter derivatives
+            num_dp,
+            d_param_gather_idxs,
+            d_dE_dp,
+            d_d2E_dxdp
+        );
+    }
 
     // cudaDeviceSynchronize();
     // auto finish = std::chrono::high_resolution_clock::now();
