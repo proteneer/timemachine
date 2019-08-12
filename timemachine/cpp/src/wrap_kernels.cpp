@@ -33,6 +33,7 @@ void declare_context(py::module &m, const char *typestr) {
         const py::array_t<int, py::array::c_style> &dp_idxs
     ) {
         const int N = x0.shape()[0];
+        const int D = x0.shape()[1];
         const int P = params.shape()[0];
         const int DP = dp_idxs.size();
 
@@ -51,6 +52,7 @@ void declare_context(py::module &m, const char *typestr) {
             x0.data(),
             v0.data(),
             N,
+            D,
             P,
             gather_param_idxs.data(),
             DP
@@ -73,7 +75,8 @@ void declare_context(py::module &m, const char *typestr) {
     })
     .def("get_dE_dx", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
         auto N = ctxt.num_atoms();
-        py::array_t<RealType, py::array::c_style> buffer({N, 3});
+        auto D = ctxt.num_dims();
+        py::array_t<RealType, py::array::c_style> buffer({N, D});
         ctxt.get_dE_dx(buffer.mutable_data());
         return buffer;
     })
@@ -85,27 +88,31 @@ void declare_context(py::module &m, const char *typestr) {
     })
     .def("get_x", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
         auto N = ctxt.num_atoms();
-        py::array_t<RealType, py::array::c_style> buffer({N, 3});
+        auto D = ctxt.num_dims();
+        py::array_t<RealType, py::array::c_style> buffer({N, D});
         ctxt.get_x(buffer.mutable_data());
         return buffer;
     })
     .def("get_v", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
         auto N = ctxt.num_atoms();
-        py::array_t<RealType, py::array::c_style> buffer({N, 3});
+        auto D = ctxt.num_dims();
+        py::array_t<RealType, py::array::c_style> buffer({N, D});
         ctxt.get_v(buffer.mutable_data());
         return buffer;
     })
     .def("get_dx_dp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
         auto DP = ctxt.num_dparams();
         auto N = ctxt.num_atoms();
-        py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
+        auto D = ctxt.num_dims();
+        py::array_t<RealType, py::array::c_style> buffer({DP, N, D});
         ctxt.get_dx_dp(buffer.mutable_data());
         return buffer;
     })
     .def("get_dv_dp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
         auto DP = ctxt.num_dparams();
         auto N = ctxt.num_atoms();
-        py::array_t<RealType, py::array::c_style> buffer({DP, N, 3});
+        auto D = ctxt.num_dims();
+        py::array_t<RealType, py::array::c_style> buffer({DP, N, D});
         ctxt.get_dv_dp(buffer.mutable_data());
         return buffer;
     });
@@ -135,10 +142,12 @@ void declare_optimizer(py::module &m, const char *typestr) {
         const py::array_t<RealType, py::array::c_style> &noise_buffer) {
 
             const long unsigned int num_atoms = dE_dx.shape()[0];
+            const long unsigned int num_dims = dE_dx.shape()[1];
             const long unsigned int num_params = d2E_dxdp.shape()[0];
 
             opt.step_host(
                 num_atoms,
+                num_dims,
                 num_params,
                 dE_dx.data(),
                 d2E_dx2.data(),
@@ -167,6 +176,7 @@ void declare_langevin_optimizer(py::module &m, const char *typestr) {
     )
     .def(py::init([](
         const RealType dt,
+        const int ndims,
         const RealType ca,
         const py::array_t<RealType, py::array::c_style> &cb, // bond_idxs
         const py::array_t<RealType, py::array::c_style> &cc  // param_idxs
@@ -175,9 +185,10 @@ void declare_langevin_optimizer(py::module &m, const char *typestr) {
         std::memcpy(coeff_bs.data(), cb.data(), cb.size()*sizeof(RealType));
         std::vector<RealType> coeff_cs(cc.size());
         std::memcpy(coeff_cs.data(), cc.data(), cc.size()*sizeof(RealType));
-        return new timemachine::LangevinOptimizer<RealType>(dt, ca, coeff_bs, coeff_cs);
+        return new timemachine::LangevinOptimizer<RealType>(dt, ndims, ca, coeff_bs, coeff_cs);
     }),
         py::arg("dt").none(false),
+        py::arg("ndims").none(false),
         py::arg("ca").none(false),
         py::arg("cb").none(false),
         py::arg("cc").none(false)
@@ -220,6 +231,7 @@ void declare_potential(py::module &m, const char *typestr) {
             const long unsigned int num_confs = coords.shape()[0];
             const long unsigned int num_atoms = coords.shape()[1];
             const long unsigned int num_dims = coords.shape()[2];
+
             const long unsigned int num_params = params.shape()[0];
             const long unsigned int num_dp_idxs = dp_idxs.shape()[0];
 
@@ -250,13 +262,13 @@ void declare_potential(py::module &m, const char *typestr) {
             nrg.derivatives_host(
                 num_confs,
                 num_atoms,
+                num_dims,
                 num_params,
                 coords.data(),
                 params.data(),
                 py_E.mutable_data(),
                 py_dE_dx.mutable_data(),
                 py_d2E_dx2.mutable_data(),
-
                 num_dp_idxs,
                 &gather_param_idxs[0],
                 py_dE_dp.mutable_data(),

@@ -1,3 +1,5 @@
+#include <stdexcept>
+
 #include "potential.hpp"
 #include "kernel_utils.cuh"
 
@@ -7,6 +9,7 @@ template<typename RealType>
 void Potential<RealType>::derivatives_host(
     const int num_confs,
     const int num_atoms,
+    const int num_dims,
     const int num_params,
     const RealType *h_coords,
     const RealType *h_params,
@@ -24,6 +27,11 @@ void Potential<RealType>::derivatives_host(
     const auto P = num_params;
     const auto DP = num_dp;
 
+
+    if(num_dims != 3 && num_dims != 4) {
+        throw std::runtime_error("Unsupported number of dimensions");
+    }
+
     RealType* d_coords = nullptr;
     RealType* d_params = nullptr;
     int* d_param_gather_idxs = nullptr;
@@ -35,11 +43,11 @@ void Potential<RealType>::derivatives_host(
     RealType* d_dE_dp = nullptr;
     RealType* d_d2E_dxdp = nullptr;
 
-    gpuErrchk(cudaMalloc((void**)&d_coords, C*N*3*sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_coords, C*N*num_dims*sizeof(RealType)));
     gpuErrchk(cudaMalloc((void**)&d_params, P*sizeof(RealType)));
     gpuErrchk(cudaMalloc((void**)&d_param_gather_idxs, P*sizeof(int)));
 
-    gpuErrchk(cudaMemcpy(d_coords, h_coords, C*N*3*sizeof(RealType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_coords, h_coords, C*N*num_dims*sizeof(RealType), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_params, h_params, P*sizeof(RealType), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_param_gather_idxs, h_param_gather_idxs, P*sizeof(int), cudaMemcpyHostToDevice));
 
@@ -49,13 +57,13 @@ void Potential<RealType>::derivatives_host(
     }
 
     if(h_dE_dx != nullptr) {
-        gpuErrchk(cudaMalloc((void**)&d_dE_dx, C*N*3*sizeof(RealType)));
-        gpuErrchk(cudaMemset(d_dE_dx, 0, C*N*3*sizeof(RealType)));
+        gpuErrchk(cudaMalloc((void**)&d_dE_dx, C*N*num_dims*sizeof(RealType)));
+        gpuErrchk(cudaMemset(d_dE_dx, 0, C*N*num_dims*sizeof(RealType)));
     }
 
     if(h_d2E_dx2 != nullptr) {
-        gpuErrchk(cudaMalloc((void**)&d_d2E_dx2, C*N*3*N*3*sizeof(RealType)));
-        gpuErrchk(cudaMemset(d_d2E_dx2, 0, C*N*3*N*3*sizeof(RealType)));     
+        gpuErrchk(cudaMalloc((void**)&d_d2E_dx2, C*N*num_dims*N*num_dims*sizeof(RealType)));
+        gpuErrchk(cudaMemset(d_d2E_dx2, 0, C*N*num_dims*N*num_dims*sizeof(RealType)));     
     }
 
     if(h_dE_dp != nullptr) {
@@ -63,13 +71,14 @@ void Potential<RealType>::derivatives_host(
         gpuErrchk(cudaMemset(d_dE_dp, 0, C*DP*sizeof(RealType)));
     }
     if(h_d2E_dxdp != nullptr) {
-        gpuErrchk(cudaMalloc((void**)&d_d2E_dxdp, C*DP*N*3*sizeof(RealType)));
-        gpuErrchk(cudaMemset(d_d2E_dxdp, 0, C*DP*N*3*sizeof(RealType)));
+        gpuErrchk(cudaMalloc((void**)&d_d2E_dxdp, C*DP*N*num_dims*sizeof(RealType)));
+        gpuErrchk(cudaMemset(d_d2E_dxdp, 0, C*DP*N*num_dims*sizeof(RealType)));
     }
 
     this->derivatives_device(
         C,
         N,
+        num_dims,
         d_coords,
         d_params,
         d_E,
@@ -90,16 +99,16 @@ void Potential<RealType>::derivatives_host(
         gpuErrchk(cudaMemcpy(h_E, d_E, C*sizeof(RealType), cudaMemcpyDeviceToHost));
     }
     if(h_dE_dx != nullptr) {
-        gpuErrchk(cudaMemcpy(h_dE_dx, d_dE_dx, C*N*3*sizeof(RealType), cudaMemcpyDeviceToHost));        
+        gpuErrchk(cudaMemcpy(h_dE_dx, d_dE_dx, C*N*num_dims*sizeof(RealType), cudaMemcpyDeviceToHost));        
     }
     if(h_d2E_dx2 != nullptr) {
-        gpuErrchk(cudaMemcpy(h_d2E_dx2, d_d2E_dx2, C*N*3*N*3*sizeof(RealType), cudaMemcpyDeviceToHost));        
+        gpuErrchk(cudaMemcpy(h_d2E_dx2, d_d2E_dx2, C*N*num_dims*N*num_dims*sizeof(RealType), cudaMemcpyDeviceToHost));        
     }
     if(h_dE_dp != nullptr) {
         gpuErrchk(cudaMemcpy(h_dE_dp, d_dE_dp, C*DP*sizeof(RealType), cudaMemcpyDeviceToHost));
     }
     if(h_d2E_dxdp != nullptr) {
-        gpuErrchk(cudaMemcpy(h_d2E_dxdp, d_d2E_dxdp, C*DP*N*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(h_d2E_dxdp, d_d2E_dxdp, C*DP*N*num_dims*sizeof(RealType), cudaMemcpyDeviceToHost));
     }
 
     cudaFree(d_coords);

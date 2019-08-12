@@ -41,6 +41,8 @@ class CustomOpsTest(unittest.TestCase):
 
     def assert_derivatives(self, conf, params, ref_nrg, test_nrg):
 
+        ndims = conf.shape[-1]
+
         if conf.ndim == 2:
             num_confs = np.random.randint(1, 10)
             confs = np.repeat(conf[np.newaxis, :, :], num_confs, axis=0)
@@ -74,13 +76,66 @@ class CustomOpsTest(unittest.TestCase):
 
             # test symmetric hessians
             for t, r in zip(test_d2e_dx2, ref_d2e_dx2):
+                test_tril = np.tril(np.reshape(t, (num_atoms*ndims, num_atoms*ndims)))
+                ref_tril = np.tril(np.reshape(r, (num_atoms*ndims, num_atoms*ndims)))
+                np.testing.assert_almost_equal(test_tril, ref_tril)
+
+            # batch compare
+            np.testing.assert_almost_equal(test_de_dp, ref_de_dp[:, dp_idxs])
+            np.testing.assert_almost_equal(test_d2e_dxdp, ref_d2e_dxdp[:, dp_idxs, :, :])
+
+    def assert_derivatives_mixed_dimensions(self, conf4d, params, ref_nrg, test_nrg):
+
+        ndims = conf4d.shape[-1]
+
+        if conf4d.ndim == 2:
+            num_conf4ds = np.random.randint(1, 10)
+            conf4ds = np.repeat(conf4d[np.newaxis, :, :], num_conf4ds, axis=0)
+            conf4ds += np.random.rand(*conf4ds.shape)
+        else:
+            conf4ds = conf4d
+            num_conf4ds = conf4ds.shape[0]
+
+        num_atoms = conf4ds.shape[1]
+
+        all_dp_idxs = [
+            np.array([]),
+            np.random.permutation(np.arange(len(params)))[:np.random.randint(len(params))],
+            np.arange(len(params))
+        ]
+
+        for dp_idxs in all_dp_idxs:
+
+            dp_idxs = dp_idxs.astype(np.int32)
+            test_e, test_de_dx, test_d2e_dx2, test_de_dp, test_d2e_dxdp = test_nrg.derivatives(
+                conf4ds,
+                params,
+                dp_idxs=dp_idxs
+            )
+
+            conf3ds = conf4ds[:, :, :3]
+
+            ref_e, ref_de_dx, ref_d2e_dx2, ref_de_dp, ref_d2e_dxdp = generate_derivatives(ref_nrg, conf3ds, params)
+
+            # batch compare
+            np.testing.assert_almost_equal(test_e, ref_e)
+            np.testing.assert_almost_equal(test_de_dx[:, :, :3], ref_de_dx)
+
+            np.testing.assert_almost_equal(test_de_dx[:, :, -1], np.zeros_like(test_de_dx[:, :, -1]))
+
+            # assert 0
+
+            # test symmetric hessians
+            for t, r in zip(test_d2e_dx2, ref_d2e_dx2):
+                t = t[:, :3, :, :3]
                 test_tril = np.tril(np.reshape(t, (num_atoms*3, num_atoms*3)))
                 ref_tril = np.tril(np.reshape(r, (num_atoms*3, num_atoms*3)))
                 np.testing.assert_almost_equal(test_tril, ref_tril)
 
             # batch compare
             np.testing.assert_almost_equal(test_de_dp, ref_de_dp[:, dp_idxs])
-            np.testing.assert_almost_equal(test_d2e_dxdp, ref_d2e_dxdp[:, dp_idxs, :, :])
+            # [C, P, N, 3]
+            np.testing.assert_almost_equal(test_d2e_dxdp[:, :, :, :3], ref_d2e_dxdp[:, dp_idxs, :, :])
 
 
 class TestHarmonicBond(CustomOpsTest):
@@ -126,6 +181,20 @@ class TestHarmonicBond(CustomOpsTest):
             hb
         )
 
+        # test a specialized variant of 4D derivatives truncating to 3D
+        x0_4d = np.array([
+            [1.0,  0.2, 3.3,  0], # H 
+            [-0.5,-1.1,-0.9,  0], # C
+            [3.4,  5.5, 0.2,  0], # H 
+            [3.2,  5.6, 0.5,  0], # H 
+        ], dtype=np.float64)
+
+        self.assert_derivatives_mixed_dimensions(
+            x0_4d,
+            params,
+            energy_fn,
+            hb
+        )
 
 class TestHarmonicAngle(CustomOpsTest):
     
@@ -159,6 +228,22 @@ class TestHarmonicAngle(CustomOpsTest):
 
         self.assert_derivatives(
             x0,
+            params,
+            energy_fn,
+            ha
+        )
+
+        # test a specialized variant of 4D derivatives truncating to 3D
+        x0_4d = np.array([
+            [ 0.0637,   0.0126,   0.2203, 0.1], # C
+            [ 1.0573,  -0.2011,   1.2864, 0.2], # H
+            [ 2.3928,   1.2209,  -0.2230, 0.3], # H
+            [-0.6891,   1.6983,   0.0780, 0.4], # H
+            [-0.6312,  -1.6261,  -0.2601, 0.5], # H
+        ], dtype=np.float64)
+
+        self.assert_derivatives_mixed_dimensions(
+            x0_4d,
             params,
             energy_fn,
             ha
@@ -269,12 +354,23 @@ class TestPeriodicTorsion(CustomOpsTest):
         # for f in s.getForces():
         #     print("OpenMM forces", f)
 
+
         self.assert_derivatives(
             x0,
             params,
             energy_fn,
             pt
         )
+
+        x0_4d = np.zeros(shape=(8, 4, 4))
+        x0_4d[:,:,:3] = x0
+
+        self.assert_derivatives(
+            x0_4d,
+            params,
+            energy_fn,
+            pt
+        )  
 
 
 class TestLennardJones(CustomOpsTest):
@@ -329,6 +425,20 @@ class TestLennardJones(CustomOpsTest):
             lj
         )
 
+        conf4d = np.array([
+            [ 0.0637,   0.0126,   0.2203,  0.5],
+            [ 1.0573,  -0.2011,   1.2864, -0.2],
+            [ 2.3928,   1.2209,  -0.2230,  5.6],
+            [-0.6891,   1.6983,   0.0780,  2.3],
+            [-0.6312,  -1.6261,  -0.2601, -5.1]
+        ], dtype=np.float64)
+
+        self.assert_derivatives(
+            conf4d,
+            params,
+            energy_fn,
+            lj
+        )
 
 class TestElectrostatics(CustomOpsTest):
 
@@ -343,21 +453,21 @@ class TestElectrostatics(CustomOpsTest):
 
         params = np.array([1.3, 0.3], dtype=np.float64)
         param_idxs = np.array([0, 1, 1, 1, 1], dtype=np.int32)
-        # scale_matrix = np.array([
-        #     [  0,  1,  1,  1,0.5],
-        #     [  1,  0,  0,  1,  1],
-        #     [  1,  0,  0,  0,0.2],
-        #     [  1,  1,  0,  0,  1],
-        #     [0.5,  1,0.2,  1,  0],
-        # ], dtype=np.float64)
-
         scale_matrix = np.array([
-            [  0,  1,  1,  1,  1],
+            [  0,  1,  1,  1,0.5],
             [  1,  0,  0,  1,  1],
-            [  1,  0,  0,  0,  1],
+            [  1,  0,  0,  0,0.2],
             [  1,  1,  0,  0,  1],
-            [  1,  1,  1,  1,  0],
+            [0.5,  1,0.2,  1,  0],
         ], dtype=np.float64)
+
+        # scale_matrix = np.array([
+        #     [  0,  1,  1,  1,  1],
+        #     [  1,  0,  0,  1,  1],
+        #     [  1,  0,  0,  0,  1],
+        #     [  1,  1,  0,  0,  1],
+        #     [  1,  1,  1,  1,  0],
+        # ], dtype=np.float64)
 
         # warning: non net-neutral cell
         # ref_nrg = nonbonded.electrostatic(param_idxs, scale_matrix)
@@ -375,6 +485,22 @@ class TestElectrostatics(CustomOpsTest):
 
         self.assert_derivatives(
             conf,
+            params,
+            energy_fn,
+            es
+        )
+
+        # test 4 dimensional hessians
+        conf4d = np.array([
+            [ 0.0637,   0.0126,   0.2203,  0.5],
+            [ 1.0573,  -0.2011,   1.2864, -0.2],
+            [ 2.3928,   1.2209,  -0.2230,  5.6],
+            [-0.6891,   1.6983,   0.0780,  2.3],
+            [-0.6312,  -1.6261,  -0.2601, -5.1]
+        ], dtype=np.float64)
+
+        self.assert_derivatives(
+            conf4d,
             params,
             energy_fn,
             es
