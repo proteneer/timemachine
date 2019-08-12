@@ -12,6 +12,7 @@ Context<RealType>::Context(
     const RealType *h_x0,
     const RealType *h_v0,
     const int N,
+    const int D,
     const int P,
     const int *h_gather_param_idxs,
     const int DP) : system_(system),
@@ -19,31 +20,32 @@ Context<RealType>::Context(
     step_(0),
     N_(N),
     P_(P),
+    D_(D),
     DP_(DP) {
     // if DP == 0 then this is null
 
     // 1. allocate
     gpuErrchk(cudaMalloc((void**)&d_params_, P*sizeof(RealType)));
     gpuErrchk(cudaMalloc((void**)&d_gather_param_idxs_, P*sizeof(int)));
-    gpuErrchk(cudaMalloc((void**)&d_x_t_, N*3*sizeof(RealType)));
-    gpuErrchk(cudaMalloc((void**)&d_v_t_, N*3*sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_x_t_, N*D*sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_v_t_, N*D*sizeof(RealType)));
 
     gpuErrchk(cudaMalloc((void**)&d_E_, sizeof(RealType)));
-    gpuErrchk(cudaMalloc((void**)&d_dE_dx_, N*3*sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_dE_dx_, N*D*sizeof(RealType)));
     gpuErrchk(cudaMalloc((void**)&d_dE_dp_, DP*sizeof(RealType)));
-    gpuErrchk(cudaMalloc((void**)&d_d2E_dx2_, N*N*3*3*sizeof(RealType)));
-    gpuErrchk(cudaMalloc((void**)&d_d2E_dxdp_, DP*N*3*sizeof(RealType)));
-    gpuErrchk(cudaMalloc((void**)&d_dx_dp_t_, DP*N*3*sizeof(RealType)));
-    gpuErrchk(cudaMalloc((void**)&d_dv_dp_t_, DP*N*3*sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_d2E_dx2_, N*N*D*D*sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_d2E_dxdp_, DP*N*D*sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_dx_dp_t_, DP*N*D*sizeof(RealType)));
+    gpuErrchk(cudaMalloc((void**)&d_dv_dp_t_, DP*N*D*sizeof(RealType)));
 
     // 2. memcpy and memset to initialize
     gpuErrchk(cudaMemcpy(d_params_, h_params, P*sizeof(RealType), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_gather_param_idxs_, h_gather_param_idxs, P*sizeof(int), cudaMemcpyHostToDevice));
-    gpuErrchk(cudaMemcpy(d_x_t_, h_x0, N*3*sizeof(RealType), cudaMemcpyHostToDevice));
-    gpuErrchk(cudaMemcpy(d_v_t_, h_v0, N*3*sizeof(RealType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_x_t_, h_x0, N*D*sizeof(RealType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_v_t_, h_v0, N*D*sizeof(RealType), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMemset(d_dx_dp_t_, 0, DP*N*3*sizeof(RealType)));
-    gpuErrchk(cudaMemset(d_dv_dp_t_, 0, DP*N*3*sizeof(RealType)));
+    gpuErrchk(cudaMemset(d_dx_dp_t_, 0, DP*N*D*sizeof(RealType)));
+    gpuErrchk(cudaMemset(d_dv_dp_t_, 0, DP*N*D*sizeof(RealType)));
 
 }
 
@@ -68,15 +70,16 @@ void Context<RealType>::step() {
 
     // reset force buffers
     gpuErrchk(cudaMemset(d_E_, 0, sizeof(RealType)));
-    gpuErrchk(cudaMemset(d_dE_dx_, 0, N_*3*sizeof(RealType)));
+    gpuErrchk(cudaMemset(d_dE_dx_, 0, N_*D_*sizeof(RealType)));
     gpuErrchk(cudaMemset(d_dE_dp_, 0, DP_*sizeof(RealType)));
-    gpuErrchk(cudaMemset(d_d2E_dx2_, 0, N_*N_*3*3*sizeof(RealType)));
-    gpuErrchk(cudaMemset(d_d2E_dxdp_, 0, DP_*N_*3*sizeof(RealType)));
+    gpuErrchk(cudaMemset(d_d2E_dx2_, 0, N_*N_*D_*D_*sizeof(RealType)));
+    gpuErrchk(cudaMemset(d_d2E_dxdp_, 0, DP_*N_*D_*sizeof(RealType)));
 
     for(auto nrg : system_) {
         nrg->derivatives_device(
             1, // one conformer when doing dynamics
             N_,
+            D_, // FIX ME
             d_x_t_,
             d_params_,
             d_E_, // this is likely optional as well
@@ -91,6 +94,7 @@ void Context<RealType>::step() {
 
     optimizer_->step(
         N_,
+        D_,
         DP_,
         d_dE_dx_,
         d_d2E_dx2_,
@@ -106,12 +110,12 @@ void Context<RealType>::step() {
 
 template<typename RealType>
 void Context<RealType>::get_x(RealType *buffer) const {
-    gpuErrchk(cudaMemcpy(buffer, d_x_t_, N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(buffer, d_x_t_, N_*D_*sizeof(RealType), cudaMemcpyDeviceToHost));
 }
 
 template<typename RealType>
 void Context<RealType>::get_v(RealType *buffer) const {
-    gpuErrchk(cudaMemcpy(buffer, d_v_t_, N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(buffer, d_v_t_, N_*D_*sizeof(RealType), cudaMemcpyDeviceToHost));
 }
 
 template<typename RealType>
@@ -121,7 +125,7 @@ void Context<RealType>::get_E(RealType *buffer) const {
 
 template<typename RealType>
 void Context<RealType>::get_dE_dx(RealType *buffer) const {
-    gpuErrchk(cudaMemcpy(buffer, d_dE_dx_, N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(buffer, d_dE_dx_, N_*D_*sizeof(RealType), cudaMemcpyDeviceToHost));
 }
 
 template<typename RealType>
@@ -131,12 +135,12 @@ void Context<RealType>::get_dE_dp(RealType *buffer) const {
 
 template<typename RealType>
 void Context<RealType>::get_dx_dp(RealType *buffer) const {
-    gpuErrchk(cudaMemcpy(buffer, d_dx_dp_t_, DP_*N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(buffer, d_dx_dp_t_, DP_*N_*D_*sizeof(RealType), cudaMemcpyDeviceToHost));
 }
 
 template<typename RealType>
 void Context<RealType>::get_dv_dp(RealType *buffer) const {
-    gpuErrchk(cudaMemcpy(buffer, d_dv_dp_t_, DP_*N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(buffer, d_dv_dp_t_, DP_*N_*D_*sizeof(RealType), cudaMemcpyDeviceToHost));
 }
 
 template class Context<float>;

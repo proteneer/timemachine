@@ -26,6 +26,7 @@ public:
     virtual void derivatives_device(
         const int num_confs,
         const int num_atoms,
+        const int num_dims,
         const RealType *d_coords,
         const RealType *d_params,
         RealType *d_E,
@@ -60,6 +61,7 @@ public:
     virtual void derivatives_device(
         const int num_confs,
         const int num_atoms,
+        const int num_dims,
         const RealType *d_coords,
         const RealType *d_params,
         RealType *d_E,
@@ -95,6 +97,7 @@ public:
     virtual void derivatives_device(
         const int num_confs,
         const int num_atoms,
+        const int num_dims,
         const RealType *d_coords,
         const RealType *d_params,
         RealType *d_E,

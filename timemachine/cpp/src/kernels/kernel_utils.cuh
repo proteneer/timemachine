@@ -7,6 +7,9 @@
 #define HESS_N3N3(i,j,N,di,dj) (i*3*N*3 + di*N*3 + j*3 + dj)
 #define HESS_IDX HESS_N3N3
 
+#define HESS_NDND(i,j,N,di,dj,D) (i*D*N*D + di*N*D + j*D + dj)
+#define HESS_IDX_ND HESS_NDND
+
 #define ONE_4PI_EPS0 138.935456
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
@@ -19,6 +22,9 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
+inline __device__ int linearize(int i, int j, int d) {
+    return d*(d-1)/2 - (d-i) * (d-i-1)/2 +j;
+}
 
 inline __device__ float gpuSqrt(float arg) {
   return sqrtf(arg);
