@@ -29,6 +29,11 @@ __global__ void update_positions(
     }
 
     int d_idx = blockIdx.y;
+
+    if(d_idx >= 3) {
+        return;
+    }
+
     int local_idx = atom_idx*D + d_idx;
 
     v_t[local_idx] = coeff_a*v_t[local_idx] - coeff_bs[atom_idx]*dE_dx[local_idx] + coeff_cs[atom_idx]*noise[local_idx];
@@ -54,6 +59,9 @@ __global__ void update_derivatives(
     }
 
     int d_idx = blockIdx.y;
+    if(d_idx >= 3) {
+        return;
+    }
     int p_idx = blockIdx.z;
     int local_idx = p_idx*N*D + atom_idx*D + d_idx;
 

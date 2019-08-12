@@ -19,7 +19,7 @@ class ReferenceLangevin():
         self.coeff_cs = cc
 
     def step(self, x_t, v_t, dE_dx):
-        noise = np.random.rand(x_t.shape[0], x_t.shape[1])
+        noise = np.random.normal(x_t.shape[0], x_t.shape[1])
         # (ytz): * operator isn't defined for sparse grads (resulting from tf.gather ops), hence the tf.multiply
         v_t_1 = self.coeff_a*v_t - np.expand_dims(self.coeff_bs, axis=-1)*dE_dx + np.expand_dims(self.coeff_cs, axis=-1)*noise
         x_t_1 = x_t + v_t_1*self.dt
