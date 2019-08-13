@@ -2,12 +2,11 @@
 
 #include "surreal.cuh"
 
-template <typename CoordType, typename ParamType, typename OutType> 
+template <typename CoordType, typename ParamType, typename OutType, int NDIMS> 
 inline __device__ OutType harmonic_angle_gradient(
     const CoordType *xs,
     const ParamType *params,
     OutType *grads) {
-
     CoordType x0 = xs[0];
     CoordType y0 = xs[1];
     CoordType z0 = xs[2];
@@ -42,21 +41,23 @@ inline __device__ OutType harmonic_angle_gradient(
     ParamType cos_a0 = cos(a0);
     OutType delta = top/nijk - cos(a0);
 
-    grads[0*3+0] = ka*delta*((-x0 + x1)*(top)/(n3ij*njk) + (-x1 + x2)/(nijk));
-    grads[1*3+0] = ka*delta*((x0 - x1)*(top)/(n3ij*njk) + (-x1 + x2)*(top)/(nij*n3jk) + (-x0 + 2.0*x1 - x2)/(nijk));
-    grads[2*3+0] = ka*((x0 - x1)/(nijk) + (x1 - x2)*(top)/(nij*n3jk))*delta;
-    grads[0*3+1] = ka*delta*((-y0 + y1)*(top)/(n3ij*njk) + (-y1 + y2)/(nijk));
-    grads[1*3+1] = ka*delta*((y0 - y1)*(top)/(n3ij*njk) + (-y1 + y2)*(top)/(nij*n3jk) + (-y0 + 2.0*y1 - y2)/(nijk));
-    grads[2*3+1] = ka*((y0 - y1)/(nijk) + (y1 - y2)*(top)/(nij*n3jk))*delta;
-    grads[0*3+2] = ka*delta*((-z0 + z1)*(top)/(n3ij*njk) + (-z1 + z2)/(nijk));
-    grads[1*3+2] = ka*delta*((z0 - z1)*(top)/(n3ij*njk) + (-z1 + z2)*(top)/(nij*n3jk) + (-z0 + 2.0*z1 - z2)/(nijk));
-    grads[2*3+2] = ka*((z0 - z1)/(nijk) + (z1 - z2)*(top)/(nij*n3jk))*delta;
+    grads[0*NDIMS+0] = ka*delta*((-x0 + x1)*(top)/(n3ij*njk) + (-x1 + x2)/(nijk));
+    grads[0*NDIMS+1] = ka*delta*((-y0 + y1)*(top)/(n3ij*njk) + (-y1 + y2)/(nijk));
+    grads[0*NDIMS+2] = ka*delta*((-z0 + z1)*(top)/(n3ij*njk) + (-z1 + z2)/(nijk));
+
+    grads[1*NDIMS+0] = ka*delta*((x0 - x1)*(top)/(n3ij*njk) + (-x1 + x2)*(top)/(nij*n3jk) + (-x0 + 2.0*x1 - x2)/(nijk));
+    grads[1*NDIMS+1] = ka*delta*((y0 - y1)*(top)/(n3ij*njk) + (-y1 + y2)*(top)/(nij*n3jk) + (-y0 + 2.0*y1 - y2)/(nijk));
+    grads[1*NDIMS+2] = ka*delta*((z0 - z1)*(top)/(n3ij*njk) + (-z1 + z2)*(top)/(nij*n3jk) + (-z0 + 2.0*z1 - z2)/(nijk));
+
+    grads[2*NDIMS+0] = ka*((x0 - x1)/(nijk) + (x1 - x2)*(top)/(nij*n3jk))*delta;
+    grads[2*NDIMS+1] = ka*((y0 - y1)/(nijk) + (y1 - y2)*(top)/(nij*n3jk))*delta;
+    grads[2*NDIMS+2] = ka*((z0 - z1)/(nijk) + (z1 - z2)*(top)/(nij*n3jk))*delta;
 
     return ka/2*(delta*delta);
 
 }
 
-template<typename RealType>
+template<typename RealType, int NDIMS>
 void __global__ k_harmonic_angle_derivatives(
     const int num_atoms,     // n, number of atoms
     const RealType *coords,  // [C, n, 3]
@@ -88,43 +89,66 @@ void __global__ k_harmonic_angle_derivatives(
     int atom_2_idx = angle_idxs[a_idx*3+2];
 
     const int indices[9] = {
-        atom_0_idx*3+0,
-        atom_0_idx*3+1,
-        atom_0_idx*3+2,
-        atom_1_idx*3+0,
-        atom_1_idx*3+1,
-        atom_1_idx*3+2,
-        atom_2_idx*3+0,
-        atom_2_idx*3+1,
-        atom_2_idx*3+2
+        atom_0_idx*NDIMS+0, // x0
+        atom_0_idx*NDIMS+1, // y0
+        atom_0_idx*NDIMS+2, // z0
+        atom_1_idx*NDIMS+0, // x1
+        atom_1_idx*NDIMS+1, // y1
+        atom_1_idx*NDIMS+2, // z1
+        atom_2_idx*NDIMS+0, // x2
+        atom_2_idx*NDIMS+1, // y2
+        atom_2_idx*NDIMS+2  // z2
     };
 
-
-    RealType xs[9];
+    RealType xs[9]; // 3 x 3
     #pragma unroll
     for(int i=0; i < 9; i++) {
-        xs[i] = coords[conf_idx*N*3 + indices[i]];
+        auto x = coords[conf_idx*N*NDIMS + indices[i]];
+        xs[i] = x;
     }
 
     RealType ps[2];
     ps[0] = params[param_idxs[a_idx*2+0]];
     ps[1] = params[param_idxs[a_idx*2+1]];
-    RealType dxs[9];
+    RealType dxs[3*NDIMS] = {0};
 
-    RealType energy = harmonic_angle_gradient<RealType, RealType, RealType>(xs, ps, dxs);
+    RealType energy = harmonic_angle_gradient<RealType, RealType, RealType, NDIMS>(xs, ps, dxs);
 
     if(E) {
         atomicAdd(E + conf_idx , energy);        
     }
 
+    int full_indices[3*NDIMS];
+    for(int a=0; a < 3; a++) {
+        auto atom_i_idx = angle_idxs[a_idx*3+a]; // not n dims since its an index over 3 atoms.
+        for(int d=0; d < NDIMS; d++) {
+            full_indices[a*NDIMS+d] = atom_i_idx*NDIMS+d;
+        }
+    }
+
+    // (ytz) the above code generates the following set of indices:
+    //     atom_0_idx*NDIMS+0,
+    //     atom_0_idx*NDIMS+1,
+    //     atom_0_idx*NDIMS+2,
+    //     atom_0_idx*NDIMS+3,
+    //     atom_1_idx*NDIMS+0,
+    //     atom_1_idx*NDIMS+1,
+    //     atom_1_idx*NDIMS+2,
+    //     atom_1_idx*NDIMS+3,
+    //     atom_2_idx*NDIMS+0,
+    //     atom_2_idx*NDIMS+1,
+    //     atom_2_idx*NDIMS+2
+
+    // RealType dxs[3*NDIMS] = {0};
     if(dE_dx) {
-        for(int i=0; i < 9; i++) {
-            atomicAdd(dE_dx + conf_idx*N*3 + indices[i], dxs[i]);
+        for(int i=0; i < 3*NDIMS; i++) {
+            atomicAdd(dE_dx + conf_idx*N*NDIMS + full_indices[i], dxs[i]);
         }        
     }
 
     const RealType step = 1e-7;
 
+    // hessian
     if(d2E_dx2) {
         Surreal<RealType> cxs[9];
         #pragma unroll
@@ -133,16 +157,18 @@ void __global__ k_harmonic_angle_derivatives(
         }
         for(int j=0; j < 9; j++) {
             cxs[j].imag = step;
-            Surreal<RealType> dcxs[9];
-            harmonic_angle_gradient<Surreal<RealType>, RealType, Surreal<RealType> >(cxs, ps, dcxs);
+            Surreal<RealType> dcxs[3*NDIMS] = {0}; 
+            harmonic_angle_gradient<Surreal<RealType>, RealType, Surreal<RealType>, NDIMS>(cxs, ps, dcxs);
             #pragma unroll
-            for(int k=0; k < 9; k++) {
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + indices[j]*N*3 + indices[k], dcxs[k].imag / step);
+            for(int k=0; k < 3*NDIMS; k++) {
+                // loop is over both indices and full indices
+                atomicAdd(d2E_dx2 + conf_idx*N*NDIMS*N*NDIMS + indices[j]*N*NDIMS + full_indices[k], dcxs[k].imag / step);
             }
             cxs[j].imag = 0;
         }
     }
 
+    // mixed partials
     if(dE_dp || d2E_dxdp) {
 
         Surreal<RealType> cps[2] = {
@@ -150,21 +176,22 @@ void __global__ k_harmonic_angle_derivatives(
             ps[1]
         };
 
+        // autodiff over the parameters
         for(int j=0; j < 2; j++) {
             int gp_idx = param_gather_idxs[param_idxs[a_idx*2+j]];
             if(gp_idx < 0) {
                 continue;
             }
             cps[j].imag = step;
-            Surreal<RealType> dcxs[9];
-            Surreal<RealType> denergy = harmonic_angle_gradient<RealType, Surreal<RealType>, Surreal<RealType> >(xs, cps, dcxs);
+            Surreal<RealType> dcxs[3*NDIMS] = {0}; 
+            Surreal<RealType> denergy = harmonic_angle_gradient<RealType, Surreal<RealType>, Surreal<RealType>, NDIMS >(xs, cps, dcxs);
             if(dE_dp) {
                 atomicAdd(dE_dp + conf_idx*DP + gp_idx, denergy.imag/step);
             }
             if(d2E_dxdp) {
                 #pragma unroll
-                for(int k=0; k < 9; k++) {
-                    atomicAdd(d2E_dxdp + conf_idx*DP*N*3 + gp_idx*N*3 + indices[k], dcxs[k].imag / step);
+                for(int k=0; k < 3*NDIMS; k++) {
+                    atomicAdd(d2E_dxdp + conf_idx*DP*N*NDIMS + gp_idx*N*NDIMS + full_indices[k], dcxs[k].imag / step);
                 }                
             }
             cps[j].imag = 0.0;

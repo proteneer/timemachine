@@ -24,6 +24,7 @@ private:
     // refactor this to base class later
     void hessian_vector_product(
         const int N,
+        const int D,
         const int P,
         const RealType *d_A,
         RealType *d_B,
@@ -35,6 +36,7 @@ public:
 
     LangevinOptimizer(
         RealType dt,
+        const int num_dims,
         const RealType coeff_a,
         const std::vector<RealType> &coeff_bs,
         const std::vector<RealType> &coeff_cs
@@ -50,6 +52,7 @@ public:
 
     virtual void step(
         const int num_atoms,
+        const int num_dims,
         const int num_params,
         const RealType *dE_dx,
         const RealType *d2E_dx2,
