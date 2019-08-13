@@ -119,6 +119,7 @@ def rmsd_test(num_epochs,
         print('--- testing',epoch, "started at", datetime.datetime.now(), '----')
 
         losses = []
+        epoch_filenames = []
 
         for b_idx in range(num_batches):            
             start_idx = b_idx*batch_size
@@ -132,9 +133,10 @@ def rmsd_test(num_epochs,
 
             results = pool.map(rmsd_run,args)
 
-            for _, loss in results:
+            for i, (_, loss) in enumerate(results):
                 if not np.isnan(loss):
                     losses.append(loss)
+                    epoch_filenames.append(batch_data[i][0])
 
         losses = np.array(losses)
         mean_loss = np.mean(losses)
@@ -174,12 +176,12 @@ def average_derivs(R, label, hydrogen_idxs=None):
     if properties['run_type'] == 'train':
         grad_fun = jax.jit(jax.grad(rmsd.opt_rot_rmsd,argnums=(0,)))
         
-    if properties['remove_hydrogens'] ==  'True':
+    if properties.get('remove_hydrogens') ==  'True':
         label = np.delete(label,hydrogen_idxs,axis=0)
     
     for E, dE_dx, dx_dp, dE_dp, x in R:
         
-        if properties['remove_hydrogens'] ==  'True':
+        if properties.get('remove_hydrogens') ==  'True':
             # remove hydrogens from label conformation, predicted conformation, and dx/dp
             dx_dp = np.delete(dx_dp,hydrogen_idxs,axis=1)
             x = np.delete(x,hydrogen_idxs,axis=0)
@@ -245,12 +247,12 @@ def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
     grad_fun = jax.grad(rmsd.opt_rot_rmsd,argnums=(0,))
     batch_grad_fun = jax.vmap(grad_fun,(0,None))
         
-    if properties['remove_hydrogens'] ==  'True':
+    if properties.get('remove_hydrogens') ==  'True':
         label = np.delete(label,hydrogen_idxs,axis=0)
               
     for E, dE_dx, dx_dp, dE_dp, x in R:
         
-        if properties['remove_hydrogens'] ==  'True':
+        if properties.get('remove_hydrogens') ==  'True':
             # remove hydrogens from label conformation, predicted conformation, and dx/dp
             dE_dx = np.delete(dE_dx,hydrogen_idxs,axis=0)
             dx_dp = np.delete(dx_dp,hydrogen_idxs,axis=1)
@@ -293,8 +295,9 @@ def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
     final_derivs = A + B
     
     loss = np.sum(s_E * RMSD)
-            
-    print('max gradient',np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
+
+    # Throw out gradients that are too large
+    print('max gradient:',np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'])
     if np.isnan(final_derivs/n_reservoir).any() or np.amax(abs(final_derivs/n_reservoir)) * properties['learning_rate'] > 1e-2:
         print("bad gradients/nan energy")
         return np.zeros_like(final_derivs), np.nan, label
@@ -303,7 +306,7 @@ def boltzmann_rmsd_derivs(R, label, hydrogen_idxs=None):
 
 def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):
     '''
-    Compute weighted average RMSD derivatives (weighted by lower RMSD using a softmax)
+    Compute weighted average RMSD derivatives (weighted to favor lowest RMSD using a softmax)
     
     R: list of reservoir
         [
@@ -326,12 +329,12 @@ def softmax_rmsd_derivs(R, label, hydrogen_idxs=None):
         grad_fun = jax.grad(rmsd.opt_rot_rmsd,argnums=(0,))
         batch_grad_fun = jax.vmap(grad_fun,(0,None))
         
-    if properties['remove_hydrogens'] ==  'True':
+    if properties.get('remove_hydrogens') ==  'True':
         label = np.delete(label,hydrogen_idxs,axis=0)
               
     for E, dE_dx, dx_dp, dE_dp, x in R:
         
-        if properties['remove_hydrogens'] ==  'True':
+        if properties.get('remove_hydrogens') ==  'True':
             # remove hydrogens from label conformation, predicted conformation, and dx/dp
             dx_dp = np.delete(dx_dp,hydrogen_idxs,axis=1)
             x = np.delete(x,hydrogen_idxs,axis=0)
@@ -395,19 +398,26 @@ def rmsd_run(params):
 
     RG = []
     
-    if 'num_conformers' in properties:
-        num_conformers = properties['num_conformers']
+    num_conformers = properties.get('num_conformers',1)
+      
+    if 'random' in properties and properties['random'] == 'True':
+        AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
     else:
-        num_conformers = 1
+        AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, clearConfs=True, useExpTorsionAnglePrefs=False, useBasicKnowledge=False)
         
-    if not properties['random'] == 'True':
-        np.random.seed(1234)
+#     if not properties['random'] == 'True':
+#         np.random.seed(1234)
     
-    for conf_idx in range(num_conformers):
+#     for conf_idx in range(num_conformers):
+    for conf_idx in range(mol.GetNumConformers()):
         guest_potentials, _, smirnoff_param_groups, _, guest_masses = forcefield.parameterize(mol, smirnoff)
         
-        # generate conformation based only on distance matrix
-        guest_conf = generate_conformer(mol)
+        # WIP: generate conformation based only on distance matrix... Still keep this?
+#         guest_conf = generate_conformer(mol)
+
+        c = mol.GetConformer(conf_idx)
+        conf = np.array(c.GetPositions(),dtype=np.float64)
+        guest_conf = conf/10
 
         dp_idxs = properties['dp_idxs']
         
@@ -430,7 +440,7 @@ def rmsd_run(params):
     if len(RG) == 0:
         return derivs, np.nan
     
-    if properties['remove_hydrogens'] ==  'True':
+    if properties.get('remove_hydrogens') ==  'True':
         hydrogen_idxs = []
         # find indices of hydrogen atoms
         for i in range(len(guest_masses)):
@@ -439,7 +449,7 @@ def rmsd_run(params):
     else:
         hydrogen_idxs = None
         
-    if properties['boltzmann'] == 'True':
+    if properties.get('boltzmann') == 'True':
         G_deriv, loss, label = boltzmann_rmsd_derivs(RG, label, hydrogen_idxs)
     else:
         G_deriv, loss, label = average_derivs(RG, label, hydrogen_idxs)
@@ -549,8 +559,7 @@ Elapsed time: {} seconds
         
         np.savez('run_{}.npz'.format(epoch+1), filename=epoch_filenames, loss=losses, params=get_params(opt_state))
         
-        print('''
-        
+        print('''    
 Epoch: {}
 ==============
 Mean RMSD: {}
@@ -597,12 +606,9 @@ def run_simulation(params):
     
     mol = Chem.MolFromMol2Block(guest_sdf, sanitize=True, removeHs=False, cleanupSubstructures=True)
     
-    if 'num_conformers' in properties:
-        num_conformers = properties['num_conformers']
-    else:
-        num_conformers = 1
-        
-    if properties['random'] == 'True':
+    num_conformers = properties.get('num_conformers',1)
+
+    if properties.get('random') == 'True':
         AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, clearConfs=True)
     else:
         AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, randomSeed=1234, clearConfs=True)
@@ -753,14 +759,18 @@ def compute_derivatives(params1,
                        combined_params):
     
     RH1, RG1, RHG1, label_1, host_dp_idxs, guest_dp_idxs_1, combined_dp_idxs_1, num_atoms = params1
-    G_E, G_derivs = boltzmann_derivatives(RG1)
-    HG_E, HG_derivs = boltzmann_derivatives(RHG1)
-#     G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG1)
-#     HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG1)
+    if properties.get('boltzmann') == 'True':
+        G_E, G_derivs = boltzmann_derivatives(RG1)
+        HG_E, HG_derivs = boltzmann_derivatives(RHG1)
+    else:
+        G_E, G_derivs, _ = simulation.average_E_and_derivatives(RG1)
+        HG_E, HG_derivs, _ = simulation.average_E_and_derivatives(RHG1)
         
     if properties['fit_method'] == 'absolute':
-#         H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH1)
-        H_E, H_derivs = boltzmann_derivatives(RH1)
+        if properties.get('boltzmann') == 'True':
+            H_E, H_derivs = boltzmann_derivatives(RH1)
+        else:
+            H_E, H_derivs, _ = simulation.average_E_and_derivatives(RH1)
         pred_enthalpy = HG_E - (G_E + H_E)
         label = label_1
         delta = pred_enthalpy - label
@@ -772,10 +782,12 @@ def compute_derivatives(params1,
             
     elif properties['fit_method'] == 'relative':
         RH2, RG2, RHG2, label_2, host_dp_idxs, guest_dp_idxs_2, combined_dp_idxs_2, _ = params2
-        G_E_2, G_derivs_2 = boltzmann_derivatives(RG2)
-        HG_E_2, HG_derivs_2 = boltzmann_derivatives(RHG2)
-#         G_E_2, G_derivs_2, _ = simulation.average_E_and_derivatives(RG2)
-#         HG_E_2, HG_derivs_2, _ = simulation.average_E_and_derivatives(RHG2)
+        if properties.get('boltzmann') == 'True':
+            G_E_2, G_derivs_2 = boltzmann_derivatives(RG2)
+            HG_E_2, HG_derivs_2 = boltzmann_derivatives(RHG2)
+        else:
+            G_E_2, G_derivs_2, _ = simulation.average_E_and_derivatives(RG2)
+            HG_E_2, HG_derivs_2, _ = simulation.average_E_and_derivatives(RHG2)
         
         pred_enthalpy = HG_E - HG_E_2 - G_E + G_E_2
         label = label_1 - label_2
@@ -805,7 +817,7 @@ def compute_derivatives(params1,
         if |delta| < cutoff, loss = (delta^2) / (2 * cutoff)
         if |delta| > cutoff, loss = |delta|
         '''
-        huber_cutoff = np.where('huber_cutoff' in properties, properties['huber_cutoff'], 1)
+        huber_cutoff = properties.get('huber_cutoff', 1)
         combined_derivs = np.where(abs(delta) < huber_cutoff, delta / huber_cutoff, delta/np.abs(delta)) * combined_derivs
     elif properties['loss_fn'] == 'log-cosh':
         '''
@@ -813,7 +825,7 @@ def compute_derivatives(params1,
         '''
         combined_derivs = (1 / np.cosh(delta)) * np.sinh(delta) * combined_derivs
         
-    print(np.amax(abs(combined_derivs)) * properties['learning_rate'])
+    print('max gradient:', np.amax(abs(combined_derivs)) * properties['learning_rate'])
     if np.isnan(combined_derivs).any() or np.amax(abs(combined_derivs)) * properties['learning_rate'] > 1e-2 or np.amax(abs(combined_derivs)) == 0:
         print("bad gradients/nan energy")
         return np.zeros_like(combined_derivs), np.nan
@@ -891,8 +903,7 @@ def train(num_epochs,
                     
             # if everything is nan, terminate training
             if len(epoch_predictions) == 0:
-                print("all energies are nan")
-                return
+                raise Exception('all energies are nan')
             
             count += 1
             opt_state = opt_update(count, batch_dp, opt_state)

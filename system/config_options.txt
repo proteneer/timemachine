@@ -1,4 +1,4 @@
-With a valid config file in the current directory, simply type the command "timemachine-train" to train force field parameters to experimental enthalpy or RMSD
+With a valid config file in the current directory, run the training.py python script to train force field parameters to experimental enthalpy or RMSD
 
 "run_type": "train" (training split) or "test" (testing split)
 "loss_type: "RMSD" (train to experimental RMSD) or "enthalpy (train to experimental enthalpy)
@@ -13,7 +13,7 @@ With a valid config file in the current directory, simply type the command "time
 "loss_fn" (enthalpy only): "L2" or "L1" or "Huber" or "log-cosh" depending on the preferred loss function for comparing computed to experimental enthalpy
 "dp_idxs": array of indices to specify which parameters to train to [0: bond k value, 1: ideal bond length, 2: angle k value, 3: ideal bond angle, 4: torsion k value, 5: torsion phase, 6: torsion period, 7: charges, 8: lj sigma, 9: lj epsilon]
 "guest_directory": path to directory containing the ligands for binding enthalpy or RMSD training
-"boltzmann": "True" or "False" to turn on or off Boltzmann weighting for multi-conformer training
-"remove_hydrogens" (RMSD only): "True" or "False" to specify whether to train to only heavy atom RMSD
-"num_conformers" (optional): specify the number of conformers to use for each compound during training (default = 1)
-"random" (RMSD only): "True" or "False" to turn off or on seeding for conformer generation (i.e. if "True" then conformers are unseeded, if "False" then conformers are seeded and the same conformers are generated for each epoch)
+"boltzmann": "True" or "False" to turn on or off Boltzmann weighting for multi-conformer training, default = False
+"remove_hydrogens" (RMSD only): "True" or "False" to specify whether to train to only heavy atom RMSD, default = False
+"num_conformers" (optional): specify the number of conformers to use for each compound during training, default = 1
+"random" (RMSD only): "True" or "False" to turn off or on seeding for conformer generation (i.e. if "True" then conformers are unseeded, if "False" then conformers are seeded and the same conformers are generated for each epoch), default = False
