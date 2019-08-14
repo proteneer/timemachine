@@ -6,9 +6,10 @@
     "num_epochs": 100, 
     "batch_size": 64,
     "dp_idxs": [4,5,7,8],
-    "training_data": "training_data.npz",
-    "guest_directory": "/home/ubuntu/Relay/structures/csd-structures/the_very_best_data",
-    "random": "no",
-    "remove_hydrogens": "True",
-    "comment": "minimize only, converged after 31 epochs, used first 45,000 compounds for training"
+    "training_data": "/path/to/training_data.npz",
+    "guest_directory": "/path/to/structures",
+    "random": "True",
+    "boltzmann": "True",
+    "num_conformers": 5,
+    "remove_hydrogens": "True"
     }
