@@ -19,7 +19,7 @@ class ReferenceLangevin():
         self.coeff_cs = cc
 
     def step(self, x_t, v_t, dE_dx):
-        noise = np.random.rand(x_t.shape[0], x_t.shape[1])
+        noise = np.random.normal(x_t.shape[0], x_t.shape[1])
         # (ytz): * operator isn't defined for sparse grads (resulting from tf.gather ops), hence the tf.multiply
         v_t_1 = self.coeff_a*v_t - np.expand_dims(self.coeff_bs, axis=-1)*dE_dx + np.expand_dims(self.coeff_cs, axis=-1)*noise
         x_t_1 = x_t + v_t_1*self.dt
@@ -114,6 +114,7 @@ class TestOptimizers(unittest.TestCase):
         # 2. Custom Ops Integration
         lo = custom_ops.LangevinOptimizer_f64(
             dt,
+            3,
             ca,
             cb,
             cc
@@ -145,10 +146,10 @@ class TestOptimizers(unittest.TestCase):
         ctxt = custom_ops.Context_f64(
             test_energies,
             lo,
-            params,
-            x0,
-            v0,
-            dp_idxs
+            params.astype(np.float64),
+            x0.astype(np.float64),
+            v0.astype(np.float64),
+            dp_idxs.astype(np.int32)
         )
 
         for i in range(100):
@@ -173,10 +174,10 @@ class TestOptimizers(unittest.TestCase):
         ctxt = custom_ops.Context_f64(
             test_energies,
             lo,
-            params,
-            x0,
-            v0,
-            dp_idxs
+            params.astype(np.float64),
+            x0.astype(np.float64),
+            v0.astype(np.float64),
+            dp_idxs.astype(np.int32)
         )
 
         # 3. test mixed integration, swap out coefficients mid-way
@@ -239,6 +240,7 @@ class TestOptimizers(unittest.TestCase):
 
             lo = custom_ops.LangevinOptimizer_f64(
                 dt,
+                3,
                 coeff_a,
                 coeff_bs,
                 coeff_cs

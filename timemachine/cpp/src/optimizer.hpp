@@ -22,6 +22,7 @@ public:
 
     void step_host(
         const int num_atoms,
+        const int num_dims,
         const int num_params,
         const RealType *h_dE_dx,
         const RealType *h_d2E_dx2,
@@ -35,6 +36,7 @@ public:
 
     virtual void step(
         const int num_atoms,
+        const int num_dims,
         const int num_params,
         const RealType *dE_dx,
         const RealType *d2E_dx2,

@@ -30,7 +30,7 @@ inline __device__ RealType norm(RealType x, RealType y, RealType z) {
     return sqrt(x*x + y*y + z*z);
 }
 
-template <typename CoordType, typename ParamType, typename OutType> 
+template <typename CoordType, typename ParamType, typename OutType, int NDIMS> 
 inline __device__ OutType torsion_gradient(
     const CoordType *xs,
     const ParamType *params,
@@ -112,27 +112,27 @@ inline __device__ OutType torsion_gradient(
     // CoordType angle = sign_angle*acos(timemachine::dot_product(n1_x, n1_y, n1_z, n2_x, n2_y, n2_z)/(bot));
     OutType prefactor = k*sin(period*angle - phase)*period;
 
-    grads[0*3+0] = dangle_dR0_x * prefactor;
-    grads[0*3+1] = dangle_dR0_y * prefactor;
-    grads[0*3+2] = dangle_dR0_z * prefactor;
+    grads[0*NDIMS+0] = dangle_dR0_x * prefactor;
+    grads[0*NDIMS+1] = dangle_dR0_y * prefactor;
+    grads[0*NDIMS+2] = dangle_dR0_z * prefactor;
 
-    grads[1*3+0] = dangle_dR1_x * prefactor;
-    grads[1*3+1] = dangle_dR1_y * prefactor;
-    grads[1*3+2] = dangle_dR1_z * prefactor;
+    grads[1*NDIMS+0] = dangle_dR1_x * prefactor;
+    grads[1*NDIMS+1] = dangle_dR1_y * prefactor;
+    grads[1*NDIMS+2] = dangle_dR1_z * prefactor;
 
-    grads[2*3+0] = dangle_dR2_x * prefactor;
-    grads[2*3+1] = dangle_dR2_y * prefactor;
-    grads[2*3+2] = dangle_dR2_z * prefactor;
+    grads[2*NDIMS+0] = dangle_dR2_x * prefactor;
+    grads[2*NDIMS+1] = dangle_dR2_y * prefactor;
+    grads[2*NDIMS+2] = dangle_dR2_z * prefactor;
 
-    grads[3*3+0] = dangle_dR3_x * prefactor;
-    grads[3*3+1] = dangle_dR3_y * prefactor;
-    grads[3*3+2] = dangle_dR3_z * prefactor;
+    grads[3*NDIMS+0] = dangle_dR3_x * prefactor;
+    grads[3*NDIMS+1] = dangle_dR3_y * prefactor;
+    grads[3*NDIMS+2] = dangle_dR3_z * prefactor;
 
     return k*(1+cos(period*angle - phase));
 
 }
 
-template<typename RealType>
+template<typename RealType, int NDIMS>
 void __global__ k_periodic_torsion_derivatives(
     const int num_atoms,    // n
     const RealType *coords, // [n, 3]
@@ -165,18 +165,18 @@ void __global__ k_periodic_torsion_derivatives(
     int atom_3_idx = angle_idxs[a_idx*4+3];
 
     const int indices[12] = {
-        atom_0_idx*3+0,
-        atom_0_idx*3+1,
-        atom_0_idx*3+2,
-        atom_1_idx*3+0,
-        atom_1_idx*3+1,
-        atom_1_idx*3+2,
-        atom_2_idx*3+0,
-        atom_2_idx*3+1,
-        atom_2_idx*3+2,
-        atom_3_idx*3+0,
-        atom_3_idx*3+1,
-        atom_3_idx*3+2
+        atom_0_idx*NDIMS+0,
+        atom_0_idx*NDIMS+1,
+        atom_0_idx*NDIMS+2,
+        atom_1_idx*NDIMS+0,
+        atom_1_idx*NDIMS+1,
+        atom_1_idx*NDIMS+2,
+        atom_2_idx*NDIMS+0,
+        atom_2_idx*NDIMS+1,
+        atom_2_idx*NDIMS+2,
+        atom_3_idx*NDIMS+0,
+        atom_3_idx*NDIMS+1,
+        atom_3_idx*NDIMS+2
     };
 
 
@@ -186,20 +186,28 @@ void __global__ k_periodic_torsion_derivatives(
 
     RealType xs[12];
     for(int i=0; i < 12; i++) {
-        xs[i] = coords[conf_idx*N*3+indices[i]];
+        xs[i] = coords[conf_idx*N*NDIMS+indices[i]];
     }
 
     RealType ps[3] = {k, phase, period};
-    RealType dxs[12];
-    RealType energy = torsion_gradient<RealType, RealType, RealType>(xs, ps, dxs);
+    RealType dxs[4*NDIMS] = {0};
+    RealType energy = torsion_gradient<RealType, RealType, RealType, NDIMS>(xs, ps, dxs);
 
     if(E) {
         atomicAdd(E + conf_idx, energy);        
     }
 
+    int full_indices[4*NDIMS];
+    for(int a=0; a < 4; a++) {
+        auto atom_i_idx = angle_idxs[a_idx*4+a]; // not n dims since its an index over 3 atoms.
+        for(int d=0; d < NDIMS; d++) {
+            full_indices[a*NDIMS+d] = atom_i_idx*NDIMS+d;
+        }
+    }
+
     if(dE_dx) {
-        for(int i=0; i < 12; i++) {
-            atomicAdd(dE_dx + conf_idx*N*3 + indices[i], dxs[i]);
+        for(int i=0; i < 4*NDIMS; i++) {
+            atomicAdd(dE_dx + conf_idx*N*NDIMS + full_indices[i], dxs[i]);
         }        
     }
 
@@ -213,11 +221,11 @@ void __global__ k_periodic_torsion_derivatives(
         }
         for(int j=0; j < 12; j++) {
             cxs[j].imag = step;
-            Surreal<RealType> dcxs[12];
-            torsion_gradient<Surreal<RealType>, RealType, Surreal<RealType> >(cxs, ps, dcxs);
+            Surreal<RealType> dcxs[4*NDIMS] = {0};
+            torsion_gradient<Surreal<RealType>, RealType, Surreal<RealType>, NDIMS >(cxs, ps, dcxs);
             #pragma unroll
-            for(int k=0; k < 12; k++) {
-                atomicAdd(d2E_dx2 + conf_idx*N*3*N*3 + indices[j]*N*3 + indices[k], dcxs[k].imag / step);
+            for(int k=0; k < 4*NDIMS; k++) {
+                atomicAdd(d2E_dx2 + conf_idx*N*NDIMS*N*NDIMS + indices[j]*N*NDIMS + full_indices[k], dcxs[k].imag / step);
             }
             cxs[j].imag = 0;
         }
@@ -235,16 +243,16 @@ void __global__ k_periodic_torsion_derivatives(
                 continue;
             }
             cps[j].imag = step;
-            Surreal<RealType> dcxs[12];
-            Surreal<RealType> denergy = torsion_gradient<RealType, Surreal<RealType>, Surreal<RealType> >(xs, cps, dcxs);
+            Surreal<RealType> dcxs[4*NDIMS] = {0};
+            Surreal<RealType> denergy = torsion_gradient<RealType, Surreal<RealType>, Surreal<RealType>, NDIMS >(xs, cps, dcxs);
             if(dE_dp) {
                 atomicAdd(dE_dp + conf_idx*DP + gp_idx, denergy.imag/step);
             }
 
             if(d2E_dxdp) {
                 #pragma unroll
-                for(int k=0; k < 12; k++) {
-                    atomicAdd(d2E_dxdp + conf_idx*DP*N*3 + gp_idx*N*3 + indices[k], dcxs[k].imag / step);
+                for(int k=0; k < 4*NDIMS; k++) {
+                    atomicAdd(d2E_dxdp + conf_idx*DP*N*NDIMS + gp_idx*N*NDIMS + full_indices[k], dcxs[k].imag / step);
                 }                
             }
             cps[j].imag = 0.0;
