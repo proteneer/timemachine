@@ -46,7 +46,7 @@ def average_E_and_derivatives(reservoir):
         if running_sum_EmultdE_dp is None:
             running_sum_EmultdE_dp = np.zeros_like(dE_dp)
 
-        # tensor contract [N,3] with [P, N, 3] and dE_d
+        # tensor contract [N,3] with [P, N, 3] and add dE_dp for a shape P array
         total_dE_dp = np.einsum('kl,mkl->m', dE_dx, dx_dp) + dE_dp
         running_sum_total_derivs += total_dE_dp
         running_sum_E += E
@@ -55,138 +55,12 @@ def average_E_and_derivatives(reservoir):
         running_sum_dE_dp += dE_dp
         running_sum_EmultdE_dp += E*dE_dp
 
-    # compute the thermodynamic average:
-    # boltz*(<E><dE/dp> - <E.dE/dp>)
+    # compute the thermodynamic average: boltz*(<E><dE/dp> - <E.dE/dp>)
     thermo_deriv = running_sum_E*running_sum_dE_dp - running_sum_EmultdE_dp
 
     return running_sum_E/n_reservoir, running_sum_total_derivs/n_reservoir, -constants.BOLTZ*(thermo_deriv/n_reservoir)/(100)
 
-class FireDescentState(namedtuple(
-    'FireDescentState',
-    ['position', 'velocity', 'force', 'dt', 'alpha', 'n_pos'])):
-  """
-  A tuple containing state information for the Fire Descent minimizer.
-  Attributes:
-    position: The current position of particles. An ndarray of floats
-      with shape [n, spatial_dimension].
-    velocity: The current velocity of particles. An ndarray of floats
-      with shape [n, spatial_dimension].
-    force: The current force on particles. An ndarray of floats
-      with shape [n, spatial_dimension].
-    dt: A float specifying the current step size.
-    alpha: A float specifying the current momentum.
-    n_pos: The number of steps in the right direction, so far.
-  """
-
-  def __new__(cls, position, velocity, force, dt, alpha, n_pos):
-    return super(FireDescentState, cls).__new__(
-        cls, position, velocity, force, dt, alpha, n_pos)
-
-
-
-def fire_descent(
-    force_fn, dt_start=0.00001,
-    dt_max=0.00005, n_min=5, f_inc=1.1, f_dec=0.5, alpha_start=0.1, f_alpha=0.99):
-    """Defines FIRE minimization.
-    This code implements the "Fast Inertial Relaxation Engine" from [1].
-    Args:
-    energy_or_force: A function that produces either an energy or a force from
-      a set of particle positions specified as an ndarray of shape
-      [n, spatial_dimension].
-    shift_fn: A function that displaces positions, R, by an amount dR. Both R
-      and dR should be ndarrays of shape [n, spatial_dimension].
-    quant: Either a quantity.Energy or a quantity.Force specifying whether
-      energy_or_force is an energy or force respectively.
-    dt_start: The initial step size during minimization as a float.
-    dt_max: The maximum step size during minimization as a float.
-    n_min: An integer specifying the minimum number of steps moving in the
-      correct direction before dt and f_alpha should be updated.
-    f_inc: A float specifying the fractional rate by which the step size
-      should be increased.
-    f_dec: A float specifying the fractional rate by which the step size
-      should be decreased.
-    alpha_start: A float specifying the initial momentum.
-    f_alpha: A float specifying the fractional change in momentum.
-    Returns:
-    See above.
-    [1] Bitzek, Erik, Pekka Koskinen, Franz Gahler, Michael Moseler,
-      and Peter Gumbsch. "Structural relaxation made simple."
-      Physical review letters 97, no. 17 (2006): 170201.
-    """
-
-    def init_fun(R, **kwargs):
-        V = np.zeros_like(R)
-        return FireDescentState(
-            R, V, force_fn(R), dt_start, alpha_start, 0)
-
-    def apply_fun(state, **kwargs):
-        R, V, F_old, dt, alpha, n_pos = state
-        R = R + dt * V + dt ** 2 * F_old
-        F = force_fn(R)
-        V = V + dt * 0.5 * (F_old + F)
-
-        # NOTE(schsam): This will be wrong if F_norm ~< 1e-8.
-        # TODO(schsam): We should check for forces below 1e-6. @ErrorChecking
-        F_norm = np.sqrt(np.sum(F ** 2))
-        V_norm = np.sqrt(np.sum(V ** 2))
-
-        P = np.array(np.dot(np.reshape(F, (-1)), np.reshape(V, (-1))))
-
-        V = V + alpha * (F * V_norm / F_norm - V)
-
-#         def sigmoid(x):
-#             k = 100
-#             return 1 / (1 + np.exp(-k*x))
-            
-#         sig = sigmoid(1000 * P)
-        
-
-        # NOTE(schsam): Can we clean this up at all?
-        n_pos = np.where(P >= 0, n_pos + 1.0, 0.0)
-#         n_pos = (n_pos + 1) * sig
-        dt_choice = np.array([dt * f_inc, dt_max])
-        dt = np.where(
-            P > 0, np.where(n_pos > n_min, np.min(dt_choice), dt), dt)
-#         dt = min(dt_max, min(dt_max, dt * f_inc * sig + dt * (1-sig)) * sigmoid((n_pos - n_min) * 1000)+ dt * (1 - sigmoid((n_pos - n_min) * 1000)))
-        dt = np.where(P < 0, dt * f_dec, dt)
-#         dt = dt * sig + dt * f_dec * (1 - sig) 
-        alpha = np.where(
-            P > 0, np.where(n_pos > n_min, alpha * f_alpha, alpha), alpha)
-#         alpha = alpha * f_alpha * sig + alpha * (1 - sig) * sigmoid((n_pos - n_min) * 1000) + alpha * (1 - sigmoid((n_pos - n_min) * 1000))
-        alpha = np.where(P < 0, alpha_start, alpha)
-#         alpha = alpha_start * (1 - sig) + alpha * sig
-        V = (P < 0) * np.zeros_like(V) + (P >= 0) * V
-#         V = (1 - sig) * np.zeros_like(V) + (sig) * V
-
-        return FireDescentState(R, V, F, dt, alpha, n_pos)
-
-    return init_fun, apply_fun
-
-
-def write(xyz, masses):
-    buf = str(len(masses)) + '\n'
-    buf += 'timemachine\n'
-    for m, (x,y,z) in zip(masses, xyz):
-        if int(round(m)) == 12:
-            symbol = 'C'
-        elif int(round(m)) == 14:
-            symbol = 'N'
-        elif int(round(m)) == 16:
-            symbol = 'O'
-        elif int(round(m)) == 32:
-            symbol = 'S'
-        elif int(round(m)) == 35:
-            symbol = 'Cl'
-        elif int(round(m)) == 1:
-            symbol = 'H'
-        else:
-            raise Exception("Unknown mass:" + str(m))
-
-        buf += symbol + ' ' + str(round(x,5)) + ' ' + str(round(y,5)) + ' ' +str(round(z,5)) + '\n'
-    return buf
-
 def run_simulation(
-#     conf,
     potentials,
     params,
     param_groups,
@@ -197,25 +71,10 @@ def run_simulation(
     start_dt=1e-6,
     end_dt=1e-2,
     scale=1.05,
-    convergence_tolerance=10,
-    pdb=None,
-    pdb_name=None
+    convergence_tolerance=10
     ):
     
     num_atoms = len(masses)
-    
-#     num_host_atoms = 2035
-
-#     custom_electrostatics = None
-#     if num_atoms > 2035:
-#         for p, args in potentials:
-#             if p == custom_ops.Electrostatics_f32:
-#                 old_scale_matrix = args[0]
-#                 new_scale_matrix = np.zeros_like(old_scale_matrix)
-#                 new_scale_matrix[:num_host_atoms, :num_host_atoms] = old_scale_matrix[:num_host_atoms, :num_host_atoms]
-#                 new_scale_matrix[num_host_atoms:, num_host_atoms:] = old_scale_matrix[num_host_atoms:, num_host_atoms:]
-
-#                 custom_electrostatics = p(new_scale_matrix.astype(np.float32), args[1])
     
     potentials = forcefield.merge_potentials(potentials)
         
@@ -250,187 +109,84 @@ def run_simulation(
         dp_idxs
     )
     
-#     tot_dE_dx = 0
     tolerance = convergence_tolerance
 
     def mean_norm(conf):
         norm_x = np.dot(conf.reshape(-1), conf.reshape(-1))/num_atoms
         return np.sqrt(norm_x)
     
+    # set normalized convergence criteria
     x_norm = mean_norm(conf)
     x_norm = np.where(x_norm < 1, 1, x_norm)
     epsilon = tolerance/x_norm
 
-#     def force_fn(conf):
-#         nonlocal tot_dE_dx
-#         _, tot_dE_dx = ctxt.debug_compute_dE_dx(
-#             conf.astype(np.float32),
-#         )        
-#         # print(tot_dE_dx)
-#         return -tot_dE_dx
-
-#     init_fn, update_fn = fire_descent(force_fn)
-
-#     state = init_fn(conf)
-    
-#     if pdb is not None:
-#         outfile = open('md.dcd','wb')
-# #         outfile = open("md.pdb", "w")
-#         dcd = DCDFile(outfile, pdb.topology, .0001)
-# #         PDBFile.writeHeader(pdb.topology, outfile)
-    
-#     state = update_fn(state)
-    
-# #     count = 0
-
-#     init_fn, update_fn = fire_descent(force_fn, dt_start=0.0005,dt_max=0.001)
-
-#     for step in range(max_iter):
-# #         print("step", step)
-#         state = update_fn(state)
-#         g_norm = mean_norm(tot_dE_dx)
-#         if g_norm < epsilon:
-#             break
-#         if step % 400 == 0:
-#             print("step", step, "energy", ctxt.get_E(), "|g|", g_norm, "eps", epsilon)
-#         if pdb is not None: 
-#             if step % 50 == 0:
-# #                 print(state.position.shape, len(pdb.getPositions()))
-# #                 assert 0
-#                 dcd.writeModel(state.position)
-# #                 PDBFile.writeModel(pdb.topology, state.position*10, outfile, count)
-# #                 count += 1
-
-    # PDBFile.writeHeader(simulation.topology, self._out)
-
-#     PDBFile.writeHeader(pdb.topology, outfile)
-#     count = 0
-    
-#     if pdb is not None:
-#         outfile = open(pdb_name + '.dcd','wb')
-#         dcd = DCDFile(outfile, pdb.topology, .0001)
-    nan = False
-
     max_iter = 10000
     for i in range(max_iter):
+    	# adjust dt by a scale factor for each time step up until it reaches a maximum value
         dt *= scale
         dt = min(dt, end_dt)
         opt.set_dt(dt)
         ctxt.step()
-        # minimization_energies.append(E)
-        # if len(minimization_energies) > window_size:
-            # window_std = np.std(minimization_energies[-window_size:])
-            # if window_std < 1.046/2:
-                # break
-#         if i % 100 == 0:
-#             E = ctxt.get_E()
-#             print("i", i, dt, E)
         if i > 50 and i % 100 == 0:
             if np.isnan(ctxt.get_E()):
-                nan = True
+            	final_energy = np.nan
                 break
-#                 raise Exception("energy is nan")
             dE_dx = ctxt.get_dE_dx()
             g_norm = mean_norm(dE_dx)
             x_norm = mean_norm(conf)
+            # minimization converges when the norm of the forces are less than a certain epsilon
             if g_norm < epsilon:
                 break
-#         if pdb is not None:
-#             if i % 50 == 0:
-#                 dcd.writeModel(ctxt.get_x())   
-            
-#     if custom_electrostatics is not None:
-        
-# #     for p in potentials:
-# #         conf = ctxt.get_x()
-#         conf = conf.reshape(1,-1,3)
-# #         if p == custom_ops.Electrostatics_f32:
-            
-#         res = custom_electrostatics.derivatives(conf.astype(np.float32), params.astype(np.float32), np.array([0]).astype(np.int32))
-#         print("electrostatic interaction energy", res[0])
-        
-#     for p in potentials:
-#         conf = ctxt.get_x()
-#         conf = conf.reshape(1,-1,3)
-#         res = p.derivatives(conf.astype(np.float32), params.astype(np.float32), np.array([0]).astype(np.int32))
-#         print(p, res[0])
 
-#     for step in range(max_iter):
-#         ctxt.step()
-#         g_norm = mean_norm(ctxt.get_dE_dx())
-#         if g_norm < epsilon:
-#             break
-#         if m_dt < .001:
-#             m_dt = m_dt * 1.1
-#             opt.set_dt(m_dt)
-#         if step % 1000 == 0:
-#             print("step", step, "energy", ctxt.get_E(), "|g|", g_norm, "eps", epsilon)
-#         minimization_energies.append(E)
-#         if len(minimization_energies) > window_size:
-#             window_std = np.std(minimization_energies[-window_size:])
-#             if window_std < 1.046/2:
-#                 break
-#         if i % 25 == 0:
-#             PDBFile.writeModel(pdb.topology, ctxt.get_x()*10, outfile, count)
-#             count += 1
-#             # PDBFile.write()
-#             # fh.write(write(ctxt.get_x()*10, masses))
-#             # print("minimization", i, E)
-#         if i > 5000:
-#             break
-    
-#     PDBFile.writeFooter(pdb.topology, outfile)
-#     outfile.flush()
-
-    if np.isnan(ctxt.get_E()):
-        final_energy = np.nan
-#         raise Exception("energy is nan")
+    # For training purposes, don't raise an exception when energy is nan or minimization doesn't converge
+    # Unsuccessful minimizations will have derivatives set to 0 and the data points will not be recorded in the loss plot
     if i == max_iter-1:
         final_energy = np.nan
         print("Energy minimization failed to converge in ", i, "steps")
-#         raise Exception("Energy minimization failed to converge in ", i, "steps")
     else:
         final_energy = ctxt.get_E()
         print("Minimization converged in", i, "steps to", final_energy)
 
-    #modify integrator to do dynamics
-#     opt.set_dt(1e-3)
-#     opt.set_coeff_a(ca)
-#     opt.set_coeff_b(cb)
-#     opt.set_coeff_c(cc)
+    # IN PROGRESS: dynamics are currently turned off for training
+    # # modify integrator to do dynamics
+    # opt.set_dt(1e-3)
+    # opt.set_coeff_a(ca)
+    # opt.set_coeff_b(cb)
+    # opt.set_coeff_c(cc)
 
-#     # dynamics via reservoir sampling
-#     k = n_samples # number of samples we want to keep
-#     R = []
-#     count = 0
+    # # dynamics via reservoir sampling
+    # k = n_samples # number of samples we want to keep
+    # R = []
+    # count = 0
 
-#     for count in range(10000):
+    # for count in range(10000):
 
-#         # closure around R, and ctxt
-#         def get_reservoir_item(step):
-#             E = ctxt.get_E()
-#             dE_dx = ctxt.get_dE_dx()
-#             dx_dp = ctxt.get_dx_dp()
-#             dE_dp = ctxt.get_dE_dp()
-#             x = ctxt.get_x()
+    #     # closure around R, and ctxt
+    #     def get_reservoir_item(step):
+    #         E = ctxt.get_E()
+    #         dE_dx = ctxt.get_dE_dx()
+    #         dx_dp = ctxt.get_dx_dp()
+    #         dE_dp = ctxt.get_dE_dp()
+    #         x = ctxt.get_x()
 
-#             limits = 1e5
-#             # if min_dx < -limits or max_dx > limits:
-#                 # raise Exception("Derivatives blew up:", min_dx, max_dx)
-#             return [E, dE_dx, dx_dp, dE_dp, x]
+    #         limits = 1e5
+    #         # if min_dx < -limits or max_dx > limits:
+    #             # raise Exception("Derivatives blew up:", min_dx, max_dx)
+    #         return [E, dE_dx, dx_dp, dE_dp, x]
         
-#         if count % 1000 == 0:
-#             print(count, ctxt.get_E())
+    #     if count % 1000 == 0:
+    #         print(count, ctxt.get_E())
 
-#         if count < k:
-#             R.append(get_reservoir_item(count))
-#         else:
-#             j = random.randint(0, count)
-#             if j < k:
-#                 R[j] = get_reservoir_item(count)
+    #     if count < k:
+    #         R.append(get_reservoir_item(count))
+    #     else:
+    #         j = random.randint(0, count)
+    #         if j < k:
+    #             R[j] = get_reservoir_item(count)
 
-#         ctxt.step()
-        
+    #     ctxt.step()
+      
+  	# IN PROGRESS: currently not reservoir sampling, just taking the final state  
     R = [[
         final_energy,
         ctxt.get_dE_dx(),
@@ -438,16 +194,5 @@ def run_simulation(
         ctxt.get_dE_dp(),
         ctxt.get_x()
     ]]
-    
-#     if nan:
-# #         print("energy is nan")
-#         R = [[
-#             np.nan,
-#             np.zeros_like(ctxt.get_dE_dx()),
-#             np.zeros_like(ctxt.get_dx_dp()),
-#             np.zeros_like(ctxt.get_dE_dp()),
-#             ctxt.get_x()
-#         ]]
 
     return R
-#     return R[0]
