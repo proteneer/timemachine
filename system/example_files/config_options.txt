@@ -9,7 +9,7 @@ With a valid *.json config file in the current directory, run the training.py py
 "num_gpus": number of gpus available
 "dp_idxs": list of indices to specify which parameters to train to [0: bond k value, 1: ideal bond length, 2: angle k value, 3: ideal bond angle, 4: torsion k value, 5: torsion phase, 6: torsion period, 7: charges, 8: lj sigma, 9: lj epsilon]
 "guest_directory": path to directory containing the ligands for binding enthalpy or compounds for RMSD training
-"training_data": path to .npz file containing experimental data for training
+"training_data": path to .npz file containing experimental data for training (or testing)
 	- .npz file format: [N, 2] array saved under the name "data", with each subarray containing the filename and the label (for RMSD, label coordinates must have the same order of atoms as the computed coordinates so calculation is accurate):
 
 		[
@@ -32,6 +32,7 @@ With a valid *.json config file in the current directory, run the training.py py
             ...
         ]
 
+"train_split" (optional): number of data points to use for training vs testing, default = use total dataset for training
 "num_conformers" (optional): specify the number of conformers to use for each compound during training, default = 1
 "boltzmann" (optional): "True" or "False" to turn on or off Boltzmann weighting for multi-conformer training, default = False
 "random" (optional): "True" or "False" to turn off or on seeding for conformer generation (i.e. if "True" then conformers are unseeded, if "False" then conformers are seeded and the same conformers are generated for each epoch), default = False

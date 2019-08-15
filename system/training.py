@@ -98,6 +98,100 @@ def generate_conformer(mol):
     
     return conf
 
+def enthalpy_test(num_epochs,
+                  testing_params):
+    '''
+    Test a given parameter set on a series of test molecules
+    
+    num_epochs (int): number of tests to run
+    testing_params (numpy.ndarray, shape P): parameter set to use
+    '''
+    training_data = np.load(properties['training_data'],allow_pickle=True)['data']
+    
+    if 'train_split' in properties:
+        training_data = training_data[properties['train_split']:]
+        
+    batch_size = properties['batch_size']
+    pool = multiprocessing.Pool(batch_size)
+    if properties['fit_method'] == 'relative':
+        batch_size -= 1
+    num_data_points = len(training_data)
+    num_batches = int(np.ceil(num_data_points/batch_size))
+    
+    _, _, (dummy_host_params, host_param_groups), _ = serialize.deserialize_system(properties['host_path'])
+    
+    for epoch in range(num_epochs):
+
+        print('--- testing:', epoch, "started at", datetime.datetime.now(), '----')
+        
+        epoch_predictions = []
+        epoch_labels = []
+        epoch_filenames = []
+        
+        for b_idx in range(num_batches):
+            start_idx = b_idx*batch_size
+            end_idx = min((b_idx+1)*batch_size, num_data_points)
+            batch_data = training_data[start_idx:end_idx]
+
+            args = []
+
+            if properties['fit_method'] == 'relative':
+                # always include the reference ligand in the batch
+                args.append([testing_params, properties['relative_reference'][0], properties['relative_reference'][1], 0])
+            
+            for b_idx, b in enumerate(batch_data):
+                if properties['fit_method'] == 'relative':
+                    args.append([testing_params, b[0], b[1], b_idx + 1])
+                else:
+                    args.append([testing_params, b[0], b[1], b_idx])
+            
+            results = pool.map(run_simulation, args)
+            
+            final_results = []
+            if properties['fit_method'] == 'absolute':
+                for params in results:
+                    final_results.append(compute_derivatives(params, None, dummy_host_params, testing_params))
+            if properties['fit_method'] == 'relative':
+                params1 = results[0]
+                for i in range(1,len(results)):
+                    final_results.append(compute_derivatives(params1, results[i], dummy_host_params, testing_params))
+
+            for i, (grads, preds, labels) in enumerate(final_results):
+                if not np.isnan(preds):
+                    epoch_predictions.append(preds)
+                    epoch_labels.append(labels)
+                    epoch_filenames.append(batch_data[i][0]) 
+        
+        epoch_predictions = np.array(epoch_predictions)
+        epoch_labels = np.array(epoch_labels)
+
+        np.savez("test_{}.npz".format(epoch), preds=epoch_predictions, labels=epoch_labels, filenames=epoch_filenames, params=testing_params)
+    
+        mae = np.mean(np.abs(epoch_predictions-epoch_labels))
+        mean = np.mean(epoch_predictions-epoch_labels)
+        if len(epoch_predictions) > 1:
+            pearson_r = stats.pearsonr(epoch_predictions, epoch_labels)
+            r2_score = sklearn.metrics.r2_score(epoch_predictions, epoch_labels)
+            print('''
+Epoch: {}
+=================
+Pearson R: {}
+R2 score: {}
+MAE: {}
+Mean: {}
+=================
+            '''.format(epoch,pearson_r[0], r2_score, mae, mean))
+        else:
+            print(''' 
+Epoch: {}
+=================
+MAE: {}
+Mean: {}
+=================
+            '''.format(epoch,mae, mean))
+        
+    return preds, labels
+
 def rmsd_test(num_epochs,
              testing_params):
     '''
@@ -107,7 +201,9 @@ def rmsd_test(num_epochs,
     testing_params (numpy.ndarray, shape P): parameter set to use
     '''
     training_data = np.load(properties['training_data'],allow_pickle=True)['data']
-    training_data = training_data[45000:]
+    
+    if 'train_split' in properties:
+        training_data = training_data[properties['train_split']:]
         
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
@@ -184,7 +280,7 @@ def average_derivs(R, label, hydrogen_idxs=None):
         grad_fun = jax.jit(jax.grad(rmsd.opt_rot_rmsd,argnums=(0,)))
         
     if properties.get('remove_hydrogens') ==  'True':
-    	# remove hydrogens from label conformation
+        # remove hydrogens from label conformation
         label = np.delete(label,hydrogen_idxs,axis=0)
     
     for E, dE_dx, dx_dp, dE_dp, x in R:
@@ -205,7 +301,7 @@ def average_derivs(R, label, hydrogen_idxs=None):
             n_reservoir -= 1
         else:
             if properties['run_type'] == 'train':
-            	# compute the gradient and add to the running sum
+                # compute the gradient and add to the running sum
                 grad_conf = grad_fun(x,label)[0]
                 combined_grad = np.einsum('kl,mkl->m', grad_conf, dx_dp)
                 running_sum_derivs += combined_grad
@@ -491,7 +587,8 @@ def train_rmsd(num_epochs,
     training_data = np.load(properties['training_data'],allow_pickle=True)['data']
     
     # split into training and testing data
-    training_data = training_data[:45000]
+    if 'train_split' in properties:
+        training_data = training_data[:properties['train_split']]
     
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
@@ -760,7 +857,7 @@ def boltzmann_derivatives(reservoir):
     
     # if reservoir is empty, return
     if len(reservoir) == 0:
-        return 0,0
+        return np.nan, 0
     
     n_reservoir = len(reservoir)
     num_atoms = len(reservoir[0][-1])
@@ -807,7 +904,7 @@ def compute_derivatives(params1,
     '''
     params1: params for the first ligand
     params2: params for the second ligand (if doing relative binding calculations)
-    host_params: params for the host
+    host_params: params for the host (just used for the length of the host parameters)
     combined_params: force field parameters for the host/guest complex (just used to initialize derivatives)
 
     returns (combined derivatives, predicted enthalpy, label enthalpy)
@@ -884,10 +981,11 @@ def compute_derivatives(params1,
         combined_derivs = (1 / np.cosh(delta)) * np.sinh(delta) * combined_derivs
         
     # throw out gradients that are too large
-    print('max gradient:', np.amax(abs(combined_derivs)) * properties['learning_rate'])
-    if np.isnan(combined_derivs).any() or np.amax(abs(combined_derivs)) * properties['learning_rate'] > 5e-2 or np.amax(abs(combined_derivs)) == 0:
-        print("bad gradients/nan energy")
-        return np.zeros_like(combined_derivs), np.nan, label
+    if properties['run_type'] == 'train':
+        print('max gradient:', np.amax(abs(combined_derivs)) * properties['learning_rate'])
+        if np.isnan(combined_derivs).any() or np.amax(abs(combined_derivs)) * properties['learning_rate'] > 5e-2 or np.amax(abs(combined_derivs)) == 0:
+            print("bad gradients/nan energy")
+            return np.zeros_like(combined_derivs), np.nan, label
 
     return combined_derivs, pred_enthalpy, label
 
@@ -908,6 +1006,9 @@ def train(num_epochs,
 
     # training data for enthalpy must be a .npz file
     training_data = np.load(properties['training_data'])['data']
+    
+    if 'train_split' in properties:
+        training_data = training_data[:properties['train_split']]
            
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
@@ -1083,6 +1184,15 @@ def main():
                 _, testing_params = initialize_parameters()
 
             losses = rmsd_test(properties['num_epochs'],testing_params)
+            
+        elif properties['loss_type'] == 'enthalpy':
+            # select the .npz file to grab parameters from
+            if 'param_file' in properties:
+                testing_params = np.load(properties['param_file'])['params']
+            else:
+                testing_params, _ = initialize_parameters(properties['host_path'])
+
+            preds, labels = enthalpy_test(properties['num_epochs'],testing_params)
 
 if __name__ == "__main__":
     main()

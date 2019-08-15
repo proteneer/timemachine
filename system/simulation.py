@@ -31,6 +31,9 @@ def average_E_and_derivatives(reservoir):
     Average energy, analytic total derivative, and thermodynamic gradient
 
     """
+    if len(reservoir) == 0:
+        return np.nan, 0, 0
+    
     running_sum_total_derivs = None
     running_sum_E = 0
     n_reservoir = len(reservoir)
@@ -46,14 +49,19 @@ def average_E_and_derivatives(reservoir):
         if running_sum_EmultdE_dp is None:
             running_sum_EmultdE_dp = np.zeros_like(dE_dp)
 
-        # tensor contract [N,3] with [P, N, 3] and add dE_dp for a shape P array
-        total_dE_dp = np.einsum('kl,mkl->m', dE_dx, dx_dp) + dE_dp
-        running_sum_total_derivs += total_dE_dp
-        running_sum_E += E
+        if np.isnan(E):
+            n_reservoir -= 1
+        else:
+            # tensor contract [N,3] with [P, N, 3] and add dE_dp for a shape P array
+            total_dE_dp = np.einsum('kl,mkl->m', dE_dx, dx_dp) + dE_dp
+            running_sum_total_derivs += total_dE_dp
+            running_sum_E += E
 
-
-        running_sum_dE_dp += dE_dp
-        running_sum_EmultdE_dp += E*dE_dp
+            running_sum_dE_dp += dE_dp
+            running_sum_EmultdE_dp += E*dE_dp
+            
+    if n_reservoir < 1:
+        return np.zeros_like(dE_dp), np.nan, np.zeros_like(dE_dp)
 
     # compute the thermodynamic average: boltz*(<E><dE/dp> - <E.dE/dp>)
     thermo_deriv = running_sum_E*running_sum_dE_dp - running_sum_EmultdE_dp
