@@ -109,39 +109,6 @@ void Context<RealType>::step() {
 }
 
 template<typename RealType>
-void Context<RealType>::debug_compute_dE_dx(
-        const RealType *h_new_x,
-        RealType *h_E,
-        RealType *h_dE_dx) {
-
-    gpuErrchk(cudaMemset(d_E_, 0, sizeof(RealType)));
-    gpuErrchk(cudaMemset(d_dE_dx_, 0, N_*3*sizeof(RealType)));
-
-    gpuErrchk(cudaMemcpy(d_x_t_, h_new_x, N_*3*sizeof(RealType), cudaMemcpyHostToDevice));
-    
-    for(auto nrg : system_) {
-        nrg->derivatives_device(
-            1, // one conformer when doing dynamics
-            N_,
-            d_x_t_,
-            d_params_,
-            d_E_, // this is likely optional as well
-            d_dE_dx_,
-            d_d2E_dx2_,
-            DP_,
-            d_gather_param_idxs_,
-            d_dE_dp_, // (ytz) we don't actually need to compute dE_dp, so can probably speed this up later
-            d_d2E_dxdp_
-        );
-    }
-
-    gpuErrchk(cudaMemcpy(h_dE_dx, d_dE_dx_, N_*3*sizeof(RealType), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(h_E, d_E_, sizeof(RealType), cudaMemcpyDeviceToHost));
-
-
-}
-
-template<typename RealType>
 void Context<RealType>::get_x(RealType *buffer) const {
     gpuErrchk(cudaMemcpy(buffer, d_x_t_, N_*D_*sizeof(RealType), cudaMemcpyDeviceToHost));
 }
