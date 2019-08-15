@@ -8,7 +8,29 @@ With a valid *.json config file in the current directory, run the training.py py
 "batch_size": number of compounds per batch
 "dp_idxs": list of indices to specify which parameters to train to [0: bond k value, 1: ideal bond length, 2: angle k value, 3: ideal bond angle, 4: torsion k value, 5: torsion phase, 6: torsion period, 7: charges, 8: lj sigma, 9: lj epsilon]
 "guest_directory": path to directory containing the ligands for binding enthalpy or compounds for RMSD training
-"training_data": .npz (RMSD) or .csv (Enthalpy) file containing experimental data for training
+"training_data": path to .npz file containing experimental data for training
+	- .npz file format: [N, 2] array saved under the name "data", with each subarray containing the filename and the label (for RMSD, label coordinates must have the same order of atoms as the computed coordinates so calculation is accurate):
+
+		[
+            ['filename1.mol2', [[x0,y0,z0],
+            					[x1,y1,z1],
+            					...
+            					]],
+            ['filename2.mol2', [[x0,y0,z0],
+            					[x1,y1,z1],
+            					...
+            					]],
+            ...
+        ]
+    
+    	OR
+
+    	[
+            ['filename1.mol2', -12.00,
+            ['filename2.mol2', -6.00,
+            ...
+        ]
+
 "num_conformers" (optional): specify the number of conformers to use for each compound during training, default = 1
 "boltzmann" (optional): "True" or "False" to turn on or off Boltzmann weighting for multi-conformer training, default = False
 "random" (optional): "True" or "False" to turn off or on seeding for conformer generation (i.e. if "True" then conformers are unseeded, if "False" then conformers are seeded and the same conformers are generated for each epoch), default = False
@@ -16,4 +38,6 @@ With a valid *.json config file in the current directory, run the training.py py
 "host_path" (enthalpy only): path to the host/receptor XML or PDB file
 "fit_method" (enthalpy only): "absolute" or "relative" for training to either absolute or relative binding energies
 "loss_fn" (enthalpy only): "L2" or "L1" or "Huber" or "log-cosh" depending on the preferred loss function for comparing computed to experimental enthalpy
+"binding_coords" (enthalpy only): [x,y,z] where x, y, and z are the coordinates of the specified binding pocket
+"rescale_factor" (enthalpy only, optional): the factor by which to shrink your guest compound before minimization (may help produce better starting geometries), default = 1
 "remove_hydrogens" (RMSD only, optional): "True" or "False" to specify whether to train to only heavy atom RMSD, default = False

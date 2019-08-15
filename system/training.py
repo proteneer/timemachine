@@ -601,12 +601,15 @@ Elapsed time: {} seconds
     return losses, get_params(opt_state)
         
 def rescale_and_center(conf, scale_factor=1):
-	'''
-	recenter ligands to the center of a-cd in host-guest set
     '''
-    mol_com = np.sum(conf, axis=0)/conf.shape[0]
-    true_com = np.array([1.97698696, 1.90113478, 2.26042174]) # a-cd
+    recenter ligands to the center of a-cd in host-guest set
+    '''
+
+    mol_com = np.sum(conf, axis=0) / conf.shape[0]
+    # true_com = np.array([1.97698696, 1.90113478, 2.26042174]) # a-cd
+    true_com = np.array(properties['binding_coords'])
     centered = conf - mol_com  # centered to origin
+
     return true_com + centered/scale_factor
 
 def filter_groups(param_groups, groups):
@@ -619,9 +622,9 @@ def filter_groups(param_groups, groups):
     return roll
     
 def run_simulation(params):
-	'''
-	Run binding enthalpy simulation/calculation
-	'''
+    '''
+    Run binding enthalpy simulation/calculation
+    '''
     p = multiprocessing.current_process()
     combined_params, guest_sdf_file, label, idx = params
     label = float(label)
@@ -648,12 +651,15 @@ def run_simulation(params):
     num_conformers = properties.get('num_conformers',1)
 
     # embed conformers
+    # if your intended starting geometry is already specified by the mol2 block, comment this out
     if properties.get('random') == 'True':
     	# unseeded conformers
         AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, clearConfs=True)
     else:
     	# seeded conformers
         AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, randomSeed=1234, clearConfs=True)
+        # set numpy.random.seed so special_ortho_group is also seeded 
+        np.random.seed(1234)
 
     guest_potentials, _, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
     smirnoff_params = combined_params[len(dummy_host_params):]
@@ -666,11 +672,14 @@ def run_simulation(params):
         c = mol.GetConformer(conf_idx)
         conf = np.array(c.GetPositions(),dtype=np.float64)
         guest_conf = conf/10
+
         # randomly rotate the guest conformation
-        rot_matrix = stats.special_ortho_group.rvs(3).astype(dtype=np.float32)
+        rot_matrix = stats.special_ortho_group.rvs(3).astype(dtype=np.float64)
         guest_conf = np.matmul(guest_conf, rot_matrix)
+
         # center the guest conformation in the binding pocket
-        guest_conf = rescale_and_center(guest_conf, scale_factor=4)
+        guest_conf = rescale_and_center(guest_conf, scale_factor=properties.get('rescale_factor',1))
+
         combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
             host_potentials, guest_potentials,
             host_params, smirnoff_params,
@@ -800,14 +809,14 @@ def compute_derivatives(params1,
                         params2,
                         host_params,
                        combined_params):
-	'''
-	params1: params for the first ligand
-	params2: params for the second ligand (if doing relative binding calculations)
-	host_params: params for the host
-	combined_params: force field parameters for the host/guest complex (just used to initialize derivatives)
+    '''
+    params1: params for the first ligand
+    params2: params for the second ligand (if doing relative binding calculations)
+    host_params: params for the host
+    combined_params: force field parameters for the host/guest complex (just used to initialize derivatives)
 
-	returns (combined derivatives, predicted enthalpy, label enthalpy)
-	'''
+    returns (combined derivatives, predicted enthalpy, label enthalpy)
+    '''
     
     RH1, RG1, RHG1, label_1, host_dp_idxs, guest_dp_idxs_1, combined_dp_idxs_1, num_atoms = params1
     if properties.get('boltzmann') == 'True':
@@ -892,21 +901,23 @@ def train(num_epochs,
           opt_update, 
           get_params, 
           init_params):
-	'''
-	Train to binding enthalpy
+    '''
+    Train to binding enthalpy
 
-	num_epochs (int): number of epochs of training
-	opt_init: JAX optimizer init object
-	opt_update: JAX optimizer update object
-	get_params: JAX optimizer get_params object
-	init_params: initial combined host/guest force field parameters
-	'''
-    
-    # training data for enthalpy must be a CSG
-    # TO DO: add implementation for .npz files
+    num_epochs (int): number of epochs of training
+    opt_init: JAX optimizer init object
+    opt_update: JAX optimizer update object
+    get_params: JAX optimizer get_params object
+    init_params: initial combined host/guest force field parameters
+    '''
+
+    # training data for enthalpy must be a .npz file
     data_file = open(properties['training_data'],'r')
     data_reader = csv.reader(data_file, delimiter=',')
     training_data = list(data_reader)
+
+    training_data = np.load(properties['training_data'])['data']
+
            
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)

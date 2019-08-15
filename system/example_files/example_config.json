@@ -6,7 +6,7 @@
     "num_epochs": 100, 
     "batch_size": 64,
     "dp_idxs": [4,5,7,8],
-    "training_data": "/path/to/training_data.npz",
+    "training_data": "example_training_data.npz",
     "guest_directory": "/path/to/structures",
     "random": "True",
     "boltzmann": "True",
