@@ -125,7 +125,7 @@ def rmsd_test(num_epochs,
 
         # looping through batches
         for b_idx in range(num_batches):
-        	# grab batch data from overall training data            
+            # grab batch data from overall training data            
             start_idx = b_idx*batch_size
             end_idx = min((b_idx+1)*batch_size, num_data_points)
             batch_data = training_data[start_idx:end_idx]
@@ -138,7 +138,7 @@ def rmsd_test(num_epochs,
             results = pool.map(rmsd_run,args)
 
             for i, (_, loss) in enumerate(results):
-            	# throw out data points that didn't minimize
+                # throw out data points that didn't minimize
                 if not np.isnan(loss):
                     losses.append(loss)
                     epoch_filenames.append(batch_data[i][0])
@@ -217,7 +217,7 @@ def average_derivs(R, label, hydrogen_idxs=None):
         return np.zeros_like(dE_dp), np.nan, label
         
     if properties['run_type'] == 'train':
-    	# if the gradients are too high, also throw out the reservoir
+        # if the gradients are too high, also throw out the reservoir
         print(np.amax(abs(running_sum_derivs/n_reservoir)) * properties['learning_rate'])
         if np.isnan(running_sum_derivs/n_reservoir).any() or np.amax(abs(running_sum_derivs/n_reservoir)) * properties['learning_rate'] > 1e-1:
             print("bad gradients/nan energy")
@@ -402,7 +402,7 @@ def rmsd_run(params):
     
     p = multiprocessing.current_process()
     smirnoff_params, guest_sdf_file, label, idx = params
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % 8)
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % properties['num_gpus'])
     
     # initialize parameter gradient
     derivs = np.zeros_like(smirnoff_params)
@@ -574,7 +574,7 @@ Elapsed time: {} seconds
             
             batch_dp = np.zeros_like(get_params(opt_state))
             for i, (grad, loss) in enumerate(results):
-            	# sum up gradients for batch
+                # sum up gradients for batch
                 batch_dp += grad
                 if not np.isnan(loss):
                     losses.append(loss)
@@ -629,12 +629,7 @@ def run_simulation(params):
     combined_params, guest_sdf_file, label, idx = params
     label = float(label)
 
-    # reindex to use certain GPUs if desired
-    if 'gpu_offset' in properties:
-        gpu_offset = properties['gpu_offset']
-    else:
-        gpu_offset = 0
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % properties['batch_size'] + gpu_offset)
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(idx % properties['num_gpus'])
 
     # Parametrize host
     host_potentials, host_conf, (dummy_host_params, host_param_groups), host_masses = serialize.deserialize_system(properties['host_path'])
@@ -653,10 +648,10 @@ def run_simulation(params):
     # embed conformers
     # if your intended starting geometry is already specified by the mol2 block, comment this out
     if properties.get('random') == 'True':
-    	# unseeded conformers
+        # unseeded conformers
         AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, clearConfs=True)
     else:
-    	# seeded conformers
+        # seeded conformers
         AllChem.EmbedMultipleConfs(mol, numConfs=num_conformers, randomSeed=1234, clearConfs=True)
         # set numpy.random.seed so special_ortho_group is also seeded 
         np.random.seed(1234)
@@ -858,7 +853,7 @@ def compute_derivatives(params1,
         
         # if reservoir is empty, derivatives are all zero
         if type(G_derivs_2) is np.ndarray:
-        	# dH/dp = dE_HG1/dp - dE_HG2/dp - dE_G1/dp + dE_G2/dp
+            # dH/dp = dE_HG1/dp - dE_HG2/dp - dE_G1/dp + dE_G2/dp
             combined_derivs[combined_dp_idxs_1] += HG_derivs
             combined_derivs[combined_dp_idxs_2] -= HG_derivs_2
             combined_derivs[guest_dp_idxs_1 + len(host_params)] -= G_derivs
@@ -890,9 +885,9 @@ def compute_derivatives(params1,
         
     # throw out gradients that are too large
     print('max gradient:', np.amax(abs(combined_derivs)) * properties['learning_rate'])
-    if np.isnan(combined_derivs).any() or np.amax(abs(combined_derivs)) * properties['learning_rate'] > 1e-2 or np.amax(abs(combined_derivs)) == 0:
+    if np.isnan(combined_derivs).any() or np.amax(abs(combined_derivs)) * properties['learning_rate'] > 5e-2 or np.amax(abs(combined_derivs)) == 0:
         print("bad gradients/nan energy")
-        return np.zeros_like(combined_derivs), np.nan
+        return np.zeros_like(combined_derivs), np.nan, label
 
     return combined_derivs, pred_enthalpy, label
 
@@ -912,12 +907,7 @@ def train(num_epochs,
     '''
 
     # training data for enthalpy must be a .npz file
-    data_file = open(properties['training_data'],'r')
-    data_reader = csv.reader(data_file, delimiter=',')
-    training_data = list(data_reader)
-
     training_data = np.load(properties['training_data'])['data']
-
            
     batch_size = properties['batch_size']
     pool = multiprocessing.Pool(batch_size)
@@ -948,7 +938,7 @@ def train(num_epochs,
             args = []
 
             if properties['fit_method'] == 'relative':
-            	# always include the reference ligand in the batch
+                # always include the reference ligand in the batch
                 args.append([get_params(opt_state), properties['relative_reference'][0], properties['relative_reference'][1], 0])
             
             for b_idx, b in enumerate(batch_data):
@@ -975,16 +965,16 @@ def train(num_epochs,
                 if not np.isnan(preds):
                     epoch_predictions.append(preds)
                     epoch_labels.append(labels)
-                    epoch_filenames.append(batch_data[i][0])
-                    
-            # if everything is nan, terminate training
-            if len(epoch_predictions) == 0:
-                raise Exception('all energies are nan')
+                    epoch_filenames.append(batch_data[i][0]) 
             
             count += 1
             # update the parameters using the batch gradients
             opt_state = opt_update(count, batch_dp, opt_state)
-
+        
+        # if everything is nan, terminate training
+        if len(epoch_predictions) == 0:
+            raise Exception('all energies are nan')    
+        
         epoch_predictions = np.array(epoch_predictions)
         epoch_labels = np.array(epoch_labels)
 
@@ -1034,7 +1024,7 @@ def initialize_parameters(host_path=None):
     # smirnoff params are all encompassing for small molecules
     _, smirnoff_params, _, _, _ = forcefield.parameterize(ref_mol, smirnoff)
 
-    if properties['loss_type'] == 'Enthalpy':
+    if properties['loss_type'] == 'enthalpy':
         _, _, (host_params, _), _ = serialize.deserialize_system(host_path)       
         epoch_combined_params = np.concatenate([host_params, smirnoff_params])
     else:
@@ -1067,17 +1057,17 @@ def initialize_optimizer(optimizer,
 def main():
     
     if properties['run_type'] == 'train':
-    	# create opt_init, opt_update, get_params functions for optimizer
+        # create opt_init, opt_update, get_params functions for optimizer
         opt_init, opt_update, get_params = initialize_optimizer(properties['optimizer'], properties['learning_rate'])
 
         if properties['loss_type'] == 'RMSD':
-        	# initialize small molecule force field params
+            # initialize small molecule force field params
             _, init_params = initialize_parameters()
             np.savez('init_params.npz', params=init_params)
             losses, final_params = train_rmsd(properties['num_epochs'],opt_init,opt_update,get_params,init_params)
 
-        elif properties['loss_type'] == 'Enthalpy':
-        	# initialize combined host and small molecule force field params
+        elif properties['loss_type'] == 'enthalpy':
+            # initialize combined host and small molecule force field params
             init_params, _ = initialize_parameters(properties['host_path'])
             np.savez('init_params.npz', params=init_params)
             preds, labels, final_params = train(properties['num_epochs'], opt_init, opt_update, get_params, init_params)
@@ -1085,14 +1075,14 @@ def main():
         np.savez('final_params.npz', params=final_params)
         
     elif properties['run_type'] == 'test':
-    	if properties['loss_type'] == 'RMSD':
-	        # select the .npz file to grab parameters from
-	        if 'param_file' in properties:
-	            testing_params = np.load(properties['param_file'])['params']
-	        else:
-	            _, testing_params = initialize_parameters()
-	            
-	        losses = rmsd_test(properties['num_epochs'],testing_params)
+        if properties['loss_type'] == 'RMSD':
+            # select the .npz file to grab parameters from
+            if 'param_file' in properties:
+                testing_params = np.load(properties['param_file'])['params']
+            else:
+                _, testing_params = initialize_parameters()
+
+            losses = rmsd_test(properties['num_epochs'],testing_params)
 
 if __name__ == "__main__":
     main()

@@ -122,14 +122,14 @@ def run_simulation(
 
     max_iter = 10000
     for i in range(max_iter):
-    	# adjust dt by a scale factor for each time step up until it reaches a maximum value
+        # adjust dt by a scale factor for each time step up until it reaches a maximum value
         dt *= scale
         dt = min(dt, end_dt)
         opt.set_dt(dt)
         ctxt.step()
         if i > 50 and i % 100 == 0:
             if np.isnan(ctxt.get_E()):
-            	final_energy = np.nan
+                final_energy = np.nan
                 break
             dE_dx = ctxt.get_dE_dx()
             g_norm = mean_norm(dE_dx)
@@ -186,7 +186,7 @@ def run_simulation(
 
     #     ctxt.step()
       
-  	# IN PROGRESS: currently not reservoir sampling, just taking the final state  
+    # IN PROGRESS: currently not reservoir sampling, just taking the final state  
     R = [[
         final_energy,
         ctxt.get_dE_dx(),
