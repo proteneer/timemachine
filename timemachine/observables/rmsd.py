@@ -4,7 +4,7 @@
 import jax.scipy
 import jax.numpy as np
 
-
+@jax.jit
 def optimal_rotational_quaternion(r):
     """Just need the largest eigenvalue of this to minimize RMSD over rotations
     
@@ -20,7 +20,7 @@ def optimal_rotational_quaternion(r):
         [r[0][1] - r[1][0], r[0][2] + r[2][0], r[1][2] + r[2][1], -r[0][0] - r[1][1] + r[2][2]],
     ])
 
-
+@jax.jit
 def squared_deviation(frame, target):
     R = np.matmul(np.transpose(frame), target)
     F = optimal_rotational_quaternion(R)
@@ -30,6 +30,7 @@ def squared_deviation(frame, target):
     # singularities occur when sd is a very small negative number
     return np.maximum(sd, 0)
 
+@jax.jit
 def opt_rot_rmsd(x0, x1):
     """
     Compute the optimally rotated root mean squared deviation between two
@@ -52,4 +53,6 @@ def opt_rot_rmsd(x0, x1):
     x0_center = x0 - np.mean(x0, axis=0, keepdims=True)
     x1_center = x1 - np.mean(x1, axis=0, keepdims=True)
     n_atoms = x0.shape[0]
-    return np.sqrt(squared_deviation(x0_center, x1_center)/n_atoms)
+    inner = squared_deviation(x0_center, x1_center)/n_atoms
+    inner = np.where(inner < 1e-12, 0, inner)
+    return np.sqrt(inner)
