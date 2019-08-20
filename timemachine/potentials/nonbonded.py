@@ -134,6 +134,16 @@ def electrostatics(conf, params, box, param_idxs, scale_matrix, cutoff=None, alp
     """
     charges = params[param_idxs]
 
+    # neutralize the charge
+    # todo: neutralize host charges separately from guest charges
+    # print("WARNING: NUMBER OF ATOMS USED TO NEUTRALIZED SET EXPLICITLY FOR HOST aCD")
+    num_host_atoms = 126
+    host_charges = charges[:num_host_atoms]
+    guest_charges = charges[num_host_atoms:]
+    host_charges = host_charges - np.sum(host_charges)/host_charges.shape[0]
+    guest_charges = guest_charges - np.sum(guest_charges)/guest_charges.shape[0]
+    charges = np.concatenate([host_charges, guest_charges])
+
     # if we use periodic boundary conditions, then the following three parameters
     # must be set in order for Ewald to make sense.
     if box is not None:
@@ -157,7 +167,9 @@ def electrostatics(conf, params, box, param_idxs, scale_matrix, cutoff=None, alp
         # non periodic electrostatics is straightforward.
         # note that we do not support reaction field approximations.
         eij = scale_matrix*pairwise_energy(conf, box, charges, cutoff)
-        return ONE_4PI_EPS0*np.sum(eij)/2
+        nrg = ONE_4PI_EPS0*np.sum(eij)/2
+
+        return nrg
 
 
 def self_energy(conf, charges, alpha):

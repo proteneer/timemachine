@@ -30,6 +30,7 @@ __global__ void update_positions(
 
     int d_idx = blockIdx.y;
 
+    // only integrate first three dimensions
     if(d_idx >= 3) {
         return;
     }
@@ -58,6 +59,7 @@ __global__ void update_derivatives(
         return;
     }
 
+    // only integrate first three dimensions
     int d_idx = blockIdx.y;
     if(d_idx >= 3) {
         return;

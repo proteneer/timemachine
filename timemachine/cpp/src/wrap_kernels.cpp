@@ -34,6 +34,11 @@ void declare_context(py::module &m, const char *typestr) {
     ) {
         const int N = x0.shape()[0];
         const int D = x0.shape()[1];
+
+        if(D != v0.shape()[1]) {
+            throw std::runtime_error("x0 dim != v0 dim");
+        }
+
         const int P = params.shape()[0];
         const int DP = dp_idxs.size();
 
@@ -44,6 +49,7 @@ void declare_context(py::module &m, const char *typestr) {
             }
             gather_param_idxs[dp_idxs.data()[i]] = i;
         }
+
 
         return new timemachine::Context<RealType>(
             system,
@@ -65,14 +71,14 @@ void declare_context(py::module &m, const char *typestr) {
         ctxt.get_E(&E);
         return E;
     })
-    .def("debug_compute_dE_dx", [](timemachine::Context<RealType> &ctxt,
-        const py::array_t<RealType, py::array::c_style> &host_x) -> py::tuple {
-        auto N = ctxt.num_atoms();
-        py::array_t<RealType, py::array::c_style> out_E({1});
-        py::array_t<RealType, py::array::c_style> out_dE_dx({N, 3});
-        ctxt.debug_compute_dE_dx(host_x.data(), out_E.mutable_data(), out_dE_dx.mutable_data());
-        return py::make_tuple(out_E, out_dE_dx);
-    })
+    // .def("debug_compute_dE_dx", [](timemachine::Context<RealType> &ctxt,
+    //     const py::array_t<RealType, py::array::c_style> &host_x) -> py::tuple {
+    //     auto N = ctxt.num_atoms();
+    //     py::array_t<RealType, py::array::c_style> out_E({1});
+    //     py::array_t<RealType, py::array::c_style> out_dE_dx({N, 3});
+    //     ctxt.debug_compute_dE_dx(host_x.data(), out_E.mutable_data(), out_dE_dx.mutable_data());
+    //     return py::make_tuple(out_E, out_dE_dx);
+    // })
     .def("get_dE_dx", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
         auto N = ctxt.num_atoms();
         auto D = ctxt.num_dims();
@@ -115,10 +121,24 @@ void declare_context(py::module &m, const char *typestr) {
         py::array_t<RealType, py::array::c_style> buffer({DP, N, D});
         ctxt.get_dv_dp(buffer.mutable_data());
         return buffer;
+    })
+    .def("get_d2E_dx2", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
+        auto N = ctxt.num_atoms();
+        auto D = ctxt.num_dims();
+        py::array_t<RealType, py::array::c_style> buffer({N, D, N, D});
+        ctxt.get_d2E_dx2(buffer.mutable_data());
+        return buffer;
     });
+    // .def("get_d2E_dxdp", [](timemachine::Context<RealType> &ctxt) -> py::array_t<RealType, py::array::c_style> {
+    //     auto DP = ctxt.num_dparams();
+    //     auto N = ctxt.num_atoms();
+    //     auto D = ctxt.num_dims();
+    //     py::array_t<RealType, py::array::c_style> buffer({DP, N, D});
+    //     ctxt.get_d2E_dxdp(buffer.mutable_data());
+    //     return buffer;
+    // });
 
 }
-
 
 
 template <typename RealType>

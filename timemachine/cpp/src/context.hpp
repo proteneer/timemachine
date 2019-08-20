@@ -65,14 +65,18 @@ public:
 
     int num_dparams() const { return DP_; };
 
-    void debug_compute_dE_dx(
-        const RealType *new_x,
-        RealType *E,
-        RealType *dE_dx);
+    // void debug_compute_dE_dx(
+    //     const RealType *new_x,
+    //     RealType *E,
+    //     RealType *dE_dx);
 
     void step();
 
     void get_E(RealType *buffer) const;
+
+    void get_d2E_dx2(RealType *buffer) const;
+
+    void get_d2E_dxdp(RealType *buffer) const;
 
     void get_dE_dx(RealType *buffer) const;
 

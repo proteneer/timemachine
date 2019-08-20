@@ -171,7 +171,6 @@ def deserialize_system(system, coords):
                     sig = 0.5
                     eps = 0.0
 
-
                 charge_idx = insert_parameters(charge, 7)
                 sig_idx = insert_parameters(sig, 8)
                 eps_idx = insert_parameters(eps, 9)

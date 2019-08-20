@@ -105,11 +105,6 @@ void __global__ k_electrostatics(
                     d2ij += dx*dx;
                 }
 
-
-                // for(size_t d=0; d < NDIMS; d++) {
-                //     d2ij += D2X[d];
-                // }
-
                 RealType dij = sqrt(d2ij);
                 RealType d3ij = d2ij*dij;
                 RealType inv_d3ij = 1/d3ij;

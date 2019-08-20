@@ -1,9 +1,11 @@
 import sympy as sp
 
-x0, y0, z0 = sp.symbols("x0 y0 z0")
-x1, y1, z1 = sp.symbols("x1 y1 z1")
-x2, y2, z2 = sp.symbols("x2 y2 z2")
-x3, y3, z3 = sp.symbols("x3 y3 z3")
+x0, y0, z0, w0 = sp.symbols("x0 y0 z0 w0")
+x1, y1, z1, w1 = sp.symbols("x1 y1 z1 w1")
+x2, y2, z2, w2 = sp.symbols("x2 y2 z2 w2")
+x3, y3, z3, w3 = sp.symbols("x3 y3 z3 w3")
+
+NDIMS = 4
 
 def get_dim(arg):
     if arg[0] == "x":
@@ -12,6 +14,8 @@ def get_dim(arg):
         return str(1)
     elif arg[0] == "z":
         return str(2)
+    elif arg[0] == "w":
+        return str(3)
 
 
 def get_param_idx(arg):
@@ -23,15 +27,16 @@ def bond_grads():
     dx = x0 - x1
     dy = y0 - y1
     dz = z0 - z1
+    dw = w0 - w1
 
-    dij = sp.sqrt(dx*dx + dy*dy + dz*dz)
+    dij = sp.sqrt(dx*dx + dy*dy + dz*dz + dw*dw)
     db = dij - b0
 
     bond_nrg = kb/2*db*db
 
 
     parameters = [kb, b0]
-    variables = [x0,y0,z0,x1,y1,z1]
+    variables = [x0,y0,z0,w0,x1,y1,z1,w1]
 
 
 
@@ -51,7 +56,7 @@ def bond_grads():
             idx1 = get_idx(v1.name)
             dim1 = get_dim(v1.name)
 
-            out_str = "atomicAdd(hessian_out + "+idx0+"*3*N*3 + " + dim0 + "*N*3 + " + idx1+"*3 + " + dim1 + ","
+            out_str = "atomicAdd(d2E_dx2 + conf_idx*N*NDIMS*N*NDIMS + "+idx0+"*NDIMS*N*NDIMS + " + dim0 + "*N*NDIMS + " + idx1+"*NDIMS + " + dim1 + ","
             ccode = sp.ccode(sp.diff(sp.diff(bond_nrg, v0), v1))
             print(out_str, ccode, ");")
 
@@ -221,4 +226,5 @@ def torsion_grads():
             ccode = sp.ccode(sp.diff(sp.diff(nrg, v0), p0))
             print(out_str, ccode, ");")
 
-torsion_grads()
+# torsion_grads()
+bond_grads()

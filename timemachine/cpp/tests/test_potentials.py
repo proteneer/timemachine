@@ -46,7 +46,7 @@ class CustomOpsTest(unittest.TestCase):
         if conf.ndim == 2:
             num_confs = np.random.randint(1, 10)
             confs = np.repeat(conf[np.newaxis, :, :], num_confs, axis=0)
-            confs += np.random.rand(*confs.shape)
+            # confs += np.random.rand(*confs.shape)
         else:
             confs = conf
             num_confs = confs.shape[0]
@@ -74,11 +74,31 @@ class CustomOpsTest(unittest.TestCase):
             np.testing.assert_almost_equal(test_e, ref_e)
             np.testing.assert_almost_equal(test_de_dx, ref_de_dx)
 
+            def symmetrize(a):
+                a = a.reshape(num_atoms*ndims, num_atoms*ndims)
+                a = np.tril(a)
+                a = a + a.T - np.diag(a.diagonal())
+                return a.reshape(num_atoms, ndims, num_atoms, ndims)
+
             # test symmetric hessians
             for t, r in zip(test_d2e_dx2, ref_d2e_dx2):
-                test_tril = np.tril(np.reshape(t, (num_atoms*ndims, num_atoms*ndims)))
-                ref_tril = np.tril(np.reshape(r, (num_atoms*ndims, num_atoms*ndims)))
-                np.testing.assert_almost_equal(test_tril, ref_tril)
+
+                t = symmetrize(t)
+                # np.testing.assert_almost_equal(t, r)
+
+                # symmetrize()
+
+                # t = t[:, :3, :, :3]
+                # r = r[:, :3, :, :3]
+                # test_tril = np.tril(np.reshape(t, (num_atoms*4, num_atoms*4)))
+                # ref_tril = np.tril(np.reshape(r, (num_atoms*4, num_atoms*4)))
+                # print("REF TRIL", ref_tril)
+                # print("TEST_TRIL", test_tril)
+                print(t[:, 3:, :, 3:])
+                print(r[:, 3:, :, 3:])
+                np.testing.assert_almost_equal(t, r)
+
+                # np.testing.assert_almost_equal(test_tril[:, 3:, :, 3:], ref_tril[:, :3, :, :3])
 
             # batch compare
             np.testing.assert_almost_equal(test_de_dp, ref_de_dp[:, dp_idxs])
@@ -120,10 +140,7 @@ class CustomOpsTest(unittest.TestCase):
             # batch compare
             np.testing.assert_almost_equal(test_e, ref_e)
             np.testing.assert_almost_equal(test_de_dx[:, :, :3], ref_de_dx)
-
             np.testing.assert_almost_equal(test_de_dx[:, :, -1], np.zeros_like(test_de_dx[:, :, -1]))
-
-            # assert 0
 
             # test symmetric hessians
             for t, r in zip(test_d2e_dx2, ref_d2e_dx2):
@@ -191,6 +208,40 @@ class TestHarmonicBond(CustomOpsTest):
 
         self.assert_derivatives_mixed_dimensions(
             x0_4d,
+            params,
+            energy_fn,
+            hb
+        )
+
+    def test_special_derivatives(self):
+        x0 = np.array([
+            [  2.69220064,   1.97004635,  -2.03574268,   0.     ],
+            [  2.50147346,   0.79925341,  -0.43194355,   0.     ],
+            [  0.31155795,   0.76004772,   0.68364305,   0.     ],
+            [-10.4245315 ,  -4.80327719,  -0.30447288,   0.1    ],
+            [  0.7704191 ,  -0.41884917,   3.01832176,   0.1    ],
+        ], dtype=np.float64)
+
+        x0.setflags(write=False)
+
+        params = np.array([100.0, 2.0, 75.0, 1.81, 3.0, 2.0, 1.0, 1.4], np.float64)
+        bond_idxs = np.array([[0, 1], [1, 2], [3,4]], dtype=np.int32)
+        bond_param_idxs = np.array([[0, 1], [0, 1], [0,1]], dtype=np.int32)
+
+        energy_fn = functools.partial(
+            bonded.harmonic_bond,
+            box=None,
+            param_idxs=bond_param_idxs,
+            bond_idxs=bond_idxs
+        )
+
+        hb = custom_ops.HarmonicBond_f64(
+            bond_idxs,
+            bond_param_idxs
+        )
+
+        self.assert_derivatives_mixed_dimensions(
+            x0,
             params,
             energy_fn,
             hb
@@ -375,6 +426,51 @@ class TestPeriodicTorsion(CustomOpsTest):
 
 class TestLennardJones(CustomOpsTest):
 
+    def test_derivatives_special(self):
+
+        x0 = np.array([
+            [  2.69220064,   1.97004635,  -2.03574268,   0.     ],
+            [  2.50147346,   0.79925341,  -0.43194355,   0.     ],
+            [  0.31155795,   0.76004772,   0.68364305,   0.     ],
+            [-10.4245315 ,  -4.80327719,  -0.30447288,   0.1    ],
+            [  0.7704191 ,  -0.41884917,   3.01832176,   0.1    ],
+        ], dtype=np.float64)
+
+
+        params = np.array([3.0, 2.0, 1.0, 1.4], dtype=np.float64)
+        param_idxs = np.array([
+            [0, 3],
+            [1, 2],
+            [1, 2],
+            [1, 2],
+            [0, 3]], dtype=np.int32)
+
+        scale_matrix = np.array([
+            [  0,  0,   0, 0.5, 0.5],
+            [  0,  0,   0,   1,   1],
+            [  0,  0,   0, 0.5, 0.5],
+            [0.5,  1, 0.5,   0, 0.5],
+            [0.5,  1, 0.5, 0.5,   0]
+        ], dtype=np.float64)
+
+        energy_fn = functools.partial(nonbonded.lennard_jones,
+            scale_matrix=scale_matrix,
+            param_idxs=param_idxs,
+            box=None,
+            cutoff=None)
+
+        lj = custom_ops.LennardJones_f64(
+            scale_matrix,
+            param_idxs
+        )
+
+        self.assert_derivatives(
+            x0,
+            params,
+            energy_fn,
+            lj
+        )
+
     def test_derivatives(self):
 
         x0 = np.array([
@@ -400,12 +496,6 @@ class TestLennardJones(CustomOpsTest):
             [0.5,  1,  0,  0,  1],
             [  0,  1,0.2,  1,  0],
         ], dtype=np.float64)
-
-        # box = np.array([
-        #     [2.0, 0.5, 0.6],
-        #     [0.6, 1.6, 0.3],
-        #     [0.4, 0.7, 1.1]
-        # ], dtype=np.float64)
 
         energy_fn = functools.partial(nonbonded.lennard_jones,
             scale_matrix=scale_matrix,

@@ -198,14 +198,14 @@ def deserialize_system(system, coords):
 
             test_potentials.append(test_lj)
 
-            test_es = (custom_ops.Electrostatics_f32,
-                (
-                    scale_matrix,
-                    charge_param_idxs,
-                )
-            )
+            # test_es = (custom_ops.Electrostatics_f32,
+            #     (
+            #         scale_matrix,
+            #         charge_param_idxs,
+            #     )
+            # )
 
-            test_potentials.append(test_es)
+            # test_potentials.append(test_es)
 
     global_params = np.array(global_params)
     global_param_groups = np.array(global_param_groups)

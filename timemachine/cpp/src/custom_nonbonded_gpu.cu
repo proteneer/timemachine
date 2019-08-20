@@ -108,7 +108,6 @@ Electrostatics<RealType>::Electrostatics(
     std::vector<RealType> scale_matrix,
     std::vector<int> param_idxs
 ) {
-
     gpuErrchk(cudaMalloc((void**)&d_param_idxs_, param_idxs.size()*sizeof(*d_param_idxs_)));
     gpuErrchk(cudaMalloc((void**)&d_scale_matrix_, scale_matrix.size()*sizeof(*d_scale_matrix_)));
     gpuErrchk(cudaMemcpy(d_param_idxs_, &param_idxs[0], param_idxs.size()*sizeof(*d_param_idxs_), cudaMemcpyHostToDevice));
