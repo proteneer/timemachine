@@ -30,6 +30,53 @@ class ReferenceLangevin():
         final_V = jnp.concatenate([v_t_1[:, :3], v_t[:, 3:]], axis=1)
         return final_X, final_V
 
+def symmetrize(a, num_atoms, num_dims):
+    a = a.reshape(num_atoms*ndims, num_atoms*ndims)
+    a = np.tril(a)
+    a = a + a.T - np.diag(a.diagonal())
+    return a.reshape(num_atoms, ndims, num_atoms, ndims)
+
+def compute_d2u_dldp(energies, params, xs, dx_dps, dp_idxs, num_host_atoms):
+
+    assert len(xs.shape) == 2
+
+    N = xs.shape[0]
+    D = xs.shape[1]
+    assert len(dx_dps.shape) == 3
+
+    mixed_partials = []
+    hessians = []
+    # we need to compute this separately since the context's sgemm call overwrites
+    # the values of d2u_dxdp
+    # batched call
+    for p in energies:
+        _, _, ph, _, pmp  = p.derivatives(np.expand_dims(xs, axis=0), params, dp_idxs)
+        mixed_partials.append(pmp)
+
+        #DEBUG LOWER/UPPER
+        np.testing.assert_almost_equal(symmetrize(np.triu(ph), N, D), symmetrize(np.tril(ph), N, D))
+
+        hessians.append(ph)
+    
+    hessians = np.sum(hessians, axis=0)[0]
+
+    #DEBUG LOWER/UPPER
+    np.testing.assert_almost_equal(symmetrize(np.triu(hessians)), symmetrize(np.tril(hessians)))
+
+    # assert 0
+
+    mixed_part = np.sum(mixed_partials, axis=0)[0]
+
+    hess_idxs = jax.ops.index[num_host_atoms:, 3:, :, :3]
+    dx_dp_idxs = jax.ops.index[:, :, :3]
+    mp_idxs = jax.ops.index[:, num_host_atoms:, 3:]
+    lhs = np.einsum('ijkl,mkl->mij', hessians[hess_idxs], dx_dps[dx_dp_idxs]) # correct only up to main hessian
+    rhs = mixed_part[mp_idxs]
+    # lhs + rhs has shape [P, num_atoms-num_host_atoms, 1] 
+    d2u_dldp = np.sum(lhs+rhs, axis=(1,2)) # P N 4 -> P
+    return d2u_dldp
+
+
 class TestTI(unittest.TestCase):
 
     def test_du_dlamba(self):
@@ -115,15 +162,15 @@ class TestTI(unittest.TestCase):
 
         num_atoms = x0.shape[0]
 
-        #                  bond  bond angle angle   lj   lj   lj   lj
-        params = np.array([100.0, 2.0, 75.0, 1.81, 3.0, 2.0, 1.0, 1.4], np.float64)
+        #                  bond  bond angle angle   lj   lj   lj   lj  q       q
+        params = np.array([100.0, 2.0, 75.0, 1.81, 3.0, 2.0, 1.0, 1.4, 0.21, -0.12], np.float64)
 
         # bond_params = np.array([100.0, 2.0], dtype=np.float64)
-        bond_idxs = np.array([[0, 1], [1, 2],[3,4]], dtype=np.int32)
-        bond_param_idxs = np.array([[0, 1], [0, 1],[0,1]], dtype=np.int32)
+        bond_idxs = np.array([[0, 1], [1, 2], [3, 4]], dtype=np.int32)
+        bond_param_idxs = np.array([[0, 1], [0, 1], [0, 1]], dtype=np.int32)
 
-        angle_idxs = np.array([[0,1,2]], dtype=np.int32)
-        angle_param_idxs = np.array([[2,3]], dtype=np.int32)
+        angle_idxs = np.array([[0, 1, 2]], dtype=np.int32)
+        angle_param_idxs = np.array([[2, 3]], dtype=np.int32)
 
         # 1. Reference integration.
         ref_hb = functools.partial(bonded.harmonic_bond,
@@ -139,10 +186,12 @@ class TestTI(unittest.TestCase):
             [1, 2],
             [0, 3]], dtype=np.int32) + 4 # offset
 
+        es_param_idxs = np.array([8, 9, 9, 9, 8], dtype=np.int32)
+
         scale_matrix = np.array([
-            [  0,  0,   0, 0.5, 0.5],
-            [  0,  0,   0,   1,   1],
-            [  0,  0,   0, 0.5, 0.5],
+            [  0,  0, 0.2, 0.5, 0.5],
+            [  0,  0, 0.1,   1,   1],
+            [0.2,0.1,   0, 0.5, 0.5],
             [0.5,  1, 0.5,   0, 0.5],
             [0.5,  1, 0.5, 0.5,   0]
         ], dtype=np.float64)
@@ -159,8 +208,14 @@ class TestTI(unittest.TestCase):
             box=None,
             cutoff=None)
 
+        ref_es = functools.partial(nonbonded.electrostatics,
+            scale_matrix=scale_matrix,
+            param_idxs=es_param_idxs,
+            box=None,
+            cutoff=None)
+
         def total_nrg(conf, params):
-            return ref_hb(conf, params) + ref_ha(conf, params) + ref_lj(conf, params)
+            return ref_hb(conf, params) + ref_ha(conf, params) + ref_lj(conf, params) + ref_es(conf, params)
             # return ref_hb(conf, params)
 
         test_hb = custom_ops.HarmonicBond_f64(
@@ -178,8 +233,40 @@ class TestTI(unittest.TestCase):
             lj_param_idxs
         )
 
-        ref_energies = [ref_hb, ref_ha, ref_lj]
-        test_energies = [test_hb, test_ha, test_lj]
+        test_es = custom_ops.Electrostatics_f64(
+            scale_matrix,
+            es_param_idxs
+        )
+
+        ref_energies = [ref_hb, ref_ha, ref_lj, ref_es]
+        test_energies = [test_hb, test_ha, test_lj, test_es]
+        # ref_energies = [ref_hb, ref_ha, ref_lj]
+        # test_energies = [test_hb, test_ha, test_lj]
+
+        dp_idxs = np.arange(len(params)).astype(dtype=np.int32)
+
+        hess_idxs = jax.ops.index[3:, 3:, :, :3]
+        dx_dp_idxs = jax.ops.index[:, :, :3]
+        mp_idxs = jax.ops.index[:, 3:, 3:]
+
+        # 0-step test
+        # for p, r in zip(test_energies, ref_energies):
+        #     p_e, p_dedx, ph, _, pmp  = p.derivatives(np.expand_dims(x0, 0), params, dp_idxs)
+
+        #     dedx_fn = jax.grad(r, argnums=(0,))
+        #     dedx_val = dedx_fn(x0, params)
+        #     np.testing.assert_almost_equal(p_dedx, dedx_val)
+
+        #     hess_fn = jax.jacfwd(dedx_fn, argnums=(0,))
+        #     hess_val = hess_fn(x0, params)
+
+        #     np.testing.assert_almost_equal(ph[0][hess_idxs], hess_val[0][0][hess_idxs])
+
+        #     rmp_fn = jax.jacfwd(dedx_fn, argnums=(1,))
+        #     rmp_val = rmp_fn(x0, params)[0][0]
+
+        #     rmp_val = np.transpose(rmp_val, (2,0,1))
+        #     np.testing.assert_almost_equal(pmp[0][mp_idxs], rmp_val[mp_idxs])
 
         dt = 0.002
         ca = 0.95
@@ -193,8 +280,6 @@ class TestTI(unittest.TestCase):
             cb,
             cc
         )
-
-        dp_idxs = np.arange(len(params)).astype(dtype=np.int32)
 
         ctxt = custom_ops.Context_f64(
             test_energies,
@@ -213,7 +298,7 @@ class TestTI(unittest.TestCase):
         test_dx_dp = ctxt.get_dx_dp()
 
         # n_params, n_atoms, n_dims
-        assert test_dx_dp.shape == (8, 5, 4)
+        assert test_dx_dp.shape == (10, 5, 4)
 
         intg = ReferenceLangevin(dt, ca, cb, cc)
 
@@ -224,7 +309,10 @@ class TestTI(unittest.TestCase):
         ref_mixed_partial = jax.jacfwd(ref_dE_dx_fn, argnums=(1,))
 
         def integrate(x_t, v_t, params):
+
             for _ in range(n_steps):
+                # print("INPUT", x_t)
+                # print("REF DE_DX", ref_dE_dx_fn(x_t, params))
                 x_t, v_t = intg.step(x_t, v_t, ref_dE_dx_fn(x_t, params)[0])
             return x_t, v_t
 
@@ -274,7 +362,7 @@ class TestTI(unittest.TestCase):
             x_f = integrate(x0, v0, pp)
 
             def total_nrg_lambda(c, params):
-                return ref_hb(c, params) + ref_ha(c, params) + ref_lj(c, params)
+                return ref_hb(c, params) + ref_ha(c, params) + ref_lj(c, params) + ref_es(c, params)
 
             # dxdp_fn = jax.jacrev(integrate, argnums=(0,))
 
@@ -332,9 +420,6 @@ class TestTI(unittest.TestCase):
             hess = ctxt.get_d2E_dx2()
             ref_hess = ref_hessian(x_f, params)[0][0]
 
-            hess_idxs = jax.ops.index[3:, 3:, :, :3]
-            dx_dp_idxs = jax.ops.index[:, :, :3]
-            mp_idxs = jax.ops.index[:, 3:, 3:]
             np.testing.assert_almost_equal(hess[hess_idxs], ref_hess[hess_idxs])
 
             # mixed_part = ctxt.get_d2E_dxdp() 
@@ -356,10 +441,16 @@ class TestTI(unittest.TestCase):
             # lhs + rhs has shape [P, 2, 1] 
             d2u_dldp = np.sum(lhs+rhs, axis=(1,2)) # P N 4
 
+            test_d2u_dldp = compute_d2u_dldp(test_energies, params, x_f, dx_dp, dp_idxs, 3)
+            np.testing.assert_almost_equal(d2u_dldp, test_d2u_dldp)
+
             return du_dl, dx_dp, d2u_dldp
 
         test_du_dl, test_dx_dp, test_d2u_dldp = simulate_test(0.1, params)
         np.testing.assert_almost_equal(ref_du_dl, test_du_dl)
+        # print(np.transpose(ref_dx_dp, [2,0,1]))
+        # print(test_dx_dp)
+        # print(np.transpose(ref_dx_dp, [2,0,1]) - test_dx_dp)
         np.testing.assert_almost_equal(np.transpose(ref_dx_dp, [2,0,1]), test_dx_dp) # so this is also correct
         # print(type(ref_d2u_dldp), type(test_d2u_dldp))
         np.testing.assert_almost_equal(np.asarray(ref_d2u_dldp), np.asarray(test_d2u_dldp))

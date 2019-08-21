@@ -27,7 +27,6 @@ void Potential<RealType>::derivatives_host(
     const auto P = num_params;
     const auto DP = num_dp;
 
-
     if(num_dims != 3 && num_dims != 4) {
         throw std::runtime_error("Unsupported number of dimensions");
     }

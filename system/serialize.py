@@ -84,7 +84,7 @@ def deserialize_system(system, coords):
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
             test_hb = (
-                custom_ops.HarmonicBond_f32,
+                custom_ops.HarmonicBond_f64,
                 (
                     bond_idxs,
                     param_idxs
@@ -111,7 +111,7 @@ def deserialize_system(system, coords):
             angle_idxs = np.array(angle_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
-            test_ha = (custom_ops.HarmonicAngle_f32,
+            test_ha = (custom_ops.HarmonicAngle_f64,
                 (
                     angle_idxs,
                     param_idxs
@@ -141,7 +141,7 @@ def deserialize_system(system, coords):
             torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
-            test_ha = (custom_ops.PeriodicTorsion_f32,
+            test_ha = (custom_ops.PeriodicTorsion_f64,
                 (
                     torsion_idxs,
                     param_idxs
@@ -154,7 +154,6 @@ def deserialize_system(system, coords):
 
             num_atoms = force.getNumParticles()
             scale_matrix = np.ones((num_atoms, num_atoms)) - np.eye(num_atoms)
-            scale_matrix /= 2 # DEBUG
 
             charge_param_idxs = []
             lj_param_idxs = []
@@ -163,7 +162,8 @@ def deserialize_system(system, coords):
                 scale_matrix[a_idx][a_idx] = 0
                 charge, sig, eps = force.getParticleParameters(a_idx)
 
-                charge = value(charge)
+                charge = value(charge)/2
+                # print("inserting charge", charge)
                 sig = value(sig)
                 eps = value(eps)
                 if sig == 0 or eps == 0:
@@ -171,7 +171,6 @@ def deserialize_system(system, coords):
                     assert eps == 0.0
                     sig = 0.5
                     eps = 0.0
-
 
                 charge_idx = insert_parameters(charge, 7)
                 sig_idx = insert_parameters(sig, 8)
@@ -189,7 +188,7 @@ def deserialize_system(system, coords):
             charge_param_idxs = np.array(charge_param_idxs, dtype=np.int32)
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
 
-            test_lj = (custom_ops.LennardJones_f32,
+            test_lj = (custom_ops.LennardJones_f64,
                 (
                     scale_matrix,
                     lj_param_idxs
@@ -198,7 +197,7 @@ def deserialize_system(system, coords):
 
             test_potentials.append(test_lj)
 
-            # test_es = (custom_ops.Electrostatics_f32,
+            # test_es = (custom_ops.Electrostatics_f64,
             #     (
             #         scale_matrix,
             #         charge_param_idxs,

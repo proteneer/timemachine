@@ -137,12 +137,12 @@ def electrostatics(conf, params, box, param_idxs, scale_matrix, cutoff=None, alp
     # neutralize the charge
     # todo: neutralize host charges separately from guest charges
     # print("WARNING: NUMBER OF ATOMS USED TO NEUTRALIZED SET EXPLICITLY FOR HOST aCD")
-    num_host_atoms = 126
-    host_charges = charges[:num_host_atoms]
-    guest_charges = charges[num_host_atoms:]
-    host_charges = host_charges - np.sum(host_charges)/host_charges.shape[0]
-    guest_charges = guest_charges - np.sum(guest_charges)/guest_charges.shape[0]
-    charges = np.concatenate([host_charges, guest_charges])
+    # num_host_atoms = 126
+    # host_charges = charges[:num_host_atoms]
+    # guest_charges = charges[num_host_atoms:]
+    # host_charges = host_charges - np.sum(host_charges)/host_charges.shape[0]
+    # guest_charges = guest_charges - np.sum(guest_charges)/guest_charges.shape[0]
+    # charges = np.concatenate([host_charges, guest_charges])
 
     # if we use periodic boundary conditions, then the following three parameters
     # must be set in order for Ewald to make sense.

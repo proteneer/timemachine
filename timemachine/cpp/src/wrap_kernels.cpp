@@ -295,6 +295,15 @@ void declare_potential(py::module &m, const char *typestr) {
                 py_d2E_dxdp.mutable_data()
             );
 
+            // symmetrize the hessians
+            auto buffer = py_d2E_dx2.mutable_data();
+            size_t K = num_atoms*num_dims;
+            for(size_t row=0; row < K; row++) {
+                for(size_t col=0; col < row; col++) {
+                    buffer[col*K+row] = buffer[row*K+col];
+                }
+            }
+
             return py::make_tuple(py_E, py_dE_dx, py_d2E_dx2, py_dE_dp, py_d2E_dxdp);
         }, 
             py::arg("coords").none(false),
