@@ -305,6 +305,8 @@ def parameterize(mol, forcefield):
     vd = ValenceDict()
     for smirks, param in model.items():
 
+        param = param/2
+
         c_idx = add_param(param, 7)
         matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
 
@@ -329,13 +331,15 @@ def parameterize(mol, forcefield):
     for k, v in vd.items():
         charge_param_idxs.append(v)
 
-    # nrg_fns.append((
-    #     custom_ops.Electrostatics_f64,
-    #     (
-    #         np.array(scale_matrix, dtype=np.int32),
-    #         np.array(charge_param_idxs, dtype=np.int32)
-    #     )
-    # ))
+    # print("LIGAND NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
+
+    nrg_fns.append((
+       custom_ops.Electrostatics_f64,
+       (
+           np.array(scale_matrix, dtype=np.int32),
+           np.array(charge_param_idxs, dtype=np.int32)
+       )
+    ))
 
     c = mol.GetConformer(0)
     conf = np.array(c.GetPositions(), dtype=np.float64)

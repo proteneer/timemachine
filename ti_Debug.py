@@ -29,7 +29,6 @@ import random
 # from system import forcefield
 from timemachine.lib import custom_ops
 from timemachine.integrator import langevin_coefficients
-from timemachine.potentials import restraints
 
 from timemachine import constants
 
@@ -52,7 +51,8 @@ import multiprocessing
 
 plt.rcParams['figure.dpi'] = 200
 
-##### 
+num_gpus = 8
+
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
@@ -155,7 +155,7 @@ def minimize(
     starting_dimension,
     lamb):
 
-    print("running lambda", lamb)
+    # print("running lambda", lamb)
 
     num_atoms = len(masses)
     num_guest_atoms = num_atoms - num_host_atoms
@@ -171,7 +171,7 @@ def minimize(
         temperature=300,
         # temperature=0,
         dt=dt,
-        friction=91*2, # (ytz) probably need to double this?
+        friction=91, # (ytz) probably need to double this?
         # friction=100, # (ytz) probably need to double this?
         masses=masses
     )
@@ -217,6 +217,8 @@ def minimize(
     x_t = d4_t
     v_t = np.zeros_like(x_t)
 
+    # print("starting x_t", x_t)
+
     cur_dim = num_dimensions
 
     ctxt = custom_ops.Context_f64(
@@ -255,30 +257,29 @@ def minimize(
     # assert 0
     print("Lambda", lamb, ": minimized in ", i, "steps to", E, 'dU_dl', dUdL, 'dx_dp', np.amin(ctxt.get_dx_dp()), np.amax(ctxt.get_dx_dp()))
 
-    # dynamics loop
+    # dynamics loop production
+    cutoff = 50000
+    sampling_interval = 10000
     if lamb == 0.0:
-        max_iter = 15000
+        max_iter = 100000
     elif lamb < 0.4:
-        max_iter = 500000*2
+        max_iter = 5000000*2
     else:
-        max_iter = 50000
+        max_iter = 100000
+
+    # testing cycle
+    cutoff = 100000
+    sampling_interval = 2000
+    if lamb == 0.0:
+        max_iter = 120000
+    elif lamb < 0.4:
+        max_iter = 1000000*2
+    else:
+        max_iter = 120000
+
     dt = 1e-3
     
     md_dudls = []
-    
-    # v_t = np.zeros((num_atoms, 4))
-    # this would zero out the velocity derivatives dv_dp
-    # not sure if this is necessary
-    # v_t[:, :3] = set_velocities_to_temperature(num_atoms, 300, masses) 
-
-    # ctxt_md = custom_ops.Context_f64(
-    #     potentials,
-    #     opt_md,
-    #     params.astype(np.float64),
-    #     ctxt.get_x(),
-    #     v_t.astype(np.float64),
-    #     dp_idxs.astype(np.int32)
-    # )
 
     # swap
     opt.set_dt(dt)
@@ -302,7 +303,7 @@ def minimize(
     start = time.time()
     for i in range(max_iter):
         ctxt.step()
-        if i % 10000 == 0 and i >= 30000:
+        if i % sampling_interval == 0 and i >= cutoff:
             
             E = ctxt.get_E()
             xi = ctxt.get_x()
@@ -325,13 +326,13 @@ def minimize(
             all_kes.append(ke)
             speed = ns_per_day(time.time()-start, i)
 
-            print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "| mean deriv: ", np.mean(all_d2u_dldps, axis=0), "\t dudl: ", np.mean(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day")
+            print(f"{lamb} \t {i} \t {E:9.4f} \t {dUdL:9.4f} \t | dxdp max/min {np.amax(dxdp):9.4f} \t {np.amin(dxdp):9.4f} \t max mean/median deriv: {np.amax(np.mean(all_d2u_dldps, axis=0)):9.4f} \t {np.amax(np.median(all_d2u_dldps, axis=0)):9.4f} \t mean/median dudl {np.mean(all_dudls):9.4f} \t {np.median(all_dudls):9.4f} \t @ {speed:9.4f} ns/day")
+            # print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day")
+#            if np.amax(dxdp) > 100:
+#                raise ValueError("DXDP IS TOO LARGE")
             xyz = write(np.asarray(xi[:, :3]*10), masses)
             xyz_buffer.append(xyz)
 
-
-            # jb = "".join(xyz_buffer)
-            # open("animation.xyz", "w").write(jb)
 
     # print("FINAL", lamb, "\t", i, "\t", E, "\t", dUdL, "\t", np.mean(all_dudls), "+-", np.std(all_dudls))
 
@@ -346,22 +347,43 @@ def minimize(
 
 #     assert 0
             
-    print("Lambda", lamb, "energy:", E, 'dUdl_min', dUdL_min, 'mean_dudl', np.mean(md_dudls))
-
-    return np.mean(md_dudls)
-    # return x_t, xyz_buffer, E, np.mean(md_dudls)
-
 def rescale_and_center(conf, scale_factor=1):
     mol_com = np.sum(conf, axis=0)/conf.shape[0]
     true_com = np.array([1.97698696, 1.90113478, 2.26042174]) # a-cd
     centered = conf - mol_com  # centered to origin
     return true_com + centered/scale_factor 
 
+
+def initialize_parameters(host_path=None):
+    '''
+    Initializes parameters for training.
+    
+    host_path (string): path to host if training binding energies (default = None)
+    
+    returns: (combined host and ligand parameters, smirnoff ligand parameters)
+    '''
+    # setting general smirnoff parameters for guest using random smiles string
+    ref_mol = Chem.MolFromSmiles('CCCC')
+    ref_mol = Chem.AddHs(ref_mol)
+    AllChem.EmbedMolecule(ref_mol)
+
+    smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
+
+    # smirnoff params are all encompassing for small molecules
+    _, smirnoff_params, _, _, _ = forcefield.parameterize(ref_mol, smirnoff)
+    sys_xml = open(host_path, 'r').read()
+    system = mm.XmlSerializer.deserialize(sys_xml)
+    _, (host_params, _), _ = serialize.deserialize_system(system)       
+    epoch_combined_params = np.concatenate([host_params, smirnoff_params])
+
+    return epoch_combined_params
+
+
 def run_simulation(params):
-    mol, lamb, idx = params
+    mol, lamb, lambda_idx, combined_params = params
     p = multiprocessing.current_process()
 
-    # os.environ['CUDA_VISIBLE_DEVICES'] = " "
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(lambda_idx % num_gpus)
 
     filepath = 'examples/host_acd.xml'
     filename, file_extension = os.path.splitext(filepath)
@@ -370,13 +392,15 @@ def run_simulation(params):
     coords = np.loadtxt(filename + '.xyz').astype(np.float64)
     coords = coords/10
     
-    host_potentials, host_conf, (host_params, host_param_groups), host_masses = serialize.deserialize_system(system, coords)
+    host_conf = coords
+
+    host_potentials, (host_params, host_param_groups), host_masses = serialize.deserialize_system(system)
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
     guest_potentials, smirnoff_params, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
     guest_conf = rescale_and_center(guest_conf)
 
-    combined_potentials, combined_params, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
+    combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
         host_potentials, guest_potentials,
         host_params, smirnoff_params,
         host_param_groups, smirnoff_param_groups,
@@ -391,155 +415,138 @@ def run_simulation(params):
             roll = np.logical_or(roll, param_groups == g)
         return roll
 
-    host_dp_idxs = np.argwhere(filter_groups(host_param_groups, [9])).reshape(-1)
-    guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [9])).reshape(-1)
-    combined_dp_idxs = np .argwhere(filter_groups(combined_param_groups, [9])).reshape(-1)
+    # host_dp_idxs = np.argwhere(filter_groups(host_param_groups, [7])).reshape(-1)
+    # guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7])).reshape(-1)
+    combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [7])).reshape(-1)
 
-    print("Number of parameter derivatives", combined_dp_idxs.shape)
+    # print("combined_dp_idxs", combined_dp_idxs)
 
-    # lambda_schedule = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.7, 1.0, 1.5]
-    lambda_schedule = [0.25]
+    # print("Number of parameter derivatives", combined_dp_idxs.shape)
 
-    for lambda_idx, lamb in enumerate(lambda_schedule):
-        du_dls, du_dl_grads = minimize(
-            num_host_atoms,
-            combined_potentials,
-            combined_params,
-            combined_param_groups,
-            combined_conf,
-            combined_masses,
-            combined_dp_idxs,
-            1000,
-            None,
-            starting_dimension=4,
-            lamb=lamb
-        )
+    du_dls, du_dl_grads = minimize(
+        num_host_atoms,
+        combined_potentials,
+        combined_params,
+        combined_param_groups,
+        combined_conf,
+        combined_masses,
+        combined_dp_idxs,
+        1000,
+        None,
+        starting_dimension=4,
+        lamb=lamb
+    )
 
-        fname = "test_du_dl_grads_lambda_everything_minima"+str(lambda_idx)
-        print("Saving")
-        np.savez(fname, lamb=lamb, du_dls=du_dls, du_dl_grads=du_dl_grads)
+    # fname = "test_du_dl_grads_lambda_low_temp_charges"+str(lambda_idx)
+    # print("Saving")
+    # np.savez(fname, lamb=lamb, du_dls=du_dls, du_dl_grads=du_dl_grads)
 
-    assert 0
+    return lamb, du_dls, du_dl_grads, combined_dp_idxs
 
+def train(true_dG):
+    fname = "/home/ubuntu/Relay/Code/benchmarksets/input_files/cd-set1/mol2/guest-"+str(1)+".mol2"
+    guest_mol2 = open(fname, "r").read()
+    # guest_mol2 = Chem.MolFromSmiles("O=P(O)(O)OP(=O)(O)OP(=O)(O)OC[C@H]3O[C@@H](n2cnc1c(ncnc12)N)[C@H](O)[C@@H]3O")
+    # mol = Chem.AddHs(guest_mol2)
+    mol = Chem.MolFromMol2Block(guest_mol2, sanitize=True, removeHs=False, cleanupSubstructures=True)
 
-    # host_dp_idxs = np.array([1])
-    # guest_dp_idxs = np.array([1])
-    # combined_dp_idxs = np.array([1])
+    pool = multiprocessing.Pool(num_gpus)
 
-    # integrate_me = functools.partial(minimize,
-    #     num_host_atoms,
-    #     combined_potentials,
-    #     combined_params,
-    #     combined_param_groups,
-    #     combined_conf,
-    #     combined_masses,
-    #     combined_dp_idxs,
-    #     1000,
-    #     None,
-    #     4
-    # )
+    AllChem.EmbedMolecule(mol, randomSeed=1337)
+    # AllChem.EmbedMolecule(mol)
+    conf = mol.GetConformer(0)
+    coords = conf.GetPositions()
+    # rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
+    # coords = np.matmul(coords, rot_matrix)
+    # for idx, (x,y,z) in enumerate(coords):
+        # conf.SetAtomPosition(idx, (x,y,z))
 
-    # res = scipy.integrate.quad(integrate_me, 0, 0.5, epsabs=1, epsrel=1.49e-03)
+    starting_params = initialize_parameters('examples/host_acd.xml')
+    lr=3e-3
+    opt_init, opt_update, get_params = optimizers.adam(lr)
+    # opt_init, opt_update, get_params = optimizers.sgd(lr)
 
+    opt_state = opt_init(starting_params)
 
+    num_epochs = 50
+    for epoch in range(num_epochs):
 
-    # buf = minimize(
-    #     num_host_atoms,
-    #     combined_potentials,
-    #     combined_params,
-    #     combined_param_groups,
-    #     combined_conf,
-    #     combined_masses,
-    #     combined_dp_idxs,
-    #     1000,
-    #     None,
-    #     starting_dimension=4,
-    #     lamb=lamb
-    # )
+        print("===============Epoch "+str(epoch)+"=============")
 
-    # return buf, num_host_atoms
-
-replicas = 10
-
-for x in range(15):
-    print("STARTING NEW SET", x)
-    complete_dudls = []
-    all_dGs = []
-
-    for rr in range(1, replicas):
-
-        fname = "/home/yutong/Code/benchmarksets/input_files/cd-set1/mol2/guest-"+str(rr)+".mol2"
-        guest_mol2 = open(fname, "r").read()
-        # guest_mol2 = Chem.MolFromSmiles("O=P(O)(O)OP(=O)(O)OP(=O)(O)OC[C@H]3O[C@@H](n2cnc1c(ncnc12)N)[C@H](O)[C@@H]3O")
-        # mol = Chem.AddHs(guest_mol2)
-        mol = Chem.MolFromMol2Block(guest_mol2, sanitize=True, removeHs=False, cleanupSubstructures=True)
-
-        def pmf(nrgs, dudls, temperature=300):
-            kT = constants.BOLTZ * temperature
-            weights = scipy.special.softmax(-np.array(nrgs)/kT)
-            print(weights)
-            return np.sum(weights*dudls)/np.sum(weights)
-
-        batch_size = 4
-        pool = multiprocessing.Pool(batch_size)
-        fh = open("4d_ti_results.txt", "w")
-
-        free_nrgs = []
-
-        def exp_weight(dgs):
-            T = 300
-            kT = constants.BOLTZ*T # in kJ
-            dgs = np.asarray(dgs)
-            return -kT*np.log(np.sum(np.exp(-dgs/kT)))
-
-        AllChem.EmbedMolecule(mol, randomSeed=1337)
-        # AllChem.EmbedMolecule(mol)
-        conf = mol.GetConformer(0)
-        coords = conf.GetPositions()
-        # rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
-        # coords = np.matmul(coords, rot_matrix)
-        # for idx, (x,y,z) in enumerate(coords):
-            # conf.SetAtomPosition(idx, (x,y,z))
-
+        lr = 1e-4
         all_params = []
         all_lambdas = []
-        for lamb_idx, lamb in enumerate(range(20, 100)):
-            dlambda = float(lamb)/100
-            all_lambdas.append(dlambda)
-            # for r in range(batch_size):
-        #     new_mol = Chem.Mol(mol)
-        #     AllChem.EmbedMolecule(new_mol)
-            params = (mol, dlambda, lamb_idx)
+        lambda_schedule = [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5]
+        #lambda_schedule = [0.0, 0.05, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.7, 0.9, 1.0, 1.5]
+        # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+        epoch_params = get_params(opt_state)
+
+        for lamb_idx, lamb in enumerate(lambda_schedule):
+            params = (mol, lamb, lamb_idx, epoch_params)
             all_params.append(params)
 
+        results = pool.map(run_simulation, all_params)
 
-        run_simulation(all_params[0])
-        # assert 0
-    #     continue
-        # results = pool.map(run_simulation, all_params)
+        all_lambdas = []
+        all_mean_du_dls = []
+        all_median_du_dls = []
+        all_mean_du_dl_grads = []
+        all_median_du_dl_grads = []
+        for lamb, du_dls, du_dl_grads, combined_dp_idxs in results:
+            all_lambdas.append(lamb)
+            all_mean_du_dls.append(np.mean(du_dls))
+            all_median_du_dls.append(np.median(du_dls))
+            all_mean_du_dl_grads.append(np.mean(du_dl_grads, axis=0))
+            all_median_du_dl_grads.append(np.median(du_dl_grads, axis=0))
 
-        batch_dudls = []
-        batch_nrgs = []
+        all_lambdas = np.array(all_lambdas)
+        all_mean_du_dls = np.array(all_mean_du_dls)
+        all_median_du_dls = np.array(all_median_du_dls)
+        all_mean_du_dl_grads = np.array(all_mean_du_dl_grads)
+        all_median_du_dl_grads = np.array(all_median_du_dl_grads)
 
-        for (_, _, energy, dudl), nha in results:
-            batch_dudls.append(dudl)
-            batch_nrgs.append(energy)
+        num_params = all_mean_du_dl_grads.shape[-1]
 
-        dx = all_lambdas[1] - all_lambdas[0]    
-        dG = np.trapz(batch_dudls, all_lambdas)
-        free_nrgs.append(dG)
-        print("free energy", dG)
-        complete_dudls.append(batch_dudls)
-        for dd in complete_dudls:
-            plt.plot(all_lambdas, dd)
-        plt.show()
+        np.set_printoptions(linewidth=np.inf)
+    
+        print("MEAN DU_DL", all_mean_du_dls)
+        print("MEDIAN DU_DL", all_median_du_dls)
 
-    #     print("mean/std", np.mean(free_nrgs), np.std(free_nrgs))
-    #     fh.write("mean/std: " + str(np.mean(free_nrgs)) + " " + str(np.std(free_nrgs)) + "\n")
-    #     fh.flush()
+        for p_idx in range(num_params):
+            print("MEAN DU_DL_GRAD_"+str(p_idx), all_mean_du_dl_grads[:, p_idx])
 
-        all_dGs.append(dG)
-        print("dgs", np.array(all_dGs)/4.18)
-        print("replica", rr, exp_weight(np.array(all_dGs))/4.18, "kcal/mol")
+        for p_idx in range(num_params):
+            print("MEDIAN DU_DL_GRAD_"+str(p_idx), all_median_du_dl_grads[:, p_idx])
 
-pool.close()
+        pred_dG = np.trapz(all_lambdas, all_mean_du_dls)
+        pred_dG_median = np.trapz(all_lambdas, all_median_du_dls)
+
+        dG_grads = []
+        dG_grads_median = []
+        for p_idx in range(num_params):
+            dG_grads.append(np.trapz(all_lambdas, all_mean_du_dl_grads[:, p_idx]))
+            dG_grads_median.append(np.trapz(all_lambdas, all_median_du_dl_grads[:, p_idx]))
+            # dG_grads.append(grad)
+            # print("MEAN DU_DL_GRAD_"+str(p_idx), grad)
+
+        dG_grads = np.array(dG_grads)
+        dG_grads_median = np.array(dG_grads_median)
+
+        dparams = np.zeros_like(epoch_params)
+        dparams[combined_dp_idxs] = dG_grads
+        # dparams[combined_dp_idxs] = dG_grads_median
+
+        L2_loss = (pred_dG-true_dG)**2
+        L1_loss = np.abs(pred_dG-true_dG)
+        full_L2_grad = 2*(pred_dG-true_dG)*dparams
+
+        print("L1_loss", L1_loss, "true vs pred", true_dG, pred_dG, pred_dG_median)
+
+        # fix me when going to multiple molecules
+        # print("full_L2_grad", full_L2_grad)
+        opt_state = opt_update(epoch, full_L2_grad, opt_state)
+
+    pool.close()
+
+train(1.575*4.18)

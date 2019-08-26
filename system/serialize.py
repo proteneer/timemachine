@@ -12,7 +12,7 @@ from simtk import unit
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
-def deserialize_system(system, coords):
+def deserialize_system(system):
     """
     Deserialize an OpenMM XML file
 
@@ -60,9 +60,8 @@ def deserialize_system(system, coords):
     for p in range(system.getNumParticles()):
         masses.append(value(system.getParticleMass(p)))
 
-    print(len(masses), coords.shape[0])
-
-    assert len(masses) == coords.shape[0]
+    # print(len(masses), coords.shape[0])
+    # assert len(masses) == coords.shape[0]
 
     for force in system.getForces():
         if isinstance(force, mm.HarmonicBondForce):
@@ -197,16 +196,18 @@ def deserialize_system(system, coords):
 
             test_potentials.append(test_lj)
 
-            # test_es = (custom_ops.Electrostatics_f64,
-            #     (
-            #         scale_matrix,
-            #         charge_param_idxs,
-            #     )
-            # )
+            test_es = (custom_ops.Electrostatics_f64,
+                (
+                    scale_matrix,
+                    charge_param_idxs,
+                )
+            )
 
-            # test_potentials.append(test_es)
+            test_potentials.append(test_es)
+
+            # print("PROTEIN NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
 
     global_params = np.array(global_params)
     global_param_groups = np.array(global_param_groups)
 
-    return test_potentials, coords, (global_params, global_param_groups), np.array(masses)
+    return test_potentials, (global_params, global_param_groups), np.array(masses)

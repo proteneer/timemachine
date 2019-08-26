@@ -5,6 +5,7 @@
 #include <vector>
 #include <stdexcept>
 #include <cstdio>
+#include <chrono>
 
 #include "langevin.hpp"
 #include "gpu_utils.cuh"
@@ -89,6 +90,7 @@ LangevinOptimizer<RealType>::LangevinOptimizer(
     coeff_a_(coeff_a),
     d_rng_buffer_(nullptr) {
 
+    auto start = std::chrono::high_resolution_clock::now();
     gpuErrchk(cudaMalloc((void**)&d_coeff_bs_, coeff_bs.size()*sizeof(RealType)));
     gpuErrchk(cudaMalloc((void**)&d_coeff_cs_, coeff_cs.size()*sizeof(RealType)));
 
@@ -98,10 +100,13 @@ LangevinOptimizer<RealType>::LangevinOptimizer(
     cublasErrchk(cublasCreate(&cb_handle_));
     // curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_PHILOX4_32_10));
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-
     gpuErrchk(cudaMalloc((void**)&d_rng_buffer_, coeff_bs.size()*num_dims*sizeof(RealType)));
 
-    curandSetPseudoRandomGeneratorSeed(cr_rng_, time(NULL));
+    auto end = std::chrono::high_resolution_clock::now();
+    auto seed = std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
+    // wtf?
+    std::cout << "setting seed to " << seed << std::endl;
+    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 
 }
 
@@ -152,7 +157,8 @@ void LangevinOptimizer<RealType>::step(
     const RealType* d_noise_buf = nullptr;
 
     if(d_input_noise_buffer == nullptr) {
-        curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N*D, 0.0, 1.0));
+        // std::cout << "calling rngjesus on " << N << " " << D << std::endl;
+        curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N*D, 0.0, 0.5));
         d_noise_buf = d_rng_buffer_;
     } else {
         d_noise_buf = d_input_noise_buffer;
