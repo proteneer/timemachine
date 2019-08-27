@@ -104,8 +104,7 @@ LangevinOptimizer<RealType>::LangevinOptimizer(
 
     auto end = std::chrono::high_resolution_clock::now();
     auto seed = std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
-    // wtf?
-    std::cout << "setting seed to " << seed << std::endl;
+
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 
 }
@@ -158,7 +157,7 @@ void LangevinOptimizer<RealType>::step(
 
     if(d_input_noise_buffer == nullptr) {
         // std::cout << "calling rngjesus on " << N << " " << D << std::endl;
-        curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N*D, 0.0, 0.5));
+        curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N*D, 0.0, 0.75));
         d_noise_buf = d_rng_buffer_;
     } else {
         d_noise_buf = d_input_noise_buffer;

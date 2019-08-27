@@ -71,7 +71,11 @@ def deserialize_system(system):
             for b_idx in range(force.getNumBonds()):
                 src_idx, dst_idx, length, k = force.getBondParameters(b_idx)
                 length = value(length)
-                k = value(k)
+
+
+                k = value(k)/5
+
+                # print("bond K", k)
 
                 k_idx = insert_parameters(k, 0)
                 b_idx = insert_parameters(length, 1)
@@ -100,6 +104,8 @@ def deserialize_system(system):
                 src_idx, mid_idx, dst_idx, angle, k = force.getAngleParameters(a_idx)
                 angle = value(angle)
                 k = value(k)
+
+                # print("ANGLE k", k)
 
                 k_idx = insert_parameters(k, 2)
                 a_idx = insert_parameters(angle, 3)
@@ -161,7 +167,7 @@ def deserialize_system(system):
                 scale_matrix[a_idx][a_idx] = 0
                 charge, sig, eps = force.getParticleParameters(a_idx)
 
-                charge = value(charge)/2
+                charge = value(charge)
                 # print("inserting charge", charge)
                 sig = value(sig)
                 eps = value(eps)
@@ -179,7 +185,6 @@ def deserialize_system(system):
                 lj_param_idxs.append([sig_idx, eps_idx])
 
             for a_idx in range(force.getNumExceptions()):
-
                 src, dst, _, _, _ = force.getExceptionParameters(a_idx)
                 scale_matrix[src][dst] = 0
                 scale_matrix[dst][src] = 0

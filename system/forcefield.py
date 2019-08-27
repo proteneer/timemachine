@@ -178,7 +178,7 @@ def parameterize(mol, forcefield):
 
             vd = ValenceDict()
             for p in handler_params.parameters:
-                k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
+                k_idx, l_idx = add_param(to_md_units(p.k)/5, 0), add_param(to_md_units(p.length), 1)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
                 # print(p.smirks, matches)
                 
@@ -263,6 +263,7 @@ def parameterize(mol, forcefield):
                     np.array(torsion_param_idxs, dtype=np.int32)
                 )
             ))
+
         elif handler_name == "vdW":
             # lennardjones
             vd = ValenceDict()
@@ -274,7 +275,7 @@ def parameterize(mol, forcefield):
 
                 scale_matrix = np.ones(shape=(num_atoms, num_atoms), dtype=np.float64) - np.eye(num_atoms)
 
-                # fully exclude 1-2, 1-3, tbd: 1-4
+                # fully exclude 1-2, 1-3, 1-4
                 for (src, dst) in bond_idxs:
                     scale_matrix[src][dst] = 0
                     scale_matrix[dst][src] = 0
@@ -305,7 +306,7 @@ def parameterize(mol, forcefield):
     vd = ValenceDict()
     for smirks, param in model.items():
 
-        param = param/2
+        param = param
 
         c_idx = add_param(param, 7)
         matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)

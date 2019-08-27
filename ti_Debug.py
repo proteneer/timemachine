@@ -1,63 +1,43 @@
-import numpy as np
-import py3Dmol
 import jax
 import jax.numpy as jnp
+import numpy as np
 import functools
 import os
 import sys
 import time
 
+from rdkit import Chem
 from rdkit.Chem import AllChem
 from system import serialize
 from system import forcefield
 from system import simulation
-import scipy.integrate
-from rdkit import Chem
+
 from openforcefield.typing.engines.smirnoff import ForceField
 from simtk import openmm as mm
 from simtk.openmm import app
+from simtk.openmm.app import forcefield as ff
 
 from scipy.stats import special_ortho_group
-# from timemachine.lib import custom_ops
 from jax.experimental import optimizers
 
-
 import jax.numpy as jnp
-import numpy as np
 import random
 
 # from system import forcefield
 from timemachine.lib import custom_ops
 from timemachine.integrator import langevin_coefficients
-
 from timemachine import constants
 
-from simtk.openmm.app import PDBFile
-
-import scipy
-
-from simtk import openmm as mm
-from simtk.openmm import app
-from simtk.openmm.app import PDBFile
-from simtk.openmm.app import forcefield as ff
-from simtk import unit
-
-import py3Dmol
-import sklearn.decomposition
+import multiprocessing
 
 from matplotlib import pyplot as plt
-# %matplotlib inline
-import multiprocessing
+import py3Dmol
 
 plt.rcParams['figure.dpi'] = 200
 
 num_gpus = 8
 
-def value(quantity):
-    return quantity.value_in_unit_system(unit.md_unit_system)
-
 def write(xyz, masses):
-
     xyz = xyz - np.mean(xyz, axis=0, keepdims=True)
     buf = str(len(masses)) + '\n'
     buf += 'timemachine\n'
@@ -90,26 +70,19 @@ def set_velocities_to_temperature(n_atoms, temperature, masses):
     velocity_scale = np.sqrt(constants.BOLTZ*temperature/np.expand_dims(masses, -1))
     return v_t*velocity_scale
 
-class ReferenceLangevin():
+def compute_d2e_dxdp(energies, params, xs, dp_idxs):
+    mixed_partials = []
+    # hessians = []
+    for p in energies:
+        _, _, ph, _, pmp  = p.derivatives(np.expand_dims(xs, axis=0), params, dp_idxs)
+        mixed_partials.append(pmp)
 
-    def __init__(self, ca, cb, cc):
-        self.coeff_a = ca
-        self.coeff_bs = cb
-        self.coeff_cs = cc
+        # print("max/min hessians of",p,'\t',np.amax(ph),'\t',np.amin(ph))
+        # hessians.append(ph)
 
-    def step(self, dt, x_t, v_t, dE_dx):
-        noise = np.random.normal(size=(x_t.shape[0], x_t.shape[1]))
-        v_t_1 = self.coeff_a*v_t - np.expand_dims(self.coeff_bs, axis=-1)*dE_dx + np.expand_dims(self.coeff_cs, axis=-1)*noise
-        x_t_1 = x_t + v_t_1*dt
-        final_X = jnp.concatenate([x_t_1[:, :3], x_t[:, 3:]], axis=1)
-        final_V = jnp.concatenate([v_t_1[:, :3], v_t[:, 3:]], axis=1)
-        return final_X, final_V
-
-@jax.jit
-def com_motion_remover(v_t, masses):
-    com = jnp.sum(v_t * jnp.expand_dims(masses, -1), axis=0)
-    momentum = com / jnp.sum(masses)
-    return v_t - jnp.expand_dims(momentum, axis=0)
+    mixed_part = np.sum(mixed_partials, axis=0)[0]
+    # hessians = np.sum(mixed_partials, axis=0)[0]
+    return mixed_part
 
 
 def compute_d2u_dldp(energies, params, xs, dx_dps, dp_idxs, num_host_atoms):
@@ -128,9 +101,6 @@ def compute_d2u_dldp(energies, params, xs, dx_dps, dp_idxs, num_host_atoms):
         hessians.append(ph)
     
     hessians = np.sum(hessians, axis=0)[0]
-
-    # print(np.triu(hessi))
-
     mixed_part = np.sum(mixed_partials, axis=0)[0]
 
     hess_idxs = jax.ops.index[num_host_atoms:, 3:, :, :3]
@@ -138,6 +108,7 @@ def compute_d2u_dldp(energies, params, xs, dx_dps, dp_idxs, num_host_atoms):
     mp_idxs = jax.ops.index[:, num_host_atoms:, 3:]
     lhs = np.einsum('ijkl,mkl->mij', hessians[hess_idxs], dx_dps[dx_dp_idxs]) # correct only up to main hessian
     rhs = mixed_part[mp_idxs]
+
     # lhs + rhs has shape [P, num_atoms-num_host_atoms, 1] 
     d2u_dldp = np.sum(lhs+rhs, axis=(1,2)) # P N 4 -> P
     return d2u_dldp
@@ -153,7 +124,8 @@ def minimize(
     n_samples,
     pdb,
     starting_dimension,
-    lamb):
+    lamb,
+    lamb_idx):
 
     # print("running lambda", lamb)
 
@@ -171,10 +143,12 @@ def minimize(
         temperature=300,
         # temperature=0,
         dt=dt,
-        friction=91, # (ytz) probably need to double this?
+        friction=91*5, # (ytz) probably need to double this?
         # friction=100, # (ytz) probably need to double this?
         masses=masses
     )
+
+    # print("LGV CF", ca, cb, cc)
 
     m_dt, m_ca, m_cb, m_cc = dt, 0.5, np.ones_like(cb)/10000, np.zeros_like(masses)
 
@@ -190,16 +164,6 @@ def minimize(
 
     dp_idxs = dp_idxs.astype(np.int32)
 
-    # tolerance = 1
-
-    # def mean_norm(conf):
-    #     norm_x = np.dot(conf.reshape(-1), conf.reshape(-1))/num_atoms
-    #     if norm_x < 1:
-    #         norm_x = 1
-    #         # raise ValueError("Starting norm is less than one")
-    #     return np.sqrt(norm_x)
-
-    # epsilon = tolerance/mean_norm(conf)    
     count = 0
     max_iter = 15000
 
@@ -246,15 +210,11 @@ def minimize(
             xi = ctxt.get_x()
             dE_dx = ctxt.get_dE_dx()
             dUdL = dU_dlambda(dE_dx)
-
             # xyz = write(np.asarray(xi[:, :3]*10), masses)
             # xyz_buffer.append(xyz)
 
         cur_dim -= 1
 
-    # sys.exit(0)
-
-    # assert 0
     print("Lambda", lamb, ": minimized in ", i, "steps to", E, 'dU_dl', dUdL, 'dx_dp', np.amin(ctxt.get_dx_dp()), np.amax(ctxt.get_dx_dp()))
 
     # dynamics loop production
@@ -268,20 +228,21 @@ def minimize(
         max_iter = 100000
 
     # testing cycle
-    cutoff = 100000
+    cutoff = 10000
     sampling_interval = 2000
     if lamb == 0.0:
-        max_iter = 120000
+        max_iter = 15000
     elif lamb < 0.4:
-        max_iter = 1000000*2
+        # max_iter = 1000000*2
+        max_iter = 100000
     else:
-        max_iter = 120000
+        max_iter = 15000
 
     dt = 1e-3
     
     md_dudls = []
 
-    # swap
+    # swap out integrator parameters
     opt.set_dt(dt)
     opt.set_coeff_a(np.float64(ca))
     opt.set_coeff_b(cb.astype(np.float64))
@@ -295,12 +256,13 @@ def minimize(
 
     all_dudls = []
     all_d2u_dldps = []
-
-    # all_dxdps = []
-    # all_d2u_dldps = []
     all_kes = []
 
     start = time.time()
+
+
+    fh = open("traj_"+str(lamb_idx)+".xyz", "w")
+
     for i in range(max_iter):
         ctxt.step()
         if i % sampling_interval == 0 and i >= cutoff:
@@ -318,19 +280,25 @@ def minimize(
             )
 
             dE_dx = ctxt.get_dE_dx()
+            hess = ctxt.get_d2E_dx2()
+            d2E_dxdp = compute_d2e_dxdp(potentials, params.astype(np.float64), xi, dp_idxs)
             dUdL = dU_dlambda(dE_dx)
             all_dudls.append(dUdL)
+            dx_dp = ctxt.get_dx_dp()
+            dv_dp = ctxt.get_dv_dp()
 
             dxdp = ctxt.get_dx_dp()
             ke = compute_ke(ctxt.get_v())
             all_kes.append(ke)
             speed = ns_per_day(time.time()-start, i)
 
-            print(f"{lamb} \t {i} \t {E:9.4f} \t {dUdL:9.4f} \t | dxdp max/min {np.amax(dxdp):9.4f} \t {np.amin(dxdp):9.4f} \t max mean/median deriv: {np.amax(np.mean(all_d2u_dldps, axis=0)):9.4f} \t {np.amax(np.median(all_d2u_dldps, axis=0)):9.4f} \t mean/median dudl {np.mean(all_dudls):9.4f} \t {np.median(all_dudls):9.4f} \t @ {speed:9.4f} ns/day")
+            print(f"{lamb} \t {i} \t {E:9.4f} \t {dUdL:9.4f} \t | dxdp max/min {np.amax(dxdp):9.4f} \t {np.amin(dxdp):9.4f} \t max mean/median deriv: {np.amax(np.mean(all_d2u_dldps, axis=0)):9.4f} \t {np.amax(np.median(all_d2u_dldps, axis=0)):9.4f} \t mean/median dudl {np.mean(all_dudls):9.4f} \t {np.median(all_dudls):9.4f} \t @ {speed:9.4f} ns/day \t  hess max/abs mean/min {np.amax(hess):9.4f}  {np.mean(np.abs(hess)):9.4f}  {np.amin(hess):9.4f} \t mp max/min {np.amax(d2E_dxdp):10.4f}  {np.amin(d2E_dxdp):10.4f} | dv_dp max/min {np.amax(dv_dp):10.4f} {np.amin(dv_dp):10.4f}")
+
             # print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day")
 #            if np.amax(dxdp) > 100:
 #                raise ValueError("DXDP IS TOO LARGE")
             xyz = write(np.asarray(xi[:, :3]*10), masses)
+            fh.write(xyz)
             xyz_buffer.append(xyz)
 
 
@@ -381,6 +349,16 @@ def initialize_parameters(host_path=None):
 
 def run_simulation(params):
     mol, lamb, lambda_idx, combined_params = params
+
+    # conf = mol.GetConformer(0)
+    # coords = conf.GetPositions()
+    # np.random.seed(int(time.time()+float(lambda_idx)))
+    # rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
+    # # print("ROT_MATRIX", rot_matrix)
+    # coords = np.matmul(coords, rot_matrix)
+    # for idx, (x,y,z) in enumerate(coords):
+    #     conf.SetAtomPosition(idx, (x,y,z))
+
     p = multiprocessing.current_process()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = str(lambda_idx % num_gpus)
@@ -417,6 +395,7 @@ def run_simulation(params):
 
     # host_dp_idxs = np.argwhere(filter_groups(host_param_groups, [7])).reshape(-1)
     # guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7])).reshape(-1)
+    # print("filtering")
     combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [7])).reshape(-1)
 
     # print("combined_dp_idxs", combined_dp_idxs)
@@ -434,7 +413,8 @@ def run_simulation(params):
         1000,
         None,
         starting_dimension=4,
-        lamb=lamb
+        lamb=lamb,
+        lamb_idx=lambda_idx
     )
 
     # fname = "test_du_dl_grads_lambda_low_temp_charges"+str(lambda_idx)
@@ -454,12 +434,7 @@ def train(true_dG):
 
     AllChem.EmbedMolecule(mol, randomSeed=1337)
     # AllChem.EmbedMolecule(mol)
-    conf = mol.GetConformer(0)
-    coords = conf.GetPositions()
-    # rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
-    # coords = np.matmul(coords, rot_matrix)
-    # for idx, (x,y,z) in enumerate(coords):
-        # conf.SetAtomPosition(idx, (x,y,z))
+
 
     starting_params = initialize_parameters('examples/host_acd.xml')
     lr=3e-3
@@ -471,16 +446,28 @@ def train(true_dG):
     num_epochs = 50
     for epoch in range(num_epochs):
 
+        print("turning off special ortho")
+        # conf = mol.GetConformer(0)
+        # coords = conf.GetPositions()
+        # rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
+        # coords = np.matmul(coords, rot_matrix)
+        # for idx, (x,y,z) in enumerate(coords):
+        #     conf.SetAtomPosition(idx, (x,y,z))
+
         print("===============Epoch "+str(epoch)+"=============")
 
-        lr = 1e-4
         all_params = []
         all_lambdas = []
-        lambda_schedule = [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5]
-        #lambda_schedule = [0.0, 0.05, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.7, 0.9, 1.0, 1.5]
+        # lambda_schedule = [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5]
+        lambda_schedule = [0.0, 0.05, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.9, 1.0, 1.5,2.5,3.5,5.0,10.0]
+        # lambda_schedule = [0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
         # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        # lambda_schedule = [0.15]
 
         epoch_params = get_params(opt_state)
+
+        print("saving ff params")
+        np.savez("epoch_"+str(epoch), params=epoch_params)
 
         for lamb_idx, lamb in enumerate(lambda_schedule):
             params = (mol, lamb, lamb_idx, epoch_params)
