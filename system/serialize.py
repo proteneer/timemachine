@@ -73,7 +73,8 @@ def deserialize_system(system):
                 length = value(length)
 
 
-                k = value(k)/5
+                # k = value(k)/5
+                k = value(k)
 
                 # print("bond K", k)
 
@@ -167,7 +168,7 @@ def deserialize_system(system):
                 scale_matrix[a_idx][a_idx] = 0
                 charge, sig, eps = force.getParticleParameters(a_idx)
 
-                charge = value(charge)
+                charge = value(charge)/2
                 # print("inserting charge", charge)
                 sig = value(sig)
                 eps = value(eps)

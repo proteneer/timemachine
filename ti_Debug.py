@@ -6,6 +6,9 @@ import os
 import sys
 import time
 
+import simtk.unit
+
+
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from system import serialize
@@ -85,6 +88,10 @@ def compute_d2e_dxdp(energies, params, xs, dp_idxs):
     return mixed_part
 
 
+def to_md_units(q):
+    return q.value_in_unit_system(simtk.unit.md_unit_system)
+
+
 def compute_d2u_dldp(energies, params, xs, dx_dps, dp_idxs, num_host_atoms):
 
     assert len(xs.shape) == 2
@@ -143,7 +150,7 @@ def minimize(
         temperature=300,
         # temperature=0,
         dt=dt,
-        friction=91*5, # (ytz) probably need to double this?
+        friction=91*2, # (ytz) probably need to double this?
         # friction=100, # (ytz) probably need to double this?
         masses=masses
     )
@@ -151,6 +158,7 @@ def minimize(
     # print("LGV CF", ca, cb, cc)
 
     m_dt, m_ca, m_cb, m_cc = dt, 0.5, np.ones_like(cb)/10000, np.zeros_like(masses)
+    m_dt, m_ca, m_cb, m_cc = dt, 0.0, np.ones_like(cb)/10000, np.zeros_like(masses)
 
     np.random.seed()
 
@@ -195,25 +203,41 @@ def minimize(
     )
 
     xyz_buffer = []
-    dt = 1e-7
+    dt = 1e-10
+    fh = open("traj_min_test"+str(lamb_idx)+".xyz", "w")
+    xyz = write(np.asarray(x_t[:, :3]*10), masses)
+    fh.write(xyz)
+    # assert 0
+
     for i in range(max_iter):
-        dt *= 1.003
-        dt = min(dt, 0.02)
+        dt *= 1.0013
+        dt = min(dt, 0.001)
 
         # dE_dx = grad_fn(x_t, params)[0]
         opt.set_dt(dt)
         # x_t, v_t = ctxt.step(x_t, v_t, dE_dx)
         ctxt.step()
 
+        # print(dt, ctxt.get_E())    
         if i % 500 == 0:
             E = ctxt.get_E()
+            print(i, dt, E, np.amin(ctxt.get_dx_dp()), np.amax(ctxt.get_dx_dp()))
             xi = ctxt.get_x()
             dE_dx = ctxt.get_dE_dx()
             dUdL = dU_dlambda(dE_dx)
+
+
+            if np.isnan(E):
+                assert 0
+
+            # xyz = write(np.asarray(xi[:, :3]*10), masses)
+            # fh.write(xyz)
+
             # xyz = write(np.asarray(xi[:, :3]*10), masses)
             # xyz_buffer.append(xyz)
 
         cur_dim -= 1
+
 
     print("Lambda", lamb, ": minimized in ", i, "steps to", E, 'dU_dl', dUdL, 'dx_dp', np.amin(ctxt.get_dx_dp()), np.amax(ctxt.get_dx_dp()))
 
@@ -229,14 +253,14 @@ def minimize(
 
     # testing cycle
     cutoff = 10000
-    sampling_interval = 2000
+    sampling_interval = 500
     if lamb == 0.0:
-        max_iter = 15000
+        max_iter = 20000
     elif lamb < 0.4:
         # max_iter = 1000000*2
-        max_iter = 100000
+        max_iter = 500000
     else:
-        max_iter = 15000
+        max_iter = 20000
 
     dt = 1e-3
     
@@ -248,6 +272,8 @@ def minimize(
     opt.set_coeff_b(cb.astype(np.float64))
     opt.set_coeff_c(cc.astype(np.float64))
 
+
+
     def compute_ke(vt):
         return np.sum(np.expand_dims(masses, axis=-1)*vt*vt)/2
 
@@ -257,17 +283,28 @@ def minimize(
     all_dudls = []
     all_d2u_dldps = []
     all_kes = []
+    all_es = []
 
     start = time.time()
 
+    # old_ctxt = ctxt
 
-    fh = open("traj_"+str(lamb_idx)+".xyz", "w")
+    # ctxt = custom_ops.Context_f64(
+    #     potentials,
+    #     opt,
+    #     params.astype(np.float64),
+    #     old_ctxt.get_x(),
+    #     v_t.astype(np.float64), # n
+    #     dp_idxs.astype(np.int32)
+    # )
+
 
     for i in range(max_iter):
         ctxt.step()
         if i % sampling_interval == 0 and i >= cutoff:
             
             E = ctxt.get_E()
+            all_es.append(E)
             xi = ctxt.get_x()
             dxi_dp = ctxt.get_dx_dp()
             all_d2u_dldps.append(compute_d2u_dldp(
@@ -292,7 +329,7 @@ def minimize(
             all_kes.append(ke)
             speed = ns_per_day(time.time()-start, i)
 
-            print(f"{lamb} \t {i} \t {E:9.4f} \t {dUdL:9.4f} \t | dxdp max/min {np.amax(dxdp):9.4f} \t {np.amin(dxdp):9.4f} \t max mean/median deriv: {np.amax(np.mean(all_d2u_dldps, axis=0)):9.4f} \t {np.amax(np.median(all_d2u_dldps, axis=0)):9.4f} \t mean/median dudl {np.mean(all_dudls):9.4f} \t {np.median(all_dudls):9.4f} \t @ {speed:9.4f} ns/day \t  hess max/abs mean/min {np.amax(hess):9.4f}  {np.mean(np.abs(hess)):9.4f}  {np.amin(hess):9.4f} \t mp max/min {np.amax(d2E_dxdp):10.4f}  {np.amin(d2E_dxdp):10.4f} | dv_dp max/min {np.amax(dv_dp):10.4f} {np.amin(dv_dp):10.4f}")
+            print(f"{lamb} \t {i} \t avg E: {np.mean(all_es):9.4f} \t {dUdL:9.4f} \t | dxdp max/min {np.amax(dxdp):9.4f} \t {np.amin(dxdp):9.4f} \t max mean/median deriv: {np.amax(np.mean(all_d2u_dldps, axis=0)):9.4f} \t {np.amax(np.median(all_d2u_dldps, axis=0)):9.4f} \t mean/median dudl {np.mean(all_dudls):9.4f} \t {np.median(all_dudls):9.4f} \t @ {speed:9.4f} ns/day \t  hess max/abs mean/min {np.amax(hess):9.4f}  {np.mean(np.abs(hess)):9.4f}  {np.amin(hess):9.4f} \t mp max/min {np.amax(d2E_dxdp):10.4f}  {np.amin(d2E_dxdp):10.4f} | dv_dp max/min {np.amax(dv_dp):10.4f} {np.amin(dv_dp):10.4f}")
 
             # print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day")
 #            if np.amax(dxdp) > 100:
@@ -304,7 +341,7 @@ def minimize(
 
     # print("FINAL", lamb, "\t", i, "\t", E, "\t", dUdL, "\t", np.mean(all_dudls), "+-", np.std(all_dudls))
 
-    return all_dudls, all_d2u_dldps
+    return all_dudls, all_d2u_dldps, all_es
     # return np.mean(all_dudls), np.mean(all_d2u_dldps, axis=0)
     # assert 0)
 #     view = py3Dmol.view(width=600, height=600).addModelsAsFrames(jb, 'xyz')
@@ -322,7 +359,7 @@ def rescale_and_center(conf, scale_factor=1):
     return true_com + centered/scale_factor 
 
 
-def initialize_parameters(host_path=None):
+def initialize_parameters(host_path=None, host_sys=None):
     '''
     Initializes parameters for training.
     
@@ -339,8 +376,11 @@ def initialize_parameters(host_path=None):
 
     # smirnoff params are all encompassing for small molecules
     _, smirnoff_params, _, _, _ = forcefield.parameterize(ref_mol, smirnoff)
-    sys_xml = open(host_path, 'r').read()
-    system = mm.XmlSerializer.deserialize(sys_xml)
+    if host_path is not None:
+        sys_xml = open(host_path, 'r').read()
+        system = mm.XmlSerializer.deserialize(sys_xml)
+    else:
+        system = host_sys
     _, (host_params, _), _ = serialize.deserialize_system(system)       
     epoch_combined_params = np.concatenate([host_params, smirnoff_params])
 
@@ -363,12 +403,28 @@ def run_simulation(params):
 
     os.environ['CUDA_VISIBLE_DEVICES'] = str(lambda_idx % num_gpus)
 
-    filepath = 'examples/host_acd.xml'
-    filename, file_extension = os.path.splitext(filepath)
-    sys_xml = open(filepath, 'r').read()
-    system = mm.XmlSerializer.deserialize(sys_xml)
-    coords = np.loadtxt(filename + '.xyz').astype(np.float64)
-    coords = coords/10
+
+    fname = "/home/ubuntu/Relay/Code/benchmarksets/input_files/BRD4/pdb/BRD4.pdb"
+    omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml')
+    pdb = app.PDBFile(fname)
+    system = omm_forcefield.createSystem(pdb.topology, nonbondedMethod=app.NoCutoff, constraints=None)
+    
+    coords = []
+    for x,y,z in pdb.positions:
+        coords.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+    coords = np.array(coords)
+    print(coords)
+
+
+
+
+
+    # filepath = 'examples/host_acd.xml'
+    # filename, file_extension = os.path.splitext(filepath)
+    # sys_xml = open(filepath, 'r').read()
+    # system = mm.XmlSerializer.deserialize(sys_xml)
+    # coords = np.loadtxt(filename + '.xyz').astype(np.float64)
+    # coords = coords/10
     
     host_conf = coords
 
@@ -376,7 +432,9 @@ def run_simulation(params):
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
     guest_potentials, smirnoff_params, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
-    guest_conf = rescale_and_center(guest_conf)
+    # guest_conf = rescale_and_center(guest_conf)
+
+    # print("GUEST CONF", guest_conf)
 
     combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
         host_potentials, guest_potentials,
@@ -397,12 +455,14 @@ def run_simulation(params):
     # guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7])).reshape(-1)
     # print("filtering")
     combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [7])).reshape(-1)
+    combined_dp_idxs = combined_dp_idxs[0:2]
+    # combined_dp_idxs = np.array([0])
 
     # print("combined_dp_idxs", combined_dp_idxs)
 
     # print("Number of parameter derivatives", combined_dp_idxs.shape)
 
-    du_dls, du_dl_grads = minimize(
+    du_dls, du_dl_grads, all_es = minimize(
         num_host_atoms,
         combined_potentials,
         combined_params,
@@ -421,10 +481,11 @@ def run_simulation(params):
     # print("Saving")
     # np.savez(fname, lamb=lamb, du_dls=du_dls, du_dl_grads=du_dl_grads)
 
-    return lamb, du_dls, du_dl_grads, combined_dp_idxs
+    return lamb, du_dls, du_dl_grads, all_es, combined_dp_idxs
 
 def train(true_dG):
-    fname = "/home/ubuntu/Relay/Code/benchmarksets/input_files/cd-set1/mol2/guest-"+str(1)+".mol2"
+    # fname = "/home/ubuntu/Relay/Code/benchmarksets/input_files/cd-set1/mol2/guest-"+str(1)+".mol2"
+    fname = "/home/ubuntu/Relay/Code/benchmarksets/input_files/BRD4/mol2/ligand-5.mol2"
     guest_mol2 = open(fname, "r").read()
     # guest_mol2 = Chem.MolFromSmiles("O=P(O)(O)OP(=O)(O)OP(=O)(O)OC[C@H]3O[C@@H](n2cnc1c(ncnc12)N)[C@H](O)[C@@H]3O")
     # mol = Chem.AddHs(guest_mol2)
@@ -432,12 +493,20 @@ def train(true_dG):
 
     pool = multiprocessing.Pool(num_gpus)
 
-    AllChem.EmbedMolecule(mol, randomSeed=1337)
+    # AllChem.EmbedMolecule(mol, randomSeed=1337)
     # AllChem.EmbedMolecule(mol)
 
 
-    starting_params = initialize_parameters('examples/host_acd.xml')
-    lr=3e-3
+    fname = "/home/ubuntu/Relay/Code/benchmarksets/input_files/BRD4/pdb/BRD4.pdb"
+    omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml')
+    pdb = app.PDBFile(fname)
+    system = omm_forcefield.createSystem(pdb.topology, nonbondedMethod=app.NoCutoff, constraints=None)
+
+    # assert 0
+
+    starting_params = initialize_parameters(host_sys=system)
+    # assert 0
+    lr=3e-4
     opt_init, opt_update, get_params = optimizers.adam(lr)
     # opt_init, opt_update, get_params = optimizers.sgd(lr)
 
@@ -458,16 +527,22 @@ def train(true_dG):
 
         all_params = []
         all_lambdas = []
-        # lambda_schedule = [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5]
-        lambda_schedule = [0.0, 0.05, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.9, 1.0, 1.5,2.5,3.5,5.0,10.0]
+        # lambda_schedule = [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5, 4.0, 6.0, 8.0, 10.0]
+        lambda_schedule = [0.0, 0.05, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.9, 1.0, 1.5,2.5,3.5,5.0,10.0,250.0]
+        # lambda_schedule = [0.0, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 5.0, 10.0]
         # lambda_schedule = [0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
         # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        # lambda_schedule = [0.0, 25.0, 250.0, 2500.0, 100000.0]
+        # lambda_schedule = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        # lambda_schedule = [0.0]
         # lambda_schedule = [0.15]
 
         epoch_params = get_params(opt_state)
+        # print("Loading parameters epoch_38.npz")
+        # epoch_params = np.load("epoch_38.npz")['params']
 
-        print("saving ff params")
-        np.savez("epoch_"+str(epoch), params=epoch_params)
+        # print("saving ff params")
+        # np.savez("epoch_run_2"+str(epoch), params=epoch_params)
 
         for lamb_idx, lamb in enumerate(lambda_schedule):
             params = (mol, lamb, lamb_idx, epoch_params)
@@ -480,13 +555,16 @@ def train(true_dG):
         all_median_du_dls = []
         all_mean_du_dl_grads = []
         all_median_du_dl_grads = []
-        for lamb, du_dls, du_dl_grads, combined_dp_idxs in results:
+        all_energies = []
+        for lamb, du_dls, du_dl_grads, nrgs, combined_dp_idxs in results:
             all_lambdas.append(lamb)
             all_mean_du_dls.append(np.mean(du_dls))
             all_median_du_dls.append(np.median(du_dls))
             all_mean_du_dl_grads.append(np.mean(du_dl_grads, axis=0))
             all_median_du_dl_grads.append(np.median(du_dl_grads, axis=0))
+            all_energies.append(nrgs)
 
+        all_energies = np.array(all_energies)
         all_lambdas = np.array(all_lambdas)
         all_mean_du_dls = np.array(all_mean_du_dls)
         all_median_du_dls = np.array(all_median_du_dls)
@@ -506,14 +584,17 @@ def train(true_dG):
         for p_idx in range(num_params):
             print("MEDIAN DU_DL_GRAD_"+str(p_idx), all_median_du_dl_grads[:, p_idx])
 
-        pred_dG = np.trapz(all_lambdas, all_mean_du_dls)
-        pred_dG_median = np.trapz(all_lambdas, all_median_du_dls)
+        pred_dG = np.trapz(all_mean_du_dls, all_lambdas)
+        pred_dG_median = np.trapz(all_median_du_dls, all_lambdas)
 
         dG_grads = []
         dG_grads_median = []
+
+        avg_enthalpy = np.mean(all_energies[-1]) - np.mean(all_energies[0])
+
         for p_idx in range(num_params):
-            dG_grads.append(np.trapz(all_lambdas, all_mean_du_dl_grads[:, p_idx]))
-            dG_grads_median.append(np.trapz(all_lambdas, all_median_du_dl_grads[:, p_idx]))
+            dG_grads.append(np.trapz(all_mean_du_dl_grads[:, p_idx], all_lambdas))
+            dG_grads_median.append(np.trapz(all_median_du_dl_grads[:, p_idx], all_lambdas))
             # dG_grads.append(grad)
             # print("MEAN DU_DL_GRAD_"+str(p_idx), grad)
 
@@ -528,7 +609,8 @@ def train(true_dG):
         L1_loss = np.abs(pred_dG-true_dG)
         full_L2_grad = 2*(pred_dG-true_dG)*dparams
 
-        print("L1_loss", L1_loss, "true vs pred", true_dG, pred_dG, pred_dG_median)
+
+        print("L1_loss", L1_loss, "true vs pred", true_dG, pred_dG, pred_dG_median, avg_enthalpy)
 
         # fix me when going to multiple molecules
         # print("full_L2_grad", full_L2_grad)

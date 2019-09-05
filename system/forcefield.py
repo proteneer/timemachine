@@ -174,11 +174,14 @@ def parameterize(mol, forcefield):
 
         handler_name, handler_params = handler
 
+        # print("Parameterizing", handler_name)
+
         if handler_name == 'Bonds':
 
             vd = ValenceDict()
             for p in handler_params.parameters:
-                k_idx, l_idx = add_param(to_md_units(p.k)/5, 0), add_param(to_md_units(p.length), 1)
+                # k_idx, l_idx = add_param(to_md_units(p.k)/5, 0), add_param(to_md_units(p.length), 1)
+                k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
                 # print(p.smirks, matches)
                 
@@ -306,7 +309,7 @@ def parameterize(mol, forcefield):
     vd = ValenceDict()
     for smirks, param in model.items():
 
-        param = param
+        param = param/2
 
         c_idx = add_param(param, 7)
         matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
@@ -333,6 +336,24 @@ def parameterize(mol, forcefield):
         charge_param_idxs.append(v)
 
     # print("LIGAND NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
+
+
+    guest_charges = np.array(global_params)[charge_param_idxs]
+    # print("LIGAND NET CHARGE", np.sum(guest_charges))
+    offsets = np.sum(guest_charges)/guest_charges.shape[0]
+    # deltas = guest_charges - new_guest_charges
+    # print("DELTAS", deltas)
+    # print("OFFSET", offset)
+    
+    # print("OFFSETS", offsets)
+    for p_idx in set(charge_param_idxs):
+        # print("ADJUSTING", p_idx)
+        global_params[p_idx] -= offsets
+    # print("LIGAND NET CHARGE AFTER", np.sum(np.array(global_params)[charge_param_idxs]))
+
+    guest_charges = np.array(global_params)[charge_param_idxs]
+    print("LIGAND NET CHARGE", guest_charges)
+
 
     nrg_fns.append((
        custom_ops.Electrostatics_f64,
