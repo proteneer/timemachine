@@ -64,6 +64,7 @@ def deserialize_system(system):
     # assert len(masses) == coords.shape[0]
 
     for force in system.getForces():
+        # print("PROCESSING", force)
         if isinstance(force, mm.HarmonicBondForce):
             bond_idxs = []
             param_idxs = []
@@ -97,11 +98,18 @@ def deserialize_system(system):
 
             test_potentials.append(test_hb)
 
+            print("NUM BONDS", force.getNumBonds())
+            # assert 0
+
+
         if isinstance(force, mm.HarmonicAngleForce):
             angle_idxs = []
             param_idxs = []
+            print("NUM ANGLES", force.getNumAngles())
+            # assert 0
 
             for a_idx in range(force.getNumAngles()):
+
                 src_idx, mid_idx, dst_idx, angle, k = force.getAngleParameters(a_idx)
                 angle = value(angle)
                 k = value(k)
@@ -168,12 +176,12 @@ def deserialize_system(system):
                 scale_matrix[a_idx][a_idx] = 0
                 charge, sig, eps = force.getParticleParameters(a_idx)
 
-                charge = value(charge)/2
+                charge = value(charge)
                 # print("inserting charge", charge)
                 sig = value(sig)
                 eps = value(eps)
                 if sig == 0 or eps == 0:
-                    print("WARNING: invalid sig eps detected", sig, eps, "adjusting to 0.5 and 0.0")
+                    # print("WARNING: invalid sig eps detected", sig, eps, "adjusting to 0.5 and 0.0")
                     assert eps == 0.0
                     sig = 0.5
                     eps = 0.0

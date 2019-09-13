@@ -70,13 +70,18 @@ def combiner(
             bond_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((custom_ops.HarmonicBond_f64, (bond_idxs, bond_param_idxs)))
         elif a_name == custom_ops.HarmonicAngle_f64:
+            # print("WTF", a_name, a_args, b_name, b_args)
             angle_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             angle_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((custom_ops.HarmonicAngle_f64, (angle_idxs, angle_param_idxs)))
         elif a_name == custom_ops.PeriodicTorsion_f64:
-            torsion_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
-            torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append((custom_ops.PeriodicTorsion_f64, (torsion_idxs, torsion_param_idxs)))
+            if len(a_args[0]) > 0:
+                torsion_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
+                torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
+                c_nrgs.append((custom_ops.PeriodicTorsion_f64, (torsion_idxs, torsion_param_idxs)))
+            else:
+                c_nrgs.append((custom_ops.PeriodicTorsion_f64, (b_args[0] + num_a_atoms, b_args[1] + len(a_params))))
+            pass
         elif a_name == custom_ops.LennardJones_f64:
             lj_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=np.float64)
             lj_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
@@ -180,8 +185,8 @@ def parameterize(mol, forcefield):
 
             vd = ValenceDict()
             for p in handler_params.parameters:
-                # k_idx, l_idx = add_param(to_md_units(p.k)/5, 0), add_param(to_md_units(p.length), 1)
                 k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
+                # k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
                 # print(p.smirks, matches)
                 
@@ -309,7 +314,7 @@ def parameterize(mol, forcefield):
     vd = ValenceDict()
     for smirks, param in model.items():
 
-        param = param/2
+        param = param
 
         c_idx = add_param(param, 7)
         matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
@@ -352,9 +357,9 @@ def parameterize(mol, forcefield):
     # print("LIGAND NET CHARGE AFTER", np.sum(np.array(global_params)[charge_param_idxs]))
 
     guest_charges = np.array(global_params)[charge_param_idxs]
-    print("LIGAND NET CHARGE", guest_charges)
+    # print("LIGAND NET CHARGE", guest_charges)
 
-
+    # print("SKIPPPING ")
     nrg_fns.append((
        custom_ops.Electrostatics_f64,
        (
