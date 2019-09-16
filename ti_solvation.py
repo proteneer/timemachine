@@ -151,12 +151,12 @@ def minimize(
         # this is only correct if it's sum, don't be tempted by the mean
         return np.sum(dE_dx[num_host_atoms:, 3:]) 
 
-    dt = 1e-3
+    dt = 1e-4
     ca, cb, cc = langevin_coefficients(
     # ca, cb, cc = brownian_coefficients(
         temperature=300,
         dt=dt,
-        friction=40, # (ytz) probably need to double this?
+        friction=100, # (ytz) probably need to double this?
         masses=np.ones_like(masses),
     )
 
@@ -195,6 +195,41 @@ def minimize(
     x_t = conf
     v_t = np.zeros_like(x_t)
 
+    custom_hb_params = np.array([50, 1.0]) # k, b
+    k_idx = params.shape[0]
+    b_idx = params.shape[0] + 1
+
+    params = np.concatenate([params, custom_hb_params])
+    custom_hb_idxs = []
+    custom_param_idxs = []
+
+    for i in range(num_atoms):
+        mi = masses[i]
+        if mi < 14:
+            continue
+        for j in range(i+1, num_atoms):
+            mj = masses[j]
+            if mj < 14:
+                continue
+            # print("IXN", i, j)
+            custom_hb_idxs.append([i, j])
+            custom_param_idxs.append([k_idx, b_idx])
+
+    custom_hb = custom_ops.HarmonicBond_f64(
+        custom_hb_idxs,
+        custom_param_idxs
+    )
+
+    potentials.append(custom_hb)
+
+
+    # assert 0
+    # add a custom force binding all the oxygens to each other
+    # for a_idx_0, atom in enumerate(masses):
+        # for a_idx, atom in masses:
+
+    print("POTENTIALS", potentials)
+
     ctxt = custom_ops.Context_f64(
         potentials,
         opt,
@@ -214,9 +249,9 @@ def minimize(
     last_dv_dp = 0
 
     # checkpoint = "minimize_coords_17500.npz"
-    checkpoint = "dynamics_coords2_540000.npz   "
-    if os.path.exists(checkpoint):
-    # if False:
+    # checkpoint = "dynamics_coords2_540000.npz   "
+    # if os.path.exists(checkpoint):
+    if False:
         print("Restoring from minimized checkpoints")
         # force into 3D
         x_t = np.load(checkpoint)['arr_0'][:, :3]
@@ -311,7 +346,7 @@ def minimize(
     else:
         max_iter = 20000
 
-    dt = 1e-3
+    dt = 1e-4
     
     md_dudls = []
 
@@ -321,8 +356,8 @@ def minimize(
     print("brownian integrator coefficients:", ca, cb, cc, dt)
 
     # assert 0
-    ca = 0
-    opt.set_coeff_a(np.float64(ca))
+    # ca = 0.0
+    opt.set_coeff_a(ca)
     # opt.set_coeff_a(0.0) # no friction
     opt.set_coeff_b(cb.astype(np.float64))
     opt.set_coeff_c(cc.astype(np.float64))
@@ -409,10 +444,16 @@ def minimize(
             np.savez("dynamics_coords2_"+str(i), xi)
 
             # print(f"{lamb} \t {i} \t avg E: {np.mean(all_es):9.4f} \t {dUdL:9.4f} \t | dxdp max/min {np.amax(dxdp):9.4f} \t {np.amin(dxdp):9.4f} \t max mean/median deriv: {np.amax(np.mean(all_d2u_dldps, axis=0)):9.4f} \t {np.amax(np.median(all_d2u_dldps, axis=0)):9.4f} \t mean/median dudl {np.mean(all_dudls):9.4f} \t {np.median(all_dudls):9.4f} \t @ {speed:9.4f} ns/day \t  hess max/abs mean/min {np.amax(hess):9.4f}  {np.mean(np.abs(hess)):9.4f}  {np.amin(hess):9.4f} \t mp max/min {np.amax(d2E_dxdp):10.4f}  {np.amin(d2E_dxdp):10.4f} | dv_dp max/min {np.amax(dv_dp):10.4f} {np.amin(dv_dp):10.4f}")
+            print("dxdp", dxdp)
 
             print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "| dvdp max/min", np.amax(dvdp), "\t", np.amin(dvdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day", " Hess max/min: ", np.amax(hess), np.amin(hess), " KE:", compute_ke(ctxt.get_v()))
             hess = hess.reshape(num_atoms*3, num_atoms*3)
-            print("First 12 and last 12 Hess eigvs", np.linalg.eigh(hess)[0][:12], np.linalg.eigh(hess)[0][-12:])
+
+            # print("hessian norm", np.linalg.norm(hess), "dxdp norm", np.linalg.norm(dxdp), 'btH', np.amax(cb*dt*np.linalg.norm(hess)), 'hessian eigv', np.linalg.eigh(hess)[0])
+            # print("hess_row_sums", np.sum(hess, axis=0))
+            # print("hess shape", hess.shape)
+            # print("hess", np.amin(hess), np.amax(hess))
+            # print("First 12 and last 12 Hess eigvs", np.linalg.eigh(hess)[0][:12], np.linalg.eigh(hess)[0][-12:])
 #            if np.amax(dxdp) > 100:
 #                raise ValueError("DXDP IS TOO LARGE")
             xyz = write(np.asarray(xi[:, :3]*10), masses)
@@ -476,7 +517,7 @@ def run_simulation(params):
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = str(lambda_idx % num_gpus)
 
-    fname = "examples/water.pdb"
+    fname = "examples/water2.pdb"
     # omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml')
     omm_forcefield = app.ForceField('amber99sb.xml', 'tip3p.xml')
     pdb = app.PDBFile(fname)
@@ -533,7 +574,7 @@ def run_simulation(params):
     # guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7])).reshape(-1)
     # print("filtering")
     combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [1])).reshape(-1)
-    combined_dp_idxs = combined_dp_idxs[0:2]
+    combined_dp_idxs = combined_dp_idxs[0:1]
     # combined_dp_idxs = np.array([0])
 
     # print("combined_dp_idxs", combined_dp_idxs)
@@ -569,13 +610,13 @@ def train(true_dG):
     # mol = Chem.AddHs(guest_mol2)
     mol = Chem.MolFromMol2Block(guest_mol2, sanitize=True, removeHs=False, cleanupSubstructures=True)
 
-    pool = multiprocessing.Pool(num_gpus)
+    # pool = multiprocessing.Pool(num_gpus)
 
     # AllChem.EmbedMolecule(mol, randomSeed=1337)
     # AllChem.EmbedMolecule(mol)
 
 
-    fname = "examples/water.pdb"
+    fname = "examples/water2.pdb"
     # omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml') # for proteins
     omm_forcefield = app.ForceField('amber99sb.xml', 'tip3p.xml') # for proteins
     pdb = app.PDBFile(fname)
@@ -631,6 +672,10 @@ def train(true_dG):
         for lamb_idx, lamb in enumerate(lambda_schedule):
             params = (mol, lamb, lamb_idx, epoch_params)
             all_params.append(params)
+
+        run_simulation(all_params[0])
+
+        assert 0
 
         results = pool.map(run_simulation, all_params)
 

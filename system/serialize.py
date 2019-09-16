@@ -75,7 +75,7 @@ def deserialize_system(system):
 
 
                 # k = value(k)/5
-                k = value(k)/16
+                k = value(k)/12
 
                 # print("bond K", k)
 
@@ -107,7 +107,7 @@ def deserialize_system(system):
 
                 src_idx, mid_idx, dst_idx, angle, k = force.getAngleParameters(a_idx)
                 angle = value(angle)
-                k = value(k)/16
+                k = value(k)/5
 
                 # print("ANGLE k", k)
 
@@ -133,6 +133,8 @@ def deserialize_system(system):
             torsion_idxs = []
             param_idxs = []
 
+            # print("NT", force.getNumTorsions())
+
             for t_idx in range(force.getNumTorsions()):
                 a_idx, b_idx, c_idx, d_idx, period, phase, k = force.getTorsionParameters(t_idx)
 
@@ -150,14 +152,14 @@ def deserialize_system(system):
             torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
-            test_ha = (custom_ops.PeriodicTorsion_f64,
-                (
-                    torsion_idxs,
-                    param_idxs
-                )
-            )
+            # test_ha = (custom_ops.PeriodicTorsion_f64,
+            #     (
+            #         torsion_idxs,
+            #         param_idxs
+            #     )
+            # )
 
-            test_potentials.append(test_ha)
+            # test_potentials.append(test_ha)
 
         if isinstance(force, mm.NonbondedForce):
 
@@ -176,7 +178,7 @@ def deserialize_system(system):
                 charge = value(charge)
                 # print("inserting charge", charge)
                 sig = value(sig)
-                eps = value(eps)*10
+                eps = value(eps)
                 # if sig == 0 or eps == 0:
                     # print("WARNING: invalid sig eps detected", sig, eps, "adjusting to 0.5 and 0.0")
                     # assert eps == 0.0
@@ -198,7 +200,7 @@ def deserialize_system(system):
             charge_param_idxs = np.array(charge_param_idxs, dtype=np.int32)
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
 
-            print("SCALE MATRIX", scale_matrix)
+            # print("SCALE MATRIX", scale_matrix)
 
             # test_lj = (custom_ops.LennardJones_f64,
             #     (
