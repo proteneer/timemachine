@@ -250,6 +250,11 @@ void PeriodicTorsion<RealType>::derivatives_device(
     dim3 dimBlock(tpb);
     dim3 dimGrid(n_blocks, dim_y, C); // x, y, z
 
+    if(n_blocks == 0) {
+        // sometimes we have 0 dims
+        return;
+    }
+
     if(num_dims == 3) {
         k_periodic_torsion_derivatives<RealType, 3> <<<dimGrid, dimBlock>>>(
             N,

@@ -24,6 +24,7 @@ __global__ void update_positions(
     RealType *x_t,
     RealType *v_t) {
 
+
     int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(atom_idx >= N) {
         return;
@@ -38,7 +39,14 @@ __global__ void update_positions(
 
     int local_idx = atom_idx*D + d_idx;
 
-    v_t[local_idx] = coeff_a*v_t[local_idx] - coeff_bs[atom_idx]*dE_dx[local_idx] + coeff_cs[atom_idx]*noise[local_idx];
+    // truncated noise
+    auto n = noise[local_idx];
+    if(n > 2.0) {
+        n = 0.0;
+    } else if(n < -2.0) {
+        n = 0.0;
+    }
+    v_t[local_idx] = coeff_a*v_t[local_idx] - coeff_bs[atom_idx]*dE_dx[local_idx] + coeff_cs[atom_idx]*n;
     x_t[local_idx] += v_t[local_idx]*d_t;
 
 }
@@ -90,6 +98,8 @@ LangevinOptimizer<RealType>::LangevinOptimizer(
     coeff_a_(coeff_a),
     d_rng_buffer_(nullptr) {
 
+    // std::cout << "C DIMS " << num_dims << std::endl;
+
     auto start = std::chrono::high_resolution_clock::now();
     gpuErrchk(cudaMalloc((void**)&d_coeff_bs_, coeff_bs.size()*sizeof(RealType)));
     gpuErrchk(cudaMalloc((void**)&d_coeff_cs_, coeff_cs.size()*sizeof(RealType)));
@@ -98,8 +108,9 @@ LangevinOptimizer<RealType>::LangevinOptimizer(
     gpuErrchk(cudaMemcpy(d_coeff_cs_, &coeff_cs[0], coeff_cs.size()*sizeof(RealType), cudaMemcpyHostToDevice));
 
     cublasErrchk(cublasCreate(&cb_handle_));
-    // curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_PHILOX4_32_10));
-    curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
+    curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_PHILOX4_32_10));
+    // curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
+    // std::cout << "init " << coeff_bs.size() << " " << num_dims << std::endl;
     gpuErrchk(cudaMalloc((void**)&d_rng_buffer_, coeff_bs.size()*num_dims*sizeof(RealType)));
 
     auto end = std::chrono::high_resolution_clock::now();
@@ -157,7 +168,7 @@ void LangevinOptimizer<RealType>::step(
 
     if(d_input_noise_buffer == nullptr) {
         // std::cout << "calling rngjesus on " << N << " " << D << std::endl;
-        curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N*D, 0.0, 0.75));
+        curandErrchk(templateCurandNormal(cr_rng_, d_rng_buffer_, N*D, 0.0, 1.0));
         d_noise_buf = d_rng_buffer_;
     } else {
         d_noise_buf = d_input_noise_buffer;

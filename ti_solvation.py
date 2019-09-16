@@ -19,6 +19,8 @@ from simtk import openmm as mm
 from simtk.openmm import app
 from simtk.openmm.app import forcefield as ff
 
+from timemachine.potentials.jax_utils import delta_r, distance
+
 from scipy.stats import special_ortho_group
 from jax.experimental import optimizers
 
@@ -27,13 +29,13 @@ import random
 
 # from system import forcefield
 from timemachine.lib import custom_ops
-from timemachine.integrator import langevin_coefficients
+from timemachine.integrator import langevin_coefficients, brownian_coefficients
 from timemachine import constants
 
 import multiprocessing
 
 from matplotlib import pyplot as plt
-import py3Dmol
+# import py3Dmol
 
 plt.rcParams['figure.dpi'] = 200
 
@@ -121,6 +123,8 @@ def compute_d2u_dldp(energies, params, xs, dx_dps, dp_idxs, num_host_atoms):
     d2u_dldp = np.sum(lhs+rhs, axis=(1,2)) # P N 4 -> P
     return d2u_dldp
 
+# dij = distance(ri, rj, box)
+
 def minimize(
     num_host_atoms,
     potentials,
@@ -138,7 +142,8 @@ def minimize(
     # print("running lambda", lamb)
 
     num_atoms = len(masses)
-    num_guest_atoms = num_atoms - num_host_atoms
+    print("MASSES", len(masses))
+    # num_guest_atoms = num_atoms - num_host_atoms
     
     potentials = forcefield.merge_potentials(potentials)
 
@@ -148,15 +153,15 @@ def minimize(
 
     dt = 1e-3
     ca, cb, cc = langevin_coefficients(
+    # ca, cb, cc = brownian_coefficients(
         temperature=300,
-        # temperature=0,
         dt=dt,
-        friction=91*6, # (ytz) probably need to double this?
-        # friction=100, # (ytz) probably need to double this?
-        masses=masses
+        friction=40, # (ytz) probably need to double this?
+        masses=np.ones_like(masses),
     )
 
     # print("LGV CF", ca, cb, cc)
+
 
     m_dt, m_ca, m_cb, m_cc = dt, 0.5, np.ones_like(cb)/10000, np.zeros_like(masses)
     m_dt, m_ca, m_cb, m_cc = dt, 0.0, np.ones_like(cb)/10000, np.zeros_like(masses)
@@ -165,7 +170,7 @@ def minimize(
 
     opt = custom_ops.LangevinOptimizer_f64(
         dt,
-        4,
+        3,
         m_ca,
         m_cb.astype(np.float64),
         m_cc.astype(np.float64)
@@ -179,20 +184,16 @@ def minimize(
     num_atoms = conf.shape[0]
     num_dimensions = starting_dimension
     
-    d4_t = np.zeros((num_atoms, num_dimensions), dtype=np.float64)
-    d4_t_lambdas = np.zeros((num_atoms, num_dimensions), dtype=np.float64) + lamb
+    # d4_t = np.zeros((num_atoms, num_dimensions), dtype=np.float64)
+    # d4_t_lambdas = np.zeros((num_atoms, num_dimensions), dtype=np.float64) + lamb
 
-    # set coordinates
-    d4_t[:num_host_atoms, :3] = conf[:num_host_atoms, :3]
-    d4_t[num_host_atoms:, :3] = conf[num_host_atoms:, :3]
-    d4_t[num_host_atoms:, 3:] = d4_t_lambdas[num_host_atoms:, 3:]
+    # # set coordinates
+    # d4_t[:num_host_atoms, :3] = conf[:num_host_atoms, :3]
+    # d4_t[num_host_atoms:, :3] = conf[num_host_atoms:, :3]
+    # d4_t[num_host_atoms:, 3:] = d4_t_lambdas[num_host_atoms:, 3:]
 
-    x_t = d4_t
+    x_t = conf
     v_t = np.zeros_like(x_t)
-
-    # print("starting x_t", x_t)
-
-    cur_dim = num_dimensions
 
     ctxt = custom_ops.Context_f64(
         potentials,
@@ -206,47 +207,88 @@ def minimize(
     xyz_buffer = []
     dt = 1e-10
     fh = open("water_test"+str(lamb_idx)+".xyz", "w")
-    xyz = write(np.asarray(x_t[:, :3]*10), masses)
+    xyz = write(np.asarray(x_t[:, :3]*10), masses)      
     fh.write(xyz)
+
     # assert 0
+    last_dv_dp = 0
 
-    for i in range(max_iter):
-        dt *= 1.0013
-        dt = min(dt, 0.001)
-
-        # dE_dx = grad_fn(x_t, params)[0]
-        opt.set_dt(dt)
-        # x_t, v_t = ctxt.step(x_t, v_t, dE_dx)
-        ctxt.step()
-
-        # print(dt, ctxt.get_E())    
-        # print(i, ctxt.get_E())
-        # if i % 50 == 0:
-            # xi = ctxt.get_x()
+    # checkpoint = "minimize_coords_17500.npz"
+    checkpoint = "dynamics_coords2_540000.npz   "
+    if os.path.exists(checkpoint):
+    # if False:
+        print("Restoring from minimized checkpoints")
+        # force into 3D
+        x_t = np.load(checkpoint)['arr_0'][:, :3]
+        v_t = np.zeros_like(x_t)
 
 
-        if i % 500 == 0:
-            E = ctxt.get_E()
-            print(i, dt, E, np.amin(ctxt.get_dx_dp()), np.amax(ctxt.get_dx_dp()))
-            xi = ctxt.get_x()
-            dE_dx = ctxt.get_dE_dx()
-            dUdL = dU_dlambda(dE_dx)
+        print(x_t.shape, v_t.shape)
 
-            if np.isnan(E):
-                assert 0
+        opt = custom_ops.LangevinOptimizer_f64(
+            dt,
+            3,
+            m_ca,
+            m_cb.astype(np.float64),
+            m_cc.astype(np.float64)
+        )
 
-            xyz = write(np.asarray(xi[:, :3]*10), masses)
-            fh.write(xyz)
+        ctxt = custom_ops.Context_f64(
+            potentials,
+            opt,
+            params.astype(np.float64),
+            x_t.astype(np.float64),
+            v_t.astype(np.float64), # n
+            dp_idxs.astype(np.int32)
+        )
+
+    else:
+        for i in range(max_iter):
+            dt *= 1.0013
+            dt = min(dt, 0.001)
+
+            # dE_dx = grad_fn(x_t, params)[0]
+            opt.set_dt(dt)
+            # x_t, v_t = ctxt.step(x_t, v_t, dE_dx)
+            ctxt.step()
+
+            # print(dt, ctxt.get_E())    
+            # print(i, ctxt.get_E())
+            # if i % 50 == 0:
+                # xi = ctxt.get_x()
+
+
+            # dvdp = ctxt.get_dv_dp()
+
+            # diff = dvdp - last_dv_dp
+            # print("diff min", np.amax(diff), np.amin(diff))
+
+            # last_dv_dp = dvdp
+
+
+            if i % 2000 == 0:
+                E = ctxt.get_E()
+                print(i, dt, E, np.amin(ctxt.get_dx_dp()), np.amax(ctxt.get_dx_dp()))
+                xi = ctxt.get_x()
+                dE_dx = ctxt.get_dE_dx()
+                dUdL = dU_dlambda(dE_dx)
+
+                if np.isnan(E):
+                    assert 0
+
+                np.savez("minimize_coords_"+str(i), xi)
+
+                xyz = write(np.asarray(xi[:, :3]*10), masses)
+                fh.write(xyz)
             # xyz = write(np.asarray(xi[:, :3]*10), masses)
             # fh.write(xyz)
 
             # xyz = write(np.asarray(xi[:, :3]*10), masses)
             # xyz_buffer.append(xyz)
 
-        cur_dim -= 1
 
 
-    print("Lambda", lamb, ": minimized in ", i, "steps to", E, 'dU_dl', dUdL, 'dx_dp', np.amin(ctxt.get_dx_dp()), np.amax(ctxt.get_dx_dp()))
+        print("Lambda", lamb, ": minimized in ", i, "steps to", E, 'dU_dl', dUdL, 'dx_dp', np.amin(ctxt.get_dx_dp()), np.amax(ctxt.get_dx_dp()))
 
     # dynamics loop production
     cutoff = 50000
@@ -260,9 +302,9 @@ def minimize(
 
     # testing cycle
     cutoff = 500
-    sampling_interval = 500
+    sampling_interval = 2000
     if lamb == 0.0:
-        max_iter = 200000
+        max_iter = 20000000
     elif lamb < 0.4:
         # max_iter = 1000000*2
         max_iter = 500000
@@ -275,9 +317,16 @@ def minimize(
 
     # swap out integrator parameters
     opt.set_dt(dt)
+
+    print("brownian integrator coefficients:", ca, cb, cc, dt)
+
+    # assert 0
+    ca = 0
     opt.set_coeff_a(np.float64(ca))
+    # opt.set_coeff_a(0.0) # no friction
     opt.set_coeff_b(cb.astype(np.float64))
     opt.set_coeff_c(cc.astype(np.float64))
+    # opt.set_dt(0.001)
 
 
 
@@ -308,7 +357,27 @@ def minimize(
 
     for i in range(max_iter):
         ctxt.step()
-        if i % sampling_interval == 0 and i >= cutoff:
+
+        # xi = ctxt.get_x()
+
+        # # e = ctxt.get_E()
+        # # hess = ctxt.get_d2E_dx2()
+        # ci = np.expand_dims(xi, axis=0)
+        # cj = np.expand_dims(xi, axis=1)
+        # dij = distance(ci, cj)
+        # min_dist = np.amin(dij[3:, :3])
+        # if min_dist < 1:
+        #     assert 0
+
+        # dvdp = ctxt.get_dv_dp()
+
+        # diff = dvdp - last_dv_dp
+        # print("diff", np.amax(diff), np.amin(diff))
+
+        # last_dv_dp = dvdp
+
+        # print(i, min_dist, e, np.amax(hess), np.amin(hess))
+        if i % sampling_interval == 0:
             
             E = ctxt.get_E()
             all_es.append(E)
@@ -332,13 +401,18 @@ def minimize(
             dv_dp = ctxt.get_dv_dp()
 
             dxdp = ctxt.get_dx_dp()
+            dvdp = ctxt.get_dv_dp()
             ke = compute_ke(ctxt.get_v())
             all_kes.append(ke)
             speed = ns_per_day(time.time()-start, i)
 
-            print(f"{lamb} \t {i} \t avg E: {np.mean(all_es):9.4f} \t {dUdL:9.4f} \t | dxdp max/min {np.amax(dxdp):9.4f} \t {np.amin(dxdp):9.4f} \t max mean/median deriv: {np.amax(np.mean(all_d2u_dldps, axis=0)):9.4f} \t {np.amax(np.median(all_d2u_dldps, axis=0)):9.4f} \t mean/median dudl {np.mean(all_dudls):9.4f} \t {np.median(all_dudls):9.4f} \t @ {speed:9.4f} ns/day \t  hess max/abs mean/min {np.amax(hess):9.4f}  {np.mean(np.abs(hess)):9.4f}  {np.amin(hess):9.4f} \t mp max/min {np.amax(d2E_dxdp):10.4f}  {np.amin(d2E_dxdp):10.4f} | dv_dp max/min {np.amax(dv_dp):10.4f} {np.amin(dv_dp):10.4f}")
+            np.savez("dynamics_coords2_"+str(i), xi)
 
-            # print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day")
+            # print(f"{lamb} \t {i} \t avg E: {np.mean(all_es):9.4f} \t {dUdL:9.4f} \t | dxdp max/min {np.amax(dxdp):9.4f} \t {np.amin(dxdp):9.4f} \t max mean/median deriv: {np.amax(np.mean(all_d2u_dldps, axis=0)):9.4f} \t {np.amax(np.median(all_d2u_dldps, axis=0)):9.4f} \t mean/median dudl {np.mean(all_dudls):9.4f} \t {np.median(all_dudls):9.4f} \t @ {speed:9.4f} ns/day \t  hess max/abs mean/min {np.amax(hess):9.4f}  {np.mean(np.abs(hess)):9.4f}  {np.amin(hess):9.4f} \t mp max/min {np.amax(d2E_dxdp):10.4f}  {np.amin(d2E_dxdp):10.4f} | dv_dp max/min {np.amax(dv_dp):10.4f} {np.amin(dv_dp):10.4f}")
+
+            print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "| dvdp max/min", np.amax(dvdp), "\t", np.amin(dvdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day", " Hess max/min: ", np.amax(hess), np.amin(hess), " KE:", compute_ke(ctxt.get_v()))
+            hess = hess.reshape(num_atoms*3, num_atoms*3)
+            print("First 12 and last 12 Hess eigvs", np.linalg.eigh(hess)[0][:12], np.linalg.eigh(hess)[0][-12:])
 #            if np.amax(dxdp) > 100:
 #                raise ValueError("DXDP IS TOO LARGE")
             xyz = write(np.asarray(xi[:, :3]*10), masses)
@@ -346,18 +420,9 @@ def minimize(
             xyz_buffer.append(xyz)
 
 
-    # print("FINAL", lamb, "\t", i, "\t", E, "\t", dUdL, "\t", np.mean(all_dudls), "+-", np.std(all_dudls))
 
     return all_dudls, all_d2u_dldps, all_es
-    # return np.mean(all_dudls), np.mean(all_d2u_dldps, axis=0)
-    # assert 0)
-#     view = py3Dmol.view(width=600, height=600).addModelsAsFrames(jb, 'xyz')
-#     view.animate({"loop": "forward","reps":15});
-#     view.setStyle({'stick':{}})
-#     view.zoomTo()
-#     view.show()
 
-#     assert 0
             
 def rescale_and_center(conf, scale_factor=1):
     mol_com = np.sum(conf, axis=0)/conf.shape[0]
@@ -411,8 +476,7 @@ def run_simulation(params):
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = str(lambda_idx % num_gpus)
 
-
-    fname = "/home/yutong/Code/benchmarksets/input_files/BRD4/pdb/water.pdb"
+    fname = "examples/water.pdb"
     # omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml')
     omm_forcefield = app.ForceField('amber99sb.xml', 'tip3p.xml')
     pdb = app.PDBFile(fname)
@@ -448,12 +512,14 @@ def run_simulation(params):
 
     # print("GUEST CONF", guest_conf)
 
-    combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
-        host_potentials, guest_potentials,
-        host_params, smirnoff_params,
-        host_param_groups, smirnoff_param_groups,
-        host_conf, guest_conf,
-        host_masses, guest_masses)
+    combined_potentials, combined_param_groups, combined_conf, combined_masses = host_potentials, host_param_groups, host_conf, host_masses
+
+    # combined_potentials, _, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
+    #     host_potentials, guest_potentials,
+    #     host_params, smirnoff_params,
+    #     host_param_groups, smirnoff_param_groups,
+    #     host_conf, guest_conf,
+    #     host_masses, guest_masses)
 
     num_host_atoms = host_conf.shape[0]
 
@@ -466,7 +532,7 @@ def run_simulation(params):
     # host_dp_idxs = np.argwhere(filter_groups(host_param_groups, [7])).reshape(-1)
     # guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7])).reshape(-1)
     # print("filtering")
-    combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [7])).reshape(-1)
+    combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [1])).reshape(-1)
     combined_dp_idxs = combined_dp_idxs[0:2]
     # combined_dp_idxs = np.array([0])
 
@@ -497,7 +563,7 @@ def run_simulation(params):
 
 def train(true_dG):
     # fname = "/home/ubuntu/Relay/Code/benchmarksets/input_files/cd-set1/mol2/guest-"+str(1)+".mol2"
-    fname = "/home/yutong/Code/benchmarksets/input_files/BRD4/mol2/ligand-4.mol2"
+    fname = "examples/ligand-4.mol2"
     guest_mol2 = open(fname, "r").read()
     # guest_mol2 = Chem.MolFromSmiles("O=P(O)(O)OP(=O)(O)OP(=O)(O)OC[C@H]3O[C@@H](n2cnc1c(ncnc12)N)[C@H](O)[C@@H]3O")
     # mol = Chem.AddHs(guest_mol2)
@@ -509,7 +575,7 @@ def train(true_dG):
     # AllChem.EmbedMolecule(mol)
 
 
-    fname = "/home/yutong/Code/benchmarksets/input_files/BRD4/pdb/water.pdb"
+    fname = "examples/water.pdb"
     # omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml') # for proteins
     omm_forcefield = app.ForceField('amber99sb.xml', 'tip3p.xml') # for proteins
     pdb = app.PDBFile(fname)
@@ -521,21 +587,6 @@ def train(true_dG):
 
     # pdb = PDBFile('input.pdb')
     omm_forcefield = app.ForceField('amber99sb.xml', 'tip3p.xml')
-    # fname = "/home/yutong/Code/benchmarksets/input_files/BRD4/pdb/ligand-4.pdb"
-    # pdb = app.PDBFile(fname)
-
-
-
-    # pdb = app.PDBFile('dummy.pdb')
-    # top = app.Topology()
-    # pos = simtk.unit.Quantity((), simtk.unit.angstroms)
-    # modeller = app.Modeller(top, pos)
-    # modeller.addSolvent(omm_forcefield, boxSize=mm.Vec3(2.5, 2.5, 2.5)*simtk.unit.nanometers, neutralize=False)
-    # app.PDBFile.writeHeader(modeller.topology)
-    # app.PDBFile.writeModel(modeller.topology, modeller.positions)
-    # app.PDBFile.writeFooter(modeller.topology)
-    # system = omm_forcefield.createSystem(modeller.topology, nonbondedMethod=app.NoCutoff)
-    # assert 0
 
     starting_params = initialize_parameters(host_sys=system)
     # assert 0
@@ -564,7 +615,7 @@ def train(true_dG):
         lambda_schedule = [0.0, 0.05, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.9, 1.0, 1.5,2.5,3.5,5.0,10.0,250.0]
         # lambda_schedule = [0.0, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 5.0, 10.0]
         # lambda_schedule = [0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
-        # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.10, 0.1]
         # lambda_schedule = [0.0, 25.0, 250.0, 2500.0, 100000.0]
         # lambda_schedule = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         # lambda_schedule = [0.0]

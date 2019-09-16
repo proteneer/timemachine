@@ -55,8 +55,6 @@ def combiner(
     a_nrgs.sort(key=str)
     b_nrgs.sort(key=str)
 
-
-
     c_nrgs = []
     for a, b in zip(a_nrgs, b_nrgs):
         a_name = a[0]
@@ -346,27 +344,20 @@ def parameterize(mol, forcefield):
     guest_charges = np.array(global_params)[charge_param_idxs]
     # print("LIGAND NET CHARGE", np.sum(guest_charges))
     offsets = np.sum(guest_charges)/guest_charges.shape[0]
-    # deltas = guest_charges - new_guest_charges
-    # print("DELTAS", deltas)
-    # print("OFFSET", offset)
-    
-    # print("OFFSETS", offsets)
+
     for p_idx in set(charge_param_idxs):
         # print("ADJUSTING", p_idx)
         global_params[p_idx] -= offsets
-    # print("LIGAND NET CHARGE AFTER", np.sum(np.array(global_params)[charge_param_idxs]))
 
     guest_charges = np.array(global_params)[charge_param_idxs]
-    # print("LIGAND NET CHARGE", guest_charges)
 
-    # print("SKIPPPING ")
-    nrg_fns.append((
-       custom_ops.Electrostatics_f64,
-       (
-           np.array(scale_matrix, dtype=np.int32),
-           np.array(charge_param_idxs, dtype=np.int32)
-       )
-    ))
+    # nrg_fns.append((
+    #    custom_ops.Electrostatics_f64,
+    #    (
+    #        np.array(scale_matrix, dtype=np.int32),
+    #        np.array(charge_param_idxs, dtype=np.int32)
+    #    )
+    # ))
 
     c = mol.GetConformer(0)
     conf = np.array(c.GetPositions(), dtype=np.float64)
