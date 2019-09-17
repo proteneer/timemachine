@@ -75,7 +75,7 @@ def deserialize_system(system):
 
 
                 # k = value(k)/5
-                k = value(k)/12
+                k = value(k)
 
                 # print("bond K", k)
 
@@ -107,7 +107,7 @@ def deserialize_system(system):
 
                 src_idx, mid_idx, dst_idx, angle, k = force.getAngleParameters(a_idx)
                 angle = value(angle)
-                k = value(k)/5
+                k = value(k)
 
                 # print("ANGLE k", k)
 
@@ -202,23 +202,23 @@ def deserialize_system(system):
 
             # print("SCALE MATRIX", scale_matrix)
 
-            # test_lj = (custom_ops.LennardJones_f64,
-            #     (
-            #         scale_matrix,
-            #         lj_param_idxs
-            #     )
-            # )
+            test_lj = (custom_ops.LennardJones_f64,
+                (
+                    scale_matrix,
+                    lj_param_idxs
+                )
+            )
 
-            # test_potentials.append(test_lj)
+            test_potentials.append(test_lj)
 
-            # test_es = (custom_ops.Electrostatics_f64,
-            #     (
-            #         scale_matrix,
-            #         charge_param_idxs,
-            #     )
-            # )
+            test_es = (custom_ops.Electrostatics_f64,
+                (
+                    scale_matrix,
+                    charge_param_idxs,
+                )
+            )
 
-            # test_potentials.append(test_es)
+            test_potentials.append(test_es)
 
             # print("PROTEIN NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
 

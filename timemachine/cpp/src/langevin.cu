@@ -41,11 +41,11 @@ __global__ void update_positions(
 
     // truncated noise
     auto n = noise[local_idx];
-    if(n > 2.0) {
-        n = 0.0;
-    } else if(n < -2.0) {
-        n = 0.0;
-    }
+    // if(n > 2.0) {
+    //     n = 0.0;
+    // } else if(n < -2.0) {
+    //     n = 0.0;
+    // }
     v_t[local_idx] = coeff_a*v_t[local_idx] - coeff_bs[atom_idx]*dE_dx[local_idx] + coeff_cs[atom_idx]*n;
     x_t[local_idx] += v_t[local_idx]*d_t;
 

@@ -7,7 +7,7 @@ import sys
 import time
 
 import simtk.unit
-
+from timemachine.potentials import jax_utils
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from system import serialize
@@ -142,16 +142,24 @@ def minimize(
     # print("running lambda", lamb)
 
     num_atoms = len(masses)
-    print("MASSES", len(masses))
+    # print("MASSES", len(masses))
     # num_guest_atoms = num_atoms - num_host_atoms
     
+    # OH_bond_length = None
+    # for p in potentials:
+    #     bond_idxs, param_idxs = p[1]
+    #     for pp in param_idxs:
+    #         OH_bond_length = params[param_idxs][1][1]
+
+    # print("OBL", OH_bond_length)
+
     potentials = forcefield.merge_potentials(potentials)
 
     def dU_dlambda(dE_dx):
         # this is only correct if it's sum, don't be tempted by the mean
         return np.sum(dE_dx[num_host_atoms:, 3:]) 
 
-    dt = 1e-4
+    dt = 1e-3
     ca, cb, cc = langevin_coefficients(
     # ca, cb, cc = brownian_coefficients(
         temperature=300,
@@ -195,11 +203,13 @@ def minimize(
     x_t = conf
     v_t = np.zeros_like(x_t)
 
-    custom_hb_params = np.array([50, 1.0]) # k, b
+    custom_hb_params = np.array([1, 0.1]) # k, b
     k_idx = params.shape[0]
     b_idx = params.shape[0] + 1
 
+    # print(params[-10:])
     params = np.concatenate([params, custom_hb_params])
+    # print(params[-10:])
     custom_hb_idxs = []
     custom_param_idxs = []
 
@@ -215,12 +225,12 @@ def minimize(
             custom_hb_idxs.append([i, j])
             custom_param_idxs.append([k_idx, b_idx])
 
-    custom_hb = custom_ops.HarmonicBond_f64(
-        custom_hb_idxs,
-        custom_param_idxs
-    )
+    # custom_hb = custom_ops.HarmonicBond_f64(
+    #     custom_hb_idxs,
+    #     custom_param_idxs
+    # )
 
-    potentials.append(custom_hb)
+    # potentials.append(custom_hb)
 
 
     # assert 0
@@ -287,20 +297,6 @@ def minimize(
             # x_t, v_t = ctxt.step(x_t, v_t, dE_dx)
             ctxt.step()
 
-            # print(dt, ctxt.get_E())    
-            # print(i, ctxt.get_E())
-            # if i % 50 == 0:
-                # xi = ctxt.get_x()
-
-
-            # dvdp = ctxt.get_dv_dp()
-
-            # diff = dvdp - last_dv_dp
-            # print("diff min", np.amax(diff), np.amin(diff))
-
-            # last_dv_dp = dvdp
-
-
             if i % 2000 == 0:
                 E = ctxt.get_E()
                 print(i, dt, E, np.amin(ctxt.get_dx_dp()), np.amax(ctxt.get_dx_dp()))
@@ -346,14 +342,14 @@ def minimize(
     else:
         max_iter = 20000
 
-    dt = 1e-4
+    dt = 1e-3
     
     md_dudls = []
 
     # swap out integrator parameters
     opt.set_dt(dt)
 
-    print("brownian integrator coefficients:", ca, cb, cc, dt)
+    print("integrator coefficients:", ca, cb[0], cc[0], dt)
 
     # assert 0
     # ca = 0.0
@@ -389,31 +385,49 @@ def minimize(
     #     dp_idxs.astype(np.int32)
     # )
 
+    M = None
+
+    bigger_c = 0
+    smaller_c = 0
 
     for i in range(max_iter):
         ctxt.step()
 
-        # xi = ctxt.get_x()
+        # if i > 0:
+            # conf = ctxt.get_x()
+           
+            # ci = conf[bond_idxs[:, 0]]
+            # cj = conf[bond_idxs[:, 1]]
 
-        # # e = ctxt.get_E()
-        # # hess = ctxt.get_d2E_dx2()
-        # ci = np.expand_dims(xi, axis=0)
-        # cj = np.expand_dims(xi, axis=1)
-        # dij = distance(ci, cj)
-        # min_dist = np.amin(dij[3:, :3])
-        # if min_dist < 1:
-        #     assert 0
+            # bond_lengths = jax_utils.distance(ci, cj, None)
 
-        # dvdp = ctxt.get_dv_dp()
+            # bigger_c += np.sum(np.where(bond_lengths > OH_bond_length, 1, 0))
+            # smaller_c += np.sum(np.where(bond_lengths < OH_bond_length, 1, 0))
 
-        # diff = dvdp - last_dv_dp
-        # print("diff", np.amax(diff), np.amin(diff))
+            # assert 0
 
-        # last_dv_dp = dvdp
+            # hess = ctxt.get_d2E_dx2()
+            # hess = np.reshape(hess, (num_atoms*3, num_atoms*3))
+            # prefactor = np.eye(num_atoms*3) - np.amax(cb)*dt*hess
+            # if M is None:
+            #     M = prefactor
+            # else:
+            #     M = np.matmul(prefactor, M)
+
+        # if i % 100 == 0 and i > 0:
+
+            # print(bigger_c, smaller_c, bigger_c/smaller_c)
+            # print(M)
+            # avals = np.linalg.eigh(M)[0]
+            # pvals = np.linalg.eigh(prefactor)[0]
+
+            # print("prefactor eigh", avals[:2], avals[-2:], pvals[:2], pvals[-2:], "amax/min", np.amax(M), np.amin(M))
 
         # print(i, min_dist, e, np.amax(hess), np.amin(hess))
         if i % sampling_interval == 0:
             
+            # print("PREFACTOR AMAX", np.amax(M))
+
             E = ctxt.get_E()
             all_es.append(E)
             xi = ctxt.get_x()
@@ -444,10 +458,14 @@ def minimize(
             np.savez("dynamics_coords2_"+str(i), xi)
 
             # print(f"{lamb} \t {i} \t avg E: {np.mean(all_es):9.4f} \t {dUdL:9.4f} \t | dxdp max/min {np.amax(dxdp):9.4f} \t {np.amin(dxdp):9.4f} \t max mean/median deriv: {np.amax(np.mean(all_d2u_dldps, axis=0)):9.4f} \t {np.amax(np.median(all_d2u_dldps, axis=0)):9.4f} \t mean/median dudl {np.mean(all_dudls):9.4f} \t {np.median(all_dudls):9.4f} \t @ {speed:9.4f} ns/day \t  hess max/abs mean/min {np.amax(hess):9.4f}  {np.mean(np.abs(hess)):9.4f}  {np.amin(hess):9.4f} \t mp max/min {np.amax(d2E_dxdp):10.4f}  {np.amin(d2E_dxdp):10.4f} | dv_dp max/min {np.amax(dv_dp):10.4f} {np.amin(dv_dp):10.4f}")
-            print("dxdp", dxdp)
+            # print("dxdp", dxdp)
 
-            print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "| dvdp max/min", np.amax(dvdp), "\t", np.amin(dvdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day", " Hess max/min: ", np.amax(hess), np.amin(hess), " KE:", compute_ke(ctxt.get_v()))
             hess = hess.reshape(num_atoms*3, num_atoms*3)
+            prefactor = np.eye(num_atoms*3)-dt*np.amax(cb)*hess
+            aval, avec = np.linalg.eigh(prefactor)
+
+            print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "| dvdp max/min", np.amax(dvdp), "\t", np.amin(dvdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day", " eigv: ", np.amax(aval), " KE:", compute_ke(ctxt.get_v()))
+
 
             # print("hessian norm", np.linalg.norm(hess), "dxdp norm", np.linalg.norm(dxdp), 'btH', np.amax(cb*dt*np.linalg.norm(hess)), 'hessian eigv', np.linalg.eigh(hess)[0])
             # print("hess_row_sums", np.sum(hess, axis=0))
