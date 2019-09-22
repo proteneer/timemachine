@@ -20,6 +20,7 @@ private:
     RealType coeff_a_;
     RealType *d_coeff_bs_;
     RealType *d_coeff_cs_;
+    RealType coeff_d_;
 
     // refactor this to base class later
     void hessian_vector_product(
@@ -47,6 +48,8 @@ public:
     void set_coeff_b(int num_atoms, const RealType *cb);
 
     void set_coeff_c(int num_atoms, const RealType *cc);
+
+    void set_coeff_d(RealType d);
 
     void set_dt(RealType ndt);
 

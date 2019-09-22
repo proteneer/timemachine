@@ -17,8 +17,9 @@ __global__ void update_positions(
     const RealType coeff_a,
     const RealType *coeff_bs, // N x 3, not P x N x 3, but we could just pass in the first index
     const RealType *coeff_cs,
+    const RealType coeff_d,
     const RealType *dE_dx,
-    const RealType d_t,
+    const RealType dt,
     const int N,
     const int D,
     RealType *x_t,
@@ -41,13 +42,8 @@ __global__ void update_positions(
 
     // truncated noise
     auto n = noise[local_idx];
-    // if(n > 2.0) {
-    //     n = 0.0;
-    // } else if(n < -2.0) {
-    //     n = 0.0;
-    // }
     v_t[local_idx] = coeff_a*v_t[local_idx] - coeff_bs[atom_idx]*dE_dx[local_idx] + coeff_cs[atom_idx]*n;
-    x_t[local_idx] += v_t[local_idx]*d_t;
+    x_t[local_idx] = (1 - coeff_d*coeff_bs[atom_idx]*dt)*x_t[local_idx] + v_t[local_idx]*dt;
 
 }
 
@@ -56,6 +52,7 @@ template<typename RealType>
 __global__ void update_derivatives(
     const RealType coeff_a,
     const RealType *coeff_bs, // shape N
+    const RealType coeff_d,
     const RealType *d2E_dxdp, 
     const RealType dt,
     const int N,
@@ -79,7 +76,7 @@ __global__ void update_derivatives(
     // derivative of the above equation
     RealType tmp = coeff_a*dv_dp_t[local_idx] - coeff_bs[atom_idx]*d2E_dxdp[local_idx];
     dv_dp_t[local_idx] = tmp;
-    dx_dp_t[local_idx] += dt*tmp;
+    dx_dp_t[local_idx] = (1 - coeff_d*coeff_bs[atom_idx]*dt)*dx_dp_t[local_idx] + dt*tmp;
 
 }
 
@@ -154,6 +151,7 @@ void LangevinOptimizer<RealType>::step(
         update_derivatives<RealType><<<dimGrid_dxdp, tpb>>>(
             coeff_a_,
             d_coeff_bs_,
+            coeff_d_,
             d2E_dxdp,
             dt_,
             N,
@@ -180,6 +178,7 @@ void LangevinOptimizer<RealType>::step(
         coeff_a_,
         d_coeff_bs_,
         d_coeff_cs_,
+        coeff_d_,
         dE_dx,
         dt_,
         N,
@@ -221,6 +220,11 @@ void LangevinOptimizer<RealType>::hessian_vector_product(
 template<typename RealType>
 void LangevinOptimizer<RealType>::set_coeff_a(RealType a) {
     coeff_a_ = a;
+}
+
+template<typename RealType>
+void LangevinOptimizer<RealType>::set_coeff_d(RealType d) {
+    coeff_d_ = d;
 }
 
 template<typename RealType>

@@ -228,6 +228,10 @@ void declare_langevin_optimizer(py::module &m, const char *typestr) {
     .def("set_coeff_c", [](timemachine::LangevinOptimizer<RealType> &lo,
         const py::array_t<RealType, py::array::c_style> &cc) {
         lo.set_coeff_c(cc.shape()[0], cc.data());
+    })
+    .def("set_coeff_d", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const RealType cd) {
+        lo.set_coeff_d(cd);
     });
 
 
