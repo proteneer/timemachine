@@ -177,8 +177,8 @@ def deserialize_system(system):
 
                 charge = value(charge)
                 # print("inserting charge", charge)
-                sig = value(sig)
-                eps = value(eps)
+                sig = value(sig)*2
+                eps = value(eps)*4
                 # if sig == 0 or eps == 0:
                     # print("WARNING: invalid sig eps detected", sig, eps, "adjusting to 0.5 and 0.0")
                     # assert eps == 0.0
@@ -211,14 +211,14 @@ def deserialize_system(system):
 
             test_potentials.append(test_lj)
 
-            test_es = (custom_ops.Electrostatics_f64,
-                (
-                    scale_matrix,
-                    charge_param_idxs,
-                )
-            )
+            # test_es = (custom_ops.Electrostatics_f64,
+            #     (
+            #         scale_matrix,
+            #         charge_param_idxs,
+            #     )
+            # )
 
-            test_potentials.append(test_es)
+            # test_potentials.append(test_es)
 
             # print("PROTEIN NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
 

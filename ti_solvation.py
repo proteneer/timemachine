@@ -171,7 +171,7 @@ def minimize(
     # print("LGV CF", ca, cb, cc)
 
 
-    m_dt, m_ca, m_cb, m_cc = dt, 0.5, np.ones_like(cb)/10000, np.zeros_like(masses)
+    # m_dt, m_ca, m_cb, m_cc = dt, 0.5, np.ones_like(cb)/10000, np.zeros_like(masses)
     m_dt, m_ca, m_cb, m_cc = dt, 0.0, np.ones_like(cb)/10000, np.zeros_like(masses)
 
     np.random.seed()
@@ -203,7 +203,7 @@ def minimize(
     x_t = conf
     v_t = np.zeros_like(x_t)
 
-    custom_hb_params = np.array([1, 0.1]) # k, b
+    custom_hb_params = np.array([100, 2.5]) # k, b
     k_idx = params.shape[0]
     b_idx = params.shape[0] + 1
 
@@ -232,12 +232,6 @@ def minimize(
 
     # potentials.append(custom_hb)
 
-
-    # assert 0
-    # add a custom force binding all the oxygens to each other
-    # for a_idx_0, atom in enumerate(masses):
-        # for a_idx, atom in masses:
-
     print("POTENTIALS", potentials)
 
     ctxt = custom_ops.Context_f64(
@@ -258,10 +252,10 @@ def minimize(
     # assert 0
     last_dv_dp = 0
 
-    # checkpoint = "minimize_coords_17500.npz"
+    checkpoint = "minimize_coords_24000.npz"
     # checkpoint = "dynamics_coords2_540000.npz   "
-    # if os.path.exists(checkpoint):
-    if False:
+    if os.path.exists(checkpoint):
+    # if False:
         print("Restoring from minimized checkpoints")
         # force into 3D
         x_t = np.load(checkpoint)['arr_0'][:, :3]
@@ -351,14 +345,11 @@ def minimize(
 
     print("integrator coefficients:", ca, cb[0], cc[0], dt)
 
-    # assert 0
-    # ca = 0.0
+    # ca = 0.9 # no friction
     opt.set_coeff_a(ca)
-    # opt.set_coeff_a(0.0) # no friction
     opt.set_coeff_b(cb.astype(np.float64))
     opt.set_coeff_c(cc.astype(np.float64))
-    # opt.set_dt(0.001)
-
+    opt.set_coeff_d(5000)
 
 
     def compute_ke(vt):
@@ -391,6 +382,14 @@ def minimize(
     smaller_c = 0
 
     for i in range(max_iter):
+        # if i == 2000:
+            # print("removing noise")
+            # cc = np.zeros_like(cc)
+            # opt.set_coeff_c(cc.astype(np.float64))
+            # ca = np.ones_like(ca)
+            # opt.set_coeff_a(ca)
+
+
         ctxt.step()
 
         # if i > 0:
@@ -455,14 +454,18 @@ def minimize(
             all_kes.append(ke)
             speed = ns_per_day(time.time()-start, i)
 
-            np.savez("dynamics_coords2_"+str(i), xi)
+            # np.savez("dynamics_coords2_"+str(i), xi)
 
             # print(f"{lamb} \t {i} \t avg E: {np.mean(all_es):9.4f} \t {dUdL:9.4f} \t | dxdp max/min {np.amax(dxdp):9.4f} \t {np.amin(dxdp):9.4f} \t max mean/median deriv: {np.amax(np.mean(all_d2u_dldps, axis=0)):9.4f} \t {np.amax(np.median(all_d2u_dldps, axis=0)):9.4f} \t mean/median dudl {np.mean(all_dudls):9.4f} \t {np.median(all_dudls):9.4f} \t @ {speed:9.4f} ns/day \t  hess max/abs mean/min {np.amax(hess):9.4f}  {np.mean(np.abs(hess)):9.4f}  {np.amin(hess):9.4f} \t mp max/min {np.amax(d2E_dxdp):10.4f}  {np.amin(d2E_dxdp):10.4f} | dv_dp max/min {np.amax(dv_dp):10.4f} {np.amin(dv_dp):10.4f}")
             # print("dxdp", dxdp)
 
+
             hess = hess.reshape(num_atoms*3, num_atoms*3)
-            prefactor = np.eye(num_atoms*3)-dt*np.amax(cb)*hess
+            prefactor = np.eye(num_atoms*3)-dt*np.repeat(cb, 3, axis=0)*hess
             aval, avec = np.linalg.eigh(prefactor)
+
+            # for exp in range(10):
+                # print("exp", exp, np.amin(np.linalg.eigh(hess + np.power(10, exp)*np.eye(num_atoms*3, num_atoms*3))[0]))
 
             print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "| dvdp max/min", np.amax(dvdp), "\t", np.amin(dvdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day", " eigv: ", np.amax(aval), " KE:", compute_ke(ctxt.get_v()))
 
