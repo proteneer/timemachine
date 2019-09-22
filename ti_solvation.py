@@ -349,7 +349,7 @@ def minimize(
     opt.set_coeff_a(ca)
     opt.set_coeff_b(cb.astype(np.float64))
     opt.set_coeff_c(cc.astype(np.float64))
-    opt.set_coeff_d(5000)
+    opt.set_coeff_d(3000)
 
 
     def compute_ke(vt):
