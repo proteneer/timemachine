@@ -75,7 +75,7 @@ def deserialize_system(system):
 
 
                 # k = value(k)/5
-                k = value(k)
+                k = value(k)/5
 
                 # print("bond K", k)
 
@@ -177,8 +177,8 @@ def deserialize_system(system):
 
                 charge = value(charge)
                 # print("inserting charge", charge)
-                sig = value(sig)*2
-                eps = value(eps)*4
+                sig = value(sig)
+                eps = value(eps)
                 # if sig == 0 or eps == 0:
                     # print("WARNING: invalid sig eps detected", sig, eps, "adjusting to 0.5 and 0.0")
                     # assert eps == 0.0
@@ -211,6 +211,7 @@ def deserialize_system(system):
 
             test_potentials.append(test_lj)
 
+            # charges look fucked up, electrostatics pulling it in?
             # test_es = (custom_ops.Electrostatics_f64,
             #     (
             #         scale_matrix,

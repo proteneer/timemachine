@@ -349,7 +349,10 @@ def minimize(
     opt.set_coeff_a(ca)
     opt.set_coeff_b(cb.astype(np.float64))
     opt.set_coeff_c(cc.astype(np.float64))
-    opt.set_coeff_d(3000)
+    # cd = 30000
+    cd = 30000
+    print("setting coeff d", 1-cd*cb*dt)
+    opt.set_coeff_d(cd)
 
 
     def compute_ke(vt):
@@ -464,8 +467,8 @@ def minimize(
             prefactor = np.eye(num_atoms*3)-dt*np.repeat(cb, 3, axis=0)*hess
             aval, avec = np.linalg.eigh(prefactor)
 
-            # for exp in range(10):
-                # print("exp", exp, np.amin(np.linalg.eigh(hess + np.power(10, exp)*np.eye(num_atoms*3, num_atoms*3))[0]))
+            for exp in [10000, 20000, 30000, 40000]:
+                print("exp", exp, np.amin(np.linalg.eigh(hess + exp*np.eye(num_atoms*3, num_atoms*3))[0]))
 
             print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "| dvdp max/min", np.amax(dvdp), "\t", np.amin(dvdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day", " eigv: ", np.amax(aval), " KE:", compute_ke(ctxt.get_v()))
 
