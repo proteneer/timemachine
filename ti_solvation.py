@@ -165,8 +165,11 @@ def minimize(
         temperature=300,
         dt=dt,
         friction=100, # (ytz) probably need to double this?
-        masses=masses,
+        masses=np.ones_like(masses)*12, # Try to double this next and see what happens
     )
+
+    # (Ytz) if the masses are not uniform the then the angles and rotations get messed up
+    # upon shrinking
 
     # print("LGV CF", ca, cb, cc)
 
@@ -261,7 +264,6 @@ def minimize(
         x_t = np.load(checkpoint)['arr_0'][:, :3]
         v_t = np.zeros_like(x_t)
 
-
         print(x_t.shape, v_t.shape)
 
         opt = custom_ops.LangevinOptimizer_f64(
@@ -296,6 +298,7 @@ def minimize(
                 print(i, dt, E, np.amin(ctxt.get_dx_dp()), np.amax(ctxt.get_dx_dp()))
                 xi = ctxt.get_x()
                 dE_dx = ctxt.get_dE_dx()
+                print("dE_dx", dE_dx)
                 dUdL = dU_dlambda(dE_dx)
 
                 if np.isnan(E):

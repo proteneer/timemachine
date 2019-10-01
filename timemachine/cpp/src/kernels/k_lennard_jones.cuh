@@ -242,6 +242,7 @@ void __global__ k_lennard_jones(
                 RealType inv_d16ij = 1.0/d16ij;
 
                 RealType eps = sqrt(eps0*eps1);
+                // printf("eps_ij, i_idx, j_idx, %f\n", eps);
                 RealType sig = (sig0 + sig1)/2;
 
                 RealType sig2 = sig*sig;

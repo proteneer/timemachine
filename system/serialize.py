@@ -74,7 +74,7 @@ def deserialize_system(system):
                 length = value(length)
 
 
-                k = value(k)/12
+                k = value(k)
                 # k = value(k)
 
                 # print("bond K", k)
@@ -107,7 +107,7 @@ def deserialize_system(system):
 
                 src_idx, mid_idx, dst_idx, angle, k = force.getAngleParameters(a_idx)
                 angle = value(angle)
-                k = value(k)/2
+                k = value(k)
 
                 # print("ANGLE k", k)
 
@@ -159,7 +159,7 @@ def deserialize_system(system):
             #     )
             # )
 
-            # test_potentials.append(test_ha)
+            test_potentials.append(test_ha)
 
         if isinstance(force, mm.NonbondedForce):
 
@@ -177,12 +177,13 @@ def deserialize_system(system):
 
                 charge = value(charge)
                 # print("inserting charge", charge)
-                sig = value(sig)*1.9
+                sig = value(sig)*2.5
                 eps = value(eps)
-                # print(sig, eps)
-                if sig == 0 or eps == 0:
 
-                    assert 0
+                # print(sig, eps)
+                # if sig == 0 or eps == 0:
+                    # print(sig, eps)
+                    # assert 0
                     # print("WARNING: invalid sig eps detected", sig, eps, "adjusting to 0.5 and 0.0")
                     # assert eps == 0.0
                     # sig = 0.5
