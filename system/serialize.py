@@ -216,14 +216,14 @@ def deserialize_system(system):
             test_potentials.append(test_lj)
 
             # charges look fucked up, electrostatics pulling it in too much?
-            # test_es = (custom_ops.Electrostatics_f64,
-            #     (
-            #         scale_matrix,
-            #         charge_param_idxs,
-            #     )
-            # )
+            test_es = (custom_ops.Electrostatics_f64,
+                (
+                    scale_matrix,
+                    charge_param_idxs,
+                )
+            )
 
-            # test_potentials.append(test_es)
+            test_potentials.append(test_es)
 
             # print("PROTEIN NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
 
