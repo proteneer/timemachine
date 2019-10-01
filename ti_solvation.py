@@ -165,7 +165,7 @@ def minimize(
         temperature=300,
         dt=dt,
         friction=100, # (ytz) probably need to double this?
-        masses=np.ones_like(masses),
+        masses=masses,
     )
 
     # print("LGV CF", ca, cb, cc)
@@ -254,8 +254,8 @@ def minimize(
 
     checkpoint = "minimize_coords_24000.npz"
     # checkpoint = "dynamics_coords2_540000.npz   "
-    if os.path.exists(checkpoint):
-    # if False:
+    # if os.path.exists(checkpoint):
+    if False:
         print("Restoring from minimized checkpoints")
         # force into 3D
         x_t = np.load(checkpoint)['arr_0'][:, :3]
@@ -345,12 +345,12 @@ def minimize(
 
     print("integrator coefficients:", ca, cb[0], cc[0], dt)
 
-    # ca = 0.9 # no friction
+    # ca =  # no friction
     opt.set_coeff_a(ca)
     opt.set_coeff_b(cb.astype(np.float64))
     opt.set_coeff_c(cc.astype(np.float64))
-    # cd = 30000
-    cd = 30000
+    cd = 20000
+    # cd = 5
     print("setting coeff d", 1-cd*cb*dt)
     opt.set_coeff_d(cd)
 
@@ -463,12 +463,13 @@ def minimize(
             # print("dxdp", dxdp)
 
 
-            hess = hess.reshape(num_atoms*3, num_atoms*3)
-            prefactor = np.eye(num_atoms*3)-dt*np.repeat(cb, 3, axis=0)*hess
-            aval, avec = np.linalg.eigh(prefactor)
+            # hess = hess.reshape(num_atoms*3, num_atoms*3)
+            # prefactor = np.eye(num_atoms*3)-dt*np.repeat(cb, 3, axis=0)*hess
+            # aval, avec = np.linalg.eigh(prefactor)
+            aval = 0.0
 
-            for exp in [10000, 20000, 30000, 40000]:
-                print("exp", exp, np.amin(np.linalg.eigh(hess + exp*np.eye(num_atoms*3, num_atoms*3))[0]))
+            # for exp in [10000, 20000, 30000, 40000]:
+                # print("exp", exp, np.amin(np.linalg.eigh(hess + exp*np.eye(num_atoms*3, num_atoms*3))[0]))
 
             print(lamb, "\t", i, "\t", E, "\t", dUdL, "\t", "| dxdp max/min", np.amax(dxdp), "\t", np.amin(dxdp), "| dvdp max/min", np.amax(dvdp), "\t", np.amin(dvdp), "\t | max mean/median deriv: ", np.amax(np.mean(all_d2u_dldps, axis=0)), "\t", np.amax(np.median(all_d2u_dldps, axis=0)), "\t mean/median dudl: ", np.mean(all_dudls), "\t", np.median(all_dudls), "+-", np.std(all_dudls), "\t @ ", speed, "ns/day", " eigv: ", np.amax(aval), " KE:", compute_ke(ctxt.get_v()))
 
@@ -541,7 +542,7 @@ def run_simulation(params):
 
     # os.environ['CUDA_VISIBLE_DEVICES'] = str(lambda_idx % num_gpus)
 
-    fname = "examples/water2.pdb"
+    fname = "examples/water.pdb"
     # omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml')
     omm_forcefield = app.ForceField('amber99sb.xml', 'tip3p.xml')
     pdb = app.PDBFile(fname)
@@ -640,7 +641,7 @@ def train(true_dG):
     # AllChem.EmbedMolecule(mol)
 
 
-    fname = "examples/water2.pdb"
+    fname = "examples/water.pdb"
     # omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml') # for proteins
     omm_forcefield = app.ForceField('amber99sb.xml', 'tip3p.xml') # for proteins
     pdb = app.PDBFile(fname)

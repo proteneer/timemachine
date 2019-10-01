@@ -183,7 +183,7 @@ def parameterize(mol, forcefield):
 
             vd = ValenceDict()
             for p in handler_params.parameters:
-                k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
+                k_idx, l_idx = add_param(to_md_units(p.k)/10, 0), add_param(to_md_units(p.length), 1)
                 # k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
                 # print(p.smirks, matches)
@@ -262,19 +262,19 @@ def parameterize(mol, forcefield):
                     torsion_idxs.append(k)
                     torsion_param_idxs.append(v)
 
-            nrg_fns.append((
-                custom_ops.PeriodicTorsion_f64,
-                (
-                    np.array(torsion_idxs, dtype=np.int32),
-                    np.array(torsion_param_idxs, dtype=np.int32)
-                )
-            ))
+            # nrg_fns.append((
+            #     custom_ops.PeriodicTorsion_f64,
+            #     (
+            #         np.array(torsion_idxs, dtype=np.int32),
+            #         np.array(torsion_param_idxs, dtype=np.int32)
+            #     )
+            # ))
 
         elif handler_name == "vdW":
             # lennardjones
             vd = ValenceDict()
             for param in handler_params.parameters:
-                s_idx, e_idx = add_param(to_md_units(param.sigma), 8), add_param(to_md_units(param.epsilon), 9)
+                s_idx, e_idx = add_param(to_md_units(param.sigma*2), 8), add_param(to_md_units(param.epsilon), 9)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, param.smirks)
                 for m in matches:
                     vd[m] = (s_idx, e_idx)
@@ -340,9 +340,8 @@ def parameterize(mol, forcefield):
 
     # print("LIGAND NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
 
-
     guest_charges = np.array(global_params)[charge_param_idxs]
-    # print("LIGAND NET CHARGE", np.sum(guest_charges))
+    print("LIGAND NET CHARGE BEFORE", np.sum(guest_charges))
     offsets = np.sum(guest_charges)/guest_charges.shape[0]
 
     for p_idx in set(charge_param_idxs):
@@ -350,14 +349,15 @@ def parameterize(mol, forcefield):
         global_params[p_idx] -= offsets
 
     guest_charges = np.array(global_params)[charge_param_idxs]
+    print("LIGAND NET CHARGE AFTER", np.sum(guest_charges))
 
-    # nrg_fns.append((
-    #    custom_ops.Electrostatics_f64,
-    #    (
-    #        np.array(scale_matrix, dtype=np.int32),
-    #        np.array(charge_param_idxs, dtype=np.int32)
-    #    )
-    # ))
+    nrg_fns.append((
+        custom_ops.Electrostatics_f64,
+        (
+            np.array(scale_matrix, dtype=np.int32),
+            np.array(charge_param_idxs, dtype=np.int32)
+        )
+    ))
 
     c = mol.GetConformer(0)
     conf = np.array(c.GetPositions(), dtype=np.float64)

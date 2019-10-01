@@ -74,8 +74,8 @@ def deserialize_system(system):
                 length = value(length)
 
 
-                # k = value(k)/5
-                k = value(k)/5
+                k = value(k)/12
+                # k = value(k)
 
                 # print("bond K", k)
 
@@ -107,7 +107,7 @@ def deserialize_system(system):
 
                 src_idx, mid_idx, dst_idx, angle, k = force.getAngleParameters(a_idx)
                 angle = value(angle)
-                k = value(k)
+                k = value(k)/2
 
                 # print("ANGLE k", k)
 
@@ -177,9 +177,12 @@ def deserialize_system(system):
 
                 charge = value(charge)
                 # print("inserting charge", charge)
-                sig = value(sig)
+                sig = value(sig)*1.9
                 eps = value(eps)
-                # if sig == 0 or eps == 0:
+                # print(sig, eps)
+                if sig == 0 or eps == 0:
+
+                    assert 0
                     # print("WARNING: invalid sig eps detected", sig, eps, "adjusting to 0.5 and 0.0")
                     # assert eps == 0.0
                     # sig = 0.5
@@ -211,7 +214,7 @@ def deserialize_system(system):
 
             test_potentials.append(test_lj)
 
-            # charges look fucked up, electrostatics pulling it in?
+            # charges look fucked up, electrostatics pulling it in too much?
             # test_es = (custom_ops.Electrostatics_f64,
             #     (
             #         scale_matrix,
