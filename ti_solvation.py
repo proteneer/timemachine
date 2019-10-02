@@ -352,7 +352,7 @@ def minimize(
     opt.set_coeff_a(ca)
     opt.set_coeff_b(cb.astype(np.float64))
     opt.set_coeff_c(cc.astype(np.float64))
-    cd = 20000
+    cd = 30000
     # cd = 5
     print("setting coeff d", 1-cd*cb*dt)
     opt.set_coeff_d(cd)
@@ -608,6 +608,8 @@ def run_simulation(params):
     # print("combined_dp_idxs", combined_dp_idxs)
 
     # print("Number of parameter derivatives", combined_dp_idxs.shape)
+
+    combined_conf = combined_conf + 3.0 # DEBUG
 
     du_dls, du_dl_grads, all_es = minimize(
         num_host_atoms,

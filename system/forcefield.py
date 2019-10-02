@@ -44,6 +44,8 @@ def combiner(
     Combine two systems with two distinct parameter sets into one.
     """
 
+    # print(a_nrgs, b_nrgs)
+
     num_a_atoms = len(a_masses)                     # offset by number of atoms in a
     c_masses = np.concatenate([a_masses, b_masses]) # combined masses
     c_conf = np.concatenate([a_conf, b_conf])       # combined geometry
@@ -68,7 +70,6 @@ def combiner(
             bond_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((custom_ops.HarmonicBond_f64, (bond_idxs, bond_param_idxs)))
         elif a_name == custom_ops.HarmonicAngle_f64:
-            # print("WTF", a_name, a_args, b_name, b_args)
             angle_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             angle_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((custom_ops.HarmonicAngle_f64, (angle_idxs, angle_param_idxs)))
@@ -183,7 +184,7 @@ def parameterize(mol, forcefield):
 
             vd = ValenceDict()
             for p in handler_params.parameters:
-                k_idx, l_idx = add_param(to_md_units(p.k)/10, 0), add_param(to_md_units(p.length), 1)
+                k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
                 # k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
                 # print(p.smirks, matches)
@@ -274,7 +275,7 @@ def parameterize(mol, forcefield):
             # lennardjones
             vd = ValenceDict()
             for param in handler_params.parameters:
-                s_idx, e_idx = add_param(to_md_units(param.sigma*2), 8), add_param(to_md_units(param.epsilon), 9)
+                s_idx, e_idx = add_param(to_md_units(param.sigma), 8), add_param(to_md_units(param.epsilon)*0.9, 9)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, param.smirks)
                 for m in matches:
                     vd[m] = (s_idx, e_idx)
@@ -341,7 +342,7 @@ def parameterize(mol, forcefield):
     # print("LIGAND NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
 
     guest_charges = np.array(global_params)[charge_param_idxs]
-    print("LIGAND NET CHARGE BEFORE", np.sum(guest_charges))
+    # print("LIGAND NET CHARGE BEFORE", np.sum(guest_charges))
     offsets = np.sum(guest_charges)/guest_charges.shape[0]
 
     for p_idx in set(charge_param_idxs):
@@ -349,15 +350,15 @@ def parameterize(mol, forcefield):
         global_params[p_idx] -= offsets
 
     guest_charges = np.array(global_params)[charge_param_idxs]
-    print("LIGAND NET CHARGE AFTER", np.sum(guest_charges))
+    # print("LIGAND NET CHARGE AFTER", np.sum(guest_charges))
 
-    nrg_fns.append((
-        custom_ops.Electrostatics_f64,
-        (
-            np.array(scale_matrix, dtype=np.int32),
-            np.array(charge_param_idxs, dtype=np.int32)
-        )
-    ))
+    # nrg_fns.append((
+    #     custom_ops.Electrostatics_f64,
+    #     (
+    #         np.array(scale_matrix, dtype=np.int32),
+    #         np.array(charge_param_idxs, dtype=np.int32)
+    #     )
+    # ))
 
     c = mol.GetConformer(0)
     conf = np.array(c.GetPositions(), dtype=np.float64)

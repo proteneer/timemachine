@@ -100,6 +100,7 @@ def deserialize_system(system):
 
 
         if isinstance(force, mm.HarmonicAngleForce):
+
             angle_idxs = []
             param_idxs = []
 
@@ -152,14 +153,14 @@ def deserialize_system(system):
             torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
-            # test_ha = (custom_ops.PeriodicTorsion_f64,
+            # test_tors = (custom_ops.PeriodicTorsion_f64,
             #     (
             #         torsion_idxs,
             #         param_idxs
             #     )
             # )
 
-            test_potentials.append(test_ha)
+            # test_potentials.append(test_tors)
 
         if isinstance(force, mm.NonbondedForce):
 
@@ -176,8 +177,7 @@ def deserialize_system(system):
                 # print('charge, sig, eps', charge, sig, eps)
 
                 charge = value(charge)
-                # print("inserting charge", charge)
-                sig = value(sig)*2.5
+                sig = value(sig)
                 eps = value(eps)
 
                 # print(sig, eps)
@@ -216,14 +216,14 @@ def deserialize_system(system):
             test_potentials.append(test_lj)
 
             # charges look fucked up, electrostatics pulling it in too much?
-            test_es = (custom_ops.Electrostatics_f64,
-                (
-                    scale_matrix,
-                    charge_param_idxs,
-                )
-            )
+            # test_es = (custom_ops.Electrostatics_f64,
+            #     (
+            #         scale_matrix,
+            #         charge_param_idxs,
+            #     )
+            # )
 
-            test_potentials.append(test_es)
+            # test_potentials.append(test_es)
 
             # print("PROTEIN NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
 
