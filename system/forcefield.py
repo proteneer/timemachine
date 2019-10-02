@@ -134,15 +134,15 @@ def simple_charge_model():
         "[#6:1]": 0.3860,
         "[#6X2:1]": 0.3100,
         "[#6X4:1]": 0.3094,
-        "[#8:1]": -0.2100,
-        "[#8X2H0+0:1]": -0.1700,
-        "[#8X2H1+0:1]": -0.2104,
+        "[#8:1]": -0.3100,
+        "[#8X2H0+0:1]": -0.3700,
+        "[#8X2H1+0:1]": -0.3104,
         "[#7:1]": -0.200,
         "[#16:1]": -0.2500,
         "[#15:1]": -0.2000,
         "[#9:1]": -0.361,
         "[#17:1]": -0.265,
-        "[#35:1]": -0.320,
+        "[#35:1]": -0.083,
         "[#53:1]": 0.40,
         "[#3+1:1]": 0.0279896,
         "[#11+1:1]": 0.0874393,
@@ -231,7 +231,69 @@ def parameterize(mol, forcefield):
                 )
             ))
 
-        # TODO: ImproperTorsions
+
+        elif handler_name == "ImproperTorsions":
+            print("Adding Improper Torsions")
+            vd = ValenceDict()
+
+
+            for all_params in handler_params.parameters:
+
+                # print(all_params.smirks)
+
+                matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, all_params.smirks)
+
+                # print(Chem.MolToSmiles(mol))
+                # qmol = Chem.MolFromSmarts(all_params.smirks)
+
+                # print("DEBUG", mol.GetSubstructMatches(qmol, uniquify=False))
+                # for a in mol
+                # print(matches)
+
+                all_k_idxs = []
+                all_phase_idxs = []
+                all_period_idxs = []
+
+                for k, phase, period in zip(all_params.k, all_params.phase, all_params.periodicity):
+
+                    # (ytz): hack
+                    impdivf = 3
+                    k_idx, phase_idx, period_idx = add_param(to_md_units(k/impdivf), 4), add_param(to_md_units(phase), 5), add_param(period, 6),
+                    all_k_idxs.append(k_idx)
+                    all_phase_idxs.append(phase_idx)
+                    all_period_idxs.append(period_idx)
+
+                for m in matches:
+                    t_p = []
+                    for k_idx, phase_idx, period_idx in zip(all_k_idxs, all_phase_idxs, all_period_idxs):
+                        t_p.append((k_idx, phase_idx, period_idx))
+
+                    # 3-way trefoil permutation
+                    others = [m[0], m[2], m[3]]
+                    for p in [(others[i], others[j], others[k]) for (i, j, k) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]]:
+                        vd[(m[1], p[0], p[1], p[2])] = t_p
+
+            torsion_idxs = []
+            torsion_param_idxs = []
+
+            for k, vv in vd.items():
+                for v in vv:
+                    torsion_idxs.append(k)
+                    torsion_param_idxs.append(v)
+
+            # nrg_fns.append((
+            #     custom_ops.PeriodicTorsion_f64,
+            #     (
+            #         np.array(torsion_idxs, dtype=np.int32),
+            #         np.array(torsion_param_idxs, dtype=np.int32)
+            #     )
+            # ))
+
+            # print(torsion_idxs)
+            # print(torsion_param_idxs)
+
+            # assert 0
+
         elif handler_name == "ProperTorsions":
 
             vd = ValenceDict()
@@ -275,7 +337,9 @@ def parameterize(mol, forcefield):
             # lennardjones
             vd = ValenceDict()
             for param in handler_params.parameters:
-                s_idx, e_idx = add_param(to_md_units(param.sigma), 8), add_param(to_md_units(param.epsilon)*0.9, 9)
+                sigma = to_md_units(param.sigma)
+                epsilon = to_md_units(param.epsilon)
+                s_idx, e_idx = add_param(sigma, 8), add_param(epsilon, 9)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, param.smirks)
                 for m in matches:
                     vd[m] = (s_idx, e_idx)
@@ -313,7 +377,7 @@ def parameterize(mol, forcefield):
     vd = ValenceDict()
     for smirks, param in model.items():
 
-        param = param
+        param = param*0.2
 
         c_idx = add_param(param, 7)
         matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
@@ -351,14 +415,15 @@ def parameterize(mol, forcefield):
 
     guest_charges = np.array(global_params)[charge_param_idxs]
     # print("LIGAND NET CHARGE AFTER", np.sum(guest_charges))
+    print("LIGAND CHARGES", guest_charges)
 
-    # nrg_fns.append((
-    #     custom_ops.Electrostatics_f64,
-    #     (
-    #         np.array(scale_matrix, dtype=np.int32),
-    #         np.array(charge_param_idxs, dtype=np.int32)
-    #     )
-    # ))
+    nrg_fns.append((
+        custom_ops.Electrostatics_f64,
+        (
+            np.array(scale_matrix, dtype=np.int32),
+            np.array(charge_param_idxs, dtype=np.int32)
+        )
+    ))
 
     c = mol.GetConformer(0)
     conf = np.array(c.GetPositions(), dtype=np.float64)

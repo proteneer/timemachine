@@ -134,8 +134,6 @@ def deserialize_system(system):
             torsion_idxs = []
             param_idxs = []
 
-            # print("NT", force.getNumTorsions())
-
             for t_idx in range(force.getNumTorsions()):
                 a_idx, b_idx, c_idx, d_idx, period, phase, k = force.getTorsionParameters(t_idx)
 
@@ -176,7 +174,7 @@ def deserialize_system(system):
 
                 # print('charge, sig, eps', charge, sig, eps)
 
-                charge = value(charge)
+                charge = value(charge)/1.2
                 sig = value(sig)
                 eps = value(eps)
 
@@ -216,16 +214,26 @@ def deserialize_system(system):
             test_potentials.append(test_lj)
 
             # charges look fucked up, electrostatics pulling it in too much?
-            # test_es = (custom_ops.Electrostatics_f64,
-            #     (
-            #         scale_matrix,
-            #         charge_param_idxs,
-            #     )
-            # )
+            test_es = (custom_ops.Electrostatics_f64,
+                (
+                    scale_matrix,
+                    charge_param_idxs,
+                )
+            )
 
-            # test_potentials.append(test_es)
+            test_potentials.append(test_es)
 
             # print("PROTEIN NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
+
+    # for sanity checking
+    # test_tors = (custom_ops.PeriodicTorsion_f64,
+    #     (
+    #         np.zeros(shape=(0,4)),
+    #         np.zeros(shape=(0,3))
+    #     )
+    # )
+
+    # test_potentials.append(test_tors)
 
     global_params = np.array(global_params)
     global_param_groups = np.array(global_param_groups)
