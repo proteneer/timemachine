@@ -339,7 +339,7 @@ def parameterize(mol, forcefield):
             for param in handler_params.parameters:
                 sigma = to_md_units(param.sigma)
                 epsilon = to_md_units(param.epsilon)
-                s_idx, e_idx = add_param(sigma, 8), add_param(epsilon, 9)
+                s_idx, e_idx = add_param(sigma, 8), add_param(epsilon, 9) # group 19
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, param.smirks)
                 for m in matches:
                     vd[m] = (s_idx, e_idx)
@@ -379,7 +379,7 @@ def parameterize(mol, forcefield):
 
         param = param*0.2
 
-        c_idx = add_param(param, 7)
+        c_idx = add_param(param, 17)
         matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
 
         for m in matches:

@@ -39,7 +39,7 @@ from matplotlib import pyplot as plt
 
 plt.rcParams['figure.dpi'] = 200
 
-num_gpus = 1
+num_gpus = 8
 
 def write(xyz, masses):
     xyz = xyz - np.mean(xyz, axis=0, keepdims=True)
@@ -250,7 +250,7 @@ def minimize(
 
         for i in range(max_iter):
             dt *= 1.0013
-            dt = min(dt, 0.01)
+            dt = min(dt, 0.003)
 
             opt.set_dt(dt)
             ctxt.step()
@@ -269,7 +269,7 @@ def minimize(
                 dUdL = dU_dlambda(dE_dx)
                 dx_dp = ctxt.get_dx_dp()
 
-                print("step", i, "dt", dt, "Energy", E,  "min/max/mean dxdp", np.amin(dx_dp), np.amax(dx_dp), np.mean(dx_dp), "du/dl", dUdL, "cd coeff", coeffs[0])
+                print("step", i, "lambda", lamb, "dt", dt, "Energy", E,  "min/max/mean dxdp", np.amin(dx_dp), np.amax(dx_dp), np.mean(dx_dp), "du/dl", dUdL, "cd coeff", coeffs[0])
 
                 if np.isnan(E):
                     assert 0
@@ -327,8 +327,8 @@ def minimize(
     opt.set_coeff_a(ca)
     opt.set_coeff_b(cb.astype(np.float64))
     opt.set_coeff_c(cc.astype(np.float64))
-    cd = 1000
-    # cd = 0
+    # cd = 1000
+    cd = 0
     print("setting coeff d", 1-cd*cb*dt)
     opt.set_coeff_d(cd)
 
@@ -352,7 +352,6 @@ def minimize(
 
     for i in range(max_iter):
 
-        ctxt.step()
 
         if i % sampling_interval == 0:
             
@@ -393,7 +392,8 @@ def minimize(
             fh.write(xyz)
             xyz_buffer.append(xyz)
 
-
+        break
+        ctxt.step()
 
     return all_dudls, all_d2u_dldps, all_es
 
@@ -436,19 +436,19 @@ def initialize_parameters(host_path=None, host_sys=None):
 
 def run_simulation(params):
     mol, lamb, lambda_idx, combined_params = params
-
+    
+    # print("rotating")
     # conf = mol.GetConformer(0)
     # coords = conf.GetPositions()
     # np.random.seed(int(time.time()+float(lambda_idx)))
     # rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
-    # # print("ROT_MATRIX", rot_matrix)
     # coords = np.matmul(coords, rot_matrix)
     # for idx, (x,y,z) in enumerate(coords):
-    #     conf.SetAtomPosition(idx, (x,y,z))
+    #      conf.SetAtomPosition(idx, (x,y,z))
 
     p = multiprocessing.current_process()
 
-    # os.environ['CUDA_VISIBLE_DEVICES'] = str(lambda_idx % num_gpus)
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(lambda_idx % num_gpus)
 
     fname = "examples/water.pdb"
     # omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml')
@@ -502,17 +502,17 @@ def run_simulation(params):
     # host_dp_idxs = np.argwhere(filter_groups(host_param_groups, [7])).reshape(-1)
     # guest_dp_idxs = np.argwhere(filter_groups(smirnoff_param_groups, [7])).reshape(-1)
     # print("filtering")
-    # 1. bond lengths
-    # 7. charges
-    # 8. vdw sigma
-    # 9. vdw epsilon
-    combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [7])).reshape(-1)
-    combined_dp_idxs = combined_dp_idxs[0:1]
+    # 1. host bond lengths
+    # 7. host charges
+    # 8. host vdw sigma
+    # 9. host vdw epsilon
+    # 19. ligand vdw epsilon
+    combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [17])).reshape(-1)
+    # combined_dp_idxs = combined_dp_idxs[0:1]
     # combined_dp_idxs = np.array([0])
 
     # print("combined_dp_idxs", combined_dp_idxs)
-
-    # print("Number of parameter derivatives", combined_dp_idxs.shape)
+    print("Number of parameter derivatives", combined_dp_idxs.shape)
 
     du_dls, du_dl_grads, all_es = minimize(
         num_host_atoms,
@@ -538,12 +538,12 @@ def run_simulation(params):
 def train(true_dG):
     # fname = "/home/ubuntu/Relay/Code/benchmarksets/input_files/cd-set1/mol2/guest-"+str(1)+".mol2"
 
-    # fname = "examples/ligand-4.mol2"
-    # guest_mol2 = open(fname, "r").read()
-   # mol = Chem.MolFromMol2Block(guest_mol2, sanitize=True, removeHs=False, cleanupSubstructures=True)
+    fname = "examples/ligand-4.mol2"
+    guest_mol2 = open(fname, "r").read()
+    mol = Chem.MolFromMol2Block(guest_mol2, sanitize=True, removeHs=False, cleanupSubstructures=True)
 
-    guest_mol2 = Chem.MolFromSmiles("c1ccccc1")
-    mol = Chem.AddHs(guest_mol2)
+    # guest_mol2 = Chem.MolFromSmiles("c1ccccc1")
+    # mol = Chem.AddHs(guest_mol2)
 
     # mol = Chem.MolFromMolBlock(Chem.MolToMolBlock(mol), removeHs=False)
     # print(mol)
@@ -567,7 +567,7 @@ def train(true_dG):
 
     starting_params = initialize_parameters(host_sys=system)
     # assert 0
-    lr=3e-4
+    lr = 1e-3
     opt_init, opt_update, get_params = optimizers.adam(lr)
     # opt_init, opt_update, get_params = optimizers.sgd(lr)
 
@@ -576,22 +576,22 @@ def train(true_dG):
     num_epochs = 50
     for epoch in range(num_epochs):
 
-        print("turning off special ortho")
-        # print("turning on special ortho")
+        # print("turning off special ortho")
+        # print("WARNING: turning on special ortho")
         # conf = mol.GetConformer(0)
         # coords = conf.GetPositions()
         # rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
         # coords = np.matmul(coords, rot_matrix)
         # for idx, (x,y,z) in enumerate(coords):
-        #     conf.SetAtomPosition(idx, (x,y,z))
+        #    conf.SetAtomPosition(idx, (x,y,z))
 
         print("===============Epoch "+str(epoch)+"=============")
 
         all_params = []
         all_lambdas = []
         # lambda_schedule = [0.0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.5, 2.0, 2.5, 4.0, 6.0, 8.0, 10.0]
-        # lambda_schedule = [0.0, 0.05, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.9, 1.0, 1.5,2.5,3.5,5.0,10.0,250.0]
-        lambda_schedule = [0.0, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 5.0, 10.0]
+        lambda_schedule = [0.0, 0.05, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.9, 1.0, 1.5,2.5,3.5,5.0,10.0,250.0]
+        # lambda_schedule = [0.0, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 5.0, 10.0]
         # lambda_schedule = [0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
         # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
         # lambda_schedule = [0.0, 25.0, 250.0, 2500.0, 100000.0]
@@ -603,15 +603,14 @@ def train(true_dG):
         # print("Loading parameters epoch_38.npz")
         # epoch_params = np.load("epoch_38.npz")['params']
 
-        # print("saving ff params")
-        # np.savez("epoch_run_2"+str(epoch), params=epoch_params)
+        print("saving ff params")
+        np.savez("epoch_run_solvation"+str(epoch), params=epoch_params)
 
         for lamb_idx, lamb in enumerate(lambda_schedule):
             params = (mol, lamb, lamb_idx, epoch_params)
             all_params.append(params)
 
         # run_simulation(all_params[0])
-
         # assert 0
 
         results = pool.map(run_simulation, all_params)
@@ -680,8 +679,8 @@ def train(true_dG):
 
         # fix me when going to multiple molecules
         # print("full_L2_grad", full_L2_grad)
-        # opt_state = opt_update(epoch, full_L2_grad, opt_state)
+        opt_state = opt_update(epoch, full_L2_grad, opt_state)
 
     pool.close()
 
-train(1.575*4.18)
+train(3.575*4.18)
