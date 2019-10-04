@@ -235,13 +235,11 @@ def train(true_dG):
     guest_mol2 = open(fname, "r").read()
     mol = Chem.MolFromMol2Block(guest_mol2, sanitize=True, removeHs=False, cleanupSubstructures=True)
 
-
     # guest_mol2 = Chem.MolFromSmiles("c1ccccc1")
     # mol = Chem.AddHs(guest_mol2)
     # mol = Chem.MolFromMolBlock(Chem.MolToMolBlock(mol), removeHs=False)
     # print(mol)
 
-    pool = multiprocessing.Pool(num_gpus)
     # AllChem.EmbedMolecule(mol, randomSeed=1337)
     # AllChem.EmbedMolecule(mol)
 
@@ -285,7 +283,7 @@ def train(true_dG):
         # lambda_schedule = [0.0, 25.0, 250.0, 2500.0, 100000.0]
         # lambda_schedule = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         # lambda_schedule = [0.0]
-        lamda_schedule = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.5, 10.0]
+        lambda_schedule = [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.5, 10.0]
 
         # lambda_schedule = [0.15, 0.25]
 
@@ -367,6 +365,6 @@ def train(true_dG):
         # print("full_L2_grad", full_L2_grad)
         opt_state = opt_update(epoch, L2_grad, opt_state)
 
-    pool.close()
+    # pool.close()
 
 train(3.575*4.18)

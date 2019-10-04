@@ -118,11 +118,7 @@ def minimize(
     )
 
     start_time = time.time()
-
-
-
     all_xis = []
-
 
     for i in range(max_iter):
         dt *= increment
@@ -145,6 +141,8 @@ def minimize(
                 assert 0
 
             all_xis.append(xi)
+
+    del ctxt
 
     # Append final du/dl
     all_dudls = []
