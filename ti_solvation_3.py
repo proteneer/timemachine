@@ -39,7 +39,7 @@ from matplotlib import pyplot as plt
 
 plt.rcParams['figure.dpi'] = 200
 
-num_gpus = 8
+num_gpus = 1
 
 def write(xyz, masses):
     xyz = xyz - np.mean(xyz, axis=0, keepdims=True)
@@ -182,10 +182,10 @@ def minimize(
     d4_t = np.zeros((num_atoms, num_dimensions), dtype=np.float64)
     d4_t_lambdas = np.zeros((num_atoms, num_dimensions), dtype=np.float64) + lamb
 
-    water_coords = "minimized_water.npz"
-    if os.path.exists(water_coords):
-        wc = np.load(water_coords)['arr_0']
-        conf[:num_host_atoms, :3] = wc[:num_host_atoms, :3]
+    # water_coords = "minimized_water.npz"
+    # if os.path.exists(water_coords):
+        # wc = np.load(water_coords)['arr_0']
+        # conf[:num_host_atoms, :3] = wc[:num_host_atoms, :3]
 
     # # set coordinates
     d4_t[:num_host_atoms, :3] = conf[:num_host_atoms, :3]
@@ -206,7 +206,7 @@ def minimize(
     )
 
     xyz_buffer = []
-    dt = 1e-9
+    dt = 1e-8
     fh = open("water_test"+str(lamb_idx)+".xyz", "w")
     xyz = write(np.asarray(x_t[:, :3]*10), masses)      
     fh.write(xyz)
@@ -450,7 +450,8 @@ def run_simulation(params):
 
     os.environ['CUDA_VISIBLE_DEVICES'] = str(lambda_idx % num_gpus)
 
-    fname = "examples/water.pdb"
+    # fname = "examples/water.pdb"
+    fname = "examples/BRD4/pdb/BRD4_10A_Belly.pdb"
     # omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml')
     omm_forcefield = app.ForceField('amber99sb.xml', 'tip3p.xml')
     pdb = app.PDBFile(fname)
@@ -470,7 +471,7 @@ def run_simulation(params):
     smirnoff = ForceField("test_forcefields/smirnoff99Frosst.offxml")
 
     guest_potentials, smirnoff_params, smirnoff_param_groups, guest_conf, guest_masses = forcefield.parameterize(mol, smirnoff)
-    guest_conf = rescale_and_center(guest_conf)
+    # guest_conf = rescale_and_center(guest_conf)
 
     # print("HOST CONF", host_conf.shape)
     # print("GUEST CONF", guest_conf.shape)
@@ -507,12 +508,19 @@ def run_simulation(params):
     # 8. host vdw sigma
     # 9. host vdw epsilon
     # 19. ligand vdw epsilon
+    print("CPG", len(combined_param_groups))
+
+
     combined_dp_idxs = np.argwhere(filter_groups(combined_param_groups, [17])).reshape(-1)
+
     # combined_dp_idxs = combined_dp_idxs[0:1]
     # combined_dp_idxs = np.array([0])
 
-    # print("combined_dp_idxs", combined_dp_idxs)
+    print("combined_dp_idxs", combined_dp_idxs, "lengths", len(combined_dp_idxs), len(set(combined_dp_idxs)))
+    # assert 0
     print("Number of parameter derivatives", combined_dp_idxs.shape)
+
+    print("combined_params", len(combined_params))
 
     du_dls, du_dl_grads, all_es = minimize(
         num_host_atoms,
@@ -538,7 +546,7 @@ def run_simulation(params):
 def train(true_dG):
     # fname = "/home/ubuntu/Relay/Code/benchmarksets/input_files/cd-set1/mol2/guest-"+str(1)+".mol2"
 
-    fname = "examples/ligand-4.mol2"
+    fname = "examples/BRD4/mol2/ligand-4.mol2"
     guest_mol2 = open(fname, "r").read()
     mol = Chem.MolFromMol2Block(guest_mol2, sanitize=True, removeHs=False, cleanupSubstructures=True)
 
@@ -550,9 +558,10 @@ def train(true_dG):
 
     pool = multiprocessing.Pool(num_gpus)
     # AllChem.EmbedMolecule(mol, randomSeed=1337)
-    AllChem.EmbedMolecule(mol)
+    # AllChem.EmbedMolecule(mol)
 
-    fname = "examples/water.pdb"
+    # fname = "examples/water.pdb"
+    fname = "examples/BRD4/pdb/BRD4_10A_Belly.pdb"
     # omm_forcefield = app.ForceField('amber96.xml', 'amber99_obc.xml') # for proteins
     omm_forcefield = app.ForceField('amber99sb.xml', 'tip3p.xml') # for proteins
     pdb = app.PDBFile(fname)
@@ -593,6 +602,7 @@ def train(true_dG):
         lambda_schedule = [0.0, 0.05, 0.1, 0.125, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.9, 1.0, 1.5,2.5,3.5,5.0,10.0,250.0]
         # lambda_schedule = [0.0, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0, 1.5, 5.0, 10.0]
         # lambda_schedule = [0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15]
+        # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
         # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
         # lambda_schedule = [0.0, 25.0, 250.0, 2500.0, 100000.0]
         # lambda_schedule = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

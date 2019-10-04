@@ -415,7 +415,7 @@ def parameterize(mol, forcefield):
 
     guest_charges = np.array(global_params)[charge_param_idxs]
     # print("LIGAND NET CHARGE AFTER", np.sum(guest_charges))
-    print("LIGAND CHARGES", guest_charges)
+    # print("LIGAND CHARGES", guest_charges)
 
     nrg_fns.append((
         custom_ops.Electrostatics_f64,
