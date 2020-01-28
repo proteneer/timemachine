@@ -15,33 +15,37 @@ from openforcefield.typing.engines.smirnoff import ForceField
 from openforcefield.topology import ValenceDict
 
 # from timemachine.lib import custom_ops
-from system import custom_functionals
+# from system import custom_functionals
+from timemachine.lib import ops
 
-def hilbert_sort(conf):
-    hc = HilbertCurve(16, 3)
-    int_confs = (conf*1000).astype(np.int64)
-    dists = []
-    for xyz in int_confs.tolist():
-        dist = hc.distance_from_coordinates(xyz)
-        dists.append(dist)
-    perm = np.argsort(dists)
-    return perm
+# def hilbert_sort(conf):
+#     hc = HilbertCurve(16, 3)
+#     int_confs = (conf*1000).astype(np.int64)
+#     dists = []
+#     for xyz in int_confs.tolist():
+#         dist = hc.distance_from_coordinates(xyz)
+#         dists.append(dist)
+#     perm = np.argsort(dists)
+#     return perm
 
 def merge_potentials(nrgs):
     c_nrgs = []
     for a in nrgs:
         a_name = a[0]
         a_args = a[1]
-        if a_name == custom_functionals.harmonic_bond:
-            c_nrgs.append(custom_functionals.harmonic_bond(a_args[0], a_args[1]))
-        elif a_name == custom_functionals.harmonic_angle:
-            c_nrgs.append(custom_functionals.harmonic_angle(a_args[0], a_args[1]))
-        elif a_name == custom_functionals.periodic_torsion:
-            c_nrgs.append(custom_functionals.periodic_torsion(a_args[0], a_args[1]))
-        elif a_name == custom_functionals.lennard_jones:
-            c_nrgs.append(custom_functionals.lennard_jones(a_args[0].astype(custom_functionals.precision), a_args[1].astype(np.int32), a_args[2], a_args[3]))
-        elif a_name == custom_functionals.electrostatics:
-            c_nrgs.append(custom_functionals.electrostatics(a_args[0].astype(custom_functionals.precision), a_args[1].astype(np.int32), a_args[2], a_args[3]))
+        if a_name == ops.HarmonicBond:
+            c_nrgs.append(ops.HarmonicBond(a_args[0], a_args[1]))
+        elif a_name == ops.HarmonicAngle:
+            c_nrgs.append(ops.HarmonicAngle(a_args[0], a_args[1]))
+        elif a_name == ops.PeriodicTorsion:
+            c_nrgs.append(ops.PeriodicTorsion(a_args[0], a_args[1]))
+        elif a_name == ops.Nonbonded:
+            print(a_args)
+
+            assert 0
+            c_nrgs.append(ops.Nonbonded(a_args[0].astype(ops.precision), a_args[1].astype(np.int32), a_args[2], a_args[3]))
+        # elif a_name == ops.electrostatics:
+            # c_nrgs.append(ops.electrostatics(a_args[0].astype(ops.precision), a_args[1].astype(np.int32), a_args[2], a_args[3]))
         else:
             raise Exception("Unknown potential", a_name)
 
@@ -84,25 +88,26 @@ def combiner(
         b_args = b[1]
 
         assert a_name == b_name
-        if a_name == custom_functionals.harmonic_bond:
+        if a_name == ops.HarmonicBond:
             # print(a_name, a_args[0].shape, b_name, b_args[0].shape)
             bond_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             bond_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append((custom_functionals.harmonic_bond, (bond_idxs, bond_param_idxs)))
-        elif a_name == custom_functionals.harmonic_angle:
+            c_nrgs.append((ops.HarmonicBond, (bond_idxs, bond_param_idxs)))
+        elif a_name == ops.HarmonicAngle:
             angle_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             angle_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append((custom_functionals.harmonic_angle, (angle_idxs, angle_param_idxs)))
-        elif a_name == custom_functionals.periodic_torsion:
+            c_nrgs.append((ops.HarmonicAngle, (angle_idxs, angle_param_idxs)))
+        elif a_name == ops.PeriodicTorsion:
             if len(a_args[0]) > 0:
                 torsion_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
                 torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-                c_nrgs.append((custom_functionals.periodic_torsion, (torsion_idxs, torsion_param_idxs)))
+                c_nrgs.append((ops.PeriodicTorsion, (torsion_idxs, torsion_param_idxs)))
             else:
-                c_nrgs.append((custom_functionals.periodic_torsion, (b_args[0] + num_a_atoms, b_args[1] + len(a_params))))
+                c_nrgs.append((ops.PeriodicTorsion, (b_args[0] + num_a_atoms, b_args[1] + len(a_params))))
             pass
-        elif a_name == custom_functionals.lennard_jones:
-            lj_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=custom_functionals.precision)
+        elif a_name == ops.Nonbonded:
+            assert 0
+            lj_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=ops.precision)
             lj_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
             lj_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
             lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
@@ -145,25 +150,25 @@ def combiner(
             lj_gather_idxs = f_perm 
             lj_gather_idxs = np.arange(len(lj_gather_idxs))
 
-            c_nrgs.append((custom_functionals.lennard_jones, (lj_scale_matrix, lj_gather_idxs, lj_param_idxs, a_cutoff)))
-        elif a_name == custom_functionals.electrostatics:
-            es_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=custom_functionals.precision)
-            es_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
-            es_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
-            es_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            a_cutoff = a_args[2]
-            b_cutoff = b_args[2]
-            assert a_cutoff == b_cutoff
-            # TBD: Hilbert curve sort.
-            # perm = hilbert_sort(int_confs)
-            es_gather_idxs = np.arange(es_scale_matrix.shape[0])
-            np.random.shuffle(es_gather_idxs)
-            perm = hilbert_sort(c_conf)
-            # es_gather_idxs = perm # optimal
-            # es_gather_idxs = lj_gather_idxs
-            es_gather_idxs = np.arange(len(es_gather_idxs))
+            c_nrgs.append((ops.lennard_jones, (lj_scale_matrix, lj_gather_idxs, lj_param_idxs, a_cutoff)))
+        # elif a_name == ops.electrostatics:
+        #     es_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=ops.precision)
+        #     es_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
+        #     es_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
+        #     es_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
+        #     a_cutoff = a_args[2]
+        #     b_cutoff = b_args[2]
+        #     assert a_cutoff == b_cutoff
+        #     # TBD: Hilbert curve sort.
+        #     # perm = hilbert_sort(int_confs)
+        #     es_gather_idxs = np.arange(es_scale_matrix.shape[0])
+        #     np.random.shuffle(es_gather_idxs)
+        #     perm = hilbert_sort(c_conf)
+        #     # es_gather_idxs = perm # optimal
+        #     # es_gather_idxs = lj_gather_idxs
+        #     es_gather_idxs = np.arange(len(es_gather_idxs))
 
-            c_nrgs.append((custom_functionals.electrostatics, (es_scale_matrix, es_gather_idxs, es_param_idxs, a_cutoff)))
+        #     c_nrgs.append((ops.electrostatics, (es_scale_matrix, es_gather_idxs, es_param_idxs, a_cutoff)))
         else:
             raise Exception("Unknown potential", a_name)
 
@@ -249,17 +254,17 @@ def parameterize(mol, forcefield, am1=False):
 
         handler_name, handler_params = handler
 
-        # print("Parameterizing", handler_name)
+        nonbonded_exclusion_idxs = []
+        nonbonded_exclusion_params = []
+        nonbonded_lj_param_idxs = []
+        nonbonded_es_param_idxs = []
 
         if handler_name == 'Bonds':
 
             vd = ValenceDict()
             for p in handler_params.parameters:
                 k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
-                # k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
-                matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
-                # print(p.smirks, matches)
-                
+                matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)               
                 for m in matches:
                     vd[m] = (k_idx, l_idx)
 
@@ -270,10 +275,8 @@ def parameterize(mol, forcefield, am1=False):
                 bond_idxs.append(k)
                 bond_param_idxs.append(v)
 
-            # print("BOND_IDXS", bond_idxs)
-
             nrg_fns.append((
-                custom_functionals.harmonic_bond,
+                ops.HarmonicBond,
                 (
                     np.array(bond_idxs, dtype=np.int32),
                     np.array(bond_param_idxs, dtype=np.int32)
@@ -297,7 +300,7 @@ def parameterize(mol, forcefield, am1=False):
                 angle_param_idxs.append(v)
 
             nrg_fns.append((
-                custom_functionals.harmonic_angle,
+                ops.HarmonicAngle,
                 (
                     np.array(angle_idxs, dtype=np.int32),
                     np.array(angle_param_idxs, dtype=np.int32)
@@ -307,6 +310,7 @@ def parameterize(mol, forcefield, am1=False):
 
         elif handler_name == "ImproperTorsions":
             # Disabled for now
+            continue # skip while we debug
             vd = ValenceDict()
 
             for all_params in handler_params.parameters:
@@ -343,19 +347,6 @@ def parameterize(mol, forcefield, am1=False):
                     torsion_idxs.append(k)
                     torsion_param_idxs.append(v)
 
-            # nrg_fns.append((
-            #     custom_functionals.periodic_torsion,
-            #     (
-            #         np.array(torsion_idxs, dtype=np.int32),
-            #         np.array(torsion_param_idxs, dtype=np.int32)
-            #     )
-            # ))
-
-            # print(torsion_idxs)
-            # print(torsion_param_idxs)
-
-            # assert 0
-
         elif handler_name == "ProperTorsions":
 
             vd = ValenceDict()
@@ -388,7 +379,7 @@ def parameterize(mol, forcefield, am1=False):
                     torsion_param_idxs.append(v)
 
             nrg_fns.append((
-                custom_functionals.periodic_torsion,
+                ops.PeriodicTorsion,
                 (
                     np.array(torsion_idxs, dtype=np.int32),
                     np.array(torsion_param_idxs, dtype=np.int32)
@@ -421,21 +412,23 @@ def parameterize(mol, forcefield, am1=False):
                     scale_matrix[src][dst] = 0.5
                     scale_matrix[dst][src] = 0.5
 
-            lj_param_idxs = []
+            # lj_param_idxs = []
 
             for k, v in vd.items():
-                lj_param_idxs.append(v)
+                nonbonded_lj_param_idxs.append(v)
 
-            nrg_fns.append((
-                custom_functionals.lennard_jones,
-                [
-                    np.array(scale_matrix, dtype=np.int32), # WRONG
-                    np.array(lj_param_idxs, dtype=np.int32),
-                    custom_functionals.lj_cutoff,
-                ]
-            ))
+            # nrg_fns.append((
+            #     custom_functionals.lennard_jones,
+            #     [
+            #         np.array(scale_matrix, dtype=np.int32), # WRONG
+            #         np.array(lj_param_idxs, dtype=np.int32),
+            #         custom_functionals.lj_cutoff,
+            #     ]
+            # ))
 
     if am1:
+
+        assert 0
 
         print("Running AM1BCC")
 
@@ -505,11 +498,13 @@ def parameterize(mol, forcefield, am1=False):
         # process charges separately
         model = simple_charge_model()
         vd = ValenceDict()
+
+        # add parameterize
         for smirks, param in model.items():
 
             # small charges
             # param = param*0.2
-            param = param*0.2
+            param = param*0.2 # REMEMBER TO MULTIPLY BY sqrt(4PI_EPS0)
             c_idx = add_param(param, 17)
             matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
 
@@ -530,9 +525,9 @@ def parameterize(mol, forcefield, am1=False):
             scale_matrix[src][dst] = 0
             scale_matrix[dst][src] = 0
 
-        charge_param_idxs = []
+        # charge_param_idxs = []
         for k, v in vd.items():
-            charge_param_idxs.append(v)
+            nonbonded_es_param_idxs.append(v)
 
         # print("LIGAND NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
         # guest_charges = np.array(global_params)[charge_param_idxs]
@@ -544,14 +539,16 @@ def parameterize(mol, forcefield, am1=False):
         # guest_charges = np.array(global_params)[charge_param_idxs]
         # print("LIGAND NET CHARGE AFTER", guest_charges, "SUM", np.sum(guest_charges))
 
-        nrg_fns.append((
-            custom_functionals.electrostatics,
-            (
-                np.array(scale_matrix, dtype=np.int32), # WRONG
-                np.array(charge_param_idxs, dtype=np.int32),
-                custom_functionals.es_cutoff
-            )
-        ))
+
+
+        # nrg_fns.append((
+        #     custom_functionals.electrostatics,
+        #     (
+        #         np.array(scale_matrix, dtype=np.int32), # WRONG
+        #         np.array(charge_param_idxs, dtype=np.int32),
+        #         custom_functionals.es_cutoff
+        #     )
+        # ))
 
     c = mol.GetConformer(0)
     conf = np.array(c.GetPositions(), dtype=custom_functionals.precision)
