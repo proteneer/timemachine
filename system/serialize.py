@@ -9,6 +9,8 @@ from simtk.openmm.app import PDBFile
 from simtk.openmm.app import forcefield as ff
 from simtk import unit
 
+from timemachine import constants
+
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
@@ -149,7 +151,8 @@ def deserialize_system(
                 scale_matrix[a_idx][a_idx] = 0
                 charge, sig, eps = force.getParticleParameters(a_idx)
 
-                charge = value(charge)
+                # this needs to be scaled by sqrt(eps0)
+                charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
                 sig = value(sig)
                 eps = value(eps)
 
@@ -162,7 +165,9 @@ def deserialize_system(
 
             charge_param_idxs = np.array(charge_param_idxs, dtype=np.int32)
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
-            scale_idx = insert_parameters(0.0, 10)
+
+            # 1 here means we fully remove the interaction
+            scale_idx = insert_parameters(1.0, 10)
 
             exclusion_idxs = []
             exclusion_param_idxs = []
@@ -170,6 +175,7 @@ def deserialize_system(
             # fix me for scaling
             for a_idx in range(force.getNumExceptions()):
                 src, dst, new_cp, new_sig, new_eps = force.getExceptionParameters(a_idx)
+                # print(src, dst, new_cp, new_sig, new_eps)
                 exclusion_idxs.append([src, dst])
                 exclusion_param_idxs.append(scale_idx)
 

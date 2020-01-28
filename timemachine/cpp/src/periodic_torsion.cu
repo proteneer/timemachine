@@ -31,10 +31,6 @@ PeriodicTorsion<RealType, D>::PeriodicTorsion(
     gpuErrchk(cudaMalloc(&d_torsion_idxs_, T_*4*sizeof(*d_torsion_idxs_)));
     gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], T_*4*sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
 
-    // for(int i=0; i < T_; i++) {
-        // printf("PARAM_IDX 012 %d % d %d\n", param_idxs[i*3+0], param_idxs[i*3+1], param_idxs[i*3+2]);
-    // }
-
     gpuErrchk(cudaMalloc(&d_param_idxs_, T_*3*sizeof(*d_param_idxs_)));
     gpuErrchk(cudaMemcpy(d_param_idxs_, &param_idxs[0], T_*3*sizeof(*d_param_idxs_), cudaMemcpyHostToDevice));
 
@@ -76,9 +72,9 @@ void PeriodicTorsion<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "PeriodicTorsion Elapsed time: " << elapsed.count() << " s\n";
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
+        // std::cout << "PeriodicTorsion Elapsed time: " << elapsed.count() << " s\n";
 
     } else {
 
@@ -97,9 +93,9 @@ void PeriodicTorsion<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "PeriodicTorsion JVP Elapsed time: " << elapsed.count() << " s\n";
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
+        // std::cout << "PeriodicTorsion JVP Elapsed time: " << elapsed.count() << " s\n";
 
 
     }
