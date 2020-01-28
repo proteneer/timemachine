@@ -20,12 +20,29 @@ private:
     RealType coeff_a_;
     RealType *d_coeff_bs_;
     RealType *d_coeff_cs_;
+    RealType coeff_d_;
+    RealType coeff_e_;
+
+    int N_offset_;
+
+    RealType *d_sparse_A_;
+    RealType *d_sparse_B_;
+    RealType *d_sparse_C_;
+
+    int *d_sparse_nnz_rpc_A_;
+    int *d_sparse_nnz_rpc_B_;
+    int *d_sparse_nnz_rpc_C_;
+
+    int *d_sparse_nnz_A_;
+    int *d_sparse_nnz_B_;
+    int *d_sparse_nnz_C_;
 
     // refactor this to base class later
     void hessian_vector_product(
         const int N,
         const int D,
         const int P,
+        const int N_offset,
         const RealType *d_A,
         RealType *d_B,
         RealType *d_C) const;
@@ -39,7 +56,8 @@ public:
         const int num_dims,
         const RealType coeff_a,
         const std::vector<RealType> &coeff_bs,
-        const std::vector<RealType> &coeff_cs
+        const std::vector<RealType> &coeff_cs,
+        const int n_offset
     );
 
     void set_coeff_a(RealType a);
@@ -47,6 +65,10 @@ public:
     void set_coeff_b(int num_atoms, const RealType *cb);
 
     void set_coeff_c(int num_atoms, const RealType *cc);
+
+    void set_coeff_d(RealType d);
+
+    void set_coeff_e(RealType e);
 
     void set_dt(RealType ndt);
 
@@ -63,6 +85,8 @@ public:
         RealType *d_dv_dp_t, // mutable
         const RealType *d_input_noise_buffer=nullptr
     ) const override;
+
+    virtual RealType get_dt() const override;
 
 };
 

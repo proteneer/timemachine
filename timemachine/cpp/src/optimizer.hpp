@@ -48,6 +48,7 @@ public:
         const RealType *d_noise_buffer=nullptr // optional
     ) const = 0;
 
+    virtual RealType get_dt() const = 0;
 };
 
 }

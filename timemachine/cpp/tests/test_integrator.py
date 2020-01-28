@@ -30,20 +30,21 @@ class TestOptimizers(unittest.TestCase):
 
     def setup_system(self):
 
-        masses = np.array([1.0, 12.0, 4.0])
+        masses = np.array([1.0, 12.0, 4.0, 3.0])
         x0 = np.array([
             [1.0, 0.5, -0.5],
             [0.2, 0.1, -0.3],
             [0.5, 0.4, 0.3],
+            [0.8, 0.3, 0.4],
         ], dtype=np.float64)
         x0.setflags(write=False)
 
         num_atoms = x0.shape[0]
 
-        params = np.array([100.0, 2.0, 75.0, 1.81], np.float64)
-        bond_params = np.array([100.0, 2.0], dtype=np.float64)
-        bond_idxs = np.array([[0, 1], [1, 2]], dtype=np.int32)
-        bond_param_idxs = np.array([[0, 1], [0, 1]], dtype=np.int32)
+        params = np.array([100.0, 2.0, 75.0, 1.81,], np.float64)
+
+        bond_idxs = np.array([[0, 1], [1, 2], [0, 3]], dtype=np.int32)
+        bond_param_idxs = np.array([[0, 1], [0, 1], [1, 0]], dtype=np.int32)
 
         angle_idxs = np.array([[0,1,2]], dtype=np.int32)
         angle_param_idxs = np.array([[2,3]], dtype=np.int32)
@@ -77,6 +78,55 @@ class TestOptimizers(unittest.TestCase):
 
         return total_nrg, x0, params, masses, [test_hb, test_ha]
 
+    def test_inference_context(self):
+
+        ref_total_nrg_fn, x0, params, masses, test_energies = self.setup_system()
+
+        num_atoms = len(masses)
+        ref_dE_dx_fn = jax.grad(ref_total_nrg_fn, argnums=(0,))
+        ref_dE_dx_fn = jax.jit(ref_dE_dx_fn)
+
+        dt = 0.002
+        ca = 0.95
+        cb = np.random.rand(num_atoms)
+        cc = np.zeros(num_atoms, dtype=np.float64)
+
+        intg = ReferenceLangevin(dt, ca, cb, cc)
+
+        # set random velocities
+        v0 = np.random.rand(x0.shape[0], x0.shape[1])
+
+        def integrate(x_t, v_t, params):
+            for _ in range(100):
+                x_t, v_t = intg.step(x_t, v_t, ref_dE_dx_fn(x_t, params)[0])
+            return x_t, v_t
+
+        x_f, v_f = integrate(x0, v0, params)
+
+        # 2. Custom Ops Integration
+        lo = custom_ops.LangevinOptimizer_f64(
+            dt,
+            3,
+            ca,
+            cb,
+            cc
+        )
+
+        dp_idxs = np.arange(len(params)).astype(dtype=np.int32)
+
+        ctxt = custom_ops.InferenceContext_f64(
+            test_energies,
+            lo,
+            params,
+            x0,
+            v0
+        )
+
+        for i in range(100):
+            ctxt.step()
+
+        np.testing.assert_almost_equal(x_f, ctxt.get_x())
+        np.testing.assert_almost_equal(v_f, ctxt.get_v())
 
     def test_context(self):
 

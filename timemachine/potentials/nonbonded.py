@@ -5,8 +5,9 @@ from jax.scipy.special import erf, erfc
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.potentials.jax_utils import delta_r, distance
 
-
-def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
+# def simple_energy(conf, params, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
+# def lennard_jones(conf, params, box, param_idxs, scale_matrix=None, cutoff=None):
+def lennard_jones(conf, params, box, param_idxs, cutoff):
     """
     Implements a non-periodic LJ612 potential using the Lorentz−Berthelot combining
     rules, where sig_ij = (sig_i + sig_j)/2 and eps_ij = sqrt(eps_i * eps_j).
@@ -35,6 +36,7 @@ def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
         greater than cutoff is fully discarded.
     
     """
+    assert box is None
     sig = params[param_idxs[:, 0]]
     eps = params[param_idxs[:, 1]]
 
@@ -45,19 +47,27 @@ def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
 
     eps_i = np.expand_dims(eps, 0)
     eps_j = np.expand_dims(eps, 1)
-    eps_ij = scale_matrix * np.sqrt(eps_i * eps_j)
+
+    # if scale_matrix is None:
+        # N = conf.shape[0]
+        # scale_matrix = np.ones((N, N)) - np.eye(N)
+
+
+    # eps_ij = scale_matrix * np.sqrt(eps_i * eps_j)
+    eps_ij = np.sqrt(eps_i * eps_j)
 
     eps_ij_raw = eps_ij
 
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
-
     dij = distance(ri, rj, box)
 
     if cutoff is not None:
         eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
 
-    keep_mask = scale_matrix > 0
+    # keep_mask = scale_matrix > 0
+    N = conf.shape[0]
+    keep_mask = np.ones((N,N)) - np.eye(N)
 
     # (ytz): this avoids a nan in the gradient in both jax and tensorflow
     sig_ij = np.where(keep_mask, sig_ij, np.zeros_like(sig_ij))
@@ -67,11 +77,102 @@ def lennard_jones(conf, params, box, param_idxs, scale_matrix, cutoff=None):
     sig2 *= sig2
     sig6 = sig2*sig2*sig2
 
-    energy = 4*eps_ij*(sig6-1.0)*sig6
-    energy = np.where(keep_mask, energy, np.zeros_like(energy))
+    eij = 4*eps_ij*(sig6-1.0)*sig6
+    eij = np.where(keep_mask, eij, np.zeros_like(eij))
+    return np.sum(eij/2)
 
-    # divide by two to deal with symmetry
-    return np.sum(energy)/2
+    # now we compute the exclusions
+def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
+
+    assert box is None
+
+    src_idxs = exclusions[:, 0]
+    dst_idxs = exclusions[:, 1]
+    ri = conf[src_idxs]
+    rj = conf[dst_idxs]
+    dij = distance(ri, rj, None)
+
+    sig_idxs = param_idxs[:, 0] 
+    sig_i = params[sig_idxs[src_idxs]]
+    sig_j = params[sig_idxs[dst_idxs]]
+    sig_ij = (sig_i + sig_j)/2
+
+    eps_idxs = param_idxs[:, 1] 
+    eps_i = params[eps_idxs[src_idxs]]
+    eps_j = params[eps_idxs[dst_idxs]]
+    eps_ij = np.sqrt(eps_i * eps_j)
+
+    if cutoff is not None:
+        eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
+
+    sig2 = sig_ij/dij
+    sig2 *= sig2
+    sig6 = sig2*sig2*sig2
+
+    scale_ij = params[exclusion_scale_idxs]
+    eij_exc = scale_ij*4*eps_ij*(sig6-1.0)*sig6
+
+    if cutoff is not None:
+        eij_exc = np.where(dij > cutoff, np.zeros_like(eij_exc), eij_exc)
+        eij_exc = np.where(src_idxs == dst_idxs, np.zeros_like(eij_exc), eij_exc)
+
+    # the exclusion energy is not divided by two.
+    return np.sum(eij_exc)
+
+
+def simple_energy(conf, params, param_idxs, cutoff):
+    """
+    Numerically stable implementation of the pairwise term:
+    
+    eij = qi*qj/dij
+
+    """
+    charges = params[param_idxs]
+    return inverse_energy(conf, charges, cutoff)
+
+# def inverse_energy(conf, charges, cutoff, exclusions, exclusion_scale_idx):
+def simple_energy(conf, params, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
+    """
+    Numerically stable implementation of the pairwise term:
+    
+    eij = qi*qj/dij
+
+    """
+    # charges = params[param_idxs]
+    charges = params[param_idxs]
+    qi = np.expand_dims(charges, 0) # (1, N)
+    qj = np.expand_dims(charges, 1) # (N, 1)
+    qij = np.multiply(qi, qj)
+    ri = np.expand_dims(conf, 0)
+    rj = np.expand_dims(conf, 1)
+    dij = distance(ri, rj, None)
+
+    # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
+    keep_mask = 1 - np.eye(conf.shape[0])
+    qij = np.where(keep_mask, qij, np.zeros_like(qij))
+    dij = np.where(keep_mask, dij, np.zeros_like(dij))
+    eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
+
+    if cutoff is not None:
+        eij = np.where(dij > cutoff, np.zeros_like(eij), eij)
+
+    src_idxs = exclusions[:, 0]
+    dst_idxs = exclusions[:, 1]
+    ri = conf[src_idxs]
+    rj = conf[dst_idxs]
+    dij = distance(ri, rj, None)
+
+    qi = charges[src_idxs]
+    qj = charges[dst_idxs]
+    qij = np.multiply(qi, qj)
+
+    scale_ij = params[exclusion_scale_idxs]
+    eij_exc = scale_ij*qij/dij
+    if cutoff is not None:
+        eij_exc = np.where(dij > cutoff, np.zeros_like(eij_exc), eij_exc)
+        eij_exc = np.where(src_idxs == dst_idxs, np.zeros_like(eij_exc), eij_exc)
+
+    return np.sum(eij/2) - np.sum(eij_exc)
 
 
 def pairwise_energy(conf, box, charges, cutoff):
@@ -81,8 +182,6 @@ def pairwise_energy(conf, box, charges, cutoff):
     eij = qi*qj/dij
 
     """
-
-
     qi = np.expand_dims(charges, 0) # (1, N)
     qj = np.expand_dims(charges, 1) # (N, 1)
     qij = np.multiply(qi, qj)
@@ -136,6 +235,16 @@ def electrostatics(conf, params, box, param_idxs, scale_matrix, cutoff=None, alp
     """
     charges = params[param_idxs]
 
+    # neutralize the charge
+    # todo: neutralize host charges separately from guest charges
+    # print("WARNING: NUMBER OF ATOMS USED TO NEUTRALIZED SET EXPLICITLY FOR HOST aCD")
+    # num_host_atoms = 126
+    # host_charges = charges[:num_host_atoms]
+    # guest_charges = charges[num_host_atoms:]
+    # host_charges = host_charges - np.sum(host_charges)/host_charges.shape[0]
+    # guest_charges = guest_charges - np.sum(guest_charges)/guest_charges.shape[0]
+    # charges = np.concatenate([host_charges, guest_charges])
+
     # if we use periodic boundary conditions, then the following three parameters
     # must be set in order for Ewald to make sense.
     if box is not None:
@@ -159,8 +268,11 @@ def electrostatics(conf, params, box, param_idxs, scale_matrix, cutoff=None, alp
         # non periodic electrostatics is straightforward.
         # note that we do not support reaction field approximations.
         eij = scale_matrix*pairwise_energy(conf, box, charges, cutoff)
+        nrg = ONE_4PI_EPS0*eij
+        # onp.save("energy.npy", onp.asarray(nrg))
+        nrg = np.sum(nrg/2)
 
-        return ONE_4PI_EPS0*np.sum(eij)/2
+        return nrg
 
 
 def self_energy(conf, charges, alpha):
