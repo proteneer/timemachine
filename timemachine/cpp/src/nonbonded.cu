@@ -151,9 +151,9 @@ void Nonbonded<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "Nonbonded Elapsed time: " << elapsed.count() << " s\n";
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
+        // std::cout << "Nonbonded Elapsed time: " << elapsed.count() << " s\n";
 
     } else {
 
@@ -199,9 +199,9 @@ void Nonbonded<RealType, D>::execute_device(
         }
 
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
+        // std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
 
     }
 

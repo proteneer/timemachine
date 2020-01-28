@@ -7,6 +7,8 @@ import functools
 from hilbertcurve.hilbertcurve import HilbertCurve
 import numpy as np
 
+from timemachine import constants
+
 from openeye import oechem
 from openeye import oequacpac
 
@@ -15,33 +17,37 @@ from openforcefield.typing.engines.smirnoff import ForceField
 from openforcefield.topology import ValenceDict
 
 # from timemachine.lib import custom_ops
-from system import custom_functionals
+# from system import custom_functionals
+from timemachine.lib import ops
 
-def hilbert_sort(conf):
-    hc = HilbertCurve(16, 3)
-    int_confs = (conf*1000).astype(np.int64)
-    dists = []
-    for xyz in int_confs.tolist():
-        dist = hc.distance_from_coordinates(xyz)
-        dists.append(dist)
-    perm = np.argsort(dists)
-    return perm
+# def hilbert_sort(conf):
+#     hc = HilbertCurve(16, 3)
+#     int_confs = (conf*1000).astype(np.int64)
+#     dists = []
+#     for xyz in int_confs.tolist():
+#         dist = hc.distance_from_coordinates(xyz)
+#         dists.append(dist)
+#     perm = np.argsort(dists)
+#     return perm
 
 def merge_potentials(nrgs):
     c_nrgs = []
     for a in nrgs:
         a_name = a[0]
         a_args = a[1]
-        if a_name == custom_functionals.harmonic_bond:
-            c_nrgs.append(custom_functionals.harmonic_bond(a_args[0], a_args[1]))
-        elif a_name == custom_functionals.harmonic_angle:
-            c_nrgs.append(custom_functionals.harmonic_angle(a_args[0], a_args[1]))
-        elif a_name == custom_functionals.periodic_torsion:
-            c_nrgs.append(custom_functionals.periodic_torsion(a_args[0], a_args[1]))
-        elif a_name == custom_functionals.lennard_jones:
-            c_nrgs.append(custom_functionals.lennard_jones(a_args[0].astype(custom_functionals.precision), a_args[1].astype(np.int32), a_args[2], a_args[3]))
-        elif a_name == custom_functionals.electrostatics:
-            c_nrgs.append(custom_functionals.electrostatics(a_args[0].astype(custom_functionals.precision), a_args[1].astype(np.int32), a_args[2], a_args[3]))
+        if a_name == ops.HarmonicBond:
+            c_nrgs.append(ops.HarmonicBond(a_args[0], a_args[1]))
+        elif a_name == ops.HarmonicAngle:
+            c_nrgs.append(ops.HarmonicAngle(a_args[0], a_args[1]))
+        elif a_name == ops.PeriodicTorsion:
+            c_nrgs.append(ops.PeriodicTorsion(a_args[0], a_args[1]))
+        elif a_name == ops.Nonbonded:
+            print(a_args)
+
+            assert 0
+            c_nrgs.append(ops.Nonbonded(a_args[0].astype(ops.precision), a_args[1].astype(np.int32), a_args[2], a_args[3]))
+        # elif a_name == ops.electrostatics:
+            # c_nrgs.append(ops.electrostatics(a_args[0].astype(ops.precision), a_args[1].astype(np.int32), a_args[2], a_args[3]))
         else:
             raise Exception("Unknown potential", a_name)
 
@@ -66,8 +72,6 @@ def combiner(
     c_params = np.concatenate([a_params, b_params]) # combined parameters
     c_param_groups = np.concatenate([a_param_groups, b_param_groups]) # combine parameter groups
 
-    # print(a_nrgs)
-    # print(b_nrgs)
     assert len(a_nrgs) == len(b_nrgs)
 
     a_nrgs.sort(key=str)
@@ -75,6 +79,8 @@ def combiner(
 
     a_nrgs = a_nrgs[::-1]
     b_nrgs = b_nrgs[::-1]
+
+    # print(len(c_params))
 
     c_nrgs = []
     for a, b in zip(a_nrgs, b_nrgs):
@@ -84,86 +90,114 @@ def combiner(
         b_args = b[1]
 
         assert a_name == b_name
-        if a_name == custom_functionals.harmonic_bond:
-            # print(a_name, a_args[0].shape, b_name, b_args[0].shape)
+        assert a_args[-1] == b_args[-1] # dimension
+        if a_name == ops.HarmonicBond:
             bond_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             bond_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append((custom_functionals.harmonic_bond, (bond_idxs, bond_param_idxs)))
-        elif a_name == custom_functionals.harmonic_angle:
+            c_nrgs.append((ops.HarmonicBond, (bond_idxs, bond_param_idxs, a_args[-1])))
+        elif a_name == ops.HarmonicAngle:
             angle_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
             angle_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            c_nrgs.append((custom_functionals.harmonic_angle, (angle_idxs, angle_param_idxs)))
-        elif a_name == custom_functionals.periodic_torsion:
+            c_nrgs.append((ops.HarmonicAngle, (angle_idxs, angle_param_idxs, a_args[-1])))
+        elif a_name == ops.PeriodicTorsion:
             if len(a_args[0]) > 0:
                 torsion_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
                 torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-                c_nrgs.append((custom_functionals.periodic_torsion, (torsion_idxs, torsion_param_idxs)))
+                c_nrgs.append((ops.PeriodicTorsion, (torsion_idxs, torsion_param_idxs, a_args[-1])))
             else:
-                c_nrgs.append((custom_functionals.periodic_torsion, (b_args[0] + num_a_atoms, b_args[1] + len(a_params))))
+
+                assert 0
+                c_nrgs.append((ops.PeriodicTorsion, (b_args[0] + num_a_atoms, b_args[1] + len(a_params))))
             pass
-        elif a_name == custom_functionals.lennard_jones:
-            lj_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=custom_functionals.precision)
-            lj_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
-            lj_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
+        elif a_name == ops.Nonbonded:
+            assert a_args[5] == b_args[5] # cutoff
+            assert a_args[-1] == b_args[-1] # dimension
+
+            es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0)
             lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            a_cutoff = a_args[2]
-            b_cutoff = b_args[2]
-            assert a_cutoff == b_cutoff
+            exclusion_idxs = np.concatenate([a_args[2], b_args[2] + num_a_atoms], axis=0)
 
-            # TBD: Filter by eps == 0 then hilbert curve sort.
-            lj_gather_idxs = np.arange(lj_scale_matrix.shape[0])
-            np.random.shuffle(lj_gather_idxs)
+            es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)
+            lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)
 
-            # sort by lj eps
-            epsilons = c_params[lj_param_idxs[:, 1]]
-            cutoff = np.sum(epsilons < 1e-6)
+            c_nrgs.append((ops.Nonbonded, (
+                es_param_idxs,
+                lj_param_idxs,
+                exclusion_idxs,
+                es_exclusion_param_idxs,
+                lj_exclusion_param_idxs,
+                a_args[5],
+                a_args[-1]
+                )
+            ))
 
-            esi = np.argsort(epsilons)
+            # print(a_name, b_name)
 
-            # first perm
-            # 2 7 1 0 3 4 6 5
-            # second perm
-            # truncate to
-            # 2 7 1 | 0 3 4 6 5
-            # local ordering
-            # . . . | 0 1 2 3 4
-            # . . . | 4 2 0 1 3
-            # final
-            # . . . | 5 4 0 3 6
 
-            r_conf = c_conf[esi][cutoff:]
-            print(r_conf.shape)
-            r_perm = hilbert_sort(r_conf)
 
-            # a = np.array([2, 7, 1, 0, 3, 4, 6, 5])
-            f_perm = np.concatenate([esi[:cutoff], esi[cutoff:][r_perm]])
-            assert set(f_perm) == set(np.arange(c_conf.shape[0]))
-
-            # print(epsilons, cutoff, eps_sort_idx.shape)
             # assert 0
+            # lj_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=ops.precision)
+            # lj_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
+            # lj_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
+            # lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
+            # a_cutoff = a_args[2]
+            # b_cutoff = b_args[2]
+            # assert a_cutoff == b_cutoff
 
-            lj_gather_idxs = f_perm 
-            lj_gather_idxs = np.arange(len(lj_gather_idxs))
+            # # TBD: Filter by eps == 0 then hilbert curve sort.
+            # lj_gather_idxs = np.arange(lj_scale_matrix.shape[0])
+            # np.random.shuffle(lj_gather_idxs)
 
-            c_nrgs.append((custom_functionals.lennard_jones, (lj_scale_matrix, lj_gather_idxs, lj_param_idxs, a_cutoff)))
-        elif a_name == custom_functionals.electrostatics:
-            es_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=custom_functionals.precision)
-            es_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
-            es_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
-            es_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            a_cutoff = a_args[2]
-            b_cutoff = b_args[2]
-            assert a_cutoff == b_cutoff
-            # TBD: Hilbert curve sort.
-            # perm = hilbert_sort(int_confs)
-            es_gather_idxs = np.arange(es_scale_matrix.shape[0])
-            np.random.shuffle(es_gather_idxs)
-            perm = hilbert_sort(c_conf)
-            # es_gather_idxs = perm # optimal
-            # es_gather_idxs = lj_gather_idxs
-            es_gather_idxs = np.arange(len(es_gather_idxs))
+            # # sort by lj eps
+            # epsilons = c_params[lj_param_idxs[:, 1]]
+            # cutoff = np.sum(epsilons < 1e-6)
 
-            c_nrgs.append((custom_functionals.electrostatics, (es_scale_matrix, es_gather_idxs, es_param_idxs, a_cutoff)))
+            # esi = np.argsort(epsilons)
+
+            # # first perm
+            # # 2 7 1 0 3 4 6 5
+            # # second perm
+            # # truncate to
+            # # 2 7 1 | 0 3 4 6 5
+            # # local ordering
+            # # . . . | 0 1 2 3 4
+            # # . . . | 4 2 0 1 3
+            # # final
+            # # . . . | 5 4 0 3 6
+
+            # r_conf = c_conf[esi][cutoff:]
+            # print(r_conf.shape)
+            # r_perm = hilbert_sort(r_conf)
+
+            # # a = np.array([2, 7, 1, 0, 3, 4, 6, 5])
+            # f_perm = np.concatenate([esi[:cutoff], esi[cutoff:][r_perm]])
+            # assert set(f_perm) == set(np.arange(c_conf.shape[0]))
+
+            # # print(epsilons, cutoff, eps_sort_idx.shape)
+            # # assert 0
+
+            # lj_gather_idxs = f_perm 
+            # lj_gather_idxs = np.arange(len(lj_gather_idxs))
+
+            # c_nrgs.append((ops.lennard_jones, (lj_scale_matrix, lj_gather_idxs, lj_param_idxs, a_cutoff)))
+        # elif a_name == ops.electrostatics:
+        #     es_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=ops.precision)
+        #     es_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
+        #     es_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
+        #     es_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
+        #     a_cutoff = a_args[2]
+        #     b_cutoff = b_args[2]
+        #     assert a_cutoff == b_cutoff
+        #     # TBD: Hilbert curve sort.
+        #     # perm = hilbert_sort(int_confs)
+        #     es_gather_idxs = np.arange(es_scale_matrix.shape[0])
+        #     np.random.shuffle(es_gather_idxs)
+        #     perm = hilbert_sort(c_conf)
+        #     # es_gather_idxs = perm # optimal
+        #     # es_gather_idxs = lj_gather_idxs
+        #     es_gather_idxs = np.arange(len(es_gather_idxs))
+
+        #     c_nrgs.append((ops.electrostatics, (es_scale_matrix, es_gather_idxs, es_param_idxs, a_cutoff)))
         else:
             raise Exception("Unknown potential", a_name)
 
@@ -227,7 +261,7 @@ def simple_charge_model():
     }
     return model
 
-def parameterize(mol, forcefield, am1=False):
+def parameterize(mol, forcefield, am1=False, dimension=3):
     """
     Parameterize an RDKit molecule with a given forcefield.
     """
@@ -245,21 +279,20 @@ def parameterize(mol, forcefield, am1=False):
 
     nrg_fns = []
 
+    nonbonded_exclusion_idxs = []
+    nonbonded_exclusion_params = []
+    nonbonded_lj_param_idxs = []
+    nonbonded_es_param_idxs = []
+
     for handler in forcefield._parameter_handlers.items():
 
         handler_name, handler_params = handler
-
-        # print("Parameterizing", handler_name)
-
         if handler_name == 'Bonds':
 
             vd = ValenceDict()
             for p in handler_params.parameters:
                 k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
-                # k_idx, l_idx = add_param(to_md_units(p.k), 0), add_param(to_md_units(p.length), 1)
-                matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)
-                # print(p.smirks, matches)
-                
+                matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, p.smirks)               
                 for m in matches:
                     vd[m] = (k_idx, l_idx)
 
@@ -270,13 +303,12 @@ def parameterize(mol, forcefield, am1=False):
                 bond_idxs.append(k)
                 bond_param_idxs.append(v)
 
-            # print("BOND_IDXS", bond_idxs)
-
             nrg_fns.append((
-                custom_functionals.harmonic_bond,
+                ops.HarmonicBond,
                 (
                     np.array(bond_idxs, dtype=np.int32),
-                    np.array(bond_param_idxs, dtype=np.int32)
+                    np.array(bond_param_idxs, dtype=np.int32),
+                    dimension
                 )
             ))
 
@@ -297,16 +329,17 @@ def parameterize(mol, forcefield, am1=False):
                 angle_param_idxs.append(v)
 
             nrg_fns.append((
-                custom_functionals.harmonic_angle,
+                ops.HarmonicAngle,
                 (
                     np.array(angle_idxs, dtype=np.int32),
-                    np.array(angle_param_idxs, dtype=np.int32)
+                    np.array(angle_param_idxs, dtype=np.int32),
+                    dimension
                 )
             ))
 
-
         elif handler_name == "ImproperTorsions":
             # Disabled for now
+            continue # skip while we debug
             vd = ValenceDict()
 
             for all_params in handler_params.parameters:
@@ -343,19 +376,6 @@ def parameterize(mol, forcefield, am1=False):
                     torsion_idxs.append(k)
                     torsion_param_idxs.append(v)
 
-            # nrg_fns.append((
-            #     custom_functionals.periodic_torsion,
-            #     (
-            #         np.array(torsion_idxs, dtype=np.int32),
-            #         np.array(torsion_param_idxs, dtype=np.int32)
-            #     )
-            # ))
-
-            # print(torsion_idxs)
-            # print(torsion_param_idxs)
-
-            # assert 0
-
         elif handler_name == "ProperTorsions":
 
             vd = ValenceDict()
@@ -388,10 +408,11 @@ def parameterize(mol, forcefield, am1=False):
                     torsion_param_idxs.append(v)
 
             nrg_fns.append((
-                custom_functionals.periodic_torsion,
+                ops.PeriodicTorsion,
                 (
                     np.array(torsion_idxs, dtype=np.int32),
-                    np.array(torsion_param_idxs, dtype=np.int32)
+                    np.array(torsion_param_idxs, dtype=np.int32),
+                    dimension
                 )
             ))
 
@@ -401,138 +422,100 @@ def parameterize(mol, forcefield, am1=False):
             for param in handler_params.parameters:
                 sigma = to_md_units(param.sigma)
                 epsilon = to_md_units(param.epsilon)
-                s_idx, e_idx = add_param(sigma, 8), add_param(epsilon, 9) # group 19
+                # print("vanilla", param.sigma, param.epsilon, "converted", sigma, epsilon)
+                s_idx, e_idx = add_param(sigma, 8), add_param(epsilon, 9)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, param.smirks)
                 for m in matches:
                     vd[m] = (s_idx, e_idx)
 
-                scale_matrix = np.ones(shape=(num_atoms, num_atoms), dtype=custom_functionals.precision) - np.eye(num_atoms)
-
-                # fully exclude 1-2, 1-3, 1-4
-                for (src, dst) in bond_idxs:
-                    scale_matrix[src][dst] = 0
-                    scale_matrix[dst][src] = 0
-
-                for (src, _, dst) in angle_idxs:
-                    scale_matrix[src][dst] = 0
-                    scale_matrix[dst][src] = 0
-
-                for (src, _, _, dst) in torsion_idxs:
-                    scale_matrix[src][dst] = 0.5
-                    scale_matrix[dst][src] = 0.5
-
-            lj_param_idxs = []
-
             for k, v in vd.items():
-                lj_param_idxs.append(v)
-
-            nrg_fns.append((
-                custom_functionals.lennard_jones,
-                [
-                    np.array(scale_matrix, dtype=np.int32), # WRONG
-                    np.array(lj_param_idxs, dtype=np.int32),
-                    custom_functionals.lj_cutoff,
-                ]
-            ))
+                # print("KV", k, global_params[v[0]], global_params[v[1]])
+                nonbonded_lj_param_idxs.append(v)
 
     if am1:
+        assert 0
 
-        print("Running AM1BCC")
+        # print("Running AM1BCC")
 
-        mb = Chem.MolToMolBlock(mol)
+        # mb = Chem.MolToMolBlock(mol)
 
-        ims = oechem.oemolistream()
-        ims.SetFormat(oechem.OEFormat_SDF)
-        ims.openstring(mb)
+        # ims = oechem.oemolistream()
+        # ims.SetFormat(oechem.OEFormat_SDF)
+        # ims.openstring(mb)
 
-        for buf_mol in ims.GetOEMols():
-            oemol = oechem.OEMol(buf_mol)
+        # for buf_mol in ims.GetOEMols():
+        #     oemol = oechem.OEMol(buf_mol)
 
-        result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1BCCELF10Charges())
+        # result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1BCCELF10Charges())
 
-        if result is False:
-            raise Exception('Unable to assign charges')
+        # if result is False:
+        #     raise Exception('Unable to assign charges')
 
-        partial_charges = []
-        for index, atom in enumerate(oemol.GetAtoms()):
-            partial_charges.append(atom.GetPartialCharge())
+        # partial_charges = []
+        # for index, atom in enumerate(oemol.GetAtoms()):
+        #     partial_charges.append(atom.GetPartialCharge())
 
-        partial_charges = np.array(partial_charges)
+        # partial_charges = np.array(partial_charges)
 
-        charge_param_idxs = []
-        for charge in partial_charges:
-            # charge = charge*0.2
-            c_idx = add_param(charge, 17)
-            charge_param_idxs.append(c_idx)
+        # charge_param_idxs = []
+        # for charge in partial_charges:
+        #     # charge = charge*0.2
+        #     c_idx = add_param(charge, 17)
+        #     charge_param_idxs.append(c_idx)
 
-        scale_matrix = np.ones(shape=(num_atoms, num_atoms), dtype=custom_functionals.precision) - np.eye(num_atoms)
-        # fully exclude 1-2, 1-3, tbd: 1-4
-        for (src, dst) in bond_idxs:
-            scale_matrix[src][dst] = 0
-            scale_matrix[dst][src] = 0
+        # scale_matrix = np.ones(shape=(num_atoms, num_atoms), dtype=custom_functionals.precision) - np.eye(num_atoms)
+        # # fully exclude 1-2, 1-3, tbd: 1-4
+        # for (src, dst) in bond_idxs:
+        #     scale_matrix[src][dst] = 0
+        #     scale_matrix[dst][src] = 0
 
-        for (src, _, dst) in angle_idxs:
-            scale_matrix[src][dst] = 0
-            scale_matrix[dst][src] = 0
+        # for (src, _, dst) in angle_idxs:
+        #     scale_matrix[src][dst] = 0
+        #     scale_matrix[dst][src] = 0
 
-        for (src, _, _, dst) in torsion_idxs:
-            scale_matrix[src][dst] = 0.83333
-            scale_matrix[dst][src] = 0.83333
+        # for (src, _, _, dst) in torsion_idxs:
+        #     scale_matrix[src][dst] = 0.83333
+        #     scale_matrix[dst][src] = 0.83333
 
-        nrg_fns.append((
-            custom_functionals.electrostatics,
-            (
-                np.array(scale_matrix, dtype=np.int32), # WRONG
-                np.array(charge_param_idxs, dtype=np.int32),
-                custom_functionals.es_cutoff,
-            )
-        ))
-
-        print("AM1 partial charges", partial_charges)
-        # assert 0
-
-        # if ((charges / unit.elementary_charge) == 0.).all():
-        #     # TODO: These will be 0 if the charging failed. What behavior do we want in that case?
-        #     raise Exception(
-        #         "Partial charge calculation failed. Charges from compute_partial_charges() are all 0."
+        # nrg_fns.append((
+        #     custom_functionals.electrostatics,
+        #     (
+        #         np.array(scale_matrix, dtype=np.int32), # WRONG
+        #         np.array(charge_param_idxs, dtype=np.int32),
+        #         custom_functionals.es_cutoff,
         #     )
-        #     return charges
+        # ))
+
+        # print("AM1 partial charges", partial_charges)
+        # # assert 0
+
+        # # if ((charges / unit.elementary_charge) == 0.).all():
+        # #     # TODO: These will be 0 if the charging failed. What behavior do we want in that case?
+        # #     raise Exception(
+        # #         "Partial charge calculation failed. Charges from compute_partial_charges() are all 0."
+        # #     )
+        # #     return charges
 
     else:
-
-        # assert 0
 
         # process charges separately
         model = simple_charge_model()
         vd = ValenceDict()
+
+        # add parameterize
         for smirks, param in model.items():
 
             # small charges
-            # param = param*0.2
-            param = param*0.2
+            param = param*np.sqrt(constants.ONE_4PI_EPS0)
             c_idx = add_param(param, 17)
             matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
 
             for m in matches:
                 vd[m] = c_idx
 
-        scale_matrix = np.ones(shape=(num_atoms, num_atoms), dtype=custom_functionals.precision) - np.eye(num_atoms)
-        # fully exclude 1-2, 1-3, tbd: 1-4
-        for (src, dst) in bond_idxs:
-            scale_matrix[src][dst] = 0
-            scale_matrix[dst][src] = 0
-
-        for (src, _, dst) in angle_idxs:
-            scale_matrix[src][dst] = 0
-            scale_matrix[dst][src] = 0
-
-        for (src, _, _, dst) in torsion_idxs:
-            scale_matrix[src][dst] = 0
-            scale_matrix[dst][src] = 0
-
-        charge_param_idxs = []
+        # charge_param_idxs = []
         for k, v in vd.items():
-            charge_param_idxs.append(v)
+            nonbonded_es_param_idxs.append(v)
 
         # print("LIGAND NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
         # guest_charges = np.array(global_params)[charge_param_idxs]
@@ -544,23 +527,51 @@ def parameterize(mol, forcefield, am1=False):
         # guest_charges = np.array(global_params)[charge_param_idxs]
         # print("LIGAND NET CHARGE AFTER", guest_charges, "SUM", np.sum(guest_charges))
 
-        nrg_fns.append((
-            custom_functionals.electrostatics,
-            (
-                np.array(scale_matrix, dtype=np.int32), # WRONG
-                np.array(charge_param_idxs, dtype=np.int32),
-                custom_functionals.es_cutoff
-            )
-        ))
+    exclusion_param_idx = add_param(1.0, 10)
+
+    # insert into a dictionary to avoid double counting exclusions
+    exclusions = {}
+    for (src, dst) in bond_idxs:
+        assert src < dst
+        exclusions[(src, dst)] = exclusion_param_idx
+    for (src, _, dst) in angle_idxs:
+        assert src < dst
+        exclusions[(src, dst)] = exclusion_param_idx
+    for (src, _, _, dst) in torsion_idxs:
+        assert src < dst
+        exclusions[(src, dst)] = exclusion_param_idx
+
+    exclusion_idxs = []
+    exclusion_param_idxs = []
+
+    for k, v in exclusions.items():
+        exclusion_idxs.append(k)
+        exclusion_param_idxs.append(v)
+
+    exclusion_idxs = np.array(exclusion_idxs)
+
+    nrg_fns.append((
+        ops.Nonbonded,
+        (
+            np.array(nonbonded_es_param_idxs, dtype=np.int32),
+            np.array(nonbonded_lj_param_idxs, dtype=np.int32),
+            np.array(exclusion_idxs, dtype=np.int32),
+            np.array(exclusion_param_idxs, dtype=np.int32),
+            np.array(exclusion_param_idxs, dtype=np.int32),
+            10000.0,
+            dimension
+        )
+    ))
+
 
     c = mol.GetConformer(0)
-    conf = np.array(c.GetPositions(), dtype=custom_functionals.precision)
+    conf = np.array(c.GetPositions(), dtype=ops.precision)
     conf = conf/10 # convert to md_units
 
     masses = []
     for atom in mol.GetAtoms():
         masses.append(atom.GetMass())
-    masses = np.array(masses, dtype=custom_functionals.precision)
+    masses = np.array(masses, dtype=ops.precision)
 
-    return nrg_fns, np.array(global_params), np.array(global_param_groups, dtype=np.int32), conf, masses
+    return nrg_fns, (np.array(global_params), np.array(global_param_groups, dtype=np.int32)), conf, masses
 

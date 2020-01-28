@@ -1,7 +1,7 @@
 import os
 import numpy as np
 
-from timemachine.lib import custom_ops
+from timemachine.lib import ops
 
 from simtk import openmm as mm
 from simtk.openmm import app
@@ -9,12 +9,14 @@ from simtk.openmm.app import PDBFile
 from simtk.openmm.app import forcefield as ff
 from simtk import unit
 
-from system import custom_functionals
+from timemachine import constants
 
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
-def deserialize_system(system):
+def deserialize_system(
+    system,
+    dimension):
     """
     Deserialize an OpenMM XML file
 
@@ -24,26 +26,6 @@ def deserialize_system(system):
         Location to an existing xml file to be deserialized
 
     """
-
-    # filename, file_extension = os.path.splitext(filepath)
-    # sys_xml = open(filepath, 'r').read()
-    # system = mm.XmlSerializer.deserialize(sys_xml)
-    # coords = np.loadtxt(filename + '.xyz').astype(np.float64)
-    # coords = coords # WARNING DEPENDENT ON IF WE USE OPENMM OR NOT WTF
-
-    # pdb = PDBFile('/home/yutong/structures/anon/capped_receptor.pdb')
-    # forcefield = ff.ForceField('amber96.xml', 'tip3p.xml')
-    # system = forcefield.createSystem(
-    #     pdb.topology,
-    #     nonbondedMethod=app.CutoffNonPeriodic,
-    #     nonbondedCutoff=1*unit.nanometer,
-    #     # constraints=HBonds
-    # )
-    # coords = []
-    # for x, y, z in pdb.getPositions():
-    #     coords.append([value(x), value(y), value(z)])
-    # coords = np.array(coords)
-
     global_params = []
     global_param_groups = []
     test_potentials = []
@@ -61,9 +43,6 @@ def deserialize_system(system):
 
     for p in range(system.getNumParticles()):
         masses.append(value(system.getParticleMass(p)))
-
-    # print(len(masses), coords.shape[0])
-    # assert len(masses) == coords.shape[0]
 
     for force in system.getForces():
         # print("PROCESSING", force)
@@ -86,10 +65,11 @@ def deserialize_system(system):
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
             test_hb = (
-                custom_functionals.harmonic_bond,
+                ops.HarmonicBond,
                 (
                     bond_idxs,
-                    param_idxs
+                    param_idxs,
+                    dimension
                 )
             )
 
@@ -118,10 +98,11 @@ def deserialize_system(system):
             angle_idxs = np.array(angle_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
-            test_ha = (custom_functionals.harmonic_angle,
+            test_ha = (ops.HarmonicAngle,
                 (
                     angle_idxs,
-                    param_idxs
+                    param_idxs,
+                    dimension
                 )
             )
 
@@ -148,10 +129,11 @@ def deserialize_system(system):
             torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
 
-            test_tors = (custom_functionals.periodic_torsion,
+            test_tors = (ops.PeriodicTorsion,
                 (
                     torsion_idxs,
-                    param_idxs
+                    param_idxs,
+                    dimension
                 )
             )
 
@@ -169,20 +151,10 @@ def deserialize_system(system):
                 scale_matrix[a_idx][a_idx] = 0
                 charge, sig, eps = force.getParticleParameters(a_idx)
 
-                # print('charge, sig, eps', charge, sig, eps)
-
-                charge = value(charge)
+                # this needs to be scaled by sqrt(eps0)
+                charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
                 sig = value(sig)
                 eps = value(eps)
-
-                # print(sig, eps)
-                # if sig == 0 or eps == 0:
-                    # print(sig, eps)
-                    # assert 0
-                    # print("WARNING: invalid sig eps detected", sig, eps, "adjusting to 0.5 and 0.0")
-                    # assert eps == 0.0
-                    # sig = 0.5
-                    # eps = 0.0
 
                 charge_idx = insert_parameters(charge, 7)
                 sig_idx = insert_parameters(sig, 8)
@@ -191,54 +163,40 @@ def deserialize_system(system):
                 charge_param_idxs.append(charge_idx)
                 lj_param_idxs.append([sig_idx, eps_idx])
 
-
             charge_param_idxs = np.array(charge_param_idxs, dtype=np.int32)
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
 
+            # 1 here means we fully remove the interaction
+            scale_idx = insert_parameters(1.0, 10)
+
+            exclusion_idxs = []
+            exclusion_param_idxs = []
+
+            # fix me for scaling
             for a_idx in range(force.getNumExceptions()):
                 src, dst, new_cp, new_sig, new_eps = force.getExceptionParameters(a_idx)
-                old_val = np.sqrt(global_params[lj_param_idxs[:, 1][src]]*global_params[lj_param_idxs[:, 1][dst]])*unit.kilojoule_per_mole
-                if value(old_val) < 1e-6:
-                    sf = 0
-                else:
-                    sf = new_eps/(np.sqrt(global_params[lj_param_idxs[:, 1][src]]*global_params[lj_param_idxs[:, 1][dst]])*unit.kilojoule_per_mole)
-                scale_matrix[src][dst] = sf
-                scale_matrix[dst][src] = sf
+                # print(src, dst, new_cp, new_sig, new_eps)
+                exclusion_idxs.append([src, dst])
+                exclusion_param_idxs.append(scale_idx)
 
-            # gather_idxs = np.arange(scale_matrix.shape[0])
+            exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
+            exclusion_param_idxs = np.array(exclusion_param_idxs, dtype=np.int32)
 
-            test_lj = (custom_functionals.lennard_jones,
+            test_nonbonded = (
+                ops.Nonbonded,
                 (
-                    scale_matrix,
-                    lj_param_idxs,
-                    custom_functionals.lj_cutoff
-                )
-            )
-
-            test_potentials.append(test_lj)
-
-            # charges look fucked up, electrostatics pulling it in too much?
-            test_es = (custom_functionals.electrostatics,
-                (
-                    scale_matrix,
                     charge_param_idxs,
-                    custom_functionals.es_cutoff
+                    lj_param_idxs,
+                    exclusion_idxs,
+                    exclusion_param_idxs,
+                    exclusion_param_idxs,
+                    10000.0,
+                    dimension
                 )
             )
 
-            test_potentials.append(test_es)
+            test_potentials.append(test_nonbonded)
 
-            # print("PROTEIN NET CHARGE", np.sum(np.array(global_params)[charge_param_idxs]))
-
-    # for sanity checking
-    # test_tors = (custom_functionals.periodic_torsion,
-    #     (
-    #         np.zeros(shape=(0,4)),
-    #         np.zeros(shape=(0,3))
-    #     )
-    # )
-
-    # test_potentials.append(test_tors)
 
     global_params = np.array(global_params)
     global_param_groups = np.array(global_param_groups)
