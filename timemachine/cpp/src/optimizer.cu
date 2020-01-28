@@ -35,8 +35,6 @@ void Optimizer<RealType>::step_host(
     RealType *d_noise_buffer;
     gpuErrchk(cudaMalloc((void**)&d_noise_buffer, N*D*sizeof(*d_noise_buffer)));
 
-
-
     gpuErrchk(cudaMemcpy(d_x_t, h_x_t, N*D*sizeof(*d_x_t), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_v_t, h_v_t, N*D*sizeof(*d_v_t), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_dx_dp_t, h_dx_dp_t, P*N*D*sizeof(*d_dx_dp_t), cudaMemcpyHostToDevice));
