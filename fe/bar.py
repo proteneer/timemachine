@@ -68,6 +68,7 @@ def dG_dw(w):
     Parameters
     ---------
     w : np.ndarray, float, (2, N)
+        forward and reverse work for N frames
 
     Returns
     ------
