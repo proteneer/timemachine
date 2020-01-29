@@ -211,7 +211,7 @@ class TestNonbonded(GradientTest):
             custom_energies,
             [lambda_v],
             lamb_flags,
-            2
+            1
         )
 
         dx = ls.forward_step(x, params)

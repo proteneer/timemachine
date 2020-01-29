@@ -154,7 +154,6 @@ __global__ void convert_3d_to_4d(
         }
         d_coords_4d[local_idx_4d] = w;
 
-        // printf("setting local_idx_4d %d to %f\n", local_idx_4d, w);
         if(d_coords_3d_tangent) {
             RealType dw;
             if(lambda_flags[atom_idx] == 1) {
@@ -223,11 +222,8 @@ __global__ void accumulate_dU_dl(
             dw = 0;
         }
 
-
-        // d_coords_4d_tangent[local_idx_4d] = dw*du_dl_adjoint;
         RealType du_dw = static_cast<RealType>(static_cast<long long>(d_forces_4d[local_idx_4d]))/FIXED_EXPONENT;
-        // printf("dw %f du_dw %f\n", dw, du_dw);
-        // this is non-deterministic but the error should be extremely tiny at this point
+
         atomicAdd(du_dl_buffer, dw*du_dw);
 
     }

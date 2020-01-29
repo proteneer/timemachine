@@ -9,9 +9,6 @@ import numpy as np
 
 from timemachine import constants
 
-from openeye import oechem
-from openeye import oequacpac
-
 from openforcefield.utils import toolkits
 from openforcefield.typing.engines.smirnoff import ForceField
 from openforcefield.topology import ValenceDict
@@ -506,7 +503,7 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
         for smirks, param in model.items():
 
             # small charges
-            param = param*np.sqrt(constants.ONE_4PI_EPS0)
+            param = param*np.sqrt(constants.ONE_4PI_EPS0)/2
             c_idx = add_param(param, 17)
             matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
 

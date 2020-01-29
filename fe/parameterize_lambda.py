@@ -16,6 +16,8 @@ from system import serialize, forcefield
 
 from openforcefield.typing.engines import smirnoff
 
+from matplotlib import pyplot as plt
+
 def write_coords(frames, pdb_path, romol, outfile, num_frames=100):
     combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(pdb_path, removeHs=False), mol)
     combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
@@ -50,7 +52,7 @@ if __name__ == "__main__":
         constraints=None,
         rigidWater=False)
 
-    host_potentials, (host_params, host_param_groups), host_masses = serialize.deserialize_system(system, 3)
+    host_potentials, (host_params, host_param_groups), host_masses = serialize.deserialize_system(system, dimension=4)
     host_conf = []
     for x,y,z in pdb.positions:
         host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
@@ -63,7 +65,7 @@ if __name__ == "__main__":
         break
 
     off = smirnoff.ForceField("test_forcefields/smirnoff99Frosst.offxml")
-    guest_potentials, (guest_params, guest_param_groups), guest_conf, guest_masses = forcefield.parameterize(mol, off)
+    guest_potentials, (guest_params, guest_param_groups), guest_conf, guest_masses = forcefield.parameterize(mol, off, dimension=4)
 
     print("Host Shape", host_conf.shape, "Guest Shape", guest_conf.shape)
 
@@ -81,25 +83,31 @@ if __name__ == "__main__":
     for fn, fn_args in combined_potentials:
         gradients.append(fn(*fn_args))
 
-    for g in gradients:
-        # if g != ops.HarmonicBond:
-            # continue
-        du_dx = g.execute(combined_conf, combined_params)
-        for atom_idx, xyz in enumerate(np.abs(du_dx)):
-            if np.amax(xyz) > 10000:
-                print(atom_idx, xyz)
-
+    # for g in gradients:
+    #     du_dx = g.execute(combined_conf, combined_params)
+    #     for atom_idx, xyz in enumerate(np.abs(du_dx)):
+    #         if np.amax(xyz) > 10000:
+    #             print(atom_idx, xyz)
     # assert 0
 
-    stepper = custom_ops.BasicStepper_f64(gradients)
-
-    # should be negative
-    cbs = -np.ones(combined_conf.shape[0])*0.001
-    dt = 0.002
     T = 10000
-    step_sizes = np.ones(T)*dt
-    cas = np.ones(T)*0.95
 
+    lambda_schedule = np.linspace(0.00001, 0.999999, num=T)
+    lambda_idxs = np.zeros(combined_conf.shape[0], dtype=np.int32)
+    lambda_idxs[host_conf.shape[0]:] = -1 # insertion is -1, deletion is +1
+
+
+    stepper = custom_ops.LambdaStepper_f64(
+        gradients,
+        lambda_schedule,
+        lambda_idxs,
+        2
+    )
+
+    dt = 0.0015
+    step_sizes = np.ones(T)*dt
+    cas = np.ones(T)*0.99
+    cbs = -np.ones(combined_conf.shape[0])*0.001
 
     ctxt = custom_ops.ReversibleContext_f64_3d(
         stepper,
@@ -119,12 +127,31 @@ if __name__ == "__main__":
     ctxt.forward_mode()
     print("forward time", time.time()-start)
 
+    du_dls = stepper.get_du_dl()
+
+    for x, y in zip(lambda_schedule, du_dls):
+        print(x, y)
+
+    plt.xlabel('lambda')
+    plt.ylabel('du/dl')
+    plt.plot(lambda_schedule, du_dls)
+    plt.show()
+
+    print("integral", np.trapz(du_dls, lambda_schedule))
+
     coords = ctxt.get_all_coords()
+
+    print(coords)
 
     write_coords(coords, args.protein_pdb, mol, out_file)
 
-    test_adjoint = np.random.rand(x0.shape[0], x0.shape[0])/10
-    ctxt.set_x_t_adjoint(test_adjoint)
+    assert 0
+
+    du_dl_adjoint = np.random.rand(du_dls.shape[0])/1000
+    stepper.set_du_dl_adjoint(du_dl_adjoint)
+
+    # test_adjoint = np.random.rand(x0.shape[0], x0.shape[0])/10
+    ctxt.set_x_t_adjoint(np.zeros_like(x0))
     start = time.time()
     ctxt.backward_mode()
     print("backward time", time.time()-start)
@@ -133,3 +160,4 @@ if __name__ == "__main__":
     dL_dp = ctxt.get_param_adjoint_accum()
 
     print(dL_dp.shape)
+    print(dL_dp)
