@@ -3,12 +3,8 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 project(timemachine LANGUAGES CXX CUDA)
 
-# useful for anaconda builds
-# set(PYTHON_INCLUDE_DIRS "$ENV{HOME}/anaconda3/include/python3.7m")
-# set(PYTHON_LIBRARIES "$ENV{HOME}/anaconda3/lib/libpython3.7m.so")
-
-find_package(PythonInterp 3.7 REQUIRED)
-find_package(PythonLibs 3.7 REQUIRED)
+find_package(PythonInterp 3.6 REQUIRED)
+find_package(PythonLibs 3.6 REQUIRED)
 
 string(APPEND CMAKE_CUDA_FLAGS "-Xptxas='-v' -arch=sm_60 -O2 -lineinfo")
 
