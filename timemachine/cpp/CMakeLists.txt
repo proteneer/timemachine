@@ -46,7 +46,7 @@ include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 include_directories(src/kernels)
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 11)
-target_link_libraries(${LIBRARY_NAME} -lcudart)
+target_link_libraries(${LIBRARY_NAME} -lcurand -lcudart)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION "lib")
