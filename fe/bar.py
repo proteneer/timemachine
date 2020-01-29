@@ -73,7 +73,7 @@ def dG_dw(w):
     Returns
     ------
     dG_dw : np.ndarray, float, (2, N)
-        The gradient of free energy difference with respect to work
+        the gradient of free energy difference with respect to work
 
     """
     dG, _ = pymbar.BAR(w[0], w[1])
