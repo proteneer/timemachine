@@ -3,6 +3,7 @@ import time
 import numpy as np
 from io import StringIO
 
+import jax
 import rdkit
 from rdkit import Chem
 
@@ -12,11 +13,12 @@ from simtk.openmm.app import PDBFile
 
 from timemachine.lib import custom_ops, ops
 from fe.utils import to_md_units, write
+from fe import math_utils
 from system import serialize, forcefield
 
 from openforcefield.typing.engines import smirnoff
-
 from matplotlib import pyplot as plt
+
 
 def write_coords(frames, pdb_path, romol, outfile, num_frames=100):
     combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(pdb_path, removeHs=False), mol)
@@ -25,9 +27,6 @@ def write_coords(frames, pdb_path, romol, outfile, num_frames=100):
     PDBFile.writeHeader(cpdb.topology, outfile)
 
     interval = max(1, frames.shape[0]//num_frames)
-    # interval = 1
-
-    # print(interval, frames.shape[0], num_frames)
 
     for frame_idx, x in enumerate(frames):
         if frame_idx % interval == 0:
@@ -83,25 +82,19 @@ if __name__ == "__main__":
     for fn, fn_args in combined_potentials:
         gradients.append(fn(*fn_args))
 
-    # for g in gradients:
-    #     du_dx = g.execute(combined_conf, combined_params)
-    #     for atom_idx, xyz in enumerate(np.abs(du_dx)):
-    #         if np.amax(xyz) > 10000:
-    #             print(atom_idx, xyz)
-    # assert 0
-
     T = 10000
 
+    # we have strict convergence at the end points, but for numerical reasons (1/inf)
+    # need to have this not be *exactly* closed [0, 1] but rather open (0, 1)
     lambda_schedule = np.linspace(0.00001, 0.999999, num=T)
     lambda_idxs = np.zeros(combined_conf.shape[0], dtype=np.int32)
-    lambda_idxs[host_conf.shape[0]:] = -1 # insertion is -1, deletion is +1
-
+    lambda_idxs[host_conf.shape[0]:] = 1 # insertion is -1, deletion is +1
 
     stepper = custom_ops.LambdaStepper_f64(
         gradients,
         lambda_schedule,
         lambda_idxs,
-        2
+        1
     )
 
     dt = 0.0015
@@ -129,25 +122,33 @@ if __name__ == "__main__":
 
     du_dls = stepper.get_du_dl()
 
-    for x, y in zip(lambda_schedule, du_dls):
-        print(x, y)
+    # for x, y in zip(lambda_schedule, du_dls):
+        # print(x, y)
 
-    plt.xlabel('lambda')
-    plt.ylabel('du/dl')
-    plt.plot(lambda_schedule, du_dls)
-    plt.show()
+    # plt.xlabel('lambda')
+    # plt.ylabel('du/dl')
+    # plt.plot(lambda_schedule, du_dls)
+    # plt.show()
 
-    print("integral", np.trapz(du_dls, lambda_schedule))
+    work_true = 400
+    work_pred = math_utils.trapz(du_dls, lambda_schedule)
 
-    coords = ctxt.get_all_coords()
+    # mimic a loss comparable to bar gradients
+    loss = np.power(work_true - work_pred, 2)/128
+    dloss_dw = 2*(work_true - work_pred)/128
+    print("work_pred", work_pred, "work_true", work_true)
+    print("loss", loss, "dloss_dw", dloss_dw)
+    trapz_grad_fn = jax.grad(math_utils.trapz, argnums=0)
 
-    print(coords)
+    # dL_d(du/dl) = dL/dw . dw/d(du/dl)
+    dw_ddudl = trapz_grad_fn(du_dls, lambda_schedule)
+    dloss_ddudl = dloss_dw*dw_ddudl
 
-    write_coords(coords, args.protein_pdb, mol, out_file)
+    # coords = ctxt.get_all_coords()
+    # print(coords[0], coords[-1])
+    # write_coords(coords, args.protein_pdb, mol, out_file)
 
-    assert 0
-
-    du_dl_adjoint = np.random.rand(du_dls.shape[0])/1000
+    du_dl_adjoint =  np.random.rand(du_dls.shape[0])/1000
     stepper.set_du_dl_adjoint(du_dl_adjoint)
 
     # test_adjoint = np.random.rand(x0.shape[0], x0.shape[0])/10
