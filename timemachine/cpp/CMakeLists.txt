@@ -41,7 +41,8 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/gradient.cu
   src/integrator.cu
   src/stepper.cu
-  src/new_context.cu)
+  src/new_context.cu
+)
 
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 include_directories(src/kernels)
