@@ -55,8 +55,11 @@ Nonbonded<RealType, D>::Nonbonded(
 
 template <typename RealType, int D>
 Nonbonded<RealType, D>::~Nonbonded() {
-    gpuErrchk(cudaFree(d_lj_param_idxs_));
     gpuErrchk(cudaFree(d_charge_param_idxs_));
+    gpuErrchk(cudaFree(d_lj_param_idxs_));
+    gpuErrchk(cudaFree(d_exclusion_idxs_));
+    gpuErrchk(cudaFree(d_charge_scale_idxs_));
+    gpuErrchk(cudaFree(d_lj_scale_idxs_));
     gpuErrchk(cudaFree(d_block_bounds_ctr_));
     gpuErrchk(cudaFree(d_block_bounds_ext_));
 };

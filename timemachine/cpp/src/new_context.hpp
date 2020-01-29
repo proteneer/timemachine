@@ -51,6 +51,8 @@ public:
         const std::vector<RealType> &params
     );
 
+    ~ReversibleContext();
+
     void get_all_coords(RealType *out_buffer) const;
 
     void get_param_adjoint_accum(RealType *out_buffer) const;
