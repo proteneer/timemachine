@@ -9,6 +9,29 @@
 namespace timemachine {
 
 // D == 3
+
+template <typename RealType, int D>
+ReversibleContext<RealType, D>::~ReversibleContext() {
+    gpuErrchk(cudaFree(d_params_));
+    gpuErrchk(cudaFree(d_params_grads_));
+
+    gpuErrchk(cudaFree(d_coeff_cbs_));
+
+    gpuErrchk(cudaFree(d_coords_));
+    gpuErrchk(cudaFree(d_du_dls_));
+
+    gpuErrchk(cudaFree(d_velocities_));
+    gpuErrchk(cudaFree(d_forces_));
+
+    gpuErrchk(cudaFree(d_x_t_tangent_));
+    gpuErrchk(cudaFree(d_param_adjoint_accum_));
+    gpuErrchk(cudaFree(d_x_t_adjoint_));
+    gpuErrchk(cudaFree(d_v_t_adjoint_));
+
+    gpuErrchk(cudaFree(d_dE_dx_jvp_));
+    gpuErrchk(cudaFree(d_dE_dp_jvp_));
+};
+
 template <typename RealType, int D>
 ReversibleContext<RealType, D>::ReversibleContext(
     Stepper<RealType> *stepper,
