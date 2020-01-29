@@ -174,7 +174,9 @@ if __name__ == "__main__":
         loss = np.power(work_true - work_pred, 2)/128
         dloss_dw = -2*(work_true - work_pred)/128
 
-        print("work_pred", work_pred, "work_true", work_true, "loss", loss, "dloss_dw", dloss_dw)
+        print("--------epoch", epoch,"--------")
+        print("Loss", loss, "dloss_dw", dloss_dw, "work_pred", work_pred, "work_true", work_true)
+        print('------------')
         trapz_grad_fn = jax.grad(math_utils.trapz, argnums=0)
 
         # dL_d(du/dl) = dL/dw . dw/d(du/dl)

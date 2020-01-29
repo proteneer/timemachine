@@ -229,108 +229,108 @@ void declare_reversible_context(py::module &m, const char *typestr) {
     });
 }
 
-template <typename RealType>
-void declare_optimizer(py::module &m, const char *typestr) {
+// template <typename RealType>
+// void declare_optimizer(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Optimizer<RealType>;
-    std::string pyclass_name = std::string("Optimizer_") + typestr;
-    py::class_<Class>(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr())
-    .def("step", [](timemachine::Optimizer<RealType> &opt,
-        const py::array_t<RealType, py::array::c_style> &dE_dx,
-        const py::array_t<RealType, py::array::c_style> &d2E_dx2,
-        const py::array_t<RealType, py::array::c_style> &d2E_dxdp,
-        py::array_t<RealType, py::array::c_style> &x_t,
-        py::array_t<RealType, py::array::c_style> &v_t,
-        py::array_t<RealType, py::array::c_style> &dx_dp_t,
-        py::array_t<RealType, py::array::c_style> &dv_dp_t,
-        const py::array_t<RealType, py::array::c_style> &noise_buffer) {
+//     using Class = timemachine::Optimizer<RealType>;
+//     std::string pyclass_name = std::string("Optimizer_") + typestr;
+//     py::class_<Class>(
+//         m,
+//         pyclass_name.c_str(),
+//         py::buffer_protocol(),
+//         py::dynamic_attr())
+//     .def("step", [](timemachine::Optimizer<RealType> &opt,
+//         const py::array_t<RealType, py::array::c_style> &dE_dx,
+//         const py::array_t<RealType, py::array::c_style> &d2E_dx2,
+//         const py::array_t<RealType, py::array::c_style> &d2E_dxdp,
+//         py::array_t<RealType, py::array::c_style> &x_t,
+//         py::array_t<RealType, py::array::c_style> &v_t,
+//         py::array_t<RealType, py::array::c_style> &dx_dp_t,
+//         py::array_t<RealType, py::array::c_style> &dv_dp_t,
+//         const py::array_t<RealType, py::array::c_style> &noise_buffer) {
 
-            const long unsigned int num_atoms = dE_dx.shape()[0];
-            const long unsigned int num_dims = dE_dx.shape()[1];
-            const long unsigned int num_params = d2E_dxdp.shape()[0];
+//             const long unsigned int num_atoms = dE_dx.shape()[0];
+//             const long unsigned int num_dims = dE_dx.shape()[1];
+//             const long unsigned int num_params = d2E_dxdp.shape()[0];
 
-            opt.step_host(
-                num_atoms,
-                num_dims,
-                num_params,
-                dE_dx.data(),
-                d2E_dx2.data(),
-                d2E_dxdp.data(),
-                x_t.mutable_data(),
-                v_t.mutable_data(),
-                dx_dp_t.mutable_data(),
-                dv_dp_t.mutable_data(),
-                noise_buffer.data()
-            );
-        })
-    .def("get_dt", &timemachine::Optimizer<RealType>::get_dt);
+//             opt.step_host(
+//                 num_atoms,
+//                 num_dims,
+//                 num_params,
+//                 dE_dx.data(),
+//                 d2E_dx2.data(),
+//                 d2E_dxdp.data(),
+//                 x_t.mutable_data(),
+//                 v_t.mutable_data(),
+//                 dx_dp_t.mutable_data(),
+//                 dv_dp_t.mutable_data(),
+//                 noise_buffer.data()
+//             );
+//         })
+//     .def("get_dt", &timemachine::Optimizer<RealType>::get_dt);
 
-}
-
-
-template<typename RealType>
-void declare_langevin_optimizer(py::module &m, const char *typestr) {
-
-    using Class = timemachine::LangevinOptimizer<RealType>;
-    std::string pyclass_name = std::string("LangevinOptimizer_") + typestr;
-    py::class_<Class, timemachine::Optimizer<RealType> >(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        const RealType dt,
-        const int ndims,
-        const RealType ca,
-        const py::array_t<RealType, py::array::c_style> &cb, // bond_idxs
-        const py::array_t<RealType, py::array::c_style> &cc,  // param_idxs
-        const int n_offset // optimization for speedups
-    ) {
-        std::vector<RealType> coeff_bs(cb.size());
-        std::memcpy(coeff_bs.data(), cb.data(), cb.size()*sizeof(RealType));
-        std::vector<RealType> coeff_cs(cc.size());
-        std::memcpy(coeff_cs.data(), cc.data(), cc.size()*sizeof(RealType));
-        return new timemachine::LangevinOptimizer<RealType>(dt, ndims, ca, coeff_bs, coeff_cs, n_offset);
-    }),
-        py::arg("dt").none(false),
-        py::arg("ndims").none(false),
-        py::arg("ca").none(false),
-        py::arg("cb").none(false),
-        py::arg("cc").none(false),
-        py::arg("n_offset").none(false)
-    )
-    .def("set_dt", [](timemachine::LangevinOptimizer<RealType> &lo,
-        const RealType dt) {
-        lo.set_dt(dt);
-    })
-    .def("set_coeff_a", [](timemachine::LangevinOptimizer<RealType> &lo,
-        const RealType ca) {
-        lo.set_coeff_a(ca);
-    })
-    .def("set_coeff_b", [](timemachine::LangevinOptimizer<RealType> &lo,
-        const py::array_t<RealType, py::array::c_style> &cb) {
-        lo.set_coeff_b(cb.shape()[0], cb.data());
-    })
-    .def("set_coeff_c", [](timemachine::LangevinOptimizer<RealType> &lo,
-        const py::array_t<RealType, py::array::c_style> &cc) {
-        lo.set_coeff_c(cc.shape()[0], cc.data());
-    })
-    .def("set_coeff_d", [](timemachine::LangevinOptimizer<RealType> &lo,
-        const RealType cd) {
-        lo.set_coeff_d(cd);
-    })
-    .def("set_coeff_e", [](timemachine::LangevinOptimizer<RealType> &lo,
-        const RealType ce) {
-        lo.set_coeff_e(ce);
-    });
+// }
 
 
-}
+// template<typename RealType>
+// void declare_langevin_optimizer(py::module &m, const char *typestr) {
+
+//     using Class = timemachine::LangevinOptimizer<RealType>;
+//     std::string pyclass_name = std::string("LangevinOptimizer_") + typestr;
+//     py::class_<Class, timemachine::Optimizer<RealType> >(
+//         m,
+//         pyclass_name.c_str(),
+//         py::buffer_protocol(),
+//         py::dynamic_attr()
+//     )
+//     .def(py::init([](
+//         const RealType dt,
+//         const int ndims,
+//         const RealType ca,
+//         const py::array_t<RealType, py::array::c_style> &cb, // bond_idxs
+//         const py::array_t<RealType, py::array::c_style> &cc,  // param_idxs
+//         const int n_offset // optimization for speedups
+//     ) {
+//         std::vector<RealType> coeff_bs(cb.size());
+//         std::memcpy(coeff_bs.data(), cb.data(), cb.size()*sizeof(RealType));
+//         std::vector<RealType> coeff_cs(cc.size());
+//         std::memcpy(coeff_cs.data(), cc.data(), cc.size()*sizeof(RealType));
+//         return new timemachine::LangevinOptimizer<RealType>(dt, ndims, ca, coeff_bs, coeff_cs, n_offset);
+//     }),
+//         py::arg("dt").none(false),
+//         py::arg("ndims").none(false),
+//         py::arg("ca").none(false),
+//         py::arg("cb").none(false),
+//         py::arg("cc").none(false),
+//         py::arg("n_offset").none(false)
+//     )
+//     .def("set_dt", [](timemachine::LangevinOptimizer<RealType> &lo,
+//         const RealType dt) {
+//         lo.set_dt(dt);
+//     })
+//     .def("set_coeff_a", [](timemachine::LangevinOptimizer<RealType> &lo,
+//         const RealType ca) {
+//         lo.set_coeff_a(ca);
+//     })
+//     .def("set_coeff_b", [](timemachine::LangevinOptimizer<RealType> &lo,
+//         const py::array_t<RealType, py::array::c_style> &cb) {
+//         lo.set_coeff_b(cb.shape()[0], cb.data());
+//     })
+//     .def("set_coeff_c", [](timemachine::LangevinOptimizer<RealType> &lo,
+//         const py::array_t<RealType, py::array::c_style> &cc) {
+//         lo.set_coeff_c(cc.shape()[0], cc.data());
+//     })
+//     .def("set_coeff_d", [](timemachine::LangevinOptimizer<RealType> &lo,
+//         const RealType cd) {
+//         lo.set_coeff_d(cd);
+//     })
+//     .def("set_coeff_e", [](timemachine::LangevinOptimizer<RealType> &lo,
+//         const RealType ce) {
+//         lo.set_coeff_e(ce);
+//     });
+
+
+// }
 
 
 template <typename RealType, int D>
@@ -566,10 +566,10 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_reversible_context<double, 4>(m, "f64_4d");
     declare_reversible_context<double, 3>(m, "f64_3d");
 
-    declare_optimizer<float>(m, "f32");
-    declare_optimizer<double>(m, "f64");
+    // declare_optimizer<float>(m, "f32");
+    // declare_optimizer<double>(m, "f64");
 
-    declare_langevin_optimizer<float>(m, "f32");
-    declare_langevin_optimizer<double>(m, "f64");
+    // declare_langevin_optimizer<float>(m, "f32");
+    // declare_langevin_optimizer<double>(m, "f64");
 
 }

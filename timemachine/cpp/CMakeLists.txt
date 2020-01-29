@@ -31,9 +31,7 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
 # NO_EXTRAS is needed since cuda doesn't use flto
 pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/wrap_kernels.cpp
-  src/optimizer.cu
   src/gpu_utils.cu
-  src/langevin.cu
   src/nonbonded.cu
   src/harmonic_bond.cu
   src/harmonic_angle.cu
