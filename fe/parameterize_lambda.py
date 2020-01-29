@@ -128,7 +128,7 @@ if __name__ == "__main__":
     itercount = itertools.count()
 
     num_epochs = 10
-    for _ in range(num_epochs):
+    for epoch in range(num_epochs):
 
 
         current_params = np.asarray(get_params(opt_state))
@@ -174,7 +174,7 @@ if __name__ == "__main__":
         loss = np.power(work_true - work_pred, 2)/128
         dloss_dw = -2*(work_true - work_pred)/128
 
-        print("--------epoch", epoch,"--------")
+        print("--------epoch", epoch, "--------")
         print("Loss", loss, "dloss_dw", dloss_dw, "work_pred", work_pred, "work_true", work_true)
         print('------------')
         trapz_grad_fn = jax.grad(math_utils.trapz, argnums=0)
