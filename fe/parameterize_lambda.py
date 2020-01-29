@@ -2,6 +2,11 @@ import argparse
 import time
 import numpy as np
 from io import StringIO
+import itertools
+
+from jax.config import config as jax_config
+# this always needs to be set
+jax_config.update("jax_enable_x64", True)
 
 import jax
 import rdkit
@@ -18,6 +23,8 @@ from system import serialize, forcefield
 
 from openforcefield.typing.engines import smirnoff
 from matplotlib import pyplot as plt
+
+from jax.experimental import optimizers
 
 
 def write_coords(frames, pdb_path, romol, outfile, num_frames=100):
@@ -75,6 +82,22 @@ if __name__ == "__main__":
         host_conf, guest_conf,
         host_masses, guest_masses)
 
+
+    # print(combined_param_groups.shape)
+
+    # charges_idxs = np.argwhere(combined_param_groups == 7)
+
+    # print(charges_idxs.shape)
+    # dummy = np.random.rand(combined_param_groups.shape[0])
+    # param_grad = np.where(combined_param_groups == 7, dummy, np.zeros_like(dummy))
+
+    # print(param_grad)
+    # for p_idx, p_grad in enumerate(param_grad):
+    #     if p_grad != 0:
+    #         print(p_idx, p_grad)
+
+    # assert 0
+
     x0 = combined_conf
     v0 = np.zeros_like(x0)
 
@@ -90,75 +113,106 @@ if __name__ == "__main__":
     lambda_idxs = np.zeros(combined_conf.shape[0], dtype=np.int32)
     lambda_idxs[host_conf.shape[0]:] = 1 # insertion is -1, deletion is +1
 
-    stepper = custom_ops.LambdaStepper_f64(
-        gradients,
-        lambda_schedule,
-        lambda_idxs,
-        1
-    )
 
     dt = 0.0015
     step_sizes = np.ones(T)*dt
     cas = np.ones(T)*0.99
     cbs = -np.ones(combined_conf.shape[0])*0.001
 
-    ctxt = custom_ops.ReversibleContext_f64_3d(
-        stepper,
-        len(combined_masses),
-        x0.reshape(-1).tolist(),
-        v0.reshape(-1).tolist(),
-        cas.tolist(),
-        cbs.tolist(),
-        step_sizes.tolist(),
-        combined_params.reshape(-1).tolist(),
-    )
 
-    out_file = open(args.out_pdb, "w")
-    PDBFile.writeHeader(pdb.topology, out_file)
+    lr = 1e-4
+    # opt_init, opt_update, get_params = optimizers.adam(lr)
+    opt_init, opt_update, get_params = optimizers.sgd(lr)
 
-    start = time.time()
-    ctxt.forward_mode()
-    print("forward time", time.time()-start)
+    opt_state = opt_init(combined_params)
+    itercount = itertools.count()
 
-    du_dls = stepper.get_du_dl()
+    num_epochs = 10
+    for _ in range(num_epochs):
 
-    # for x, y in zip(lambda_schedule, du_dls):
-        # print(x, y)
 
-    # plt.xlabel('lambda')
-    # plt.ylabel('du/dl')
-    # plt.plot(lambda_schedule, du_dls)
-    # plt.show()
+        current_params = np.asarray(get_params(opt_state))
 
-    work_true = 400
-    work_pred = math_utils.trapz(du_dls, lambda_schedule)
 
-    # mimic a loss comparable to bar gradients
-    loss = np.power(work_true - work_pred, 2)/128
-    dloss_dw = 2*(work_true - work_pred)/128
-    print("work_pred", work_pred, "work_true", work_true)
-    print("loss", loss, "dloss_dw", dloss_dw)
-    trapz_grad_fn = jax.grad(math_utils.trapz, argnums=0)
+        stepper = custom_ops.LambdaStepper_f64(
+            gradients,
+            lambda_schedule,
+            lambda_idxs,
+            1
+        )
 
-    # dL_d(du/dl) = dL/dw . dw/d(du/dl)
-    dw_ddudl = trapz_grad_fn(du_dls, lambda_schedule)
-    dloss_ddudl = dloss_dw*dw_ddudl
+        ctxt = custom_ops.ReversibleContext_f64_3d(
+            stepper,
+            len(combined_masses),
+            x0.reshape(-1).tolist(),
+            v0.reshape(-1).tolist(),
+            cas.tolist(),
+            cbs.tolist(),
+            step_sizes.tolist(),
+            current_params.reshape(-1).tolist(),
+        )
 
-    # coords = ctxt.get_all_coords()
-    # print(coords[0], coords[-1])
-    # write_coords(coords, args.protein_pdb, mol, out_file)
+        start = time.time()
+        ctxt.forward_mode()
+        print("forward time", time.time()-start)
 
-    du_dl_adjoint =  np.random.rand(du_dls.shape[0])/1000
-    stepper.set_du_dl_adjoint(du_dl_adjoint)
+        du_dls = stepper.get_du_dl()
 
-    # test_adjoint = np.random.rand(x0.shape[0], x0.shape[0])/10
-    ctxt.set_x_t_adjoint(np.zeros_like(x0))
-    start = time.time()
-    ctxt.backward_mode()
-    print("backward time", time.time()-start)
+        # for x, y in zip(lambda_schedule, du_dls):
+            # print(x, y)
 
-    # compute the parameter derivatives
-    dL_dp = ctxt.get_param_adjoint_accum()
+        # plt.xlabel('lambda')
+        # plt.ylabel('du/dl')
+        # plt.plot(lambda_schedule, du_dls)
+        # plt.show()
 
-    print(dL_dp.shape)
-    print(dL_dp)
+
+        work_true = 400
+        work_pred = math_utils.trapz(du_dls, lambda_schedule)
+
+        # mimic a loss comparable to bar gradients
+        loss = np.power(work_true - work_pred, 2)/128
+        dloss_dw = -2*(work_true - work_pred)/128
+
+        print("work_pred", work_pred, "work_true", work_true, "loss", loss, "dloss_dw", dloss_dw)
+        trapz_grad_fn = jax.grad(math_utils.trapz, argnums=0)
+
+        # dL_d(du/dl) = dL/dw . dw/d(du/dl)
+        dw_ddudl = trapz_grad_fn(du_dls, lambda_schedule)
+        dloss_ddudl = dloss_dw*dw_ddudl
+
+        # coords = ctxt.get_all_coords()
+        # print(coords[0], coords[-1])
+        # write_coords(coords, args.protein_pdb, mol, out_file)
+
+        # du_dl_adjoint =  np.random.rand(du_dls.shape[0])/1000
+        print("setting adjoints to", dloss_ddudl, "with mean", np.mean(dloss_ddudl))
+        stepper.set_du_dl_adjoint(dloss_ddudl)
+
+        # test_adjoint = np.random.rand(x0.shape[0], x0.shape[0])/10
+        ctxt.set_x_t_adjoint(np.zeros_like(x0))
+        start = time.time()
+        ctxt.backward_mode()
+        print("backward time", time.time()-start)
+
+        # compute the parameter derivatives
+        dL_dp = ctxt.get_param_adjoint_accum()
+
+        # only change charges (both ligand and protein)
+
+
+        # for p_idx, pp in enumerate(dL_dp):
+        #     if combined_param_groups[p_idx] == 7:
+        #         print(p_idx, pp)
+
+        # assert 0
+
+
+        param_grad = np.where(combined_param_groups == 7, dL_dp, np.zeros_like(dL_dp))
+        print("mean_grad", np.sum(param_grad)/np.sum(combined_param_groups == 7))
+        opt_state = opt_update(next(itercount), param_grad, opt_state)
+
+
+        # explictly call the destructor?
+        del ctxt
+        del stepper
