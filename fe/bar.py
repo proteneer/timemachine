@@ -37,7 +37,7 @@ def BARzero(w, deltaF):
 
     Returns
     ------
-    fzero : scalar, float
+    scalar, float
         a variable that is zeroed when deltaF satisfies BAR
 
     """
@@ -72,7 +72,7 @@ def dG_dw(w):
 
     Returns
     ------
-    dG_dw : np.ndarray, float, (2, N)
+    np.ndarray, float, (2, N)
         the gradient of free energy difference with respect to work
 
     """

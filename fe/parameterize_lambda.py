@@ -19,13 +19,14 @@ from simtk.openmm.app import PDBFile
 from timemachine.lib import custom_ops, ops
 from fe.utils import to_md_units, write
 from fe import math_utils
-from system import serialize, forcefield
 
-from openforcefield.typing.engines import smirnoff
+import multiprocessing
 from matplotlib import pyplot as plt
 
 from jax.experimental import optimizers
 
+from fe import simulation
+from fe import loss
 
 def write_coords(frames, pdb_path, romol, outfile, num_frames=100):
     combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(pdb_path, removeHs=False), mol)
@@ -45,13 +46,78 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Quick Test')
     parser.add_argument('--out_pdb', type=str)
-    parser.add_argument('--protein_pdb', type=str)
+    parser.add_argument('--complex_pdb', type=str)
+    parser.add_argument('--solvent_pdb', type=str)
     parser.add_argument('--ligand_sdf', type=str)
     args = parser.parse_args()
+
+    suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
+    for guest_mol in suppl:
+        break
+
+    T = 10000
+    dt = 0.0015
+    step_sizes = np.ones(T)*dt
+    cas = np.ones(T)*0.99
+
+    num_gpus = 1
+    pool = multiprocessing.Pool(num_gpus)
+
+    complex_pdb = app.PDBFile(args.complex_pdb)
+    solvent_pdb = app.PDBFile(args.solvent_pdb)
+
+    all_du_dls = []
+
+    lambda_schedule = np.linspace(0.00001, 0.999999, num=T)
+
+    for host_pdb in [complex_pdb, solvent_pdb]:
+        for mode in ['insertion', 'deletion']:
+            sim = simulation.Simulation(
+                guest_mol,
+                host_pdb,
+                mode,
+                step_sizes,
+                cas,
+                lambda_schedule
+            )
+
+            host_conf = []
+            for x,y,z in host_pdb.positions:
+                host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+
+            # todo batch
+            guest_conf = guest_mol.GetConformer(0)
+            guest_conf = np.array(guest_conf.GetPositions(), dtype=ops.precision)
+            guest_conf = guest_conf/10 # convert to md_units
+
+            x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
+
+            all_xs = []
+            for _ in range(4):
+                all_xs.append(x0)
+
+            results = pool.map(sim.run_forward, all_xs)
+
+            all_du_dls.append(results)
+
+    all_du_dls = np.array(all_du_dls)
+
+    error = loss.loss_dG(*all_du_dls, lambda_schedule, 250.)
+
+    print("Error", error)
+
+    assert 0
+
+    pool.close()
+    # du_dls = sim.run_forward(x0)
+    # print(du_dls)
+
+    assert 0
 
     # parameterize the protein
     pdb = app.PDBFile(args.protein_pdb)
     amber_ff = app.ForceField('amber99sb.xml', 'tip3p.xml')
+
     system = amber_ff.createSystem(
         pdb.topology,
         nonbondedMethod=app.NoCutoff,
@@ -63,7 +129,6 @@ if __name__ == "__main__":
     for x,y,z in pdb.positions:
         host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
     host_conf = np.array(host_conf, dtype=np.float64)
-
 
     # parameterize the small molecule
     suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
@@ -112,9 +177,9 @@ if __name__ == "__main__":
     num_epochs = 10
     for epoch in range(num_epochs):
 
-        num_gpus = 8
-
-        batch_size = num_gpus
+        # simulations = []
+        # for sims in [water_insertion_sims, water_deletion_sims, complex_insertion_sims, complex_deletion_sims]:
+        #     for sim in sims:
 
 
 
@@ -144,6 +209,8 @@ if __name__ == "__main__":
 
         du_dls = stepper.get_du_dl()
 
+
+        # goal is to get all the du_dls
         # for x, y in zip(lambda_schedule, du_dls):
             # print(x, y)
 

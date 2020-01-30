@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 
-def trapz(y, x=None, dx=1.0, axis=-1):
+def trapz(y, x, dx=1.0, axis=-1):
     """
     Isomorphic API to numpy's trapz. Refer to np.trapz for documentation.
     """

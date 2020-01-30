@@ -55,7 +55,7 @@ def combiner(
     a_nrgs, b_nrgs,
     a_params, b_params,
     a_param_groups, b_param_groups,
-    a_conf, b_conf,
+    # a_conf, b_conf,
     a_masses, b_masses):
     """
     Combine two systems with two distinct parameter sets into one.
@@ -65,7 +65,7 @@ def combiner(
 
     num_a_atoms = len(a_masses)                     # offset by number of atoms in a
     c_masses = np.concatenate([a_masses, b_masses]) # combined masses
-    c_conf = np.concatenate([a_conf, b_conf])       # combined geometry
+    # c_conf = np.concatenate([a_conf, b_conf])       # combined geometry
     c_params = np.concatenate([a_params, b_params]) # combined parameters
     c_param_groups = np.concatenate([a_param_groups, b_param_groups]) # combine parameter groups
 
@@ -102,9 +102,7 @@ def combiner(
                 torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 c_nrgs.append((ops.PeriodicTorsion, (torsion_idxs, torsion_param_idxs, a_args[-1])))
             else:
-
-                assert 0
-                c_nrgs.append((ops.PeriodicTorsion, (b_args[0] + num_a_atoms, b_args[1] + len(a_params))))
+                c_nrgs.append((ops.PeriodicTorsion, (b_args[0] + num_a_atoms, b_args[1] + len(a_params), b_args[-1])))
             pass
         elif a_name == ops.Nonbonded:
             assert a_args[5] == b_args[5] # cutoff
@@ -128,77 +126,11 @@ def combiner(
                 )
             ))
 
-            # print(a_name, b_name)
-
-
-
-            # assert 0
-            # lj_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=ops.precision)
-            # lj_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
-            # lj_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
-            # lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            # a_cutoff = a_args[2]
-            # b_cutoff = b_args[2]
-            # assert a_cutoff == b_cutoff
-
-            # # TBD: Filter by eps == 0 then hilbert curve sort.
-            # lj_gather_idxs = np.arange(lj_scale_matrix.shape[0])
-            # np.random.shuffle(lj_gather_idxs)
-
-            # # sort by lj eps
-            # epsilons = c_params[lj_param_idxs[:, 1]]
-            # cutoff = np.sum(epsilons < 1e-6)
-
-            # esi = np.argsort(epsilons)
-
-            # # first perm
-            # # 2 7 1 0 3 4 6 5
-            # # second perm
-            # # truncate to
-            # # 2 7 1 | 0 3 4 6 5
-            # # local ordering
-            # # . . . | 0 1 2 3 4
-            # # . . . | 4 2 0 1 3
-            # # final
-            # # . . . | 5 4 0 3 6
-
-            # r_conf = c_conf[esi][cutoff:]
-            # print(r_conf.shape)
-            # r_perm = hilbert_sort(r_conf)
-
-            # # a = np.array([2, 7, 1, 0, 3, 4, 6, 5])
-            # f_perm = np.concatenate([esi[:cutoff], esi[cutoff:][r_perm]])
-            # assert set(f_perm) == set(np.arange(c_conf.shape[0]))
-
-            # # print(epsilons, cutoff, eps_sort_idx.shape)
-            # # assert 0
-
-            # lj_gather_idxs = f_perm 
-            # lj_gather_idxs = np.arange(len(lj_gather_idxs))
-
-            # c_nrgs.append((ops.lennard_jones, (lj_scale_matrix, lj_gather_idxs, lj_param_idxs, a_cutoff)))
-        # elif a_name == ops.electrostatics:
-        #     es_scale_matrix = np.ones(shape=(len(c_masses), len(c_masses)), dtype=ops.precision)
-        #     es_scale_matrix[:num_a_atoms, :num_a_atoms] = a_args[0]
-        #     es_scale_matrix[num_a_atoms:, num_a_atoms:] = b_args[0]
-        #     es_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-        #     a_cutoff = a_args[2]
-        #     b_cutoff = b_args[2]
-        #     assert a_cutoff == b_cutoff
-        #     # TBD: Hilbert curve sort.
-        #     # perm = hilbert_sort(int_confs)
-        #     es_gather_idxs = np.arange(es_scale_matrix.shape[0])
-        #     np.random.shuffle(es_gather_idxs)
-        #     perm = hilbert_sort(c_conf)
-        #     # es_gather_idxs = perm # optimal
-        #     # es_gather_idxs = lj_gather_idxs
-        #     es_gather_idxs = np.arange(len(es_gather_idxs))
-
-        #     c_nrgs.append((ops.electrostatics, (es_scale_matrix, es_gather_idxs, es_param_idxs, a_cutoff)))
         else:
             raise Exception("Unknown potential", a_name)
 
-    return c_nrgs, c_params, c_param_groups, c_conf, c_masses
+    # return c_nrgs, c_params, c_param_groups, c_conf, c_masses
+    return c_nrgs, c_params, c_param_groups, c_masses
 
 
 def to_md_units(q):
@@ -561,14 +493,14 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
     ))
 
 
-    c = mol.GetConformer(0)
-    conf = np.array(c.GetPositions(), dtype=ops.precision)
-    conf = conf/10 # convert to md_units
+    # c = mol.GetConformer(0)
+    # conf = np.array(c.GetPositions(), dtype=ops.precision)
+    # conf = conf/10 # convert to md_units
 
     masses = []
     for atom in mol.GetAtoms():
         masses.append(atom.GetMass())
     masses = np.array(masses, dtype=ops.precision)
 
-    return nrg_fns, (np.array(global_params), np.array(global_param_groups, dtype=np.int32)), conf, masses
+    return nrg_fns, (np.array(global_params), np.array(global_param_groups, dtype=np.int32)), masses
 
