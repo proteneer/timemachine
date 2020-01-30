@@ -82,22 +82,6 @@ if __name__ == "__main__":
         host_conf, guest_conf,
         host_masses, guest_masses)
 
-
-    # print(combined_param_groups.shape)
-
-    # charges_idxs = np.argwhere(combined_param_groups == 7)
-
-    # print(charges_idxs.shape)
-    # dummy = np.random.rand(combined_param_groups.shape[0])
-    # param_grad = np.where(combined_param_groups == 7, dummy, np.zeros_like(dummy))
-
-    # print(param_grad)
-    # for p_idx, p_grad in enumerate(param_grad):
-    #     if p_grad != 0:
-    #         print(p_idx, p_grad)
-
-    # assert 0
-
     x0 = combined_conf
     v0 = np.zeros_like(x0)
 
@@ -113,12 +97,10 @@ if __name__ == "__main__":
     lambda_idxs = np.zeros(combined_conf.shape[0], dtype=np.int32)
     lambda_idxs[host_conf.shape[0]:] = 1 # insertion is -1, deletion is +1
 
-
     dt = 0.0015
     step_sizes = np.ones(T)*dt
     cas = np.ones(T)*0.99
     cbs = -np.ones(combined_conf.shape[0])*0.001
-
 
     lr = 1e-4
     # opt_init, opt_update, get_params = optimizers.adam(lr)
@@ -130,9 +112,13 @@ if __name__ == "__main__":
     num_epochs = 10
     for epoch in range(num_epochs):
 
+        num_gpus = 8
+
+        batch_size = num_gpus
+
+
 
         current_params = np.asarray(get_params(opt_state))
-
 
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
@@ -169,6 +155,27 @@ if __name__ == "__main__":
 
         work_true = 400
         work_pred = math_utils.trapz(du_dls, lambda_schedule)
+
+        complex_insertion_work = []
+        complex_deletion_work = []
+        complex_dG = pymbar.bar()
+
+        solvent_insertion_work = []
+        solvent_deletion_work = []
+        solvent_dG = pymbar.bar()
+
+        final_dG = complex_dG - solvent_dG
+        true_dG = 35
+
+        loss = (true_dG - final_dG)**2
+
+        # compute adjoints
+        dL_dfinal_dG = -2*(true_dG - final_dG)
+        dL_dcomplex_dG = dL_dfinal_dG
+        dL_dsolvent_dG = -dL_dfinal_dG
+        dL_dcomplex_dinsertion_work = []
+        dL_dcomplex_ddeletion_work = []
+
 
         # mimic a loss comparable to bar gradients
         loss = np.power(work_true - work_pred, 2)/128
