@@ -435,7 +435,7 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
         for smirks, param in model.items():
 
             # small charges
-            param = param*np.sqrt(constants.ONE_4PI_EPS0)/2
+            param = param*np.sqrt(constants.ONE_4PI_EPS0)/4
             c_idx = add_param(param, 17)
             matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
 
@@ -487,7 +487,7 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
             np.array(exclusion_idxs, dtype=np.int32),
             np.array(exclusion_param_idxs, dtype=np.int32),
             np.array(exclusion_param_idxs, dtype=np.int32),
-            10000.0,
+            1.0,
             dimension
         )
     ))

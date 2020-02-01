@@ -47,6 +47,7 @@ class TestNonbonded(GradientTest):
         ref_mp = np.transpose(ref_mp, (2,0,1))
         return ref_mp
 
+    # @unittest.skip("debug")
     def test_fast_nonbonded(self):
         np.random.seed(125)
         N = 65
@@ -105,7 +106,7 @@ class TestNonbonded(GradientTest):
                 for r, t in zip(ref_forces, test_forces):
                     self.compare_forces(x, params, r, t)
 
-    @unittest.skip("debug")
+    # @unittest.skip("debug")
     def test_lambda(self):
 
         np.random.seed(4321)
@@ -134,11 +135,20 @@ class TestNonbonded(GradientTest):
 
         def lambda_to_w(lamb, lamb_flags, exponent):
             """
+            We use the following form:
+
+            Insertion:
+
+            np.tan()
+
             """
-            lk = jnp.power(lamb, exponent)
-            d4 = lk/(1-lk)*np.ones_like(lamb_flags)
-            d4 = jnp.power(d4, lamb_flags)
-            d4 = jnp.where(lamb_flags != 0, d4, 0)
+            insertion = jnp.tan(lamb*(np.pi/2))/exponent
+            deletion = jnp.tan(-(lamb-1)*(np.pi/2))/exponent
+
+            d4_insertion = jnp.where(lamb_flags == 1, insertion, 0.0)
+            d4_deletion = jnp.where(lamb_flags == -1, deletion, 0.0)
+            d4 = d4_insertion + d4_deletion
+
             return d4
 
         def potential_lambda(x3, lamb, params, lamb_flags, exponent):
@@ -160,7 +170,7 @@ class TestNonbonded(GradientTest):
             lamb_flags=lamb_flags,
             exponent=2)
 
-        lambda_v = 0.5
+        lambda_v = 0.4
         dw_dl_fn = jax.jacfwd(lambda_to_w, argnums=(0,))
         dw_dl = dw_dl_fn(lambda_v, lamb_flags, 2)[0]
 

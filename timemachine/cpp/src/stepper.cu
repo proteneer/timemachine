@@ -2,6 +2,8 @@
 #include "kernel_utils.cuh"
 #include "fixed_point.hpp"
 
+#define PI 3.14159265358979323846
+
 #include <iostream>
 namespace timemachine {
 
@@ -142,13 +144,12 @@ __global__ void convert_3d_to_4d(
     int local_idx_4d = atom_idx*4 + d_idx;
 
     if(d_idx == 3) {
-        RealType upper = pow(lambda, k);
-        RealType lower = (1-upper);
+
         RealType w;
         if(lambda_flags[atom_idx] == 1) {
-            w = upper/lower;
+            w = tan(lambda*(PI/2))/k;
         } else if (lambda_flags[atom_idx] == -1) {
-            w = lower/upper;
+            w = tan(-(lambda-1)*(PI/2))/k;
         } else {
             w = 0;
         }
@@ -157,9 +158,13 @@ __global__ void convert_3d_to_4d(
         if(d_coords_3d_tangent) {
             RealType dw;
             if(lambda_flags[atom_idx] == 1) {
-                dw = k*pow(lambda, k-1)/pow(1-pow(lambda, k), 2);
+                auto cosw = cos(lambda*PI/2);
+                auto secw = 1/cosw;
+                dw = (secw*secw*PI)/(2*k);
             } else if (lambda_flags[atom_idx] == -1) { 
-                dw = -k*pow(lambda, -k-1);
+                auto sinw = sin(lambda*PI/2);
+                auto cscw = 1/sinw;
+                dw = -(cscw*cscw*PI)/(2*k);
             } else {
                 dw = 0;
             }
@@ -215,9 +220,13 @@ __global__ void accumulate_dU_dl(
 
         RealType dw;
         if(lambda_flags[atom_idx] == 1) {
-            dw = k*pow(lambda, k-1)/pow(1-pow(lambda, k), 2);
+            auto cosw = cos(lambda*PI/2);
+            auto secw = 1/cosw;
+            dw = (secw*secw*PI)/(2*k);
         } else if (lambda_flags[atom_idx] == -1) { 
-            dw = -k*pow(lambda, -k-1);
+            auto sinw = sin(lambda*PI/2);
+            auto cscw = 1/sinw;
+            dw = -(cscw*cscw*PI)/(2*k);
         } else {
             dw = 0;
         }

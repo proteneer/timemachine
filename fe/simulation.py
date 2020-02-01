@@ -1,7 +1,7 @@
 import numpy as np
 import time
 
-
+import os
 from rdkit import Chem
 
 from simtk.openmm import app
@@ -12,6 +12,22 @@ from openforcefield.typing.engines import smirnoff
 from system import serialize, forcefield
 
 from timemachine.lib import custom_ops
+import traceback
+
+
+# def write_coords(frames, pdb_path, romol, outfile, num_frames=100):
+#     combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(pdb_path, removeHs=False), mol)
+#     combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+#     cpdb = app.PDBFile(combined_pdb_str)
+#     PDBFile.writeHeader(cpdb.topology, outfile)
+
+#     interval = max(1, frames.shape[0]//num_frames)
+
+#     for frame_idx, x in enumerate(frames):
+#         if frame_idx % interval == 0:
+#             PDBFile.writeModel(cpdb.topology, x*10, outfile, frame_idx)
+
+#     PDBFile.writeFooter(pdb.topology, outfile)
 
 class Simulation:
     """
@@ -29,6 +45,8 @@ class Simulation:
 
         self.step_sizes = step_sizes
         amber_ff = app.ForceField('amber99sb.xml', 'tip3p.xml')
+
+
 
         # host
         system = amber_ff.createSystem(
@@ -53,8 +71,6 @@ class Simulation:
         self.combined_param_groups = combined_param_groups
         self.combined_masses = combined_masses
 
-
-
         N_host = len(host_pdb.positions)
         N_guest = guest_mol.GetNumAtoms()
         N_combined = N_host + N_guest
@@ -65,18 +81,29 @@ class Simulation:
         self.lambda_schedule = lambda_schedule
         self.lambda_idxs = np.zeros(N_combined, dtype=np.int32)
         if direction == 'deletion':
-            self.lambda_idxs[N_host:] = 1 # insertion is -1, deletion is +1
+            self.lambda_idxs[N_host:] = 1
         elif direction == 'insertion':
-            self.lambda_idxs[N_host:] = -1 # insertion is -1, deletion is +1
+            self.lambda_idxs[N_host:] = -1
         else:
             raise ValueError("Unknown direction: "+direction)
-        self.exponent = 1
+        self.exponent = 16
 
-    def run_forward(self, x0):
+    def run_forward_multi(self, args):
+        x0, pdb_writer, gpu_idx = args
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
+        try:
+            return self.run_forward(x0, pdb_writer)
+        except Exception as err:
+            print(err)
+            traceback.print_tb(err.__traceback__)
+            raise 
+
+    def run_forward(self, x0, pdb_writer):
         """
         x0 include host configs as well
         """
         # this is multi-process safe to run.
+
 
         start = time.time()
         gradients = []
@@ -102,20 +129,18 @@ class Simulation:
             self.step_sizes.tolist(),
             self.combined_params.reshape(-1).tolist(),
         )
-        print("init time", time.time() - start)
-
-        start = time.time()
         ctxt.forward_mode()
-        # print("run time", time.time() - start)
-
         du_dls = stepper.get_du_dl()
 
-        stepper.set_du_dl_adjoint(np.zeros_like(du_dls))
+        if pdb_writer is not None:
+            pdb_writer.write_header()
+            xs = ctxt.get_all_coords()
+            for frame_idx, x in enumerate(xs):
 
-        # test_adjoint = np.random.rand(x0.shape[0], x0.shape[0])/10
-        ctxt.set_x_t_adjoint(np.zeros_like(x0))
-
-        ctxt.backward_mode()
+                interval = max(1, xs.shape[0]//pdb_writer.n_frames)
+                if frame_idx % interval == 0:
+                    pdb_writer.write(x*10)
+        # pdb_writer.close()
 
         print("run time", time.time() - start)
 
@@ -124,50 +149,54 @@ class Simulation:
 
         return du_dls
 
-
-    # def run_forward(self, x0):
-    #     """
-    #     x0 include host configs as well
-    #     """
-    #     # this is multi-process safe to run.
-
-    #     start = time.time()
-    #     gradients = []
-    #     for fn, fn_args in self.combined_potentials:
-    #         gradients.append(fn(*fn_args))
-
-    #     stepper = custom_ops.LambdaStepper_f64(
-    #         gradients,
-    #         self.lambda_schedule,
-    #         self.lambda_idxs,
-    #         self.exponent
-    #     )
-
-    #     v0 = np.zeros_like(x0)
-
-    #     ctxt = custom_ops.ReversibleContext_f64_3d(
-    #         stepper,
-    #         len(self.combined_masses),
-    #         x0.reshape(-1).tolist(),
-    #         v0.reshape(-1).tolist(),
-    #         self.cas.tolist(),
-    #         self.cbs.tolist(),
-    #         self.step_sizes.tolist(),
-    #         self.combined_params.reshape(-1).tolist(),
-    #     )
-    #     print("init time", time.time() - start)
-
-    #     start = time.time()
-    #     ctxt.forward_mode()
+    def run_forward_and_backward_multi(self, args):
+        x0, du_dl_adjoints, gpu_idx = args
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
+        try:
+            return self.run_forward_and_backward(x0)
+        except Exception as e:
+            print(e)
+            traceback.print_tb(err.__traceback__)
+            raise 
 
 
-    #     du_dls = stepper.get_du_dl()
+    def run_forward_and_backward(self, x0, du_dl_adjoints):
+        """
+        x0 include host configs as well
+        """
 
-    #     ctxt.backward_mode()
+        start = time.time()
+        gradients = []
+        for fn, fn_args in self.combined_potentials:
+            gradients.append(fn(*fn_args))
 
-    #     print("run time", time.time() - start)
+        stepper = custom_ops.LambdaStepper_f64(
+            gradients,
+            self.lambda_schedule,
+            self.lambda_idxs,
+            self.exponent
+        )
 
-    #     del stepper
-    #     del ctxt
+        v0 = np.zeros_like(x0)
 
-    #     return du_dls
+        ctxt = custom_ops.ReversibleContext_f64_3d(
+            stepper,
+            len(self.combined_masses),
+            x0.reshape(-1).tolist(),
+            v0.reshape(-1).tolist(),
+            self.cas.tolist(),
+            self.cbs.tolist(),
+            self.step_sizes.tolist(),
+            self.combined_params.reshape(-1).tolist(),
+        )
+        ctxt.forward_mode()
+
+        stepper.set_du_dl_adjoint(dloss_ddudl)
+        ctxt.set_x_t_adjoint(np.zeros_like(x0))
+        ctxt.backward_mode()
+
+        dL_dp = ctxt.get_param_adjoint_accum()
+
+        print("run time", time.time() - start)
+
+        return dL_dp
