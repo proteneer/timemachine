@@ -278,6 +278,9 @@ void __global__ k_nonbonded_inference(
         }
 
         if(atom_j_idx < atom_i_idx && d2ij < cutoff*cutoff && atom_j_idx < N && atom_i_idx < N) {
+
+
+
             RealType dij = sqrt(d2ij);
             // electrostatics force
             RealType inv_dij = 1/dij;
@@ -298,15 +301,12 @@ void __global__ k_nonbonded_inference(
             RealType d8ij = d4ij*d4ij;
             RealType d14ij = d8ij*d4ij*d2ij;
 
-            // RealType sig6rij4 = sig6/pow(d2ij, 4);
-            // RealType sig12rij7 = sig12/pow(d2ij, 7);
             RealType sig6rij4 = sig6/d8ij;
             RealType sig12rij7 = sig12/d14ij;
             RealType lj_grad_prefactor = 24*eps_ij*(sig12rij7*2 - sig6rij4);
 
             #pragma unroll
             for(int d=0; d < D; d++) {
-
                 RealType val = abs((es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]));
                 gi[d] -= (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);
                 gj[d] += (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);

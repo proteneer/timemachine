@@ -4,7 +4,6 @@ from rdkit import Chem
 
 import simtk
 import functools
-from hilbertcurve.hilbertcurve import HilbertCurve
 import numpy as np
 
 from timemachine import constants
@@ -17,15 +16,6 @@ from openforcefield.topology import ValenceDict
 # from system import custom_functionals
 from timemachine.lib import ops
 
-# def hilbert_sort(conf):
-#     hc = HilbertCurve(16, 3)
-#     int_confs = (conf*1000).astype(np.int64)
-#     dists = []
-#     for xyz in int_confs.tolist():
-#         dist = hc.distance_from_coordinates(xyz)
-#         dists.append(dist)
-#     perm = np.argsort(dists)
-#     return perm
 
 def merge_potentials(nrgs):
     c_nrgs = []
@@ -55,17 +45,24 @@ def combiner(
     a_nrgs, b_nrgs,
     a_params, b_params,
     a_param_groups, b_param_groups,
-    # a_conf, b_conf,
-    a_masses, b_masses):
+    a_masses, b_masses,
+    perm=None):
     """
     Combine two systems with two distinct parameter sets into one.
     """
 
-    # print(a_nrgs, b_nrgs)
-
     num_a_atoms = len(a_masses)                     # offset by number of atoms in a
     c_masses = np.concatenate([a_masses, b_masses]) # combined masses
-    # c_conf = np.concatenate([a_conf, b_conf])       # combined geometry
+
+    if perm is None:
+        perm = np.arange(len(c_masses))
+
+    iperm = np.argsort(perm).astype(np.int32)
+
+    perm = np.array(perm, dtype=np.int32)
+
+    np.testing.assert_equal(np.sort(perm), np.arange(len(c_masses))) # assert every atom has a unique permutation
+
     c_params = np.concatenate([a_params, b_params]) # combined parameters
     c_param_groups = np.concatenate([a_param_groups, b_param_groups]) # combine parameter groups
 
@@ -77,9 +74,8 @@ def combiner(
     a_nrgs = a_nrgs[::-1]
     b_nrgs = b_nrgs[::-1]
 
-    # print(len(c_params))
-
     c_nrgs = []
+
     for a, b in zip(a_nrgs, b_nrgs):
         a_name = a[0]
         a_args = a[1]
@@ -90,15 +86,18 @@ def combiner(
         assert a_args[-1] == b_args[-1] # dimension
         if a_name == ops.HarmonicBond:
             bond_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
+            bond_idxs = iperm[bond_idxs]
             bond_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((ops.HarmonicBond, (bond_idxs, bond_param_idxs, a_args[-1])))
         elif a_name == ops.HarmonicAngle:
             angle_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
+            angle_idxs = iperm[angle_idxs]
             angle_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((ops.HarmonicAngle, (angle_idxs, angle_param_idxs, a_args[-1])))
         elif a_name == ops.PeriodicTorsion:
             if len(a_args[0]) > 0:
                 torsion_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
+                torsion_idxs = iperm[torsion_idxs]
                 torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 c_nrgs.append((ops.PeriodicTorsion, (torsion_idxs, torsion_param_idxs, a_args[-1])))
             else:
@@ -108,12 +107,17 @@ def combiner(
             assert a_args[5] == b_args[5] # cutoff
             assert a_args[-1] == b_args[-1] # dimension
 
-            es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0)
+            # directly permute the location of the charges
+            es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
             lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            exclusion_idxs = np.concatenate([a_args[2], b_args[2] + num_a_atoms], axis=0)
+            es_param_idxs = es_param_idxs[perm]
+            lj_param_idxs = lj_param_idxs[perm]
 
-            es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)
-            lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)
+            exclusion_idxs = np.concatenate([a_args[2], b_args[2] + num_a_atoms], axis=0)
+            exclusion_idxs = iperm[exclusion_idxs] # [E,]
+
+            es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)  # [E, 1]
+            lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)  # [E, 1]
 
             c_nrgs.append((ops.Nonbonded, (
                 es_param_idxs,
@@ -129,7 +133,6 @@ def combiner(
         else:
             raise Exception("Unknown potential", a_name)
 
-    # return c_nrgs, c_params, c_param_groups, c_conf, c_masses
     return c_nrgs, c_params, c_param_groups, c_masses
 
 
@@ -351,14 +354,12 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
             for param in handler_params.parameters:
                 sigma = to_md_units(param.sigma)
                 epsilon = to_md_units(param.epsilon)
-                # print("vanilla", param.sigma, param.epsilon, "converted", sigma, epsilon)
                 s_idx, e_idx = add_param(sigma, 8), add_param(epsilon, 9)
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, param.smirks)
                 for m in matches:
                     vd[m] = (s_idx, e_idx)
 
             for k, v in vd.items():
-                # print("KV", k, global_params[v[0]], global_params[v[1]])
                 nonbonded_lj_param_idxs.append(v)
 
     if am1:
@@ -436,6 +437,7 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
 
             # small charges
             param = param*np.sqrt(constants.ONE_4PI_EPS0)/4
+
             c_idx = add_param(param, 17)
             matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
 

@@ -43,6 +43,18 @@ def recenter(conf, true_com, scale_factor=1):
     return true_com + centered/scale_factor 
 
 
+from hilbertcurve.hilbertcurve import HilbertCurve
+
+def hilbert_sort(conf):
+    hc = HilbertCurve(16, 3)
+    int_confs = (conf*1000).astype(np.int64)+10000
+    dists = []
+    for xyz in int_confs.tolist():
+        dist = hc.distance_from_coordinates(xyz)
+        dists.append(dist)
+    perm = np.argsort(dists)
+    return perm
+
 class PDBWriter():
 
     def __init__(self, pdb_str, out_filepath):
@@ -94,6 +106,7 @@ if __name__ == "__main__":
     for guest_mol in suppl:
         break
 
+    # T = 5000
     T = 10000
     dt = 0.0015
     step_sizes = np.ones(T)*dt
@@ -104,7 +117,7 @@ if __name__ == "__main__":
 
     all_du_dls = []
 
-    lambda_schedule = np.linspace(0.00001, 0.999999, num=T)
+    lambda_schedule = np.linspace(0.00001, 0.99999, num=T)
 
     epoch = 0
 
@@ -126,27 +139,31 @@ if __name__ == "__main__":
 
         for mode in ['insertion', 'deletion']:
             print("Mode", mode)
-            sim = simulation.Simulation(
-                guest_mol,
-                host_pdb,
-                mode,
-                step_sizes,
-                cas,
-                lambda_schedule
-            )
 
             host_conf = []
             for x,y,z in host_pdb.positions:
                 host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
 
             host_conf = np.array(host_conf)
+            init_combined_conf = np.concatenate([host_conf, init_conf])
+
+            perm = hilbert_sort(init_combined_conf)
+            # perm = np.arange(init_combined_conf.shape[0])
+
+            sim = simulation.Simulation(
+                guest_mol,
+                host_pdb,
+                mode,
+                step_sizes,
+                cas,
+                lambda_schedule,
+                perm
+            )
 
             num_conformers = 4
 
             guest_mol.RemoveAllConformers()
             AllChem.EmbedMultipleConfs(guest_mol, num_conformers, randomSeed=2020)
-
-            print("N Confs", init_mol.GetNumConformers())
 
             # sample from the DG distribution
             all_args = []
@@ -154,15 +171,16 @@ if __name__ == "__main__":
                 guest_conf = guest_mol.GetConformer(conf_idx)
                 guest_conf = np.array(guest_conf.GetPositions(), dtype=ops.precision)
                 guest_conf = guest_conf/10 # convert to md_units
+                np.random.seed(2020)
                 rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
                 guest_conf = np.matmul(guest_conf, rot_matrix)
                 guest_conf = recenter(guest_conf, conf_com)
 
-                # host_com = com(host_conf)
-                # guest_conf = recenter(guest_conf, host_com)
                 x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
 
-                print("N Confs", init_mol.GetNumConformers())
+
+                x0 = x0[perm]
+
                 combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
                 combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
                 out_file = os.path.join("frames", "epoch_"+str(epoch)+"_"+mode+"_"+host_name+"_conf_"+str(conf_idx)+".pdb")
@@ -172,12 +190,6 @@ if __name__ == "__main__":
 
             results = pool.map(sim.run_forward_multi, all_args)
 
-            # plot_args = []
-            # for ys in results:
-            #     plot_args.append((lambda_schedule, ys))
-            # gp.plot(
-            #     *plot_args
-            # )
 
             all_du_dls.append(results)
 
@@ -189,187 +201,185 @@ if __name__ == "__main__":
 
     assert 0
 
-    pool.close()
-    # du_dls = sim.run_forward(x0)
-    # print(du_dls)
+    # pool.close()
+    # # du_dls = sim.run_forward(x0)
+    # # print(du_dls)
 
-    assert 0
+    # assert 0
 
-    # parameterize the protein
-    pdb = app.PDBFile(args.protein_pdb)
-    amber_ff = app.ForceField('amber99sb.xml', 'tip3p.xml')
+    # # parameterize the protein
+    # pdb = app.PDBFile(args.protein_pdb)
+    # amber_ff = app.ForceField('amber99sb.xml', 'tip3p.xml')
 
-    system = amber_ff.createSystem(
-        pdb.topology,
-        nonbondedMethod=app.NoCutoff,
-        constraints=None,
-        rigidWater=False)
+    # system = amber_ff.createSystem(
+    #     pdb.topology,
+    #     nonbondedMethod=app.NoCutoff,
+    #     constraints=None,
+    #     rigidWater=False)
 
-    host_potentials, (host_params, host_param_groups), host_masses = serialize.deserialize_system(system, dimension=4)
-    host_conf = []
-    for x,y,z in pdb.positions:
-        host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-    host_conf = np.array(host_conf, dtype=np.float64)
+    # host_potentials, (host_params, host_param_groups), host_masses = serialize.deserialize_system(system, dimension=4)
+    # host_conf = []
+    # for x,y,z in pdb.positions:
+    #     host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+    # host_conf = np.array(host_conf, dtype=np.float64)
 
-    # parameterize the small molecule
-    suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
-    for mol in suppl:
-        break
+    # # parameterize the small molecule
+    # suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
+    # for mol in suppl:
+    #     break
 
-    off = smirnoff.ForceField("test_forcefields/smirnoff99Frosst.offxml")
-    guest_potentials, (guest_params, guest_param_groups), guest_conf, guest_masses = forcefield.parameterize(mol, off, dimension=4)
+    # off = smirnoff.ForceField("test_forcefields/smirnoff99Frosst.offxml")
+    # guest_potentials, (guest_params, guest_param_groups), guest_conf, guest_masses = forcefield.parameterize(mol, off, dimension=4)
 
-    print("Host Shape", host_conf.shape, "Guest Shape", guest_conf.shape)
+    # print("Host Shape", host_conf.shape, "Guest Shape", guest_conf.shape)
 
-    combined_potentials, combined_params, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
-        host_potentials, guest_potentials,
-        host_params, guest_params,
-        host_param_groups, guest_param_groups,
-        host_conf, guest_conf,
-        host_masses, guest_masses)
+    # combined_potentials, combined_params, combined_param_groups, combined_conf, combined_masses = forcefield.combiner(
+    #     host_potentials, guest_potentials,
+    #     host_params, guest_params,
+    #     host_param_groups, guest_param_groups,
+    #     host_conf, guest_conf,
+    #     host_masses, guest_masses)
 
-    x0 = combined_conf
-    v0 = np.zeros_like(x0)
+    # x0 = combined_conf
+    # v0 = np.zeros_like(x0)
 
-    gradients = []
-    for fn, fn_args in combined_potentials:
-        gradients.append(fn(*fn_args))
+    # print(x0.shape)
 
-    T = 10000
+    # assert 0
 
-    # we have strict convergence at the end points, but for numerical reasons (1/inf)
-    # need to have this not be *exactly* closed [0, 1] but rather open (0, 1)
-    lambda_schedule = np.linspace(0.00001, 0.999999, num=T)
-    lambda_idxs = np.zeros(combined_conf.shape[0], dtype=np.int32)
-    lambda_idxs[host_conf.shape[0]:] = 1 # insertion is -1, deletion is +1
+    # gradients = []
+    # for fn, fn_args in combined_potentials:
+    #     gradients.append(fn(*fn_args))
 
-    dt = 0.0015
-    step_sizes = np.ones(T)*dt
-    cas = np.ones(T)*0.99
-    cbs = -np.ones(combined_conf.shape[0])*0.001
+    # T = 10000
 
-    lr = 1e-4
-    # opt_init, opt_update, get_params = optimizers.adam(lr)
-    opt_init, opt_update, get_params = optimizers.sgd(lr)
+    # # we have strict convergence at the end points, but for numerical reasons (1/inf)
+    # # need to have this not be *exactly* closed [0, 1] but rather open (0, 1)
+    # lambda_schedule = np.linspace(0.00001, 0.999999, num=T)
+    # lambda_idxs = np.zeros(combined_conf.shape[0], dtype=np.int32)
+    # lambda_idxs[host_conf.shape[0]:] = 1 # insertion is -1, deletion is +1
 
-    opt_state = opt_init(combined_params)
-    itercount = itertools.count()
+    # dt = 0.0015
+    # step_sizes = np.ones(T)*dt
+    # cas = np.ones(T)*0.99
+    # cbs = -np.ones(combined_conf.shape[0])*0.001
 
-    num_epochs = 10
-    for epoch in range(num_epochs):
+    # lr = 1e-4
+    # # opt_init, opt_update, get_params = optimizers.adam(lr)
+    # opt_init, opt_update, get_params = optimizers.sgd(lr)
 
-        # simulations = []
-        # for sims in [water_insertion_sims, water_deletion_sims, complex_insertion_sims, complex_deletion_sims]:
-        #     for sim in sims:
+    # opt_state = opt_init(combined_params)
+    # itercount = itertools.count()
 
+    # num_epochs = 10
+    # for epoch in range(num_epochs):
 
+    #     current_params = np.asarray(get_params(opt_state))
 
-        current_params = np.asarray(get_params(opt_state))
+    #     stepper = custom_ops.LambdaStepper_f64(
+    #         gradients,
+    #         lambda_schedule,
+    #         lambda_idxs,
+    #         4
+    #     )
 
-        stepper = custom_ops.LambdaStepper_f64(
-            gradients,
-            lambda_schedule,
-            lambda_idxs,
-            4
-        )
+    #     ctxt = custom_ops.ReversibleContext_f64_3d(
+    #         stepper,
+    #         len(combined_masses),
+    #         x0.reshape(-1).tolist(),
+    #         v0.reshape(-1).tolist(),
+    #         cas.tolist(),
+    #         cbs.tolist(),
+    #         step_sizes.tolist(),
+    #         current_params.reshape(-1).tolist(),
+    #     )
 
-        ctxt = custom_ops.ReversibleContext_f64_3d(
-            stepper,
-            len(combined_masses),
-            x0.reshape(-1).tolist(),
-            v0.reshape(-1).tolist(),
-            cas.tolist(),
-            cbs.tolist(),
-            step_sizes.tolist(),
-            current_params.reshape(-1).tolist(),
-        )
+    #     start = time.time()
+    #     ctxt.forward_mode()
+    #     print("forward time", time.time()-start)
 
-        start = time.time()
-        ctxt.forward_mode()
-        print("forward time", time.time()-start)
-
-        du_dls = stepper.get_du_dl()
+    #     du_dls = stepper.get_du_dl()
 
 
-        # goal is to get all the du_dls
-        # for x, y in zip(lambda_schedule, du_dls):
-            # print(x, y)
+    #     # goal is to get all the du_dls
+    #     # for x, y in zip(lambda_schedule, du_dls):
+    #         # print(x, y)
 
-        # plt.xlabel('lambda')
-        # plt.ylabel('du/dl')
-        # plt.plot(lambda_schedule, du_dls)
-        # plt.show()
-
-
-        work_true = 400
-        work_pred = math_utils.trapz(du_dls, lambda_schedule)
-
-        complex_insertion_work = []
-        complex_deletion_work = []
-        complex_dG = pymbar.bar()
-
-        solvent_insertion_work = []
-        solvent_deletion_work = []
-        solvent_dG = pymbar.bar()
-
-        final_dG = complex_dG - solvent_dG
-        true_dG = 35
-
-        loss = (true_dG - final_dG)**2
-
-        # compute adjoints
-        dL_dfinal_dG = -2*(true_dG - final_dG)
-        dL_dcomplex_dG = dL_dfinal_dG
-        dL_dsolvent_dG = -dL_dfinal_dG
-        dL_dcomplex_dinsertion_work = []
-        dL_dcomplex_ddeletion_work = []
+    #     # plt.xlabel('lambda')
+    #     # plt.ylabel('du/dl')
+    #     # plt.plot(lambda_schedule, du_dls)
+    #     # plt.show()
 
 
-        # mimic a loss comparable to bar gradients
-        loss = np.power(work_true - work_pred, 2)/128
-        dloss_dw = -2*(work_true - work_pred)/128
+    #     work_true = 400
+    #     work_pred = math_utils.trapz(du_dls, lambda_schedule)
 
-        print("--------epoch", epoch, "--------")
-        print("Loss", loss, "dloss_dw", dloss_dw, "work_pred", work_pred, "work_true", work_true)
-        print('------------')
-        trapz_grad_fn = jax.grad(math_utils.trapz, argnums=0)
+    #     complex_insertion_work = []
+    #     complex_deletion_work = []
+    #     complex_dG = pymbar.bar()
 
-        # dL_d(du/dl) = dL/dw . dw/d(du/dl)
-        dw_ddudl = trapz_grad_fn(du_dls, lambda_schedule)
-        dloss_ddudl = dloss_dw*dw_ddudl
+    #     solvent_insertion_work = []
+    #     solvent_deletion_work = []
+    #     solvent_dG = pymbar.bar()
 
-        # coords = ctxt.get_all_coords()
-        # print(coords[0], coords[-1])
-        # write_coords(coords, args.protein_pdb, mol, out_file)
+    #     final_dG = complex_dG - solvent_dG
+    #     true_dG = 35
 
-        # du_dl_adjoint =  np.random.rand(du_dls.shape[0])/1000
-        print("setting adjoints to", dloss_ddudl, "with mean", np.mean(dloss_ddudl))
-        stepper.set_du_dl_adjoint(dloss_ddudl)
+    #     loss = (true_dG - final_dG)**2
 
-        # test_adjoint = np.random.rand(x0.shape[0], x0.shape[0])/10
-        ctxt.set_x_t_adjoint(np.zeros_like(x0))
-        start = time.time()
-        ctxt.backward_mode()
-        print("backward time", time.time()-start)
-
-        # compute the parameter derivatives
-        dL_dp = ctxt.get_param_adjoint_accum()
-
-        # only change charges (both ligand and protein)
+    #     # compute adjoints
+    #     dL_dfinal_dG = -2*(true_dG - final_dG)
+    #     dL_dcomplex_dG = dL_dfinal_dG
+    #     dL_dsolvent_dG = -dL_dfinal_dG
+    #     dL_dcomplex_dinsertion_work = []
+    #     dL_dcomplex_ddeletion_work = []
 
 
-        # for p_idx, pp in enumerate(dL_dp):
-        #     if combined_param_groups[p_idx] == 7:
-        #         print(p_idx, pp)
+    #     # mimic a loss comparable to bar gradients
+    #     loss = np.power(work_true - work_pred, 2)/128
+    #     dloss_dw = -2*(work_true - work_pred)/128
 
-        # assert 0
+    #     print("--------epoch", epoch, "--------")
+    #     print("Loss", loss, "dloss_dw", dloss_dw, "work_pred", work_pred, "work_true", work_true)
+    #     print('------------')
+    #     trapz_grad_fn = jax.grad(math_utils.trapz, argnums=0)
+
+    #     # dL_d(du/dl) = dL/dw . dw/d(du/dl)
+    #     dw_ddudl = trapz_grad_fn(du_dls, lambda_schedule)
+    #     dloss_ddudl = dloss_dw*dw_ddudl
+
+    #     # coords = ctxt.get_all_coords()
+    #     # print(coords[0], coords[-1])
+    #     # write_coords(coords, args.protein_pdb, mol, out_file)
+
+    #     # du_dl_adjoint =  np.random.rand(du_dls.shape[0])/1000
+    #     print("setting adjoints to", dloss_ddudl, "with mean", np.mean(dloss_ddudl))
+    #     stepper.set_du_dl_adjoint(dloss_ddudl)
+
+    #     # test_adjoint = np.random.rand(x0.shape[0], x0.shape[0])/10
+    #     ctxt.set_x_t_adjoint(np.zeros_like(x0))
+    #     start = time.time()
+    #     ctxt.backward_mode()
+    #     print("backward time", time.time()-start)
+
+    #     # compute the parameter derivatives
+    #     dL_dp = ctxt.get_param_adjoint_accum()
+
+    #     # only change charges (both ligand and protein)
 
 
-        param_grad = np.where(combined_param_groups == 7, dL_dp, np.zeros_like(dL_dp))
-        print("mean_grad", np.sum(param_grad)/np.sum(combined_param_groups == 7))
-        opt_state = opt_update(next(itercount), param_grad, opt_state)
+    #     # for p_idx, pp in enumerate(dL_dp):
+    #     #     if combined_param_groups[p_idx] == 7:
+    #     #         print(p_idx, pp)
+
+    #     # assert 0
 
 
-        # explictly call the destructor?
-        del ctxt
-        del stepper
+    #     param_grad = np.where(combined_param_groups == 7, dL_dp, np.zeros_like(dL_dp))
+    #     print("mean_grad", np.sum(param_grad)/np.sum(combined_param_groups == 7))
+    #     opt_state = opt_update(next(itercount), param_grad, opt_state)
+
+
+    #     # explictly call the destructor?
+    #     del ctxt
+    #     del stepper

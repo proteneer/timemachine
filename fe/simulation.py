@@ -40,13 +40,12 @@ class Simulation:
         direction,
         step_sizes,
         cas,
-        lambda_schedule
+        lambda_schedule,
+        perm
         ):
 
         self.step_sizes = step_sizes
         amber_ff = app.ForceField('amber99sb.xml', 'tip3p.xml')
-
-
 
         # host
         system = amber_ff.createSystem(
@@ -64,12 +63,18 @@ class Simulation:
             host_potentials, guest_potentials,
             host_params, guest_params,
             host_param_groups, guest_param_groups,
-            host_masses, guest_masses)
+            host_masses, guest_masses,
+            perm
+        )
 
+        self.num_host_atoms = len(host_masses)
+
+        self.perm = perm
+        self.iperm = np.argsort(perm)
         self.combined_potentials = combined_potentials
         self.combined_params = combined_params
         self.combined_param_groups = combined_param_groups
-        self.combined_masses = combined_masses
+        self.combined_masses = combined_masses[perm]
 
         N_host = len(host_pdb.positions)
         N_guest = guest_mol.GetNumAtoms()
@@ -86,6 +91,8 @@ class Simulation:
             self.lambda_idxs[N_host:] = -1
         else:
             raise ValueError("Unknown direction: "+direction)
+        # how did this take 6 hours to debug?
+        self.lambda_idxs = self.lambda_idxs[perm]
         self.exponent = 16
 
     def run_forward_multi(self, args):
@@ -109,6 +116,24 @@ class Simulation:
         gradients = []
         for fn, fn_args in self.combined_potentials:
             gradients.append(fn(*fn_args))
+
+
+
+        # for g in gradients:
+        #     # if g != ops.HarmonicBond:
+        #         # continue
+        #     print(g)
+        #     d4 = np.expand_dims(np.zeros(x0.shape[0]), -1)
+        #     d4[self.num_host_atoms:] = 1000
+        #     print(d4)
+        #     print(x0.shape, d4.shape)
+        #     x4 = np.concatenate([x0, d4], axis=1)
+        #     du_dx = g.execute(x4, self.combined_params)
+        #     for atom_idx, xyz in enumerate(np.abs(du_dx)):
+        #         if np.amax(xyz) > 10000:
+        #             print(atom_idx, xyz)
+
+        # assert 0
 
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
@@ -139,7 +164,9 @@ class Simulation:
 
                 interval = max(1, xs.shape[0]//pdb_writer.n_frames)
                 if frame_idx % interval == 0:
-                    pdb_writer.write(x*10)
+                # if frame_idx < interval:
+                    # argsort is iperm
+                    pdb_writer.write((x*10)[np.argsort(self.perm)])
         # pdb_writer.close()
 
         print("run time", time.time() - start)
@@ -169,6 +196,8 @@ class Simulation:
         gradients = []
         for fn, fn_args in self.combined_potentials:
             gradients.append(fn(*fn_args))
+
+
 
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
