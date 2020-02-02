@@ -183,6 +183,8 @@ void __global__ k_nonbonded_jvp(
         }
     }
 
+    // we should always accumulate in double precision
+
     // (ytz): we don't care about deterministic atomics that much when
     // doing reverse mode since we only ever have to do it once.
     for(int d=0; d < D; d++) {
@@ -433,8 +435,8 @@ void __global__ k_nonbonded_inference_exclusion_jvp(
         #pragma unroll
         for(int d=0; d < D; d++) {
             Surreal<RealType> dx = ci[d] - cj[d];
-            gi[d] += charge_scale * es_grad_prefactor * dx + lj_scale * lj_grad_prefactor * dx;
-            gj[d] -= charge_scale * es_grad_prefactor * dx + lj_scale * lj_grad_prefactor * dx;
+            gi[d] += (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor)*dx;
+            gj[d] -= (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor)*dx;
         }
 
         for(int d=0; d < D; d++) {
@@ -556,8 +558,8 @@ void __global__ k_nonbonded_inference_exclusion(
         #pragma unroll
         for(int d=0; d < D; d++) {
             RealType dx = ci[d] - cj[d];
-            gi[d] += charge_scale * es_grad_prefactor * dx + lj_scale * lj_grad_prefactor * dx;
-            gj[d] -= charge_scale * es_grad_prefactor * dx + lj_scale * lj_grad_prefactor * dx;
+            gi[d] += (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor)*dx;
+            gj[d] -= (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor)*dx;
         }
 
         for(int d=0; d < D; d++) {
