@@ -80,4 +80,16 @@ template void step_forward<double>(
     double *d_x_new,
     double *d_v_new);
 
+template void step_forward<float>(
+    int N,
+    int D,
+    const float ca,
+    const float *d_coeff_bs,
+    const float *d_x_old,
+    const float *d_v_old,
+    const unsigned long long *d_dE_dx_old,
+    const float dt,
+    float *d_x_new,
+    float *d_v_new);
+
 }

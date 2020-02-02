@@ -285,4 +285,7 @@ void ReversibleContext<RealType, D>::get_v_t_adjoint(RealType *out_buffer) const
 template class ReversibleContext<double, 4>;
 template class ReversibleContext<double, 3>;
 
+template class ReversibleContext<float, 4>;
+template class ReversibleContext<float, 3>;
+
 };

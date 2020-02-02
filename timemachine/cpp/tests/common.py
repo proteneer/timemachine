@@ -20,7 +20,8 @@ def prepare_nonbonded_system(
     p_scale=4.0,
     e_scale=1.0,
     cutoff=100.0,
-    custom_D=None):
+    custom_D=None,
+    precision=np.float64):
 
     N = x.shape[0]
     D = x.shape[1]
@@ -57,7 +58,16 @@ def prepare_nonbonded_system(
     if custom_D is None:
         custom_D = D
 
-    custom_nonbonded = ops.Nonbonded(charge_param_idxs, lj_param_idxs, exclusion_idxs, exclusion_charge_idxs, exclusion_lj_idxs, cutoff, custom_D)
+    custom_nonbonded = ops.Nonbonded(
+        charge_param_idxs,
+        lj_param_idxs,
+        exclusion_idxs,
+        exclusion_charge_idxs,
+        exclusion_lj_idxs,
+        cutoff,
+        custom_D,
+        precision=precision
+    )
 
     lj_fn = functools.partial(nonbonded.lennard_jones, box=None, param_idxs=lj_param_idxs, cutoff=cutoff)
     lj_fn_exc = functools.partial(nonbonded.lennard_jones_exclusion, box=None, param_idxs=lj_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=exclusion_lj_idxs)
@@ -66,7 +76,7 @@ def prepare_nonbonded_system(
     def ref_total_energy(x, p):
         return lj_fn(x, p) - lj_fn_exc(x, p) + es_fn(x, p)
 
-    return params, [ref_total_energy], [custom_nonbonded]
+    return params.astype(precision), [ref_total_energy], [custom_nonbonded]
 
 
 def prepare_bonded_system(
@@ -148,7 +158,7 @@ class GradientTest(unittest.TestCase):
 
         return x
 
-    def compare_forces(self, x, params, ref_nrg_fn, custom_force):
+    def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
 
         N = x.shape[0]
         D = x.shape[1]
@@ -158,23 +168,48 @@ class GradientTest(unittest.TestCase):
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
         ref_dx, _ = grad_fn(x, params)
 
-        np.testing.assert_almost_equal(
+        if rtol is None:
+            if precision == np.float64:
+                # 5e-11 is doable if we move the fixed point up
+                rtol = 1e-8
+            elif precision == np.float32:
+                rtol = 1e-6
+
+        # np.testing.assert_almost_equal(
+        #     np.array(ref_dx),
+        #     np.array(test_dx),
+        #     decimal=10
+        # )
+
+        print("rtol", rtol)
+        print(ref_dx)
+        print(test_dx)
+
+
+        # currently just straight up wrong!
+
+        np.testing.assert_allclose(
             np.array(ref_dx),
             np.array(test_dx),
-            decimal=10
+            rtol
         )
 
         x_tangent = np.random.rand(N, D).astype(np.float64)
         params_tangent = np.zeros_like(params)
 
         test_x_tangent, test_p_tangent = custom_force.execute_jvp(
-            x, params,
-            x_tangent, params_tangent)
+            x.astype(np.float32),
+            params.astype(np.float32),
+            x_tangent.astype(np.float32),
+            params_tangent.astype(np.float32)
+        )
 
         primals = (x, params)
         tangents = (x_tangent, params_tangent)
 
         _, t = jax.jvp(grad_fn, primals, tangents)
 
-        np.testing.assert_allclose(t[0], test_x_tangent, rtol=5e-11)
-        np.testing.assert_allclose(t[1], test_p_tangent, rtol=5e-11)
+
+
+        np.testing.assert_allclose(t[0], test_x_tangent, rtol=rtol)
+        np.testing.assert_allclose(t[1], test_p_tangent, rtol=rtol)

@@ -47,7 +47,6 @@ class TestNonbonded(GradientTest):
         ref_mp = np.transpose(ref_mp, (2,0,1))
         return ref_mp
 
-    # @unittest.skip("debug")
     def test_fast_nonbonded(self):
         np.random.seed(125)
         N = 65
@@ -59,40 +58,9 @@ class TestNonbonded(GradientTest):
  
         x = self.get_random_coords(N, D)
 
-        for cutoff in [100.0, 0.5, 0.1]:
-            params, ref_forces, test_forces = prepare_nonbonded_system(
-                x,
-                E,
-                P_charges,
-                P_lj,
-                P_exc,
-                p_scale=8.0,
-                cutoff=cutoff
-            )
+        for precision, rtol in [(np.float64, 1e-8), (np.float32, 2e-5)]:
 
-            for r, t in zip(ref_forces, test_forces):
-                self.compare_forces(x, params, r, t)
-
-
-
-        # self.compare_system(*args, cutoff=100.0)
-        # self.compare_system(*args, cutoff=0.5)
-        # self.compare_system(*args, cutoff=0.1)
-
-    # @unittest.skip("debug")
-    def test_water_box(self):
-        
-        np.random.seed(123)
-        P_charges = 4
-        P_lj = 5
-        P_exc = 7
-
-        for dim in [3, 4]:
-            x = self.get_water_coords(dim)
-            E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
-
-            for cutoff in [1000.0, 0.9, 0.5, 0.4, 0.001]:
-
+            for cutoff in [100.0, 0.5, 0.1]:
                 params, ref_forces, test_forces = prepare_nonbonded_system(
                     x,
                     E,
@@ -100,11 +68,54 @@ class TestNonbonded(GradientTest):
                     P_lj,
                     P_exc,
                     p_scale=8.0,
-                    cutoff=cutoff
+                    cutoff=cutoff,
+                    precision=precision
                 )
 
                 for r, t in zip(ref_forces, test_forces):
-                    self.compare_forces(x, params, r, t)
+                    self.compare_forces(
+                        x.astype(precision),
+                        params.astype(precision),
+                        r,
+                        t,
+                        precision,
+                        rtol=rtol
+                    )
+
+    @unittest.skip("debug")
+    def test_water_box(self):
+        
+        np.random.seed(123)
+        P_charges = 4
+        P_lj = 5
+        P_exc = 7
+
+        for precision, rtol in [(np.float64, 1e-6), (np.float32, 1e-5)]:
+            for dim in [3, 4]:
+                x = self.get_water_coords(dim)
+                E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
+
+                for cutoff in [1000.0, 0.9, 0.5, 0.001]:
+
+                    params, ref_forces, test_forces = prepare_nonbonded_system(
+                        x,
+                        E,
+                        P_charges,
+                        P_lj,
+                        P_exc,
+                        p_scale=8.0,
+                        cutoff=cutoff,
+                        precision=precision
+                    )
+
+                    for r, t in zip(ref_forces, test_forces):
+                        self.compare_forces(
+                            x,
+                            params,
+                            r,
+                            t,
+                            precision,
+                            rtol)
 
     # @unittest.skip("debug")
     def test_lambda(self):

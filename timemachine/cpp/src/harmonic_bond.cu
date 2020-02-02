@@ -104,4 +104,11 @@ void HarmonicBond<RealType, D>::execute_device(
 template class HarmonicBond<double, 4>;
 template class HarmonicBond<double, 3>;
 
+
+template class HarmonicBond<float, 4>;
+template class HarmonicBond<float, 3>;
+
+
+
+
 } // namespace timemachine

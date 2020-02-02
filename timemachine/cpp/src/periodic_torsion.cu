@@ -106,4 +106,7 @@ void PeriodicTorsion<RealType, D>::execute_device(
 template class PeriodicTorsion<double, 4>;
 template class PeriodicTorsion<double, 3>;
 
+template class PeriodicTorsion<float, 4>;
+template class PeriodicTorsion<float, 3>;
+
 } // namespace timemachine

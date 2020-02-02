@@ -57,7 +57,7 @@ void Gradient<RealType, D>::execute_host(
     );
 
     if(h_in_coords_tangents == nullptr) {
-        gpuErrchk(cudaMemcpy(h_out_coords, d_out_coords, N*D*sizeof(RealType), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(h_out_coords, d_out_coords, N*D*sizeof(*h_out_coords), cudaMemcpyDeviceToHost));
         gpuErrchk(cudaFree(d_out_coords));
     } else {
         gpuErrchk(cudaMemcpy(h_out_coords_tangents, d_out_coords_tangents, N*D*sizeof(RealType), cudaMemcpyDeviceToHost));
@@ -73,6 +73,9 @@ void Gradient<RealType, D>::execute_host(
 
 template class Gradient<double, 4>; 
 template class Gradient<double, 3>;
+
+template class Gradient<float, 4>; 
+template class Gradient<float, 3>;
 
 }
 

@@ -33,7 +33,6 @@ class Simulation:
     """
     A picklable simulation object
     """
-
     def __init__(self,
         guest_mol,
         host_pdb,
@@ -110,14 +109,10 @@ class Simulation:
         x0 include host configs as well
         """
         # this is multi-process safe to run.
-
-
         start = time.time()
         gradients = []
         for fn, fn_args in self.combined_potentials:
             gradients.append(fn(*fn_args))
-
-
 
         # for g in gradients:
         #     # if g != ops.HarmonicBond:
@@ -170,9 +165,8 @@ class Simulation:
 
                 interval = max(1, xs.shape[0]//pdb_writer.n_frames)
                 if frame_idx % interval == 0:
-                # if frame_idx < interval:
-                    # argsort is iperm
-                    pdb_writer.write((x*10)[np.argsort(self.perm)])
+                    # argsort is iperm and
+                    pdb_writer.write((x*10)[self.iperm])
         # pdb_writer.close()
 
 

@@ -307,6 +307,7 @@ void __global__ k_nonbonded_inference(
 
             #pragma unroll
             for(int d=0; d < D; d++) {
+                // this loses precision, but we may have to deal with it for now (esp in single precision)
                 RealType val = abs((es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]));
                 gi[d] -= (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);
                 gj[d] += (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);

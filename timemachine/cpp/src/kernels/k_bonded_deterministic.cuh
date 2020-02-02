@@ -364,7 +364,6 @@ void __global__ k_periodic_torsion_inference(
 
     RealType prefactor = kt*sin(period*angle - phase)*period;
 
-
     for(int d=0; d < 3; d++) {
         atomicAdd(grad_coords + i_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR0[d] * prefactor * FIXED_EXPONENT)));
         atomicAdd(grad_coords + j_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR1[d] * prefactor * FIXED_EXPONENT)));
@@ -473,7 +472,7 @@ void __global__ k_periodic_torsion_jvp(
 
     Surreal<RealType> du_dkt = 1. + cos(period*angle - phase);
     Surreal<RealType> du_dphase = kt*(1. + sin(period*angle - phase));
-    Surreal<RealType> du_dperiod = kt*(1. - sin(period*angle - phase)*angle);
+    Surreal<RealType> du_dperiod = kt*(RealType(1.) - sin(period*angle - phase)*angle);
 
     atomicAdd(grad_params_tangents + kt_idx, du_dkt.imag);
     atomicAdd(grad_params_tangents + phase_idx, du_dphase.imag);

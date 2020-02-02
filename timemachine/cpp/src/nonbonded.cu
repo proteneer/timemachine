@@ -214,4 +214,7 @@ void Nonbonded<RealType, D>::execute_device(
 template class Nonbonded<double, 4>;
 template class Nonbonded<double, 3>;
 
+template class Nonbonded<float, 4>;
+template class Nonbonded<float, 3>;
+
 } // namespace timemachine

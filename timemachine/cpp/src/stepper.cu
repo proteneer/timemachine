@@ -65,7 +65,7 @@ void BasicStepper<RealType>::backward_step(
 
 };
 
-template class BasicStepper<double>;
+
 
 template<typename RealType>
 LambdaStepper<RealType>::LambdaStepper(
@@ -427,6 +427,9 @@ void LambdaStepper<RealType>::backward_step_host(
 };
 
 template class LambdaStepper<double>;
+template class LambdaStepper<float>;
 
+template class BasicStepper<double>;
+template class BasicStepper<float>;
 
 };

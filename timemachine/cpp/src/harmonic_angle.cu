@@ -105,4 +105,7 @@ void HarmonicAngle<RealType, D>::execute_device(
 template class HarmonicAngle<double, 4>;
 template class HarmonicAngle<double, 3>;
 
+template class HarmonicAngle<float, 4>;
+template class HarmonicAngle<float, 3>;
+
 } // namespace timemachine
