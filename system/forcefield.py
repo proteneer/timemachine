@@ -489,7 +489,7 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
             np.array(exclusion_idxs, dtype=np.int32),
             np.array(exclusion_param_idxs, dtype=np.int32),
             np.array(exclusion_param_idxs, dtype=np.int32),
-            1.0,
+            0.85,
             dimension
         )
     ))

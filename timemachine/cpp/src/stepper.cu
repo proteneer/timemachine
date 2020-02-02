@@ -67,31 +67,6 @@ void BasicStepper<RealType>::backward_step(
 
 template class BasicStepper<double>;
 
-
-// template<typename RealType>
-// __global__ void compute_dw_dl(
-//     const int *lambda_flags, // [1, 0, or -1]
-//     const RealType lambda,
-//     RealType *dw_dl) {
-
-//     if(d_idx == 3) {
-//         RealType upper = pow(lambda, exponent);
-//         RealType lower = (1-upper);
-//         RealType w;
-//         if(lambda_flags[atom_idx] == 1) {
-//             w = upper/lower;
-//         } else if (lambda_flags[atom_idx] == -1) {
-//             w = lower/upper;
-//         } else {
-//             w = 0;
-//         }
-//         d_coords_4d[local_idx_4d] = w;
-//     } else {
-//         d_coords_4d[local_idx_4d] = d_coords_3d[local_idx_3d];
-//     }
-
-// };
-
 template<typename RealType>
 LambdaStepper<RealType>::LambdaStepper(
     std::vector<Gradient <RealType, 4> *> forces,

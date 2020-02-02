@@ -1,4 +1,5 @@
 #include <iostream>
+#include <chrono>
 
 #include "new_context.hpp"
 #include "integrator.hpp"
@@ -95,6 +96,7 @@ void ReversibleContext<RealType, D>::forward_mode() {
         gpuErrchk(cudaMemset(d_forces_, 0, N_*D*sizeof(*d_forces_)));
         // gpuErrchk(cudaMemset(d_params_grads_, 0, P_*sizeof(RealType))); # not used
 
+	auto start0 = std::chrono::high_resolution_clock::now();
         stepper_->forward_step(
             N_,
             P_,
@@ -102,7 +104,10 @@ void ReversibleContext<RealType, D>::forward_mode() {
             d_params_,
             d_forces_
         );
-
+	auto finish0 = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsed0 = finish0 - start0;
+        // std::cout << "Forward Elapsed time: " << elapsed0.count() << " s\n";
+	auto start = std::chrono::high_resolution_clock::now();
         step_forward<RealType>(
             N_,
             D,
@@ -115,6 +120,10 @@ void ReversibleContext<RealType, D>::forward_mode() {
             d_coords_ + (t+1)*N_*D,
             d_velocities_
         );
+
+	auto finish = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsed = finish - start;
+	// std::cout << "Total Step Elapsed time: " << elapsed.count() << " s\n";
 
     }
 

@@ -155,7 +155,13 @@ class Simulation:
             self.combined_params.reshape(-1).tolist(),
         )
         ctxt.forward_mode()
-        du_dls = stepper.get_du_dl()
+        # du_dls = stepper.get_du_dl()
+
+        # stepper.set_du_dl_adjoint(np.zeros_like(du_dls))
+        # ctxt.set_x_t_adjoint(np.zeros_like(x0))
+        # ctxt.backward_mode()
+
+        print("run time", time.time() - start)
 
         if pdb_writer is not None:
             pdb_writer.write_header()
@@ -169,7 +175,6 @@ class Simulation:
                     pdb_writer.write((x*10)[np.argsort(self.perm)])
         # pdb_writer.close()
 
-        print("run time", time.time() - start)
 
         del stepper
         del ctxt

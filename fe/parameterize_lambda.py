@@ -108,6 +108,7 @@ if __name__ == "__main__":
 
     # T = 5000
     T = 10000
+    # T = 200
     dt = 0.0015
     step_sizes = np.ones(T)*dt
     cas = np.ones(T)*0.99
@@ -118,6 +119,7 @@ if __name__ == "__main__":
     all_du_dls = []
 
     lambda_schedule = np.linspace(0.00001, 0.99999, num=T)
+    # lambda_schedule = np.linspace(0.00001, 0.01, num=T)
 
     epoch = 0
 
@@ -148,6 +150,7 @@ if __name__ == "__main__":
             init_combined_conf = np.concatenate([host_conf, init_conf])
 
             perm = hilbert_sort(init_combined_conf)
+            # perm = np.random.permutation(np.arange(init_combined_conf.shape[0]))
             # perm = np.arange(init_combined_conf.shape[0])
 
             sim = simulation.Simulation(
@@ -160,7 +163,7 @@ if __name__ == "__main__":
                 perm
             )
 
-            num_conformers = 4
+            num_conformers = 1
 
             guest_mol.RemoveAllConformers()
             AllChem.EmbedMultipleConfs(guest_mol, num_conformers, randomSeed=2020)
@@ -178,6 +181,7 @@ if __name__ == "__main__":
 
                 x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
 
+                print("x0 shape", x0.shape)
 
                 x0 = x0[perm]
 
@@ -190,6 +194,7 @@ if __name__ == "__main__":
 
             results = pool.map(sim.run_forward_multi, all_args)
 
+            sys.exit(0) 
 
             all_du_dls.append(results)
 
