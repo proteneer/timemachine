@@ -7,18 +7,16 @@
 #include <iostream>
 namespace timemachine {
 
-template<typename RealType>
-BasicStepper<RealType>::BasicStepper(
-    std::vector<Gradient <RealType, 3> *> forces
+BasicStepper::BasicStepper(
+    std::vector<Gradient<3> *> forces
 ) : count_(0),
     forces_(forces) {};
 
-template<typename RealType>
-void BasicStepper<RealType>::forward_step(
+void BasicStepper::forward_step(
     const int N,
     const int P,
-    const RealType *coords,
-    const RealType *params,
+    const double *coords,
+    const double *params,
     unsigned long long *dx) {
 
     for(int f=0; f < forces_.size(); f++) {
@@ -37,15 +35,14 @@ void BasicStepper<RealType>::forward_step(
 
 };
 
-template<typename RealType>
-void BasicStepper<RealType>::backward_step(
+void BasicStepper::backward_step(
     const int N,
     const int P,
-    const RealType *coords,
-    const RealType *params,
-    const RealType *dx_tangent,
-    RealType *coords_jvp,
-    RealType *params_jvp) {
+    const double *coords,
+    const double *params,
+    const double *dx_tangent,
+    double *coords_jvp,
+    double *params_jvp) {
 
     count_ -= 1;
 
@@ -67,10 +64,9 @@ void BasicStepper<RealType>::backward_step(
 
 
 
-template<typename RealType>
-LambdaStepper<RealType>::LambdaStepper(
-    std::vector<Gradient <RealType, 4> *> forces,
-    const std::vector<RealType> &lambda_schedule,
+LambdaStepper::LambdaStepper(
+    std::vector<Gradient <4> *> forces,
+    const std::vector<double> &lambda_schedule,
     const std::vector<int> &lambda_flags,
     const int exponent
 ) : forces_(forces),
@@ -95,18 +91,16 @@ LambdaStepper<RealType>::LambdaStepper(
 }
 
 
-// also call to setup tangents
-template<typename RealType>
 __global__ void convert_3d_to_4d(
     const int N,
-    const RealType *d_coords_3d,
+    const double *d_coords_3d,
     const int *lambda_flags, // [1, 0, or -1]
-    const RealType lambda,
+    const double lambda,
     const int k,
-    const RealType *d_coords_3d_tangent, // can be nullptr
-    const RealType du_dl_adjoint, // used only if d_coords_3d_tangent is not null
-    RealType *d_coords_4d,
-    RealType *d_coords_4d_tangent // must be nullptr if tangent is nullptr
+    const double *d_coords_3d_tangent, // can be nullptr
+    const double du_dl_adjoint, // used only if d_coords_3d_tangent is not null
+    double *d_coords_4d,
+    double *d_coords_4d_tangent // must be nullptr if tangent is nullptr
 ) { 
 
     int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
@@ -120,7 +114,7 @@ __global__ void convert_3d_to_4d(
 
     if(d_idx == 3) {
 
-        RealType w;
+        double w;
         if(lambda_flags[atom_idx] == 1) {
             w = tan(lambda*(PI/2))/k;
         } else if (lambda_flags[atom_idx] == -1) {
@@ -131,7 +125,7 @@ __global__ void convert_3d_to_4d(
         d_coords_4d[local_idx_4d] = w;
 
         if(d_coords_3d_tangent) {
-            RealType dw;
+            double dw;
             if(lambda_flags[atom_idx] == 1) {
                 auto cosw = cos(lambda*PI/2);
                 auto secw = 1/cosw;
@@ -174,14 +168,13 @@ __global__ void convert_4d_to_3d(
 
 }
 
-template <typename RealType>
 __global__ void accumulate_dU_dl(
     const int N,
     const unsigned long long *d_forces_4d,
     const int *lambda_flags, // [1, 0, or -1]
-    const RealType lambda,
+    const double lambda,
     const int k,
-    RealType *du_dl_buffer) {
+    double *du_dl_buffer) {
 
     int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(atom_idx >= N) {
@@ -193,7 +186,7 @@ __global__ void accumulate_dU_dl(
 
         int local_idx_4d = atom_idx*4 + d_idx;
 
-        RealType dw;
+        double dw;
         if(lambda_flags[atom_idx] == 1) {
             auto cosw = cos(lambda*PI/2);
             auto secw = 1/cosw;
@@ -206,22 +199,21 @@ __global__ void accumulate_dU_dl(
             dw = 0;
         }
 
-        RealType du_dw = static_cast<RealType>(static_cast<long long>(d_forces_4d[local_idx_4d]))/FIXED_EXPONENT;
+        double du_dw = static_cast<double>(static_cast<long long>(d_forces_4d[local_idx_4d]))/FIXED_EXPONENT;
 
         atomicAdd(du_dl_buffer, dw*du_dw);
 
     }
 }
 
-template<typename RealType>
-void LambdaStepper<RealType>::forward_step_host(
+void LambdaStepper::forward_step_host(
     const int N,
     const int P,
-    const RealType *h_coords, // 3d
-    const RealType *h_params, // 3d
+    const double *h_coords, // 3d
+    const double *h_params, // 3d
     unsigned long long *h_dx) {
 
-    RealType *d_coords, *d_params;
+    double *d_coords, *d_params;
     unsigned long long *d_dx;
 
     const int D = 3;
@@ -249,12 +241,11 @@ void LambdaStepper<RealType>::forward_step_host(
 
 };
 
-template<typename RealType>
-void LambdaStepper<RealType>::forward_step(
+void LambdaStepper::forward_step(
     const int N,
     const int P,
-    const RealType *coords,
-    const RealType *params,
+    const double *coords,
+    const double *params,
     unsigned long long *dx) {
 
     const int D = 4;
@@ -267,7 +258,7 @@ void LambdaStepper<RealType>::forward_step(
         throw std::runtime_error("backward step bad counter!");
     }
 
-    convert_3d_to_4d<RealType><<<dimGrid, tpb>>>(
+    convert_3d_to_4d<<<dimGrid, tpb>>>(
         N,
         coords,
         d_lambda_flags_,
@@ -302,34 +293,31 @@ void LambdaStepper<RealType>::forward_step(
 
 };
 
-template<typename RealType>
-void LambdaStepper<RealType>::get_du_dl(
-    RealType *buf) {
+void LambdaStepper::get_du_dl(
+    double *buf) {
     const int T = get_T();
-    cudaMemcpy(buf, d_du_dl_, T*sizeof(RealType), cudaMemcpyDeviceToHost);
+    cudaMemcpy(buf, d_du_dl_, T*sizeof(double), cudaMemcpyDeviceToHost);
 };
 
 
-template<typename RealType>
-void LambdaStepper<RealType>::set_du_dl_adjoint(
+void LambdaStepper::set_du_dl_adjoint(
     const int T,
-    const RealType *adj) {
+    const double *adj) {
     if(T != lambda_schedule_.size()) {
         throw std::runtime_error("adjoint size not the same as lambda schedule size");
     }
     du_dl_adjoint_.resize(T);
-    memcpy(&du_dl_adjoint_[0], adj, T*sizeof(RealType));
+    memcpy(&du_dl_adjoint_[0], adj, T*sizeof(double));
 };
 
-template<typename RealType>
-void LambdaStepper<RealType>::backward_step(
+void LambdaStepper::backward_step(
     const int N,
     const int P,
-    const RealType *coords,
-    const RealType *params,
-    const RealType *dx_tangent,
-    RealType *coords_jvp,
-    RealType *params_jvp) {
+    const double *coords,
+    const double *params,
+    const double *dx_tangent,
+    double *coords_jvp,
+    double *params_jvp) {
     // first decrement
     count_ -= 1;
 
@@ -343,7 +331,7 @@ void LambdaStepper<RealType>::backward_step(
         throw std::runtime_error("backward step bad counter!");
     }
 
-    convert_3d_to_4d<RealType><<<dimGrid, tpb>>>(
+    convert_3d_to_4d<<<dimGrid, tpb>>>(
         N,
         coords,
         d_lambda_flags_,
@@ -380,17 +368,16 @@ void LambdaStepper<RealType>::backward_step(
 
 };
 
-template<typename RealType>
-void LambdaStepper<RealType>::backward_step_host(
+void LambdaStepper::backward_step_host(
     const int N,
     const int P,
-    const RealType *h_coords, // 3d
-    const RealType *h_params,
-    const RealType *h_dx_tangent,
-    RealType *h_coords_jvp,
-    RealType *h_params_jvp) {
+    const double *h_coords, // 3d
+    const double *h_params,
+    const double *h_dx_tangent,
+    double *h_coords_jvp,
+    double *h_params_jvp) {
 
-    RealType *d_coords, *d_params, *d_dx_tangent, *d_coords_jvp, *d_params_jvp;
+    double *d_coords, *d_params, *d_dx_tangent, *d_coords_jvp, *d_params_jvp;
 
     const int D = 3;
 
@@ -426,10 +413,10 @@ void LambdaStepper<RealType>::backward_step_host(
 
 };
 
-template class LambdaStepper<double>;
-template class LambdaStepper<float>;
+// template class LambdaStepper<double>;
+// template class LambdaStepper<float>;
 
-template class BasicStepper<double>;
-template class BasicStepper<float>;
+// template class BasicStepper<double>;
+// template class BasicStepper<float>;
 
 };

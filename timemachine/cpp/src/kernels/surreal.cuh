@@ -330,9 +330,11 @@ DECL Surreal<RealType> atan2(const Surreal<RealType>& z1, const Surreal<RealType
 template <typename RealType>
 DECL Surreal<RealType> sqrt(const Surreal<RealType>& z) {
     RealType sqrtv = sqrt(z.real);
+
     return Surreal<RealType>(
         sqrtv,
-        0.5*z.imag/(sqrtv+ERR)
+        // 0.5*z.imag/(sqrtv+ERR)
+        0.5*z.imag/(sqrtv)
     );
 }
 

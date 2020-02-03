@@ -5,14 +5,14 @@
 #define WARPSIZE 32
 
 
-template <typename RealType>
+// template <typename RealType>
 void __global__ k_find_block_bounds(
     const int N,
     const int D,
     const int T,
-    const RealType *coords,
-    RealType *block_bounds_ctr,
-    RealType *block_bounds_ext) {
+    const double *coords,
+    double *block_bounds_ctr,
+    double *block_bounds_ext) {
 
     const int tile_idx = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -21,12 +21,12 @@ void __global__ k_find_block_bounds(
     }
 
     for(int d=0; d < D; d++) {
-        RealType ci_min =  9999999;
-        RealType ci_max = -9999999;
+        double ci_min =  9999999;
+        double ci_max = -9999999;
         for(int i=0; i < WARPSIZE; i++) {
             int atom_i_idx = tile_idx*WARPSIZE + i;
             if(atom_i_idx < N) {
-                RealType ci = coords[atom_i_idx*D + d];
+                double ci = coords[atom_i_idx*D + d];
                 ci_min = ci < ci_min ? ci : ci_min;
                 ci_max = ci > ci_max ? ci : ci_max;                
             }
@@ -37,31 +37,37 @@ void __global__ k_find_block_bounds(
 
 }
 
+
+DECL Surreal<double> operator+(const Surreal<double>& y, const Surreal<float>& z) {
+    return Surreal<double>(y.real+z.real, y.imag+z.imag);
+}
+
+
 template <typename RealType, int D>
 void __global__ k_nonbonded_jvp(
     const int N,
-    const RealType *coords, // maybe Surreal or Real
-    const RealType *coords_tangent, // maybe Surreal or Real
-    const RealType *params, // we do *not* support params tangent, ever!
+    const double *coords, // maybe Surreal or Real
+    const double *coords_tangent, // maybe Surreal or Real
+    const double *params, // we do *not* support params tangent, ever!
     const int *charge_param_idxs,
     const int *lj_param_idxs, // [N,2]
     const double cutoff,
-    const RealType *block_bounds_ctr,
-    const RealType *block_bounds_ext,
-    RealType *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    RealType *grad_params_tangents) {
+    const double *block_bounds_ctr,
+    const double *block_bounds_ext,
+    double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
+    double *grad_params_tangents) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
     }
 
-    RealType block_d2ij = 0; 
+    double block_d2ij = 0; 
     for(int d=0; d < D; d++) {
-        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
-        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
-        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
-        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
-        RealType dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        double block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+        double block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+        double block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+        double block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+        double dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
 
@@ -124,6 +130,7 @@ void __global__ k_nonbonded_jvp(
 
             // this steaming pile is unrolled for speed, and for the fact that we do not overload
             // pow for complex numbers as they get very very tricky
+            // Surreal<RealType> dij = sqrt(d2ij);
             Surreal<RealType> dij = sqrt(d2ij);
             Surreal<RealType> inv_dij = Surreal<RealType>(1.0)/dij;
             Surreal<RealType> inv_d2ij = inv_dij*inv_dij;
@@ -150,6 +157,8 @@ void __global__ k_nonbonded_jvp(
 
             #pragma unroll
             for(int d=0; d < D; d++) {
+                // gi[d] = gi[d] + -(es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);
+                // gj[d] = gi[d] + (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);
                 gi[d] -= (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);
                 gj[d] += (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);
             }
@@ -212,26 +221,26 @@ void __global__ k_nonbonded_jvp(
 template <typename RealType, int D>
 void __global__ k_nonbonded_inference(
     const int N,
-    const RealType *coords,
-    const RealType *params,
+    const double *coords,
+    const double *params,
     const int *charge_param_idxs, // [N]
     const int *lj_param_idxs, // [N,2]
     const double cutoff,
-    const RealType *block_bounds_ctr,
-    const RealType *block_bounds_ext,
+    const double *block_bounds_ctr,
+    const double *block_bounds_ext,
     unsigned long long *grad_coords) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
     }
 
-    RealType block_d2ij = 0; 
+    double block_d2ij = 0; 
     for(int d=0; d < D; d++) {
-        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
-        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
-        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
-        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
-        RealType dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        double block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+        double block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+        double block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+        double block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+        double dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
 
@@ -275,13 +284,12 @@ void __global__ k_nonbonded_inference(
         RealType d2ij = 0;
         #pragma unroll
         for(int d=0; d < D; d++) {
+            // (ytz): loss of significance possible?
             RealType dx = ci[d] - cj[d];
             d2ij += dx*dx;
         }
 
         if(atom_j_idx < atom_i_idx && d2ij < cutoff*cutoff && atom_j_idx < N && atom_i_idx < N) {
-
-
 
             RealType dij = sqrt(d2ij);
             // electrostatics force
@@ -309,10 +317,10 @@ void __global__ k_nonbonded_inference(
 
             #pragma unroll
             for(int d=0; d < D; d++) {
-                // this loses precision, but we may have to deal with it for now (esp in single precision)
-                RealType val = abs((es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]));
-                gi[d] -= (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);
-                gj[d] += (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);
+                // (ytz): loss of significance possible?
+                RealType dx = ci[d] - cj[d];
+                gi[d] -= (es_grad_prefactor + lj_grad_prefactor) * dx;
+                gj[d] += (es_grad_prefactor + lj_grad_prefactor) * dx;
             }
         }
 
@@ -341,19 +349,19 @@ void __global__ k_nonbonded_inference(
 
 
 template<typename RealType, int D>
-void __global__ k_nonbonded_inference_exclusion_jvp(
+void __global__ k_nonbonded_exclusion_jvp(
     const int E, // number of exclusions
-    const RealType *coords,
-    const RealType *coords_tangent,
-    const RealType *params,
+    const double *coords,
+    const double *coords_tangent,
+    const double *params,
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
     const int *charge_scale_idxs, // [E]
     const int *lj_scale_idxs, // [E] 
     const int *charge_param_idxs, // [N]
     const int *lj_param_idxs, // [N,2]
     const double cutoff,
-    RealType *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    RealType *grad_params_tangents) {
+    double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
+    double *grad_params_tangents) {
 
     const int e_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(e_idx >= E) {
@@ -416,21 +424,28 @@ void __global__ k_nonbonded_inference_exclusion_jvp(
 
     if(d2ij.real < cutoff*cutoff) {
         Surreal<RealType> dij = sqrt(d2ij);
-        // electrostatics force
-        Surreal<RealType> inv_dij = 1/dij;
-        Surreal<RealType> inv_d3ij = inv_dij*inv_dij*inv_dij;
+        Surreal<RealType> inv_dij = Surreal<RealType>(1.0)/dij;
+        Surreal<RealType> inv_d2ij = inv_dij*inv_dij;
+        Surreal<RealType> inv_d3ij = inv_d2ij*inv_dij;
+        Surreal<RealType> inv_d4ij = inv_d3ij*inv_dij;
+        Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
+        Surreal<RealType> inv_d7ij = inv_d4ij*inv_d3ij;
+
         Surreal<RealType> es_grad_prefactor = qi*qj*inv_d3ij;
 
         // lennard jones force
-        RealType eps_ij = sqrt(eps_i * eps_j);
-        RealType sig_ij = (sig_i + sig_j)/2;
+        RealType eps_ij = sqrt(eps_i*eps_j);
+        RealType sig_ij = (sig_i+sig_j)/2;
 
-        Surreal<RealType> d8ij = d2ij*d2ij*d2ij*d2ij;
-        Surreal<RealType> d14ij = d8ij*d2ij*d2ij*d2ij;
+        RealType sig2 = sig_ij*sig_ij;
+        RealType sig4 = sig2*sig2;
+        RealType sig5 = sig4*sig_ij;
+        RealType sig6 = sig4*sig2;
+        RealType sig12 = sig6*sig6;
 
-        Surreal<RealType> sig6rij4 = pow(sig_ij, 6)/d8ij;
-        Surreal<RealType> sig12rij7 = pow(sig_ij, 12)/d14ij;
-        Surreal<RealType> lj_grad_prefactor = 24*eps_ij*(sig12rij7*2 - sig6rij4);
+        Surreal<RealType> sig12_rij7 = sig12*inv_d7ij*inv_d7ij;
+        Surreal<RealType> sig6_rij4 = sig6*inv_d4ij*inv_d4ij;
+        Surreal<RealType> lj_grad_prefactor = 24*eps_ij*(sig12_rij7*2 - sig6_rij4);
 
         #pragma unroll
         for(int d=0; d < D; d++) {
@@ -450,9 +465,9 @@ void __global__ k_nonbonded_inference_exclusion_jvp(
         g_qj += qi*inv_dij;
 
         // vDw
-        RealType sig6 = pow(sig_ij, 6);
-        RealType sig5 = pow(sig_ij, 5);
-        Surreal<RealType> inv_d6ij = inv_d3ij*inv_d3ij;
+        // RealType sig6 = pow(sig_ij, 6);
+        // RealType sig5 = pow(sig_ij, 5);
+        // Surreal<RealType> inv_d6ij = inv_d3ij*inv_d3ij;
         Surreal<RealType> eps_grad = 4*(sig6*inv_d6ij-1.0)*sig6*inv_d6ij;
         g_epsi += eps_grad*eps_j/(2*eps_ij);
         g_epsj += eps_grad*eps_i/(2*eps_ij);
@@ -482,10 +497,10 @@ void __global__ k_nonbonded_inference_exclusion_jvp(
 
 
 template<typename RealType, int D>
-void __global__ k_nonbonded_inference_exclusion(
+void __global__ k_nonbonded_exclusion_inference(
     const int E, // number of exclusions
-    const RealType *coords,
-    const RealType *params,
+    const double *coords,
+    const double *params,
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
     const int *charge_scale_idxs, // [E]
     const int *lj_scale_idxs, // [E] 
@@ -501,7 +516,7 @@ void __global__ k_nonbonded_inference_exclusion(
 
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
     RealType ci[D] = {0};
-    RealType gi[D] = {0};
+    double gi[D] = {0};
     #pragma unroll
     for(int d=0; d < D; d++) {
         ci[d] = coords[atom_i_idx*D+d];
@@ -516,7 +531,7 @@ void __global__ k_nonbonded_inference_exclusion(
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
     RealType cj[D] = {0};
-    RealType gj[D] = {0};
+    double gj[D] = {0};
     #pragma unroll
     for(int d=0; d < D; d++) {
         cj[d] = coords[atom_j_idx*D+d];
@@ -541,6 +556,7 @@ void __global__ k_nonbonded_inference_exclusion(
     }
 
     if(d2ij < cutoff*cutoff) {
+
         RealType dij = sqrt(d2ij);
         // electrostatics force
         RealType inv_dij = 1/dij;
@@ -551,8 +567,18 @@ void __global__ k_nonbonded_inference_exclusion(
         RealType eps_ij = sqrt(eps_i * eps_j);
         RealType sig_ij = (sig_i + sig_j)/2;
 
-        RealType sig6rij4 = pow(sig_ij, 6)/pow(d2ij, 4);
-        RealType sig12rij7 = pow(sig_ij, 12)/pow(d2ij, 7);
+        RealType sig = sig_ij;
+        RealType sig2 = sig*sig;
+        RealType sig4 = sig2*sig2;
+        RealType sig6 = sig4*sig2;
+        RealType sig12 = sig6*sig6;
+
+        RealType d4ij = d2ij*d2ij;
+        RealType d8ij = d4ij*d4ij;
+        RealType d14ij = d8ij*d4ij*d2ij;
+
+        RealType sig6rij4 = sig6/d8ij;
+        RealType sig12rij7 = sig12/d14ij;
         RealType lj_grad_prefactor = 24*eps_ij*(sig12rij7*2 - sig6rij4);
 
         #pragma unroll

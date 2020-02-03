@@ -4,8 +4,8 @@
 template<typename RealType, int D>
 void __global__ k_harmonic_bond_inference(
     const int B,     // number of bonds
-    const RealType *coords,  // [n, 3]
-    const RealType *params,  // [p,]
+    const double *coords,  // [n, 3]
+    const double *params,  // [p,]
     const int *bond_idxs,    // [b, 2]
     const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords
@@ -49,13 +49,13 @@ void __global__ k_harmonic_bond_inference(
 template<typename RealType, int D>
 void __global__ k_harmonic_bond_jvp(
     const int B,     // number of bonds
-    const RealType *coords,  
-    const RealType *coords_tangent,  
-    const RealType *params,  // [p,]
+    const double *coords,  
+    const double *coords_tangent,  
+    const double *params,  // [p,]
     const int *bond_idxs,    // [b, 2]
     const int *param_idxs,   // [b, 2]
-    RealType *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    RealType *grad_params_tangents
+    double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
+    double *grad_params_tangents
 ) {
 
     const auto b_idx = blockDim.x*blockIdx.x + threadIdx.x;
@@ -105,8 +105,8 @@ void __global__ k_harmonic_bond_jvp(
 template<typename RealType, int D>
 void __global__ k_harmonic_angle_inference(
     const int A,     // number of bonds
-    const RealType *coords,  // [n, 3]
-    const RealType *params,  // [p,]
+    const double *coords,  // [n, 3]
+    const double *params,  // [p,]
     const int *angle_idxs,    // [b, 3]
     const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords
@@ -172,13 +172,13 @@ void __global__ k_harmonic_angle_inference(
 template<typename RealType, int D>
 void __global__ k_harmonic_angle_jvp(
     const int A,     // number of bonds
-    const RealType *coords,  // [n, 3]
-    const RealType *coords_tangent,  // [n, 3]
-    const RealType *params,  // [p,]
+    const double *coords,  // [n, 3]
+    const double *coords_tangent,  // [n, 3]
+    const double *params,  // [p,]
     const int *angle_idxs,    // [b, 3]
     const int *param_idxs,   // [b, 2]
-    RealType *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    RealType *grad_params_tangents 
+    double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
+    double *grad_params_tangents 
 ) {
 
     const auto a_idx = blockDim.x*blockIdx.x + threadIdx.x;
@@ -280,8 +280,8 @@ inline __device__ void cross_product(
 template<typename RealType, int D>
 void __global__ k_periodic_torsion_inference(
     const int T,     // number of bonds
-    const RealType *coords,  // [n, 3]
-    const RealType *params,  // [p,]
+    const double *coords,  // [n, 3]
+    const double *params,  // [p,]
     const int *torsion_idxs,    // [b, 4]
     const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords
@@ -377,13 +377,13 @@ void __global__ k_periodic_torsion_inference(
 template<typename RealType, int D>
 void __global__ k_periodic_torsion_jvp(
     const int T,     // number of bonds
-    const RealType *coords,  // [n, 3]
-    const RealType *coords_tangent, 
-    const RealType *params,  // [p,]
+    const double *coords,  // [n, 3]
+    const double *coords_tangent, 
+    const double *params,  // [p,]
     const int *torsion_idxs,    // [b, 4]
     const int *param_idxs,   // [b, 2]
-    RealType *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    RealType *grad_params_tangents
+    double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
+    double *grad_params_tangents
 ) {
 
     const auto t_idx = blockDim.x*blockIdx.x + threadIdx.x;

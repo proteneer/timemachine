@@ -6,7 +6,7 @@
 namespace timemachine {
 
 template<typename RealType, int D>
-class Nonbonded : public Gradient<RealType, D> {
+class Nonbonded : public Gradient<D> {
 
 private:
 
@@ -19,8 +19,8 @@ private:
     double cutoff_;
 
     // these buffers can be in RealType as well
-    RealType *d_block_bounds_ctr_;
-    RealType *d_block_bounds_ext_;
+    double *d_block_bounds_ctr_;
+    double *d_block_bounds_ext_;
 
     const int E_;
     const int N_;
@@ -47,12 +47,12 @@ public:
     virtual void execute_device(
         const int N,
         const int P,
-        const RealType *d_coords,
-        const RealType *d_coords_tangents,
-        const RealType *d_params,
+        const double *d_coords,
+        const double *d_coords_tangents,
+        const double *d_params,
         unsigned long long *out_coords,
-        RealType *out_coords_tangents,
-        RealType *out_params_tangents
+        double *out_coords_tangents,
+        double *out_params_tangents
     ) override;
 
 

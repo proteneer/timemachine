@@ -31,6 +31,7 @@ def prepare_nonbonded_system(
 
     # charges
     charge_params = np.random.rand(P_charges).astype(np.float64)/e_scale
+    charge_params = np.zeros_like(charge_params) # REMOVE ME LATER
     charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, charge_params])
 
@@ -58,6 +59,10 @@ def prepare_nonbonded_system(
     if custom_D is None:
         custom_D = D
 
+    # exclusion_idxs = np.zeros((0, 2), dtype=np.int32)
+    # exclusion_charge_idxs = np.zeros((0,1), dtype=np.int32)
+    # exclusion_lj_idxs = np.zeros((0,2), dtype=np.int32)
+
     custom_nonbonded = ops.Nonbonded(
         charge_param_idxs,
         lj_param_idxs,
@@ -76,7 +81,7 @@ def prepare_nonbonded_system(
     def ref_total_energy(x, p):
         return lj_fn(x, p) - lj_fn_exc(x, p) + es_fn(x, p)
 
-    return params.astype(precision), [ref_total_energy], [custom_nonbonded]
+    return params, [ref_total_energy], [custom_nonbonded]
 
 
 def prepare_bonded_system(
@@ -158,50 +163,64 @@ class GradientTest(unittest.TestCase):
 
         return x
 
+    def assert_equal_vectors(self, truth, test, rtol):
+        """
+        OpenMM convention
+        """
+        print('tshape', truth.shape)
+        norms = np.linalg.norm(truth, axis=-1, keepdims=True)
+        norms = np.where(norms < 1., 1.0, norms)
+        errors = (truth-test)/norms
+        max_error = np.amax(errors)
+        max_error_arg = np.argmax(errors)//truth.shape[1]
+        print(max_error_arg)
+
+        print(truth[1928], test[1928])
+        # print(truth[1928//3], test[1928//3])
+
+        errors = errors > rtol
+        print("max relative error", max_error, norms[max_error_arg])
+        if np.sum(errors) > 0:
+            print("FATAL: max relative error", max_error)
+            assert 0
+
     def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
+
+        x = (x.astype(np.float32)).astype(np.float64)
+        params = (params.astype(np.float32)).astype(np.float64)
 
         N = x.shape[0]
         D = x.shape[1]
+
+        assert x.dtype == np.float64
+        assert params.dtype == np.float64
 
         test_dx = custom_force.execute(x, params)
 
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
         ref_dx, _ = grad_fn(x, params)
 
-        if rtol is None:
-            if precision == np.float64:
-                # 5e-11 is doable if we move the fixed point up
-                rtol = 1e-8
-            elif precision == np.float32:
-                rtol = 1e-6
+        # if rtol is None:
+        #     if precision == np.float64:
+        #         # 5e-11 is doable if we move the fixed point up
+        #         rtol = 1e-8
+        #     elif precision == np.float32:
+        #         rtol = 1e-6
 
-        # np.testing.assert_almost_equal(
-        #     np.array(ref_dx),
-        #     np.array(test_dx),
-        #     decimal=10
-        # )
-
-        print("rtol", rtol)
-        print(ref_dx)
-        print(test_dx)
-
-
-        # currently just straight up wrong!
-
-        np.testing.assert_allclose(
+        self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),
-            rtol
+            rtol,
         )
 
-        x_tangent = np.random.rand(N, D).astype(np.float64)
+        x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         params_tangent = np.zeros_like(params)
 
         test_x_tangent, test_p_tangent = custom_force.execute_jvp(
-            x.astype(np.float32),
-            params.astype(np.float32),
-            x_tangent.astype(np.float32),
-            params_tangent.astype(np.float32)
+            x,
+            params,
+            x_tangent,
+            params_tangent
         )
 
         primals = (x, params)
@@ -209,7 +228,18 @@ class GradientTest(unittest.TestCase):
 
         _, t = jax.jvp(grad_fn, primals, tangents)
 
+        self.assert_equal_vectors(
+            t[0],
+            test_x_tangent,
+            1e-6
+        )
+
+        assert 0
+
+        # self.assert_quasi_equal(t[1], test_p_tangent, rtol=rtol)
+        # assert 0
+
+        # np.testing.assert_allclose(t[0], test_x_tangent, rtol=rtol)
 
 
-        np.testing.assert_allclose(t[0], test_x_tangent, rtol=rtol)
         np.testing.assert_allclose(t[1], test_p_tangent, rtol=rtol)
