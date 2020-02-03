@@ -31,14 +31,20 @@ def prepare_nonbonded_system(
 
     # charges
     charge_params = np.random.rand(P_charges).astype(np.float64)/e_scale
-    charge_params = np.zeros_like(charge_params) # REMOVE ME LATER
+    # charge_params = np.zeros_like(charge_params)
     charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, charge_params])
 
     # lennard jones
-    lj_params = np.random.rand(P_lj)/p_scale # we want these to be pretty small for numerical stability
-    lj_param_idxs = np.random.randint(low=0, high=P_lj, size=(N,2), dtype=np.int32) + len(params)
-    params = np.concatenate([params, lj_params])
+    lj_sig_params = np.random.rand(P_lj)/p_scale # we want these to be pretty small for numerical stability
+    lj_sig_idxs = np.random.randint(low=0, high=P_lj, size=(N,), dtype=np.int32) + len(params)
+    params = np.concatenate([params, lj_sig_params])
+
+    lj_eps_params = np.random.rand(P_lj)
+    lj_eps_idxs = np.random.randint(low=0, high=P_lj, size=(N,), dtype=np.int32) + len(params)
+    params = np.concatenate([params, lj_eps_params])
+
+    lj_param_idxs = np.stack([lj_sig_idxs, lj_eps_idxs], axis=-1)
 
     # generate exclusion parameters
     exclusion_idxs = np.random.randint(low=0, high=N, size=(E,2), dtype=np.int32)
@@ -167,21 +173,21 @@ class GradientTest(unittest.TestCase):
         """
         OpenMM convention
         """
-        print('tshape', truth.shape)
+        # print('tshape', truth.shape)
         norms = np.linalg.norm(truth, axis=-1, keepdims=True)
         norms = np.where(norms < 1., 1.0, norms)
         errors = (truth-test)/norms
         max_error = np.amax(errors)
         max_error_arg = np.argmax(errors)//truth.shape[1]
-        print(max_error_arg)
+        # print(max_error_arg)
 
-        print(truth[1928], test[1928])
+        # print(truth[1928], test[1928])
         # print(truth[1928//3], test[1928//3])
 
         errors = errors > rtol
-        print("max relative error", max_error, norms[max_error_arg])
+        # print("max relative error", max_error, norms[max_error_arg])
         if np.sum(errors) > 0:
-            print("FATAL: max relative error", max_error)
+            print("FATAL: max relative error", max_error, truth[max_error_arg], test[max_error_arg])
             assert 0
 
     def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
@@ -213,6 +219,8 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
+        print("PASS FORCES")
+
         x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         params_tangent = np.zeros_like(params)
 
@@ -231,15 +239,19 @@ class GradientTest(unittest.TestCase):
         self.assert_equal_vectors(
             t[0],
             test_x_tangent,
-            1e-6
+            rtol,
         )
 
-        assert 0
+        print("PASS HESSIANS")
+
+        # assert 0
 
         # self.assert_quasi_equal(t[1], test_p_tangent, rtol=rtol)
         # assert 0
 
         # np.testing.assert_allclose(t[0], test_x_tangent, rtol=rtol)
 
+        print(t[1])
+        print(np.abs((test_p_tangent - t[1])/t[1]))
 
-        np.testing.assert_allclose(t[1], test_p_tangent, rtol=rtol)
+        np.testing.assert_allclose(t[1], test_p_tangent, rtol=1e-4)

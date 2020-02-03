@@ -42,7 +42,6 @@ def recenter(conf, true_com, scale_factor=1):
     centered = conf - mol_com  # centered to origin
     return true_com + centered/scale_factor 
 
-
 from hilbertcurve.hilbertcurve import HilbertCurve
 
 def hilbert_sort(conf):
