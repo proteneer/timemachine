@@ -1,12 +1,12 @@
 import functools
 import unittest
 import scipy.linalg
-
+from jax.config import config; config.update("jax_enable_x64", True)
 
 import numpy as np
 import jax
 import jax.numpy as jnp
-from jax.config import config; config.update("jax_enable_x64", True)
+
 import functools
 
 from common import GradientTest
@@ -58,27 +58,29 @@ class TestNonbonded(GradientTest):
  
         x = self.get_random_coords(N, D)
 
-        for cutoff in [100.0, 0.5, 0.1]:
-            params, ref_forces, test_forces = prepare_nonbonded_system(
-                x,
-                E,
-                P_charges,
-                P_lj,
-                P_exc,
-                p_scale=8.0,
-                cutoff=cutoff
-            )
+        for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
+            for cutoff in [100.0, 0.5, 0.1]:
+                E = 0
+                params, ref_forces, test_forces = prepare_nonbonded_system(
+                    x,
+                    E,
+                    P_charges,
+                    P_lj,
+                    P_exc,
+                    p_scale=10.0,
+                    cutoff=cutoff,
+                    precision=precision
+                )
+                for r, t in zip(ref_forces, test_forces):
+                    self.compare_forces(
+                        x,
+                        params,
+                        r,
+                        t,
+                        precision,
+                        rtol=rtol
+                    )
 
-            for r, t in zip(ref_forces, test_forces):
-                self.compare_forces(x, params, r, t)
-
-
-
-        # self.compare_system(*args, cutoff=100.0)
-        # self.compare_system(*args, cutoff=0.5)
-        # self.compare_system(*args, cutoff=0.1)
-
-    # @unittest.skip("debug")
     def test_water_box(self):
         
         np.random.seed(123)
@@ -86,26 +88,37 @@ class TestNonbonded(GradientTest):
         P_lj = 5
         P_exc = 7
 
-        for dim in [3, 4]:
-            x = self.get_water_coords(dim)
-            E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
+        for precision, rtol in [(np.float32, 2e-5), (np.float64, 5e-10)]:
 
-            for cutoff in [1000.0, 0.9, 0.5, 0.4, 0.001]:
+            print("PRECISION", precision)
+            for dim in [3, 4]:
+                x = self.get_water_coords(dim)
+                E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
+                for cutoff in [1000.0, 0.9, 0.5, 0.001]:
 
-                params, ref_forces, test_forces = prepare_nonbonded_system(
-                    x,
-                    E,
-                    P_charges,
-                    P_lj,
-                    P_exc,
-                    p_scale=8.0,
-                    cutoff=cutoff
-                )
+                    print("cutoff", cutoff)
 
-                for r, t in zip(ref_forces, test_forces):
-                    self.compare_forces(x, params, r, t)
+                    params, ref_forces, test_forces = prepare_nonbonded_system(
+                        x,
+                        E,
+                        P_charges,
+                        P_lj,
+                        P_exc,
+                        p_scale=10.0,
+                        e_scale=0.5, # double the charges
+                        cutoff=cutoff,
+                        precision=precision
+                    )
 
-    @unittest.skip("debug")
+                    for r, t in zip(ref_forces, test_forces):
+                        self.compare_forces(
+                            x,
+                            params,
+                            r,
+                            t,
+                            precision,
+                            rtol)
+
     def test_lambda(self):
 
         np.random.seed(4321)
@@ -134,11 +147,19 @@ class TestNonbonded(GradientTest):
 
         def lambda_to_w(lamb, lamb_flags, exponent):
             """
+            We use the following form:
+
+            Insertion:
+
+            np.tan()
+
             """
-            lk = jnp.power(lamb, exponent)
-            d4 = lk/(1-lk)*np.ones_like(lamb_flags)
-            d4 = jnp.power(d4, lamb_flags)
-            d4 = jnp.where(lamb_flags != 0, d4, 0)
+            insertion = jnp.tan(lamb*(np.pi/2))/exponent
+            deletion = jnp.tan(-(lamb-1)*(np.pi/2))/exponent
+            d4_insertion = jnp.where(lamb_flags == 1, insertion, 0.0)
+            d4_deletion = jnp.where(lamb_flags == -1, deletion, 0.0)
+            d4 = d4_insertion + d4_deletion
+
             return d4
 
         def potential_lambda(x3, lamb, params, lamb_flags, exponent):
@@ -160,7 +181,7 @@ class TestNonbonded(GradientTest):
             lamb_flags=lamb_flags,
             exponent=2)
 
-        lambda_v = 0.5
+        lambda_v = 0.4
         dw_dl_fn = jax.jacfwd(lambda_to_w, argnums=(0,))
         dw_dl = dw_dl_fn(lambda_v, lamb_flags, 2)[0]
 
