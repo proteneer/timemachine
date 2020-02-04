@@ -47,7 +47,6 @@ class TestNonbonded(GradientTest):
         ref_mp = np.transpose(ref_mp, (2,0,1))
         return ref_mp
 
-    # @unittest.skip("debug")
     def test_fast_nonbonded(self):
         np.random.seed(125)
         N = 65
@@ -61,6 +60,7 @@ class TestNonbonded(GradientTest):
 
         for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
             for cutoff in [100.0, 0.5, 0.1]:
+                E = 0
                 params, ref_forces, test_forces = prepare_nonbonded_system(
                     x,
                     E,
@@ -81,7 +81,6 @@ class TestNonbonded(GradientTest):
                         rtol=rtol
                     )
 
-    # @unittest.skip("debug")
     def test_water_box(self):
         
         np.random.seed(123)
@@ -90,13 +89,11 @@ class TestNonbonded(GradientTest):
         P_exc = 7
 
         for precision, rtol in [(np.float32, 2e-5), (np.float64, 5e-10)]:
-            
+
             print("PRECISION", precision)
             for dim in [3, 4]:
                 x = self.get_water_coords(dim)
                 E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
-                # E = 0
-
                 for cutoff in [1000.0, 0.9, 0.5, 0.001]:
 
                     print("cutoff", cutoff)

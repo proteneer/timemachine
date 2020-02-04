@@ -68,7 +68,7 @@ void __global__ k_harmonic_bond_jvp(
     int dst_idx = bond_idxs[b_idx*2+1];
 
     Surreal<RealType> dx[D];
-    Surreal<RealType> d2ij = 0; // initialize your summed variables!
+    Surreal<RealType> d2ij(0.0, 0.0); // initialize your summed variables!
     for(int d=0; d < D; d++) {
         Surreal<RealType> delta;
         delta.real = coords[src_idx*D+d] - coords[dst_idx*D+d];
@@ -87,10 +87,7 @@ void __global__ k_harmonic_bond_jvp(
     Surreal<RealType> db = dij - b0;
 
     for(int d=0; d < D; d++) {
-
-
         Surreal<RealType> grad_delta = kb*db*dx[d]/dij;
-
         atomicAdd(grad_coords_tangents + src_idx*D + d, grad_delta.imag);
         atomicAdd(grad_coords_tangents + dst_idx*D + d, -grad_delta.imag);
     }
@@ -193,9 +190,9 @@ void __global__ k_harmonic_angle_jvp(
 
     Surreal<RealType> rij[D];
     Surreal<RealType> rjk[D];
-    Surreal<RealType> nij = 0; // initialize your summed variables!
-    Surreal<RealType> njk = 0; // initialize your summed variables!
-    Surreal<RealType> top = 0;
+    Surreal<RealType> nij(0.0, 0.0); // initialize your summed variables!
+    Surreal<RealType> njk(0.0, 0.0); // initialize your summed variables!
+    Surreal<RealType> top(0.0, 0.0);
     // this is a little confusing
     for(int d=0; d < D; d++) {
 
@@ -401,7 +398,7 @@ void __global__ k_periodic_torsion_jvp(
     Surreal<RealType> rkj[3];
     Surreal<RealType> rkl[3];
 
-    Surreal<RealType> rkj_norm_square = 0;
+    Surreal<RealType> rkj_norm_square(0.0, 0.0);
 
     // (todo) cap to three dims, while keeping stride at 4
     for(int d=0; d < 3; d++) {

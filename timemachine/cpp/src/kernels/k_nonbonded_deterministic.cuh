@@ -76,10 +76,13 @@ void __global__ k_nonbonded_jvp(
     }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    Surreal<RealType> ci[D] = {0};
-    Surreal<RealType> gi[D] = {0};
+    Surreal<RealType> ci[D];
+    Surreal<RealType> gi[D];
+    // Surreal<RealType> gi[D] = {Surreal<RealType>(0.0, 0.0)};
     #pragma unroll
     for(int d=0; d < D; d++) {
+        gi[d].real = 0.0;
+        gi[d].imag = 0.0;
         ci[d].real = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
         ci[d].imag = atom_i_idx < N ? coords_tangent[atom_i_idx*D+d] : 0;
     }
@@ -96,11 +99,13 @@ void __global__ k_nonbonded_jvp(
     Surreal<RealType> g_epsi(0.0, 0.0);
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    Surreal<RealType> cj[D] = {0};
-    Surreal<RealType> gj[D] = {0};
+    Surreal<RealType> cj[D];
+    Surreal<RealType> gj[D];
 
     #pragma unroll
     for(int d=0; d < D; d++) {
+        gj[d].real = 0.0;
+        gj[d].imag = 0.0;
         cj[d].real = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
         cj[d].imag = atom_j_idx < N ? coords_tangent[atom_j_idx*D+d] : 0;
     }
@@ -119,7 +124,7 @@ void __global__ k_nonbonded_jvp(
 
     for(int round = 0; round < 32; round++) {
 
-        Surreal<RealType> d2ij = 0;
+        Surreal<RealType> d2ij(0.0, 0.0);
         #pragma unroll
         for(int d=0; d < D; d++) {
             Surreal<RealType> dx = ci[d] - cj[d];
@@ -249,7 +254,7 @@ void __global__ k_nonbonded_inference(
     }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    RealType ci[D] = {0};
+    RealType ci[D];
     RealType gi[D] = {0};
     #pragma unroll
     for(int d=0; d < D; d++) {
@@ -264,7 +269,7 @@ void __global__ k_nonbonded_inference(
     RealType eps_i = atom_i_idx < N ? params[lj_param_idx_eps_i] : 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    RealType cj[D] = {0};
+    RealType cj[D];
     RealType gj[D] = {0};
     #pragma unroll
     for(int d=0; d < D; d++) {
@@ -365,10 +370,12 @@ void __global__ k_nonbonded_exclusion_jvp(
     }
 
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
-    Surreal<RealType> ci[D] = {0};
-    Surreal<RealType> gi[D] = {0};
+    Surreal<RealType> ci[D];
+    Surreal<RealType> gi[D] = {Surreal<RealType>(0.0, 0.0)};
     #pragma unroll
     for(int d=0; d < D; d++) {
+        gi[d].real = 0;
+        gi[d].imag = 0;
         ci[d].real = coords[atom_i_idx*D+d];
         ci[d].imag = coords_tangent[atom_i_idx*D+d];
     }
@@ -385,10 +392,12 @@ void __global__ k_nonbonded_exclusion_jvp(
     Surreal<RealType> g_epsi(0.0, 0.0);
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
-    Surreal<RealType> cj[D] = {0};
-    Surreal<RealType> gj[D] = {0};
+    Surreal<RealType> cj[D];
+    Surreal<RealType> gj[D] = {Surreal<RealType>(0.0, 0.0)};
     #pragma unroll
     for(int d=0; d < D; d++) {
+        gj[d].real = 0;
+        gj[d].imag = 0;
         cj[d].real = coords[atom_j_idx*D+d];
         cj[d].imag = coords_tangent[atom_j_idx*D+d];
     }
@@ -411,7 +420,7 @@ void __global__ k_nonbonded_exclusion_jvp(
     int lj_scale_idx = lj_scale_idxs[e_idx];
     RealType lj_scale = params[lj_scale_idx];
 
-    Surreal<RealType> d2ij = 0;
+    Surreal<RealType> d2ij(0.0, 0.0);
     #pragma unroll
     for(int d=0; d < D; d++) {
         Surreal<RealType> dx = ci[d] - cj[d];
@@ -531,7 +540,7 @@ void __global__ k_nonbonded_exclusion_inference(
     }
 
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
-    RealType ci[D] = {0};
+    RealType ci[D];
     double gi[D] = {0};
     #pragma unroll
     for(int d=0; d < D; d++) {
@@ -546,7 +555,7 @@ void __global__ k_nonbonded_exclusion_inference(
     RealType eps_i = params[lj_param_idx_eps_i];
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
-    RealType cj[D] = {0};
+    RealType cj[D];
     double gj[D] = {0};
     #pragma unroll
     for(int d=0; d < D; d++) {

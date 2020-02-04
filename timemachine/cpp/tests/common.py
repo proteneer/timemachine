@@ -93,7 +93,8 @@ def prepare_bonded_system(
     P_torsions,
     B,
     A,
-    T):
+    T,
+    precision):
 
     N = x.shape[0]
     D = x.shape[1]
@@ -128,17 +129,19 @@ def prepare_bonded_system(
 
     params = np.concatenate([params, torsion_params])
 
-    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, D)
+    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, D, precision=precision)
     harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs)
 
-    custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, D)
+    custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, D, precision=precision)
     harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs)
 
-    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, D)
+    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, D, precision=precision)
     periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
 
 
-    return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
+    # return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
+
+    return params, [harmonic_bond_fn], [custom_bonded]
 
 def hilbert_sort(conf, D):
     hc = HilbertCurve(32, D)

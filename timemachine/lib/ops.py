@@ -74,7 +74,7 @@ def PeriodicTorsion(*args, precision):
         if dim == 3:
             return custom_ops.PeriodicTorsion_f32_3d(*args[:-1])
         elif dim == 4:
-            return custom_ops.PeriodicTorsion_f23_4d(*args[:-1])
+            return custom_ops.PeriodicTorsion_f32_4d(*args[:-1])
         else:
             raise Exception("Bad Dim")
     else:
