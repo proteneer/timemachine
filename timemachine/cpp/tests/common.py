@@ -65,10 +65,6 @@ def prepare_nonbonded_system(
     if custom_D is None:
         custom_D = D
 
-    # exclusion_idxs = np.zeros((0, 2), dtype=np.int32)
-    # exclusion_charge_idxs = np.zeros((0,1), dtype=np.int32)
-    # exclusion_lj_idxs = np.zeros((0,2), dtype=np.int32)
-
     custom_nonbonded = ops.Nonbonded(
         charge_param_idxs,
         lj_param_idxs,
@@ -171,21 +167,18 @@ class GradientTest(unittest.TestCase):
 
     def assert_equal_vectors(self, truth, test, rtol):
         """
-        OpenMM convention
+        OpenMM convention - errors are compared against norm of force vectors
         """
-        # print('tshape', truth.shape)
         norms = np.linalg.norm(truth, axis=-1, keepdims=True)
         norms = np.where(norms < 1., 1.0, norms)
         errors = (truth-test)/norms
-        max_error = np.amax(errors)
+        max_error = np.amax(np.abs(errors))
+        mean_error = np.mean(np.abs(errors).reshape(-1))
+        std_error = np.std(errors.reshape(-1))
         max_error_arg = np.argmax(errors)//truth.shape[1]
-        # print(max_error_arg)
-
-        # print(truth[1928], test[1928])
-        # print(truth[1928//3], test[1928//3])
 
         errors = errors > rtol
-        # print("max relative error", max_error, norms[max_error_arg])
+        print("max relative error", max_error, norms[max_error_arg], "mean error", mean_error, "std error", std_error)
         if np.sum(errors) > 0:
             print("FATAL: max relative error", max_error, truth[max_error_arg], test[max_error_arg])
             assert 0
@@ -206,20 +199,11 @@ class GradientTest(unittest.TestCase):
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
         ref_dx, _ = grad_fn(x, params)
 
-        # if rtol is None:
-        #     if precision == np.float64:
-        #         # 5e-11 is doable if we move the fixed point up
-        #         rtol = 1e-8
-        #     elif precision == np.float32:
-        #         rtol = 1e-6
-
         self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),
             rtol,
         )
-
-        print("PASS FORCES")
 
         x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         params_tangent = np.zeros_like(params)
@@ -242,16 +226,4 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
-        print("PASS HESSIANS")
-
-        # assert 0
-
-        # self.assert_quasi_equal(t[1], test_p_tangent, rtol=rtol)
-        # assert 0
-
-        # np.testing.assert_allclose(t[0], test_x_tangent, rtol=rtol)
-
-        print(t[1])
-        print(np.abs((test_p_tangent - t[1])/t[1]))
-
-        np.testing.assert_allclose(t[1], test_p_tangent, rtol=1e-4)
+        np.testing.assert_allclose(t[1], test_p_tangent, rtol=5e-5)

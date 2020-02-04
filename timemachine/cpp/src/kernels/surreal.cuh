@@ -334,7 +334,18 @@ DECL Surreal<RealType> sqrt(const Surreal<RealType>& z) {
     return Surreal<RealType>(
         sqrtv,
         // 0.5*z.imag/(sqrtv+ERR)
-        0.5*z.imag/(sqrtv)
+        0.5*z.imag/sqrtv
+    );
+}
+
+template <typename RealType>
+DECL Surreal<RealType> rsqrt(const Surreal<RealType>& z) {
+    // RealType rsqrta = rsqrt(z.real);
+    RealType rsqrta = 1/sqrt(z.real);
+
+    return Surreal<RealType>(
+        rsqrta,
+        -(z.imag*rsqrta)/(2*z.real)
     );
 }
 

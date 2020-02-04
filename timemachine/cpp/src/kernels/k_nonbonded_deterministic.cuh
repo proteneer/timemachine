@@ -122,36 +122,22 @@ void __global__ k_nonbonded_jvp(
         Surreal<RealType> d2ij = 0;
         #pragma unroll
         for(int d=0; d < D; d++) {
-            // this only slightly increases the precision, but not by much
-            // unfortunately a trick that works great for real numbers falls apart quickly
-            // for complex numbers
-            // Surreal<double> ci_dbl;
-            // ci_dbl.real = ci[d].real;
-            // ci_dbl.imag = ci[d].imag;
-            // Surreal<double> cj_dbl;
-            // cj_dbl.real = cj[d].real;
-            // cj_dbl.imag = cj[d].imag;
-            // Surreal<double> dx = ci_dbl - cj_dbl;
-            // Surreal<double> d2x = dx*dx;
-            // d2ij.real += d2x.real;
-            // d2ij.imag += d2x.imag;
             Surreal<RealType> dx = ci[d] - cj[d];
             d2ij += dx*dx;
         }
 
         if(atom_j_idx < atom_i_idx && d2ij.real < cutoff*cutoff && atom_j_idx < N && atom_i_idx < N) {
 
-            // this steaming pile is unrolled for speed, and for the fact that we do not overload
-            // pow for complex numbers as they get very very tricky
-            Surreal<RealType> dij = sqrt(d2ij);
-            Surreal<RealType> inv_dij = 1/dij;
-
-            Surreal<RealType> inv_d2ij = inv_dij*inv_dij;
-            Surreal<RealType> inv_d3ij = inv_d2ij*inv_dij;
-            Surreal<RealType> inv_d4ij = inv_d3ij*inv_dij;
+            // high precision
+            Surreal<RealType> inv_d2ij = 1/d2ij;
+            Surreal<RealType> inv_d4ij = inv_d2ij*inv_d2ij;
             Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
-            Surreal<RealType> inv_d7ij = inv_d4ij*inv_d3ij;
+            Surreal<RealType> inv_d8ij = inv_d4ij*inv_d4ij;
+            Surreal<RealType> inv_d14ij = inv_d8ij*inv_d6ij;
 
+            // low-ish precision due to rsqrt
+            Surreal<RealType> inv_dij = rsqrt(d2ij);
+            Surreal<RealType> inv_d3ij = inv_d2ij*inv_dij;
             Surreal<RealType> es_grad_prefactor = qi*qj*inv_d3ij;
 
             // lennard jones force
@@ -164,16 +150,16 @@ void __global__ k_nonbonded_jvp(
             RealType sig6 = sig4*sig2;
             RealType sig12 = sig6*sig6;
 
-            Surreal<RealType> sig12_rij7 = sig12*inv_d7ij*inv_d7ij;
-            Surreal<RealType> sig6_rij4 = sig6*inv_d4ij*inv_d4ij;
-            // expand
-            // Surreal<RealType> lj_grad_prefactor = 24*eps_ij*(sig12_rij7*2 - sig6_rij4);
-            Surreal<RealType> lj_grad_prefactor = 24*eps_ij*sig12_rij7*2 - 24*eps_ij*sig6_rij4;
+            Surreal<RealType> sig12_rij7 = sig12*inv_d14ij;
+            Surreal<RealType> sig6_rij4 = sig6*inv_d8ij;
+            // Surreal<RealType> lj_grad_prefactor = 24*eps_ij*sig12_rij7*2 - 24*eps_ij*sig6_rij4;
+            Surreal<RealType> lj_grad_prefactor = 24*eps_ij*(sig12_rij7*2 - sig6_rij4);
 
             #pragma unroll
             for(int d=0; d < D; d++) {
-                gi[d] -= (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);
-                gj[d] += (es_grad_prefactor + lj_grad_prefactor) * (ci[d]-cj[d]);
+                Surreal<RealType> dx = ci[d]-cj[d];
+                gi[d] -= es_grad_prefactor*dx + lj_grad_prefactor*dx;
+                gj[d] += es_grad_prefactor*dx + lj_grad_prefactor*dx;
             }
 
             // dE_dp 
@@ -182,12 +168,10 @@ void __global__ k_nonbonded_jvp(
             g_qj += qi*inv_dij;
 
             // vDw
-            // Surreal<RealType> eps_grad = 4*(sig6*inv_d6ij-1.0)*sig6*inv_d6ij;
-            Surreal<RealType> eps_grad = 4*(sig6*inv_d6ij*sig6*inv_d6ij-sig6*inv_d6ij);
+            Surreal<RealType> eps_grad = 4*(sig12*inv_d6ij*inv_d6ij-sig6*inv_d6ij);
             g_epsi += eps_grad*eps_j/(2*eps_ij);
             g_epsj += eps_grad*eps_i/(2*eps_ij);
 
-            // Surreal<RealType> sig_grad = 24*eps_ij*(2*sig6*inv_d6ij*-1.0)*(sig5*inv_d6ij);
             Surreal<RealType> sig_grad = 24*eps_ij*(2*sig6*inv_d6ij*sig5*inv_d6ij-sig5*inv_d6ij);
             g_sigi += sig_grad/2;
             g_sigj += sig_grad/2;
@@ -297,60 +281,42 @@ void __global__ k_nonbonded_inference(
     // In inference mode, we don't care about gradients with respect to parameters.
     for(int round = 0; round < 32; round++) {
 
-        double d2ij = 0;
+        RealType d2ij = 0;
         #pragma unroll
         for(int d=0; d < D; d++) {
             // (ytz): loss of significance possible?
-            double dx = double(ci[d]) - double(cj[d]);
+            RealType dx = ci[d] - cj[d];
             d2ij += dx*dx;
-            // d2ij += ci[d]*ci[d] - (2*ci[d]*cj[d] - cj[d]*cj[d]);
         }
 
         if(atom_j_idx < atom_i_idx && d2ij < cutoff*cutoff && atom_j_idx < N && atom_i_idx < N) {
 
-            // RealType dij = sqrt(d2ij);
-            // electrostatics force
-            // RealType inv_dij = 1/dij;
-            RealType inv_dij = rsqrt(d2ij); // if this is RealType as opposed to double then we have a ****lot**** of errors
+            RealType inv_dij = rsqrt(d2ij);
             RealType inv_d2ij = 1/d2ij;
             RealType inv_d3ij = inv_dij*inv_d2ij;
-            RealType es_grad_prefactor = qi*qj*inv_d3ij; // maybe inv_d4ij * dij has less error than this since sqrt introduces error
+            RealType inv_d4ij = inv_d2ij*inv_d2ij;
+            RealType inv_d6ij = inv_d4ij*inv_d2ij;
+            RealType inv_d8ij = inv_d4ij*inv_d4ij;
+            RealType es_grad_prefactor = qi*qj*inv_d3ij;
 
             // lennard jones force
             RealType eps_ij = sqrt(eps_i * eps_j);
             RealType sig_ij = (sig_i + sig_j)/2;
 
-            // RealType sig = sig_ij;
-            // RealType sig2 = sig*sig;
-            // RealType sig4 = sig2*sig2;
-            // RealType sig6 = sig4*sig2;
-            // RealType sig12 = sig6*sig6;
+            RealType sig2 = sig_ij*sig_ij;
+            RealType sig4 = sig2*sig2;
+            RealType sig6 = sig4*sig2;
 
-            // RealType d4ij = d2ij*d2ij;
-            // RealType d8ij = d4ij*d4ij;
-            // RealType d14ij = d8ij*d4ij*d2ij;
+            RealType sig6_inv_d6ij = sig6*inv_d6ij;
+            RealType sig6_inv_d8ij = sig6*inv_d8ij;
 
-            // RealType sig6rij4 = sig6/d8ij;
-            // RealType sig12rij7 = sig12/d14ij;
-
-            // RealType tmp_inv_dij = rsqrt(d2ij); // if this is RealType as opposed to double then we have a ****lot**** of errors
-
-            RealType sig2_inv_d2ij = sig_ij*sig_ij/d2ij; // avoid using inv_dij as much as we can due to errors
-            RealType sig4_inv_d4ij = sig2_inv_d2ij*sig2_inv_d2ij;
-            RealType sig6_inv_d6ij = sig4_inv_d4ij*sig2_inv_d2ij;
-            RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
-            RealType sig8_inv_d8ij = sig4_inv_d4ij*sig4_inv_d4ij;
-            RealType sig12_inv_d12ij = sig8_inv_d8ij*sig4_inv_d4ij;
-            RealType sig12_inv_d14ij = sig12_inv_d12ij*inv_d2ij;
-
-            // RealType lj_grad_prefactor = 24*eps_ij*(sig12rij7*2 - sig6rij4);
-            RealType lj_grad_prefactor = 24*eps_ij*sig12_inv_d14ij*2 - 24*eps_ij*sig6_inv_d8ij;
+            RealType lj_grad_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1.0);
 
             #pragma unroll
             for(int d=0; d < D; d++) {
                 RealType dx = ci[d]- cj[d];
-                gi[d] -= es_grad_prefactor*dx + lj_grad_prefactor * dx;
-                gj[d] += es_grad_prefactor*dx + lj_grad_prefactor * dx;
+                gi[d] -= (es_grad_prefactor + lj_grad_prefactor) * dx;
+                gj[d] += (es_grad_prefactor + lj_grad_prefactor) * dx;
             }
         }
 
@@ -453,29 +419,52 @@ void __global__ k_nonbonded_exclusion_jvp(
     }
 
     if(d2ij.real < cutoff*cutoff) {
-        Surreal<RealType> dij = sqrt(d2ij);
-        Surreal<RealType> inv_dij = Surreal<RealType>(1.0)/dij;
-        Surreal<RealType> inv_d2ij = inv_dij*inv_dij;
-        Surreal<RealType> inv_d3ij = inv_d2ij*inv_dij;
-        Surreal<RealType> inv_d4ij = inv_d3ij*inv_dij;
-        Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
-        Surreal<RealType> inv_d7ij = inv_d4ij*inv_d3ij;
+        // Surreal<RealType> dij = sqrt(d2ij);
+        // Surreal<RealType> inv_dij = Surreal<RealType>(1.0)/dij;
+        // Surreal<RealType> inv_d2ij = inv_dij*inv_dij;
+        // Surreal<RealType> inv_d3ij = inv_d2ij*inv_dij;
+        // Surreal<RealType> inv_d4ij = inv_d3ij*inv_dij;
+        // Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
+        // Surreal<RealType> inv_d7ij = inv_d4ij*inv_d3ij;
 
+        // Surreal<RealType> es_grad_prefactor = qi*qj*inv_d3ij;
+
+        // // lennard jones force
+        // RealType eps_ij = sqrt(eps_i*eps_j);
+        // RealType sig_ij = (sig_i+sig_j)/2;
+
+        // RealType sig2 = sig_ij*sig_ij;
+        // RealType sig4 = sig2*sig2;
+        // RealType sig5 = sig4*sig_ij;
+        // RealType sig6 = sig4*sig2;
+        // RealType sig12 = sig6*sig6;
+
+        // Surreal<RealType> sig12_rij7 = sig12*inv_d7ij*inv_d7ij;
+        // Surreal<RealType> sig6_rij4 = sig6*inv_d4ij*inv_d4ij;
+        // Surreal<RealType> lj_grad_prefactor = 24*eps_ij*(sig12_rij7*2 - sig6_rij4);
+
+        Surreal<RealType> inv_dij = rsqrt(d2ij);
+        Surreal<RealType> inv_d2ij = 1/d2ij;
+        Surreal<RealType> inv_d3ij = inv_dij*inv_d2ij;
+        Surreal<RealType> inv_d4ij = inv_d2ij*inv_d2ij;
+        Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
+        Surreal<RealType> inv_d8ij = inv_d4ij*inv_d4ij;
         Surreal<RealType> es_grad_prefactor = qi*qj*inv_d3ij;
 
         // lennard jones force
-        RealType eps_ij = sqrt(eps_i*eps_j);
-        RealType sig_ij = (sig_i+sig_j)/2;
+        RealType eps_ij = sqrt(eps_i * eps_j);
+        RealType sig_ij = (sig_i + sig_j)/2;
 
         RealType sig2 = sig_ij*sig_ij;
         RealType sig4 = sig2*sig2;
         RealType sig5 = sig4*sig_ij;
         RealType sig6 = sig4*sig2;
-        RealType sig12 = sig6*sig6;
 
-        Surreal<RealType> sig12_rij7 = sig12*inv_d7ij*inv_d7ij;
-        Surreal<RealType> sig6_rij4 = sig6*inv_d4ij*inv_d4ij;
-        Surreal<RealType> lj_grad_prefactor = 24*eps_ij*(sig12_rij7*2 - sig6_rij4);
+        Surreal<RealType> sig6_inv_d6ij = sig6*inv_d6ij;
+        Surreal<RealType> sig6_inv_d8ij = sig6*inv_d8ij;
+
+        Surreal<RealType> lj_grad_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1.0);
+
 
         #pragma unroll
         for(int d=0; d < D; d++) {
@@ -495,9 +484,6 @@ void __global__ k_nonbonded_exclusion_jvp(
         g_qj += qi*inv_dij;
 
         // vDw
-        // RealType sig6 = pow(sig_ij, 6);
-        // RealType sig5 = pow(sig_ij, 5);
-        // Surreal<RealType> inv_d6ij = inv_d3ij*inv_d3ij;
         Surreal<RealType> eps_grad = 4*(sig6*inv_d6ij-1.0)*sig6*inv_d6ij;
         g_epsi += eps_grad*eps_j/(2*eps_ij);
         g_epsj += eps_grad*eps_i/(2*eps_ij);
@@ -587,29 +573,25 @@ void __global__ k_nonbonded_exclusion_inference(
 
     if(d2ij < cutoff*cutoff) {
 
-        RealType dij = sqrt(d2ij);
-        // electrostatics force
-        RealType inv_dij = 1/dij;
-        RealType inv_d3ij = inv_dij*inv_dij*inv_dij;
+        RealType inv_dij = rsqrt(d2ij);
+        RealType inv_d2ij = 1/d2ij;
+        RealType inv_d3ij = inv_dij*inv_d2ij;
         RealType es_grad_prefactor = qi*qj*inv_d3ij;
 
         // lennard jones force
         RealType eps_ij = sqrt(eps_i * eps_j);
         RealType sig_ij = (sig_i + sig_j)/2;
 
-        RealType sig = sig_ij;
-        RealType sig2 = sig*sig;
-        RealType sig4 = sig2*sig2;
-        RealType sig6 = sig4*sig2;
-        RealType sig12 = sig6*sig6;
+        RealType sig2_inv_d2ij = sig_ij*sig_ij/d2ij; // avoid using inv_dij as much as we can due to loss of precision
+        RealType sig4_inv_d4ij = sig2_inv_d2ij*sig2_inv_d2ij;
+        RealType sig6_inv_d6ij = sig4_inv_d4ij*sig2_inv_d2ij;
+        RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
+        RealType sig8_inv_d8ij = sig4_inv_d4ij*sig4_inv_d4ij;
+        RealType sig12_inv_d12ij = sig8_inv_d8ij*sig4_inv_d4ij;
+        RealType sig12_inv_d14ij = sig12_inv_d12ij*inv_d2ij;
 
-        RealType d4ij = d2ij*d2ij;
-        RealType d8ij = d4ij*d4ij;
-        RealType d14ij = d8ij*d4ij*d2ij;
-
-        RealType sig6rij4 = sig6/d8ij;
-        RealType sig12rij7 = sig12/d14ij;
-        RealType lj_grad_prefactor = 24*eps_ij*(sig12rij7*2 - sig6rij4);
+        // RealType lj_grad_prefactor = 24*eps_ij*(sig12rij7*2 - sig6rij4);
+        RealType lj_grad_prefactor = 24*eps_ij*sig12_inv_d14ij*2 - 24*eps_ij*sig6_inv_d8ij;
 
         #pragma unroll
         for(int d=0; d < D; d++) {

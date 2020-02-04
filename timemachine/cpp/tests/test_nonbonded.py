@@ -48,7 +48,7 @@ class TestNonbonded(GradientTest):
         return ref_mp
 
     # @unittest.skip("debug")
-    # def test_fast_nonbonded(self):
+    def test_fast_nonbonded(self):
         np.random.seed(125)
         N = 65
         D = 4
@@ -61,14 +61,13 @@ class TestNonbonded(GradientTest):
 
         for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
             for cutoff in [100.0, 0.5, 0.1]:
-                E = 0
                 params, ref_forces, test_forces = prepare_nonbonded_system(
                     x,
                     E,
                     P_charges,
                     P_lj,
                     P_exc,
-                    p_scale=5.0,
+                    p_scale=10.0,
                     cutoff=cutoff,
                     precision=precision
                 )
@@ -91,14 +90,12 @@ class TestNonbonded(GradientTest):
         P_exc = 7
 
         for precision, rtol in [(np.float32, 2e-5), (np.float64, 5e-10)]:
-        # for precision, rtol in [(np.float64, 1e-9), (np.float32, 1e-5)]:
-        # for precision, rtol in [(np.float64, 1e-9)]:
             
             print("PRECISION", precision)
             for dim in [3, 4]:
                 x = self.get_water_coords(dim)
                 E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
-                E = 0
+                # E = 0
 
                 for cutoff in [1000.0, 0.9, 0.5, 0.001]:
 
@@ -111,6 +108,7 @@ class TestNonbonded(GradientTest):
                         P_lj,
                         P_exc,
                         p_scale=10.0,
+                        e_scale=0.5, # double the charges
                         cutoff=cutoff,
                         precision=precision
                     )
