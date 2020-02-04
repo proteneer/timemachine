@@ -1,8 +1,6 @@
 import numpy as np
 from timemachine.lib import custom_ops
 
-precision = np.float64
-
 def Nonbonded(*args, precision):
     dim = args[-1]
     if precision == np.float64:

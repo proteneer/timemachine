@@ -201,17 +201,12 @@ void declare_reversible_context(py::module &m, const char *typestr) {
 
         int P = params.shape()[0];
 
-        std::cout << "N D" << N << " " << D << " " << " size: " << x0.size() << std::endl;
-        std::cout << coeff_cas.size() << " " << coeff_cbs.size() << " " << step_sizes.size() << " " << params.size() << std::endl;
-
         std::vector<double> x0_vec(x0.data(), x0.data()+x0.size());
         std::vector<double> v0_vec(v0.data(), v0.data()+v0.size());
         std::vector<double> coeff_cas_vec(coeff_cas.data(), coeff_cas.data()+coeff_cas.size());
         std::vector<double> coeff_cbs_vec(coeff_cbs.data(), coeff_cbs.data()+coeff_cbs.size());
         std::vector<double> step_sizes_vec(step_sizes.data(), step_sizes.data()+step_sizes.size());
         std::vector<double> params_vec(params.data(), params.data()+params.size());
-
-        std::cout << "OKAY" << std::endl;
 
         return new timemachine::ReversibleContext(
             stepper,
@@ -299,8 +294,6 @@ void declare_gradient(py::module &m, const char *typestr) {
 
             py::array_t<double, py::array::c_style> py_out_coords({N, DD});
             for(int i=0; i < out_coords.size(); i++) {
-
-                // std::cout << "forces " << out_coords[i] << std::endl;
                 py_out_coords.mutable_data()[i] = static_cast<double>(static_cast<long long>(out_coords[i]))/FIXED_EXPONENT;
             }
 

@@ -29,6 +29,18 @@ import traceback
 
 #     PDBFile.writeFooter(pdb.topology, outfile)
 
+def merge_gradients(
+    gradients,
+    precision):
+
+    g = []
+    for fn, fn_args in gradients:
+        g.append(fn(*fn_args, precision=precision))
+
+    # print("GRADS", g)
+
+    return g
+
 class Simulation:
     """
     A picklable simulation object
@@ -109,26 +121,8 @@ class Simulation:
         x0 include host configs as well
         """
         # this is multi-process safe to run.
-        start = time.time()
-        gradients = []
-        for fn, fn_args in self.combined_potentials:
-            gradients.append(fn(*fn_args))
 
-        # for g in gradients:
-        #     # if g != ops.HarmonicBond:
-        #         # continue
-        #     print(g)
-        #     d4 = np.expand_dims(np.zeros(x0.shape[0]), -1)
-        #     d4[self.num_host_atoms:] = 1000
-        #     print(d4)
-        #     print(x0.shape, d4.shape)
-        #     x4 = np.concatenate([x0, d4], axis=1)
-        #     du_dx = g.execute(x4, self.combined_params)
-        #     for atom_idx, xyz in enumerate(np.abs(du_dx)):
-        #         if np.amax(xyz) > 10000:
-        #             print(atom_idx, xyz)
-
-        # assert 0
+        gradients = merge_gradients(self.combined_potentials, np.float32)
 
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
@@ -141,22 +135,18 @@ class Simulation:
 
         ctxt = custom_ops.ReversibleContext_f64_3d(
             stepper,
-            len(self.combined_masses),
-            x0.reshape(-1).tolist(),
-            v0.reshape(-1).tolist(),
-            self.cas.tolist(),
-            self.cbs.tolist(),
-            self.step_sizes.tolist(),
-            self.combined_params.reshape(-1).tolist(),
+            x0,
+            v0,
+            self.cas,
+            self.cbs,
+            self.step_sizes,
+            self.combined_params
         )
+        start = time.time()
         ctxt.forward_mode()
-        # du_dls = stepper.get_du_dl()
-
-        # stepper.set_du_dl_adjoint(np.zeros_like(du_dls))
-        # ctxt.set_x_t_adjoint(np.zeros_like(x0))
-        # ctxt.backward_mode()
-
         print("run time", time.time() - start)
+        du_dls = stepper.get_du_dl()
+
 
         if pdb_writer is not None:
             pdb_writer.write_header()
@@ -209,13 +199,12 @@ class Simulation:
 
         ctxt = custom_ops.ReversibleContext_f64_3d(
             stepper,
-            len(self.combined_masses),
-            x0.reshape(-1).tolist(),
-            v0.reshape(-1).tolist(),
-            self.cas.tolist(),
-            self.cbs.tolist(),
-            self.step_sizes.tolist(),
-            self.combined_params.reshape(-1).tolist(),
+            x0,
+            v0,
+            self.cas,
+            self.cbs,
+            self.step_sizes,
+            self.combined_params,
         )
         ctxt.forward_mode()
 

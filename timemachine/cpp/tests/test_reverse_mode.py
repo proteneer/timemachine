@@ -48,7 +48,6 @@ class TestContext(unittest.TestCase):
 
         x0 = np.random.rand(N, dims)*5
 
-
         if lamb_flags is not None:
 
             assert exponent is not None

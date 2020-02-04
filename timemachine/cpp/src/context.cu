@@ -101,7 +101,7 @@ void ReversibleContext::forward_mode() {
         );
 	auto finish0 = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed0 = finish0 - start0;
-        // std::cout << "Forward Elapsed time: " << elapsed0.count() << " s\n";
+        // std::cout << "Stepper Elapsed time: " << elapsed0.count() << " s\n";
 	auto start = std::chrono::high_resolution_clock::now();
         step_forward<double>(
             N_,
@@ -118,7 +118,7 @@ void ReversibleContext::forward_mode() {
 
 	auto finish = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed = finish - start;
-	// std::cout << "Total Step Elapsed time: " << elapsed.count() << " s\n";
+	// std::cout << "Context Elapsed time: " << elapsed.count() << " s\n";
 
     }
 
