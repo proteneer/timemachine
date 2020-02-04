@@ -1,6 +1,7 @@
 #include <iostream>
+#include <chrono>
 
-#include "new_context.hpp"
+#include "context.hpp"
 #include "integrator.hpp"
 #include "assert.h"
 #include "kernel_utils.cuh"
@@ -8,10 +9,7 @@
 
 namespace timemachine {
 
-// D == 3
-
-template <typename RealType, int D>
-ReversibleContext<RealType, D>::~ReversibleContext() {
+ReversibleContext::~ReversibleContext() {
     gpuErrchk(cudaFree(d_params_));
     gpuErrchk(cudaFree(d_params_grads_));
 
@@ -32,16 +30,15 @@ ReversibleContext<RealType, D>::~ReversibleContext() {
     gpuErrchk(cudaFree(d_dE_dp_jvp_));
 };
 
-template <typename RealType, int D>
-ReversibleContext<RealType, D>::ReversibleContext(
-    Stepper<RealType> *stepper,
+ReversibleContext::ReversibleContext(
+    Stepper *stepper,
     const int N,
-    const std::vector<RealType> &x0,
-    const std::vector<RealType> &v0,
-    const std::vector<RealType> &coeff_cas,
-    const std::vector<RealType> &coeff_cbs,
-    const std::vector<RealType> &step_sizes,
-    const std::vector<RealType> &params) :
+    const std::vector<double> &x0,
+    const std::vector<double> &v0,
+    const std::vector<double> &coeff_cas,
+    const std::vector<double> &coeff_cbs,
+    const std::vector<double> &step_sizes,
+    const std::vector<double> &params) :
         N_(N),
         P_(params.size()),
         stepper_(stepper),
@@ -59,42 +56,42 @@ ReversibleContext<RealType, D>::ReversibleContext(
     assert(step_sizes.size() == T);
     assert(params.size() == P);
 
-    gpuErrchk(cudaMalloc(&d_coeff_cbs_, N*sizeof(RealType)));
-    gpuErrchk(cudaMemcpy(d_coeff_cbs_, &coeff_cbs[0], N*sizeof(RealType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMalloc(&d_coeff_cbs_, N*sizeof(double)));
+    gpuErrchk(cudaMemcpy(d_coeff_cbs_, &coeff_cbs[0], N*sizeof(double), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_coords_, F*N*D*sizeof(RealType)));
-    gpuErrchk(cudaMalloc(&d_du_dls_, F*sizeof(RealType)));
-    cudaMemset(d_du_dls_, 0, F*sizeof(RealType));
-    gpuErrchk(cudaMemcpy(d_coords_, &x0[0], N*D*sizeof(RealType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMalloc(&d_coords_, F*N*D*sizeof(double)));
+    gpuErrchk(cudaMalloc(&d_du_dls_, F*sizeof(double)));
+    cudaMemset(d_du_dls_, 0, F*sizeof(double));
+    gpuErrchk(cudaMemcpy(d_coords_, &x0[0], N*D*sizeof(double), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_velocities_, N*D*sizeof(RealType)));
-    gpuErrchk(cudaMemcpy(d_velocities_, &v0[0], N*D*sizeof(RealType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMalloc(&d_velocities_, N*D*sizeof(double)));
+    gpuErrchk(cudaMemcpy(d_velocities_, &v0[0], N*D*sizeof(double), cudaMemcpyHostToDevice));
 
     gpuErrchk(cudaMalloc(&d_forces_, N*D*sizeof(*d_forces_)));
 
-    gpuErrchk(cudaMalloc(&d_params_, P*sizeof(RealType)));
-    gpuErrchk(cudaMemcpy(d_params_, &params[0], P*sizeof(RealType), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMalloc(&d_params_, P*sizeof(double)));
+    gpuErrchk(cudaMemcpy(d_params_, &params[0], P*sizeof(double), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_x_t_tangent_, N*D*sizeof(RealType))); // [NxD]
-    gpuErrchk(cudaMalloc(&d_param_adjoint_accum_, P*sizeof(RealType))); // [P]
-    gpuErrchk(cudaMalloc(&d_x_t_adjoint_, N*D*sizeof(RealType))); // [NxD]
-    gpuErrchk(cudaMalloc(&d_v_t_adjoint_, N*D*sizeof(RealType))); // [NxD]
+    gpuErrchk(cudaMalloc(&d_x_t_tangent_, N*D*sizeof(double))); // [NxD]
+    gpuErrchk(cudaMalloc(&d_param_adjoint_accum_, P*sizeof(double))); // [P]
+    gpuErrchk(cudaMalloc(&d_x_t_adjoint_, N*D*sizeof(double))); // [NxD]
+    gpuErrchk(cudaMalloc(&d_v_t_adjoint_, N*D*sizeof(double))); // [NxD]
 
-    gpuErrchk(cudaMalloc(&d_dE_dx_jvp_, N*D*sizeof(RealType))); // [NxD]
-    gpuErrchk(cudaMalloc(&d_dE_dp_jvp_, P*sizeof(RealType))); // [P]
+    gpuErrchk(cudaMalloc(&d_dE_dx_jvp_, N*D*sizeof(double))); // [NxD]
+    gpuErrchk(cudaMalloc(&d_dE_dp_jvp_, P*sizeof(double))); // [P]
 
-    gpuErrchk(cudaMalloc(&d_params_grads_, P*sizeof(RealType))); // [P]
+    gpuErrchk(cudaMalloc(&d_params_grads_, P*sizeof(double))); // [P]
 };
 
-template <typename RealType, int D>
-void ReversibleContext<RealType, D>::forward_mode() {
+void ReversibleContext::forward_mode() {
 
     for(int t=0; t < step_sizes_.size(); t++) {
 
         // compute gradients
         gpuErrchk(cudaMemset(d_forces_, 0, N_*D*sizeof(*d_forces_)));
-        // gpuErrchk(cudaMemset(d_params_grads_, 0, P_*sizeof(RealType))); # not used
+        // gpuErrchk(cudaMemset(d_params_grads_, 0, P_*sizeof(double))); # not used
 
+	auto start0 = std::chrono::high_resolution_clock::now();
         stepper_->forward_step(
             N_,
             P_,
@@ -102,8 +99,11 @@ void ReversibleContext<RealType, D>::forward_mode() {
             d_params_,
             d_forces_
         );
-
-        step_forward<RealType>(
+	auto finish0 = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsed0 = finish0 - start0;
+        // std::cout << "Stepper Elapsed time: " << elapsed0.count() << " s\n";
+	auto start = std::chrono::high_resolution_clock::now();
+        step_forward<double>(
             N_,
             D,
             coeff_cas_[t],
@@ -116,19 +116,22 @@ void ReversibleContext<RealType, D>::forward_mode() {
             d_velocities_
         );
 
+	auto finish = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsed = finish - start;
+	// std::cout << "Context Elapsed time: " << elapsed.count() << " s\n";
+
     }
 
 }
 
-template <typename RealType>
 __global__ void update_backward_1(
     const int N,
     const int D,
-    const RealType *d_coeff_bs,
-    const RealType *d_adjoint_x_t_new,
-    RealType *d_adjoint_v_t_new,
-    RealType *d_x_t_tangent,
-    const RealType dt) {
+    const double *d_coeff_bs,
+    const double *d_adjoint_x_t_new,
+    double *d_adjoint_v_t_new,
+    double *d_x_t_tangent,
+    const double dt) {
 
     int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(atom_idx >= N) {
@@ -142,11 +145,10 @@ __global__ void update_backward_1(
 
 };
 
-template <typename RealType>
 __global__ void update_backward_2(
     int P,
-    const RealType *d_dE_dp_jvp,
-    RealType *d_adjoint_params) {
+    const double *d_dE_dp_jvp,
+    double *d_adjoint_params) {
 
     int p_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(p_idx >= P) {
@@ -155,16 +157,15 @@ __global__ void update_backward_2(
     d_adjoint_params[p_idx] += d_dE_dp_jvp[p_idx];
 }
 
-template <typename RealType>
 __global__ void update_backward_3(
     const int N,
     const int D,
-    const RealType ca,
-    const RealType *d_adjoint_x_new,
-    const RealType *d_adjoint_v_new,
-    const RealType *d_x_t_jvp,
-    RealType *d_adjoint_x_old,
-    RealType *d_adjoint_v_old) {
+    const double ca,
+    const double *d_adjoint_x_new,
+    const double *d_adjoint_v_new,
+    const double *d_x_t_jvp,
+    double *d_adjoint_x_old,
+    double *d_adjoint_v_old) {
 
     int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(atom_idx >= N) {
@@ -178,19 +179,17 @@ __global__ void update_backward_3(
 
 };
 
-template <typename RealType, int D>
-void ReversibleContext<RealType, D>::set_x_t_adjoint(const RealType *buffer) {
+void ReversibleContext::set_x_t_adjoint(const double *buffer) {
     gpuErrchk(cudaMemcpy(d_x_t_adjoint_, buffer, N_*D*sizeof(*buffer), cudaMemcpyHostToDevice));
 }
 
-template <typename RealType, int D>
-void ReversibleContext<RealType, D>::backward_mode() {
+void ReversibleContext::backward_mode() {
 
     // initialized
     // d_x_t adjoint has been set via set_x_t_adjoint() but we should make it possible
     // to set the rest of the initial adjoints as well.
     gpuErrchk(cudaMemset(d_v_t_adjoint_, 0, N_*D*sizeof(*d_v_t_adjoint_)));
-    gpuErrchk(cudaMemset(d_param_adjoint_accum_, 0, P_*sizeof(RealType)));
+    gpuErrchk(cudaMemset(d_param_adjoint_accum_, 0, P_*sizeof(double)));
 
     // compute derivatives
     for(int t = step_sizes_.size()-1; t >= 0; t--) {
@@ -253,27 +252,26 @@ void ReversibleContext<RealType, D>::backward_mode() {
 
 }
 
-template <typename RealType, int D>
-void ReversibleContext<RealType, D>::get_all_coords(RealType *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_coords_, (step_sizes_.size()+1)*N_*D*sizeof(RealType), cudaMemcpyDeviceToHost));
+void ReversibleContext::get_all_coords(double *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_coords_, (step_sizes_.size()+1)*N_*D*sizeof(double), cudaMemcpyDeviceToHost));
 }
 
-template <typename RealType, int D>
-void ReversibleContext<RealType, D>::get_param_adjoint_accum(RealType *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_param_adjoint_accum_, P_*sizeof(RealType), cudaMemcpyDeviceToHost));
+void ReversibleContext::get_param_adjoint_accum(double *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_param_adjoint_accum_, P_*sizeof(double), cudaMemcpyDeviceToHost));
 }
 
-template <typename RealType, int D>
-void ReversibleContext<RealType, D>::get_x_t_adjoint(RealType *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_x_t_adjoint_, N_*D*sizeof(RealType), cudaMemcpyDeviceToHost));
+void ReversibleContext::get_x_t_adjoint(double *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_x_t_adjoint_, N_*D*sizeof(double), cudaMemcpyDeviceToHost));
 }
 
-template <typename RealType, int D>
-void ReversibleContext<RealType, D>::get_v_t_adjoint(RealType *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_v_t_adjoint_, N_*D*sizeof(RealType), cudaMemcpyDeviceToHost));
+void ReversibleContext::get_v_t_adjoint(double *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_v_t_adjoint_, N_*D*sizeof(double), cudaMemcpyDeviceToHost));
 }
 
-template class ReversibleContext<double, 4>;
-template class ReversibleContext<double, 3>;
+// template class ReversibleContext<double, 4>;
+// template class ReversibleContext<double, 3>;
+
+// template class ReversibleContext<float, 4>;
+// template class ReversibleContext<float, 3>;
 
 };

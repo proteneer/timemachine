@@ -17,7 +17,6 @@ from system import serialize, forcefield
 from openforcefield.typing.engines import smirnoff
 
 def write_coords(frames, pdb_path, romol, outfile, num_frames=100):
-
     combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(pdb_path, removeHs=False), mol)
     combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
     cpdb = app.PDBFile(combined_pdb_str)
