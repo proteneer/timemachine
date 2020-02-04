@@ -20,8 +20,7 @@ def prepare_nonbonded_system(
     p_scale=4.0,
     e_scale=1.0,
     cutoff=100.0,
-    custom_D=None,
-    precision=np.float64):
+    custom_D=None):
 
     N = x.shape[0]
     D = x.shape[1]
@@ -31,20 +30,13 @@ def prepare_nonbonded_system(
 
     # charges
     charge_params = np.random.rand(P_charges).astype(np.float64)/e_scale
-    # charge_params = np.zeros_like(charge_params)
     charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, charge_params])
 
     # lennard jones
-    lj_sig_params = np.random.rand(P_lj)/p_scale # we want these to be pretty small for numerical stability
-    lj_sig_idxs = np.random.randint(low=0, high=P_lj, size=(N,), dtype=np.int32) + len(params)
-    params = np.concatenate([params, lj_sig_params])
-
-    lj_eps_params = np.random.rand(P_lj)
-    lj_eps_idxs = np.random.randint(low=0, high=P_lj, size=(N,), dtype=np.int32) + len(params)
-    params = np.concatenate([params, lj_eps_params])
-
-    lj_param_idxs = np.stack([lj_sig_idxs, lj_eps_idxs], axis=-1)
+    lj_params = np.random.rand(P_lj)/p_scale # we want these to be pretty small for numerical stability
+    lj_param_idxs = np.random.randint(low=0, high=P_lj, size=(N,2), dtype=np.int32) + len(params)
+    params = np.concatenate([params, lj_params])
 
     # generate exclusion parameters
     exclusion_idxs = np.random.randint(low=0, high=N, size=(E,2), dtype=np.int32)
@@ -65,16 +57,7 @@ def prepare_nonbonded_system(
     if custom_D is None:
         custom_D = D
 
-    custom_nonbonded = ops.Nonbonded(
-        charge_param_idxs,
-        lj_param_idxs,
-        exclusion_idxs,
-        exclusion_charge_idxs,
-        exclusion_lj_idxs,
-        cutoff,
-        custom_D,
-        precision=precision
-    )
+    custom_nonbonded = ops.Nonbonded(charge_param_idxs, lj_param_idxs, exclusion_idxs, exclusion_charge_idxs, exclusion_lj_idxs, cutoff, custom_D)
 
     lj_fn = functools.partial(nonbonded.lennard_jones, box=None, param_idxs=lj_param_idxs, cutoff=cutoff)
     lj_fn_exc = functools.partial(nonbonded.lennard_jones_exclusion, box=None, param_idxs=lj_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=exclusion_lj_idxs)
@@ -93,8 +76,7 @@ def prepare_bonded_system(
     P_torsions,
     B,
     A,
-    T,
-    precision):
+    T):
 
     N = x.shape[0]
     D = x.shape[1]
@@ -129,19 +111,17 @@ def prepare_bonded_system(
 
     params = np.concatenate([params, torsion_params])
 
-    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, D, precision=precision)
+    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, D)
     harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs)
 
-    custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, D, precision=precision)
+    custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, D)
     harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs)
 
-    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, D, precision=precision)
+    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, D)
     periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
 
 
-    # return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
-
-    return params, [harmonic_bond_fn], [custom_bonded]
+    return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
 
 def hilbert_sort(conf, D):
     hc = HilbertCurve(32, D)
@@ -168,65 +148,33 @@ class GradientTest(unittest.TestCase):
 
         return x
 
-    def assert_equal_vectors(self, truth, test, rtol):
-        """
-        OpenMM convention - errors are compared against norm of force vectors
-        """
-        norms = np.linalg.norm(truth, axis=-1, keepdims=True)
-        norms = np.where(norms < 1., 1.0, norms)
-        errors = (truth-test)/norms
-        max_error = np.amax(np.abs(errors))
-        mean_error = np.mean(np.abs(errors).reshape(-1))
-        std_error = np.std(errors.reshape(-1))
-        max_error_arg = np.argmax(errors)//truth.shape[1]
-
-        errors = errors > rtol
-        print("max relative error", max_error, norms[max_error_arg], "mean error", mean_error, "std error", std_error)
-        if np.sum(errors) > 0:
-            print("FATAL: max relative error", max_error, truth[max_error_arg], test[max_error_arg])
-            assert 0
-
-    def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
-
-        x = (x.astype(np.float32)).astype(np.float64)
-        params = (params.astype(np.float32)).astype(np.float64)
+    def compare_forces(self, x, params, ref_nrg_fn, custom_force):
 
         N = x.shape[0]
         D = x.shape[1]
-
-        assert x.dtype == np.float64
-        assert params.dtype == np.float64
 
         test_dx = custom_force.execute(x, params)
 
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
         ref_dx, _ = grad_fn(x, params)
 
-        self.assert_equal_vectors(
+        np.testing.assert_almost_equal(
             np.array(ref_dx),
             np.array(test_dx),
-            rtol,
+            decimal=10
         )
 
-        x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
+        x_tangent = np.random.rand(N, D).astype(np.float64)
         params_tangent = np.zeros_like(params)
 
         test_x_tangent, test_p_tangent = custom_force.execute_jvp(
-            x,
-            params,
-            x_tangent,
-            params_tangent
-        )
+            x, params,
+            x_tangent, params_tangent)
 
         primals = (x, params)
         tangents = (x_tangent, params_tangent)
 
         _, t = jax.jvp(grad_fn, primals, tangents)
 
-        self.assert_equal_vectors(
-            t[0],
-            test_x_tangent,
-            rtol,
-        )
-
-        np.testing.assert_allclose(t[1], test_p_tangent, rtol=5e-5)
+        np.testing.assert_allclose(t[0], test_x_tangent, rtol=5e-11)
+        np.testing.assert_allclose(t[1], test_p_tangent, rtol=5e-11)

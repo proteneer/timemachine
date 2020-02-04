@@ -6,7 +6,7 @@
 namespace timemachine {
 
 template<typename RealType, int D>
-class HarmonicBond : public Gradient<D> {
+class HarmonicBond : public Gradient<RealType, D> {
 
 private:
 
@@ -33,12 +33,12 @@ public:
     virtual void execute_device(
         const int N,
         const int P,
-        const double *d_coords,
-        const double *d_coords_tangents,
-        const double *d_params,
+        const RealType *d_coords,
+        const RealType *d_coords_tangents,
+        const RealType *d_params,
         unsigned long long *out_coords,
-        double *out_coords_tangents,
-        double *out_params_tangents
+        RealType *out_coords_tangents,
+        RealType *out_params_tangents
     ) override;
 
 

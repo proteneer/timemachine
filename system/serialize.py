@@ -45,6 +45,7 @@ def deserialize_system(
         masses.append(value(system.getParticleMass(p)))
 
     for force in system.getForces():
+        # print("PROCESSING", force)
         if isinstance(force, mm.HarmonicBondForce):
             bond_idxs = []
             param_idxs = []
@@ -85,6 +86,8 @@ def deserialize_system(
                 src_idx, mid_idx, dst_idx, angle, k = force.getAngleParameters(a_idx)
                 angle = value(angle)
                 k = value(k)
+
+                # print("ANGLE k", k)
 
                 k_idx = insert_parameters(k, 2)
                 a_idx = insert_parameters(angle, 3)
@@ -172,6 +175,7 @@ def deserialize_system(
             # fix me for scaling
             for a_idx in range(force.getNumExceptions()):
                 src, dst, new_cp, new_sig, new_eps = force.getExceptionParameters(a_idx)
+                # print(src, dst, new_cp, new_sig, new_eps)
                 exclusion_idxs.append([src, dst])
                 exclusion_param_idxs.append(scale_idx)
 
@@ -186,7 +190,7 @@ def deserialize_system(
                     exclusion_idxs,
                     exclusion_param_idxs,
                     exclusion_param_idxs,
-                    0.85,
+                    10000.0,
                     dimension
                 )
             )

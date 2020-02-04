@@ -2,7 +2,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
-#include "context.hpp"
+#include "new_context.hpp"
 #include "optimizer.hpp"
 #include "langevin.hpp"
 #include "harmonic_bond.hpp"
@@ -18,9 +18,10 @@
 namespace py = pybind11;
 
 
+template <typename RealType>
 void declare_stepper(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Stepper;
+    using Class = timemachine::Stepper<RealType>;
     std::string pyclass_name = std::string("Stepper_") + typestr;
     py::class_<Class>(
         m,
@@ -31,62 +32,64 @@ void declare_stepper(py::module &m, const char *typestr) {
 
 }
 
+template <typename RealType>
 void declare_basic_stepper(py::module &m, const char *typestr) {
 
-    using Class = timemachine::BasicStepper;
+    using Class = timemachine::BasicStepper<RealType>;
     std::string pyclass_name = std::string("BasicStepper_") + typestr;
-    py::class_<Class, timemachine::Stepper >(
+    py::class_<Class, timemachine::Stepper<RealType> >(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
         py::dynamic_attr()
     )
     .def(py::init([](
-        const std::vector<timemachine::Gradient<3> *> system
+        const std::vector<timemachine::Gradient<RealType, 3> *> system
     ) {
-        return new timemachine::BasicStepper(
+        return new timemachine::BasicStepper<RealType>(
             system
         );
     }));
 }
 
 
+template <typename RealType>
 void declare_lambda_stepper(py::module &m, const char *typestr) {
 
-    using Class = timemachine::LambdaStepper;
+    using Class = timemachine::LambdaStepper<RealType>;
     std::string pyclass_name = std::string("LambdaStepper_") + typestr;
-    py::class_<Class, timemachine::Stepper >(
+    py::class_<Class, timemachine::Stepper<RealType> >(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
         py::dynamic_attr()
     )
     .def(py::init([](
-        const std::vector<timemachine::Gradient<4> *> system,
-        const std::vector<double> &lambda_schedule,
+        const std::vector<timemachine::Gradient<RealType, 4> *> system,
+        const std::vector<RealType> &lambda_schedule,
         const std::vector<int> &lambda_flags,
         const int exponent
     ) {
-        return new timemachine::LambdaStepper(
+        return new timemachine::LambdaStepper<RealType>(
             system,
             lambda_schedule,
             lambda_flags,
             exponent
         );
     }))
-    .def("get_du_dl", [](timemachine::LambdaStepper &stepper) -> py::array_t<double, py::array::c_style> {
-        const unsigned long long T = stepper.get_T();
-        py::array_t<double, py::array::c_style> buffer({T});
+    .def("get_du_dl", [](timemachine::LambdaStepper<RealType> &stepper) -> py::array_t<RealType, py::array::c_style> {
+        const int T = stepper.get_T();
+        py::array_t<RealType, py::array::c_style> buffer({T});
         stepper.get_du_dl(buffer.mutable_data());
         return buffer;
     })
-    .def("set_du_dl_adjoint", [](timemachine::LambdaStepper &stepper,
-        const py::array_t<double, py::array::c_style> &adjoints) {
+    .def("set_du_dl_adjoint", [](timemachine::LambdaStepper<RealType> &stepper,
+        const py::array_t<RealType, py::array::c_style> &adjoints) {
         stepper.set_du_dl_adjoint(adjoints.shape()[0], adjoints.data());
     })
-    .def("forward_step", [](timemachine::LambdaStepper &stepper,
-        const py::array_t<double, py::array::c_style> &coords,
-        const py::array_t<double, py::array::c_style> &params) -> py::array_t<double, py::array::c_style> {
+    .def("forward_step", [](timemachine::LambdaStepper<RealType> &stepper,
+        const py::array_t<RealType, py::array::c_style> &coords,
+        const py::array_t<RealType, py::array::c_style> &params) -> py::array_t<RealType, py::array::c_style> {
 
         unsigned int N = coords.shape()[0];
         unsigned int D = coords.shape()[1];
@@ -98,7 +101,7 @@ void declare_lambda_stepper(py::module &m, const char *typestr) {
 
         std::vector<unsigned long long> forces(N*D);
 
-        py::array_t<double, py::array::c_style> buffer({N, D});
+        py::array_t<RealType, py::array::c_style> buffer({N, D});
         stepper.forward_step_host(
             N,
             P,
@@ -107,18 +110,18 @@ void declare_lambda_stepper(py::module &m, const char *typestr) {
             &forces[0]
         );
 
-        py::array_t<double, py::array::c_style> py_out_coords({N, D});
+        py::array_t<RealType, py::array::c_style> py_out_coords({N, D});
         for(int i=0; i < forces.size(); i++) {
-            buffer.mutable_data()[i] = static_cast<double>(static_cast<long long>(forces[i]))/FIXED_EXPONENT;
+            buffer.mutable_data()[i] = static_cast<RealType>(static_cast<long long>(forces[i]))/FIXED_EXPONENT;
         }
 
         return buffer;
 
     })
-    .def("backward_step", [](timemachine::LambdaStepper &stepper,
-        const py::array_t<double, py::array::c_style> &coords,
-        const py::array_t<double, py::array::c_style> &params,
-        const py::array_t<double, py::array::c_style> &coords_tangent) -> py::tuple {
+    .def("backward_step", [](timemachine::LambdaStepper<RealType> &stepper,
+        const py::array_t<RealType, py::array::c_style> &coords,
+        const py::array_t<RealType, py::array::c_style> &params,
+        const py::array_t<RealType, py::array::c_style> &coords_tangent) -> py::tuple {
 
         unsigned int N = coords.shape()[0];
         unsigned int D = coords.shape()[1];
@@ -135,8 +138,8 @@ void declare_lambda_stepper(py::module &m, const char *typestr) {
         }
         unsigned int P = params.shape()[0];
 
-        py::array_t<double, py::array::c_style> py_out_coords_jvp({N, D});
-        py::array_t<double, py::array::c_style> py_out_params_jvp({P});
+        py::array_t<RealType, py::array::c_style> py_out_coords_jvp({N, D});
+        py::array_t<RealType, py::array::c_style> py_out_params_jvp({P});
 
         stepper.backward_step_host(
             N,
@@ -154,9 +157,10 @@ void declare_lambda_stepper(py::module &m, const char *typestr) {
 }
 
 
+template <typename RealType, int D>
 void declare_reversible_context(py::module &m, const char *typestr) {
 
-    using Class = timemachine::ReversibleContext;
+    using Class = timemachine::ReversibleContext<RealType, D>;
     std::string pyclass_name = std::string("ReversibleContext_") + typestr;
     py::class_<Class>(
         m,
@@ -165,113 +169,183 @@ void declare_reversible_context(py::module &m, const char *typestr) {
         py::dynamic_attr()
     )
     .def(py::init([](
-        timemachine::Stepper *stepper,
-        // int N,
-        const py::array_t<double, py::array::c_style> &x0,
-        const py::array_t<double, py::array::c_style> &v0,
-        const py::array_t<double, py::array::c_style> &coeff_cas,
-        const py::array_t<double, py::array::c_style> &coeff_cbs,
-        const py::array_t<double, py::array::c_style> &step_sizes,
-        const py::array_t<double, py::array::c_style> &params
-        // const std::vector<double> &x0,
-        // const std::vector<double> &v0,
-        // const std::vector<double> &coeff_cas,
-        // const std::vector<double> &coeff_cbs,
-        // const std::vector<double> &step_sizes,
-        // const std::vector<double> &params
+        timemachine::Stepper<RealType> *stepper,
+        int N,
+        const std::vector<RealType> &x0,
+        const std::vector<RealType> &v0,
+        const std::vector<RealType> &coeff_cas,
+        const std::vector<RealType> &coeff_cbs,
+        const std::vector<RealType> &step_sizes,
+        const std::vector<RealType> &params
     ) {
 
-
-        int N = x0.shape()[0];
-        int D = x0.shape()[1];
-
-        if(N != v0.shape()[0]) {
-            throw std::runtime_error("v0 N != x0 N");
-        }
-
-        if(D != v0.shape()[1]) {
-            throw std::runtime_error("v0 D != x0 D");
-        }
-
-        int T = coeff_cas.shape()[0];
-
-        if(T != step_sizes.shape()[0]) {
-            throw std::runtime_error("coeff_cas T != step_sizes T");
-        }
-
-        int P = params.shape()[0];
-
-        std::vector<double> x0_vec(x0.data(), x0.data()+x0.size());
-        std::vector<double> v0_vec(v0.data(), v0.data()+v0.size());
-        std::vector<double> coeff_cas_vec(coeff_cas.data(), coeff_cas.data()+coeff_cas.size());
-        std::vector<double> coeff_cbs_vec(coeff_cbs.data(), coeff_cbs.data()+coeff_cbs.size());
-        std::vector<double> step_sizes_vec(step_sizes.data(), step_sizes.data()+step_sizes.size());
-        std::vector<double> params_vec(params.data(), params.data()+params.size());
-
-        return new timemachine::ReversibleContext(
+        return new timemachine::ReversibleContext<RealType, D>(
             stepper,
             N,
-            x0_vec,
-            v0_vec,
-            coeff_cas_vec,
-            coeff_cbs_vec,
-            step_sizes_vec,
-            params_vec
+            x0,
+            v0,
+            coeff_cas,
+            coeff_cbs,
+            step_sizes,
+            params
         );
 
     }))
-    .def("forward_mode", &timemachine::ReversibleContext::forward_mode)
-    .def("backward_mode", &timemachine::ReversibleContext::backward_mode)
-    .def("get_param_adjoint_accum", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
+    .def("forward_mode", &timemachine::ReversibleContext<RealType, D>::forward_mode)
+    .def("backward_mode", &timemachine::ReversibleContext<RealType, D>::backward_mode)
+    .def("get_param_adjoint_accum", [](timemachine::ReversibleContext<RealType, D> &ctxt) -> py::array_t<RealType, py::array::c_style> {
         unsigned int P = ctxt.P();
-        py::array_t<double, py::array::c_style> buffer({P});
+        py::array_t<RealType, py::array::c_style> buffer({P});
         ctxt.get_param_adjoint_accum(buffer.mutable_data());
         return buffer;
     })
-    .def("get_all_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
+    .def("get_all_coords", [](timemachine::ReversibleContext<RealType, D> &ctxt) -> py::array_t<RealType, py::array::c_style> {
         unsigned int N = ctxt.N();
         unsigned int F = ctxt.F();
-        unsigned int D = 3;
-        py::array_t<double, py::array::c_style> buffer({F, N, D});
+        unsigned int DD = D;
+        py::array_t<RealType, py::array::c_style> buffer({F, N, DD});
         ctxt.get_all_coords(buffer.mutable_data());
         return buffer;
     })
-    .def("set_x_t_adjoint", [](timemachine::ReversibleContext &ctxt,
-        const py::array_t<double, py::array::c_style> &xt) {
+    .def("set_x_t_adjoint", [](timemachine::ReversibleContext<RealType, D> &ctxt,
+        const py::array_t<RealType, py::array::c_style> &xt) {
         ctxt.set_x_t_adjoint(xt.data());
     })
-    .def("get_x_t_adjoint", [](timemachine::ReversibleContext &ctxt) -> 
-        py::array_t<double, py::array::c_style> {
+    .def("get_x_t_adjoint", [](timemachine::ReversibleContext<RealType, D> &ctxt) -> 
+        py::array_t<RealType, py::array::c_style> {
         unsigned int N = ctxt.N();
-        unsigned int D = 3;
-        py::array_t<double, py::array::c_style> buffer({N, D});
+        unsigned int DD = D;
+        py::array_t<RealType, py::array::c_style> buffer({N, DD});
         ctxt.get_x_t_adjoint(buffer.mutable_data());
         return buffer;
     })
-    .def("get_v_t_adjoint", [](timemachine::ReversibleContext &ctxt) -> 
-        py::array_t<double, py::array::c_style> {
+    .def("get_v_t_adjoint", [](timemachine::ReversibleContext<RealType, D> &ctxt) -> 
+        py::array_t<RealType, py::array::c_style> {
         unsigned int N = ctxt.N();
-        unsigned int D = 3;
-        py::array_t<double, py::array::c_style> buffer({N, D});
+        unsigned int DD = D;
+        py::array_t<RealType, py::array::c_style> buffer({N, DD});
         ctxt.get_v_t_adjoint(buffer.mutable_data());
         return buffer;
     });
 }
 
+template <typename RealType>
+void declare_optimizer(py::module &m, const char *typestr) {
 
-template <int D>
+    using Class = timemachine::Optimizer<RealType>;
+    std::string pyclass_name = std::string("Optimizer_") + typestr;
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr())
+    .def("step", [](timemachine::Optimizer<RealType> &opt,
+        const py::array_t<RealType, py::array::c_style> &dE_dx,
+        const py::array_t<RealType, py::array::c_style> &d2E_dx2,
+        const py::array_t<RealType, py::array::c_style> &d2E_dxdp,
+        py::array_t<RealType, py::array::c_style> &x_t,
+        py::array_t<RealType, py::array::c_style> &v_t,
+        py::array_t<RealType, py::array::c_style> &dx_dp_t,
+        py::array_t<RealType, py::array::c_style> &dv_dp_t,
+        const py::array_t<RealType, py::array::c_style> &noise_buffer) {
+
+            const long unsigned int num_atoms = dE_dx.shape()[0];
+            const long unsigned int num_dims = dE_dx.shape()[1];
+            const long unsigned int num_params = d2E_dxdp.shape()[0];
+
+            opt.step_host(
+                num_atoms,
+                num_dims,
+                num_params,
+                dE_dx.data(),
+                d2E_dx2.data(),
+                d2E_dxdp.data(),
+                x_t.mutable_data(),
+                v_t.mutable_data(),
+                dx_dp_t.mutable_data(),
+                dv_dp_t.mutable_data(),
+                noise_buffer.data()
+            );
+        })
+    .def("get_dt", &timemachine::Optimizer<RealType>::get_dt);
+
+}
+
+
+template<typename RealType>
+void declare_langevin_optimizer(py::module &m, const char *typestr) {
+
+    using Class = timemachine::LangevinOptimizer<RealType>;
+    std::string pyclass_name = std::string("LangevinOptimizer_") + typestr;
+    py::class_<Class, timemachine::Optimizer<RealType> >(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const RealType dt,
+        const int ndims,
+        const RealType ca,
+        const py::array_t<RealType, py::array::c_style> &cb, // bond_idxs
+        const py::array_t<RealType, py::array::c_style> &cc,  // param_idxs
+        const int n_offset // optimization for speedups
+    ) {
+        std::vector<RealType> coeff_bs(cb.size());
+        std::memcpy(coeff_bs.data(), cb.data(), cb.size()*sizeof(RealType));
+        std::vector<RealType> coeff_cs(cc.size());
+        std::memcpy(coeff_cs.data(), cc.data(), cc.size()*sizeof(RealType));
+        return new timemachine::LangevinOptimizer<RealType>(dt, ndims, ca, coeff_bs, coeff_cs, n_offset);
+    }),
+        py::arg("dt").none(false),
+        py::arg("ndims").none(false),
+        py::arg("ca").none(false),
+        py::arg("cb").none(false),
+        py::arg("cc").none(false),
+        py::arg("n_offset").none(false)
+    )
+    .def("set_dt", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const RealType dt) {
+        lo.set_dt(dt);
+    })
+    .def("set_coeff_a", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const RealType ca) {
+        lo.set_coeff_a(ca);
+    })
+    .def("set_coeff_b", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const py::array_t<RealType, py::array::c_style> &cb) {
+        lo.set_coeff_b(cb.shape()[0], cb.data());
+    })
+    .def("set_coeff_c", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const py::array_t<RealType, py::array::c_style> &cc) {
+        lo.set_coeff_c(cc.shape()[0], cc.data());
+    })
+    .def("set_coeff_d", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const RealType cd) {
+        lo.set_coeff_d(cd);
+    })
+    .def("set_coeff_e", [](timemachine::LangevinOptimizer<RealType> &lo,
+        const RealType ce) {
+        lo.set_coeff_e(ce);
+    });
+
+
+}
+
+
+template <typename RealType, int D>
 void declare_gradient(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Gradient<D>;
+    using Class = timemachine::Gradient<RealType, D>;
     std::string pyclass_name = std::string("Gradient_") + typestr;
     py::class_<Class>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
         py::dynamic_attr())
-    .def("execute", [](timemachine::Gradient<D> &grad,
-        const py::array_t<double, py::array::c_style> &coords,
-        const py::array_t<double, py::array::c_style> &params) -> py::array_t<double, py::array::c_style>  {
+    .def("execute", [](timemachine::Gradient<RealType, D> &grad,
+        const py::array_t<RealType, py::array::c_style> &coords,
+        const py::array_t<RealType, py::array::c_style> &params) -> py::array_t<RealType, py::array::c_style>  {
 
             const long unsigned int N = coords.shape()[0];
             const long unsigned int DD = coords.shape()[1];
@@ -292,18 +366,18 @@ void declare_gradient(py::module &m, const char *typestr) {
                 nullptr
             );
 
-            py::array_t<double, py::array::c_style> py_out_coords({N, DD});
+            py::array_t<RealType, py::array::c_style> py_out_coords({N, DD});
             for(int i=0; i < out_coords.size(); i++) {
-                py_out_coords.mutable_data()[i] = static_cast<double>(static_cast<long long>(out_coords[i]))/FIXED_EXPONENT;
+                py_out_coords.mutable_data()[i] = static_cast<RealType>(static_cast<long long>(out_coords[i]))/FIXED_EXPONENT;
             }
 
             return py_out_coords;
     })
-   .def("execute_jvp", [](timemachine::Gradient<D> &grad,
-        const py::array_t<double, py::array::c_style> &coords,
-        const py::array_t<double, py::array::c_style> &params,
-        const py::array_t<double, py::array::c_style> &coords_tangents,
-        const py::array_t<double, py::array::c_style> &params_tangents) -> py::tuple {
+   .def("execute_jvp", [](timemachine::Gradient<RealType, D> &grad,
+        const py::array_t<RealType, py::array::c_style> &coords,
+        const py::array_t<RealType, py::array::c_style> &params,
+        const py::array_t<RealType, py::array::c_style> &coords_tangents,
+        const py::array_t<RealType, py::array::c_style> &params_tangents) -> py::tuple {
 
             const long unsigned int N = coords.shape()[0];
             const long unsigned int DD = coords.shape()[1];
@@ -312,8 +386,8 @@ void declare_gradient(py::module &m, const char *typestr) {
 
             const long unsigned int P = params.shape()[0];
 
-            py::array_t<double, py::array::c_style> py_out_coords_tangents({N, DD});
-            py::array_t<double, py::array::c_style> py_out_params_tangents({P});
+            py::array_t<RealType, py::array::c_style> py_out_coords_tangents({N, DD});
+            py::array_t<RealType, py::array::c_style> py_out_params_tangents({P});
 
             grad.execute_host(
                 N,P,
@@ -336,7 +410,7 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicBond<RealType, D>;
     std::string pyclass_name = std::string("HarmonicBond_") + typestr;
-    py::class_<Class, timemachine::Gradient<D> >(
+    py::class_<Class, timemachine::Gradient<RealType, D> >(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -366,7 +440,7 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicAngle<RealType, D>;
     std::string pyclass_name = std::string("HarmonicAngle_") + typestr;
-    py::class_<Class, timemachine::Gradient<D> >(
+    py::class_<Class, timemachine::Gradient<RealType, D> >(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -396,7 +470,7 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 
     using Class = timemachine::PeriodicTorsion<RealType, D>;
     std::string pyclass_name = std::string("PeriodicTorsion_") + typestr;
-    py::class_<Class, timemachine::Gradient<D> >(
+    py::class_<Class, timemachine::Gradient<RealType, D> >(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -426,7 +500,7 @@ void declare_nonbonded(py::module &m, const char *typestr) {
 
     using Class = timemachine::Nonbonded<RealType, D>;
     std::string pyclass_name = std::string("Nonbonded_") + typestr;
-    py::class_<Class, timemachine::Gradient<D> >(
+    py::class_<Class, timemachine::Gradient<RealType, D> >(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -470,35 +544,32 @@ void declare_nonbonded(py::module &m, const char *typestr) {
 
 PYBIND11_MODULE(custom_ops, m) {
 
-    declare_gradient<3>(m, "f64_3d");
-    declare_gradient<4>(m, "f64_4d");
-    // declare_gradient<double, 3>(m, "f64_3d");
-    // declare_gradient<float, 4>(m, "f32_4d");
-    // declare_gradient<float, 3>(m, "f32_3d");
+    declare_gradient<double, 4>(m, "f64_4d");
+    declare_gradient<double, 3>(m, "f64_3d");
 
     declare_harmonic_bond<double, 4>(m, "f64_4d");
     declare_harmonic_bond<double, 3>(m, "f64_3d");
-    declare_harmonic_bond<float, 4>(m, "f32_4d");
-    declare_harmonic_bond<float, 3>(m, "f32_3d");
 
     declare_harmonic_angle<double, 4>(m, "f64_4d");
     declare_harmonic_angle<double, 3>(m, "f64_3d");
-    declare_harmonic_angle<float, 4>(m, "f32_4d");
-    declare_harmonic_angle<float, 3>(m, "f32_3d");
 
     declare_periodic_torsion<double, 4>(m, "f64_4d");
     declare_periodic_torsion<double, 3>(m, "f64_3d");
-    declare_periodic_torsion<float, 4>(m, "f32_4d");
-    declare_periodic_torsion<float, 3>(m, "f32_3d");
 
     declare_nonbonded<double, 4>(m, "f64_4d");
     declare_nonbonded<double, 3>(m, "f64_3d");
-    declare_nonbonded<float, 4>(m, "f32_4d");
-    declare_nonbonded<float, 3>(m, "f32_3d");
 
-    declare_stepper(m, "f64");
-    declare_basic_stepper(m, "f64");
-    declare_lambda_stepper(m, "f64");
-    declare_reversible_context(m, "f64_3d");
+    declare_stepper<double>(m, "f64");
+    declare_basic_stepper<double>(m, "f64");
+    declare_lambda_stepper<double>(m, "f64");
+
+    declare_reversible_context<double, 4>(m, "f64_4d");
+    declare_reversible_context<double, 3>(m, "f64_3d");
+
+    declare_optimizer<float>(m, "f32");
+    declare_optimizer<double>(m, "f64");
+
+    declare_langevin_optimizer<float>(m, "f32");
+    declare_langevin_optimizer<double>(m, "f64");
 
 }

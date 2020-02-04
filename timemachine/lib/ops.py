@@ -1,79 +1,41 @@
 import numpy as np
 from timemachine.lib import custom_ops
 
-def Nonbonded(*args, precision):
+precision = np.float64
+
+def Nonbonded(*args):
     dim = args[-1]
-    if precision == np.float64:
-        if dim == 3:
-            return custom_ops.Nonbonded_f64_3d(*args[:-1])
-        elif dim == 4:
-            return custom_ops.Nonbonded_f64_4d(*args[:-1])
-        else:
-            raise Exception("Bad Dim")
-    elif precision == np.float32:
-        if dim == 3:
-            return custom_ops.Nonbonded_f32_3d(*args[:-1])
-        elif dim == 4:
-            return custom_ops.Nonbonded_f32_4d(*args[:-1])
-        else:
-            raise Exception("Bad Dim")
+    if dim == 3:
+        return custom_ops.Nonbonded_f64_3d(*args[:-1])
+    elif dim == 4:
+        return custom_ops.Nonbonded_f64_4d(*args[:-1])
     else:
-        raise Exception("Unknown precision")
+        raise Exception("Bad Dim")
 
 
-def HarmonicBond(*args, precision):
+def HarmonicBond(*args):
     dim = args[-1]
-    if precision == np.float64:
-        if dim == 3:
-            return custom_ops.HarmonicBond_f64_3d(*args[:-1])
-        elif dim == 4:
-            return custom_ops.HarmonicBond_f64_4d(*args[:-1])
-        else:
-            raise Exception("Bad Dim")
-    elif precision == np.float32:
-        if dim == 3:
-            return custom_ops.HarmonicBond_f32_3d(*args[:-1])
-        elif dim == 4:
-            return custom_ops.HarmonicBond_f32_4d(*args[:-1])
-        else:
-            raise Exception("Bad Dim")
+    if dim == 3:
+        return custom_ops.HarmonicBond_f64_3d(*args[:-1])
+    elif dim == 4:
+        return custom_ops.HarmonicBond_f64_4d(*args[:-1])
     else:
-        raise Exception("Unknown precision")
+        raise Exception("Bad Dim")
 
-def HarmonicAngle(*args, precision):
+def HarmonicAngle(*args):
     dim = args[-1]
-    if precision == np.float64:
-        if dim == 3:
-            return custom_ops.HarmonicAngle_f64_3d(*args[:-1])
-        elif dim == 4:
-            return custom_ops.HarmonicAngle_f64_4d(*args[:-1])
-        else:
-            raise Exception("Bad Dim")
-    elif precision == np.float32:
-        if dim == 3:
-            return custom_ops.HarmonicAngle_f32_3d(*args[:-1])
-        elif dim == 4:
-            return custom_ops.HarmonicAngle_f32_4d(*args[:-1])
-        else:
-            raise Exception("Bad Dim")
+    if dim == 3:
+        return custom_ops.HarmonicAngle_f64_3d(*args[:-1])
+    elif dim == 4:
+        return custom_ops.HarmonicAngle_f64_4d(*args[:-1])
     else:
-        raise Exception("Unknown precision")
+        raise Exception("Bad Dim")
 
-def PeriodicTorsion(*args, precision):
+def PeriodicTorsion(*args):
     dim = args[-1]
-    if precision == np.float64:
-        if dim == 3:
-            return custom_ops.PeriodicTorsion_f64_3d(*args[:-1])
-        elif dim == 4:
-            return custom_ops.PeriodicTorsion_f64_4d(*args[:-1])
-        else:
-            raise Exception("Bad Dim")
-    elif precision == np.float32:
-        if dim == 3:
-            return custom_ops.PeriodicTorsion_f32_3d(*args[:-1])
-        elif dim == 4:
-            return custom_ops.PeriodicTorsion_f32_4d(*args[:-1])
-        else:
-            raise Exception("Bad Dim")
+    if dim == 3:
+        return custom_ops.PeriodicTorsion_f64_3d(*args[:-1])
+    elif dim == 4:
+        return custom_ops.PeriodicTorsion_f64_4d(*args[:-1])
     else:
-        raise Exception("Unknown precision")
+        raise Exception("Bad Dim")

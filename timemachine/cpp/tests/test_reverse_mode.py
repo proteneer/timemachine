@@ -14,7 +14,56 @@ from timemachine.potentials import bonded, nonbonded
 from common import GradientTest
 from common import prepare_nonbonded_system
 
-class TestContext(unittest.TestCase):
+class TestOptimizers(unittest.TestCase):
+
+    # def setup_system(self):
+
+    #     masses = np.array([1.0, 12.0, 4.0, 3.0])
+    #     x0 = np.array([
+    #         [1.0, 0.5, -0.5],
+    #         [0.2, 0.1, -0.3],
+    #         [0.5, 0.4, 0.3],
+    #         [0.8, 0.3, 0.4],
+    #     ], dtype=np.float64)
+    #     x0.setflags(write=False)
+
+    #     num_atoms = x0.shape[0]
+
+    #     params = np.array([25.0, 2.0, 75.0, 1.81, 5.0], np.float64)
+
+    #     bond_idxs = np.array([[0, 1], [1, 2], [0, 3]], dtype=np.int32)
+    #     bond_param_idxs = np.array([[0, 1], [0, 1], [1, 0]], dtype=np.int32)
+
+    #     angle_idxs = np.array([[0,1,2]], dtype=np.int32)
+    #     angle_param_idxs = np.array([[2,3]], dtype=np.int32)
+
+    #     # 1. Reference integration.
+    #     ref_hb = functools.partial(bonded.harmonic_bond,
+    #         bond_idxs=bond_idxs,
+    #         param_idxs=bond_param_idxs,
+    #         box=None
+    #     )
+
+    #     ref_ha = functools.partial(bonded.harmonic_angle,
+    #         angle_idxs=angle_idxs,
+    #         param_idxs=angle_param_idxs,
+    #         box=None
+    #     )
+
+    #     def total_nrg(conf, params):
+    #         return ref_hb(conf, params) + ref_ha(conf, params)
+    
+    #     test_hb = custom_ops.HarmonicBond_f64(
+    #         bond_idxs,
+    #         bond_param_idxs
+    #     )
+
+    #     test_ha = custom_ops.HarmonicAngle_f64(
+    #         angle_idxs,
+    #         angle_param_idxs
+    #     )
+
+    #     return total_nrg, x0, params, masses, [test_hb, test_ha]
 
     def setup_charge_system(self, N, lamb_flags=None, exponent=None):
         """
@@ -48,6 +97,7 @@ class TestContext(unittest.TestCase):
 
         x0 = np.random.rand(N, dims)*5
 
+
         if lamb_flags is not None:
 
             assert exponent is not None
@@ -68,11 +118,10 @@ class TestContext(unittest.TestCase):
             # modify potential energy to take in def (x, p, l)
             # as opposed to just (x, p)
             def lambda_to_w(lamb, lamb_flags, exponent):
-                insertion = jnp.tan(lamb*(np.pi/2))/exponent
-                deletion = jnp.tan(-(lamb-1)*(np.pi/2))/exponent
-                d4_insertion = jnp.where(lamb_flags == 1, insertion, 0.0)
-                d4_deletion = jnp.where(lamb_flags == -1, deletion, 0.0)
-                d4 = d4_insertion + d4_deletion
+                lk = jnp.power(lamb, exponent)
+                d4 = lk/(1-lk)*np.ones_like(lamb_flags)
+                d4 = jnp.power(d4, lamb_flags)
+                d4 = jnp.where(lamb_flags != 0, d4, 0)
                 return d4
 
             def ref_es_lambda(x3, params, lamb):
@@ -159,12 +208,13 @@ class TestContext(unittest.TestCase):
 
         ctxt = custom_ops.ReversibleContext_f64_3d(
             stepper,
-            x0,
-            v0,
+            len(masses),
+            x0.reshape(-1).tolist(),
+            v0.reshape(-1).tolist(),
             cas,
             cbs,
             step_sizes,
-            params
+            params.reshape(-1).tolist(),
         )
 
         # run 5 steps forward
@@ -176,9 +226,11 @@ class TestContext(unittest.TestCase):
         loss_grad_fn = jax.grad(loss_fn, argnums=(0,))
         dl_du_adjoint = loss_grad_fn(test_du_dls)[0]
 
-        # limit of precision is due to the settings in fixed_point.hpp
-        np.testing.assert_almost_equal(test_loss, ref_loss, decimal=7)
+        np.testing.assert_almost_equal(test_loss, ref_loss, decimal=8)
+
         stepper.set_du_dl_adjoint(dl_du_adjoint)
+
+        # run 5 steps backward
         ctxt.backward_mode()
         test_dl_dp = ctxt.get_param_adjoint_accum()
 
@@ -193,7 +245,7 @@ class TestContext(unittest.TestCase):
         ref_total_nrg_fn, x0, params, masses, test_energies = self.setup_charge_system(N=32*3)
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
         N = len(masses)
-        num_steps = 1
+        num_steps = 5
         cas = np.random.rand(num_steps)
         cbs = np.random.rand(len(masses))/30
         cbs = np.expand_dims(cbs, axis=-1)
@@ -252,12 +304,13 @@ class TestContext(unittest.TestCase):
 
         ctxt = custom_ops.ReversibleContext_f64_3d(
             stepper,
-            x0,
-            v0,
+            len(masses),
+            x0.reshape(-1).tolist(),
+            v0.reshape(-1).tolist(),
             cas,
             cbs,
             step_sizes,
-            params
+            params.reshape(-1).tolist(),
         )
 
         ctxt.forward_mode()

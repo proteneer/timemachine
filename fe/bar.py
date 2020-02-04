@@ -19,8 +19,8 @@ def EXP(w):
         free energy difference
 
     """
-    T = np.float64(jnp.size(w))
-    deltaF = -(logsumexp(-w) - jnp.log(T))
+    T = float(jnp.size(w))
+    deltaF = - (logsumexp(-w) - jnp.log(T))
     return deltaF
 
 def BARzero(w, deltaF):
@@ -37,7 +37,7 @@ def BARzero(w, deltaF):
 
     Returns
     ------
-    scalar, float
+    fzero : scalar, float
         a variable that is zeroed when deltaF satisfies BAR
 
     """
@@ -72,7 +72,7 @@ def dG_dw(w):
 
     Returns
     ------
-    np.ndarray, float, (2, N)
+    dG_dw : np.ndarray, float, (2, N)
         the gradient of free energy difference with respect to work
 
     """
