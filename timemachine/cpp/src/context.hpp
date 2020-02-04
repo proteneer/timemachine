@@ -36,7 +36,7 @@ private:
 
     const int N_;
     const int P_;
-    const int D = 5;
+    const int D = 3;
 
 public:
 

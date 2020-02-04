@@ -2,7 +2,8 @@
 #include "kernel_utils.cuh"
 #include "fixed_point.hpp"
 
-#define PI 3.14159265358979323846
+// #define PI 3.14159265358979323846
+#define PI  3.1415926535897932384626433
 
 #include <iostream>
 namespace timemachine {

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <chrono>
 
-#include "new_context.hpp"
+#include "context.hpp"
 #include "integrator.hpp"
 #include "assert.h"
 #include "kernel_utils.cuh"

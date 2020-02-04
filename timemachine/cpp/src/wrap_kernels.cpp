@@ -2,7 +2,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
-#include "new_context.hpp"
+#include "context.hpp"
 #include "optimizer.hpp"
 #include "langevin.hpp"
 #include "harmonic_bond.hpp"
@@ -75,7 +75,7 @@ void declare_lambda_stepper(py::module &m, const char *typestr) {
         );
     }))
     .def("get_du_dl", [](timemachine::LambdaStepper &stepper) -> py::array_t<double, py::array::c_style> {
-        const int T = stepper.get_T();
+        const unsigned long long T = stepper.get_T();
         py::array_t<double, py::array::c_style> buffer({T});
         stepper.get_du_dl(buffer.mutable_data());
         return buffer;
@@ -166,24 +166,62 @@ void declare_reversible_context(py::module &m, const char *typestr) {
     )
     .def(py::init([](
         timemachine::Stepper *stepper,
-        int N,
-        const std::vector<double> &x0,
-        const std::vector<double> &v0,
-        const std::vector<double> &coeff_cas,
-        const std::vector<double> &coeff_cbs,
-        const std::vector<double> &step_sizes,
-        const std::vector<double> &params
+        // int N,
+        const py::array_t<double, py::array::c_style> &x0,
+        const py::array_t<double, py::array::c_style> &v0,
+        const py::array_t<double, py::array::c_style> &coeff_cas,
+        const py::array_t<double, py::array::c_style> &coeff_cbs,
+        const py::array_t<double, py::array::c_style> &step_sizes,
+        const py::array_t<double, py::array::c_style> &params
+        // const std::vector<double> &x0,
+        // const std::vector<double> &v0,
+        // const std::vector<double> &coeff_cas,
+        // const std::vector<double> &coeff_cbs,
+        // const std::vector<double> &step_sizes,
+        // const std::vector<double> &params
     ) {
+
+
+        int N = x0.shape()[0];
+        int D = x0.shape()[1];
+
+        if(N != v0.shape()[0]) {
+            throw std::runtime_error("v0 N != x0 N");
+        }
+
+        if(D != v0.shape()[1]) {
+            throw std::runtime_error("v0 D != x0 D");
+        }
+
+        int T = coeff_cas.shape()[0];
+
+        if(T != step_sizes.shape()[0]) {
+            throw std::runtime_error("coeff_cas T != step_sizes T");
+        }
+
+        int P = params.shape()[0];
+
+        std::cout << "N D" << N << " " << D << " " << " size: " << x0.size() << std::endl;
+        std::cout << coeff_cas.size() << " " << coeff_cbs.size() << " " << step_sizes.size() << " " << params.size() << std::endl;
+
+        std::vector<double> x0_vec(x0.data(), x0.data()+x0.size());
+        std::vector<double> v0_vec(v0.data(), v0.data()+v0.size());
+        std::vector<double> coeff_cas_vec(coeff_cas.data(), coeff_cas.data()+coeff_cas.size());
+        std::vector<double> coeff_cbs_vec(coeff_cbs.data(), coeff_cbs.data()+coeff_cbs.size());
+        std::vector<double> step_sizes_vec(step_sizes.data(), step_sizes.data()+step_sizes.size());
+        std::vector<double> params_vec(params.data(), params.data()+params.size());
+
+        std::cout << "OKAY" << std::endl;
 
         return new timemachine::ReversibleContext(
             stepper,
             N,
-            x0,
-            v0,
-            coeff_cas,
-            coeff_cbs,
-            step_sizes,
-            params
+            x0_vec,
+            v0_vec,
+            coeff_cas_vec,
+            coeff_cbs_vec,
+            step_sizes_vec,
+            params_vec
         );
 
     }))
@@ -466,18 +504,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded<float, 3>(m, "f32_3d");
 
     declare_stepper(m, "f64");
-    // declare_stepper<float>(m, "f32");
-
     declare_basic_stepper(m, "f64");
-    // declare_basic_stepper<float>(m, "f32");
-
     declare_lambda_stepper(m, "f64");
-    // declare_lambda_stepper<float>(m, "f32");
-
     declare_reversible_context(m, "f64_3d");
-    // declare_reversible_context<double, 3>(m, "f64_3d");
-    // declare_reversible_context<float, 4>(m, "f32_4d");
-    // declare_reversible_context<float, 3>(m, "f32_3d");
-
 
 }

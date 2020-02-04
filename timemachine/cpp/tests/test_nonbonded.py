@@ -119,7 +119,6 @@ class TestNonbonded(GradientTest):
                             precision,
                             rtol)
 
-    @unittest.skip("debug")
     def test_lambda(self):
 
         np.random.seed(4321)
@@ -157,7 +156,6 @@ class TestNonbonded(GradientTest):
             """
             insertion = jnp.tan(lamb*(np.pi/2))/exponent
             deletion = jnp.tan(-(lamb-1)*(np.pi/2))/exponent
-
             d4_insertion = jnp.where(lamb_flags == 1, insertion, 0.0)
             d4_deletion = jnp.where(lamb_flags == -1, deletion, 0.0)
             d4 = d4_insertion + d4_deletion
