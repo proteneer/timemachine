@@ -4,8 +4,6 @@
 // reverse mode we don't care at all
 #define WARPSIZE 32
 
-
-// template <typename RealType>
 void __global__ k_find_block_bounds(
     const int N,
     const int D,
@@ -36,12 +34,6 @@ void __global__ k_find_block_bounds(
     }
 
 }
-
-
-// DECL Surreal<double> operator+(const Surreal<double>& y, const Surreal<float>& z) {
-//     return Surreal<double>(y.real+z.real, y.imag+z.imag);
-// }
-
 
 template <typename RealType, int D>
 void __global__ k_nonbonded_jvp(

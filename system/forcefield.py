@@ -16,30 +16,6 @@ from openforcefield.topology import ValenceDict
 # from system import custom_functionals
 from timemachine.lib import ops
 
-
-
-    # c_nrgs = []
-    # for a in nrgs:
-    #     a_name = a[0]
-    #     a_args = a[1]
-    #     if a_name == ops.HarmonicBond:
-    #         c_nrgs.append(ops.HarmonicBond(a_args[0], a_args[1]))
-    #     elif a_name == ops.HarmonicAngle:
-    #         c_nrgs.append(ops.HarmonicAngle(a_args[0], a_args[1]))
-    #     elif a_name == ops.PeriodicTorsion:
-    #         c_nrgs.append(ops.PeriodicTorsion(a_args[0], a_args[1]))
-    #     elif a_name == ops.Nonbonded:
-    #         print(a_args)
-
-    #         assert 0
-    #         c_nrgs.append(ops.Nonbonded(a_args[0].astype(ops.precision), a_args[1].astype(np.int32), a_args[2], a_args[3]))
-    #     # elif a_name == ops.electrostatics:
-    #         # c_nrgs.append(ops.electrostatics(a_args[0].astype(ops.precision), a_args[1].astype(np.int32), a_args[2], a_args[3]))
-    #     else:
-    #         raise Exception("Unknown potential", a_name)
-
-    # return c_nrgs  
-
 def combiner(
     a_nrgs, b_nrgs,
     a_params, b_params,

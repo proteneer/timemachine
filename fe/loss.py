@@ -28,7 +28,7 @@ mybar_p.def_impl(mybar_impl)
 ad.defvjp(mybar_p, mybar_vjp)
 
 
-def leg_dG(
+def BAR_leg(
     insertion_du_dls,
     deletion_du_dls,
     lambda_schedule):
@@ -37,7 +37,7 @@ def leg_dG(
 
     return mybar(jnp.stack([insertion_W, deletion_W]))
    
-def loss_dG(
+def BAR_loss(
     complex_insertion_du_dls, # [C, N]
     complex_deletion_du_dls,  # [C, N]
     solvent_insertion_du_dls, # [C, N]
@@ -51,22 +51,28 @@ def loss_dG(
     pred_dG = solvent_dG - complex_dG
     loss = jnp.power(true_dG - pred_dG, 2)
 
-    print(solvent_dG, complex_dG, pred_dG, true_dG)
-
     return loss
 
-# if __name__ == "__main__":
+def EXP_leg(
+    du_dls,
+    lambda_schedule):
+    insertion_W = math_utils.trapz(du_dls, lambda_schedule)
 
-#     C = 128
-#     T = 10000
-    
-#     lambda_schedule = onp.linspace(0.0001, 0.9999, T)
-#     cid = onp.stack(onp.random.rand(C, T))
-#     cdd = onp.stack(onp.random.rand(C, T))
-#     sid = onp.stack(onp.random.rand(C, T))
-#     sdd = onp.stack(onp.random.rand(C, T))
+    return tmbar.EXP(insertion_W)
+   
+def EXP_loss(
+    complex_du_dls, # [C, N]
+    solvent_du_dls, # [C, N]
+    lambda_schedule,
+    true_dG):
 
-#     res = math_utils.trapz(cid, lambda_schedule)
+    complex_dG = EXP_leg(complex_du_dls, lambda_schedule)
+    solvent_dG = EXP_leg(solvent_du_dls, lambda_schedule)
 
-#     loss_grad_fn = jax.grad(loss_dG, argnums=(0,1,2,3))
-#     cid_grad, cdd_grad, sid_grad, sdd_grad = loss_grad_fn(cid, cdd, sid, sdd, lambda_schedule, 2.5)
+    print("complex_dG", complex_dG)
+    print("solvent_dG", solvent_dG)
+
+    pred_dG = solvent_dG - complex_dG
+    loss = jnp.power(true_dG - pred_dG, 2)
+
+    return loss

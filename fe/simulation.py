@@ -15,20 +15,6 @@ from timemachine.lib import custom_ops
 import traceback
 
 
-# def write_coords(frames, pdb_path, romol, outfile, num_frames=100):
-#     combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(pdb_path, removeHs=False), mol)
-#     combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-#     cpdb = app.PDBFile(combined_pdb_str)
-#     PDBFile.writeHeader(cpdb.topology, outfile)
-
-#     interval = max(1, frames.shape[0]//num_frames)
-
-#     for frame_idx, x in enumerate(frames):
-#         if frame_idx % interval == 0:
-#             PDBFile.writeModel(cpdb.topology, x*10, outfile, frame_idx)
-
-#     PDBFile.writeFooter(pdb.topology, outfile)
-
 def merge_gradients(
     gradients,
     precision):
@@ -36,8 +22,6 @@ def merge_gradients(
     g = []
     for fn, fn_args in gradients:
         g.append(fn(*fn_args, precision=precision))
-
-    # print("GRADS", g)
 
     return g
 
@@ -107,22 +91,22 @@ class Simulation:
         self.exponent = 16
 
     def run_forward_multi(self, args):
-        x0, pdb_writer, gpu_idx = args
+        x0, pdb_writer, gpu_idx, precision = args
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
         try:
-            return self.run_forward(x0, pdb_writer)
+            return self.run_forward(x0, pdb_writer, precision)
         except Exception as err:
             print(err)
             traceback.print_tb(err.__traceback__)
             raise 
 
-    def run_forward(self, x0, pdb_writer):
+    def run_forward(self, x0, pdb_writer, precision):
         """
         x0 include host configs as well
         """
         # this is multi-process safe to run.
-
-        gradients = merge_gradients(self.combined_potentials, np.float32)
+        # use single precision
+        gradients = merge_gradients(self.combined_potentials, precision)
 
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
@@ -147,7 +131,6 @@ class Simulation:
         print("run time", time.time() - start)
         du_dls = stepper.get_du_dl()
 
-
         if pdb_writer is not None:
             pdb_writer.write_header()
             xs = ctxt.get_all_coords()
@@ -158,8 +141,6 @@ class Simulation:
                     # argsort is iperm and
                     pdb_writer.write((x*10)[self.iperm])
         # pdb_writer.close()
-
-
         del stepper
         del ctxt
 

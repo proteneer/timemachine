@@ -61,7 +61,7 @@ class PDBWriter():
         self.pdb_str = pdb_str
         self.out_filepath = out_filepath
         self.outfile = None
-        self.n_frames = 100
+        self.n_frames = 10
 
     def write_header(self):
         """
@@ -90,13 +90,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Quick Test')
     parser.add_argument('--out_pdb', type=str)
 
-    # parser.add_argument('--precision', type=str)    
+    parser.add_argument('--precision', type=str)    
     parser.add_argument('--complex_pdb', type=str)
     parser.add_argument('--solvent_pdb', type=str)
     parser.add_argument('--ligand_sdf', type=str)
     args = parser.parse_args()
 
     amber_ff = app.ForceField('amber99sb.xml', 'tip3p.xml')
+
+    if args.precision == 'single':
+        precision = np.float32
+    elif args.precision == 'double':
+        precision = np.float64
+    else:
+        raise Exception("precision must be either single or double")
 
     # host_pdb = app.PDBFile(args.complex_pdb)
     # modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
@@ -126,25 +133,51 @@ if __name__ == "__main__":
     init_conf = np.array(init_conf.GetPositions(), dtype=np.float64)
     init_conf = init_conf/10 # convert to md_units
     conf_com = com(init_conf)
+
     init_mol = Chem.Mol(guest_mol)
+
+    num_conformers = 4
+
+    # generate a set of gas phase conformers using the RDKit
+    guest_mol.RemoveAllConformers()
+    AllChem.EmbedMultipleConfs(guest_mol, num_conformers, randomSeed=2020)
+    np.random.seed(2020)
+    for conf_idx in range(num_conformers):
+        conformer = guest_mol.GetConformer(conf_idx)
+        guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+        guest_conf = guest_conf/10 # convert to md_units
+        rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
+        guest_conf = np.matmul(guest_conf, rot_matrix)*10
+
+        for atom_idx, pos in enumerate(guest_conf):
+            conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
+
+    # tbd training code
 
     for host_idx, host_pdb_file in enumerate([args.complex_pdb, args.solvent_pdb]):
 
         host_pdb = app.PDBFile(host_pdb_file)
 
-        if host_idx == 0:
-            host_name = "complex"
-        elif host_idx == 1:
-            host_name = "solvent"
+        # deletion is difficult because of clashes arising from poorly minimized structures
+        # so we need to work on the coupled insertion/deletion schedule
+        # for mode in ['insertion', 'deletion']: 
+        for mode in ['insertion']: 
 
-        for mode in ['insertion', 'deletion']:
             print("Mode", mode)
 
             host_conf = []
             for x,y,z in host_pdb.positions:
                 host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-
             host_conf = np.array(host_conf)
+
+            # recenter the ligand based on whether we're using the host or the solvent
+            if host_idx == 0:
+                host_name = "complex"
+                conf_center = conf_com
+            elif host_idx == 1:
+                host_name = "solvent"
+                conf_center = com(host_conf)
+
             init_combined_conf = np.concatenate([host_conf, init_conf])
 
             perm = hilbert_sort(init_combined_conf)
@@ -158,21 +191,14 @@ if __name__ == "__main__":
                 perm
             )
 
-            num_conformers = 1
-
-            guest_mol.RemoveAllConformers()
-            AllChem.EmbedMultipleConfs(guest_mol, num_conformers, randomSeed=2020)
-
-            # sample from the DG distribution
+            # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
             all_args = []
             for conf_idx in range(num_conformers):
-                guest_conf = guest_mol.GetConformer(conf_idx)
-                guest_conf = np.array(guest_conf.GetPositions(), dtype=np.float64)
+
+                conformer = guest_mol.GetConformer(conf_idx)
+                guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
                 guest_conf = guest_conf/10 # convert to md_units
-                np.random.seed(2020)
-                rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
-                guest_conf = np.matmul(guest_conf, rot_matrix)
-                guest_conf = recenter(guest_conf, conf_com)
+                guest_conf = recenter(guest_conf, conf_center)
 
                 x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
                 x0 = x0[perm]
@@ -181,18 +207,15 @@ if __name__ == "__main__":
                 combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
                 out_file = os.path.join("frames", "epoch_"+str(epoch)+"_"+mode+"_"+host_name+"_conf_"+str(conf_idx)+".pdb")
                 writer = PDBWriter(combined_pdb_str, out_file)
-                all_args.append((x0, writer,  conf_idx % num_gpus))
-
-            sim.run_forward_multi(all_args[0])
-
-            sys.exit(0)
+                # set this to None if we don't care about visualization
+                all_args.append((x0, writer,  conf_idx % num_gpus, precision))
 
             results = pool.map(sim.run_forward_multi, all_args)
             all_du_dls.append(results)
 
     all_du_dls = np.array(all_du_dls)
 
-    error = loss.loss_dG(*all_du_dls, lambda_schedule, 250.)
+    error = loss.EXP_loss(*all_du_dls, lambda_schedule, -20)
 
     print("Error", error)
 

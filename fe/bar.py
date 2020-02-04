@@ -19,8 +19,8 @@ def EXP(w):
         free energy difference
 
     """
-    T = float(jnp.size(w))
-    deltaF = - (logsumexp(-w) - jnp.log(T))
+    T = np.float64(jnp.size(w))
+    deltaF = -(logsumexp(-w) - jnp.log(T))
     return deltaF
 
 def BARzero(w, deltaF):
