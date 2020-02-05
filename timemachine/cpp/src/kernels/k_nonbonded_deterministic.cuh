@@ -35,6 +35,14 @@ void __global__ k_find_block_bounds(
 
 }
 
+__device__ float overloaded_sqrt(const float x) {
+    return sqrtf(x);
+}
+
+__device__ double overloaded_sqrt(const double x) {
+    return sqrt(x);
+}
+
 template<typename RealType, int D>
 __device__ RealType fast_vec_rnorm(const RealType v[D]);
 
@@ -58,51 +66,6 @@ __device__ double fast_vec_rnorm<double, 4>(const double v[4]) {
     return rnorm4d(v[0], v[1], v[2], v[3]);
 };
 
-template<typename NumericType, int D>
-__device__ NumericType fast_vec_rnorm_surreal(const NumericType v[D]);
-
-
-template<>
-__forceinline__ __device__ Surreal<float> fast_vec_rnorm_surreal<Surreal<float>, 3>(const Surreal<float> v[3]) {
-    Surreal<float> res;
-    float g = rnorm3df(v[0].real, v[1].real, v[2].real);
-    float h = v[0].real*v[0].imag + v[1].real*v[1].imag + v[2].real*v[2].imag;
-    res.real = g;
-    res.imag = -h*g*g*g;
-    return res;
-}
-
-template<>
-__forceinline__ __device__ Surreal<double> fast_vec_rnorm_surreal<Surreal<double>, 3>(const Surreal<double> v[3]) {
-    Surreal<double> res;
-    double g = rnorm3d(v[0].real, v[1].real, v[2].real);
-    double h = v[0].real*v[0].imag + v[1].real*v[1].imag + v[2].real*v[2].imag;
-    res.real = g;
-    res.imag = -h*g*g*g;
-    return res;
-}
-
-template<>
-__forceinline__ __device__ Surreal<float> fast_vec_rnorm_surreal<Surreal<float>, 4>(const Surreal<float> v[4]) {
-    Surreal<float> res;
-    float g = rnorm4df(v[0].real, v[1].real, v[2].real, v[3].real);
-    float h = v[0].real*v[0].imag + v[1].real*v[1].imag + v[2].real*v[2].imag + v[3].real*v[3].imag;
-    res.real = g;
-    res.imag = -h*g*g*g;
-    return res;
-}
-
-template<>
-__forceinline__ __device__ Surreal<double> fast_vec_rnorm_surreal<Surreal<double>, 4>(const Surreal<double> v[4]) {
-    Surreal<double> res;
-    double g = rnorm4d(v[0].real, v[1].real, v[2].real, v[3].real);
-    double h = v[0].real*v[0].imag + v[1].real*v[1].imag + v[2].real*v[2].imag + v[3].real*v[3].imag;
-    res.real = g;
-    res.imag = -h*g*g*g;
-    return res;
-}
-
-
 template <typename RealType, int D>
 void __global__ k_nonbonded_jvp(
     const int N,
@@ -121,13 +84,13 @@ void __global__ k_nonbonded_jvp(
         return;
     }
 
-    double block_d2ij = 0; 
+    RealType block_d2ij = 0; 
     for(int d=0; d < D; d++) {
-        double block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
-        double block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
-        double block_row_ext = block_bounds_ext[blockIdx.x*D+d];
-        double block_col_ext = block_bounds_ext[blockIdx.y*D+d];
-        double dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+        RealType dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
 
@@ -138,8 +101,6 @@ void __global__ k_nonbonded_jvp(
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     Surreal<RealType> ci[D];
     Surreal<RealType> gi[D];
-    // Surreal<RealType> gi[D] = {Surreal<RealType>(0.0, 0.0)};
-    #pragma unroll
     for(int d=0; d < D; d++) {
         gi[d].real = 0.0;
         gi[d].imag = 0.0;
@@ -162,7 +123,6 @@ void __global__ k_nonbonded_jvp(
     Surreal<RealType> cj[D];
     Surreal<RealType> gj[D];
 
-    #pragma unroll
     for(int d=0; d < D; d++) {
         gj[d].real = 0.0;
         gj[d].imag = 0.0;
@@ -186,62 +146,63 @@ void __global__ k_nonbonded_jvp(
 
     for(int round = 0; round < 32; round++) {
 
-        Surreal<RealType> dx[D];
-        #pragma unroll
+        RealType dx_real[D];
         for(int d=0; d < D; d++) {
-            dx[d] = ci[d] - cj[d];
+            dx_real[d] = ci[d].real - cj[d].real;
         }
-        Surreal<RealType> inv_dij = fast_vec_rnorm_surreal<Surreal<RealType>, D>(dx);
 
-        if(atom_j_idx < atom_i_idx && inv_dij.real > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
+        RealType inv_dij_real = fast_vec_rnorm<RealType, D>(dx_real);
 
-            // high precision
+        if(atom_j_idx < atom_i_idx && inv_dij_real > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
+
+            RealType dx_imag = 0;
+            #pragma unroll
+            for(int d=0; d < D; d++) {
+                dx_imag += dx_real[d]*(ci[d].imag - cj[d].imag);
+            }
+
+            Surreal<RealType> inv_dij(inv_dij_real, -dx_imag*inv_dij_real*inv_dij_real*inv_dij_real);
+
             Surreal<RealType> inv_d2ij = inv_dij*inv_dij;
             Surreal<RealType> inv_d4ij = inv_d2ij*inv_d2ij;
             Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
             Surreal<RealType> inv_d8ij = inv_d4ij*inv_d4ij;
             Surreal<RealType> inv_d14ij = inv_d8ij*inv_d6ij;
-
-            // low-ish precision due to rsqrt
-            // Surreal<RealType> inv_dij = rsqrt(d2ij);
             Surreal<RealType> inv_d3ij = inv_d2ij*inv_dij;
             Surreal<RealType> es_grad_prefactor = qi*qj*inv_d3ij;
 
             // lennard jones force
-            RealType eps_ij = sqrt(eps_i*eps_j);
+            RealType eps_ij = overloaded_sqrt(eps_i*eps_j);
             RealType sig_ij = (sig_i+sig_j)/2;
 
             RealType sig2 = sig_ij*sig_ij;
             RealType sig4 = sig2*sig2;
             RealType sig5 = sig4*sig_ij;
             RealType sig6 = sig4*sig2;
-            RealType sig12 = sig6*sig6;
 
-            Surreal<RealType> sig12_rij7 = sig12*inv_d14ij;
-            Surreal<RealType> sig6_rij4 = sig6*inv_d8ij;
-            // Surreal<RealType> lj_grad_prefactor = 24*eps_ij*sig12_rij7*2 - 24*eps_ij*sig6_rij4;
-            Surreal<RealType> lj_grad_prefactor = 24*eps_ij*(sig12_rij7*2 - sig6_rij4);
+            Surreal<RealType> sig6_inv_d6ij = sig6*inv_d6ij;
+            Surreal<RealType> sig6_inv_d8ij = sig6*inv_d8ij;
 
-            #pragma unroll
+            Surreal<RealType> lj_grad_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
+
             for(int d=0; d < D; d++) {
                 Surreal<RealType> dx = ci[d]-cj[d];
-                gi[d] -= es_grad_prefactor*dx + lj_grad_prefactor*dx;
-                gj[d] += es_grad_prefactor*dx + lj_grad_prefactor*dx;
+                gi[d] -= (es_grad_prefactor + lj_grad_prefactor)*dx;
+                gj[d] += (es_grad_prefactor + lj_grad_prefactor)*dx;
             }
 
-            // dE_dp 
             // Charge
             g_qi += qj*inv_dij;
             g_qj += qi*inv_dij;
 
             // vDw
-            Surreal<RealType> eps_grad = 4*(sig12*inv_d6ij*inv_d6ij-sig6*inv_d6ij);
-            g_epsi += eps_grad*eps_j/(2*eps_ij);
-            g_epsj += eps_grad*eps_i/(2*eps_ij);
+            Surreal<RealType> eps_grad = 2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
+            g_epsi += eps_grad*eps_j;
+            g_epsj += eps_grad*eps_i;
 
-            Surreal<RealType> sig_grad = 24*eps_ij*(2*sig6*inv_d6ij*sig5*inv_d6ij-sig5*inv_d6ij);
-            g_sigi += sig_grad/2;
-            g_sigj += sig_grad/2;
+            Surreal<RealType> sig_grad = 12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
+            g_sigi += sig_grad;
+            g_sigj += sig_grad;
         }
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
@@ -252,7 +213,6 @@ void __global__ k_nonbonded_jvp(
         qj = __shfl_sync(0xffffffff, qj, srcLane);
         sig_j = __shfl_sync(0xffffffff, sig_j, srcLane);
         eps_j = __shfl_sync(0xffffffff, eps_j, srcLane);
-        #pragma unroll
         for(size_t d=0; d < D; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
@@ -301,13 +261,13 @@ void __global__ k_nonbonded_inference(
         return;
     }
 
-    double block_d2ij = 0; 
+    RealType block_d2ij = 0; 
     for(int d=0; d < D; d++) {
-        double block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
-        double block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
-        double block_row_ext = block_bounds_ext[blockIdx.x*D+d];
-        double block_col_ext = block_bounds_ext[blockIdx.y*D+d];
-        double dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+        RealType dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
 
@@ -318,7 +278,6 @@ void __global__ k_nonbonded_inference(
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     RealType ci[D];
     RealType gi[D] = {0};
-    #pragma unroll
     for(int d=0; d < D; d++) {
         ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
     }
@@ -333,7 +292,6 @@ void __global__ k_nonbonded_inference(
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType cj[D];
     RealType gj[D] = {0};
-    #pragma unroll
     for(int d=0; d < D; d++) {
         cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
     }
@@ -359,8 +317,6 @@ void __global__ k_nonbonded_inference(
 
         if(atom_j_idx < atom_i_idx && inv_dij > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
 
-            // RealType inv_dij = rsqrt(d2ij);
-            // RealType inv_d2ij = inv_dij*inv_dij;
             RealType inv_d2ij = inv_dij*inv_dij;
             RealType inv_d3ij = inv_dij*inv_d2ij;
             RealType inv_d4ij = inv_d2ij*inv_d2ij;
@@ -369,7 +325,7 @@ void __global__ k_nonbonded_inference(
             RealType es_grad_prefactor = qi*qj*inv_d3ij;
 
             // lennard jones force
-            RealType eps_ij = sqrt(eps_i * eps_j);
+            RealType eps_ij = overloaded_sqrt(eps_i * eps_j);
             RealType sig_ij = (sig_i + sig_j)/2;
 
             RealType sig2 = sig_ij*sig_ij;
@@ -379,9 +335,8 @@ void __global__ k_nonbonded_inference(
             RealType sig6_inv_d6ij = sig6*inv_d6ij;
             RealType sig6_inv_d8ij = sig6*inv_d8ij;
 
-            RealType lj_grad_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1.0);
+            RealType lj_grad_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
 
-            #pragma unroll
             for(int d=0; d < D; d++) {
                 RealType dx = ci[d]- cj[d];
                 gi[d] -= (es_grad_prefactor + lj_grad_prefactor) * dx;
@@ -394,7 +349,6 @@ void __global__ k_nonbonded_inference(
         qj = __shfl_sync(0xffffffff, qj, srcLane);
         sig_j = __shfl_sync(0xffffffff, sig_j, srcLane);
         eps_j = __shfl_sync(0xffffffff, eps_j, srcLane);
-        #pragma unroll
         for(size_t d=0; d < D; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane); // needs to support real
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
