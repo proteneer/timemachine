@@ -150,13 +150,9 @@ void Nonbonded<RealType, D>::execute_device(
 
         // auto finish = std::chrono::high_resolution_clock::now();
         // std::chrono::duration<double> elapsed = finish - start;
-        // std::cout << "Nonbonded Elapsed time: " << elapsed.count() << " s\n";
+        // std::cout << "---Nonbonded Elapsed time: " << elapsed.count() << " s\n";
 
     } else {
-
-        // do *not* accumulate tangents here
-        // gpuErrchk(cudaMemset(d_out_coords_tangents, 0, N*D*sizeof(RealType)));
-        // gpuErrchk(cudaMemset(d_out_params_tangents, 0, P*sizeof(RealType)));
 
         k_nonbonded_jvp<RealType, D><<<dimGrid, tpb>>>(
             N,
@@ -198,7 +194,7 @@ void Nonbonded<RealType, D>::execute_device(
 
         // auto finish = std::chrono::high_resolution_clock::now();
         // std::chrono::duration<double> elapsed = finish - start;
-        // std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
+        // std::cout << "---Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
 
     }
 

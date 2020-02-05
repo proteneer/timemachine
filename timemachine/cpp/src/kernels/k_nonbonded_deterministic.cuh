@@ -35,6 +35,74 @@ void __global__ k_find_block_bounds(
 
 }
 
+template<typename RealType, int D>
+__device__ RealType fast_vec_rnorm(const RealType v[D]);
+
+template<>
+__device__ float fast_vec_rnorm<float, 3>(const float v[3]) {
+    return rnorm3df(v[0], v[1], v[2]);
+};
+
+template<>
+__device__ double fast_vec_rnorm<double, 3>(const double v[3]) {
+    return rnorm3d(v[0], v[1], v[2]);
+};
+
+template<>
+__device__ float fast_vec_rnorm<float, 4>(const float v[4]) {
+    return rnorm4df(v[0], v[1], v[2], v[3]);
+};
+
+template<>
+__device__ double fast_vec_rnorm<double, 4>(const double v[4]) {
+    return rnorm4d(v[0], v[1], v[2], v[3]);
+};
+
+template<typename NumericType, int D>
+__device__ NumericType fast_vec_rnorm_surreal(const NumericType v[D]);
+
+
+template<>
+__forceinline__ __device__ Surreal<float> fast_vec_rnorm_surreal<Surreal<float>, 3>(const Surreal<float> v[3]) {
+    Surreal<float> res;
+    float g = rnorm3df(v[0].real, v[1].real, v[2].real);
+    float h = v[0].real*v[0].imag + v[1].real*v[1].imag + v[2].real*v[2].imag;
+    res.real = g;
+    res.imag = -h*g*g*g;
+    return res;
+}
+
+template<>
+__forceinline__ __device__ Surreal<double> fast_vec_rnorm_surreal<Surreal<double>, 3>(const Surreal<double> v[3]) {
+    Surreal<double> res;
+    double g = rnorm3d(v[0].real, v[1].real, v[2].real);
+    double h = v[0].real*v[0].imag + v[1].real*v[1].imag + v[2].real*v[2].imag;
+    res.real = g;
+    res.imag = -h*g*g*g;
+    return res;
+}
+
+template<>
+__forceinline__ __device__ Surreal<float> fast_vec_rnorm_surreal<Surreal<float>, 4>(const Surreal<float> v[4]) {
+    Surreal<float> res;
+    float g = rnorm4df(v[0].real, v[1].real, v[2].real, v[3].real);
+    float h = v[0].real*v[0].imag + v[1].real*v[1].imag + v[2].real*v[2].imag + v[3].real*v[3].imag;
+    res.real = g;
+    res.imag = -h*g*g*g;
+    return res;
+}
+
+template<>
+__forceinline__ __device__ Surreal<double> fast_vec_rnorm_surreal<Surreal<double>, 4>(const Surreal<double> v[4]) {
+    Surreal<double> res;
+    double g = rnorm4d(v[0].real, v[1].real, v[2].real, v[3].real);
+    double h = v[0].real*v[0].imag + v[1].real*v[1].imag + v[2].real*v[2].imag + v[3].real*v[3].imag;
+    res.real = g;
+    res.imag = -h*g*g*g;
+    return res;
+}
+
+
 template <typename RealType, int D>
 void __global__ k_nonbonded_jvp(
     const int N,
@@ -114,26 +182,28 @@ void __global__ k_nonbonded_jvp(
     Surreal<RealType> g_sigj(0.0, 0.0);
     Surreal<RealType> g_epsj(0.0, 0.0);
 
+    RealType inv_cutoff = 1/cutoff;
+
     for(int round = 0; round < 32; round++) {
 
-        Surreal<RealType> d2ij(0.0, 0.0);
+        Surreal<RealType> dx[D];
         #pragma unroll
         for(int d=0; d < D; d++) {
-            Surreal<RealType> dx = ci[d] - cj[d];
-            d2ij += dx*dx;
+            dx[d] = ci[d] - cj[d];
         }
+        Surreal<RealType> inv_dij = fast_vec_rnorm_surreal<Surreal<RealType>, D>(dx);
 
-        if(atom_j_idx < atom_i_idx && d2ij.real < cutoff*cutoff && atom_j_idx < N && atom_i_idx < N) {
+        if(atom_j_idx < atom_i_idx && inv_dij.real > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
 
             // high precision
-            Surreal<RealType> inv_d2ij = 1/d2ij;
+            Surreal<RealType> inv_d2ij = inv_dij*inv_dij;
             Surreal<RealType> inv_d4ij = inv_d2ij*inv_d2ij;
             Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
             Surreal<RealType> inv_d8ij = inv_d4ij*inv_d4ij;
             Surreal<RealType> inv_d14ij = inv_d8ij*inv_d6ij;
 
             // low-ish precision due to rsqrt
-            Surreal<RealType> inv_dij = rsqrt(d2ij);
+            // Surreal<RealType> inv_dij = rsqrt(d2ij);
             Surreal<RealType> inv_d3ij = inv_d2ij*inv_dij;
             Surreal<RealType> es_grad_prefactor = qi*qj*inv_d3ij;
 
@@ -275,21 +345,23 @@ void __global__ k_nonbonded_inference(
     RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 1;
     RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
 
+    RealType inv_cutoff = 1/cutoff;
+
     // In inference mode, we don't care about gradients with respect to parameters.
     for(int round = 0; round < 32; round++) {
 
-        RealType d2ij = 0;
-        #pragma unroll
+        RealType dx[D];
         for(int d=0; d < D; d++) {
-            // (ytz): loss of significance possible?
-            RealType dx = ci[d] - cj[d];
-            d2ij += dx*dx;
+            dx[d] = ci[d] - cj[d];
         }
 
-        if(atom_j_idx < atom_i_idx && d2ij < cutoff*cutoff && atom_j_idx < N && atom_i_idx < N) {
+        RealType inv_dij = fast_vec_rnorm<RealType, D>(dx);
 
-            RealType inv_dij = rsqrt(d2ij);
-            RealType inv_d2ij = 1/d2ij;
+        if(atom_j_idx < atom_i_idx && inv_dij > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
+
+            // RealType inv_dij = rsqrt(d2ij);
+            // RealType inv_d2ij = inv_dij*inv_dij;
+            RealType inv_d2ij = inv_dij*inv_dij;
             RealType inv_d3ij = inv_dij*inv_d2ij;
             RealType inv_d4ij = inv_d2ij*inv_d2ij;
             RealType inv_d6ij = inv_d4ij*inv_d2ij;

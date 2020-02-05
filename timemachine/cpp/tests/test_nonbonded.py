@@ -95,6 +95,7 @@ class TestNonbonded(GradientTest):
                 x = self.get_water_coords(dim)
                 E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
                 for cutoff in [1000.0, 0.9, 0.5, 0.001]:
+                # for cutoff in [1000.0, 0.5]:
 
                     print("cutoff", cutoff)
 
