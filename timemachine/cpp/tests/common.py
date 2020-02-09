@@ -5,10 +5,96 @@ import jax.numpy as jnp
 import functools
 
 
-from timemachine.potentials import bonded, nonbonded
+from timemachine.potentials import bonded, nonbonded, gbsa
 from timemachine.lib import ops, custom_ops
 
 from hilbertcurve.hilbertcurve import HilbertCurve
+
+
+def prepare_gbsa_system(
+    x,
+    E, # number of exclusions
+    P_charges,
+    P_radii,
+    P_scale_factors,
+    alpha,
+    beta,
+    gamma,
+    dielectric_offset,
+    screening,
+    surface_tension,
+    solute_dielectric,
+    solvent_dielectric,
+    probe_radius,
+    params=None,
+    precision=np.float64):
+
+    N = x.shape[0]
+    D = x.shape[1]
+
+    if params is None:
+        params = np.array([], dtype=np.float64)
+
+    # charges
+    charge_params = np.random.rand(P_charges).astype(np.float64)
+    charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
+    params = np.concatenate([params, charge_params])
+
+    # gb radiis
+    radii_params = np.random.rand(P_radii).astype(np.float64)
+    radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
+    params = np.concatenate([params, radii_params])
+
+    # scale factors
+    scale_params = np.random.rand(P_scale_factors).astype(np.float64)
+    scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
+    params = np.concatenate([params, scale_params])
+
+    # dielectric_offset = 0.009
+
+    # solute_dielectric = 0.6
+    # solvent_dielectric = 0.3
+    cutoff = 100.0
+
+    custom_gb = ops.GBSAReference(
+        charge_param_idxs,
+        radii_param_idxs,
+        scale_param_idxs,
+        alpha,
+        beta,
+        gamma,
+        dielectric_offset,
+        screening,
+        surface_tension,
+        solute_dielectric,
+        solvent_dielectric,
+        probe_radius,
+        cutoff,
+        D,
+        precision=precision
+    )
+
+    gbsa_obc_fn = functools.partial(
+        gbsa.gbsa_obc,
+        charge_idxs=charge_param_idxs,
+        radii_idxs=radii_param_idxs,
+        scale_idxs=scale_param_idxs,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        dielectric_offset=dielectric_offset,
+        screening=screening,
+        surface_tension=surface_tension,
+        solute_dielectric=solute_dielectric,
+        solvent_dielectric=solvent_dielectric,
+        probe_radius=probe_radius
+    )
+
+    def ref_total_energy(x, p):
+        return lj_fn(x, p) - lj_fn_exc(x, p) + es_fn(x, p)
+
+    return params, [gbsa_obc_fn], [custom_gb]
+
 
 def prepare_nonbonded_system(
     x,
@@ -202,6 +288,7 @@ class GradientTest(unittest.TestCase):
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
         ref_dx, _ = grad_fn(x, params)
 
+        # print(np.array(ref_dx), np.array(test_dx))
         self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),
