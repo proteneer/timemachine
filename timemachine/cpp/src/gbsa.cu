@@ -123,7 +123,7 @@ void compute_born_radii(
  
        born_radii[i_idx]      = 1.0/(1.0/offsetRadiusI - tanhSum/radiusI); 
 
-       printf("born radius %d %f\n", i_idx, born_radii[i_idx]);
+       // printf("born radius %d %f\n", i_idx, born_radii[i_idx]);
 
        obc_chain[i_idx]       = offsetRadiusI*(alpha_obc - 2.0*beta_obc*sum + 3.0*gamma_obc*sum2);
        obc_chain[i_idx]       = (1.0 - tanhSum*tanhSum)*obc_chain[i_idx]/radiusI;
@@ -166,7 +166,7 @@ double compute_born_energy_and_forces(
     if (soluteDielectric != 0.0 && solventDielectric != 0.0) {
           // preFactor = 2.0*electric_constant*((1.0/soluteDielectric) - (1.0/solventDielectric));
         preFactor = -screening*((1.0/soluteDielectric) - (1.0/solventDielectric));    
-        printf("prefactor %f\n", preFactor);
+        // printf("prefactor %f\n", preFactor);
     } else {
         preFactor = 0.0;
     }
@@ -210,15 +210,18 @@ double compute_born_energy_and_forces(
     // observed values. He did not think it was important enough to write up, so there is
     // no paper to cite.
 
-    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-    //     if (bornRadii[atomI] > 0.0) {
-    //         double r            = atomicRadii[atomI] + probeRadius;
-    //         double ratio6       = pow(atomicRadii[atomI]/bornRadii[atomI], 6.0);
-    //         double saTerm       = surface_tension*r*r*ratio6;
-    //         *energy                += saTerm;
-    //         forces[atomI]          -= 6.0*saTerm/bornRadii[atomI]; 
-    //     }
-    // }
+
+
+    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+        if (born_radii[atomI] > 0.0) {
+            double atomic_radii = params[atomic_radii_idxs[atomI]];
+            double r            = atomic_radii + probe_radius;
+            double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
+            double saTerm       = surface_tension*r*r*ratio6;
+            obcEnergy          += saTerm;
+            bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+        }
+    }
  
     // ---------------------------------------------------------------------------------------
 
@@ -237,18 +240,12 @@ double compute_born_energy_and_forces(
              r2 += dx*dx;
           }
           double r = sqrt(r2);
-          // double r2                 = deltaR[ReferenceForce::R2Index];
-          // double deltaX             = deltaR[ReferenceForce::XIndex];
-          // double deltaY             = deltaR[ReferenceForce::YIndex];
-          // double deltaZ             = deltaR[ReferenceForce::ZIndex];
-
           double alpha2_ij          = born_radii[atomI]*born_radii[atomJ];
           double D_ij               = r2/(4.0*alpha2_ij);
 
           double expTerm            = exp(-D_ij);
           double denominator2       = r2 + alpha2_ij*expTerm; 
           double denominator        = sqrt(denominator2);
-          printf("atom i %d j %d, denom: %f\n", atomI, atomJ, denominator);
           
           double partialChargeJ     = params[charge_param_idxs[atomJ]];
           double Gpol               = (partialChargeI*partialChargeJ)/denominator; 
@@ -260,30 +257,14 @@ double compute_born_energy_and_forces(
 
           if (atomI != atomJ) {
 
-              // (ytz): WTF? if cutoff is infinity - then this is zero
-              // copied from is from ReferenceOBC.cpp
+              // TBD: determine what we should do with cutoff
                 // energy -= partialChargeI*partialCharges[atomJ]/cutoff;
-
-              
               bornForces[atomJ]        += dGpol_dalpha2_ij*born_radii[atomI];
 
               for(int d=0; d < D; d++) {
                 out_forces[atomI*D+d] += dxs[d]*dGpol_dr;
                 out_forces[atomJ*D+d] -= dxs[d]*dGpol_dr;
               }
-
-
-              // deltaX                   *= dGpol_dr;
-              // deltaY                   *= dGpol_dr;
-              // deltaZ                   *= dGpol_dr;
-
-              // inputForces[atomI][0]    += deltaX;
-              // inputForces[atomI][1]    += deltaY;
-              // inputForces[atomI][2]    += deltaZ;
-
-              // inputForces[atomJ][0]    -= deltaX;
-              // inputForces[atomJ][1]    -= deltaY;
-              // inputForces[atomJ][2]    -= deltaZ;
 
           } else {
              energy *= 0.5;
@@ -299,16 +280,8 @@ double compute_born_energy_and_forces(
 
     // second main loop
 
-    // const vector<double>& obc_chain            = getObcChain();
-    // const vector<double>& atomicRadii         = _obcParameters->getAtomicRadii();
-
-    // const double alphaObc                   = _obcParameters->getAlphaObc();
-    // const double betaObc                    = _obcParameters->getBetaObc();
-    // const double gammaObc                   = _obcParameters->getGammaObc();
-    // const vector<double>& scaledRadiusFactor  = _obcParameters->getScaledRadiusFactors();
-
-    // compute factor that depends only on the outer loop index
-
+    // compute factor that depends only on the outer loop index (this is just the outer derivative
+    // of the born radius function)
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
        bornForces[atomI] *= born_radii[atomI]*born_radii[atomI]*obc_chain[atomI];      
     }
@@ -323,20 +296,6 @@ double compute_born_energy_and_forces(
        for (int atomJ = 0; atomJ < numberOfAtoms; atomJ++) {
 
           if (atomJ != atomI) {
-
-             // double deltaR[ReferenceForce::LastDeltaRIndex];
-             // if (_obcParameters->getPeriodic())
-             //    ReferenceForce::getDeltaRPeriodic(atomCoordinates[atomI], atomCoordinates[atomJ], _obcParameters->getPeriodicBox(), deltaR);
-             // else 
-             //    ReferenceForce::getDeltaR(atomCoordinates[atomI], atomCoordinates[atomJ], deltaR);
-             // if (_obcParameters->getUseCutoff() && deltaR[ReferenceForce::RIndex] > cutoffDistance)
-             //        continue;
-    
-             // double deltaX             = deltaR[ReferenceForce::XIndex];
-             // double deltaY             = deltaR[ReferenceForce::YIndex];
-             // double deltaZ             = deltaR[ReferenceForce::ZIndex];
-             // double r                  = deltaR[ReferenceForce::RIndex];
- 
 
              double r2 = 0;
              double dxs[D] = {0};
@@ -382,19 +341,6 @@ double compute_born_energy_and_forces(
                     out_forces[atomI*D+d] -= dxs[d]*de;
                     out_forces[atomJ*D+d] += dxs[d]*de;
                 }
-
-                // deltaX                  *= de;
-                // deltaY                  *= de;
-                // deltaZ                  *= de;
-    
-                // inputForces[atomI][0]   -= deltaX;
-                // inputForces[atomI][1]   -= deltaY;
-                // inputForces[atomI][2]   -= deltaZ;
-  
-                // inputForces[atomJ][0]   += deltaX;
-                // inputForces[atomJ][1]   += deltaY;
-                // inputForces[atomJ][2]   += deltaZ;
- 
              }
           }
        }

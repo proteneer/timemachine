@@ -295,6 +295,8 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
+        print("PASSED FORCES")
+
         x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         params_tangent = np.zeros_like(params)
 
