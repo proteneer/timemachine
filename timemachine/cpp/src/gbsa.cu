@@ -64,9 +64,7 @@ void compute_born_radii(
     for (int i_idx = 0; i_idx < numberOfAtoms; i_idx++) {
       
        double radiusI         = params[atomic_radii_idxs[i_idx]];
-
        double offsetRadiusI   = radiusI - dielectric_offset;
-
        double radiusIInverse  = 1.0/offsetRadiusI;
        double sum             = 0.0;
 
@@ -157,7 +155,8 @@ double compute_born_energy_and_forces(
     const double solvent_dielectric,
     const double probe_radius,
     const double cutoff,
-    std::vector<double> &out_forces
+    std::vector<double> &out_forces,
+    std::vector<double> &out_dU_dp
 ) {
 
     // constants
@@ -248,16 +247,6 @@ double compute_born_energy_and_forces(
     // ---------------------------------------------------------------------------------------
 
     // second main loop
-
-    // compute factor that depends only on the outer loop index (this is just the outer derivative
-    // of the born radius function)
-    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-    //    bornForces[atomI] *= born_radii[atomI]*born_radii[atomI]*obc_chain[atomI];      
-    // }
-
-
-
-
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
       // order matters here
       atomic_radii_derivatives[atomI] += bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately 
@@ -384,16 +373,92 @@ double compute_born_energy_and_forces(
     }
 
     for(int i=0; i < dPsi_dri.size(); i++) {
-      std::cout << "dPsi_dri parts: " << dPsi_dri[i] << " " << atomic_radii_derivatives[i] << std::endl;
+      // std::cout << "dPsi_dri parts: " << dPsi_dri[i] << " " << atomic_radii_derivatives[i] << std::endl;
+      out_dU_dp[atomic_radii_idxs[i]] = dPsi_dri[i]+atomic_radii_derivatives[i];
     }
 
     for(int i=0; i < dPsi_dsi.size(); i++) {
-      std::cout << "dPsi_dsi: " << dPsi_dsi[i] << std::endl;
+      out_dU_dp[scale_factor_idxs[i]] = dPsi_dsi[i];
     }
+
+
 
 
     std::cout << "energy" << obcEnergy << std::endl;
     // return obcEnergy;
+}
+
+template <typename RealType, int D>
+void GBSAReference<RealType, D>::execute_first_order(
+  const int N,
+  const int P,
+  const std::vector<double> &coords,
+  const std::vector<double> &params,
+  std::vector<double> &dU_dx,
+  std::vector<double> &dU_dp
+) {
+
+    if(coords.size() != dU_dx.size()) {
+      throw std::runtime_error("FATAL coords.size() != dU_dx.size()");
+    }
+
+    if(params.size() != dU_dp.size()) {
+      throw std::runtime_error("FATAL params.size() != dU_dp.size()");
+    }
+
+    std::vector<double> born_radii(N, 0);
+    std::vector<double> obc_chain(N, 0);
+    std::vector<double> obc_chain_ri(N, 0);
+
+    compute_born_radii<D>(
+        coords,
+        params,
+        atomic_radii_idxs_,
+        scale_factor_idxs_,
+        dielectric_offset_,
+        alpha_,
+        beta_,
+        gamma_,
+        cutoff_,
+        born_radii,
+        obc_chain,
+        obc_chain_ri
+    );
+
+    std::vector<double> out_forces(N*D, 0);
+
+    // CPU
+    compute_born_energy_and_forces<D>(
+        coords,
+        params,
+        charge_param_idxs_,
+        atomic_radii_idxs_,
+        scale_factor_idxs_,
+        born_radii,
+        obc_chain,
+        obc_chain_ri,
+        alpha_,
+        beta_,
+        gamma_,
+        dielectric_offset_,
+        screening_,
+        surface_tension_,
+        solute_dielectric_,
+        solvent_dielectric_,
+        probe_radius_,
+        cutoff_,
+        dU_dx,
+        dU_dp
+    );
+
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaPeekAtLastError());
+
+    // for(int i=0; i< out_forces.size(); i++) {
+    //     dU_dx[i] = static_cast<unsigned long long>((long long) (out_forces[i]*FIXED_EXPONENT));
+    // }
+
+
 }
 
 template <typename RealType, int D>
@@ -458,6 +523,8 @@ void GBSAReference<RealType, D>::execute_device(
     std::vector<double> out_forces(N*D, 0);
 
     // CPU
+    std::vector<double> out_dU_dp(N*D, 0);
+
     compute_born_energy_and_forces<D>(
         coords,
         params,
@@ -477,7 +544,8 @@ void GBSAReference<RealType, D>::execute_device(
         solvent_dielectric_,
         probe_radius_,
         cutoff_,
-        out_forces
+        out_forces,
+        out_dU_dp
     );
 
     cudaDeviceSynchronize();

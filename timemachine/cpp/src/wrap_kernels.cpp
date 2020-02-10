@@ -518,8 +518,46 @@ void declare_gbsa_reference(py::module &m, const char *typestr) {
             cutoff
         );
     }
-    ));
+    ))
+    .def("execute_first_order", [](timemachine::GBSAReference<RealType, D> gbsa,
+        const py::array_t<double, py::array::c_style> &coords,
+        const py::array_t<double, py::array::c_style> &params) -> py::tuple {
 
+            const long unsigned int N = coords.shape()[0];
+            const long unsigned int DD = coords.shape()[1];
+            const long unsigned int P = params.shape()[0];
+
+            if(DD != D) throw std::runtime_error("D mismatch");
+
+
+            std::vector<double> dU_dx(N*DD, 0);
+            std::vector<double> dU_dp(P, 0);
+
+            std::vector<double> in_coords(coords.data(), coords.data()+coords.size());
+            std::vector<double> in_params(params.data(), params.data()+params.size());
+
+            gbsa.execute_first_order(
+                N,
+                P,
+                in_coords,
+                in_params,
+                dU_dx,
+                dU_dp
+            );
+
+            py::array_t<double, py::array::c_style> py_out_coords({N, DD});
+            for(int i=0; i < dU_dx.size(); i++) {
+                py_out_coords.mutable_data()[i] = dU_dx[i];
+            }
+
+
+            py::array_t<double, py::array::c_style> py_out_dU_dp({P});
+            for(int i=0; i < dU_dp.size(); i++) {
+                py_out_dU_dp.mutable_data()[i] = dU_dp[i];
+            }
+
+            return py::make_tuple(py_out_coords, py_out_dU_dp);
+    });
 }
 
 PYBIND11_MODULE(custom_ops, m) {

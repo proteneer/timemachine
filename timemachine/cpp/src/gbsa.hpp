@@ -58,6 +58,15 @@ public:
     // FIX ME with actual destructors later
     ~GBSAReference() {};
 
+    void execute_first_order(
+        const int N,
+        const int P,
+        const std::vector<double> &coords,
+        const std::vector<double> &params,
+        std::vector<double> &dU_dx,
+        std::vector<double> &dU_dp
+    );
+
     /*
     Execute the force computation, the semantics are:
 
