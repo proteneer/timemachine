@@ -51,7 +51,8 @@ void compute_born_radii(
     const double gamma_obc,
     const double cutoff,
     std::vector<double>& born_radii,
-    std::vector<double>& obc_chain) {
+    std::vector<double>& obc_chain,
+    std::vector<double>& obc_chain_ri) {
 
     int numberOfAtoms = atomic_radii_idxs.size();
     int N = numberOfAtoms;
@@ -87,8 +88,16 @@ void compute_born_radii(
 
              if (offsetRadiusI < rScaledRadiusJ) {
                 double rInverse = 1.0/r;
-                double l_ij     = offsetRadiusI > abs(r - scaledRadiusJ) ? offsetRadiusI : abs(r - scaledRadiusJ);
-                       l_ij     = 1.0/l_ij;
+
+                double l_ij = 0;
+                if(offsetRadiusI > abs(r - scaledRadiusJ)) {
+                  l_ij = offsetRadiusI;
+                } else {
+                  l_ij = abs(r - scaledRadiusJ);
+                }
+
+                // double l_ij     = offsetRadiusI > abs(r - scaledRadiusJ) ? offsetRadiusI : abs(r - scaledRadiusJ);
+                l_ij     = 1.0/l_ij;
 
                 double u_ij     = 1.0/rScaledRadiusJ;
 
@@ -98,18 +107,20 @@ void compute_born_radii(
                 double ratio    = log((u_ij/l_ij));
                 double term     = l_ij - u_ij + 0.25*r*(u_ij2 - l_ij2)  + (0.5*rInverse*ratio) + (0.25*scaledRadiusJ*scaledRadiusJ*rInverse)*(l_ij2 - u_ij2);
 
+
+                printf("term1 %f\n", term*0.5*offsetRadiusI);
                 // this case (atom i completely inside atom j) is not considered in the original paper
                 // Jay Ponder and the authors of Tinker recognized this and
                 // worked out the details
 
-                if (offsetRadiusI < (scaledRadiusJ - r)) {
-                   term += 2.0*(radiusIInverse - l_ij);
-                }
+                // if (offsetRadiusI < (scaledRadiusJ - r)) {
+                   // term += 2.0*(radiusIInverse - l_ij);
+                // }
                 sum += term;
 
-             }
-          }
-       }
+               }
+            }
+         }
 
        // std::cout << "psi " << i_idx << " " << sum/2 << std::endl; 
        // OBC-specific code (Eqs. 6-8 in paper)
@@ -123,10 +134,16 @@ void compute_born_radii(
  
        born_radii[i_idx]      = 1.0/(1.0/offsetRadiusI - tanhSum/radiusI); 
 
-       // printf("born radius %d %f\n", i_idx, born_radii[i_idx]);
 
+       // dRi/dPsi
        obc_chain[i_idx]       = offsetRadiusI*(alpha_obc - 2.0*beta_obc*sum + 3.0*gamma_obc*sum2);
        obc_chain[i_idx]       = (1.0 - tanhSum*tanhSum)*obc_chain[i_idx]/radiusI;
+       obc_chain[i_idx]      *= born_radii[i_idx]*born_radii[i_idx];
+       
+       // flip the signs later
+       // dRi/dri
+       obc_chain_ri[i_idx]    = -1.0/(offsetRadiusI*offsetRadiusI) + tanhSum/(radiusI*radiusI);
+       obc_chain_ri[i_idx]   *= -born_radii[i_idx]*born_radii[i_idx];
 
     }
 }
@@ -140,6 +157,7 @@ double compute_born_energy_and_forces(
     const std::vector<int>& scale_factor_idxs,
     const std::vector<double>& born_radii,
     const std::vector<double>& obc_chain,
+    const std::vector<double>& obc_chain_ri,
     const double alpha_obc,
     const double beta_obc,
     const double gamma_obc,
@@ -157,6 +175,7 @@ double compute_born_energy_and_forces(
 
     // const int numberOfAtoms = _obcParameters->getNumberOfAtoms();
     const int numberOfAtoms = atomic_radii_idxs.size();
+    const int N = numberOfAtoms;
 
     const double dielectricOffset = dielectric_offset;
     const double cutoffDistance = cutoff;
@@ -212,16 +231,16 @@ double compute_born_energy_and_forces(
 
 
 
-    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-        if (born_radii[atomI] > 0.0) {
-            double atomic_radii = params[atomic_radii_idxs[atomI]];
-            double r            = atomic_radii + probe_radius;
-            double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
-            double saTerm       = surface_tension*r*r*ratio6;
-            obcEnergy          += saTerm;
-            bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
-        }
-    }
+    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+    //     if (born_radii[atomI] > 0.0) {
+    //         double atomic_radii = params[atomic_radii_idxs[atomI]];
+    //         double r            = atomic_radii + probe_radius;
+    //         double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
+    //         double saTerm       = surface_tension*r*r*ratio6;
+    //         obcEnergy          += saTerm;
+    //         bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+    //     }
+    // }
  
     // ---------------------------------------------------------------------------------------
 
@@ -282,9 +301,25 @@ double compute_born_energy_and_forces(
 
     // compute factor that depends only on the outer loop index (this is just the outer derivative
     // of the born radius function)
+    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+    //    bornForces[atomI] *= born_radii[atomI]*born_radii[atomI]*obc_chain[atomI];      
+    // }
+
+    // obc chain is derivative of the born radius with respect to the psi sum
+
+    // can we factor out LHS?
+
+    std::vector<double> atomic_radii_derivatives(N, 0);
+
+
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-       bornForces[atomI] *= born_radii[atomI]*born_radii[atomI]*obc_chain[atomI];      
+      // order matters here
+      // atomic_radii_derivatives[atomI] = bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately
+      bornForces[atomI] *= obc_chain[atomI];
     }
+
+    std::vector<double> dPsi_dx(N*D, 0);
+
 
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
  
@@ -311,41 +346,75 @@ double compute_born_energy_and_forces(
              double radiusJ            = params[atomic_radii_idxs[atomJ]];
              double offsetRadiusJ      = radiusJ - dielectricOffset;
 
-             double scaledRadiusJ      = offsetRadiusJ*params[scale_factor_idxs[atomJ]];
+             double scaleFactorJ       = params[scale_factor_idxs[atomJ]];
+             double scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
              double scaledRadiusJ2     = scaledRadiusJ*scaledRadiusJ;
              double rScaledRadiusJ     = r + scaledRadiusJ;
 
+             // this is *not* correct
              // dL/dr & dU/dr are zero (this can be shown analytically)
              // removed from calculation
 
              if (offsetRadiusI < rScaledRadiusJ) {
 
-                double l_ij          = offsetRadiusI > abs(r - scaledRadiusJ) ? offsetRadiusI : abs(r - scaledRadiusJ);
-                       l_ij          = 1.0/l_ij;
+                // double l_ij          = offsetRadiusI > abs(r - scaledRadiusJ) ? offsetRadiusI : abs(r - scaledRadiusJ);
+                //        l_ij          = 1.0/l_ij;
+                // double u_ij          = 1.0/rScaledRadiusJ;
+                // double l_ij2         = l_ij*l_ij;
+                // double u_ij2         = u_ij*u_ij; 
+                // double rInverse      = 1.0/r;
+                // double r2Inverse     = rInverse*rInverse;
+                // double t3            = 0.125*(1.0 + scaledRadiusJ2*r2Inverse)*(l_ij2 - u_ij2) + 0.25*log(u_ij/l_ij)*r2Inverse;
 
-                double u_ij          = 1.0/rScaledRadiusJ;
+                // printf("%d t3 RHS: %.8f\n", atomI, t3);
+                // double de            = bornForces[atomI]*t3*rInverse;
 
-                double l_ij2         = l_ij*l_ij;
+                // for(int d=0; d < D; d++) {
+                //     dPsi_dx[atomI*D+d] -= dxs[d]*de;
+                //     dPsi_dx[atomJ*D+d] += dxs[d]*de;
+                // }
 
-                double u_ij2         = u_ij*u_ij;
- 
-                double rInverse      = 1.0/r;
-                double r2Inverse     = rInverse*rInverse;
+                // start manual derivative
+                double de = 0; // derivative of Psi wrt the distance
+                if(offsetRadiusI > abs(r - scaledRadiusJ)) {
+                  double term = (1.0/2.0)*(dielectricOffset - radiusI)*(-1.0/4.0*r*(pow(r - scaleFactorJ*(dielectricOffset - radiusJ), -2) - 1/pow(dielectricOffset - radiusI, 2)) + 1.0/(r - scaleFactorJ*(dielectricOffset - radiusJ)) + 1.0/(dielectricOffset - radiusI) + (1.0/4.0)*pow(scaleFactorJ, 2)*pow(dielectricOffset - radiusJ, 2)*(pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), -2) - 1/pow(-dielectricOffset + radiusI, 2))/r - 1.0/2.0*log(-(dielectricOffset - radiusI)/(r - scaleFactorJ*(dielectricOffset - radiusJ)))/r);
 
-                double t3            = 0.125*(1.0 + scaledRadiusJ2*r2Inverse)*(l_ij2 - u_ij2) + 0.25*log(u_ij/l_ij)*r2Inverse;
+                  // printf("a term2 %f\n", term);
+                  // de = (-1.0/2.0*dielectricOffset + (1.0/2.0)*radiusI)*(-1.0/2.0*r/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 3) + (5.0/4.0)/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 2) - 1.0/4.0/pow(-dielectricOffset + radiusI, 2) + (1.0/2.0)*pow(scaleFactorJ, 2)*pow(-dielectricOffset + radiusJ, 2)/(r*pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 3)) - 1.0/2.0/(r*(r + scaleFactorJ*(-dielectricOffset + radiusJ))) - 1.0/4.0*pow(scaleFactorJ, 2)*pow(-dielectricOffset + radiusJ, 2)*(-1/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 2) + pow(-dielectricOffset + radiusI, -2))/pow(r, 2) - 1.0/2.0*log((-dielectricOffset + radiusI)/(r + scaleFactorJ*(-dielectricOffset + radiusJ)))/pow(r, 2));
 
-                double de            = bornForces[atomI]*t3*rInverse;
+                  de = -1.0/2.0*r/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 3) + (5.0/4.0)/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 2) - 1.0/4.0/pow(-dielectricOffset + radiusI, 2) + (1.0/2.0)*pow(scaleFactorJ, 2)*pow(-dielectricOffset + radiusJ, 2)/(r*pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 3)) - 1.0/2.0/(r*(r + scaleFactorJ*(-dielectricOffset + radiusJ))) - 1.0/4.0*pow(scaleFactorJ, 2)*pow(-dielectricOffset + radiusJ, 2)*(-1/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 2) + pow(-dielectricOffset + radiusI, -2))/pow(r, 2) - 1.0/2.0*log((-dielectricOffset + radiusI)/(r + scaleFactorJ*(-dielectricOffset + radiusJ)))/pow(r, 2);
 
+                  printf("%d de a RHS: %.8f\n", atomI, de);
+
+                } else {
+                  double term = -1.0/2.0*(dielectricOffset - radiusI)*(-1.0/4.0*r*(pow(r + scaleFactorJ*(dielectricOffset - radiusJ), -2) - 1/pow(r - scaleFactorJ*(dielectricOffset - radiusJ), 2)) + 1.0/fabs(r + scaleFactorJ*(dielectricOffset - radiusJ)) - 1/(r - scaleFactorJ*(dielectricOffset - radiusJ)) - 1.0/4.0*pow(scaleFactorJ, 2)*pow(dielectricOffset - radiusJ, 2)*(-1/pow(r + scaleFactorJ*(dielectricOffset - radiusJ), 2) + pow(r - scaleFactorJ*(dielectricOffset - radiusJ), -2))/r + (1.0/2.0)*log(fabs(r + scaleFactorJ*(dielectricOffset - radiusJ))/(r - scaleFactorJ*(dielectricOffset - radiusJ)))/r);
+                  // printf("b term2 %f\n", term);
+
+                  // de = (-1.0/2.0*dielectricOffset + (1.0/2.0)*radiusI)*((1.0/4.0)*r*(-2/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 3) + 2/pow(r - scaleFactorJ*(-dielectricOffset + radiusJ), 3)) + (5.0/4.0)/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 2) - (((r - scaleFactorJ*(-dielectricOffset + radiusJ)) > 0) - ((r - scaleFactorJ*(-dielectricOffset + radiusJ)) < 0))/pow(r - scaleFactorJ*(-dielectricOffset + radiusJ), 2) - 1.0/4.0/pow(r - scaleFactorJ*(-dielectricOffset + radiusJ), 2) + (1.0/4.0)*pow(scaleFactorJ, 2)*pow(-dielectricOffset + radiusJ, 2)*(2/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 3) - 2/pow(r - scaleFactorJ*(-dielectricOffset + radiusJ), 3))/r + (1.0/2.0)*(r + scaleFactorJ*(-dielectricOffset + radiusJ))*((((r - scaleFactorJ*(-dielectricOffset + radiusJ)) > 0) - ((r - scaleFactorJ*(-dielectricOffset + radiusJ)) < 0))/(r + scaleFactorJ*(-dielectricOffset + radiusJ)) - fabs(r - scaleFactorJ*(-dielectricOffset + radiusJ))/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 2))/(r*fabs(r - scaleFactorJ*(-dielectricOffset + radiusJ))) - 1.0/4.0*pow(scaleFactorJ, 2)*pow(-dielectricOffset + radiusJ, 2)*(-1/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 2) + pow(r - scaleFactorJ*(-dielectricOffset + radiusJ), -2))/pow(r, 2) - 1.0/2.0*log(fabs(r - scaleFactorJ*(-dielectricOffset + radiusJ))/(r + scaleFactorJ*(-dielectricOffset + radiusJ)))/pow(r, 2));
+                  de = (1.0/4.0)*r*(-2/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 3) + 2/pow(r - scaleFactorJ*(-dielectricOffset + radiusJ), 3)) + (5.0/4.0)/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 2) - (((r - scaleFactorJ*(-dielectricOffset + radiusJ)) > 0) - ((r - scaleFactorJ*(-dielectricOffset + radiusJ)) < 0))/pow(r - scaleFactorJ*(-dielectricOffset + radiusJ), 2) - 1.0/4.0/pow(r - scaleFactorJ*(-dielectricOffset + radiusJ), 2) + (1.0/4.0)*pow(scaleFactorJ, 2)*pow(-dielectricOffset + radiusJ, 2)*(2/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 3) - 2/pow(r - scaleFactorJ*(-dielectricOffset + radiusJ), 3))/r + (1.0/2.0)*(r + scaleFactorJ*(-dielectricOffset + radiusJ))*((((r - scaleFactorJ*(-dielectricOffset + radiusJ)) > 0) - ((r - scaleFactorJ*(-dielectricOffset + radiusJ)) < 0))/(r + scaleFactorJ*(-dielectricOffset + radiusJ)) - fabs(r - scaleFactorJ*(-dielectricOffset + radiusJ))/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 2))/(r*fabs(r - scaleFactorJ*(-dielectricOffset + radiusJ))) - 1.0/4.0*pow(scaleFactorJ, 2)*pow(-dielectricOffset + radiusJ, 2)*(-1/pow(r + scaleFactorJ*(-dielectricOffset + radiusJ), 2) + pow(r - scaleFactorJ*(-dielectricOffset + radiusJ), -2))/pow(r, 2) - 1.0/2.0*log(fabs(r - scaleFactorJ*(-dielectricOffset + radiusJ))/(r + scaleFactorJ*(-dielectricOffset + radiusJ)))/pow(r, 2);
+
+                    printf("%d de b RHS: %.8f\n", atomI, de);
+                }
+
+                de = 0.5*bornForces[atomI]*de/r;
 
                 for(int d=0; d < D; d++) {
-                    out_forces[atomI*D+d] -= dxs[d]*de;
-                    out_forces[atomJ*D+d] += dxs[d]*de;
+                    // 1/d is for the derivative of the xyz itself
+                    dPsi_dx[atomI*D+d] += dxs[d]*de;
+                    dPsi_dx[atomJ*D+d] -= dxs[d]*de;
                 }
              }
           }
        }
 
     }
+
+    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+      for(int d=0; d < D; d++) {
+        out_forces[atomI*D+d] += dPsi_dx[atomI*D+d];
+      }
+    }
+
 
     std::cout << "energy" << obcEnergy << std::endl;
     // return obcEnergy;
@@ -394,6 +463,7 @@ void GBSAReference<RealType, D>::execute_device(
 
     std::vector<double> born_radii(N, 0);
     std::vector<double> obc_chain(N, 0);
+    std::vector<double> obc_chain_ri(N, 0);
 
     compute_born_radii<D>(
         coords,
@@ -406,7 +476,8 @@ void GBSAReference<RealType, D>::execute_device(
         gamma_,
         cutoff_,
         born_radii,
-        obc_chain
+        obc_chain,
+        obc_chain_ri
     );
 
     std::vector<double> out_forces(N*D, 0);
@@ -420,6 +491,7 @@ void GBSAReference<RealType, D>::execute_device(
         scale_factor_idxs_,
         born_radii,
         obc_chain,
+        obc_chain_ri,
         alpha_,
         beta_,
         gamma_,

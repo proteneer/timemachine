@@ -1,6 +1,5 @@
 # taken from josh fass's code but fixed a couple of bugs
 import jax.numpy as np
-# import numpy as onp
 from jax import grad, jit
 
 from timemachine.potentials.jax_utils import delta_r, distance
@@ -9,6 +8,41 @@ from timemachine.potentials.jax_utils import delta_r, distance
 def step(x):
     # return (x > 0)
     return 1.0 * (x >= 0)
+
+def psi(coords, # NxD
+    radii, # N
+    scales # N
+    ):
+
+    ri = np.expand_dims(coords, 0)
+    rj = np.expand_dims(coords, 1)
+    dij = distance(ri, rj, None)
+
+    eye = np.eye(N, dtype=dij.dtype)
+
+    r = dij + eye # so I don't have divide-by-zero nonsense
+    or1 = radii.reshape((N, 1)) - dielectric_offset
+    or2 = radii.reshape((1, N)) - dielectric_offset
+    sr2 = scales.reshape((1, N)) * or2
+
+    L = np.maximum(or1, abs(r - sr2))
+    U = r + sr2
+
+    I = 1 / L - 1 / U + 0.25 * (r - sr2 ** 2 / r) * (1 / (U ** 2) - 1 / (L ** 2)) + 0.5 * np.log(
+        L / U) / r
+    # handle the interior case
+    I = np.where(or1 < (sr2 - r), I + 2*(1/or1 - 1/L), I)
+    I = step(r + sr2 - or1) * 0.5 * I
+    I -= np.diag(np.diag(I))
+    I = np.sum(I, axis=1)
+
+    # okay, next compute born radii
+    offset_radius = radii - dielectric_offset
+
+    psi = I * offset_radius
+    # return a vector of length N
+    return psi
+
 
 #@jit
 def gbsa_obc(
@@ -31,7 +65,6 @@ def gbsa_obc(
 
     radii = params[radii_idxs]
     scales = params[scale_idxs]
-    charges = params[charge_idxs]
 
     ri = np.expand_dims(coords, 0)
     rj = np.expand_dims(coords, 1)
@@ -71,9 +104,11 @@ def gbsa_obc(
     E = 0.0
     # single particle
     # ACE
-    E += np.sum(surface_tension * (radii + probe_radius) ** 2 * (radii / B) ** 6)
+    # E += np.sum(surface_tension * (radii + probe_radius) ** 2 * (radii / B) ** 6)
 
     # on-diagonal
+    charges = params[charge_idxs]
+
     E += np.sum(-0.5 * screening * (1 / solute_dielectric - 1 / solvent_dielectric) * charges ** 2 / B)
 
     # particle pair
