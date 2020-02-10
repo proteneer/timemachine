@@ -304,7 +304,7 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
-        np.testing.assert_allclose(ref_dp[4:], test_dp[4:], rtol=1e-10)
+        np.testing.assert_allclose(ref_dp[:4], test_dp[:4], rtol=1e-10)
 
         #
         # print("dri", ref_dp[4:4+N])
@@ -334,4 +334,5 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
+        # having some error in this is okay because of how we accumulate (this is just a sum)
         np.testing.assert_allclose(t[1], test_p_tangent, rtol=5e-5)
