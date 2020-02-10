@@ -38,16 +38,24 @@ def prepare_gbsa_system(
     # charges
     charge_params = np.random.rand(P_charges).astype(np.float64)
     charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
+    print(charge_param_idxs)
     params = np.concatenate([params, charge_params])
 
     # gb radiis
     radii_params = np.random.rand(P_radii).astype(np.float64)
-    radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
+    # radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
+    assert P_radii == N
+    radii_param_idxs = np.arange(P_radii, dtype=np.int32) + len(params)
+    print(radii_param_idxs)
+
     params = np.concatenate([params, radii_params])
 
     # scale factors
     scale_params = np.random.rand(P_scale_factors).astype(np.float64)
-    scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
+    # scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
+    assert P_scale_factors == N
+    scale_param_idxs = np.arange(P_scale_factors, dtype=np.int32) + len(params)
+    print(scale_param_idxs)
     params = np.concatenate([params, scale_params])
 
     # dielectric_offset = 0.009
@@ -286,7 +294,7 @@ class GradientTest(unittest.TestCase):
         test_dx = custom_force.execute(x, params)
 
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
-        ref_dx, _ = grad_fn(x, params)
+        ref_dx, ref_dp = grad_fn(x, params)
 
         print(np.array(ref_dx))
         print(np.array(test_dx))
@@ -295,6 +303,10 @@ class GradientTest(unittest.TestCase):
             np.array(test_dx),
             rtol,
         )
+
+        #
+        print("dri", ref_dp[4:4+N])
+        print("dsi", ref_dp[4+N:])
 
         print("PASSED FORCES")
         assert 0

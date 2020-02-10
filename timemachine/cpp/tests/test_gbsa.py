@@ -53,8 +53,10 @@ class TestGBSA(GradientTest):
         D = 4
         E = 5
         P_charges = 4
-        P_radii = 5
-        P_scale_factors = 6
+        # P_radii = 8
+        P_radii = N
+        # P_scale_factors = 6
+        P_scale_factors = N
 
         dielectric_offset = 0.009
         solute_dielectric = 1.0

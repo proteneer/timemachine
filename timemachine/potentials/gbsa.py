@@ -9,41 +9,6 @@ def step(x):
     # return (x > 0)
     return 1.0 * (x >= 0)
 
-def psi(coords, # NxD
-    radii, # N
-    scales # N
-    ):
-
-    ri = np.expand_dims(coords, 0)
-    rj = np.expand_dims(coords, 1)
-    dij = distance(ri, rj, None)
-
-    eye = np.eye(N, dtype=dij.dtype)
-
-    r = dij + eye # so I don't have divide-by-zero nonsense
-    or1 = radii.reshape((N, 1)) - dielectric_offset
-    or2 = radii.reshape((1, N)) - dielectric_offset
-    sr2 = scales.reshape((1, N)) * or2
-
-    L = np.maximum(or1, abs(r - sr2))
-    U = r + sr2
-
-    I = 1 / L - 1 / U + 0.25 * (r - sr2 ** 2 / r) * (1 / (U ** 2) - 1 / (L ** 2)) + 0.5 * np.log(
-        L / U) / r
-    # handle the interior case
-    I = np.where(or1 < (sr2 - r), I + 2*(1/or1 - 1/L), I)
-    I = step(r + sr2 - or1) * 0.5 * I
-    I -= np.diag(np.diag(I))
-    I = np.sum(I, axis=1)
-
-    # okay, next compute born radii
-    offset_radius = radii - dielectric_offset
-
-    psi = I * offset_radius
-    # return a vector of length N
-    return psi
-
-
 #@jit
 def gbsa_obc(
     coords,
@@ -84,7 +49,7 @@ def gbsa_obc(
         L / U) / r
     # handle the interior case
     I = np.where(or1 < (sr2 - r), I + 2*(1/or1 - 1/L), I)
-    I = step(r + sr2 - or1) * 0.5 * I
+    I = step(r + sr2 - or1) * 0.5 * I # note the extra 0.5 here
     I -= np.diag(np.diag(I))
     I = np.sum(I, axis=1)
 
