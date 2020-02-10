@@ -110,7 +110,6 @@ void compute_born_radii(
                 // this case (atom i completely inside atom j) is not considered in the original paper
                 // Jay Ponder and the authors of Tinker recognized this and
                 // worked out the details
-
                 if (offsetRadiusI < (scaledRadiusJ - r)) {
                    term += 2.0*(radiusIInverse - l_ij);
                 }
@@ -119,19 +118,12 @@ void compute_born_radii(
                }
             }
          }
-
-       // std::cout << "psi " << i_idx << " " << sum/2 << std::endl; 
-       // OBC-specific code (Eqs. 6-8 in paper)
-       // std::cout << "ori" << offsetRadiusI << std::endl;
-
        sum              *= 0.5*offsetRadiusI;
-       // std::cout << "sum " << sum << std::endl;
        double sum2       = sum*sum;
        double sum3       = sum*sum2;
        double tanhSum    = tanh(alpha_obc*sum - beta_obc*sum2 + gamma_obc*sum3);
  
        born_radii[i_idx]      = 1.0/(1.0/offsetRadiusI - tanhSum/radiusI); 
-
 
        // dRi/dPsi
        obc_chain[i_idx]       = (alpha_obc - 2.0*beta_obc*sum + 3.0*gamma_obc*sum2); // !@#$ why did you move it here!
@@ -169,8 +161,6 @@ double compute_born_energy_and_forces(
 ) {
 
     // constants
-
-    // const int numberOfAtoms = _obcParameters->getNumberOfAtoms();
     const int numberOfAtoms = atomic_radii_idxs.size();
     const int N = numberOfAtoms;
 
@@ -180,52 +170,14 @@ double compute_born_energy_and_forces(
     const double solventDielectric = solvent_dielectric;
     double preFactor;
     if (soluteDielectric != 0.0 && solventDielectric != 0.0) {
-          // preFactor = 2.0*electric_constant*((1.0/soluteDielectric) - (1.0/solventDielectric));
         preFactor = -screening*((1.0/soluteDielectric) - (1.0/solventDielectric));    
-        // printf("prefactor %f\n", preFactor);
     } else {
         preFactor = 0.0;
     }
 
-    // ---------------------------------------------------------------------------------------
-
-    // compute Born radii
-    // vector<double> born_radii(numberOfAtoms);
-    // computeBornRadii(atomCoordinates, born_radii);
-
-    // set energy/forces to zero
 
     double obcEnergy = 0.0;
     std::vector<double> bornForces(numberOfAtoms, 0.0);
-
-    // ---------------------------------------------------------------------------------------
-
-    // compute the nonpolar solvation via ACE approximation
-    // (ytz): disabled for now
-    // if (includeAceApproximation()) {
-       // computeAceNonPolarForce(_obcParameters, born_radii, &obcEnergy, bornForces);
-    // }
-
-    // const double probeRadius          = obcParameters->getProbeRadius();
-    // const double surface_tension    = obcParameters->getPi4Asolv();
-
-    // const vector<double>& atomicRadii   = obcParameters->getAtomicRadii();
-    // int numberOfAtoms                     = obcParameters->getNumberOfAtoms();
-
-    // the original ACE equation is based on Eq.2 of
-
-    // M. Schaefer, C. Bartels and M. Karplus, "Solution Conformations
-    // and Thermodynamics of Structured Peptides: Molecular Dynamics
-    // Simulation with an Implicit Solvation Model", J. Mol. Biol.,
-    // 284, 835-848 (1998)  (ACE Method)
-
-    // The original equation includes the factor (atomicRadii[atomI]/bornRadii[atomI]) to the first power,
-    // whereas here the ratio is raised to the sixth power: (atomicRadii[atomI]/bornRadii[atomI])**6
-
-    // This modification was made by Jay Ponder who observed it gave better correlations w/
-    // observed values. He did not think it was important enough to write up, so there is
-    // no paper to cite.
-
     std::vector<double> atomic_radii_derivatives(N, 0);
 
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
@@ -308,8 +260,7 @@ double compute_born_energy_and_forces(
 
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
       // order matters here
-      atomic_radii_derivatives[atomI] += bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately *before* we do the rest of the chain rule
-      // dU/dR.dR/dPsi
+      atomic_radii_derivatives[atomI] += bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately 
       bornForces[atomI] *= obc_chain[atomI]; // dU/dR*dR/dPsi
     }
 
