@@ -226,16 +226,19 @@ double compute_born_energy_and_forces(
     // observed values. He did not think it was important enough to write up, so there is
     // no paper to cite.
 
-    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-    //     if (born_radii[atomI] > 0.0) {
-    //         double atomic_radii = params[atomic_radii_idxs[atomI]];
-    //         double r            = atomic_radii + probe_radius;
-    //         double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
-    //         double saTerm       = surface_tension*r*r*ratio6;
-    //         obcEnergy          += saTerm;
-    //         bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
-    //     }
-    // }
+    std::vector<double> atomic_radii_derivatives(N, 0);
+
+    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+        if (born_radii[atomI] > 0.0) {
+            double atomic_radii = params[atomic_radii_idxs[atomI]];
+            double r            = atomic_radii + probe_radius;
+            double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
+            double saTerm       = surface_tension*r*r*ratio6;
+            obcEnergy          += saTerm;
+            bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+            atomic_radii_derivatives[atomI] += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/pow(born_radii[atomI], 6);
+        }
+    }
  
     // ---------------------------------------------------------------------------------------
 
@@ -300,12 +303,12 @@ double compute_born_energy_and_forces(
     //    bornForces[atomI] *= born_radii[atomI]*born_radii[atomI]*obc_chain[atomI];      
     // }
 
-    std::vector<double> atomic_radii_derivatives(N, 0);
+
 
 
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
       // order matters here
-      atomic_radii_derivatives[atomI] = bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately *before* we do the rest of the chain rule
+      atomic_radii_derivatives[atomI] += bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately *before* we do the rest of the chain rule
       // dU/dR.dR/dPsi
       bornForces[atomI] *= obc_chain[atomI]; // dU/dR*dR/dPsi
     }

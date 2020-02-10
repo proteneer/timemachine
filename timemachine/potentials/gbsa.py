@@ -69,7 +69,7 @@ def gbsa_obc(
     E = 0.0
     # single particle
     # ACE
-    # E += np.sum(surface_tension * (radii + probe_radius) ** 2 * (radii / B) ** 6)
+    E += np.sum(surface_tension * (radii + probe_radius) ** 2 * (radii / B) ** 6)
 
     # on-diagonal
     charges = params[charge_idxs]
