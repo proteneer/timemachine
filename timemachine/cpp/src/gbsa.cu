@@ -407,11 +407,6 @@ double compute_born_energy_and_forces(
 
                 dPsi_dri[atomI] += dpsi_dri;
                 dPsi_dri[atomJ] += dpsi_drj;
-
-                dPsi_dri[atomI] += dpsi_dri;
-                dPsi_dri[atomJ] += dpsi_drj;
-
-
                 dPsi_dsi[atomJ] += dpsi_dsj;
 
                 for(int d=0; d < D; d++) {
