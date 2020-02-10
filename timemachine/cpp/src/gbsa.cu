@@ -134,7 +134,7 @@ void compute_born_radii(
 
 
        // dRi/dPsi
-       obc_chain[i_idx]       = offsetRadiusI*(alpha_obc - 2.0*beta_obc*sum + 3.0*gamma_obc*sum2);
+       obc_chain[i_idx]       = (alpha_obc - 2.0*beta_obc*sum + 3.0*gamma_obc*sum2); // !@#$ why did you move it here!
        obc_chain[i_idx]       = (1.0 - tanhSum*tanhSum)*obc_chain[i_idx]/radiusI; // this takes care of the radiusI prefactor
        obc_chain[i_idx]      *= born_radii[i_idx]*born_radii[i_idx];
        
@@ -400,7 +400,7 @@ double compute_born_energy_and_forces(
 
                 // is bornForces
 
-                de *= 0.5*bornForces[atomI];
+                de *= 0.5*bornForces[atomI]*offsetRadiusI;
                 dpsi_dri *= 0.5*bornForces[atomI];
                 dpsi_drj *= 0.5*bornForces[atomI];
                 dpsi_dsj *= 0.5*bornForces[atomI];
