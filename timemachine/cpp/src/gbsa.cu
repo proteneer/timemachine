@@ -5,6 +5,7 @@
 #include "gbsa_jvp.cuh"
 #include "kernel_utils.cuh"
 #include "math_utils.cuh"
+#include "k_gbsa.cuh"
 
 namespace timemachine {
 
@@ -38,6 +39,11 @@ GBSAReference<RealType, D>::GBSAReference(
     probe_radius_(probe_radius),
     cutoff_(cutoff) {
 
+    gpuErrchk(cudaMalloc(&d_scale_factor_idxs_, N_*sizeof(*d_scale_factor_idxs_)));
+    gpuErrchk(cudaMalloc(&d_atomic_radii_idxs_, N_*sizeof(*d_atomic_radii_idxs_)));
+    gpuErrchk(cudaMemcpy(d_scale_factor_idxs_, &scale_factor_idxs[0], N_*sizeof(*d_scale_factor_idxs_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_atomic_radii_idxs_, &atomic_radii_idxs[0], N_*sizeof(*d_atomic_radii_idxs_), cudaMemcpyHostToDevice));
+
 }
 
 // ported over from OpenMM with minor corrections
@@ -57,7 +63,7 @@ void compute_born_radii(
     std::vector<double>& obc_chain_ri) {
 
     int numberOfAtoms = atomic_radii_idxs.size();
-    int N = numberOfAtoms;
+    // int N = numberOfAtoms;
 
     if(coords.size() / D != numberOfAtoms) {
         throw std::runtime_error("compute born radii number of atoms are inconsistent");
@@ -437,24 +443,70 @@ void GBSAReference<RealType, D>::execute_first_order(
       throw std::runtime_error("FATAL params.size() != dU_dp.size()");
     }
 
-    std::vector<double> born_radii(N, 0);
-    std::vector<double> obc_chain(N, 0);
-    std::vector<double> obc_chain_ri(N, 0);
 
-    compute_born_radii<D>(
-        coords,
-        params,
-        atomic_radii_idxs_,
-        scale_factor_idxs_,
+
+    double* d_born_radii;
+    double* d_obc_chain;
+    double* d_obc_chain_ri;
+
+    gpuErrchk(cudaMalloc(&d_born_radii, N*sizeof(*d_born_radii)));
+    gpuErrchk(cudaMalloc(&d_obc_chain, N*sizeof(*d_obc_chain)));
+    gpuErrchk(cudaMalloc(&d_obc_chain_ri, N*sizeof(*d_obc_chain_ri)));
+
+    gpuErrchk(cudaMemset(d_born_radii, 0, N*sizeof(*d_born_radii)));
+    gpuErrchk(cudaMemset(d_obc_chain, 0, N*sizeof(*d_obc_chain)));
+    gpuErrchk(cudaMemset(d_obc_chain_ri, 0, N*sizeof(*d_obc_chain_ri)));
+
+    // compute_born_radii<D>(
+    //     coords,
+    //     params,
+    //     atomic_radii_idxs_,
+    //     scale_factor_idxs_,
+    //     dielectric_offset_,
+    //     alpha_,
+    //     beta_,
+    //     gamma_,
+    //     cutoff_,
+    //     born_radii,
+    //     obc_chain,
+    //     obc_chain_ri
+    // );
+
+    double* d_coords;
+    double* d_params;
+
+    gpuErrchk(cudaMalloc(&d_coords, N*D*sizeof(*d_coords)));
+    gpuErrchk(cudaMalloc(&d_params, N*D*sizeof(*d_params)));
+
+    gpuErrchk(cudaMemcpy(d_coords, &coords[0], N*D*sizeof(*d_coords), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_params, &params[0], P*sizeof(*d_params), cudaMemcpyHostToDevice));
+
+    int tpb = 32;
+    int B = (N_+tpb-1)/tpb;
+
+    compute_born_radii_gpu<double, D><<<B, tpb>>>(
+        N_,
+        d_coords,
+        d_params,
+        d_atomic_radii_idxs_,
+        d_scale_factor_idxs_,
         dielectric_offset_,
         alpha_,
         beta_,
         gamma_,
         cutoff_,
-        born_radii,
-        obc_chain,
-        obc_chain_ri
+        d_born_radii,
+        d_obc_chain,
+        d_obc_chain_ri
     );
+
+    std::vector<double> h_born_radii(N, 0);
+    std::vector<double> h_obc_chain(N, 0);
+    std::vector<double> h_obc_chain_ri(N, 0);
+
+    gpuErrchk(cudaMemcpy(&h_born_radii[0], d_born_radii, N*sizeof(*d_born_radii), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&h_obc_chain[0], d_obc_chain, N*sizeof(*d_obc_chain), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&h_obc_chain_ri[0], d_obc_chain_ri, N*sizeof(*d_obc_chain_ri), cudaMemcpyDeviceToHost));
 
     std::vector<double> out_forces(N*D, 0);
 
@@ -465,9 +517,9 @@ void GBSAReference<RealType, D>::execute_first_order(
         charge_param_idxs_,
         atomic_radii_idxs_,
         scale_factor_idxs_,
-        born_radii,
-        obc_chain,
-        obc_chain_ri,
+        h_born_radii,
+        h_obc_chain,
+        h_obc_chain_ri,
         alpha_,
         beta_,
         gamma_,
