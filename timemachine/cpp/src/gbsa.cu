@@ -574,26 +574,60 @@ void GBSAReference<RealType, D>::execute_second_order(
 
     std::vector<Surreal<double> > dual_coords(N*D);
 
-
     for(int i=0; i < coords.size(); i++) {
       dual_coords[i].real = coords[i];
       dual_coords[i].imag = coords_tangent[i];
     }
 
-    compute_born_radii_jvp<D>(
-        dual_coords,
-        params,
-        atomic_radii_idxs_,
-        scale_factor_idxs_,
+
+    Surreal<double>* d_born_radii;
+    Surreal<double>* d_obc_chain;
+    Surreal<double>* d_obc_chain_ri;
+
+    gpuErrchk(cudaMalloc(&d_born_radii, N*sizeof(*d_born_radii)));
+    gpuErrchk(cudaMalloc(&d_obc_chain, N*sizeof(*d_obc_chain)));
+    gpuErrchk(cudaMalloc(&d_obc_chain_ri, N*sizeof(*d_obc_chain_ri)));
+
+    gpuErrchk(cudaMemset(d_born_radii, 0, N*sizeof(*d_born_radii)));
+    gpuErrchk(cudaMemset(d_obc_chain, 0, N*sizeof(*d_obc_chain)));
+    gpuErrchk(cudaMemset(d_obc_chain_ri, 0, N*sizeof(*d_obc_chain_ri)));
+
+
+    Surreal<double>* d_coords;
+    double* d_params;
+
+    gpuErrchk(cudaMalloc(&d_coords, N*D*sizeof(*d_coords)));
+    gpuErrchk(cudaMalloc(&d_params, N*D*sizeof(*d_params)));
+    gpuErrchk(cudaMemcpy(d_coords, &dual_coords[0], N*D*sizeof(*d_coords), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_params, &params[0], P*sizeof(*d_params), cudaMemcpyHostToDevice));
+
+
+    int tpb = 32;
+    int B = (N_+tpb-1)/tpb;
+
+    compute_born_radii_gpu_jvp<double, D><<<B, tpb>>>(
+        N_,
+        d_coords,
+        d_params,
+        d_atomic_radii_idxs_,
+        d_scale_factor_idxs_,
         dielectric_offset_,
         alpha_,
         beta_,
         gamma_,
         cutoff_,
-        born_radii,
-        obc_chain,
-        obc_chain_ri
+        d_born_radii,
+        d_obc_chain,
+        d_obc_chain_ri
     );
+
+    std::vector<Surreal<double> > h_born_radii(N, Surreal<double>(0,0));
+    std::vector<Surreal<double> > h_obc_chain(N, Surreal<double>(0,0));
+    std::vector<Surreal<double> > h_obc_chain_ri(N, Surreal<double>(0,0));
+
+    gpuErrchk(cudaMemcpy(&h_born_radii[0], d_born_radii, N*sizeof(*d_born_radii), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&h_obc_chain[0], d_obc_chain, N*sizeof(*d_obc_chain), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&h_obc_chain_ri[0], d_obc_chain_ri, N*sizeof(*d_obc_chain_ri), cudaMemcpyDeviceToHost));
 
     std::vector<double> out_forces(N*D, 0);
 
@@ -604,9 +638,9 @@ void GBSAReference<RealType, D>::execute_second_order(
         charge_param_idxs_,
         atomic_radii_idxs_,
         scale_factor_idxs_,
-        born_radii,
-        obc_chain,
-        obc_chain_ri,
+        h_born_radii,
+        h_obc_chain,
+        h_obc_chain_ri,
         alpha_,
         beta_,
         gamma_,
