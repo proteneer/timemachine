@@ -50,7 +50,7 @@ class TestGBSA(GradientTest):
 
         np.random.seed(125)
         # N = 35
-        N = 8
+        N = 35
         D = 4
         E = 5
         P_charges = 4

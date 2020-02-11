@@ -26,11 +26,10 @@ __global__ void compute_born_radii_gpu(
     if(atom_i_idx >= N) {
         return;
     }
-    // RealType ci[D];
-    // RealType gi[D] = {0};
-    // for(int d=0; d < D; d++) {
-    //     ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
-    // }
+    RealType ci[D];
+    for(int d=0; d < D; d++) {
+        ci[d] = coords[atom_i_idx*D+d];
+    }
     int radii_param_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
     // int scale_param_idx_i = atom_i_idx < N ? scale_factor_idxs[atom_i_idx] : 0;
 
@@ -43,12 +42,6 @@ __global__ void compute_born_radii_gpu(
  
     for(int atom_j_idx = 0; atom_j_idx < N; atom_j_idx++) {
 
-        // int atom_j_idx =  blockIdx.x*32 + threadIdx.x;
-        // RealType cj[D];
-        // RealType gj[D] = {0};
-        // for(int d=0; d < D; d++) {
-        //     cj[d] = atom_i_idx < N ? coords[atom_j_idx*D+d] : 0;
-        // }
         int radii_param_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
         int scale_param_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
 
@@ -60,7 +53,7 @@ __global__ void compute_born_radii_gpu(
 
         RealType r = 0;
         for(int d=0; d < D; d++) {
-            RealType dx = coords[atom_i_idx*D+d] - coords[atom_j_idx*D+d];
+            RealType dx = ci[d] - coords[atom_j_idx*D+d];
             r += dx*dx;
         }
         r = sqrt(r);
@@ -70,7 +63,7 @@ __global__ void compute_born_radii_gpu(
 
         // printf("%d %d %d %d\n",atom_j_idx != atom_i_idx, r < cutoff, atom_j_idx < N, atom_i_idx < N);
 
-        if(atom_j_idx != atom_i_idx && r < cutoff && atom_j_idx < N && atom_i_idx < N) {
+        if(atom_j_idx != atom_i_idx && r < cutoff) {
 
             if (offsetRadiusI < rScaledRadiusJ) {
                 RealType rInverse = 1.0/r;
