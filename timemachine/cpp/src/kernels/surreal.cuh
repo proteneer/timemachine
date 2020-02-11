@@ -16,8 +16,11 @@ struct Surreal {
 
     // DECL Surreal<RealType>(const RealType& v=0.0, const RealType& d=0.0) : real(v), imag(d) {}
 
-    DECL Surreal<RealType>() {}; // uninitialized
+    DECL Surreal<RealType>() {}; // uninitialized for efficiency
     DECL Surreal<RealType>(const RealType& v, const RealType& d) : real(v), imag(d) {}
+
+    // copy constructor
+    DECL Surreal<RealType>(const Surreal<RealType> &z) : real(z.real), imag(z.imag) {}
 
     DECL Surreal& operator=(const Surreal & s) {real = s.real ; imag = s.imag; return *this;};
 
@@ -313,12 +316,28 @@ DECL Surreal<RealType> acos(const Surreal<RealType>& z) {
 }
 
 template <typename RealType>
+DECL Surreal<RealType> tanh(const Surreal<RealType>& z) {
+    double coshv=cosh(z.real);
+    return Surreal<RealType>(
+        tanh(z.real),
+        z.imag/(coshv*coshv)
+    );
+}
+
+template <typename RealType>
 DECL Surreal<RealType> atan2(const Surreal<RealType>& z1, const Surreal<RealType>& z2) {
     return Surreal<RealType>(
         atan2(z1.real,z2.real),
         (z2.real*z1.imag-z1.real*z2.imag)/(z1.real*z1.real+z2.real*z2.real)
     );
 }
+
+
+template <typename RealType>
+DECL Surreal<RealType> log(const Surreal<RealType>& z) {
+    return Surreal<RealType>(log(z.real), z.imag/z.real);
+}
+
 
 template <typename RealType>
 DECL Surreal<RealType> sqrt(const Surreal<RealType>& z) {

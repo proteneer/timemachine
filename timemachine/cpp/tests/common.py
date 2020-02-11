@@ -266,6 +266,8 @@ class GradientTest(unittest.TestCase):
         """
         OpenMM convention - errors are compared against norm of force vectors
         """
+        assert np.array(truth).shape == np.array(test).shape
+
         norms = np.linalg.norm(truth, axis=-1, keepdims=True)
         norms = np.where(norms < 1., 1.0, norms)
         errors = (truth-test)/norms
@@ -306,24 +308,33 @@ class GradientTest(unittest.TestCase):
 
         np.testing.assert_allclose(ref_dp, test_dp, rtol=1e-10)
 
-        print("all passed")
+        print("first order passed")
 
-        assert 0
+        # assert 0
 
         x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         params_tangent = np.zeros_like(params)
 
-        test_x_tangent, test_p_tangent = custom_force.execute_jvp(
-            x,
-            params,
-            x_tangent,
-            params_tangent
-        )
+        test_x_tangent, test_p_tangent = custom_force.execute_second_order(x, x_tangent, params)
+
+
+
+        # assert 0
+
+        # test_x_tangent, test_p_tangent = custom_force.execute_jvp(
+        #     x,
+        #     params,
+        #     x_tangent,
+        #     params_tangent
+        # )
 
         primals = (x, params)
         tangents = (x_tangent, params_tangent)
 
         _, t = jax.jvp(grad_fn, primals, tangents)
+
+        print(t[0], test_x_tangent)
+        print(t[0].shape, test_x_tangent.shape)
 
         self.assert_equal_vectors(
             t[0],
@@ -333,3 +344,6 @@ class GradientTest(unittest.TestCase):
 
         # having some error in this is okay because of how we accumulate (this is just a sum)
         np.testing.assert_allclose(t[1], test_p_tangent, rtol=5e-5)
+
+        # print("PASSED ROUND 1")
+        # assert 0

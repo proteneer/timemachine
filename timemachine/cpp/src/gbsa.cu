@@ -2,7 +2,9 @@
 #include <iostream> 
 #include "fixed_point.hpp"
 #include "gbsa.hpp"
+#include "gbsa_jvp.cuh"
 #include "kernel_utils.cuh"
+#include "math_utils.cuh"
 
 namespace timemachine {
 
@@ -133,11 +135,6 @@ void compute_born_radii(
        obc_chain_ri[i_idx]   *= born_radii[i_idx]*born_radii[i_idx];
 
     }
-}
-
-template<typename T>
-int sign(T a) {
-  return (a > 0) - (a < 0);
 }
 
 template <int D>
@@ -421,6 +418,7 @@ double compute_born_energy_and_forces(
     // return obcEnergy;
 }
 
+
 template <typename RealType, int D>
 void GBSAReference<RealType, D>::execute_first_order(
   const int N,
@@ -482,6 +480,93 @@ void GBSAReference<RealType, D>::execute_first_order(
         cutoff_,
         dU_dx,
         dU_dp
+    );
+
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaPeekAtLastError());
+
+    // for(int i=0; i< out_forces.size(); i++) {
+    //     dU_dx[i] = static_cast<unsigned long long>((long long) (out_forces[i]*FIXED_EXPONENT));
+    // }
+
+
+}
+
+
+template <typename RealType, int D>
+void GBSAReference<RealType, D>::execute_second_order(
+  const int N,
+  const int P,
+  const std::vector<double> &coords,
+  const std::vector<double> &coords_tangent,
+  const std::vector<double> &params,
+  std::vector<double> &HvP,
+  std::vector<double> &MvP
+) {
+
+    if(coords.size() != HvP.size()) {
+      throw std::runtime_error("FATAL coords.size() != HvP.size()");
+    }
+
+    if(coords.size() != coords_tangent.size()) {
+      throw std::runtime_error("FATAL coords.size() != coords_tangent.size()");
+    }
+
+    if(params.size() != MvP.size()) {
+      throw std::runtime_error("FATAL params.size() != MvP.size()");
+    }
+
+    std::vector<Surreal<double> > born_radii(N, Surreal<double>(0, 0));
+    std::vector<Surreal<double> > obc_chain(N, Surreal<double>(0, 0));
+    std::vector<Surreal<double> > obc_chain_ri(N, Surreal<double>(0, 0));
+
+    std::vector<Surreal<double> > dual_coords(N*D);
+
+
+    for(int i=0; i < coords.size(); i++) {
+      dual_coords[i].real = coords[i];
+      dual_coords[i].imag = coords_tangent[i];
+    }
+
+    compute_born_radii_jvp<D>(
+        dual_coords,
+        params,
+        atomic_radii_idxs_,
+        scale_factor_idxs_,
+        dielectric_offset_,
+        alpha_,
+        beta_,
+        gamma_,
+        cutoff_,
+        born_radii,
+        obc_chain,
+        obc_chain_ri
+    );
+
+    std::vector<double> out_forces(N*D, 0);
+
+    // CPU
+    compute_born_energy_and_forces_jvp<D>(
+        dual_coords,
+        params,
+        charge_param_idxs_,
+        atomic_radii_idxs_,
+        scale_factor_idxs_,
+        born_radii,
+        obc_chain,
+        obc_chain_ri,
+        alpha_,
+        beta_,
+        gamma_,
+        dielectric_offset_,
+        screening_,
+        surface_tension_,
+        solute_dielectric_,
+        solvent_dielectric_,
+        probe_radius_,
+        cutoff_,
+        HvP,
+        MvP
     );
 
     cudaDeviceSynchronize();

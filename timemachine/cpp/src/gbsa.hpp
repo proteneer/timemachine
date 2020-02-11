@@ -67,6 +67,16 @@ public:
         std::vector<double> &dU_dp
     );
 
+    void execute_second_order(
+        const int N,
+        const int P,
+        const std::vector<double> &coords,
+        const std::vector<double> &coords_tangents,
+        const std::vector<double> &params,
+        std::vector<double> &HvP,
+        std::vector<double> &MvP
+    );
+
     /*
     Execute the force computation, the semantics are:
 

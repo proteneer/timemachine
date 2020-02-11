@@ -49,7 +49,7 @@ class TestGBSA(GradientTest):
     def test_fast_nonbonded(self):
 
         np.random.seed(125)
-        N = 64
+        N = 35
         D = 4
         E = 5
         P_charges = 4
@@ -65,8 +65,11 @@ class TestGBSA(GradientTest):
         cutoff = 1000.0
         x = self.get_random_coords(N, D)
 
-        for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
-            for cutoff in [100.0, 0.5, 0.1]:
+        # for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
+        for precision, rtol in [(np.float64, 1e-10)]:
+            # for cutoff in [100.0, 0.5, 0.1]:
+            print("PRECISION, RTOL")
+            for cutoff in [10000.0]:
                 np.random.rand(1)
                 params, ref_forces, test_forces = prepare_gbsa_system(
                     x,
