@@ -296,21 +296,18 @@ class GradientTest(unittest.TestCase):
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
         ref_dx, ref_dp = grad_fn(x, params)
 
-        print(np.array(ref_dx))
-        print(np.array(test_dx))
+        # print(np.array(ref_dx))
+        # print(np.array(test_dx))
         self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),
             rtol,
         )
 
-        np.testing.assert_allclose(ref_dp[:4], test_dp[:4], rtol=1e-10)
+        np.testing.assert_allclose(ref_dp, test_dp, rtol=1e-10)
 
-        #
-        # print("dri", ref_dp[4:4+N])
-        # print("dsi", ref_dp[4+N:])
+        print("all passed")
 
-        # print("PASSED FORCES")
         assert 0
 
         x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)

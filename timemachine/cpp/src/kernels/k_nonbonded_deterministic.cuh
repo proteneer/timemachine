@@ -90,7 +90,7 @@ void __global__ k_nonbonded_jvp(
         RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
         RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
         RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
-        RealType dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
 
@@ -267,7 +267,7 @@ void __global__ k_nonbonded_inference(
         RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
         RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
         RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
-        RealType dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
 

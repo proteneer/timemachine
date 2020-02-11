@@ -65,6 +65,11 @@ DECL Surreal<RealType> abs(const Surreal<RealType>& v) {
 }
 
 template <typename RealType>
+DECL Surreal<RealType> fabs(const Surreal<RealType>& v) {
+    return v.real < 0.0 ? -v: v;
+}
+
+template <typename RealType>
 DECL Surreal<RealType> max(const double &a, const Surreal<RealType>& v) {
     return v.real > a ? v: Surreal<RealType>(a);
 }
