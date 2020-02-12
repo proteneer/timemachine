@@ -22,7 +22,7 @@ __global__ void compute_born_radii_gpu(
     RealType* obc_chain,
     RealType* obc_chain_ri) {
 
-    int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
+    int atom_i_idx = blockIdx.x*32 + threadIdx.x;
 
     if(atom_i_idx >= N) {
         return;
@@ -237,3 +237,126 @@ __global__ void compute_born_radii_gpu_jvp(
     }
 
 }
+
+
+// template <typename RealType, int D>
+// void __global__ k_compute_born_first_loop(
+//     const int N,
+//     const double* coords,
+//     const double* params,
+//     const int* charge_param_idxs,
+//     const double* born_radii,
+//     const double prefactor,
+//     const double cutoff,
+//     double *bornForces,
+//     double *out_forces,
+//     double *dU_dp) {
+
+//     if(blockIdx.y > blockIdx.x) {
+//         return;
+//     }
+
+//     // RealType block_d2ij = 0; 
+//     // for(int d=0; d < D; d++) {
+//     //     RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+//     //     RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+//     //     RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+//     //     RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+//     //     RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+//     //     block_d2ij += dx*dx;
+//     // }
+
+//     // if(block_d2ij > cutoff*cutoff) {
+//     //     return;
+//     // }
+
+//     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
+//     RealType ci[D];
+//     RealType gi[D] = {0};
+//     for(int d=0; d < D; d++) {
+//         ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
+//     }
+//     int charge_param_idx_i = atom_i_idx < N ? charge_param_idxs[atom_i_idx] : 0;
+//     int lj_param_idx_sig_i = atom_i_idx < N ? lj_param_idxs[atom_i_idx*2+0] : 0;
+//     int lj_param_idx_eps_i = atom_i_idx < N ? lj_param_idxs[atom_i_idx*2+1] : 0;
+
+//     RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
+//     RealType sig_i = atom_i_idx < N ? params[lj_param_idx_sig_i] : 1;
+//     RealType eps_i = atom_i_idx < N ? params[lj_param_idx_eps_i] : 0;
+
+//     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
+//     RealType cj[D];
+//     RealType gj[D] = {0};
+//     for(int d=0; d < D; d++) {
+//         cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
+//     }
+//     int charge_param_idx_j = atom_j_idx < N ? charge_param_idxs[atom_j_idx] : 0;
+//     int lj_param_idx_sig_j = atom_j_idx < N ? lj_param_idxs[atom_j_idx*2+0] : 0;
+//     int lj_param_idx_eps_j = atom_j_idx < N ? lj_param_idxs[atom_j_idx*2+1] : 0;
+
+//     RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
+//     RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 1;
+//     RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
+
+//     RealType inv_cutoff = 1/cutoff;
+
+//     // In inference mode, we don't care about gradients with respect to parameters.
+//     for(int round = 0; round < 32; round++) {
+
+//         RealType dx[D];
+//         for(int d=0; d < D; d++) {
+//             dx[d] = ci[d] - cj[d];
+//         }
+
+//         RealType inv_dij = fast_vec_rnorm<RealType, D>(dx);
+
+//         if(atom_j_idx < atom_i_idx && inv_dij > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
+
+//             RealType inv_d2ij = inv_dij*inv_dij;
+//             RealType inv_d3ij = inv_dij*inv_d2ij;
+//             RealType inv_d4ij = inv_d2ij*inv_d2ij;
+//             RealType inv_d6ij = inv_d4ij*inv_d2ij;
+//             RealType inv_d8ij = inv_d4ij*inv_d4ij;
+//             RealType es_grad_prefactor = qi*qj*inv_d3ij;
+
+//             // lennard jones force
+//             RealType eps_ij = overloaded_sqrt(eps_i * eps_j);
+//             RealType sig_ij = (sig_i + sig_j)/2;
+
+//             RealType sig2 = sig_ij*sig_ij;
+//             RealType sig4 = sig2*sig2;
+//             RealType sig6 = sig4*sig2;
+
+//             RealType sig6_inv_d6ij = sig6*inv_d6ij;
+//             RealType sig6_inv_d8ij = sig6*inv_d8ij;
+
+//             RealType lj_grad_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
+
+//             for(int d=0; d < D; d++) {
+//                 RealType dx = ci[d]- cj[d];
+//                 gi[d] -= (es_grad_prefactor + lj_grad_prefactor) * dx;
+//                 gj[d] += (es_grad_prefactor + lj_grad_prefactor) * dx;
+//             }
+//         }
+
+//         const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
+//         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
+//         qj = __shfl_sync(0xffffffff, qj, srcLane);
+//         sig_j = __shfl_sync(0xffffffff, sig_j, srcLane);
+//         eps_j = __shfl_sync(0xffffffff, eps_j, srcLane);
+//         for(size_t d=0; d < D; d++) {
+//             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane); // needs to support real
+//             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
+//         }
+//     }
+
+//     for(int d=0; d < D; d++) {
+//         if(atom_i_idx < N) {
+//             atomicAdd(grad_coords + atom_i_idx*D + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));            
+//         }
+//         if(atom_j_idx < N) {
+//             atomicAdd(grad_coords + atom_j_idx*D + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));            
+//         }
+//     }
+
+// }

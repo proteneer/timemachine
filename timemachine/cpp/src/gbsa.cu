@@ -46,6 +46,95 @@ GBSAReference<RealType, D>::GBSAReference(
 
 }
 
+template<int D>
+double compute_born_first_loop(
+    const std::vector<double>& coords,
+    const std::vector<double>& params,
+    const std::vector<int>& charge_param_idxs,
+    const std::vector<double>& born_radii,
+    const double prefactor,
+    const double cutoff,
+    std::vector<double> &bornForces,
+    std::vector<double> &out_forces,
+    std::vector<double> &dU_dp) {
+
+    const int numberOfAtoms = charge_param_idxs.size();
+    const int N = numberOfAtoms;
+
+    // const double soluteDielectric = solute_dielectric;
+    // const double solventDielectric = solvent_dielectric;
+    // double preFactor;
+
+    // if (soluteDielectric != 0.0 && solventDielectric != 0.0) {
+    //     preFactor = -screening*((1.0/soluteDielectric) - (1.0/solventDielectric));    
+    // } else {
+    //     preFactor = 0.0;
+    // }
+    // printf("preFactor %f\n", preFactor);
+    std::vector<double> charge_derivs(N, 0);
+
+    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+ 
+        double partialChargeI = params[charge_param_idxs[atomI]];
+        for (int atomJ = atomI; atomJ < numberOfAtoms; atomJ++) {
+
+            double r2 = 0;
+            double dxs[D] = {0};
+            for(int d=0; d < D; d++) {
+                double dx = coords[atomI*D+d] - coords[atomJ*D+d];
+                dxs[d] = dx;
+                r2 += dx*dx;
+            }
+            double r = sqrt(r2);
+            double alpha2_ij          = born_radii[atomI]*born_radii[atomJ];
+            double D_ij               = r2/(4.0*alpha2_ij);
+
+            double expTerm            = exp(-D_ij);
+            double denominator2       = r2 + alpha2_ij*expTerm; 
+            double denominator        = sqrt(denominator2);
+
+            double partialChargeJ     = params[charge_param_idxs[atomJ]];
+            double Gpol               = (prefactor*partialChargeI*partialChargeJ)/denominator; 
+
+            double dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;  
+            double dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
+
+            double energy = Gpol;
+
+            double dE_dqi = prefactor*partialChargeJ/denominator;
+            double dE_dqj = prefactor*partialChargeI/denominator;
+
+            if (atomI != atomJ) {
+
+                // TBD: determine what we should do with cutoff
+                // energy -= partialChargeI*partialCharges[atomJ]/cutoff;
+                bornForces[atomJ]        += dGpol_dalpha2_ij*born_radii[atomI];
+                for(int d=0; d < D; d++) {
+                    out_forces[atomI*D+d] += dxs[d]*dGpol_dr;
+                    out_forces[atomJ*D+d] -= dxs[d]*dGpol_dr;
+                }
+            } else {
+                dE_dqi *= 0.5;
+                dE_dqj *= 0.5;
+                energy *= 0.5;
+            }
+
+            charge_derivs[atomI]     += dE_dqi;
+            charge_derivs[atomJ]     += dE_dqj;
+
+            // obcEnergy         += energy;
+            bornForces[atomI] += dGpol_dalpha2_ij*born_radii[atomJ];
+
+        }
+    }
+
+    for(int i=0; i < charge_derivs.size(); i++) {
+      // std::cout << "???" << charge_derivs[i] << std::endl;
+        dU_dp[charge_param_idxs[i]] += charge_derivs[i];
+    }
+
+};
+
 // ported over from OpenMM with minor corrections
 template<int D>
 void compute_born_radii(
@@ -61,6 +150,8 @@ void compute_born_radii(
     std::vector<double>& born_radii,
     std::vector<double>& obc_chain,
     std::vector<double>& obc_chain_ri) {
+
+
 
     int numberOfAtoms = atomic_radii_idxs.size();
     // int N = numberOfAtoms;
@@ -135,7 +226,6 @@ void compute_born_radii(
        obc_chain[i_idx]       = (alpha_obc - 2.0*beta_obc*sum + 3.0*gamma_obc*sum2); // !@#$ why did you move it here!
        obc_chain[i_idx]       = (1.0 - tanhSum*tanhSum)*obc_chain[i_idx]/radiusI; // this takes care of the radiusI prefactor
        obc_chain[i_idx]      *= born_radii[i_idx]*born_radii[i_idx];
-       
        // dRi/dri
        obc_chain_ri[i_idx]    = 1.0/(offsetRadiusI*offsetRadiusI) - tanhSum/(radiusI*radiusI);
        obc_chain_ri[i_idx]   *= born_radii[i_idx]*born_radii[i_idx];
@@ -163,6 +253,7 @@ double compute_born_energy_and_forces(
     const double solvent_dielectric,
     const double probe_radius,
     const double cutoff,
+    std::vector<double> &bornForces,
     std::vector<double> &out_forces,
     std::vector<double> &out_dU_dp
 ) {
@@ -173,20 +264,87 @@ double compute_born_energy_and_forces(
 
     const double dielectricOffset = dielectric_offset;
     const double cutoffDistance = cutoff;
-    const double soluteDielectric = solute_dielectric;
-    const double solventDielectric = solvent_dielectric;
-    double preFactor;
+    // const double soluteDielectric = solute_dielectric;
+    // const double solventDielectric = solvent_dielectric;
+    // double preFactor;
 
-    if (soluteDielectric != 0.0 && solventDielectric != 0.0) {
-        preFactor = -screening*((1.0/soluteDielectric) - (1.0/solventDielectric));    
-    } else {
-        preFactor = 0.0;
-    }
-    printf("preFactor %f\n", preFactor);
+    // if (soluteDielectric != 0.0 && solventDielectric != 0.0) {
+    //     preFactor = -screening*((1.0/soluteDielectric) - (1.0/solventDielectric));    
+    // } else {
+    //     preFactor = 0.0;
+    // }
+    // printf("preFactor %f\n", preFactor);
 
     double obcEnergy = 0.0;
-    std::vector<double> bornForces(numberOfAtoms, 0.0);
+    // std::vector<double> bornForces(numberOfAtoms, 0.0);
     std::vector<double> atomic_radii_derivatives(N, 0);
+
+    // do this in the second pass!
+
+ 
+    // ---------------------------------------------------------------------------------------
+
+    // first main loop
+
+    // std::vector<double> charge_derivs(N, 0);
+
+    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+ 
+    //    double partialChargeI = params[charge_param_idxs[atomI]];
+    //    for (int atomJ = atomI; atomJ < numberOfAtoms; atomJ++) {
+
+    //       double r2 = 0;
+    //       double dxs[D] = {0};
+    //       for(int d=0; d < D; d++) {
+    //          double dx = coords[atomI*D+d] - coords[atomJ*D+d];
+    //          dxs[d] = dx;
+    //          r2 += dx*dx;
+    //       }
+    //       double r = sqrt(r2);
+    //       double alpha2_ij          = born_radii[atomI]*born_radii[atomJ];
+    //       double D_ij               = r2/(4.0*alpha2_ij);
+
+    //       double expTerm            = exp(-D_ij);
+    //       double denominator2       = r2 + alpha2_ij*expTerm; 
+    //       double denominator        = sqrt(denominator2);
+          
+    //       double partialChargeJ     = params[charge_param_idxs[atomJ]];
+    //       double Gpol               = (preFactor*partialChargeI*partialChargeJ)/denominator; 
+
+
+    //       double dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;  
+    //       double dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
+
+    //       double energy = Gpol;
+
+    //       double dE_dqi = preFactor*partialChargeJ/denominator;
+    //       double dE_dqj = preFactor*partialChargeI/denominator;
+
+    //       if (atomI != atomJ) {
+
+    //           // TBD: determine what we should do with cutoff
+    //             // energy -= partialChargeI*partialCharges[atomJ]/cutoff;
+    //           bornForces[atomJ]        += dGpol_dalpha2_ij*born_radii[atomI];
+    //           for(int d=0; d < D; d++) {
+    //             out_forces[atomI*D+d] += dxs[d]*dGpol_dr;
+    //             out_forces[atomJ*D+d] -= dxs[d]*dGpol_dr;
+    //           }
+    //       } else {
+    //          dE_dqi *= 0.5;
+    //          dE_dqj *= 0.5;
+    //          energy *= 0.5;
+    //       }
+
+    //       charge_derivs[atomI]     += dE_dqi;
+    //       charge_derivs[atomJ]     += dE_dqj;
+
+    //       obcEnergy         += energy;
+    //       bornForces[atomI] += dGpol_dalpha2_ij*born_radii[atomJ];
+
+    //    }
+    // }
+
+    // ---------------------------------------------------------------------------------------
 
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
         if (born_radii[atomI] > 0.0) {
@@ -202,70 +360,6 @@ double compute_born_energy_and_forces(
             atomic_radii_derivatives[atomI] += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
         }
     }
- 
-    // ---------------------------------------------------------------------------------------
-
-    // first main loop
-
-    std::vector<double> charge_derivs(N, 0);
-
-    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
- 
-       double partialChargeI = params[charge_param_idxs[atomI]];
-       for (int atomJ = atomI; atomJ < numberOfAtoms; atomJ++) {
-
-          double r2 = 0;
-          double dxs[D] = {0};
-          for(int d=0; d < D; d++) {
-             double dx = coords[atomI*D+d] - coords[atomJ*D+d];
-             dxs[d] = dx;
-             r2 += dx*dx;
-          }
-          double r = sqrt(r2);
-          double alpha2_ij          = born_radii[atomI]*born_radii[atomJ];
-          double D_ij               = r2/(4.0*alpha2_ij);
-
-          double expTerm            = exp(-D_ij);
-          double denominator2       = r2 + alpha2_ij*expTerm; 
-          double denominator        = sqrt(denominator2);
-          
-          double partialChargeJ     = params[charge_param_idxs[atomJ]];
-          double Gpol               = (preFactor*partialChargeI*partialChargeJ)/denominator; 
-
-
-          double dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;  
-          double dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
-
-          double energy = Gpol;
-
-          double dE_dqi = preFactor*partialChargeJ/denominator;
-          double dE_dqj = preFactor*partialChargeI/denominator;
-
-          if (atomI != atomJ) {
-
-              // TBD: determine what we should do with cutoff
-                // energy -= partialChargeI*partialCharges[atomJ]/cutoff;
-              bornForces[atomJ]        += dGpol_dalpha2_ij*born_radii[atomI];
-              for(int d=0; d < D; d++) {
-                out_forces[atomI*D+d] += dxs[d]*dGpol_dr;
-                out_forces[atomJ*D+d] -= dxs[d]*dGpol_dr;
-              }
-          } else {
-             dE_dqi *= 0.5;
-             dE_dqj *= 0.5;
-             energy *= 0.5;
-          }
-
-          charge_derivs[atomI]     += dE_dqi;
-          charge_derivs[atomJ]     += dE_dqj;
-
-          obcEnergy         += energy;
-          bornForces[atomI] += dGpol_dalpha2_ij*born_radii[atomJ];
-
-       }
-    }
-
-    // ---------------------------------------------------------------------------------------
 
     // second main loop
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
@@ -278,6 +372,8 @@ double compute_born_energy_and_forces(
     std::vector<double> dPsi_dri(N, 0);
     std::vector<double> dPsi_dsi(N, 0);
 
+
+    // born forcesI will have been fully loaded by now
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
  
        // radius w/ dielectric offset applied
@@ -415,10 +511,10 @@ double compute_born_energy_and_forces(
       out_dU_dp[scale_factor_idxs[i]] += dPsi_dsi[i];
     }
 
-    for(int i=0; i < charge_derivs.size(); i++) {
-      // std::cout << "???" << charge_derivs[i] << std::endl;
-      out_dU_dp[charge_param_idxs[i]] += charge_derivs[i];
-    }
+    // for(int i=0; i < charge_derivs.size(); i++) {
+    //   // std::cout << "???" << charge_derivs[i] << std::endl;
+    //   out_dU_dp[charge_param_idxs[i]] += charge_derivs[i];
+    // }
 
     std::cout << "energy" << obcEnergy << std::endl;
     // return obcEnergy;
@@ -509,6 +605,26 @@ void GBSAReference<RealType, D>::execute_first_order(
     gpuErrchk(cudaMemcpy(&h_obc_chain_ri[0], d_obc_chain_ri, N*sizeof(*d_obc_chain_ri), cudaMemcpyDeviceToHost));
 
     std::vector<double> out_forces(N*D, 0);
+    std::vector<double> bornForces(N, 0);
+
+    double prefactor;
+    if (solute_dielectric_ != 0.0 && solvent_dielectric_ != 0.0) {
+        prefactor = -screening_*((1.0/solute_dielectric_) - (1.0/solvent_dielectric_));    
+    } else {
+        prefactor = 0.0;
+    }
+
+    compute_born_first_loop<D>(
+        coords,
+        params,
+        charge_param_idxs_,
+        h_born_radii,
+        prefactor,
+        cutoff_,
+        bornForces,
+        dU_dx,
+        dU_dp
+    );
 
     // CPU
     compute_born_energy_and_forces<D>(
@@ -530,6 +646,7 @@ void GBSAReference<RealType, D>::execute_first_order(
         solvent_dielectric_,
         probe_radius_,
         cutoff_,
+        bornForces,
         dU_dx,
         dU_dp
     );
@@ -729,28 +846,28 @@ void GBSAReference<RealType, D>::execute_device(
     // CPU
     std::vector<double> out_dU_dp(N*D, 0);
 
-    compute_born_energy_and_forces<D>(
-        coords,
-        params,
-        charge_param_idxs_,
-        atomic_radii_idxs_,
-        scale_factor_idxs_,
-        born_radii,
-        obc_chain,
-        obc_chain_ri,
-        alpha_,
-        beta_,
-        gamma_,
-        dielectric_offset_,
-        screening_,
-        surface_tension_,
-        solute_dielectric_,
-        solvent_dielectric_,
-        probe_radius_,
-        cutoff_,
-        out_forces,
-        out_dU_dp
-    );
+    // compute_born_energy_and_forces<D>(
+    //     coords,
+    //     params,
+    //     charge_param_idxs_,
+    //     atomic_radii_idxs_,
+    //     scale_factor_idxs_,
+    //     born_radii,
+    //     obc_chain,
+    //     obc_chain_ri,
+    //     alpha_,
+    //     beta_,
+    //     gamma_,
+    //     dielectric_offset_,
+    //     screening_,
+    //     surface_tension_,
+    //     solute_dielectric_,
+    //     solvent_dielectric_,
+    //     probe_radius_,
+    //     cutoff_,
+    //     out_forces,
+    //     out_dU_dp
+    // );
 
     cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
