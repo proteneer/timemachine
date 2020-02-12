@@ -524,3 +524,87 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
 
 
 }
+
+
+template <typename RealType, int D>
+__global__ void k_reduce_born_forces(
+    const int N,
+    const double* coords,
+    const double* params,
+    const int* atomic_radii_idxs,
+    const double* born_radii,
+    const double* obc_chain,
+    const double* obc_chain_ri,
+    const double surface_tension, // surface area factor
+    const double probe_radius,
+    double* bornForces, // dU/Ri
+    double* out_dU_dp
+) {
+
+    int atomI =  blockIdx.x*32 + threadIdx.x;
+    if(atomI >= N) {
+        return;
+    }
+
+    RealType radii_derivs = 0;
+    if (born_radii[atomI] > 0.0) {
+        RealType atomic_radii = params[atomic_radii_idxs[atomI]];
+        RealType r            = atomic_radii + probe_radius;
+        RealType ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
+        RealType saTerm       = surface_tension*r*r*ratio6;
+        bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+        RealType br2 = born_radii[atomI]*born_radii[atomI];
+        RealType br4 = br2*br2;
+        RealType br6 = br4*br2;
+        radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
+    }
+    radii_derivs += bornForces[atomI] * obc_chain_ri[atomI];
+    out_dU_dp[atomic_radii_idxs[atomI]] += radii_derivs;
+    bornForces[atomI] *= obc_chain[atomI];
+
+}
+
+
+template <typename RealType, int D>
+__global__ void k_reduce_born_forces_jvp(
+    const int N,
+    const Surreal<double>* coords,
+    const double* params,
+    const int* atomic_radii_idxs,
+    const Surreal<double>* born_radii,
+    const Surreal<double>* obc_chain,
+    const Surreal<double>* obc_chain_ri,
+    const double surface_tension, // surface area factor
+    const double probe_radius,
+    Surreal<double>* bornForces, // dU/Ri
+    double* out_dU_dp
+) {
+
+    int atomI =  blockIdx.x*32 + threadIdx.x;
+    if(atomI >= N) {
+        return;
+    }
+
+    Surreal<RealType> radii_derivs(0, 0);
+    if (born_radii[atomI] > 0.0) {
+        RealType atomic_radii = params[atomic_radii_idxs[atomI]];
+        RealType r            = atomic_radii + probe_radius;
+
+        Surreal<RealType> ar = atomic_radii/born_radii[atomI];
+        Surreal<RealType> ar2 = ar*ar;
+        Surreal<RealType> ar4 = ar2*ar2;
+        Surreal<RealType> ratio6 = ar4*ar2;
+
+        // Surreal<RealType> ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
+        Surreal<RealType> saTerm       = surface_tension*r*r*ratio6;
+        bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+        Surreal<RealType> br2 = born_radii[atomI]*born_radii[atomI];
+        Surreal<RealType> br4 = br2*br2;
+        Surreal<RealType> br6 = br4*br2;
+        radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
+    }
+    radii_derivs += bornForces[atomI] * obc_chain_ri[atomI];
+    out_dU_dp[atomic_radii_idxs[atomI]] += radii_derivs.imag;
+    bornForces[atomI] *= obc_chain[atomI];
+
+}

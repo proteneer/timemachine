@@ -235,24 +235,59 @@ void compute_born_radii(
 }
 
 template <int D>
+double reduce_born_forces(
+    const std::vector<double>& coords,
+    const std::vector<double>& params,
+    const std::vector<int>& atomic_radii_idxs,
+    const std::vector<double>& born_radii,
+    const std::vector<double>& obc_chain,
+    const std::vector<double>& obc_chain_ri,
+    const double surface_tension, // surface area factor
+    const double probe_radius,
+    std::vector<double> &bornForces, // dU/Ri
+    std::vector<double> &out_dU_dp
+) {
+
+    // constants
+    const int numberOfAtoms = atomic_radii_idxs.size();
+    const int N = numberOfAtoms;
+
+    double obcEnergy = 0.0;
+
+    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+
+        double radii_derivs = 0;
+        if (born_radii[atomI] > 0.0) {
+            double atomic_radii = params[atomic_radii_idxs[atomI]];
+            double r            = atomic_radii + probe_radius;
+            double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
+            double saTerm       = surface_tension*r*r*ratio6;
+            obcEnergy          += saTerm;
+            bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+            double br2 = born_radii[atomI]*born_radii[atomI];
+            double br4 = br2*br2;
+            double br6 = br4*br2;
+            radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
+        }
+        radii_derivs += bornForces[atomI] * obc_chain_ri[atomI];
+        out_dU_dp[atomic_radii_idxs[atomI]] += radii_derivs;
+        bornForces[atomI] *= obc_chain[atomI];
+    }
+
+}
+
+template <int D>
 double compute_born_energy_and_forces(
     const std::vector<double>& coords,
     const std::vector<double>& params,
-    const std::vector<int>& charge_param_idxs,
     const std::vector<int>& atomic_radii_idxs,
     const std::vector<int>& scale_factor_idxs,
     const std::vector<double>& born_radii,
     const std::vector<double>& obc_chain,
     const std::vector<double>& obc_chain_ri,
-    const double alpha_obc,
-    const double beta_obc,
-    const double gamma_obc,
     const double dielectric_offset,
-    const double screening,
-    const double surface_tension, // surface area factor
-    const double solute_dielectric,
-    const double solvent_dielectric,
-    const double probe_radius,
+    // const double surface_tension, // surface area factor
+    // const double probe_radius,
     const double cutoff,
     std::vector<double> &bornForces,
     std::vector<double> &out_forces,
@@ -265,115 +300,36 @@ double compute_born_energy_and_forces(
 
     const double dielectricOffset = dielectric_offset;
     const double cutoffDistance = cutoff;
-    // const double soluteDielectric = solute_dielectric;
-    // const double solventDielectric = solvent_dielectric;
-    // double preFactor;
 
-    // if (soluteDielectric != 0.0 && solventDielectric != 0.0) {
-    //     preFactor = -screening*((1.0/soluteDielectric) - (1.0/solventDielectric));    
-    // } else {
-    //     preFactor = 0.0;
-    // }
-    // printf("preFactor %f\n", preFactor);
-
-    double obcEnergy = 0.0;
-    // std::vector<double> bornForces(numberOfAtoms, 0.0);
-    std::vector<double> atomic_radii_derivatives(N, 0);
-
-    // do this in the second pass!
-
- 
-    // ---------------------------------------------------------------------------------------
-
-    // first main loop
-
-    // std::vector<double> charge_derivs(N, 0);
+    // double obcEnergy = 0.0;
+    // // std::vector<double> bornForces(numberOfAtoms, 0.0);
+    // std::vector<double> atomic_radii_derivatives(N, 0);
 
     // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
- 
-    //    double partialChargeI = params[charge_param_idxs[atomI]];
-    //    for (int atomJ = atomI; atomJ < numberOfAtoms; atomJ++) {
-
-    //       double r2 = 0;
-    //       double dxs[D] = {0};
-    //       for(int d=0; d < D; d++) {
-    //          double dx = coords[atomI*D+d] - coords[atomJ*D+d];
-    //          dxs[d] = dx;
-    //          r2 += dx*dx;
-    //       }
-    //       double r = sqrt(r2);
-    //       double alpha2_ij          = born_radii[atomI]*born_radii[atomJ];
-    //       double D_ij               = r2/(4.0*alpha2_ij);
-
-    //       double expTerm            = exp(-D_ij);
-    //       double denominator2       = r2 + alpha2_ij*expTerm; 
-    //       double denominator        = sqrt(denominator2);
-          
-    //       double partialChargeJ     = params[charge_param_idxs[atomJ]];
-    //       double Gpol               = (preFactor*partialChargeI*partialChargeJ)/denominator; 
-
-
-    //       double dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;  
-    //       double dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
-
-    //       double energy = Gpol;
-
-    //       double dE_dqi = preFactor*partialChargeJ/denominator;
-    //       double dE_dqj = preFactor*partialChargeI/denominator;
-
-    //       if (atomI != atomJ) {
-
-    //           // TBD: determine what we should do with cutoff
-    //             // energy -= partialChargeI*partialCharges[atomJ]/cutoff;
-    //           bornForces[atomJ]        += dGpol_dalpha2_ij*born_radii[atomI];
-    //           for(int d=0; d < D; d++) {
-    //             out_forces[atomI*D+d] += dxs[d]*dGpol_dr;
-    //             out_forces[atomJ*D+d] -= dxs[d]*dGpol_dr;
-    //           }
-    //       } else {
-    //          dE_dqi *= 0.5;
-    //          dE_dqj *= 0.5;
-    //          energy *= 0.5;
-    //       }
-
-    //       charge_derivs[atomI]     += dE_dqi;
-    //       charge_derivs[atomJ]     += dE_dqj;
-
-    //       obcEnergy         += energy;
-    //       bornForces[atomI] += dGpol_dalpha2_ij*born_radii[atomJ];
-
-    //    }
+    //     if (born_radii[atomI] > 0.0) {
+    //         double atomic_radii = params[atomic_radii_idxs[atomI]];
+    //         double r            = atomic_radii + probe_radius;
+    //         double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
+    //         double saTerm       = surface_tension*r*r*ratio6;
+    //         obcEnergy          += saTerm;
+    //         bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+    //         double br2 = born_radii[atomI]*born_radii[atomI];
+    //         double br4 = br2*br2;
+    //         double br6 = br4*br2;
+    //         atomic_radii_derivatives[atomI] += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
+    //     }
     // }
 
-    // ---------------------------------------------------------------------------------------
-
-    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-        if (born_radii[atomI] > 0.0) {
-            double atomic_radii = params[atomic_radii_idxs[atomI]];
-            double r            = atomic_radii + probe_radius;
-            double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
-            double saTerm       = surface_tension*r*r*ratio6;
-            obcEnergy          += saTerm;
-            bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
-            double br2 = born_radii[atomI]*born_radii[atomI];
-            double br4 = br2*br2;
-            double br6 = br4*br2;
-            atomic_radii_derivatives[atomI] += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
-        }
-    }
-
-    // second main loop
-    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-      // order matters here
-      atomic_radii_derivatives[atomI] += bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately 
-      bornForces[atomI] *= obc_chain[atomI]; // dU/dR*dR/dPsi
-    }
+    // // second main loop
+    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+    //   // order matters here
+    //   atomic_radii_derivatives[atomI] += bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately 
+    //   bornForces[atomI] *= obc_chain[atomI]; // dU/dR*dR/dPsi
+    // }
 
     std::vector<double> dPsi_dx(N*D, 0);
     std::vector<double> dPsi_dri(N, 0);
     std::vector<double> dPsi_dsi(N, 0);
-
-
     // born forcesI will have been fully loaded by now
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
  
@@ -505,7 +461,8 @@ double compute_born_energy_and_forces(
 
     for(int i=0; i < dPsi_dri.size(); i++) {
       // std::cout << "dPsi_dri parts: " << dPsi_dri[i] << " " << atomic_radii_derivatives[i] << std::endl;
-      out_dU_dp[atomic_radii_idxs[i]] += dPsi_dri[i]+atomic_radii_derivatives[i];
+      // out_dU_dp[atomic_radii_idxs[i]] += dPsi_dri[i]+atomic_radii_derivatives[i];
+      out_dU_dp[atomic_radii_idxs[i]] += dPsi_dri[i];
     }
 
     for(int i=0; i < dPsi_dsi.size(); i++) {
@@ -517,7 +474,7 @@ double compute_born_energy_and_forces(
     //   out_dU_dp[charge_param_idxs[i]] += charge_derivs[i];
     // }
 
-    std::cout << "energy" << obcEnergy << std::endl;
+    // std::cout << "energy" << obcEnergy << std::endl;
     // return obcEnergy;
 }
 
@@ -646,6 +603,19 @@ void GBSAReference<RealType, D>::execute_first_order(
         d_dU_dp // ouput
     );
 
+    k_reduce_born_forces<double, D><<<B, tpb>>>(
+      N_,
+      d_coords,
+      d_params,
+      d_atomic_radii_idxs_,
+      d_born_radii,
+      d_obc_chain,
+      d_obc_chain_ri,
+      surface_tension_,
+      probe_radius_,
+      d_born_forces,
+      d_dU_dp
+    );
 
     gpuErrchk(cudaMemcpy(&bornForces[0], d_born_forces, N*sizeof(*d_born_forces), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(&dU_dx[0], d_dU_dx, N*D*sizeof(*d_dU_dx), cudaMemcpyDeviceToHost));
@@ -655,21 +625,14 @@ void GBSAReference<RealType, D>::execute_first_order(
     compute_born_energy_and_forces<D>(
         coords,
         params,
-        charge_param_idxs_,
         atomic_radii_idxs_,
         scale_factor_idxs_,
         h_born_radii,
         h_obc_chain,
         h_obc_chain_ri,
-        alpha_,
-        beta_,
-        gamma_,
         dielectric_offset_,
-        screening_,
-        surface_tension_,
-        solute_dielectric_,
-        solvent_dielectric_,
-        probe_radius_,
+        // surface_tension_,
+        // probe_radius_,
         cutoff_,
         bornForces,
         dU_dx,
@@ -809,6 +772,20 @@ void GBSAReference<RealType, D>::execute_second_order(
         d_MvP // ouput
     );
 
+    k_reduce_born_forces_jvp<double, D><<<B, tpb>>>(
+      N_,
+      d_coords,
+      d_params,
+      d_atomic_radii_idxs_,
+      d_born_radii,
+      d_obc_chain,
+      d_obc_chain_ri,
+      surface_tension_,
+      probe_radius_,
+      d_born_forces,
+      d_MvP
+    );
+
 
     gpuErrchk(cudaMemcpy(&bornForces[0], d_born_forces, N*sizeof(*d_born_forces), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(&HvP[0], d_HvP, N*D*sizeof(*d_HvP), cudaMemcpyDeviceToHost));
@@ -818,21 +795,12 @@ void GBSAReference<RealType, D>::execute_second_order(
     compute_born_energy_and_forces_jvp<D>(
         dual_coords,
         params,
-        charge_param_idxs_,
         atomic_radii_idxs_,
         scale_factor_idxs_,
         h_born_radii,
         h_obc_chain,
         h_obc_chain_ri,
-        alpha_,
-        beta_,
-        gamma_,
         dielectric_offset_,
-        screening_,
-        surface_tension_,
-        solute_dielectric_,
-        solvent_dielectric_,
-        probe_radius_,
         cutoff_,
         bornForces,
         HvP,

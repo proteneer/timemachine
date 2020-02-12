@@ -108,23 +108,18 @@ void compute_born_radii_jvp(
 template <int D>
 double compute_born_energy_and_forces_jvp(
     const std::vector<Surreal<double> >& coords,
-    // const std::vector<double>& coords_tangents,
     const std::vector<double>& params,
-    const std::vector<int>& charge_param_idxs,
     const std::vector<int>& atomic_radii_idxs,
     const std::vector<int>& scale_factor_idxs,
     const std::vector<Surreal<double> > & born_radii,
     const std::vector<Surreal<double> > & obc_chain,
     const std::vector<Surreal<double> > & obc_chain_ri,
-    const double alpha_obc,
-    const double beta_obc,
-    const double gamma_obc,
     const double dielectric_offset,
-    const double screening,
-    const double surface_tension, // surface area factor
-    const double solute_dielectric,
-    const double solvent_dielectric,
-    const double probe_radius,
+    // const double screening,
+    // const double surface_tension, // surface area factor
+    // const double solute_dielectric,
+    // const double solvent_dielectric,
+    // const double probe_radius,
     const double cutoff,
     std::vector<Surreal<double> > &bornForces,
     std::vector<double> &out_HvP,
@@ -217,34 +212,33 @@ double compute_born_energy_and_forces_jvp(
 
     // ---------------------------------------------------------------------------------------
 
-    Surreal<double> obcEnergy(0, 0);
-    // std::vector<Surreal<double> > bornForces(numberOfAtoms, Surreal<double>(0, 0));
-    std::vector<Surreal<double> > atomic_radii_derivatives(N, Surreal<double>(0, 0));
+    // Surreal<double> obcEnergy(0, 0);
+    // std::vector<Surreal<double> > atomic_radii_derivatives(N, Surreal<double>(0, 0));
 
-    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-        if (born_radii[atomI] > 0.0) {
-            double atomic_radii = params[atomic_radii_idxs[atomI]];
-            double r            = atomic_radii + probe_radius;
-            Surreal<double> ratio = atomic_radii/born_radii[atomI];
-            Surreal<double> ratio2 = ratio*ratio;
-            Surreal<double> ratio4 = ratio2*ratio2;
-            Surreal<double> ratio6 = ratio4*ratio2;
-            Surreal<double> saTerm = surface_tension*r*r*ratio6;
-            obcEnergy          += saTerm;
-            bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
-            Surreal<double> br2 = born_radii[atomI]*born_radii[atomI];
-            Surreal<double> br4 = br2*br2;
-            Surreal<double> br6 = br4*br2;
-            atomic_radii_derivatives[atomI] += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
-        }
-    }
+    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+    //     if (born_radii[atomI] > 0.0) {
+    //         double atomic_radii = params[atomic_radii_idxs[atomI]];
+    //         double r            = atomic_radii + probe_radius;
+    //         Surreal<double> ratio = atomic_radii/born_radii[atomI];
+    //         Surreal<double> ratio2 = ratio*ratio;
+    //         Surreal<double> ratio4 = ratio2*ratio2;
+    //         Surreal<double> ratio6 = ratio4*ratio2;
+    //         Surreal<double> saTerm = surface_tension*r*r*ratio6;
+    //         obcEnergy          += saTerm;
+    //         bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+    //         Surreal<double> br2 = born_radii[atomI]*born_radii[atomI];
+    //         Surreal<double> br4 = br2*br2;
+    //         Surreal<double> br6 = br4*br2;
+    //         atomic_radii_derivatives[atomI] += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
+    //     }
+    // }
  
-    // second main loop
-    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-      // order matters here
-      atomic_radii_derivatives[atomI] += bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately 
-      bornForces[atomI] *= obc_chain[atomI]; // dU/dR*dR/dPsi
-    }
+    // // second main loop
+    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+    //   // order matters here
+    //   atomic_radii_derivatives[atomI] += bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately 
+    //   bornForces[atomI] *= obc_chain[atomI]; // dU/dR*dR/dPsi
+    // }
 
     std::vector<Surreal<double> > dPsi_dx(N*D, Surreal<double>(0, 0));
     std::vector<Surreal<double> > dPsi_dri(N, Surreal<double>(0, 0));
@@ -383,7 +377,8 @@ double compute_born_energy_and_forces_jvp(
 
     for(int i=0; i < dPsi_dri.size(); i++) {
       // std::cout << "dPsi_dri parts: " << dPsi_dri[i] << " " << atomic_radii_derivatives[i] << std::endl;
-      out_MvP[atomic_radii_idxs[i]] += dPsi_dri[i].imag + atomic_radii_derivatives[i].imag;
+      // out_MvP[atomic_radii_idxs[i]] += dPsi_dri[i].imag + atomic_radii_derivatives[i].imag;
+      out_MvP[atomic_radii_idxs[i]] += dPsi_dri[i].imag;
     }
 
     for(int i=0; i < dPsi_dsi.size(); i++) {
@@ -395,7 +390,7 @@ double compute_born_energy_and_forces_jvp(
     //   out_MvP[charge_param_idxs[i]] += charge_derivs[i].imag;
     // }
 
-    std::cout << "energy" << obcEnergy.real << std::endl;
+    // std::cout << "energy" << obcEnergy.real << std::endl;
     // return obcEnergy;
 }
 
