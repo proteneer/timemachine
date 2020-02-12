@@ -190,7 +190,10 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
     nonbonded_exclusion_params = []
     nonbonded_lj_param_idxs = []
     nonbonded_es_param_idxs = []
-
+    
+    torsion_idxs = []
+    torsion_param_idxs = []
+    
     for handler in forcefield._parameter_handlers.items():
 
         handler_name, handler_params = handler
@@ -245,10 +248,8 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
             ))
 
         elif handler_name == "ImproperTorsions":
-            # Disabled for now
-            continue # skip while we debug
+            
             vd = ValenceDict()
-
             for all_params in handler_params.parameters:
 
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, all_params.smirks)
@@ -264,19 +265,26 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
                     all_k_idxs.append(k_idx)
                     all_phase_idxs.append(phase_idx)
                     all_period_idxs.append(period_idx)
-
-                for m in matches:
+                
+                # remove the redundant matches and use unique pair for trefoil
+                new_matches = []
+                
+                for element in matches:
+                    tmp=[element[0], element[2], element[3]]
+                    tmp.sort()
+                    new_matches.append((element[1], tmp[0], tmp[1], tmp[2]))
+                
+                new_matches = list(set(new_matches))
+                                                
+                for m in new_matches:
                     t_p = []
                     for k_idx, phase_idx, period_idx in zip(all_k_idxs, all_phase_idxs, all_period_idxs):
                         t_p.append((k_idx, phase_idx, period_idx))
 
                     # 3-way trefoil permutation
-                    others = [m[0], m[2], m[3]]
+                    others = [m[1], m[2], m[3]]
                     for p in [(others[i], others[j], others[k]) for (i, j, k) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]]:
-                        vd[(m[1], p[0], p[1], p[2])] = t_p
-
-            torsion_idxs = []
-            torsion_param_idxs = []
+                        vd[(m[0], p[0], p[1], p[2])] = t_p
 
             for k, vv in vd.items():
                 for v in vv:
@@ -306,22 +314,10 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
                         t_p.append((k_idx, phase_idx, period_idx))
                     vd[m] = t_p
 
-            torsion_idxs = []
-            torsion_param_idxs = []
-
             for k, vv in vd.items():
                 for v in vv:
                     torsion_idxs.append(k)
                     torsion_param_idxs.append(v)
-
-            nrg_fns.append((
-                ops.PeriodicTorsion,
-                (
-                    np.array(torsion_idxs, dtype=np.int32),
-                    np.array(torsion_param_idxs, dtype=np.int32),
-                    dimension
-                )
-            ))
 
         elif handler_name == "vdW":
             # lennardjones
@@ -432,7 +428,16 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
 
         # guest_charges = np.array(global_params)[charge_param_idxs]
         # print("LIGAND NET CHARGE AFTER", guest_charges, "SUM", np.sum(guest_charges))
-
+        
+    nrg_fns.append((
+                ops.PeriodicTorsion,
+                (
+                    np.array(torsion_idxs, dtype=np.int32),
+                    np.array(torsion_param_idxs, dtype=np.int32),
+                    dimension
+                )
+            ))
+    
     exclusion_param_idx = add_param(1.0, 10)
 
     # insert into a dictionary to avoid double counting exclusions
