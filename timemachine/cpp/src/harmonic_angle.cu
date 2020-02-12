@@ -45,12 +45,12 @@ template <typename RealType, int D>
 void HarmonicAngle<RealType, D>::execute_device(
     const int N,
     const int P,
-    const RealType *d_coords,
-    const RealType *d_coords_tangents,
-    const RealType *d_params,
+    const double *d_coords,
+    const double *d_coords_tangents,
+    const double *d_params,
     unsigned long long *d_out_coords,
-    RealType *d_out_coords_tangents,
-    RealType *d_out_params_tangents
+    double *d_out_coords_tangents,
+    double *d_out_params_tangents
 ) {
 
     int tpb = 32;
@@ -71,9 +71,9 @@ void HarmonicAngle<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "HarmonicAngle Elapsed time: " << elapsed.count() << " s\n";
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
+        // std::cout << "HarmonicAngle Elapsed time: " << elapsed.count() << " s\n";
 
     } else {
 
@@ -92,9 +92,9 @@ void HarmonicAngle<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "HarmonicAngle JVP Elapsed time: " << elapsed.count() << " s\n";
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
+        // std::cout << "HarmonicAngle JVP Elapsed time: " << elapsed.count() << " s\n";
 
 
     }
@@ -104,5 +104,8 @@ void HarmonicAngle<RealType, D>::execute_device(
 
 template class HarmonicAngle<double, 4>;
 template class HarmonicAngle<double, 3>;
+
+template class HarmonicAngle<float, 4>;
+template class HarmonicAngle<float, 3>;
 
 } // namespace timemachine

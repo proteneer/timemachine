@@ -2,86 +2,16 @@
 
 # Time Machine
 
-This package is designed with three goals in mind:
+The TimeMachine is a simplified and differentiable MD engine with the following features:
 
-1. Enable rapid prototyping of potential functions and automatic generation of gradients of arbitrary order.
-2. Generate performant code using a [jax/xla](github.com/google/jax) backend that can be run on CPUs, GPUs, and TPUs.
-2. Meta-optimization of optimizers and integrators, allowing one to generate analytic derivatives of a trajectory.
+1. Optimized for performance on modern NVIDIA GPUs.
+2. Analytical first order derivatives of the potential with respect to the coordinates and the forcefield parameters.
+3. Analytical second order hessian vector products of the above at a 2.5x cost.
+4. Implements adjoint equations of motion via rematerialization, enabling one to differentiate objective functions with respect to an arbitrary number of forcefield parameters in a *single* backwards pass.
 
-The code is implemented against OpenMM for numerical accuracy.
-
-# Example Code:
-
-``` python
-import functools
-import numpy as np
-import jax
-
-from timemachine.potentials import bonded
-
-x0 = np.array([
-    [1.0, 0.2, 3.3], # H 
-    [-0.5,-1.1,-0.9], # C
-    [3.4, 5.5, 0.2], # H 
-], dtype=np.float64)
-
-params = np.array([10.0, 3.0, 5.5], dtype=np.float64)
-
-param_idxs = np.array([
-    [0,1],
-    [1,2],
-], dtype=np.int32)
-
-bond_idxs = np.array([
-    [0,1],
-    [1,2]
-], dtype=np.int32)
-
-# wrap the energy function for convenience
-energy_fn = functools.partial(
-    bonded.harmonic_bond,
-    param_idxs=param_idxs,
-    bond_idxs=bond_idxs)
-
-# dE/dx, shape [N,3]:
-dedx_fn = jax.grad(energy_fn, argnums=(0,))
-dedx_fn(x0, params, box=None)
-
-# dE/dparams, shape [3,]:
-dedp_fn = jax.grad(energy_fn, argnums=(1,))
-dedp_fn(x0, params, box=None)
-
-# d^2E/dx^2, shape [N,3,N,3]:
-d2edx2_fn = jax.hessian(energy_fn, argnums=(0,))
-d2edx2_fn(x0, params, box=None)
-
-# d^2E/dxde, shape [N,3,3]:
-d2edxde_fn = jax.jacfwd(jax.jacrev(energy_fn, argnums=(0,)), argnums=(1,))
-d2edxde_fn(x0, params, box=None)
-```
-
-# Warning
-
-This code is under heavy development. APIs for potential energies are fairly stable now. 
-
-# Supported Potentials
-
-We currently support the following functional forms:
-
-- (Periodic) Harmonic Bond
-- (Periodic) Harmonic Angle
-- (Periodic) Periodic Torsion
-- (Periodic) Electrostatic
-- (Periodic) Lennard-Jones
-- GBSA OBC
-
-# Requirements
-
-See requirements.txt
+The code is implemented against OpenMM and is still under very heavy development.
 
 # License
-
-Copyright 2019 Yutong Zhao
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

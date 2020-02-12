@@ -2,7 +2,7 @@
 
 namespace timemachine {
 
-template <typename RealType, int D>
+template <int D>
 class Gradient {
 
 public: 
@@ -15,23 +15,23 @@ public:
     void execute_host(
         const int N,
         const int P,
-        const RealType *h_in_coords,
-        const RealType *h_in_coords_tangents,
-        const RealType *h_in_params,
+        const double *h_in_coords,
+        const double *h_in_coords_tangents,
+        const double *h_in_params,
         unsigned long long *h_out_coords,
-        RealType *h_out_coords_tangents,
-        RealType *h_out_params_tangents
+        double *h_out_coords_tangents,
+        double *h_out_params_tangents
     );
 
     virtual void execute_device(
         const int N,
         const int P,
-        const RealType *d_coords,
-        const RealType *d_coords_tangents,
-        const RealType *d_params,
+        const double *d_coords,
+        const double *d_coords_tangents,
+        const double *d_params,
         unsigned long long *d_out_coords,
-        RealType *d_out_coords_tangents,
-        RealType *d_out_params_tangents
+        double *d_out_coords_tangents,
+        double *d_out_params_tangents
     ) = 0;
 
 };
