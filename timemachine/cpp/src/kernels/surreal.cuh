@@ -85,6 +85,15 @@ DECL Surreal<RealType> __shfl_sync(unsigned mask, Surreal<RealType> &var, int sr
     return var;
 }
 
+
+template <typename RealType>
+__device__ inline void atomicAddOffset(Surreal<RealType> *base_ptr, const unsigned offset, const Surreal<RealType> &val) {
+    RealType* real_ptr = reinterpret_cast<RealType*>(base_ptr) + offset*2;
+    RealType* imag_ptr = real_ptr + 1;
+    atomicAdd(real_ptr, val.real);
+    atomicAdd(imag_ptr, val.imag);
+}
+
 #endif
 
 template <typename RealType>

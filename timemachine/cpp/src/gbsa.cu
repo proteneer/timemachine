@@ -631,17 +631,6 @@ void GBSAReference<RealType, D>::execute_first_order(
 
 
     std::vector<double> bornForces(N, 0);
-    // compute_born_first_loop<D>(
-    //     coords,
-    //     params,
-    //     charge_param_idxs_,
-    //     h_born_radii,
-    //     prefactor,
-    //     cutoff_,
-    //     bornForces,
-    //     dU_dx,
-    //     dU_dp
-    // );
 
     dim3 dimGrid(B, B, 1); // x, y, z dims
     k_compute_born_first_loop_gpu<double, D><<<dimGrid, tpb>>>(
@@ -782,7 +771,48 @@ void GBSAReference<RealType, D>::execute_second_order(
     gpuErrchk(cudaMemcpy(&h_obc_chain[0], d_obc_chain, N*sizeof(*d_obc_chain), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(&h_obc_chain_ri[0], d_obc_chain_ri, N*sizeof(*d_obc_chain_ri), cudaMemcpyDeviceToHost));
 
-    std::vector<double> out_forces(N*D, 0);
+    Surreal<double>* d_born_forces;
+
+    gpuErrchk(cudaMalloc(&d_born_forces, N*sizeof(*d_born_forces)));
+    gpuErrchk(cudaMemset(d_born_forces, 0, N*sizeof(*d_born_forces)));
+
+    double* d_HvP;
+
+    gpuErrchk(cudaMalloc(&d_HvP, N*D*sizeof(*d_HvP)));
+    gpuErrchk(cudaMemset(d_HvP, 0, N*D*sizeof(*d_HvP)));
+
+    double* d_MvP;
+
+    gpuErrchk(cudaMalloc(&d_MvP, P*sizeof(*d_MvP)));
+    gpuErrchk(cudaMemset(d_MvP, 0, P*sizeof(*d_MvP)));
+
+    double prefactor;
+    if (solute_dielectric_ != 0.0 && solvent_dielectric_ != 0.0) {
+        prefactor = -screening_*((1.0/solute_dielectric_) - (1.0/solvent_dielectric_));    
+    } else {
+        prefactor = 0.0;
+    }
+
+    std::vector<Surreal<double> > bornForces(N, Surreal<double>(0,0));
+
+    dim3 dimGrid(B, B, 1); // x, y, z dims
+    k_compute_born_first_loop_gpu_jvp<double, D><<<dimGrid, tpb>>>(
+        N_,
+        d_coords,
+        d_params,
+        d_charge_param_idxs_,
+        d_born_radii,
+        prefactor,
+        cutoff_,
+        d_born_forces, // output
+        d_HvP, // ouput
+        d_MvP // ouput
+    );
+
+
+    gpuErrchk(cudaMemcpy(&bornForces[0], d_born_forces, N*sizeof(*d_born_forces), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&HvP[0], d_HvP, N*D*sizeof(*d_HvP), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&MvP[0], d_MvP, P*sizeof(*d_MvP), cudaMemcpyDeviceToHost));
 
     // CPU
     compute_born_energy_and_forces_jvp<D>(
@@ -804,6 +834,7 @@ void GBSAReference<RealType, D>::execute_second_order(
         solvent_dielectric_,
         probe_radius_,
         cutoff_,
+        bornForces,
         HvP,
         MvP
     );

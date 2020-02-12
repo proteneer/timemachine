@@ -319,7 +319,7 @@ void __global__ k_compute_born_first_loop_gpu(
             RealType dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;  
             RealType dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
 
-            RealType energy = Gpol;
+            // RealType energy = Gpol;
 
             RealType dE_dqi = prefactor*qj/denominator;
             RealType dE_dqj = prefactor*qi/denominator;
@@ -339,7 +339,7 @@ void __global__ k_compute_born_first_loop_gpu(
             } else {
                 dE_dqi *= 0.5;
                 dE_dqj *= 0.5;
-                energy *= 0.5;
+                // energy *= 0.5;
             }
 
             dE_dqi_accum += dE_dqi;
@@ -376,6 +376,149 @@ void __global__ k_compute_born_first_loop_gpu(
     if(atom_j_idx < N) {
         atomicAdd(bornForces + atom_j_idx, born_force_j_accum);
         atomicAdd(dU_dp + charge_param_idx_j, dE_dqj_accum);
+    }
+
+
+
+}
+
+
+
+template <typename RealType, int D>
+void __global__ k_compute_born_first_loop_gpu_jvp(
+    const int N,
+    const Surreal<double>* coords,
+    const double* params,
+    const int* charge_param_idxs,
+    const Surreal<double>* born_radii,
+    const double prefactor,
+    const double cutoff,
+    Surreal<double> *bornForces,
+    double *out_HvP,
+    double *out_MvP) {
+
+    if(blockIdx.y > blockIdx.x) {
+        return;
+    }
+
+    // RealType block_d2ij = 0; 
+    // for(int d=0; d < D; d++) {
+    //     RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+    //     RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+    //     RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+    //     RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+    //     RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+    //     block_d2ij += dx*dx;
+    // }
+
+    // if(block_d2ij > cutoff*cutoff) {
+    //     return;
+    // }
+
+    int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
+    Surreal<RealType> ci[D];
+    Surreal<RealType> gi[D] = {Surreal<RealType>(0,0)};
+    for(int d=0; d < D; d++) {
+        ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : Surreal<RealType>(0,0);
+    }
+    int charge_param_idx_i = atom_i_idx < N ? charge_param_idxs[atom_i_idx] : 0;
+    RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
+    Surreal<RealType> born_radii_i = atom_i_idx < N ? born_radii[atom_i_idx] : Surreal<RealType>(0,0);
+
+    Surreal<RealType> dE_dqi_accum(0, 0);
+    Surreal<RealType> born_force_i_accum(0, 0);
+
+    int atom_j_idx = blockIdx.y*32 + threadIdx.x;
+    Surreal<RealType> cj[D];
+    Surreal<RealType> gj[D] = {Surreal<RealType>(0,0)};
+    for(int d=0; d < D; d++) {
+        cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : Surreal<RealType>(0,0);
+    }
+    int charge_param_idx_j = atom_j_idx < N ? charge_param_idxs[atom_j_idx] : 0;
+    RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
+    Surreal<RealType> born_radii_j = atom_j_idx < N ? born_radii[atom_j_idx] : Surreal<RealType>(0,0);
+    Surreal<RealType> dE_dqj_accum(0, 0);
+    Surreal<RealType> born_force_j_accum(0, 0);
+
+    // In inference mode, we don't care about gradients with respect to parameters.
+    for(int round = 0; round < 32; round++) {
+
+        Surreal<RealType> dxs[D];
+        Surreal<RealType> r2(0, 0);
+        for(int d=0; d < D; d++) {
+            dxs[d] = ci[d] - cj[d];
+            r2 += dxs[d]*dxs[d];
+        }
+        Surreal<RealType> r = sqrt(r2);
+
+        if(atom_j_idx <= atom_i_idx && r.real < cutoff && atom_j_idx < N && atom_i_idx < N) {
+
+            Surreal<RealType> alpha2_ij          = born_radii_i*born_radii_j;
+            Surreal<RealType> D_ij               = r2/(4.0*alpha2_ij);
+            Surreal<RealType> expTerm            = exp(-D_ij);
+            Surreal<RealType> denominator2       = r2 + alpha2_ij*expTerm; 
+            Surreal<RealType> denominator        = sqrt(denominator2);
+            Surreal<RealType> Gpol               = (prefactor*qi*qj)/denominator; 
+            Surreal<RealType> dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;  
+            Surreal<RealType> dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
+
+            // Surreal<RealType> energy = Gpol;
+
+            Surreal<RealType> dE_dqi = prefactor*qj/denominator;
+            Surreal<RealType> dE_dqj = prefactor*qi/denominator;
+
+            if (atom_i_idx != atom_j_idx) {
+
+                // TBD: determine what we should do with cutoff
+                // energy -= qi*partialCharges[atom_j_idx]/cutoff;
+                // bornForces[atom_j_idx]        += dGpol_dalpha2_ij*born_radii[atom_i_idx];
+                born_force_j_accum += dGpol_dalpha2_ij*born_radii_i;
+
+                for(int d=0; d < D; d++) {
+                    gi[d] += dxs[d]*dGpol_dr;
+                    gj[d] -= dxs[d]*dGpol_dr;
+                }
+
+            } else {
+                dE_dqi *= 0.5;
+                dE_dqj *= 0.5;
+                // energy *= 0.5;
+            }
+
+            dE_dqi_accum += dE_dqi;
+            dE_dqj_accum += dE_dqj;
+            born_force_i_accum += dGpol_dalpha2_ij*born_radii_j;
+        }
+
+        const int srcLane = (threadIdx.x + 1) % WARPSIZE;
+        atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
+        qj = __shfl_sync(0xffffffff, qj, srcLane);
+        born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
+        dE_dqj_accum = __shfl_sync(0xffffffff, dE_dqj_accum, srcLane);
+        born_force_j_accum = __shfl_sync(0xffffffff, born_force_j_accum, srcLane);
+        for(size_t d=0; d < D; d++) {
+            cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
+            gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
+        }
+    }
+
+    for(int d=0; d < D; d++) {
+        if(atom_i_idx < N) {
+            atomicAdd(out_HvP + atom_i_idx*D + d, gi[d].imag);
+        }
+        if(atom_j_idx < N) {
+            atomicAdd(out_HvP + atom_j_idx*D + d, gj[d].imag);
+        }
+    }
+
+    if(atom_i_idx < N) {
+        atomicAddOffset(bornForces, atom_i_idx, born_force_i_accum); // add both real and imaginary part
+        atomicAdd(out_MvP + charge_param_idx_i, dE_dqi_accum.imag); 
+    }
+
+    if(atom_j_idx < N) {
+        atomicAddOffset(bornForces, atom_j_idx, born_force_j_accum); // add both real and imaginary
+        atomicAdd(out_MvP + charge_param_idx_j, dE_dqj_accum.imag);
     }
 
 
