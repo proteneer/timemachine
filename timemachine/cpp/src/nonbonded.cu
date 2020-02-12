@@ -55,8 +55,11 @@ Nonbonded<RealType, D>::Nonbonded(
 
 template <typename RealType, int D>
 Nonbonded<RealType, D>::~Nonbonded() {
-    gpuErrchk(cudaFree(d_lj_param_idxs_));
     gpuErrchk(cudaFree(d_charge_param_idxs_));
+    gpuErrchk(cudaFree(d_lj_param_idxs_));
+    gpuErrchk(cudaFree(d_exclusion_idxs_));
+    gpuErrchk(cudaFree(d_charge_scale_idxs_));
+    gpuErrchk(cudaFree(d_lj_scale_idxs_));
     gpuErrchk(cudaFree(d_block_bounds_ctr_));
     gpuErrchk(cudaFree(d_block_bounds_ext_));
 };
@@ -65,17 +68,13 @@ template <typename RealType, int D>
 void Nonbonded<RealType, D>::execute_device(
     const int N,
     const int P,
-    const RealType *d_coords,
-    const RealType *d_coords_tangents,
-    const RealType *d_params,
+    const double *d_coords,
+    const double *d_coords_tangents,
+    const double *d_params,
     unsigned long long *d_out_coords,
-    RealType *d_out_coords_tangents,
-    RealType *d_out_params_tangents
+    double *d_out_coords_tangents,
+    double *d_out_params_tangents
 ) {
-
-    // if(N % 32 != 0) {
-        // throw std::runtime_error("N % 32 must be zero.");
-    // }
 
     if(N != N_) {
         throw std::runtime_error("N != N_");
@@ -87,12 +86,10 @@ void Nonbonded<RealType, D>::execute_device(
     gpuErrchk(cudaMemset(d_block_bounds_ctr_, 0, B*D*sizeof(*d_block_bounds_ctr_)));
     gpuErrchk(cudaMemset(d_block_bounds_ext_, 0, B*D*sizeof(*d_block_bounds_ext_)));
 
-
-
     cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
 
-    k_find_block_bounds<RealType><<<1, B>>>(
+    k_find_block_bounds<<<1, B>>>(
         N,
         D,
         B,
@@ -131,7 +128,7 @@ void Nonbonded<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if(E_ > 0) {
-            k_nonbonded_inference_exclusion<RealType, D><<<dimGridExclusions, tpb>>>(
+            k_nonbonded_exclusion_inference<RealType, D><<<dimGridExclusions, tpb>>>(
                 E_,
                 d_coords,
                 d_params,
@@ -151,9 +148,9 @@ void Nonbonded<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "Nonbonded Elapsed time: " << elapsed.count() << " s\n";
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
+        // std::cout << "Nonbonded Elapsed time: " << elapsed.count() << " s\n";
 
     } else {
 
@@ -179,7 +176,7 @@ void Nonbonded<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         if(E_ > 0) {
-            k_nonbonded_inference_exclusion_jvp<RealType, D><<<dimGridExclusions, tpb>>>(
+            k_nonbonded_exclusion_jvp<RealType, D><<<dimGridExclusions, tpb>>>(
                 E_,
                 d_coords,
                 d_coords_tangents,
@@ -199,9 +196,9 @@ void Nonbonded<RealType, D>::execute_device(
         }
 
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
+        // std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
 
     }
 
@@ -210,5 +207,8 @@ void Nonbonded<RealType, D>::execute_device(
 
 template class Nonbonded<double, 4>;
 template class Nonbonded<double, 3>;
+
+template class Nonbonded<float, 4>;
+template class Nonbonded<float, 3>;
 
 } // namespace timemachine

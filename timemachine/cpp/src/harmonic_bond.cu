@@ -45,12 +45,12 @@ template <typename RealType, int D>
 void HarmonicBond<RealType, D>::execute_device(
     const int N,
     const int P,
-    const RealType *d_coords,
-    const RealType *d_coords_tangents,
-    const RealType *d_params,
+    const double *d_coords,
+    const double *d_coords_tangents,
+    const double *d_params,
     unsigned long long *d_out_coords,
-    RealType *d_out_coords_tangents,
-    RealType *d_out_params_tangents
+    double *d_out_coords_tangents,
+    double *d_out_params_tangents
 ) {
 
     int tpb = 32;
@@ -71,9 +71,9 @@ void HarmonicBond<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "HarmonicBond Elapsed time: " << elapsed.count() << " s\n";
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
+        // std::cout << "HarmonicBond Elapsed time: " << elapsed.count() << " s\n";
 
     } else {
 
@@ -92,54 +92,6 @@ void HarmonicBond<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "HarmonicBond JVP Elapsed time: " << elapsed.count() << " s\n";
-
-
-        // gpuErrchk(cudaMemset(d_out_coords_tangents, 0, N*D*sizeof(RealType)));
-        // gpuErrchk(cudaMemset(d_out_params_tangents, 0, P*sizeof(RealType)));
-
-        // auto start = std::chrono::high_resolution_clock::now();
-
-        // k_nonbonded_jvp<RealType, D><<<dimGrid, tpb>>>(
-        //     N,
-        //     d_coords,
-        //     d_coords_tangents,
-        //     d_params,
-        //     d_charge_param_idxs_,
-        //     d_lj_param_idxs_,
-        //     cutoff_,
-        //     d_block_bounds_ctr_,
-        //     d_block_bounds_ext_,
-        //     d_out_coords_tangents,
-        //     d_out_params_tangents
-        // );
-
-        // cudaDeviceSynchronize();
-        // gpuErrchk(cudaPeekAtLastError());
-
-        // if(E_ > 0) {
-        //     k_nonbonded_inference_exclusion_jvp<RealType, D><<<dimGridExclusions, tpb>>>(
-        //         E_,
-        //         d_coords,
-        //         d_coords_tangents,
-        //         d_params,
-        //         d_exclusion_idxs_,
-        //         d_charge_scale_idxs_,
-        //         d_lj_scale_idxs_,
-        //         d_charge_param_idxs_,
-        //         d_lj_param_idxs_,
-        //         cutoff_,
-        //         d_out_coords_tangents,
-        //         d_out_params_tangents
-        //     );            
-
-        //     cudaDeviceSynchronize();
-        //     gpuErrchk(cudaPeekAtLastError());
-        // }
-
-
         // auto finish = std::chrono::high_resolution_clock::now();
         // std::chrono::duration<double> elapsed = finish - start;
         // std::cout << "HarmonicBond JVP Elapsed time: " << elapsed.count() << " s\n";
@@ -151,5 +103,12 @@ void HarmonicBond<RealType, D>::execute_device(
 
 template class HarmonicBond<double, 4>;
 template class HarmonicBond<double, 3>;
+
+
+template class HarmonicBond<float, 4>;
+template class HarmonicBond<float, 3>;
+
+
+
 
 } // namespace timemachine

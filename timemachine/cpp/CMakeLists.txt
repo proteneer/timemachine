@@ -3,6 +3,9 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 project(timemachine LANGUAGES CXX CUDA)
 
+find_package(PythonInterp 3.6 REQUIRED)
+find_package(PythonLibs 3.6 REQUIRED)
+
 string(APPEND CMAKE_CUDA_FLAGS "-Xptxas='-v' -arch=sm_60 -O2 -lineinfo")
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -24,9 +27,7 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
 # NO_EXTRAS is needed since cuda doesn't use flto
 pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/wrap_kernels.cpp
-  src/optimizer.cu
   src/gpu_utils.cu
-  src/langevin.cu
   src/nonbonded.cu
   src/harmonic_bond.cu
   src/harmonic_angle.cu
@@ -34,14 +35,14 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/gradient.cu
   src/integrator.cu
   src/stepper.cu
-  src/new_context.cu
+  src/context.cu
 )
 
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 include_directories(src/kernels)
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 11)
-target_link_libraries(${LIBRARY_NAME} -lcublas -lcusparse -lcurand -lcudart)
+target_link_libraries(${LIBRARY_NAME} -lcurand -lcudart)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION "lib")
