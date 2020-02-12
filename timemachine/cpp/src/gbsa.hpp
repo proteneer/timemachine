@@ -10,7 +10,7 @@ class GBSAReference : public Gradient<D> {
 
 private:
 
-    // int *d_charge_param_idxs_;
+    int *d_charge_param_idxs_;
     int *d_atomic_radii_idxs_;
     int *d_scale_factor_idxs_;
 

@@ -39,8 +39,10 @@ GBSAReference<RealType, D>::GBSAReference(
     probe_radius_(probe_radius),
     cutoff_(cutoff) {
 
+    gpuErrchk(cudaMalloc(&d_charge_param_idxs_, N_*sizeof(*d_charge_param_idxs_)));
     gpuErrchk(cudaMalloc(&d_scale_factor_idxs_, N_*sizeof(*d_scale_factor_idxs_)));
     gpuErrchk(cudaMalloc(&d_atomic_radii_idxs_, N_*sizeof(*d_atomic_radii_idxs_)));
+    gpuErrchk(cudaMemcpy(d_charge_param_idxs_, &charge_param_idxs[0], N_*sizeof(*d_charge_param_idxs_), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_scale_factor_idxs_, &scale_factor_idxs[0], N_*sizeof(*d_scale_factor_idxs_), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_atomic_radii_idxs_, &atomic_radii_idxs[0], N_*sizeof(*d_atomic_radii_idxs_), cudaMemcpyHostToDevice));
 
@@ -99,6 +101,8 @@ double compute_born_first_loop(
             double dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;  
             double dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
 
+            printf("%d %d dGpol_dalpha2_ij %f\n", atomI, atomJ, dGpol_dalpha2_ij);
+
             double energy = Gpol;
 
             double dE_dqi = prefactor*partialChargeJ/denominator;
@@ -151,10 +155,7 @@ void compute_born_radii(
     std::vector<double>& obc_chain,
     std::vector<double>& obc_chain_ri) {
 
-
-
     int numberOfAtoms = atomic_radii_idxs.size();
-    // int N = numberOfAtoms;
 
     if(coords.size() / D != numberOfAtoms) {
         throw std::runtime_error("compute born radii number of atoms are inconsistent");
@@ -604,8 +605,22 @@ void GBSAReference<RealType, D>::execute_first_order(
     gpuErrchk(cudaMemcpy(&h_obc_chain[0], d_obc_chain, N*sizeof(*d_obc_chain), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(&h_obc_chain_ri[0], d_obc_chain_ri, N*sizeof(*d_obc_chain_ri), cudaMemcpyDeviceToHost));
 
-    std::vector<double> out_forces(N*D, 0);
-    std::vector<double> bornForces(N, 0);
+
+
+    double* d_born_forces;
+
+    gpuErrchk(cudaMalloc(&d_born_forces, N*sizeof(*d_born_forces)));
+    gpuErrchk(cudaMemset(d_born_forces, 0, N*sizeof(*d_born_forces)));
+
+    double* d_dU_dx;
+
+    gpuErrchk(cudaMalloc(&d_dU_dx, N*D*sizeof(*d_dU_dx)));
+    gpuErrchk(cudaMemset(d_dU_dx, 0, N*D*sizeof(*d_dU_dx)));
+
+    double* d_dU_dp;
+
+    gpuErrchk(cudaMalloc(&d_dU_dp, P*sizeof(*d_dU_dp)));
+    gpuErrchk(cudaMemset(d_dU_dp, 0, P*sizeof(*d_dU_dp)));
 
     double prefactor;
     if (solute_dielectric_ != 0.0 && solvent_dielectric_ != 0.0) {
@@ -614,17 +629,38 @@ void GBSAReference<RealType, D>::execute_first_order(
         prefactor = 0.0;
     }
 
-    compute_born_first_loop<D>(
-        coords,
-        params,
-        charge_param_idxs_,
-        h_born_radii,
+
+    std::vector<double> bornForces(N, 0);
+    // compute_born_first_loop<D>(
+    //     coords,
+    //     params,
+    //     charge_param_idxs_,
+    //     h_born_radii,
+    //     prefactor,
+    //     cutoff_,
+    //     bornForces,
+    //     dU_dx,
+    //     dU_dp
+    // );
+
+    dim3 dimGrid(B, B, 1); // x, y, z dims
+    k_compute_born_first_loop_gpu<double, D><<<dimGrid, tpb>>>(
+        N_,
+        d_coords,
+        d_params,
+        d_charge_param_idxs_,
+        d_born_radii,
         prefactor,
         cutoff_,
-        bornForces,
-        dU_dx,
-        dU_dp
+        d_born_forces, // output
+        d_dU_dx, // ouput
+        d_dU_dp // ouput
     );
+
+
+    gpuErrchk(cudaMemcpy(&bornForces[0], d_born_forces, N*sizeof(*d_born_forces), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&dU_dx[0], d_dU_dx, N*D*sizeof(*d_dU_dx), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&dU_dp[0], d_dU_dp, P*sizeof(*d_dU_dp), cudaMemcpyDeviceToHost));
 
     // CPU
     compute_born_energy_and_forces<D>(
