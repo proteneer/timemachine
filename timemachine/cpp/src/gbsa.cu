@@ -746,19 +746,25 @@ void GBSAReference<RealType, D>::execute_second_order(
     std::vector<Surreal<double> > bornForces(N, Surreal<double>(0,0));
 
     dim3 dimGrid(B, B, 1); // x, y, z dims
-    // k_compute_born_first_loop_gpu_jvp<double, D><<<dimGrid, tpb>>>(
-    //     N_,
-    //     d_coords,
-    //     d_params,
-    //     d_charge_param_idxs_,
-    //     d_born_radii,
-    //     prefactor,
-    //     cutoff_,
-    //     d_born_forces, // output
-    //     d_HvP, // ouput
-    //     d_MvP // ouput
-    // );
+    k_compute_born_first_loop_gpu_jvp<double, D><<<dimGrid, tpb>>>(
+        N_,
+        d_coords,
+        d_params,
+        d_charge_param_idxs_,
+        d_born_radii,
+        prefactor,
+        cutoff_,
+        d_born_forces, // output
+        d_HvP, // ouput
+        d_MvP // ouput
+    );
 
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaPeekAtLastError());
+
+    gpuErrchk(cudaMemcpy(&bornForces[0], d_born_forces, N*sizeof(*d_born_forces), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&HvP[0], d_HvP, N*D*sizeof(*d_HvP), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&MvP[0], d_MvP, P*sizeof(*d_MvP), cudaMemcpyDeviceToHost));
 
    compute_born_first_loop_jvp<D>(
         dual_coords,
@@ -772,86 +778,82 @@ void GBSAReference<RealType, D>::execute_second_order(
         MvP // ouput
     );
 
-    cudaDeviceSynchronize();
-    gpuErrchk(cudaPeekAtLastError());
-
-
-    // gpuErrchk(cudaMemcpy(&bornForces[0], d_born_forces, N*sizeof(*d_born_forces), cudaMemcpyDeviceToHost));
-    // gpuErrchk(cudaMemcpy(&HvP[0], d_HvP, N*D*sizeof(*d_HvP), cudaMemcpyDeviceToHost));
-    // gpuErrchk(cudaMemcpy(&MvP[0], d_MvP, P*sizeof(*d_MvP), cudaMemcpyDeviceToHost));
-
-    reduce_born_forces_jvp<D>(
-      dual_coords,
-      params,
-      atomic_radii_idxs_,
-      h_born_radii,
-      h_obc_chain,
-      h_obc_chain_ri,
-      surface_tension_,
-      probe_radius_,
-      bornForces,
-      MvP
-    );
-
-
-    // k_reduce_born_forces_jvp<double, D><<<B, tpb>>>(
-    //   N_,
-    //   d_coords,
-    //   d_params,
-    //   d_atomic_radii_idxs_,
-    //   d_born_radii,
-    //   d_obc_chain,
-    //   d_obc_chain_ri,
+    // reduce_born_forces_jvp<D>(
+    //   dual_coords,
+    //   params,
+    //   atomic_radii_idxs_,
+    //   h_born_radii,
+    //   h_obc_chain,
+    //   h_obc_chain_ri,
     //   surface_tension_,
     //   probe_radius_,
-    //   d_born_forces,
-    //   d_MvP
+    //   bornForces,
+    //   MvP
     // );
 
-    // cudaDeviceSynchronize();
-    // gpuErrchk(cudaPeekAtLastError());
+    k_reduce_born_forces_jvp<double, D><<<B, tpb>>>(
+      N_,
+      d_coords,
+      d_params,
+      d_atomic_radii_idxs_,
+      d_born_radii,
+      d_obc_chain,
+      d_obc_chain_ri,
+      surface_tension_,
+      probe_radius_,
+      d_born_forces,
+      d_MvP
+    );
+
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaPeekAtLastError());
 
     // gpuErrchk(cudaMemcpy(&bornForces[0], d_born_forces, N*sizeof(*d_born_forces), cudaMemcpyDeviceToHost));
     // gpuErrchk(cudaMemcpy(&HvP[0], d_HvP, N*D*sizeof(*d_HvP), cudaMemcpyDeviceToHost));
     // gpuErrchk(cudaMemcpy(&MvP[0], d_MvP, P*sizeof(*d_MvP), cudaMemcpyDeviceToHost));
 
 
-
-    // k_compute_born_energy_and_forces_jvp<double, D><<<dimGrid, tpb>>>(
-    //     N_,
-    //     d_coords,
-    //     d_params,
-    //     d_atomic_radii_idxs_,
-    //     d_scale_factor_idxs_,
-    //     d_born_radii,
-    //     d_obc_chain,
-    //     d_obc_chain_ri,
-    //     dielectric_offset_,        // probe_radius_,
-    //     cutoff_,
-    //     d_born_forces,
-    //     d_HvP,
-    //     d_MvP
-    // );
-
-
-    // CPU
-    compute_born_energy_and_forces_jvp<D>(
-        dual_coords,
-        params,
-        atomic_radii_idxs_,
-        scale_factor_idxs_,
-        h_born_radii,
-        h_obc_chain,
-        h_obc_chain_ri,
-        dielectric_offset_,
-        cutoff_,
-        bornForces,
-        HvP,
-        MvP
-    );
-
     cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
+
+
+
+    k_compute_born_energy_and_forces_jvp<double, D><<<dimGrid, tpb>>>(
+        N_,
+        d_coords,
+        d_params,
+        d_atomic_radii_idxs_,
+        d_scale_factor_idxs_,
+        d_born_radii,
+        d_obc_chain,
+        d_obc_chain_ri,
+        dielectric_offset_,        // probe_radius_,
+        cutoff_,
+        d_born_forces,
+        d_HvP,
+        d_MvP
+    );
+
+
+    gpuErrchk(cudaMemcpy(&HvP[0], d_HvP, N*D*sizeof(*d_HvP), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&MvP[0], d_MvP, P*sizeof(*d_MvP), cudaMemcpyDeviceToHost));
+
+    // CPU
+    // compute_born_energy_and_forces_jvp<D>(
+    //     dual_coords,
+    //     params,
+    //     atomic_radii_idxs_,
+    //     scale_factor_idxs_,
+    //     h_born_radii,
+    //     h_obc_chain,
+    //     h_obc_chain_ri,
+    //     dielectric_offset_,
+    //     cutoff_,
+    //     bornForces,
+    //     HvP,
+    //     MvP
+    // );
+
 
     // for(int i=0; i< out_forces.size(); i++) {
     //     dU_dx[i] = static_cast<unsigned long long>((long long) (out_forces[i]*FIXED_EXPONENT));

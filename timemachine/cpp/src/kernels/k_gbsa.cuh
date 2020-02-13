@@ -415,8 +415,9 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     Surreal<RealType> ci[D];
-    Surreal<RealType> gi[D] = {Surreal<RealType>(0,0)};
+    Surreal<RealType> gi[D];
     for(int d=0; d < D; d++) {
+        gi[d] = Surreal<RealType>(0,0);
         ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : Surreal<RealType>(0,0);
     }
     int charge_param_idx_i = atom_i_idx < N ? charge_param_idxs[atom_i_idx] : 0;
@@ -428,8 +429,9 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     Surreal<RealType> cj[D];
-    Surreal<RealType> gj[D] = {Surreal<RealType>(0,0)};
+    Surreal<RealType> gj[D];
     for(int d=0; d < D; d++) {
+        gj[d] = Surreal<RealType>(0,0);
         cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : Surreal<RealType>(0,0);
     }
     int charge_param_idx_j = atom_j_idx < N ? charge_param_idxs[atom_j_idx] : 0;
@@ -834,8 +836,9 @@ __global__ void k_compute_born_energy_and_forces_jvp(
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     Surreal<RealType> ci[D];
-    Surreal<RealType> dPsi_dx_i[D] = {Surreal<RealType>(0,0)};
+    Surreal<RealType> dPsi_dx_i[D];
     for(int d=0; d < D; d++) {
+        dPsi_dx_i[d] = Surreal<RealType>(0,0);
         ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : Surreal<RealType>(0,0);
     }
 
@@ -847,8 +850,9 @@ __global__ void k_compute_born_energy_and_forces_jvp(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     Surreal<RealType> cj[D];
-    Surreal<RealType> dPsi_dx_j[D] = {Surreal<RealType>(0,0)};
+    Surreal<RealType> dPsi_dx_j[D];
     for(int d=0; d < D; d++) {
+        dPsi_dx_j[d]  = Surreal<RealType>(0,0);
         cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : Surreal<RealType>(0,0);
     }
     int atomic_radii_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;

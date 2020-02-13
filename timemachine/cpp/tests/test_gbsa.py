@@ -46,11 +46,11 @@ class TestGBSA(GradientTest):
         ref_mp = np.transpose(ref_mp, (2,0,1))
         return ref_mp
 
-    def test_fast_nonbonded(self):
+    def test_gbsa(self):
 
         np.random.seed(125)
         # N = 54
-        N = 8
+        N = 35
         D = 4
         E = 5
         P_charges = 4
