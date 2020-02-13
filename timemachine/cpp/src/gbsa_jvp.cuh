@@ -7,6 +7,54 @@
 
 namespace timemachine {
 
+
+template <int D>
+double reduce_born_forces_jvp(
+    const std::vector<Surreal<double> >& coords,
+    const std::vector<double>& params,
+    const std::vector<int>& atomic_radii_idxs,
+    const std::vector<Surreal<double> >& born_radii,
+    const std::vector<Surreal<double> >& obc_chain,
+    const std::vector<Surreal<double> >& obc_chain_ri,
+    const double surface_tension, // surface area factor
+    const double probe_radius,
+    std::vector<Surreal<double> > &bornForces, // dU/Ri
+    std::vector<double> &out_MvP
+) {
+
+    // constants
+    const int numberOfAtoms = atomic_radii_idxs.size();
+    const int N = numberOfAtoms;
+
+    // double obcEnergy = 0.0;
+
+    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+
+        Surreal<double> radii_derivs(0,0);
+        if (born_radii[atomI].real > 0.0) {
+            double atomic_radii = params[atomic_radii_idxs[atomI]];
+            double r            = atomic_radii + probe_radius;
+            Surreal<double> ar           = atomic_radii/born_radii[atomI];
+            Surreal<double> ar2          = ar*ar;
+            Surreal<double> ar4          = ar2*ar2;
+            Surreal<double> ratio6          = ar4*ar2;
+            // Surreal<double> ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
+            Surreal<double> saTerm       = surface_tension*r*r*ratio6;
+            // obcEnergy          += saTerm;
+            bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+            Surreal<double> br2 = born_radii[atomI]*born_radii[atomI];
+            Surreal<double> br4 = br2*br2;
+            Surreal<double> br6 = br4*br2;
+            radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
+        }
+        radii_derivs += bornForces[atomI] * obc_chain_ri[atomI];
+        out_MvP[atomic_radii_idxs[atomI]] += radii_derivs.imag;
+        bornForces[atomI] *= obc_chain[atomI];
+    }
+
+}
+
+
 // ported over from OpenMM with minor corrections
 template<int D>
 void compute_born_radii_jvp(
@@ -104,6 +152,98 @@ void compute_born_radii_jvp(
     }
 }
 
+
+
+template<int D>
+double compute_born_first_loop_jvp(
+    const std::vector<Surreal<double> >& coords,
+    const std::vector<double>& params,
+    const std::vector<int>& charge_param_idxs,
+    const std::vector<Surreal<double> >& born_radii,
+    const double prefactor,
+    const double cutoff,
+    std::vector<Surreal<double> > &bornForces,
+    std::vector<double> &out_forces,
+    std::vector<double> &dU_dp) {
+
+    const int numberOfAtoms = charge_param_idxs.size();
+    const int N = numberOfAtoms;
+
+    // const double soluteDielectric = solute_dielectric;
+    // const double solventDielectric = solvent_dielectric;
+    // double preFactor;
+
+    // if (soluteDielectric != 0.0 && solventDielectric != 0.0) {
+    //     preFactor = -screening*((1.0/soluteDielectric) - (1.0/solventDielectric));    
+    // } else {
+    //     preFactor = 0.0;
+    // }
+    // printf("preFactor %f\n", preFactor);
+    std::vector<Surreal<double> > charge_derivs(N, Surreal<double>(0, 0));
+
+    for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
+ 
+        double partialChargeI = params[charge_param_idxs[atomI]];
+        for (int atomJ = atomI; atomJ < numberOfAtoms; atomJ++) {
+
+            Surreal<double> r2(0,0);
+            Surreal<double> dxs[D] = {Surreal<double>(0, 0)};
+            for(int d=0; d < D; d++) {
+                Surreal<double> dx = coords[atomI*D+d] - coords[atomJ*D+d];
+                dxs[d] = dx;
+                r2 += dx*dx;
+            }
+            Surreal<double> r = sqrt(r2);
+            Surreal<double> alpha2_ij          = born_radii[atomI]*born_radii[atomJ];
+            Surreal<double> D_ij               = r2/(4.0*alpha2_ij);
+
+            Surreal<double> expTerm            = exp(-D_ij);
+            Surreal<double> denominator2       = r2 + alpha2_ij*expTerm; 
+            Surreal<double> denominator        = sqrt(denominator2);
+
+            double partialChargeJ     = params[charge_param_idxs[atomJ]];
+            Surreal<double> Gpol               = (prefactor*partialChargeI*partialChargeJ)/denominator; 
+
+            Surreal<double> dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;  
+            Surreal<double> dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
+
+            printf("%d %d dGpol_dalpha2_ij %f\n", atomI, atomJ, dGpol_dalpha2_ij);
+
+            Surreal<double> energy = Gpol;
+
+            Surreal<double> dE_dqi = prefactor*partialChargeJ/denominator;
+            Surreal<double> dE_dqj = prefactor*partialChargeI/denominator;
+
+            if (atomI != atomJ) {
+
+                // TBD: determine what we should do with cutoff
+                // energy -= partialChargeI*partialCharges[atomJ]/cutoff;
+                bornForces[atomJ]        += dGpol_dalpha2_ij*born_radii[atomI];
+                for(int d=0; d < D; d++) {
+                    out_forces[atomI*D+d] += (dxs[d]*dGpol_dr).imag;
+                    out_forces[atomJ*D+d] -= (dxs[d]*dGpol_dr).imag;
+                }
+            } else {
+                dE_dqi *= 0.5;
+                dE_dqj *= 0.5;
+                energy *= 0.5;
+            }
+
+            charge_derivs[atomI]     += dE_dqi;
+            charge_derivs[atomJ]     += dE_dqj;
+
+            // obcEnergy         += energy;
+            bornForces[atomI] += dGpol_dalpha2_ij*born_radii[atomJ];
+
+        }
+    }
+
+    for(int i=0; i < charge_derivs.size(); i++) {
+      // std::cout << "???" << charge_derivs[i] << std::endl;
+        dU_dp[charge_param_idxs[i]] += charge_derivs[i].imag;
+    }
+
+};
 
 template <int D>
 double compute_born_energy_and_forces_jvp(
