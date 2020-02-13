@@ -1,6 +1,6 @@
 #pragma once
 
 template<typename T>
-int sign(T a) {
+__device__ __host__ int sign(T a) {
   return (a > 0) - (a < 0);
 }

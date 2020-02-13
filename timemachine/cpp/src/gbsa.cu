@@ -291,8 +291,7 @@ double compute_born_energy_and_forces(
     const double cutoff,
     std::vector<double> &bornForces,
     std::vector<double> &out_forces,
-    std::vector<double> &out_dU_dp
-) {
+    std::vector<double> &out_dU_dp) {
 
     // constants
     const int numberOfAtoms = atomic_radii_idxs.size();
@@ -300,32 +299,6 @@ double compute_born_energy_and_forces(
 
     const double dielectricOffset = dielectric_offset;
     const double cutoffDistance = cutoff;
-
-    // double obcEnergy = 0.0;
-    // // std::vector<double> bornForces(numberOfAtoms, 0.0);
-    // std::vector<double> atomic_radii_derivatives(N, 0);
-
-    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-    //     if (born_radii[atomI] > 0.0) {
-    //         double atomic_radii = params[atomic_radii_idxs[atomI]];
-    //         double r            = atomic_radii + probe_radius;
-    //         double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
-    //         double saTerm       = surface_tension*r*r*ratio6;
-    //         obcEnergy          += saTerm;
-    //         bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
-    //         double br2 = born_radii[atomI]*born_radii[atomI];
-    //         double br4 = br2*br2;
-    //         double br6 = br4*br2;
-    //         atomic_radii_derivatives[atomI] += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
-    //     }
-    // }
-
-    // // second main loop
-    // for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
-    //   // order matters here
-    //   atomic_radii_derivatives[atomI] += bornForces[atomI] * obc_chain_ri[atomI]; // do obc chain separately 
-    //   bornForces[atomI] *= obc_chain[atomI]; // dU/dR*dR/dPsi
-    // }
 
     std::vector<double> dPsi_dx(N*D, 0);
     std::vector<double> dPsi_dri(N, 0);
@@ -455,13 +428,8 @@ double compute_born_energy_and_forces(
       }
     }
 
-    // for(int i=0; i < dPsi_dri.size(); i++) {
-    //   std::cout << "dPsi_dri: " << dPsi_dri[i]+atomic_radii_derivatives[i] << std::endl;
-    // }
 
     for(int i=0; i < dPsi_dri.size(); i++) {
-      // std::cout << "dPsi_dri parts: " << dPsi_dri[i] << " " << atomic_radii_derivatives[i] << std::endl;
-      // out_dU_dp[atomic_radii_idxs[i]] += dPsi_dri[i]+atomic_radii_derivatives[i];
       out_dU_dp[atomic_radii_idxs[i]] += dPsi_dri[i];
     }
 
@@ -469,13 +437,6 @@ double compute_born_energy_and_forces(
       out_dU_dp[scale_factor_idxs[i]] += dPsi_dsi[i];
     }
 
-    // for(int i=0; i < charge_derivs.size(); i++) {
-    //   // std::cout << "???" << charge_derivs[i] << std::endl;
-    //   out_dU_dp[charge_param_idxs[i]] += charge_derivs[i];
-    // }
-
-    // std::cout << "energy" << obcEnergy << std::endl;
-    // return obcEnergy;
 }
 
 
@@ -603,6 +564,9 @@ void GBSAReference<RealType, D>::execute_first_order(
         d_dU_dp // ouput
     );
 
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaPeekAtLastError());
+
     k_reduce_born_forces<double, D><<<B, tpb>>>(
       N_,
       d_coords,
@@ -617,27 +581,50 @@ void GBSAReference<RealType, D>::execute_first_order(
       d_dU_dp
     );
 
-    gpuErrchk(cudaMemcpy(&bornForces[0], d_born_forces, N*sizeof(*d_born_forces), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(&dU_dx[0], d_dU_dx, N*D*sizeof(*d_dU_dx), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(&dU_dp[0], d_dU_dp, P*sizeof(*d_dU_dp), cudaMemcpyDeviceToHost));
+    cudaDeviceSynchronize();
+    gpuErrchk(cudaPeekAtLastError());
+
+    // gpuErrchk(cudaMemcpy(&bornForces[0], d_born_forces, N*sizeof(*d_born_forces), cudaMemcpyDeviceToHost));
 
     // CPU
-    compute_born_energy_and_forces<D>(
-        coords,
-        params,
-        atomic_radii_idxs_,
-        scale_factor_idxs_,
-        h_born_radii,
-        h_obc_chain,
-        h_obc_chain_ri,
+    // compute_born_energy_and_forces<D>(
+    //     coords,
+    //     params,
+    //     atomic_radii_idxs_,
+    //     scale_factor_idxs_,
+    //     h_born_radii,
+    //     h_obc_chain,
+    //     h_obc_chain_ri,
+    //     dielectric_offset_,
+    //     // surface_tension_,
+    //     // probe_radius_,
+    //     cutoff_,
+    //     bornForces,
+    //     dU_dx,
+    //     dU_dp
+    // );
+
+    k_compute_born_energy_and_forces<double, D><<<dimGrid, tpb>>>(
+        N_,
+        d_coords,
+        d_params,
+        d_atomic_radii_idxs_,
+        d_scale_factor_idxs_,
+        d_born_radii,
+        d_obc_chain,
+        d_obc_chain_ri,
         dielectric_offset_,
         // surface_tension_,
         // probe_radius_,
         cutoff_,
-        bornForces,
-        dU_dx,
-        dU_dp
+        d_born_forces,
+        d_dU_dx,
+        d_dU_dp
     );
+
+    gpuErrchk(cudaMemcpy(&dU_dx[0], d_dU_dx, N*D*sizeof(*d_dU_dx), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&dU_dp[0], d_dU_dp, P*sizeof(*d_dU_dp), cudaMemcpyDeviceToHost));
+
 
     cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
