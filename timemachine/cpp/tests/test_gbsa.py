@@ -49,8 +49,8 @@ class TestGBSA(GradientTest):
     def test_fast_nonbonded(self):
 
         np.random.seed(125)
-        N = 35
-        # N = 8
+        # N = 54
+        N = 8
         D = 4
         E = 5
         P_charges = 4

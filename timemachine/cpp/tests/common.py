@@ -271,13 +271,17 @@ class GradientTest(unittest.TestCase):
         norms = np.linalg.norm(truth, axis=-1, keepdims=True)
         norms = np.where(norms < 1., 1.0, norms)
         errors = (truth-test)/norms
+
+        print(errors)
         max_error = np.amax(np.abs(errors))
         mean_error = np.mean(np.abs(errors).reshape(-1))
         std_error = np.std(errors.reshape(-1))
         max_error_arg = np.argmax(errors)//truth.shape[1]
 
-        errors = errors > rtol
-        print("max relative error", max_error, norms[max_error_arg], "mean error", mean_error, "std error", std_error)
+        # was just straight up fucking wrong
+        errors = np.abs(errors) > rtol
+
+        print("max relative error", max_error, "rtol", rtol, norms[max_error_arg], "mean error", mean_error, "std error", std_error)
         if np.sum(errors) > 0:
             print("FATAL: max relative error", max_error, truth[max_error_arg], test[max_error_arg])
             assert 0
