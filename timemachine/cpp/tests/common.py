@@ -38,7 +38,6 @@ def prepare_gbsa_system(
     # charges
     charge_params = np.random.rand(P_charges).astype(np.float64)
     charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
-    print(charge_param_idxs)
     params = np.concatenate([params, charge_params])
 
     # gb radiis
@@ -46,7 +45,6 @@ def prepare_gbsa_system(
     # radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
     assert P_radii == N
     radii_param_idxs = np.arange(P_radii, dtype=np.int32) + len(params)
-    print(radii_param_idxs)
 
     params = np.concatenate([params, radii_params])
 
@@ -55,7 +53,6 @@ def prepare_gbsa_system(
     # scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
     assert P_scale_factors == N
     scale_param_idxs = np.arange(P_scale_factors, dtype=np.int32) + len(params)
-    print(scale_param_idxs)
     params = np.concatenate([params, scale_params])
 
     # dielectric_offset = 0.009
@@ -297,40 +294,37 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
-        test_dx, test_dp = custom_force.execute_first_order(x, params)
+        # test_dx, test_dp = custom_force.execute_first_order(x, params)
+        test_dx = custom_force.execute(x, params)
 
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
         ref_dx, ref_dp = grad_fn(x, params)
 
-        # print(np.array(ref_dx))
-        # print(np.array(test_dx))
         self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),
             rtol,
         )
 
-        np.testing.assert_allclose(ref_dp, test_dp, rtol=1e-10)
+        # np.testing.assert_allclose(ref_dp, test_dp, rtol=1e-10)
 
         print("first order passed")
-
-        # assert 0
 
         x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         params_tangent = np.zeros_like(params)
 
-        test_x_tangent, test_p_tangent = custom_force.execute_second_order(x, x_tangent, params)
+        # test_x_tangent, test_p_tangent = custom_force.execute_second_order(x, x_tangent, params)
 
 
 
         # assert 0
 
-        # test_x_tangent, test_p_tangent = custom_force.execute_jvp(
-        #     x,
-        #     params,
-        #     x_tangent,
-        #     params_tangent
-        # )
+        test_x_tangent, test_p_tangent = custom_force.execute_jvp(
+            x,
+            params,
+            x_tangent,
+            params_tangent
+        )
 
         primals = (x, params)
         tangents = (x_tangent, params_tangent)

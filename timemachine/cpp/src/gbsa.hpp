@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gradient.hpp"
+#include "surreal.cuh"
 #include <vector>
 
 namespace timemachine {
@@ -13,6 +14,27 @@ private:
     int *d_charge_param_idxs_;
     int *d_atomic_radii_idxs_;
     int *d_scale_factor_idxs_;
+
+
+    double *d_born_radii_buffer_; // double or Surreal<double>
+    double *d_obc_buffer_; // double or Surreal<double>
+    double *d_obc_ri_buffer_; // double or Surreal<double>
+    unsigned long long *d_born_forces_buffer_; // ull or Surreal<double>
+
+    Surreal<double> *d_born_radii_buffer_jvp_; // double or Surreal<double>
+    Surreal<double> *d_obc_buffer_jvp_; // double or Surreal<double>
+    Surreal<double> *d_obc_ri_buffer_jvp_; // double or Surreal<double>
+    Surreal<double> *d_born_forces_buffer_jvp_; // ull or Surreal<double>
+
+
+    // unsigned long long *d_born_forces_ull_;
+    // double *d_born_forces_jvp_;
+
+    // double *d_born_radii_;
+    // Surreal<double> *d_born_radii_jvp_;
+
+    // double *d_born_obc_;
+    // Surreal<double> *d_born_obc_jvp_;
 
 
     std::vector<int> charge_param_idxs_;

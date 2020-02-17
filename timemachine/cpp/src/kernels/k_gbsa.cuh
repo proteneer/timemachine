@@ -9,7 +9,7 @@
 // since we need to do a full O(N^2) computing and we don't need to broadcast the forces,
 // this should just be extremely efficient already
 template<typename RealType, int D>
-__global__ void compute_born_radii_gpu(
+__global__ void k_compute_born_radii_gpu(
     const int N,
     const double* coords,
     const double* params,
@@ -123,9 +123,10 @@ __global__ void compute_born_radii_gpu(
 
 
 template<typename RealType, int D>
-__global__ void compute_born_radii_gpu_jvp(
+__global__ void k_compute_born_radii_gpu_jvp(
     const int N,
-    const Surreal<RealType>* coords,
+    const double* coords,
+    const double* coords_tangents,
     const double* params,
     const int* atomic_radii_idxs,
     const int* scale_factor_idxs,
@@ -145,7 +146,8 @@ __global__ void compute_born_radii_gpu_jvp(
     }
     Surreal<RealType> ci[D] = {Surreal<RealType>(0, 0)};
     for(int d=0; d < D; d++) {
-        ci[d] = coords[atom_i_idx*D+d];
+        ci[d].real = coords[atom_i_idx*D+d];
+        ci[d].imag = coords_tangents[atom_i_idx*D+d];
     }
     int radii_param_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
 
@@ -167,7 +169,8 @@ __global__ void compute_born_radii_gpu_jvp(
 
         Surreal<RealType> r(0, 0);
         for(int d=0; d < D; d++) {
-            Surreal<RealType> dx = ci[d] - coords[atom_j_idx*D+d];
+            Surreal<RealType> cjd(coords[atom_j_idx*D+d], coords_tangents[atom_j_idx*D+d]);
+            Surreal<RealType> dx = ci[d] - cjd;
             r += dx*dx;
         }
         r = sqrt(r);
@@ -381,7 +384,8 @@ void __global__ k_compute_born_first_loop_gpu(
 template <typename RealType, int D>
 void __global__ k_compute_born_first_loop_gpu_jvp(
     const int N,
-    const Surreal<double>* coords,
+    const double* coords,
+    const double* coords_tangents,
     const double* params,
     const int* charge_param_idxs,
     const Surreal<double>* born_radii,
@@ -414,7 +418,8 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     Surreal<RealType> gi[D];
     for(int d=0; d < D; d++) {
         gi[d] = Surreal<RealType>(0,0);
-        ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : Surreal<RealType>(0,0);
+        ci[d].real = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
+        ci[d].imag = atom_i_idx < N ? coords_tangents[atom_i_idx*D+d] : 0;
     }
     int charge_param_idx_i = atom_i_idx < N ? charge_param_idxs[atom_i_idx] : 0;
     RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
@@ -428,7 +433,8 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     Surreal<RealType> gj[D];
     for(int d=0; d < D; d++) {
         gj[d] = Surreal<RealType>(0,0);
-        cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : Surreal<RealType>(0,0);
+        cj[d].real = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
+        cj[d].imag = atom_j_idx < N ? coords_tangents[atom_j_idx*D+d] : 0;
     }
     int charge_param_idx_j = atom_j_idx < N ? charge_param_idxs[atom_j_idx] : 0;
     RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
@@ -500,6 +506,7 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
 
     for(int d=0; d < D; d++) {
         if(atom_i_idx < N) {
+            printf("!!I %d %f\n", atom_i_idx, gi[d].imag);
             atomicAdd(out_HvP + atom_i_idx*D + d, gi[d].imag);
         }
         if(atom_j_idx < N) {
@@ -525,7 +532,6 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
 template <typename RealType, int D>
 __global__ void k_reduce_born_forces(
     const int N,
-    const double* coords,
     const double* params,
     const int* atomic_radii_idxs,
     const double* born_radii,
@@ -567,7 +573,6 @@ __global__ void k_reduce_born_forces(
 template <typename RealType, int D>
 __global__ void k_reduce_born_forces_jvp(
     const int N,
-    const Surreal<double>* coords,
     const double* params,
     const int* atomic_radii_idxs,
     const Surreal<double>* born_radii,
@@ -619,8 +624,6 @@ __global__ void k_compute_born_energy_and_forces(
     const double* obc_chain,
     const double* obc_chain_ri,
     const double dielectric_offset,
-    // const double surface_tension, // surface area factor
-    // const double probe_radius,
     const double cutoff,
     const unsigned long long* bornForces,
     unsigned long long* out_forces,
@@ -667,7 +670,6 @@ __global__ void k_compute_born_energy_and_forces(
     int atomI = atom_i_idx;
     int atomJ = atom_j_idx;
 
-    // for (int atomJ = 0; atomJ < numberOfAtoms; atomJ++) {
     for(int round = 0; round < 32; round++) {
 
         if (atomJ != atomI) {
@@ -816,7 +818,8 @@ __global__ void k_compute_born_energy_and_forces(
 template <typename RealType, int D>
 __global__ void k_compute_born_energy_and_forces_jvp(
     const int N,
-    const Surreal<double>* coords,
+    const double* coords,
+    const double* coords_tangents,
     const double* params,
     const int* atomic_radii_idxs,
     const int* scale_factor_idxs,
@@ -824,8 +827,6 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     const Surreal<double>* obc_chain,
     const Surreal<double>* obc_chain_ri,
     const double dielectric_offset,
-    // const double surface_tension, // surface area factor
-    // const double probe_radius,
     const double cutoff,
     const Surreal<double>* bornForces,
     double* out_HvP,
@@ -838,7 +839,8 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     Surreal<RealType> dPsi_dx_i[D];
     for(int d=0; d < D; d++) {
         dPsi_dx_i[d] = Surreal<RealType>(0,0);
-        ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : Surreal<RealType>(0,0);
+        ci[d].real = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
+        ci[d].imag = atom_i_idx < N ? coords_tangents[atom_i_idx*D+d] : 0;
     }
 
     int atomic_radii_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
@@ -852,7 +854,8 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     Surreal<RealType> dPsi_dx_j[D];
     for(int d=0; d < D; d++) {
         dPsi_dx_j[d]  = Surreal<RealType>(0,0);
-        cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : Surreal<RealType>(0,0);
+        cj[d].real = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
+        cj[d].imag = atom_j_idx < N ? coords_tangents[atom_j_idx*D+d] : 0;
     }
     int atomic_radii_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
     RealType radiusJ = atom_j_idx < N ? params[atomic_radii_idx_j] : 0;
