@@ -506,7 +506,6 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
 
     for(int d=0; d < D; d++) {
         if(atom_i_idx < N) {
-            printf("!!I %d %f\n", atom_i_idx, gi[d].imag);
             atomicAdd(out_HvP + atom_i_idx*D + d, gi[d].imag);
         }
         if(atom_j_idx < N) {
