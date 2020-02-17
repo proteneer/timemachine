@@ -207,7 +207,7 @@ double compute_born_first_loop_jvp(
             Surreal<double> dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;  
             Surreal<double> dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
 
-            printf("%d %d dGpol_dalpha2_ij %f\n", atomI, atomJ, dGpol_dalpha2_ij);
+            // printf("%d %d dGpol_dalpha2_ij %f\n", atomI, atomJ, dGpol_dalpha2_ij);
 
             Surreal<double> energy = Gpol;
 

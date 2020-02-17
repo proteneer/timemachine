@@ -525,15 +525,15 @@ void GBSAReference<RealType, D>::execute_first_order(
 
 
 
-    double* d_born_forces;
+    unsigned long long *d_born_forces_ull;
 
-    gpuErrchk(cudaMalloc(&d_born_forces, N*sizeof(*d_born_forces)));
-    gpuErrchk(cudaMemset(d_born_forces, 0, N*sizeof(*d_born_forces)));
+    gpuErrchk(cudaMalloc(&d_born_forces_ull, N*sizeof(*d_born_forces_ull)));
+    gpuErrchk(cudaMemset(d_born_forces_ull, 0, N*sizeof(*d_born_forces_ull)));
 
-    double* d_dU_dx;
+    unsigned long long* d_dU_dx_ull;
 
-    gpuErrchk(cudaMalloc(&d_dU_dx, N*D*sizeof(*d_dU_dx)));
-    gpuErrchk(cudaMemset(d_dU_dx, 0, N*D*sizeof(*d_dU_dx)));
+    gpuErrchk(cudaMalloc(&d_dU_dx_ull, N*D*sizeof(*d_dU_dx_ull)));
+    gpuErrchk(cudaMemset(d_dU_dx_ull, 0, N*D*sizeof(*d_dU_dx_ull)));
 
     double* d_dU_dp;
 
@@ -559,8 +559,8 @@ void GBSAReference<RealType, D>::execute_first_order(
         d_born_radii,
         prefactor,
         cutoff_,
-        d_born_forces, // output
-        d_dU_dx, // ouput
+        d_born_forces_ull, // output
+        d_dU_dx_ull, // ouput
         d_dU_dp // ouput
     );
 
@@ -577,7 +577,8 @@ void GBSAReference<RealType, D>::execute_first_order(
       d_obc_chain_ri,
       surface_tension_,
       probe_radius_,
-      d_born_forces,
+      d_born_forces_ull,
+
       d_dU_dp
     );
 
@@ -617,12 +618,21 @@ void GBSAReference<RealType, D>::execute_first_order(
         // surface_tension_,
         // probe_radius_,
         cutoff_,
-        d_born_forces,
-        d_dU_dx,
+        d_born_forces_ull,
+        d_dU_dx_ull,
         d_dU_dp
     );
 
-    gpuErrchk(cudaMemcpy(&dU_dx[0], d_dU_dx, N*D*sizeof(*d_dU_dx), cudaMemcpyDeviceToHost));
+    std::vector<unsigned long long> dU_dx_ull(N*D, 0);
+
+    gpuErrchk(cudaMemcpy(&dU_dx_ull[0], d_dU_dx_ull, N*D*sizeof(*d_dU_dx_ull), cudaMemcpyDeviceToHost));    
+
+    for(int i=0; i < dU_dx_ull.size(); i++) {
+        std::cout << "i " << i << " " << dU_dx_ull[i] << std::endl;
+        dU_dx[i] = static_cast<RealType>(static_cast<long long>(dU_dx_ull[i]))/FIXED_EXPONENT;
+    }
+
+    // gpuErrchk(cudaMemcpy(&dU_dx[0], d_dU_dx, N*D*sizeof(*d_dU_dx), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(&dU_dp[0], d_dU_dp, P*sizeof(*d_dU_dp), cudaMemcpyDeviceToHost));
 
 

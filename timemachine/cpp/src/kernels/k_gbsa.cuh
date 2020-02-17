@@ -62,8 +62,6 @@ __global__ void compute_born_radii_gpu(
         RealType rScaledRadiusJ  = r + scaledRadiusJ;
         RealType rSubScaledRadiusJ =  r - scaledRadiusJ;
 
-        // printf("%d %d %d %d\n",atom_j_idx != atom_i_idx, r < cutoff, atom_j_idx < N, atom_i_idx < N);
-
         if(atom_j_idx != atom_i_idx && r < cutoff) {
 
             if (offsetRadiusI < rScaledRadiusJ) {
@@ -177,8 +175,6 @@ __global__ void compute_born_radii_gpu_jvp(
         Surreal<RealType> rScaledRadiusJ  = r + scaledRadiusJ;
         Surreal<RealType> rSubScaledRadiusJ =  r - scaledRadiusJ;
 
-        // printf("%d %d %d %d\n",atom_j_idx != atom_i_idx, r < cutoff, atom_j_idx < N, atom_i_idx < N);
-
         if(atom_j_idx != atom_i_idx && r.real < cutoff) {
 
             if (offsetRadiusI < rScaledRadiusJ.real) {
@@ -248,8 +244,8 @@ void __global__ k_compute_born_first_loop_gpu(
     const double* born_radii,
     const double prefactor,
     const double cutoff,
-    double *bornForces,
-    double *out_forces,
+    unsigned long long *bornForces,
+    unsigned long long *out_forces,
     double *dU_dp) {
 
     if(blockIdx.y > blockIdx.x) {
@@ -359,20 +355,20 @@ void __global__ k_compute_born_first_loop_gpu(
 
     for(int d=0; d < D; d++) {
         if(atom_i_idx < N) {
-            atomicAdd(out_forces + atom_i_idx*D + d, gi[d]);
+            atomicAdd(out_forces + atom_i_idx*D + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));
         }
         if(atom_j_idx < N) {
-            atomicAdd(out_forces + atom_j_idx*D + d, gj[d]);
+            atomicAdd(out_forces + atom_j_idx*D + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
         }
     }
 
     if(atom_i_idx < N) {
-        atomicAdd(bornForces + atom_i_idx, born_force_i_accum);
+        atomicAdd(bornForces + atom_i_idx, static_cast<unsigned long long>((long long) (born_force_i_accum*FIXED_EXPONENT_BORN_FORCES)));
         atomicAdd(dU_dp + charge_param_idx_i, dE_dqi_accum);
     }
 
     if(atom_j_idx < N) {
-        atomicAdd(bornForces + atom_j_idx, born_force_j_accum);
+        atomicAdd(bornForces + atom_j_idx, static_cast<unsigned long long>((long long) (born_force_j_accum*FIXED_EXPONENT_BORN_FORCES)));
         atomicAdd(dU_dp + charge_param_idx_j, dE_dqj_accum);
     }
 
@@ -537,7 +533,7 @@ __global__ void k_reduce_born_forces(
     const double* obc_chain_ri,
     const double surface_tension, // surface area factor
     const double probe_radius,
-    double* bornForces, // dU/Ri
+    unsigned long long* bornForces, // dU/Ri
     double* out_dU_dp
 ) {
 
@@ -547,20 +543,23 @@ __global__ void k_reduce_born_forces(
     }
 
     RealType radii_derivs = 0;
+    RealType born_force_i = static_cast<RealType>(static_cast<long long>(bornForces[atomI]))/FIXED_EXPONENT_BORN_FORCES;
     if (born_radii[atomI] > 0.0) {
         RealType atomic_radii = params[atomic_radii_idxs[atomI]];
         RealType r            = atomic_radii + probe_radius;
         RealType ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
         RealType saTerm       = surface_tension*r*r*ratio6;
-        bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+        born_force_i  -= 6.0*saTerm/born_radii[atomI]; 
         RealType br2 = born_radii[atomI]*born_radii[atomI];
         RealType br4 = br2*br2;
         RealType br6 = br4*br2;
         radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
     }
-    radii_derivs += bornForces[atomI] * obc_chain_ri[atomI];
+    radii_derivs += born_force_i * obc_chain_ri[atomI];
     out_dU_dp[atomic_radii_idxs[atomI]] += radii_derivs;
-    bornForces[atomI] *= obc_chain[atomI];
+
+    born_force_i *= obc_chain[atomI];
+    bornForces[atomI] = static_cast<unsigned long long>((long long) ( born_force_i*FIXED_EXPONENT_BORN_FORCES));
 
 }
 
@@ -623,8 +622,8 @@ __global__ void k_compute_born_energy_and_forces(
     // const double surface_tension, // surface area factor
     // const double probe_radius,
     const double cutoff,
-    const double* bornForces,
-    double* out_forces,
+    const unsigned long long* bornForces,
+    unsigned long long* out_forces,
     double* out_dU_dp) {
 
     // we always do the full interaction matrix due to non-symmetry
@@ -638,7 +637,7 @@ __global__ void k_compute_born_energy_and_forces(
 
     int atomic_radii_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
     RealType radiusI = atom_i_idx < N ? params[atomic_radii_idx_i] : 0;
-    RealType born_force_i = atom_i_idx < N ? bornForces[atom_i_idx] : 0;
+    RealType born_force_i = atom_i_idx < N ? static_cast<RealType>(static_cast<long long>(bornForces[atom_i_idx]))/FIXED_EXPONENT_BORN_FORCES : 0;
     RealType born_radii_i = atom_i_idx < N ? born_radii[atom_i_idx] : 0;
     RealType dPsi_dri = 0;
 
@@ -690,7 +689,7 @@ __global__ void k_compute_born_energy_and_forces(
             RealType scaleFactorJ2      = scaleFactorJ*scaleFactorJ;
             RealType scaleFactorJ3      = scaleFactorJ2*scaleFactorJ;
             RealType scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
-            RealType scaledRadiusJ2     = scaledRadiusJ*scaledRadiusJ;
+            // RealType scaledRadiusJ2     = scaledRadiusJ*scaledRadiusJ;
             RealType rScaledRadiusJ     = r + scaledRadiusJ;
             RealType rScaledRadiusJ2    = rScaledRadiusJ*rScaledRadiusJ;
             RealType rScaledRadiusJ3    = rScaledRadiusJ2*rScaledRadiusJ;
@@ -792,10 +791,10 @@ __global__ void k_compute_born_energy_and_forces(
 
     for(int d=0; d < D; d++) {
         if(atomI < N) {
-            atomicAdd(out_forces + atomI*D+d, dPsi_dx_i[d]);
+            atomicAdd(out_forces + atomI*D+d,  static_cast<unsigned long long>((long long) (dPsi_dx_i[d]*FIXED_EXPONENT)));
         }
         if(atomJ < N) {
-            atomicAdd(out_forces + atomJ*D+d, dPsi_dx_j[d]);
+            atomicAdd(out_forces + atomJ*D+d,  static_cast<unsigned long long>((long long) (dPsi_dx_j[d]*FIXED_EXPONENT)));
         }
     }
 
