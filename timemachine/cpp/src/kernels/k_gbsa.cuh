@@ -697,11 +697,9 @@ __global__ void k_compute_born_energy_and_forces(
             RealType offsetRadiusJ      = radiusJ - dielectricOffset;
             RealType offsetRadiusJ2     = offsetRadiusJ*offsetRadiusJ;
 
-            // RealType scaleFactorJ       = params[scale_factor_idxs[atomJ]];
             RealType scaleFactorJ2      = scaleFactorJ*scaleFactorJ;
             RealType scaleFactorJ3      = scaleFactorJ2*scaleFactorJ;
             RealType scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
-            // RealType scaledRadiusJ2     = scaledRadiusJ*scaledRadiusJ;
             RealType rScaledRadiusJ     = r + scaledRadiusJ;
             RealType rScaledRadiusJ2    = rScaledRadiusJ*rScaledRadiusJ;
             RealType rScaledRadiusJ3    = rScaledRadiusJ2*rScaledRadiusJ;
