@@ -315,12 +315,6 @@ class GradientTest(unittest.TestCase):
         x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         params_tangent = np.zeros_like(params)
 
-        # test_x_tangent, test_p_tangent = custom_force.execute_second_order(x, x_tangent, params)
-
-
-
-        # assert 0
-
         test_x_tangent, test_p_tangent = custom_force.execute_jvp(
             x,
             params,

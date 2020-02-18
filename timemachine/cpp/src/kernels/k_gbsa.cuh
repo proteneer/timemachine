@@ -39,7 +39,9 @@ __global__ void k_compute_born_radii_gpu(
     RealType offsetRadiusI   = radiusI - dielectric_offset;
     RealType radiusIInverse  = 1.0/offsetRadiusI;
 
-    RealType sum = 0;
+
+    // *always* accumulate in 64 bit.
+    double sum = 0;
  
     for(int atom_j_idx = 0; atom_j_idx < N; atom_j_idx++) {
 
@@ -99,9 +101,9 @@ __global__ void k_compute_born_radii_gpu(
 
     sum                *= 0.5*offsetRadiusI;
 
-    RealType sum2       = sum*sum;
-    RealType sum3       = sum*sum2;
-    RealType tanhSum    = tanh(alpha_obc*sum - beta_obc*sum2 + gamma_obc*sum3);
+    double sum2       = sum*sum;
+    double sum3       = sum*sum2;
+    double tanhSum    = tanh(alpha_obc*sum - beta_obc*sum2 + gamma_obc*sum3);
 
     if(atom_i_idx < N) {
 
