@@ -31,8 +31,10 @@ def GBSAReference(*args, precision):
             raise Exception("Bad Dim")
     elif precision == np.float32:
         if dim == 3:
+            print("32 bit 3D")
             return custom_ops.GBSAReference_f32_3d(*args[:-1])
         elif dim == 4:
+            print("32 bit 4D")
             return custom_ops.GBSAReference_f32_4d(*args[:-1])
         else:
             raise Exception("Bad Dim")

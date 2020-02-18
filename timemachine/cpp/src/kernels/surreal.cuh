@@ -94,6 +94,14 @@ __device__ inline void atomicAddOffset(Surreal<RealType> *base_ptr, const unsign
     atomicAdd(imag_ptr, val.imag);
 }
 
+template <typename PtrType, typename SecondType>
+__device__ inline void atomicAddOffsetSplit(Surreal<PtrType> *base_ptr, const unsigned offset, const Surreal<SecondType> &val) {
+    PtrType* real_ptr = reinterpret_cast<PtrType*>(base_ptr) + offset*2;
+    PtrType* imag_ptr = real_ptr + 1;
+    atomicAdd(real_ptr, val.real);
+    atomicAdd(imag_ptr, val.imag);
+}
+
 #endif
 
 template <typename RealType>

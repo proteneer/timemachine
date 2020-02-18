@@ -41,7 +41,8 @@ def prepare_gbsa_system(
     params = np.concatenate([params, charge_params])
 
     # gb radiis
-    radii_params = np.random.rand(P_radii).astype(np.float64)
+    # +0.1 is to avoid catastrophic loss of accuracy when really small
+    radii_params = np.random.rand(P_radii).astype(np.float64)+0.1
     # radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
     assert P_radii == N
     radii_param_idxs = np.arange(P_radii, dtype=np.int32) + len(params)
@@ -49,7 +50,8 @@ def prepare_gbsa_system(
     params = np.concatenate([params, radii_params])
 
     # scale factors
-    scale_params = np.random.rand(P_scale_factors).astype(np.float64)
+    # +0.1 is to avoid catastrophic loss of accuracy when really small
+    scale_params = np.random.rand(P_scale_factors).astype(np.float64)+0.1
     # scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
     assert P_scale_factors == N
     scale_param_idxs = np.arange(P_scale_factors, dtype=np.int32) + len(params)
@@ -341,6 +343,9 @@ class GradientTest(unittest.TestCase):
         )
 
         # having some error in this is okay because of how we accumulate (this is just a sum)
+        print("TEST", t[1])
+        print("REF0", test_p_tangent)
+        print("DIFF", t[1] - test_p_tangent)
         np.testing.assert_allclose(t[1], test_p_tangent, rtol=5e-5)
 
         # print("PASSED ROUND 1")

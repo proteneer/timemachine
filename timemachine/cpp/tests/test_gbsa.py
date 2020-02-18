@@ -66,10 +66,12 @@ class TestGBSA(GradientTest):
         cutoff = 1000.0
         x = self.get_random_coords(N, D)
 
-        # for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
-        for precision, rtol in [(np.float64, 1e-10)]:
+
+
+        for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
+        # for precision, rtol in [(np.float64, 1e-10)]:
             # for cutoff in [100.0, 0.5, 0.1]:
-            print("PRECISION, RTOL")
+            print("PRECISION", precision, "RTOL", rtol)
             for cutoff in [10000.0]:
                 np.random.rand(1)
                 params, ref_forces, test_forces = prepare_gbsa_system(
