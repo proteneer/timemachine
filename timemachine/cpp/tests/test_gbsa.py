@@ -49,8 +49,8 @@ class TestGBSA(GradientTest):
     def test_gbsa(self):
 
         np.random.seed(125)
-        # N = 54
-        N = 31
+        N = 54
+        # N = 31
         D = 4
         E = 5
         P_charges = 4
@@ -68,7 +68,8 @@ class TestGBSA(GradientTest):
 
 
 
-        for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
+        # for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
+        for precision, rtol in [(np.float32, 5e-6)]:
         # for precision, rtol in [(np.float64, 1e-10)]:
             # for cutoff in [100.0, 0.5, 0.1]:
             print("PRECISION", precision, "RTOL", rtol)

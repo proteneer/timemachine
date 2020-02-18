@@ -642,40 +642,40 @@ __global__ void k_compute_born_energy_and_forces(
     // we always do the full interaction matrix due to non-symmetry
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    RealType ci[D];
-    RealType dPsi_dx_i[D] = {0};
+    double ci[D];
+    double dPsi_dx_i[D] = {0};
     for(int d=0; d < D; d++) {
         ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
     }
 
     int atomic_radii_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
-    RealType radiusI = atom_i_idx < N ? params[atomic_radii_idx_i] : 0;
-    RealType born_force_i = atom_i_idx < N ? static_cast<RealType>(static_cast<long long>(bornForces[atom_i_idx]))/FIXED_EXPONENT_BORN_FORCES : 0;
-    // RealType born_radii_i = atom_i_idx < N ? born_radii[atom_i_idx] : 0;
-    RealType dPsi_dri = 0;
+    double radiusI = atom_i_idx < N ? params[atomic_radii_idx_i] : 0;
+    double born_force_i = atom_i_idx < N ? static_cast<double>(static_cast<long long>(bornForces[atom_i_idx]))/FIXED_EXPONENT_BORN_FORCES : 0;
+    // double born_radii_i = atom_i_idx < N ? born_radii[atom_i_idx] : 0;
+    double dPsi_dri = 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    RealType cj[D];
-    RealType dPsi_dx_j[D] = {0};
+    double cj[D];
+    double dPsi_dx_j[D] = {0};
     for(int d=0; d < D; d++) {
         cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
     }
     int atomic_radii_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
-    RealType radiusJ = atom_j_idx < N ? params[atomic_radii_idx_j] : 0;
+    double radiusJ = atom_j_idx < N ? params[atomic_radii_idx_j] : 0;
 
     int scale_factor_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
-    RealType scaleFactorJ = atom_j_idx < N ? params[scale_factor_idx_j] : 0;
-    RealType born_radii_j = atom_j_idx < N ? born_radii[atom_j_idx] : 0;
-    RealType dPsi_drj = 0;
-    RealType dPsi_dsj = 0;
+    double scaleFactorJ = atom_j_idx < N ? params[scale_factor_idx_j] : 0;
+    double born_radii_j = atom_j_idx < N ? born_radii[atom_j_idx] : 0;
+    double dPsi_drj = 0;
+    double dPsi_dsj = 0;
 
     const double dielectricOffset = dielectric_offset;
-    // const RealType cutoffDistance = cutoff;
+    // const double cutoffDistance = cutoff;
 
-    // RealType radiusI        = params[atomic_radii_idxs[atomI]];
-    RealType offsetRadiusI  = radiusI - dielectricOffset;
-    RealType offsetRadiusI2 = offsetRadiusI*offsetRadiusI;
-    RealType offsetRadiusI3 = offsetRadiusI2*offsetRadiusI;
+    // double radiusI        = params[atomic_radii_idxs[atomI]];
+    double offsetRadiusI  = radiusI - dielectricOffset;
+    double offsetRadiusI2 = offsetRadiusI*offsetRadiusI;
+    double offsetRadiusI3 = offsetRadiusI2*offsetRadiusI;
 
     int atomI = atom_i_idx;
     int atomJ = atom_j_idx;
@@ -684,25 +684,25 @@ __global__ void k_compute_born_energy_and_forces(
 
         if (atomJ != atomI) {
 
-            RealType dxs[D];
-            RealType r2 = 0;
+            double dxs[D];
+            double r2 = 0;
             for(int d=0; d < D; d++) {
                 dxs[d] = ci[d] - cj[d];
                 r2 += dxs[d]*dxs[d];
             }
-            RealType r = sqrt(r2);
+            double r = sqrt(r2);
             // radius w/ dielectric offset applied
 
-            // RealType radiusJ            = params[atomic_radii_idxs[atomJ]];
-            RealType offsetRadiusJ      = radiusJ - dielectricOffset;
-            RealType offsetRadiusJ2     = offsetRadiusJ*offsetRadiusJ;
+            // double radiusJ            = params[atomic_radii_idxs[atomJ]];
+            double offsetRadiusJ      = radiusJ - dielectricOffset;
+            double offsetRadiusJ2     = offsetRadiusJ*offsetRadiusJ;
 
-            RealType scaleFactorJ2      = scaleFactorJ*scaleFactorJ;
-            RealType scaleFactorJ3      = scaleFactorJ2*scaleFactorJ;
-            RealType scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
-            RealType rScaledRadiusJ     = r + scaledRadiusJ;
-            RealType rScaledRadiusJ2    = rScaledRadiusJ*rScaledRadiusJ;
-            RealType rScaledRadiusJ3    = rScaledRadiusJ2*rScaledRadiusJ;
+            double scaleFactorJ2      = scaleFactorJ*scaleFactorJ;
+            double scaleFactorJ3      = scaleFactorJ2*scaleFactorJ;
+            double scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
+            double rScaledRadiusJ     = r + scaledRadiusJ;
+            double rScaledRadiusJ2    = rScaledRadiusJ*rScaledRadiusJ;
+            double rScaledRadiusJ3    = rScaledRadiusJ2*rScaledRadiusJ;
 
             if (offsetRadiusI < rScaledRadiusJ) {
 
@@ -724,18 +724,18 @@ __global__ void k_compute_born_energy_and_forces(
                 // }
 
                 // start manual derivative
-                RealType de = 0; // derivative of Psi wrt the distance
-                RealType dpsi_dri = 0;
-                RealType dpsi_drj = 0;
-                RealType dpsi_dsj = 0;
+                double de = 0; // derivative of Psi wrt the distance
+                double dpsi_dri = 0;
+                double dpsi_drj = 0;
+                double dpsi_dsj = 0;
 
-                RealType rSubScaledRadiusJ = r - scaledRadiusJ;
-                RealType rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
-                RealType rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
+                double rSubScaledRadiusJ = r - scaledRadiusJ;
+                double rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
+                double rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
 
                 // factor out as much as we can to outside of the conditional for reduce convergence
                 if(offsetRadiusI > abs(rSubScaledRadiusJ)) {
-                  RealType term = 0.5*(-offsetRadiusI)*(-0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + 1.0/rScaledRadiusJ + 1.0/(-offsetRadiusI) + 0.25*scaleFactorJ2*offsetRadiusJ2*(1/rScaledRadiusJ2 - 1/offsetRadiusI2)/r - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r);
+                  RealType term = 0.5*(-offsetRadiusI)*(-0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + 1.0/rScaledRadiusJ - 1.0/offsetRadiusI + 0.25*scaleFactorJ2*offsetRadiusJ2*(1/rScaledRadiusJ2 - 1/offsetRadiusI2)/r - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r);
                   de = -0.5*r/rScaledRadiusJ3 + (5.0/4.0)/rScaledRadiusJ2 - 0.25/offsetRadiusI2 + 0.5*scaleFactorJ2*offsetRadiusJ2/(r*rScaledRadiusJ3) - 0.5/(r*rScaledRadiusJ) - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r2 - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r2;
                   dpsi_dri = 0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + offsetRadiusI*(0.5*r/offsetRadiusI3 - 1/offsetRadiusI2 - 0.5*scaleFactorJ2*offsetRadiusJ2/(r*offsetRadiusI3) + 0.5/(r*offsetRadiusI)) - 1/rScaledRadiusJ + 1.0/offsetRadiusI + 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r + 0.5*log(offsetRadiusI/rScaledRadiusJ)/r;
                   dpsi_drj = offsetRadiusI*(-0.5*r*scaleFactorJ/rScaledRadiusJ3 + scaleFactorJ/rScaledRadiusJ2 + 0.5*scaleFactorJ3*offsetRadiusJ2/(r*rScaledRadiusJ3) + 0.25*scaleFactorJ2*(-2*dielectricOffset + 2*radiusJ)*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r - 0.5*scaleFactorJ/(r*rScaledRadiusJ));
@@ -748,7 +748,8 @@ __global__ void k_compute_born_energy_and_forces(
                   }
 
                 } else {
-                  RealType term = -0.5*(-offsetRadiusI)*(-0.25*r*(1/rSubScaledRadiusJ2 - 1/rScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rSubScaledRadiusJ2 + 1/rScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r);
+
+                  RealType term = 0.5*offsetRadiusI*(-0.25*r*(1/rSubScaledRadiusJ2 - 1/rScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rSubScaledRadiusJ2 + 1/rScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r);
                   de = 0.25*r*(-2/rScaledRadiusJ3 + 2/rSubScaledRadiusJ3) + (5.0/4.0)/rScaledRadiusJ2 - sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 - 0.25/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*offsetRadiusJ2*(2/rScaledRadiusJ3 - 2/rSubScaledRadiusJ3)/r + 0.5*rScaledRadiusJ*(sign(rSubScaledRadiusJ)/rScaledRadiusJ - fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)) - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r2 - 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r2;
                   dpsi_dri = 0.25*r*(1/rScaledRadiusJ2 - 1/rSubScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ + 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r;
                   dpsi_drj = offsetRadiusI*(0.25*r*(-2*scaleFactorJ/rScaledRadiusJ3 - 2*scaleFactorJ/rSubScaledRadiusJ3) + scaleFactorJ/rScaledRadiusJ2 + scaleFactorJ*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*(-2*dielectricOffset + 2*radiusJ)*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.25*scaleFactorJ2*offsetRadiusJ2*(2*scaleFactorJ/rScaledRadiusJ3 + 2*scaleFactorJ/rSubScaledRadiusJ3)/r + 0.5*rScaledRadiusJ*(-scaleFactorJ*sign(rSubScaledRadiusJ)/rScaledRadiusJ - scaleFactorJ*fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)));
@@ -843,51 +844,51 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     // we always do the full interaction matrix due to non-symmetry
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    Surreal<RealType> ci[D];
-    Surreal<RealType> dPsi_dx_i[D];
+    Surreal<double> ci[D];
+    Surreal<double> dPsi_dx_i[D];
     for(int d=0; d < D; d++) {
-        dPsi_dx_i[d] = Surreal<RealType>(0,0);
+        dPsi_dx_i[d] = Surreal<double>(0,0);
         ci[d].real = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
         ci[d].imag = atom_i_idx < N ? coords_tangents[atom_i_idx*D+d] : 0;
     }
 
     int atomic_radii_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
-    RealType radiusI = atom_i_idx < N ? params[atomic_radii_idx_i] : 0;
-    Surreal<RealType> born_force_i;
+    double radiusI = atom_i_idx < N ? params[atomic_radii_idx_i] : 0;
+    Surreal<double> born_force_i;
     born_force_i.real = atom_i_idx < N ? bornForces[atom_i_idx].real : 0;
     born_force_i.imag = atom_i_idx < N ? bornForces[atom_i_idx].imag : 0;
-    Surreal<RealType> born_radii_i;
+    Surreal<double> born_radii_i;
     born_radii_i.real = atom_i_idx < N ? born_radii[atom_i_idx].real : 0;
     born_radii_i.imag = atom_i_idx < N ? born_radii[atom_i_idx].imag : 0;
-    Surreal<RealType> dPsi_dri = Surreal<RealType>(0,0);
+    Surreal<double> dPsi_dri = Surreal<double>(0,0);
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    Surreal<RealType> cj[D];
-    Surreal<RealType> dPsi_dx_j[D];
+    Surreal<double> cj[D];
+    Surreal<double> dPsi_dx_j[D];
     for(int d=0; d < D; d++) {
-        dPsi_dx_j[d]  = Surreal<RealType>(0,0);
+        dPsi_dx_j[d]  = Surreal<double>(0,0);
         cj[d].real = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
         cj[d].imag = atom_j_idx < N ? coords_tangents[atom_j_idx*D+d] : 0;
     }
     int atomic_radii_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
-    RealType radiusJ = atom_j_idx < N ? params[atomic_radii_idx_j] : 0;
+    double radiusJ = atom_j_idx < N ? params[atomic_radii_idx_j] : 0;
 
     int scale_factor_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
-    RealType scaleFactorJ = atom_j_idx < N ? params[scale_factor_idx_j] : 0;
-    Surreal<RealType> born_radii_j;
+    double scaleFactorJ = atom_j_idx < N ? params[scale_factor_idx_j] : 0;
+    Surreal<double> born_radii_j;
     born_radii_j.real = atom_j_idx < N ? born_radii[atom_j_idx].real : 0;
     born_radii_j.imag = atom_j_idx < N ? born_radii[atom_j_idx].imag : 0;
 
-    Surreal<RealType> dPsi_drj = Surreal<RealType>(0,0);
-    Surreal<RealType> dPsi_dsj = Surreal<RealType>(0,0);
+    Surreal<double> dPsi_drj = Surreal<double>(0,0);
+    Surreal<double> dPsi_dsj = Surreal<double>(0,0);
 
     const double dielectricOffset = dielectric_offset;
-    // const RealType cutoffDistance = cutoff;
+    // const double cutoffDistance = cutoff;
 
-    // RealType radiusI        = params[atomic_radii_idxs[atomI]];
-    RealType offsetRadiusI  = radiusI - dielectricOffset;
-    RealType offsetRadiusI2 = offsetRadiusI*offsetRadiusI;
-    RealType offsetRadiusI3 = offsetRadiusI2*offsetRadiusI;
+    // double radiusI        = params[atomic_radii_idxs[atomI]];
+    double offsetRadiusI  = radiusI - dielectricOffset;
+    double offsetRadiusI2 = offsetRadiusI*offsetRadiusI;
+    double offsetRadiusI3 = offsetRadiusI2*offsetRadiusI;
 
     int atomI = atom_i_idx;
     int atomJ = atom_j_idx;
@@ -897,27 +898,27 @@ __global__ void k_compute_born_energy_and_forces_jvp(
 
         if (atomJ != atomI) {
 
-            Surreal<RealType> dxs[D];
-            Surreal<RealType> r2(0, 0);
+            Surreal<double> dxs[D];
+            Surreal<double> r2(0, 0);
             for(int d=0; d < D; d++) {
                 dxs[d] = ci[d] - cj[d];
                 r2 += dxs[d]*dxs[d];
             }
-            Surreal<RealType> r = sqrt(r2);
+            Surreal<double> r = sqrt(r2);
             // radius w/ dielectric offset applied
 
-            // RealType radiusJ            = params[atomic_radii_idxs[atomJ]];
-            RealType offsetRadiusJ      = radiusJ - dielectricOffset;
-            RealType offsetRadiusJ2     = offsetRadiusJ*offsetRadiusJ;
+            // double radiusJ            = params[atomic_radii_idxs[atomJ]];
+            double offsetRadiusJ      = radiusJ - dielectricOffset;
+            double offsetRadiusJ2     = offsetRadiusJ*offsetRadiusJ;
 
-            // RealType scaleFactorJ       = params[scale_factor_idxs[atomJ]];
-            RealType scaleFactorJ2      = scaleFactorJ*scaleFactorJ;
-            RealType scaleFactorJ3      = scaleFactorJ2*scaleFactorJ;
-            RealType scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
-            // RealType scaledRadiusJ2     = scaledRadiusJ*scaledRadiusJ;
-            Surreal<RealType> rScaledRadiusJ     = r + scaledRadiusJ;
-            Surreal<RealType> rScaledRadiusJ2    = rScaledRadiusJ*rScaledRadiusJ;
-            Surreal<RealType> rScaledRadiusJ3    = rScaledRadiusJ2*rScaledRadiusJ;
+            // double scaleFactorJ       = params[scale_factor_idxs[atomJ]];
+            double scaleFactorJ2      = scaleFactorJ*scaleFactorJ;
+            double scaleFactorJ3      = scaleFactorJ2*scaleFactorJ;
+            double scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
+            // double scaledRadiusJ2     = scaledRadiusJ*scaledRadiusJ;
+            Surreal<double> rScaledRadiusJ     = r + scaledRadiusJ;
+            Surreal<double> rScaledRadiusJ2    = rScaledRadiusJ*rScaledRadiusJ;
+            Surreal<double> rScaledRadiusJ3    = rScaledRadiusJ2*rScaledRadiusJ;
 
             if (offsetRadiusI < rScaledRadiusJ.real) {
 
@@ -939,18 +940,18 @@ __global__ void k_compute_born_energy_and_forces_jvp(
                 // }
 
                 // start manual derivative
-                Surreal<RealType> de = Surreal<RealType>(0, 0); // derivative of Psi wrt the distance
-                Surreal<RealType> dpsi_dri = Surreal<RealType>(0, 0);
-                Surreal<RealType> dpsi_drj = Surreal<RealType>(0, 0);
-                Surreal<RealType> dpsi_dsj = Surreal<RealType>(0, 0);
+                Surreal<double> de = Surreal<double>(0, 0); // derivative of Psi wrt the distance
+                Surreal<double> dpsi_dri = Surreal<double>(0, 0);
+                Surreal<double> dpsi_drj = Surreal<double>(0, 0);
+                Surreal<double> dpsi_dsj = Surreal<double>(0, 0);
 
-                Surreal<RealType> rSubScaledRadiusJ = r - scaledRadiusJ;
-                Surreal<RealType> rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
-                Surreal<RealType> rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
+                Surreal<double> rSubScaledRadiusJ = r - scaledRadiusJ;
+                Surreal<double> rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
+                Surreal<double> rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
 
                 // factor out as much as we can to outside of the conditional for reduce convergence
                 if(offsetRadiusI > abs(rSubScaledRadiusJ).real) {
-                    Surreal<RealType> term = 0.5*(-offsetRadiusI)*(-0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + 1.0/rScaledRadiusJ + 1.0/(-offsetRadiusI) + 0.25*scaleFactorJ2*offsetRadiusJ2*(1/rScaledRadiusJ2 - 1/offsetRadiusI2)/r - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r);
+                    Surreal<double> term = 0.5*(-offsetRadiusI)*(-0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + 1.0/rScaledRadiusJ + 1.0/(-offsetRadiusI) + 0.25*scaleFactorJ2*offsetRadiusJ2*(1/rScaledRadiusJ2 - 1/offsetRadiusI2)/r - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r);
                     de = -0.5*r/rScaledRadiusJ3 + (5.0/4.0)/rScaledRadiusJ2 - 0.25/offsetRadiusI2 + 0.5*scaleFactorJ2*offsetRadiusJ2/(r*rScaledRadiusJ3) - 0.5/(r*rScaledRadiusJ) - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r2 - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r2;
                     dpsi_dri = 0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + offsetRadiusI*(0.5*r/offsetRadiusI3 - 1/offsetRadiusI2 - 0.5*scaleFactorJ2*offsetRadiusJ2/(r*offsetRadiusI3) + 0.5/(r*offsetRadiusI)) - 1/rScaledRadiusJ + 1.0/offsetRadiusI + 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r + 0.5*log(offsetRadiusI/rScaledRadiusJ)/r;
                     dpsi_drj = offsetRadiusI*(-0.5*r*scaleFactorJ/rScaledRadiusJ3 + scaleFactorJ/rScaledRadiusJ2 + 0.5*scaleFactorJ3*offsetRadiusJ2/(r*rScaledRadiusJ3) + 0.25*scaleFactorJ2*(-2*dielectricOffset + 2*radiusJ)*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r - 0.5*scaleFactorJ/(r*rScaledRadiusJ));
@@ -964,7 +965,7 @@ __global__ void k_compute_born_energy_and_forces_jvp(
                     }
 
                 } else {
-                    Surreal<RealType> term = -0.5*(-offsetRadiusI)*(-0.25*r*(1/rSubScaledRadiusJ2 - 1/rScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rSubScaledRadiusJ2 + 1/rScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r);
+                    Surreal<double> term = -0.5*(-offsetRadiusI)*(-0.25*r*(1/rSubScaledRadiusJ2 - 1/rScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rSubScaledRadiusJ2 + 1/rScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r);
                     de = 0.25*r*(-2/rScaledRadiusJ3 + 2/rSubScaledRadiusJ3) + (5.0/4.0)/rScaledRadiusJ2 - sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 - 0.25/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*offsetRadiusJ2*(2/rScaledRadiusJ3 - 2/rSubScaledRadiusJ3)/r + 0.5*rScaledRadiusJ*(sign(rSubScaledRadiusJ)/rScaledRadiusJ - fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)) - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r2 - 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r2;
                     dpsi_dri = 0.25*r*(1/rScaledRadiusJ2 - 1/rSubScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ + 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r;
                     dpsi_drj = offsetRadiusI*(0.25*r*(-2*scaleFactorJ/rScaledRadiusJ3 - 2*scaleFactorJ/rSubScaledRadiusJ3) + scaleFactorJ/rScaledRadiusJ2 + scaleFactorJ*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*(-2*dielectricOffset + 2*radiusJ)*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.25*scaleFactorJ2*offsetRadiusJ2*(2*scaleFactorJ/rScaledRadiusJ3 + 2*scaleFactorJ/rSubScaledRadiusJ3)/r + 0.5*rScaledRadiusJ*(-scaleFactorJ*sign(rSubScaledRadiusJ)/rScaledRadiusJ - scaleFactorJ*fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)));

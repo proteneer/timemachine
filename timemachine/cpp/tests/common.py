@@ -310,10 +310,11 @@ class GradientTest(unittest.TestCase):
 
         # np.testing.assert_allclose(ref_dp, test_dp, rtol=1e-10)
 
-        print("first order passed")
-
         x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         params_tangent = np.zeros_like(params)
+
+        # return
+        print("PASSED FIRST ORDER")
 
         test_x_tangent, test_p_tangent = custom_force.execute_jvp(
             x,
