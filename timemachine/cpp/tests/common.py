@@ -42,7 +42,9 @@ def prepare_gbsa_system(
 
     # gb radiis
     # +0.1 is to avoid catastrophic loss of accuracy when really small
-    radii_params = np.random.rand(P_radii).astype(np.float64)+0.1
+    radii_params = np.random.rand(P_radii).astype(np.float64)+0.5
+    radii_params = radii_params/10 # convert to nm for numerical stability
+    # print(radii_params)
     # radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
     assert P_radii == N
     radii_param_idxs = np.arange(P_radii, dtype=np.int32) + len(params)
@@ -51,7 +53,11 @@ def prepare_gbsa_system(
 
     # scale factors
     # +0.1 is to avoid catastrophic loss of accuracy when really small
-    scale_params = np.random.rand(P_scale_factors).astype(np.float64)+0.1
+    scale_params = np.random.rand(P_scale_factors).astype(np.float64)/3 + 0.75
+
+    # print(scale_params)
+    # assert 0
+    # scale_params = np.random.rand(P_scale_factors).astype(np.float64)+0.1
     # scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
     assert P_scale_factors == N
     scale_param_idxs = np.arange(P_scale_factors, dtype=np.int32) + len(params)
@@ -315,6 +321,8 @@ class GradientTest(unittest.TestCase):
 
         # return
         print("PASSED FIRST ORDER")
+
+        
 
         test_x_tangent, test_p_tangent = custom_force.execute_jvp(
             x,
