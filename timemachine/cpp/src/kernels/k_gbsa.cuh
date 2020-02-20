@@ -83,7 +83,7 @@ __global__ void k_compute_born_radii_gpu(
                 RealType l_ij2    = l_ij*l_ij;
                 RealType u_ij2    = u_ij*u_ij;
 
-                RealType ratio    = log((u_ij/l_ij));
+                RealType ratio    = log(u_ij/l_ij);
                 RealType term     = l_ij - u_ij + 0.25*r*(u_ij2 - l_ij2)  + (0.5*rInverse*ratio) + (0.25*scaledRadiusJ*scaledRadiusJ*rInverse)*(l_ij2 - u_ij2);
 
                 // this case (atom i completely inside atom j) is not considered in the original paper
@@ -623,6 +623,7 @@ __global__ void k_reduce_born_forces_jvp(
 }
 
 
+
 template <typename RealType, int D>
 __global__ void k_compute_born_energy_and_forces(
     const int N,
@@ -642,40 +643,40 @@ __global__ void k_compute_born_energy_and_forces(
     // we always do the full interaction matrix due to non-symmetry
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    double ci[D];
-    double dPsi_dx_i[D] = {0};
+    RealType ci[D];
+    RealType dPsi_dx_i[D] = {0};
     for(int d=0; d < D; d++) {
         ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
     }
 
     int atomic_radii_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
-    double radiusI = atom_i_idx < N ? params[atomic_radii_idx_i] : 0;
-    double born_force_i = atom_i_idx < N ? static_cast<double>(static_cast<long long>(bornForces[atom_i_idx]))/FIXED_EXPONENT_BORN_FORCES : 0;
-    // double born_radii_i = atom_i_idx < N ? born_radii[atom_i_idx] : 0;
-    double dPsi_dri = 0;
+    RealType radiusI = atom_i_idx < N ? params[atomic_radii_idx_i] : 0;
+    RealType born_force_i = atom_i_idx < N ? static_cast<RealType>(static_cast<long long>(bornForces[atom_i_idx]))/FIXED_EXPONENT_BORN_FORCES : 0;
+    // RealType born_radii_i = atom_i_idx < N ? born_radii[atom_i_idx] : 0;
+    RealType dPsi_dri = 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    double cj[D];
-    double dPsi_dx_j[D] = {0};
+    RealType cj[D];
+    RealType dPsi_dx_j[D] = {0};
     for(int d=0; d < D; d++) {
         cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
     }
     int atomic_radii_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
-    double radiusJ = atom_j_idx < N ? params[atomic_radii_idx_j] : 0;
+    RealType radiusJ = atom_j_idx < N ? params[atomic_radii_idx_j] : 0;
 
     int scale_factor_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
-    double scaleFactorJ = atom_j_idx < N ? params[scale_factor_idx_j] : 0;
-    double born_radii_j = atom_j_idx < N ? born_radii[atom_j_idx] : 0;
-    double dPsi_drj = 0;
-    double dPsi_dsj = 0;
+    RealType scaleFactorJ = atom_j_idx < N ? params[scale_factor_idx_j] : 0;
+    RealType born_radii_j = atom_j_idx < N ? born_radii[atom_j_idx] : 0;
+    RealType dPsi_drj = 0;
+    RealType dPsi_dsj = 0;
 
-    const double dielectricOffset = dielectric_offset;
+    const RealType dielectricOffset = dielectric_offset;
     // const double cutoffDistance = cutoff;
 
     // double radiusI        = params[atomic_radii_idxs[atomI]];
-    double offsetRadiusI  = radiusI - dielectricOffset;
-    double offsetRadiusI2 = offsetRadiusI*offsetRadiusI;
-    double offsetRadiusI3 = offsetRadiusI2*offsetRadiusI;
+    RealType offsetRadiusI  = radiusI - dielectricOffset;
+    RealType offsetRadiusI2 = offsetRadiusI*offsetRadiusI;
+    RealType offsetRadiusI3 = offsetRadiusI2*offsetRadiusI;
 
     int atomI = atom_i_idx;
     int atomJ = atom_j_idx;
@@ -684,25 +685,29 @@ __global__ void k_compute_born_energy_and_forces(
 
         if (atomJ != atomI) {
 
-            double dxs[D];
-            double r2 = 0;
+            // distance computations in single precision always introduce
+            // a lot of numerical errors
+            RealType dxs[D];
             for(int d=0; d < D; d++) {
                 dxs[d] = ci[d] - cj[d];
-                r2 += dxs[d]*dxs[d];
             }
-            double r = sqrt(r2);
+
+            RealType r = static_cast<RealType>(fast_vec_norm<RealType, D>(dxs));
+            RealType rInverse = static_cast<RealType>(fast_vec_rnorm<RealType, D>(dxs));
+
+            
             // radius w/ dielectric offset applied
 
-            // double radiusJ            = params[atomic_radii_idxs[atomJ]];
-            double offsetRadiusJ      = radiusJ - dielectricOffset;
-            double offsetRadiusJ2     = offsetRadiusJ*offsetRadiusJ;
+            // RealType radiusJ            = params[atomic_radii_idxs[atomJ]];
+            RealType offsetRadiusJ      = radiusJ - dielectricOffset;
+            RealType offsetRadiusJ2     = offsetRadiusJ*offsetRadiusJ;
 
-            double scaleFactorJ2      = scaleFactorJ*scaleFactorJ;
-            double scaleFactorJ3      = scaleFactorJ2*scaleFactorJ;
-            double scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
-            double rScaledRadiusJ     = r + scaledRadiusJ;
-            double rScaledRadiusJ2    = rScaledRadiusJ*rScaledRadiusJ;
-            double rScaledRadiusJ3    = rScaledRadiusJ2*rScaledRadiusJ;
+            RealType scaleFactorJ2      = scaleFactorJ*scaleFactorJ;
+            RealType scaleFactorJ3      = scaleFactorJ2*scaleFactorJ;
+            RealType scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
+            RealType rScaledRadiusJ     = r + scaledRadiusJ;
+            RealType rScaledRadiusJ2    = rScaledRadiusJ*rScaledRadiusJ;
+            RealType rScaledRadiusJ3    = rScaledRadiusJ2*rScaledRadiusJ;
 
             if (offsetRadiusI < rScaledRadiusJ) {
 
@@ -724,22 +729,69 @@ __global__ void k_compute_born_energy_and_forces(
                 // }
 
                 // start manual derivative
-                double de = 0; // derivative of Psi wrt the distance
-                double dpsi_dri = 0;
-                double dpsi_drj = 0;
-                double dpsi_dsj = 0;
+                // double de = 0; // derivative of Psi wrt the distance
+                RealType dpsi_dri = 0;
+                RealType dpsi_drj = 0;
+                RealType dpsi_dsj = 0;
 
-                double rSubScaledRadiusJ = r - scaledRadiusJ;
-                double rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
-                double rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
+                RealType rSubScaledRadiusJ = r - scaledRadiusJ;
+                RealType rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
+                RealType rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
+
+                // RealType rInverse = 1/r; // oof high error
+
+                RealType l_ij = offsetRadiusI > abs(rSubScaledRadiusJ) ? offsetRadiusI : abs(rSubScaledRadiusJ);
+                l_ij = 1.0/l_ij;
+                RealType l_ij2 = l_ij*l_ij;
+
+                RealType u_ij = 1.0/rScaledRadiusJ;
+                RealType u_ij2 = u_ij*u_ij;
+
+                // original expression
+                // RealType term = l_ij - u_ij + 0.25*(u_ij2 - l_ij2)*t1 + (0.5*rInverse*ratio);
+                RealType dl_dr = offsetRadiusI > abs(rSubScaledRadiusJ) ? 0 : -(l_ij*l_ij)*(rSubScaledRadiusJ/abs(rSubScaledRadiusJ));
+                RealType du_dr = -(u_ij*u_ij)*(rScaledRadiusJ/abs(rScaledRadiusJ));
+
+                RealType dl_dsj = offsetRadiusI > abs(rSubScaledRadiusJ) ? 0 : (l_ij*l_ij*offsetRadiusJ)*(rSubScaledRadiusJ/abs(rSubScaledRadiusJ));
+                RealType du_dsj = -(u_ij*u_ij)*offsetRadiusJ;
+
+                // ugh so much loss of significance here
+                RealType t1 = r - scaledRadiusJ*scaledRadiusJ*rInverse;
+                RealType dt1_dr = (1 + scaledRadiusJ*scaledRadiusJ*rInverse*rInverse);
+                // RealType dt1_dsj = -(2/r)*(offsetRadiusJ*offsetRadiusJ*scaleFactorJ);
+
+                RealType ratio = log((u_ij/l_ij));
+
+                //          l_ij - u_ij   + 0.25*(u_ij2 - l_ij2)*t1                          + (0.5*rInverse*ratio);
+                // RealType du_dr_div_u = -u_ij*u_ij*abs(rScaledRadiusJ);
+                // RealType dl_dr_div_l = offsetRadiusI > abs(rSubScaledRadiusJ) ? 0 : -l_ij*l_ij*abs(rSubScaledRadiusJ);
+
+                // RealType du_dr_mul_u = -u_ij*u_ij/abs(rScaledRadiusJ);
+                // RealType dl_dr_mul_l = offsetRadiusI > abs(rSubScaledRadiusJ) ? 0 : -l_ij*l_ij/abs(rSubScaledRadiusJ);
+
+                RealType de1 = static_cast<RealType>(dl_dr) - static_cast<RealType>(du_dr);
+                // we may need three separate accumulators for precision
+                RealType de2 = 0.5*(u_ij*du_dr - l_ij*dl_dr)*t1;
+                RealType de3 = 0.25*(u_ij*u_ij - l_ij*l_ij)*dt1_dr;
+                RealType de4 = -0.5*rInverse*(rInverse*ratio - (du_dr/u_ij - dl_dr/l_ij));
+                RealType de = de1 + de2 + de3 + de4;
+
+                RealType dsj1 = static_cast<RealType>(dl_dsj) - static_cast<RealType>(du_dsj);
+                RealType dsj2 = 0.5*r*(u_ij*du_dsj - l_ij*dl_dsj);
+                // RealType dsj3 = (0.5*rInverse*(log(u_ij) - log(l_ij)))
+                RealType dsj3 = 0.5*rInverse*(du_dsj/u_ij - dl_dsj/l_ij);
+                RealType dsj4 = 0.25*rInverse*(scaledRadiusJ*scaledRadiusJ)*(2*l_ij*dl_dsj - 2*u_ij*du_dsj);
+                RealType dsj5 = 0.25*rInverse*(2*scaledRadiusJ*offsetRadiusJ)*(l_ij2 - u_ij2);
+
+                RealType dPsi_dsj = dsj1 + dsj2 + dsj3 + dsj4 + dsj5;
+
+                printf("dPsi_dsj %f\n", dPsi_dsj);
 
                 // factor out as much as we can to outside of the conditional for reduce convergence
                 if(offsetRadiusI > abs(rSubScaledRadiusJ)) {
-                  RealType term = 0.5*(-offsetRadiusI)*(-0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + 1.0/rScaledRadiusJ - 1.0/offsetRadiusI + 0.25*scaleFactorJ2*offsetRadiusJ2*(1/rScaledRadiusJ2 - 1/offsetRadiusI2)/r - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r);
-                  de = -0.5*r/rScaledRadiusJ3 + (5.0/4.0)/rScaledRadiusJ2 - 0.25/offsetRadiusI2 + 0.5*scaleFactorJ2*offsetRadiusJ2/(r*rScaledRadiusJ3) - 0.5/(r*rScaledRadiusJ) - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r2 - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r2;
                   dpsi_dri = 0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + offsetRadiusI*(0.5*r/offsetRadiusI3 - 1/offsetRadiusI2 - 0.5*scaleFactorJ2*offsetRadiusJ2/(r*offsetRadiusI3) + 0.5/(r*offsetRadiusI)) - 1/rScaledRadiusJ + 1.0/offsetRadiusI + 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r + 0.5*log(offsetRadiusI/rScaledRadiusJ)/r;
                   dpsi_drj = offsetRadiusI*(-0.5*r*scaleFactorJ/rScaledRadiusJ3 + scaleFactorJ/rScaledRadiusJ2 + 0.5*scaleFactorJ3*offsetRadiusJ2/(r*rScaledRadiusJ3) + 0.25*scaleFactorJ2*(-2*dielectricOffset + 2*radiusJ)*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r - 0.5*scaleFactorJ/(r*rScaledRadiusJ));
-                  dpsi_dsj = offsetRadiusI*(0.25*r*(2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3 + offsetRadiusJ/rScaledRadiusJ2 - 0.25*scaleFactorJ2*offsetRadiusJ2*(2*dielectricOffset - 2*radiusJ)/(r*rScaledRadiusJ3) + 0.5*scaleFactorJ*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r + 0.5*(-offsetRadiusJ)/(r*rScaledRadiusJ));
+                  // dpsi_dsj = offsetRadiusI*(0.25*r*(2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3 + offsetRadiusJ/rScaledRadiusJ2 - 0.25*scaleFactorJ2*offsetRadiusJ2*(2*dielectricOffset - 2*radiusJ)/(r*rScaledRadiusJ3) + 0.5*scaleFactorJ*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r + 0.5*(-offsetRadiusJ)/(r*rScaledRadiusJ));
                   if(offsetRadiusI < (scaledRadiusJ - r)) {
                    de += 0;
                    dpsi_dri += 0;
@@ -748,19 +800,18 @@ __global__ void k_compute_born_energy_and_forces(
                   }
 
                 } else {
-
-                  RealType term = 0.5*offsetRadiusI*(-0.25*r*(1/rSubScaledRadiusJ2 - 1/rScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rSubScaledRadiusJ2 + 1/rScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r);
-                  de = 0.25*r*(-2/rScaledRadiusJ3 + 2/rSubScaledRadiusJ3) + (5.0/4.0)/rScaledRadiusJ2 - sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 - 0.25/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*offsetRadiusJ2*(2/rScaledRadiusJ3 - 2/rSubScaledRadiusJ3)/r + 0.5*rScaledRadiusJ*(sign(rSubScaledRadiusJ)/rScaledRadiusJ - fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)) - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r2 - 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r2;
                   dpsi_dri = 0.25*r*(1/rScaledRadiusJ2 - 1/rSubScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ + 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r;
                   dpsi_drj = offsetRadiusI*(0.25*r*(-2*scaleFactorJ/rScaledRadiusJ3 - 2*scaleFactorJ/rSubScaledRadiusJ3) + scaleFactorJ/rScaledRadiusJ2 + scaleFactorJ*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*(-2*dielectricOffset + 2*radiusJ)*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.25*scaleFactorJ2*offsetRadiusJ2*(2*scaleFactorJ/rScaledRadiusJ3 + 2*scaleFactorJ/rSubScaledRadiusJ3)/r + 0.5*rScaledRadiusJ*(-scaleFactorJ*sign(rSubScaledRadiusJ)/rScaledRadiusJ - scaleFactorJ*fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)));
-                  dpsi_dsj = offsetRadiusI*(0.25*r*(-(-2*dielectricOffset + 2*radiusJ)/rSubScaledRadiusJ3 + (2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3) + offsetRadiusJ/rScaledRadiusJ2 + offsetRadiusJ*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*offsetRadiusJ2*((-2*dielectricOffset + 2*radiusJ)/rSubScaledRadiusJ3 - (2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3)/r + 0.5*scaleFactorJ*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.5*rScaledRadiusJ*((-offsetRadiusJ)*sign(rSubScaledRadiusJ)/rScaledRadiusJ + (-offsetRadiusJ)*fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)));
+                  // dpsi_dsj = offsetRadiusI*(0.25*r*(-(-2*dielectricOffset + 2*radiusJ)/rSubScaledRadiusJ3 + (2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3) + offsetRadiusJ/rScaledRadiusJ2 + offsetRadiusJ*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*offsetRadiusJ2*((-2*dielectricOffset + 2*radiusJ)/rSubScaledRadiusJ3 - (2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3)/r + 0.5*scaleFactorJ*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.5*rScaledRadiusJ*((-offsetRadiusJ)*sign(rSubScaledRadiusJ)/rScaledRadiusJ + (-offsetRadiusJ)*fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)));
                   if (offsetRadiusI < (scaledRadiusJ - r)) {
-                   de += 2.0*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
+                   de += 2.0*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2; // refactor later
                    dpsi_dri += -2.0/fabs(rSubScaledRadiusJ);
                    dpsi_drj += -2.0*scaleFactorJ*offsetRadiusI*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
                    dpsi_dsj += 2.0*offsetRadiusI*(-offsetRadiusJ)*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
                   }
                 }
+
+                // printf("r a1 a2 a3 a4 t1 de %f \t %f \t %f \t %f \t %f \t %f \t %f\n", r, a1, a2, a3, a4, t1, de);
 
                 // is bornForces
 
@@ -905,6 +956,7 @@ __global__ void k_compute_born_energy_and_forces_jvp(
                 r2 += dxs[d]*dxs[d];
             }
             Surreal<double> r = sqrt(r2);
+            Surreal<double> rInverse = 1/r;
             // radius w/ dielectric offset applied
 
             // double radiusJ            = params[atomic_radii_idxs[atomJ]];
@@ -940,42 +992,91 @@ __global__ void k_compute_born_energy_and_forces_jvp(
                 // }
 
                 // start manual derivative
-                Surreal<double> de = Surreal<double>(0, 0); // derivative of Psi wrt the distance
-                Surreal<double> dpsi_dri = Surreal<double>(0, 0);
-                Surreal<double> dpsi_drj = Surreal<double>(0, 0);
-                Surreal<double> dpsi_dsj = Surreal<double>(0, 0);
+                // Surreal<double> de = Surreal<double>(0, 0); // derivative of Psi wrt the distance
+                Surreal<double> dpsi_dri(0, 0);
+                Surreal<double> dpsi_drj(0, 0);
+
 
                 Surreal<double> rSubScaledRadiusJ = r - scaledRadiusJ;
                 Surreal<double> rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
                 Surreal<double> rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
 
+                // Surreal<double> rInverse = 1/r; // oof high error
+
+                Surreal<double> l_ij = offsetRadiusI > abs(rSubScaledRadiusJ).real ? Surreal<double>(offsetRadiusI, 0) : abs(rSubScaledRadiusJ);
+                l_ij = 1.0/l_ij;
+                Surreal<double> l_ij2 = l_ij*l_ij;
+
+                Surreal<double> u_ij = 1.0/rScaledRadiusJ;
+                Surreal<double> u_ij2 = u_ij*u_ij;
+
+
+                Surreal<double> dl_dr = offsetRadiusI > abs(rSubScaledRadiusJ).real ? Surreal<double>(0, 0) : -(l_ij*l_ij)*(rSubScaledRadiusJ/abs(rSubScaledRadiusJ));
+                Surreal<double> du_dr = -u_ij*u_ij*rScaledRadiusJ/abs(rScaledRadiusJ);
+
+
+                Surreal<double> t1 = r - scaledRadiusJ*scaledRadiusJ*rInverse;
+                Surreal<double> dt1_dr = (1 + scaledRadiusJ*scaledRadiusJ*rInverse*rInverse);
+                // Surreal<double> dt1_dsj = -(2/r)*(offsetRadiusJ*offsetRadiusJ*scaleFactorJ);
+
+                Surreal<double> ratio = log(u_ij/l_ij);
+
+                //          l_ij - u_ij   + 0.25*(u_ij2 - l_ij2)*t1                          + (0.5*rInverse*ratio);
+                // Surreal<double> du_dr_div_u = -u_ij*u_ij*abs(rScaledRadiusJ);
+                // Surreal<double> dl_dr_div_l = offsetRadiusI > abs(rSubScaledRadiusJ) ? 0 : -l_ij*l_ij*abs(rSubScaledRadiusJ);
+
+                // Surreal<double> du_dr_mul_u = -u_ij*u_ij/abs(rScaledRadiusJ);
+                // Surreal<double> dl_dr_mul_l = offsetRadiusI > abs(rSubScaledRadiusJ) ? 0 : -l_ij*l_ij/abs(rSubScaledRadiusJ);
+
+
+                Surreal<double> de1 = dl_dr - du_dr;
+                Surreal<double> de2 = 0.5*(u_ij*du_dr - l_ij*dl_dr)*t1;
+                Surreal<double> de3 = 0.25*(u_ij*u_ij - l_ij*l_ij)*dt1_dr;
+                Surreal<double> de4 = -0.5*rInverse*(rInverse*ratio - (du_dr/u_ij - dl_dr/l_ij));
+                Surreal<double> de = de1 + de2 + de3 + de4;
+
+
+                Surreal<double> dl_dsj = offsetRadiusI > abs(rSubScaledRadiusJ).real ? Surreal<double>(0, 0) : l_ij*l_ij*offsetRadiusJ*(rSubScaledRadiusJ/abs(rSubScaledRadiusJ));
+                Surreal<double> du_dsj = -u_ij*u_ij*offsetRadiusJ;
+
+                Surreal<double> dsj1 = dl_dsj - du_dsj;
+                Surreal<double> dsj2 = 0.5*r*(u_ij*du_dsj - l_ij*dl_dsj);
+                Surreal<double> dsj3 = 0.5*rInverse*(du_dsj/u_ij - dl_dsj/l_ij);
+                Surreal<double> dsj4 = 0.5*rInverse*(scaledRadiusJ*scaledRadiusJ)*(l_ij*dl_dsj - u_ij*du_dsj);
+                Surreal<double> dsj5 = 0.5*rInverse*(scaledRadiusJ*offsetRadiusJ)*(l_ij2 - u_ij2);
+
+                Surreal<double> dpsi_dsj = (dsj1 + dsj2 + dsj3 + dsj4 + dsj5)*offsetRadiusI;
+
+                // Surreal<double> dpsi_dsj(0, 0);
+
                 // factor out as much as we can to outside of the conditional for reduce convergence
                 if(offsetRadiusI > abs(rSubScaledRadiusJ).real) {
-                    Surreal<double> term = 0.5*(-offsetRadiusI)*(-0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + 1.0/rScaledRadiusJ + 1.0/(-offsetRadiusI) + 0.25*scaleFactorJ2*offsetRadiusJ2*(1/rScaledRadiusJ2 - 1/offsetRadiusI2)/r - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r);
-                    de = -0.5*r/rScaledRadiusJ3 + (5.0/4.0)/rScaledRadiusJ2 - 0.25/offsetRadiusI2 + 0.5*scaleFactorJ2*offsetRadiusJ2/(r*rScaledRadiusJ3) - 0.5/(r*rScaledRadiusJ) - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r2 - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r2;
+                    // Surreal<double> term = 0.5*(-offsetRadiusI)*(-0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + 1.0/rScaledRadiusJ + 1.0/(-offsetRadiusI) + 0.25*scaleFactorJ2*offsetRadiusJ2*(1/rScaledRadiusJ2 - 1/offsetRadiusI2)/r - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r);
+                    // de = -0.5*r/rScaledRadiusJ3 + (5.0/4.0)/rScaledRadiusJ2 - 0.25/offsetRadiusI2 + 0.5*scaleFactorJ2*offsetRadiusJ2/(r*rScaledRadiusJ3) - 0.5/(r*rScaledRadiusJ) - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r2 - 0.5*log(offsetRadiusI/rScaledRadiusJ)/r2;
                     dpsi_dri = 0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + offsetRadiusI*(0.5*r/offsetRadiusI3 - 1/offsetRadiusI2 - 0.5*scaleFactorJ2*offsetRadiusJ2/(r*offsetRadiusI3) + 0.5/(r*offsetRadiusI)) - 1/rScaledRadiusJ + 1.0/offsetRadiusI + 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r + 0.5*log(offsetRadiusI/rScaledRadiusJ)/r;
                     dpsi_drj = offsetRadiusI*(-0.5*r*scaleFactorJ/rScaledRadiusJ3 + scaleFactorJ/rScaledRadiusJ2 + 0.5*scaleFactorJ3*offsetRadiusJ2/(r*rScaledRadiusJ3) + 0.25*scaleFactorJ2*(-2*dielectricOffset + 2*radiusJ)*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r - 0.5*scaleFactorJ/(r*rScaledRadiusJ));
-                    dpsi_dsj = offsetRadiusI*(0.25*r*(2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3 + offsetRadiusJ/rScaledRadiusJ2 - 0.25*scaleFactorJ2*offsetRadiusJ2*(2*dielectricOffset - 2*radiusJ)/(r*rScaledRadiusJ3) + 0.5*scaleFactorJ*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r + 0.5*(-offsetRadiusJ)/(r*rScaledRadiusJ));
+                    // dpsi_dsj = offsetRadiusI*(0.25*r*(2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3 + offsetRadiusJ/rScaledRadiusJ2 - 0.25*scaleFactorJ2*offsetRadiusJ2*(2*dielectricOffset - 2*radiusJ)/(r*rScaledRadiusJ3) + 0.5*scaleFactorJ*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r + 0.5*(-offsetRadiusJ)/(r*rScaledRadiusJ));
                     
                     if(offsetRadiusI < (scaledRadiusJ - r).real) {
                         de += 0;
                         dpsi_dri += 0;
                         dpsi_drj += 0;
-                    dpsi_dsj += 0;
+                        dpsi_dsj += 0;
                     }
 
                 } else {
-                    Surreal<double> term = -0.5*(-offsetRadiusI)*(-0.25*r*(1/rSubScaledRadiusJ2 - 1/rScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rSubScaledRadiusJ2 + 1/rScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r);
-                    de = 0.25*r*(-2/rScaledRadiusJ3 + 2/rSubScaledRadiusJ3) + (5.0/4.0)/rScaledRadiusJ2 - sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 - 0.25/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*offsetRadiusJ2*(2/rScaledRadiusJ3 - 2/rSubScaledRadiusJ3)/r + 0.5*rScaledRadiusJ*(sign(rSubScaledRadiusJ)/rScaledRadiusJ - fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)) - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r2 - 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r2;
+                    // Surreal<double> term = -0.5*(-offsetRadiusI)*(-0.25*r*(1/rSubScaledRadiusJ2 - 1/rScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rSubScaledRadiusJ2 + 1/rScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r);
+                    // de = 0.25*r*(-2/rScaledRadiusJ3 + 2/rSubScaledRadiusJ3) + (5.0/4.0)/rScaledRadiusJ2 - sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 - 0.25/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*offsetRadiusJ2*(2/rScaledRadiusJ3 - 2/rSubScaledRadiusJ3)/r + 0.5*rScaledRadiusJ*(sign(rSubScaledRadiusJ)/rScaledRadiusJ - fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)) - 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r2 - 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r2;
                     dpsi_dri = 0.25*r*(1/rScaledRadiusJ2 - 1/rSubScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ + 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r;
                     dpsi_drj = offsetRadiusI*(0.25*r*(-2*scaleFactorJ/rScaledRadiusJ3 - 2*scaleFactorJ/rSubScaledRadiusJ3) + scaleFactorJ/rScaledRadiusJ2 + scaleFactorJ*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*(-2*dielectricOffset + 2*radiusJ)*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.25*scaleFactorJ2*offsetRadiusJ2*(2*scaleFactorJ/rScaledRadiusJ3 + 2*scaleFactorJ/rSubScaledRadiusJ3)/r + 0.5*rScaledRadiusJ*(-scaleFactorJ*sign(rSubScaledRadiusJ)/rScaledRadiusJ - scaleFactorJ*fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)));
-                    dpsi_dsj = offsetRadiusI*(0.25*r*(-(-2*dielectricOffset + 2*radiusJ)/rSubScaledRadiusJ3 + (2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3) + offsetRadiusJ/rScaledRadiusJ2 + offsetRadiusJ*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*offsetRadiusJ2*((-2*dielectricOffset + 2*radiusJ)/rSubScaledRadiusJ3 - (2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3)/r + 0.5*scaleFactorJ*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.5*rScaledRadiusJ*((-offsetRadiusJ)*sign(rSubScaledRadiusJ)/rScaledRadiusJ + (-offsetRadiusJ)*fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)));
+                    // dpsi_dsj = offsetRadiusI*(0.25*r*(-(-2*dielectricOffset + 2*radiusJ)/rSubScaledRadiusJ3 + (2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3) + offsetRadiusJ/rScaledRadiusJ2 + offsetRadiusJ*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*offsetRadiusJ2*((-2*dielectricOffset + 2*radiusJ)/rSubScaledRadiusJ3 - (2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3)/r + 0.5*scaleFactorJ*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.5*rScaledRadiusJ*((-offsetRadiusJ)*sign(rSubScaledRadiusJ)/rScaledRadiusJ + (-offsetRadiusJ)*fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)));
                     
                     if (offsetRadiusI < (scaledRadiusJ - r).real) {
                         de += 2.0*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
                         dpsi_dri += -2.0/fabs(rSubScaledRadiusJ);
                         dpsi_drj += -2.0*scaleFactorJ*offsetRadiusI*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
-                        dpsi_dsj += 2.0*offsetRadiusI*(-offsetRadiusJ)*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
+                        // dpsi_dsj += 2.0*offsetRadiusI*(-offsetRadiusJ)*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
+                        dpsi_dsj += -2*dl_dsj*offsetRadiusI;
                     }
                 }
 
