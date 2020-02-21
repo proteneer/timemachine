@@ -6,6 +6,7 @@
 #include "kernel_utils.cuh"
 #include "math_utils.cuh"
 #include "k_gbsa.cuh"
+#include "k_gbsa_jvp.cuh"
 
 namespace timemachine {
 
@@ -856,9 +857,6 @@ void GBSAReference<RealType, D>::execute_device(
 
     // inference mode
     if(d_coords_tangents == nullptr) {
-
-        std::cout << "A branch" << std::endl;
-
         gpuErrchk(cudaMemset(d_born_radii_buffer_, 0, N*sizeof(*d_born_radii_buffer_)));
         gpuErrchk(cudaMemset(d_obc_buffer_, 0, N*sizeof(*d_obc_buffer_)));
         gpuErrchk(cudaMemset(d_obc_ri_buffer_, 0, N*sizeof(*d_obc_ri_buffer_)));
@@ -935,15 +933,10 @@ void GBSAReference<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
     } else {
-
-
-        std::cout << "B branch" << std::endl;
-
         gpuErrchk(cudaMemset(d_born_radii_buffer_jvp_, 0, N*sizeof(*d_born_radii_buffer_jvp_)));
         gpuErrchk(cudaMemset(d_obc_buffer_jvp_, 0, N*sizeof(*d_obc_buffer_jvp_)));
         gpuErrchk(cudaMemset(d_obc_ri_buffer_jvp_, 0, N*sizeof(*d_obc_ri_buffer_jvp_)));
         gpuErrchk(cudaMemset(d_born_forces_buffer_jvp_, 0, N*sizeof(*d_born_forces_buffer_jvp_)));
-
 
         k_compute_born_radii_gpu_jvp<RealType, D><<<B, tpb>>>(
             N_,

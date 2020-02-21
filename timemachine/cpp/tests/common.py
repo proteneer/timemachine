@@ -41,11 +41,11 @@ def prepare_gbsa_system(
     params = np.concatenate([params, charge_params])
 
     # gb radiis
-    # +0.1 is to avoid catastrophic loss of accuracy when really small
-    radii_params = np.random.rand(P_radii).astype(np.float64)+0.5
-    radii_params = radii_params/10 # convert to nm for numerical stability
+    radii_params = 1.5*np.random.rand(P_radii).astype(np.float64) + 1.0 # 1.0 to 2.5
+    radii_params = radii_params/10 # convert to nm for
+
     # print(radii_params)
-    # radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
+    # assert 0
     assert P_radii == N
     radii_param_idxs = np.arange(P_radii, dtype=np.int32) + len(params)
 
@@ -277,7 +277,7 @@ class GradientTest(unittest.TestCase):
         norms = np.where(norms < 1., 1.0, norms)
         errors = (truth-test)/norms
 
-        print(errors)
+        # print(errors)
         max_error = np.amax(np.abs(errors))
         mean_error = np.mean(np.abs(errors).reshape(-1))
         std_error = np.std(errors.reshape(-1))
@@ -308,6 +308,9 @@ class GradientTest(unittest.TestCase):
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
         ref_dx, ref_dp = grad_fn(x, params)
 
+        print("FORCES", ref_dx)
+        print("min/max", np.amax(ref_dx), np.amin(ref_dx))
+
         self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),
@@ -321,7 +324,6 @@ class GradientTest(unittest.TestCase):
 
         # return
         print("PASSED FIRST ORDER")
-
         
 
         test_x_tangent, test_p_tangent = custom_force.execute_jvp(
@@ -336,8 +338,8 @@ class GradientTest(unittest.TestCase):
 
         _, t = jax.jvp(grad_fn, primals, tangents)
 
-        print(t[0], test_x_tangent)
-        print(t[0].shape, test_x_tangent.shape)
+        # print(t[0], test_x_tangent)
+        # print(t[0].shape, test_x_tangent.shape)
 
         self.assert_equal_vectors(
             t[0],
@@ -346,10 +348,23 @@ class GradientTest(unittest.TestCase):
         )
 
         # having some error in this is okay because of how we accumulate (this is just a sum)
-        print("TEST", t[1])
-        print("REF0", test_p_tangent)
-        print("DIFF", t[1] - test_p_tangent)
-        np.testing.assert_allclose(t[1], test_p_tangent, rtol=5e-5)
+        # print("REF0", t[1])
+        # print("TEST", test_p_tangent)
+        # print("DIF0", t[1] - test_p_tangent)
+        # print("DIF1", t[1] / test_p_tangent)
+        # d1 = t[1] / test_p_tangent
+        # for p_idx, (p, r) in enumerate(zip(d1[-N:], t[1][-N:])):
+            # print(p_idx, p, r)
+        # for p_idx, p in t[1] / test_p_tangent[-N:]:
+            # print(p_idx, p)
 
-        # print("PASSED ROUND 1")
+        # compare relative to the *norm* of the group of similar derivatives.
+        for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
+            err = abs((r - tt)/r)
+            if err > 1e-4:
+                print(r_idx, err, r, tt)
+        np.testing.assert_allclose(t[1], test_p_tangent, rtol=rtol)
+
+
+        print("PASSED ROUND 1")
         # assert 0

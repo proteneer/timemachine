@@ -79,7 +79,9 @@ def gbsa_obc(
     # particle pair
     f = np.sqrt(r ** 2 + np.outer(B, B) * np.exp(-r ** 2 / (4 * np.outer(B, B))))
     charge_products = np.outer(charges, charges)
-    E += np.sum(np.triu(-screening * (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f, k=1))
+
+    ixns = -screening * (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
+    E += np.sum(np.triu(ixns, k=1))
 
     print("REF E", E)
 

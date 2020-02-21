@@ -49,32 +49,44 @@ class TestGBSA(GradientTest):
     def test_gbsa(self):
 
         np.random.seed(125)
-        N = 54
-        # N = 31
+        # N = 65
+        # N = 54
         D = 4
+        # x = self.get_random_coords(N, D)
+
+        x = self.get_water_coords(D)
+        N = x.shape[0]
+
         E = 5
-        P_charges = 4
+        # P_charges = 4
+        P_charges = N
         # P_radii = 8
         P_radii = N
         # P_scale_factors = 6
         P_scale_factors = N
+
+        print("num atoms", N)
 
         dielectric_offset = 0.009
         solute_dielectric = 1.0
         solvent_dielectric = 78.5
  
         cutoff = 1000.0
-        x = self.get_random_coords(N, D)
 
 
+        # x[0, :] += 5
 
         # for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
-        for precision, rtol in [(np.float32, 5e-6)]:
-        # for precision, rtol in [(np.float64, 1e-10)]:
+        # for precision, rtol in [(np.float64, 1e-10), (np.float32, 2e-5)]:
+        for precision, rtol in [(np.float32, 2e-5)]:
+        # for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
             # for cutoff in [100.0, 0.5, 0.1]:
             print("PRECISION", precision, "RTOL", rtol)
             for cutoff in [10000.0]:
                 np.random.rand(1)
+
+
+
                 params, ref_forces, test_forces = prepare_gbsa_system(
                     x,
                     E,
@@ -96,8 +108,8 @@ class TestGBSA(GradientTest):
 
                 for r, t in zip(ref_forces, test_forces):
                     self.compare_forces(
-                        x,
-                        params,
+                        x.astype(precision).astype(np.float64),
+                        params.astype(precision).astype(np.float64),
                         r,
                         t,
                         precision,
