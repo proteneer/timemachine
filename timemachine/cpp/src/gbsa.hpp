@@ -18,7 +18,7 @@ private:
 
     double *d_born_radii_buffer_; // double or Surreal<double>
     double *d_obc_buffer_; // double or Surreal<double>
-    double *d_obc_ri_buffer_; // double or Surreal<double>
+    // double *d_obc_ri_buffer_; // double or Surreal<double>
     unsigned long long *d_born_forces_buffer_; // ull or Surreal<double>
 
     Surreal<double> *d_born_radii_buffer_jvp_; // double or Surreal<double>
@@ -45,7 +45,7 @@ private:
     double beta_;
     double gamma_;
     double dielectric_offset_;
-    double screening_;
+    // double screening_;
     double surface_tension_;
     double solute_dielectric_;
     double solvent_dielectric_;
@@ -69,7 +69,7 @@ public:
         double beta,
         double gamma,
         double dielectric_offset,
-        double screening,
+        // double screening,
         double surface_tension,
         double solute_dielectric,
         double solvent_dielectric,

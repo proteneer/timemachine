@@ -21,7 +21,7 @@ def prepare_gbsa_system(
     beta,
     gamma,
     dielectric_offset,
-    screening,
+    # screening,
     surface_tension,
     solute_dielectric,
     solvent_dielectric,
@@ -42,31 +42,15 @@ def prepare_gbsa_system(
 
     # gb radiis
     radii_params = 1.5*np.random.rand(P_radii).astype(np.float64) + 1.0 # 1.0 to 2.5
-    radii_params = radii_params/10 # convert to nm for
-
-    # print(radii_params)
-    # assert 0
-    assert P_radii == N
-    radii_param_idxs = np.arange(P_radii, dtype=np.int32) + len(params)
-
+    radii_params = radii_params/10 # convert to nm form
+    radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, radii_params])
 
     # scale factors
-    # +0.1 is to avoid catastrophic loss of accuracy when really small
     scale_params = np.random.rand(P_scale_factors).astype(np.float64)/3 + 0.75
-
-    # print(scale_params)
-    # assert 0
-    # scale_params = np.random.rand(P_scale_factors).astype(np.float64)+0.1
-    # scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
-    assert P_scale_factors == N
-    scale_param_idxs = np.arange(P_scale_factors, dtype=np.int32) + len(params)
+    scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, scale_params])
 
-    # dielectric_offset = 0.009
-
-    # solute_dielectric = 0.6
-    # solvent_dielectric = 0.3
     cutoff = 100.0
 
     custom_gb = ops.GBSAReference(
@@ -77,7 +61,7 @@ def prepare_gbsa_system(
         beta,
         gamma,
         dielectric_offset,
-        screening,
+        # screening,
         surface_tension,
         solute_dielectric,
         solvent_dielectric,
@@ -96,7 +80,6 @@ def prepare_gbsa_system(
         beta=beta,
         gamma=gamma,
         dielectric_offset=dielectric_offset,
-        screening=screening,
         surface_tension=surface_tension,
         solute_dielectric=solute_dielectric,
         solvent_dielectric=solvent_dielectric,
@@ -307,9 +290,6 @@ class GradientTest(unittest.TestCase):
 
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
         ref_dx, ref_dp = grad_fn(x, params)
-
-        print("FORCES", ref_dx)
-        print("min/max", np.amax(ref_dx), np.amin(ref_dx))
 
         self.assert_equal_vectors(
             np.array(ref_dx),

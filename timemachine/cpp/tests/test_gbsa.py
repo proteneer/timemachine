@@ -48,10 +48,11 @@ class TestGBSA(GradientTest):
 
     def test_gbsa(self):
 
+        D = 4
         np.random.seed(125)
         # N = 65
         # N = 54
-        D = 4
+        # N = 8
         # x = self.get_random_coords(N, D)
 
         x = self.get_water_coords(D)
@@ -59,13 +60,11 @@ class TestGBSA(GradientTest):
 
         E = 5
         # P_charges = 4
-        P_charges = N
+        P_charges = N//4
         # P_radii = 8
-        P_radii = N
+        P_radii = N//3
         # P_scale_factors = 6
-        P_scale_factors = N
-
-        print("num atoms", N)
+        P_scale_factors = N//5
 
         dielectric_offset = 0.009
         solute_dielectric = 1.0
@@ -77,8 +76,8 @@ class TestGBSA(GradientTest):
         # x[0, :] += 5
 
         # for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
-        # for precision, rtol in [(np.float64, 1e-10), (np.float32, 2e-5)]:
-        for precision, rtol in [(np.float32, 2e-5)]:
+        for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-5)]:
+        # for precision, rtol in [(np.float32, 5e-5)]:
         # for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
             # for cutoff in [100.0, 0.5, 0.1]:
             print("PRECISION", precision, "RTOL", rtol)
@@ -98,7 +97,7 @@ class TestGBSA(GradientTest):
                     gamma=0.65,
                     # cutoff=cutoff,
                     dielectric_offset=dielectric_offset,
-                    screening=138.935456,
+                    # screening=138.935456,
                     surface_tension=28.3919551,
                     solute_dielectric=solute_dielectric,
                     solvent_dielectric=solvent_dielectric,

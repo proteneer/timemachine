@@ -21,8 +21,8 @@ __global__ void k_compute_born_radii_gpu(
     const double gamma_obc,
     const double cutoff,
     double* born_radii,
-    double* obc_chain,
-    double* obc_chain_ri) {
+    double* obc_chain) {
+    // double* obc_chain_ri) {
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
 
@@ -103,8 +103,8 @@ __global__ void k_compute_born_radii_gpu(
     double sum3       = sum*sum2;
     double inner      = alpha_obc*sum - beta_obc*sum2 + gamma_obc*sum3;
     double tanhSum    = tanh(inner);
-    double coshSum    = cosh(inner);
-    double sechSum    = 1/coshSum;
+    // double coshSum    = cosh(inner);
+    // double sechSum    = 1/coshSum;
 
     if(atom_i_idx < N) {
 
@@ -117,8 +117,8 @@ __global__ void k_compute_born_radii_gpu(
         obc_chain[atom_i_idx]      *= born_radii[atom_i_idx]*born_radii[atom_i_idx];
 
         // dRi/dri
-        obc_chain_ri[atom_i_idx]    = 1.0/(offsetRadiusI*offsetRadiusI) - tanhSum/(radiusI*radiusI);
-        obc_chain_ri[atom_i_idx]   *= born_radii[atom_i_idx]*born_radii[atom_i_idx];
+        // obc_chain_ri[atom_i_idx]    = 1.0/(offsetRadiusI*offsetRadiusI) - tanhSum/(radiusI*radiusI);
+        // obc_chain_ri[atom_i_idx]   *= born_radii[atom_i_idx]*born_radii[atom_i_idx];
 
     }
 
@@ -136,8 +136,7 @@ void __global__ k_compute_born_first_loop_gpu(
     const double prefactor,
     const double cutoff,
     unsigned long long *bornForces,
-    unsigned long long *out_forces,
-    double *dU_dp) {
+    unsigned long long *out_forces) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
@@ -167,7 +166,7 @@ void __global__ k_compute_born_first_loop_gpu(
     RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
     RealType born_radii_i = atom_i_idx < N ? born_radii[atom_i_idx] : 0;
 
-    RealType dE_dqi_accum = 0;
+    // RealType dE_dqi_accum = 0;
     RealType born_force_i_accum = 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
@@ -179,7 +178,7 @@ void __global__ k_compute_born_first_loop_gpu(
     int charge_param_idx_j = atom_j_idx < N ? charge_param_idxs[atom_j_idx] : 0;
     RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
     RealType born_radii_j = atom_j_idx < N ? born_radii[atom_j_idx] : 0;
-    RealType dE_dqj_accum = 0;
+    // RealType dE_dqj_accum = 0;
     RealType born_force_j_accum = 0;
 
     // In inference mode, we don't care about gradients with respect to parameters.
@@ -207,8 +206,8 @@ void __global__ k_compute_born_first_loop_gpu(
             RealType dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
 
             // RealType energy = Gpol;
-            RealType dE_dqi = prefactor*qj/denominator;
-            RealType dE_dqj = prefactor*qi/denominator;
+            // RealType dE_dqi = prefactor*qj/denominator;
+            // RealType dE_dqj = prefactor*qi/denominator;
 
             if (atom_i_idx != atom_j_idx) {
 
@@ -223,13 +222,11 @@ void __global__ k_compute_born_first_loop_gpu(
                 }
 
             } else {
-                dE_dqi *= 0.5;
-                dE_dqj *= 0.5;
+                // dE_dqi *= 0.5;
+                // dE_dqj *= 0.5;
                 // energy *= 0.5;
             }
 
-            dE_dqi_accum += dE_dqi;
-            dE_dqj_accum += dE_dqj;
             born_force_i_accum += dGpol_dalpha2_ij*born_radii_j;
         }
 
@@ -237,7 +234,6 @@ void __global__ k_compute_born_first_loop_gpu(
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
         qj = __shfl_sync(0xffffffff, qj, srcLane);
         born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
-        dE_dqj_accum = __shfl_sync(0xffffffff, dE_dqj_accum, srcLane);
         born_force_j_accum = __shfl_sync(0xffffffff, born_force_j_accum, srcLane);
         for(size_t d=0; d < D; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
@@ -256,12 +252,10 @@ void __global__ k_compute_born_first_loop_gpu(
 
     if(atom_i_idx < N) {
         atomicAdd(bornForces + atom_i_idx, static_cast<unsigned long long>((long long) (born_force_i_accum*FIXED_EXPONENT_BORN_FORCES)));
-        atomicAdd(dU_dp + charge_param_idx_i, dE_dqi_accum);
     }
 
     if(atom_j_idx < N) {
         atomicAdd(bornForces + atom_j_idx, static_cast<unsigned long long>((long long) (born_force_j_accum*FIXED_EXPONENT_BORN_FORCES)));
-        atomicAdd(dU_dp + charge_param_idx_j, dE_dqj_accum);
     }
 
 }
@@ -275,11 +269,11 @@ __global__ void k_reduce_born_forces(
     const int* atomic_radii_idxs,
     const double* born_radii,
     const double* obc_chain,
-    const double* obc_chain_ri,
+    // const double* obc_chain_ri,
     const double surface_tension, // surface area factor
     const double probe_radius,
-    unsigned long long* bornForces, // dU/Ri
-    double* out_dU_dp
+    unsigned long long* bornForces // dU/Ri
+    // double* out_dU_dp
 ) {
 
     int atomI =  blockIdx.x*32 + threadIdx.x;
@@ -287,7 +281,7 @@ __global__ void k_reduce_born_forces(
         return;
     }
 
-    double radii_derivs = 0;
+    // double radii_derivs = 0;
     double born_force_i = static_cast<double>(static_cast<long long>(bornForces[atomI]))/FIXED_EXPONENT_BORN_FORCES;
     if (born_radii[atomI] > 0.0) {
         double atomic_radii = params[atomic_radii_idxs[atomI]];
@@ -295,13 +289,13 @@ __global__ void k_reduce_born_forces(
         double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
         double saTerm       = surface_tension*r*r*ratio6;
         born_force_i  -= 6.0*saTerm/born_radii[atomI]; 
-        double br2 = born_radii[atomI]*born_radii[atomI];
-        double br4 = br2*br2;
-        double br6 = br4*br2;
-        radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
+        // double br2 = born_radii[atomI]*born_radii[atomI];
+        // double br4 = br2*br2;
+        // double br6 = b/r4*br2;
+        // radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
     }
-    radii_derivs += born_force_i * obc_chain_ri[atomI];
-    out_dU_dp[atomic_radii_idxs[atomI]] += radii_derivs;
+    // radii_derivs += born_force_i * obc_chain_ri[atomI];
+    // out_dU_dp[atomic_radii_idxs[atomI]] += radii_derivs;
 
     born_force_i *= obc_chain[atomI];
     bornForces[atomI] = static_cast<unsigned long long>((long long) ( born_force_i*FIXED_EXPONENT_BORN_FORCES));
@@ -319,12 +313,11 @@ __global__ void k_compute_born_energy_and_forces(
     const int* scale_factor_idxs,
     const double* born_radii,
     const double* obc_chain,
-    const double* obc_chain_ri,
+    // const double* obc_chain_ri,
     const double dielectric_offset,
     const double cutoff,
     const unsigned long long* bornForces,
-    unsigned long long* out_forces,
-    double* out_dU_dp) {
+    unsigned long long* out_forces) {
 
     // we always do the full interaction matrix due to non-symmetry
 
@@ -339,7 +332,7 @@ __global__ void k_compute_born_energy_and_forces(
     RealType radiusI = atom_i_idx < N ? params[atomic_radii_idx_i] : 0;
     RealType born_force_i = atom_i_idx < N ? static_cast<RealType>(static_cast<long long>(bornForces[atom_i_idx]))/FIXED_EXPONENT_BORN_FORCES : 0;
     // RealType born_radii_i = atom_i_idx < N ? born_radii[atom_i_idx] : 0;
-    RealType dPsi_dri = 0;
+    // RealType dPsi_dri = 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType cj[D];
@@ -353,8 +346,8 @@ __global__ void k_compute_born_energy_and_forces(
     int scale_factor_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
     RealType scaleFactorJ = atom_j_idx < N ? params[scale_factor_idx_j] : 0;
     RealType born_radii_j = atom_j_idx < N ? born_radii[atom_j_idx] : 0;
-    RealType dPsi_drj = 0;
-    RealType dPsi_dsj = 0;
+    // RealType dPsi_drj = 0;
+    // RealType dPsi_dsj = 0;
 
     const RealType dielectricOffset = dielectric_offset;
     // const RealType cutoffDistance = cutoff;
@@ -381,14 +374,14 @@ __global__ void k_compute_born_energy_and_forces(
             // radius w/ dielectric offset applied
             // RealType radiusJ            = params[atomic_radii_idxs[atomJ]];
             RealType offsetRadiusJ      = radiusJ - dielectricOffset;
-            RealType offsetRadiusJ2     = offsetRadiusJ*offsetRadiusJ;
+            // RealType offsetRadiusJ2     = offsetRadiusJ*offsetRadiusJ;
 
-            RealType scaleFactorJ2      = scaleFactorJ*scaleFactorJ;
-            RealType scaleFactorJ3      = scaleFactorJ2*scaleFactorJ;
+            // RealType scaleFactorJ2      = scaleFactorJ*scaleFactorJ;
+            // RealType scaleFactorJ3      = scaleFactorJ2*scaleFactorJ;
             RealType scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
             RealType rScaledRadiusJ     = r + scaledRadiusJ;
-            RealType rScaledRadiusJ2    = rScaledRadiusJ*rScaledRadiusJ;
-            RealType rScaledRadiusJ3    = rScaledRadiusJ2*rScaledRadiusJ;
+            // RealType rScaledRadiusJ2    = rScaledRadiusJ*rScaledRadiusJ;
+            // RealType rScaledRadiusJ3    = rScaledRadiusJ2*rScaledRadiusJ;
 
             if (offsetRadiusI < rScaledRadiusJ) {
 
@@ -401,25 +394,9 @@ __global__ void k_compute_born_energy_and_forces(
                 // RealType r2Inverse     = rInverse*rInverse;
                 // RealType t3            = 0.125*(1.0 + scaledRadiusJ2*r2Inverse)*(l_ij2 - u_ij2) + 0.25*log(u_ij/l_ij)*r2Inverse;
 
-                // printf("%d t3 RHS: %.8f\n", atomI, t3);
-                // RealType de            = bornForces[atomI]*t3*rInverse;
-
-                // for(int d=0; d < D; d++) {
-                //     dPsi_dx[atomI*D+d] -= dxs[d]*de;
-                //     dPsi_dx[atomJ*D+d] += dxs[d]*de;
-                // }
-
-                // start manual derivative
-                // RealType de = 0; // derivative of Psi wrt the distance
-                RealType dpsi_dri = 0;
-                RealType dpsi_drj = 0;
-                RealType dpsi_dsj = 0;
-
                 RealType rSubScaledRadiusJ = r - scaledRadiusJ;
                 RealType rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
-                RealType rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
-
-                // RealType rInverse = 1/r; // oof high error
+                // RealType rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
 
                 RealType l_ij = offsetRadiusI > abs(rSubScaledRadiusJ) ? offsetRadiusI : abs(rSubScaledRadiusJ);
                 l_ij = 1.0/l_ij;
@@ -454,78 +431,17 @@ __global__ void k_compute_born_energy_and_forces(
                 RealType de4 = -0.5*rInverse*(rInverse*ratio - (du_dr/u_ij - dl_dr/l_ij));
                 RealType de = de1 + de2 + de3 + de4;
 
-                // if(abs(de1) > 5) {
-                    // printf("derivs atom_i_idx %d atom_j_idx %d de1 de2 de3 de4 \t %f \t %f \t %f \t %f \t \n", atom_i_idx, atom_j_idx, de1, de2, de3, de4);
-                // }
-
-
-                RealType dl_dsj = offsetRadiusI > abs(rSubScaledRadiusJ) ? 0 : l_ij*l_ij*offsetRadiusJ*(rSubScaledRadiusJ/abs(rSubScaledRadiusJ));
-                RealType du_dsj = -u_ij*u_ij*offsetRadiusJ;
-
-                // RealType term1 = (l_ij - u_ij)(1 + 0.25*r*(u_ij + l_ij))
-                RealType dsj1 = dl_dsj - du_dsj;
-                RealType dsj2 = 0.5*r*(u_ij*du_dsj - l_ij*dl_dsj);
-                RealType dsj3 = 0.5*rInverse*(du_dsj/u_ij - dl_dsj/l_ij);
-                RealType dsj4 = 0.5*rInverse*(scaledRadiusJ*scaledRadiusJ)*(l_ij*dl_dsj - u_ij*du_dsj);
-                RealType dsj5 = 0.5*rInverse*(scaledRadiusJ*offsetRadiusJ)*(l_ij2 - u_ij2);
-
-                // RealType dsj2 = 0.5*r*(-u_ij*u_ij*u_ij*offsetRadiusJ - l_ij*dl_dsj);
-
-
-
-                RealType dpsi_dsj_sum = (dsj1 + dsj2 + dsj3 + dsj4 + dsj5)*offsetRadiusI;
-
-                // printf("dsj1 dsj2 dsj3 dsj4 dsj5 sum %f %f %f %f %f %f \n", dsj1, dsj2, dsj3, dsj4, dsj5, dpsi_dsj_sum);
-
-                // double dsj1 = static_cast<double>(dl_dsj) - static_cast<double>(du_dsj);
-                // double dsj2 = 0.5*r*(u_ij*du_dsj - l_ij*dl_dsj);
-                // // double dsj3 = (0.5*rInverse*(log(u_ij) - log(l_ij)))
-                // double dsj3 = 0.5*rInverse*(du_dsj/u_ij - dl_dsj/l_ij);
-                // double dsj4 = 0.25*rInverse*(scaledRadiusJ*scaledRadiusJ)*(2*l_ij*dl_dsj - 2*u_ij*du_dsj);
-                // double dsj5 = 0.25*rInverse*(2*scaledRadiusJ*offsetRadiusJ)*(l_ij2 - u_ij2);
-
-                // double dPsi_dsj = dsj1 + dsj2 + dsj3 + dsj4 + dsj5;
-
-                // f("dPsi_dsj %f\n", dPsi_dsj);
-
-                // factor out as much as we can to outside of the conditional for reduce convergence
                 if(offsetRadiusI > abs(rSubScaledRadiusJ)) {
-                  dpsi_dri = 0.25*r*(1/rScaledRadiusJ2 - 1/offsetRadiusI2) + offsetRadiusI*(0.5*r/offsetRadiusI3 - 1/offsetRadiusI2 - 0.5*scaleFactorJ2*offsetRadiusJ2/(r*offsetRadiusI3) + 0.5/(r*offsetRadiusI)) - 1/rScaledRadiusJ + 1.0/offsetRadiusI + 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r + 0.5*log(offsetRadiusI/rScaledRadiusJ)/r;
-                  dpsi_drj = offsetRadiusI*(-0.5*r*scaleFactorJ/rScaledRadiusJ3 + scaleFactorJ/rScaledRadiusJ2 + 0.5*scaleFactorJ3*offsetRadiusJ2/(r*rScaledRadiusJ3) + 0.25*scaleFactorJ2*(-2*dielectricOffset + 2*radiusJ)*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r - 0.5*scaleFactorJ/(r*rScaledRadiusJ));
-                  // dpsi_dsj = offsetRadiusI*(0.25*r*(2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3 + offsetRadiusJ/rScaledRadiusJ2 - 0.25*scaleFactorJ2*offsetRadiusJ2*(2*dielectricOffset - 2*radiusJ)/(r*rScaledRadiusJ3) + 0.5*scaleFactorJ*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/offsetRadiusI2)/r + 0.5*(-offsetRadiusJ)/(r*rScaledRadiusJ));
-                  if(offsetRadiusI < (scaledRadiusJ - r)) {
-                   de += 0;
-                   dpsi_dri += 0;
-                   dpsi_drj += 0;
-                   dpsi_dsj += 0;
-                  }
-
+                    if(offsetRadiusI < (scaledRadiusJ - r)) {
+                        de += 0;
+                    }
                 } else {
-                  dpsi_dri = 0.25*r*(1/rScaledRadiusJ2 - 1/rSubScaledRadiusJ2) + 1.0/fabs(rSubScaledRadiusJ) - 1/rScaledRadiusJ + 0.25*scaleFactorJ2*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.5*log(fabs(rSubScaledRadiusJ)/rScaledRadiusJ)/r;
-                  dpsi_drj = offsetRadiusI*(0.25*r*(-2*scaleFactorJ/rScaledRadiusJ3 - 2*scaleFactorJ/rSubScaledRadiusJ3) + scaleFactorJ/rScaledRadiusJ2 + scaleFactorJ*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*(-2*dielectricOffset + 2*radiusJ)*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.25*scaleFactorJ2*offsetRadiusJ2*(2*scaleFactorJ/rScaledRadiusJ3 + 2*scaleFactorJ/rSubScaledRadiusJ3)/r + 0.5*rScaledRadiusJ*(-scaleFactorJ*sign(rSubScaledRadiusJ)/rScaledRadiusJ - scaleFactorJ*fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)));
-                  // dpsi_dsj = offsetRadiusI*(0.25*r*(-(-2*dielectricOffset + 2*radiusJ)/rSubScaledRadiusJ3 + (2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3) + offsetRadiusJ/rScaledRadiusJ2 + offsetRadiusJ*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2 + 0.25*scaleFactorJ2*offsetRadiusJ2*((-2*dielectricOffset + 2*radiusJ)/rSubScaledRadiusJ3 - (2*dielectricOffset - 2*radiusJ)/rScaledRadiusJ3)/r + 0.5*scaleFactorJ*offsetRadiusJ2*(-1/rScaledRadiusJ2 + 1/rSubScaledRadiusJ2)/r + 0.5*rScaledRadiusJ*((-offsetRadiusJ)*sign(rSubScaledRadiusJ)/rScaledRadiusJ + (-offsetRadiusJ)*fabs(rSubScaledRadiusJ)/rScaledRadiusJ2)/(r*fabs(rSubScaledRadiusJ)));
-                  if (offsetRadiusI < (scaledRadiusJ - r)) {
-                   de += 2.0*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2; // refactor later
-                   dpsi_dri += -2.0/fabs(rSubScaledRadiusJ);
-                   dpsi_drj += -2.0*scaleFactorJ*offsetRadiusI*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
-                   dpsi_dsj += 2.0*offsetRadiusI*(-offsetRadiusJ)*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
-                  }
+                    if(offsetRadiusI < (scaledRadiusJ - r)) {
+                        de += 2.0*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
+                    }
                 }
 
-                // printf("r a1 a2 a3 a4 t1 de %f \t %f \t %f \t %f \t %f \t %f \t %f\n", r, a1, a2, a3, a4, t1, de);
-
-                // is bornForces
-
                 de *= 0.5*born_force_i*offsetRadiusI;
-                dpsi_dri *= 0.5*born_force_i;
-                dpsi_drj *= 0.5*born_force_i;
-                dpsi_dsj *= 0.5*born_force_i;
-
-                // parameter derivatives wrt atomic radii and scale factors
-                dPsi_dri += dpsi_dri;
-                dPsi_drj += dpsi_drj;
-                dPsi_dsj += dpsi_dsj;
-
                 for(int d=0; d < D; d++) {
                     dPsi_dx_i[d] += (dxs[d]/r)*de;
                     dPsi_dx_j[d] -= (dxs[d]/r)*de;
@@ -539,8 +455,8 @@ __global__ void k_compute_born_energy_and_forces(
         born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
         radiusJ = __shfl_sync(0xffffffff, radiusJ, srcLane);
         scaleFactorJ = __shfl_sync(0xffffffff, scaleFactorJ, srcLane);
-        dPsi_drj = __shfl_sync(0xffffffff, dPsi_drj, srcLane);
-        dPsi_dsj = __shfl_sync(0xffffffff, dPsi_dsj, srcLane);
+        // dPsi_drj = __shfl_sync(0xffffffff, dPsi_drj, srcLane);
+        // dPsi_dsj = __shfl_sync(0xffffffff, dPsi_dsj, srcLane);
 
         atomic_radii_idx_i = __shfl_sync(0xffffffff, atomic_radii_idx_i, srcLane);
         scale_factor_idx_j = __shfl_sync(0xffffffff, scale_factor_idx_j, srcLane);
@@ -554,6 +470,7 @@ __global__ void k_compute_born_energy_and_forces(
 
     for(int d=0; d < D; d++) {
         if(atomI < N) {
+            // printf("%d %d dPsi_dx_i[d] %f\n", atomI, d, dPsi_dx_i[d]);
             atomicAdd(out_forces + atomI*D+d,  static_cast<unsigned long long>((long long) (dPsi_dx_i[d]*FIXED_EXPONENT)));
         }
         if(atomJ < N) {
@@ -562,14 +479,14 @@ __global__ void k_compute_born_energy_and_forces(
     }
 
 
-    if(atomI < N) {
-        atomicAdd(out_dU_dp + atomic_radii_idx_i, dPsi_dri);
-    }
+    // if(atomI < N) {
+    //     atomicAdd(out_dU_dp + atomic_radii_idx_i, dPsi_dri);
+    // }
 
-    if(atomJ < N) {
-        atomicAdd(out_dU_dp + atomic_radii_idx_j, dPsi_drj);
-        atomicAdd(out_dU_dp + scale_factor_idx_j, dPsi_dsj);
-    }
+    // if(atomJ < N) {
+    //     atomicAdd(out_dU_dp + atomic_radii_idx_j, dPsi_drj);
+    //     atomicAdd(out_dU_dp + scale_factor_idx_j, dPsi_dsj);
+    // }
 
 
 }

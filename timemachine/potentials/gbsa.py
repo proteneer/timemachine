@@ -20,7 +20,7 @@ def gbsa_obc(
     beta,
     gamma,
     dielectric_offset=0.009,
-    screening=138.935484, # ONE_4PI_EPS0
+    # screening=138.935484, # ONE_4PI_EPS0
     surface_tension=28.3919551,
     solute_dielectric=1.0,
     solvent_dielectric=78.5,
@@ -74,15 +74,15 @@ def gbsa_obc(
     # on-diagonal
     charges = params[charge_idxs]
 
-    E += np.sum(-0.5 * screening * (1 / solute_dielectric - 1 / solvent_dielectric) * charges ** 2 / B)
+    E += np.sum(-0.5 * (1 / solute_dielectric - 1 / solvent_dielectric) * charges ** 2 / B)
 
     # particle pair
     f = np.sqrt(r ** 2 + np.outer(B, B) * np.exp(-r ** 2 / (4 * np.outer(B, B))))
     charge_products = np.outer(charges, charges)
 
-    ixns = -screening * (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
+    # ixns = -screening * (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
+    ixns = - (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
     E += np.sum(np.triu(ixns, k=1))
 
-    print("REF E", E)
-
+    # print("REF E", E)
     return E
