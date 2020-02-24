@@ -24,7 +24,6 @@ class TestGBSA(GradientTest):
         sort=False):
 
         x = np.load("water.npy").astype(np.float64)
-        # x = x[:2976, :D]
         if sort:
             perm = hilbert_sort(x, D)
             x = x[perm, :]
@@ -50,10 +49,6 @@ class TestGBSA(GradientTest):
 
         D = 4
         np.random.seed(125)
-        # N = 65
-        # N = 54
-        # N = 8
-        # x = self.get_random_coords(N, D)
 
         x = self.get_water_coords(D)
         N = x.shape[0]
@@ -79,7 +74,6 @@ class TestGBSA(GradientTest):
                     alpha=0.35,
                     beta=0.645,
                     gamma=0.65,
-                    # cutoff=cutoff,
                     dielectric_offset=dielectric_offset,
                     surface_tension=28.3919551,
                     solute_dielectric=solute_dielectric,

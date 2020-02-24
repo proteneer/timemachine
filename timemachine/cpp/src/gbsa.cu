@@ -19,21 +19,17 @@ GBSA<RealType, D>::GBSA(
     double beta,
     double gamma,
     double dielectric_offset,
-    // double screening,
     double surface_tension,
     double solute_dielectric,
     double solvent_dielectric,
     double probe_radius,
     double cutoff) :
-    // charge_param_idxs_(charge_param_idxs),
-    // atomic_radii_idxs_(atomic_radii_idxs),
-    // scale_factor_idxs_(scale_factor_idxs),
+
     N_(charge_param_idxs.size()),
     alpha_(alpha),
     beta_(beta),
     gamma_(gamma),
     dielectric_offset_(dielectric_offset),
-    // screening_(screening),
     surface_tension_(surface_tension),
     solute_dielectric_(solute_dielectric),
     solvent_dielectric_(solvent_dielectric),
@@ -55,7 +51,6 @@ GBSA<RealType, D>::GBSA(
 
     gpuErrchk(cudaMalloc(&d_born_radii_buffer_, N*sizeof(*d_born_radii_buffer_)));
     gpuErrchk(cudaMalloc(&d_obc_buffer_, N*sizeof(*d_obc_buffer_)));
-    // gpuErrchk(cudaMalloc(&d_obc_ri_buffer_, N*sizeof(*d_obc_ri_buffer_)));
     gpuErrchk(cudaMalloc(&d_born_forces_buffer_, N*sizeof(*d_born_forces_buffer_)));
 
     gpuErrchk(cudaMalloc(&d_born_radii_buffer_jvp_, N*sizeof(*d_born_radii_buffer_jvp_)));
@@ -85,6 +80,7 @@ GBSA<RealType, D>::~GBSA() {
 
 };
 
+// reference code
 template<int D>
 double compute_born_first_loop(
     const std::vector<double>& coords,
@@ -177,6 +173,7 @@ double compute_born_first_loop(
 };
 
 // ported over from OpenMM with minor corrections
+// reference code
 template<int D>
 void compute_born_radii(
     const std::vector<double>& coords,
@@ -271,6 +268,7 @@ void compute_born_radii(
     }
 }
 
+// reference code
 template <int D>
 double reduce_born_forces(
     const std::vector<double>& coords,
@@ -313,6 +311,7 @@ double reduce_born_forces(
 
 }
 
+// reference code
 template <int D>
 double compute_born_energy_and_forces(
     const std::vector<double>& coords,
@@ -520,7 +519,6 @@ void GBSA<RealType, D>::execute_device(
           cutoff_,
           d_born_radii_buffer_,
           d_obc_buffer_
-          // d_obc_ri_buffer_
         );
 
         cudaDeviceSynchronize();
@@ -536,7 +534,6 @@ void GBSA<RealType, D>::execute_device(
           cutoff_,
           d_born_forces_buffer_, // output
           d_out_coords // ouput
-          // d_dU_dp // ouput
         );
 
         cudaDeviceSynchronize();
@@ -548,11 +545,9 @@ void GBSA<RealType, D>::execute_device(
           d_atomic_radii_idxs_,
           d_born_radii_buffer_,
           d_obc_buffer_,
-          // d_obc_ri_buffer_,
           surface_tension_,
           probe_radius_,
           d_born_forces_buffer_
-          // d_dU_dp
         );
 
         cudaDeviceSynchronize();
@@ -566,12 +561,10 @@ void GBSA<RealType, D>::execute_device(
           d_scale_factor_idxs_,
           d_born_radii_buffer_,
           d_obc_buffer_,
-          // d_obc_ri_buffer_,
           dielectric_offset_,
           cutoff_,
           d_born_forces_buffer_,
           d_out_coords
-          // d_dU_dp
         );
 
         cudaDeviceSynchronize();
@@ -659,7 +652,6 @@ void GBSA<RealType, D>::execute_device(
     }
 
 }
-
 
 template class GBSA<double, 4>;
 template class GBSA<double, 3>;

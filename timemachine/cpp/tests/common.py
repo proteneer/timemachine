@@ -261,7 +261,6 @@ class GradientTest(unittest.TestCase):
         std_error = np.std(errors.reshape(-1))
         max_error_arg = np.argmax(errors)//truth.shape[1]
 
-        # was just straight up fucking wrong
         errors = np.abs(errors) > rtol
 
         print("max relative error", max_error, "rtol", rtol, norms[max_error_arg], "mean error", mean_error, "std error", std_error)
@@ -279,13 +278,6 @@ class GradientTest(unittest.TestCase):
     def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
-
-        # for p in params:
-            # print(p.astype(np.float32))
-            # print(float(p.astype(np.float32)))
-            # print(p.astype(np.float32).astype(np.float64))
-            # print(p.astype(np.float16).astype(np.float64))
-
 
         N = x.shape[0]
         D = x.shape[1]
@@ -329,10 +321,10 @@ class GradientTest(unittest.TestCase):
         )
 
         # TBD compare relative to the *norm* of the group of similar derivatives.
-        for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
-            err = abs((r - tt)/r)
-            if err > 1e-4:
-                print(r_idx, err, r, tt)
+        # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
+        #     err = abs((r - tt)/r)
+        #     if err > 1e-4:
+        #         print(r_idx, err, r, tt)
 
         if precision == np.float64:
             np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
