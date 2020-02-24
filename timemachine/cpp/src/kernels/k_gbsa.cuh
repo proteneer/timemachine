@@ -115,11 +115,6 @@ __global__ void k_compute_born_radii_gpu(
         obc_chain[atom_i_idx]       = (alpha_obc - 2.0*beta_obc*sum + 3.0*gamma_obc*sum2);
         obc_chain[atom_i_idx]       = (1 -tanhSum*tanhSum)*obc_chain[atom_i_idx]/radiusI;
         obc_chain[atom_i_idx]      *= born_radii[atom_i_idx]*born_radii[atom_i_idx];
-
-        // dRi/dri
-        // obc_chain_ri[atom_i_idx]    = 1.0/(offsetRadiusI*offsetRadiusI) - tanhSum/(radiusI*radiusI);
-        // obc_chain_ri[atom_i_idx]   *= born_radii[atom_i_idx]*born_radii[atom_i_idx];
-
     }
 
 }

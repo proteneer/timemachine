@@ -58,37 +58,21 @@ class TestGBSA(GradientTest):
         x = self.get_water_coords(D)
         N = x.shape[0]
 
-        E = 5
-        # P_charges = 4
-        P_charges = N//4
-        # P_radii = 8
-        P_radii = N//3
-        # P_scale_factors = 6
-        P_scale_factors = N//5
+        P_charges = 64
+        P_radii = 12
+        P_scale_factors = 12
 
         dielectric_offset = 0.009
         solute_dielectric = 1.0
         solvent_dielectric = 78.5
  
         cutoff = 1000.0
-
-
-        # x[0, :] += 5
-
-        # for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
-        for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-5)]:
-        # for precision, rtol in [(np.float32, 5e-5)]:
-        # for precision, rtol in [(np.float64, 1e-10), (np.float32, 5e-6)]:
-            # for cutoff in [100.0, 0.5, 0.1]:
-            print("PRECISION", precision, "RTOL", rtol)
+        for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
             for cutoff in [10000.0]:
                 np.random.rand(1)
 
-
-
                 params, ref_forces, test_forces = prepare_gbsa_system(
                     x,
-                    E,
                     P_charges,
                     P_radii,
                     P_scale_factors,
@@ -97,7 +81,6 @@ class TestGBSA(GradientTest):
                     gamma=0.65,
                     # cutoff=cutoff,
                     dielectric_offset=dielectric_offset,
-                    # screening=138.935456,
                     surface_tension=28.3919551,
                     solute_dielectric=solute_dielectric,
                     solvent_dielectric=solvent_dielectric,
@@ -107,8 +90,8 @@ class TestGBSA(GradientTest):
 
                 for r, t in zip(ref_forces, test_forces):
                     self.compare_forces(
-                        x.astype(precision).astype(np.float64),
-                        params.astype(precision).astype(np.float64),
+                        x,
+                        params,
                         r,
                         t,
                         precision,

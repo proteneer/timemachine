@@ -13,7 +13,6 @@ from hilbertcurve.hilbertcurve import HilbertCurve
 
 def prepare_gbsa_system(
     x,
-    E, # number of exclusions
     P_charges,
     P_radii,
     P_scale_factors,
@@ -21,7 +20,6 @@ def prepare_gbsa_system(
     beta,
     gamma,
     dielectric_offset,
-    # screening,
     surface_tension,
     solute_dielectric,
     solvent_dielectric,
@@ -36,7 +34,7 @@ def prepare_gbsa_system(
         params = np.array([], dtype=np.float64)
 
     # charges
-    charge_params = np.random.rand(P_charges).astype(np.float64)
+    charge_params = np.random.rand(P_charges).astype(np.float64)*np.sqrt(138.935456)/4
     charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, charge_params])
 
@@ -61,7 +59,6 @@ def prepare_gbsa_system(
         beta,
         gamma,
         dielectric_offset,
-        # screening,
         surface_tension,
         solute_dielectric,
         solvent_dielectric,
@@ -220,9 +217,6 @@ def prepare_bonded_system(
     custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, D, precision=precision)
     periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
 
-
-    # return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
-
     return params, [harmonic_bond_fn], [custom_bonded]
 
 def hilbert_sort(conf, D):
@@ -234,6 +228,7 @@ def hilbert_sort(conf, D):
         dists.append(dist)
     perm = np.argsort(dists)
     return perm
+
 
 class GradientTest(unittest.TestCase):
 
@@ -274,10 +269,23 @@ class GradientTest(unittest.TestCase):
             print("FATAL: max relative error", max_error, truth[max_error_arg], test[max_error_arg])
             assert 0
 
-    def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
+    def assert_param_derivs(self, truth, test):
+        for ref, test in zip(truth, test):
+            if np.abs(ref) < 1:
+                np.testing.assert_almost_equal(ref, test, decimal=2)
+            else:
+                np.testing.assert_allclose(ref, test, rtol=5e-3)
 
+    def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
+
+        # for p in params:
+            # print(p.astype(np.float32))
+            # print(float(p.astype(np.float32)))
+            # print(p.astype(np.float32).astype(np.float64))
+            # print(p.astype(np.float16).astype(np.float64))
+
 
         N = x.shape[0]
         D = x.shape[1]
@@ -297,14 +305,8 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
-        # np.testing.assert_allclose(ref_dp, test_dp, rtol=1e-10)
-
         x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         params_tangent = np.zeros_like(params)
-
-        # return
-        print("PASSED FIRST ORDER")
-        
 
         test_x_tangent, test_p_tangent = custom_force.execute_jvp(
             x,
@@ -318,8 +320,7 @@ class GradientTest(unittest.TestCase):
 
         _, t = jax.jvp(grad_fn, primals, tangents)
 
-        # print(t[0], test_x_tangent)
-        # print(t[0].shape, test_x_tangent.shape)
+        ref_p_tangent = t[1]
 
         self.assert_equal_vectors(
             t[0],
@@ -327,23 +328,19 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
-        # having some error in this is okay because of how we accumulate (this is just a sum)
-        # print("REF0", t[1])
-        # print("TEST", test_p_tangent)
-        # print("DIF0", t[1] - test_p_tangent)
-        # print("DIF1", t[1] / test_p_tangent)
-        # d1 = t[1] / test_p_tangent
-        # for p_idx, (p, r) in enumerate(zip(d1[-N:], t[1][-N:])):
-            # print(p_idx, p, r)
-        # for p_idx, p in t[1] / test_p_tangent[-N:]:
-            # print(p_idx, p)
+        print("MAX/MIN", np.amax(ref_p_tangent[:N]), np.amin(ref_p_tangent[:N]))
 
-        # compare relative to the *norm* of the group of similar derivatives.
+        # TBD compare relative to the *norm* of the group of similar derivatives.
         for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
             err = abs((r - tt)/r)
             if err > 1e-4:
                 print(r_idx, err, r, tt)
-        np.testing.assert_allclose(t[1], test_p_tangent, rtol=rtol)
+
+
+        if precision == np.float64:
+            np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
+        else:
+            self.assert_param_derivs(ref_p_tangent, test_p_tangent)
 
 
         print("PASSED ROUND 1")
