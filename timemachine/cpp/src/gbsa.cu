@@ -11,7 +11,7 @@
 namespace timemachine {
 
 template <typename RealType, int D>
-GBSAReference<RealType, D>::GBSAReference(
+GBSA<RealType, D>::GBSA(
     const std::vector<int> &charge_param_idxs, // [N]
     const std::vector<int> &atomic_radii_idxs, // [N]
     const std::vector<int> &scale_factor_idxs, // [E,2]
@@ -25,9 +25,9 @@ GBSAReference<RealType, D>::GBSAReference(
     double solvent_dielectric,
     double probe_radius,
     double cutoff) :
-    charge_param_idxs_(charge_param_idxs),
-    atomic_radii_idxs_(atomic_radii_idxs),
-    scale_factor_idxs_(scale_factor_idxs),
+    // charge_param_idxs_(charge_param_idxs),
+    // atomic_radii_idxs_(atomic_radii_idxs),
+    // scale_factor_idxs_(scale_factor_idxs),
     N_(charge_param_idxs.size()),
     alpha_(alpha),
     beta_(beta),
@@ -65,6 +65,25 @@ GBSAReference<RealType, D>::GBSAReference(
 
 
 }
+
+template <typename RealType, int D>
+GBSA<RealType, D>::~GBSA() {
+
+  gpuErrchk(cudaFree(d_charge_param_idxs_));
+  gpuErrchk(cudaFree(d_atomic_radii_idxs_));
+  gpuErrchk(cudaFree(d_scale_factor_idxs_));
+
+  gpuErrchk(cudaFree(d_born_radii_buffer_)); // double or Surreal<double>
+  gpuErrchk(cudaFree(d_obc_buffer_)); // double or Surreal<double>
+  gpuErrchk(cudaFree(d_born_forces_buffer_)); // ull or Surreal<double>
+
+  gpuErrchk(cudaFree(d_born_radii_buffer_jvp_)); // double or Surreal<double>
+  gpuErrchk(cudaFree(d_obc_buffer_jvp_)); // double or Surreal<double>
+  gpuErrchk(cudaFree(d_obc_ri_buffer_jvp_)); // double or Surreal<double>
+  gpuErrchk(cudaFree(d_born_forces_buffer_jvp_)); // ull or Surreal<double>
+
+
+};
 
 template<int D>
 double compute_born_first_loop(
@@ -458,7 +477,7 @@ double compute_born_energy_and_forces(
 }
 
 template <typename RealType, int D>
-void GBSAReference<RealType, D>::execute_device(
+void GBSA<RealType, D>::execute_device(
     const int N,
     const int P,
     const double *d_coords,
@@ -642,11 +661,11 @@ void GBSAReference<RealType, D>::execute_device(
 }
 
 
-template class GBSAReference<double, 4>;
-template class GBSAReference<double, 3>;
+template class GBSA<double, 4>;
+template class GBSA<double, 3>;
 
-template class GBSAReference<float, 4>;
-template class GBSAReference<float, 3>;
+template class GBSA<float, 4>;
+template class GBSA<float, 3>;
 
 
 }

@@ -51,7 +51,7 @@ def prepare_gbsa_system(
 
     cutoff = 100.0
 
-    custom_gb = ops.GBSAReference(
+    custom_gb = ops.GBSA(
         charge_param_idxs,
         radii_param_idxs,
         scale_param_idxs,
@@ -328,20 +328,14 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
-        print("MAX/MIN", np.amax(ref_p_tangent[:N]), np.amin(ref_p_tangent[:N]))
-
         # TBD compare relative to the *norm* of the group of similar derivatives.
         for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
             err = abs((r - tt)/r)
             if err > 1e-4:
                 print(r_idx, err, r, tt)
 
-
         if precision == np.float64:
             np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
         else:
             self.assert_param_derivs(ref_p_tangent, test_p_tangent)
 
-
-        print("PASSED ROUND 1")
-        # assert 0

@@ -470,10 +470,10 @@ void declare_nonbonded(py::module &m, const char *typestr) {
 
 
 template <typename RealType, int D>
-void declare_gbsa_reference(py::module &m, const char *typestr) {
+void declare_gbsa(py::module &m, const char *typestr) {
 
-    using Class = timemachine::GBSAReference<RealType, D>;
-    std::string pyclass_name = std::string("GBSAReference_") + typestr;
+    using Class = timemachine::GBSA<RealType, D>;
+    std::string pyclass_name = std::string("GBSA_") + typestr;
     py::class_<Class, timemachine::Gradient<D> >(
         m,
         pyclass_name.c_str(),
@@ -502,7 +502,7 @@ void declare_gbsa_reference(py::module &m, const char *typestr) {
         std::vector<int> scale_factor_idxs(scale_fi.size());
         std::memcpy(scale_factor_idxs.data(), scale_fi.data(), scale_fi.size()*sizeof(int));
 
-        return new timemachine::GBSAReference<RealType, D>(
+        return new timemachine::GBSA<RealType, D>(
             charge_param_idxs, // [N]
             atomic_radii_idxs, // [N]
             scale_factor_idxs, // 
@@ -550,10 +550,10 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded<float, 4>(m, "f32_4d");
     declare_nonbonded<float, 3>(m, "f32_3d");
 
-    declare_gbsa_reference<double, 4>(m, "f64_4d");
-    declare_gbsa_reference<double, 3>(m, "f64_3d");
-    declare_gbsa_reference<float, 4>(m, "f32_4d");
-    declare_gbsa_reference<float, 3>(m, "f32_3d");
+    declare_gbsa<double, 4>(m, "f64_4d");
+    declare_gbsa<double, 3>(m, "f64_3d");
+    declare_gbsa<float, 4>(m, "f32_4d");
+    declare_gbsa<float, 3>(m, "f32_3d");
 
     declare_stepper(m, "f64");
     declare_basic_stepper(m, "f64");

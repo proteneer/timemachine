@@ -7,7 +7,7 @@
 namespace timemachine {
 
 template<typename RealType, int D>
-class GBSAReference : public Gradient<D> {
+class GBSA : public Gradient<D> {
 
 private:
 
@@ -15,10 +15,8 @@ private:
     int *d_atomic_radii_idxs_;
     int *d_scale_factor_idxs_;
 
-
     double *d_born_radii_buffer_; // double or Surreal<double>
     double *d_obc_buffer_; // double or Surreal<double>
-    // double *d_obc_ri_buffer_; // double or Surreal<double>
     unsigned long long *d_born_forces_buffer_; // ull or Surreal<double>
 
     Surreal<double> *d_born_radii_buffer_jvp_; // double or Surreal<double>
@@ -26,26 +24,10 @@ private:
     Surreal<double> *d_obc_ri_buffer_jvp_; // double or Surreal<double>
     Surreal<double> *d_born_forces_buffer_jvp_; // ull or Surreal<double>
 
-
-    // unsigned long long *d_born_forces_ull_;
-    // double *d_born_forces_jvp_;
-
-    // double *d_born_radii_;
-    // Surreal<double> *d_born_radii_jvp_;
-
-    // double *d_born_obc_;
-    // Surreal<double> *d_born_obc_jvp_;
-
-
-    std::vector<int> charge_param_idxs_;
-    std::vector<int> atomic_radii_idxs_;
-    std::vector<int> scale_factor_idxs_;
-
     double alpha_;
     double beta_;
     double gamma_;
     double dielectric_offset_;
-    // double screening_;
     double surface_tension_;
     double solute_dielectric_;
     double solvent_dielectric_;
@@ -56,12 +38,11 @@ private:
     // double *d_block_bounds_ctr_;
     // double *d_block_bounds_ext_;
 
-    // const int E_;
     const int N_;
 
 public:
 
-    GBSAReference(
+    GBSA(
         const std::vector<int> &charge_param_idxs, // [N]
         const std::vector<int> &atomic_radii_idxs, // [N]
         const std::vector<int> &scale_factor_idxs, // 
@@ -78,7 +59,7 @@ public:
     );
 
     // FIX ME with actual destructors later
-    ~GBSAReference() {};
+    ~GBSA();
 
     void execute_first_order(
         const int N,
