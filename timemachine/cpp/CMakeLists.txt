@@ -36,6 +36,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/integrator.cu
   src/stepper.cu
   src/context.cu
+  src/gbsa.cu
 )
 
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
