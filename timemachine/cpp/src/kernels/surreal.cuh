@@ -1,6 +1,5 @@
 #pragma once
 
-// #include "kernel_utils.cuh"
 #define ERR (1.e-24)
 #ifdef __NVCC__
     #define DECL __host__ __device__
@@ -13,8 +12,6 @@ struct Surreal {
 
     typedef RealType value_type;
     RealType real, imag;
-
-    // DECL Surreal<RealType>(const RealType& v=0.0, const RealType& d=0.0) : real(v), imag(d) {}
 
     DECL Surreal<RealType>() {}; // uninitialized for efficiency
     DECL Surreal<RealType>(const RealType& v, const RealType& d) : real(v), imag(d) {}
@@ -201,11 +198,6 @@ DECL Surreal<RealType> operator-(const int& b, const Surreal<RealType>& a) {
     return Surreal<RealType>(b - a.real, -a.imag);
 }
 
-// template <typename RealType>
-// DECL Surreal<RealType> Surreal<RealType>::operator-(const RealType& r) const {
-//     return Surreal<RealType>(real-r,imag);
-// }
-
 template <typename RealType>
 DECL Surreal<RealType>& Surreal<RealType>::operator-=(const Surreal<RealType>& z) {
     real -= z.real;
@@ -218,14 +210,6 @@ DECL Surreal<RealType>& Surreal<RealType>::operator-=(const RealType& r) {
     real -= r;
     return *this;
 }
-
-// template <typename RealType>
-// DECL Surreal<RealType> operator-(const RealType& r, const Surreal<RealType>& z) {
-//     return Surreal<RealType>(
-//         r-z.real,
-//         -z.imag
-//     );
-// }
 
 template <typename RealType>
 DECL Surreal<RealType>& Surreal<RealType>::operator*=(const Surreal<RealType>& z) {
@@ -250,24 +234,6 @@ DECL Surreal<RealType> operator*(
         b.real*a.imag + a.real*b.imag
     );
 }
-
-// DECL Surreal<double> operator*(
-//     const Surreal<double>& a,
-//     const Surreal<float>& b) {
-//     return Surreal<double>(
-//         b.real*a.real, // we don't do b.imag*b.imag cuz autodiff
-//         b.real*a.imag + a.real*b.imag
-//     );
-// }
-
-// DECL Surreal<double> operator*(
-//     const Surreal<float>& a,
-//     const Surreal<double>& b) {
-//     return Surreal<double>(
-//         b.real*a.real, // we don't do b.imag*b.imag cuz autodiff
-//         b.real*a.imag + a.real*b.imag
-//     );
-// }
 
 template <typename RealType>
 DECL Surreal<RealType> operator*(const float& i, const Surreal<RealType>& z) {
@@ -373,20 +339,6 @@ DECL Surreal<RealType> operator/(
     return Surreal<RealType>(r/z.real, -r*z.imag/(z.real*z.real));
 }
 
-// template <typename RealType>
-// DECL Surreal<RealType> Surreal<RealType>::operator/(const Surreal<RealType>& z) const {
-//     return Surreal<RealType>(
-//         real/z.real,
-//         (z.real*imag - real*z.imag)/(z.real*z.real)
-//     );
-// }
-
-// template <typename RealType>
-// DECL Surreal<RealType> Surreal<RealType>::operator/(const RealType& r) const {
-//     return Surreal<RealType>(real/r, imag/r);
-// }
-
-
 
 template <typename RealType>
 DECL Surreal<RealType>& Surreal<RealType>::operator/=(const Surreal<RealType>& z) {
@@ -443,11 +395,6 @@ DECL Surreal<RealType> tanh(const Surreal<RealType>& z) {
     );
 }
 
-// inline surreal cosh(const surreal& z)
-// {
-//     return surreal(cosh(z.val),z.deriv*sinh(z.val));
-// }
-
 template <typename RealType>
 DECL Surreal<RealType> cosh(const Surreal<RealType>& z) {
     double coshv = cosh(z.real);
@@ -479,14 +426,12 @@ DECL Surreal<RealType> sqrt(const Surreal<RealType>& z) {
 
     return Surreal<RealType>(
         sqrtv,
-        // 0.5*z.imag/(sqrtv+ERR)
         0.5*z.imag/sqrtv
     );
 }
 
 template <typename RealType>
 DECL Surreal<RealType> rsqrt(const Surreal<RealType>& z) {
-    // RealType rsqrta = rsqrt(z.real);
     RealType rsqrta = 1/sqrt(z.real);
 
     return Surreal<RealType>(

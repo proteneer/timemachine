@@ -117,18 +117,3 @@ template<>
 inline __device__ double fast_vec_norm<double, 4>(const double v[4]) {
     return norm4d(v[0], v[1], v[2], v[3]);
 };
-
-// template<>
-// inline __device__ Surreal<double> fast_vec_norm<Surreal<double>, 3>(const Surreal<double> v[3]) {
-//     return norm3d(v[0], v[1], v[2]);
-// };
-
-// template<>
-// inline __device__ Surreal<float> fast_vec_norm<Surreal<float>, 4>(const Surreal<float> v[4]) {
-//     return norm4df(v[0], v[1], v[2], v[3]);
-// };
-
-// template<>
-// inline __device__ Surreal<double> fast_vec_norm<Surreal<double>, 4>(const Surreal<double> v[4]) {
-//     return norm4d(v[0], v[1], v[2], v[3]);
-// };

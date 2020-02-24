@@ -1,15 +1,17 @@
 # Time Machine
 
-The Time Machine is a simplified and differentiable MD engine with the following features:
+A high-performance differentiable molecular dynamics and optimization engine.
+
+## Features
 
 1. Optimized for performance on modern NVIDIA GPUs.
 2. Analytical first order derivatives of the potential with respect to the coordinates and the forcefield parameters.
 3. Analytical second order hessian vector products and mixed vector products of the above at a 2.5x cost.
 4. Implements adjoint equations of motion via rematerialization, enabling one to differentiate objective functions with respect to an arbitrary number of forcefield parameters in a *single* backwards pass.
 5. Supports 3 and 4 dimensional coordinates, enabling geometric decoupling for alchemical methods and docking-like protocols.
-6. Uses the Open Forcefield for small molecule forcefields.
+6. Mixed forcefield support, with AMBER for protein and OFF for small molecules.
 
-# Functional Forms Supported
+## Functional Forms
 
 We currently support the following functional forms. Parameters that can be optimized are listed in parentheses.
 
