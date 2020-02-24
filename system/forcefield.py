@@ -474,10 +474,70 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
         )
     ))
 
+    if True:
 
-    # c = mol.GetConformer(0)
-    # conf = np.array(c.GetPositions(), dtype=ops.precision)
-    # conf = conf/10 # convert to md_units
+        gb_model = {
+            "[*:1]": (2.17294, 0.16865),
+            "[#1:1]": (1.79923, 1.00254),
+            "[#6:1]": (2.09618, 0.93122),
+            "[#7:1]": (1.72778, 0.77446),
+            "[#8:1]": (2.27665, 0.88298),
+            "[#9:1]": (1.64722, 0.80448),
+            "[#14:1]": (1.82741, 0.94334),
+            "[#15:1]": (0.67724, 0.83768),
+            "[#16:1]": (2.20727, 0.75234),
+        }
+
+        vd = ValenceDict()
+
+        # add parameterize
+        for smirks, (gb_radii_in_angstroms, gb_scale) in gb_model.items():
+
+            gb_radii_in_nm = gb_radii_in_angstroms/10
+            r_idx = add_param(gb_radii_in_nm, 18)
+            s_idx = add_param(gb_scale, 19)
+            matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
+
+            for m in matches:
+                vd[m] = (r_idx, s_idx)
+
+        scale_idxs = []
+        radii_idxs = []
+
+        for k, v in vd.items():
+            radii_idxs.append(v[0])
+            scale_idxs.append(v[1])
+
+        # solvent_dielectric = force.getSolventDielectric()
+        # solute_dielectric = force.getSoluteDielectric()
+        solvent_dielectric = 1.0
+        solute_dielectric = 78.5
+        probe_radius = 0.14
+        surface_tension = 28.3919551
+        dielectric_offset = 0.009
+        # GBOBC2
+        alpha = 1
+        beta = 0.8
+        gamma = 4.85
+
+        nrg_fns.append((
+            ops.GBSA,
+            (
+                nonbonded_es_param_idxs,
+                radii_idxs,
+                scale_idxs,
+                alpha,                         # alpha
+                beta,                          # beta
+                gamma,                         # gamma
+                dielectric_offset,             # dielectric_offset
+                surface_tension,               # surface_tension
+                solute_dielectric,             # solute_dielectric
+                solvent_dielectric,            # solvent_dieletric
+                probe_radius,                  # probe_radius
+                9999,                          # cutoff
+                dimension
+            )
+        ))
 
     masses = []
     for atom in mol.GetAtoms():
