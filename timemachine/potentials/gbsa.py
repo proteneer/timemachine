@@ -1,15 +1,15 @@
 # taken from josh fass's code but fixed a couple of bugs
+# https://github.com/openforcefield/bayes-implicit-solvent/blob/propertycalculator/bayes_implicit_solvent/gb_models/jax_gb_models.py
+
 import jax.numpy as np
 from jax import grad, jit
 
 from timemachine.potentials.jax_utils import delta_r, distance
 
-#@jit
 def step(x):
     # return (x > 0)
     return 1.0 * (x >= 0)
 
-#@jit
 def gbsa_obc(
     coords,
     params,
@@ -20,7 +20,6 @@ def gbsa_obc(
     beta,
     gamma,
     dielectric_offset=0.009,
-    # screening=138.935484, # ONE_4PI_EPS0
     surface_tension=28.3919551,
     solute_dielectric=1.0,
     solvent_dielectric=78.5,
@@ -65,7 +64,6 @@ def gbsa_obc(
 
     B = 1 / (1 / offset_radius - np.tanh(psi_term) / radii)
 
-
     E = 0.0
     # single particle
     # ACE
@@ -80,9 +78,7 @@ def gbsa_obc(
     f = np.sqrt(r ** 2 + np.outer(B, B) * np.exp(-r ** 2 / (4 * np.outer(B, B))))
     charge_products = np.outer(charges, charges)
 
-    # ixns = -screening * (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
     ixns = - (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
     E += np.sum(np.triu(ixns, k=1))
 
-    # print("REF E", E)
     return E
