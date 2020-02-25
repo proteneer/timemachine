@@ -508,10 +508,8 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
             radii_idxs.append(v[0])
             scale_idxs.append(v[1])
 
-        # solvent_dielectric = force.getSolventDielectric()
-        # solute_dielectric = force.getSoluteDielectric()
-        solvent_dielectric = 1.0
-        solute_dielectric = 78.5
+        solvent_dielectric = 78.5
+        solute_dielectric = 1.0
         probe_radius = 0.14
         surface_tension = 28.3919551
         dielectric_offset = 0.009
