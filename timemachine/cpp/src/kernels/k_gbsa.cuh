@@ -6,6 +6,8 @@
 
 #define WARPSIZE 32
 
+#include <cooperative_groups.h>
+
 // since we need to do a full O(N^2) computing and we don't need to broadcast the forces,
 // this should just be extremely efficient already
 
@@ -29,9 +31,13 @@ __global__ void k_compute_born_radii_gpu(
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
 
-    if(atom_i_idx >= N) {
-        return;
+    if(threadIdx.x == 0) {
+        printf("%d %d\n", blockIdx.x, blockIdx.y);
     }
+    // if(atom_i_idx >= N) {
+    //     return;
+    // }
+
     RealType ci[D];
     for(int d=0; d < D; d++) {
         ci[d] = coords[atom_i_idx*D+d];
@@ -40,26 +46,35 @@ __global__ void k_compute_born_radii_gpu(
 
     RealType radiusI = atom_i_idx < N ? params[radii_param_idx_i] : 0;
     RealType offsetRadiusI   = radiusI - dielectric_offset;
-    RealType radiusIInverse  = 1.0/offsetRadiusI;
+    RealType radiusIInverse  = 1/offsetRadiusI;
+
+    int atom_j_idx = blockIdx.y*32 + threadIdx.x;
 
     // *always* accumulate in 64 bit.
     double sum = 0;
  
-    for(int atom_j_idx = 0; atom_j_idx < N; atom_j_idx++) {
+    RealType cj[D];
+    for(int d=0; d < D; d++) {
+        cj[d] = coords[atom_j_idx*D+d];
+    }
 
-        int radii_param_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
-        int scale_param_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
+    int radii_param_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
+    int scale_param_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
 
-        RealType radiusJ = atom_j_idx < N ? params[radii_param_idx_j] : 0;
-        RealType scaleFactorJ = atom_j_idx < N ? params[scale_param_idx_j] : 0;
+    RealType radiusJ = atom_j_idx < N ? params[radii_param_idx_j] : 0;
+    RealType scaleFactorJ = atom_j_idx < N ? params[scale_param_idx_j] : 0;
 
-        RealType offsetRadiusJ   = radiusJ - dielectric_offset; 
-        RealType scaledRadiusJ   = offsetRadiusJ*scaleFactorJ;
+    RealType offsetRadiusJ   = radiusJ - dielectric_offset; 
+    RealType scaledRadiusJ   = offsetRadiusJ*scaleFactorJ;
+
+    // for(int atom_j_idx = 0; atom_j_idx < N; atom_j_idx++) {
+    for(int round = 0; round < 32; round++) {
 
         RealType dxs[D];
         for(int d=0; d < D; d++) {
-            dxs[d] = ci[d] - coords[atom_j_idx*D+d];
+            dxs[d] = ci[d] - cj[d];
         }
+
         RealType r = fast_vec_norm<RealType, D>(dxs);
         RealType rInverse = fast_vec_rnorm<RealType, D>(dxs);
         RealType rScaledRadiusJ  = r + scaledRadiusJ;
@@ -76,7 +91,7 @@ __global__ void k_compute_born_radii_gpu(
                   l_ij = abs(rSubScaledRadiusJ);
                 }
 
-                l_ij     = 1/l_ij;
+                l_ij = 1/l_ij;
 
                 // RealType inv_uij = rScaledRadiusJ;
                 RealType u_ij     = 1/rScaledRadiusJ;
@@ -97,9 +112,17 @@ __global__ void k_compute_born_radii_gpu(
                 sum += term;
             }
         }
+
+
+        const int srcLane = (threadIdx.x + 1) % WARPSIZE;
+        scaledRadiusJ = __shfl_sync(0xffffffff, scaledRadiusJ, srcLane);
+        for(int d=0; d < D; d++) {
+            cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
+        }
+
     }
 
-    sum                *= 0.5*offsetRadiusI;
+    sum *= offsetRadiusI/2;
 
     double sum2       = sum*sum;
     double sum3       = sum*sum2;
@@ -111,12 +134,9 @@ __global__ void k_compute_born_radii_gpu(
     if(atom_i_idx < N) {
 
         // born_radii[atom_i_idx]      = 1.0/(1.0/offsetRadiusI - tanhSum/radiusI);
-        born_radii[atom_i_idx]      = (offsetRadiusI*radiusI)/(radiusI - offsetRadiusI*tanhSum);
-
-        // dRi/dPsi
-        obc_chain[atom_i_idx]       = (alpha_obc - 2.0*beta_obc*sum + 3.0*gamma_obc*sum2);
-        obc_chain[atom_i_idx]       = (1 -tanhSum*tanhSum)*obc_chain[atom_i_idx]/radiusI;
-        obc_chain[atom_i_idx]      *= born_radii[atom_i_idx]*born_radii[atom_i_idx];
+        auto br = offsetRadiusI*radiusI/(radiusI - offsetRadiusI*tanhSum);
+        atomicAdd(born_radii + atom_i_idx, br);
+        atomicAdd(obc_chain + atom_i_idx, (1 - tanhSum*tanhSum)*(alpha_obc - 2*beta_obc*sum + 3*gamma_obc*sum2)/radiusI);
     }
 
 }
@@ -265,7 +285,7 @@ __global__ void k_reduce_born_forces(
     const double* params,
     const int* atomic_radii_idxs,
     const double* born_radii,
-    const double* obc_chain,
+    double* obc_chain,
     // const double* obc_chain_ri,
     const double surface_tension, // surface area factor
     const double probe_radius,
@@ -280,20 +300,18 @@ __global__ void k_reduce_born_forces(
 
     // double radii_derivs = 0;
     double born_force_i = static_cast<double>(static_cast<long long>(bornForces[atomI]))/FIXED_EXPONENT_BORN_FORCES;
-    if (born_radii[atomI] > 0.0) {
+    double br = born_radii[atomI];
+    if (br > 0.0) {
         double atomic_radii = params[atomic_radii_idxs[atomI]];
         double r            = atomic_radii + probe_radius;
         double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
         double saTerm       = surface_tension*r*r*ratio6;
-        born_force_i  -= 6.0*saTerm/born_radii[atomI]; 
-        // double br2 = born_radii[atomI]*born_radii[atomI];
-        // double br4 = br2*br2;
-        // double br6 = b/r4*br2;
-        // radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
+        born_force_i  -= 6.0*saTerm/born_radii[atomI];
     }
     // radii_derivs += born_force_i * obc_chain_ri[atomI];
     // out_dU_dp[atomic_radii_idxs[atomI]] += radii_derivs;
 
+    obc_chain[atomI] *= br*br;
     born_force_i *= obc_chain[atomI];
     bornForces[atomI] = static_cast<unsigned long long>((long long) ( born_force_i*FIXED_EXPONENT_BORN_FORCES));
 

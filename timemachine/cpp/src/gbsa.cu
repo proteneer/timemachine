@@ -507,7 +507,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaMemset(d_obc_buffer_, 0, N*sizeof(*d_obc_buffer_)));
         gpuErrchk(cudaMemset(d_born_forces_buffer_, 0, N*sizeof(*d_born_forces_buffer_)));
 
-        k_compute_born_radii_gpu<RealType, D><<<B, tpb>>>(
+        k_compute_born_radii_gpu<RealType, D><<<dimGrid, tpb>>>(
           N_,
           d_coords,
           d_params,
