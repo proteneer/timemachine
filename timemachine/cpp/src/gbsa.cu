@@ -1,5 +1,6 @@
 #include <stdexcept>
 #include <iostream> 
+#include <chrono>
 #include "fixed_point.hpp"
 #include "gbsa.hpp"
 #include "gbsa_jvp.cuh"
@@ -553,6 +554,8 @@ void GBSA<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
+
+        auto start = std::chrono::high_resolution_clock::now();
         k_compute_born_energy_and_forces<RealType, D><<<dimGrid, tpb>>>(
           N_,
           d_coords,
@@ -569,6 +572,10 @@ void GBSA<RealType, D>::execute_device(
 
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
+
+        auto finish = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = finish - start;
+        std::cout << "Nonbonded Elapsed time: " << elapsed.count() << " s\n";
 
     } else {
         gpuErrchk(cudaMemset(d_born_radii_buffer_jvp_, 0, N*sizeof(*d_born_radii_buffer_jvp_)));
@@ -629,6 +636,8 @@ void GBSA<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
+
+        auto start = std::chrono::high_resolution_clock::now();
         k_compute_born_energy_and_forces_jvp<RealType, D><<<dimGrid, tpb>>>(
             N_,
             d_coords,
@@ -648,6 +657,11 @@ void GBSA<RealType, D>::execute_device(
 
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
+
+        auto finish = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = finish - start;
+        std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
+
 
     }
 

@@ -66,7 +66,6 @@ __global__ void k_compute_born_radii_gpu(
 
             if (offsetRadiusI < rScaledRadiusJ) {
 
-
                 RealType l_ij = 0;
                 if(offsetRadiusI > abs(rSubScaledRadiusJ)) {
                   l_ij = offsetRadiusI;
@@ -84,7 +83,7 @@ __global__ void k_compute_born_radii_gpu(
 
                 RealType ratio    = log(u_ij/l_ij);
                 // RealType term     = l_ij - u_ij + 0.25*r*(u_ij2 - l_ij2)  + (0.5*rInverse*ratio) + (0.25*scaledRadiusJ*scaledRadiusJ*rInverse)*(l_ij2 - u_ij2);
-                RealType term     = (l_ij - u_ij + (0.25*r*(u_ij2 - l_ij2) + (0.25*scaledRadiusJ*scaledRadiusJ*rInverse)*(l_ij2 - u_ij2))) + (0.5*rInverse*ratio);
+                RealType term     = l_ij - u_ij + 0.25*r*(u_ij2 - l_ij2) + (0.25*scaledRadiusJ*scaledRadiusJ*rInverse)*(l_ij2 - u_ij2) + 0.5*rInverse*ratio;
 
                 // this case (atom i completely inside atom j) is not considered in the original paper
                 // Jay Ponder and the authors of Tinker recognized this and
