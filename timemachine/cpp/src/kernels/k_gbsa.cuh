@@ -8,6 +8,9 @@
 
 // since we need to do a full O(N^2) computing and we don't need to broadcast the forces,
 // this should just be extremely efficient already
+
+
+// nope, still need to parallelize out
 template<typename RealType, int D>
 __global__ void k_compute_born_radii_gpu(
     const int N,
@@ -73,23 +76,23 @@ __global__ void k_compute_born_radii_gpu(
                   l_ij = abs(rSubScaledRadiusJ);
                 }
 
-                l_ij     = 1.0/l_ij;
+                l_ij     = 1/l_ij;
 
                 // RealType inv_uij = rScaledRadiusJ;
-                RealType u_ij     = 1.0/rScaledRadiusJ;
+                RealType u_ij     = 1/rScaledRadiusJ;
 
                 RealType l_ij2    = l_ij*l_ij;
                 RealType u_ij2    = u_ij*u_ij;
 
                 RealType ratio    = log(u_ij/l_ij);
                 // RealType term     = l_ij - u_ij + 0.25*r*(u_ij2 - l_ij2)  + (0.5*rInverse*ratio) + (0.25*scaledRadiusJ*scaledRadiusJ*rInverse)*(l_ij2 - u_ij2);
-                RealType term     = l_ij - u_ij + 0.25*r*(u_ij2 - l_ij2) + 0.25*scaledRadiusJ*scaledRadiusJ*rInverse*(l_ij2 - u_ij2) + 0.5*rInverse*ratio;
+                RealType term     = l_ij - u_ij + r*(u_ij2 - l_ij2)/4 + scaledRadiusJ*scaledRadiusJ*rInverse*(l_ij2 - u_ij2)/4 + rInverse*ratio/2;
 
                 // this case (atom i completely inside atom j) is not considered in the original paper
                 // Jay Ponder and the authors of Tinker recognized this and
                 // worked out the details
                 if (offsetRadiusI < (scaledRadiusJ - r)) {
-                    term += 2.0*(radiusIInverse - l_ij);
+                    term += 2*(radiusIInverse - l_ij);
                 }
                 sum += term;
             }

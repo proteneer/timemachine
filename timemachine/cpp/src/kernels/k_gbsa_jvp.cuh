@@ -71,7 +71,7 @@ __global__ void k_compute_born_radii_gpu_jvp(
         if(atom_j_idx != atom_i_idx && r.real < cutoff) {
 
             if (offsetRadiusI < rScaledRadiusJ.real) {
-                Surreal<RealType> rInverse = 1.0/r;
+                Surreal<RealType> rInverse = 1/r;
 
                 Surreal<RealType> l_ij(0,0);
                 if(offsetRadiusI > abs(rSubScaledRadiusJ).real) {
@@ -81,9 +81,9 @@ __global__ void k_compute_born_radii_gpu_jvp(
                   l_ij = abs(rSubScaledRadiusJ);
                 }
 
-                l_ij     = 1.0/l_ij;
+                l_ij     = 1/l_ij;
 
-                Surreal<RealType> u_ij     = 1.0/rScaledRadiusJ;
+                Surreal<RealType> u_ij     = 1/rScaledRadiusJ;
 
                 Surreal<RealType> l_ij2    = l_ij*l_ij;
                 Surreal<RealType> u_ij2    = u_ij*u_ij;
@@ -91,9 +91,9 @@ __global__ void k_compute_born_radii_gpu_jvp(
                 Surreal<RealType> ratio    = log(u_ij/l_ij);
 
                 Surreal<RealType> term0    = l_ij - u_ij;
-                Surreal<RealType> term1    = 0.25*r*(u_ij2 - l_ij2);
-                Surreal<RealType> term2    = (0.5*rInverse*ratio); // add using double precision
-                Surreal<RealType> term3    = (0.25*scaledRadiusJ*scaledRadiusJ*rInverse)*(l_ij2 - u_ij2);
+                Surreal<RealType> term1    = r*(u_ij2 - l_ij2)/4;
+                Surreal<RealType> term2    = rInverse*ratio/2; // add using double precision
+                Surreal<RealType> term3    = scaledRadiusJ*scaledRadiusJ*rInverse*(l_ij2 - u_ij2)/4;
 
                 // Surreal<RealType> term     = term0 + term1 + term2 + term3;
                 Surreal<RealType> term     = term0 + term1 + term3;
@@ -102,7 +102,7 @@ __global__ void k_compute_born_radii_gpu_jvp(
                 // Jay Ponder and the authors of Tinker recognized this and
                 // worked out the details
                 if (offsetRadiusI < (scaledRadiusJ - r).real) {
-                    term += 2.0*(1.0/offsetRadiusI - l_ij);
+                    term += 2*(1/offsetRadiusI - l_ij);
                 }
 
                 // terms_single[atom_j_idx] = u_ij/l_ij;
@@ -229,13 +229,13 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
         if(atom_j_idx <= atom_i_idx && r.real < cutoff && atom_j_idx < N && atom_i_idx < N) {
 
             Surreal<RealType> alpha2_ij          = born_radii_i*born_radii_j;
-            Surreal<RealType> D_ij               = r2/(4.0*alpha2_ij);
+            Surreal<RealType> D_ij               = r2/(4*alpha2_ij);
             Surreal<RealType> expTerm            = exp(-D_ij);
             Surreal<RealType> denominator2       = r2 + alpha2_ij*expTerm; 
             Surreal<RealType> denominator        = sqrt(denominator2);
             Surreal<RealType> Gpol               = (prefactor*qi*qj)/denominator; 
-            Surreal<RealType> dGpol_dr           = -Gpol*(static_cast<RealType>(1.0) - 0.25*expTerm)/denominator2;  
-            Surreal<RealType> dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
+            Surreal<RealType> dGpol_dr           = -Gpol*(1 - expTerm/4)/denominator2;  
+            Surreal<RealType> dGpol_dalpha2_ij   = -Gpol*expTerm*(1 + D_ij)/(2*denominator2);
 
             // Surreal<RealType> energy = Gpol;
 
