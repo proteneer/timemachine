@@ -45,6 +45,7 @@ def deserialize_system(
         masses.append(value(system.getParticleMass(p)))
 
     for force in system.getForces():
+        print(force)
         if isinstance(force, mm.HarmonicBondForce):
             bond_idxs = []
             param_idxs = []
@@ -234,9 +235,9 @@ def deserialize_system(
             test_gbsa = (
                 ops.GBSA,
                 (
-                    charge_param_idxs,
-                    radius_param_idxs,
-                    scale_param_idxs,
+                    np.array(charge_param_idxs),
+                    np.array(radius_param_idxs),
+                    np.array(scale_param_idxs),
                     alpha,                         # alpha
                     beta,                          # beta
                     gamma,                         # gamma
