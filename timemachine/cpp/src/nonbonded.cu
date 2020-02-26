@@ -73,7 +73,8 @@ void Nonbonded<RealType, D>::execute_device(
     const double *d_params,
     unsigned long long *d_out_coords,
     double *d_out_coords_tangents,
-    double *d_out_params_tangents
+    double *d_out_params_tangents,
+    cudaStream_t stream
 ) {
 
     if(N != N_) {
