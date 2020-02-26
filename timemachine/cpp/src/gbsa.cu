@@ -198,7 +198,7 @@ void GBSA<RealType, D>::execute_device(
 
         auto finish = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "Nonbonded Elapsed time: " << elapsed.count() << " s\n";
+        // std::cout << "Nonbonded Elapsed time: " << elapsed.count() << " s\n";
 
     } else {
         gpuErrchk(cudaMemset(d_born_radii_buffer_jvp_, 0, N*sizeof(*d_born_radii_buffer_jvp_)));
@@ -294,7 +294,7 @@ void GBSA<RealType, D>::execute_device(
 
         auto finish = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
+        // std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
 
 
     }
