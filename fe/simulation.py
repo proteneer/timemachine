@@ -35,12 +35,11 @@ class Simulation:
         direction,
         step_sizes,
         cas,
-        lambda_schedule,
-        perm
+        lambda_schedule
         ):
 
         self.step_sizes = step_sizes
-        amber_ff = app.ForceField('amber99sb.xml', 'tip3p.xml')
+        amber_ff = app.ForceField('amber99sb.xml', 'amber99_obc.xml')
 
         # host
         system = amber_ff.createSystem(
@@ -58,25 +57,21 @@ class Simulation:
             host_potentials, guest_potentials,
             host_params, guest_params,
             host_param_groups, guest_param_groups,
-            host_masses, guest_masses,
-            perm
+            host_masses, guest_masses
         )
 
         self.num_host_atoms = len(host_masses)
 
-        self.perm = perm
-        self.iperm = np.argsort(perm)
         self.combined_potentials = combined_potentials
         self.combined_params = combined_params
         self.combined_param_groups = combined_param_groups
-        self.combined_masses = combined_masses[perm]
 
         N_host = len(host_pdb.positions)
         N_guest = guest_mol.GetNumAtoms()
         N_combined = N_host + N_guest
 
         self.cas = cas
-        self.cbs = -np.ones(N_combined)*0.001
+        self.cbs = -np.ones(N_combined)*0.0001
 
         self.lambda_schedule = lambda_schedule
         self.lambda_idxs = np.zeros(N_combined, dtype=np.int32)
@@ -87,7 +82,6 @@ class Simulation:
         else:
             raise ValueError("Unknown direction: "+direction)
         # how did this take 6 hours to debug?
-        self.lambda_idxs = self.lambda_idxs[perm]
         self.exponent = 16
 
     def run_forward_multi(self, args):
@@ -107,6 +101,8 @@ class Simulation:
         # this is multi-process safe to run.
         # use single precision
         gradients = merge_gradients(self.combined_potentials, precision)
+
+        print(self.lambda_idxs)
 
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
@@ -138,11 +134,13 @@ class Simulation:
 
                 interval = max(1, xs.shape[0]//pdb_writer.n_frames)
                 if frame_idx % interval == 0:
-                    # argsort is iperm and
-                    pdb_writer.write((x*10)[self.iperm])
-        # pdb_writer.close()
+                    pdb_writer.write(x*10)
+
+        pdb_writer.close()
         del stepper
         del ctxt
+
+        print("work", np.trapz(du_dls, self.lambda_schedule))
 
         return du_dls
 

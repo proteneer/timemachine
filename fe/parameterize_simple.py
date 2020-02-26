@@ -61,7 +61,7 @@ class PDBWriter():
         self.pdb_str = pdb_str
         self.out_filepath = out_filepath
         self.outfile = None
-        self.n_frames = 10
+        self.n_frames = 25
 
     def write_header(self):
         """
@@ -92,11 +92,11 @@ if __name__ == "__main__":
 
     parser.add_argument('--precision', type=str)    
     parser.add_argument('--complex_pdb', type=str)
-    parser.add_argument('--solvent_pdb', type=str)
+    # parser.add_argument('--solvent_pdb', type=str)
     parser.add_argument('--ligand_sdf', type=str)
     args = parser.parse_args()
 
-    amber_ff = app.ForceField('amber99sb.xml', 'tip3p.xml')
+
 
     if args.precision == 'single':
         precision = np.float32
@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
     init_mol = Chem.Mol(guest_mol)
 
-    num_conformers = 4
+    num_conformers = 16
 
     # generate a set of gas phase conformers using the RDKit
     guest_mol.RemoveAllConformers()
@@ -154,7 +154,7 @@ if __name__ == "__main__":
 
     # tbd training code
 
-    for host_idx, host_pdb_file in enumerate([args.complex_pdb, args.solvent_pdb]):
+    for host_idx, host_pdb_file in enumerate([args.complex_pdb]):
 
         host_pdb = app.PDBFile(host_pdb_file)
 
@@ -180,15 +180,15 @@ if __name__ == "__main__":
 
             init_combined_conf = np.concatenate([host_conf, init_conf])
 
-            perm = hilbert_sort(init_combined_conf)
+            # perm = hilbert_sort(init_combined_conf)
+            # perm = np.arange(init_combined_conf.shape[0])
             sim = simulation.Simulation(
                 guest_mol,
                 host_pdb,
                 mode,
                 step_sizes,
                 cas,
-                lambda_schedule,
-                perm
+                lambda_schedule
             )
 
             # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
@@ -201,7 +201,6 @@ if __name__ == "__main__":
                 guest_conf = recenter(guest_conf, conf_center)
 
                 x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
-                x0 = x0[perm]
 
                 combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
                 combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))

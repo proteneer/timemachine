@@ -20,8 +20,7 @@ def combiner(
     a_nrgs, b_nrgs,
     a_params, b_params,
     a_param_groups, b_param_groups,
-    a_masses, b_masses,
-    perm=None):
+    a_masses, b_masses):
     """
     Combine two systems with two distinct parameter sets into one.
     """
@@ -29,14 +28,7 @@ def combiner(
     num_a_atoms = len(a_masses)                     # offset by number of atoms in a
     c_masses = np.concatenate([a_masses, b_masses]) # combined masses
 
-    if perm is None:
-        perm = np.arange(len(c_masses))
-
-    iperm = np.argsort(perm).astype(np.int32)
-
-    perm = np.array(perm, dtype=np.int32)
-
-    np.testing.assert_equal(np.sort(perm), np.arange(len(c_masses))) # assert every atom has a unique permutation
+    # assert perm is None
 
     c_params = np.concatenate([a_params, b_params]) # combined parameters
     c_param_groups = np.concatenate([a_param_groups, b_param_groups]) # combine parameter groups
@@ -61,18 +53,15 @@ def combiner(
         assert a_args[-1] == b_args[-1] # dimension
         if a_name == ops.HarmonicBond:
             bond_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
-            bond_idxs = iperm[bond_idxs]
             bond_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((ops.HarmonicBond, (bond_idxs, bond_param_idxs, a_args[-1])))
         elif a_name == ops.HarmonicAngle:
             angle_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
-            angle_idxs = iperm[angle_idxs]
             angle_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((ops.HarmonicAngle, (angle_idxs, angle_param_idxs, a_args[-1])))
         elif a_name == ops.PeriodicTorsion:
             if len(a_args[0]) > 0:
                 torsion_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
-                torsion_idxs = iperm[torsion_idxs]
                 torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 c_nrgs.append((ops.PeriodicTorsion, (torsion_idxs, torsion_param_idxs, a_args[-1])))
             else:
@@ -85,11 +74,8 @@ def combiner(
             # directly permute the location of the charges
             es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
             lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            es_param_idxs = es_param_idxs[perm]
-            lj_param_idxs = lj_param_idxs[perm]
 
             exclusion_idxs = np.concatenate([a_args[2], b_args[2] + num_a_atoms], axis=0)
-            exclusion_idxs = iperm[exclusion_idxs] # [E,]
 
             es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)  # [E, 1]
             lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)  # [E, 1]
@@ -102,6 +88,30 @@ def combiner(
                 lj_exclusion_param_idxs,
                 a_args[5],
                 a_args[-1]
+                )
+            ))
+        elif a_name == ops.GBSA:
+
+            charge_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0)
+            radius_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
+            scale_param_idxs = np.concatenate([a_args[2], b_args[2] + len(a_params)], axis=0)
+
+            assert a_args[3] == b_args[3] # alpha
+            assert a_args[4] == b_args[4] # beta
+            assert a_args[5] == b_args[5] # gamma
+            assert a_args[6] == b_args[6] # dielec_offset
+            assert a_args[7] == b_args[7] # surface tension
+            assert a_args[8] == b_args[8] # solute dielectric
+            print(a_args[9], b_args[9])
+            assert a_args[9] == b_args[9] # solvent dielectric
+
+            assert a_args[10] == b_args[10] # probe_radius
+
+            c_nrgs.append((ops.GBSA, (
+                charge_param_idxs.astype(np.int32),
+                radius_param_idxs.astype(np.int32),
+                scale_param_idxs.astype(np.int32),
+                *a_args[3:]
                 )
             ))
 
@@ -508,7 +518,7 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
             radii_idxs.append(v[0])
             scale_idxs.append(v[1])
 
-        solvent_dielectric = 78.5
+        solvent_dielectric = 78.3 # matches OBC2
         solute_dielectric = 1.0
         probe_radius = 0.14
         surface_tension = 28.3919551
@@ -521,9 +531,9 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
         nrg_fns.append((
             ops.GBSA,
             (
-                nonbonded_es_param_idxs,
-                radii_idxs,
-                scale_idxs,
+                np.array(nonbonded_es_param_idxs, dtype=np.int32),
+                np.array(radii_idxs, dtype=np.int32),
+                np.array(scale_idxs, dtype=np.int32),
                 alpha,                         # alpha
                 beta,                          # beta
                 gamma,                         # gamma
