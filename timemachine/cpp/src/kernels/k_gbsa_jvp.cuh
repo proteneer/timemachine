@@ -15,53 +15,48 @@ __global__ void k_compute_born_radii_gpu_jvp(
     const int* atomic_radii_idxs,
     const int* scale_factor_idxs,
     const double dielectric_offset,
-    const double alpha_obc,
-    const double beta_obc,
-    const double gamma_obc,
     const double cutoff,
-    Surreal<double>* born_radii,
-    Surreal<double>* obc_chain,
-    Surreal<double>* obc_chain_ri) {
+    Surreal<double>* born_radii) {
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
 
-    if(atom_i_idx >= N) {
-        return;
-    }
-
-    // {
-    // Surreal<RealType> terms_single[2976];
     Surreal<RealType> ci[D];
     for(int d=0; d < D; d++) {
-        ci[d].real = coords[atom_i_idx*D+d];
-        ci[d].imag = coords_tangents[atom_i_idx*D+d];
+        ci[d].real = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
+        ci[d].imag = atom_i_idx < N ? coords_tangents[atom_i_idx*D+d] : 0;
     }
     int radii_param_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
 
     RealType radiusI = atom_i_idx < N ? params[radii_param_idx_i] : 0;
     RealType offsetRadiusI   = radiusI - dielectric_offset;
-    // RealType radiusIInverse  = 1.0/offsetRadiusI;
 
-    // do accumulation in RealType precision
-    Surreal<double> sum_single(0, 0);
+    // test accumulation in RealType precision 
+    Surreal<double> sum(0, 0);
 
     const auto dielectricOffset = dielectric_offset;
- 
-    for(int atom_j_idx = 0; atom_j_idx < N; atom_j_idx++) {
 
-        int radii_param_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
-        int scale_param_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
+    int atom_j_idx =  blockIdx.y*32 + threadIdx.x;
 
-        RealType radiusJ = atom_j_idx < N ? params[radii_param_idx_j] : 0;
-        RealType scaleFactorJ = atom_j_idx < N ? params[scale_param_idx_j] : 0;
-        RealType scaleFactorJ2 = scaleFactorJ*scaleFactorJ;
-        RealType offsetRadiusJ   = radiusJ - dielectric_offset; 
-        RealType scaledRadiusJ   = offsetRadiusJ*scaleFactorJ;
+    int radii_param_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
+    int scale_param_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
+
+    Surreal<RealType> cj[D];
+    for(int d=0; d < D; d++) {
+        cj[d].real = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
+        cj[d].imag = atom_j_idx < N ? coords_tangents[atom_j_idx*D+d] : 0;
+    }
+
+    RealType radiusJ = atom_j_idx < N ? params[radii_param_idx_j] : 0;
+    RealType scaleFactorJ = atom_j_idx < N ? params[scale_param_idx_j] : 0;
+    RealType scaleFactorJ2 = scaleFactorJ*scaleFactorJ;
+    RealType offsetRadiusJ   = radiusJ - dielectric_offset; 
+    RealType scaledRadiusJ   = offsetRadiusJ*scaleFactorJ;
+
+    for(int round = 0; round < 32; round++) {
 
         Surreal<RealType> r2(0, 0);
         for(int d=0; d < D; d++) {
-            Surreal<RealType> cjd(coords[atom_j_idx*D+d], coords_tangents[atom_j_idx*D+d]);
-            Surreal<RealType> dx = ci[d] - cjd;
+            Surreal<RealType> dx = ci[d] - cj[d];
             r2 += dx*dx;
         }
         Surreal<RealType> r = sqrt(r2);
@@ -96,7 +91,7 @@ __global__ void k_compute_born_radii_gpu_jvp(
                 Surreal<RealType> term3    = scaledRadiusJ*scaledRadiusJ*rInverse*(l_ij2 - u_ij2)/4;
 
                 // Surreal<RealType> term     = term0 + term1 + term2 + term3;
-                Surreal<RealType> term     = term0 + term1 + term3;
+                Surreal<RealType> term     = term0 + term1 + term3 + term2;
 
                 // this case (atom i completely inside atom j) is not considered in the original paper
                 // Jay Ponder and the authors of Tinker recognized this and
@@ -105,46 +100,22 @@ __global__ void k_compute_born_radii_gpu_jvp(
                     term += 2*(1/offsetRadiusI - l_ij);
                 }
 
-                // terms_single[atom_j_idx] = u_ij/l_ij;
+                sum.real += term.real;
+                sum.imag += term.imag;
 
-                sum_single.real += term.real;
-                sum_single.imag += term.imag;
-
-                sum_single.real += term2.real;
-                sum_single.imag += term2.imag;
 
             }
         }
+        const int srcLane = (threadIdx.x + 1) % WARPSIZE;
+        scaledRadiusJ = __shfl_sync(0xffffffff, scaledRadiusJ, srcLane);
+        atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
+        for(int d=0; d < D; d++) {
+            cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
+        }
     }
 
-    Surreal<double> sum = sum_single;
-    sum                *= 0.5*offsetRadiusI;
-
-    Surreal<double> sum2       = sum*sum;
-    Surreal<double> sum3       = sum*sum2;
-
-    Surreal<double> inner   = alpha_obc*sum - beta_obc*sum2 + gamma_obc*sum3;
-    Surreal<double> tanhSum = tanh(inner);
-
     if(atom_i_idx < N) {
-
-        // born_radii[atom_i_idx]      = 1.0/(1.0/offsetRadiusI - tanhSum/radiusI); 
-
-        born_radii[atom_i_idx]      = (offsetRadiusI*radiusI)/(radiusI - offsetRadiusI*tanhSum);
-
-
-        // printf("debug imag %f %f\n", sum.imag, sum.real);
-        // dRi/dPsi
-        obc_chain[atom_i_idx]       = (alpha_obc - 2.0*beta_obc*sum + 3.0*gamma_obc*sum2);
-                                        // use secHsum
-        // obc_chain[atom_i_idx]       = sechSum*sechSum*obc_chain[atom_i_idx]/radiusI;
-        obc_chain[atom_i_idx]       = (1.0 - tanhSum*tanhSum)*obc_chain[atom_i_idx]/radiusI;
-        obc_chain[atom_i_idx]      *= born_radii[atom_i_idx]*born_radii[atom_i_idx];
-
-        // dRi/dri, this is per particle
-        obc_chain_ri[atom_i_idx]    = 1.0/(offsetRadiusI*offsetRadiusI) - tanhSum/(radiusI*radiusI);
-        obc_chain_ri[atom_i_idx]   *= born_radii[atom_i_idx]*born_radii[atom_i_idx];
-
+        atomicAddOffset(born_radii, atom_i_idx, sum);
     }
 
 }
@@ -296,14 +267,48 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
         atomicAdd(out_MvP + charge_param_idx_j, dE_dqj_accum.imag);
     }
 
-
-
 }
 
+__global__ void k_reduce_born_radii_jvp(
+    const int N,
+    const double *params,
+    const int* atomic_radii_idxs,
+    const double dielectric_offset,
+    const double alpha_obc,
+    const double beta_obc,
+    const double gamma_obc,
+    Surreal<double> *born_radii,
+    Surreal<double> *obc_chain,
+    Surreal<double> *obc_chain_ri
+) {
 
+    int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
+    if(atom_i_idx >= N) {
+        return;
+    }
+
+    int radii_param_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
+    double radiusI = atom_i_idx < N ? params[radii_param_idx_i] : 0;
+    double offsetRadiusI   = radiusI - dielectric_offset;
+
+    Surreal<double> sum = born_radii[atom_i_idx];
+
+    sum *= offsetRadiusI/2;
+
+    Surreal<double> sum2       = sum*sum;
+    Surreal<double> sum3       = sum*sum2;
+    Surreal<double> inner      = alpha_obc*sum - beta_obc*sum2 + gamma_obc*sum3;
+    Surreal<double> tanhSum    = tanh(inner);
+
+    if(atom_i_idx < N) {
+        Surreal<double> br = offsetRadiusI*radiusI/(radiusI - offsetRadiusI*tanhSum);
+        born_radii[atom_i_idx] = br;
+        obc_chain[atom_i_idx] = br*br*(1 - tanhSum*tanhSum)*(alpha_obc - 2*beta_obc*sum + 3*gamma_obc*sum2)/radiusI;
+        obc_chain_ri[atom_i_idx] = br*br*(1/(offsetRadiusI*offsetRadiusI) - tanhSum/(radiusI*radiusI));
+    }
+}
 
 // this is entirely done in double precision
-template <typename RealType, int D>
 __global__ void k_reduce_born_forces_jvp(
     const int N,
     const double* params,
@@ -340,7 +345,6 @@ __global__ void k_reduce_born_forces_jvp(
         radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
     }
     radii_derivs += bornForces[atomI] * obc_chain_ri[atomI];
-    // printf("%d adding to %d\n", atomI, atomic_radii_idxs[atomI]);
     atomicAdd(out_MvP + atomic_radii_idxs[atomI], radii_derivs.imag);
     bornForces[atomI] *= obc_chain[atomI];
 
@@ -438,6 +442,8 @@ __global__ void k_compute_born_energy_and_forces_jvp(
 
             if (offsetRadiusI < rScaledRadiusJ.real) {
 
+                // (ytz): yes I was insane enough to derive and optimize all of this bullshit by hand
+
                 Surreal<RealType> rSubScaledRadiusJ = r - scaledRadiusJ;
                 Surreal<RealType> rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
                 Surreal<RealType> rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
@@ -449,7 +455,6 @@ __global__ void k_compute_born_energy_and_forces_jvp(
                 Surreal<RealType> u_ij = 1/rScaledRadiusJ;
                 Surreal<RealType> u_ij2 = u_ij*u_ij;
 
-                // Surreal<RealType> l_ij2_sub_u_ij2 = l_ij2 - u_ij2;
                 Surreal<RealType> ll_uu = l_ij2 - u_ij2;
 
                 Surreal<RealType> l2rss = l_ij2*rSubScaledRadiusJ/abs(rSubScaledRadiusJ);

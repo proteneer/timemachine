@@ -50,6 +50,7 @@ GBSA<RealType, D>::GBSA(
 
     const int N = charge_param_idxs.size();
 
+    gpuErrchk(cudaMalloc(&d_born_psi_buffer_, N*sizeof(*d_born_psi_buffer_)));
     gpuErrchk(cudaMalloc(&d_born_radii_buffer_, N*sizeof(*d_born_radii_buffer_)));
     gpuErrchk(cudaMalloc(&d_obc_buffer_, N*sizeof(*d_obc_buffer_)));
     gpuErrchk(cudaMalloc(&d_born_forces_buffer_, N*sizeof(*d_born_forces_buffer_)));
@@ -69,14 +70,15 @@ GBSA<RealType, D>::~GBSA() {
   gpuErrchk(cudaFree(d_atomic_radii_idxs_));
   gpuErrchk(cudaFree(d_scale_factor_idxs_));
 
-  gpuErrchk(cudaFree(d_born_radii_buffer_)); // double or Surreal<double>
-  gpuErrchk(cudaFree(d_obc_buffer_)); // double or Surreal<double>
-  gpuErrchk(cudaFree(d_born_forces_buffer_)); // ull or Surreal<double>
+  gpuErrchk(cudaFree(d_born_psi_buffer_));
+  gpuErrchk(cudaFree(d_born_radii_buffer_));
+  gpuErrchk(cudaFree(d_obc_buffer_));
+  gpuErrchk(cudaFree(d_born_forces_buffer_));
 
-  gpuErrchk(cudaFree(d_born_radii_buffer_jvp_)); // double or Surreal<double>
-  gpuErrchk(cudaFree(d_obc_buffer_jvp_)); // double or Surreal<double>
-  gpuErrchk(cudaFree(d_obc_ri_buffer_jvp_)); // double or Surreal<double>
-  gpuErrchk(cudaFree(d_born_forces_buffer_jvp_)); // ull or Surreal<double>
+  gpuErrchk(cudaFree(d_born_radii_buffer_jvp_));
+  gpuErrchk(cudaFree(d_obc_buffer_jvp_));
+  gpuErrchk(cudaFree(d_obc_ri_buffer_jvp_));
+  gpuErrchk(cudaFree(d_born_forces_buffer_jvp_));
 
 
 };
@@ -109,6 +111,7 @@ void GBSA<RealType, D>::execute_device(
 
     // inference mode
     if(d_coords_tangents == nullptr) {
+        gpuErrchk(cudaMemset(d_born_psi_buffer_, 0, N*sizeof(*d_born_psi_buffer_)));
         gpuErrchk(cudaMemset(d_born_radii_buffer_, 0, N*sizeof(*d_born_radii_buffer_)));
         gpuErrchk(cudaMemset(d_obc_buffer_, 0, N*sizeof(*d_obc_buffer_)));
         gpuErrchk(cudaMemset(d_born_forces_buffer_, 0, N*sizeof(*d_born_forces_buffer_)));
@@ -121,7 +124,7 @@ void GBSA<RealType, D>::execute_device(
           d_scale_factor_idxs_,
           dielectric_offset_,
           cutoff_,
-          d_born_radii_buffer_
+          d_born_psi_buffer_
         );
 
 
@@ -136,6 +139,7 @@ void GBSA<RealType, D>::execute_device(
           alpha_,
           beta_,
           gamma_,
+          d_born_psi_buffer_,
           d_born_radii_buffer_,
           d_obc_buffer_
         );
@@ -202,7 +206,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaMemset(d_obc_ri_buffer_jvp_, 0, N*sizeof(*d_obc_ri_buffer_jvp_)));
         gpuErrchk(cudaMemset(d_born_forces_buffer_jvp_, 0, N*sizeof(*d_born_forces_buffer_jvp_)));
 
-        k_compute_born_radii_gpu_jvp<RealType, D><<<B, tpb>>>(
+        k_compute_born_radii_gpu_jvp<RealType, D><<<dimGrid, tpb>>>(
             N_,
             d_coords,
             d_coords_tangents,
@@ -210,13 +214,24 @@ void GBSA<RealType, D>::execute_device(
             d_atomic_radii_idxs_,
             d_scale_factor_idxs_,
             dielectric_offset_,
-            alpha_,
-            beta_,
-            gamma_,
             cutoff_,
-            d_born_radii_buffer_jvp_,
-            d_obc_buffer_jvp_,
-            d_obc_ri_buffer_jvp_
+            d_born_radii_buffer_jvp_
+        );
+
+        cudaDeviceSynchronize();
+        gpuErrchk(cudaPeekAtLastError());
+
+        k_reduce_born_radii_jvp<<<B, tpb>>>(
+          N_,
+          d_params,
+          d_atomic_radii_idxs_,
+          dielectric_offset_,
+          alpha_,
+          beta_,
+          gamma_,
+          d_born_radii_buffer_jvp_,
+          d_obc_buffer_jvp_,
+          d_obc_ri_buffer_jvp_
         );
 
         cudaDeviceSynchronize();
@@ -239,7 +254,7 @@ void GBSA<RealType, D>::execute_device(
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        k_reduce_born_forces_jvp<RealType, D><<<B, tpb>>>(
+        k_reduce_born_forces_jvp<<<B, tpb>>>(
             N_,
             d_params,
             d_atomic_radii_idxs_,

@@ -15,14 +15,15 @@ private:
     int *d_atomic_radii_idxs_;
     int *d_scale_factor_idxs_;
 
-    double *d_born_radii_buffer_; // double or Surreal<double>
-    double *d_obc_buffer_; // double or Surreal<double>
-    unsigned long long *d_born_forces_buffer_; // ull or Surreal<double>
+    unsigned long long *d_born_psi_buffer_;
+    double *d_born_radii_buffer_;
+    double *d_obc_buffer_;
+    unsigned long long *d_born_forces_buffer_;
 
-    Surreal<double> *d_born_radii_buffer_jvp_; // double or Surreal<double>
-    Surreal<double> *d_obc_buffer_jvp_; // double or Surreal<double>
-    Surreal<double> *d_obc_ri_buffer_jvp_; // double or Surreal<double>
-    Surreal<double> *d_born_forces_buffer_jvp_; // ull or Surreal<double>
+    Surreal<double> *d_born_radii_buffer_jvp_;
+    Surreal<double> *d_obc_buffer_jvp_;
+    Surreal<double> *d_obc_ri_buffer_jvp_;
+    Surreal<double> *d_born_forces_buffer_jvp_;
 
     double alpha_;
     double beta_;

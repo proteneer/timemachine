@@ -22,7 +22,7 @@ __global__ void k_compute_born_radii_gpu(
     const int* scale_factor_idxs,
     const double dielectric_offset,
     const double cutoff,
-    double* born_radii) {
+    unsigned long long* born_psi) {
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
 
@@ -71,7 +71,6 @@ __global__ void k_compute_born_radii_gpu(
 
         RealType r = fast_vec_norm<RealType, D>(dxs);
         RealType rInverse = 1/r;
-        // RealType rInverse = fast_vec_rnorm<RealType, D>(dxs);
         RealType rScaledRadiusJ  = r + scaledRadiusJ;
         RealType rSubScaledRadiusJ =  r - scaledRadiusJ;
 
@@ -119,26 +118,8 @@ __global__ void k_compute_born_radii_gpu(
     }
     
     if(atom_i_idx < N) {
-        atomicAdd(born_radii + atom_i_idx, sum);
+        atomicAdd(born_psi + atom_i_idx, static_cast<unsigned long long>((long long) (sum*FIXED_BORN_PSI)));
     }
-    // we probably need to store the sum and reduce the sum separately
-
-    // sum *= offsetRadiusI/2;
-
-
-
-    // double sum2       = sum*sum;
-    // double sum3       = sum*sum2;
-    // double inner      = alpha_obc*sum - beta_obc*sum2 + gamma_obc*sum3;
-    // double tanhSum    = tanh(inner);
-    // // double coshSum    = cosh(inner);
-    // // double sechSum    = 1/coshSum;
-
-    // if(atom_i_idx < N) {
-    //     auto br = offsetRadiusI*radiusI/(radiusI - offsetRadiusI*tanhSum);
-    //     atomicAdd(born_radii + atom_i_idx, br);
-    //     atomicAdd(obc_chain + atom_i_idx, (1 - tanhSum*tanhSum)*(alpha_obc - 2*beta_obc*sum + 3*gamma_obc*sum2)/radiusI);
-    // }
 
 }
 
@@ -279,6 +260,7 @@ __global__ void k_reduce_born_radii(
     const double alpha_obc,
     const double beta_obc,
     const double gamma_obc,
+    const unsigned long long *born_psi,
     double *born_radii,
     double *obc_chain
 ) {
@@ -292,8 +274,7 @@ __global__ void k_reduce_born_radii(
     double radiusI = atom_i_idx < N ? params[radii_param_idx_i] : 0;
     double offsetRadiusI   = radiusI - dielectric_offset;
 
-    double sum = born_radii[atom_i_idx];
-
+    double sum = static_cast<double>(static_cast<long long>(born_psi[atom_i_idx]))/FIXED_BORN_PSI;
     sum *= offsetRadiusI/2;
 
     double sum2       = sum*sum;
