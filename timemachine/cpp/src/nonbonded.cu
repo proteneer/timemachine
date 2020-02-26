@@ -84,13 +84,10 @@ void Nonbonded<RealType, D>::execute_device(
     int tpb = 32;
     int B = (N_+tpb-1)/tpb;
 
-    gpuErrchk(cudaMemset(d_block_bounds_ctr_, 0, B*D*sizeof(*d_block_bounds_ctr_)));
-    gpuErrchk(cudaMemset(d_block_bounds_ext_, 0, B*D*sizeof(*d_block_bounds_ext_)));
+    gpuErrchk(cudaMemsetAsync(d_block_bounds_ctr_, 0, B*D*sizeof(*d_block_bounds_ctr_), stream));
+    gpuErrchk(cudaMemsetAsync(d_block_bounds_ext_, 0, B*D*sizeof(*d_block_bounds_ext_), stream));
 
-    cudaDeviceSynchronize();
-    gpuErrchk(cudaPeekAtLastError());
-
-    k_find_block_bounds<<<1, B>>>(
+    k_find_block_bounds<<<1, B, 0, stream>>>(
         N,
         D,
         B,
@@ -98,7 +95,6 @@ void Nonbonded<RealType, D>::execute_device(
         d_block_bounds_ctr_,
         d_block_bounds_ext_
     );
-    cudaDeviceSynchronize();
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -109,11 +105,10 @@ void Nonbonded<RealType, D>::execute_device(
     if(d_coords_tangents == nullptr) {
 
         // these can be ran in two streams
-        // gpuErrchk(cudaMemset(d_out_coords, 0, N*D*sizeof(*d_out_coords)));
 
         // tbd run in two streams?
 
-        k_nonbonded_inference<RealType, D><<<dimGrid, tpb>>>(
+        k_nonbonded_inference<RealType, D><<<dimGrid, tpb, 0, stream>>>(
             N,
             d_coords,
             d_params,
@@ -125,11 +120,11 @@ void Nonbonded<RealType, D>::execute_device(
             d_out_coords
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
         if(E_ > 0) {
-            k_nonbonded_exclusion_inference<RealType, D><<<dimGridExclusions, tpb>>>(
+            k_nonbonded_exclusion_inference<RealType, D><<<dimGridExclusions, tpb, 0, stream>>>(
                 E_,
                 d_coords,
                 d_params,
@@ -141,12 +136,12 @@ void Nonbonded<RealType, D>::execute_device(
                 cutoff_,
                 d_out_coords
             );
-            cudaDeviceSynchronize();
+            // cudaDeviceSynchronize();
             gpuErrchk(cudaPeekAtLastError());
         }
 
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
         // auto finish = std::chrono::high_resolution_clock::now();
@@ -159,7 +154,7 @@ void Nonbonded<RealType, D>::execute_device(
         // gpuErrchk(cudaMemset(d_out_coords_tangents, 0, N*D*sizeof(RealType)));
         // gpuErrchk(cudaMemset(d_out_params_tangents, 0, P*sizeof(RealType)));
 
-        k_nonbonded_jvp<RealType, D><<<dimGrid, tpb>>>(
+        k_nonbonded_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
             N,
             d_coords,
             d_coords_tangents,
@@ -173,11 +168,11 @@ void Nonbonded<RealType, D>::execute_device(
             d_out_params_tangents
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
         if(E_ > 0) {
-            k_nonbonded_exclusion_jvp<RealType, D><<<dimGridExclusions, tpb>>>(
+            k_nonbonded_exclusion_jvp<RealType, D><<<dimGridExclusions, tpb, 0, stream>>>(
                 E_,
                 d_coords,
                 d_coords_tangents,
@@ -192,7 +187,7 @@ void Nonbonded<RealType, D>::execute_device(
                 d_out_params_tangents
             );            
 
-            cudaDeviceSynchronize();
+            // cudaDeviceSynchronize();
             gpuErrchk(cudaPeekAtLastError());
         }
 
