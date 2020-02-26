@@ -39,7 +39,7 @@ class Simulation:
         ):
 
         self.step_sizes = step_sizes
-        amber_ff = app.ForceField('amber99sb.xml', 'amber99_obc.xml')
+        amber_ff = app.ForceField('amber99sbildn.xml', 'amber10_obc.xml')
 
         # host
         system = amber_ff.createSystem(
