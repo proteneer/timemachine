@@ -50,6 +50,9 @@ class TestGBSA(GradientTest):
         D = 4
         np.random.seed(125)
 
+        # N = 33
+        # x = self.get_random_coords(N, D) 
+
         x = self.get_water_coords(D)
         N = x.shape[0]
 
@@ -63,31 +66,30 @@ class TestGBSA(GradientTest):
  
         cutoff = 1000.0
         for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
-            for cutoff in [10000.0]:
-                np.random.rand(1)
+            np.random.rand(1)
 
-                params, ref_forces, test_forces = prepare_gbsa_system(
+            params, ref_forces, test_forces = prepare_gbsa_system(
+                x,
+                P_charges,
+                P_radii,
+                P_scale_factors,
+                alpha=0.35,
+                beta=0.645,
+                gamma=0.65,
+                dielectric_offset=dielectric_offset,
+                surface_tension=28.3919551,
+                solute_dielectric=solute_dielectric,
+                solvent_dielectric=solvent_dielectric,
+                probe_radius=0.14,
+                precision=precision
+            )
+
+            for r, t in zip(ref_forces, test_forces):
+                self.compare_forces(
                     x,
-                    P_charges,
-                    P_radii,
-                    P_scale_factors,
-                    alpha=0.35,
-                    beta=0.645,
-                    gamma=0.65,
-                    dielectric_offset=dielectric_offset,
-                    surface_tension=28.3919551,
-                    solute_dielectric=solute_dielectric,
-                    solvent_dielectric=solvent_dielectric,
-                    probe_radius=0.14,
-                    precision=precision
+                    params,
+                    r,
+                    t,
+                    precision,
+                    rtol=rtol
                 )
-
-                for r, t in zip(ref_forces, test_forces):
-                    self.compare_forces(
-                        x,
-                        params,
-                        r,
-                        t,
-                        precision,
-                        rtol=rtol
-                    )

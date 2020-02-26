@@ -56,6 +56,7 @@ def gbsa_obc(
     offset_radius = radii - dielectric_offset
 
     psi = I * offset_radius
+
     psi_coefficient = alpha
     psi2_coefficient = beta
     psi3_coefficient = gamma
