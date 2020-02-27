@@ -208,8 +208,6 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
             Surreal<RealType> dGpol_dr           = -Gpol*(1 - expTerm/4)/denominator2;  
             Surreal<RealType> dGpol_dalpha2_ij   = -Gpol*expTerm*(1 + D_ij)/(2*denominator2);
 
-            // Surreal<RealType> energy = Gpol;
-
             Surreal<RealType> dE_dqi = prefactor*qj/denominator;
             Surreal<RealType> dE_dqj = prefactor*qi/denominator;
 
@@ -416,13 +414,9 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     RealType offsetRadiusI  = radiusI - dielectricOffset;
     RealType radiusIInverse  = 1/offsetRadiusI;
 
-    int atomI = atom_i_idx;
-    int atomJ = atom_j_idx;
-
-    // for (int atomJ = 0; atomJ < numberOfAtoms; atomJ++) {
     for(int round = 0; round < 32; round++) {
 
-        if (atomJ != atomI) {
+        if (atom_j_idx != atom_i_idx) {
 
             Surreal<RealType> dxs[D];
             Surreal<RealType> r2(0, 0);
@@ -448,7 +442,9 @@ __global__ void k_compute_born_energy_and_forces_jvp(
                 Surreal<RealType> rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
                 Surreal<RealType> rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
 
-                Surreal<RealType> l_ij = offsetRadiusI > abs(rSubScaledRadiusJ).real ? Surreal<RealType>(offsetRadiusI, 0) : abs(rSubScaledRadiusJ);
+                Surreal<RealType> rSSRJ = abs(rSubScaledRadiusJ);
+
+                Surreal<RealType> l_ij = offsetRadiusI > rSSRJ.real ? Surreal<RealType>(offsetRadiusI, 0) : rSSRJ;
                 l_ij = 1/l_ij;
                 Surreal<RealType> l_ij2 = l_ij*l_ij;
 
@@ -457,9 +453,9 @@ __global__ void k_compute_born_energy_and_forces_jvp(
 
                 Surreal<RealType> ll_uu = l_ij2 - u_ij2;
 
-                Surreal<RealType> l2rss = l_ij2*rSubScaledRadiusJ/abs(rSubScaledRadiusJ);
+                Surreal<RealType> l2rss = l_ij2*rSubScaledRadiusJ/rSSRJ;
 
-                Surreal<RealType> dl_dr = offsetRadiusI > abs(rSubScaledRadiusJ).real ? Surreal<RealType>(0, 0) : -l2rss;
+                Surreal<RealType> dl_dr = offsetRadiusI > rSSRJ.real ? Surreal<RealType>(0, 0) : -l2rss;
                 Surreal<RealType> du_dr = -u_ij*u_ij*rScaledRadiusJ/abs(rScaledRadiusJ);
 
                 Surreal<RealType> t1 = r - scaledRadiusJ2*rInverse;
@@ -473,7 +469,7 @@ __global__ void k_compute_born_energy_and_forces_jvp(
                 Surreal<RealType> de4 = -rInverse*(rInverse*ratio - (du_dr/u_ij - dl_dr/l_ij));
                 Surreal<RealType> de = de1 + (de2 + de3 + de4)/2;
 
-                Surreal<RealType> dl_dsj = offsetRadiusI > abs(rSubScaledRadiusJ).real ? Surreal<RealType>(0, 0) : offsetRadiusJ*l2rss;
+                Surreal<RealType> dl_dsj = offsetRadiusI > rSSRJ.real ? Surreal<RealType>(0, 0) : offsetRadiusJ*l2rss;
                 Surreal<RealType> du_dsj = -u_ij2*offsetRadiusJ;
 
                 Surreal<RealType> dsj1 = dl_dsj - du_dsj;
@@ -485,7 +481,7 @@ __global__ void k_compute_born_energy_and_forces_jvp(
 
                 Surreal<RealType> dpsi_dsj = dsj1 + (dsj2 + rInverse*(dsj3 + dsj4 + dsj5))/2;
 
-                Surreal<RealType> dl_dri = offsetRadiusI > abs(rSubScaledRadiusJ).real ? -l_ij2 : Surreal<RealType>(0, 0);
+                Surreal<RealType> dl_dri = offsetRadiusI > rSSRJ.real ? -l_ij2 : Surreal<RealType>(0, 0);
 
                 Surreal<RealType> term = l_ij - u_ij + (ll_uu/4)*(scaledRadiusJ2*rInverse - r) + rInverse*ratio/2;
 
@@ -497,7 +493,7 @@ __global__ void k_compute_born_energy_and_forces_jvp(
 
                 Surreal<RealType> dterm_dri = dri1 + (dri2 + rInverse*(dri3 + dri4))/2;
 
-                Surreal<RealType> dl_drj = offsetRadiusI > abs(rSubScaledRadiusJ).real ? Surreal<RealType>(0, 0) : scaleFactorJ*l2rss;
+                Surreal<RealType> dl_drj = offsetRadiusI > rSSRJ.real ? Surreal<RealType>(0, 0) : scaleFactorJ*l2rss;
                 Surreal<RealType> du_drj = -u_ij2*scaleFactorJ;
 
                 Surreal<RealType> drj1 = dl_drj - du_drj;
@@ -539,15 +535,11 @@ __global__ void k_compute_born_energy_and_forces_jvp(
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE;
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
-        atomJ = __shfl_sync(0xffffffff, atomJ, srcLane);
         born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
         radiusJ = __shfl_sync(0xffffffff, radiusJ, srcLane);
         scaleFactorJ = __shfl_sync(0xffffffff, scaleFactorJ, srcLane);
         dPsi_drj_imag = __shfl_sync(0xffffffff, dPsi_drj_imag, srcLane);
         dPsi_dsj_imag = __shfl_sync(0xffffffff, dPsi_dsj_imag, srcLane);
-
-        atomic_radii_idx_i = __shfl_sync(0xffffffff, atomic_radii_idx_i, srcLane);
-        scale_factor_idx_j = __shfl_sync(0xffffffff, scale_factor_idx_j, srcLane);
 
         for(int d=0; d < D; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
@@ -557,20 +549,19 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     }
 
     for(int d=0; d < D; d++) {
-        if(atomI < N) {
-            atomicAdd(out_HvP + atomI*D+d, dPsi_dx_i_imag[d]);
+        if(atom_i_idx < N) {
+            atomicAdd(out_HvP + atom_i_idx*D+d, dPsi_dx_i_imag[d]);
         }
-        if(atomJ < N) {
-            atomicAdd(out_HvP + atomJ*D+d, dPsi_dx_j_imag[d]);
+        if(atom_j_idx < N) {
+            atomicAdd(out_HvP + atom_j_idx*D+d, dPsi_dx_j_imag[d]);
         }
     }
 
-
-    if(atomI < N) {
+    if(atom_i_idx < N) {
         atomicAdd(out_MvP + atomic_radii_idx_i, dPsi_dri_imag);
     }
 
-    if(atomJ < N) {
+    if(atom_j_idx < N) {
         atomicAdd(out_MvP + atomic_radii_idx_j, dPsi_drj_imag);
         atomicAdd(out_MvP + scale_factor_idx_j, dPsi_dsj_imag);
     }

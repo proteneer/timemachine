@@ -214,9 +214,6 @@ if __name__ == "__main__":
         # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
 
         epoch_params = get_params(opt_state)
-
-
-
         sim.combined_params = epoch_params
 
         all_args = []
@@ -259,7 +256,8 @@ if __name__ == "__main__":
             19: 1e-2 # scale factor
         }
 
-        # prefactors = (1, 1e-2, 1e-2)
+        sys.exit(0)
+
 
         # print("!!", grad[0])
 
