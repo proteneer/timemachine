@@ -375,12 +375,12 @@ __global__ void k_compute_born_energy_and_forces(
 
     RealType offsetRadiusI  = radiusI - dielectricOffset;
 
-    int atomI = atom_i_idx;
-    int atomJ = atom_j_idx;
+    // int atomI = atom_i_idx;
+    // int atomJ = atom_j_idx;
 
     for(int round = 0; round < 32; round++) {
 
-        if (atomJ != atomI) {
+        if (atom_j_idx != atom_i_idx) {
 
             RealType dxs[D];
             for(int d=0; d < D; d++) {
@@ -393,6 +393,7 @@ __global__ void k_compute_born_energy_and_forces(
             // radius w/ dielectric offset applied
             RealType offsetRadiusJ      = radiusJ - dielectricOffset;
             RealType scaledRadiusJ      = offsetRadiusJ*scaleFactorJ;
+            RealType scaledRadiusJ2     = scaledRadiusJ*scaledRadiusJ;
             RealType rScaledRadiusJ     = r + scaledRadiusJ;
 
             if (offsetRadiusI < rScaledRadiusJ) {
@@ -408,52 +409,55 @@ __global__ void k_compute_born_energy_and_forces(
 
                 RealType rSubScaledRadiusJ = r - scaledRadiusJ;
                 RealType rSubScaledRadiusJ2 = rSubScaledRadiusJ*rSubScaledRadiusJ;
-                // RealType rSubScaledRadiusJ3 = rSubScaledRadiusJ2*rSubScaledRadiusJ;
 
-                RealType l_ij = offsetRadiusI > abs(rSubScaledRadiusJ) ? offsetRadiusI : abs(rSubScaledRadiusJ);
-                l_ij = 1.0/l_ij;
+                RealType arss = abs(rSubScaledRadiusJ);
+
+                RealType l_ij = offsetRadiusI > arss ? offsetRadiusI : arss;
+                l_ij = 1/l_ij;
                 RealType l_ij2 = l_ij*l_ij;
 
-                RealType u_ij = 1.0/rScaledRadiusJ;
+                RealType u_ij = 1/rScaledRadiusJ;
                 RealType u_ij2 = u_ij*u_ij;
 
                 // original expression
                 // RealType term = l_ij - u_ij + 0.25*(u_ij2 - l_ij2)*t1 + (0.5*rInverse*ratio);
-                RealType dl_dr = offsetRadiusI > abs(rSubScaledRadiusJ) ? 0 : -l_ij2*(rSubScaledRadiusJ/abs(rSubScaledRadiusJ));
-                RealType du_dr = -u_ij2*(rScaledRadiusJ/abs(rScaledRadiusJ));
 
-                RealType t1 = r - scaledRadiusJ*scaledRadiusJ*rInverse;
-                RealType dt1_dr = (1 + scaledRadiusJ*scaledRadiusJ*rInverse*rInverse);
+                RealType dl_dr = offsetRadiusI > arss ? 0 : -l_ij2*sign(rSubScaledRadiusJ);
+                RealType du_dr = -u_ij2*sign(rScaledRadiusJ);
+
+                RealType t1 = r - scaledRadiusJ2*rInverse;
+                RealType dt1_dr = (1 + scaledRadiusJ2*rInverse*rInverse);
                 RealType ratio = log(u_ij/l_ij);
 
-                RealType de1 = static_cast<RealType>(dl_dr) - static_cast<RealType>(du_dr);
+                RealType de1 = dl_dr - du_dr;
                 // we may need three separate accumulators for precision
                 RealType de2 = (u_ij*du_dr - l_ij*dl_dr)*t1;
                 RealType de3 = (u_ij2 - l_ij2)*dt1_dr/2;
                 RealType de4 = rInverse*(rInverse*ratio - (du_dr/u_ij - dl_dr/l_ij));
                 RealType de = de1 + (de2 + de3 - de4)/2;
 
-                if(offsetRadiusI > abs(rSubScaledRadiusJ)) {
+                if(offsetRadiusI > arss) {
                     // if(offsetRadiusI < (scaledRadiusJ - r)) {
                         // de += 0;
                     // }
                 } else {
-                    if(offsetRadiusI < (scaledRadiusJ - r)) {
+                    if(offsetRadiusI >= rSubScaledRadiusJ) {
                         de += 2*sign(rSubScaledRadiusJ)/rSubScaledRadiusJ2;
                     }
                 }
 
-                de *= born_force_i*offsetRadiusI/2;
+                de *= rInverse*born_force_i*offsetRadiusI/2;
                 for(int d=0; d < D; d++) {
-                    dPsi_dx_i[d] += (dxs[d]/r)*de;
-                    dPsi_dx_j[d] -= (dxs[d]/r)*de;
+                    RealType deriv = dxs[d]*de;
+                    dPsi_dx_i[d] += deriv;
+                    dPsi_dx_j[d] -= deriv;
                 }
             }
         }
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE;
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
-        atomJ = __shfl_sync(0xffffffff, atomJ, srcLane);
+        // atomJ = __shfl_sync(0xffffffff, atomJ, srcLane);
         born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
         radiusJ = __shfl_sync(0xffffffff, radiusJ, srcLane);
         scaleFactorJ = __shfl_sync(0xffffffff, scaleFactorJ, srcLane);
@@ -469,11 +473,11 @@ __global__ void k_compute_born_energy_and_forces(
     }
 
     for(int d=0; d < D; d++) {
-        if(atomI < N) {
-            atomicAdd(out_forces + atomI*D+d,  static_cast<unsigned long long>((long long) (dPsi_dx_i[d]*FIXED_EXPONENT)));
+        if(atom_i_idx < N) {
+            atomicAdd(out_forces + atom_i_idx*D+d,  static_cast<unsigned long long>((long long) (dPsi_dx_i[d]*FIXED_EXPONENT)));
         }
-        if(atomJ < N) {
-            atomicAdd(out_forces + atomJ*D+d,  static_cast<unsigned long long>((long long) (dPsi_dx_j[d]*FIXED_EXPONENT)));
+        if(atom_j_idx < N) {
+            atomicAdd(out_forces + atom_j_idx*D+d,  static_cast<unsigned long long>((long long) (dPsi_dx_j[d]*FIXED_EXPONENT)));
         }
     }
 
