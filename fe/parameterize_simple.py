@@ -84,6 +84,23 @@ class PDBWriter():
         PDBFile.writeFooter(self.topology, self.outfile)
         self.outfile.flush()
 
+import jax.numpy as jnp
+
+def loss(du_dls, T, schedule, loss):
+    fwd = du_dls[:T//2]
+    fwd_sched = schedule[:T//2]
+
+    bkwd = du_dls[T//2:]
+    bkwd_sched = schedule[T//2:]
+
+    dG_fwd = math_utils.trapz(fwd, fwd_sched)
+    dG_bkwd = math_utils.trapz(bkwd, bkwd_sched)
+
+    # print("fwd dG", dG_fwd)
+    # print("bkwd dG", dG_bkwd)
+
+    return jnp.abs((dG_fwd+dG_bkwd)/2 - loss)
+
 
 if __name__ == "__main__":
 
@@ -118,14 +135,20 @@ if __name__ == "__main__":
     T = 10000
     dt = 0.0015
     step_sizes = np.ones(T)*dt
-    cas = np.ones(T)*0.99
+    # cas = np.ones(T)*0.99
+    cas = np.ones(T)*0.92
 
     num_gpus = 1
     pool = multiprocessing.Pool(num_gpus)
 
     all_du_dls = []
 
-    lambda_schedule = np.linspace(0.00001, 0.99999, num=T)
+    assert T % 2 == 0
+
+    # insertion deletion lambda_schedule
+    forward_schedule = np.linspace(0.00001, 0.99999, num=T//2)
+    backward_schedule = np.linspace(0.99999, 0.00001, num=T//2)
+    lambda_schedule = np.concatenate([forward_schedule, backward_schedule])
 
     epoch = 0
 
@@ -136,7 +159,7 @@ if __name__ == "__main__":
 
     init_mol = Chem.Mol(guest_mol)
 
-    num_conformers = 16
+    num_conformers = 1
 
     # generate a set of gas phase conformers using the RDKit
     guest_mol.RemoveAllConformers()
@@ -152,65 +175,148 @@ if __name__ == "__main__":
         for atom_idx, pos in enumerate(guest_conf):
             conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
 
-    # tbd training code
 
-    for host_idx, host_pdb_file in enumerate([args.complex_pdb]):
+    lr = 5e-4
+    # opt_init, opt_update, get_params = optimizers.adam(lr)
+    opt_init, opt_update, get_params = optimizers.sgd(lr)
 
-        host_pdb = app.PDBFile(host_pdb_file)
+    # for host_idx, host_pdb_file in enumerate([args.complex_pdb]):
 
-        # deletion is difficult because of clashes arising from poorly minimized structures
-        # so we need to work on the coupled insertion/deletion schedule
-        # for mode in ['insertion', 'deletion']: 
-        for mode in ['insertion']: 
+    host_pdb_file = args.complex_pdb
+    host_pdb = app.PDBFile(host_pdb_file)
+    # insertion deletion
+    host_conf = []
+    for x,y,z in host_pdb.positions:
+        host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+    host_conf = np.array(host_conf)
 
-            print("Mode", mode)
+    # recenter the ligand based on whether we're using the host or the solvent
+    host_name = "complex"
+    conf_center = conf_com
 
-            host_conf = []
-            for x,y,z in host_pdb.positions:
-                host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-            host_conf = np.array(host_conf)
+    init_combined_conf = np.concatenate([host_conf, init_conf])
 
-            # recenter the ligand based on whether we're using the host or the solvent
-            if host_idx == 0:
-                host_name = "complex"
-                conf_center = conf_com
-            elif host_idx == 1:
-                host_name = "solvent"
-                conf_center = com(host_conf)
+    sim = simulation.Simulation(
+        guest_mol,
+        host_pdb,
+        'insertion',
+        step_sizes,
+        cas,
+        lambda_schedule
+    )
 
-            init_combined_conf = np.concatenate([host_conf, init_conf])
+    initial_params = sim.combined_params
 
-            # perm = hilbert_sort(init_combined_conf)
-            # perm = np.arange(init_combined_conf.shape[0])
-            sim = simulation.Simulation(
-                guest_mol,
-                host_pdb,
-                mode,
-                step_sizes,
-                cas,
-                lambda_schedule
-            )
+    opt_state = opt_init(initial_params)
 
-            # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
-            all_args = []
-            for conf_idx in range(num_conformers):
+    num_epochs = 100
+    for epoch in range(num_epochs):
+        # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
 
-                conformer = guest_mol.GetConformer(conf_idx)
-                guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-                guest_conf = guest_conf/10 # convert to md_units
-                guest_conf = recenter(guest_conf, conf_center)
+        epoch_params = get_params(opt_state)
 
-                x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
 
-                combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
-                combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-                out_file = os.path.join("frames", "epoch_"+str(epoch)+"_"+mode+"_"+host_name+"_conf_"+str(conf_idx)+".pdb")
-                writer = PDBWriter(combined_pdb_str, out_file)
-                # set this to None if we don't care about visualization
-                all_args.append((x0, writer,  conf_idx % num_gpus, precision))
 
-            results = pool.map(sim.run_forward_multi, all_args)
-            all_du_dls.append(results)
+        sim.combined_params = epoch_params
+
+        all_args = []
+        for conf_idx in range(num_conformers):
+
+            conformer = guest_mol.GetConformer(conf_idx)
+            guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+            guest_conf = guest_conf/10 # convert to md_units
+            guest_conf = recenter(guest_conf, conf_center)
+
+            x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
+
+            combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
+            combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+            out_file = os.path.join("frames", "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
+            writer = PDBWriter(combined_pdb_str, out_file)
+            # set this to None if we don't care about visualization
+            all_args.append([x0, writer, conf_idx % num_gpus, precision, None])
+
+        # du_dls = pool.map(sim.run_forward_multi, all_args)
+
+        du_dls = [sim.run_forward_multi(all_args[0])]
+
+        loss_grad_fn = jax.grad(loss, argnums=(0,))
+        
+        error = loss(du_dls[0], T, lambda_schedule, 100)
+        print("EPOCH", epoch, "LOSS", error)
+        error_grad = loss_grad_fn(du_dls[0], T, lambda_schedule, 100)
+        du_dl_adjoints = error_grad[0]
+
+        for arg in all_args:
+            arg[-1] = du_dl_adjoints
+
+        # grad = pool.map(sim.run_forward_multi, all_args)
+        grad = [sim.run_forward_multi(all_args[0])]
+        # allowed_groups = (17, 18, 19)
+        allowed_groups = {
+            17: 1, # charge
+            # 18: 1e-2, # atomic radii
+            19: 1e-2 # scale factor
+        }
+
+        # prefactors = (1, 1e-2, 1e-2)
+
+        # print("!!", grad[0])
+
+        filtered_grad = []
+        for g_idx, (g, gp) in enumerate(zip(grad[0], sim.combined_param_groups)):
+            if gp in allowed_groups:
+                pf = allowed_groups[gp]
+                filtered_grad.append(g*pf)
+                if g != 0:
+                    print("derivs", g_idx, g, gp, pf, g*pf)
+            else:
+                filtered_grad.append(0)
+
+
+        filtered_grad = np.array(filtered_grad)
+        opt_state = opt_update(epoch, filtered_grad, opt_state)
+            # print(g_idx, '\t', g, '\t', gp)
+
+
+
+
+
+
+
+    # print("du_dl", grad)
+
+    plt.subplot(2, 1, 1)
+
+    insertion_work_vals = []
+    deletion_work_vals = []
+    for r_idx, r in enumerate(results):
+
+        insertion_du_dls = r[:T//2]
+        deletion_du_dls = r[T//2:]
+
+        plt.plot(insertion_du_dls, label='insertion_'+str(r_idx))
+        plt.plot(deletion_du_dls, label='deletion_'+str(r_idx))
+
+        insertion_work = np.trapz(insertion_du_dls, forward_schedule)
+        deletion_work = np.trapz(deletion_du_dls, backward_schedule)
+
+        insertion_work_vals.append(insertion_work)
+        deletion_work_vals.append(deletion_work)
+    plt.title('work integrals')
+    plt.ylabel('du_dl')
+    plt.xlabel('lambda')
+    plt.legend()
+    # plt.show()
+    plt.subplot(2, 1, 2)
+
+    plt.title('insertion/deletion work dist.')
+    plt.hist(insertion_work_vals, label='insertion')
+    plt.hist(deletion_work_vals, label='deletion')
+    plt.legend()
+    plt.show()
+
+        # all_du_dls.append(results)
 
     all_du_dls = np.array(all_du_dls)
 

@@ -85,16 +85,16 @@ class Simulation:
         self.exponent = 16
 
     def run_forward_multi(self, args):
-        x0, pdb_writer, gpu_idx, precision = args
+        x0, pdb_writer, gpu_idx, precision, adjoint_du_dl = args
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
         try:
-            return self.run_forward(x0, pdb_writer, precision)
+            return self.run_forward(x0, pdb_writer, precision, adjoint_du_dl)
         except Exception as err:
             print(err)
             traceback.print_tb(err.__traceback__)
             raise 
 
-    def run_forward(self, x0, pdb_writer, precision):
+    def run_forward(self, x0, pdb_writer, precision, du_dl_adjoints=None):
         """
         x0 include host configs as well
         """
@@ -102,7 +102,7 @@ class Simulation:
         # use single precision
         gradients = merge_gradients(self.combined_potentials, precision)
 
-        print(self.lambda_idxs)
+        # print(self.lambda_idxs)
 
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
@@ -122,77 +122,109 @@ class Simulation:
             self.step_sizes,
             self.combined_params
         )
-        start = time.time()
-        ctxt.forward_mode()
-        print("run time", time.time() - start)
-        du_dls = stepper.get_du_dl()
-
-        if pdb_writer is not None:
-            pdb_writer.write_header()
-            xs = ctxt.get_all_coords()
-            for frame_idx, x in enumerate(xs):
-
-                interval = max(1, xs.shape[0]//pdb_writer.n_frames)
-                if frame_idx % interval == 0:
-                    pdb_writer.write(x*10)
-
-        pdb_writer.close()
-        del stepper
-        del ctxt
-
-        print("work", np.trapz(du_dls, self.lambda_schedule))
-
-        return du_dls
-
-    def run_forward_and_backward_multi(self, args):
-        x0, du_dl_adjoints, gpu_idx = args
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
-        try:
-            return self.run_forward_and_backward(x0)
-        except Exception as e:
-            print(e)
-            traceback.print_tb(err.__traceback__)
-            raise 
-
-
-    def run_forward_and_backward(self, x0, du_dl_adjoints):
-        """
-        x0 include host configs as well
-        """
 
         start = time.time()
-        gradients = []
-        for fn, fn_args in self.combined_potentials:
-            gradients.append(fn(*fn_args))
-
-
-
-        stepper = custom_ops.LambdaStepper_f64(
-            gradients,
-            self.lambda_schedule,
-            self.lambda_idxs,
-            self.exponent
-        )
-
-        v0 = np.zeros_like(x0)
-
-        ctxt = custom_ops.ReversibleContext_f64_3d(
-            stepper,
-            x0,
-            v0,
-            self.cas,
-            self.cbs,
-            self.step_sizes,
-            self.combined_params,
-        )
         ctxt.forward_mode()
+        print("fwd run time", time.time() - start)
 
-        stepper.set_du_dl_adjoint(dloss_ddudl)
-        ctxt.set_x_t_adjoint(np.zeros_like(x0))
-        ctxt.backward_mode()
 
-        dL_dp = ctxt.get_param_adjoint_accum()
+        if du_dl_adjoints is not None:
 
-        print("run time", time.time() - start)
+            assert du_dl_adjoints.shape == self.lambda_schedule.shape
 
-        return dL_dp
+            # for d_idx, d in enumerate(du_dl_adjoints):
+                # if d_idx % 10 == 0:
+                    # print(d_idx, d)
+
+            stepper.set_du_dl_adjoint(du_dl_adjoints)
+
+
+            ctxt.set_x_t_adjoint(np.zeros_like(x0))
+            start = time.time()
+            ctxt.backward_mode()
+            print("bkwd run time", time.time() - start)
+
+
+            dL_dp = ctxt.get_param_adjoint_accum()
+
+            return dL_dp                 
+
+        else:
+            
+            du_dls = stepper.get_du_dl()
+
+            return du_dls     
+
+        # print("run time", time.time() - start)
+
+
+        # if pdb_writer is not None:
+        #     pdb_writer.write_header()
+        #     xs = ctxt.get_all_coords()
+        #     for frame_idx, x in enumerate(xs):
+
+        #         interval = max(1, xs.shape[0]//pdb_writer.n_frames)
+        #         if frame_idx % interval == 0:
+        #             pdb_writer.write(x*10)
+        # pdb_writer.close()
+        # del stepper
+        # del ctxt
+
+        # print("work", np.trapz(du_dls, self.lambda_schedule))
+
+        # return du_dls
+
+    # def run_forward_and_backward_multi(self, args):
+    #     x0, du_dl_adjoints, gpu_idx = args
+    #     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
+    #     try:
+    #         return self.run_forward_and_backward(x0, du_dl_adjoints)
+    #     except Exception as e:
+    #         print(e)
+    #         traceback.print_tb(err.__traceback__)
+    #         raise 
+
+
+    # def run_forward_and_backward(self, x0, du_dl_adjoints):
+    #     """
+    #     x0 include host configs as well
+    #     """
+
+    #     start = time.time()
+    #     gradients = []
+    #     for fn, fn_args in self.combined_potentials:
+    #         gradients.append(fn(*fn_args))
+
+
+
+    #     stepper = custom_ops.LambdaStepper_f64(
+    #         gradients,
+    #         self.lambda_schedule,
+    #         self.lambda_idxs,
+    #         self.exponent
+    #     )
+
+    #     v0 = np.zeros_like(x0)
+
+    #     ctxt = custom_ops.ReversibleContext_f64_3d(
+    #         stepper,
+    #         x0,
+    #         v0,
+    #         self.cas,
+    #         self.cbs,
+    #         self.step_sizes,
+    #         self.combined_params,
+    #     )
+    #     ctxt.forward_mode()
+
+    #     stepper.set_du_dl_adjoint(dloss_ddudl)
+
+
+    #     ctxt.set_x_t_adjoint(np.zeros_like(x0))
+    #     ctxt.backward_mode()
+
+    #     dL_dp = ctxt.get_param_adjoint_accum()
+
+    #     print("run time", time.time() - start)
+
+    #     return dL_dp
