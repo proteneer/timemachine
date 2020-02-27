@@ -86,33 +86,29 @@ class PDBWriter():
 
 import jax.numpy as jnp
 
-def loss(du_dls, T, schedule, loss):
-    fwd = du_dls[:T//2]
+def error_fn(all_du_dls, T, schedule, true_dG):
+    fwd = all_du_dls[:, :T//2]
     fwd_sched = schedule[:T//2]
-
-    bkwd = du_dls[T//2:]
+    bkwd = all_du_dls[:, T//2:]
     bkwd_sched = schedule[T//2:]
-
     dG_fwd = math_utils.trapz(fwd, fwd_sched)
     dG_bkwd = math_utils.trapz(bkwd, bkwd_sched)
+    pred_dG = loss.mybar(jnp.stack([dG_fwd, dG_bkwd]))
 
-    # print("fwd dG", dG_fwd)
-    # print("bkwd dG", dG_bkwd)
-
-    return jnp.abs((dG_fwd+dG_bkwd)/2 - loss)
-
+    return jnp.abs(pred_dG - true_dG)
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Quick Test')
     parser.add_argument('--out_pdb', type=str)
 
-    parser.add_argument('--precision', type=str)    
-    parser.add_argument('--complex_pdb', type=str)
-    # parser.add_argument('--solvent_pdb', type=str)
-    parser.add_argument('--ligand_sdf', type=str)
+    parser.add_argument('--precision', type=str, required=True)    
+    parser.add_argument('--complex_pdb', type=str, required=True)
+    parser.add_argument('--ligand_sdf', type=str, required=True)
+    parser.add_argument('--num_gpus', type=int, required=True)
+    parser.add_argument('--jobs_per_gpu', type=int, required=True)
+    parser.add_argument('--num_conformers', type=int, required=True)
     args = parser.parse_args()
-
 
 
     if args.precision == 'single':
@@ -121,12 +117,6 @@ if __name__ == "__main__":
         precision = np.float64
     else:
         raise Exception("precision must be either single or double")
-
-    # host_pdb = app.PDBFile(args.complex_pdb)
-    # modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
-    # modeller.addSolvent(amber_ff, numAdded=6000)
-    # PDBFile.writeFile(modeller.topology, modeller.positions, open("sanitized.pdb", 'w'))
-    # assert 0
 
     suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
     for guest_mol in suppl:
@@ -138,8 +128,11 @@ if __name__ == "__main__":
     # cas = np.ones(T)*0.99
     cas = np.ones(T)*0.92
 
-    num_gpus = 1
-    pool = multiprocessing.Pool(num_gpus)
+    num_gpus = args.num_gpus
+    num_workers = args.num_gpus*args.jobs_per_gpu
+
+    print('Creating multiprocessing pool with',args.num_gpus, 'gpus and', args.jobs_per_gpu, 'jobs per gpu')
+    pool = multiprocessing.Pool(num_workers)
 
     all_du_dls = []
 
@@ -159,7 +152,7 @@ if __name__ == "__main__":
 
     init_mol = Chem.Mol(guest_mol)
 
-    num_conformers = 1
+    num_conformers = args.num_conf
 
     # generate a set of gas phase conformers using the RDKit
     guest_mol.RemoveAllConformers()
@@ -175,26 +168,17 @@ if __name__ == "__main__":
         for atom_idx, pos in enumerate(guest_conf):
             conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
 
-
     lr = 5e-4
     # opt_init, opt_update, get_params = optimizers.adam(lr)
     opt_init, opt_update, get_params = optimizers.sgd(lr)
 
-    # for host_idx, host_pdb_file in enumerate([args.complex_pdb]):
-
     host_pdb_file = args.complex_pdb
     host_pdb = app.PDBFile(host_pdb_file)
-    # insertion deletion
     host_conf = []
     for x,y,z in host_pdb.positions:
         host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
     host_conf = np.array(host_conf)
-
-    # recenter the ligand based on whether we're using the host or the solvent
     host_name = "complex"
-    conf_center = conf_com
-
-    init_combined_conf = np.concatenate([host_conf, init_conf])
 
     sim = simulation.Simulation(
         guest_mol,
@@ -222,7 +206,7 @@ if __name__ == "__main__":
             conformer = guest_mol.GetConformer(conf_idx)
             guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
             guest_conf = guest_conf/10 # convert to md_units
-            guest_conf = recenter(guest_conf, conf_center)
+            guest_conf = recenter(guest_conf, conf_com)
 
             x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
 
@@ -230,44 +214,43 @@ if __name__ == "__main__":
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
             out_file = os.path.join("frames", "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file)
+
             # set this to None if we don't care about visualization
             all_args.append([x0, writer, conf_idx % num_gpus, precision, None])
 
-        # du_dls = pool.map(sim.run_forward_multi, all_args)
+        all_du_dls = pool.map(sim.run_forward_multi, all_args)
+        all_du_dls = np.array(all_du_dls)
 
-        du_dls = [sim.run_forward_multi(all_args[0])]
+        loss_grad_fn = jax.grad(error_fn, argnums=(0,))
+      
+        error = error_fn(all_du_dls, T, lambda_schedule, 100)
 
-        loss_grad_fn = jax.grad(loss, argnums=(0,))
-        
-        error = loss(du_dls[0], T, lambda_schedule, 100)
-        print("EPOCH", epoch, "LOSS", error)
-        error_grad = loss_grad_fn(du_dls[0], T, lambda_schedule, 100)
-        du_dl_adjoints = error_grad[0]
+        print("---EPOCH", epoch, "---- LOSS", error)
 
-        for arg in all_args:
-            arg[-1] = du_dl_adjoints
+        error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, 100)
+        all_du_dl_adjoints = error_grad[0]
 
-        # grad = pool.map(sim.run_forward_multi, all_args)
-        grad = [sim.run_forward_multi(all_args[0])]
-        # allowed_groups = (17, 18, 19)
+        for arg, adjoint in zip(all_args, all_du_dl_adjoints):
+            arg[-1] = adjoint
+
+        dl_dps = pool.map(sim.run_forward_multi, all_args)
+
+        dl_dps = np.array(dl_dps)
+        dl_dps = np.sum(dl_dps, axis=0)
+
         allowed_groups = {
-            17: 1, # charge
+            17: 0.5, # charge
             # 18: 1e-2, # atomic radii
             19: 1e-2 # scale factor
         }
 
-        sys.exit(0)
-
-
-        # print("!!", grad[0])
-
         filtered_grad = []
-        for g_idx, (g, gp) in enumerate(zip(grad[0], sim.combined_param_groups)):
+        for g_idx, (g, gp) in enumerate(zip(dl_dps, sim.combined_param_groups)):
             if gp in allowed_groups:
                 pf = allowed_groups[gp]
                 filtered_grad.append(g*pf)
                 if g != 0:
-                    print("derivs", g_idx, g, gp, pf, g*pf)
+                    print("derivs", g_idx, '\t', g, '\t adjusted to', g*pf)
             else:
                 filtered_grad.append(0)
 

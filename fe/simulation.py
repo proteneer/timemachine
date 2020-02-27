@@ -131,25 +131,27 @@ class Simulation:
         if du_dl_adjoints is not None:
 
             assert du_dl_adjoints.shape == self.lambda_schedule.shape
-
-            # for d_idx, d in enumerate(du_dl_adjoints):
-                # if d_idx % 10 == 0:
-                    # print(d_idx, d)
-
             stepper.set_du_dl_adjoint(du_dl_adjoints)
-
-
             ctxt.set_x_t_adjoint(np.zeros_like(x0))
             start = time.time()
             ctxt.backward_mode()
             print("bkwd run time", time.time() - start)
-
-
             dL_dp = ctxt.get_param_adjoint_accum()
 
             return dL_dp                 
 
         else:
+
+
+            if pdb_writer is not None:
+                pdb_writer.write_header()
+                xs = ctxt.get_all_coords()
+                for frame_idx, x in enumerate(xs):
+
+                    interval = max(1, xs.shape[0]//pdb_writer.n_frames)
+                    if frame_idx % interval == 0:
+                        pdb_writer.write(x*10)
+            pdb_writer.close()
             
             du_dls = stepper.get_du_dl()
 
