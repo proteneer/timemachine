@@ -152,7 +152,7 @@ if __name__ == "__main__":
 
     init_mol = Chem.Mol(guest_mol)
 
-    num_conformers = args.num_conf
+    num_conformers = args.num_conformers
 
     # generate a set of gas phase conformers using the RDKit
     guest_mol.RemoveAllConformers()
