@@ -93,7 +93,8 @@ void GBSA<RealType, D>::execute_device(
     const double *d_params,
     unsigned long long *d_out_coords,
     double *d_out_coords_tangents,
-    double *d_out_params_tangents
+    double *d_out_params_tangents,
+    cudaStream_t stream
 ) {
 
     int tpb = 32;
@@ -111,12 +112,12 @@ void GBSA<RealType, D>::execute_device(
 
     // inference mode
     if(d_coords_tangents == nullptr) {
-        gpuErrchk(cudaMemset(d_born_psi_buffer_, 0, N*sizeof(*d_born_psi_buffer_)));
-        gpuErrchk(cudaMemset(d_born_radii_buffer_, 0, N*sizeof(*d_born_radii_buffer_)));
-        gpuErrchk(cudaMemset(d_obc_buffer_, 0, N*sizeof(*d_obc_buffer_)));
-        gpuErrchk(cudaMemset(d_born_forces_buffer_, 0, N*sizeof(*d_born_forces_buffer_)));
+        gpuErrchk(cudaMemsetAsync(d_born_psi_buffer_, 0, N*sizeof(*d_born_psi_buffer_), stream));
+        gpuErrchk(cudaMemsetAsync(d_born_radii_buffer_, 0, N*sizeof(*d_born_radii_buffer_), stream));
+        gpuErrchk(cudaMemsetAsync(d_obc_buffer_, 0, N*sizeof(*d_obc_buffer_), stream));
+        gpuErrchk(cudaMemsetAsync(d_born_forces_buffer_, 0, N*sizeof(*d_born_forces_buffer_), stream));
 
-        k_compute_born_radii_gpu<RealType, D><<<dimGrid, tpb>>>(
+        k_compute_born_radii_gpu<RealType, D><<<dimGrid, tpb, 0, stream>>>(
           N_,
           d_coords,
           d_params,
@@ -128,10 +129,10 @@ void GBSA<RealType, D>::execute_device(
         );
 
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        k_reduce_born_radii<<<B, tpb>>>(
+        k_reduce_born_radii<<<B, tpb, 0, stream>>>(
           N_,
           d_params,
           d_atomic_radii_idxs_,
@@ -144,11 +145,11 @@ void GBSA<RealType, D>::execute_device(
           d_obc_buffer_
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
 
-        k_compute_born_first_loop_gpu<RealType, D><<<dimGrid, tpb>>>(
+        k_compute_born_first_loop_gpu<RealType, D><<<dimGrid, tpb, 0, stream>>>(
           N_,
           d_coords,
           d_params,
@@ -160,10 +161,10 @@ void GBSA<RealType, D>::execute_device(
           d_out_coords // ouput
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        k_reduce_born_forces<<<B, tpb>>>(
+        k_reduce_born_forces<<<B, tpb, 0, stream>>>(
           N_,
           d_params,
           d_atomic_radii_idxs_,
@@ -174,12 +175,12 @@ void GBSA<RealType, D>::execute_device(
           d_born_forces_buffer_
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
 
         auto start = std::chrono::high_resolution_clock::now();
-        k_compute_born_energy_and_forces<RealType, D><<<dimGrid, tpb>>>(
+        k_compute_born_energy_and_forces<RealType, D><<<dimGrid, tpb, 0, stream>>>(
           N_,
           d_coords,
           d_params,
@@ -193,20 +194,20 @@ void GBSA<RealType, D>::execute_device(
           d_out_coords
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
         // std::cout << "Nonbonded Elapsed time: " << elapsed.count() << " s\n";
 
     } else {
-        gpuErrchk(cudaMemset(d_born_radii_buffer_jvp_, 0, N*sizeof(*d_born_radii_buffer_jvp_)));
-        gpuErrchk(cudaMemset(d_obc_buffer_jvp_, 0, N*sizeof(*d_obc_buffer_jvp_)));
-        gpuErrchk(cudaMemset(d_obc_ri_buffer_jvp_, 0, N*sizeof(*d_obc_ri_buffer_jvp_)));
-        gpuErrchk(cudaMemset(d_born_forces_buffer_jvp_, 0, N*sizeof(*d_born_forces_buffer_jvp_)));
+        gpuErrchk(cudaMemsetAsync(d_born_radii_buffer_jvp_, 0, N*sizeof(*d_born_radii_buffer_jvp_), stream));
+        gpuErrchk(cudaMemsetAsync(d_obc_buffer_jvp_, 0, N*sizeof(*d_obc_buffer_jvp_), stream));
+        gpuErrchk(cudaMemsetAsync(d_obc_ri_buffer_jvp_, 0, N*sizeof(*d_obc_ri_buffer_jvp_), stream));
+        gpuErrchk(cudaMemsetAsync(d_born_forces_buffer_jvp_, 0, N*sizeof(*d_born_forces_buffer_jvp_), stream));
 
-        k_compute_born_radii_gpu_jvp<RealType, D><<<dimGrid, tpb>>>(
+        k_compute_born_radii_gpu_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
             N_,
             d_coords,
             d_coords_tangents,
@@ -218,10 +219,10 @@ void GBSA<RealType, D>::execute_device(
             d_born_radii_buffer_jvp_
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        k_reduce_born_radii_jvp<<<B, tpb>>>(
+        k_reduce_born_radii_jvp<<<B, tpb, 0, stream>>>(
           N_,
           d_params,
           d_atomic_radii_idxs_,
@@ -234,10 +235,10 @@ void GBSA<RealType, D>::execute_device(
           d_obc_ri_buffer_jvp_
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        k_compute_born_first_loop_gpu_jvp<RealType, D><<<dimGrid, tpb>>>(
+        k_compute_born_first_loop_gpu_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
             N_,
             d_coords,
             d_coords_tangents,
@@ -251,10 +252,10 @@ void GBSA<RealType, D>::execute_device(
             d_out_params_tangents // ouput
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        k_reduce_born_forces_jvp<<<B, tpb>>>(
+        k_reduce_born_forces_jvp<<<B, tpb, 0, stream>>>(
             N_,
             d_params,
             d_atomic_radii_idxs_,
@@ -267,12 +268,12 @@ void GBSA<RealType, D>::execute_device(
             d_out_params_tangents
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
 
         auto start = std::chrono::high_resolution_clock::now();
-        k_compute_born_energy_and_forces_jvp<RealType, D><<<dimGrid, tpb>>>(
+        k_compute_born_energy_and_forces_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
             N_,
             d_coords,
             d_coords_tangents,
@@ -289,7 +290,7 @@ void GBSA<RealType, D>::execute_device(
             d_out_params_tangents
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
         auto finish = std::chrono::high_resolution_clock::now();

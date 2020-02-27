@@ -1,17 +1,40 @@
 #include "stepper.hpp"
-#include "kernel_utils.cuh"
 #include "fixed_point.hpp"
+#include "gpu_utils.cuh"
 
-// #define PI 3.14159265358979323846
 #define PI  3.1415926535897932384626433
 
 #include <iostream>
 namespace timemachine {
 
+Stepper::Stepper(int F) : streams_(F) {
+    for(int i=0; i < F; i++) {
+        gpuErrchk(cudaStreamCreate(&streams_[i]));        
+    }
+
+}
+
+Stepper::~Stepper() {
+    for(int i=0; i <streams_.size(); i++) {
+        gpuErrchk(cudaStreamDestroy(streams_[i]));
+    }
+}
+
+cudaStream_t Stepper::get_stream(int idx) {
+    return streams_[idx];
+}
+
+void Stepper::sync_all_streams() {
+    for(int i=0; i < streams_.size(); i++) {
+        gpuErrchk(cudaStreamSynchronize(streams_[i]));
+    }
+}
+
 BasicStepper::BasicStepper(
     std::vector<Gradient<3> *> forces
 ) : count_(0),
-    forces_(forces) {};
+    forces_(forces),
+    Stepper(forces.size()) {};
 
 void BasicStepper::forward_step(
     const int N,
@@ -20,6 +43,7 @@ void BasicStepper::forward_step(
     const double *params,
     unsigned long long *dx) {
 
+    gpuErrchk(cudaDeviceSynchronize());
     for(int f=0; f < forces_.size(); f++) {
         forces_[f]->execute_device(
             N,
@@ -29,8 +53,11 @@ void BasicStepper::forward_step(
             params,
             dx, // accumulation place
             nullptr,
-            nullptr);
+            nullptr,
+            this->get_stream(f)
+        );
     }
+    gpuErrchk(cudaDeviceSynchronize());
 
     count_ += 1;
 
@@ -47,6 +74,8 @@ void BasicStepper::backward_step(
 
     count_ -= 1;
 
+
+    gpuErrchk(cudaDeviceSynchronize());
     for(int f=0; f < forces_.size(); f++) {
         forces_[f]->execute_device(
             N,
@@ -56,9 +85,11 @@ void BasicStepper::backward_step(
             params,
             nullptr, 
             coords_jvp,
-            params_jvp
+            params_jvp,
+            this->get_stream(f)
         );
     }
+    gpuErrchk(cudaDeviceSynchronize());
 
 
 };
@@ -73,7 +104,8 @@ LambdaStepper::LambdaStepper(
 ) : forces_(forces),
     lambda_schedule_(lambda_schedule),
     exponent_(exponent),
-    count_(0) {
+    count_(0),
+    Stepper(forces.size()) {
 
     const int N = lambda_flags.size();
     const int D = 4;
@@ -274,6 +306,7 @@ void LambdaStepper::forward_step(
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMemset(d_forces_buffer_, 0, N*D*sizeof(*d_forces_buffer_)));
 
+    gpuErrchk(cudaDeviceSynchronize());
     for(int f=0; f < forces_.size(); f++) {
         forces_[f]->execute_device(
             N,
@@ -283,8 +316,11 @@ void LambdaStepper::forward_step(
             params,
             d_forces_buffer_, // accumulation place
             nullptr,
-            nullptr);
+            nullptr,
+            this->get_stream(f)
+        );
     }
+    gpuErrchk(cudaDeviceSynchronize());
 
     accumulate_dU_dl<<<dimGrid, tpb>>>(N, d_forces_buffer_, d_lambda_flags_, lambda_schedule_[count_], exponent_, &d_du_dl_[count_]);
     gpuErrchk(cudaPeekAtLastError());
@@ -348,6 +384,8 @@ void LambdaStepper::backward_step(
     gpuErrchk(cudaMemset(d_coords_jvp_buffer_, 0, N*D*sizeof(*d_coords_jvp_buffer_)));
     gpuErrchk(cudaMemset(params_jvp, 0, P*sizeof(*params_jvp)));
 
+
+    gpuErrchk(cudaDeviceSynchronize());
     for(int f=0; f < forces_.size(); f++) {
         forces_[f]->execute_device(
             N,
@@ -357,9 +395,11 @@ void LambdaStepper::backward_step(
             params,
             nullptr,
             d_coords_jvp_buffer_,
-            params_jvp // no need to reshape this
+            params_jvp,
+            this->get_stream(f)
         );
     }
+    gpuErrchk(cudaDeviceSynchronize());
 
     convert_4d_to_3d<<<dimGrid, tpb>>>(N, d_coords_jvp_buffer_, coords_jvp);
 

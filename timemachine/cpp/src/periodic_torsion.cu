@@ -51,7 +51,8 @@ void PeriodicTorsion<RealType, D>::execute_device(
     const double *d_params,
     unsigned long long *d_out_coords,
     double *d_out_coords_tangents,
-    double *d_out_params_tangents
+    double *d_out_params_tangents,
+    cudaStream_t stream
 ) {
 
     int tpb = 32;
@@ -60,7 +61,7 @@ void PeriodicTorsion<RealType, D>::execute_device(
     auto start = std::chrono::high_resolution_clock::now();
     if(d_coords_tangents == nullptr) {
 
-        k_periodic_torsion_inference<RealType, D><<<blocks, tpb>>>(
+        k_periodic_torsion_inference<RealType, D><<<blocks, tpb, 0, stream>>>(
             T_,
             d_coords,
             d_params,
@@ -79,7 +80,7 @@ void PeriodicTorsion<RealType, D>::execute_device(
     } else {
 
 
-        k_periodic_torsion_jvp<RealType, D><<<blocks, tpb>>>(
+        k_periodic_torsion_jvp<RealType, D><<<blocks, tpb, 0, stream>>>(
             T_,
             d_coords,
             d_coords_tangents,
