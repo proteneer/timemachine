@@ -65,14 +65,12 @@ void declare_lambda_stepper(py::module &m, const char *typestr) {
     .def(py::init([](
         const std::vector<timemachine::Gradient<4> *> system,
         const std::vector<double> &lambda_schedule,
-        const std::vector<int> &lambda_flags,
-        const int exponent
+        const std::vector<int> &lambda_flags
     ) {
         return new timemachine::LambdaStepper(
             system,
             lambda_schedule,
-            lambda_flags,
-            exponent
+            lambda_flags
         );
     }))
     .def("get_du_dl", [](timemachine::LambdaStepper &stepper) -> py::array_t<double, py::array::c_style> {

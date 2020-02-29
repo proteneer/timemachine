@@ -99,11 +99,9 @@ void BasicStepper::backward_step(
 LambdaStepper::LambdaStepper(
     std::vector<Gradient <4> *> forces,
     const std::vector<double> &lambda_schedule,
-    const std::vector<int> &lambda_flags,
-    const int exponent
+    const std::vector<int> &lambda_flags
 ) : forces_(forces),
     lambda_schedule_(lambda_schedule),
-    exponent_(exponent),
     count_(0),
     Stepper(forces.size()) {
 
@@ -129,7 +127,6 @@ __global__ void convert_3d_to_4d(
     const double *d_coords_3d,
     const int *lambda_flags, // [1, 0, or -1]
     const double lambda,
-    const int k,
     const double *d_coords_3d_tangent, // can be nullptr
     const double du_dl_adjoint, // used only if d_coords_3d_tangent is not null
     double *d_coords_4d,
@@ -204,7 +201,6 @@ __global__ void accumulate_dU_dl(
     const unsigned long long *d_forces_4d,
     const int *lambda_flags, // [1, 0, or -1]
     const double lambda,
-    const int k,
     double *du_dl_buffer) {
 
     int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
@@ -290,7 +286,6 @@ void LambdaStepper::forward_step(
         coords,
         d_lambda_flags_,
         lambda_schedule_[count_],
-        exponent_,
         nullptr,
         0,
         d_coords_buffer_,
@@ -316,7 +311,7 @@ void LambdaStepper::forward_step(
     }
     gpuErrchk(cudaDeviceSynchronize());
 
-    accumulate_dU_dl<<<dimGrid, tpb>>>(N, d_forces_buffer_, d_lambda_flags_, lambda_schedule_[count_], exponent_, &d_du_dl_[count_]);
+    accumulate_dU_dl<<<dimGrid, tpb>>>(N, d_forces_buffer_, d_lambda_flags_, lambda_schedule_[count_], &d_du_dl_[count_]);
     gpuErrchk(cudaPeekAtLastError());
     convert_4d_to_3d<<<dimGrid, tpb>>>(N, d_forces_buffer_, dx);
     gpuErrchk(cudaPeekAtLastError());
@@ -367,7 +362,6 @@ void LambdaStepper::backward_step(
         coords,
         d_lambda_flags_,
         lambda_schedule_[count_],
-        exponent_,
         dx_tangent,
         du_dl_adjoint_[count_],
         d_coords_buffer_,

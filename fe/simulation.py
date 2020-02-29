@@ -81,10 +81,13 @@ class Simulation:
             self.lambda_idxs[N_host:] = -1
         else:
             raise ValueError("Unknown direction: "+direction)
-        # how did this take 6 hours to debug?
-        self.exponent = 16
 
     def run_forward_multi(self, args):
+        """
+        A multiprocess safe version of the run_forward code. This code will
+        also set the GPU on which the simulation should run on.
+        """
+
         x0, pdb_writer, gpu_idx, precision, adjoint_du_dl = args
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
         try:
@@ -96,19 +99,30 @@ class Simulation:
 
     def run_forward(self, x0, pdb_writer, precision, du_dl_adjoints=None):
         """
-        x0 include host configs as well
-        """
-        # this is multi-process safe to run.
-        # use single precision
-        gradients = merge_gradients(self.combined_potentials, precision)
+        Run a forward simulation
 
-        # print(self.lambda_idxs)
+        Parameters
+        ----------
+        x0: np.arrray, np.float64, [N,3]
+            Starting geometries
+
+        pdb_writer: For writing out the trajectory
+            If None then we skip writing
+
+        precision: np.float64 or np.float32
+            What level of precision we run the simulation at.
+
+        du_dl_adjoints: np.array, np.float64, [T]
+            If None, then we skip the backwards pass. If not None, this
+            array must have shape equal to the number of timesteps.
+
+        """
+        gradients = merge_gradients(self.combined_potentials, precision)
 
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
             self.lambda_schedule,
-            self.lambda_idxs,
-            self.exponent
+            self.lambda_idxs
         )
 
         v0 = np.zeros_like(x0)
@@ -156,77 +170,3 @@ class Simulation:
             du_dls = stepper.get_du_dl()
 
             return du_dls     
-
-        # print("run time", time.time() - start)
-
-
-        # if pdb_writer is not None:
-        #     pdb_writer.write_header()
-        #     xs = ctxt.get_all_coords()
-        #     for frame_idx, x in enumerate(xs):
-
-        #         interval = max(1, xs.shape[0]//pdb_writer.n_frames)
-        #         if frame_idx % interval == 0:
-        #             pdb_writer.write(x*10)
-        # pdb_writer.close()
-        # del stepper
-        # del ctxt
-
-        # print("work", np.trapz(du_dls, self.lambda_schedule))
-
-        # return du_dls
-
-    # def run_forward_and_backward_multi(self, args):
-    #     x0, du_dl_adjoints, gpu_idx = args
-    #     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
-    #     try:
-    #         return self.run_forward_and_backward(x0, du_dl_adjoints)
-    #     except Exception as e:
-    #         print(e)
-    #         traceback.print_tb(err.__traceback__)
-    #         raise 
-
-
-    # def run_forward_and_backward(self, x0, du_dl_adjoints):
-    #     """
-    #     x0 include host configs as well
-    #     """
-
-    #     start = time.time()
-    #     gradients = []
-    #     for fn, fn_args in self.combined_potentials:
-    #         gradients.append(fn(*fn_args))
-
-
-
-    #     stepper = custom_ops.LambdaStepper_f64(
-    #         gradients,
-    #         self.lambda_schedule,
-    #         self.lambda_idxs,
-    #         self.exponent
-    #     )
-
-    #     v0 = np.zeros_like(x0)
-
-    #     ctxt = custom_ops.ReversibleContext_f64_3d(
-    #         stepper,
-    #         x0,
-    #         v0,
-    #         self.cas,
-    #         self.cbs,
-    #         self.step_sizes,
-    #         self.combined_params,
-    #     )
-    #     ctxt.forward_mode()
-
-    #     stepper.set_du_dl_adjoint(dloss_ddudl)
-
-
-    #     ctxt.set_x_t_adjoint(np.zeros_like(x0))
-    #     ctxt.backward_mode()
-
-    #     dL_dp = ctxt.get_param_adjoint_accum()
-
-    #     print("run time", time.time() - start)
-
-    #     return dL_dp

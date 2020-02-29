@@ -100,8 +100,7 @@ def error_fn(all_du_dls, T, schedule, true_dG):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Quick Test')
-    parser.add_argument('--out_pdb', type=str)
-
+    parser.add_argument('--frames_dir', type=str, required=True)
     parser.add_argument('--precision', type=str, required=True)    
     parser.add_argument('--complex_pdb', type=str, required=True)
     parser.add_argument('--ligand_sdf', type=str, required=True)
@@ -109,6 +108,8 @@ if __name__ == "__main__":
     parser.add_argument('--jobs_per_gpu', type=int, required=True)
     parser.add_argument('--num_conformers', type=int, required=True)
     args = parser.parse_args()
+
+    assert os.path.isdir(args.frames_dir)
 
 
     if args.precision == 'single':
@@ -130,8 +131,6 @@ if __name__ == "__main__":
 
     all_du_dls = []
 
-    assert T % 2 == 0
-
     start = 1e3
     end = 1.0
     NT = 500
@@ -145,6 +144,7 @@ if __name__ == "__main__":
     lambda_schedule = np.concatenate([forward_schedule, backward_schedule])
 
     T = lambda_schedule.shape[0]
+    assert T % 2 == 0
     dt = 0.0015
     step_sizes = np.ones(T)*dt
 
@@ -220,7 +220,7 @@ if __name__ == "__main__":
 
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-            out_file = os.path.join("frames", "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
+            out_file = os.path.join(args.frames_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file)
 
             # set this to None if we don't care about visualization
@@ -237,6 +237,10 @@ if __name__ == "__main__":
 
         error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, 100)
         all_du_dl_adjoints = error_grad[0]
+
+        # set the adjoints for reverse mode
+        for arg_idx, arg in enumerate(all_args):
+            arg[-1] = all_du_dl_adjoints[arg_idx]
 
         dl_dps = pool.map(sim.run_forward_multi, all_args)
 
@@ -258,7 +262,6 @@ if __name__ == "__main__":
                     print("derivs", g_idx, '\t', g, '\t adjusted to', g*pf)
             else:
                 filtered_grad.append(0)
-
 
         filtered_grad = np.array(filtered_grad)
         opt_state = opt_update(epoch, filtered_grad, opt_state)
