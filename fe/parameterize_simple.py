@@ -126,7 +126,7 @@ if __name__ == "__main__":
     dt = 0.0015
     step_sizes = np.ones(T)*dt
     # cas = np.ones(T)*0.99
-    cas = np.ones(T)*0.92
+    cas = np.ones(T)*0.93
 
     num_gpus = args.num_gpus
     num_workers = args.num_gpus*args.jobs_per_gpu
@@ -140,9 +140,29 @@ if __name__ == "__main__":
 
     # insertion deletion lambda_schedule
     # forward_schedule = np.linspace(0.00001, 0.99999, num=T//2)
-    forward_schedule = np.linspace(100, 1, num=T//2)
-    backward_schedule = np.linspace(1, 100, num=T//2)
+    # forward_schedule = np.linspace(100, 1, num=T//2)
+    # backward_schedule = np.linspace(1, 100, num=T//2)
+    # lambda_schedule = np.concatenate([forward_schedule, backward_schedule])
+
+    start = 1e3
+    end = 1.0
+    NT = 500
+    base = np.exp(np.log(end/start)/NT)
+    exps = np.arange(NT)
+    part_one = np.power(base, exps)*start
+    part_two = np.linspace(1.0, 0.0, 4500)
+
+    # forward_schedule = np.concatenate([part_one])
+    forward_schedule = np.concatenate([part_one, part_two])
+    backward_schedule = forward_schedule[::-1]
     lambda_schedule = np.concatenate([forward_schedule, backward_schedule])
+
+    T = lambda_schedule.shape[0]
+    dt = 0.0015
+    step_sizes = np.ones(T)*dt
+
+    assert T % 2 == 0
+    cas = np.ones(T)*0.92
 
     epoch = 0
 
@@ -222,6 +242,28 @@ if __name__ == "__main__":
         all_du_dls = pool.map(sim.run_forward_multi, all_args)
         all_du_dls = np.array(all_du_dls)
 
+
+        # for plotting purposes
+        # for du_dl in all_du_dls:
+
+        #     # fwd
+        #     xs = lambda_schedule[:T//2]
+        #     ys = du_dl[:T//2]
+
+        #     plt.plot(np.log(xs), ys, label='insertion')
+
+        #     # bkwd
+        #     xs = lambda_schedule[T//2:]
+        #     ys = du_dl[T//2:]
+
+        #     plt.plot(np.log(xs), ys, label='deletion')
+        #     plt.title("4d geometric decoupling")
+        #     plt.xlabel("log(lambda)")
+        #     plt.ylabel("du_dl")
+        #     plt.legend()
+        #     plt.show()
+
+
         loss_grad_fn = jax.grad(error_fn, argnums=(0,))
       
         error = error_fn(all_du_dls, T, lambda_schedule, 100)
@@ -230,9 +272,6 @@ if __name__ == "__main__":
 
         error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, 100)
         all_du_dl_adjoints = error_grad[0]
-
-        for arg, adjoint in zip(all_args, all_du_dl_adjoints):
-            arg[-1] = adjoint
 
         dl_dps = pool.map(sim.run_forward_multi, all_args)
 
