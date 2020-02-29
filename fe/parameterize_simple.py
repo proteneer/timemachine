@@ -122,12 +122,6 @@ if __name__ == "__main__":
     for guest_mol in suppl:
         break
 
-    T = 10000
-    dt = 0.0015
-    step_sizes = np.ones(T)*dt
-    # cas = np.ones(T)*0.99
-    cas = np.ones(T)*0.93
-
     num_gpus = args.num_gpus
     num_workers = args.num_gpus*args.jobs_per_gpu
 
@@ -138,12 +132,6 @@ if __name__ == "__main__":
 
     assert T % 2 == 0
 
-    # insertion deletion lambda_schedule
-    # forward_schedule = np.linspace(0.00001, 0.99999, num=T//2)
-    # forward_schedule = np.linspace(100, 1, num=T//2)
-    # backward_schedule = np.linspace(1, 100, num=T//2)
-    # lambda_schedule = np.concatenate([forward_schedule, backward_schedule])
-
     start = 1e3
     end = 1.0
     NT = 500
@@ -152,7 +140,6 @@ if __name__ == "__main__":
     part_one = np.power(base, exps)*start
     part_two = np.linspace(1.0, 0.0, 4500)
 
-    # forward_schedule = np.concatenate([part_one])
     forward_schedule = np.concatenate([part_one, part_two])
     backward_schedule = forward_schedule[::-1]
     lambda_schedule = np.concatenate([forward_schedule, backward_schedule])
@@ -242,28 +229,6 @@ if __name__ == "__main__":
         all_du_dls = pool.map(sim.run_forward_multi, all_args)
         all_du_dls = np.array(all_du_dls)
 
-
-        # for plotting purposes
-        # for du_dl in all_du_dls:
-
-        #     # fwd
-        #     xs = lambda_schedule[:T//2]
-        #     ys = du_dl[:T//2]
-
-        #     plt.plot(np.log(xs), ys, label='insertion')
-
-        #     # bkwd
-        #     xs = lambda_schedule[T//2:]
-        #     ys = du_dl[T//2:]
-
-        #     plt.plot(np.log(xs), ys, label='deletion')
-        #     plt.title("4d geometric decoupling")
-        #     plt.xlabel("log(lambda)")
-        #     plt.ylabel("du_dl")
-        #     plt.legend()
-        #     plt.show()
-
-
         loss_grad_fn = jax.grad(error_fn, argnums=(0,))
       
         error = error_fn(all_du_dls, T, lambda_schedule, 100)
@@ -297,52 +262,4 @@ if __name__ == "__main__":
 
         filtered_grad = np.array(filtered_grad)
         opt_state = opt_update(epoch, filtered_grad, opt_state)
-            # print(g_idx, '\t', g, '\t', gp)
 
-
-
-
-
-
-
-    # print("du_dl", grad)
-
-    plt.subplot(2, 1, 1)
-
-    insertion_work_vals = []
-    deletion_work_vals = []
-    for r_idx, r in enumerate(results):
-
-        insertion_du_dls = r[:T//2]
-        deletion_du_dls = r[T//2:]
-
-        plt.plot(insertion_du_dls, label='insertion_'+str(r_idx))
-        plt.plot(deletion_du_dls, label='deletion_'+str(r_idx))
-
-        insertion_work = np.trapz(insertion_du_dls, forward_schedule)
-        deletion_work = np.trapz(deletion_du_dls, backward_schedule)
-
-        insertion_work_vals.append(insertion_work)
-        deletion_work_vals.append(deletion_work)
-    plt.title('work integrals')
-    plt.ylabel('du_dl')
-    plt.xlabel('lambda')
-    plt.legend()
-    # plt.show()
-    plt.subplot(2, 1, 2)
-
-    plt.title('insertion/deletion work dist.')
-    plt.hist(insertion_work_vals, label='insertion')
-    plt.hist(deletion_work_vals, label='deletion')
-    plt.legend()
-    plt.show()
-
-        # all_du_dls.append(results)
-
-    all_du_dls = np.array(all_du_dls)
-
-    error = loss.EXP_loss(*all_du_dls, lambda_schedule, -20)
-
-    print("Error", error)
-
-    assert 0
