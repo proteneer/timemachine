@@ -149,9 +149,11 @@ __global__ void convert_3d_to_4d(
 
         double w;
         if(lambda_flags[atom_idx] == 1) {
-            w = tan(lambda*(PI/2))/k;
+            // w = tan(lambda*(PI/2))/k;
+            w = lambda;
         } else if (lambda_flags[atom_idx] == -1) {
-            w = tan(-(lambda-1)*(PI/2))/k;
+            // w = tan(-(lambda-1)*(PI/2))/k;
+            w = -lambda;
         } else {
             w = 0;
         }
@@ -160,13 +162,9 @@ __global__ void convert_3d_to_4d(
         if(d_coords_3d_tangent) {
             double dw;
             if(lambda_flags[atom_idx] == 1) {
-                auto cosw = cos(lambda*PI/2);
-                auto secw = 1/cosw;
-                dw = (secw*secw*PI)/(2*k);
+                dw = 1;
             } else if (lambda_flags[atom_idx] == -1) { 
-                auto sinw = sin(lambda*PI/2);
-                auto cscw = 1/sinw;
-                dw = -(cscw*cscw*PI)/(2*k);
+                dw = -1;
             } else {
                 dw = 0;
             }
@@ -221,13 +219,9 @@ __global__ void accumulate_dU_dl(
 
         double dw;
         if(lambda_flags[atom_idx] == 1) {
-            auto cosw = cos(lambda*PI/2);
-            auto secw = 1/cosw;
-            dw = (secw*secw*PI)/(2*k);
+            dw = 1;
         } else if (lambda_flags[atom_idx] == -1) { 
-            auto sinw = sin(lambda*PI/2);
-            auto cscw = 1/sinw;
-            dw = -(cscw*cscw*PI)/(2*k);
+            dw = -1;
         } else {
             dw = 0;
         }

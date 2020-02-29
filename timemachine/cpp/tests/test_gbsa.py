@@ -64,7 +64,6 @@ class TestGBSA(GradientTest):
         solute_dielectric = 1.0
         solvent_dielectric = 78.5
  
-        cutoff = 1000.0
         for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
             np.random.rand(1)
 

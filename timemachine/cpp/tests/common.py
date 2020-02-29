@@ -34,7 +34,7 @@ def prepare_gbsa_system(
         params = np.array([], dtype=np.float64)
 
     # charges
-    charge_params = np.random.rand(P_charges).astype(np.float64)*np.sqrt(138.935456)/4
+    charge_params = (np.random.rand(P_charges).astype(np.float64)-0.5)*np.sqrt(138.935456)
     charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, charge_params])
 
@@ -83,9 +83,6 @@ def prepare_gbsa_system(
         probe_radius=probe_radius
     )
 
-    def ref_total_energy(x, p):
-        return lj_fn(x, p) - lj_fn_exc(x, p) + es_fn(x, p)
-
     return params, [gbsa_obc_fn], [custom_gb]
 
 
@@ -108,9 +105,7 @@ def prepare_nonbonded_system(
     if params is None:
         params = np.array([], dtype=np.float64)
 
-    # charges
-    charge_params = np.random.rand(P_charges).astype(np.float64)/e_scale
-    # charge_params = np.zeros_like(charge_params)
+    charge_params = (np.random.rand(P_charges).astype(np.float64) - 0.5)*np.sqrt(138.935456)/e_scale
     charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, charge_params])
 
