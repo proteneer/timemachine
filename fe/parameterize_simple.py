@@ -93,6 +93,9 @@ def error_fn(all_du_dls, T, schedule, true_dG):
     bkwd_sched = schedule[T//2:]
     dG_fwd = math_utils.trapz(fwd, fwd_sched)
     dG_bkwd = math_utils.trapz(bkwd, bkwd_sched)
+
+    print("fwd", dG_fwd)
+    print("bkwd", dG_bkwd)
     pred_dG = loss.mybar(jnp.stack([dG_fwd, dG_bkwd]))
 
     return jnp.abs(pred_dG - true_dG)
@@ -137,9 +140,10 @@ if __name__ == "__main__":
     base = np.exp(np.log(end/start)/NT)
     exps = np.arange(NT)
     part_one = np.power(base, exps)*start
-    part_two = np.linspace(1.0, 0.0, 4500)
+    part_two = np.linspace(1.0, 0.3, 1000)
+    part_three = np.linspace(0.3, 0.0, 4000)
 
-    forward_schedule = np.concatenate([part_one, part_two])
+    forward_schedule = np.concatenate([part_one, part_two, part_three])
     backward_schedule = forward_schedule[::-1]
     lambda_schedule = np.concatenate([forward_schedule, backward_schedule])
 
@@ -149,7 +153,7 @@ if __name__ == "__main__":
     step_sizes = np.ones(T)*dt
 
     assert T % 2 == 0
-    cas = np.ones(T)*0.92
+    cas = np.ones(T)*0.93
 
     epoch = 0
 
@@ -231,6 +235,15 @@ if __name__ == "__main__":
 
         loss_grad_fn = jax.grad(error_fn, argnums=(0,))
       
+        for du_dls in all_du_dls:
+            fwd = du_dls[:T//2]
+            bkwd = du_dls[T//2:]
+
+            plt.plot(np.log(lambda_schedule[:T//2]), fwd)
+            plt.plot(np.log(lambda_schedule[T//2:]), bkwd)
+
+        plt.show()
+
         error = error_fn(all_du_dls, T, lambda_schedule, 100)
 
         print("---EPOCH", epoch, "---- LOSS", error)

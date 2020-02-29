@@ -141,7 +141,6 @@ class Simulation:
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
-
         if du_dl_adjoints is not None:
 
             assert du_dl_adjoints.shape == self.lambda_schedule.shape
