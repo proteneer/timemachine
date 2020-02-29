@@ -68,10 +68,10 @@ class TestContext(unittest.TestCase):
             # modify potential energy to take in def (x, p, l)
             # as opposed to just (x, p)
             def lambda_to_w(lamb, lamb_flags, exponent):
-                insertion = jnp.tan(lamb*(np.pi/2))/exponent
-                deletion = jnp.tan(-(lamb-1)*(np.pi/2))/exponent
-                d4_insertion = jnp.where(lamb_flags == 1, insertion, 0.0)
-                d4_deletion = jnp.where(lamb_flags == -1, deletion, 0.0)
+                insertion = -lamb
+                deletion = lamb
+                d4_insertion = jnp.where(lamb_flags == -1, insertion, 0.0)
+                d4_deletion = jnp.where(lamb_flags == 1, deletion, 0.0)
                 d4 = d4_insertion + d4_deletion
                 return d4
 
