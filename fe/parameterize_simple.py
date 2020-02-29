@@ -139,8 +139,9 @@ if __name__ == "__main__":
     assert T % 2 == 0
 
     # insertion deletion lambda_schedule
-    forward_schedule = np.linspace(0.00001, 0.99999, num=T//2)
-    backward_schedule = np.linspace(0.99999, 0.00001, num=T//2)
+    # forward_schedule = np.linspace(0.00001, 0.99999, num=T//2)
+    forward_schedule = np.linspace(100, 1, num=T//2)
+    backward_schedule = np.linspace(1, 100, num=T//2)
     lambda_schedule = np.concatenate([forward_schedule, backward_schedule])
 
     epoch = 0
