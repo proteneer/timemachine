@@ -84,8 +84,6 @@ private:
 
     const std::vector<double> lambda_schedule_; // [T]
 
-    int exponent_;
-
     double *d_coords_buffer_; // Nx4
     double *d_dx_tangent_buffer_; // Nx4
     double *d_coords_jvp_buffer_; // Nx4
@@ -105,8 +103,7 @@ public:
     LambdaStepper(
         std::vector<Gradient <4> *> forces,
         const std::vector<double> &lambda_schedule,
-        const std::vector<int> &lambda_flags,
-        const int exponent
+        const std::vector<int> &lambda_flags
     );
 
     int get_T() const {

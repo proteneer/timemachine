@@ -102,7 +102,6 @@ def combiner(
             assert a_args[6] == b_args[6] # dielec_offset
             assert a_args[7] == b_args[7] # surface tension
             assert a_args[8] == b_args[8] # solute dielectric
-            print(a_args[9], b_args[9])
             assert a_args[9] == b_args[9] # solvent dielectric
 
             assert a_args[10] == b_args[10] # probe_radius

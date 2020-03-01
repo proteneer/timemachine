@@ -26,13 +26,6 @@ __global__ void k_compute_born_radii_gpu(
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
 
-    // if(threadIdx.x == 0) {
-        // printf("%d %d\n", blockIdx.x, blockIdx.y);
-    // }
-    // if(atom_i_idx >= N) {
-    //     return;
-    // }
-
     RealType ci[D];
     for(int d=0; d < D; d++) {
         ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;

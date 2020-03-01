@@ -45,7 +45,6 @@ def deserialize_system(
         masses.append(value(system.getParticleMass(p)))
 
     for force in system.getForces():
-        print(force)
         if isinstance(force, mm.HarmonicBondForce):
             bond_idxs = []
             param_idxs = []
