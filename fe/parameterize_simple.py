@@ -96,7 +96,14 @@ def error_fn(all_du_dls, T, schedule, true_dG):
     # dG_fwd and dG_bkwd have the same sign, so we need to flip dG_bkwd so the
     # direction of integral is the same (requirement for pymbar.BAR)
     dG_bkwd = -dG_bkwd # this is needed for BAR to be correct
+
+    # this is in kJ/mol, inputs to BAR needs to be in 1/kT.
+    kT = 2.479
+    # kT = 1
+    dG_fwd /= kT
+    dG_bkwd /= kT
     pred_dG = loss.mybar(jnp.stack([dG_fwd, dG_bkwd]))
+    pred_dG *= kT
 
     return jnp.abs(pred_dG - true_dG)
 
@@ -244,11 +251,13 @@ if __name__ == "__main__":
 
         # plt.show() # enable on desktop (non servers if you want to see what's going on)
 
-        error = error_fn(all_du_dls, T, lambda_schedule, 100)
+        true_dG = 26.61024 # -6.36 * 4.184 * -1 (for insertion)
+
+        error = error_fn(all_du_dls, T, lambda_schedule, true_dG)
 
         print("---EPOCH", epoch, "---- LOSS", error)
 
-        error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, 100)
+        error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, true_dG)
         all_du_dl_adjoints = error_grad[0]
 
         # set the adjoints for reverse mode
