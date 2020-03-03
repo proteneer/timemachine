@@ -91,11 +91,11 @@ def error_fn(all_du_dls, T, schedule, true_dG):
     fwd_sched = schedule[:T//2]
     bkwd = all_du_dls[:, T//2:]
     bkwd_sched = schedule[T//2:]
-    dG_fwd = math_utils.trapz(fwd, fwd_sched)
-    dG_bkwd = math_utils.trapz(bkwd, bkwd_sched)
-
-    print("fwd", dG_fwd)
-    print("bkwd", dG_bkwd)
+    dG_fwd = math_utils.trapz(fwd, fwd_sched) # integral from inf to 0
+    dG_bkwd = math_utils.trapz(bkwd, bkwd_sched) # integral from 0 to inf
+    # dG_fwd and dG_bkwd have the same sign, so we need to flip dG_bkwd so the
+    # direction of integral is the same (requirement for pymbar.BAR)
+    dG_bkwd = -dG_bkwd # this is needed for BAR to be correct
     pred_dG = loss.mybar(jnp.stack([dG_fwd, dG_bkwd]))
 
     return jnp.abs(pred_dG - true_dG)
@@ -242,7 +242,7 @@ if __name__ == "__main__":
             plt.plot(np.log(lambda_schedule[:T//2]), fwd)
             plt.plot(np.log(lambda_schedule[T//2:]), bkwd)
 
-        plt.show()
+        # plt.show() # enable on desktop (non servers if you want to see what's going on)
 
         error = error_fn(all_du_dls, T, lambda_schedule, 100)
 
@@ -272,7 +272,7 @@ if __name__ == "__main__":
                 pf = allowed_groups[gp]
                 filtered_grad.append(g*pf)
                 if g != 0:
-                    print("derivs", g_idx, '\t', g, '\t adjusted to', g*pf)
+                    print("derivs", g_idx, '\t', g, '\t adjusted to', g*pf, '\t old val', sim.combined_params[g_idx])
             else:
                 filtered_grad.append(0)
 
