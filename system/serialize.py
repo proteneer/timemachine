@@ -210,9 +210,9 @@ def deserialize_system(
             dielectric_offset = 0.009
 
             # GBOBC2
-            alpha = 1
-            beta = 0.8
-            gamma = 4.85
+            alpha = 0.8
+            beta = 0.0
+            gamma = 2.909125
             
             for a_idx in range(num_atoms):
 
