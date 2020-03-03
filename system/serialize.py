@@ -106,6 +106,7 @@ def deserialize_system(
             test_potentials.append(test_ha)
 
         if isinstance(force, mm.PeriodicTorsionForce):
+
             torsion_idxs = []
             param_idxs = []
 
@@ -193,6 +194,63 @@ def deserialize_system(
 
             test_potentials.append(test_nonbonded)
 
+        if isinstance(force, mm.GBSAOBCForce):
+
+            num_atoms = force.getNumParticles()
+            scale_matrix = np.ones((num_atoms, num_atoms)) - np.eye(num_atoms)
+
+            charge_param_idxs = []
+            radius_param_idxs = []
+            scale_param_idxs = []
+            
+            solvent_dielectric = force.getSolventDielectric()
+            solute_dielectric = force.getSoluteDielectric()
+            probe_radius = 0.14
+            surface_tension = 28.3919551
+            dielectric_offset = 0.009
+
+            # GBOBC2
+            alpha = 1
+            beta = 0.8
+            gamma = 4.85
+            
+            for a_idx in range(num_atoms):
+
+                scale_matrix[a_idx][a_idx] = 0
+                charge, radius, scale = force.getParticleParameters(a_idx)
+
+                # this needs to be scaled by sqrt(eps0)
+                charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
+                radius = value(radius)
+                
+                charge_idx = insert_parameters(charge, 7)
+                radius_idx = insert_parameters(radius, 11)
+                scale_idx = insert_parameters(scale, 12)
+                
+                charge_param_idxs.append(charge_idx)
+                radius_param_idxs.append(radius_idx)
+                scale_param_idxs.append(scale_idx)               
+            
+            test_gbsa = (
+                ops.GBSA,
+                (
+                    np.array(charge_param_idxs),
+                    np.array(radius_param_idxs),
+                    np.array(scale_param_idxs),
+                    alpha,                         # alpha
+                    beta,                          # beta
+                    gamma,                         # gamma
+                    dielectric_offset,             # dielectric_offset
+                    surface_tension,               # surface_tension
+                    solute_dielectric,             # solute_dielectric
+                    solvent_dielectric,            # solvent_dieletric
+                    probe_radius,                  # probe_radius
+                    9999,                          # cutoff
+                    dimension
+                )
+            )
+
+            test_potentials.append(test_gbsa)
 
     global_params = np.array(global_params)
     global_param_groups = np.array(global_param_groups)

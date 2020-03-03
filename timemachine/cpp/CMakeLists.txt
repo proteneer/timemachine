@@ -6,7 +6,7 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.6 REQUIRED)
 find_package(PythonLibs 3.6 REQUIRED)
 
-string(APPEND CMAKE_CUDA_FLAGS "-Xptxas='-v' -arch=sm_60 -O2 -lineinfo")
+string(APPEND CMAKE_CUDA_FLAGS "-Xptxas='-v' -arch=sm_70 -O2 -lineinfo")
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	get_filename_component(PARENT_DIR ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
@@ -36,6 +36,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/integrator.cu
   src/stepper.cu
   src/context.cu
+  src/gbsa.cu
 )
 
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})

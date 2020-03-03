@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cuda_runtime.h>
+
 namespace timemachine {
 
 template <int D>
@@ -31,7 +33,8 @@ public:
         const double *d_params,
         unsigned long long *d_out_coords,
         double *d_out_coords_tangents,
-        double *d_out_params_tangents
+        double *d_out_params_tangents,
+        cudaStream_t stream
     ) = 0;
 
 };

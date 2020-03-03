@@ -53,7 +53,8 @@ void Gradient<D>::execute_host(
         d_in_params,
         d_out_coords,
         d_out_coords_tangents,
-        d_out_params_tangents
+        d_out_params_tangents,
+        static_cast<cudaStream_t>(0)
     );
 
     if(h_in_coords_tangents == nullptr) {

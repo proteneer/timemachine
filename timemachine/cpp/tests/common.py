@@ -5,10 +5,86 @@ import jax.numpy as jnp
 import functools
 
 
-from timemachine.potentials import bonded, nonbonded
+from timemachine.potentials import bonded, nonbonded, gbsa
 from timemachine.lib import ops, custom_ops
 
 from hilbertcurve.hilbertcurve import HilbertCurve
+
+
+def prepare_gbsa_system(
+    x,
+    P_charges,
+    P_radii,
+    P_scale_factors,
+    alpha,
+    beta,
+    gamma,
+    dielectric_offset,
+    surface_tension,
+    solute_dielectric,
+    solvent_dielectric,
+    probe_radius,
+    params=None,
+    precision=np.float64):
+
+    N = x.shape[0]
+    D = x.shape[1]
+
+    if params is None:
+        params = np.array([], dtype=np.float64)
+
+    # charges
+    charge_params = (np.random.rand(P_charges).astype(np.float64)-0.5)*np.sqrt(138.935456)
+    charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
+    params = np.concatenate([params, charge_params])
+
+    # gb radiis
+    radii_params = 1.5*np.random.rand(P_radii).astype(np.float64) + 1.0 # 1.0 to 2.5
+    radii_params = radii_params/10 # convert to nm form
+    radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
+    params = np.concatenate([params, radii_params])
+
+    # scale factors
+    scale_params = np.random.rand(P_scale_factors).astype(np.float64)/3 + 0.75
+    scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
+    params = np.concatenate([params, scale_params])
+
+    cutoff = 100.0
+
+    custom_gb = ops.GBSA(
+        charge_param_idxs,
+        radii_param_idxs,
+        scale_param_idxs,
+        alpha,
+        beta,
+        gamma,
+        dielectric_offset,
+        surface_tension,
+        solute_dielectric,
+        solvent_dielectric,
+        probe_radius,
+        cutoff,
+        D,
+        precision=precision
+    )
+
+    gbsa_obc_fn = functools.partial(
+        gbsa.gbsa_obc,
+        charge_idxs=charge_param_idxs,
+        radii_idxs=radii_param_idxs,
+        scale_idxs=scale_param_idxs,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        dielectric_offset=dielectric_offset,
+        surface_tension=surface_tension,
+        solute_dielectric=solute_dielectric,
+        solvent_dielectric=solvent_dielectric,
+        probe_radius=probe_radius
+    )
+
+    return params, [gbsa_obc_fn], [custom_gb]
+
 
 def prepare_nonbonded_system(
     x,
@@ -29,9 +105,7 @@ def prepare_nonbonded_system(
     if params is None:
         params = np.array([], dtype=np.float64)
 
-    # charges
-    charge_params = np.random.rand(P_charges).astype(np.float64)/e_scale
-    # charge_params = np.zeros_like(charge_params)
+    charge_params = (np.random.rand(P_charges).astype(np.float64) - 0.5)*np.sqrt(138.935456)/e_scale
     charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, charge_params])
 
@@ -138,9 +212,6 @@ def prepare_bonded_system(
     custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, D, precision=precision)
     periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
 
-
-    # return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
-
     return params, [harmonic_bond_fn], [custom_bonded]
 
 def hilbert_sort(conf, D):
@@ -152,6 +223,7 @@ def hilbert_sort(conf, D):
         dists.append(dist)
     perm = np.argsort(dists)
     return perm
+
 
 class GradientTest(unittest.TestCase):
 
@@ -172,22 +244,33 @@ class GradientTest(unittest.TestCase):
         """
         OpenMM convention - errors are compared against norm of force vectors
         """
+        assert np.array(truth).shape == np.array(test).shape
+
         norms = np.linalg.norm(truth, axis=-1, keepdims=True)
         norms = np.where(norms < 1., 1.0, norms)
         errors = (truth-test)/norms
+
+        # print(errors)
         max_error = np.amax(np.abs(errors))
         mean_error = np.mean(np.abs(errors).reshape(-1))
         std_error = np.std(errors.reshape(-1))
         max_error_arg = np.argmax(errors)//truth.shape[1]
 
-        errors = errors > rtol
-        print("max relative error", max_error, norms[max_error_arg], "mean error", mean_error, "std error", std_error)
+        errors = np.abs(errors) > rtol
+
+        print("max relative error", max_error, "rtol", rtol, norms[max_error_arg], "mean error", mean_error, "std error", std_error)
         if np.sum(errors) > 0:
             print("FATAL: max relative error", max_error, truth[max_error_arg], test[max_error_arg])
             assert 0
 
-    def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
+    def assert_param_derivs(self, truth, test):
+        for ref, test in zip(truth, test):
+            if np.abs(ref) < 1:
+                np.testing.assert_almost_equal(ref, test, decimal=2)
+            else:
+                np.testing.assert_allclose(ref, test, rtol=5e-3)
 
+    def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
 
@@ -197,10 +280,11 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
+        # test_dx, test_dp = custom_force.execute_first_order(x, params)
         test_dx = custom_force.execute(x, params)
 
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
-        ref_dx, _ = grad_fn(x, params)
+        ref_dx, ref_dp = grad_fn(x, params)
 
         self.assert_equal_vectors(
             np.array(ref_dx),
@@ -223,10 +307,22 @@ class GradientTest(unittest.TestCase):
 
         _, t = jax.jvp(grad_fn, primals, tangents)
 
+        ref_p_tangent = t[1]
+
         self.assert_equal_vectors(
             t[0],
             test_x_tangent,
             rtol,
         )
 
-        np.testing.assert_allclose(t[1], test_p_tangent, rtol=5e-5)
+        # TBD compare relative to the *norm* of the group of similar derivatives.
+        # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
+        #     err = abs((r - tt)/r)
+        #     if err > 1e-4:
+        #         print(r_idx, err, r, tt)
+
+        if precision == np.float64:
+            np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
+        else:
+            self.assert_param_derivs(ref_p_tangent, test_p_tangent)
+

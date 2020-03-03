@@ -9,6 +9,7 @@
 #include "harmonic_angle.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
+#include "gbsa.hpp"
 #include "gradient.hpp"
 #include "stepper.hpp"
 #include "fixed_point.hpp"
@@ -64,14 +65,12 @@ void declare_lambda_stepper(py::module &m, const char *typestr) {
     .def(py::init([](
         const std::vector<timemachine::Gradient<4> *> system,
         const std::vector<double> &lambda_schedule,
-        const std::vector<int> &lambda_flags,
-        const int exponent
+        const std::vector<int> &lambda_flags
     ) {
         return new timemachine::LambdaStepper(
             system,
             lambda_schedule,
-            lambda_flags,
-            exponent
+            lambda_flags
         );
     }))
     .def("get_du_dl", [](timemachine::LambdaStepper &stepper) -> py::array_t<double, py::array::c_style> {
@@ -468,6 +467,59 @@ void declare_nonbonded(py::module &m, const char *typestr) {
 }
 
 
+template <typename RealType, int D>
+void declare_gbsa(py::module &m, const char *typestr) {
+
+    using Class = timemachine::GBSA<RealType, D>;
+    std::string pyclass_name = std::string("GBSA_") + typestr;
+    py::class_<Class, timemachine::Gradient<D> >(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &charge_pi, // [N]
+        const py::array_t<int, py::array::c_style> &atomic_ri, // [N]
+        const py::array_t<int, py::array::c_style> &scale_fi, // [N]
+        double alpha,
+        double beta,
+        double gamma,
+        double dielectric_offset,
+        // double screening,
+        double surface_tension,
+        double solute_dielectric,
+        double solvent_dielectric,
+        double probe_radius,
+        double cutoff
+    ){
+        std::vector<int> charge_param_idxs(charge_pi.size());
+        std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
+        std::vector<int> atomic_radii_idxs(atomic_ri.size());
+        std::memcpy(atomic_radii_idxs.data(), atomic_ri.data(), atomic_ri.size()*sizeof(int));
+        std::vector<int> scale_factor_idxs(scale_fi.size());
+        std::memcpy(scale_factor_idxs.data(), scale_fi.data(), scale_fi.size()*sizeof(int));
+
+        return new timemachine::GBSA<RealType, D>(
+            charge_param_idxs, // [N]
+            atomic_radii_idxs, // [N]
+            scale_factor_idxs, // 
+            alpha,
+            beta,
+            gamma,
+            dielectric_offset,
+            // screening,
+            surface_tension,
+            solute_dielectric,
+            solvent_dielectric,
+            probe_radius,
+            cutoff
+        );
+    }
+    ));
+
+}
+
 PYBIND11_MODULE(custom_ops, m) {
 
     declare_gradient<3>(m, "f64_3d");
@@ -495,6 +547,11 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded<double, 3>(m, "f64_3d");
     declare_nonbonded<float, 4>(m, "f32_4d");
     declare_nonbonded<float, 3>(m, "f32_3d");
+
+    declare_gbsa<double, 4>(m, "f64_4d");
+    declare_gbsa<double, 3>(m, "f64_3d");
+    declare_gbsa<float, 4>(m, "f32_4d");
+    declare_gbsa<float, 3>(m, "f32_3d");
 
     declare_stepper(m, "f64");
     declare_basic_stepper(m, "f64");

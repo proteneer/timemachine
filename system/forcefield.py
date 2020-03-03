@@ -20,8 +20,7 @@ def combiner(
     a_nrgs, b_nrgs,
     a_params, b_params,
     a_param_groups, b_param_groups,
-    a_masses, b_masses,
-    perm=None):
+    a_masses, b_masses):
     """
     Combine two systems with two distinct parameter sets into one.
     """
@@ -29,14 +28,7 @@ def combiner(
     num_a_atoms = len(a_masses)                     # offset by number of atoms in a
     c_masses = np.concatenate([a_masses, b_masses]) # combined masses
 
-    if perm is None:
-        perm = np.arange(len(c_masses))
-
-    iperm = np.argsort(perm).astype(np.int32)
-
-    perm = np.array(perm, dtype=np.int32)
-
-    np.testing.assert_equal(np.sort(perm), np.arange(len(c_masses))) # assert every atom has a unique permutation
+    # assert perm is None
 
     c_params = np.concatenate([a_params, b_params]) # combined parameters
     c_param_groups = np.concatenate([a_param_groups, b_param_groups]) # combine parameter groups
@@ -61,18 +53,15 @@ def combiner(
         assert a_args[-1] == b_args[-1] # dimension
         if a_name == ops.HarmonicBond:
             bond_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
-            bond_idxs = iperm[bond_idxs]
             bond_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((ops.HarmonicBond, (bond_idxs, bond_param_idxs, a_args[-1])))
         elif a_name == ops.HarmonicAngle:
             angle_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
-            angle_idxs = iperm[angle_idxs]
             angle_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
             c_nrgs.append((ops.HarmonicAngle, (angle_idxs, angle_param_idxs, a_args[-1])))
         elif a_name == ops.PeriodicTorsion:
             if len(a_args[0]) > 0:
                 torsion_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
-                torsion_idxs = iperm[torsion_idxs]
                 torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 c_nrgs.append((ops.PeriodicTorsion, (torsion_idxs, torsion_param_idxs, a_args[-1])))
             else:
@@ -85,11 +74,8 @@ def combiner(
             # directly permute the location of the charges
             es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
             lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-            es_param_idxs = es_param_idxs[perm]
-            lj_param_idxs = lj_param_idxs[perm]
 
             exclusion_idxs = np.concatenate([a_args[2], b_args[2] + num_a_atoms], axis=0)
-            exclusion_idxs = iperm[exclusion_idxs] # [E,]
 
             es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)  # [E, 1]
             lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)  # [E, 1]
@@ -102,6 +88,29 @@ def combiner(
                 lj_exclusion_param_idxs,
                 a_args[5],
                 a_args[-1]
+                )
+            ))
+        elif a_name == ops.GBSA:
+
+            charge_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0)
+            radius_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
+            scale_param_idxs = np.concatenate([a_args[2], b_args[2] + len(a_params)], axis=0)
+
+            assert a_args[3] == b_args[3] # alpha
+            assert a_args[4] == b_args[4] # beta
+            assert a_args[5] == b_args[5] # gamma
+            assert a_args[6] == b_args[6] # dielec_offset
+            assert a_args[7] == b_args[7] # surface tension
+            assert a_args[8] == b_args[8] # solute dielectric
+            assert a_args[9] == b_args[9] # solvent dielectric
+
+            assert a_args[10] == b_args[10] # probe_radius
+
+            c_nrgs.append((ops.GBSA, (
+                charge_param_idxs.astype(np.int32),
+                radius_param_idxs.astype(np.int32),
+                scale_param_idxs.astype(np.int32),
+                *a_args[3:]
                 )
             ))
 
@@ -190,7 +199,10 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
     nonbonded_exclusion_params = []
     nonbonded_lj_param_idxs = []
     nonbonded_es_param_idxs = []
-
+    
+    torsion_idxs = []
+    torsion_param_idxs = []
+    
     for handler in forcefield._parameter_handlers.items():
 
         handler_name, handler_params = handler
@@ -245,10 +257,8 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
             ))
 
         elif handler_name == "ImproperTorsions":
-            # Disabled for now
-            continue # skip while we debug
+            
             vd = ValenceDict()
-
             for all_params in handler_params.parameters:
 
                 matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, all_params.smirks)
@@ -264,19 +274,26 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
                     all_k_idxs.append(k_idx)
                     all_phase_idxs.append(phase_idx)
                     all_period_idxs.append(period_idx)
-
-                for m in matches:
+                
+                # remove the redundant matches and use unique pair for trefoil
+                new_matches = []
+                
+                for element in matches:
+                    tmp=[element[0], element[2], element[3]]
+                    tmp.sort()
+                    new_matches.append((element[1], tmp[0], tmp[1], tmp[2]))
+                
+                new_matches = list(set(new_matches))
+                                                
+                for m in new_matches:
                     t_p = []
                     for k_idx, phase_idx, period_idx in zip(all_k_idxs, all_phase_idxs, all_period_idxs):
                         t_p.append((k_idx, phase_idx, period_idx))
 
                     # 3-way trefoil permutation
-                    others = [m[0], m[2], m[3]]
+                    others = [m[1], m[2], m[3]]
                     for p in [(others[i], others[j], others[k]) for (i, j, k) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]]:
-                        vd[(m[1], p[0], p[1], p[2])] = t_p
-
-            torsion_idxs = []
-            torsion_param_idxs = []
+                        vd[(m[0], p[0], p[1], p[2])] = t_p
 
             for k, vv in vd.items():
                 for v in vv:
@@ -306,22 +323,10 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
                         t_p.append((k_idx, phase_idx, period_idx))
                     vd[m] = t_p
 
-            torsion_idxs = []
-            torsion_param_idxs = []
-
             for k, vv in vd.items():
                 for v in vv:
                     torsion_idxs.append(k)
                     torsion_param_idxs.append(v)
-
-            nrg_fns.append((
-                ops.PeriodicTorsion,
-                (
-                    np.array(torsion_idxs, dtype=np.int32),
-                    np.array(torsion_param_idxs, dtype=np.int32),
-                    dimension
-                )
-            ))
 
         elif handler_name == "vdW":
             # lennardjones
@@ -432,7 +437,16 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
 
         # guest_charges = np.array(global_params)[charge_param_idxs]
         # print("LIGAND NET CHARGE AFTER", guest_charges, "SUM", np.sum(guest_charges))
-
+        
+    nrg_fns.append((
+                ops.PeriodicTorsion,
+                (
+                    np.array(torsion_idxs, dtype=np.int32),
+                    np.array(torsion_param_idxs, dtype=np.int32),
+                    dimension
+                )
+            ))
+    
     exclusion_param_idx = add_param(1.0, 10)
 
     # insert into a dictionary to avoid double counting exclusions
@@ -469,10 +483,68 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
         )
     ))
 
+    if True:
 
-    # c = mol.GetConformer(0)
-    # conf = np.array(c.GetPositions(), dtype=ops.precision)
-    # conf = conf/10 # convert to md_units
+        gb_model = {
+            "[*:1]": (2.17294, 0.16865),
+            "[#1:1]": (1.79923, 1.00254),
+            "[#6:1]": (2.09618, 0.93122),
+            "[#7:1]": (1.72778, 0.77446),
+            "[#8:1]": (2.27665, 0.88298),
+            "[#9:1]": (1.64722, 0.80448),
+            "[#14:1]": (1.82741, 0.94334),
+            "[#15:1]": (0.67724, 0.83768),
+            "[#16:1]": (2.20727, 0.75234),
+        }
+
+        vd = ValenceDict()
+
+        # add parameterize
+        for smirks, (gb_radii_in_angstroms, gb_scale) in gb_model.items():
+
+            gb_radii_in_nm = gb_radii_in_angstroms/10
+            r_idx = add_param(gb_radii_in_nm, 18)
+            s_idx = add_param(gb_scale, 19)
+            matches = toolkits.RDKitToolkitWrapper._find_smarts_matches(mol, smirks)
+
+            for m in matches:
+                vd[m] = (r_idx, s_idx)
+
+        scale_idxs = []
+        radii_idxs = []
+
+        for k, v in vd.items():
+            radii_idxs.append(v[0])
+            scale_idxs.append(v[1])
+
+        solvent_dielectric = 78.3 # matches OBC2
+        solute_dielectric = 1.0
+        probe_radius = 0.14
+        surface_tension = 28.3919551
+        dielectric_offset = 0.009
+        # GBOBC2
+        alpha = 1
+        beta = 0.8
+        gamma = 4.85
+
+        nrg_fns.append((
+            ops.GBSA,
+            (
+                np.array(nonbonded_es_param_idxs, dtype=np.int32),
+                np.array(radii_idxs, dtype=np.int32),
+                np.array(scale_idxs, dtype=np.int32),
+                alpha,                         # alpha
+                beta,                          # beta
+                gamma,                         # gamma
+                dielectric_offset,             # dielectric_offset
+                surface_tension,               # surface_tension
+                solute_dielectric,             # solute_dielectric
+                solvent_dielectric,            # solvent_dieletric
+                probe_radius,                  # probe_radius
+                9999,                          # cutoff
+                dimension
+            )
+        ))
 
     masses = []
     for atom in mol.GetAtoms():
