@@ -209,7 +209,7 @@ def deserialize_system(
             surface_tension = 28.3919551
             dielectric_offset = 0.009
 
-            # GBOBC2
+            # GBOBC1
             alpha = 0.8
             beta = 0.0
             gamma = 2.909125
