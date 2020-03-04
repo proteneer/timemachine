@@ -522,10 +522,10 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
         probe_radius = 0.14
         surface_tension = 28.3919551
         dielectric_offset = 0.009
-        # GBOBC2
-        alpha = 1
-        beta = 0.8
-        gamma = 4.85
+        # GBOBC1
+        alpha = 0.8
+        beta = 0.0
+        gamma = 2.909125
 
         nrg_fns.append((
             ops.GBSA,
