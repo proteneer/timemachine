@@ -187,7 +187,7 @@ def deserialize_system(
                     exclusion_idxs,
                     exclusion_param_idxs,
                     exclusion_param_idxs,
-                    0.85,
+                    10000.0,
                     dimension
                 )
             )
