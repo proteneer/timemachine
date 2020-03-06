@@ -111,10 +111,14 @@ if __name__ == "__main__":
     parser.add_argument('--frames_dir', type=str, required=True)
     parser.add_argument('--precision', type=str, required=True)    
     parser.add_argument('--complex_pdb', type=str, required=True)
+
+    """The ligands in ligand_sdf_file should be listed in the same order as the true_dG_file"""
     parser.add_argument('--ligand_sdf_file', type=str, nargs='*')
     parser.add_argument('--num_gpus', type=int, required=True)
     parser.add_argument('--jobs_per_gpu', type=int, required=True)
     parser.add_argument('--num_conformers', type=int, required=True)
+
+    """The dG values are in kJ/mol and positive sign for both insertion and deletion (1kcal/mol=4.184kJ/mol)"""
     parser.add_argument('--true_dG_file', type=str, nargs='*')
 
     args = parser.parse_args()
