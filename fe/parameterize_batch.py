@@ -121,13 +121,6 @@ if __name__ == "__main__":
 
     assert os.path.isdir(args.frames_dir)
 
-    true_dG_list = []
-    for true_dG_file in args.true_dG_file:
-        f = open(true_dG_file, 'r').readlines()
-        for line in f:
-            true_dG = float(line.split()[0])
-            true_dG_list.append(true_dG)
-
     if args.precision == 'single':
         precision = np.float32
     elif args.precision == 'double':
@@ -158,23 +151,28 @@ if __name__ == "__main__":
     assert T % 2 == 0
     dt = 0.001
     step_sizes = np.ones(T)*dt
-    #T_min = 500
     assert T % 2 == 0
     cas = np.ones(T)*0.93
     epoch = 0
     lr = 5e-4
 
     ligand_list = []
-    for ligand_sdf_file in args.ligand_sdf_file:
-        f = open(ligand_sdf_file, 'r').readlines()
-        for file_name in f:
-            ligand_list.append(Chem.SDMolSupplier(file_name.rstrip('\n'), removeHs=False))
+    for ligand_sdf_file, ligand_dG_file in zip(args.ligand_sdf_file, args.true_dG_file):
+        ligand_sdf_file_readlines = open(ligand_sdf_file, 'r').readlines()
+        ligand_dG_file_readlines = open(ligand_dG_file, 'r').readlines()
 
-    for guest_mol in ligand_list[0]:
-        break
-    
+        for file_name, deltaG in zip(ligand_sdf_file_readlines, ligand_dG_file_readlines):
+            
+            for rd_mol in Chem.SDMolSupplier(file_name.rstrip('\n'), removeHs=False):
+                break
+
+            true_dG_value = float(deltaG.split()[0])
+            ligand_list.append((rd_mol, true_dG_value))
+
+    guest_mol = ligand_list[0][0]
+        
     off = smirnoff.ForceField("test_forcefields/smirnoff99Frosst.offxml")
-    guest_potentials, (guest_params, guest_param_groups), masses = forcefield.parameterize(guest_mol, off, dimension=4)
+    _, (guest_params, _), _ = forcefield.parameterize(guest_mol, off, dimension=4)
     
     opt_init, opt_update, get_params = optimizers.adam(lr)
     opt_state = opt_init(guest_params)
@@ -189,10 +187,6 @@ if __name__ == "__main__":
     host_conf = np.array(host_conf)
     host_name = "complex"  
 
-    #initial_params = sim.combined_params
-    #opt_init, opt_update, get_params = optimizers.adam(lr)
-    #opt_state = opt_init(initial_params)
-
     num_epochs = 100
     # torsion, charge, gb radii, gb scaling factor, torsion
     vary_allowed_groups = [4]*10 + [17]*20 + [18]*20 + [19]*20 + [4]*30
@@ -200,7 +194,6 @@ if __name__ == "__main__":
     assert len(vary_allowed_groups) == num_epochs
 
     ligand_dataset = dataset.Dataset(ligand_list)
-    ligand_dataset.iterbatches(1)
     train, test = ligand_dataset.split(0.7)
 
     for epoch in range(num_epochs):
@@ -209,13 +202,13 @@ if __name__ == "__main__":
         # guest_params = epoch_params
 
         train.shuffle()
-        print(train.data[0])
+        print(train.data)
 
 ###### Training ######
-        for i in range(len(train.data)):
+        for data in train.iterbatches(1):
 
-            for guest_mol in train.data[i]:
-                break
+            guest_mol = data[0][0]
+            true_dG = data[0][1]
 
             current_off_params = get_params(opt_state)
 
@@ -298,7 +291,7 @@ if __name__ == "__main__":
             allowed_groups = {vary_allowed_groups[epoch]: 1e-3}        
 
             filtered_grad = []
-            for g_idx, (g, gp) in enumerate(zip(dl_dps, guest_param_groups)):
+            for g_idx, (g, gp) in enumerate(zip(dl_dps, sim.guest_param_groups)):
                 if gp in allowed_groups:
                     pf = allowed_groups[gp]
                     filtered_grad.append(g*pf)
@@ -311,10 +304,10 @@ if __name__ == "__main__":
             opt_state = opt_update(epoch, filtered_grad, opt_state)
 
 ######## Testing ##########
-        for j in range(len(test.data)):
+        for data in test.iterbatches(1):
 
-            for guest_mol in train.data[j]:
-                break
+            guest_mol = data[0][0]
+            true_dG = data[0][1]
 
             current_off_params = get_params(opt_state)
 
@@ -383,5 +376,6 @@ if __name__ == "__main__":
 
             print("---EPOCH", epoch, "---- LOSS of one ligand in test ----", error)
 
+    pool.close()
 
 

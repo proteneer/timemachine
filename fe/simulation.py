@@ -67,6 +67,7 @@ class Simulation:
         self.combined_potentials = combined_potentials
         self.combined_params = combined_params
         self.combined_param_groups = combined_param_groups
+        self.guest_param_groups = guest_param_groups
 
         N_host = len(host_pdb.positions)
         N_guest = guest_mol.GetNumAtoms()
