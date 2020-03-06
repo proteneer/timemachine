@@ -52,7 +52,8 @@ public:
         const double *d_params,
         unsigned long long *out_coords,
         double *out_coords_tangents,
-        double *out_params_tangents
+        double *out_params_tangents,
+        cudaStream_t stream
     ) override;
 
 

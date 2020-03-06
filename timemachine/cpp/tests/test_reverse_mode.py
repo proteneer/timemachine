@@ -50,8 +50,6 @@ class TestContext(unittest.TestCase):
 
         if lamb_flags is not None:
 
-            assert exponent is not None
-
             params, ref_nrgs, test_nrgs = prepare_nonbonded_system(
                 x0,
                 E,
@@ -68,10 +66,10 @@ class TestContext(unittest.TestCase):
             # modify potential energy to take in def (x, p, l)
             # as opposed to just (x, p)
             def lambda_to_w(lamb, lamb_flags, exponent):
-                insertion = jnp.tan(lamb*(np.pi/2))/exponent
-                deletion = jnp.tan(-(lamb-1)*(np.pi/2))/exponent
-                d4_insertion = jnp.where(lamb_flags == 1, insertion, 0.0)
-                d4_deletion = jnp.where(lamb_flags == -1, deletion, 0.0)
+                insertion = -lamb
+                deletion = lamb
+                d4_insertion = jnp.where(lamb_flags == -1, insertion, 0.0)
+                d4_deletion = jnp.where(lamb_flags == 1, deletion, 0.0)
                 d4 = d4_insertion + d4_deletion
                 return d4
 
@@ -108,12 +106,11 @@ class TestContext(unittest.TestCase):
         """
         np.random.seed(4321)
         N = 32
+
         lambda_flags = np.random.randint(0, 2, size=N) - 1
-        exponent = 2
         ref_total_nrg_fn, x0, params, masses, test_energies = self.setup_charge_system(
             N=N,
-            lamb_flags=lambda_flags,
-            exponent=exponent
+            lamb_flags=lambda_flags
         )
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
         N = len(masses)

@@ -62,3 +62,58 @@ inline __device__ float gpuSqrt(float arg) {
 inline __device__ double gpuSqrt(double arg) {
   return sqrt(arg);
 }
+
+
+inline __device__ float overloaded_sqrt(const float x) {
+    return sqrtf(x);
+}
+
+inline __device__ double overloaded_sqrt(const double x) {
+    return sqrt(x);
+}
+
+template<typename RealType, int D>
+inline __device__ RealType fast_vec_rnorm(const RealType v[D]);
+
+template<>
+inline __device__ float fast_vec_rnorm<float, 3>(const float v[3]) {
+    return rnorm3df(v[0], v[1], v[2]);
+};
+
+template<>
+inline __device__ double fast_vec_rnorm<double, 3>(const double v[3]) {
+    return rnorm3d(v[0], v[1], v[2]);
+};
+
+template<>
+inline __device__ float fast_vec_rnorm<float, 4>(const float v[4]) {
+    return rnorm4df(v[0], v[1], v[2], v[3]);
+};
+
+template<>
+inline __device__ double fast_vec_rnorm<double, 4>(const double v[4]) {
+    return rnorm4d(v[0], v[1], v[2], v[3]);
+};
+
+template<typename RealType, int D>
+inline __device__ RealType fast_vec_norm(const RealType v[D]);
+
+template<>
+inline __device__ float fast_vec_norm<float, 3>(const float v[3]) {
+    return norm3df(v[0], v[1], v[2]);
+};
+
+template<>
+inline __device__ double fast_vec_norm<double, 3>(const double v[3]) {
+    return norm3d(v[0], v[1], v[2]);
+};
+
+template<>
+inline __device__ float fast_vec_norm<float, 4>(const float v[4]) {
+    return norm4df(v[0], v[1], v[2], v[3]);
+};
+
+template<>
+inline __device__ double fast_vec_norm<double, 4>(const double v[4]) {
+    return norm4d(v[0], v[1], v[2], v[3]);
+};

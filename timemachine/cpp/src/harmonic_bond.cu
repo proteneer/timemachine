@@ -50,16 +50,17 @@ void HarmonicBond<RealType, D>::execute_device(
     const double *d_params,
     unsigned long long *d_out_coords,
     double *d_out_coords_tangents,
-    double *d_out_params_tangents
+    double *d_out_params_tangents,
+    cudaStream_t stream
 ) {
 
     int tpb = 32;
     int blocks = (B_+tpb-1)/tpb;
 
-    auto start = std::chrono::high_resolution_clock::now();
+    // auto start = std::chrono::high_resolution_clock::now();
     if(d_coords_tangents == nullptr) {
 
-        k_harmonic_bond_inference<RealType, D><<<blocks, tpb>>>(
+        k_harmonic_bond_inference<RealType, D><<<blocks, tpb, 0, stream>>>(
             B_,
             d_coords,
             d_params,
@@ -68,7 +69,7 @@ void HarmonicBond<RealType, D>::execute_device(
             d_out_coords
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
         // auto finish = std::chrono::high_resolution_clock::now();
@@ -78,7 +79,7 @@ void HarmonicBond<RealType, D>::execute_device(
     } else {
 
 
-        k_harmonic_bond_jvp<RealType, D><<<blocks, tpb>>>(
+        k_harmonic_bond_jvp<RealType, D><<<blocks, tpb, 0, stream>>>(
             B_,
             d_coords,
             d_coords_tangents,
@@ -89,7 +90,7 @@ void HarmonicBond<RealType, D>::execute_device(
             d_out_params_tangents
         );
 
-        cudaDeviceSynchronize();
+        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
         // auto finish = std::chrono::high_resolution_clock::now();

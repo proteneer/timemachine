@@ -1,5 +1,6 @@
 #include "surreal.cuh"
 #include "../fixed_point.hpp"
+#include "kernel_utils.cuh"
 // we need to make this fully deterministic if we want to be able to realiably rematerialize (this also only really matters for forward mode)
 // reverse mode we don't care at all
 #define WARPSIZE 32
@@ -35,36 +36,6 @@ void __global__ k_find_block_bounds(
 
 }
 
-__device__ float overloaded_sqrt(const float x) {
-    return sqrtf(x);
-}
-
-__device__ double overloaded_sqrt(const double x) {
-    return sqrt(x);
-}
-
-template<typename RealType, int D>
-__device__ RealType fast_vec_rnorm(const RealType v[D]);
-
-template<>
-__device__ float fast_vec_rnorm<float, 3>(const float v[3]) {
-    return rnorm3df(v[0], v[1], v[2]);
-};
-
-template<>
-__device__ double fast_vec_rnorm<double, 3>(const double v[3]) {
-    return rnorm3d(v[0], v[1], v[2]);
-};
-
-template<>
-__device__ float fast_vec_rnorm<float, 4>(const float v[4]) {
-    return rnorm4df(v[0], v[1], v[2], v[3]);
-};
-
-template<>
-__device__ double fast_vec_rnorm<double, 4>(const double v[4]) {
-    return rnorm4d(v[0], v[1], v[2], v[3]);
-};
 
 template <typename RealType, int D>
 void __global__ k_nonbonded_jvp(
@@ -90,7 +61,7 @@ void __global__ k_nonbonded_jvp(
         RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
         RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
         RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
-        RealType dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
 
@@ -267,7 +238,7 @@ void __global__ k_nonbonded_inference(
         RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
         RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
         RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
-        RealType dx = max(0.0, abs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
 
@@ -471,7 +442,7 @@ void __global__ k_nonbonded_exclusion_jvp(
         // Surreal<RealType> lj_grad_prefactor = 24*eps_ij*(sig12_rij7*2 - sig6_rij4);
 
         Surreal<RealType> inv_dij = rsqrt(d2ij);
-        Surreal<RealType> inv_d2ij = 1/d2ij;
+        Surreal<RealType> inv_d2ij = 1.0/d2ij;
         Surreal<RealType> inv_d3ij = inv_dij*inv_d2ij;
         Surreal<RealType> inv_d4ij = inv_d2ij*inv_d2ij;
         Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
