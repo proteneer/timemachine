@@ -35,11 +35,13 @@ class Simulation:
         direction,
         step_sizes,
         cas,
-        lambda_schedule
+        lambda_schedule,
+        current_off_params
         ):
 
         self.step_sizes = step_sizes
         amber_ff = app.ForceField('amber99sbildn.xml', 'amber99_obc.xml')
+        #self.current_off_params = current_off_params
 
         # host
         system = amber_ff.createSystem(
@@ -51,11 +53,11 @@ class Simulation:
         host_potentials, (host_params, host_param_groups), host_masses = serialize.deserialize_system(system, dimension=4)
         # parameterize the small molecule
         off = smirnoff.ForceField("test_forcefields/smirnoff99Frosst.offxml")
-        guest_potentials, (guest_params, guest_param_groups), guest_masses = forcefield.parameterize(guest_mol, off, dimension=4)
+        guest_potentials, (_, guest_param_groups), guest_masses = forcefield.parameterize(guest_mol, off, dimension=4)
 
         combined_potentials, combined_params, combined_param_groups, combined_masses = forcefield.combiner(
             host_potentials, guest_potentials,
-            host_params, guest_params,
+            host_params, current_off_params,
             host_param_groups, guest_param_groups,
             host_masses, guest_masses
         )
