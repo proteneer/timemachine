@@ -15,6 +15,8 @@ from openforcefield.topology import ValenceDict
 # from timemachine.lib import custom_ops
 # from system import custom_functionals
 from timemachine.lib import ops
+from ff import system
+
 
 def combiner(
     a_nrgs, b_nrgs,
@@ -662,5 +664,5 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
         masses.append(atom.GetMass())
     masses = np.array(masses, dtype=np.float64)
 
-    return nrg_fns, (np.array(global_params), np.array(global_param_groups, dtype=np.int32)), masses
+    return system.System(nrg_fns, (np.array(global_params), np.array(global_param_groups, dtype=np.int32)), masses)
 

@@ -480,13 +480,12 @@ void declare_gbsa(py::module &m, const char *typestr) {
     )
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &charge_pi, // [N]
-        const py::array_t<int, py::array::c_style> &atomic_ri, // [N]
-        const py::array_t<int, py::array::c_style> &scale_fi, // [N]
+        const py::array_t<int, py::array::c_style> &radii_pi, // [N]
+        const py::array_t<int, py::array::c_style> &scale_pi, // [N]
         double alpha,
         double beta,
         double gamma,
         double dielectric_offset,
-        // double screening,
         double surface_tension,
         double solute_dielectric,
         double solvent_dielectric,
@@ -508,7 +507,6 @@ void declare_gbsa(py::module &m, const char *typestr) {
             beta,
             gamma,
             dielectric_offset,
-            // screening,
             surface_tension,
             solute_dielectric,
             solvent_dielectric,
@@ -524,9 +522,6 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_gradient<3>(m, "f64_3d");
     declare_gradient<4>(m, "f64_4d");
-    // declare_gradient<double, 3>(m, "f64_3d");
-    // declare_gradient<float, 4>(m, "f32_4d");
-    // declare_gradient<float, 3>(m, "f32_3d");
 
     declare_harmonic_bond<double, 4>(m, "f64_4d");
     declare_harmonic_bond<double, 3>(m, "f64_3d");

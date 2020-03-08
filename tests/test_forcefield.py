@@ -2,6 +2,7 @@ import os
 import unittest
 import ast
 from ff import forcefield
+from ff import system
 import itertools
 import numpy as np
 
@@ -10,14 +11,18 @@ from rdkit import Chem
 
 class TestForcefield(unittest.TestCase):
 
-    def test_forcefield(self):
-
+    def get_smirnoff(self):
         cwd = pathlib.Path(__file__).parent.parent.absolute()
         fpath = os.path.join(cwd, 'ff', "smirnoff_1.1.0.py")
-        ff_raw = ast.literal_eval(open(fpath).read())
+        ff = forcefield.Forcefield(fpath)
+        return ff
+
+    def test_forcefield(self):
+        cwd = pathlib.Path(__file__).parent.parent.absolute()
+        fpath = os.path.join(cwd, 'ff', "smirnoff_1.1.0.py")
         ff = forcefield.Forcefield(fpath)
         ff_res = ff.serialize()
-
+        ff_raw = ast.literal_eval(open(fpath).read())
         self.assertDictEqual(ff_res, ff_raw)
 
     def test_params_and_groups(self):
@@ -77,11 +82,42 @@ class TestForcefield(unittest.TestCase):
 
     def test_parameterization(self):
 
-        cwd = pathlib.Path(__file__).parent.parent.absolute()
-        fpath = os.path.join(cwd, 'ff', "smirnoff_1.1.0.py")
-        ff = forcefield.Forcefield(fpath)
+        ff = self.get_smirnoff()
+        mol1 = Chem.AddHs(Chem.MolFromSmiles("O=C(N)C[C@H](N)C(=O)O"))
+        nrg_fns_1 = ff.parameterize(mol1)
 
-        mol = Chem.AddHs(Chem.MolFromSmiles("O=C(C)Oc1ccccc1C(=O)O"))
-        mol = Chem.AddHs(Chem.MolFromSmiles("O=C(N)C[C@H](N)C(=O)O"))
-        nrg_fns = ff.parameterize(mol)
-        print(nrg_fns)
+        # mol2 = Chem.AddHs(Chem.MolFromSmiles("O=C(C)Oc1ccccc1C(=O)O"))
+        # nrg_fns_2 = ff.parameterize(mol2)
+
+    def test_merging(self):
+
+        ff = self.get_smirnoff()
+
+        def get_masses(m):
+            masses = []
+            for a in m.GetAtoms():
+                masses.append(a.GetMass())
+            return masses
+
+        mol1 = Chem.AddHs(Chem.MolFromSmiles("O=C(N)C[C@H](N)C(=O)O"))
+        nrg_fns1 = ff.parameterize(mol1)
+
+        mol1_masses = get_masses(mol1)
+
+        mol2 = Chem.AddHs(Chem.MolFromSmiles("O=C(C)Oc1ccccc1C(=O)O"))
+        nrg_fns2 = ff.parameterize(mol2)
+
+        mol2_masses = get_masses(mol2)
+
+        system1 = system.System(nrg_fns1, ff.params, ff.param_groups, mol1_masses)
+        system2 = system.System(nrg_fns2, ff.params, ff.param_groups, mol2_masses)
+
+        system3 = system1.merge(system2)
+
+        np.testing.assert_equal(system3.masses, np.concatenate([system1.masses, system2.masses]))
+        np.testing.assert_equal(system3.params, np.concatenate([system1.params, system2.params]))
+        np.testing.assert_equal(system3.param_groups, np.concatenate([system1.param_groups, system2.param_groups]))
+
+        system3.make_gradients(3, np.float64)
+
+        # print(system)

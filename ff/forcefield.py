@@ -2,6 +2,7 @@ import ast
 import numpy as np
 
 from rdkit import Chem
+from ff import system
 # from timemachine.lib import ops
 
 class Forcefield():
@@ -91,7 +92,6 @@ class Forcefield():
         exclusion_param_group = 20
         self.params.append(exclusion_param)
         self.param_groups.append(exclusion_param_group)
-        # assert 0
 
     def get_exclusion_idx(self):
         return len(self.params)-1
@@ -288,7 +288,29 @@ class Forcefield():
                     q_idx = pp[1]
                     es_param_idxs.append(q_idx)
 
+            elif force_type == "GBSA":
 
+                gb_radii_idxs = []
+                gb_scale_idxs = []
+                # gb_props = []
+                for atom_idx, p_idx in vd.items():
+                    pp = params[p_idx]
+                    radii_idx, scale_idx = pp[1], pp[2]
+                    gb_radii_idxs.append(radii_idx)
+                    gb_scale_idxs.append(scale_idx)
+
+                props = values["props"]
+                gb_args = (
+                    props["alpha"],
+                    props["beta"],
+                    props["gamma"],
+                    props["dielectric_offset"],
+                    props["surface_tension"],
+                    props["solute_dielectric"],
+                    props["solvent_dielectric"],
+                    props["probe_radius"],
+                    10000.0
+                )
         # clean up torsions
         nrg_fns['PeriodicTorsion'] = (
             np.array(torsion_idxs, dtype=np.int32),
@@ -309,7 +331,15 @@ class Forcefield():
             np.array(lj_param_idxs, dtype=np.int32),
             np.array(exclusion_idxs, dtype=np.int32),
             np.array(exclusion_param_idxs, dtype=np.int32),
-            np.array(exclusion_param_idxs, dtype=np.int32)
+            np.array(exclusion_param_idxs, dtype=np.int32),
+            10000.0
+        )
+
+        nrg_fns['GBSA'] = (
+            np.array(es_param_idxs, dtype=np.int32),
+            np.array(gb_radii_idxs, dtype=np.int32),
+            np.array(es_param_idxs, dtype=np.int32),
+            *gb_args
         )
 
         return nrg_fns
