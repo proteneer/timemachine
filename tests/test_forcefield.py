@@ -3,11 +3,23 @@ import unittest
 import ast
 from ff import forcefield
 from ff import system
+from ff import openmm_converter
 import itertools
 import numpy as np
 
 import pathlib
 from rdkit import Chem
+
+
+from simtk.openmm import app
+from simtk.openmm.app import PDBFile
+
+def get_masses(m):
+    masses = []
+    for a in m.GetAtoms():
+        masses.append(a.GetMass())
+    return masses
+
 
 class TestForcefield(unittest.TestCase):
 
@@ -93,12 +105,6 @@ class TestForcefield(unittest.TestCase):
 
         ff = self.get_smirnoff()
 
-        def get_masses(m):
-            masses = []
-            for a in m.GetAtoms():
-                masses.append(a.GetMass())
-            return masses
-
         mol1 = Chem.AddHs(Chem.MolFromSmiles("O=C(N)C[C@H](N)C(=O)O"))
         nrg_fns1 = ff.parameterize(mol1)
 
@@ -120,4 +126,34 @@ class TestForcefield(unittest.TestCase):
 
         system3.make_gradients(3, np.float64)
 
+    def test_merging_with_openmm(self):
+
+        ff = self.get_smirnoff()
+
+        mol1 = Chem.AddHs(Chem.MolFromSmiles("O=C(N)C[C@H](N)C(=O)O"))
+        nrg_fns1 = ff.parameterize(mol1)
+        mol1_masses = get_masses(mol1)
+
+        host_pdb = app.PDBFile("examples/BRD4_minimized.pdb")
+        amber_ff = app.ForceField('amber99sbildn.xml', 'amber99_obc.xml')
+
+        protein_system = amber_ff.createSystem(
+            host_pdb.topology,
+            nonbondedMethod=app.NoCutoff,
+            constraints=None,
+            rigidWater=False
+        )
+
+        system1 = system.System(nrg_fns1, ff.params, ff.param_groups, mol1_masses)
+        protein_sys = openmm_converter.deserialize_system(protein_system)
+
+        combined_system = protein_sys.merge(system1)
+
+
+        np.testing.assert_equal(combined_system.masses, np.concatenate([protein_sys.masses, system1.masses]))
+        np.testing.assert_equal(combined_system.params, np.concatenate([protein_sys.params, system1.params]))
+        np.testing.assert_equal(combined_system.param_groups, np.concatenate([protein_sys.param_groups, system1.param_groups]))
+
+
+        # open("examples/BRD4_minimized.pdb")
         # print(system)

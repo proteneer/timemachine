@@ -101,7 +101,9 @@ class System():
         return System(c_nrgs, c_params, c_param_groups, c_masses)
 
     def make_gradients(self, dimension, precision):
-
+        """
+        Instantiate time-machine based functional forms.
+        """
         gradients = []
         for k, v in self.nrg_fns.items():
             op_fn = getattr(ops, k)

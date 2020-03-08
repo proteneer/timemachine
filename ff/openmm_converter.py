@@ -9,6 +9,8 @@ from simtk.openmm.app import PDBFile
 from simtk.openmm.app import forcefield as ff
 from simtk import unit
 
+from ff.system import System
+
 from timemachine import constants
 
 def value(quantity):
@@ -44,9 +46,13 @@ def deserialize_system(system):
     for p in range(system.getNumParticles()):
         masses.append(value(system.getParticleMass(p)))
 
-    nrg_fns = []
+    nrg_fns = {}
+
+
+    print(system.getForces())
 
     for force in system.getForces():
+        print(force)
         if isinstance(force, mm.HarmonicBondForce):
             bond_idxs = []
             param_idxs = []
@@ -122,6 +128,8 @@ def deserialize_system(system):
 
         if isinstance(force, mm.NonbondedForce):
 
+
+
             num_atoms = force.getNumParticles()
             scale_matrix = np.ones((num_atoms, num_atoms)) - np.eye(num_atoms)
 
@@ -179,7 +187,7 @@ def deserialize_system(system):
             num_atoms = force.getNumParticles()
             scale_matrix = np.ones((num_atoms, num_atoms)) - np.eye(num_atoms)
 
-            charge_param_idxs = []
+            # charge_param_idxs = []
             radius_param_idxs = []
             scale_param_idxs = []
             
@@ -207,29 +215,29 @@ def deserialize_system(system):
                 radius_idx = insert_parameters(radius, 12)
                 scale_idx = insert_parameters(scale, 13)
                 
-                charge_param_idxs.append(charge_idx)
+                # charge_param_idxs.append(charge_idx)
                 radius_param_idxs.append(radius_idx)
                 scale_param_idxs.append(scale_idx)               
 
-        # post-process GBSA
-        nrg_fns["GBSA"] = (
-            np.array(charge_param_idxs),
-            np.array(radius_param_idxs),
-            np.array(scale_param_idxs),
-            alpha,                         # alpha
-            beta,                          # beta
-            gamma,                         # gamma
-            dielectric_offset,             # dielectric_offset
-            surface_tension,               # surface_tension
-            solute_dielectric,             # solute_dielectric
-            solvent_dielectric,            # solvent_dieletric
-            probe_radius,                  # probe_radius
-            10000.0                        # cutoff
-        )
+    # post-process GBSA
+    nrg_fns["GBSA"] = (
+        np.array(charge_param_idxs),
+        np.array(radius_param_idxs),
+        np.array(scale_param_idxs),
+        alpha,                         # alpha
+        beta,                          # beta
+        gamma,                         # gamma
+        dielectric_offset,             # dielectric_offset
+        surface_tension,               # surface_tension
+        solute_dielectric,             # solute_dielectric
+        solvent_dielectric,            # solvent_dieletric
+        probe_radius,                  # probe_radius
+        10000.0                        # cutoff
+    )
 
             # test_potentials.append(test_gbsa)
 
     global_params = np.array(global_params)
     global_param_groups = np.array(global_param_groups) + 100
 
-    return nrg_fns, (global_params, global_param_groups), np.array(masses)
+    return System(nrg_fns, global_params, global_param_groups, np.array(masses))
