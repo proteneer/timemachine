@@ -138,7 +138,8 @@ for tag in tags:
         params = []
         for s in itemlist:
             patt = s.attributes['smirks'].value
-            k = parse_quantity(s.attributes['k1'].value)
+            impdivf = 3
+            k = parse_quantity(s.attributes['k1'].value)/impdivf
             phase = parse_quantity(s.attributes['phase1'].value)
             period = float(s.attributes['periodicity1'].value)
             params.append([patt, k, phase, period])

@@ -6,7 +6,7 @@ import itertools
 import numpy as np
 
 import pathlib
-
+from rdkit import Chem
 
 class TestForcefield(unittest.TestCase):
 
@@ -70,6 +70,18 @@ class TestForcefield(unittest.TestCase):
             }
         
         ff = forcefield.Forcefield(handle)
-        np.testing.assert_equal(np.arange(next(itercount))/5, ff.params)
+        # the -1 is for exclusions
+        np.testing.assert_equal(np.arange(next(itercount))/5, ff.params[:-1])
         ref_groups = [0,1, 0,1, 0,1, 2,3, 2,3, 2,3, 4,5,6, 4,5,6, 7,8,9, 7,8,9, 7,8,9, 7,8,9, 10,11, 10,11, 12,13, 14,14]
-        np.testing.assert_equal(ref_groups, ff.param_groups)
+        np.testing.assert_equal(ref_groups, ff.param_groups[:-1])
+
+    def test_parameterization(self):
+
+        cwd = pathlib.Path(__file__).parent.parent.absolute()
+        fpath = os.path.join(cwd, 'ff', "smirnoff_1.1.0.py")
+        ff = forcefield.Forcefield(fpath)
+
+        mol = Chem.AddHs(Chem.MolFromSmiles("O=C(C)Oc1ccccc1C(=O)O"))
+        mol = Chem.AddHs(Chem.MolFromSmiles("O=C(N)C[C@H](N)C(=O)O"))
+        nrg_fns = ff.parameterize(mol)
+        print(nrg_fns)

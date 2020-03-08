@@ -123,20 +123,6 @@ def combiner(
 def to_md_units(q):
     return q.value_in_unit_system(simtk.unit.md_unit_system)
 
-
-def match_bonds(mol, triples):
-    """
-
-    """
-    bond_idxs = []
-    param_idxs = []
-
-    for smirks, k_idx, length_idx in triples:
-        bond_idxs.append([bond.src, bond.dst])
-        param_idxs.append([k_idx, length_idx])
-
-    return bond_idxs, param_idxs
-
 def simple_charge_model():
     model = {
         "[#1:1]": 0.0157,
@@ -342,7 +328,132 @@ def parameterize(mol, forcefield, am1=False, dimension=3):
             for k, v in vd.items():
                 nonbonded_lj_param_idxs.append(v)
 
-    if am1:
+    am1_bcc = True
+    if am1_bcc:
+
+        bccs = {
+            "[#6X4:1]-[#6X4:2]": 1.526,
+            "[#6X4:1]-[#6X3:2]": 1.51,
+            "[#6X4:1]-[#6X3:2]=[#8X1+0]": 1.522,
+            "[#6X3:1]-[#6X3:2]": 1.45,
+            "[#6X3:1]:[#6X3:2]": 1.40,
+            "[#6X3:1]=[#6X3:2]": 1.35,
+            "[#6:1]-[#7:2]": 1.47,
+            "[#6X3:1]-[#7X3:2]": 1.38,
+            "[#6X4:1]-[#7X3:2]-[#6X3]=[#8X1+0]": 1.449,
+            "[#6X3:1](=[#8X1+0])-[#7X3:2]": 1.335,
+            "[#6X3:1]-[#7X2:2]": 1.39,
+            "[#6X3:1]:[#7X2,#7X3+1:2]": 1.34,
+            "[#6X3:1]=[#7X2,#7X3+1:2]": 1.30,
+            "[#6:1]-[#8:2]": 1.410,
+            "[#6X4:1]-[#8X2H0:2]": 1.370,
+            "[#6X3:1]-[#8X2:2]": 1.326,
+            "[#6X3:1]-[#8X2H1:2]": 1.364,
+            "[#6X3a:1]-[#8X2H0:2]": 1.323,
+            "[#6X3:1](=[#8X1])-[#8X2H0:2]": 1.340,
+            "[#6:1]=[#8X1+0,#8X2+1:2]": 1.229,
+            "[#6X3:1](~[#8X1])~[#8X1:2]": 1.250,
+            "[#6X3:1]:[#8X2+1:2]": 1.28,
+            "[#6X2:1]-[#6:2]": 1.440,
+            "[#6X2:1]-[#6X4:2]": 1.468,
+            "[#6X2:1]=[#6X3:2]": 1.35,
+            "[#6:1]#[#7:2]": 1.188,
+            "[#6X2:1]#[#6X2:2]": 1.188,
+            "[#6X2:1]-[#8X2:2]": 1.326,
+            "[#6X2:1]-[#7:2]": 1.38,
+            "[#6X2:1]=[#7:2]": 1.17,
+            "[#6X2:1]=[#16:2]": 1.54,
+            "[#7:1]-[#7:2]": 1.40,
+            "[#7X3:1]-[#7X2:2]": 1.33,
+            "[#7X2:1]-[#7X2:2]": 1.33,
+            "[#7:1]:[#7:2]": 1.33,
+            "[#7:1]=[#7:2]": 1.30,
+            "[#7:1]#[#7:2]": 1.27,
+            "[#7:1]-[#8X2:2]": 1.40,
+            "[#7:1]~[#8X1:2]": 1.30,
+            "[#8X2:1]-[#8X2:2]": 1.46,
+            "[#16:1]-[#6:2]": 1.810,
+            "[#16:1]-[#1:2]": 1.336,
+            "[#16:1]-[#16:2]": 2.038,
+            "[#16:1]-[#9:2]": 1.6,
+            "[#16:1]-[#17:2]": 2.0,
+            "[#16:1]-[#35:2]": 2.2,
+            "[#16:1]-[#53:2]": 2.6,
+            "[#16X2,#16X1-1,#16X3+1:1]-[#6X4:2]": 1.81,
+            "[#16X2,#16X1-1,#16X3+1:1]-[#6X3:2]": 1.74,
+            "[#16X2:1]-[#7:2]": 1.69,
+            "[#16X2:1]-[#8X2:2]": 1.60,
+            "[#16X2:1]=[#8X1,#7X2:2]": 1.44,
+            "[#16X4,#16X3!+1:1]-[#6:2]": 1.750,
+            "[#16X4,#16X3:1]~[#7:2]": 1.71,
+            "[#16X4,#16X3:1]-[#8X2:2]": 1.596,
+            "[#16X4,#16X3:1]~[#8X1:2]": 1.44,
+            "[#16:1]=[#6:2]": 1.7,
+            "[#15:1]-[#1:2]": 1.4,
+            "[#15:1]~[#6:2]": 1.90,
+            "[#15:1]-[#7:2]": 1.65,
+            "[#15:1]=[#7:2]": 1.5,
+            "[#15:1]~[#8X2:2]": 1.610,
+            "[#15:1]~[#8X1:2]": 1.480,
+            "[#15:1]~[#9:2]": 1.639,
+            "[#16:1]-[#15:2]": 2.1,
+            "[#15:1]=[#16X1:2]": 1.98,
+            "[#6:1]-[#9:2]": 1.359,
+            "[#6X4:1]-[#9:2]": 1.380,
+            "[#6:1]-[#17:2]": 1.727,
+            "[#6X4:1]-[#17:2]": 1.766,
+            "[#6:1]-[#35:2]": 1.890,
+            "[#6X4:1]-[#35:2]": 1.944,
+            "[#6:1]-[#53:2]": 2.075,
+            "[#6X4:1]-[#53:2]": 2.166,
+            "[#7:1]-[#9:2]": 1.4,
+            "[#7:1]-[#17:2]": 1.8,
+            "[#7:1]-[#35:2]": 2.0,
+            "[#7:1]-[#53:2]": 2.1,
+            "[#15:1]-[#9:2]": 1.6,
+            "[#15:1]-[#17:2]": 2.0,
+            "[#15:1]-[#35:2]": 2.2,
+            "[#15:1]-[#53:2]": 2.6,
+            "[#6X4:1]-[#1:2]": 1.090,
+            "[#6X3:1]-[#1:2]": 1.080,
+            "[#6X2:1]-[#1:2]": 1.056,
+            "[#7:1]-[#1:2]": 1.010,
+            "[#8:1]-[#1:2]": 0.960
+        }
+
+        groups = Chem.CanonicalRankAtoms(mol, breakTies=False)
+
+        print(groups)
+
+        mb = Chem.MolToMolBlock(mol)
+
+        ims = oechem.oemolistream()
+        ims.SetFormat(oechem.OEFormat_SDF)
+        ims.openstring(mb)
+
+        for buf_mol in ims.GetOEMols():
+            oemol = oechem.OEMol(buf_mol)
+
+        optimizationSetting = False
+        result =  oequacpac.OEAssignCharges(mol, oequacpac.OEAM1Charges(optimizationSetting)):
+        # result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1BCCELF10Charges())
+
+
+        if result is False:
+            raise Exception('Unable to assign charges')
+
+        partial_charges = []
+        for index, atom in enumerate(oemol.GetAtoms()):
+            partial_charges.append(atom.GetPartialCharge())
+
+        partial_charges = np.array(partial_charges)
+
+        charge_param_idxs = []
+        for charge in partial_charges:
+            # charge = charge*0.2
+            c_idx = add_param(charge, 17)
+            charge_param_idxs.append(c_idx)
+    elif am1:
         assert 0
 
         # print("Running AM1BCC")
