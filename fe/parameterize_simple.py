@@ -258,20 +258,12 @@ if __name__ == "__main__":
     opt_state = opt_init(initial_params)
 
     num_epochs = 100
+
     for epoch in range(num_epochs):
         # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
 
         epoch_params = get_params(opt_state)
-        
-
-        # (ytz) RESTORE ME WHEN TRAINING
         sim.system.params = epoch_params
-
-        # for pg in sim.system.param_groups:
-        #     if pg == 13:
-        #         print(pg)
-
-        # assert 0
 
         all_args = []
 
@@ -332,6 +324,7 @@ if __name__ == "__main__":
 
         all_dl_dps = []
         for pc, du_dl_adjoints in zip(parent_conns, all_du_dl_adjoints):
+
             pc.send(du_dl_adjoints)
             dl_dp = pc.recv()
             all_dl_dps.append(dl_dp)
