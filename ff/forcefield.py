@@ -48,7 +48,8 @@ class Forcefield():
                     arr.append(v)
                 return arr
             elif isinstance(val, float) or isinstance(val, int):
-                return add_param(val, p_group)
+                p_idx = add_param(val, p_group)
+                return p_idx
             else:
                 raise Exception("Unsupported type")
 
@@ -62,10 +63,10 @@ class Forcefield():
         group_map = {
             "Angle": (0,1),
             "Bond": (2,3),
-            "Improper": (4,5,6),
-            "Proper": (7,8,9),
-            "vdW": (10,11),
-            "GBSA": (12,13),
+            "Improper": (4,5,6), # k, phase, period
+            "Proper": (7,8,9), # k, phase, period
+            "vdW": (10,11),  # sigma, epsilon
+            "GBSA": (12,13), # radii, scale factor
             "SimpleCharges": (14,)
         }
 
@@ -343,7 +344,7 @@ class Forcefield():
         nrg_fns['GBSA'] = (
             np.array(es_param_idxs, dtype=np.int32),
             np.array(gb_radii_idxs, dtype=np.int32),
-            np.array(es_param_idxs, dtype=np.int32),
+            np.array(gb_scale_idxs, dtype=np.int32),
             *gb_args
         )
 

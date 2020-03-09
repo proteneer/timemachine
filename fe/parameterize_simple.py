@@ -227,6 +227,10 @@ if __name__ == "__main__":
     host_system = openmm_converter.deserialize_system(host_system)
     num_host_atoms = len(host_system.masses)
 
+    print("num_host_atoms", num_host_atoms)
+
+    # assert 0
+
     open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
     nrg_fns = open_ff.parameterize(guest_mol)
     guest_masses = get_masses(guest_mol)
@@ -262,6 +266,12 @@ if __name__ == "__main__":
 
         # (ytz) RESTORE ME WHEN TRAINING
         sim.system.params = epoch_params
+
+        # for pg in sim.system.param_groups:
+        #     if pg == 13:
+        #         print(pg)
+
+        # assert 0
 
         all_args = []
 
@@ -326,13 +336,16 @@ if __name__ == "__main__":
             dl_dp = pc.recv()
             all_dl_dps.append(dl_dp)
 
+        for p in processes:
+            p.join()
+
         all_dl_dps = np.array(all_dl_dps)
         all_dl_dps = np.sum(all_dl_dps, axis=0)
 
         allowed_groups = {
             14: 0.5, # small_molecule charge
-            # 18: 1e-2, # atomic radii
-            # 19: 1e-2 # scale factor
+            # 18: 1e-2, # GB atomic radii
+            13: 1e-2 # GB scale factor
         }
 
         filtered_grad = []
@@ -341,9 +354,10 @@ if __name__ == "__main__":
                 pf = allowed_groups[gp]
                 filtered_grad.append(g*pf)
                 if g != 0:
-                    print("derivs", g_idx, '\t', g, '\t adjusted to', g*pf, '\t old val', sim.system.params[g_idx])
+                    print("derivs", g_idx, '\t group', gp, '\t', g, '\t adjusted to', g*pf, '\t old val', sim.system.params[g_idx])
             else:
                 filtered_grad.append(0)
 
         filtered_grad = np.array(filtered_grad)
         opt_state = opt_update(epoch, filtered_grad, opt_state)
+

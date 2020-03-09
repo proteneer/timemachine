@@ -91,6 +91,10 @@ class Simulation:
         """
         gradients = self.system.make_gradients(dimension=4, precision=self.precision)
 
+        # gradients = self.system.make_gradients(dimension=3, precision=self.precision)
+        # for g in gradients:
+            # forces = g.execute(x0, self.system.params)
+
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
             self.lambda_schedule,
@@ -109,7 +113,6 @@ class Simulation:
         )
 
         start = time.time()
-        # print("start forward_mode")
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
@@ -129,6 +132,7 @@ class Simulation:
         pipe.send(du_dls)
         du_dl_adjoints = pipe.recv()
 
+        print("setting adjoints to", du_dl_adjoints)
         stepper.set_du_dl_adjoint(du_dl_adjoints)
         ctxt.set_x_t_adjoint(np.zeros_like(x0))
         start = time.time()
@@ -137,27 +141,5 @@ class Simulation:
         dL_dp = ctxt.get_param_adjoint_accum()
 
         pipe.send(dL_dp)
-
+        pipe.close()
         return
-
-    # def run_backwards(self, du_dl_adjoints):
-
-    #     # if du_dl_adjoints is not None:
-
-    #     assert du_dl_adjoints.shape == self.lambda_schedule.shape
-    #     stepper.set_du_dl_adjoint(du_dl_adjoints)
-    #     ctxt.set_x_t_adjoint(np.zeros_like(x0))
-    #     start = time.time()
-    #     ctxt.backward_mode()
-    #     print("bkwd run time", time.time() - start)
-    #     dL_dp = ctxt.get_param_adjoint_accum()
-
-    #     return dL_dp                 
-
-    #     else:
-
-
-            
-    #         du_dls = stepper.get_du_dl()
-
-    #         return du_dls     
