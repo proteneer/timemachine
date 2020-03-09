@@ -109,16 +109,12 @@ class Simulation:
         )
 
         start = time.time()
-        print("start forward_mode")
+        # print("start forward_mode")
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
-
-
         du_dls = stepper.get_du_dl()
-
         xs = ctxt.get_all_coords()
-
 
         if pdb_writer is not None:
             pdb_writer.write_header()
@@ -129,12 +125,6 @@ class Simulation:
                 if frame_idx % interval == 0:
                     pdb_writer.write(x*10)
         pdb_writer.close()
-        print(xs[0])
-        print(xs[-1])
-
-        # print("du-dls")
-        # for d in du_dls:
-        #     print(d)
 
         pipe.send(du_dls)
         du_dl_adjoints = pipe.recv()
@@ -148,7 +138,7 @@ class Simulation:
 
         pipe.send(dL_dp)
 
-        return du_dls
+        return
 
     # def run_backwards(self, du_dl_adjoints):
 

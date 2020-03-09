@@ -178,7 +178,7 @@ if __name__ == "__main__":
     step_sizes = np.ones(T)*dt
 
     assert T % 2 == 0
-    cas = np.ones(T)*0.93
+    cas = np.ones(T)*0.92
 
     epoch = 0
 
@@ -230,27 +230,17 @@ if __name__ == "__main__":
     open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
     nrg_fns = open_ff.parameterize(guest_mol)
     guest_masses = get_masses(guest_mol)
-
-    # print(guest_masses)
-
     guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
 
     combined_system = host_system.merge(guest_system)
 
-    cbs = -1*np.array(combined_system.masses)*0.0001
+    # cbs = -1*(1/np.array(combined_system.masses))*0.0001
+    cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
     lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
     lambda_idxs[num_host_atoms:] = -1
 
-    # cbs = -1*np.array(host_system.masses)*0.0001
-    # lambda_idxs = np.zeros(len(host_system.masses), dtype=np.int32)
-
-    # cbs = -1*np.ones_like(np.array(guest_system.masses))*0.0001
-    # lambda_idxs = np.zeros(len(guest_system.masses), dtype=np.int32)
-
     sim = simulation.Simulation(
         combined_system,
-        # host_system,
-        # guest_system,
         step_sizes,
         cas,
         cbs,
@@ -259,9 +249,7 @@ if __name__ == "__main__":
         precision
     )
 
-    # initial_params = guest_system.params
     initial_params = combined_system.params
-    # initial_params = host_system.params
 
     opt_state = opt_init(initial_params)
 
@@ -272,7 +260,7 @@ if __name__ == "__main__":
         epoch_params = get_params(opt_state)
         
         # (ytz) RESTORE ME WHEN TRAINING
-        # sim.combined_params = epoch_params
+        sim.system.params = epoch_params
 
         all_args = []
 
@@ -312,17 +300,15 @@ if __name__ == "__main__":
             du_dls = pc.recv()
             all_du_dls.append(du_dls)
 
-        # all_du_dls = pool.map(sim.run_forward_multi, all_args)
         all_du_dls = np.array(all_du_dls)
-
         loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
       
-        for du_dls in all_du_dls:
-            fwd = du_dls[:T//2]
-            bkwd = du_dls[T//2:]
-            plt.plot(np.log(lambda_schedule[:T//2]), fwd)
-            plt.plot(np.log(lambda_schedule[T//2:]), bkwd)
-        plt.show() # enable on desktop (non servers if you want to see what's going on)
+        # for du_dls in all_du_dls:
+        #     fwd = du_dls[:T//2]
+        #     bkwd = du_dls[T//2:]
+        #     plt.plot(np.log(lambda_schedule[:T//2]), fwd)
+        #     plt.plot(np.log(lambda_schedule[T//2:]), bkwd)
+        # plt.show()
 
         true_dG = 26.61024 # -6.36 * 4.184 * -1 (for insertion)
 
@@ -330,33 +316,36 @@ if __name__ == "__main__":
 
         print("---EPOCH", epoch, "---- LOSS", error)
 
-        assert 0
-
         error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, true_dG)
         all_du_dl_adjoints = error_grad[0]
 
+        all_dl_dps = []
+        for pc, du_dl_adjoints in zip(parent_conns, all_du_dl_adjoints):
+            pc.send(du_dl_adjoints)
+            dl_dp = pc.recv()
+            all_dl_dps.append(dl_dp)
+
         # set the adjoints for reverse mode
-        for arg_idx, arg in enumerate(all_args):
-            arg[-1] = all_du_dl_adjoints[arg_idx]
+        # for arg_idx, arg in enumerate(all_args):
+            # arg[-1] = all_du_dl_adjoints[arg_idx]
+        # dl_dps = pool.map(sim.run_forward_multi, all_args)
 
-        dl_dps = pool.map(sim.run_forward_multi, all_args)
-
-        dl_dps = np.array(dl_dps)
-        dl_dps = np.sum(dl_dps, axis=0)
+        all_dl_dps = np.array(all_dl_dps)
+        all_dl_dps = np.sum(all_dl_dps, axis=0)
 
         allowed_groups = {
-            17: 0.5, # charge
+            14: 0.5, # small_molecule charge
             # 18: 1e-2, # atomic radii
-            19: 1e-2 # scale factor
+            # 19: 1e-2 # scale factor
         }
 
         filtered_grad = []
-        for g_idx, (g, gp) in enumerate(zip(dl_dps, sim.combined_param_groups)):
+        for g_idx, (g, gp) in enumerate(zip(all_dl_dps, sim.system.param_groups)):
             if gp in allowed_groups:
                 pf = allowed_groups[gp]
                 filtered_grad.append(g*pf)
                 if g != 0:
-                    print("derivs", g_idx, '\t', g, '\t adjusted to', g*pf, '\t old val', sim.combined_params[g_idx])
+                    print("derivs", g_idx, '\t', g, '\t adjusted to', g*pf, '\t old val', sim.system.params[g_idx])
             else:
                 filtered_grad.append(0)
 

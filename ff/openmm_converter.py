@@ -48,11 +48,8 @@ def deserialize_system(system):
 
     nrg_fns = {}
 
-
-    print(system.getForces())
-
     for force in system.getForces():
-        print(force)
+
         if isinstance(force, mm.HarmonicBondForce):
             bond_idxs = []
             param_idxs = []
