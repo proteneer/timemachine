@@ -1,3 +1,5 @@
+# forcefield
+
 import ast
 import numpy as np
 
@@ -217,6 +219,8 @@ class Forcefield():
 
                     src, dst = atom_idxs
                     assert src < dst
+                    # assert (src, dst) not in exclusions
+                    # print("bonds", src, dst)
                     exclusions[(src, dst)] = exclusion_param_idx
 
                 nrg_fns['HarmonicBond'] = (
@@ -236,6 +240,8 @@ class Forcefield():
                     angle_param_idxs.append((k_idx, a_idx))
                     src, _, dst = atom_idxs
                     assert src < dst
+                    # assert (src, dst) not in exclusions
+                    # print("angle", src, dst)
                     exclusions[(src, dst)] = exclusion_param_idx
 
                 nrg_fns['HarmonicAngle'] = (
@@ -254,21 +260,23 @@ class Forcefield():
 
                     src, _, _, dst = atom_idxs
                     assert src < dst
+                    # print("torsion exclusions", atom_idxs)
+                    # assert (src, dst) not in exclusions
                     exclusions[(src, dst)] = exclusion_param_idx
 
-            elif force_type == 'Improper':
+            # elif force_type == 'Improper':
 
-                for atom_idxs, p_idx in vd.items():
-                    pp = params[p_idx]
-                    k_idx, phase_idx, period_idx = pp[1], pp[2], pp[3]
-                    m = atom_idxs
+            #     for atom_idxs, p_idx in vd.items():
+            #         pp = params[p_idx]
+            #         k_idx, phase_idx, period_idx = pp[1], pp[2], pp[3]
+            #         m = atom_idxs
 
-                    # trefoil
-                    others = [atom_idxs[0], atom_idxs[2], atom_idxs[3]]
-                    for p in [(others[i], others[j], others[k]) for (i, j, k) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]]:
-                        improper_idx = (atom_idxs[1], p[0], p[1], p[2])
-                        torsion_idxs.append(improper_idx)
-                        torsion_param_idxs.append((k_idx, phase_idx, period_idx))
+            #         # trefoil
+            #         others = [atom_idxs[0], atom_idxs[2], atom_idxs[3]]
+            #         for p in [(others[i], others[j], others[k]) for (i, j, k) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]]:
+            #             improper_idx = (atom_idxs[1], p[0], p[1], p[2])
+            #             torsion_idxs.append(improper_idx)
+            #             torsion_param_idxs.append((k_idx, phase_idx, period_idx))
 
             elif force_type == 'vdW':
 
@@ -311,7 +319,7 @@ class Forcefield():
                     props["probe_radius"],
                     10000.0
                 )
-        # clean up torsions
+
         nrg_fns['PeriodicTorsion'] = (
             np.array(torsion_idxs, dtype=np.int32),
             np.array(torsion_param_idxs, dtype=np.int32)
@@ -325,6 +333,9 @@ class Forcefield():
             exclusion_param_idxs.append(v)
 
         exclusion_idxs = np.array(exclusion_idxs)
+
+
+        # assert 0
 
         nrg_fns['Nonbonded'] = (
             np.array(es_param_idxs, dtype=np.int32),

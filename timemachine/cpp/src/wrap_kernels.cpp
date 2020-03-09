@@ -494,10 +494,10 @@ void declare_gbsa(py::module &m, const char *typestr) {
     ){
         std::vector<int> charge_param_idxs(charge_pi.size());
         std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
-        std::vector<int> atomic_radii_idxs(atomic_ri.size());
-        std::memcpy(atomic_radii_idxs.data(), atomic_ri.data(), atomic_ri.size()*sizeof(int));
-        std::vector<int> scale_factor_idxs(scale_fi.size());
-        std::memcpy(scale_factor_idxs.data(), scale_fi.data(), scale_fi.size()*sizeof(int));
+        std::vector<int> atomic_radii_idxs(radii_pi.size());
+        std::memcpy(atomic_radii_idxs.data(), radii_pi.data(), radii_pi.size()*sizeof(int));
+        std::vector<int> scale_factor_idxs(scale_pi.size());
+        std::memcpy(scale_factor_idxs.data(), scale_pi.data(), scale_pi.size()*sizeof(int));
 
         return new timemachine::GBSA<RealType, D>(
             charge_param_idxs, // [N]
