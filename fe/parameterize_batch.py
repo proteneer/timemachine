@@ -157,7 +157,6 @@ if __name__ == "__main__":
     step_sizes = np.ones(T)*dt
     assert T % 2 == 0
     cas = np.ones(T)*0.93
-    epoch = 0
     lr = 5e-4
 
     ligand_list = []
@@ -166,30 +165,21 @@ if __name__ == "__main__":
         ligand_dG_file_readlines = open(ligand_dG_file, 'r').readlines()
 
         for file_name, deltaG in zip(ligand_sdf_file_readlines, ligand_dG_file_readlines):
-            
             for rd_mol in Chem.SDMolSupplier(file_name.rstrip('\n'), removeHs=False):
                 break
-
             true_dG_value = float(deltaG.split()[0])
             ligand_list.append((rd_mol, true_dG_value))
 
     guest_mol = ligand_list[0][0]
         
     off = smirnoff.ForceField("test_forcefields/smirnoff99Frosst.offxml")
-    _, (guest_params, _), _ = forcefield.parameterize(guest_mol, off, dimension=4)
+    _, (guest_params, guest_param_groups), _ = forcefield.parameterize(guest_mol, off, dimension=4)
     
     opt_init, opt_update, get_params = optimizers.adam(lr)
     opt_state = opt_init(guest_params)
 
     np.savetxt("original_off_params.txt", guest_params)
-   
-    host_pdb_file = args.complex_pdb
-    host_pdb = app.PDBFile(host_pdb_file)
-    host_conf = []
-    for x,y,z in host_pdb.positions:
-        host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-    host_conf = np.array(host_conf)
-    host_name = "complex"  
+    np.savetxt("original_off_param_groups.txt", guest_param_groups)
 
     num_epochs = 100
     # torsion, charge, gb radii, gb scaling factor, torsion
@@ -200,23 +190,31 @@ if __name__ == "__main__":
     ligand_dataset = dataset.Dataset(ligand_list)
     train, test = ligand_dataset.split(0.7)
 
+    itercount = itertools.count()
+
     for epoch in range(num_epochs):
         # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
-        # epoch_params = get_params(opt_state)
-        # guest_params = epoch_params
-
         train.shuffle()
-        print(train.data)
 
 ###### Training ######
         for data in train.iterbatches(1):
-
-            guest_mol = data[0][0]
+            
+            # 8 hours on this debug, the guest_mol must be preserved every epoch
+            import copy
+            guest_mol = copy.deepcopy(data[0][0])
             true_dG = data[0][1]
 
             current_off_params = get_params(opt_state)
-
+            np.savetxt("check_current_off_params_"+str(epoch)+".true_dG_"+str(true_dG)+".txt", current_off_params)
             all_du_dls = []
+            
+            host_pdb_file = args.complex_pdb
+            host_pdb = app.PDBFile(host_pdb_file)
+            host_conf = []
+            for x,y,z in host_pdb.positions:
+                host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+            host_conf = np.array(host_conf)
+            host_name = "complex"
 
             sim = simulation.Simulation(
                 guest_mol,
@@ -262,7 +260,7 @@ if __name__ == "__main__":
 
                 combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
                 combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-                out_file = os.path.join(args.frames_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
+                out_file = os.path.join(args.frames_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".batch.pdb")
                 writer = PDBWriter(combined_pdb_str, out_file)
 
                 # set this to None if we don't care about visualization
@@ -280,6 +278,7 @@ if __name__ == "__main__":
             error = error_fn(all_du_dls, T, lambda_schedule, true_dG)
 
             print("---EPOCH", epoch, "---- LOSS of one ligand in training ----", error)
+            #output_loss.write("---EPOCH %s---- LOSS of one ligand in training ---- %s\n " % (str(epoch), str(error)))
 
             error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, true_dG)
             all_du_dl_adjoints = error_grad[0]
@@ -305,12 +304,12 @@ if __name__ == "__main__":
                     filtered_grad.append(0)
 
             filtered_grad = np.array(filtered_grad)
-            opt_state = opt_update(epoch, filtered_grad, opt_state)
+            opt_state = opt_update(next(itercount), filtered_grad, opt_state)
 
 ######## Testing ##########
         for data in test.iterbatches(1):
 
-            guest_mol = data[0][0]
+            guest_mol = copy.deepcopy(data[0][0])
             true_dG = data[0][1]
 
             current_off_params = get_params(opt_state)
@@ -361,7 +360,7 @@ if __name__ == "__main__":
 
                 combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
                 combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-                out_file = os.path.join(args.frames_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
+                out_file = os.path.join(args.frames_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".batch.pdb")
                 writer = PDBWriter(combined_pdb_str, out_file)
 
                 # set this to None if we don't care about visualization
@@ -379,6 +378,9 @@ if __name__ == "__main__":
             error = error_fn(all_du_dls, T, lambda_schedule, true_dG)
 
             print("---EPOCH", epoch, "---- LOSS of one ligand in test ----", error)
+            #output_loss.write("---EPOCH %s---- LOSS of one ligand in test ---- %s" % (str(epoch), str(error)))
+
+        np.savetxt("optimized_off_params_epoch"+str(epoch)+".txt", current_off_params)
 
     pool.close()
 
