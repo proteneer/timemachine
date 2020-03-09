@@ -70,8 +70,6 @@ def deserialize_system(system):
 
             nrg_fns["HarmonicBond"] = (bond_idxs, param_idxs)
 
-            # test_potentials.append(test_hb)
-
         if isinstance(force, mm.HarmonicAngleForce):
 
             angle_idxs = []
@@ -94,8 +92,6 @@ def deserialize_system(system):
 
             nrg_fns["HarmonicAngle"] = (angle_idxs, param_idxs)
 
-            # test_potentials.append(test_ha)
-
         if isinstance(force, mm.PeriodicTorsionForce):
 
             torsion_idxs = []
@@ -104,7 +100,6 @@ def deserialize_system(system):
             for t_idx in range(force.getNumTorsions()):
                 a_idx, b_idx, c_idx, d_idx, period, phase, k = force.getTorsionParameters(t_idx)
 
-                # period is unitless
                 phase = value(phase)
                 k = value(k)
 
@@ -117,11 +112,7 @@ def deserialize_system(system):
 
             torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
             param_idxs = np.array(param_idxs, dtype=np.int32)
-
-            # test_tors = (ops.PeriodicTorsion,
             nrg_fns["PeriodicTorsion"] = (torsion_idxs, param_idxs)
-
-            # test_potentials.append(test_tors)
 
         if isinstance(force, mm.NonbondedForce):
 
@@ -167,7 +158,6 @@ def deserialize_system(system):
             exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
             exclusion_param_idxs = np.array(exclusion_param_idxs, dtype=np.int32)
 
-            # test_nonbonded = (
             nrg_fns["Nonbonded"] = (
                 charge_param_idxs,
                 lj_param_idxs,
@@ -177,14 +167,11 @@ def deserialize_system(system):
                 10000.0
             )
 
-            # test_potentials.append(test_nonbonded)
-
         if isinstance(force, mm.GBSAOBCForce):
 
             num_atoms = force.getNumParticles()
             scale_matrix = np.ones((num_atoms, num_atoms)) - np.eye(num_atoms)
 
-            # charge_param_idxs = []
             radius_param_idxs = []
             scale_param_idxs = []
             
@@ -208,11 +195,9 @@ def deserialize_system(system):
                 charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
                 radius = value(radius)
                 
-                # charge_idx = insert_parameters(charge, 7)
                 radius_idx = insert_parameters(radius, 12)
                 scale_idx = insert_parameters(scale, 13)
                 
-                # charge_param_idxs.append(charge_idx)
                 radius_param_idxs.append(radius_idx)
                 scale_param_idxs.append(scale_idx)               
 

@@ -4,6 +4,8 @@ import numpy as np
 from rdkit import Chem
 from ff import system
 
+from timemachine import constants
+
 class Forcefield():
 
     def __init__(self, handle):
@@ -91,6 +93,11 @@ class Forcefield():
         exclusion_param_group = 20
         self.params.append(exclusion_param)
         self.param_groups.append(exclusion_param_group)
+
+        # (ytz): fix the parameters
+        for p_idx, p in enumerate(self.params):
+            if self.param_groups[p_idx] == 14:
+                self.params[p_idx] *= np.sqrt(constants.ONE_4PI_EPS0)/4
 
     def get_exclusion_idx(self):
         return len(self.params)-1

@@ -259,6 +259,7 @@ if __name__ == "__main__":
 
         epoch_params = get_params(opt_state)
         
+
         # (ytz) RESTORE ME WHEN TRAINING
         sim.system.params = epoch_params
 
@@ -325,11 +326,6 @@ if __name__ == "__main__":
             dl_dp = pc.recv()
             all_dl_dps.append(dl_dp)
 
-        # set the adjoints for reverse mode
-        # for arg_idx, arg in enumerate(all_args):
-            # arg[-1] = all_du_dl_adjoints[arg_idx]
-        # dl_dps = pool.map(sim.run_forward_multi, all_args)
-
         all_dl_dps = np.array(all_dl_dps)
         all_dl_dps = np.sum(all_dl_dps, axis=0)
 
@@ -351,4 +347,3 @@ if __name__ == "__main__":
 
         filtered_grad = np.array(filtered_grad)
         opt_state = opt_update(epoch, filtered_grad, opt_state)
-
