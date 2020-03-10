@@ -97,6 +97,8 @@ void GBSA<RealType, D>::execute_device(
     cudaStream_t stream
 ) {
 
+    // std::cout << "exec GB" << std::endl;
+
     int tpb = 32;
     int B = (N_+tpb-1)/tpb;
 
@@ -202,6 +204,9 @@ void GBSA<RealType, D>::execute_device(
         // std::cout << "Nonbonded Elapsed time: " << elapsed.count() << " s\n";
 
     } else {
+
+        // std::cout << "exec GB JVP" << std::endl;
+
         gpuErrchk(cudaMemsetAsync(d_born_radii_buffer_jvp_, 0, N*sizeof(*d_born_radii_buffer_jvp_), stream));
         gpuErrchk(cudaMemsetAsync(d_obc_buffer_jvp_, 0, N*sizeof(*d_obc_buffer_jvp_), stream));
         gpuErrchk(cudaMemsetAsync(d_obc_ri_buffer_jvp_, 0, N*sizeof(*d_obc_ri_buffer_jvp_), stream));
