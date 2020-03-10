@@ -163,7 +163,7 @@ if __name__ == "__main__":
     step_sizes = np.ones(T)*dt
 
     assert T % 2 == 0
-    cas = np.ones(T)*0.92
+    cas = np.ones(T)*0.93
 
     epoch = 0
 
@@ -234,7 +234,7 @@ if __name__ == "__main__":
         precision
     )
 
-    initial_params = combined_system.params
+    initial_params = sim.system.params
 
     opt_state = opt_init(initial_params)
 

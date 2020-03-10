@@ -1,5 +1,3 @@
-# class Simulation
-
 import numpy as np
 import time
 
@@ -7,25 +5,9 @@ import os
 from rdkit import Chem
 
 from simtk.openmm import app
-# from simtk.openmm.app import forcefield as ff
-# from simtk.openmm.app import PDBFile
-
-# from openforcefield.typing.engines import smirnoff
-# from system import serialize, forcefield
 
 from timemachine.lib import custom_ops
 import traceback
-
-
-def merge_gradients(
-    gradients,
-    precision):
-
-    g = []
-    for fn, fn_args in gradients:
-        g.append(fn(*fn_args, precision=precision))
-
-    return g
 
 class Simulation:
     """
