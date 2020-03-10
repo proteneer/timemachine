@@ -131,8 +131,6 @@ class Simulation:
 
         pipe.send(du_dls)
         du_dl_adjoints = pipe.recv()
-
-        print("setting adjoints to", du_dl_adjoints)
         stepper.set_du_dl_adjoint(du_dl_adjoints)
         ctxt.set_x_t_adjoint(np.zeros_like(x0))
         start = time.time()

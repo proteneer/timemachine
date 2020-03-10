@@ -224,16 +224,12 @@ if __name__ == "__main__":
 
     print("num_host_atoms", num_host_atoms)
 
-    # assert 0
-
     open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
     nrg_fns = open_ff.parameterize(guest_mol)
     guest_masses = get_masses(guest_mol)
     guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
 
     combined_system = host_system.merge(guest_system)
-
-    # cbs = -1*(1/np.array(combined_system.masses))*0.0001
     cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
     lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
     lambda_idxs[num_host_atoms:] = -1
@@ -277,12 +273,11 @@ if __name__ == "__main__":
             out_file = os.path.join(args.frames_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file)
 
-            # set this to None if we don't care about visualization
-            # all_args.append([x0, writer, conf_idx % num_gpus, precision, None])
             v0 = np.zeros_like(x0)
 
             parent_conn, child_conn = Pipe()
             parent_conns.append(parent_conn)
+            # writer can be None if we don't care about vis
             all_args.append([x0, v0, conf_idx % num_gpus, writer, child_conn])
 
         processes = []
@@ -327,6 +322,7 @@ if __name__ == "__main__":
             dl_dp = pc.recv()
             all_dl_dps.append(dl_dp)
 
+        # terminate all the processes
         for p in processes:
             p.join()
 
