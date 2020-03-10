@@ -1,3 +1,4 @@
+import copy
 import argparse
 import time
 import numpy as np
@@ -119,15 +120,16 @@ def error_fn(all_du_dls, T, schedule, true_dG):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Quick Test')
-    parser.add_argument('--frames_dir', type=str, required=True)
+    parser.add_argument('--out_dir', type=str, required=True)
     parser.add_argument('--precision', type=str, required=True)    
     parser.add_argument('--complex_pdb', type=str, required=True)
     parser.add_argument('--ligand_sdf', type=str, required=True)
     parser.add_argument('--num_gpus', type=int, required=True)
     parser.add_argument('--num_conformers', type=int, required=True)
+    parser.add_argument('--forcefield', type=str, required=True)
     args = parser.parse_args()
 
-    assert os.path.isdir(args.frames_dir)
+    assert os.path.isdir(args.out_dir)
 
 
     if args.precision == 'single':
@@ -214,7 +216,8 @@ if __name__ == "__main__":
 
     print("num_host_atoms", num_host_atoms)
 
-    open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
+    # open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
+    open_ff = forcefield.Forcefield(args.forcefield)
     nrg_fns = open_ff.parameterize(guest_mol)
     guest_masses = get_masses(guest_mol)
     guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
@@ -244,6 +247,16 @@ if __name__ == "__main__":
         # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
 
         epoch_params = get_params(opt_state)
+
+
+
+        # deepy and openff param at start
+        epoch_ff_params = copy.deepcopy(open_ff)
+        epoch_ff_params.params = epoch_params[len(host_system.params):]
+        fname = "epoch_"+str(epoch)+"_params"
+        fpath = os.path.join(args.out_dir, fname)
+        epoch_ff_params.save(fpath)
+
         sim.system.params = epoch_params
 
         all_args = []
@@ -260,7 +273,7 @@ if __name__ == "__main__":
 
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-            out_file = os.path.join(args.frames_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
+            out_file = os.path.join(args.out_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file)
 
             v0 = np.zeros_like(x0)
@@ -337,4 +350,3 @@ if __name__ == "__main__":
 
         filtered_grad = np.array(filtered_grad)
         opt_state = opt_update(epoch, filtered_grad, opt_state)
-

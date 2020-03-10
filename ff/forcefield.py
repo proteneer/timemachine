@@ -103,6 +103,13 @@ class Forcefield():
     def get_exclusion_idx(self):
         return len(self.params)-1
 
+    def save(self, handle):
+        with open(handle, "w") as fh:
+            import pprint
+            pp = pprint.PrettyPrinter(width=500, compact=False, stream=fh)
+            pp._sorted = lambda x:x
+            pp.pprint(self.serialize())
+
     def serialize(self):
         """
         Serialize the forcefield to an python dictionary.

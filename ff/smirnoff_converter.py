@@ -174,14 +174,6 @@ for tag in tags:
 
 
 import pprint
-import json
 pp = pprint.PrettyPrinter(width=500, compact=False)
 pp._sorted = lambda x:x
-
 pp.pprint(forcefield)
-
-# print(json.dumps(forcefield, indent=4))
-
-# import yaml
-
-# print(yaml.dump(forcefield))
