@@ -127,7 +127,6 @@ if __name__ == "__main__":
     parser.add_argument('--complex_pdb', type=str, required=True)
     parser.add_argument('--ligand_sdf', type=str, required=True)
     parser.add_argument('--num_gpus', type=int, required=True)
-    parser.add_argument('--jobs_per_gpu', type=int, required=True)
     parser.add_argument('--num_conformers', type=int, required=True)
     args = parser.parse_args()
 
@@ -149,7 +148,6 @@ if __name__ == "__main__":
     # AllChem.EmbedMultipleConfs(guest_mol, 1, randomSeed=2020)
 
     num_gpus = args.num_gpus
-    num_workers = args.num_gpus*args.jobs_per_gpu
 
     # print('Creating multiprocessing pool with',args.num_gpus, 'gpus and', args.jobs_per_gpu, 'jobs per gpu')
     # pool = multiprocessing.Pool(num_workers)
