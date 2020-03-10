@@ -274,6 +274,7 @@ if __name__ == "__main__":
 
         for arg in all_args:
             p = Process(target=sim.run_forward_and_backward, args=arg)
+            p.daemon = True
             processes.append(p)
             p.start()
 
