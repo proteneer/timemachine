@@ -3,14 +3,12 @@ import time
 import numpy as np
 from io import StringIO
 import itertools
-import gnuplotlib as gp
 import os
 import sys
 
 from jax.config import config as jax_config
 # this always needs to be set
 jax_config.update("jax_enable_x64", True)
-
 
 from scipy.stats import special_ortho_group
 import jax
@@ -115,7 +113,6 @@ def error_fn(all_du_dls, T, schedule, true_dG):
     pred_dG *= kT
 
     # print(dG_fwd, dG_bkwd)
-
     print("pred_dG", pred_dG)
     return jnp.abs(pred_dG - true_dG)
 
@@ -144,14 +141,7 @@ if __name__ == "__main__":
     for guest_mol in suppl:
         break
 
-    # guest_mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1CC"))
-    # AllChem.EmbedMultipleConfs(guest_mol, 1, randomSeed=2020)
-
     num_gpus = args.num_gpus
-
-    # print('Creating multiprocessing pool with',args.num_gpus, 'gpus and', args.jobs_per_gpu, 'jobs per gpu')
-    # pool = multiprocessing.Pool(num_workers)
-
     all_du_dls = []
 
     start = 1e3
@@ -283,8 +273,7 @@ if __name__ == "__main__":
         processes = []
 
         for arg in all_args:
-
-            p = Process(target=sim.run_forward_multi, args=(arg,))
+            p = Process(target=sim.run_forward_and_backward, args=arg)
             processes.append(p)
             p.start()
 

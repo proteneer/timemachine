@@ -39,35 +39,53 @@ class Simulation:
         lambda_schedule,
         lambda_idxs,
         precision):
+        """
+        Create a simulation.
+
+        Parameters
+        ----------
+        system: System
+            A fully parameterized system
+
+        step_sizes: np.array, np.float64, [T]
+            dt for each step
+
+        cas: np.array, np.float64, [T]
+            Friction coefficient to be used on each timestep
+
+        cbs: np.array, np.float64, [N]
+            Per particle force multipliers. Every element must be negative.
+
+        lambda_schedule: np.array, np.float64, [T]
+            lambda parameter for each time step
+
+        lambda_idxs: np.array, np.int32, [N]
+            If lambda_idxs[atom_idx] is 0, then the particle is not modified.
+
+        precision: either np.float64 or np.float32
+            Precision in which we compute the force kernels. Note that integration
+            is always done in 64bit.
+
+        """
 
         self.step_sizes = step_sizes
         self.system = system
         self.cas = cas
         self.cbs = cbs
+
+        for b in cbs:
+            if b > 0:
+                raise ValueError("cbs must all be <= 0")
+
         self.lambda_schedule = lambda_schedule
         self.lambda_idxs = lambda_idxs
         self.precision = precision
-
-    def run_forward_multi(self, args):
-        """
-        A multiprocess safe version of the run_forward code. This code will
-        also set the GPU on which the simulation should run on.
-        """
-
-        # x0, pdb_writer, gpu_idx = args
-        x0, v0, gpu_idx, pdb_writer, pipe = args
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
-        try:
-            return self.run_forward_and_backward(x0, v0, pdb_writer, pipe)
-        except Exception as err:
-            print(err)
-            traceback.print_tb(err.__traceback__)
-            raise 
 
     def run_forward_and_backward(
         self,
         x0,
         v0,
+        gpu_idx,
         pdb_writer,
         pipe):
         """
@@ -78,19 +96,24 @@ class Simulation:
         x0: np.arrray, np.float64, [N,3]
             Starting geometries
 
+        v0: np.array, np.float64, [N, 3]
+            Starting velocities
+
+        gpu_idx: int
+            which gpu we run the job on
+
         pdb_writer: For writing out the trajectory
             If None then we skip writing
 
-        precision: np.float64 or np.float32
-            What level of precision we run the simulation at.
-
-        du_dl_adjoints: np.array, np.float64, [T]
-            If None, then we skip the backwards pass. If not None, this
-            array must have shape equal to the number of timesteps.
+        pipe: multiprocessing.Pipe
+            Use to communicate with the parent host
 
         """
         gradients = self.system.make_gradients(dimension=4, precision=self.precision)
 
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
+
+        # (ytz): debug use
         # gradients = self.system.make_gradients(dimension=3, precision=self.precision)
         # for g in gradients:
             # forces = g.execute(x0, self.system.params)
