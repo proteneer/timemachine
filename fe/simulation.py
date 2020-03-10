@@ -91,9 +91,9 @@ class Simulation:
             Use to communicate with the parent host
 
         """
-        gradients = self.system.make_gradients(dimension=4, precision=self.precision)
-
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
+
+        gradients = self.system.make_gradients(dimension=4, precision=self.precision)
 
         # (ytz): debug use
         # gradients = self.system.make_gradients(dimension=3, precision=self.precision)
