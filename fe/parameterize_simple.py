@@ -1,16 +1,15 @@
+import copy
 import argparse
 import time
 import numpy as np
 from io import StringIO
 import itertools
-import gnuplotlib as gp
 import os
 import sys
 
 from jax.config import config as jax_config
 # this always needs to be set
 jax_config.update("jax_enable_x64", True)
-
 
 from scipy.stats import special_ortho_group
 import jax
@@ -19,14 +18,13 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from simtk.openmm import app
-from simtk.openmm.app import forcefield as ff
 from simtk.openmm.app import PDBFile
 
 from timemachine.lib import custom_ops, ops
 from fe.utils import to_md_units, write
 from fe import math_utils
 
-import multiprocessing
+from multiprocessing import Process, Pipe
 from matplotlib import pyplot as plt
 
 from jax.experimental import optimizers
@@ -34,6 +32,9 @@ from jax.experimental import optimizers
 from fe import simulation
 from fe import loss
 
+from ff import forcefield
+from ff import system
+from ff import openmm_converter
 
 def com(conf):
     return np.sum(conf, axis=0)/conf.shape[0]
@@ -84,6 +85,12 @@ class PDBWriter():
         PDBFile.writeFooter(self.topology, self.outfile)
         self.outfile.flush()
 
+def get_masses(m):
+    masses = []
+    for a in m.GetAtoms():
+        masses.append(a.GetMass())
+    return masses
+
 import jax.numpy as jnp
 
 def error_fn(all_du_dls, T, schedule, true_dG):
@@ -102,24 +109,27 @@ def error_fn(all_du_dls, T, schedule, true_dG):
     # kT = 1
     dG_fwd /= kT
     dG_bkwd /= kT
+
     pred_dG = loss.mybar(jnp.stack([dG_fwd, dG_bkwd]))
     pred_dG *= kT
 
+    # print(dG_fwd, dG_bkwd)
+    print("pred_dG", pred_dG)
     return jnp.abs(pred_dG - true_dG)
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Quick Test')
-    parser.add_argument('--frames_dir', type=str, required=True)
+    parser.add_argument('--out_dir', type=str, required=True)
     parser.add_argument('--precision', type=str, required=True)    
     parser.add_argument('--complex_pdb', type=str, required=True)
     parser.add_argument('--ligand_sdf', type=str, required=True)
     parser.add_argument('--num_gpus', type=int, required=True)
-    parser.add_argument('--jobs_per_gpu', type=int, required=True)
     parser.add_argument('--num_conformers', type=int, required=True)
+    parser.add_argument('--forcefield', type=str, required=True)
     args = parser.parse_args()
 
-    assert os.path.isdir(args.frames_dir)
+    assert os.path.isdir(args.out_dir)
 
 
     if args.precision == 'single':
@@ -134,11 +144,6 @@ if __name__ == "__main__":
         break
 
     num_gpus = args.num_gpus
-    num_workers = args.num_gpus*args.jobs_per_gpu
-
-    print('Creating multiprocessing pool with',args.num_gpus, 'gpus and', args.jobs_per_gpu, 'jobs per gpu')
-    pool = multiprocessing.Pool(num_workers)
-
     all_du_dls = []
 
     start = 1e3
@@ -199,57 +204,107 @@ if __name__ == "__main__":
     host_conf = np.array(host_conf)
     host_name = "complex"
 
+    # set up the system
+    amber_ff = app.ForceField('amber99sbildn.xml', 'amber99_obc.xml')
+    host_system = amber_ff.createSystem(host_pdb.topology,
+        nonbondedMethod=app.NoCutoff,
+        constraints=None,
+        rigidWater=False)
+
+    host_system = openmm_converter.deserialize_system(host_system)
+    num_host_atoms = len(host_system.masses)
+
+    print("num_host_atoms", num_host_atoms)
+
+    # open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
+    open_ff = forcefield.Forcefield(args.forcefield)
+    nrg_fns = open_ff.parameterize(guest_mol)
+    guest_masses = get_masses(guest_mol)
+    guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
+
+    combined_system = host_system.merge(guest_system)
+    cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
+    lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
+    lambda_idxs[num_host_atoms:] = -1
+
     sim = simulation.Simulation(
-        guest_mol,
-        host_pdb,
-        'insertion',
+        combined_system,
         step_sizes,
         cas,
-        lambda_schedule
+        cbs,
+        lambda_schedule,
+        lambda_idxs,
+        precision
     )
 
-    initial_params = sim.combined_params
+    initial_params = sim.system.params
 
     opt_state = opt_init(initial_params)
 
     num_epochs = 100
+
     for epoch in range(num_epochs):
         # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
 
         epoch_params = get_params(opt_state)
-        sim.combined_params = epoch_params
+
+
+
+        # deepy and openff param at start
+        epoch_ff_params = copy.deepcopy(open_ff)
+        epoch_ff_params.params = epoch_params[len(host_system.params):]
+        fname = "epoch_"+str(epoch)+"_params"
+        fpath = os.path.join(args.out_dir, fname)
+        epoch_ff_params.save(fpath)
+
+        sim.system.params = epoch_params
 
         all_args = []
+
+        child_conns = []
+        parent_conns = []
         for conf_idx in range(num_conformers):
 
             conformer = guest_mol.GetConformer(conf_idx)
             guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
             guest_conf = guest_conf/10 # convert to md_units
             guest_conf = recenter(guest_conf, conf_com)
-
             x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
 
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-            out_file = os.path.join(args.frames_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
+            out_file = os.path.join(args.out_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file)
 
-            # set this to None if we don't care about visualization
-            all_args.append([x0, writer, conf_idx % num_gpus, precision, None])
+            v0 = np.zeros_like(x0)
 
-        all_du_dls = pool.map(sim.run_forward_multi, all_args)
+            parent_conn, child_conn = Pipe()
+            parent_conns.append(parent_conn)
+            # writer can be None if we don't care about vis
+            all_args.append([x0, v0, conf_idx % num_gpus, writer, child_conn])
+
+        processes = []
+
+        for arg in all_args:
+            p = Process(target=sim.run_forward_and_backward, args=arg)
+            p.daemon = True
+            processes.append(p)
+            p.start()
+
+        all_du_dls = []
+        for pc in parent_conns:
+            du_dls = pc.recv()
+            all_du_dls.append(du_dls)
+
         all_du_dls = np.array(all_du_dls)
-
-        loss_grad_fn = jax.grad(error_fn, argnums=(0,))
+        loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
       
-        for du_dls in all_du_dls:
-            fwd = du_dls[:T//2]
-            bkwd = du_dls[T//2:]
-
-            plt.plot(np.log(lambda_schedule[:T//2]), fwd)
-            plt.plot(np.log(lambda_schedule[T//2:]), bkwd)
-
-        # plt.show() # enable on desktop (non servers if you want to see what's going on)
+        # for du_dls in all_du_dls:
+        #     fwd = du_dls[:T//2]
+        #     bkwd = du_dls[T//2:]
+        #     plt.plot(np.log(lambda_schedule[:T//2]), fwd)
+        #     plt.plot(np.log(lambda_schedule[T//2:]), bkwd)
+        # plt.show()
 
         true_dG = 26.61024 # -6.36 * 4.184 * -1 (for insertion)
 
@@ -260,31 +315,38 @@ if __name__ == "__main__":
         error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, true_dG)
         all_du_dl_adjoints = error_grad[0]
 
-        # set the adjoints for reverse mode
-        for arg_idx, arg in enumerate(all_args):
-            arg[-1] = all_du_dl_adjoints[arg_idx]
+        # send everything at once
+        for pc, du_dl_adjoints in zip(parent_conns, all_du_dl_adjoints):
+            pc.send(du_dl_adjoints)
 
-        dl_dps = pool.map(sim.run_forward_multi, all_args)
+        # receive everything at once
+        all_dl_dps = []
+        for pc in parent_conns:
+            dl_dp = pc.recv()
+            all_dl_dps.append(dl_dp)
 
-        dl_dps = np.array(dl_dps)
-        dl_dps = np.sum(dl_dps, axis=0)
+        # terminate all the processes
+        for p in processes:
+            p.join()
+
+        all_dl_dps = np.array(all_dl_dps)
+        all_dl_dps = np.sum(all_dl_dps, axis=0)
 
         allowed_groups = {
-            17: 0.5, # charge
-            # 18: 1e-2, # atomic radii
-            19: 1e-2 # scale factor
+            14: 0.5, # small_molecule charge
+            # 12: 1e-2, # GB atomic radii
+            13: 1e-2 # GB scale factor
         }
 
         filtered_grad = []
-        for g_idx, (g, gp) in enumerate(zip(dl_dps, sim.combined_param_groups)):
+        for g_idx, (g, gp) in enumerate(zip(all_dl_dps, sim.system.param_groups)):
             if gp in allowed_groups:
                 pf = allowed_groups[gp]
                 filtered_grad.append(g*pf)
                 if g != 0:
-                    print("derivs", g_idx, '\t', g, '\t adjusted to', g*pf, '\t old val', sim.combined_params[g_idx])
+                    print("derivs", g_idx, '\t group', gp, '\t', g, '\t adjusted to', g*pf, '\t old val', sim.system.params[g_idx])
             else:
                 filtered_grad.append(0)
 
         filtered_grad = np.array(filtered_grad)
         opt_state = opt_update(epoch, filtered_grad, opt_state)
-

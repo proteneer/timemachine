@@ -300,6 +300,8 @@ __global__ void k_reduce_born_radii_jvp(
 
     if(atom_i_idx < N) {
         Surreal<double> br = offsetRadiusI*radiusI/(radiusI - offsetRadiusI*tanhSum);
+
+        // printf("br real/imag %f %f\n", br.real, br.imag);
         born_radii[atom_i_idx] = br;
         obc_chain[atom_i_idx] = br*br*(1 - tanhSum*tanhSum)*(alpha_obc - 2*beta_obc*sum + 3*gamma_obc*sum2)/radiusI;
         obc_chain_ri[atom_i_idx] = br*br*(1/(offsetRadiusI*offsetRadiusI) - tanhSum/(radiusI*radiusI));

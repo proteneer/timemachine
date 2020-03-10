@@ -7,7 +7,7 @@ from jax.interpreters import ad
 
 from fe import bar as tmbar
 import pymbar
-import math_utils
+from fe import math_utils
 
 
 # (ytz): the AD override trick is taken from:

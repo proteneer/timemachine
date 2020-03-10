@@ -5,99 +5,71 @@ import os
 from rdkit import Chem
 
 from simtk.openmm import app
-from simtk.openmm.app import forcefield as ff
-from simtk.openmm.app import PDBFile
-
-from openforcefield.typing.engines import smirnoff
-from system import serialize, forcefield
 
 from timemachine.lib import custom_ops
 import traceback
 
-
-def merge_gradients(
-    gradients,
-    precision):
-
-    g = []
-    for fn, fn_args in gradients:
-        g.append(fn(*fn_args, precision=precision))
-
-    return g
-
 class Simulation:
     """
-    A picklable simulation object
+    A serializable simulation object
     """
     def __init__(self,
-        guest_mol,
-        host_pdb,
-        direction,
+        system,
         step_sizes,
         cas,
-        lambda_schedule
-        ):
+        cbs,
+        lambda_schedule,
+        lambda_idxs,
+        precision):
+        """
+        Create a simulation.
+
+        Parameters
+        ----------
+        system: System
+            A fully parameterized system
+
+        step_sizes: np.array, np.float64, [T]
+            dt for each step
+
+        cas: np.array, np.float64, [T]
+            Friction coefficient to be used on each timestep
+
+        cbs: np.array, np.float64, [N]
+            Per particle force multipliers. Every element must be negative.
+
+        lambda_schedule: np.array, np.float64, [T]
+            lambda parameter for each time step
+
+        lambda_idxs: np.array, np.int32, [N]
+            If lambda_idxs[atom_idx] is 0, then the particle is not modified.
+
+        precision: either np.float64 or np.float32
+            Precision in which we compute the force kernels. Note that integration
+            is always done in 64bit.
+
+        """
 
         self.step_sizes = step_sizes
-        amber_ff = app.ForceField('amber99sbildn.xml', 'amber99_obc.xml')
-
-        # host
-        system = amber_ff.createSystem(
-            host_pdb.topology,
-            nonbondedMethod=app.NoCutoff,
-            constraints=None,
-            rigidWater=False)
-
-        host_potentials, (host_params, host_param_groups), host_masses = serialize.deserialize_system(system, dimension=4)
-        # parameterize the small molecule
-        off = smirnoff.ForceField("test_forcefields/smirnoff99Frosst.offxml")
-        guest_potentials, (guest_params, guest_param_groups), guest_masses = forcefield.parameterize(guest_mol, off, dimension=4)
-
-        combined_potentials, combined_params, combined_param_groups, combined_masses = forcefield.combiner(
-            host_potentials, guest_potentials,
-            host_params, guest_params,
-            host_param_groups, guest_param_groups,
-            host_masses, guest_masses
-        )
-
-        self.num_host_atoms = len(host_masses)
-
-        self.combined_potentials = combined_potentials
-        self.combined_params = combined_params
-        self.combined_param_groups = combined_param_groups
-
-        N_host = len(host_pdb.positions)
-        N_guest = guest_mol.GetNumAtoms()
-        N_combined = N_host + N_guest
-
+        self.system = system
         self.cas = cas
-        self.cbs = -np.ones(N_combined)*0.0001
+        self.cbs = cbs
+
+        for b in cbs:
+            if b > 0:
+                raise ValueError("cbs must all be <= 0")
 
         self.lambda_schedule = lambda_schedule
-        self.lambda_idxs = np.zeros(N_combined, dtype=np.int32)
-        if direction == 'deletion':
-            self.lambda_idxs[N_host:] = 1
-        elif direction == 'insertion':
-            self.lambda_idxs[N_host:] = -1
-        else:
-            raise ValueError("Unknown direction: "+direction)
+        self.lambda_idxs = lambda_idxs
+        self.precision = precision
 
-    def run_forward_multi(self, args):
-        """
-        A multiprocess safe version of the run_forward code. This code will
-        also set the GPU on which the simulation should run on.
-        """
-
-        x0, pdb_writer, gpu_idx, precision, adjoint_du_dl = args
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
-        try:
-            return self.run_forward(x0, pdb_writer, precision, adjoint_du_dl)
-        except Exception as err:
-            print(err)
-            traceback.print_tb(err.__traceback__)
-            raise 
-
-    def run_forward(self, x0, pdb_writer, precision, du_dl_adjoints=None):
+    def run_forward_and_backward(
+        self,
+        x0,
+        v0,
+        gpu_idx,
+        pdb_writer,
+        pipe):
         """
         Run a forward simulation
 
@@ -106,18 +78,27 @@ class Simulation:
         x0: np.arrray, np.float64, [N,3]
             Starting geometries
 
+        v0: np.array, np.float64, [N, 3]
+            Starting velocities
+
+        gpu_idx: int
+            which gpu we run the job on
+
         pdb_writer: For writing out the trajectory
             If None then we skip writing
 
-        precision: np.float64 or np.float32
-            What level of precision we run the simulation at.
-
-        du_dl_adjoints: np.array, np.float64, [T]
-            If None, then we skip the backwards pass. If not None, this
-            array must have shape equal to the number of timesteps.
+        pipe: multiprocessing.Pipe
+            Use to communicate with the parent host
 
         """
-        gradients = merge_gradients(self.combined_potentials, precision)
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
+
+        gradients = self.system.make_gradients(dimension=4, precision=self.precision)
+
+        # (ytz): debug use
+        # gradients = self.system.make_gradients(dimension=3, precision=self.precision)
+        # for g in gradients:
+            # forces = g.execute(x0, self.system.params)
 
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
@@ -126,7 +107,6 @@ class Simulation:
         )
 
         v0 = np.zeros_like(x0)
-
         ctxt = custom_ops.ReversibleContext_f64_3d(
             stepper,
             x0,
@@ -134,38 +114,35 @@ class Simulation:
             self.cas,
             self.cbs,
             self.step_sizes,
-            self.combined_params
+            self.system.params
         )
 
         start = time.time()
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
-        if du_dl_adjoints is not None:
+        du_dls = stepper.get_du_dl()
+        xs = ctxt.get_all_coords()
 
-            assert du_dl_adjoints.shape == self.lambda_schedule.shape
-            stepper.set_du_dl_adjoint(du_dl_adjoints)
-            ctxt.set_x_t_adjoint(np.zeros_like(x0))
-            start = time.time()
-            ctxt.backward_mode()
-            print("bkwd run time", time.time() - start)
-            dL_dp = ctxt.get_param_adjoint_accum()
+        if pdb_writer is not None:
+            pdb_writer.write_header()
+            xs = ctxt.get_all_coords()
+            for frame_idx, x in enumerate(xs):
 
-            return dL_dp                 
+                interval = max(1, xs.shape[0]//pdb_writer.n_frames)
+                if frame_idx % interval == 0:
+                    pdb_writer.write(x*10)
+        pdb_writer.close()
 
-        else:
+        pipe.send(du_dls)
+        du_dl_adjoints = pipe.recv()
+        stepper.set_du_dl_adjoint(du_dl_adjoints)
+        ctxt.set_x_t_adjoint(np.zeros_like(x0))
+        start = time.time()
+        ctxt.backward_mode()
+        print("bkwd run time", time.time() - start)
+        dL_dp = ctxt.get_param_adjoint_accum()
 
-
-            if pdb_writer is not None:
-                pdb_writer.write_header()
-                xs = ctxt.get_all_coords()
-                for frame_idx, x in enumerate(xs):
-
-                    interval = max(1, xs.shape[0]//pdb_writer.n_frames)
-                    if frame_idx % interval == 0:
-                        pdb_writer.write(x*10)
-            pdb_writer.close()
-            
-            du_dls = stepper.get_du_dl()
-
-            return du_dls     
+        pipe.send(dL_dp)
+        pipe.close()
+        return
