@@ -56,7 +56,6 @@ class System():
                 c_nrgs["PeriodicTorsion"] = (torsion_idxs, torsion_param_idxs)
             elif a_name == "Nonbonded":
                 assert a_args[5] == b_args[5] # cutoff
-                # directly permute the location of the charges
                 es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
                 lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
 

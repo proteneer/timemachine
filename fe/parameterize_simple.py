@@ -1,5 +1,3 @@
-# parameterize_simple
-
 import argparse
 import time
 import numpy as np
@@ -21,7 +19,6 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from simtk.openmm import app
-# from simtk.openmm.app import forcefield as mmff
 from simtk.openmm.app import PDBFile
 
 from timemachine.lib import custom_ops, ops
@@ -337,7 +334,7 @@ if __name__ == "__main__":
 
         allowed_groups = {
             14: 0.5, # small_molecule charge
-            # 18: 1e-2, # GB atomic radii
+            # 12: 1e-2, # GB atomic radii
             13: 1e-2 # GB scale factor
         }
 

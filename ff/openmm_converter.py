@@ -1,8 +1,6 @@
 import os
 import numpy as np
 
-# from timemachine.lib import ops
-
 from simtk import openmm as mm
 from simtk.openmm import app
 from simtk.openmm.app import PDBFile
@@ -216,8 +214,6 @@ def deserialize_system(system):
         probe_radius,                  # probe_radius
         10000.0                        # cutoff
     )
-
-            # test_potentials.append(test_gbsa)
 
     global_params = np.array(global_params)
     global_param_groups = np.array(global_param_groups) + 100
