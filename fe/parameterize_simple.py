@@ -319,10 +319,13 @@ if __name__ == "__main__":
         error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, true_dG)
         all_du_dl_adjoints = error_grad[0]
 
-        all_dl_dps = []
+        # send everything at once
         for pc, du_dl_adjoints in zip(parent_conns, all_du_dl_adjoints):
-
             pc.send(du_dl_adjoints)
+
+        # receive everything at once
+        all_dl_dps = []
+        for pc in parent_conns:
             dl_dp = pc.recv()
             all_dl_dps.append(dl_dp)
 
