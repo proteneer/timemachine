@@ -230,16 +230,17 @@ if __name__ == "__main__":
             ligand_list.append((rd_mol, float(dG_value)))
 
     ligand_dataset = dataset.Dataset(ligand_list)
-    train, test = ligand_dataset.split(0.7)
+    train, test = ligand_dataset.split(0.2)
 
-    if os.path.exists(args.out_dir+"/loss.txt"):
-        os.remove(args.out_dir+"/loss.txt")
+    loss_file_path = os.path.join(args.out_dir, "loss.txt")
+    if os.path.exists(loss_file_path):
+        os.remove(loss_file_path)
 
     for epoch in range(num_epochs):
         # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
         train.shuffle()
         
-        for data in train.iterbatches(1):
+        for id, data in enumerate(train.iterbatches(1)):
 
             guest_mol = copy.deepcopy(data[0][0])
             true_dG = data[0][1] # in kJ/mol and positive sign 
@@ -268,26 +269,7 @@ if __name__ == "__main__":
 
                 for atom_idx, pos in enumerate(guest_conf):
                     conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
-    
-            host_pdb_file = args.complex_pdb
-            host_pdb = app.PDBFile(host_pdb_file)
-            host_conf = []
-            for x,y,z in host_pdb.positions:
-                host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-            host_conf = np.array(host_conf)
-            host_name = "complex"
 
-            # set up the system
-            amber_ff = app.ForceField('amber99sbildn.xml', 'amber99_obc.xml')
-            host_system = amber_ff.createSystem(host_pdb.topology,
-                nonbondedMethod=app.NoCutoff,
-                constraints=None,
-                rigidWater=False)
-
-            host_system = openmm_converter.deserialize_system(host_system)
-            num_host_atoms = len(host_system.masses)
-
-            # open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
             open_ff = forcefield.Forcefield(args.forcefield)
             nrg_fns = open_ff.parameterize(guest_mol)
             guest_masses = get_masses(guest_mol)
@@ -312,7 +294,7 @@ if __name__ == "__main__":
 
             epoch_train_ff_params = copy.deepcopy(open_ff)
             epoch_train_ff_params.params = epoch_train_params[len(host_system.params):]
-            fname = "epoch_"+str(epoch)+"_dG_"+str(true_dG)+"_params"
+            fname = "epoch_"+str(epoch)+"_ligand_"+str(id)+"_params"
             fpath = os.path.join(args.out_dir, fname)
             epoch_train_ff_params.save(fpath)
 
@@ -361,7 +343,7 @@ if __name__ == "__main__":
             error = error_fn(all_du_dls, T, lambda_schedule, true_dG)
 
             print("---EPOCH", epoch, "---Train---LOSS", error)
-            with open(args.out_dir+"/loss.txt", "a+") as f:
+            with open(loss_file_path, "a+") as f:
                 f.write("---EPOCH %d----Train---LOSS---- %f\n\n " % (epoch, error))
 
             error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, true_dG)
@@ -376,6 +358,7 @@ if __name__ == "__main__":
             for pc in parent_conns:
                 dl_dp = pc.recv()
                 all_dl_dps.append(dl_dp)
+                pc.close()
 
             # terminate all the processes
             for p in processes:
@@ -426,26 +409,7 @@ if __name__ == "__main__":
 
                 for atom_idx, pos in enumerate(guest_conf):
                     conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
-    
-            host_pdb_file = args.complex_pdb
-            host_pdb = app.PDBFile(host_pdb_file)
-            host_conf = []
-            for x,y,z in host_pdb.positions:
-                host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-            host_conf = np.array(host_conf)
-            host_name = "complex"
 
-            # set up the system
-            amber_ff = app.ForceField('amber99sbildn.xml', 'amber99_obc.xml')
-            host_system = amber_ff.createSystem(host_pdb.topology,
-                nonbondedMethod=app.NoCutoff,
-                constraints=None,
-                rigidWater=False)
-
-            host_system = openmm_converter.deserialize_system(host_system)
-            num_host_atoms = len(host_system.masses)
-
-            # open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
             open_ff = forcefield.Forcefield(args.forcefield)
             nrg_fns = open_ff.parameterize(guest_mol)
             guest_masses = get_masses(guest_mol)
@@ -505,7 +469,12 @@ if __name__ == "__main__":
             all_du_dls = []
             for pc in parent_conns:
                 du_dls = pc.recv()
-                all_du_dls.append(du_dls)
+                all_du_dls.append(du_dls)           
+                pc.close()
+
+            # terminate all the processes
+            for p in processes:
+                p.terminate()
 
             all_du_dls = np.array(all_du_dls)
             loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
@@ -513,11 +482,6 @@ if __name__ == "__main__":
             error = error_fn(all_du_dls, T, lambda_schedule, true_dG)
 
             print("---EPOCH", epoch, "---Test---LOSS", error)
-            with open(args.out_dir+"/loss.txt", "a+") as f:
+            with open(loss_file_path, "a+") as f:
                 f.write("---EPOCH %d----Test---LOSS---- %f\n\n " % (epoch, error))
-
-
-
-
-
-
+            
