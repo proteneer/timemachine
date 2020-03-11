@@ -135,14 +135,17 @@ class Simulation:
         pdb_writer.close()
 
         pipe.send(du_dls)
-        du_dl_adjoints = pipe.recv()
-        stepper.set_du_dl_adjoint(du_dl_adjoints)
-        ctxt.set_x_t_adjoint(np.zeros_like(x0))
-        start = time.time()
-        ctxt.backward_mode()
-        print("bkwd run time", time.time() - start)
-        dL_dp = ctxt.get_param_adjoint_accum()
 
-        pipe.send(dL_dp)
+        du_dl_adjoints = pipe.recv()
+
+        if du_dl_adjoints is not None:
+            stepper.set_du_dl_adjoint(du_dl_adjoints)
+            ctxt.set_x_t_adjoint(np.zeros_like(x0))
+            start = time.time()
+            ctxt.backward_mode()
+            print("bkwd run time", time.time() - start)
+            dL_dp = ctxt.get_param_adjoint_accum()
+            pipe.send(dL_dp)
+
         pipe.close()
         return
