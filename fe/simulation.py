@@ -135,8 +135,10 @@ class Simulation:
         pdb_writer.close()
 
         pipe.send(du_dls)
-        try:
-            du_dl_adjoints = pipe.recv()
+
+        du_dl_adjoints = pipe.recv()
+
+        if du_dl_adjoints is not None:
             stepper.set_du_dl_adjoint(du_dl_adjoints)
             ctxt.set_x_t_adjoint(np.zeros_like(x0))
             start = time.time()
@@ -144,8 +146,6 @@ class Simulation:
             print("bkwd run time", time.time() - start)
             dL_dp = ctxt.get_param_adjoint_accum()
             pipe.send(dL_dp)
-        except EOFError:
-            pass
 
         pipe.close()
         return

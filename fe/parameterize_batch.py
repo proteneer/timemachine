@@ -192,6 +192,9 @@ if __name__ == "__main__":
     guest_masses = get_masses(guest_mol)
     guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
 
+    off_groups_path = os.path.join(args.out_dir, "original_off_param_groups.txt")
+    np.savetxt(off_groups_path, open_ff.param_groups)
+
     combined_system = host_system.merge(guest_system)
     cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
     lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
@@ -230,258 +233,172 @@ if __name__ == "__main__":
             ligand_list.append((rd_mol, float(dG_value)))
 
     ligand_dataset = dataset.Dataset(ligand_list)
-    train, test = ligand_dataset.split(0.2)
+    train, test = ligand_dataset.split(0.7)
 
     loss_file_path = os.path.join(args.out_dir, "loss.txt")
     if os.path.exists(loss_file_path):
         os.remove(loss_file_path)
 
-    for epoch in range(num_epochs):
-        # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
-        train.shuffle()
-        
-        for id, data in enumerate(train.iterbatches(1)):
+    for epoch in range(num_epochs):        
+        for idx, dataset in enumerate([train, test]):
+            if idx == 1:
+                inference = True
+                job_name = 'test'
+            else:
+                inference = False
+                job_name = 'train'
+                dataset.shuffle()
 
-            guest_mol = copy.deepcopy(data[0][0])
-            true_dG = data[0][1] # in kJ/mol and positive sign 
-            
-            print(guest_mol, true_dG)
+            for id, data in enumerate(dataset.iterbatches(1)):
+                # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
+                guest_mol = copy.deepcopy(data[0][0])
+                true_dG = data[0][1] # in kJ/mol and positive sign 
 
-            init_conf = guest_mol.GetConformer(0)
-            init_conf = np.array(init_conf.GetPositions(), dtype=np.float64)
-            init_conf = init_conf/10 # convert to md_units
-            conf_com = com(init_conf)
+                init_conf = guest_mol.GetConformer(0)
+                init_conf = np.array(init_conf.GetPositions(), dtype=np.float64)
+                init_conf = init_conf/10 # convert to md_units
+                conf_com = com(init_conf)
 
-            init_mol = Chem.Mol(guest_mol)
+                init_mol = Chem.Mol(guest_mol)
 
-            num_conformers = args.num_conformers
+                num_conformers = args.num_conformers
 
-            # generate a set of gas phase conformers using the RDKit
-            guest_mol.RemoveAllConformers()
-            AllChem.EmbedMultipleConfs(guest_mol, num_conformers, randomSeed=2020)
-            np.random.seed(2020)
-            for conf_idx in range(num_conformers):
-                conformer = guest_mol.GetConformer(conf_idx)
-                guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-                guest_conf = guest_conf/10 # convert to md_units
-                rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
-                guest_conf = np.matmul(guest_conf, rot_matrix)*10
+                # generate a set of gas phase conformers using the RDKit
+                guest_mol.RemoveAllConformers()
+                AllChem.EmbedMultipleConfs(guest_mol, num_conformers, randomSeed=2020)
+                np.random.seed(2020)
+                for conf_idx in range(num_conformers):
+                    conformer = guest_mol.GetConformer(conf_idx)
+                    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+                    guest_conf = guest_conf/10 # convert to md_units
+                    rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
+                    guest_conf = np.matmul(guest_conf, rot_matrix)*10
 
-                for atom_idx, pos in enumerate(guest_conf):
-                    conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
+                    for atom_idx, pos in enumerate(guest_conf):
+                        conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
 
-            open_ff = forcefield.Forcefield(args.forcefield)
-            nrg_fns = open_ff.parameterize(guest_mol)
-            guest_masses = get_masses(guest_mol)
-            guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
+                open_ff = forcefield.Forcefield(args.forcefield)
+                nrg_fns = open_ff.parameterize(guest_mol)
+                guest_masses = get_masses(guest_mol)
+                guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
 
-            combined_system = host_system.merge(guest_system)
-            cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
-            lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
-            lambda_idxs[num_host_atoms:] = -1
+                combined_system = host_system.merge(guest_system)
+                cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
+                lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
+                lambda_idxs[num_host_atoms:] = -1
 
-            sim = simulation.Simulation(
-                combined_system,
-                step_sizes,
-                cas,
-                cbs,
-                lambda_schedule,
-                lambda_idxs,
-                precision
-            )
+                sim = simulation.Simulation(
+                    combined_system,
+                    step_sizes,
+                    cas,
+                    cbs,
+                    lambda_schedule,
+                    lambda_idxs,
+                    precision
+                )
 
-            epoch_train_params = get_params(opt_state)
+                epoch_train_params = get_params(opt_state)
+                
+                if not inference:
+                    epoch_train_ff_params = copy.deepcopy(open_ff)
+                    epoch_train_ff_params.params = epoch_train_params[len(host_system.params):]
+                    fname = "epoch_"+str(epoch)+"_ligand_"+str(id)+"_params"
+                    fpath = os.path.join(args.out_dir, fname)
+                    epoch_train_ff_params.save(fpath)
 
-            epoch_train_ff_params = copy.deepcopy(open_ff)
-            epoch_train_ff_params.params = epoch_train_params[len(host_system.params):]
-            fname = "epoch_"+str(epoch)+"_ligand_"+str(id)+"_params"
-            fpath = os.path.join(args.out_dir, fname)
-            epoch_train_ff_params.save(fpath)
+                sim.system.params = epoch_train_params
 
-            sim.system.params = epoch_train_params
+                all_args = []
 
-            all_args = []
+                child_conns = []
+                parent_conns = []
+                for conf_idx in range(num_conformers):
 
-            child_conns = []
-            parent_conns = []
-            for conf_idx in range(num_conformers):
+                    conformer = guest_mol.GetConformer(conf_idx)
+                    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+                    guest_conf = guest_conf/10 # convert to md_units
+                    guest_conf = recenter(guest_conf, conf_com)
+                    x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
 
-                conformer = guest_mol.GetConformer(conf_idx)
-                guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-                guest_conf = guest_conf/10 # convert to md_units
-                guest_conf = recenter(guest_conf, conf_com)
-                x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
+                    combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
+                    combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+                    out_file = os.path.join(args.out_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+job_name+"_"+host_name+"_ligand_"+str(id)+"_conf_"+str(conf_idx)+".pdb")
+                    writer = PDBWriter(combined_pdb_str, out_file)
 
-                combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
-                combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-                out_file = os.path.join(args.out_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
-                writer = PDBWriter(combined_pdb_str, out_file)
+                    v0 = np.zeros_like(x0)
 
-                v0 = np.zeros_like(x0)
+                    parent_conn, child_conn = Pipe()
+                    parent_conns.append(parent_conn)
+                    # writer can be None if we don't care about vis
+                    all_args.append([x0, v0, conf_idx % num_gpus, writer, child_conn])
 
-                parent_conn, child_conn = Pipe()
-                parent_conns.append(parent_conn)
-                # writer can be None if we don't care about vis
-                all_args.append([x0, v0, conf_idx % num_gpus, writer, child_conn])
+                processes = []
 
-            processes = []
+                for arg in all_args:
+                    p = Process(target=sim.run_forward_and_backward, args=arg)
+                    p.daemon = True
+                    processes.append(p)
+                    p.start()
 
-            for arg in all_args:
-                p = Process(target=sim.run_forward_and_backward, args=arg)
-                p.daemon = True
-                processes.append(p)
-                p.start()
+                all_du_dls = []
+                for pc in parent_conns:
+                    du_dls = pc.recv()
+                    all_du_dls.append(du_dls)
 
-            all_du_dls = []
-            for pc in parent_conns:
-                du_dls = pc.recv()
-                all_du_dls.append(du_dls)
+                all_du_dls = np.array(all_du_dls)
+                loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
+                
+                if inference:
+                    # test mode
+                    error = error_fn(all_du_dls, T, lambda_schedule, true_dG)
+                    print("---EPOCH", epoch, "---Test---LOSS", error)
+                    with open(loss_file_path, "a+") as f:
+                        f.write("---EPOCH %d---Test---LOSS---%f\n\n " % (epoch, error))
 
-            all_du_dls = np.array(all_du_dls)
-            loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
+                    for pc in parent_conns:
+                        pc.send(None)
+                        pc.close()
 
-            error = error_fn(all_du_dls, T, lambda_schedule, true_dG)
-
-            print("---EPOCH", epoch, "---Train---LOSS", error)
-            with open(loss_file_path, "a+") as f:
-                f.write("---EPOCH %d----Train---LOSS---- %f\n\n " % (epoch, error))
-
-            error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, true_dG)
-            all_du_dl_adjoints = error_grad[0]
-
-            # send everything at once
-            for pc, du_dl_adjoints in zip(parent_conns, all_du_dl_adjoints):
-                pc.send(du_dl_adjoints)
-
-            # receive everything at once
-            all_dl_dps = []
-            for pc in parent_conns:
-                dl_dp = pc.recv()
-                all_dl_dps.append(dl_dp)
-                pc.close()
-
-            # terminate all the processes
-            for p in processes:
-                p.join()
-
-            all_dl_dps = np.array(all_dl_dps)
-            all_dl_dps = np.sum(all_dl_dps, axis=0)
-
-            allowed_groups = {vary_allowed_groups[epoch][0]: vary_allowed_groups[epoch][1]}
-
-            filtered_grad = []
-            for g_idx, (g, gp) in enumerate(zip(all_dl_dps, sim.system.param_groups)):
-                if gp in allowed_groups:
-                    pf = allowed_groups[gp]
-                    filtered_grad.append(g*pf)
-                    if g != 0:
-                        print("derivs", g_idx, '\t group', gp, '\t', g, '\t adjusted to', g*pf, '\t old val', sim.system.params[g_idx])
                 else:
-                    filtered_grad.append(0)
+                    # training mode, so we need to compute the derivatives
+                    error = error_fn(all_du_dls, T, lambda_schedule, true_dG)
+                    print("---EPOCH", epoch, "---Train---LOSS", error)
+                    with open(loss_file_path, "a+") as f:
+                        f.write("---EPOCH %d---Train---LOSS---%f\n\n " % (epoch, error))
+                    error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, true_dG)
+                    all_du_dl_adjoints = error_grad[0]
 
-            filtered_grad = np.array(filtered_grad)
-            opt_state = opt_update(epoch, filtered_grad, opt_state)
+                    # send everything at once
+                    for pc, du_dl_adjoints in zip(parent_conns, all_du_dl_adjoints):
+                        pc.send(du_dl_adjoints)
 
-        for data in test.iterbatches(1):
+                    # receive everything at once
+                    all_dl_dps = []
+                    for pc in parent_conns:
+                        dl_dp = pc.recv()
+                        all_dl_dps.append(dl_dp)
 
-            guest_mol = copy.deepcopy(data[0][0])
-            true_dG = data[0][1] # in kJ/mol and positive sign 
+                    all_dl_dps = np.array(all_dl_dps)
+                    all_dl_dps = np.sum(all_dl_dps, axis=0)
 
-            init_conf = guest_mol.GetConformer(0)
-            init_conf = np.array(init_conf.GetPositions(), dtype=np.float64)
-            init_conf = init_conf/10 # convert to md_units
-            conf_com = com(init_conf)
+                    allowed_groups = {vary_allowed_groups[epoch][0]: vary_allowed_groups[epoch][1]}
 
-            init_mol = Chem.Mol(guest_mol)
+                    filtered_grad = []
+                    for g_idx, (g, gp) in enumerate(zip(all_dl_dps, sim.system.param_groups)):
+                        if gp in allowed_groups:
+                            pf = allowed_groups[gp]
+                            filtered_grad.append(g*pf)
+                            if g != 0:
+                                print("derivs", g_idx, '\t group', gp, '\t', g, '\t adjusted to', g*pf, '\t old val', sim.system.params[g_idx])
+                        else:
+                            filtered_grad.append(0)
 
-            num_conformers = args.num_conformers
+                    filtered_grad = np.array(filtered_grad)
+                    opt_state = opt_update(epoch, filtered_grad, opt_state)
 
-            # generate a set of gas phase conformers using the RDKit
-            guest_mol.RemoveAllConformers()
-            AllChem.EmbedMultipleConfs(guest_mol, num_conformers, randomSeed=2020)
-            np.random.seed(2020)
-            for conf_idx in range(num_conformers):
-                conformer = guest_mol.GetConformer(conf_idx)
-                guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-                guest_conf = guest_conf/10 # convert to md_units
-                rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
-                guest_conf = np.matmul(guest_conf, rot_matrix)*10
+                    for pc in parent_conns:
+                        pc.close()
 
-                for atom_idx, pos in enumerate(guest_conf):
-                    conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
-
-            open_ff = forcefield.Forcefield(args.forcefield)
-            nrg_fns = open_ff.parameterize(guest_mol)
-            guest_masses = get_masses(guest_mol)
-            guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
-
-            combined_system = host_system.merge(guest_system)
-            cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
-            lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
-            lambda_idxs[num_host_atoms:] = -1
-
-            sim = simulation.Simulation(
-                combined_system,
-                step_sizes,
-                cas,
-                cbs,
-                lambda_schedule,
-                lambda_idxs,
-                precision
-            )
-
-            epoch_train_params = get_params(opt_state)
-
-            sim.system.params = epoch_train_params
-
-            all_args = []
-
-            child_conns = []
-            parent_conns = []
-            for conf_idx in range(num_conformers):
-
-                conformer = guest_mol.GetConformer(conf_idx)
-                guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-                guest_conf = guest_conf/10 # convert to md_units
-                guest_conf = recenter(guest_conf, conf_com)
-                x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
-
-                combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
-                combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-                out_file = os.path.join(args.out_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
-                writer = PDBWriter(combined_pdb_str, out_file)
-
-                v0 = np.zeros_like(x0)
-
-                parent_conn, child_conn = Pipe()
-                parent_conns.append(parent_conn)
-                # writer can be None if we don't care about vis
-                all_args.append([x0, v0, conf_idx % num_gpus, writer, child_conn])
-
-            processes = []
-
-            for arg in all_args:
-                p = Process(target=sim.run_forward_and_backward, args=arg)
-                p.daemon = True
-                processes.append(p)
-                p.start()
-
-            all_du_dls = []
-            for pc in parent_conns:
-                du_dls = pc.recv()
-                all_du_dls.append(du_dls)           
-                pc.close()
-
-            # terminate all the processes
-            for p in processes:
-                p.terminate()
-
-            all_du_dls = np.array(all_du_dls)
-            loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
-
-            error = error_fn(all_du_dls, T, lambda_schedule, true_dG)
-
-            print("---EPOCH", epoch, "---Test---LOSS", error)
-            with open(loss_file_path, "a+") as f:
-                f.write("---EPOCH %d----Test---LOSS---- %f\n\n " % (epoch, error))
-            
+                # terminate all the processes
+                for p in processes:
+                    p.join()
