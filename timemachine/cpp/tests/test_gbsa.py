@@ -54,11 +54,13 @@ class TestGBSA(GradientTest):
         # x = self.get_random_coords(N, D) 
 
         x = self.get_water_coords(D)
+
+        # print(x)
         N = x.shape[0]
 
-        P_charges = 64
-        P_radii = 12
-        P_scale_factors = 12
+        P_charges = N
+        P_radii = N
+        P_scale_factors = N
 
         dielectric_offset = 0.009
         solute_dielectric = 1.0

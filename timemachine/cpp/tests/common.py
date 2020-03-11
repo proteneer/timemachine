@@ -286,6 +286,10 @@ class GradientTest(unittest.TestCase):
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
         ref_dx, ref_dp = grad_fn(x, params)
 
+        print("REF_DX", ref_dx)
+
+        assert 0
+
         self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),

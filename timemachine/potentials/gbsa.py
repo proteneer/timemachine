@@ -34,6 +34,12 @@ def gbsa_obc(
     rj = np.expand_dims(coords, 1)
     dij = distance(ri, rj, None)
 
+    # print(dij)
+
+
+    CUTOFF_GB_RADII = 10000.0
+    CUTOFF_GB_IXN = 10.0
+
     eye = np.eye(N, dtype=dij.dtype)
 
     r = dij + eye # so I don't have divide-by-zero nonsense
@@ -50,7 +56,15 @@ def gbsa_obc(
     I = np.where(or1 < (sr2 - r), I + 2*(1/or1 - 1/L), I)
     I = step(r + sr2 - or1) * 0.5 * I # note the extra 0.5 here
     I -= np.diag(np.diag(I))
+
+    I = np.where(dij > CUTOFF_GB_RADII, 0, I)
+
+    print("matrix", I)
+
     I = np.sum(I, axis=1)
+
+    print("reduced", I)
+
 
     # okay, next compute born radii
     offset_radius = radii - dielectric_offset
@@ -65,6 +79,8 @@ def gbsa_obc(
 
     B = 1 / (1 / offset_radius - np.tanh(psi_term) / radii)
 
+    print("BI", B)
+
     E = 0.0
     # single particle
     # ACE
@@ -72,7 +88,6 @@ def gbsa_obc(
 
     # on-diagonal
     charges = params[charge_idxs]
-
     E += np.sum(-0.5 * (1 / solute_dielectric - 1 / solvent_dielectric) * charges ** 2 / B)
 
     # particle pair
@@ -80,6 +95,9 @@ def gbsa_obc(
     charge_products = np.outer(charges, charges)
 
     ixns = - (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
+
+    ixns = np.where(ixns > CUTOFF_GB_IXN, 0, ixns)
+
     E += np.sum(np.triu(ixns, k=1))
 
     return E
