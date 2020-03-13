@@ -236,6 +236,8 @@ void GBSA<RealType, D>::execute_device(
             d_scale_factor_idxs_,
             dielectric_offset_,
             cutoff_radii_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
             d_born_radii_buffer_jvp_
         );
 
@@ -267,6 +269,8 @@ void GBSA<RealType, D>::execute_device(
             d_born_radii_buffer_jvp_,
             prefactor,
             cutoff_force_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
             d_born_forces_buffer_jvp_, // output
             d_out_coords_tangents, // ouput
             d_out_params_tangents // ouput
@@ -305,6 +309,8 @@ void GBSA<RealType, D>::execute_device(
             d_obc_ri_buffer_jvp_,
             dielectric_offset_,
             cutoff_force_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
             d_born_forces_buffer_jvp_,
             d_out_coords_tangents,
             d_out_params_tangents

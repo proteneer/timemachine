@@ -37,7 +37,6 @@ __global__ void k_compute_born_radii_gpu(
     }
 
     if(block_d2ij > cutoff*cutoff) {
-        printf("blockIdx.x %d blockIdx.y %d %f %f\n", blockIdx.x, blockIdx.y, block_d2ij, cutoff*cutoff);
         return;
     }
 
