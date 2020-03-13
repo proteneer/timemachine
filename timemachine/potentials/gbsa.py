@@ -69,8 +69,6 @@ def gbsa_obc(
 
     B = 1 / (1 / offset_radius - np.tanh(psi_term) / radii)
 
-    print("BI", B)
-
     E = 0.0
     # single particle
     # ACE

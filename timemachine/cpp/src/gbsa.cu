@@ -120,10 +120,17 @@ void GBSA<RealType, D>::execute_device(
         prefactor = 0.0;
     }
 
+
+    // std::cout << "cutoff 12: " << cutoff_radii_ << " " << cutoff_force_ << std::endl;
+
+    cudaDeviceSynchronize();
     nblist_.compute_block_bounds(N, D, d_coords, stream);
 
-    // inference mode
+
+    auto start = std::chrono::high_resolution_clock::now();
     if(d_coords_tangents == nullptr) {
+
+        // inference mode  
         gpuErrchk(cudaMemsetAsync(d_born_psi_buffer_, 0, N*sizeof(*d_born_psi_buffer_), stream));
         gpuErrchk(cudaMemsetAsync(d_born_radii_buffer_, 0, N*sizeof(*d_born_radii_buffer_), stream));
         gpuErrchk(cudaMemsetAsync(d_obc_buffer_, 0, N*sizeof(*d_obc_buffer_), stream));
@@ -194,7 +201,6 @@ void GBSA<RealType, D>::execute_device(
         // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto start = std::chrono::high_resolution_clock::now();
         k_compute_born_energy_and_forces<RealType, D><<<dimGrid, tpb, 0, stream>>>(
           N_,
           d_coords,
@@ -296,7 +302,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
 
-        auto start = std::chrono::high_resolution_clock::now();
+        // auto start = std::chrono::high_resolution_clock::now();
         k_compute_born_energy_and_forces_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
             N_,
             d_coords,
@@ -319,12 +325,18 @@ void GBSA<RealType, D>::execute_device(
         // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
         // std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
 
 
     }
+
+    cudaDeviceSynchronize();
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = finish - start;
+    std::cout << "GBSA Elapsed time: " << elapsed.count() << " s\n";
+
 
 }
 

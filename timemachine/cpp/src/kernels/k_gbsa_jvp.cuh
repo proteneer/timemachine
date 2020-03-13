@@ -75,11 +75,12 @@ __global__ void k_compute_born_radii_gpu_jvp(
             Surreal<RealType> dx = ci[d] - cj[d];
             r2 += dx*dx;
         }
-        Surreal<RealType> r = sqrt(r2);
-        Surreal<RealType> rScaledRadiusJ  = r + scaledRadiusJ;
-        Surreal<RealType> rSubScaledRadiusJ =  r - scaledRadiusJ;
 
-        if(atom_j_idx != atom_i_idx && r.real < cutoff) {
+        if(atom_j_idx != atom_i_idx && r2.real < cutoff*cutoff) {
+
+            Surreal<RealType> r = sqrt(r2);
+            Surreal<RealType> rScaledRadiusJ  = r + scaledRadiusJ;
+            Surreal<RealType> rSubScaledRadiusJ =  r - scaledRadiusJ;
 
             if (offsetRadiusI < rScaledRadiusJ.real) {
                 Surreal<RealType> rInverse = 1/r;
@@ -213,9 +214,10 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
             dxs[d] = ci[d] - cj[d];
             r2 += dxs[d]*dxs[d];
         }
-        Surreal<RealType> r = sqrt(r2);
 
-        if(atom_j_idx <= atom_i_idx && r.real < cutoff && atom_j_idx < N && atom_i_idx < N) {
+        if(atom_j_idx <= atom_i_idx && r2.real < cutoff*cutoff && atom_j_idx < N && atom_i_idx < N) {
+
+            Surreal<RealType> r = sqrt(r2);
 
             Surreal<RealType> alpha2_ij          = born_radii_i*born_radii_j;
             Surreal<RealType> D_ij               = r2/(4*alpha2_ij);
@@ -459,9 +461,10 @@ __global__ void k_compute_born_energy_and_forces_jvp(
             dxs[d] = ci[d] - cj[d];
             r2 += dxs[d]*dxs[d];
         }
-        Surreal<RealType> r = sqrt(r2);
 
-        if (atom_j_idx != atom_i_idx && r.real < cutoff) {
+        if (atom_j_idx != atom_i_idx && r2.real < cutoff*cutoff) {
+            
+            Surreal<RealType> r = sqrt(r2);
 
             Surreal<RealType> rInverse = 1/r;
 
