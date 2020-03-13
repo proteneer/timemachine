@@ -22,7 +22,24 @@ __global__ void k_compute_born_radii_gpu(
     const int* scale_factor_idxs,
     const double dielectric_offset,
     const double cutoff,
+    const double *block_bounds_ctr,
+    const double *block_bounds_ext,
     unsigned long long* born_psi) {
+
+    RealType block_d2ij = 0; 
+    for(int d=0; d < D; d++) {
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        block_d2ij += dx*dx;
+    }
+
+    if(block_d2ij > cutoff*cutoff) {
+        printf("blockIdx.x %d blockIdx.y %d %f %f\n", blockIdx.x, blockIdx.y, block_d2ij, cutoff*cutoff);
+        return;
+    }
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
 
@@ -127,6 +144,8 @@ void __global__ k_compute_born_first_loop_gpu(
     const double* born_radii,
     const double prefactor,
     const double cutoff,
+    const double *block_bounds_ctr,
+    const double *block_bounds_ext,
     unsigned long long *bornForces,
     unsigned long long *out_forces) {
 
@@ -134,19 +153,19 @@ void __global__ k_compute_born_first_loop_gpu(
         return;
     }
 
-    // RealType block_d2ij = 0; 
-    // for(int d=0; d < D; d++) {
-    //     RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
-    //     RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
-    //     RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
-    //     RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
-    //     RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
-    //     block_d2ij += dx*dx;
-    // }
+    RealType block_d2ij = 0; 
+    for(int d=0; d < D; d++) {
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        block_d2ij += dx*dx;
+    }
 
-    // if(block_d2ij > cutoff*cutoff) {
-    //     return;
-    // }
+    if(block_d2ij > cutoff*cutoff) {
+        return;
+    }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     RealType ci[D];
@@ -290,11 +309,9 @@ __global__ void k_reduce_born_forces(
     const int* atomic_radii_idxs,
     const double* born_radii,
     const double* obc_chain,
-    // const double* obc_chain_ri,
     const double surface_tension, // surface area factor
     const double probe_radius,
     unsigned long long* bornForces // dU/Ri
-    // double* out_dU_dp
 ) {
 
     int atomI =  blockIdx.x*32 + threadIdx.x;
@@ -330,13 +347,26 @@ __global__ void k_compute_born_energy_and_forces(
     const int* scale_factor_idxs,
     const double* born_radii,
     const double* obc_chain,
-    // const double* obc_chain_ri,
     const double dielectric_offset,
     const double cutoff,
+    const double *block_bounds_ctr,
+    const double *block_bounds_ext,
     const unsigned long long* bornForces,
     unsigned long long* out_forces) {
 
-    // we always do the full interaction matrix due to non-symmetry
+    RealType block_d2ij = 0; 
+    for(int d=0; d < D; d++) {
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        block_d2ij += dx*dx;
+    }
+
+    if(block_d2ij > cutoff*cutoff) {
+        return;
+    }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     RealType ci[D];
@@ -373,14 +403,14 @@ __global__ void k_compute_born_energy_and_forces(
 
     for(int round = 0; round < 32; round++) {
 
-        if (atom_j_idx != atom_i_idx) {
+        RealType dxs[D];
+        for(int d=0; d < D; d++) {
+            dxs[d] = ci[d] - cj[d];
+        }
 
-            RealType dxs[D];
-            for(int d=0; d < D; d++) {
-                dxs[d] = ci[d] - cj[d];
-            }
+        RealType r = fast_vec_norm<RealType, D>(dxs);
 
-            RealType r = fast_vec_norm<RealType, D>(dxs);
+        if (atom_j_idx != atom_i_idx && r < cutoff) {
             RealType rInverse = 1/r;
             // RealType rInverse = fast_vec_rnorm<RealType, D>(dxs);
             // radius w/ dielectric offset applied

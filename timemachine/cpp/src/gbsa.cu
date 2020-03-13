@@ -38,7 +38,12 @@ GBSA<RealType, D>::GBSA(
     solvent_dielectric_(solvent_dielectric),
     probe_radius_(probe_radius),
     cutoff_radii_(cutoff_radii),
-    cutoff_force_(cutoff_force) {
+    cutoff_force_(cutoff_force),
+    nblist_(charge_param_idxs.size(), D) {
+
+    if(cutoff_radii != cutoff_force) {
+      throw std::runtime_error("GB currently requires that cutoff_radii be equal to cutoff_force!");
+    }
 
     gpuErrchk(cudaMalloc(&d_charge_param_idxs_, N_*sizeof(*d_charge_param_idxs_)));
     gpuErrchk(cudaMalloc(&d_scale_factor_idxs_, N_*sizeof(*d_scale_factor_idxs_)));
@@ -115,6 +120,8 @@ void GBSA<RealType, D>::execute_device(
         prefactor = 0.0;
     }
 
+    nblist_.compute_block_bounds(N, D, d_coords, stream);
+
     // inference mode
     if(d_coords_tangents == nullptr) {
         gpuErrchk(cudaMemsetAsync(d_born_psi_buffer_, 0, N*sizeof(*d_born_psi_buffer_), stream));
@@ -130,6 +137,8 @@ void GBSA<RealType, D>::execute_device(
           d_scale_factor_idxs_,
           dielectric_offset_,
           cutoff_radii_,
+          nblist_.get_block_bounds_ctr(),
+          nblist_.get_block_bounds_ext(),
           d_born_psi_buffer_
         );
 
@@ -162,6 +171,8 @@ void GBSA<RealType, D>::execute_device(
           d_born_radii_buffer_,
           prefactor,
           cutoff_force_,
+          nblist_.get_block_bounds_ctr(),
+          nblist_.get_block_bounds_ext(),
           d_born_forces_buffer_, // output
           d_out_coords // ouput
         );
@@ -183,7 +194,6 @@ void GBSA<RealType, D>::execute_device(
         // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-
         auto start = std::chrono::high_resolution_clock::now();
         k_compute_born_energy_and_forces<RealType, D><<<dimGrid, tpb, 0, stream>>>(
           N_,
@@ -195,6 +205,8 @@ void GBSA<RealType, D>::execute_device(
           d_obc_buffer_,
           dielectric_offset_,
           cutoff_force_,
+          nblist_.get_block_bounds_ctr(),
+          nblist_.get_block_bounds_ext(),
           d_born_forces_buffer_,
           d_out_coords
         );

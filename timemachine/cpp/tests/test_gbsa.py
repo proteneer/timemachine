@@ -53,7 +53,8 @@ class TestGBSA(GradientTest):
         # N = 33
         # x = self.get_random_coords(N, D) 
 
-        x = self.get_cdk8_coords(D)
+        # x = self.get_cdk8_coords(D)
+        x = self.get_water_coords(D, sort=True)
 
         # print(x)
         N = x.shape[0]
@@ -83,6 +84,8 @@ class TestGBSA(GradientTest):
                 solute_dielectric=solute_dielectric,
                 solvent_dielectric=solvent_dielectric,
                 probe_radius=0.14,
+                cutoff_radii=0.5,
+                cutoff_force=0.5,
                 precision=precision
             )
 

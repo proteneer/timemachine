@@ -1,5 +1,6 @@
 #pragma once
 
+#include "neighborlist.hpp"
 #include "gradient.hpp"
 #include "surreal.cuh"
 #include <vector>
@@ -39,6 +40,8 @@ private:
     // these buffers can be in RealType as well
     // double *d_block_bounds_ctr_;
     // double *d_block_bounds_ext_;
+
+    Neighborlist nblist_;
 
     const int N_;
 

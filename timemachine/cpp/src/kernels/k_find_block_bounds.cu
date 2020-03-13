@@ -26,6 +26,7 @@ void __global__ k_find_block_bounds(
                 ci_max = ci > ci_max ? ci : ci_max;                
             }
         }
+     
         block_bounds_ctr[tile_idx*D+d] = (ci_max + ci_min)/2.0;
         block_bounds_ext[tile_idx*D+d] = ci_max - ci_min;
     }

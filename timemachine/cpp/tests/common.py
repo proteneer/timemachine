@@ -292,7 +292,6 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
-        # test_dx, test_dp = custom_force.execute_first_order(x, params)
         test_dx = custom_force.execute(x, params)
 
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
@@ -302,11 +301,13 @@ class GradientTest(unittest.TestCase):
 
         # assert 0
 
-        # self.assert_equal_vectors(
-        #     np.array(ref_dx),
-        #     np.array(test_dx),
-        #     rtol,
-        # )
+        self.assert_equal_vectors(
+            np.array(ref_dx),
+            np.array(test_dx),
+            rtol,
+        )
+
+        assert 0
 
         # x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         # params_tangent = np.zeros_like(params)
