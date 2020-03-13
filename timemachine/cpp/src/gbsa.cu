@@ -24,7 +24,9 @@ GBSA<RealType, D>::GBSA(
     double solute_dielectric,
     double solvent_dielectric,
     double probe_radius,
-    double cutoff) :
+    double cutoff_radii,
+    double cutoff_force
+) :
 
     N_(charge_param_idxs.size()),
     alpha_(alpha),
@@ -35,7 +37,8 @@ GBSA<RealType, D>::GBSA(
     solute_dielectric_(solute_dielectric),
     solvent_dielectric_(solvent_dielectric),
     probe_radius_(probe_radius),
-    cutoff_(cutoff) {
+    cutoff_radii_(cutoff_radii),
+    cutoff_force_(cutoff_force) {
 
     gpuErrchk(cudaMalloc(&d_charge_param_idxs_, N_*sizeof(*d_charge_param_idxs_)));
     gpuErrchk(cudaMalloc(&d_scale_factor_idxs_, N_*sizeof(*d_scale_factor_idxs_)));
@@ -126,7 +129,7 @@ void GBSA<RealType, D>::execute_device(
           d_atomic_radii_idxs_,
           d_scale_factor_idxs_,
           dielectric_offset_,
-          cutoff_,
+          cutoff_radii_,
           d_born_psi_buffer_
         );
 
@@ -158,7 +161,7 @@ void GBSA<RealType, D>::execute_device(
           d_charge_param_idxs_,
           d_born_radii_buffer_,
           prefactor,
-          cutoff_,
+          cutoff_force_,
           d_born_forces_buffer_, // output
           d_out_coords // ouput
         );
@@ -191,7 +194,7 @@ void GBSA<RealType, D>::execute_device(
           d_born_radii_buffer_,
           d_obc_buffer_,
           dielectric_offset_,
-          cutoff_,
+          cutoff_force_,
           d_born_forces_buffer_,
           d_out_coords
         );
@@ -220,7 +223,7 @@ void GBSA<RealType, D>::execute_device(
             d_atomic_radii_idxs_,
             d_scale_factor_idxs_,
             dielectric_offset_,
-            cutoff_,
+            cutoff_radii_,
             d_born_radii_buffer_jvp_
         );
 
@@ -251,7 +254,7 @@ void GBSA<RealType, D>::execute_device(
             d_charge_param_idxs_,
             d_born_radii_buffer_jvp_,
             prefactor,
-            cutoff_,
+            cutoff_force_,
             d_born_forces_buffer_jvp_, // output
             d_out_coords_tangents, // ouput
             d_out_params_tangents // ouput
@@ -289,7 +292,7 @@ void GBSA<RealType, D>::execute_device(
             d_obc_buffer_jvp_,
             d_obc_ri_buffer_jvp_,
             dielectric_offset_,
-            cutoff_,
+            cutoff_force_,
             d_born_forces_buffer_jvp_,
             d_out_coords_tangents,
             d_out_params_tangents

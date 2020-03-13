@@ -19,6 +19,8 @@ def gbsa_obc(
     alpha,
     beta,
     gamma,
+    cutoff_radii,
+    cutoff_force,
     dielectric_offset=0.009,
     surface_tension=28.3919551,
     solute_dielectric=1.0,
@@ -33,12 +35,6 @@ def gbsa_obc(
     ri = np.expand_dims(coords, 0)
     rj = np.expand_dims(coords, 1)
     dij = distance(ri, rj, None)
-
-    # print(dij)
-
-
-    CUTOFF_GB_RADII = 10000.0
-    CUTOFF_GB_IXN = 10.0
 
     eye = np.eye(N, dtype=dij.dtype)
 
@@ -57,14 +53,8 @@ def gbsa_obc(
     I = step(r + sr2 - or1) * 0.5 * I # note the extra 0.5 here
     I -= np.diag(np.diag(I))
 
-    I = np.where(dij > CUTOFF_GB_RADII, 0, I)
-
-    print("matrix", I)
-
+    I = np.where(dij > cutoff_radii, 0, I)
     I = np.sum(I, axis=1)
-
-    print("reduced", I)
-
 
     # okay, next compute born radii
     offset_radius = radii - dielectric_offset
@@ -96,7 +86,7 @@ def gbsa_obc(
 
     ixns = - (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
 
-    ixns = np.where(ixns > CUTOFF_GB_IXN, 0, ixns)
+    ixns = np.where(dij > cutoff_force, 0, ixns)
 
     E += np.sum(np.triu(ixns, k=1))
 

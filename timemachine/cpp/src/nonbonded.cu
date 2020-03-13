@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <complex>
+#include "k_neighborlist.cuh"
 #include "nonbonded.hpp"
 #include "kernel_utils.cuh"
 #include "k_nonbonded_deterministic.cuh"
@@ -16,7 +17,10 @@ Nonbonded<RealType, D>::Nonbonded(
     const std::vector<int> &charge_scale_idxs, // [E]
     const std::vector<int> &lj_scale_idxs, // [E]
     double cutoff
-) :  N_(charge_param_idxs.size()), cutoff_(cutoff), E_(charge_scale_idxs.size()) {
+) :  N_(charge_param_idxs.size()),
+    cutoff_(cutoff),
+    E_(charge_scale_idxs.size()),
+    nblist_(charge_param_idxs.size(), D) {
 
     if(charge_scale_idxs.size()*2 != exclusion_idxs.size()) {
         throw std::runtime_error("charge scale idxs size not half of exclusion size!");
@@ -30,8 +34,8 @@ Nonbonded<RealType, D>::Nonbonded(
         throw std::runtime_error("Charge param idxs not half of lj param idxs!");
     }
 
-    int tpb = 32;
-    int B = (N_+tpb-1)/tpb;
+    // int tpb = 32;
+    // int B = (N_+tpb-1)/tpb;
 
     gpuErrchk(cudaMalloc(&d_exclusion_idxs_, E_*2*sizeof(*d_exclusion_idxs_)));
     gpuErrchk(cudaMemcpy(d_exclusion_idxs_, &exclusion_idxs[0], E_*2*sizeof(*d_exclusion_idxs_), cudaMemcpyHostToDevice));
@@ -48,8 +52,8 @@ Nonbonded<RealType, D>::Nonbonded(
     gpuErrchk(cudaMalloc(&d_lj_param_idxs_, N_*2*sizeof(*d_lj_param_idxs_)));
     gpuErrchk(cudaMemcpy(d_lj_param_idxs_, &lj_param_idxs[0], N_*2*sizeof(*d_lj_param_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_block_bounds_ctr_, B*D*sizeof(*d_block_bounds_ctr_)));
-    gpuErrchk(cudaMalloc(&d_block_bounds_ext_, B*D*sizeof(*d_block_bounds_ext_)));
+    // gpuErrchk(cudaMalloc(&d_block_bounds_ctr_, B*D*sizeof(*d_block_bounds_ctr_)));
+    // gpuErrchk(cudaMalloc(&d_block_bounds_ext_, B*D*sizeof(*d_block_bounds_ext_)));
 
 };
 
@@ -60,8 +64,8 @@ Nonbonded<RealType, D>::~Nonbonded() {
     gpuErrchk(cudaFree(d_exclusion_idxs_));
     gpuErrchk(cudaFree(d_charge_scale_idxs_));
     gpuErrchk(cudaFree(d_lj_scale_idxs_));
-    gpuErrchk(cudaFree(d_block_bounds_ctr_));
-    gpuErrchk(cudaFree(d_block_bounds_ext_));
+    // gpuErrchk(cudaFree(d_block_bounds_ctr_));
+    // gpuErrchk(cudaFree(d_block_bounds_ext_));
 };
 
 template <typename RealType, int D>
@@ -84,17 +88,21 @@ void Nonbonded<RealType, D>::execute_device(
     int tpb = 32;
     int B = (N_+tpb-1)/tpb;
 
-    gpuErrchk(cudaMemsetAsync(d_block_bounds_ctr_, 0, B*D*sizeof(*d_block_bounds_ctr_), stream));
-    gpuErrchk(cudaMemsetAsync(d_block_bounds_ext_, 0, B*D*sizeof(*d_block_bounds_ext_), stream));
+    // gpuErrchk(cudaMemsetAsync(d_block_bounds_ctr_, 0, B*D*sizeof(*d_block_bounds_ctr_), stream));
+    // gpuErrchk(cudaMemsetAsync(d_block_bounds_ext_, 0, B*D*sizeof(*d_block_bounds_ext_), stream));
 
-    k_find_block_bounds<<<1, B, 0, stream>>>(
-        N,
-        D,
-        B,
-        d_coords,
-        d_block_bounds_ctr_,
-        d_block_bounds_ext_
-    );
+
+
+    // k_find_block_bounds<<<1, B, 0, stream>>>(
+    //     N,
+    //     D,
+    //     B,
+    //     d_coords,
+    //     d_block_bounds_ctr_,
+    //     d_block_bounds_ext_
+    // );
+
+    nblist_.compute_block_bounds(N, D, d_coords, stream);
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -115,8 +123,8 @@ void Nonbonded<RealType, D>::execute_device(
             d_charge_param_idxs_,
             d_lj_param_idxs_,
             cutoff_,
-            d_block_bounds_ctr_,
-            d_block_bounds_ext_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
             d_out_coords
         );
 
@@ -162,8 +170,8 @@ void Nonbonded<RealType, D>::execute_device(
             d_charge_param_idxs_,
             d_lj_param_idxs_,
             cutoff_,
-            d_block_bounds_ctr_,
-            d_block_bounds_ext_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
             d_out_coords_tangents,
             d_out_params_tangents
         );

@@ -47,13 +47,13 @@ class TestGBSA(GradientTest):
 
     def test_gbsa(self):
 
-        D = 4
+        D = 3
         np.random.seed(125)
 
         # N = 33
         # x = self.get_random_coords(N, D) 
 
-        x = self.get_water_coords(D)
+        x = self.get_cdk8_coords(D)
 
         # print(x)
         N = x.shape[0]
@@ -66,7 +66,8 @@ class TestGBSA(GradientTest):
         solute_dielectric = 1.0
         solvent_dielectric = 78.5
  
-        for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
+        # for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
+        for precision, rtol in [(np.float64, 1e-10)]:
             np.random.rand(1)
 
             params, ref_forces, test_forces = prepare_gbsa_system(
