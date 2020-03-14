@@ -70,7 +70,8 @@ class TestGBSA(GradientTest):
         # for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
         # for cutoff in [0.5, 1.0, 2.0, 50.0]:
         # for cutoff in [0.1, 0.5, 1.0, 1.5, 2.0, 500.0]:
-        for cutoff in [1.5]:
+        for cutoff in [0.1]:
+        # for cutoff in [0.5]:
             print("Testing cutoff of", cutoff)
             for precision, rtol in [(np.float32, 8e-5)]:
             # for precision, rtol in [(np.float64, 1e-10)]:

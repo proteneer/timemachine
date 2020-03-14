@@ -403,9 +403,19 @@ __global__ void k_compute_born_energy_and_forces_jvp(
         block_d2ij += dx*dx;
     }
 
+
+    if(threadIdx.x == 0) {
+        printf("blockIdx.x %d blockIdx.y %d, b_d2ij %f cutoff*cutoff %f\n", blockIdx.x, blockIdx.y, block_d2ij, cutoff*cutoff);
+    }
+
     if(block_d2ij > cutoff*cutoff) {
+        // if(threadIdx.x == 0) {
+            //printf("skipping blockIdx.x %d blockIdx.y %d, b_d2ij %f cutoff*cutoff %f\n", blockIdx.x, blockIdx.y, block_d2ij, cutoff*cutoff);
+        // }
         return;
     }
+
+    // (ytz): we can probably do this computation twice by flipping i and j
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     Surreal<RealType> ci[D];

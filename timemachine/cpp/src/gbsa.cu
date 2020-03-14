@@ -126,7 +126,6 @@ void GBSA<RealType, D>::execute_device(
     cudaDeviceSynchronize();
     nblist_.compute_block_bounds(N, D, d_coords, stream);
 
-
     auto start = std::chrono::high_resolution_clock::now();
     if(d_coords_tangents == nullptr) {
 

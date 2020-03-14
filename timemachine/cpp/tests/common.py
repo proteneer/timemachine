@@ -218,8 +218,9 @@ def prepare_bonded_system(
     return params, [harmonic_bond_fn], [custom_bonded]
 
 def hilbert_sort(conf, D):
-    hc = HilbertCurve(64, D)
-    int_confs = (conf*10000).astype(np.int64)+100000
+    hc = HilbertCurve(512, D)
+    int_confs = (conf*10000).astype(np.int64)+50000
+    print(int_confs)
     dists = []
     for xyz in int_confs.tolist():
         dist = hc.distance_from_coordinates(xyz)
@@ -246,6 +247,7 @@ class GradientTest(unittest.TestCase):
 
     def get_cdk8_coords(self, D, sort=False):
         x = np.load("cdk8.npy").astype(np.float64)
+        print("num_atoms", x.shape[0])
         if sort:
             perm = hilbert_sort(x, D)
             x = x[perm]
