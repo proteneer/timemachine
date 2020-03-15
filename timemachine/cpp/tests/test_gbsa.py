@@ -53,10 +53,8 @@ class TestGBSA(GradientTest):
         # N = 33
         # x = self.get_random_coords(N, D) 
 
-        x = self.get_cdk8_coords(D, sort=True)
-        # x = self.get_water_coords(D, sort=True)
+        x = self.get_water_coords(D, sort=True)
 
-        # print(x)
         N = x.shape[0]
 
         P_charges = N
@@ -69,15 +67,9 @@ class TestGBSA(GradientTest):
  
         # for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
         # for cutoff in [0.5, 1.0, 2.0, 50.0]:
-        # for cutoff in [0.1, 0.5, 1.0, 1.5, 2.0, 500.0]:
-        for cutoff in [0.1]:
-        # for cutoff in [0.5]:
-            print("Testing cutoff of", cutoff)
+        for cutoff in [0.1, 1.0, 1.5, 2.0, 500.0]:
+            print("Testing cutoff @", cutoff)
             for precision, rtol in [(np.float32, 8e-5)]:
-            # for precision, rtol in [(np.float64, 1e-10)]:
-
-                np.random.rand(1)
-
                 params, ref_forces, test_forces = prepare_gbsa_system(
                     x,
                     P_charges,

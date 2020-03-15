@@ -1,6 +1,6 @@
 
 #include "neighborlist.hpp"
-#include "k_neighborlist.cuh"
+#include "k_find_block_bounds.cuh"
 #include "kernel_utils.cuh"
 
 namespace timemachine {

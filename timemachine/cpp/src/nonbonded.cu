@@ -2,9 +2,9 @@
 #include <iostream>
 #include <vector>
 #include <complex>
-#include "k_neighborlist.cuh"
 #include "nonbonded.hpp"
 #include "kernel_utils.cuh"
+
 #include "k_nonbonded_deterministic.cuh"
 
 namespace timemachine {

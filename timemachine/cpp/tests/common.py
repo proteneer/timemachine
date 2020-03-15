@@ -218,9 +218,8 @@ def prepare_bonded_system(
     return params, [harmonic_bond_fn], [custom_bonded]
 
 def hilbert_sort(conf, D):
-    hc = HilbertCurve(512, D)
+    hc = HilbertCurve(64, D)
     int_confs = (conf*10000).astype(np.int64)+50000
-    print(int_confs)
     dists = []
     for xyz in int_confs.tolist():
         dist = hc.distance_from_coordinates(xyz)
@@ -297,14 +296,14 @@ class GradientTest(unittest.TestCase):
 
         test_dx = custom_force.execute(x, params)
 
-        # grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
-        # ref_dx, ref_dp = grad_fn(x, params)
+        grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
+        ref_dx, ref_dp = grad_fn(x, params)
 
-        # self.assert_equal_vectors(
-        #     np.array(ref_dx),
-        #     np.array(test_dx),
-        #     rtol,
-        # )
+        self.assert_equal_vectors(
+            np.array(ref_dx),
+            np.array(test_dx),
+            rtol,
+        )
 
         x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
         params_tangent = np.zeros_like(params)
@@ -316,27 +315,27 @@ class GradientTest(unittest.TestCase):
             params_tangent
         )
 
-        # primals = (x, params)
-        # tangents = (x_tangent, params_tangent)
+        primals = (x, params)
+        tangents = (x_tangent, params_tangent)
 
-        # _, t = jax.jvp(grad_fn, primals, tangents)
+        _, t = jax.jvp(grad_fn, primals, tangents)
 
-        # ref_p_tangent = t[1]
+        ref_p_tangent = t[1]
 
-        # self.assert_equal_vectors(
-        #     t[0],
-        #     test_x_tangent,
-        #     rtol,
-        # )
+        self.assert_equal_vectors(
+            t[0],
+            test_x_tangent,
+            rtol,
+        )
 
-        # # TBD compare relative to the *norm* of the group of similar derivatives.
-        # # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
-        # #     err = abs((r - tt)/r)
-        # #     if err > 1e-4:
-        # #         print(r_idx, err, r, tt)
+        # TBD compare relative to the *norm* of the group of similar derivatives.
+        # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
+        #     err = abs((r - tt)/r)
+        #     if err > 1e-4:
+        #         print(r_idx, err, r, tt)
 
-        # if precision == np.float64:
-        #     np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
-        # else:
-        #     self.assert_param_derivs(ref_p_tangent, test_p_tangent)
+        if precision == np.float64:
+            np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
+        else:
+            self.assert_param_derivs(ref_p_tangent, test_p_tangent)
 
