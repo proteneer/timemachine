@@ -65,11 +65,9 @@ class TestGBSA(GradientTest):
         solute_dielectric = 1.0
         solvent_dielectric = 78.5
  
-        # for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
-        # for cutoff in [0.5, 1.0, 2.0, 50.0]:
         for cutoff in [0.1, 1.0, 1.5, 2.0, 500.0]:
             print("Testing cutoff @", cutoff)
-            for precision, rtol in [(np.float32, 8e-5)]:
+            for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
                 params, ref_forces, test_forces = prepare_gbsa_system(
                     x,
                     P_charges,

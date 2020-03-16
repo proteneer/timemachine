@@ -123,7 +123,7 @@ void GBSA<RealType, D>::execute_device(
 
     // std::cout << "cutoff 12: " << cutoff_radii_ << " " << cutoff_force_ << std::endl;
 
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
     nblist_.compute_block_bounds(N, D, d_coords, stream);
 
     auto start = std::chrono::high_resolution_clock::now();
@@ -331,10 +331,10 @@ void GBSA<RealType, D>::execute_device(
 
     }
 
-    cudaDeviceSynchronize();
-    auto finish = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> elapsed = finish - start;
-    std::cout << "GBSA Elapsed time: " << elapsed.count() << " s\n";
+    // cudaDeviceSynchronize();
+    // auto finish = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double> elapsed = finish - start;
+    // std::cout << "GBSA Elapsed time: " << elapsed.count() << " s\n";
 
 
 }

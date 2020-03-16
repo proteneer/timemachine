@@ -228,14 +228,16 @@ if __name__ == "__main__":
         constraints=None,
         rigidWater=False)
 
-    host_system = openmm_converter.deserialize_system(host_system)
+    cutoff = 1.25
+
+    host_system = openmm_converter.deserialize_system(host_system, cutoff=cutoff)
     num_host_atoms = len(host_system.masses)
 
     print("num_host_atoms", num_host_atoms)
 
     # open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
     open_ff = forcefield.Forcefield(args.forcefield)
-    nrg_fns = open_ff.parameterize(guest_mol)
+    nrg_fns = open_ff.parameterize(guest_mol, cutoff=cutoff)
     guest_masses = get_masses(guest_mol)
     guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
 
