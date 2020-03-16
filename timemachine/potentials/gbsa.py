@@ -19,6 +19,8 @@ def gbsa_obc(
     alpha,
     beta,
     gamma,
+    cutoff_radii,
+    cutoff_force,
     dielectric_offset=0.009,
     surface_tension=28.3919551,
     solute_dielectric=1.0,
@@ -50,6 +52,8 @@ def gbsa_obc(
     I = np.where(or1 < (sr2 - r), I + 2*(1/or1 - 1/L), I)
     I = step(r + sr2 - or1) * 0.5 * I # note the extra 0.5 here
     I -= np.diag(np.diag(I))
+
+    I = np.where(dij > cutoff_radii, 0, I)
     I = np.sum(I, axis=1)
 
     # okay, next compute born radii
@@ -72,7 +76,6 @@ def gbsa_obc(
 
     # on-diagonal
     charges = params[charge_idxs]
-
     E += np.sum(-0.5 * (1 / solute_dielectric - 1 / solvent_dielectric) * charges ** 2 / B)
 
     # particle pair
@@ -80,6 +83,9 @@ def gbsa_obc(
     charge_products = np.outer(charges, charges)
 
     ixns = - (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
+
+    ixns = np.where(dij > cutoff_force, 0, ixns)
+
     E += np.sum(np.triu(ixns, k=1))
 
     return E

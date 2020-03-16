@@ -14,7 +14,7 @@ from timemachine import constants
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
-def deserialize_system(system):
+def deserialize_system(system, cutoff=10000):
     """
     Deserialize an OpenMM XML file
 
@@ -162,7 +162,7 @@ def deserialize_system(system):
                 exclusion_idxs,
                 exclusion_param_idxs,
                 exclusion_param_idxs,
-                10000.0
+                cutoff
             )
 
         if isinstance(force, mm.GBSAOBCForce):
@@ -212,7 +212,8 @@ def deserialize_system(system):
         solute_dielectric,             # solute_dielectric
         solvent_dielectric,            # solvent_dieletric
         probe_radius,                  # probe_radius
-        10000.0                        # cutoff
+        cutoff,                        # cutoff radii
+        cutoff                         # cutoff force
     )
 
     global_params = np.array(global_params)

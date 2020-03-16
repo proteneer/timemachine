@@ -490,7 +490,8 @@ void declare_gbsa(py::module &m, const char *typestr) {
         double solute_dielectric,
         double solvent_dielectric,
         double probe_radius,
-        double cutoff
+        double cutoff_radii,
+        double cutoff_force
     ){
         std::vector<int> charge_param_idxs(charge_pi.size());
         std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
@@ -511,7 +512,8 @@ void declare_gbsa(py::module &m, const char *typestr) {
             solute_dielectric,
             solvent_dielectric,
             probe_radius,
-            cutoff
+            cutoff_radii,
+            cutoff_force
         );
     }
     ));

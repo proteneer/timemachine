@@ -1,5 +1,6 @@
 #pragma once
 
+#include "neighborlist.hpp"
 #include "gradient.hpp"
 #include "surreal.cuh"
 #include <vector>
@@ -33,30 +34,33 @@ private:
     double solute_dielectric_;
     double solvent_dielectric_;
     double probe_radius_;
-    double cutoff_;
+    double cutoff_radii_;
+    double cutoff_force_;
 
     // these buffers can be in RealType as well
     // double *d_block_bounds_ctr_;
     // double *d_block_bounds_ext_;
+
+    Neighborlist nblist_;
 
     const int N_;
 
 public:
 
     GBSA(
-        const std::vector<int> &charge_param_idxs, // [N]
-        const std::vector<int> &atomic_radii_idxs, // [N]
-        const std::vector<int> &scale_factor_idxs, // 
+        const std::vector<int> &charge_param_idxs,
+        const std::vector<int> &atomic_radii_idxs,
+        const std::vector<int> &scale_factor_idxs,
         double alpha,
         double beta,
         double gamma,
         double dielectric_offset,
-        // double screening,
         double surface_tension,
         double solute_dielectric,
         double solvent_dielectric,
         double probe_radius,
-        double cutoff
+        double cutoff_radii,
+        double cutoff_force
     );
 
     // FIX ME with actual destructors later

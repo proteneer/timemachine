@@ -24,7 +24,9 @@ GBSA<RealType, D>::GBSA(
     double solute_dielectric,
     double solvent_dielectric,
     double probe_radius,
-    double cutoff) :
+    double cutoff_radii,
+    double cutoff_force
+) :
 
     N_(charge_param_idxs.size()),
     alpha_(alpha),
@@ -35,7 +37,13 @@ GBSA<RealType, D>::GBSA(
     solute_dielectric_(solute_dielectric),
     solvent_dielectric_(solvent_dielectric),
     probe_radius_(probe_radius),
-    cutoff_(cutoff) {
+    cutoff_radii_(cutoff_radii),
+    cutoff_force_(cutoff_force),
+    nblist_(charge_param_idxs.size(), D) {
+
+    if(cutoff_radii != cutoff_force) {
+      throw std::runtime_error("GB currently requires that cutoff_radii be equal to cutoff_force!");
+    }
 
     gpuErrchk(cudaMalloc(&d_charge_param_idxs_, N_*sizeof(*d_charge_param_idxs_)));
     gpuErrchk(cudaMalloc(&d_scale_factor_idxs_, N_*sizeof(*d_scale_factor_idxs_)));
@@ -112,8 +120,16 @@ void GBSA<RealType, D>::execute_device(
         prefactor = 0.0;
     }
 
-    // inference mode
+
+    // std::cout << "cutoff 12: " << cutoff_radii_ << " " << cutoff_force_ << std::endl;
+
+    // cudaDeviceSynchronize();
+    nblist_.compute_block_bounds(N, D, d_coords, stream);
+
+    auto start = std::chrono::high_resolution_clock::now();
     if(d_coords_tangents == nullptr) {
+
+        // inference mode  
         gpuErrchk(cudaMemsetAsync(d_born_psi_buffer_, 0, N*sizeof(*d_born_psi_buffer_), stream));
         gpuErrchk(cudaMemsetAsync(d_born_radii_buffer_, 0, N*sizeof(*d_born_radii_buffer_), stream));
         gpuErrchk(cudaMemsetAsync(d_obc_buffer_, 0, N*sizeof(*d_obc_buffer_), stream));
@@ -126,7 +142,9 @@ void GBSA<RealType, D>::execute_device(
           d_atomic_radii_idxs_,
           d_scale_factor_idxs_,
           dielectric_offset_,
-          cutoff_,
+          cutoff_radii_,
+          nblist_.get_block_bounds_ctr(),
+          nblist_.get_block_bounds_ext(),
           d_born_psi_buffer_
         );
 
@@ -158,7 +176,9 @@ void GBSA<RealType, D>::execute_device(
           d_charge_param_idxs_,
           d_born_radii_buffer_,
           prefactor,
-          cutoff_,
+          cutoff_force_,
+          nblist_.get_block_bounds_ctr(),
+          nblist_.get_block_bounds_ext(),
           d_born_forces_buffer_, // output
           d_out_coords // ouput
         );
@@ -180,8 +200,6 @@ void GBSA<RealType, D>::execute_device(
         // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-
-        auto start = std::chrono::high_resolution_clock::now();
         k_compute_born_energy_and_forces<RealType, D><<<dimGrid, tpb, 0, stream>>>(
           N_,
           d_coords,
@@ -191,7 +209,9 @@ void GBSA<RealType, D>::execute_device(
           d_born_radii_buffer_,
           d_obc_buffer_,
           dielectric_offset_,
-          cutoff_,
+          cutoff_force_,
+          nblist_.get_block_bounds_ctr(),
+          nblist_.get_block_bounds_ext(),
           d_born_forces_buffer_,
           d_out_coords
         );
@@ -220,7 +240,9 @@ void GBSA<RealType, D>::execute_device(
             d_atomic_radii_idxs_,
             d_scale_factor_idxs_,
             dielectric_offset_,
-            cutoff_,
+            cutoff_radii_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
             d_born_radii_buffer_jvp_
         );
 
@@ -251,7 +273,9 @@ void GBSA<RealType, D>::execute_device(
             d_charge_param_idxs_,
             d_born_radii_buffer_jvp_,
             prefactor,
-            cutoff_,
+            cutoff_force_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
             d_born_forces_buffer_jvp_, // output
             d_out_coords_tangents, // ouput
             d_out_params_tangents // ouput
@@ -277,7 +301,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
 
-        auto start = std::chrono::high_resolution_clock::now();
+        // auto start = std::chrono::high_resolution_clock::now();
         k_compute_born_energy_and_forces_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
             N_,
             d_coords,
@@ -289,7 +313,9 @@ void GBSA<RealType, D>::execute_device(
             d_obc_buffer_jvp_,
             d_obc_ri_buffer_jvp_,
             dielectric_offset_,
-            cutoff_,
+            cutoff_force_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
             d_born_forces_buffer_jvp_,
             d_out_coords_tangents,
             d_out_params_tangents
@@ -298,12 +324,18 @@ void GBSA<RealType, D>::execute_device(
         // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
 
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
         // std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
 
 
     }
+
+    // cudaDeviceSynchronize();
+    // auto finish = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double> elapsed = finish - start;
+    // std::cout << "GBSA Elapsed time: " << elapsed.count() << " s\n";
+
 
 }
 

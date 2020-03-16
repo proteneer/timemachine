@@ -145,7 +145,7 @@ class Forcefield():
 
         return raw_ff
 
-    def parameterize(self, mol):
+    def parameterize(self, mol, cutoff=10000):
         """
         Given a RDKit Molecule, return a parameterized system.
         """
@@ -322,7 +322,8 @@ class Forcefield():
                     props["solute_dielectric"],
                     props["solvent_dielectric"],
                     props["probe_radius"],
-                    10000.0
+                    cutoff,
+                    cutoff
                 )
 
         nrg_fns['PeriodicTorsion'] = (
@@ -345,7 +346,7 @@ class Forcefield():
             np.array(exclusion_idxs, dtype=np.int32),
             np.array(exclusion_param_idxs, dtype=np.int32),
             np.array(exclusion_param_idxs, dtype=np.int32),
-            10000.0
+            cutoff
         )
 
         nrg_fns['GBSA'] = (

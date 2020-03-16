@@ -16,7 +16,23 @@ __global__ void k_compute_born_radii_gpu_jvp(
     const int* scale_factor_idxs,
     const double dielectric_offset,
     const double cutoff,
+    const double *block_bounds_ctr,
+    const double *block_bounds_ext,
     Surreal<double>* born_radii) {
+
+    RealType block_d2ij = 0; 
+    for(int d=0; d < D; d++) {
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        block_d2ij += dx*dx;
+    }
+
+    if(block_d2ij > cutoff*cutoff) {
+        return;
+    }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
 
@@ -59,11 +75,12 @@ __global__ void k_compute_born_radii_gpu_jvp(
             Surreal<RealType> dx = ci[d] - cj[d];
             r2 += dx*dx;
         }
-        Surreal<RealType> r = sqrt(r2);
-        Surreal<RealType> rScaledRadiusJ  = r + scaledRadiusJ;
-        Surreal<RealType> rSubScaledRadiusJ =  r - scaledRadiusJ;
 
-        if(atom_j_idx != atom_i_idx && r.real < cutoff) {
+        if(atom_j_idx != atom_i_idx && r2.real < cutoff*cutoff) {
+
+            Surreal<RealType> r = sqrt(r2);
+            Surreal<RealType> rScaledRadiusJ  = r + scaledRadiusJ;
+            Surreal<RealType> rSubScaledRadiusJ =  r - scaledRadiusJ;
 
             if (offsetRadiusI < rScaledRadiusJ.real) {
                 Surreal<RealType> rInverse = 1/r;
@@ -131,6 +148,8 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     const Surreal<double>* born_radii,
     const double prefactor,
     const double cutoff,
+    const double *block_bounds_ctr,
+    const double *block_bounds_ext,
     Surreal<double> *bornForces,
     double *out_HvP,
     double *out_MvP) {
@@ -139,19 +158,19 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
         return;
     }
 
-    // RealType block_d2ij = 0; 
-    // for(int d=0; d < D; d++) {
-    //     RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
-    //     RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
-    //     RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
-    //     RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
-    //     RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
-    //     block_d2ij += dx*dx;
-    // }
+    RealType block_d2ij = 0; 
+    for(int d=0; d < D; d++) {
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        block_d2ij += dx*dx;
+    }
 
-    // if(block_d2ij > cutoff*cutoff) {
-    //     return;
-    // }
+    if(block_d2ij > cutoff*cutoff) {
+        return;
+    }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     Surreal<RealType> ci[D];
@@ -195,9 +214,10 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
             dxs[d] = ci[d] - cj[d];
             r2 += dxs[d]*dxs[d];
         }
-        Surreal<RealType> r = sqrt(r2);
 
-        if(atom_j_idx <= atom_i_idx && r.real < cutoff && atom_j_idx < N && atom_i_idx < N) {
+        if(atom_j_idx <= atom_i_idx && r2.real < cutoff*cutoff && atom_j_idx < N && atom_i_idx < N) {
+
+            Surreal<RealType> r = sqrt(r2);
 
             Surreal<RealType> alpha2_ij          = born_radii_i*born_radii_j;
             Surreal<RealType> D_ij               = r2/(4*alpha2_ij);
@@ -364,12 +384,31 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     const Surreal<double>* obc_chain_ri,
     const double dielectric_offset,
     const double cutoff,
+    const double *block_bounds_ctr,
+    const double *block_bounds_ext,
     const Surreal<double>* bornForces,
     double* out_HvP,
     double* out_MvP) {
 
     // we always do the full interaction matrix due to non-symmetry
 
+
+    RealType block_d2ij = 0; 
+    for(int d=0; d < D; d++) {
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+        block_d2ij += dx*dx;
+    }
+
+    if(block_d2ij > cutoff*cutoff) {
+        return;
+    }
+
+    // (ytz): we can probably do this computation twice by flipping i and j, but we have more
+    // parallelism as is
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     Surreal<RealType> ci[D];
     RealType dPsi_dx_i_imag[D];
@@ -418,15 +457,17 @@ __global__ void k_compute_born_energy_and_forces_jvp(
 
     for(int round = 0; round < 32; round++) {
 
-        if (atom_j_idx != atom_i_idx) {
+        Surreal<RealType> dxs[D];
+        Surreal<RealType> r2(0, 0);
+        for(int d=0; d < D; d++) {
+            dxs[d] = ci[d] - cj[d];
+            r2 += dxs[d]*dxs[d];
+        }
 
-            Surreal<RealType> dxs[D];
-            Surreal<RealType> r2(0, 0);
-            for(int d=0; d < D; d++) {
-                dxs[d] = ci[d] - cj[d];
-                r2 += dxs[d]*dxs[d];
-            }
+        if (atom_j_idx != atom_i_idx && r2.real < cutoff*cutoff) {
+            
             Surreal<RealType> r = sqrt(r2);
+
             Surreal<RealType> rInverse = 1/r;
 
             RealType offsetRadiusJ      = radiusJ - dielectricOffset;

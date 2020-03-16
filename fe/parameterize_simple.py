@@ -113,7 +113,8 @@ def error_fn(all_du_dls, T, schedule, true_dG):
     pred_dG = loss.mybar(jnp.stack([dG_fwd, dG_bkwd]))
     pred_dG *= kT
 
-    # print(dG_fwd, dG_bkwd)
+    print("fwd", dG_fwd)
+    print("bwd", dG_bkwd)
     print("pred_dG", pred_dG)
     return jnp.abs(pred_dG - true_dG)
 
@@ -140,8 +141,24 @@ if __name__ == "__main__":
         raise Exception("precision must be either single or double")
 
     suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
+
+    all_guest_mols = []
     for guest_mol in suppl:
-        break
+        all_guest_mols.append(guest_mol)
+    
+    np.random.seed(123)
+
+    perm = np.arange(len(all_guest_mols))
+    np.random.shuffle(perm)
+
+    print(perm)
+
+    # np.random.shuffl(all_guest_mols)
+
+    guest_mol = all_guest_mols[perm[0]]
+
+
+    # break
 
     num_gpus = args.num_gpus
     all_du_dls = []
@@ -153,7 +170,7 @@ if __name__ == "__main__":
     exps = np.arange(NT)
     part_one = np.power(base, exps)*start
     part_two = np.linspace(1.0, 0.3, 1000)
-    part_three = np.linspace(0.3, 0.0, 4000)
+    part_three = np.linspace(0.3, 0.0, 5000)
 
     forward_schedule = np.concatenate([part_one, part_two, part_three])
     backward_schedule = forward_schedule[::-1]
@@ -211,19 +228,22 @@ if __name__ == "__main__":
         constraints=None,
         rigidWater=False)
 
-    host_system = openmm_converter.deserialize_system(host_system)
+    cutoff = 1.25
+
+    host_system = openmm_converter.deserialize_system(host_system, cutoff=cutoff)
     num_host_atoms = len(host_system.masses)
 
     print("num_host_atoms", num_host_atoms)
 
     # open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
     open_ff = forcefield.Forcefield(args.forcefield)
-    nrg_fns = open_ff.parameterize(guest_mol)
+    nrg_fns = open_ff.parameterize(guest_mol, cutoff=cutoff)
     guest_masses = get_masses(guest_mol)
     guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
 
     combined_system = host_system.merge(guest_system)
-    cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
+    # cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
+    cbs = -0.0001/np.array(combined_system.masses)
     lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
     lambda_idxs[num_host_atoms:] = -1
 
@@ -246,7 +266,7 @@ if __name__ == "__main__":
     for epoch in range(num_epochs):
         # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
 
-        epoch_params = get_params(opt_state)
+        epoch_params = get_params(opt_state )
 
 
 
@@ -299,11 +319,13 @@ if __name__ == "__main__":
         all_du_dls = np.array(all_du_dls)
         loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
       
-        # for du_dls in all_du_dls:
-        #     fwd = du_dls[:T//2]
-        #     bkwd = du_dls[T//2:]
-        #     plt.plot(np.log(lambda_schedule[:T//2]), fwd)
-        #     plt.plot(np.log(lambda_schedule[T//2:]), bkwd)
+        for du_dls in all_du_dls:
+            fwd = du_dls[:T//2]
+            bkwd = du_dls[T//2:]
+            plt.plot(np.log(lambda_schedule[:T//2]), fwd)
+            plt.plot(np.log(lambda_schedule[T//2:]), bkwd)
+
+        plt.savefig(os.path.join(args.out_dir, "epoch_"+str(epoch)+"_du_dls"))
         # plt.show()
 
         true_dG = 26.61024 # -6.36 * 4.184 * -1 (for insertion)
@@ -333,6 +355,7 @@ if __name__ == "__main__":
         all_dl_dps = np.sum(all_dl_dps, axis=0)
 
         allowed_groups = {
+            7: 0.5,
             14: 0.5, # small_molecule charge
             # 12: 1e-2, # GB atomic radii
             13: 1e-2 # GB scale factor

@@ -29,6 +29,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/wrap_kernels.cpp
   src/gpu_utils.cu
   src/nonbonded.cu
+  src/neighborlist.cu
   src/harmonic_bond.cu
   src/harmonic_angle.cu
   src/periodic_torsion.cu
@@ -37,6 +38,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/stepper.cu
   src/context.cu
   src/gbsa.cu
+  src/kernels/k_find_block_bounds.cu
 )
 
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})

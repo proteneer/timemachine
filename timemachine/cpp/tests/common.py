@@ -24,6 +24,8 @@ def prepare_gbsa_system(
     solute_dielectric,
     solvent_dielectric,
     probe_radius,
+    cutoff_radii,
+    cutoff_force,
     params=None,
     precision=np.float64):
 
@@ -49,8 +51,6 @@ def prepare_gbsa_system(
     scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, scale_params])
 
-    cutoff = 100.0
-
     custom_gb = ops.GBSA(
         charge_param_idxs,
         radii_param_idxs,
@@ -63,7 +63,8 @@ def prepare_gbsa_system(
         solute_dielectric,
         solvent_dielectric,
         probe_radius,
-        cutoff,
+        cutoff_radii,
+        cutoff_force,
         D,
         precision=precision
     )
@@ -80,7 +81,9 @@ def prepare_gbsa_system(
         surface_tension=surface_tension,
         solute_dielectric=solute_dielectric,
         solvent_dielectric=solvent_dielectric,
-        probe_radius=probe_radius
+        probe_radius=probe_radius,
+        cutoff_radii=cutoff_radii,
+        cutoff_force=cutoff_force
     )
 
     return params, [gbsa_obc_fn], [custom_gb]
@@ -215,13 +218,14 @@ def prepare_bonded_system(
     return params, [harmonic_bond_fn], [custom_bonded]
 
 def hilbert_sort(conf, D):
-    hc = HilbertCurve(32, D)
-    int_confs = (conf*10000).astype(np.int64)
+    hc = HilbertCurve(64, D)
+    int_confs = (conf*10000).astype(np.int64)+50000
     dists = []
     for xyz in int_confs.tolist():
         dist = hc.distance_from_coordinates(xyz)
         dists.append(dist)
     perm = np.argsort(dists)
+    # np.random.shuffle(perm)
     return perm
 
 
@@ -239,6 +243,16 @@ class GradientTest(unittest.TestCase):
             x = x[perm]
 
         return x
+
+    def get_cdk8_coords(self, D, sort=False):
+        x = np.load("cdk8.npy").astype(np.float64)
+        print("num_atoms", x.shape[0])
+        if sort:
+            perm = hilbert_sort(x, D)
+            x = x[perm]
+
+        return x
+
 
     def assert_equal_vectors(self, truth, test, rtol):
         """
@@ -280,7 +294,6 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
-        # test_dx, test_dp = custom_force.execute_first_order(x, params)
         test_dx = custom_force.execute(x, params)
 
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))

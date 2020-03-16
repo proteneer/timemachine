@@ -47,48 +47,51 @@ class TestGBSA(GradientTest):
 
     def test_gbsa(self):
 
-        D = 4
+        D = 3
         np.random.seed(125)
 
         # N = 33
         # x = self.get_random_coords(N, D) 
 
-        x = self.get_water_coords(D)
+        x = self.get_water_coords(D, sort=True)
+
         N = x.shape[0]
 
-        P_charges = 64
-        P_radii = 12
-        P_scale_factors = 12
+        P_charges = N
+        P_radii = N
+        P_scale_factors = N
 
         dielectric_offset = 0.009
         solute_dielectric = 1.0
         solvent_dielectric = 78.5
  
-        for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
-            np.random.rand(1)
-
-            params, ref_forces, test_forces = prepare_gbsa_system(
-                x,
-                P_charges,
-                P_radii,
-                P_scale_factors,
-                alpha=0.35,
-                beta=0.645,
-                gamma=0.65,
-                dielectric_offset=dielectric_offset,
-                surface_tension=28.3919551,
-                solute_dielectric=solute_dielectric,
-                solvent_dielectric=solvent_dielectric,
-                probe_radius=0.14,
-                precision=precision
-            )
-
-            for r, t in zip(ref_forces, test_forces):
-                self.compare_forces(
+        for cutoff in [0.1, 1.0, 1.5, 2.0, 500.0]:
+            print("Testing cutoff @", cutoff)
+            for precision, rtol in [(np.float64, 1e-10), (np.float32, 8e-5)]:
+                params, ref_forces, test_forces = prepare_gbsa_system(
                     x,
-                    params,
-                    r,
-                    t,
-                    precision,
-                    rtol=rtol
+                    P_charges,
+                    P_radii,
+                    P_scale_factors,
+                    alpha=0.35,
+                    beta=0.645,
+                    gamma=0.65,
+                    dielectric_offset=dielectric_offset,
+                    surface_tension=28.3919551,
+                    solute_dielectric=solute_dielectric,
+                    solvent_dielectric=solvent_dielectric,
+                    probe_radius=0.14,
+                    cutoff_radii=cutoff,
+                    cutoff_force=cutoff,
+                    precision=precision
                 )
+
+                for r, t in zip(ref_forces, test_forces):
+                    self.compare_forces(
+                        x,
+                        params,
+                        r,
+                        t,
+                        precision,
+                        rtol=rtol
+                    )
