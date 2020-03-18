@@ -213,7 +213,7 @@ class Forcefield():
                     matches = match_smirks(mol, smirks)
                     for m in matches:
                         sorted_m = sort_tuple(m)
-                        vd[sorted_m] = p_idx
+                        vd[sorted_m] = (p_idx, m)
                 return vd
 
             vd = make_vd()
@@ -223,7 +223,7 @@ class Forcefield():
                 bond_idxs = []
                 bond_param_idxs = []
 
-                for atom_idxs, p_idx in vd.items():
+                for atom_idxs, (p_idx, _) in vd.items():
                     bond_idxs.append(atom_idxs)
                     pp = params[p_idx]
                     k_idx, b_idx = pp[1], pp[2]
@@ -243,7 +243,7 @@ class Forcefield():
                 angle_idxs = []
                 angle_param_idxs = []
 
-                for atom_idxs, p_idx in vd.items():
+                for atom_idxs, (p_idx, _) in vd.items():
                     angle_idxs.append(atom_idxs)
                     pp = params[p_idx]
                     k_idx, a_idx = pp[1], pp[2]
@@ -259,7 +259,7 @@ class Forcefield():
 
             elif force_type == "Proper":
 
-                for atom_idxs, p_idx in vd.items():
+                for atom_idxs, (p_idx, _) in vd.items():
                     pp = params[p_idx]
                     components = pp[1]
                     for proper_torsion in components:
@@ -272,7 +272,7 @@ class Forcefield():
 
             elif force_type == 'Improper':
 
-                for atom_idxs, p_idx in vd.items():
+                for _, (p_idx, atom_idxs) in vd.items():
                     pp = params[p_idx]
                     k_idx, phase_idx, period_idx = pp[1], pp[2], pp[3]
                     m = atom_idxs
@@ -288,7 +288,7 @@ class Forcefield():
 
                 lj_param_idxs = []
 
-                for atom_idx, p_idx in vd.items():
+                for atom_idx, (p_idx, _) in vd.items():
                     pp = params[p_idx]
                     sig_idx, eps_idx = pp[1], pp[2]
                     lj_param_idxs.append((sig_idx, eps_idx))
@@ -297,7 +297,7 @@ class Forcefield():
 
                 es_param_idxs = []
 
-                for atom_idx, p_idx in vd.items():
+                for atom_idx, (p_idx, _) in vd.items():
                     pp = params[p_idx]
                     q_idx = pp[1]
                     es_param_idxs.append(q_idx)
