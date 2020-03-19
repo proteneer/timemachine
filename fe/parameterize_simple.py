@@ -277,7 +277,7 @@ if __name__ == "__main__":
         fpath = os.path.join(args.out_dir, fname)
         epoch_ff_params.save(fpath)
 
-        sim.system.params = epoch_params
+        sim.system.params = np.asarray(epoch_params)
 
         all_args = []
 
