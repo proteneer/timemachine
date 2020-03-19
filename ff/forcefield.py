@@ -132,6 +132,9 @@ class Forcefield():
                 param_idxs = v[1:]
                 # print(smirks, param_idxs)
                 param_vals = recursive_lookup(param_idxs)
+
+                # coerce into numpy array as new_params may be a jax array
+                param_vals = np.asarray(param_vals)
                 new_params.append([smirks, *param_vals])
 
             raw_ff[force_type]["params"] = new_params
