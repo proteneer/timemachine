@@ -132,7 +132,7 @@ class Simulation:
                 interval = max(1, xs.shape[0]//pdb_writer.n_frames)
                 if frame_idx % interval == 0:
                     pdb_writer.write(x*10)
-        pdb_writer.close()
+            pdb_writer.close()
 
         pipe.send(du_dls)
 
