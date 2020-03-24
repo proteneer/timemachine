@@ -75,8 +75,8 @@ class System():
             elif a_name == "GBSA":
 
                 # skip GB
-                print("skipping GB")
-                continue
+                # print("skipping GB")
+                # continue
 
                 charge_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0)
                 radius_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)

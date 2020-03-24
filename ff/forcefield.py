@@ -318,7 +318,7 @@ class Forcefield():
 
                 partial_charges = []
                 for index, atom in enumerate(oemol.GetAtoms()):
-                    partial_charges.append(0*atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0))
+                    partial_charges.append(atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0))
 
                 partial_charges = np.array(partial_charges)
 
