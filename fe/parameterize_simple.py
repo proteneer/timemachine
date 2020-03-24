@@ -228,7 +228,7 @@ if __name__ == "__main__":
         constraints=None,
         rigidWater=False)
 
-    cutoff = 1.25
+    cutoff = 1000
 
     host_system = openmm_converter.deserialize_system(host_system, cutoff=cutoff)
     num_host_atoms = len(host_system.masses)
@@ -245,7 +245,7 @@ if __name__ == "__main__":
     # cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
     cbs = -0.0001/np.array(combined_system.masses)
     lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
-    lambda_idxs[num_host_atoms:] = -1
+    lambda_idxs[num_host_atoms:] = 1
 
     sim = simulation.Simulation(
         combined_system,

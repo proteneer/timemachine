@@ -44,6 +44,11 @@ def recenter(conf, true_com, scale_factor=1):
     centered = conf - mol_com  # centered to origin
     return true_com + centered/scale_factor 
 
+def rescale_and_center(conf, true_com, scale_factor=2):
+    mol_com = np.sum(conf, axis=0)/conf.shape[0]
+    centered = conf - mol_com  # centered to origin
+    return true_com + centered/scale_factor 
+
 from hilbertcurve.hilbertcurve import HilbertCurve
 
 def hilbert_sort(conf):
@@ -62,7 +67,7 @@ class PDBWriter():
         self.pdb_str = pdb_str
         self.out_filepath = out_filepath
         self.outfile = None
-        self.n_frames = 25
+        self.n_frames = 100
 
     def write_header(self):
         """
@@ -97,10 +102,13 @@ import jax.numpy as jnp
 def error_fn(all_du_dls, T, schedule, true_dG):
     bkwd = all_du_dls[:, T//2:]
     bkwd_sched = schedule[T//2:]
+
     dG_bkwd = math_utils.trapz(bkwd, bkwd_sched) # integral from 0 to inf
+
+    print("raw dG_deletion", dG_bkwd)
     # dG_fwd and dG_bkwd have the same sign, so we need to flip dG_bkwd so the
     # direction of integral is the same (requirement for pymbar.BAR)
-    dG_bkwd = -dG_bkwd # this is needed for BAR to be correct
+    dG_bkwd = -dG_bkwd # this is needed for BAR to be correct, REMOVE FOR EXP
 
     # this is in kJ/mol, inputs to BAR needs to be in 1/kT.
     kT = 2.479
@@ -151,30 +159,28 @@ if __name__ == "__main__":
     num_gpus = args.num_gpus
     all_du_dls = []
 
-    start = 1e3
-    end = 1.0
-    NT = 500
-    base = np.exp(np.log(end/start)/NT)
-    exps = np.arange(NT)
-    part_one = np.power(base, exps)*start
-    part_two = np.linspace(1.0, 0.3, 1000)
-    part_three = np.linspace(0.3, 0.0, 5000)
+    insertion_T = 5000
+    insertion_lambda = np.linspace(1.0, 0.0, insertion_T) # insertion
+    insertion_cas = np.ones(insertion_T, dtype=np.float64)*0.5
+    insertion_dts = np.ones(insertion_T) * 0.0015
 
-    forward_schedule = np.concatenate([part_one, part_two, part_three])
-    backward_schedule = forward_schedule[::-1]
-    lambda_schedule = np.concatenate([forward_schedule, backward_schedule])
+    relaxation_T = 1000
+    relaxation_lambda = np.zeros(relaxation_T) # relaxation
+    relaxation_cas = np.ones(relaxation_T, dtype=np.float64)*0.95 # FIXME
+    relaxation_dts = np.linspace(0.001, 0.01, relaxation_T).astype(np.float64) # FIXME
 
-    T = lambda_schedule.shape[0]
-    assert T % 2 == 0
-    dt = 0.0015
-    step_sizes = np.ones(T)*dt
+    deletion_T = 5000
+    deletion_lambda = np.linspace(0.0, 5.0, deletion_T).astype(np.float64)
+    deletion_cas = np.ones(deletion_T, dtype=np.float64)*0.95
+    deletion_dts = np.ones(deletion_T)*0.0015
 
-    assert T % 2 == 0
-    # cas = np.ones(T)*0.93
+    deletion_offset = insertion_T + relaxation_T # when we start doing deletion
 
-    cas_part_one = np.zeros(T//2)
-    cas_part_two = np.ones(T//2)*0.93
-    cas = np.concatenate([cas_part_one, cas_part_two])
+    complete_T = insertion_T + relaxation_T + deletion_T
+    complete_lambda = np.concatenate([insertion_lambda, relaxation_lambda, deletion_lambda])
+    complete_cas = np.concatenate([insertion_cas, relaxation_cas, deletion_cas])
+    complete_dts = np.concatenate([insertion_dts, relaxation_dts, deletion_dts])
+
 
     epoch = 0
 
@@ -196,6 +202,7 @@ if __name__ == "__main__":
         guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
         guest_conf = guest_conf/10 # convert to md_units
         rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
+        rot_matrix = np.eye(3)
         guest_conf = np.matmul(guest_conf, rot_matrix)*10
 
         for atom_idx, pos in enumerate(guest_conf):
@@ -220,7 +227,7 @@ if __name__ == "__main__":
         constraints=None,
         rigidWater=False)
 
-    cutoff = 1.25
+    cutoff = 50.0
 
     host_system = openmm_converter.deserialize_system(host_system, cutoff=cutoff)
     num_host_atoms = len(host_system.masses)
@@ -237,14 +244,14 @@ if __name__ == "__main__":
     # cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
     cbs = -0.0001/np.array(combined_system.masses)
     lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
-    lambda_idxs[num_host_atoms:] = -1
+    lambda_idxs[num_host_atoms:] = 1
 
     sim = simulation.Simulation(
         combined_system,
-        step_sizes,
-        cas,
+        complete_dts,
+        complete_cas,
         cbs,
-        lambda_schedule,
+        complete_lambda,
         lambda_idxs,
         precision
     )
@@ -280,7 +287,7 @@ if __name__ == "__main__":
             conformer = guest_mol.GetConformer(conf_idx)
             guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
             guest_conf = guest_conf/10 # convert to md_units
-            guest_conf = recenter(guest_conf, conf_com)
+            guest_conf = rescale_and_center(guest_conf, conf_com, 1)
             x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
 
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
@@ -312,12 +319,19 @@ if __name__ == "__main__":
         loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
       
         for du_dls in all_du_dls:
-            fwd = du_dls[:T//2]
-            bkwd = du_dls[T//2:]
-            plt.plot(np.log(lambda_schedule[:T//2]), fwd)
-            plt.plot(np.log(lambda_schedule[T//2:]), bkwd)
+            # fwd = du_dls[:deletion_offset]
+            # plt.plot(complete_lambda[:deletion_offset], fwd)
+            bkwd = du_dls[deletion_offset:]
+            plt.plot(complete_lambda[deletion_offset:], bkwd)
 
-        plt.savefig(os.path.join(args.out_dir, "epoch_"+str(epoch)+"_du_dls"))
+            plt.ylabel("du_dl")
+            plt.xlabel("lambda")
+
+        axes = plt.gca()
+        axes.set_xlim([0, 2])
+        plt.savefig(os.path.join(args.out_dir, "bkwd_epoch_"+str(epoch)+"_du_dls"))
+
+        assert 0
         # plt.show()
 
         true_dG = 26.61024 # -6.36 * 4.184 * -1 (for insertion)
