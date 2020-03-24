@@ -364,6 +364,7 @@ if __name__ == "__main__":
         error_grad = loss_grad_fn(all_du_dls, deletion_offset, complete_lambda, true_dG)
         all_du_dl_adjoints = error_grad[0]
 
+        # this needs to be rescaled by number of conformers (eg. 100 conformers with 0.01 each will fail)
         work_grad_cutoff = 1e-2
         # send everything at once
         for conf_idx, (pc, du_dl_adjoints, wg) in enumerate(zip(parent_conns, all_du_dl_adjoints, work_grads)):
@@ -376,7 +377,7 @@ if __name__ == "__main__":
         # receive everything at once
         all_dl_dps = []
         for pc, wg in zip(parent_conns, work_grads):
-            if wg < work_grad_cutoff:
+            if wg > work_grad_cutoff:
                 dl_dp = pc.recv()
                 all_dl_dps.append(dl_dp)
 
