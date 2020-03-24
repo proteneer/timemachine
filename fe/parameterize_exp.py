@@ -99,6 +99,25 @@ def get_masses(m):
 import jax.numpy as jnp
 
 # use exponential averaging
+exp_grad = jax.grad(bar.EXP)
+
+def exp_grad_filter(all_du_dls, T, schedule, true_dG):
+    bkwd = all_du_dls[:, T:]
+    bkwd_sched = schedule[T:]
+
+    dG_bkwd = math_utils.trapz(bkwd, bkwd_sched) # integral from 0 to inf
+    dG_bkwd = -dG_bkwd
+
+    kT = 2.479
+    dG_bkwd /= kT
+
+    grads = exp_grad(dG_bkwd)
+
+    return grads
+    # print(grads)
+
+    # assert 0
+
 def error_fn(all_du_dls, T, schedule, true_dG):
     bkwd = all_du_dls[:, T:]
     bkwd_sched = schedule[T:]
@@ -121,10 +140,7 @@ def error_fn(all_du_dls, T, schedule, true_dG):
 
     # (ytz): undo the negative sign
     # this is *not* the same as not doing the initial dG_bkwd negation at all.
-
     pred_dG = -pred_dG
-
-    print("bwd", dG_bkwd)
     print("pred_dG", pred_dG, "true_dG", true_dG)
     return jnp.abs(pred_dG - true_dG)
 
@@ -209,7 +225,7 @@ if __name__ == "__main__":
         guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
         guest_conf = guest_conf/10 # convert to md_units
         rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
-        rot_matrix = np.eye(3)
+        # rot_matrix = np.eye(3)
         guest_conf = np.matmul(guest_conf, rot_matrix)*10
 
         for atom_idx, pos in enumerate(guest_conf):
@@ -341,21 +357,28 @@ if __name__ == "__main__":
         true_dG = 26.61024 # -6.36 * 4.184 * -1 (for insertion)
 
         error = error_fn(all_du_dls, deletion_offset, complete_lambda, true_dG)
+        work_grads = exp_grad_filter(all_du_dls, deletion_offset, complete_lambda, true_dG)
 
         print("---EPOCH", epoch, "---- LOSS", error)
 
         error_grad = loss_grad_fn(all_du_dls, deletion_offset, complete_lambda, true_dG)
         all_du_dl_adjoints = error_grad[0]
 
+        work_grad_cutoff = 1e-2
         # send everything at once
-        for pc, du_dl_adjoints in zip(parent_conns, all_du_dl_adjoints):
-            pc.send(du_dl_adjoints)
+        for conf_idx, (pc, du_dl_adjoints, wg) in enumerate(zip(parent_conns, all_du_dl_adjoints, work_grads)):
+            if wg < work_grad_cutoff:
+                print("skipping conf", conf_idx)
+                pc.send(None)
+            else:
+                pc.send(du_dl_adjoints)
 
         # receive everything at once
         all_dl_dps = []
-        for pc in parent_conns:
-            dl_dp = pc.recv()
-            all_dl_dps.append(dl_dp)
+        for pc, wg in zip(parent_conns, work_grads):
+            if wg < work_grad_cutoff:
+                dl_dp = pc.recv()
+                all_dl_dps.append(dl_dp)
 
         # terminate all the processes
         for p in processes:
