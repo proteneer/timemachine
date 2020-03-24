@@ -330,7 +330,7 @@ class Forcefield():
                 es_param_groups = []
                 for c_idx, _ in enumerate(partial_charges):
                     es_param_idxs.append(c_idx+len(self.params))
-                    es_param_groups.append(22)
+                    es_param_groups.append(14)
 
 
                 self.params = np.concatenate([self.params, partial_charges])

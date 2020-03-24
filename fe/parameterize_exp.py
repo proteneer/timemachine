@@ -100,15 +100,17 @@ import jax.numpy as jnp
 
 # use exponential averaging
 def error_fn(all_du_dls, T, schedule, true_dG):
-    bkwd = all_du_dls[:, T//2:]
-    bkwd_sched = schedule[T//2:]
+    bkwd = all_du_dls[:, T:]
+    bkwd_sched = schedule[T:]
 
     dG_bkwd = math_utils.trapz(bkwd, bkwd_sched) # integral from 0 to inf
 
     print("raw dG_deletion", dG_bkwd)
-    # dG_fwd and dG_bkwd have the same sign, so we need to flip dG_bkwd so the
-    # direction of integral is the same (requirement for pymbar.BAR)
-    dG_bkwd = -dG_bkwd # this is needed for BAR to be correct, REMOVE FOR EXP
+    # (ytz): dG_bkwd should be mostly positive values. The most positive value
+    # carries the semantic of being the most tightly bound. So we want to weight
+    # this conformation exponentially more:
+
+    dG_bkwd = -dG_bkwd
 
     # this is in kJ/mol, inputs to BAR needs to be in 1/kT.
     kT = 2.479
@@ -117,8 +119,13 @@ def error_fn(all_du_dls, T, schedule, true_dG):
     pred_dG = bar.EXP(dG_bkwd)
     pred_dG *= kT
 
+    # (ytz): undo the negative sign
+    # this is *not* the same as not doing the initial dG_bkwd negation at all.
+
+    pred_dG = -pred_dG
+
     print("bwd", dG_bkwd)
-    print("pred_dG", pred_dG)
+    print("pred_dG", pred_dG, "true_dG", true_dG)
     return jnp.abs(pred_dG - true_dG)
 
 if __name__ == "__main__":
@@ -159,19 +166,19 @@ if __name__ == "__main__":
     num_gpus = args.num_gpus
     all_du_dls = []
 
-    insertion_T = 5000
+    insertion_T = 2500
     insertion_lambda = np.linspace(1.0, 0.0, insertion_T) # insertion
-    insertion_cas = np.ones(insertion_T, dtype=np.float64)*0.5
-    insertion_dts = np.ones(insertion_T) * 0.0015
+    insertion_cas = np.ones(insertion_T, dtype=np.float64)*0.9
+    insertion_dts = np.ones(insertion_T) * 0.001
 
     relaxation_T = 1000
     relaxation_lambda = np.zeros(relaxation_T) # relaxation
-    relaxation_cas = np.ones(relaxation_T, dtype=np.float64)*0.95 # FIXME
-    relaxation_dts = np.linspace(0.001, 0.01, relaxation_T).astype(np.float64) # FIXME
+    relaxation_cas = np.ones(relaxation_T, dtype=np.float64)*0.9
+    relaxation_dts = np.linspace(0.001, 0.01, relaxation_T).astype(np.float64)
 
     deletion_T = 5000
     deletion_lambda = np.linspace(0.0, 5.0, deletion_T).astype(np.float64)
-    deletion_cas = np.ones(deletion_T, dtype=np.float64)*0.95
+    deletion_cas = np.ones(deletion_T, dtype=np.float64)*0.9
     deletion_dts = np.ones(deletion_T)*0.0015
 
     deletion_offset = insertion_T + relaxation_T # when we start doing deletion
@@ -227,7 +234,7 @@ if __name__ == "__main__":
         constraints=None,
         rigidWater=False)
 
-    cutoff = 50.0
+    cutoff = 20
 
     host_system = openmm_converter.deserialize_system(host_system, cutoff=cutoff)
     num_host_atoms = len(host_system.masses)
@@ -331,16 +338,13 @@ if __name__ == "__main__":
         axes.set_xlim([0, 2])
         plt.savefig(os.path.join(args.out_dir, "bkwd_epoch_"+str(epoch)+"_du_dls"))
 
-        assert 0
-        # plt.show()
-
         true_dG = 26.61024 # -6.36 * 4.184 * -1 (for insertion)
 
-        error = error_fn(all_du_dls, T, lambda_schedule, true_dG)
+        error = error_fn(all_du_dls, deletion_offset, complete_lambda, true_dG)
 
         print("---EPOCH", epoch, "---- LOSS", error)
 
-        error_grad = loss_grad_fn(all_du_dls, T, lambda_schedule, true_dG)
+        error_grad = loss_grad_fn(all_du_dls, deletion_offset, complete_lambda, true_dG)
         all_du_dl_adjoints = error_grad[0]
 
         # send everything at once
