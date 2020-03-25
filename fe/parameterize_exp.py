@@ -376,11 +376,20 @@ if __name__ == "__main__":
         assert len(all_du_dl_adjoints) == len(work_grads)
         assert len(work_grads) ==  len(all_du_dls)
 
+        picked_conformers = []
+        unstable_conformers = []
+
         for conf_idx, (pc, du_dl_adjoints, wg, du_dls) in enumerate(zip(parent_conns, all_du_dl_adjoints, work_grads, all_du_dls)):
+            if du_dls is None:
+                unstable_conformers.append(conf_idx)
             if wg < work_grad_cutoff or du_dls is None:
                 pc.send(None)
             else:
+                picked_conformers.append(conf_idx)
                 pc.send(du_dl_adjoints)
+
+        print("picked conformers:", picked_conformers)
+        print("unstable conformers:", unstable_conformers)
 
         # receive everything at once
         all_dl_dps = []
