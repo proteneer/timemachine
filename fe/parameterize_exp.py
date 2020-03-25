@@ -44,11 +44,6 @@ def recenter(conf, true_com, scale_factor=1):
     centered = conf - mol_com  # centered to origin
     return true_com + centered/scale_factor 
 
-def rescale_and_center(conf, true_com, scale_factor=2):
-    mol_com = np.sum(conf, axis=0)/conf.shape[0]
-    centered = conf - mol_com  # centered to origin
-    return true_com + centered/scale_factor 
-
 from hilbertcurve.hilbertcurve import HilbertCurve
 
 def hilbert_sort(conf):
@@ -67,7 +62,7 @@ class PDBWriter():
         self.pdb_str = pdb_str
         self.out_filepath = out_filepath
         self.outfile = None
-        self.n_frames = 100
+        self.n_frames = 25
 
     def write_header(self):
         """
@@ -98,11 +93,13 @@ def get_masses(m):
 
 import jax.numpy as jnp
 
-# use exponential averaging
 exp_grad = jax.grad(bar.EXP)
 
 def exp_grad_filter(all_du_dls_raw, T, schedule, true_dG):
-
+    """
+    Compute the derivative of exp weighted free energy with respect
+    to the input work values
+    """
     all_du_dls = []
     for du_dl in all_du_dls_raw:
         if du_dl is not None:
@@ -123,9 +120,6 @@ def exp_grad_filter(all_du_dls_raw, T, schedule, true_dG):
     grads = exp_grad(dG_bkwd)
 
     return grads
-    # print(grads)
-
-    # assert 0
 
 def error_fn(all_du_dls_raw, T, schedule, true_dG):
 
@@ -241,10 +235,7 @@ if __name__ == "__main__":
         guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
         guest_conf = guest_conf/10 # convert to md_units
         rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
-        # rot_matrix = np.eye(3)
         guest_conf = np.matmul(guest_conf, rot_matrix)*10
-
-        # np.save("guest_conf_"+str(conf_idx), guest_conf)
 
         for atom_idx, pos in enumerate(guest_conf):
             conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
@@ -275,7 +266,6 @@ if __name__ == "__main__":
 
     print("num_host_atoms", num_host_atoms)
 
-    # open_ff = forcefield.Forcefield("ff/smirnoff_1.1.0.py")
     open_ff = forcefield.Forcefield(args.forcefield)
     nrg_fns = open_ff.parameterize(guest_mol, cutoff=cutoff)
     guest_masses = get_masses(guest_mol)
@@ -304,12 +294,7 @@ if __name__ == "__main__":
     num_epochs = 100
 
     for epoch in range(num_epochs):
-        # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
-
         epoch_params = get_params(opt_state)
-
-        # print("net ligand charge:", np.sum(epoch_params[open_ff.es_param_idxs]))
-
 
         # deepy and openff param at start
         epoch_ff_params = copy.deepcopy(open_ff)
@@ -328,9 +313,8 @@ if __name__ == "__main__":
 
             conformer = guest_mol.GetConformer(conf_idx)
             guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-            # guest_conf = np.load("guest_conf_4.npy")
             guest_conf = guest_conf/10 # convert to md_units
-            guest_conf = rescale_and_center(guest_conf, conf_com, 1)
+            guest_conf = recenter(guest_conf, conf_com)
             x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
 
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
@@ -359,14 +343,11 @@ if __name__ == "__main__":
             du_dls = pc.recv()
             all_du_dls.append(du_dls)
 
-        # all_du_dls = np.array(all_du_dls)
         loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
       
         for du_dls in all_du_dls:
             if du_dls is None:
                 continue
-            # fwd = du_dls[:deletion_offset]
-            # plt.plot(complete_lambda[:deletion_offset], fwd)
             bkwd = du_dls[deletion_offset:]
             plt.plot(complete_lambda[deletion_offset:], bkwd)
 
@@ -391,28 +372,25 @@ if __name__ == "__main__":
         work_grad_cutoff = 1e-2
         # send everything at once
 
-        # print(len(parent_conns), len(all_du_dl_adjoints), len(work_grads), len(all_du_dls))
+        assert len(parent_conns) == len(all_du_dl_adjoints)
+        assert len(all_du_dl_adjoints) == len(work_grads)
+        assert len(work_grads) ==  len(all_du_dls)
 
         for conf_idx, (pc, du_dl_adjoints, wg, du_dls) in enumerate(zip(parent_conns, all_du_dl_adjoints, work_grads, all_du_dls)):
             if wg < work_grad_cutoff or du_dls is None:
-                # print("skipping conf", conf_idx)
-                # print("sending none", conf_idx)
                 pc.send(None)
             else:
-                # print("keeping conf", conf_idx)
                 pc.send(du_dl_adjoints)
 
         # receive everything at once
         all_dl_dps = []
         for conf_idx, (pc, wg, du_dls) in enumerate(zip(parent_conns, work_grads, all_du_dls)):
             if wg > work_grad_cutoff and du_dls is not None:
-                # print("receiving from", conf_idx)
                 dl_dp = pc.recv()
                 all_dl_dps.append(dl_dp)
 
         # terminate all the processes
         for p_idx, p in enumerate(processes):
-            # print("trying to join", p_idx)
             p.join()
 
         all_dl_dps = np.array(all_dl_dps)

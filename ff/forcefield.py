@@ -1,6 +1,3 @@
-from openeye import oechem
-from openeye import oequacpac
-
 import ast
 import numpy as np
 
@@ -51,10 +48,6 @@ class Forcefield():
                     arr.append(v)
                 return arr
             elif isinstance(val, float) or isinstance(val, int):
-                # charge test
-                # if p_group == 14:
-                #    val = 0
-
                 p_idx = add_param(val, p_group)
                 return p_idx
             else:
@@ -299,8 +292,6 @@ class Forcefield():
                     lj_param_idxs.append((sig_idx, eps_idx))
 
             elif force_type == 'SimpleCharges':
-
-
                 es_param_idxs = []
 
                 for atom_idx, (p_idx, _) in vd.items():

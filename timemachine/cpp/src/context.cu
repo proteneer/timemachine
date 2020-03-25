@@ -272,10 +272,4 @@ void ReversibleContext::get_v_t_adjoint(double *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_v_t_adjoint_, N_*D*sizeof(double), cudaMemcpyDeviceToHost));
 }
 
-// template class ReversibleContext<double, 4>;
-// template class ReversibleContext<double, 3>;
-
-// template class ReversibleContext<float, 4>;
-// template class ReversibleContext<float, 3>;
-
 };

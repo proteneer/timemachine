@@ -228,7 +228,7 @@ if __name__ == "__main__":
         constraints=None,
         rigidWater=False)
 
-    cutoff = 1000
+    cutoff = 1.25
 
     host_system = openmm_converter.deserialize_system(host_system, cutoff=cutoff)
     num_host_atoms = len(host_system.masses)
