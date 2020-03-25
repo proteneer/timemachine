@@ -31,7 +31,7 @@ from jax.experimental import optimizers
 
 from fe import simulation
 from fe import loss
-from fe.PDBWriter import PDBWriter
+from fe.pdb_writer import PDBWriter
 
 from ff import forcefield
 from ff import system
