@@ -107,6 +107,8 @@ def exp_grad_filter(all_du_dls_raw, T, schedule, true_dG):
     for du_dl in all_du_dls_raw:
         if du_dl is not None:
             all_du_dls.append(du_dl)
+        else:
+            all_du_dls.append(np.zeros_like(schedule))
     all_du_dls = jnp.array(all_du_dls)
 
     bkwd = all_du_dls[:, T:]
@@ -335,6 +337,7 @@ if __name__ == "__main__":
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
             out_file = os.path.join(args.out_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file)
+            writer = None
 
             v0 = np.zeros_like(x0)
 
@@ -360,6 +363,8 @@ if __name__ == "__main__":
         loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
       
         for du_dls in all_du_dls:
+            if du_dls is None:
+                continue
             # fwd = du_dls[:deletion_offset]
             # plt.plot(complete_lambda[:deletion_offset], fwd)
             bkwd = du_dls[deletion_offset:]
@@ -385,23 +390,29 @@ if __name__ == "__main__":
         # this needs to be rescaled by number of conformers (eg. 100 conformers with 0.01 each will fail)
         work_grad_cutoff = 1e-2
         # send everything at once
-        for conf_idx, (pc, du_dl_adjoints, wg) in enumerate(zip(parent_conns, all_du_dl_adjoints, work_grads)):
-            if wg < work_grad_cutoff:
+
+        # print(len(parent_conns), len(all_du_dl_adjoints), len(work_grads), len(all_du_dls))
+
+        for conf_idx, (pc, du_dl_adjoints, wg, du_dls) in enumerate(zip(parent_conns, all_du_dl_adjoints, work_grads, all_du_dls)):
+            if wg < work_grad_cutoff or du_dls is None:
                 # print("skipping conf", conf_idx)
+                # print("sending none", conf_idx)
                 pc.send(None)
             else:
-                print("keeping conf", conf_idx)
+                # print("keeping conf", conf_idx)
                 pc.send(du_dl_adjoints)
 
         # receive everything at once
         all_dl_dps = []
-        for pc, wg in zip(parent_conns, work_grads):
-            if wg > work_grad_cutoff:
+        for conf_idx, (pc, wg, du_dls) in enumerate(zip(parent_conns, work_grads, all_du_dls)):
+            if wg > work_grad_cutoff and du_dls is not None:
+                # print("receiving from", conf_idx)
                 dl_dp = pc.recv()
                 all_dl_dps.append(dl_dp)
 
         # terminate all the processes
-        for p in processes:
+        for p_idx, p in enumerate(processes):
+            # print("trying to join", p_idx)
             p.join()
 
         all_dl_dps = np.array(all_dl_dps)
