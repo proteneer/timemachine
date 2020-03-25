@@ -9,6 +9,19 @@ from simtk.openmm import app
 from timemachine.lib import custom_ops
 import traceback
 
+def check_coords(x):
+    x3 = x[:, :3]
+    ri = np.expand_dims(x3, 0)
+    rj = np.expand_dims(x3, 1)
+    dij = np.sqrt(np.sum(np.power(ri - rj, 2), axis=-1))
+    if np.any(np.isinf(dij)):
+        return False
+    if np.any(np.isnan(dij)):
+        return False
+    if np.any(dij > 100):
+        return False
+    return True
+
 class Simulation:
     """
     A serializable simulation object
@@ -137,19 +150,13 @@ class Simulation:
 
                 interval = max(1, xs.shape[0]//pdb_writer.n_frames)
                 if frame_idx % interval == 0:
-                    pdb_writer.write(x*10)
+                    if check_coords(x):
+                        pdb_writer.write(x*10)
             pdb_writer.close()
 
         x3 = ctxt.get_last_coords()[:, :3]
-        ri = np.expand_dims(x3, 0)
-        rj = np.expand_dims(x3, 1)
-        dij = np.sqrt(np.sum(np.power(ri - rj, 2), axis=-1))
 
-        if np.any(np.isinf(dij)):
-            du_dls = None
-        if np.any(np.isnan(dij)):
-            du_dls = None
-        if np.any(dij > 100):
+        if check_coords(x3) == False:
             du_dls = None
 
         pipe.send(du_dls)
