@@ -101,7 +101,14 @@ import jax.numpy as jnp
 # use exponential averaging
 exp_grad = jax.grad(bar.EXP)
 
-def exp_grad_filter(all_du_dls, T, schedule, true_dG):
+def exp_grad_filter(all_du_dls_raw, T, schedule, true_dG):
+
+    all_du_dls = []
+    for du_dl in all_du_dls_raw:
+        if du_dl is not None:
+            all_du_dls.append(du_dl)
+    all_du_dls = jnp.array(all_du_dls)
+
     bkwd = all_du_dls[:, T:]
     bkwd_sched = schedule[T:]
 
@@ -118,7 +125,14 @@ def exp_grad_filter(all_du_dls, T, schedule, true_dG):
 
     # assert 0
 
-def error_fn(all_du_dls, T, schedule, true_dG):
+def error_fn(all_du_dls_raw, T, schedule, true_dG):
+
+    all_du_dls = []
+    for du_dl in all_du_dls_raw:
+        if du_dl is not None:
+            all_du_dls.append(du_dl)
+    all_du_dls = jnp.array(all_du_dls)
+
     bkwd = all_du_dls[:, T:]
     bkwd_sched = schedule[T:]
 
@@ -342,7 +356,7 @@ if __name__ == "__main__":
             du_dls = pc.recv()
             all_du_dls.append(du_dls)
 
-        all_du_dls = np.array(all_du_dls)
+        # all_du_dls = np.array(all_du_dls)
         loss_grad_fn = jax.grad(error_fn, argnums=(0,)) 
       
         for du_dls in all_du_dls:

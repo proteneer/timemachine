@@ -227,6 +227,13 @@ void declare_reversible_context(py::module &m, const char *typestr) {
         ctxt.get_param_adjoint_accum(buffer.mutable_data());
         return buffer;
     })
+    .def("get_last_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
+        unsigned int N = ctxt.N();
+        unsigned int D = 3;
+        py::array_t<double, py::array::c_style> buffer({N, D});
+        ctxt.get_last_coords(buffer.mutable_data());
+        return buffer;
+    })
     .def("get_all_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.N();
         unsigned int F = ctxt.F();
