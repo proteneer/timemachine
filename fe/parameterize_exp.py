@@ -124,9 +124,13 @@ def exp_grad_filter(all_du_dls_raw, T, schedule, true_dG):
 def error_fn(all_du_dls_raw, T, schedule, true_dG):
 
     all_du_dls = []
-    for du_dl in all_du_dls_raw:
+    for conf_idx, du_dl in enumerate(all_du_dls_raw):
         if du_dl is not None:
             all_du_dls.append(du_dl)
+            print("conf_idx", conf_idx, "dG", math_utils.trapz(du_dl[T:], schedule[T:]))
+        else:
+            print("conf_idx", conf_idx, "dG None")
+
     all_du_dls = jnp.array(all_du_dls)
 
     bkwd = all_du_dls[:, T:]
@@ -134,7 +138,7 @@ def error_fn(all_du_dls_raw, T, schedule, true_dG):
 
     dG_bkwd = math_utils.trapz(bkwd, bkwd_sched) # integral from 0 to inf
 
-    print("raw dG_deletion", dG_bkwd)
+    # print("raw dG_deletion", dG_bkwd)
     # (ytz): dG_bkwd should be mostly positive values. The most positive value
     # carries the semantic of being the most tightly bound. So we want to weight
     # this conformation exponentially more:
@@ -321,6 +325,7 @@ if __name__ == "__main__":
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
             out_file = os.path.join(args.out_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file)
+            # temporarily disabled
             writer = None
 
             v0 = np.zeros_like(x0)
