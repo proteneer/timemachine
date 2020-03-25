@@ -54,6 +54,7 @@ public:
     ~ReversibleContext();
 
     void get_all_coords(double *out_buffer) const;
+    void get_last_coords(double *out_buffer) const;
 
     void get_param_adjoint_accum(double *out_buffer) const;
     void set_x_t_adjoint(const double *buffer);

@@ -90,6 +90,12 @@ class Simulation:
         pipe: multiprocessing.Pipe
             Use to communicate with the parent host
 
+        The pipe will ping-pong in two passes. If the simulation is stable, ie. the coords
+        of the last frame is well defined, then we return du_dls. Otherwise, a None is sent
+        through the pipe. The pipe then expects to receive the adjoint derivatives, which
+        must be sent for the function to return. None adjoints can be sent to instantly
+        return the function.
+
         """
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
 
@@ -133,6 +139,18 @@ class Simulation:
                 if frame_idx % interval == 0:
                     pdb_writer.write(x*10)
             pdb_writer.close()
+
+        x3 = ctxt.get_last_coords()[:, :3]
+        ri = np.expand_dims(x3, 0)
+        rj = np.expand_dims(x3, 1)
+        dij = np.sqrt(np.sum(np.power(ri - rj, 2), axis=-1))
+
+        if np.any(np.isinf(dij)):
+            du_dls = None
+        if np.any(np.isnan(dij)):
+            du_dls = None
+        if np.any(dij > 100):
+            du_dls = None
 
         pipe.send(du_dls)
 

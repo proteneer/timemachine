@@ -292,7 +292,6 @@ class Forcefield():
                     lj_param_idxs.append((sig_idx, eps_idx))
 
             elif force_type == 'SimpleCharges':
-
                 es_param_idxs = []
 
                 for atom_idx, (p_idx, _) in vd.items():
