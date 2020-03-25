@@ -139,6 +139,8 @@ def deserialize_system(system, cutoff=10000):
                 lj_param_idxs.append([sig_idx, eps_idx])
 
             charge_param_idxs = np.array(charge_param_idxs, dtype=np.int32)
+
+            print("net protein charge:", np.sum(np.array(global_params)[charge_param_idxs]))
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
 
             # 1 here means we fully remove the interaction

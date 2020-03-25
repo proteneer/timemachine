@@ -182,12 +182,12 @@ if __name__ == "__main__":
     num_gpus = args.num_gpus
     all_du_dls = []
 
-    insertion_T = 2500
+    insertion_T = 3000
     insertion_lambda = np.linspace(1.0, 0.0, insertion_T) # insertion
     insertion_cas = np.ones(insertion_T, dtype=np.float64)*0.9
     insertion_dts = np.ones(insertion_T) * 0.001
 
-    relaxation_T = 1000
+    relaxation_T = 2000
     relaxation_lambda = np.zeros(relaxation_T) # relaxation
     relaxation_cas = np.ones(relaxation_T, dtype=np.float64)*0.9
     relaxation_dts = np.linspace(0.001, 0.01, relaxation_T).astype(np.float64)
@@ -228,6 +228,8 @@ if __name__ == "__main__":
         # rot_matrix = np.eye(3)
         guest_conf = np.matmul(guest_conf, rot_matrix)*10
 
+        # np.save("guest_conf_"+str(conf_idx), guest_conf)
+
         for atom_idx, pos in enumerate(guest_conf):
             conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
 
@@ -250,7 +252,7 @@ if __name__ == "__main__":
         constraints=None,
         rigidWater=False)
 
-    cutoff = 20
+    cutoff = 1.25
 
     host_system = openmm_converter.deserialize_system(host_system, cutoff=cutoff)
     num_host_atoms = len(host_system.masses)
@@ -288,8 +290,9 @@ if __name__ == "__main__":
     for epoch in range(num_epochs):
         # sample from the rdkit DG distribution (this can be changed later to another distribution later on)
 
-        epoch_params = get_params(opt_state )
+        epoch_params = get_params(opt_state)
 
+        # print("net ligand charge:", np.sum(epoch_params[open_ff.es_param_idxs]))
 
 
         # deepy and openff param at start
@@ -309,6 +312,7 @@ if __name__ == "__main__":
 
             conformer = guest_mol.GetConformer(conf_idx)
             guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+            # guest_conf = np.load("guest_conf_4.npy")
             guest_conf = guest_conf/10 # convert to md_units
             guest_conf = rescale_and_center(guest_conf, conf_com, 1)
             x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
@@ -369,9 +373,10 @@ if __name__ == "__main__":
         # send everything at once
         for conf_idx, (pc, du_dl_adjoints, wg) in enumerate(zip(parent_conns, all_du_dl_adjoints, work_grads)):
             if wg < work_grad_cutoff:
-                print("skipping conf", conf_idx)
+                # print("skipping conf", conf_idx)
                 pc.send(None)
             else:
+                print("keeping conf", conf_idx)
                 pc.send(du_dl_adjoints)
 
         # receive everything at once
@@ -389,10 +394,10 @@ if __name__ == "__main__":
         all_dl_dps = np.sum(all_dl_dps, axis=0)
 
         allowed_groups = {
-            7: 0.5,
+            # 7: 0.5,
             14: 0.5, # small_molecule charge
             # 12: 1e-2, # GB atomic radii
-            13: 1e-2 # GB scale factor
+            # 13: 1e-2 # GB scale factor
         }
 
         filtered_grad = []

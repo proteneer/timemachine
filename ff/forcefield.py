@@ -52,8 +52,8 @@ class Forcefield():
                 return arr
             elif isinstance(val, float) or isinstance(val, int):
                 # charge test
-                if p_group == 14:
-                    val = 0
+                # if p_group == 14:
+                #    val = 0
 
                 p_idx = add_param(val, p_group)
                 return p_idx
@@ -301,46 +301,12 @@ class Forcefield():
             elif force_type == 'SimpleCharges':
 
 
-                mb = Chem.MolToMolBlock(mol)
-
-                ims = oechem.oemolistream()
-                ims.SetFormat(oechem.OEFormat_SDF)
-                ims.openstring(mb)
-
-                for buf_mol in ims.GetOEMols():
-                    oemol = oechem.OEMol(buf_mol)
-
-                result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1BCCELF10Charges())
-
-                if result is False:
-                    raise Exception('Unable to assign charges')
-
-
-                partial_charges = []
-                for index, atom in enumerate(oemol.GetAtoms()):
-                    partial_charges.append(atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0))
-
-                partial_charges = np.array(partial_charges)
-
-
-                print("AM1 Charges", partial_charges)
-
-
                 es_param_idxs = []
-                es_param_groups = []
-                for c_idx, _ in enumerate(partial_charges):
-                    es_param_idxs.append(c_idx+len(self.params))
-                    es_param_groups.append(14)
 
-
-                self.params = np.concatenate([self.params, partial_charges])
-                self.param_groups = np.concatenate([self.param_groups, es_param_groups])
-                # es_param_idxs = []
-
-                # for atom_idx, (p_idx, _) in vd.items():
-                    # pp = params[p_idx]
-                    # q_idx = pp[1]
-                    # es_param_idxs.append(q_idx)
+                for atom_idx, (p_idx, _) in vd.items():
+                    pp = params[p_idx]
+                    q_idx = pp[1]
+                    es_param_idxs.append(q_idx)
 
             elif force_type == "GBSA":
 
