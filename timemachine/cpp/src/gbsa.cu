@@ -4,7 +4,7 @@
 #include "fixed_point.hpp"
 #include "gbsa.hpp"
 #include "gbsa_jvp.cuh"
-#include "kernel_utils.cuh"
+#include "gpu_utils.cuh"
 #include "math_utils.cuh"
 #include "k_gbsa.cuh"
 #include "k_gbsa_jvp.cuh"

@@ -170,16 +170,11 @@ void declare_reversible_context(py::module &m, const char *typestr) {
         const py::array_t<double, py::array::c_style> &v0,
         const py::array_t<double, py::array::c_style> &coeff_cas,
         const py::array_t<double, py::array::c_style> &coeff_cbs,
+        const py::array_t<double, py::array::c_style> &coeff_ccs,
         const py::array_t<double, py::array::c_style> &step_sizes,
-        const py::array_t<double, py::array::c_style> &params
-        // const std::vector<double> &x0,
-        // const std::vector<double> &v0,
-        // const std::vector<double> &coeff_cas,
-        // const std::vector<double> &coeff_cbs,
-        // const std::vector<double> &step_sizes,
-        // const std::vector<double> &params
+        const py::array_t<double, py::array::c_style> &params,
+        unsigned long long seed
     ) {
-
 
         int N = x0.shape()[0];
         int D = x0.shape()[1];
@@ -204,6 +199,7 @@ void declare_reversible_context(py::module &m, const char *typestr) {
         std::vector<double> v0_vec(v0.data(), v0.data()+v0.size());
         std::vector<double> coeff_cas_vec(coeff_cas.data(), coeff_cas.data()+coeff_cas.size());
         std::vector<double> coeff_cbs_vec(coeff_cbs.data(), coeff_cbs.data()+coeff_cbs.size());
+        std::vector<double> coeff_ccs_vec(coeff_ccs.data(), coeff_ccs.data()+coeff_ccs.size());
         std::vector<double> step_sizes_vec(step_sizes.data(), step_sizes.data()+step_sizes.size());
         std::vector<double> params_vec(params.data(), params.data()+params.size());
 
@@ -214,8 +210,10 @@ void declare_reversible_context(py::module &m, const char *typestr) {
             v0_vec,
             coeff_cas_vec,
             coeff_cbs_vec,
+            coeff_ccs_vec,
             step_sizes_vec,
-            params_vec
+            params_vec,
+            seed
         );
 
     }))

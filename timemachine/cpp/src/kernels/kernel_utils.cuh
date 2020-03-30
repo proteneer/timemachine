@@ -41,15 +41,15 @@
 //     }
 // }
 
-#define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
-inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
-{
-   if (code != cudaSuccess) 
-   {
-      fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
-      if (abort) exit(code);
-   }
-}
+// #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+// inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
+// {
+//    if (code != cudaSuccess) 
+//    {
+//       fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
+//       if (abort) exit(code);
+//    }
+// }
 
 inline __device__ int linearize(int i, int j, int d) {
     return d*(d-1)/2 - (d-i) * (d-i-1)/2 +j;

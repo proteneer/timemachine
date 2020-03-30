@@ -95,6 +95,9 @@ def exp_grad_filter(all_du_dls_raw, T, schedule, true_dG):
 
 def error_fn(all_du_dls_raw, T, schedule, true_dG):
 
+    print("schedule", schedule)
+    print("T", T)
+
     all_du_dls = []
     for conf_idx, du_dl in enumerate(all_du_dls_raw):
         if du_dl is not None:
@@ -105,29 +108,18 @@ def error_fn(all_du_dls_raw, T, schedule, true_dG):
 
     all_du_dls = jnp.array(all_du_dls)
 
-    bkwd = all_du_dls[:, T:]
-    bkwd_sched = schedule[T:]
+    fwd = all_du_dls
+    fwd_sched = schedule
 
-    dG_bkwd = math_utils.trapz(bkwd, bkwd_sched) # integral from 0 to inf
-
-    # print("raw dG_deletion", dG_bkwd)
-    # (ytz): dG_bkwd should be mostly positive values. The most positive value
-    # carries the semantic of being the most tightly bound. So we want to weight
-    # this conformation exponentially more:
-
-    dG_bkwd = -dG_bkwd
-
+    dG_fwd = math_utils.trapz(fwd, fwd_sched) # integral from inf to 0
     # this is in kJ/mol, inputs to BAR needs to be in 1/kT.
     kT = 2.479
-    dG_bkwd /= kT
+    dG_fwd /= kT
 
-    pred_dG = bar.EXP(dG_bkwd)
+    pred_dG = bar.EXP(dG_fwd)
     pred_dG *= kT
 
-    # (ytz): undo the negative sign
-    # this is *not* the same as not doing the initial dG_bkwd negation at all.
-    pred_dG = -pred_dG
-    print("pred_dG", pred_dG, "true_dG", true_dG)
+    print("dG_fwd", pred_dG, "true_dG", true_dG)
     return jnp.abs(pred_dG - true_dG)
 
 if __name__ == "__main__":
@@ -140,6 +132,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_gpus', type=int, required=True)
     parser.add_argument('--num_conformers', type=int, required=True)
     parser.add_argument('--forcefield', type=str, required=True)
+    parser.add_argument('--seed', type=int, required=True)
     args = parser.parse_args()
 
     assert os.path.isdir(args.out_dir)
@@ -158,7 +151,7 @@ if __name__ == "__main__":
     for guest_mol in suppl:
         all_guest_mols.append(guest_mol)
     
-    np.random.seed(123)
+    np.random.seed(args.seed)
 
     perm = np.arange(len(all_guest_mols))
     np.random.shuffle(perm)
@@ -168,27 +161,40 @@ if __name__ == "__main__":
     num_gpus = args.num_gpus
     all_du_dls = []
 
-    insertion_T = 3000
-    insertion_lambda = np.linspace(1.0, 0.0, insertion_T) # insertion
-    insertion_cas = np.ones(insertion_T, dtype=np.float64)*0.9
-    insertion_dts = np.ones(insertion_T) * 0.001
+    insertion_T = 7000
+    part_one_T = 500
+    part_two_T = insertion_T - part_one_T
+    insertion_lambda_part_one = np.linspace(1.0, 0.25, part_one_T) # insertion
+    insertion_lambda_part_two = np.linspace(0.25, 0.0, part_two_T) # insertion
+    insertion_lambda = np.concatenate([insertion_lambda_part_one, insertion_lambda_part_two])
+    insertion_cas = np.ones(insertion_T, dtype=np.float64)*0.95
+    # insertion_dts = np.ones(insertion_T) * 0.001
+    insertion_dts_part_one = np.ones(part_one_T) * 0.001
+    insertion_dts_part_two = np.linspace(0.001, 0.02, part_two_T)
+    insertion_dts = np.concatenate([insertion_dts_part_one, insertion_dts_part_two])
 
-    relaxation_T = 2000
-    relaxation_lambda = np.zeros(relaxation_T) # relaxation
-    relaxation_cas = np.ones(relaxation_T, dtype=np.float64)*0.9
-    relaxation_dts = np.linspace(0.001, 0.01, relaxation_T).astype(np.float64)
+    complete_T = insertion_T
+    complete_lambda = insertion_lambda
+    complete_cas = insertion_cas
+    complete_dts = insertion_dts
+    deletion_offset = 0
 
-    deletion_T = 5000
-    deletion_lambda = np.linspace(0.0, 5.0, deletion_T).astype(np.float64)
-    deletion_cas = np.ones(deletion_T, dtype=np.float64)*0.9
-    deletion_dts = np.ones(deletion_T)*0.0015
+    # relaxation_T = 2000
+    # relaxation_lambda = np.zeros(relaxation_T) # relaxation
+    # relaxation_cas = np.ones(relaxation_T, dtype=np.float64)*0.9
+    # relaxation_dts = np.linspace(0.001, 0.01, relaxation_T).astype(np.float64)
 
-    deletion_offset = insertion_T + relaxation_T # when we start doing deletion
+    # deletion_T = 5000
+    # deletion_lambda = np.linspace(0.0, 5.0, deletion_T).astype(np.float64)
+    # deletion_cas = np.ones(deletion_T, dtype=np.float64)*0.9
+    # deletion_dts = np.ones(deletion_T)*0.0015
 
-    complete_T = insertion_T + relaxation_T + deletion_T
-    complete_lambda = np.concatenate([insertion_lambda, relaxation_lambda, deletion_lambda])
-    complete_cas = np.concatenate([insertion_cas, relaxation_cas, deletion_cas])
-    complete_dts = np.concatenate([insertion_dts, relaxation_dts, deletion_dts])
+    # deletion_offset = insertion_T + relaxation_T # when we start doing deletion
+
+    # complete_T = insertion_T + relaxation_T + deletion_T
+    # complete_lambda = np.concatenate([insertion_lambda, relaxation_lambda, deletion_lambda])
+    # complete_cas = np.concatenate([insertion_cas, relaxation_cas, deletion_cas])
+    # complete_dts = np.concatenate([insertion_dts, relaxation_dts, deletion_dts])
 
 
     epoch = 0
@@ -204,8 +210,8 @@ if __name__ == "__main__":
 
     # generate a set of gas phase conformers using the RDKit
     guest_mol.RemoveAllConformers()
-    AllChem.EmbedMultipleConfs(guest_mol, num_conformers, randomSeed=2020)
-    np.random.seed(2020)
+    AllChem.EmbedMultipleConfs(guest_mol, num_conformers, randomSeed=args.seed)
+    np.random.seed(args.seed)
     for conf_idx in range(num_conformers):
         conformer = guest_mol.GetConformer(conf_idx)
         guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
@@ -290,6 +296,7 @@ if __name__ == "__main__":
             conformer = guest_mol.GetConformer(conf_idx)
             guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
             guest_conf = guest_conf/10 # convert to md_units
+            # guest_conf = np.load("/home/yutong/Downloads/preselected_conf_44_lig_45.64744.npy")
             guest_conf = recenter(guest_conf, conf_com)
             x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
 
@@ -298,7 +305,7 @@ if __name__ == "__main__":
             out_file = os.path.join(args.out_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file)
             # temporarily disabled
-            writer = None
+            # writer = None
 
             v0 = np.zeros_like(x0)
 
@@ -325,9 +332,8 @@ if __name__ == "__main__":
         for du_dls in all_du_dls:
             if du_dls is None:
                 continue
-            bkwd = du_dls[deletion_offset:]
-            plt.plot(complete_lambda[deletion_offset:], bkwd)
 
+            plt.plot(complete_lambda, du_dls)
             plt.ylabel("du_dl")
             plt.xlabel("lambda")
 
@@ -338,6 +344,9 @@ if __name__ == "__main__":
         true_dG = 26.61024 # -6.36 * 4.184 * -1 (for insertion)
 
         error = error_fn(all_du_dls, deletion_offset, complete_lambda, true_dG)
+
+        assert 0
+
         work_grads = exp_grad_filter(all_du_dls, deletion_offset, complete_lambda, true_dG)
 
         print("---EPOCH", epoch, "---- LOSS", error)

@@ -1,6 +1,7 @@
 #include <vector>
 #include "gradient.hpp"
 #include "stepper.hpp"
+#include "curand.h"
 
 namespace timemachine {
 
@@ -18,7 +19,12 @@ private:
     double *d_params_; // [T]
     double *d_params_grads_;
 
+    curandGenerator_t  cr_rng_;
+
+    double *d_noise_buffer_;
+
     double *d_coeff_cbs_; // [N]
+    double *d_coeff_ccs_; // [N]
 
     double *d_coords_; // [TxNxD]
     double *d_du_dls_; // [T]
@@ -47,8 +53,10 @@ public:
         const std::vector<double> &v0,
         const std::vector<double> &coeff_cas,
         const std::vector<double> &coeff_cbs,
+        const std::vector<double> &coeff_ccs,
         const std::vector<double> &dts,
-        const std::vector<double> &params
+        const std::vector<double> &params,
+        unsigned long long seed
     );
 
     ~ReversibleContext();

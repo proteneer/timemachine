@@ -3,7 +3,7 @@
 #include <vector>
 #include <complex>
 #include "harmonic_bond.hpp"
-#include "kernel_utils.cuh"
+#include "gpu_utils.cuh"
 #include "k_bonded_deterministic.cuh"
 
 namespace timemachine {

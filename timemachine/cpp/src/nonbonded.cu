@@ -3,7 +3,7 @@
 #include <vector>
 #include <complex>
 #include "nonbonded.hpp"
-#include "kernel_utils.cuh"
+#include "gpu_utils.cuh"
 
 #include "k_nonbonded_deterministic.cuh"
 

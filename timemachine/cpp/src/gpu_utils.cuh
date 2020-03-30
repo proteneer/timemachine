@@ -22,3 +22,13 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
       if (abort) exit(code);
    }
 }
+
+#define curandErrchk(ans) { curandAssert((ans), __FILE__, __LINE__); }
+inline void curandAssert(curandStatus_t code, const char *file, int line, bool abort=true)
+{
+   if (code != CURAND_STATUS_SUCCESS) 
+   {
+      fprintf(stderr,"curand failure, code: %d %s %d\n", code, file, line);
+      if (abort) exit(code);
+   }
+}
