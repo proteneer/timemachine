@@ -200,6 +200,8 @@ class Forcefield():
 
         exclusions = {}
 
+        N = mol.GetNumAtoms()
+
         for force_type, values in self.forcefield.items():
 
             params = values["params"]
@@ -284,20 +286,20 @@ class Forcefield():
 
             elif force_type == 'vdW':
 
-                lj_param_idxs = []
-
+                lj_param_idxs = np.zeros((N, 2))
                 for atom_idx, (p_idx, _) in vd.items():
                     pp = params[p_idx]
                     sig_idx, eps_idx = pp[1], pp[2]
-                    lj_param_idxs.append((sig_idx, eps_idx))
+                    lj_param_idxs[atom_idx][0] = sig_idx
+                    lj_param_idxs[atom_idx][1] = eps_idx
 
             elif force_type == 'SimpleCharges':
-                es_param_idxs = []
 
+                es_param_idxs = np.zeros(N)
                 for atom_idx, (p_idx, _) in vd.items():
                     pp = params[p_idx]
                     q_idx = pp[1]
-                    es_param_idxs.append(q_idx)
+                    es_param_idxs[atom_idx] = q_idx
 
             elif force_type == "GBSA":
 
