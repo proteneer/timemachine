@@ -204,6 +204,8 @@ class Forcefield():
 
         exclusions = {}
 
+        N = mol.GetNumAtoms()
+
         for force_type, values in self.forcefield.items():
 
             params = values["params"]
@@ -287,7 +289,7 @@ class Forcefield():
                         torsion_param_idxs.append((k_idx, phase_idx, period_idx))
 
             elif force_type == 'vdW':
-                N = mol.GetNumAtoms()
+
                 lj_param_idxs = np.zeros((N, 2))
                 for atom_idx, (p_idx, _) in vd.items():
                     pp = params[p_idx]
@@ -297,34 +299,42 @@ class Forcefield():
 
             elif force_type == 'SimpleCharges':
 
-                print("Running AM1BCC")
+                am1 = False
+                if am1:
 
-                # imported here for optional dependency
-                from openeye import oechem
-                from openeye import oequacpac
+                    print("Running AM1BCC")
 
-                mb = Chem.MolToMolBlock(mol)
-                ims = oechem.oemolistream()
-                ims.SetFormat(oechem.OEFormat_SDF)
-                ims.openstring(mb)
+                    # imported here for optional dependency
+                    from openeye import oechem
+                    from openeye import oequacpac
 
-                for buf_mol in ims.GetOEMols():
-                    oemol = oechem.OEMol(buf_mol)
+                    mb = Chem.MolToMolBlock(mol)
+                    ims = oechem.oemolistream()
+                    ims.SetFormat(oechem.OEFormat_SDF)
+                    ims.openstring(mb)
 
-                # (ytz): BCC the BCCs!
-                result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1BCCELF10Charges())
+                    for buf_mol in ims.GetOEMols():
+                        oemol = oechem.OEMol(buf_mol)
 
-                if result is False:
-                    raise Exception('Unable to assign charges')
+                    # (ytz): BCC the BCCs!
+                    result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1BCCELF10Charges())
 
-                # partial_charges = []
+                    if result is False:
+                        raise Exception('Unable to assign charges')
 
-                es_param_idxs = np.arange(mol.GetNumAtoms()) + len(self.params)
-                for index, atom in enumerate(oemol.GetAtoms()):
-                    q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
-                    # q = 0
-                    self.params.append(q)
-                    self.param_groups.append(23)
+                    es_param_idxs = np.arange(mol.GetNumAtoms()) + len(self.params)
+                    for index, atom in enumerate(oemol.GetAtoms()):
+                        q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+                        self.params.append(q)
+                        self.param_groups.append(23)
+
+                else:
+
+                    es_param_idxs = np.zeros(N)
+                    for atom_idx, (p_idx, _) in vd.items():
+                        pp = params[p_idx]
+                        q_idx = pp[1]
+                        es_param_idxs[atom_idx] = q_idx
 
             elif force_type == "GBSA":
 
