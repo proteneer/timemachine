@@ -95,8 +95,6 @@ class Forcefield():
         self.params.append(exclusion_param)
         self.param_groups.append(exclusion_param_group)
 
-        print("RAW LAP", len(self.params))
-
     def get_exclusion_idx(self):
         return len(self.params)-1
 
@@ -142,8 +140,6 @@ class Forcefield():
             raw_ff[force_type]["params"] = new_params
             if "props" in values:
                 raw_ff[force_type]["props"] = values["props"]
-
-
 
         return raw_ff
 
@@ -299,7 +295,9 @@ class Forcefield():
 
             elif force_type == 'SimpleCharges':
 
-                am1 = False
+                #  (ytz): Don't use this unless you *only* intend to do inference). Training
+                # requires us to refactor the Jacobian code.
+                am1 = True
                 if am1:
 
                     print("Running AM1BCC")
@@ -316,7 +314,6 @@ class Forcefield():
                     for buf_mol in ims.GetOEMols():
                         oemol = oechem.OEMol(buf_mol)
 
-                    # (ytz): BCC the BCCs!
                     result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1BCCELF10Charges())
 
                     if result is False:

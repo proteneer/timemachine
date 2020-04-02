@@ -18,6 +18,7 @@ ReversibleContext::~ReversibleContext() {
 
     gpuErrchk(cudaFree(d_coeff_cbs_));
     gpuErrchk(cudaFree(d_coeff_ccs_));
+    gpuErrchk(cudaFree(d_noise_buffer_));
 
     gpuErrchk(cudaFree(d_coords_));
     gpuErrchk(cudaFree(d_du_dls_));
@@ -94,9 +95,6 @@ ReversibleContext::ReversibleContext(
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
     gpuErrchk(cudaMalloc((void**)&d_noise_buffer_, N*D*sizeof(double)));
-
-    // auto end = std::chrono::high_resolution_clock::now();
-    // auto seed = std::chrono::duration_cast<std::chrono::microseconds>(end-start).count();
 
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 };

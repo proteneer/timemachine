@@ -125,7 +125,6 @@ def deserialize_system(system, cutoff=10000):
                 charge, sig, eps = force.getParticleParameters(a_idx)
 
                 # this needs to be scaled by sqrt(eps0)
-
                 charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
                 sig = value(sig)
                 eps = value(eps)
