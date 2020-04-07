@@ -195,9 +195,7 @@ class Forcefield():
         torsion_idxs = []
         torsion_param_idxs = []
 
-
         exclusion_param_idx = self.get_exclusion_idx()
-
         exclusions = {}
 
         N = mol.GetNumAtoms()
@@ -295,21 +293,53 @@ class Forcefield():
 
             elif force_type == 'SimpleCharges':
 
-                es_param_idxs = np.zeros(N)
-                for atom_idx, (p_idx, _) in vd.items():
-                    pp = params[p_idx]
-                    q_idx = pp[1]
-                    es_param_idxs[atom_idx] = q_idx
+                #  (ytz): Don't use this unless you *only* intend to do inference). Training
+                # requires us to refactor the Jacobian code.
+                am1 = True
+                if am1:
+
+                    print("Running AM1BCC")
+
+                    # imported here for optional dependency
+                    from openeye import oechem
+                    from openeye import oequacpac
+
+                    mb = Chem.MolToMolBlock(mol)
+                    ims = oechem.oemolistream()
+                    ims.SetFormat(oechem.OEFormat_SDF)
+                    ims.openstring(mb)
+
+                    for buf_mol in ims.GetOEMols():
+                        oemol = oechem.OEMol(buf_mol)
+
+                    result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1BCCELF10Charges())
+
+                    if result is False:
+                        raise Exception('Unable to assign charges')
+
+                    es_param_idxs = np.arange(mol.GetNumAtoms()) + len(self.params)
+                    for index, atom in enumerate(oemol.GetAtoms()):
+                        q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+                        self.params.append(q)
+                        self.param_groups.append(23)
+
+                else:
+
+                    es_param_idxs = np.zeros(N)
+                    for atom_idx, (p_idx, _) in vd.items():
+                        pp = params[p_idx]
+                        q_idx = pp[1]
+                        es_param_idxs[atom_idx] = q_idx
 
             elif force_type == "GBSA":
 
-                gb_radii_idxs = []
-                gb_scale_idxs = []
+                gb_radii_idxs = np.zeros(N)
+                gb_scale_idxs = np.zeros(N)
                 for atom_idx, (p_idx, _) in vd.items():
                     pp = params[p_idx]
                     radii_idx, scale_idx = pp[1], pp[2]
-                    gb_radii_idxs.append(radii_idx)
-                    gb_scale_idxs.append(scale_idx)
+                    gb_radii_idxs[atom_idx] = radii_idx
+                    gb_scale_idxs[atom_idx] = scale_idx
 
                 props = values["props"]
                 gb_args = (

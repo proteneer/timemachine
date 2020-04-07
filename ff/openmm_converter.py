@@ -114,8 +114,6 @@ def deserialize_system(system, cutoff=10000):
 
         if isinstance(force, mm.NonbondedForce):
 
-
-
             num_atoms = force.getNumParticles()
             scale_matrix = np.ones((num_atoms, num_atoms)) - np.eye(num_atoms)
 
@@ -144,16 +142,40 @@ def deserialize_system(system, cutoff=10000):
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
 
             # 1 here means we fully remove the interaction
-            scale_idx = insert_parameters(1.0, 20)
+            # 1-2, 1-3
+            scale_idx_full = insert_parameters(1.0, 20)
+
+            # 1-4, remove half of the interaction
+            scale_idx_half = insert_parameters(0.5, 21)
 
             exclusion_idxs = []
             exclusion_param_idxs = []
 
             # fix me for scaling
+            all_sig = np.array(global_params)[lj_param_idxs[:, 0]]
+            all_eps = np.array(global_params)[lj_param_idxs[:, 1]]
             for a_idx in range(force.getNumExceptions()):
                 src, dst, new_cp, new_sig, new_eps = force.getExceptionParameters(a_idx)
+                new_sig = value(new_sig)
+                new_eps = value(new_eps)
+
+                src_sig = all_sig[src]
+                dst_sig = all_sig[dst]
+
+                src_eps = all_eps[src]
+                dst_eps = all_eps[dst]
+                expected_sig = (src_sig + dst_sig)/2
+                expected_eps = np.sqrt(src_eps*dst_eps)
+
                 exclusion_idxs.append([src, dst])
-                exclusion_param_idxs.append(scale_idx)
+                if new_eps != 0:
+                    np.testing.assert_almost_equal(expected_sig, new_sig)
+                    np.testing.assert_almost_equal(new_eps/expected_eps, 0.5)
+
+                    exclusion_param_idxs.append(scale_idx_half)
+                else:
+                    exclusion_param_idxs.append(scale_idx_full)
+
 
             exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
             exclusion_param_idxs = np.array(exclusion_param_idxs, dtype=np.int32)
@@ -185,7 +207,7 @@ def deserialize_system(system, cutoff=10000):
             alpha = 0.8
             beta = 0.0
             gamma = 2.909125
-            
+
             for a_idx in range(num_atoms):
 
                 scale_matrix[a_idx][a_idx] = 0
@@ -203,9 +225,9 @@ def deserialize_system(system, cutoff=10000):
 
     # post-process GBSA
     nrg_fns["GBSA"] = (
-        np.array(charge_param_idxs),
-        np.array(radius_param_idxs),
-        np.array(scale_param_idxs),
+        np.array(charge_param_idxs, dtype=np.int32),
+        np.array(radius_param_idxs, dtype=np.int32),
+        np.array(scale_param_idxs, dtype=np.int32),
         alpha,                         # alpha
         beta,                          # beta
         gamma,                         # gamma

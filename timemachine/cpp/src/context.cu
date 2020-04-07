@@ -5,6 +5,7 @@
 #include "integrator.hpp"
 #include "assert.h"
 #include "kernel_utils.cuh"
+#include "gpu_utils.cuh"
 #include "stepper.hpp"
 
 namespace timemachine {
@@ -13,7 +14,11 @@ ReversibleContext::~ReversibleContext() {
     gpuErrchk(cudaFree(d_params_));
     gpuErrchk(cudaFree(d_params_grads_));
 
+    curandErrchk(curandDestroyGenerator(cr_rng_));
+
     gpuErrchk(cudaFree(d_coeff_cbs_));
+    gpuErrchk(cudaFree(d_coeff_ccs_));
+    gpuErrchk(cudaFree(d_noise_buffer_));
 
     gpuErrchk(cudaFree(d_coords_));
     gpuErrchk(cudaFree(d_du_dls_));
@@ -37,8 +42,10 @@ ReversibleContext::ReversibleContext(
     const std::vector<double> &v0,
     const std::vector<double> &coeff_cas,
     const std::vector<double> &coeff_cbs,
+    const std::vector<double> &coeff_ccs,
     const std::vector<double> &step_sizes,
-    const std::vector<double> &params) :
+    const std::vector<double> &params,
+    unsigned long long seed) :
         N_(N),
         P_(params.size()),
         stepper_(stepper),
@@ -53,11 +60,15 @@ ReversibleContext::ReversibleContext(
     assert(v0.size() == N*D);
     assert(coeff_cas.size() == T);
     assert(coeff_cbs.size() == N);
+    assert(coeff_ccs.size() == N);
     assert(step_sizes.size() == T);
     assert(params.size() == P);
 
     gpuErrchk(cudaMalloc(&d_coeff_cbs_, N*sizeof(double)));
     gpuErrchk(cudaMemcpy(d_coeff_cbs_, &coeff_cbs[0], N*sizeof(double), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMalloc(&d_coeff_ccs_, N*sizeof(double)));
+    gpuErrchk(cudaMemcpy(d_coeff_ccs_, &coeff_ccs[0], N*sizeof(double), cudaMemcpyHostToDevice));
 
     gpuErrchk(cudaMalloc(&d_coords_, F*N*D*sizeof(double)));
     gpuErrchk(cudaMalloc(&d_du_dls_, F*sizeof(double)));
@@ -81,6 +92,11 @@ ReversibleContext::ReversibleContext(
     gpuErrchk(cudaMalloc(&d_dE_dp_jvp_, P*sizeof(double))); // [P]
 
     gpuErrchk(cudaMalloc(&d_params_grads_, P*sizeof(double))); // [P]
+
+    curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
+    gpuErrchk(cudaMalloc((void**)&d_noise_buffer_, N*D*sizeof(double)));
+
+    curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 };
 
 void ReversibleContext::forward_mode() {
@@ -101,24 +117,28 @@ void ReversibleContext::forward_mode() {
         );
 	auto finish0 = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed0 = finish0 - start0;
-        // std::cout << "Stepper Elapsed time: " << elapsed0.count() << " s\n";
+
 	auto start = std::chrono::high_resolution_clock::now();
-        step_forward<double>(
-            N_,
-            D,
-            coeff_cas_[t],
-            d_coeff_cbs_,
-            d_coords_ + t*N_*D,
-            d_velocities_, 
-            d_forces_,
-            step_sizes_[t],
-            d_coords_ + (t+1)*N_*D,
-            d_velocities_
-        );
+
+    curandErrchk(templateCurandNormal(cr_rng_, d_noise_buffer_, N_*D, 0.0, 1.0));
+
+    step_forward<double>(
+        N_,
+        D,
+        coeff_cas_[t],
+        d_coeff_cbs_,
+        d_coeff_ccs_,
+        d_noise_buffer_,
+        d_coords_ + t*N_*D,
+        d_velocities_, 
+        d_forces_,
+        step_sizes_[t],
+        d_coords_ + (t+1)*N_*D,
+        d_velocities_
+    );
 
 	auto finish = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed = finish - start;
-	// std::cout << "Context Elapsed time: " << elapsed.count() << " s\n";
 
     }
 

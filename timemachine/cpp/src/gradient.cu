@@ -1,6 +1,6 @@
 
 #include "gradient.hpp"
-#include "kernel_utils.cuh"
+#include "gpu_utils.cuh"
 #include "surreal.cuh"
 
 namespace timemachine {

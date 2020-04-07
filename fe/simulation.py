@@ -9,18 +9,37 @@ from simtk.openmm import app
 from timemachine.lib import custom_ops
 import traceback
 
+
+import jax
+import jax.numpy as jnp
+
+
+import warnings
+warnings.simplefilter("ignore", UserWarning)
+
 def check_coords(x):
     x3 = x[:, :3]
-    ri = np.expand_dims(x3, 0)
-    rj = np.expand_dims(x3, 1)
-    dij = np.sqrt(np.sum(np.power(ri - rj, 2), axis=-1))
-    if np.any(np.isinf(dij)):
+    ri = jnp.expand_dims(x3, 0)
+    rj = jnp.expand_dims(x3, 1)
+    dij = jnp.linalg.norm(ri-rj, axis=-1)
+
+    N = x.shape[0]
+
+    idx = jnp.argmax(dij)
+    row = idx // N
+    col = idx - row * N 
+
+    if jnp.any(dij > 100):
         return False
-    if np.any(np.isnan(dij)):
+    elif jnp.any(jnp.isinf(dij)):
         return False
-    if np.any(dij > 100):
+    elif jnp.any(jnp.isnan(dij)):
         return False
+
     return True
+
+check_coords = jax.jit(check_coords, static_argnums=(0,))
+
 
 class Simulation:
     """
@@ -31,6 +50,7 @@ class Simulation:
         step_sizes,
         cas,
         cbs,
+        ccs,
         lambda_schedule,
         lambda_idxs,
         precision):
@@ -67,6 +87,7 @@ class Simulation:
         self.system = system
         self.cas = cas
         self.cbs = cbs
+        self.ccs = ccs
 
         for b in cbs:
             if b > 0:
@@ -80,9 +101,10 @@ class Simulation:
         self,
         x0,
         v0,
-        gpu_idx,
+        seed,
         pdb_writer,
-        pipe):
+        pipe,
+        gpu_idx):
         """
         Run a forward simulation
 
@@ -94,14 +116,18 @@ class Simulation:
         v0: np.array, np.float64, [N, 3]
             Starting velocities
 
-        gpu_idx: int
-            which gpu we run the job on
+        seed: int
+            Random number used to seed the thermostat
 
         pdb_writer: For writing out the trajectory
             If None then we skip writing
 
         pipe: multiprocessing.Pipe
             Use to communicate with the parent host
+
+        gpu_idx: int
+            which gpu we run the job on
+
 
         The pipe will ping-pong in two passes. If the simulation is stable, ie. the coords
         of the last frame is well defined, then we return du_dls. Otherwise, a None is sent
@@ -117,7 +143,10 @@ class Simulation:
         # (ytz): debug use
         # gradients = self.system.make_gradients(dimension=3, precision=self.precision)
         # for g in gradients:
-            # forces = g.execute(x0, self.system.params)
+        #     forces = g.execute(x0, self.system.params)
+        #     print(g, forces, np.amax(np.abs(forces)))
+
+        # assert 0
 
         stepper = custom_ops.LambdaStepper_f64(
             gradients,
@@ -132,40 +161,50 @@ class Simulation:
             v0,
             self.cas,
             self.cbs,
+            self.ccs,
             self.step_sizes,
-            self.system.params
+            self.system.params,
+            seed
         )
 
         start = time.time()
+        # print("start_forward_mode")
         ctxt.forward_mode()
-        print("fwd run time", time.time() - start)
+
+        # print("fwd run time", time.time() - start)
 
         du_dls = stepper.get_du_dl()
-        xs = ctxt.get_all_coords()
+
+        start = time.time()
+        x_final = ctxt.get_last_coords()[:, :3]
+
+        if check_coords(x_final) == False:
+            print("Final frame failed")
+            du_dls = None
 
         if pdb_writer is not None:
             pdb_writer.write_header()
             xs = ctxt.get_all_coords()
             for frame_idx, x in enumerate(xs):
-
                 interval = max(1, xs.shape[0]//pdb_writer.n_frames)
                 if frame_idx % interval == 0:
                     if check_coords(x):
                         pdb_writer.write(x*10)
+                    else:
+                        print("failed to write on frame", frame_idx)
+                        break
             pdb_writer.close()
 
-        x3 = ctxt.get_last_coords()[:, :3]
-
-        if check_coords(x3) == False:
-            du_dls = None
-
+        print("sending dudls back.")
         pipe.send(du_dls)
 
         du_dl_adjoints = pipe.recv()
 
         if du_dl_adjoints is not None:
             stepper.set_du_dl_adjoint(du_dl_adjoints)
-            ctxt.set_x_t_adjoint(np.zeros_like(x0))
+            # ctxt.set_x_t_adjoint(np.zeros_like(x0))
+            x_t_adjoint = np.random.rand(*x0.shape).reshape(x0.shape)/10
+            ctxt.set_x_t_adjoint(x_t_adjoint)
             start = time.time()
             ctxt.backward_mode()
             print("bkwd run time", time.time() - start)
