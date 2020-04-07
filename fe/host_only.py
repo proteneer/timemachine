@@ -237,7 +237,6 @@ if __name__ == "__main__":
     parent_conn.send(adjoints)
     dl_dps = parent_conn.recv()
 
-
     allowed_groups = {
         # 7: 0.5,
         114: 0.5, #protein charge
