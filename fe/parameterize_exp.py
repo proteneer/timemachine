@@ -84,7 +84,7 @@ def exp_grad_filter(all_du_dls_raw, schedule, true_dG):
             print("conf_idx", conf_idx, "dG None")
 
     all_du_dls = jnp.array(all_du_dls)
-    work_insertion = math_utils.trapz(all_du_dls, schedule) # integral from 0 to inf
+    work_insertion = math_utils.trapz(all_du_dls, schedule) # integral from inf to 0
 
     kT = 2.479
     work_insertion /= kT
@@ -104,7 +104,7 @@ def error_fn(all_du_dls_raw, schedule, true_dG):
             print("conf_idx", conf_idx, "dG None")
 
     all_du_dls = jnp.array(all_du_dls)
-    work_insertion = math_utils.trapz(all_du_dls, schedule) # integral from 0 to inf
+    work_insertion = math_utils.trapz(all_du_dls, schedule) # integral from inf to 0
 
     kT = 2.479
     work_insertion /= kT
