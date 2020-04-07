@@ -53,12 +53,27 @@ def BAR_loss(
 
     return loss
 
-def EXP_leg(
-    du_dls,
-    lambda_schedule):
-    insertion_W = math_utils.trapz(du_dls, lambda_schedule)
+def EXP_from_du_dls(
+    all_du_dls,
+    lambda_schedule,
+    kT):
+    """
+    Run exponential averaging on a list of du_dls that may contain None elements.
 
-    return tmbar.EXP(insertion_W)
+    The inputs for du_dls should be in units of 1/kT
+    """
+    proper_du_dls = []
+
+    for d in all_du_dls:
+        if d is not None:
+            proper_du_dls.append(d)
+
+    proper_du_dls = jnp.array(proper_du_dls)
+
+    work_array = math_utils.trapz(proper_du_dls, lambda_schedule)
+    work_array = work_array/kT
+
+    return tmbar.EXP(work_array)*kT
    
 def EXP_loss(
     complex_du_dls, # [C, N]
@@ -66,8 +81,8 @@ def EXP_loss(
     lambda_schedule,
     true_dG):
 
-    complex_dG = EXP_leg(complex_du_dls, lambda_schedule)
-    solvent_dG = EXP_leg(solvent_du_dls, lambda_schedule)
+    complex_dG = EXP(complex_du_dls, lambda_schedule)
+    solvent_dG = EXP(solvent_du_dls, lambda_schedule)
 
     print("complex_dG", complex_dG)
     print("solvent_dG", solvent_dG)

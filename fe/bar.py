@@ -4,7 +4,7 @@ from jax.scipy.special import logsumexp
 import pymbar
 import jax
 
-def EXP(w):
+def EXP(w_raw):
     """
     Estimate free energy difference using exponential averaging
 
@@ -19,7 +19,12 @@ def EXP(w):
         free energy difference
 
     """
-    T = np.float64(jnp.size(w))
+    w = []
+    for ww in w_raw:
+        if ww is not None:
+            w.append(ww)
+    w = jnp.array(w)
+    T = jnp.float64(jnp.size(w))
     deltaF = -(logsumexp(-w) - jnp.log(T))
     return deltaF
 

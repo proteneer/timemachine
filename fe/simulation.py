@@ -53,8 +53,7 @@ class Simulation:
         ccs,
         lambda_schedule,
         lambda_idxs,
-        precision,
-        seed):
+        precision):
         """
         Create a simulation.
 
@@ -89,7 +88,6 @@ class Simulation:
         self.cas = cas
         self.cbs = cbs
         self.ccs = ccs
-        self.seed = seed
 
         for b in cbs:
             if b > 0:
@@ -103,9 +101,10 @@ class Simulation:
         self,
         x0,
         v0,
-        gpu_idx,
+        seed,
         pdb_writer,
-        pipe):
+        pipe,
+        gpu_idx):
         """
         Run a forward simulation
 
@@ -117,14 +116,18 @@ class Simulation:
         v0: np.array, np.float64, [N, 3]
             Starting velocities
 
-        gpu_idx: int
-            which gpu we run the job on
+        seed: int
+            Random number used to seed the thermostat
 
         pdb_writer: For writing out the trajectory
             If None then we skip writing
 
         pipe: multiprocessing.Pipe
             Use to communicate with the parent host
+
+        gpu_idx: int
+            which gpu we run the job on
+
 
         The pipe will ping-pong in two passes. If the simulation is stable, ie. the coords
         of the last frame is well defined, then we return du_dls. Otherwise, a None is sent
@@ -161,14 +164,14 @@ class Simulation:
             self.ccs,
             self.step_sizes,
             self.system.params,
-            self.seed
+            seed
         )
 
         start = time.time()
-        print("start_forward_mode")
+        # print("start_forward_mode")
         ctxt.forward_mode()
 
-        print("fwd run time", time.time() - start)
+        # print("fwd run time", time.time() - start)
 
         du_dls = stepper.get_du_dl()
 
@@ -199,7 +202,9 @@ class Simulation:
 
         if du_dl_adjoints is not None:
             stepper.set_du_dl_adjoint(du_dl_adjoints)
-            ctxt.set_x_t_adjoint(np.zeros_like(x0))
+            # ctxt.set_x_t_adjoint(np.zeros_like(x0))
+            x_t_adjoint = np.random.rand(*x0.shape).reshape(x0.shape)/10
+            ctxt.set_x_t_adjoint(x_t_adjoint)
             start = time.time()
             ctxt.backward_mode()
             print("bkwd run time", time.time() - start)

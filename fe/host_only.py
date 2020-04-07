@@ -155,8 +155,8 @@ if __name__ == "__main__":
     cutoff = 100.0
 
     Ts = [
-        5000, # minimization (with thermal noise lol)
-        50000, # equilibration
+        1000, # minimization (with thermal noise lol)
+        5000, # equilibration
     ]
 
     lambda_offset = Ts[0]+Ts[1]
@@ -215,8 +215,7 @@ if __name__ == "__main__":
         ccs,
         complete_lambda,
         lambda_idxs,
-        precision,
-        args.seed
+        precision
     )
 
     initial_params = sim.system.params
@@ -228,10 +227,31 @@ if __name__ == "__main__":
     # writer can be None if we don't care about vis
 
     parent_conn, child_conn = Pipe()
-    args = (x0, v0, 0 % num_gpus, writer, child_conn)
+    seed = np.random.randint(np.iinfo(np.int32).max)
+    args = (x0, v0, seed, writer, child_conn, 0)
     
     p = Process(target=sim.run_forward_and_backward, args=args)
     p.start()
-    parent_conn.recv()
-    parent_conn.send(None)
+    du_dls = parent_conn.recv()
+    adjoints = np.random.rand(du_dls.shape[0])/1000
+    parent_conn.send(adjoints)
+    dl_dps = parent_conn.recv()
+
+
+    allowed_groups = {
+        # 7: 0.5,
+        114: 0.5, #protein charge
+        112: 1e-2, # GB atomic radii
+        113: 1e-2 # GB scale factor
+    }
+
+    filtered_grad = []
+    for g_idx, (g, gp) in enumerate(zip(dl_dps, sim.system.param_groups)):
+        if gp in allowed_groups:
+            pf = allowed_groups[gp]
+            filtered_grad.append(g*pf)
+            # if g != 0:
+            print("derivs", g_idx, '\t group', gp, '\t', g, '\t adjusted to', g*pf, '\t old val', sim.system.params[g_idx])
+        else:
+            filtered_grad.append(0)
     p.join()

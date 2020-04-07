@@ -195,9 +195,7 @@ class Forcefield():
         torsion_idxs = []
         torsion_param_idxs = []
 
-
         exclusion_param_idx = self.get_exclusion_idx()
-
         exclusions = {}
 
         N = mol.GetNumAtoms()
@@ -335,13 +333,13 @@ class Forcefield():
 
             elif force_type == "GBSA":
 
-                gb_radii_idxs = []
-                gb_scale_idxs = []
+                gb_radii_idxs = np.zeros(N)
+                gb_scale_idxs = np.zeros(N)
                 for atom_idx, (p_idx, _) in vd.items():
                     pp = params[p_idx]
                     radii_idx, scale_idx = pp[1], pp[2]
-                    gb_radii_idxs.append(radii_idx)
-                    gb_scale_idxs.append(scale_idx)
+                    gb_radii_idxs[atom_idx] = radii_idx
+                    gb_scale_idxs[atom_idx] = scale_idx
 
                 props = values["props"]
                 gb_args = (
