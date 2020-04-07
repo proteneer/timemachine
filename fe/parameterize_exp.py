@@ -7,6 +7,8 @@ import itertools
 import os
 import sys
 
+from timemachine.integrator import langevin_coefficients
+
 from jax.config import config as jax_config
 # this always needs to be set
 jax_config.update("jax_enable_x64", True)
@@ -67,66 +69,49 @@ import jax.numpy as jnp
 
 exp_grad = jax.grad(bar.EXP)
 
-def exp_grad_filter(all_du_dls_raw, T, schedule, true_dG):
+def exp_grad_filter(all_du_dls_raw, schedule, true_dG):
     """
     Compute the derivative of exp weighted free energy with respect
     to the input work values
     """
+ 
     all_du_dls = []
-    for du_dl in all_du_dls_raw:
+    for conf_idx, du_dl in enumerate(all_du_dls_raw):
         if du_dl is not None:
             all_du_dls.append(du_dl)
+            print("conf_idx", conf_idx, "dG", math_utils.trapz(du_dl, schedule))
         else:
-            all_du_dls.append(np.zeros_like(schedule))
+            print("conf_idx", conf_idx, "dG None")
+
     all_du_dls = jnp.array(all_du_dls)
-
-    bkwd = all_du_dls[:, T:]
-    bkwd_sched = schedule[T:]
-
-    dG_bkwd = math_utils.trapz(bkwd, bkwd_sched) # integral from 0 to inf
-    dG_bkwd = -dG_bkwd
+    work_insertion = math_utils.trapz(all_du_dls, schedule) # integral from 0 to inf
 
     kT = 2.479
-    dG_bkwd /= kT
+    work_insertion /= kT
 
-    grads = exp_grad(dG_bkwd)
+    grads = exp_grad(work_insertion)
 
     return grads
 
-def error_fn(all_du_dls_raw, T, schedule, true_dG):
+def error_fn(all_du_dls_raw, schedule, true_dG):
 
     all_du_dls = []
     for conf_idx, du_dl in enumerate(all_du_dls_raw):
         if du_dl is not None:
             all_du_dls.append(du_dl)
-            print("conf_idx", conf_idx, "dG", math_utils.trapz(du_dl[T:], schedule[T:]))
+            print("conf_idx", conf_idx, "dG", math_utils.trapz(du_dl, schedule))
         else:
             print("conf_idx", conf_idx, "dG None")
 
     all_du_dls = jnp.array(all_du_dls)
+    work_insertion = math_utils.trapz(all_du_dls, schedule) # integral from 0 to inf
 
-    bkwd = all_du_dls[:, T:]
-    bkwd_sched = schedule[T:]
-
-    dG_bkwd = math_utils.trapz(bkwd, bkwd_sched) # integral from 0 to inf
-
-    # print("raw dG_deletion", dG_bkwd)
-    # (ytz): dG_bkwd should be mostly positive values. The most positive value
-    # carries the semantic of being the most tightly bound. So we want to weight
-    # this conformation exponentially more:
-
-    dG_bkwd = -dG_bkwd
-
-    # this is in kJ/mol, inputs to BAR needs to be in 1/kT.
     kT = 2.479
-    dG_bkwd /= kT
+    work_insertion /= kT
 
-    pred_dG = bar.EXP(dG_bkwd)
+    pred_dG = bar.EXP(work_insertion)
     pred_dG *= kT
 
-    # (ytz): undo the negative sign
-    # this is *not* the same as not doing the initial dG_bkwd negation at all.
-    pred_dG = -pred_dG
     print("pred_dG", pred_dG, "true_dG", true_dG)
     return jnp.abs(pred_dG - true_dG)
 
@@ -138,12 +123,11 @@ if __name__ == "__main__":
     parser.add_argument('--complex_pdb', type=str, required=True)
     parser.add_argument('--ligand_sdf', type=str, required=True)
     parser.add_argument('--num_gpus', type=int, required=True)
-    parser.add_argument('--num_conformers', type=int, required=True)
+    parser.add_argument('--num_trials', type=int, required=True)
     parser.add_argument('--forcefield', type=str, required=True)
     args = parser.parse_args()
 
     assert os.path.isdir(args.out_dir)
-
 
     if args.precision == 'single':
         precision = np.float32
@@ -163,58 +147,14 @@ if __name__ == "__main__":
     perm = np.arange(len(all_guest_mols))
     np.random.shuffle(perm)
 
+    print("======Picking Mol=======", perm[0])
+
     guest_mol = all_guest_mols[perm[0]]
 
     num_gpus = args.num_gpus
     all_du_dls = []
 
-    insertion_T = 3000
-    insertion_lambda = np.linspace(1.0, 0.0, insertion_T) # insertion
-    insertion_cas = np.ones(insertion_T, dtype=np.float64)*0.9
-    insertion_dts = np.ones(insertion_T) * 0.001
 
-    relaxation_T = 2000
-    relaxation_lambda = np.zeros(relaxation_T) # relaxation
-    relaxation_cas = np.ones(relaxation_T, dtype=np.float64)*0.9
-    relaxation_dts = np.linspace(0.001, 0.01, relaxation_T).astype(np.float64)
-
-    deletion_T = 5000
-    deletion_lambda = np.linspace(0.0, 5.0, deletion_T).astype(np.float64)
-    deletion_cas = np.ones(deletion_T, dtype=np.float64)*0.9
-    deletion_dts = np.ones(deletion_T)*0.0015
-
-    deletion_offset = insertion_T + relaxation_T # when we start doing deletion
-
-    complete_T = insertion_T + relaxation_T + deletion_T
-    complete_lambda = np.concatenate([insertion_lambda, relaxation_lambda, deletion_lambda])
-    complete_cas = np.concatenate([insertion_cas, relaxation_cas, deletion_cas])
-    complete_dts = np.concatenate([insertion_dts, relaxation_dts, deletion_dts])
-
-
-    epoch = 0
-
-    init_conf = guest_mol.GetConformer(0)
-    init_conf = np.array(init_conf.GetPositions(), dtype=np.float64)
-    init_conf = init_conf/10 # convert to md_units
-    conf_com = com(init_conf)
-
-    init_mol = Chem.Mol(guest_mol)
-
-    num_conformers = args.num_conformers
-
-    # generate a set of gas phase conformers using the RDKit
-    guest_mol.RemoveAllConformers()
-    AllChem.EmbedMultipleConfs(guest_mol, num_conformers, randomSeed=2020)
-    np.random.seed(2020)
-    for conf_idx in range(num_conformers):
-        conformer = guest_mol.GetConformer(conf_idx)
-        guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-        guest_conf = guest_conf/10 # convert to md_units
-        rot_matrix = special_ortho_group.rvs(3).astype(dtype=np.float64)
-        guest_conf = np.matmul(guest_conf, rot_matrix)*10
-
-        for atom_idx, pos in enumerate(guest_conf):
-            conformer.SetAtomPosition(atom_idx, (float(pos[0]), float(pos[1]), float(pos[2])))
 
     lr = 5e-4
     # opt_init, opt_update, get_params = optimizers.adam(lr)
@@ -227,6 +167,13 @@ if __name__ == "__main__":
         host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
     host_conf = np.array(host_conf)
     host_name = "complex"
+
+    conformer = guest_mol.GetConformer(0)
+    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+    guest_conf = guest_conf/10 # convert to md_units
+    x0 = np.concatenate([host_conf, guest_conf]) # combined geometry
+    # thermostat will bring velocities to the correct temperature
+    v0 = np.zeros_like(x0)
 
     # set up the system
     amber_ff = app.ForceField('amber99sbildn.xml', 'amber99_obc.xml')
@@ -248,8 +195,48 @@ if __name__ == "__main__":
     guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
 
     combined_system = host_system.merge(guest_system)
-    # cbs = -1*np.ones_like(np.array(combined_system.masses))*0.0001
-    cbs = -0.0001/np.array(combined_system.masses)
+
+    temperature = 300
+    dt = 1.5e-3
+    friction = 91
+
+    ca, cbs, ccs = langevin_coefficients(
+        temperature,
+        dt,
+        friction,
+        np.array(combined_system.masses)
+    )
+
+    cbs *= -1
+
+    print("Integrator coefficients:")
+    print("ca", ca)
+    print("cbs", cbs)
+    print("ccs", ccs)
+
+    # insertion only
+    Ts = [
+        1000, # fast insertion
+        5000, # slow insertion
+    ]
+
+    complete_T = np.sum(Ts)
+
+    complete_lambda = np.concatenate([
+        np.linspace(cutoff, 0.3, Ts[0]),
+        np.linspace(0.3,   0.0,  Ts[1]),
+    ])
+
+    complete_cas = np.concatenate([
+        np.linspace(0.00, ca, Ts[0]),
+        np.linspace(ca, ca, Ts[1]),
+    ])
+
+    complete_dts = np.concatenate([
+        np.linspace(dt, dt, Ts[0]),
+        np.linspace(dt, dt, Ts[1]),
+    ])
+
     lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
     lambda_idxs[num_host_atoms:] = 1
 
@@ -258,6 +245,7 @@ if __name__ == "__main__":
         complete_dts,
         complete_cas,
         cbs,
+        ccs,
         complete_lambda,
         lambda_idxs,
         precision
@@ -282,32 +270,27 @@ if __name__ == "__main__":
         sim.system.params = np.asarray(epoch_params)
 
         all_args = []
-
         child_conns = []
         parent_conns = []
-        for conf_idx in range(num_conformers):
+        processes = []
 
-            conformer = guest_mol.GetConformer(conf_idx)
-            guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-            guest_conf = guest_conf/10 # convert to md_units
-            guest_conf = recenter(guest_conf, conf_com)
-            x0 = np.concatenate([host_conf, guest_conf])       # combined geometry
+        np.random.seed(2020)
+        for trial_idx in range(args.num_trials):
 
-            combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), init_mol)
-            combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-            out_file = os.path.join(args.out_dir, "epoch_"+str(epoch)+"_insertion_deletion_"+host_name+"_conf_"+str(conf_idx)+".pdb")
-            writer = PDBWriter(combined_pdb_str, out_file)
-            # temporarily disabled
-            writer = None
-
-            v0 = np.zeros_like(x0)
+            if epoch % 10 == 0:
+                combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), guest_mol)
+                combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+                out_file = os.path.join(args.out_dir, "epoch_"+str(epoch)+"_insertion_"+str(trial_idx)+".pdb")
+                writer = PDBWriter(combined_pdb_str, out_file)
+            else:
+                writer = None
 
             parent_conn, child_conn = Pipe()
             parent_conns.append(parent_conn)
-            # writer can be None if we don't care about vis
-            all_args.append([x0, v0, conf_idx % num_gpus, writer, child_conn])
 
-        processes = []
+            intg_seed = np.random.randint(np.iinfo(np.int32).max)
+
+            all_args.append([x0, v0, intg_seed, writer, child_conn, trial_idx % args.num_gpus])
 
         for arg in all_args:
             p = Process(target=sim.run_forward_and_backward, args=arg)
@@ -325,8 +308,8 @@ if __name__ == "__main__":
         for du_dls in all_du_dls:
             if du_dls is None:
                 continue
-            bkwd = du_dls[deletion_offset:]
-            plt.plot(complete_lambda[deletion_offset:], bkwd)
+            insertion = du_dls
+            plt.plot(complete_lambda, insertion)
 
             plt.ylabel("du_dl")
             plt.xlabel("lambda")
@@ -335,14 +318,13 @@ if __name__ == "__main__":
         axes.set_xlim([0, 2])
         plt.savefig(os.path.join(args.out_dir, "bkwd_epoch_"+str(epoch)+"_du_dls"))
 
-        true_dG = 26.61024 # -6.36 * 4.184 * -1 (for insertion)
-
-        error = error_fn(all_du_dls, deletion_offset, complete_lambda, true_dG)
-        work_grads = exp_grad_filter(all_du_dls, deletion_offset, complete_lambda, true_dG)
+        true_dG = -26.61024 # -6.36 * 4.184
+        error = error_fn(all_du_dls, complete_lambda, true_dG)
+        work_grads = exp_grad_filter(all_du_dls, complete_lambda, true_dG)
 
         print("---EPOCH", epoch, "---- LOSS", error)
 
-        error_grad = loss_grad_fn(all_du_dls, deletion_offset, complete_lambda, true_dG)
+        error_grad = loss_grad_fn(all_du_dls, complete_lambda, true_dG)
         all_du_dl_adjoints = error_grad[0]
 
         # this needs to be rescaled by number of conformers (eg. 100 conformers with 0.01 each will fail)
@@ -355,6 +337,8 @@ if __name__ == "__main__":
 
         picked_conformers = []
         unstable_conformers = []
+
+        print("work grads", work_grads)
 
         for conf_idx, (pc, du_dl_adjoints, wg, du_dls) in enumerate(zip(parent_conns, all_du_dl_adjoints, work_grads, all_du_dls)):
             if du_dls is None:

@@ -14,32 +14,31 @@ import jax
 import jax.numpy as jnp
 
 
-import warnings
-warnings.simplefilter("ignore", UserWarning)
+# import warnings
+# warnings.simplefilter("ignore", UserWarning)
 
 def check_coords(x):
     x3 = x[:, :3]
-    ri = jnp.expand_dims(x3, 0)
-    rj = jnp.expand_dims(x3, 1)
-    dij = jnp.linalg.norm(ri-rj, axis=-1)
+    ri = np.expand_dims(x3, 0)
+    rj = np.expand_dims(x3, 1)
+    dij = np.linalg.norm(ri-rj, axis=-1)
 
     N = x.shape[0]
 
-    idx = jnp.argmax(dij)
+    idx = np.argmax(dij)
     row = idx // N
     col = idx - row * N 
 
-    if jnp.any(dij > 100):
+    if np.any(dij > 100):
         return False
-    elif jnp.any(jnp.isinf(dij)):
+    elif np.any(np.isinf(dij)):
         return False
-    elif jnp.any(jnp.isnan(dij)):
+    elif np.any(np.isnan(dij)):
         return False
 
     return True
 
-check_coords = jax.jit(check_coords, static_argnums=(0,))
-
+# check_coords = jax.jit(check_coords, static_argnums=(0,))
 
 class Simulation:
     """
@@ -170,8 +169,7 @@ class Simulation:
         start = time.time()
         # print("start_forward_mode")
         ctxt.forward_mode()
-
-        # print("fwd run time", time.time() - start)
+        print("fwd run time", time.time() - start)
 
         du_dls = stepper.get_du_dl()
 
@@ -179,7 +177,7 @@ class Simulation:
         x_final = ctxt.get_last_coords()[:, :3]
 
         if check_coords(x_final) == False:
-            print("Final frame failed")
+            print("Final for frame failed")
             du_dls = None
 
         if pdb_writer is not None:

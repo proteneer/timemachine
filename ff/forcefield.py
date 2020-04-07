@@ -294,8 +294,8 @@ class Forcefield():
             elif force_type == 'SimpleCharges':
 
                 #  (ytz): Don't use this unless you *only* intend to do inference). Training
-                # requires us to refactor the Jacobian code.
-                am1 = True
+                # requires us to refactor code to do Jacobians properly
+                am1 = False
                 if am1:
 
                     print("Running AM1BCC")
