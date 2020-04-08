@@ -35,6 +35,14 @@ ReversibleContext::~ReversibleContext() {
     gpuErrchk(cudaFree(d_dE_dp_jvp_));
 };
 
+int round_up_even(int count) {
+    if(count % 2 == 1) {
+        return count += 1;
+    } else {
+        return count;
+    }
+}
+
 ReversibleContext::ReversibleContext(
     Stepper *stepper,
     const int N,
@@ -94,7 +102,8 @@ ReversibleContext::ReversibleContext(
     gpuErrchk(cudaMalloc(&d_params_grads_, P*sizeof(double))); // [P]
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    gpuErrchk(cudaMalloc((void**)&d_noise_buffer_, N*D*sizeof(double)));
+
+    gpuErrchk(cudaMalloc((void**)&d_noise_buffer_, round_up_even(N*D)*sizeof(double)));
 
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 };
@@ -120,7 +129,7 @@ void ReversibleContext::forward_mode() {
 
 	auto start = std::chrono::high_resolution_clock::now();
 
-    curandErrchk(templateCurandNormal(cr_rng_, d_noise_buffer_, N_*D, 0.0, 1.0));
+    curandErrchk(templateCurandNormal(cr_rng_, d_noise_buffer_, round_up_even(N_*D), 0.0, 1.0));
 
     step_forward<double>(
         N_,
