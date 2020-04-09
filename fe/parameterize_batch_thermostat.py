@@ -1,4 +1,5 @@
 import copy
+import itertools
 import argparse
 import time
 import numpy as np
@@ -229,7 +230,7 @@ if __name__ == "__main__":
 
     initial_params = sim.system.params
 
-    lr = 1e-4
+    lr = 1e-3
     opt_init, opt_update, get_params = optimizers.adam(lr)
 
     opt_state = opt_init(initial_params)
@@ -237,7 +238,7 @@ if __name__ == "__main__":
     num_epochs = 90
 
     # torsion, charge, gb radii, gb scaling factor, torsion
-    vary_allowed_groups = [(14, 1e-2)]*30 + [(12, 1e-2)]*30 + [(13, 1e-2)]*30
+    vary_allowed_groups = [(12, 1e-2)]*30 + [(13, 1e-2)]*30 + [(14, 1e-2)]*30
 
     assert len(vary_allowed_groups) == num_epochs
 
@@ -255,6 +256,8 @@ if __name__ == "__main__":
     #loss_file_path = os.path.join(args.out_dir, "loss.txt")
     #if os.path.exists(loss_file_path):
     #    os.remove(loss_file_path)
+
+    itercount = itertools.count()
 
     for epoch in range(num_epochs):        
         for idx, dataset in enumerate([train, test]):
@@ -430,7 +433,7 @@ if __name__ == "__main__":
                             filtered_grad.append(0)
 
                     filtered_grad = np.array(filtered_grad)
-                    opt_state = opt_update(epoch, filtered_grad, opt_state)
+                    opt_state = opt_update(next(itercount), filtered_grad, opt_state)
 
                     for pc in parent_conns:
                         pc.close()
