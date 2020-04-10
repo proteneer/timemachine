@@ -115,6 +115,7 @@ def prep_structure(rdmol):
 
     omega = oeomega.OEOmega()
     # omega.SetIncludeInput(True)
+    omega.SetMaxSearchTime(30)
     omega.SetCanonOrder(False)
     omega.SetSampleHydrogens(True)
     eWindow = 15.0
@@ -142,6 +143,7 @@ if __name__ == "__main__":
     parser.add_argument('--ligand_sdf', type=str, required=True)
     parser.add_argument('--checkpoint', type=str, required=True)
     parser.add_argument('--pool_size', type=int, required=True)
+    parser.add_argument('--limit', type=int, required=True)
     args = parser.parse_args()
 
     chkpt_file = args.checkpoint
@@ -154,11 +156,13 @@ if __name__ == "__main__":
         all_rdmols = []
         for mol_idx, mol in enumerate(suppl):
 
-            if mol_idx > 1024:
+            if mol_idx > args.limit:
                 break
 
             all_rdmols.append(Chem.AddHs(mol))
         
+        print("Total of", len(all_rdmols), "mols")
+
         am1_charges = pool.map(prep_structure, all_rdmols)
         pool.close()
 
