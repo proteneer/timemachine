@@ -72,7 +72,14 @@ if __name__ == "__main__":
 
     suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
 
+    all_guest_mols = []
     for guest_idx, guest_mol in enumerate(suppl):
+        all_guest_mols.append(guest_mol)
+
+    for _, _ in enumerate(all_guest_mols):
+
+        guest_idx = 0
+        guest_mol = all_guest_mols[0]
 
         name = guest_mol.GetProp("_Name")
         true_dG = convert_uIC50_to_kJ_per_mole(float(guest_mol.GetProp("IC50[uM](SPA)")))
@@ -156,7 +163,7 @@ if __name__ == "__main__":
 
 
 
-        lambda_schedule = [0.05, 0.1, 0.125, 0.15, 0.2, 0.225, 0.25, 0.28, 0.3, 0.32, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.9, 1.0]
+        lambda_schedule = [0.05, 0.1, 0.15, 0.2, 0.225, 0.25, 0.28, 0.3, 0.32, 0.35, 0.4, 0.45, 0.5, 0.7, 0.9, 1.0]
         # lambda_schedule = [0.1, 0.4, 1.0]
 
         # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
@@ -169,6 +176,7 @@ if __name__ == "__main__":
         lambda_schedule = np.array(lambda_schedule)
 
         simulations = []
+
         for lamb in lambda_schedule:
 
             # insertion only
