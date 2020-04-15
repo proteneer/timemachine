@@ -135,7 +135,7 @@ if __name__ == "__main__":
         temperature = 300
         # dt = 1.5e-3
         dt = 1.5e-3
-        friction = 91
+        friction = 50
 
         masses = np.array(combined_system.masses)
         # masses = np.where(masses < 2.0, masses*8, masses)
