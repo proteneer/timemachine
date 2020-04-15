@@ -75,7 +75,7 @@ if __name__ == "__main__":
     for guest_idx, guest_mol in enumerate(suppl):
 
         name = guest_mol.GetProp("_Name")
-        true_dG = float(guest_mol.GetProp("IC50[uM](SPA)"))
+        true_dG = convert_uIC50_to_kJ_per_mole(float(guest_mol.GetProp("IC50[uM](SPA)")))
 
         print("====== Processing",str(guest_idx),name,Chem.MolToSmiles(guest_mol, isomericSmiles=True),"========")
 
@@ -258,9 +258,9 @@ if __name__ == "__main__":
                 p.start()
 
             batch_du_dls = []
-            for pc in parent_conns[b_idx:b_idx+args.num_gpus]:
+            for pc_idx, pc in enumerate(parent_conns[b_idx:b_idx+args.num_gpus]):
 
-                lamb = lambda_schedule[b_idx:b_idx+args.num_gpus]
+                lamb = lambda_schedule[b_idx+pc_idx]
 
                 du_dls = pc.recv()[offset:]
                 # du_dls = subsample(du_dls)
