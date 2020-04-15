@@ -88,10 +88,6 @@ if __name__ == "__main__":
 
         num_gpus = args.num_gpus
 
-        np.random.seed(args.seed)
-
-
-
         host_pdb_file = args.complex_pdb
         host_pdb = app.PDBFile(host_pdb_file)
         host_conf = []
