@@ -59,6 +59,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_gpus', type=int, required=True)
     parser.add_argument('--forcefield', type=str, required=True)
     parser.add_argument('--seed', type=int, required=True)
+    parser.add_argument('--cutoff', type=float, required=True)
     args = parser.parse_args()
 
     assert os.path.isdir(args.out_dir)
@@ -110,7 +111,7 @@ if __name__ == "__main__":
             constraints=None,
             rigidWater=False)
 
-        cutoff = 1.25
+        cutoff = args.cutoff
 
         host_system = openmm_converter.deserialize_system(host_system, cutoff=cutoff)
         num_host_atoms = len(host_system.masses)
