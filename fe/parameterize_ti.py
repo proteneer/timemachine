@@ -307,6 +307,7 @@ if __name__ == "__main__":
         mean_du_dls = np.concatenate([[0], mean_du_dls, [0]])
         lambda_schedule = np.concatenate([[0], lambda_schedule, [1.25]])
 
+        print(name, mean_du_dls)
         print(name, "pred_dG", np.trapz(mean_du_dls, lambda_schedule), "true_dG", true_dG)
 
         assert 0
