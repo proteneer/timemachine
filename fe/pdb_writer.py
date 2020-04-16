@@ -7,7 +7,7 @@ class PDBWriter():
         self.pdb_str = pdb_str
         self.out_filepath = out_filepath
         self.outfile = None
-        self.n_frames = 32
+        self.n_frames = 50
 
     def write_header(self):
         """

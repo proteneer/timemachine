@@ -160,12 +160,12 @@ if __name__ == "__main__":
 
 
 
-        # lambda_schedule = [0.05, 0.1, 0.15, 0.2, 0.225, 0.25, 0.28, 0.3, 0.32, 0.35, 0.4, 0.45, 0.5, 0.7, 0.9, 1.0]
+        lambda_schedule = [0.05, 0.1, 0.15, 0.2, 0.225, 0.25, 0.28, 0.3, 0.32, 0.35, 0.4, 0.45, 0.5, 0.7, 0.9, 1.0]
         # lambda_schedule = [0.05, 0.1, 0.2, 0.3]
 
         # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
         # mean of means
-        lambda_schedule = [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+        # lambda_schedule = [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
         # lambda_schedule = [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
         # lambda_schedule = [0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]
         # lambda_schedule = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
@@ -180,7 +180,7 @@ if __name__ == "__main__":
             # insertion only
             Ts = [
                 1000, # insertion/minimization
-                10000, # equilibriation
+                250000, # equilibriation
             ]
 
             offset = 3000
@@ -290,9 +290,6 @@ if __name__ == "__main__":
             for p in processes[b_idx:b_idx+args.num_gpus]:
                 p.join()
 
-        print("MEAN OF ALL DU_DLS", np.mean(all_du_dls))
-
-
         plt.close()
 
 
@@ -307,11 +304,8 @@ if __name__ == "__main__":
         plt.savefig(os.path.join(args.out_dir, "boxplot_du_dls"))
         plt.close()
 
-
-
         mean_du_dls = np.concatenate([[0], mean_du_dls, [0]])
         lambda_schedule = np.concatenate([[0], lambda_schedule, [1.25]])
-
 
         print(name, "pred_dG", np.trapz(mean_du_dls, lambda_schedule), "true_dG", true_dG)
 
