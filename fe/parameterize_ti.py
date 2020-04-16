@@ -120,6 +120,7 @@ if __name__ == "__main__":
         open_ff = forcefield.Forcefield(args.forcefield)
         nrg_fns = open_ff.parameterize(guest_mol, cutoff=cutoff, am1=True)
         guest_masses = get_masses(guest_mol)
+        # guest_masses = np.ones_like(guest_masses)*9999999
         guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
 
         combined_system = host_system.merge(guest_system)
@@ -137,8 +138,8 @@ if __name__ == "__main__":
 
         temperature = 300
         # dt = 1.5e-3
-        dt = 1.5e-3
-        friction = 50
+        dt = 1.6e-3
+        friction = 30
 
         masses = np.array(combined_system.masses)
         # masses = np.where(masses < 2.0, masses*8, masses)
@@ -152,18 +153,19 @@ if __name__ == "__main__":
 
         cbs *= -1
 
-        # print("Integrator coefficients:")
-        # print("ca", ca)
-        # print("cbs", cbs)
-        # print("ccs", ccs)
+        print("Integrator coefficients:")
+        print("ca", ca)
+        print("cbs", cbs)
+        print("ccs", ccs)
 
 
 
-        lambda_schedule = [0.05, 0.1, 0.15, 0.2, 0.225, 0.25, 0.28, 0.3, 0.32, 0.35, 0.4, 0.45, 0.5, 0.7, 0.9, 1.0]
-        # lambda_schedule = [0.1, 0.4, 1.0]
+        # lambda_schedule = [0.05, 0.1, 0.15, 0.2, 0.225, 0.25, 0.28, 0.3, 0.32, 0.35, 0.4, 0.45, 0.5, 0.7, 0.9, 1.0]
+        # lambda_schedule = [0.05, 0.1, 0.2, 0.3]
 
         # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        # lambda_schedule = [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+        # mean of means
+        lambda_schedule = [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
         # lambda_schedule = [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
         # lambda_schedule = [0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]
         # lambda_schedule = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
@@ -178,7 +180,7 @@ if __name__ == "__main__":
             # insertion only
             Ts = [
                 1000, # insertion/minimization
-                14000, # equilibriation
+                10000, # equilibriation
             ]
 
             offset = 3000
@@ -250,7 +252,7 @@ if __name__ == "__main__":
         def subsample(du_dls):
             us = []
             for u_idx, u in enumerate(du_dls):
-                if u_idx % 100 == 0:
+                if u_idx % 500 == 0:
                     us.append(u)
             return np.array(us)
 
@@ -288,7 +290,7 @@ if __name__ == "__main__":
             for p in processes[b_idx:b_idx+args.num_gpus]:
                 p.join()
 
-
+        print("MEAN OF ALL DU_DLS", np.mean(all_du_dls))
 
 
         plt.close()
@@ -313,3 +315,4 @@ if __name__ == "__main__":
 
         print(name, "pred_dG", np.trapz(mean_du_dls, lambda_schedule), "true_dG", true_dG)
 
+        assert 0
