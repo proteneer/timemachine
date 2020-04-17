@@ -40,6 +40,8 @@ from ff import system
 from ff import openmm_converter
 import jax.numpy as jnp
 
+from rdkit.Chem import rdFMCS
+
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18
 
@@ -77,10 +79,26 @@ if __name__ == "__main__":
     for guest_idx, guest_mol in enumerate(suppl):
         all_guest_mols.append(guest_mol)
 
+    # find the common core.
+    core_pattern = rdFMCS.FindMCS(all_guest_mols).smartsString
+    core = Chem.MolFromSmarts(core_pattern)
+
+
+
     for _, _ in enumerate(all_guest_mols):
+
+
 
         guest_idx = 0
         guest_mol = all_guest_mols[0]
+
+        guest_lambda_idxs = np.ones(guest_mol.GetNumAtoms())
+
+        for match in guest_mol.GetSubstructMatches(core):
+            for atom in match:
+                guest_lambda_idxs[atom] = 0
+
+        print(guest_lambda_idxs)
 
         name = guest_mol.GetProp("_Name")
         true_dG = convert_uIC50_to_kJ_per_mole(float(guest_mol.GetProp("IC50[uM](SPA)")))
@@ -121,7 +139,6 @@ if __name__ == "__main__":
         open_ff = forcefield.Forcefield(args.forcefield)
         nrg_fns = open_ff.parameterize(guest_mol, cutoff=cutoff, am1=True)
         guest_masses = get_masses(guest_mol)
-        # guest_masses = np.ones_like(guest_masses)*9999999
         guest_system = system.System(nrg_fns, open_ff.params, open_ff.param_groups, guest_masses)
 
         combined_system = host_system.merge(guest_system)
@@ -139,8 +156,8 @@ if __name__ == "__main__":
 
         temperature = 300
         # dt = 1.5e-3
-        dt = 1.6e-3
-        friction = 30
+        dt = 1.5e-3
+        friction = 20
 
         masses = np.array(combined_system.masses)
         # masses = np.where(masses < 2.0, masses*8, masses)
@@ -160,13 +177,12 @@ if __name__ == "__main__":
         print("ccs", ccs)
 
 
-
-        lambda_schedule = [0.05, 0.1, 0.15, 0.2, 0.225, 0.25, 0.28, 0.3, 0.32, 0.35, 0.4, 0.45, 0.5, 0.7, 0.9, 1.0]
+        # lambda_schedule = [0.05, 0.1, 0.15, 0.2, 0.225, 0.25, 0.28, 0.3, 0.32, 0.35, 0.4, 0.45, 0.5, 0.7, 0.9, 1.0]
         # lambda_schedule = [0.05, 0.1, 0.2, 0.3]
 
         # lambda_schedule = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
         # mean of means
-        # lambda_schedule = [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+        lambda_schedule = [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
         # lambda_schedule = [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]
         # lambda_schedule = [0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4]
         # lambda_schedule = [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
@@ -181,7 +197,7 @@ if __name__ == "__main__":
             # insertion only
             Ts = [
                 1000, # insertion/minimization
-                250000, # equilibriation
+                20000, # equilibriation
             ]
 
             offset = 3000
@@ -194,19 +210,17 @@ if __name__ == "__main__":
             ])
 
             complete_cas = np.concatenate([
-                np.linspace(0.5, ca, Ts[0]),
+                np.linspace(0.0, ca, Ts[0]),
                 np.linspace(ca, ca, Ts[1]),
             ])
 
             complete_dts = np.concatenate([
-                np.linspace(dt, dt, Ts[0]),
+                np.linspace(1e-7, dt, Ts[0]),
                 np.linspace(dt, dt, Ts[1]),
             ])
 
-
-
             lambda_idxs = np.zeros(len(combined_system.masses), dtype=np.int32)
-            lambda_idxs[num_host_atoms:] = 1
+            lambda_idxs[num_host_atoms:] = guest_lambda_idxs
 
             sim = simulation.Simulation(
                 combined_system,

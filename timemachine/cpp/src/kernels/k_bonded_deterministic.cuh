@@ -1,6 +1,14 @@
 #include "surreal.cuh"
 #include "../fixed_point.hpp"
 
+/*
+
+Bond terms will only ever use the first three dimensions.
+
+*/
+
+#define MAXDIM 3
+
 template<typename RealType, int D>
 void __global__ k_harmonic_bond_inference(
     const int B,     // number of bonds
@@ -20,9 +28,9 @@ void __global__ k_harmonic_bond_inference(
     int src_idx = bond_idxs[b_idx*2+0];
     int dst_idx = bond_idxs[b_idx*2+1];
 
-    RealType dx[D];
+    RealType dx[MAXDIM];
     RealType d2ij = 0; // initialize your summed variables!
-    for(int d=0; d < D; d++) {
+    for(int d=0; d < 3; d++) {
         RealType delta = coords[src_idx*D+d] - coords[dst_idx*D+d];
         dx[d] = delta;
         d2ij += delta*delta;
@@ -37,7 +45,7 @@ void __global__ k_harmonic_bond_inference(
     RealType dij = sqrt(d2ij);
     RealType db = dij - b0;
 
-    for(int d=0; d < D; d++) {
+    for(int d=0; d < MAXDIM; d++) {
         RealType grad_delta = kb*db*dx[d]/dij;
         atomicAdd(grad_coords + src_idx*D + d, static_cast<unsigned long long>((long long) (grad_delta*FIXED_EXPONENT)));
         atomicAdd(grad_coords + dst_idx*D + d, static_cast<unsigned long long>((long long) (-grad_delta*FIXED_EXPONENT)));
@@ -67,9 +75,9 @@ void __global__ k_harmonic_bond_jvp(
     int src_idx = bond_idxs[b_idx*2+0];
     int dst_idx = bond_idxs[b_idx*2+1];
 
-    Surreal<RealType> dx[D];
+    Surreal<RealType> dx[MAXDIM];
     Surreal<RealType> d2ij(0.0, 0.0); // initialize your summed variables!
-    for(int d=0; d < D; d++) {
+    for(int d=0; d < MAXDIM; d++) {
         Surreal<RealType> delta;
         delta.real = coords[src_idx*D+d] - coords[dst_idx*D+d];
         delta.imag = coords_tangent[src_idx*D+d] - coords_tangent[dst_idx*D+d];
@@ -86,7 +94,7 @@ void __global__ k_harmonic_bond_jvp(
     Surreal<RealType> dij = sqrt(d2ij);
     Surreal<RealType> db = dij - b0;
 
-    for(int d=0; d < D; d++) {
+    for(int d=0; d < MAXDIM; d++) {
         Surreal<RealType> grad_delta = kb*db*dx[d]/dij;
         atomicAdd(grad_coords_tangents + src_idx*D + d, grad_delta.imag);
         atomicAdd(grad_coords_tangents + dst_idx*D + d, -grad_delta.imag);
@@ -119,13 +127,13 @@ void __global__ k_harmonic_angle_inference(
     int j_idx = angle_idxs[a_idx*3+1];
     int k_idx = angle_idxs[a_idx*3+2];
 
-    RealType rij[D];
-    RealType rjk[D];
+    RealType rij[MAXDIM];
+    RealType rjk[MAXDIM];
     RealType nij = 0; // initialize your summed variables!
     RealType njk = 0; // initialize your summed variables!
     RealType top = 0;
     // this is a little confusing
-    for(int d=0; d < D; d++) {
+    for(int d=0; d < MAXDIM; d++) {
         RealType vij = coords[j_idx*D+d] - coords[i_idx*D+d];
         RealType vjk = coords[j_idx*D+d] - coords[k_idx*D+d];
 
@@ -152,7 +160,7 @@ void __global__ k_harmonic_angle_inference(
 
     RealType delta = top/nijk - cos(a0);
 
-    for(int d=0; d < D; d++) {
+    for(int d=0; d < MAXDIM; d++) {
         RealType grad_i = ka*delta*(rij[d]*top/(n3ij*njk) + (-rjk[d])/nijk);
         atomicAdd(grad_coords + i_idx*D + d, static_cast<unsigned long long>((long long) (grad_i*FIXED_EXPONENT)));
 
@@ -188,13 +196,13 @@ void __global__ k_harmonic_angle_jvp(
     int j_idx = angle_idxs[a_idx*3+1];
     int k_idx = angle_idxs[a_idx*3+2];
 
-    Surreal<RealType> rij[D];
-    Surreal<RealType> rjk[D];
+    Surreal<RealType> rij[MAXDIM];
+    Surreal<RealType> rjk[MAXDIM];
     Surreal<RealType> nij(0.0, 0.0); // initialize your summed variables!
     Surreal<RealType> njk(0.0, 0.0); // initialize your summed variables!
     Surreal<RealType> top(0.0, 0.0);
-    // this is a little confusing
-    for(int d=0; d < D; d++) {
+
+    for(int d=0; d < MAXDIM; d++) {
 
         Surreal<RealType> vij;
         vij.real = coords[j_idx*D+d] - coords[i_idx*D+d];
@@ -216,8 +224,6 @@ void __global__ k_harmonic_angle_jvp(
     nij = sqrt(nij);
     njk = sqrt(njk);
 
-
-
     Surreal<RealType> nijk = nij*njk;
     Surreal<RealType> n3ij = nij*nij*nij;
     Surreal<RealType> n3jk = njk*njk*njk;
@@ -230,7 +236,7 @@ void __global__ k_harmonic_angle_jvp(
 
     Surreal<RealType> delta = top/nijk - cos(a0);
 
-    for(int d=0; d < D; d++) {
+    for(int d=0; d < MAXDIM; d++) {
         Surreal<RealType> grad_i = ka*delta*(rij[d]*top/(n3ij*njk) + (-rjk[d])/nijk);
         atomicAdd(grad_coords_tangents + i_idx*D + d, grad_i.imag);
 
