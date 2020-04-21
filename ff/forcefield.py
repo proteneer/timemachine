@@ -143,7 +143,7 @@ class Forcefield():
 
         return raw_ff
 
-    def parameterize(self, mol, cutoff=10000):
+    def parameterize(self, mol, cutoff=10000, am1=False):
         """
         Given a RDKit Molecule, return a parameterized system.
         """
@@ -295,10 +295,9 @@ class Forcefield():
 
                 #  (ytz): Don't use this unless you *only* intend to do inference). Training
                 # requires us to refactor code to do Jacobians properly
-                am1 = False
                 if am1:
+                    print("WARNING: using AM1BCC, you should not train your forcefield when this option is turned on. Also: this function should not be called more than once.")
 
-                    print("Running AM1BCC")
 
                     # imported here for optional dependency
                     from openeye import oechem

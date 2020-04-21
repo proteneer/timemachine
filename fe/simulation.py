@@ -142,8 +142,8 @@ class Simulation:
         # (ytz): debug use
         # gradients = self.system.make_gradients(dimension=3, precision=self.precision)
         # for g in gradients:
-        #     forces = g.execute(x0, self.system.params)
-        #     print(g, forces, np.amax(np.abs(forces)))
+            # forces = g.execute(x0, self.system.params)
+            # print(g, forces, np.amax(np.abs(forces)))
 
         # assert 0
 
@@ -167,7 +167,7 @@ class Simulation:
         )
 
         start = time.time()
-        # print("start_forward_mode")
+        print("start_forward_mode")
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
