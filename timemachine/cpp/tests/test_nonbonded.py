@@ -14,6 +14,9 @@ from common import prepare_nonbonded_system
 
 from timemachine.lib import custom_ops
 
+from timemachine.lib import ops, custom_ops
+
+
 np.set_printoptions(linewidth=500)
 
 class TestNonbonded(GradientTest):
@@ -46,6 +49,97 @@ class TestNonbonded(GradientTest):
         ref_mp = mixed_fn(x, params, param_idxs, cutoff)[0][0]
         ref_mp = np.transpose(ref_mp, (2,0,1))
         return ref_mp
+
+    def test_limits(self):
+        """
+        Test that we're properly truncating the limits for exclusion purposes.
+        """
+        np.random.seed(125)
+        N = 65
+        D = 4
+        E = 5
+        P_charges = 4
+        P_lj = 5
+        P_exc = 7
+ 
+        x_full = self.get_random_coords(N, D)
+        
+        N_limit = 60
+
+        assert N_limit < N
+
+        x_limit = x_full[:N_limit, :]
+
+        precision, rtol  = np.float64, 1e-10
+        cutoff = 100.0
+        E = 5
+
+        p_scale = 4.0
+        e_scale = 1.0
+
+        params = np.array([], dtype=np.float64)
+
+        charge_params = (np.random.rand(P_charges).astype(np.float64) - 0.5)*np.sqrt(138.935456)/e_scale
+        charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
+        params = np.concatenate([params, charge_params])
+
+        # lennard jones
+        lj_sig_params = np.random.rand(P_lj)/p_scale # we want these to be pretty small for numerical stability
+        lj_sig_idxs = np.random.randint(low=0, high=P_lj, size=(N,), dtype=np.int32) + len(params)
+        params = np.concatenate([params, lj_sig_params])
+
+        lj_eps_params = np.random.rand(P_lj)
+        lj_eps_idxs = np.random.randint(low=0, high=P_lj, size=(N,), dtype=np.int32) + len(params)
+        params = np.concatenate([params, lj_eps_params])
+
+        lj_param_idxs = np.stack([lj_sig_idxs, lj_eps_idxs], axis=-1)
+
+        # generate exclusion parameters
+        exclusion_idxs = np.random.randint(low=0, high=N_limit, size=(E,2), dtype=np.int32)
+        for e_idx, (i,j) in enumerate(exclusion_idxs):
+            if i == j:
+                exclusion_idxs[e_idx][0] = i
+                exclusion_idxs[e_idx][1] = (j+1) % N # mod is in case we overflow
+
+        for e_idx, (i,j) in enumerate(exclusion_idxs):
+            if i == j:
+                raise Exception("BAD")
+
+        exclusion_params = np.random.rand(P_exc).astype(np.float64) # must be between 0 and 1
+        exclusion_charge_idxs = np.random.randint(low=0, high=P_exc, size=(E), dtype=np.int32) + len(params)
+        exclusion_lj_idxs = np.random.randint(low=0, high=P_exc, size=(E), dtype=np.int32) + len(params)
+        params = np.concatenate([params, exclusion_params])
+
+        custom_nonbonded_full = ops.Nonbonded(
+            charge_param_idxs,
+            lj_param_idxs,
+            exclusion_idxs,
+            exclusion_charge_idxs,
+            exclusion_lj_idxs,
+            cutoff,
+            N_limit,
+            D,
+            precision=precision
+        )
+
+        test_dx_full = custom_nonbonded_full.execute(x_full, params)
+        np.testing.assert_almost_equal(test_dx_full[N_limit:], 0)
+
+        custom_nonbonded_limit = ops.Nonbonded(
+            charge_param_idxs[:N_limit],
+            lj_param_idxs[:N_limit],
+            exclusion_idxs,
+            exclusion_charge_idxs,
+            exclusion_lj_idxs,
+            cutoff,
+            N_limit,
+            D,
+            precision=precision
+        )
+
+        test_dx_limit = custom_nonbonded_limit.execute(x_limit, params)
+
+        np.testing.assert_almost_equal(test_dx_limit, test_dx_full[:N_limit])
 
     def test_fast_nonbonded(self):
         np.random.seed(125)

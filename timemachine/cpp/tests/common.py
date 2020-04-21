@@ -99,6 +99,7 @@ def prepare_nonbonded_system(
     p_scale=4.0,
     e_scale=1.0,
     cutoff=100.0,
+    N_limit=None,
     custom_D=None,
     precision=np.float64):
 
@@ -149,6 +150,7 @@ def prepare_nonbonded_system(
         exclusion_charge_idxs,
         exclusion_lj_idxs,
         cutoff,
+        N_limit,
         custom_D,
         precision=precision
     )
