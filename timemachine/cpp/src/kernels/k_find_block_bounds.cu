@@ -22,13 +22,13 @@ void __global__ k_find_block_bounds(
             int atom_i_idx = tile_idx*WARPSIZE + i;
             if(atom_i_idx < N) {
                 double ci = coords[atom_i_idx*D + d];
-                ci_min = ci < ci_min ? ci : ci_min;
-                ci_max = ci > ci_max ? ci : ci_max;                
+                ci_min = min(ci, ci_min);
+                ci_max = max(ci, ci_max);
             }
         }
      
         block_bounds_ctr[tile_idx*D+d] = (ci_max + ci_min)/2.0;
-        block_bounds_ext[tile_idx*D+d] = ci_max - ci_min;
+        block_bounds_ext[tile_idx*D+d] = (ci_max - ci_min)/2.0;
     }
 
 }
