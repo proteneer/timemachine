@@ -29,6 +29,7 @@ def prepare_gbsa_system(
     params=None,
     precision=np.float64):
 
+
     N = x.shape[0]
     D = x.shape[1]
 
@@ -65,6 +66,7 @@ def prepare_gbsa_system(
         probe_radius,
         cutoff_radii,
         cutoff_force,
+        N,
         D,
         precision=precision
     )
@@ -105,6 +107,9 @@ def prepare_nonbonded_system(
 
     N = x.shape[0]
     D = x.shape[1]
+
+    if N_limit is None:
+        N_limit = N
 
     if params is None:
         params = np.array([], dtype=np.float64)
