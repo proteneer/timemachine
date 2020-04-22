@@ -442,7 +442,8 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
         const py::array_t<int, py::array::c_style> &charge_scale_i,  // 
         const py::array_t<int, py::array::c_style> &lj_scale_i,  // 
-        double cutoff
+        double cutoff,
+        int N_limit
     ){
         std::vector<int> charge_param_idxs(charge_pi.size());
         std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
@@ -464,7 +465,8 @@ void declare_nonbonded(py::module &m, const char *typestr) {
             exclusion_idxs,
             charge_scale_idxs,
             lj_scale_idxs,
-            cutoff
+            cutoff,
+            N_limit
         );
     }
     ));
@@ -496,7 +498,8 @@ void declare_gbsa(py::module &m, const char *typestr) {
         double solvent_dielectric,
         double probe_radius,
         double cutoff_radii,
-        double cutoff_force
+        double cutoff_force,
+        int N_limit
     ){
         std::vector<int> charge_param_idxs(charge_pi.size());
         std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
@@ -518,7 +521,8 @@ void declare_gbsa(py::module &m, const char *typestr) {
             solvent_dielectric,
             probe_radius,
             cutoff_radii,
-            cutoff_force
+            cutoff_force,
+            N_limit
         );
     }
     ));

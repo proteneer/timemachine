@@ -25,10 +25,9 @@ GBSA<RealType, D>::GBSA(
     double solvent_dielectric,
     double probe_radius,
     double cutoff_radii,
-    double cutoff_force
-) :
-
-    N_(charge_param_idxs.size()),
+    double cutoff_force,
+    int N_limit
+) : N_(charge_param_idxs.size()),
     alpha_(alpha),
     beta_(beta),
     gamma_(gamma),
@@ -39,7 +38,12 @@ GBSA<RealType, D>::GBSA(
     probe_radius_(probe_radius),
     cutoff_radii_(cutoff_radii),
     cutoff_force_(cutoff_force),
+    N_limit_(N_limit),
     nblist_(charge_param_idxs.size(), D) {
+
+    if(N_limit > N_) {
+        throw std::runtime_error("N_limit must be <= N");
+    }
 
     if(cutoff_radii != cutoff_force) {
       throw std::runtime_error("GB currently requires that cutoff_radii be equal to cutoff_force!");
@@ -124,7 +128,7 @@ void GBSA<RealType, D>::execute_device(
     // std::cout << "cutoff 12: " << cutoff_radii_ << " " << cutoff_force_ << std::endl;
 
     // cudaDeviceSynchronize();
-    nblist_.compute_block_bounds(N, D, d_coords, stream);
+    nblist_.compute_block_bounds(N_limit_, D, d_coords, stream);
 
     auto start = std::chrono::high_resolution_clock::now();
     if(d_coords_tangents == nullptr) {
@@ -136,7 +140,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_born_forces_buffer_, 0, N*sizeof(*d_born_forces_buffer_), stream));
 
         k_compute_born_radii_gpu<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-          N_,
+          N_limit_,
           d_coords,
           d_params,
           d_atomic_radii_idxs_,
@@ -153,7 +157,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         k_reduce_born_radii<<<B, tpb, 0, stream>>>(
-          N_,
+          N_limit_,
           d_params,
           d_atomic_radii_idxs_,
           dielectric_offset_,
@@ -170,7 +174,7 @@ void GBSA<RealType, D>::execute_device(
 
 
         k_compute_born_first_loop_gpu<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-          N_,
+          N_limit_,
           d_coords,
           d_params,
           d_charge_param_idxs_,
@@ -187,7 +191,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         k_reduce_born_forces<<<B, tpb, 0, stream>>>(
-          N_,
+          N_limit_,
           d_params,
           d_atomic_radii_idxs_,
           d_born_radii_buffer_,
@@ -201,7 +205,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         k_compute_born_energy_and_forces<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-          N_,
+          N_limit_,
           d_coords,
           d_params,
           d_atomic_radii_idxs_,
@@ -233,7 +237,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_born_forces_buffer_jvp_, 0, N*sizeof(*d_born_forces_buffer_jvp_), stream));
 
         k_compute_born_radii_gpu_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-            N_,
+            N_limit_,
             d_coords,
             d_coords_tangents,
             d_params,
@@ -250,7 +254,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         k_reduce_born_radii_jvp<<<B, tpb, 0, stream>>>(
-          N_,
+          N_limit_,
           d_params,
           d_atomic_radii_idxs_,
           dielectric_offset_,
@@ -266,7 +270,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         k_compute_born_first_loop_gpu_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-            N_,
+            N_limit_,
             d_coords,
             d_coords_tangents,
             d_params,
@@ -285,7 +289,7 @@ void GBSA<RealType, D>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
 
         k_reduce_born_forces_jvp<<<B, tpb, 0, stream>>>(
-            N_,
+            N_limit_,
             d_params,
             d_atomic_radii_idxs_,
             d_born_radii_buffer_jvp_,
@@ -303,7 +307,7 @@ void GBSA<RealType, D>::execute_device(
 
         // auto start = std::chrono::high_resolution_clock::now();
         k_compute_born_energy_and_forces_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-            N_,
+            N_limit_,
             d_coords,
             d_coords_tangents,
             d_params,

@@ -44,6 +44,7 @@ private:
     Neighborlist nblist_;
 
     const int N_;
+    const int N_limit_;
 
 public:
 
@@ -60,7 +61,8 @@ public:
         double solvent_dielectric,
         double probe_radius,
         double cutoff_radii,
-        double cutoff_force
+        double cutoff_force,
+        int N_limit
     );
 
     // FIX ME with actual destructors later

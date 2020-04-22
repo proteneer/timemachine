@@ -17,6 +17,8 @@ private:
     int *d_charge_scale_idxs_; // [E]
     int *d_lj_scale_idxs_; // [E]
 
+    int N_limit_;
+
     double cutoff_;
 
     // these buffers can be in RealType as well
@@ -37,7 +39,8 @@ public:
         const std::vector<int> &exclusion_idxs, // [E,2]
         const std::vector<int> &charge_scale_idxs, // [E]
         const std::vector<int> &lj_scale_idxs, // [E]
-        double cutoff);
+        double cutoff,
+        int atom_limit);
 
     ~Nonbonded();
 

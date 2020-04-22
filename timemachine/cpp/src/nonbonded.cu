@@ -16,11 +16,17 @@ Nonbonded<RealType, D>::Nonbonded(
     const std::vector<int> &exclusion_idxs, // [E,2]
     const std::vector<int> &charge_scale_idxs, // [E]
     const std::vector<int> &lj_scale_idxs, // [E]
-    double cutoff
+    double cutoff,
+    int N_limit
 ) :  N_(charge_param_idxs.size()),
     cutoff_(cutoff),
     E_(charge_scale_idxs.size()),
-    nblist_(charge_param_idxs.size(), D) {
+    nblist_(charge_param_idxs.size(), D),
+    N_limit_(N_limit) {
+
+    if(N_limit > N_) {
+        throw std::runtime_error("N_limit must be <= N");
+    }
 
     if(charge_scale_idxs.size()*2 != exclusion_idxs.size()) {
         throw std::runtime_error("charge scale idxs size not half of exclusion size!");
@@ -88,21 +94,7 @@ void Nonbonded<RealType, D>::execute_device(
     int tpb = 32;
     int B = (N_+tpb-1)/tpb;
 
-    // gpuErrchk(cudaMemsetAsync(d_block_bounds_ctr_, 0, B*D*sizeof(*d_block_bounds_ctr_), stream));
-    // gpuErrchk(cudaMemsetAsync(d_block_bounds_ext_, 0, B*D*sizeof(*d_block_bounds_ext_), stream));
-
-
-
-    // k_find_block_bounds<<<1, B, 0, stream>>>(
-    //     N,
-    //     D,
-    //     B,
-    //     d_coords,
-    //     d_block_bounds_ctr_,
-    //     d_block_bounds_ext_
-    // );
-
-    nblist_.compute_block_bounds(N, D, d_coords, stream);
+    nblist_.compute_block_bounds(N_limit_, D, d_coords, stream);
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -112,12 +104,9 @@ void Nonbonded<RealType, D>::execute_device(
     auto start = std::chrono::high_resolution_clock::now();
     if(d_coords_tangents == nullptr) {
 
-        // these can be ran in two streams
-
-        // tbd run in two streams?
-
+        // these can be ran in two streams later on
         k_nonbonded_inference<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-            N,
+            N_limit_,
             d_coords,
             d_params,
             d_charge_param_idxs_,
@@ -159,11 +148,8 @@ void Nonbonded<RealType, D>::execute_device(
     } else {
 
         // do *not* accumulate tangents here
-        // gpuErrchk(cudaMemset(d_out_coords_tangents, 0, N*D*sizeof(RealType)));
-        // gpuErrchk(cudaMemset(d_out_params_tangents, 0, P*sizeof(RealType)));
-
         k_nonbonded_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-            N,
+            N_limit_,
             d_coords,
             d_coords_tangents,
             d_params,
