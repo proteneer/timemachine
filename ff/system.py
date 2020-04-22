@@ -1,6 +1,9 @@
 import numpy as np
 
 from timemachine.lib import ops
+from rdkit import Chem
+from rdkit.Chem import rdFMCS
+from ff import forcefield
 
 class System():
 
