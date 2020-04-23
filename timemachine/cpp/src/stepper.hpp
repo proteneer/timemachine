@@ -74,6 +74,54 @@ public:
 
 };
 
+
+class AlchemicalStepper : public Stepper {
+
+private:
+
+    int count_;
+    std::vector<Gradient<3> *>forces_;
+
+    const std::vector<double> lambda_schedule_; // [T]
+    double *d_du_dl_; // [T]
+    std::vector<double> du_dl_adjoint_; // [T], set later
+
+public:
+
+    AlchemicalStepper(
+        std::vector<Gradient<3> *> forces,
+        const std::vector<double> &lambda_schedule
+    );
+
+    virtual void forward_step(
+        const int N,
+        const int P,
+        const double *coords,
+        const double *params,
+        unsigned long long *dx) override;
+
+    virtual void backward_step(
+        const int N,
+        const int P,
+        const double *coords,
+        const double *params,
+        const double *dx_tangent,
+        double *coords_jvp,
+        double *params_jvp) override;
+
+    void get_du_dl(double *buf);
+
+    int get_T() const {
+        return lambda_schedule_.size();
+    }
+
+    void set_du_dl_adjoint(
+        const int T,
+        const double *adj);
+
+};
+
+
 class LambdaStepper : public Stepper {
 
 private:
