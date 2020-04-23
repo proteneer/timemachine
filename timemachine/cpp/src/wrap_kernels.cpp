@@ -546,8 +546,8 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
         const py::array_t<int, py::array::c_style> &charge_scale_i,  // 
         const py::array_t<int, py::array::c_style> &lj_scale_i,  // 
-        double cutoff,
-        int N_limit
+        const py::array_t<int, py::array::c_style> &lambda_idxs_i,  // 
+        double cutoff
     ){
         std::vector<int> charge_param_idxs(charge_pi.size());
         std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
@@ -563,14 +563,17 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         std::vector<int> lj_scale_idxs(lj_scale_i.size());
         std::memcpy(lj_scale_idxs.data(), lj_scale_i.data(), lj_scale_i.size()*sizeof(int));
 
+        std::vector<int> lambda_idxs(lambda_idxs_i.size());
+        std::memcpy(lambda_idxs.data(), lambda_idxs_i.data(), lambda_idxs_i.size()*sizeof(int));
+
         return new timemachine::Nonbonded<RealType, D>(
             charge_param_idxs,
             lj_param_idxs,
             exclusion_idxs,
             charge_scale_idxs,
             lj_scale_idxs,
-            cutoff,
-            N_limit
+            lambda_idxs,
+            cutoff
         );
     }
     ));
@@ -653,10 +656,10 @@ PYBIND11_MODULE(custom_ops, m) {
     // declare_periodic_torsion<float, 4>(m, "f32_4d");
     // declare_periodic_torsion<float, 3>(m, "f32_3d");
 
-    // declare_nonbonded<double, 4>(m, "f64_4d");
-    // declare_nonbonded<double, 3>(m, "f64_3d");
-    // declare_nonbonded<float, 4>(m, "f32_4d");
-    // declare_nonbonded<float, 3>(m, "f32_3d");
+    declare_nonbonded<double, 4>(m, "f64_4d");
+    declare_nonbonded<double, 3>(m, "f64_3d");
+    declare_nonbonded<float, 4>(m, "f32_4d");
+    declare_nonbonded<float, 3>(m, "f32_3d");
 
     // declare_gbsa<double, 4>(m, "f64_4d");
     // declare_gbsa<double, 3>(m, "f64_3d");

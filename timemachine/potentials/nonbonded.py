@@ -5,8 +5,41 @@ from jax.scipy.special import erf, erfc
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.potentials.jax_utils import delta_r, distance
 
-# def simple_energy(conf, params, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
-# def lennard_jones(conf, params, box, param_idxs, scale_matrix=None, cutoff=None):
+def lambda_to_w(lamb, lamb_flags, cutoff):
+    d4_i = np.where(lamb_flags == 1, lamb, 0.0)
+    d4_d = np.where(lamb_flags == -1, cutoff + lamb, 0.0)
+    d4 = d4_i + d4_d
+    return d4
+
+def convert_to_4d(x3, lamb, lamb_flags, cutoff):
+    d4 = lambda_to_w(lamb, lamb_flags, cutoff)
+    d4 = np.expand_dims(d4, axis=-1)
+    x4 = np.concatenate((x3, d4), axis=1)
+    return x4
+
+def nonbonded(
+    conf,
+    params,
+    lamb,
+    box,
+    es_param_idxs,
+    lj_param_idxs,
+    exclusion_idxs,
+    es_exclusion_scale_idxs,
+    lj_exclusion_scale_idxs,
+    cutoff,
+    lambda_idxs):
+
+    conf_4d = convert_to_4d(conf, lamb, lambda_idxs, cutoff)
+
+    lj = lennard_jones(conf_4d, params, box=box, param_idxs=lj_param_idxs, cutoff=cutoff)
+    lj_exc = lennard_jones_exclusion(conf_4d, params, box=box, param_idxs=lj_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=lj_exclusion_scale_idxs)
+    es =               simple_energy(conf_4d, params, box=box, param_idxs=es_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=es_exclusion_scale_idxs)
+
+    return lj - lj_exc + es
+
+
+
 def lennard_jones(conf, params, box, param_idxs, cutoff):
     """
     Implements a non-periodic LJ612 potential using the Lorentz−Berthelot combining
@@ -36,7 +69,7 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
         greater than cutoff is fully discarded.
     
     """
-    assert box is None
+    # assert box is None
     sig = params[param_idxs[:, 0]]
     eps = params[param_idxs[:, 1]]
 
@@ -84,13 +117,13 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
     # now we compute the exclusions
 def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
 
-    assert box is None
+    # assert box is None
 
     src_idxs = exclusions[:, 0]
     dst_idxs = exclusions[:, 1]
     ri = conf[src_idxs]
     rj = conf[dst_idxs]
-    dij = distance(ri, rj, None)
+    dij = distance(ri, rj, box)
 
     sig_idxs = param_idxs[:, 0] 
     sig_i = params[sig_idxs[src_idxs]]
@@ -120,18 +153,17 @@ def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, e
     return np.sum(eij_exc)
 
 
-def simple_energy(conf, params, param_idxs, cutoff):
-    """
-    Numerically stable implementation of the pairwise term:
+# def simple_energy(conf, params, param_idxs, cutoff):
+#     """
+#     Numerically stable implementation of the pairwise term:
     
-    eij = qi*qj/dij
+#     eij = qi*qj/dij
 
-    """
-    charges = params[param_idxs]
-    return inverse_energy(conf, charges, cutoff)
+#     """
+#     charges = params[param_idxs]
+#     return inverse_energy(conf, charges, cutoff)
 
-# def inverse_energy(conf, charges, cutoff, exclusions, exclusion_scale_idx):
-def simple_energy(conf, params, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
+def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
     """
     Numerically stable implementation of the pairwise term:
     
@@ -145,7 +177,7 @@ def simple_energy(conf, params, param_idxs, cutoff, exclusions, exclusion_scale_
     qij = np.multiply(qi, qj)
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
-    dij = distance(ri, rj, None)
+    dij = distance(ri, rj, box)
 
     # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
     keep_mask = 1 - np.eye(conf.shape[0])
@@ -160,7 +192,7 @@ def simple_energy(conf, params, param_idxs, cutoff, exclusions, exclusion_scale_
     dst_idxs = exclusions[:, 1]
     ri = conf[src_idxs]
     rj = conf[dst_idxs]
-    dij = distance(ri, rj, None)
+    dij = distance(ri, rj, box)
 
     qi = charges[src_idxs]
     qj = charges[dst_idxs]

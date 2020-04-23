@@ -16,10 +16,12 @@ private:
     int *d_exclusion_idxs_; // [E,2]
     int *d_charge_scale_idxs_; // [E]
     int *d_lj_scale_idxs_; // [E]
-
-    int N_limit_;
+    int *d_lambda_idxs_;
 
     double cutoff_;
+
+    double *d_tmp_coords_4d_;
+    double *d_tmp_grads_4d_;
 
     // these buffers can be in RealType as well
     // double *d_block_bounds_ctr_;
@@ -39,8 +41,8 @@ public:
         const std::vector<int> &exclusion_idxs, // [E,2]
         const std::vector<int> &charge_scale_idxs, // [E]
         const std::vector<int> &lj_scale_idxs, // [E]
-        double cutoff,
-        int atom_limit);
+        const std::vector<int> &lambda_idxs, // [E]
+        double cutoff);
 
     ~Nonbonded();
 
@@ -60,6 +62,21 @@ public:
         unsigned long long *out_coords,
         double *out_coords_tangents,
         double *out_params_tangents,
+        cudaStream_t stream
+    ) override;
+
+    virtual void execute_lambda_device(
+        const int N,
+        const int P,
+        const double *d_coords,
+        const double *d_coords_tangents,
+        const double *d_params,
+        const double lambda,
+        const double lambda_tangents,
+        unsigned long long *d_out_coords,
+        double *d_out_du_dl,
+        double *d_out_coords_tangents,
+        double *d_out_params_tangents,
         cudaStream_t stream
     ) override;
 
