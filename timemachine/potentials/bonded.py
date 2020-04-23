@@ -3,7 +3,7 @@ import jax.numpy as np
 from timemachine.potentials.jax_utils import distance, delta_r
 
 
-def harmonic_bond(conf, params, box, bond_idxs, param_idxs):
+def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs, lambda_idxs):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -27,12 +27,21 @@ def harmonic_bond(conf, params, box, bond_idxs, param_idxs):
         each element (k_idx, r_idx) maps into params for bond constants and ideal lengths
 
     """
+    assert lambda_idxs.shape[0] == bond_idxs.shape[0]
+
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
     dij = distance(ci, cj, box)
     kbs = params[param_idxs[:, 0]]
     r0s = params[param_idxs[:, 1]]
-    energy = np.sum(kbs/2 * np.power(dij - r0s, 2.0))
+
+    prefactors_c = np.where(lambda_idxs ==  0, 1, 0)
+    prefactors_a = np.where(lambda_idxs ==  1, lamb, 0)
+    prefactors_b = np.where(lambda_idxs == -1, 1-lamb, 0)
+    prefactors = np.stack([prefactors_a, prefactors_b, prefactors_c])
+    prefactors = np.sum(prefactors, axis=0)
+
+    energy = np.sum(prefactors * kbs/2 * np.power(dij - r0s, 2.0))
     return energy
 
 

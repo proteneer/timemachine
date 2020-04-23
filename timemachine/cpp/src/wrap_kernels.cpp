@@ -273,6 +273,42 @@ void declare_gradient(py::module &m, const char *typestr) {
         pyclass_name.c_str(),
         py::buffer_protocol(),
         py::dynamic_attr())
+    .def("execute_lambda", [](timemachine::Gradient<D> &grad,
+        const py::array_t<double, py::array::c_style> &coords,
+        const py::array_t<double, py::array::c_style> &params,
+        double lambda) -> py::tuple  {
+
+            const long unsigned int N = coords.shape()[0];
+            const long unsigned int DD = coords.shape()[1];
+
+            if(DD != D) throw std::runtime_error("D mismatch");
+
+            const long unsigned int P = params.shape()[0];
+
+            std::vector<unsigned long long> out_coords(N*DD);
+
+            double out_du_dl = -9999999999; //debug use, make sure its overwritten
+
+            grad.execute_lambda_host(
+                N,P,
+                coords.data(),
+                nullptr,
+                params.data(),
+                lambda,
+                0,
+                &out_coords[0],
+                &out_du_dl,
+                nullptr,
+                nullptr
+            );
+
+            py::array_t<double, py::array::c_style> py_out_coords({N, DD});
+            for(int i=0; i < out_coords.size(); i++) {
+                py_out_coords.mutable_data()[i] = static_cast<double>(static_cast<long long>(out_coords[i]))/FIXED_EXPONENT;
+            }
+
+            return py::make_tuple(py_out_coords, out_du_dl);
+    })
     .def("execute", [](timemachine::Gradient<D> &grad,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params) -> py::array_t<double, py::array::c_style>  {
@@ -348,16 +384,20 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
     )
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &bond_idxs,
-        const py::array_t<int, py::array::c_style> &param_idxs
+        const py::array_t<int, py::array::c_style> &param_idxs,
+        const py::array_t<int, py::array::c_style> &lambda_idxs
     ){
         std::vector<int> vec_bond_idxs(bond_idxs.size());
         std::memcpy(vec_bond_idxs.data(), bond_idxs.data(), vec_bond_idxs.size()*sizeof(int));
         std::vector<int> vec_param_idxs(param_idxs.size());
         std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
+        std::vector<int> vec_lambda_idxs(lambda_idxs.size());
+        std::memcpy(vec_lambda_idxs.data(), lambda_idxs.data(), vec_lambda_idxs.size()*sizeof(int));
 
         return new timemachine::HarmonicBond<RealType, D>(
             vec_bond_idxs,
-            vec_param_idxs
+            vec_param_idxs,
+            vec_lambda_idxs
         );
     }
     ));
@@ -539,29 +579,29 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_harmonic_bond<float, 4>(m, "f32_4d");
     declare_harmonic_bond<float, 3>(m, "f32_3d");
 
-    declare_harmonic_angle<double, 4>(m, "f64_4d");
-    declare_harmonic_angle<double, 3>(m, "f64_3d");
-    declare_harmonic_angle<float, 4>(m, "f32_4d");
-    declare_harmonic_angle<float, 3>(m, "f32_3d");
+    // declare_harmonic_angle<double, 4>(m, "f64_4d");
+    // declare_harmonic_angle<double, 3>(m, "f64_3d");
+    // declare_harmonic_angle<float, 4>(m, "f32_4d");
+    // declare_harmonic_angle<float, 3>(m, "f32_3d");
 
-    declare_periodic_torsion<double, 4>(m, "f64_4d");
-    declare_periodic_torsion<double, 3>(m, "f64_3d");
-    declare_periodic_torsion<float, 4>(m, "f32_4d");
-    declare_periodic_torsion<float, 3>(m, "f32_3d");
+    // declare_periodic_torsion<double, 4>(m, "f64_4d");
+    // declare_periodic_torsion<double, 3>(m, "f64_3d");
+    // declare_periodic_torsion<float, 4>(m, "f32_4d");
+    // declare_periodic_torsion<float, 3>(m, "f32_3d");
 
-    declare_nonbonded<double, 4>(m, "f64_4d");
-    declare_nonbonded<double, 3>(m, "f64_3d");
-    declare_nonbonded<float, 4>(m, "f32_4d");
-    declare_nonbonded<float, 3>(m, "f32_3d");
+    // declare_nonbonded<double, 4>(m, "f64_4d");
+    // declare_nonbonded<double, 3>(m, "f64_3d");
+    // declare_nonbonded<float, 4>(m, "f32_4d");
+    // declare_nonbonded<float, 3>(m, "f32_3d");
 
-    declare_gbsa<double, 4>(m, "f64_4d");
-    declare_gbsa<double, 3>(m, "f64_3d");
-    declare_gbsa<float, 4>(m, "f32_4d");
-    declare_gbsa<float, 3>(m, "f32_3d");
+    // declare_gbsa<double, 4>(m, "f64_4d");
+    // declare_gbsa<double, 3>(m, "f64_3d");
+    // declare_gbsa<float, 4>(m, "f32_4d");
+    // declare_gbsa<float, 3>(m, "f32_3d");
 
-    declare_stepper(m, "f64");
-    declare_basic_stepper(m, "f64");
-    declare_lambda_stepper(m, "f64");
-    declare_reversible_context(m, "f64_3d");
+    // declare_stepper(m, "f64");
+    // declare_basic_stepper(m, "f64");
+    // declare_lambda_stepper(m, "f64");
+    // declare_reversible_context(m, "f64_3d");
 
 }

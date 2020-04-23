@@ -42,7 +42,6 @@ public:
 
 };
 
-
 class BasicStepper : public Stepper {
 
 private:

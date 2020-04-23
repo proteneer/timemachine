@@ -194,33 +194,42 @@ def prepare_bonded_system(
     bond_idxs = np.array(bond_idxs, dtype=np.int32)
     params = np.concatenate([params, bond_params])
 
-    params = np.array([], dtype=np.float64);
-    angle_params = np.random.rand(P_angles).astype(np.float64)
-    angle_param_idxs = np.random.randint(low=0, high=P_angles, size=(A,2), dtype=np.int32) + len(params)
-    angle_idxs = []
-    for _ in range(A):
-        angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
-    angle_idxs = np.array(angle_idxs, dtype=np.int32)
-    params = np.concatenate([params, angle_params])
 
-    params = np.array([], dtype=np.float64);
-    torsion_params = np.random.rand(P_torsions).astype(np.float64)
-    torsion_param_idxs = np.random.randint(low=0, high=P_torsions, size=(T,3), dtype=np.int32) + len(params)
-    torsion_idxs = []
-    for _ in range(T):
-        torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
-    torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
+    bond_lambda_idxs = np.random.randint(
+        low=-1,
+        high=1,
+        size=(B),
+        dtype=np.int32
+    )
 
-    params = np.concatenate([params, torsion_params])
 
-    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, D, precision=precision)
-    harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs)
+    # params = np.array([], dtype=np.float64);
+    # angle_params = np.random.rand(P_angles).astype(np.float64)
+    # angle_param_idxs = np.random.randint(low=0, high=P_angles, size=(A,2), dtype=np.int32) + len(params)
+    # angle_idxs = []
+    # for _ in range(A):
+    #     angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
+    # angle_idxs = np.array(angle_idxs, dtype=np.int32)
+    # params = np.concatenate([params, angle_params])
 
-    custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, D, precision=precision)
-    harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs)
+    # params = np.array([], dtype=np.float64);
+    # torsion_params = np.random.rand(P_torsions).astype(np.float64)
+    # torsion_param_idxs = np.random.randint(low=0, high=P_torsions, size=(T,3), dtype=np.int32) + len(params)
+    # torsion_idxs = []
+    # for _ in range(T):
+    #     torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
+    # torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
 
-    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, D, precision=precision)
-    periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
+    # params = np.concatenate([params, torsion_params])
+
+    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, bond_lambda_idxs, D, precision=precision)
+    harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs, lambda_idxs=bond_lambda_idxs)
+
+    # custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, D, precision=precision)
+    # harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs)
+
+    # custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, D, precision=precision)
+    # periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
 
     return params, [harmonic_bond_fn], [custom_bonded]
 
@@ -291,7 +300,7 @@ class GradientTest(unittest.TestCase):
             else:
                 np.testing.assert_allclose(ref, test, rtol=5e-3)
 
-    def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
+    def compare_forces(self, x, params, lamb, ref_nrg_fn, custom_force, precision, rtol=None):
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
 
@@ -301,10 +310,10 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
-        test_dx = custom_force.execute(x, params)
+        test_dx, test_dl = custom_force.execute_lambda(x, params, lamb)
 
-        grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
-        ref_dx, ref_dp = grad_fn(x, params)
+        grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1, 2))
+        ref_dx, ref_dp, ref_dl = grad_fn(x, params, lamb)
 
         self.assert_equal_vectors(
             np.array(ref_dx),
@@ -312,37 +321,41 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
-        x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
-        params_tangent = np.zeros_like(params)
+        np.testing.assert_almost_equal(ref_dl, test_dl, rtol)
 
-        test_x_tangent, test_p_tangent = custom_force.execute_jvp(
-            x,
-            params,
-            x_tangent,
-            params_tangent
-        )
+        # assert 0
 
-        primals = (x, params)
-        tangents = (x_tangent, params_tangent)
+        # x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
+        # params_tangent = np.zeros_like(params)
 
-        _, t = jax.jvp(grad_fn, primals, tangents)
+        # test_x_tangent, test_p_tangent = custom_force.execute_jvp(
+        #     x,
+        #     params,
+        #     x_tangent,
+        #     params_tangent
+        # )
 
-        ref_p_tangent = t[1]
+        # primals = (x, params)
+        # tangents = (x_tangent, params_tangent)
 
-        self.assert_equal_vectors(
-            t[0],
-            test_x_tangent,
-            rtol,
-        )
+        # _, t = jax.jvp(grad_fn, primals, tangents)
 
-        # TBD compare relative to the *norm* of the group of similar derivatives.
-        # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
-        #     err = abs((r - tt)/r)
-        #     if err > 1e-4:
-        #         print(r_idx, err, r, tt)
+        # ref_p_tangent = t[1]
 
-        if precision == np.float64:
-            np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
-        else:
-            self.assert_param_derivs(ref_p_tangent, test_p_tangent)
+        # self.assert_equal_vectors(
+        #     t[0],
+        #     test_x_tangent,
+        #     rtol,
+        # )
+
+        # # TBD compare relative to the *norm* of the group of similar derivatives.
+        # # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
+        # #     err = abs((r - tt)/r)
+        # #     if err > 1e-4:
+        # #         print(r_idx, err, r, tt)
+
+        # if precision == np.float64:
+        #     np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
+        # else:
+        #     self.assert_param_derivs(ref_p_tangent, test_p_tangent)
 

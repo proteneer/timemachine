@@ -14,9 +14,12 @@ void __global__ k_harmonic_bond_inference(
     const int B,     // number of bonds
     const double *coords,  // [n, 3]
     const double *params,  // [p,]
+    const double lambda,
     const int *bond_idxs,    // [b, 2]
     const int *param_idxs,   // [b, 2]
-    unsigned long long *grad_coords
+    const int *lambda_idxs,
+    unsigned long long *grad_coords,
+    double *du_dl
 ) {
 
     const auto b_idx = blockDim.x*blockIdx.x + threadIdx.x;
@@ -45,11 +48,31 @@ void __global__ k_harmonic_bond_inference(
     RealType dij = sqrt(d2ij);
     RealType db = dij - b0;
 
+    // not used
+    // RealType bond_nrg = prefactor*(kb/2)*db*db;
+
+    RealType prefactor;
+    RealType prefactor_grad;
+    if(lambda_idxs[b_idx] == 0) {
+        prefactor = 1;
+        prefactor_grad = 0;
+    } else if(lambda_idxs[b_idx] == 1) {
+        prefactor = lambda;
+        prefactor_grad = 1;
+    } else if(lambda_idxs[b_idx] == -1) {
+        prefactor = 1-lambda;
+        prefactor_grad = -1;
+    };
+
     for(int d=0; d < MAXDIM; d++) {
-        RealType grad_delta = kb*db*dx[d]/dij;
+        RealType grad_delta = prefactor*kb*db*dx[d]/dij;
         atomicAdd(grad_coords + src_idx*D + d, static_cast<unsigned long long>((long long) (grad_delta*FIXED_EXPONENT)));
         atomicAdd(grad_coords + dst_idx*D + d, static_cast<unsigned long long>((long long) (-grad_delta*FIXED_EXPONENT)));
     }
+
+    RealType bond_du_dl = prefactor_grad*(kb/2)*db*db;
+
+    atomicAdd(du_dl, bond_du_dl);
 
 }
 
@@ -60,9 +83,12 @@ void __global__ k_harmonic_bond_jvp(
     const double *coords,  
     const double *coords_tangent,  
     const double *params,  // [p,]
+    const double lambda_primal,
+    const double lambda_tangent,
     const int *bond_idxs,    // [b, 2]
     const int *param_idxs,   // [b, 2]
-    double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
+    const int *lambda_idxs,
+    double *grad_coords_tangents,
     double *grad_params_tangents
 ) {
 
@@ -94,14 +120,25 @@ void __global__ k_harmonic_bond_jvp(
     Surreal<RealType> dij = sqrt(d2ij);
     Surreal<RealType> db = dij - b0;
 
+    Surreal<RealType> lambda(lambda_primal, lambda_tangent);
+
+    Surreal<RealType> prefactor;
+    if(lambda_idxs[b_idx] == 0) {
+        prefactor = Surreal<RealType>(1, 0);
+    } else if(lambda_idxs[b_idx] == 1) {
+        prefactor = lambda;
+    } else if(lambda_idxs[b_idx] == -1) {
+        prefactor = 1-lambda;
+    };
+
     for(int d=0; d < MAXDIM; d++) {
-        Surreal<RealType> grad_delta = kb*db*dx[d]/dij;
+        Surreal<RealType> grad_delta = prefactor*kb*db*dx[d]/dij;
         atomicAdd(grad_coords_tangents + src_idx*D + d, grad_delta.imag);
         atomicAdd(grad_coords_tangents + dst_idx*D + d, -grad_delta.imag);
     }
 
-    atomicAdd(grad_params_tangents + kb_idx, (0.5*db*db).imag);
-    atomicAdd(grad_params_tangents + b0_idx, (-kb*db).imag);
+    atomicAdd(grad_params_tangents + kb_idx, (prefactor*0.5*db*db).imag);
+    atomicAdd(grad_params_tangents + b0_idx, (-prefactor*kb*db).imag);
 
 }
 
