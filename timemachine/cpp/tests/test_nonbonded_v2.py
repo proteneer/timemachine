@@ -190,12 +190,9 @@ class TestNonbonded(GradientTest):
 
         for precision, rtol in [(np.float32, 2e-5), (np.float64, 5e-10)]:
 
-            print("PRECISION", precision)
             x = self.get_water_coords(dim)
             E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
             for cutoff in [1000.0, 0.9, 0.5, 0.001]:
-
-                print("cutoff", cutoff)
 
                 params, ref_forces, test_forces = prepare_nonbonded_system(
                     x,
@@ -208,7 +205,6 @@ class TestNonbonded(GradientTest):
                     cutoff=cutoff,
                     precision=precision
                 )
-
 
                 for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
 
