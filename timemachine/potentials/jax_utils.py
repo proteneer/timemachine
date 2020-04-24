@@ -1,5 +1,18 @@
 import jax.numpy as np
 
+
+def lambda_to_w(lamb, lamb_flags, cutoff):
+    d4_i = np.where(lamb_flags == 1, lamb, 0.0)
+    d4_d = np.where(lamb_flags == -1, cutoff + lamb, 0.0)
+    d4 = d4_i + d4_d
+    return d4
+
+def convert_to_4d(x3, lamb, lamb_flags, cutoff):
+    d4 = lambda_to_w(lamb, lamb_flags, cutoff)
+    d4 = np.expand_dims(d4, axis=-1)
+    x4 = np.concatenate((x3, d4), axis=1)
+    return x4
+
 def rescale_coordinates(
     conf,
     indices,

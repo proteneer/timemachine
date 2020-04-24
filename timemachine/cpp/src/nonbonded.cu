@@ -58,6 +58,7 @@ Nonbonded<RealType, D>::Nonbonded(
     gpuErrchk(cudaMalloc(&d_lj_param_idxs_, N_*2*sizeof(*d_lj_param_idxs_)));
     gpuErrchk(cudaMemcpy(d_lj_param_idxs_, &lj_param_idxs[0], N_*2*sizeof(*d_lj_param_idxs_), cudaMemcpyHostToDevice));
 
+    // REMOVE ME
     gpuErrchk(cudaMalloc(&d_tmp_coords_4d_, N_*4*sizeof(d_tmp_coords_4d_)));
     gpuErrchk(cudaMalloc(&d_tmp_grads_4d_, N_*4*sizeof(d_tmp_grads_4d_)));
 

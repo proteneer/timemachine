@@ -596,6 +596,7 @@ void declare_gbsa(py::module &m, const char *typestr) {
         const py::array_t<int, py::array::c_style> &charge_pi, // [N]
         const py::array_t<int, py::array::c_style> &radii_pi, // [N]
         const py::array_t<int, py::array::c_style> &scale_pi, // [N]
+        const py::array_t<int, py::array::c_style> &lambda_pi, // [N]
         double alpha,
         double beta,
         double gamma,
@@ -605,8 +606,7 @@ void declare_gbsa(py::module &m, const char *typestr) {
         double solvent_dielectric,
         double probe_radius,
         double cutoff_radii,
-        double cutoff_force,
-        int N_limit
+        double cutoff_force
     ){
         std::vector<int> charge_param_idxs(charge_pi.size());
         std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
@@ -614,11 +614,15 @@ void declare_gbsa(py::module &m, const char *typestr) {
         std::memcpy(atomic_radii_idxs.data(), radii_pi.data(), radii_pi.size()*sizeof(int));
         std::vector<int> scale_factor_idxs(scale_pi.size());
         std::memcpy(scale_factor_idxs.data(), scale_pi.data(), scale_pi.size()*sizeof(int));
+        std::vector<int> lambda_idxs(lambda_pi.size());
+        std::memcpy(lambda_idxs.data(), lambda_pi.data(), lambda_pi.size()*sizeof(int));
+
 
         return new timemachine::GBSA<RealType, D>(
             charge_param_idxs, // [N]
             atomic_radii_idxs, // [N]
             scale_factor_idxs, // 
+            lambda_idxs,
             alpha,
             beta,
             gamma,
@@ -628,8 +632,7 @@ void declare_gbsa(py::module &m, const char *typestr) {
             solvent_dielectric,
             probe_radius,
             cutoff_radii,
-            cutoff_force,
-            N_limit
+            cutoff_force
         );
     }
     ));
@@ -661,10 +664,10 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded<float, 4>(m, "f32_4d");
     declare_nonbonded<float, 3>(m, "f32_3d");
 
-    // declare_gbsa<double, 4>(m, "f64_4d");
-    // declare_gbsa<double, 3>(m, "f64_3d");
-    // declare_gbsa<float, 4>(m, "f32_4d");
-    // declare_gbsa<float, 3>(m, "f32_3d");
+    declare_gbsa<double, 4>(m, "f64_4d");
+    declare_gbsa<double, 3>(m, "f64_3d");
+    declare_gbsa<float, 4>(m, "f32_4d");
+    declare_gbsa<float, 3>(m, "f32_3d");
 
     declare_stepper(m, "f64");
     declare_alchemical_stepper(m, "f64");

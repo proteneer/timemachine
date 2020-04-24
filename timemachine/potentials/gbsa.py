@@ -3,8 +3,7 @@
 
 import jax.numpy as np
 from jax import grad, jit
-
-from timemachine.potentials.jax_utils import delta_r, distance
+from timemachine.potentials.jax_utils import delta_r, distance, lambda_to_w, convert_to_4d
 
 def step(x):
     # return (x > 0)
@@ -13,6 +12,8 @@ def step(x):
 def gbsa_obc(
     coords,
     params,
+    lamb,
+    box,
     charge_idxs,
     radii_idxs,
     scale_idxs,
@@ -21,20 +22,26 @@ def gbsa_obc(
     gamma,
     cutoff_radii,
     cutoff_force,
+    lambda_idxs,
     dielectric_offset=0.009,
     surface_tension=28.3919551,
     solute_dielectric=1.0,
     solvent_dielectric=78.5,
     probe_radius=0.14):
-    """Replacing for-loops with vectorized operations"""
+
+    assert cutoff_radii == cutoff_force
+
+    coords_4d = convert_to_4d(coords, lamb, lambda_idxs, cutoff_radii)
+
     N = len(radii_idxs)
 
     radii = params[radii_idxs]
     scales = params[scale_idxs]
 
-    ri = np.expand_dims(coords, 0)
-    rj = np.expand_dims(coords, 1)
-    dij = distance(ri, rj, None)
+    ri = np.expand_dims(coords_4d, 0)
+    rj = np.expand_dims(coords_4d, 1)
+
+    dij = distance(ri, rj, box)
 
     eye = np.eye(N, dtype=dij.dtype)
 
