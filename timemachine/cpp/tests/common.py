@@ -357,40 +357,43 @@ class GradientTest(unittest.TestCase):
 
         # assert 0
 
-        # x_tangent = np.random.rand(N, D).astype(np.float64)
-        # params_tangent = np.zeros_like(params)
-        # lamb_tangent = np.random.rand()
+        x_tangent = np.random.rand(N, D).astype(np.float64)
+        params_tangent = np.zeros_like(params)
+        lamb_tangent = np.random.rand()
 
-        # test_x_tangent, test_p_tangent = custom_force.execute_lambda_jvp(
-        #     x,
-        #     params,
-        #     lamb,
-        #     x_tangent,
-        #     params_tangent,
-        #     lamb_tangent
-        # )
+        test_x_tangent, test_p_tangent = custom_force.execute_lambda_jvp(
+            x,
+            params,
+            lamb,
+            x_tangent,
+            params_tangent,
+            lamb_tangent
+        )
 
-        # primals = (x, params, lamb)
-        # tangents = (x_tangent, params_tangent, lamb_tangent)
+        primals = (x, params, lamb)
+        tangents = (x_tangent, params_tangent, lamb_tangent)
 
-        # _, t = jax.jvp(grad_fn, primals, tangents)
+        _, t = jax.jvp(grad_fn, primals, tangents)
 
-        # ref_p_tangent = t[1]
+        ref_p_tangent = t[1]
 
-        # self.assert_equal_vectors(
-        #     t[0],
-        #     test_x_tangent,
-        #     rtol,
-        # )
+        print("HESSIAN")
+        self.assert_equal_vectors(
+            t[0],
+            test_x_tangent,
+            rtol,
+        )
 
-        # # TBD compare relative to the *norm* of the group of similar derivatives.
-        # # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
-        # #     err = abs((r - tt)/r)
-        # #     if err > 1e-4:
-        # #         print(r_idx, err, r, tt)
 
-        # if precision == np.float64:
-        #     np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
-        # else:
-        #     self.assert_param_derivs(ref_p_tangent, test_p_tangent)
+        print("MVP")
+        # TBD compare relative to the *norm* of the group of similar derivatives.
+        # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
+        #     err = abs((r - tt)/r)
+        #     if err > 1e-4:
+        #         print(r_idx, err, r, tt)
+
+        if precision == np.float64:
+            np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
+        else:
+            self.assert_param_derivs(ref_p_tangent, test_p_tangent)
 

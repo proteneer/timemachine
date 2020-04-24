@@ -7,6 +7,7 @@
 #include "gpu_utils.cuh"
 #include "math_utils.cuh"
 #include "k_gbsa_lambda.cuh"
+#include "k_gbsa_lambda_jvp.cuh"
 // #include "k_gbsa_jvp.cuh"
 
 namespace timemachine {
@@ -241,108 +242,117 @@ void GBSA<RealType, D>::execute_lambda_device(
 
     } else {
 
-        // // std::cout << "exec GB JVP" << std::endl;
+        // std::cout << "exec GB JVP" << std::endl;
 
-        // gpuErrchk(cudaMemsetAsync(d_born_radii_buffer_jvp_, 0, N*sizeof(*d_born_radii_buffer_jvp_), stream));
-        // gpuErrchk(cudaMemsetAsync(d_obc_buffer_jvp_, 0, N*sizeof(*d_obc_buffer_jvp_), stream));
-        // gpuErrchk(cudaMemsetAsync(d_obc_ri_buffer_jvp_, 0, N*sizeof(*d_obc_ri_buffer_jvp_), stream));
-        // gpuErrchk(cudaMemsetAsync(d_born_forces_buffer_jvp_, 0, N*sizeof(*d_born_forces_buffer_jvp_), stream));
+        gpuErrchk(cudaMemsetAsync(d_born_radii_buffer_jvp_, 0, N*sizeof(*d_born_radii_buffer_jvp_), stream));
+        gpuErrchk(cudaMemsetAsync(d_obc_buffer_jvp_, 0, N*sizeof(*d_obc_buffer_jvp_), stream));
+        gpuErrchk(cudaMemsetAsync(d_obc_ri_buffer_jvp_, 0, N*sizeof(*d_obc_ri_buffer_jvp_), stream));
+        gpuErrchk(cudaMemsetAsync(d_born_forces_buffer_jvp_, 0, N*sizeof(*d_born_forces_buffer_jvp_), stream));
 
-        // k_compute_born_radii_gpu_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-        //     N_,
-        //     d_coords,
-        //     d_coords_tangents,
-        //     d_params,
-        //     d_atomic_radii_idxs_,
-        //     d_scale_factor_idxs_,
-        //     dielectric_offset_,
-        //     cutoff_radii_,
-        //     nblist_.get_block_bounds_ctr(),
-        //     nblist_.get_block_bounds_ext(),
-        //     d_born_radii_buffer_jvp_
-        // );
+        k_compute_born_radii_gpu_jvp<RealType><<<dimGrid, tpb, 0, stream>>>(
+            N_,
+            d_coords,
+            d_coords_tangents,
+            d_params,
+            lambda,
+            lambda_tangent,
+            d_lambda_idxs_,
+            d_atomic_radii_idxs_,
+            d_scale_factor_idxs_,
+            dielectric_offset_,
+            cutoff_radii_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
+            d_born_radii_buffer_jvp_
+        );
 
-        // // cudaDeviceSynchronize();
-        // gpuErrchk(cudaPeekAtLastError());
+        // cudaDeviceSynchronize();
+        gpuErrchk(cudaPeekAtLastError());
 
-        // k_reduce_born_radii_jvp<<<B, tpb, 0, stream>>>(
-        //   N_,
-        //   d_params,
-        //   d_atomic_radii_idxs_,
-        //   dielectric_offset_,
-        //   alpha_,
-        //   beta_,
-        //   gamma_,
-        //   d_born_radii_buffer_jvp_,
-        //   d_obc_buffer_jvp_,
-        //   d_obc_ri_buffer_jvp_
-        // );
+        k_reduce_born_radii_jvp<<<B, tpb, 0, stream>>>(
+          N_,
+          d_params,
+          d_atomic_radii_idxs_,
+          dielectric_offset_,
+          alpha_,
+          beta_,
+          gamma_,
+          d_born_radii_buffer_jvp_,
+          d_obc_buffer_jvp_,
+          d_obc_ri_buffer_jvp_
+        );
 
-        // // cudaDeviceSynchronize();
-        // gpuErrchk(cudaPeekAtLastError());
+        // cudaDeviceSynchronize();
+        gpuErrchk(cudaPeekAtLastError());
 
-        // k_compute_born_first_loop_gpu_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-        //     N_,
-        //     d_coords,
-        //     d_coords_tangents,
-        //     d_params,
-        //     d_charge_param_idxs_,
-        //     d_born_radii_buffer_jvp_,
-        //     prefactor,
-        //     cutoff_force_,
-        //     nblist_.get_block_bounds_ctr(),
-        //     nblist_.get_block_bounds_ext(),
-        //     d_born_forces_buffer_jvp_, // output
-        //     d_out_coords_tangents, // ouput
-        //     d_out_params_tangents // ouput
-        // );
+        k_compute_born_first_loop_gpu_jvp<RealType><<<dimGrid, tpb, 0, stream>>>(
+            N_,
+            d_coords,
+            d_coords_tangents,
+            d_params,
+            lambda,
+            lambda_tangent,
+            d_lambda_idxs_,
+            d_charge_param_idxs_,
+            d_born_radii_buffer_jvp_,
+            prefactor,
+            cutoff_force_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
+            d_born_forces_buffer_jvp_, // output
+            d_out_coords_tangents, // ouput
+            d_out_params_tangents // ouput
+        );
 
-        // // cudaDeviceSynchronize();
-        // gpuErrchk(cudaPeekAtLastError());
+        // cudaDeviceSynchronize();
+        gpuErrchk(cudaPeekAtLastError());
 
-        // k_reduce_born_forces_jvp<<<B, tpb, 0, stream>>>(
-        //     N_,
-        //     d_params,
-        //     d_atomic_radii_idxs_,
-        //     d_born_radii_buffer_jvp_,
-        //     d_obc_buffer_jvp_,
-        //     d_obc_ri_buffer_jvp_,
-        //     surface_tension_,
-        //     probe_radius_,
-        //     d_born_forces_buffer_jvp_,
-        //     d_out_params_tangents
-        // );
+        k_reduce_born_forces_jvp<<<B, tpb, 0, stream>>>(
+            N_,
+            d_params,
+            d_atomic_radii_idxs_,
+            d_born_radii_buffer_jvp_,
+            d_obc_buffer_jvp_,
+            d_obc_ri_buffer_jvp_,
+            surface_tension_,
+            probe_radius_,
+            d_born_forces_buffer_jvp_,
+            d_out_params_tangents
+        );
 
-        // // cudaDeviceSynchronize();
-        // gpuErrchk(cudaPeekAtLastError());
+        // cudaDeviceSynchronize();
+        gpuErrchk(cudaPeekAtLastError());
 
 
-        // // auto start = std::chrono::high_resolution_clock::now();
-        // k_compute_born_energy_and_forces_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-        //     N_,
-        //     d_coords,
-        //     d_coords_tangents,
-        //     d_params,
-        //     d_atomic_radii_idxs_,
-        //     d_scale_factor_idxs_,
-        //     d_born_radii_buffer_jvp_,
-        //     d_obc_buffer_jvp_,
-        //     d_obc_ri_buffer_jvp_,
-        //     dielectric_offset_,
-        //     cutoff_force_,
-        //     nblist_.get_block_bounds_ctr(),
-        //     nblist_.get_block_bounds_ext(),
-        //     d_born_forces_buffer_jvp_,
-        //     d_out_coords_tangents,
-        //     d_out_params_tangents
-        // );
+        // auto start = std::chrono::high_resolution_clock::now();
+        k_compute_born_energy_and_forces_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
+            N_,
+            d_coords,
+            d_coords_tangents,
+            d_params,
+            lambda,
+            lambda_tangent,
+            d_lambda_idxs_,
+            d_atomic_radii_idxs_,
+            d_scale_factor_idxs_,
+            d_born_radii_buffer_jvp_,
+            d_obc_buffer_jvp_,
+            d_obc_ri_buffer_jvp_,
+            dielectric_offset_,
+            cutoff_force_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
+            d_born_forces_buffer_jvp_,
+            d_out_coords_tangents,
+            d_out_params_tangents
+        );
 
-        // // cudaDeviceSynchronize();
-        // gpuErrchk(cudaPeekAtLastError());
+        // cudaDeviceSynchronize();
+        gpuErrchk(cudaPeekAtLastError());
 
-        // // auto finish = std::chrono::high_resolution_clock::now();
-        // // std::chrono::duration<double> elapsed = finish - start;
-        // // std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
+        // auto finish = std::chrono::high_resolution_clock::now();
+        // std::chrono::duration<double> elapsed = finish - start;
+        // std::cout << "Nonbonded JVP Elapsed time: " << elapsed.count() << " s\n";
 
 
     }
