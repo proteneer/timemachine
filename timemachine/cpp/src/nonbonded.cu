@@ -84,7 +84,7 @@ void Nonbonded<RealType, D>::execute_lambda_device(
     const double *d_coords_tangents,
     const double *d_params,
     const double lambda,
-    const double lambda_tangents,
+    const double lambda_tangent,
     unsigned long long *d_out_coords,
     double *d_out_du_dl,
     double *d_out_coords_tangents,
@@ -161,42 +161,48 @@ void Nonbonded<RealType, D>::execute_lambda_device(
     } else {
 
         // // do *not* accumulate tangents here
-        // k_nonbonded_jvp<RealType, D><<<dimGrid, tpb, 0, stream>>>(
-        //     N_limit_,
-        //     d_coords,
-        //     d_coords_tangents,
-        //     d_params,
-        //     d_charge_param_idxs_,
-        //     d_lj_param_idxs_,
-        //     cutoff_,
-        //     nblist_.get_block_bounds_ctr(),
-        //     nblist_.get_block_bounds_ext(),
-        //     d_out_coords_tangents,
-        //     d_out_params_tangents
-        // );
+        k_nonbonded_jvp<RealType><<<dimGrid, tpb, 0, stream>>>(
+            N_,
+            d_coords,
+            d_coords_tangents,
+            d_params,
+            lambda,
+            lambda_tangent,
+            d_lambda_idxs_,
+            d_charge_param_idxs_,
+            d_lj_param_idxs_,
+            cutoff_,
+            nblist_.get_block_bounds_ctr(),
+            nblist_.get_block_bounds_ext(),
+            d_out_coords_tangents,
+            d_out_params_tangents
+        );
 
-        // // cudaDeviceSynchronize();
-        // gpuErrchk(cudaPeekAtLastError());
+        // cudaDeviceSynchronize();
+        gpuErrchk(cudaPeekAtLastError());
 
-        // if(E_ > 0) {
-        //     k_nonbonded_exclusion_jvp<RealType, D><<<dimGridExclusions, tpb, 0, stream>>>(
-        //         E_,
-        //         d_coords,
-        //         d_coords_tangents,
-        //         d_params,
-        //         d_exclusion_idxs_,
-        //         d_charge_scale_idxs_,
-        //         d_lj_scale_idxs_,
-        //         d_charge_param_idxs_,
-        //         d_lj_param_idxs_,
-        //         cutoff_,
-        //         d_out_coords_tangents,
-        //         d_out_params_tangents
-        //     );            
+        if(E_ > 0) {
+            k_nonbonded_exclusion_jvp<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
+                E_,
+                d_coords,
+                d_coords_tangents,
+                d_params,
+                lambda,
+                lambda_tangent,
+                d_lambda_idxs_,
+                d_exclusion_idxs_,
+                d_charge_scale_idxs_,
+                d_lj_scale_idxs_,
+                d_charge_param_idxs_,
+                d_lj_param_idxs_,
+                cutoff_,
+                d_out_coords_tangents,
+                d_out_params_tangents
+            );            
 
-        //     // cudaDeviceSynchronize();
-        //     gpuErrchk(cudaPeekAtLastError());
-        // }
+            // cudaDeviceSynchronize();
+            gpuErrchk(cudaPeekAtLastError());
+        }
 
 
         // auto finish = std::chrono::high_resolution_clock::now();

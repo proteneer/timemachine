@@ -385,29 +385,6 @@ void __global__ k_nonbonded_exclusion_jvp(
     }
 
     if(d2ij.real < cutoff*cutoff) {
-        // Surreal<RealType> dij = sqrt(d2ij);
-        // Surreal<RealType> inv_dij = Surreal<RealType>(1.0)/dij;
-        // Surreal<RealType> inv_d2ij = inv_dij*inv_dij;
-        // Surreal<RealType> inv_d3ij = inv_d2ij*inv_dij;
-        // Surreal<RealType> inv_d4ij = inv_d3ij*inv_dij;
-        // Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
-        // Surreal<RealType> inv_d7ij = inv_d4ij*inv_d3ij;
-
-        // Surreal<RealType> es_grad_prefactor = qi*qj*inv_d3ij;
-
-        // // lennard jones force
-        // RealType eps_ij = sqrt(eps_i*eps_j);
-        // RealType sig_ij = (sig_i+sig_j)/2;
-
-        // RealType sig2 = sig_ij*sig_ij;
-        // RealType sig4 = sig2*sig2;
-        // RealType sig5 = sig4*sig_ij;
-        // RealType sig6 = sig4*sig2;
-        // RealType sig12 = sig6*sig6;
-
-        // Surreal<RealType> sig12_rij7 = sig12*inv_d7ij*inv_d7ij;
-        // Surreal<RealType> sig6_rij4 = sig6*inv_d4ij*inv_d4ij;
-        // Surreal<RealType> lj_grad_prefactor = 24*eps_ij*(sig12_rij7*2 - sig6_rij4);
 
         Surreal<RealType> inv_dij = rsqrt(d2ij);
         Surreal<RealType> inv_d2ij = 1.0/d2ij;

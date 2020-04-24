@@ -90,6 +90,7 @@ __device__ inline void atomicAddOffsetSplit(Surreal<PtrType> *base_ptr, const un
 
 #endif
 
+
 template <typename RealType>
 DECL bool operator>(const Surreal<RealType> &l, const Surreal<RealType> &r) {
     return l.real > r.real;
@@ -447,4 +448,9 @@ DECL Surreal<RealType> exp(const Surreal<RealType>& z) {
         expv,
         z.imag*expv
     );
+}
+
+template <typename RealType>
+DECL Surreal<RealType> floor(const Surreal<RealType>& z) {
+    return Surreal<RealType>(floor(z.real),0.);
 }
