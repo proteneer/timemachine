@@ -82,6 +82,7 @@ GBSA<RealType, D>::~GBSA() {
   gpuErrchk(cudaFree(d_charge_param_idxs_));
   gpuErrchk(cudaFree(d_atomic_radii_idxs_));
   gpuErrchk(cudaFree(d_scale_factor_idxs_));
+  gpuErrchk(cudaFree(d_lambda_idxs_));
 
   gpuErrchk(cudaFree(d_born_psi_buffer_));
   gpuErrchk(cudaFree(d_born_radii_buffer_));

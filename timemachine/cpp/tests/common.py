@@ -227,7 +227,7 @@ def prepare_bonded_system(
     params = np.concatenate([params, bond_params])
     bond_lambda_idxs = np.random.randint(
         low=-1,
-        high=1,
+        high=2,
         size=(B),
         dtype=np.int32
     )
@@ -243,19 +243,27 @@ def prepare_bonded_system(
     params = np.concatenate([params, angle_params])
     angle_lambda_idxs = np.random.randint(
         low=-1,
-        high=1,
+        high=2,
         size=(A),
         dtype=np.int32
     )
-    # params = np.array([], dtype=np.float64);
-    # torsion_params = np.random.rand(P_torsions).astype(np.float64)
-    # torsion_param_idxs = np.random.randint(low=0, high=P_torsions, size=(T,3), dtype=np.int32) + len(params)
-    # torsion_idxs = []
-    # for _ in range(T):
-    #     torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
-    # torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
 
-    # params = np.concatenate([params, torsion_params])
+    params = np.array([], dtype=np.float64);
+    torsion_params = np.random.rand(P_torsions).astype(np.float64)
+    torsion_param_idxs = np.random.randint(low=0, high=P_torsions, size=(T,3), dtype=np.int32) + len(params)
+    torsion_idxs = []
+    for _ in range(T):
+        torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
+    torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
+    params = np.concatenate([params, torsion_params])
+    torsion_lambda_idxs = np.random.randint(
+        low=-1,
+        high=2,
+        size=(T),
+        dtype=np.int32
+    )
+
+    # torsion_lambda_idxs = np.zeros_like(torsion_lambda_idxs)
 
     custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, bond_lambda_idxs, D, precision=precision)
     harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs, lambda_idxs=bond_lambda_idxs)
@@ -263,10 +271,11 @@ def prepare_bonded_system(
     custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, angle_lambda_idxs, D, precision=precision)
     harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs, lambda_idxs=angle_lambda_idxs)
 
-    # custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, D, precision=precision)
-    # periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
+    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, torsion_lambda_idxs, D, precision=precision)
+    periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs, lambda_idxs=torsion_lambda_idxs)
 
-    return params, [harmonic_bond_fn, harmonic_angle_fn], [custom_bonded, custom_angles]
+    return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
+    # return params, [periodic_torsion_fn], [custom_torsions]
 
 def hilbert_sort(conf, D):
     hc = HilbertCurve(64, D)
@@ -356,6 +365,7 @@ class GradientTest(unittest.TestCase):
             np.array(test_dx),
             rtol,
         )
+
         np.testing.assert_almost_equal(ref_dl, test_dl, rtol)
 
         # assert 0
@@ -380,15 +390,12 @@ class GradientTest(unittest.TestCase):
 
         ref_p_tangent = t[1]
 
-        print("HESSIAN")
         self.assert_equal_vectors(
             t[0],
             test_x_tangent,
             rtol,
         )
 
-
-        print("MVP")
         # TBD compare relative to the *norm* of the group of similar derivatives.
         # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
         #     err = abs((r - tt)/r)

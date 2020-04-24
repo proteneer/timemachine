@@ -126,7 +126,7 @@ void __global__ k_harmonic_bond_jvp(
     if(lambda_idxs[b_idx] == 0) {
         prefactor = Surreal<RealType>(1, 0);
     } else if(lambda_idxs[b_idx] == 1) {
-        prefactor = lambda;
+    prefactor = lambda;
     } else if(lambda_idxs[b_idx] == -1) {
         prefactor = 1-lambda;
     };
@@ -357,9 +357,12 @@ void __global__ k_periodic_torsion_inference(
     const int T,     // number of bonds
     const double *coords,  // [n, 3]
     const double *params,  // [p,]
+    const double lambda,
+    const int *lambda_idxs,
     const int *torsion_idxs,    // [b, 4]
     const int *param_idxs,   // [b, 2]
-    unsigned long long *grad_coords
+    unsigned long long *grad_coords,
+    double *du_dl
 ) {
 
     const auto t_idx = blockDim.x*blockIdx.x + threadIdx.x;
@@ -437,7 +440,20 @@ void __global__ k_periodic_torsion_inference(
     RealType phase = params[phase_idx];
     RealType period = params[period_idx];
 
-    RealType prefactor = kt*sin(period*angle - phase)*period;
+    RealType prefactor;
+    RealType prefactor_grad;
+    if(lambda_idxs[t_idx] == 0) {
+        prefactor = 1;
+        prefactor_grad = 0;
+    } else if(lambda_idxs[t_idx] == 1) {
+        prefactor = lambda;
+        prefactor_grad = 1;
+    } else if(lambda_idxs[t_idx] == -1) {
+        prefactor = 1-lambda;
+        prefactor_grad = -1;
+    };
+
+    prefactor *= kt*sin(period*angle - phase)*period;
 
     for(int d=0; d < 3; d++) {
         atomicAdd(grad_coords + i_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR0[d] * prefactor * FIXED_EXPONENT)));
@@ -445,6 +461,10 @@ void __global__ k_periodic_torsion_inference(
         atomicAdd(grad_coords + k_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR2[d] * prefactor * FIXED_EXPONENT)));
         atomicAdd(grad_coords + l_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR3[d] * prefactor * FIXED_EXPONENT)));
     }
+
+    RealType tosion_du_dl = prefactor_grad*kt*(1+cos(period*angle - phase));
+
+    atomicAdd(du_dl, tosion_du_dl);
 
 }
 
@@ -455,6 +475,9 @@ void __global__ k_periodic_torsion_jvp(
     const double *coords,  // [n, 3]
     const double *coords_tangent, 
     const double *params,  // [p,]
+    const double lambda_primal,
+    const double lambda_tangent,
+    const int *lambda_idxs,
     const int *torsion_idxs,    // [b, 4]
     const int *param_idxs,   // [b, 2]
     double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
@@ -536,18 +559,32 @@ void __global__ k_periodic_torsion_jvp(
     RealType phase = params[phase_idx];
     RealType period = params[period_idx];
 
-    Surreal<RealType> prefactor = kt*sin(period*angle - phase)*period;
+    Surreal<RealType> lambda(lambda_primal, lambda_tangent);
+    Surreal<RealType> prefactor;
 
-    for(int d=0; d < 3; d++) {
-        atomicAdd(grad_coords_tangents + i_idx*D + d, (d_angle_dR0[d] * prefactor).imag);
-        atomicAdd(grad_coords_tangents + j_idx*D + d, (d_angle_dR1[d] * prefactor).imag);
-        atomicAdd(grad_coords_tangents + k_idx*D + d, (d_angle_dR2[d] * prefactor).imag);
-        atomicAdd(grad_coords_tangents + l_idx*D + d, (d_angle_dR3[d] * prefactor).imag);
+    if(lambda_idxs[t_idx] == 0) {
+        prefactor = Surreal<RealType>(1, 0);
+    } else if(lambda_idxs[t_idx] == 1) {
+        prefactor = lambda;
+    } else if(lambda_idxs[t_idx] == -1) {
+        prefactor = 1-lambda;
     }
 
-    Surreal<RealType> du_dkt = 1. + cos(period*angle - phase);
-    Surreal<RealType> du_dphase = kt*(1. + sin(period*angle - phase));
-    Surreal<RealType> du_dperiod = kt*(RealType(1.) - sin(period*angle - phase)*angle);
+    Surreal<RealType> grad = kt*sin(period*angle - phase)*period*prefactor;
+
+    for(int d=0; d < 3; d++) {
+        atomicAdd(grad_coords_tangents + i_idx*D + d, (d_angle_dR0[d] * grad).imag);
+        atomicAdd(grad_coords_tangents + j_idx*D + d, (d_angle_dR1[d] * grad).imag);
+        atomicAdd(grad_coords_tangents + k_idx*D + d, (d_angle_dR2[d] * grad).imag);
+        atomicAdd(grad_coords_tangents + l_idx*D + d, (d_angle_dR3[d] * grad).imag);
+    }
+
+
+    // RealType U = prefactor*kt*(1+cos(period*angle - phase));
+
+    Surreal<RealType> du_dkt = prefactor*(1 + cos(period*angle - phase));
+    Surreal<RealType> du_dphase = prefactor*kt*sin(period*angle - phase);
+    Surreal<RealType> du_dperiod = -prefactor*kt*sin(period*angle - phase)*angle;
 
     atomicAdd(grad_params_tangents + kt_idx, du_dkt.imag);
     atomicAdd(grad_params_tangents + phase_idx, du_dphase.imag);

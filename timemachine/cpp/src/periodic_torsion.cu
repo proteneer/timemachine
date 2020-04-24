@@ -11,7 +11,8 @@ namespace timemachine {
 template <typename RealType, int D>
 PeriodicTorsion<RealType, D>::PeriodicTorsion(
     const std::vector<int> &torsion_idxs, // [A, 4]
-    const std::vector<int> &param_idxs // [A, 3]
+    const std::vector<int> &param_idxs, // [A, 3]
+    const std::vector<int> &lambda_idxs
 ) : T_(torsion_idxs.size()/4) {
 
     if(torsion_idxs.size() % 4 != 0) {
@@ -28,6 +29,13 @@ PeriodicTorsion<RealType, D>::PeriodicTorsion(
         }
     }
 
+    if(lambda_idxs.size() != T_) {
+        throw std::runtime_error("lambda_idxs must have size T");
+    }
+
+    gpuErrchk(cudaMalloc(&d_lambda_idxs_, T_*sizeof(*d_lambda_idxs_)));
+    gpuErrchk(cudaMemcpy(d_lambda_idxs_, &lambda_idxs[0], T_*sizeof(*d_lambda_idxs_), cudaMemcpyHostToDevice));
+
     gpuErrchk(cudaMalloc(&d_torsion_idxs_, T_*4*sizeof(*d_torsion_idxs_)));
     gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], T_*4*sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
 
@@ -40,6 +48,7 @@ template <typename RealType, int D>
 PeriodicTorsion<RealType, D>::~PeriodicTorsion() {
     gpuErrchk(cudaFree(d_torsion_idxs_));
     gpuErrchk(cudaFree(d_param_idxs_));
+    gpuErrchk(cudaFree(d_lambda_idxs_));
 };
 
 template <typename RealType, int D>
@@ -55,6 +64,25 @@ void PeriodicTorsion<RealType, D>::execute_device(
     cudaStream_t stream
 ) {
 
+};
+
+
+template <typename RealType, int D>
+void PeriodicTorsion<RealType, D>::execute_lambda_device(
+    const int N,
+    const int P,
+    const double *d_coords,
+    const double *d_coords_tangents,
+    const double *d_params,
+    const double lambda,
+    const double lambda_tangent,
+    unsigned long long *d_out_coords,
+    double *d_out_du_dl,
+    double *d_out_coords_tangents,
+    double *d_out_params_tangents,
+    cudaStream_t stream
+) {
+
     int tpb = 32;
     int blocks = (T_+tpb-1)/tpb;
 
@@ -65,9 +93,12 @@ void PeriodicTorsion<RealType, D>::execute_device(
             T_,
             d_coords,
             d_params,
+            lambda,
+            d_lambda_idxs_,
             d_torsion_idxs_,
             d_param_idxs_,
-            d_out_coords
+            d_out_coords,
+            d_out_du_dl
         );
 
         cudaDeviceSynchronize();
@@ -85,6 +116,9 @@ void PeriodicTorsion<RealType, D>::execute_device(
             d_coords,
             d_coords_tangents,
             d_params,
+            lambda,
+            lambda_tangent,
+            d_lambda_idxs_,
             d_torsion_idxs_,
             d_param_idxs_,
             d_out_coords_tangents,
@@ -103,6 +137,7 @@ void PeriodicTorsion<RealType, D>::execute_device(
 
 
 };
+
 
 template class PeriodicTorsion<double, 4>;
 template class PeriodicTorsion<double, 3>;

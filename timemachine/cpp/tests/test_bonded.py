@@ -49,6 +49,7 @@ class TestBonded(GradientTest):
             )
 
             for lamb in [0.0, 0.4, 0.5, 1.0]:
+                print("LAMBDA", lamb)
                 for r, t in zip(ref_bonds, custom_bonds):
                     self.compare_forces(
                         x,
