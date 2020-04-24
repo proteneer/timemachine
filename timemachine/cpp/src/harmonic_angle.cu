@@ -11,7 +11,8 @@ namespace timemachine {
 template <typename RealType, int D>
 HarmonicAngle<RealType, D>::HarmonicAngle(
     const std::vector<int> &angle_idxs, // [A, 3]
-    const std::vector<int> &param_idxs // [A, 2]
+    const std::vector<int> &param_idxs, // [A, 2]
+    const std::vector<int> &lambda_idxs // [A]
 ) : A_(angle_idxs.size()/3) {
 
     if(angle_idxs.size() % 3 != 0) {
@@ -27,6 +28,14 @@ HarmonicAngle<RealType, D>::HarmonicAngle(
         }
     }
 
+    if(lambda_idxs.size() != A_) {
+        throw std::runtime_error("lambda_idxs must have size A");
+    }
+
+
+    gpuErrchk(cudaMalloc(&d_lambda_idxs_, A_*sizeof(*d_lambda_idxs_)));
+    gpuErrchk(cudaMemcpy(d_lambda_idxs_, &lambda_idxs[0], A_*sizeof(*d_lambda_idxs_), cudaMemcpyHostToDevice));
+
     gpuErrchk(cudaMalloc(&d_angle_idxs_, A_*3*sizeof(*d_angle_idxs_)));
     gpuErrchk(cudaMemcpy(d_angle_idxs_, &angle_idxs[0], A_*3*sizeof(*d_angle_idxs_), cudaMemcpyHostToDevice));
 
@@ -39,6 +48,7 @@ template <typename RealType, int D>
 HarmonicAngle<RealType, D>::~HarmonicAngle() {
     gpuErrchk(cudaFree(d_angle_idxs_));
     gpuErrchk(cudaFree(d_param_idxs_));
+    gpuErrchk(cudaFree(d_lambda_idxs_));
 };
 
 template <typename RealType, int D>
@@ -54,19 +64,90 @@ void HarmonicAngle<RealType, D>::execute_device(
     cudaStream_t stream
 ) {
 
+    // int tpb = 32;
+    // int blocks = (A_+tpb-1)/tpb;
+
+    // auto start = std::chrono::high_resolution_clock::now();
+    // if(d_coords_tangents == nullptr) {
+
+    //     k_harmonic_angle_inference<RealType, D><<<blocks, tpb, 0, stream>>>(
+    //         A_,
+    //         d_coords,
+    //         d_params,
+    //         d_angle_idxs_,
+    //         d_param_idxs_,
+    //         d_out_coords
+    //     );
+
+
+    //     gpuErrchk(cudaPeekAtLastError());
+
+    //     // cudaDeviceSynchronize();
+    //     // auto finish = std::chrono::high_resolution_clock::now();
+    //     // std::chrono::duration<double> elapsed = finish - start;
+    //     // std::cout << "HarmonicAngle Elapsed time: " << elapsed.count() << " s\n";
+
+    // } else {
+
+
+    //     k_harmonic_angle_jvp<RealType, D><<<blocks, tpb,  0, stream>>>(
+    //         A_,
+    //         d_coords,
+    //         d_coords_tangents,
+    //         d_params,
+    //         d_angle_idxs_,
+    //         d_param_idxs_,
+    //         d_out_coords_tangents,
+    //         d_out_params_tangents
+    //     );
+
+
+    //     gpuErrchk(cudaPeekAtLastError());
+
+    //     // cudaDeviceSynchronize();
+    //     // auto finish = std::chrono::high_resolution_clock::now();
+    //     // std::chrono::duration<double> elapsed = finish - start;
+    //     // std::cout << "HarmonicAngle JVP Elapsed time: " << elapsed.count() << " s\n";
+
+
+    // }
+
+
+};
+
+
+template <typename RealType, int D>
+void HarmonicAngle<RealType, D>::execute_lambda_device(
+    const int N,
+    const int P,
+    const double *d_coords,
+    const double *d_coords_tangents,
+    const double *d_params,
+    const double lambda,
+    const double lambda_tangent,
+    unsigned long long *d_out_coords,
+    double *d_out_du_dl,
+    double *d_out_coords_tangents,
+    double *d_out_params_tangents,
+    cudaStream_t stream
+) {
+
     int tpb = 32;
     int blocks = (A_+tpb-1)/tpb;
 
     auto start = std::chrono::high_resolution_clock::now();
     if(d_coords_tangents == nullptr) {
 
-        k_harmonic_angle_inference<RealType, D><<<blocks, tpb, 0, stream>>>(
+        k_harmonic_angle_inference<RealType, 3><<<blocks, tpb, 0, stream>>>(
             A_,
             d_coords,
             d_params,
+            lambda,
+            d_lambda_idxs_,
             d_angle_idxs_,
             d_param_idxs_,
-            d_out_coords
+            d_out_coords,
+            d_out_du_dl
         );
 
 
@@ -80,11 +161,14 @@ void HarmonicAngle<RealType, D>::execute_device(
     } else {
 
 
-        k_harmonic_angle_jvp<RealType, D><<<blocks, tpb,  0, stream>>>(
+        k_harmonic_angle_jvp<RealType, 3><<<blocks, tpb,  0, stream>>>(
             A_,
             d_coords,
             d_coords_tangents,
             d_params,
+            lambda,
+            lambda_tangent,
+            d_lambda_idxs_,
             d_angle_idxs_,
             d_param_idxs_,
             d_out_coords_tangents,

@@ -10,9 +10,9 @@ namespace timemachine {
 
 template <typename RealType, int D>
 HarmonicBond<RealType, D>::HarmonicBond(
-    const std::vector<int> &bond_idxs, // [N, 2]
-    const std::vector<int> &param_idxs, // [N, 2]
-    const std::vector<int> &lambda_idxs // [N]
+    const std::vector<int> &bond_idxs, // [B, 2]
+    const std::vector<int> &param_idxs, // [B, 2]
+    const std::vector<int> &lambda_idxs // [B]
 ) : B_(bond_idxs.size()/2) {
 
     // alloc lambda_idxs
@@ -76,14 +76,14 @@ void HarmonicBond<RealType, D>::execute_lambda_device(
     // auto start = std::chrono::high_resolution_clock::now();
     if(d_coords_tangents == nullptr) {
 
-        k_harmonic_bond_inference<RealType, D><<<blocks, tpb, 0, stream>>>(
+        k_harmonic_bond_inference<RealType, 3><<<blocks, tpb, 0, stream>>>(
             B_,
             d_coords_primals,
             d_params_primals,
             lambda_primal,
+            d_lambda_idxs_,
             d_bond_idxs_,
             d_param_idxs_,
-            d_lambda_idxs_,
             d_out_coords,
             d_out_du_dl
         );
@@ -98,16 +98,16 @@ void HarmonicBond<RealType, D>::execute_lambda_device(
     } else {
 
 
-        k_harmonic_bond_jvp<RealType, D><<<blocks, tpb, 0, stream>>>(
+        k_harmonic_bond_jvp<RealType, 3><<<blocks, tpb, 0, stream>>>(
             B_,
             d_coords_primals,
             d_coords_tangents,
             d_params_primals,
             lambda_primal,
             lambda_tangent,
+            d_lambda_idxs_,
             d_bond_idxs_,
             d_param_idxs_,
-            d_lambda_idxs_,
             d_out_coords_tangents,
             d_out_params_tangents
         );

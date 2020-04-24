@@ -482,16 +482,20 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
     )
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &angle_idxs,
-        const py::array_t<int, py::array::c_style> &param_idxs
+        const py::array_t<int, py::array::c_style> &param_idxs,
+        const py::array_t<int, py::array::c_style> &lambda_idxs
     ){
         std::vector<int> vec_angle_idxs(angle_idxs.size());
         std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size()*sizeof(int));
         std::vector<int> vec_param_idxs(param_idxs.size());
         std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
+        std::vector<int> vec_lambda_idxs(lambda_idxs.size());
+        std::memcpy(vec_lambda_idxs.data(), lambda_idxs.data(), vec_lambda_idxs.size()*sizeof(int));
 
         return new timemachine::HarmonicAngle<RealType, D>(
             vec_angle_idxs,
-            vec_param_idxs
+            vec_param_idxs,
+            vec_lambda_idxs
         );
     }
     ));
@@ -649,10 +653,10 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_harmonic_bond<float, 4>(m, "f32_4d");
     declare_harmonic_bond<float, 3>(m, "f32_3d");
 
-    // declare_harmonic_angle<double, 4>(m, "f64_4d");
-    // declare_harmonic_angle<double, 3>(m, "f64_3d");
-    // declare_harmonic_angle<float, 4>(m, "f32_4d");
-    // declare_harmonic_angle<float, 3>(m, "f32_3d");
+    declare_harmonic_angle<double, 4>(m, "f64_4d");
+    declare_harmonic_angle<double, 3>(m, "f64_3d");
+    declare_harmonic_angle<float, 4>(m, "f32_4d");
+    declare_harmonic_angle<float, 3>(m, "f32_3d");
 
     // declare_periodic_torsion<double, 4>(m, "f64_4d");
     // declare_periodic_torsion<double, 3>(m, "f64_3d");

@@ -15,9 +15,9 @@ void __global__ k_harmonic_bond_inference(
     const double *coords,  // [n, 3]
     const double *params,  // [p,]
     const double lambda,
+    const int *lambda_idxs,
     const int *bond_idxs,    // [b, 2]
     const int *param_idxs,   // [b, 2]
-    const int *lambda_idxs,
     unsigned long long *grad_coords,
     double *du_dl
 ) {
@@ -85,9 +85,9 @@ void __global__ k_harmonic_bond_jvp(
     const double *params,  // [p,]
     const double lambda_primal,
     const double lambda_tangent,
+    const int *lambda_idxs,
     const int *bond_idxs,    // [b, 2]
     const int *param_idxs,   // [b, 2]
-    const int *lambda_idxs,
     double *grad_coords_tangents,
     double *grad_params_tangents
 ) {
@@ -149,9 +149,12 @@ void __global__ k_harmonic_angle_inference(
     const int A,     // number of bonds
     const double *coords,  // [n, 3]
     const double *params,  // [p,]
+    const double lambda,
+    const int *lambda_idxs,
     const int *angle_idxs,    // [b, 3]
     const int *param_idxs,   // [b, 2]
-    unsigned long long *grad_coords
+    unsigned long long *grad_coords,
+    double *du_dl
 ) {
 
     const auto a_idx = blockDim.x*blockIdx.x + threadIdx.x;
@@ -195,18 +198,36 @@ void __global__ k_harmonic_angle_inference(
     RealType ka = params[ka_idx];
     RealType a0 = params[a0_idx];
 
+    RealType prefactor;
+    RealType prefactor_grad;
+    if(lambda_idxs[a_idx] == 0) {
+        prefactor = 1;
+        prefactor_grad = 0;
+    } else if(lambda_idxs[a_idx] == 1) {
+        prefactor = lambda;
+        prefactor_grad = 1;
+    } else if(lambda_idxs[a_idx] == -1) {
+        prefactor = 1-lambda;
+        prefactor_grad = -1;
+    };
+
     RealType delta = top/nijk - cos(a0);
 
     for(int d=0; d < MAXDIM; d++) {
-        RealType grad_i = ka*delta*(rij[d]*top/(n3ij*njk) + (-rjk[d])/nijk);
+        RealType grad_i = prefactor*ka*delta*(rij[d]*top/(n3ij*njk) + (-rjk[d])/nijk);
         atomicAdd(grad_coords + i_idx*D + d, static_cast<unsigned long long>((long long) (grad_i*FIXED_EXPONENT)));
 
-        RealType grad_j = ka*delta*((-rij[d]*top/(n3ij*njk) + (-rjk[d])*top/(nij*n3jk) + (rij[d] + rjk[d])/nijk));
+        RealType grad_j = prefactor*ka*delta*((-rij[d]*top/(n3ij*njk) + (-rjk[d])*top/(nij*n3jk) + (rij[d] + rjk[d])/nijk));
         atomicAdd(grad_coords + j_idx*D + d, static_cast<unsigned long long>((long long) (grad_j*FIXED_EXPONENT)));
 
-        RealType grad_k = ka*delta*(-rij[d]/nijk + rjk[d]*top/(nij*n3jk));
+        RealType grad_k = prefactor*ka*delta*(-rij[d]/nijk + rjk[d]*top/(nij*n3jk));
         atomicAdd(grad_coords + k_idx*D + d, static_cast<unsigned long long>((long long) (grad_k*FIXED_EXPONENT)));
     }
+
+
+    RealType angle_du_dl = prefactor_grad*(ka/2)*delta*delta;
+
+    atomicAdd(du_dl, angle_du_dl);
 
 }
 
@@ -217,10 +238,13 @@ void __global__ k_harmonic_angle_jvp(
     const double *coords,  // [n, 3]
     const double *coords_tangent,  // [n, 3]
     const double *params,  // [p,]
+    const double lambda_primal,
+    const double lambda_tangent,
+    const int *lambda_idxs,
     const int *angle_idxs,    // [b, 3]
     const int *param_idxs,   // [b, 2]
     double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    double *grad_params_tangents 
+    double *grad_params_tangents
 ) {
 
     const auto a_idx = blockDim.x*blockIdx.x + threadIdx.x;
@@ -273,23 +297,34 @@ void __global__ k_harmonic_angle_jvp(
 
     Surreal<RealType> delta = top/nijk - cos(a0);
 
+    Surreal<RealType> lambda(lambda_primal, lambda_tangent);
+
+    Surreal<RealType> prefactor;
+    if(lambda_idxs[a_idx] == 0) {
+        prefactor = Surreal<RealType>(1, 0);
+    } else if(lambda_idxs[a_idx] == 1) {
+        prefactor = lambda;
+    } else if(lambda_idxs[a_idx] == -1) {
+        prefactor = 1-lambda;
+    };
+
     for(int d=0; d < MAXDIM; d++) {
-        Surreal<RealType> grad_i = ka*delta*(rij[d]*top/(n3ij*njk) + (-rjk[d])/nijk);
+        Surreal<RealType> grad_i = prefactor*ka*delta*(rij[d]*top/(n3ij*njk) + (-rjk[d])/nijk);
         atomicAdd(grad_coords_tangents + i_idx*D + d, grad_i.imag);
 
-        Surreal<RealType> grad_j = ka*delta*((-rij[d]*top/(n3ij*njk) + (-rjk[d])*top/(nij*n3jk) + (rij[d] + rjk[d])/nijk));
+        Surreal<RealType> grad_j = prefactor*ka*delta*((-rij[d]*top/(n3ij*njk) + (-rjk[d])*top/(nij*n3jk) + (rij[d] + rjk[d])/nijk));
         atomicAdd(grad_coords_tangents + j_idx*D + d, grad_j.imag);
 
-        Surreal<RealType> grad_k = ka*delta*(-rij[d]/nijk + rjk[d]*top/(nij*n3jk));
+        Surreal<RealType> grad_k = prefactor*ka*delta*(-rij[d]/nijk + rjk[d]*top/(nij*n3jk));
         atomicAdd(grad_coords_tangents + k_idx*D + d, grad_k.imag);
     }
 
     // now we do dU/dp by hand
-    Surreal<RealType> dka_grad = delta*delta/2;
+    Surreal<RealType> dka_grad = prefactor*delta*delta/2;
 
     atomicAdd(grad_params_tangents + ka_idx, dka_grad.imag);
 
-    Surreal<RealType> da0_grad = delta*ka*sin(a0);
+    Surreal<RealType> da0_grad = prefactor*delta*ka*sin(a0);
 
     atomicAdd(grad_params_tangents + a0_idx, da0_grad.imag);
 }
