@@ -101,15 +101,10 @@ def prepare_nonbonded_system(
     p_scale=4.0,
     e_scale=1.0,
     cutoff=100.0,
-    N_limit=None,
-    custom_D=None,
     precision=np.float64):
 
     N = x.shape[0]
     D = x.shape[1]
-
-    if N_limit is None:
-        N_limit = N
 
     if params is None:
         params = np.array([], dtype=np.float64)

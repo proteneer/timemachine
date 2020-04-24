@@ -12,8 +12,7 @@ from timemachine.lib import ops
 from timemachine.potentials import bonded, nonbonded
 
 from common import GradientTest
-from common import prepare_bonded_system
-
+from common import prepare_bonded_system, prepare_nonbonded_system
 class TestContext(unittest.TestCase):
 
     def setup_system(self, N):
@@ -28,13 +27,9 @@ class TestContext(unittest.TestCase):
         A = 36
         T = 37
 
-        # B = 6
-        # A = 1
-        # T = 1
-
         D = 3
 
-        x0 = np.random.rand(N,D).astype(dtype=np.float64)
+        x0 = np.random.rand(N,D).astype(dtype=np.float64)*2
 
         precision = np.float64
 
@@ -51,7 +46,31 @@ class TestContext(unittest.TestCase):
 
         masses = np.random.rand(N)
 
-        return ref_potentials[0], x0, params, masses, test_potentials
+        E = 1
+        P_charges = 4
+        P_lj = 5
+        P_exc = 7
+
+        cutoff = 1.5
+
+        new_params, new_ref_potentials, new_test_potentials = prepare_nonbonded_system(
+            x0,
+            E,
+            P_charges,
+            P_lj,
+            P_exc,
+            params=params,
+            p_scale=10.0,
+            cutoff=cutoff,
+            precision=precision
+        )
+
+        def total_potential(*args, **kwargs):
+            return ref_potentials[0](*args, **kwargs) + new_ref_potentials[0](*args, **kwargs)
+
+
+        return total_potential, x0, new_params, masses, test_potentials + new_test_potentials
+
 
     def test_reverse_mode_lambda(self):
         """
@@ -132,7 +151,8 @@ class TestContext(unittest.TestCase):
         dl_du_adjoint = loss_grad_fn(test_du_dls)[0]
 
         # limit of precision is due to the settings in fixed_point.hpp
-        np.testing.assert_almost_equal(test_loss, ref_loss, decimal=7)
+        # np.testing.assert_almost_equal(test_loss, ref_loss, decimal=7)
+        np.testing.assert_allclose(test_loss, ref_loss, rtol=1e-6)
         stepper.set_du_dl_adjoint(dl_du_adjoint)
         ctxt.set_x_t_adjoint(np.zeros_like(x0))
         ctxt.backward_mode()
@@ -140,7 +160,7 @@ class TestContext(unittest.TestCase):
 
         print(test_dl_dp, ref_dl_dp[0])
 
-        np.testing.assert_almost_equal(test_dl_dp, ref_dl_dp[0])
+        np.testing.assert_allclose(test_dl_dp, ref_dl_dp[0], rtol=1e-6)
 
     # def test_reverse_mode(self):
     #     """
