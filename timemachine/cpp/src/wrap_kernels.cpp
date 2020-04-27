@@ -471,31 +471,19 @@ void declare_gbsa(py::module &m, const char *typestr) {
 PYBIND11_MODULE(custom_ops, m) {
 
     declare_gradient<3>(m, "f64_3d");
-    declare_gradient<4>(m, "f64_4d");
-
-    declare_harmonic_bond<double, 4>(m, "f64_4d");
     declare_harmonic_bond<double, 3>(m, "f64_3d");
-    declare_harmonic_bond<float, 4>(m, "f32_4d");
     declare_harmonic_bond<float, 3>(m, "f32_3d");
 
-    declare_harmonic_angle<double, 4>(m, "f64_4d");
     declare_harmonic_angle<double, 3>(m, "f64_3d");
-    declare_harmonic_angle<float, 4>(m, "f32_4d");
     declare_harmonic_angle<float, 3>(m, "f32_3d");
 
-    declare_periodic_torsion<double, 4>(m, "f64_4d");
     declare_periodic_torsion<double, 3>(m, "f64_3d");
-    declare_periodic_torsion<float, 4>(m, "f32_4d");
     declare_periodic_torsion<float, 3>(m, "f32_3d");
 
-    declare_nonbonded<double, 4>(m, "f64_4d");
     declare_nonbonded<double, 3>(m, "f64_3d");
-    declare_nonbonded<float, 4>(m, "f32_4d");
     declare_nonbonded<float, 3>(m, "f32_3d");
 
-    declare_gbsa<double, 4>(m, "f64_4d");
     declare_gbsa<double, 3>(m, "f64_3d");
-    declare_gbsa<float, 4>(m, "f32_4d");
     declare_gbsa<float, 3>(m, "f32_3d");
 
     declare_stepper(m, "f64");

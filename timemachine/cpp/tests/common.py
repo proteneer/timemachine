@@ -77,7 +77,6 @@ def prepare_gbsa_system(
         probe_radius,
         cutoff_radii,
         cutoff_force,
-        D,
         precision=precision
     )
 
@@ -175,7 +174,6 @@ def prepare_nonbonded_system(
         exclusion_lj_idxs,
         nonbonded_lambda_idxs,
         cutoff,
-        3,
         precision=precision
     )
 
@@ -265,13 +263,13 @@ def prepare_bonded_system(
 
     # torsion_lambda_idxs = np.zeros_like(torsion_lambda_idxs)
 
-    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, bond_lambda_idxs, D, precision=precision)
+    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, bond_lambda_idxs, precision=precision)
     harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs, lambda_idxs=bond_lambda_idxs)
 
-    custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, angle_lambda_idxs, D, precision=precision)
+    custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, angle_lambda_idxs, precision=precision)
     harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs, lambda_idxs=angle_lambda_idxs)
 
-    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, torsion_lambda_idxs, D, precision=precision)
+    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, torsion_lambda_idxs, precision=precision)
     periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs, lambda_idxs=torsion_lambda_idxs)
 
     return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
