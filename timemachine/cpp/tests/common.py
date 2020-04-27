@@ -61,7 +61,6 @@ def prepare_gbsa_system(
         dtype=np.int32
     )
 
-
     custom_gb = ops.GBSA(
         charge_param_idxs,
         radii_param_idxs,
@@ -261,8 +260,6 @@ def prepare_bonded_system(
         dtype=np.int32
     )
 
-    # torsion_lambda_idxs = np.zeros_like(torsion_lambda_idxs)
-
     custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, bond_lambda_idxs, precision=precision)
     harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs, lambda_idxs=bond_lambda_idxs)
 
@@ -273,8 +270,6 @@ def prepare_bonded_system(
     periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs, lambda_idxs=torsion_lambda_idxs)
 
     return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
-    # return params, [periodic_torsion_fn], [custom_torsions]
-    # return params, [periodic_torsion_fn], [custom_torsions]
 
 def hilbert_sort(conf, D):
     hc = HilbertCurve(64, D)
@@ -366,8 +361,6 @@ class GradientTest(unittest.TestCase):
         )
 
         np.testing.assert_almost_equal(ref_dl, test_dl, rtol)
-
-        # assert 0
 
         x_tangent = np.random.rand(N, D).astype(np.float64)
         params_tangent = np.zeros_like(params)

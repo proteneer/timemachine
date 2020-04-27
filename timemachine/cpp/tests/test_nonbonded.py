@@ -28,7 +28,6 @@ class TestNonbonded(GradientTest):
         sort=False):
 
         x = np.load("water.npy").astype(np.float64)
-        # x = x[:2976, :D]
         if sort:
             perm = hilbert_sort(x, D)
             x = x[perm, :]
@@ -61,8 +60,7 @@ class TestNonbonded(GradientTest):
  
         x = self.get_random_coords(N, D)
 
-        # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-6)]:
-        for precision, rtol in [(np.float64, 1e-9)]:
+        for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
             for cutoff in [50.0, 0.5, 0.3]:
                 params, ref_forces, test_forces = prepare_nonbonded_system(
                     x,

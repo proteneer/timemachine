@@ -160,7 +160,7 @@ void Nonbonded<RealType, D>::execute_lambda_device(
 
     } else {
 
-        // // do *not* accumulate tangents here
+        // do *not* accumulate tangents here
         k_nonbonded_jvp<RealType><<<dimGrid, tpb, 0, stream>>>(
             N_,
             d_coords,

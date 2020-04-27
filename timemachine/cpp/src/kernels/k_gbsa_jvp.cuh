@@ -139,7 +139,6 @@ __global__ void k_compute_born_radii_gpu_jvp(
                 Surreal<RealType> term2    = rInverse*ratio/2; // add using double precision
                 Surreal<RealType> term3    = scaledRadiusJ*scaledRadiusJ*rInverse*(l_ij2 - u_ij2)/4;
 
-                // Surreal<RealType> term     = term0 + term1 + term2 + term3;
                 Surreal<RealType> term     = term0 + term1 + term3 + term2;
 
                 // this case (atom i completely inside atom j) is not considered in the original paper
@@ -312,7 +311,6 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
             } else {
                 dE_dqi *= 0.5;
                 dE_dqj *= 0.5;
-                // energy *= 0.5;
             }
 
             dE_dqi_accum += dE_dqi;

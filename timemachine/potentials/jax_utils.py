@@ -37,15 +37,11 @@ def delta_r(ri, rj, box=None):
 
     # assert box is not None
 
-    # box is None for harmonic bonds
+    # box is None for harmonic bonds, not None for nonbonded terms
     if box is not None:
         for d in range(dims):
             diff -= box[d]*np.floor(np.expand_dims(diff[...,d], axis=-1)/box[d][d]+0.5)
 
-    # if box is not None:
-        # diff -= box[2]*np.floor(np.expand_dims(diff[...,2], axis=-1)/box[2][2]+0.5)
-        # diff -= box[1]*np.floor(np.expand_dims(diff[...,1], axis=-1)/box[1][1]+0.5)
-        # diff -= box[0]*np.floor(np.expand_dims(diff[...,0], axis=-1)/box[0][0]+0.5)
     return diff
 
 def distance(ri, rj, box=None):
