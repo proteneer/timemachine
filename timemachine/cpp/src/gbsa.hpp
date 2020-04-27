@@ -66,44 +66,6 @@ public:
     // FIX ME with actual destructors later
     ~GBSA();
 
-    void execute_first_order(
-        const int N,
-        const int P,
-        const std::vector<double> &coords,
-        const std::vector<double> &params,
-        std::vector<double> &dU_dx,
-        std::vector<double> &dU_dp
-    );
-
-    void execute_second_order(
-        const int N,
-        const int P,
-        const std::vector<double> &coords,
-        const std::vector<double> &coords_tangents,
-        const std::vector<double> &params,
-        std::vector<double> &HvP,
-        std::vector<double> &MvP
-    );
-
-    /*
-    Execute the force computation, the semantics are:
-
-    1. If d_coords_tangents == null, then out_coords != null, out_coords_tangent == null, out_params_tangents == null
-    2. If d_coords_tangents != null, then out_coords == null, out_coords_tangent != null, out_params_tangents != null
-
-    */
-    virtual void execute_device(
-        const int N,
-        const int P,
-        const double *d_coords,
-        const double *d_coords_tangents,
-        const double *d_params,
-        unsigned long long *out_coords,
-        double *out_coords_tangents,
-        double *out_params_tangents,
-        cudaStream_t stream
-    ) override;
-
     virtual void execute_lambda_device(
         const int N,
         const int P,

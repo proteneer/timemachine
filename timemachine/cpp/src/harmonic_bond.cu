@@ -123,67 +123,6 @@ void HarmonicBond<RealType, D>::execute_lambda_device(
 
 }
 
-template <typename RealType, int D>
-void HarmonicBond<RealType, D>::execute_device(
-    const int N,
-    const int P,
-    const double *d_coords_primals,
-    const double *d_coords_tangents,
-    const double *d_params,
-    unsigned long long *d_out_coords,
-    double *d_out_coords_tangents,
-    double *d_out_params_tangents,
-    cudaStream_t stream
-) {
-
-    // int tpb = 32;
-    // int blocks = (B_+tpb-1)/tpb;
-
-    // // auto start = std::chrono::high_resolution_clock::now();
-    // if(d_coords_tangents == nullptr) {
-
-    //     k_harmonic_bond_inference<RealType, D><<<blocks, tpb, 0, stream>>>(
-    //         B_,
-    //         d_coords,
-    //         d_params,
-    //         d_bond_idxs_,
-    //         d_param_idxs_,
-    //         d_out_coords
-    //     );
-
-    //     // cudaDeviceSynchronize();
-    //     gpuErrchk(cudaPeekAtLastError());
-
-    //     // auto finish = std::chrono::high_resolution_clock::now();
-    //     // std::chrono::duration<double> elapsed = finish - start;
-    //     // std::cout << "HarmonicBond Elapsed time: " << elapsed.count() << " s\n";
-
-    // } else {
-
-
-    //     k_harmonic_bond_jvp<RealType, D><<<blocks, tpb, 0, stream>>>(
-    //         B_,
-    //         d_coords,
-    //         d_coords_tangents,
-    //         d_params,
-    //         d_bond_idxs_,
-    //         d_param_idxs_,
-    //         d_out_coords_tangents,
-    //         d_out_params_tangents
-    //     );
-
-    //     // cudaDeviceSynchronize();
-    //     gpuErrchk(cudaPeekAtLastError());
-
-    //     // auto finish = std::chrono::high_resolution_clock::now();
-    //     // std::chrono::duration<double> elapsed = finish - start;
-    //     // std::cout << "HarmonicBond JVP Elapsed time: " << elapsed.count() << " s\n";
-
-    // }
-
-
-};
-
 template class HarmonicBond<double, 4>;
 template class HarmonicBond<double, 3>;
 

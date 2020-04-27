@@ -32,25 +32,6 @@ void declare_stepper(py::module &m, const char *typestr) {
 
 }
 
-void declare_basic_stepper(py::module &m, const char *typestr) {
-
-    using Class = timemachine::BasicStepper;
-    std::string pyclass_name = std::string("BasicStepper_") + typestr;
-    py::class_<Class, timemachine::Stepper >(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        const std::vector<timemachine::Gradient<3> *> system
-    ) {
-        return new timemachine::BasicStepper(
-            system
-        );
-    }));
-}
-
 void declare_alchemical_stepper(py::module &m, const char *typestr) {
 
     using Class = timemachine::AlchemicalStepper;
@@ -81,108 +62,6 @@ void declare_alchemical_stepper(py::module &m, const char *typestr) {
         stepper.set_du_dl_adjoint(adjoints.shape()[0], adjoints.data());
     });
 }
-
-
-void declare_lambda_stepper(py::module &m, const char *typestr) {
-
-    using Class = timemachine::LambdaStepper;
-    std::string pyclass_name = std::string("LambdaStepper_") + typestr;
-    py::class_<Class, timemachine::Stepper >(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        const std::vector<timemachine::Gradient<4> *> system,
-        const std::vector<double> &lambda_schedule,
-        const std::vector<int> &lambda_flags
-    ) {
-        return new timemachine::LambdaStepper(
-            system,
-            lambda_schedule,
-            lambda_flags
-        );
-    }))
-    .def("get_du_dl", [](timemachine::LambdaStepper &stepper) -> py::array_t<double, py::array::c_style> {
-        const unsigned long long T = stepper.get_T();
-        py::array_t<double, py::array::c_style> buffer({T});
-        stepper.get_du_dl(buffer.mutable_data());
-        return buffer;
-    })
-    .def("set_du_dl_adjoint", [](timemachine::LambdaStepper &stepper,
-        const py::array_t<double, py::array::c_style> &adjoints) {
-        stepper.set_du_dl_adjoint(adjoints.shape()[0], adjoints.data());
-    })
-    .def("forward_step", [](timemachine::LambdaStepper &stepper,
-        const py::array_t<double, py::array::c_style> &coords,
-        const py::array_t<double, py::array::c_style> &params) -> py::array_t<double, py::array::c_style> {
-
-        unsigned int N = coords.shape()[0];
-        unsigned int D = coords.shape()[1];
-
-        if(D != 3) {
-            throw std::runtime_error("D must be 3 for lambda stepper!");
-        }
-        unsigned int P = params.shape()[0];
-
-        std::vector<unsigned long long> forces(N*D);
-
-        py::array_t<double, py::array::c_style> buffer({N, D});
-        stepper.forward_step_host(
-            N,
-            P,
-            coords.data(),
-            params.data(),
-            &forces[0]
-        );
-
-        py::array_t<double, py::array::c_style> py_out_coords({N, D});
-        for(int i=0; i < forces.size(); i++) {
-            buffer.mutable_data()[i] = static_cast<double>(static_cast<long long>(forces[i]))/FIXED_EXPONENT;
-        }
-
-        return buffer;
-
-    })
-    .def("backward_step", [](timemachine::LambdaStepper &stepper,
-        const py::array_t<double, py::array::c_style> &coords,
-        const py::array_t<double, py::array::c_style> &params,
-        const py::array_t<double, py::array::c_style> &coords_tangent) -> py::tuple {
-
-        unsigned int N = coords.shape()[0];
-        unsigned int D = coords.shape()[1];
-
-        if(coords_tangent.shape()[0] != N) {
-            throw std::runtime_error("tangent shape mismatch N");
-        }
-        if(coords_tangent.shape()[1] != D) {
-            throw std::runtime_error("tangent shape mismatch N");
-        }
-
-        if(D != 3) {
-            throw std::runtime_error("D must be 3 for lambda stepper!");
-        }
-        unsigned int P = params.shape()[0];
-
-        py::array_t<double, py::array::c_style> py_out_coords_jvp({N, D});
-        py::array_t<double, py::array::c_style> py_out_params_jvp({P});
-
-        stepper.backward_step_host(
-            N,
-            P,
-            coords.data(),
-            params.data(),
-            coords_tangent.data(),
-            py_out_coords_jvp.mutable_data(),
-            py_out_params_jvp.mutable_data()
-        );
-
-        return py::make_tuple(py_out_coords_jvp, py_out_params_jvp);
-
-    });
-}
-
 
 void declare_reversible_context(py::module &m, const char *typestr) {
 
@@ -340,36 +219,6 @@ void declare_gradient(py::module &m, const char *typestr) {
 
             return py::make_tuple(py_out_coords, out_du_dl);
     })
-    .def("execute", [](timemachine::Gradient<D> &grad,
-        const py::array_t<double, py::array::c_style> &coords,
-        const py::array_t<double, py::array::c_style> &params) -> py::array_t<double, py::array::c_style>  {
-
-            const long unsigned int N = coords.shape()[0];
-            const long unsigned int DD = coords.shape()[1];
-
-            if(DD != D) throw std::runtime_error("D mismatch");
-
-            const long unsigned int P = params.shape()[0];
-
-            std::vector<unsigned long long> out_coords(N*DD);
-
-            grad.execute_host(
-                N,P,
-                coords.data(),
-                nullptr,
-                params.data(),
-                &out_coords[0],
-                nullptr,
-                nullptr
-            );
-
-            py::array_t<double, py::array::c_style> py_out_coords({N, DD});
-            for(int i=0; i < out_coords.size(); i++) {
-                py_out_coords.mutable_data()[i] = static_cast<double>(static_cast<long long>(out_coords[i]))/FIXED_EXPONENT;
-            }
-
-            return py_out_coords;
-    })
     .def("execute_lambda_jvp", [](timemachine::Gradient<D> &grad,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
@@ -396,34 +245,6 @@ void declare_gradient(py::module &m, const char *typestr) {
                 lambda,
                 lambda_tangent,
                 nullptr,
-                nullptr,
-                py_out_coords_tangents.mutable_data(),
-                py_out_params_tangents.mutable_data()
-            );
-
-            return py::make_tuple(py_out_coords_tangents, py_out_params_tangents);
-    })
-    .def("execute_jvp", [](timemachine::Gradient<D> &grad,
-        const py::array_t<double, py::array::c_style> &coords,
-        const py::array_t<double, py::array::c_style> &params,
-        const py::array_t<double, py::array::c_style> &coords_tangents,
-        const py::array_t<double, py::array::c_style> &params_tangents) -> py::tuple {
-
-            const long unsigned int N = coords.shape()[0];
-            const long unsigned int DD = coords.shape()[1];
-
-            if(DD != D) throw std::runtime_error("D mismatch");
-
-            const long unsigned int P = params.shape()[0];
-
-            py::array_t<double, py::array::c_style> py_out_coords_tangents({N, DD});
-            py::array_t<double, py::array::c_style> py_out_params_tangents({P});
-
-            grad.execute_host(
-                N,P,
-                coords.data(),
-                coords_tangents.data(),
-                params.data(),
                 nullptr,
                 py_out_coords_tangents.mutable_data(),
                 py_out_params_tangents.mutable_data()
@@ -679,7 +500,6 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_stepper(m, "f64");
     declare_alchemical_stepper(m, "f64");
-    // declare_lambda_stepper(m, "f64");
     declare_reversible_context(m, "f64_3d");
 
 }

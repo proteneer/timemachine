@@ -276,6 +276,7 @@ def prepare_bonded_system(
 
     return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
     # return params, [periodic_torsion_fn], [custom_torsions]
+    # return params, [periodic_torsion_fn], [custom_torsions]
 
 def hilbert_sort(conf, D):
     hc = HilbertCurve(64, D)

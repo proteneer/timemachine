@@ -52,22 +52,6 @@ PeriodicTorsion<RealType, D>::~PeriodicTorsion() {
 };
 
 template <typename RealType, int D>
-void PeriodicTorsion<RealType, D>::execute_device(
-    const int N,
-    const int P,
-    const double *d_coords,
-    const double *d_coords_tangents,
-    const double *d_params,
-    unsigned long long *d_out_coords,
-    double *d_out_coords_tangents,
-    double *d_out_params_tangents,
-    cudaStream_t stream
-) {
-
-};
-
-
-template <typename RealType, int D>
 void PeriodicTorsion<RealType, D>::execute_lambda_device(
     const int N,
     const int P,

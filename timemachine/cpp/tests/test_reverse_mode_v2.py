@@ -33,7 +33,7 @@ class TestContext(unittest.TestCase):
 
         precision = np.float64
 
-        params, ref_potentials, test_potentials = prepare_bonded_system(
+        params, ref_bonded_potentials, test_bonded_potentials = prepare_bonded_system(
             x0,
             P_bonds,
             P_angles,
@@ -53,7 +53,7 @@ class TestContext(unittest.TestCase):
 
         cutoff = 1.5
 
-        new_params, new_ref_potentials, new_test_potentials = prepare_nonbonded_system(
+        new_params, ref_nonbonded_potentials, new_nonbonded_potentials = prepare_nonbonded_system(
             x0,
             E,
             P_charges,
@@ -66,10 +66,15 @@ class TestContext(unittest.TestCase):
         )
 
         def total_potential(*args, **kwargs):
-            return ref_potentials[0](*args, **kwargs) + new_ref_potentials[0](*args, **kwargs)
+            nrgs = []
+            for p in ref_bonded_potentials:
+                nrgs.append(p(*args, **kwargs))
+            for p in ref_nonbonded_potentials:
+                nrgs.append(p(*args, **kwargs))
+            return jnp.sum(nrgs)
 
 
-        return total_potential, x0, new_params, masses, test_potentials + new_test_potentials
+        return total_potential, x0, new_params, masses, test_bonded_potentials + new_nonbonded_potentials
 
 
     def test_reverse_mode_lambda(self):
@@ -157,8 +162,6 @@ class TestContext(unittest.TestCase):
         ctxt.set_x_t_adjoint(np.zeros_like(x0))
         ctxt.backward_mode()
         test_dl_dp = ctxt.get_param_adjoint_accum()
-
-        print(test_dl_dp, ref_dl_dp[0])
 
         np.testing.assert_allclose(test_dl_dp, ref_dl_dp[0], rtol=1e-6)
 
