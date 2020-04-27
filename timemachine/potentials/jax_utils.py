@@ -1,5 +1,18 @@
 import jax.numpy as np
 
+
+def lambda_to_w(lamb, lamb_flags, cutoff):
+    d4_i = np.where(lamb_flags == 1, lamb, 0.0)
+    d4_d = np.where(lamb_flags == -1, cutoff + lamb, 0.0)
+    d4 = d4_i + d4_d
+    return d4
+
+def convert_to_4d(x3, lamb, lamb_flags, cutoff):
+    d4 = lambda_to_w(lamb, lamb_flags, cutoff)
+    d4 = np.expand_dims(d4, axis=-1)
+    x4 = np.concatenate((x3, d4), axis=1)
+    return x4
+
 def rescale_coordinates(
     conf,
     indices,
@@ -20,10 +33,15 @@ def rescale_coordinates(
 
 def delta_r(ri, rj, box=None):
     diff = ri - rj # this can be either N,N,3 or B,3
+    dims = ri.shape[-1]
+
+    # assert box is not None
+
+    # box is None for harmonic bonds, not None for nonbonded terms
     if box is not None:
-        diff -= box[2]*np.floor(np.expand_dims(diff[...,2], axis=-1)/box[2][2]+0.5)
-        diff -= box[1]*np.floor(np.expand_dims(diff[...,1], axis=-1)/box[1][1]+0.5)
-        diff -= box[0]*np.floor(np.expand_dims(diff[...,0], axis=-1)/box[0][0]+0.5)
+        for d in range(dims):
+            diff -= box[d]*np.floor(np.expand_dims(diff[...,d], axis=-1)/box[d][d]+0.5)
+
     return diff
 
 def distance(ri, rj, box=None):

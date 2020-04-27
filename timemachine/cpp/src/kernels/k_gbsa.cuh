@@ -4,6 +4,8 @@
 #include "surreal.cuh"
 #include "kernel_utils.cuh"
 
+#include "k_periodic_utils.cuh"
+
 #define WARPSIZE 32
 
 #include <cooperative_groups.h>
@@ -13,11 +15,13 @@
 
 
 // nope, still need to parallelize out
-template<typename RealType, int D>
-__global__ void k_compute_born_radii_gpu(
+template<typename RealType>
+__global__ void k_compute_born_radii(
     const int N,
     const double* coords,
     const double* params,
+    const double lambda,
+    const int* lambda_idxs,
     const int* atomic_radii_idxs,
     const int* scale_factor_idxs,
     const double dielectric_offset,
@@ -27,11 +31,11 @@ __global__ void k_compute_born_radii_gpu(
     unsigned long long* born_psi) {
 
     RealType block_d2ij = 0; 
-    for(int d=0; d < D; d++) {
-        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
-        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
-        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
-        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+    for(int d=0; d < 3; d++) {
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*3+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*3+d];
         RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
@@ -41,10 +45,22 @@ __global__ void k_compute_born_radii_gpu(
     }
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
+    RealType lambda_i;
+    if(atom_i_idx < N) {
+        if(lambda_idxs[atom_i_idx] == 0) {
+            lambda_i = 0;
+        } else if(lambda_idxs[atom_i_idx] == 1) {
+            lambda_i = lambda;
+        } else if(lambda_idxs[atom_i_idx] == -1) {
+            lambda_i = cutoff + lambda;
+        }        
+    } else {
+        lambda_i = 0;
+    }
 
-    RealType ci[D];
-    for(int d=0; d < D; d++) {
-        ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
+    RealType ci[3];
+    for(int d=0; d < 3; d++) {
+        ci[d] = atom_i_idx < N ? coords[atom_i_idx*3+d] : 0;
     }
     int radii_param_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
 
@@ -53,13 +69,26 @@ __global__ void k_compute_born_radii_gpu(
     RealType radiusIInverse  = 1/offsetRadiusI;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
+    RealType lambda_j;
+
+    if(atom_j_idx < N) {
+        if(lambda_idxs[atom_j_idx] == 0) {
+            lambda_j = 0;
+        } else if(lambda_idxs[atom_j_idx] == 1) {
+            lambda_j = lambda;
+        } else if(lambda_idxs[atom_j_idx] == -1) {
+            lambda_j = cutoff + lambda;
+        }   
+    } else {
+        lambda_j = 0;
+    }
 
     // *always* accumulate in 64 bit.
     double sum = 0;
  
-    RealType cj[D];
-    for(int d=0; d < D; d++) {
-        cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
+    RealType cj[3];
+    for(int d=0; d < 3; d++) {
+        cj[d] = atom_j_idx < N ? coords[atom_j_idx*3+d] : 0;
     }
 
     int radii_param_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
@@ -68,22 +97,24 @@ __global__ void k_compute_born_radii_gpu(
     RealType radiusJ = atom_j_idx < N ? params[radii_param_idx_j] : 0;
     RealType scaleFactorJ = atom_j_idx < N ? params[scale_param_idx_j] : 0;
 
-    RealType offsetRadiusJ   = radiusJ - dielectric_offset; 
-    RealType scaledRadiusJ   = offsetRadiusJ*scaleFactorJ;
+    RealType offsetRadiusJ = radiusJ - dielectric_offset; 
+    RealType scaledRadiusJ = offsetRadiusJ*scaleFactorJ;
 
     for(int round = 0; round < 32; round++) {
 
-        RealType dxs[D];
-        for(int d=0; d < D; d++) {
+        RealType dxs[4];
+        for(int d=0; d < 3; d++) {
             dxs[d] = ci[d] - cj[d];
         }
+        RealType delta_lambda = lambda_i - lambda_j;
+        dxs[3] = apply_delta(delta_lambda, 2*cutoff); 
 
-        RealType r = fast_vec_norm<RealType, D>(dxs);
+        RealType r = fast_vec_norm<RealType, 4>(dxs);
         RealType rInverse = 1/r;
         RealType rScaledRadiusJ  = r + scaledRadiusJ;
         RealType rSubScaledRadiusJ =  r - scaledRadiusJ;
 
-        if(atom_j_idx != atom_i_idx && r < cutoff) {
+        if(atom_j_idx != atom_i_idx && r < cutoff && atom_j_idx < N && atom_i_idx < N) {
 
             if (offsetRadiusI < rScaledRadiusJ) {
 
@@ -120,9 +151,10 @@ __global__ void k_compute_born_radii_gpu(
         const int srcLane = (threadIdx.x + 1) % WARPSIZE;
         scaledRadiusJ = __shfl_sync(0xffffffff, scaledRadiusJ, srcLane);
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
-        for(int d=0; d < D; d++) {
+        for(int d=0; d < 3; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
         }
+        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
 
     }
     
@@ -134,11 +166,13 @@ __global__ void k_compute_born_radii_gpu(
 
 
 
-template <typename RealType, int D>
+template <typename RealType>
 void __global__ k_compute_born_first_loop_gpu(
     const int N,
     const double* coords,
     const double* params,
+    const double lambda,
+    const int* lambda_idxs,
     const int* charge_param_idxs,
     const double* born_radii,
     const double prefactor,
@@ -146,18 +180,19 @@ void __global__ k_compute_born_first_loop_gpu(
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
     unsigned long long *bornForces,
-    unsigned long long *out_forces) {
+    unsigned long long *out_forces,
+    double *du_dl) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
     }
 
     RealType block_d2ij = 0; 
-    for(int d=0; d < D; d++) {
-        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
-        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
-        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
-        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+    for(int d=0; d < 3; d++) {
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*3+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*3+d];
         RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
@@ -167,10 +202,24 @@ void __global__ k_compute_born_first_loop_gpu(
     }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    RealType ci[D];
-    RealType gi[D] = {0};
-    for(int d=0; d < D; d++) {
-        ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
+    RealType du_dl_i = 0;
+    RealType lambda_i;
+    if(atom_i_idx < N) {
+        if(lambda_idxs[atom_i_idx] == 0) {
+            lambda_i = 0;
+        } else if(lambda_idxs[atom_i_idx] == 1) {
+            lambda_i = lambda;
+        } else if(lambda_idxs[atom_i_idx] == -1) {
+            lambda_i = cutoff + lambda;
+        }        
+    } else {
+        lambda_i = 0;
+    }
+
+    RealType ci[3];
+    RealType gi[3] = {0};
+    for(int d=0; d < 3; d++) {
+        ci[d] = atom_i_idx < N ? coords[atom_i_idx*3+d] : 0;
     }
     int charge_param_idx_i = atom_i_idx < N ? charge_param_idxs[atom_i_idx] : 0;
     RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
@@ -180,10 +229,25 @@ void __global__ k_compute_born_first_loop_gpu(
     RealType born_force_i_accum = 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    RealType cj[D];
-    RealType gj[D] = {0};
-    for(int d=0; d < D; d++) {
-        cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
+    RealType du_dl_j = 0;
+    RealType lambda_j;
+
+    if(atom_j_idx < N) {
+        if(lambda_idxs[atom_j_idx] == 0) {
+            lambda_j = 0;
+        } else if(lambda_idxs[atom_j_idx] == 1) {
+            lambda_j = lambda;
+        } else if(lambda_idxs[atom_j_idx] == -1) {
+            lambda_j = cutoff + lambda;
+        }   
+    } else {
+        lambda_j = 0;
+    }
+
+    RealType cj[3];
+    RealType gj[3] = {0};
+    for(int d=0; d < 3; d++) {
+        cj[d] = atom_j_idx < N ? coords[atom_j_idx*3+d] : 0;
     }
     int charge_param_idx_j = atom_j_idx < N ? charge_param_idxs[atom_j_idx] : 0;
     RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
@@ -194,14 +258,14 @@ void __global__ k_compute_born_first_loop_gpu(
     // In inference mode, we don't care about gradients with respect to parameters.
     for(int round = 0; round < 32; round++) {
 
-        RealType dxs[D];
-        RealType r2 = 0;
-        for(int d=0; d < D; d++) {
-            RealType dx = ci[d] - cj[d];
-            dxs[d] = dx;
-            r2 += dx*dx;
+        RealType dxs[4];
+        for(int d=0; d < 3; d++) {
+            dxs[d] = ci[d] - cj[d];
         }
-        RealType r = fast_vec_norm<RealType, D>(dxs);
+        RealType delta_lambda = lambda_i - lambda_j;
+        dxs[3] = apply_delta(delta_lambda, 2*cutoff); 
+        RealType r = fast_vec_norm<RealType, 4>(dxs);
+        RealType r2 = r*r;
         RealType rInverse = 1/r;
         // RealType rInverse = fast_vec_rnorm<RealType, D>(dxs);
 
@@ -223,10 +287,16 @@ void __global__ k_compute_born_first_loop_gpu(
                 // bornForces[atom_j_idx]        += dGpol_dalpha2_ij*born_radii[atom_i_idx];
                 born_force_j_accum += dGpol_dalpha2_ij*born_radii_i;
 
-                for(int d=0; d < D; d++) {
+                for(int d=0; d < 3; d++) {
                     gi[d] += dxs[d]*dGpol_dr;
                     gj[d] -= dxs[d]*dGpol_dr;
                 }
+
+                RealType dw_i = (lambda_i == 0) ? 0 : 1;
+                RealType dw_j = (lambda_j == 0) ? 0 : 1;
+
+                du_dl_i += dxs[3]*dGpol_dr*dw_i;
+                du_dl_j -= dxs[3]*dGpol_dr*dw_j;
 
             }
 
@@ -238,18 +308,20 @@ void __global__ k_compute_born_first_loop_gpu(
         qj = __shfl_sync(0xffffffff, qj, srcLane);
         born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
         born_force_j_accum = __shfl_sync(0xffffffff, born_force_j_accum, srcLane);
-        for(size_t d=0; d < D; d++) {
+        for(size_t d=0; d < 3; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
         }
+        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
-    for(int d=0; d < D; d++) {
+    for(int d=0; d < 3; d++) {
         if(atom_i_idx < N) {
-            atomicAdd(out_forces + atom_i_idx*D + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));
+            atomicAdd(out_forces + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));
         }
         if(atom_j_idx < N) {
-            atomicAdd(out_forces + atom_j_idx*D + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
+            atomicAdd(out_forces + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
         }
     }
 
@@ -261,7 +333,10 @@ void __global__ k_compute_born_first_loop_gpu(
         atomicAdd(bornForces + atom_j_idx, static_cast<unsigned long long>((long long) (born_force_j_accum*FIXED_EXPONENT_BORN_FORCES)));
     }
 
+    atomicAdd(du_dl, du_dl_i + du_dl_j);
+
 }
+
 
 __global__ void k_reduce_born_radii(
     const int N,
@@ -313,6 +388,8 @@ __global__ void k_reduce_born_forces(
     unsigned long long* bornForces // dU/Ri
 ) {
 
+    // surface area term
+
     int atomI =  blockIdx.x*32 + threadIdx.x;
     if(atomI >= N) {
         return;
@@ -337,11 +414,13 @@ __global__ void k_reduce_born_forces(
 
 
 
-template <typename RealType, int D>
+template <typename RealType>
 __global__ void k_compute_born_energy_and_forces(
     const int N,
     const double* coords,
     const double* params,
+    const double lambda,
+    const int* lambda_idxs,
     const int* atomic_radii_idxs,
     const int* scale_factor_idxs,
     const double* born_radii,
@@ -351,14 +430,15 @@ __global__ void k_compute_born_energy_and_forces(
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
     const unsigned long long* bornForces,
-    unsigned long long* out_forces) {
+    unsigned long long* out_forces,
+    double *du_dl) {
 
     RealType block_d2ij = 0; 
-    for(int d=0; d < D; d++) {
-        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
-        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*D+d];
-        RealType block_row_ext = block_bounds_ext[blockIdx.x*D+d];
-        RealType block_col_ext = block_bounds_ext[blockIdx.y*D+d];
+    for(int d=0; d < 3; d++) {
+        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
+        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
+        RealType block_row_ext = block_bounds_ext[blockIdx.x*3+d];
+        RealType block_col_ext = block_bounds_ext[blockIdx.y*3+d];
         RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
         block_d2ij += dx*dx;
     }
@@ -368,10 +448,24 @@ __global__ void k_compute_born_energy_and_forces(
     }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    RealType ci[D];
-    RealType dPsi_dx_i[D] = {0};
-    for(int d=0; d < D; d++) {
-        ci[d] = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
+    RealType du_dl_i = 0;
+    RealType lambda_i;
+    if(atom_i_idx < N) {
+        if(lambda_idxs[atom_i_idx] == 0) {
+            lambda_i = 0;
+        } else if(lambda_idxs[atom_i_idx] == 1) {
+            lambda_i = lambda;
+        } else if(lambda_idxs[atom_i_idx] == -1) {
+            lambda_i = cutoff + lambda;
+        }        
+    } else {
+        lambda_i = 0;
+    }
+
+    RealType ci[3];
+    RealType dPsi_dx_i[3] = {0};
+    for(int d=0; d < 3; d++) {
+        ci[d] = atom_i_idx < N ? coords[atom_i_idx*3+d] : 0;
     }
 
     int atomic_radii_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
@@ -381,10 +475,25 @@ __global__ void k_compute_born_energy_and_forces(
     // RealType dPsi_dri = 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    RealType cj[D];
-    RealType dPsi_dx_j[D] = {0};
-    for(int d=0; d < D; d++) {
-        cj[d] = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
+    RealType du_dl_j = 0;
+    RealType lambda_j;
+
+    if(atom_j_idx < N) {
+        if(lambda_idxs[atom_j_idx] == 0) {
+            lambda_j = 0;
+        } else if(lambda_idxs[atom_j_idx] == 1) {
+            lambda_j = lambda;
+        } else if(lambda_idxs[atom_j_idx] == -1) {
+            lambda_j = cutoff + lambda;
+        }   
+    } else {
+        lambda_j = 0;
+    }
+
+    RealType cj[3];
+    RealType dPsi_dx_j[3] = {0};
+    for(int d=0; d < 3; d++) {
+        cj[d] = atom_j_idx < N ? coords[atom_j_idx*3+d] : 0;
     }
     int atomic_radii_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
     RealType radiusJ = atom_j_idx < N ? params[atomic_radii_idx_j] : 0;
@@ -402,14 +511,15 @@ __global__ void k_compute_born_energy_and_forces(
 
     for(int round = 0; round < 32; round++) {
 
-        RealType dxs[D];
-        for(int d=0; d < D; d++) {
+        RealType dxs[4];
+        for(int d=0; d < 3; d++) {
             dxs[d] = ci[d] - cj[d];
         }
+        RealType delta_lambda = lambda_i - lambda_j;
+        dxs[3] = apply_delta(delta_lambda, 2*cutoff); 
+        RealType r = fast_vec_norm<RealType, 4>(dxs);
 
-        RealType r = fast_vec_norm<RealType, D>(dxs);
-
-        if (atom_j_idx != atom_i_idx && r < cutoff) {
+        if (atom_j_idx != atom_i_idx && r < cutoff && atom_j_idx < N && atom_i_idx < N) {
             RealType rInverse = 1/r;
             // RealType rInverse = fast_vec_rnorm<RealType, D>(dxs);
             // radius w/ dielectric offset applied
@@ -469,11 +579,19 @@ __global__ void k_compute_born_energy_and_forces(
                 }
 
                 de *= rInverse*born_force_i*offsetRadiusI/2;
-                for(int d=0; d < D; d++) {
+
+                for(int d=0; d < 3; d++) {
                     RealType deriv = dxs[d]*de;
                     dPsi_dx_i[d] += deriv;
                     dPsi_dx_j[d] -= deriv;
                 }
+
+                RealType dw_i = (lambda_i == 0) ? 0 : 1;
+                RealType dw_j = (lambda_j == 0) ? 0 : 1;
+
+                du_dl_i += dxs[3]*de*dw_i;
+                du_dl_j -= dxs[3]*de*dw_j;
+
             }
         }
 
@@ -487,20 +605,25 @@ __global__ void k_compute_born_energy_and_forces(
         atomic_radii_idx_i = __shfl_sync(0xffffffff, atomic_radii_idx_i, srcLane);
         scale_factor_idx_j = __shfl_sync(0xffffffff, scale_factor_idx_j, srcLane);
 
-        for(int d=0; d < D; d++) {
+        for(int d=0; d < 3; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
             dPsi_dx_j[d] = __shfl_sync(0xffffffff, dPsi_dx_j[d], srcLane);
         }
 
+        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
+
     }
 
-    for(int d=0; d < D; d++) {
+    for(int d=0; d < 3; d++) {
         if(atom_i_idx < N) {
-            atomicAdd(out_forces + atom_i_idx*D+d,  static_cast<unsigned long long>((long long) (dPsi_dx_i[d]*FIXED_EXPONENT)));
+            atomicAdd(out_forces + atom_i_idx*3+d,  static_cast<unsigned long long>((long long) (dPsi_dx_i[d]*FIXED_EXPONENT)));
         }
         if(atom_j_idx < N) {
-            atomicAdd(out_forces + atom_j_idx*D+d,  static_cast<unsigned long long>((long long) (dPsi_dx_j[d]*FIXED_EXPONENT)));
+            atomicAdd(out_forces + atom_j_idx*3+d,  static_cast<unsigned long long>((long long) (dPsi_dx_j[d]*FIXED_EXPONENT)));
         }
     }
+
+    atomicAdd(du_dl, du_dl_i + du_dl_j);
 
 }

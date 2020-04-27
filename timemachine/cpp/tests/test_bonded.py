@@ -20,39 +20,41 @@ class TestBonded(GradientTest):
         P_bonds = 4
         P_angles = 6
         P_torsions = 13
-        # N = 64
-        # B = 35
-        # A = 36
-        # T = 37
+ 
+        N = 64
+        B = 35
+        A = 36
+        T = 37
 
-        N = 4
-        B = 1
-        A = 1
-        T = 1
+        # N = 4
+        # B = 6
+        # A = 1
+        # T = 1
 
-        for precision, rtol in [(np.float32, 2e-5), (np.float64, 5e-10)]:
+        D = 3
 
-            for D in [3,4]:
+        x = self.get_random_coords(N, D)
 
-                x = self.get_random_coords(N, D)
+        for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
 
-                params, ref_bonds, custom_bonds = prepare_bonded_system(
-                    x,
-                    P_bonds,
-                    P_angles,
-                    P_torsions,
-                    B,
-                    A,
-                    T,
-                    precision
-                )
+            params, ref_bonds, custom_bonds = prepare_bonded_system(
+                x,
+                P_bonds,
+                P_angles,
+                P_torsions,
+                B,
+                A,
+                T,
+                precision
+            )
 
-                # assert 0
-
+            for lamb in [0.0, 0.4, 0.5, 1.0]:
+                print("LAMBDA", lamb)
                 for r, t in zip(ref_bonds, custom_bonds):
                     self.compare_forces(
                         x,
                         params,
+                        lamb,
                         r,
                         t,
                         precision,

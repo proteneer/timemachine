@@ -30,6 +30,8 @@ def prepare_gbsa_system(
     precision=np.float64):
 
 
+    assert cutoff_radii == cutoff_force
+
     N = x.shape[0]
     D = x.shape[1]
 
@@ -52,10 +54,18 @@ def prepare_gbsa_system(
     scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, scale_params])
 
+    nonbonded_lambda_idxs = np.random.randint(
+        low=-1,
+        high=1,
+        size=(N),
+        dtype=np.int32
+    )
+
     custom_gb = ops.GBSA(
         charge_param_idxs,
         radii_param_idxs,
         scale_param_idxs,
+        nonbonded_lambda_idxs,
         alpha,
         beta,
         gamma,
@@ -66,13 +76,20 @@ def prepare_gbsa_system(
         probe_radius,
         cutoff_radii,
         cutoff_force,
-        N,
-        D,
         precision=precision
     )
 
+    # ideally cutoff is the max(cutoff_radii, cutoff_force)
+    box = np.array([
+        [100.0, 0.0, 0.0, 0.0],
+        [0.0, 100.0, 0.0, 0.0],
+        [0.0, 0.0, 100.0, 0.0],
+        [0.0, 0.0, 0.0, 2*cutoff_radii],
+    ])
+
     gbsa_obc_fn = functools.partial(
         gbsa.gbsa_obc,
+        box=box,
         charge_idxs=charge_param_idxs,
         radii_idxs=radii_param_idxs,
         scale_idxs=scale_param_idxs,
@@ -85,7 +102,8 @@ def prepare_gbsa_system(
         solvent_dielectric=solvent_dielectric,
         probe_radius=probe_radius,
         cutoff_radii=cutoff_radii,
-        cutoff_force=cutoff_force
+        cutoff_force=cutoff_force,
+        lambda_idxs=nonbonded_lambda_idxs
     )
 
     return params, [gbsa_obc_fn], [custom_gb]
@@ -101,15 +119,10 @@ def prepare_nonbonded_system(
     p_scale=4.0,
     e_scale=1.0,
     cutoff=100.0,
-    N_limit=None,
-    custom_D=None,
     precision=np.float64):
 
     N = x.shape[0]
     D = x.shape[1]
-
-    if N_limit is None:
-        N_limit = N
 
     if params is None:
         params = np.array([], dtype=np.float64)
@@ -145,8 +158,12 @@ def prepare_nonbonded_system(
     exclusion_lj_idxs = np.random.randint(low=0, high=P_exc, size=(E), dtype=np.int32) + len(params)
     params = np.concatenate([params, exclusion_params])
 
-    if custom_D is None:
-        custom_D = D
+    nonbonded_lambda_idxs = np.random.randint(
+        low=-1,
+        high=1,
+        size=(N),
+        dtype=np.int32
+    )
 
     custom_nonbonded = ops.Nonbonded(
         charge_param_idxs,
@@ -154,18 +171,30 @@ def prepare_nonbonded_system(
         exclusion_idxs,
         exclusion_charge_idxs,
         exclusion_lj_idxs,
+        nonbonded_lambda_idxs,
         cutoff,
-        N_limit,
-        custom_D,
         precision=precision
     )
 
-    lj_fn = functools.partial(nonbonded.lennard_jones, box=None, param_idxs=lj_param_idxs, cutoff=cutoff)
-    lj_fn_exc = functools.partial(nonbonded.lennard_jones_exclusion, box=None, param_idxs=lj_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=exclusion_lj_idxs)
-    es_fn = functools.partial(nonbonded.simple_energy, param_idxs=charge_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=exclusion_charge_idxs)
+    # make sure this is big enough!
+    box = np.array([
+        [100.0, 0.0, 0.0, 0.0],
+        [0.0, 100.0, 0.0, 0.0],
+        [0.0, 0.0, 100.0, 0.0],
+        [0.0, 0.0, 0.0, 2*cutoff],
+    ])
 
-    def ref_total_energy(x, p):
-        return lj_fn(x, p) - lj_fn_exc(x, p) + es_fn(x, p)
+    ref_total_energy = functools.partial(
+        nonbonded.nonbonded,
+        box=box,
+        es_param_idxs=charge_param_idxs,
+        lj_param_idxs=lj_param_idxs,
+        exclusion_idxs=exclusion_idxs,
+        es_exclusion_scale_idxs=exclusion_charge_idxs,
+        lj_exclusion_scale_idxs=exclusion_lj_idxs,
+        cutoff=cutoff,
+        lambda_idxs=nonbonded_lambda_idxs
+    )
 
     return params, [ref_total_energy], [custom_nonbonded]
 
@@ -193,6 +222,13 @@ def prepare_bonded_system(
         bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
     bond_idxs = np.array(bond_idxs, dtype=np.int32)
     params = np.concatenate([params, bond_params])
+    bond_lambda_idxs = np.random.randint(
+        low=-1,
+        high=2,
+        size=(B),
+        dtype=np.int32
+    )
+
 
     params = np.array([], dtype=np.float64);
     angle_params = np.random.rand(P_angles).astype(np.float64)
@@ -202,6 +238,12 @@ def prepare_bonded_system(
         angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
     angle_idxs = np.array(angle_idxs, dtype=np.int32)
     params = np.concatenate([params, angle_params])
+    angle_lambda_idxs = np.random.randint(
+        low=-1,
+        high=2,
+        size=(A),
+        dtype=np.int32
+    )
 
     params = np.array([], dtype=np.float64);
     torsion_params = np.random.rand(P_torsions).astype(np.float64)
@@ -210,19 +252,24 @@ def prepare_bonded_system(
     for _ in range(T):
         torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
     torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
-
     params = np.concatenate([params, torsion_params])
+    torsion_lambda_idxs = np.random.randint(
+        low=-1,
+        high=2,
+        size=(T),
+        dtype=np.int32
+    )
 
-    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, D, precision=precision)
-    harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs)
+    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, bond_lambda_idxs, precision=precision)
+    harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs, lambda_idxs=bond_lambda_idxs)
 
-    custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, D, precision=precision)
-    harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs)
+    custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, angle_lambda_idxs, precision=precision)
+    harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs, lambda_idxs=angle_lambda_idxs)
 
-    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, D, precision=precision)
-    periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
+    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, torsion_lambda_idxs, precision=precision)
+    periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs, lambda_idxs=torsion_lambda_idxs)
 
-    return params, [harmonic_bond_fn], [custom_bonded]
+    return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
 
 def hilbert_sort(conf, D):
     hc = HilbertCurve(64, D)
@@ -291,7 +338,7 @@ class GradientTest(unittest.TestCase):
             else:
                 np.testing.assert_allclose(ref, test, rtol=5e-3)
 
-    def compare_forces(self, x, params, ref_nrg_fn, custom_force, precision, rtol=None):
+    def compare_forces(self, x, params, lamb, ref_nrg_fn, custom_force, precision, rtol=None):
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
 
@@ -301,10 +348,11 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
-        test_dx = custom_force.execute(x, params)
 
-        grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
-        ref_dx, ref_dp = grad_fn(x, params)
+        grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1, 2))
+        ref_dx, ref_dp, ref_dl = grad_fn(x, params, lamb)
+
+        test_dx, test_dl = custom_force.execute_lambda(x, params, lamb)
 
         self.assert_equal_vectors(
             np.array(ref_dx),
@@ -312,18 +360,23 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
-        x_tangent = np.random.rand(N, D).astype(np.float32).astype(np.float64)
-        params_tangent = np.zeros_like(params)
+        np.testing.assert_almost_equal(ref_dl, test_dl, rtol)
 
-        test_x_tangent, test_p_tangent = custom_force.execute_jvp(
+        x_tangent = np.random.rand(N, D).astype(np.float64)
+        params_tangent = np.zeros_like(params)
+        lamb_tangent = np.random.rand()
+
+        test_x_tangent, test_p_tangent = custom_force.execute_lambda_jvp(
             x,
             params,
+            lamb,
             x_tangent,
-            params_tangent
+            params_tangent,
+            lamb_tangent
         )
 
-        primals = (x, params)
-        tangents = (x_tangent, params_tangent)
+        primals = (x, params, lamb)
+        tangents = (x_tangent, params_tangent, lamb_tangent)
 
         _, t = jax.jvp(grad_fn, primals, tangents)
 

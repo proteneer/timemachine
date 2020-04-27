@@ -3,10 +3,32 @@ import jax.numpy as np
 from jax.scipy.special import erf, erfc
 
 from timemachine.constants import ONE_4PI_EPS0
-from timemachine.potentials.jax_utils import delta_r, distance
+from timemachine.potentials.jax_utils import delta_r, distance, lambda_to_w, convert_to_4d
 
-# def simple_energy(conf, params, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
-# def lennard_jones(conf, params, box, param_idxs, scale_matrix=None, cutoff=None):
+
+def nonbonded(
+    conf,
+    params,
+    lamb,
+    box,
+    es_param_idxs,
+    lj_param_idxs,
+    exclusion_idxs,
+    es_exclusion_scale_idxs,
+    lj_exclusion_scale_idxs,
+    cutoff,
+    lambda_idxs):
+
+    conf_4d = convert_to_4d(conf, lamb, lambda_idxs, cutoff)
+
+    lj = lennard_jones(conf_4d, params, box=box, param_idxs=lj_param_idxs, cutoff=cutoff)
+    lj_exc = lennard_jones_exclusion(conf_4d, params, box=box, param_idxs=lj_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=lj_exclusion_scale_idxs)
+    es =               simple_energy(conf_4d, params, box=box, param_idxs=es_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=es_exclusion_scale_idxs)
+
+    return lj - lj_exc + es
+
+
+
 def lennard_jones(conf, params, box, param_idxs, cutoff):
     """
     Implements a non-periodic LJ612 potential using the Lorentz−Berthelot combining
@@ -36,7 +58,6 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
         greater than cutoff is fully discarded.
     
     """
-    assert box is None
     sig = params[param_idxs[:, 0]]
     eps = params[param_idxs[:, 1]]
 
@@ -48,12 +69,6 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
     eps_i = np.expand_dims(eps, 0)
     eps_j = np.expand_dims(eps, 1)
 
-    # if scale_matrix is None:
-        # N = conf.shape[0]
-        # scale_matrix = np.ones((N, N)) - np.eye(N)
-
-
-    # eps_ij = scale_matrix * np.sqrt(eps_i * eps_j)
     eps_ij = np.sqrt(eps_i * eps_j)
 
     eps_ij_raw = eps_ij
@@ -81,16 +96,15 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
     eij = np.where(keep_mask, eij, np.zeros_like(eij))
     return np.sum(eij/2)
 
-    # now we compute the exclusions
-def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
 
-    assert box is None
+# now we compute the exclusions
+def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
 
     src_idxs = exclusions[:, 0]
     dst_idxs = exclusions[:, 1]
     ri = conf[src_idxs]
     rj = conf[dst_idxs]
-    dij = distance(ri, rj, None)
+    dij = distance(ri, rj, box)
 
     sig_idxs = param_idxs[:, 0] 
     sig_i = params[sig_idxs[src_idxs]]
@@ -120,18 +134,7 @@ def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, e
     return np.sum(eij_exc)
 
 
-def simple_energy(conf, params, param_idxs, cutoff):
-    """
-    Numerically stable implementation of the pairwise term:
-    
-    eij = qi*qj/dij
-
-    """
-    charges = params[param_idxs]
-    return inverse_energy(conf, charges, cutoff)
-
-# def inverse_energy(conf, charges, cutoff, exclusions, exclusion_scale_idx):
-def simple_energy(conf, params, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
+def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
     """
     Numerically stable implementation of the pairwise term:
     
@@ -145,7 +148,7 @@ def simple_energy(conf, params, param_idxs, cutoff, exclusions, exclusion_scale_
     qij = np.multiply(qi, qj)
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
-    dij = distance(ri, rj, None)
+    dij = distance(ri, rj, box)
 
     # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
     keep_mask = 1 - np.eye(conf.shape[0])
@@ -160,7 +163,7 @@ def simple_energy(conf, params, param_idxs, cutoff, exclusions, exclusion_scale_
     dst_idxs = exclusions[:, 1]
     ri = conf[src_idxs]
     rj = conf[dst_idxs]
-    dij = distance(ri, rj, None)
+    dij = distance(ri, rj, box)
 
     qi = charges[src_idxs]
     qj = charges[dst_idxs]

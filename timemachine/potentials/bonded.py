@@ -3,7 +3,7 @@ import jax.numpy as np
 from timemachine.potentials.jax_utils import distance, delta_r
 
 
-def harmonic_bond(conf, params, box, bond_idxs, param_idxs):
+def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs, lambda_idxs):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -27,16 +27,25 @@ def harmonic_bond(conf, params, box, bond_idxs, param_idxs):
         each element (k_idx, r_idx) maps into params for bond constants and ideal lengths
 
     """
+    assert lambda_idxs.shape[0] == bond_idxs.shape[0]
+
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
     dij = distance(ci, cj, box)
     kbs = params[param_idxs[:, 0]]
     r0s = params[param_idxs[:, 1]]
-    energy = np.sum(kbs/2 * np.power(dij - r0s, 2.0))
+
+    prefactors_c = np.where(lambda_idxs ==  0, 1, 0)
+    prefactors_a = np.where(lambda_idxs ==  1, lamb, 0)
+    prefactors_b = np.where(lambda_idxs == -1, 1-lamb, 0)
+    prefactors = np.stack([prefactors_a, prefactors_b, prefactors_c])
+    prefactors = np.sum(prefactors, axis=0)
+
+    energy = np.sum(prefactors * kbs/2 * np.power(dij - r0s, 2.0))
     return energy
 
 
-def harmonic_angle(conf, params, box, angle_idxs, param_idxs, cos_angles=True):
+def harmonic_angle(conf, params, lamb, box, angle_idxs, param_idxs, lambda_idxs, cos_angles=True):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -80,12 +89,19 @@ def harmonic_angle(conf, params, box, angle_idxs, param_idxs, cos_angles=True):
 
     tb = top/bot
 
+    prefactors_c = np.where(lambda_idxs ==  0, 1, 0)
+    prefactors_a = np.where(lambda_idxs ==  1, lamb, 0)
+    prefactors_b = np.where(lambda_idxs == -1, 1-lamb, 0)
+    prefactors = np.stack([prefactors_a, prefactors_b, prefactors_c])
+    prefactors = np.sum(prefactors, axis=0)
+
+
     # (ytz): we used the squared version so that we make this energy being strictly positive
     if cos_angles:
-        energies = kas/2*np.power(tb - np.cos(a0s), 2)
+        energies = prefactors*kas/2*np.power(tb - np.cos(a0s), 2)
     else:
         angle = np.arccos(tb)
-        energies = kas/2*np.power(angle - a0s, 2)
+        energies = prefactors*kas/2*np.power(angle - a0s, 2)
 
     return np.sum(energies, -1)  # reduce over all angles
 
@@ -140,7 +156,7 @@ def signed_torsion_angle(ci, cj, ck, cl):
     return np.arctan2(y, x)
 
 
-def periodic_torsion(conf, params, box, torsion_idxs, param_idxs):
+def periodic_torsion(conf, params, lamb, box, torsion_idxs, param_idxs, lambda_idxs):
     """
     Compute the periodic torsional energy.
 
@@ -174,5 +190,12 @@ def periodic_torsion(conf, params, box, torsion_idxs, param_idxs):
     phase = params[param_idxs[:, 1]]
     period = params[param_idxs[:, 2]]
     angle = signed_torsion_angle(ci, cj, ck, cl)
-    nrg = ks*(1+np.cos(period * angle - phase))
+
+    prefactors_c = np.where(lambda_idxs ==  0, 1, 0)
+    prefactors_a = np.where(lambda_idxs ==  1, lamb, 0)
+    prefactors_b = np.where(lambda_idxs == -1, 1-lamb, 0)
+    prefactors = np.stack([prefactors_a, prefactors_b, prefactors_c])
+    prefactors = np.sum(prefactors, axis=0)
+
+    nrg = prefactors*ks*(1+np.cos(period * angle - phase))
     return np.sum(nrg, axis=-1)

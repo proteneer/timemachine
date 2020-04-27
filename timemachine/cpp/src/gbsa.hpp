@@ -15,6 +15,9 @@ private:
     int *d_charge_param_idxs_;
     int *d_atomic_radii_idxs_;
     int *d_scale_factor_idxs_;
+    int *d_lambda_idxs_;
+
+    double *d_du_dl_buffer_;
 
     unsigned long long *d_born_psi_buffer_;
     double *d_born_radii_buffer_;
@@ -37,14 +40,9 @@ private:
     double cutoff_radii_;
     double cutoff_force_;
 
-    // these buffers can be in RealType as well
-    // double *d_block_bounds_ctr_;
-    // double *d_block_bounds_ext_;
-
     Neighborlist nblist_;
 
     const int N_;
-    const int N_limit_;
 
 public:
 
@@ -52,6 +50,7 @@ public:
         const std::vector<int> &charge_param_idxs,
         const std::vector<int> &atomic_radii_idxs,
         const std::vector<int> &scale_factor_idxs,
+        const std::vector<int> &lambda_idxs, // [N]
         double alpha,
         double beta,
         double gamma,
@@ -61,51 +60,26 @@ public:
         double solvent_dielectric,
         double probe_radius,
         double cutoff_radii,
-        double cutoff_force,
-        int N_limit
+        double cutoff_force
     );
 
     // FIX ME with actual destructors later
     ~GBSA();
 
-    void execute_first_order(
+    virtual void execute_lambda_device(
         const int N,
         const int P,
-        const std::vector<double> &coords,
-        const std::vector<double> &params,
-        std::vector<double> &dU_dx,
-        std::vector<double> &dU_dp
-    );
-
-    void execute_second_order(
-        const int N,
-        const int P,
-        const std::vector<double> &coords,
-        const std::vector<double> &coords_tangents,
-        const std::vector<double> &params,
-        std::vector<double> &HvP,
-        std::vector<double> &MvP
-    );
-
-    /*
-    Execute the force computation, the semantics are:
-
-    1. If d_coords_tangents == null, then out_coords != null, out_coords_tangent == null, out_params_tangents == null
-    2. If d_coords_tangents != null, then out_coords == null, out_coords_tangent != null, out_params_tangents != null
-
-    */
-    virtual void execute_device(
-        const int N,
-        const int P,
-        const double *d_coords,
+        const double *d_coords_primals,
         const double *d_coords_tangents,
-        const double *d_params,
-        unsigned long long *out_coords,
-        double *out_coords_tangents,
-        double *out_params_tangents,
+        const double *d_params_primals,
+        const double lambda_primal,
+        const double lambda_tangent,
+        unsigned long long *d_out_coords_primals,
+        double *d_out_lambda_primals,
+        double *d_out_coords_tangents,
+        double *d_out_params_tangents,
         cudaStream_t stream
     ) override;
-
 
 };
 
