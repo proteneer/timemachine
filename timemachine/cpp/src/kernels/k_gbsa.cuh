@@ -50,9 +50,9 @@ __global__ void k_compute_born_radii(
         if(lambda_idxs[atom_i_idx] == 0) {
             lambda_i = 0;
         } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = lambda;
+            lambda_i = cutoff*lambda;
         } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + lambda;
+            lambda_i = cutoff + cutoff*lambda;
         }        
     } else {
         lambda_i = 0;
@@ -70,14 +70,13 @@ __global__ void k_compute_born_radii(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType lambda_j;
-
     if(atom_j_idx < N) {
         if(lambda_idxs[atom_j_idx] == 0) {
             lambda_j = 0;
         } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = lambda;
+            lambda_j = cutoff*lambda;
         } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + lambda;
+            lambda_j = cutoff + cutoff*lambda;
         }   
     } else {
         lambda_j = 0;
@@ -208,9 +207,9 @@ void __global__ k_compute_born_first_loop_gpu(
         if(lambda_idxs[atom_i_idx] == 0) {
             lambda_i = 0;
         } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = lambda;
+            lambda_i = cutoff*lambda;
         } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + lambda;
+            lambda_i = cutoff + cutoff*lambda;
         }        
     } else {
         lambda_i = 0;
@@ -231,14 +230,13 @@ void __global__ k_compute_born_first_loop_gpu(
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType du_dl_j = 0;
     RealType lambda_j;
-
     if(atom_j_idx < N) {
         if(lambda_idxs[atom_j_idx] == 0) {
             lambda_j = 0;
         } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = lambda;
+            lambda_j = cutoff*lambda;
         } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + lambda;
+            lambda_j = cutoff + cutoff*lambda;
         }   
     } else {
         lambda_j = 0;
@@ -292,8 +290,8 @@ void __global__ k_compute_born_first_loop_gpu(
                     gj[d] -= dxs[d]*dGpol_dr;
                 }
 
-                RealType dw_i = (lambda_i == 0) ? 0 : 1;
-                RealType dw_j = (lambda_j == 0) ? 0 : 1;
+                RealType dw_i = (lambda_i == 0) ? 0 : cutoff;
+                RealType dw_j = (lambda_j == 0) ? 0 : cutoff;
 
                 du_dl_i += dxs[3]*dGpol_dr*dw_i;
                 du_dl_j -= dxs[3]*dGpol_dr*dw_j;
@@ -454,9 +452,9 @@ __global__ void k_compute_born_energy_and_forces(
         if(lambda_idxs[atom_i_idx] == 0) {
             lambda_i = 0;
         } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = lambda;
+            lambda_i = cutoff*lambda;
         } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + lambda;
+            lambda_i = cutoff + cutoff*lambda;
         }        
     } else {
         lambda_i = 0;
@@ -477,14 +475,13 @@ __global__ void k_compute_born_energy_and_forces(
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType du_dl_j = 0;
     RealType lambda_j;
-
     if(atom_j_idx < N) {
         if(lambda_idxs[atom_j_idx] == 0) {
             lambda_j = 0;
         } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = lambda;
+            lambda_j = cutoff*lambda;
         } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + lambda;
+            lambda_j = cutoff + cutoff*lambda;
         }   
     } else {
         lambda_j = 0;
@@ -586,8 +583,8 @@ __global__ void k_compute_born_energy_and_forces(
                     dPsi_dx_j[d] -= deriv;
                 }
 
-                RealType dw_i = (lambda_i == 0) ? 0 : 1;
-                RealType dw_j = (lambda_j == 0) ? 0 : 1;
+                RealType dw_i = (lambda_i == 0) ? 0 : cutoff;
+                RealType dw_j = (lambda_j == 0) ? 0 : cutoff;
 
                 du_dl_i += dxs[3]*de*dw_i;
                 du_dl_j -= dxs[3]*de*dw_j;
