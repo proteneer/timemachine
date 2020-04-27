@@ -48,9 +48,9 @@ void __global__ k_nonbonded_jvp(
         if(lambda_idxs[atom_i_idx] == 0) {
             lambda_i = Surreal<RealType>(0, 0);
         } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = Surreal<RealType>(lambda, lambda_tangent);
+            lambda_i = cutoff*Surreal<RealType>(lambda, lambda_tangent);
         } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = Surreal<RealType>(cutoff + lambda, lambda_tangent);
+            lambda_i = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
         }        
     } else {
         lambda_i = Surreal<RealType>(0, 0);
@@ -79,14 +79,13 @@ void __global__ k_nonbonded_jvp(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     Surreal<RealType> lambda_j;
-
     if(atom_j_idx < N) {
         if(lambda_idxs[atom_j_idx] == 0) {
             lambda_j = Surreal<RealType>(0, 0);
         } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = Surreal<RealType>(lambda, lambda_tangent);
+            lambda_j = cutoff*Surreal<RealType>(lambda, lambda_tangent);
         } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = Surreal<RealType>(cutoff + lambda, lambda_tangent);
+            lambda_j = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
         }        
     } else {
         lambda_j = Surreal<RealType>(0, 0);
@@ -239,14 +238,13 @@ void __global__ k_nonbonded_exclusion_jvp(
 
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
     Surreal<RealType> lambda_i;
-
     if(lambda_idxs[atom_i_idx] == 0) {
         lambda_i = Surreal<RealType>(0, 0);
     } else if(lambda_idxs[atom_i_idx] == 1) {
-        lambda_i = Surreal<RealType>(lambda, lambda_tangent);
+        lambda_i = cutoff*Surreal<RealType>(lambda, lambda_tangent);
     } else if(lambda_idxs[atom_i_idx] == -1) {
-        lambda_i = Surreal<RealType>(cutoff + lambda, lambda_tangent);
-    }        
+        lambda_i = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
+    }
 
     Surreal<RealType> ci[3];
     Surreal<RealType> gi[3] = {Surreal<RealType>(0.0, 0.0)};
@@ -271,14 +269,13 @@ void __global__ k_nonbonded_exclusion_jvp(
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
     Surreal<RealType> lambda_j;
-
     if(lambda_idxs[atom_j_idx] == 0) {
         lambda_j = Surreal<RealType>(0, 0);
     } else if(lambda_idxs[atom_j_idx] == 1) {
-        lambda_j = Surreal<RealType>(lambda, lambda_tangent);
+        lambda_j = cutoff*Surreal<RealType>(lambda, lambda_tangent);
     } else if(lambda_idxs[atom_j_idx] == -1) {
-        lambda_j = Surreal<RealType>(cutoff + lambda, lambda_tangent);
-    }        
+        lambda_j = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
+    }
 
     Surreal<RealType> cj[3];
     Surreal<RealType> gj[3] = {Surreal<RealType>(0.0, 0.0)};
@@ -428,14 +425,13 @@ void __global__ k_nonbonded_inference(
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
     RealType lambda_i;
-
     if(atom_i_idx < N) {
         if(lambda_idxs[atom_i_idx] == 0) {
             lambda_i = 0;
         } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = lambda;
+            lambda_i = cutoff*lambda;
         } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + lambda;
+            lambda_i = cutoff + cutoff*lambda;
         }        
     } else {
         lambda_i = 0;
@@ -458,14 +454,13 @@ void __global__ k_nonbonded_inference(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType lambda_j;
-
     if(atom_j_idx < N) {
         if(lambda_idxs[atom_j_idx] == 0) {
             lambda_j = 0;
         } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = lambda;
+            lambda_j = cutoff*lambda;
         } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + lambda;
+            lambda_j = cutoff + cutoff*lambda;
         }   
     } else {
         lambda_j = 0;
@@ -529,8 +524,8 @@ void __global__ k_nonbonded_inference(
 
             // this technically should be if lambda_idxs[i] == 0 and lamba_idxs[j] == 0
             // however, they both imply that delta_lambda = 0, so dxs[3] == 0, simplifying the equation
-            RealType dw_i = (lambda_i == 0) ? 0 : 1;
-            RealType dw_j = (lambda_j == 0) ? 0 : 1;
+            RealType dw_i = (lambda_i == 0) ? 0 : cutoff;
+            RealType dw_j = (lambda_j == 0) ? 0 : cutoff;
 
             du_dl_i -= (es_grad_prefactor + lj_grad_prefactor) * dxs[3] * dw_i;
             du_dl_j += (es_grad_prefactor + lj_grad_prefactor) * dxs[3] * dw_j;
@@ -590,9 +585,9 @@ void __global__ k_nonbonded_exclusion_inference(
     if(lambda_idxs[atom_i_idx] == 0) {
         lambda_i = 0;
     } else if(lambda_idxs[atom_i_idx] == 1) {
-        lambda_i = lambda;
+        lambda_i = cutoff*lambda;
     } else if(lambda_idxs[atom_i_idx] == -1) {
-        lambda_i = cutoff + lambda;
+        lambda_i = cutoff + cutoff*lambda;
     }
 
     RealType ci[3];
@@ -616,9 +611,9 @@ void __global__ k_nonbonded_exclusion_inference(
     if(lambda_idxs[atom_j_idx] == 0) {
         lambda_j = 0;
     } else if(lambda_idxs[atom_j_idx] == 1) {
-        lambda_j = lambda;
+        lambda_j = cutoff*lambda;
     } else if(lambda_idxs[atom_j_idx] == -1) {
-        lambda_j = cutoff + lambda;
+        lambda_j = cutoff + cutoff*lambda;
     }
 
     RealType cj[3];
@@ -677,8 +672,8 @@ void __global__ k_nonbonded_exclusion_inference(
             gj[d] -= (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor)*dxs[d];
         }
 
-        RealType dw_i = (lambda_i == 0) ? 0 : 1;
-        RealType dw_j = (lambda_j == 0) ? 0 : 1;
+        RealType dw_i = (lambda_i == 0) ? 0 : cutoff;
+        RealType dw_j = (lambda_j == 0) ? 0 : cutoff;
 
         du_dl_i += (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor) * dxs[3] * dw_i;
         du_dl_j -= (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor) * dxs[3] * dw_j;

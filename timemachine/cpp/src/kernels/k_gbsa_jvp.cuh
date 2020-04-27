@@ -43,9 +43,9 @@ __global__ void k_compute_born_radii_gpu_jvp(
         if(lambda_idxs[atom_i_idx] == 0) {
             lambda_i = Surreal<RealType>(0, 0);
         } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = Surreal<RealType>(lambda, lambda_tangent);
+            lambda_i = cutoff*Surreal<RealType>(lambda, lambda_tangent);
         } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = Surreal<RealType>(cutoff + lambda, lambda_tangent);
+            lambda_i = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
         }        
     } else {
         lambda_i = Surreal<RealType>(0, 0);
@@ -68,14 +68,13 @@ __global__ void k_compute_born_radii_gpu_jvp(
 
     int atom_j_idx =  blockIdx.y*32 + threadIdx.x;
     Surreal<RealType> lambda_j;
-
     if(atom_j_idx < N) {
         if(lambda_idxs[atom_j_idx] == 0) {
             lambda_j = Surreal<RealType>(0, 0);
         } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = Surreal<RealType>(lambda, lambda_tangent);
+            lambda_j = cutoff*Surreal<RealType>(lambda, lambda_tangent);
         } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = Surreal<RealType>(cutoff + lambda, lambda_tangent);
+            lambda_j = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
         }        
     } else {
         lambda_j = Surreal<RealType>(0, 0);
@@ -213,9 +212,9 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
         if(lambda_idxs[atom_i_idx] == 0) {
             lambda_i = Surreal<RealType>(0, 0);
         } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = Surreal<RealType>(lambda, lambda_tangent);
+            lambda_i = cutoff*Surreal<RealType>(lambda, lambda_tangent);
         } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = Surreal<RealType>(cutoff + lambda, lambda_tangent);
+            lambda_i = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
         }        
     } else {
         lambda_i = Surreal<RealType>(0, 0);
@@ -239,14 +238,13 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     Surreal<RealType> lambda_j;
-
     if(atom_j_idx < N) {
         if(lambda_idxs[atom_j_idx] == 0) {
             lambda_j = Surreal<RealType>(0, 0);
         } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = Surreal<RealType>(lambda, lambda_tangent);
+            lambda_j = cutoff*Surreal<RealType>(lambda, lambda_tangent);
         } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = Surreal<RealType>(cutoff + lambda, lambda_tangent);
+            lambda_j = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
         }        
     } else {
         lambda_j = Surreal<RealType>(0, 0);
@@ -483,13 +481,14 @@ __global__ void k_compute_born_energy_and_forces_jvp(
         if(lambda_idxs[atom_i_idx] == 0) {
             lambda_i = Surreal<RealType>(0, 0);
         } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = Surreal<RealType>(lambda, lambda_tangent);
+            lambda_i = cutoff*Surreal<RealType>(lambda, lambda_tangent);
         } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = Surreal<RealType>(cutoff + lambda, lambda_tangent);
+            lambda_i = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
         }        
     } else {
         lambda_i = Surreal<RealType>(0, 0);
     }
+
     Surreal<RealType> ci[D];
     RealType dPsi_dx_i_imag[D];
     for(int d=0; d < D; d++) {
@@ -510,14 +509,13 @@ __global__ void k_compute_born_energy_and_forces_jvp(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     Surreal<RealType> lambda_j;
-
     if(atom_j_idx < N) {
         if(lambda_idxs[atom_j_idx] == 0) {
             lambda_j = Surreal<RealType>(0, 0);
         } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = Surreal<RealType>(lambda, lambda_tangent);
+            lambda_j = cutoff*Surreal<RealType>(lambda, lambda_tangent);
         } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = Surreal<RealType>(cutoff + lambda, lambda_tangent);
+            lambda_j = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
         }        
     } else {
         lambda_j = Surreal<RealType>(0, 0);

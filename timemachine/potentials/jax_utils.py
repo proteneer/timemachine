@@ -2,8 +2,8 @@ import jax.numpy as np
 
 
 def lambda_to_w(lamb, lamb_flags, cutoff):
-    d4_i = np.where(lamb_flags == 1, lamb, 0.0)
-    d4_d = np.where(lamb_flags == -1, cutoff + lamb, 0.0)
+    d4_i = np.where(lamb_flags == 1, cutoff*lamb, 0.0)
+    d4_d = np.where(lamb_flags == -1, cutoff + cutoff*lamb, 0.0)
     d4 = d4_i + d4_d
     return d4
 

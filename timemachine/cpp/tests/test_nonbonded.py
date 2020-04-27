@@ -75,7 +75,7 @@ class TestNonbonded(GradientTest):
 
                 for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
 
-                    print("lambda", lamb, "cutoff", cutoff)
+                    print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
                     for r, t in zip(ref_forces, test_forces):
                         self.compare_forces(
                             x,
@@ -95,7 +95,7 @@ class TestNonbonded(GradientTest):
         P_exc = 7
         dim = 3
 
-        for precision, rtol in [(np.float32, 2e-5), (np.float64, 5e-10)]:
+        for precision, rtol in [(np.float64, 5e-10), (np.float32, 2e-5)]:
 
             x = self.get_water_coords(dim)
             E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
@@ -114,7 +114,7 @@ class TestNonbonded(GradientTest):
                 )
 
                 for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
-
+                    print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
                     for r, t in zip(ref_forces, test_forces):
                         self.compare_forces(
                             x,
