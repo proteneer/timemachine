@@ -6,9 +6,8 @@
 #include "gbsa_jvp.cuh"
 #include "gpu_utils.cuh"
 #include "math_utils.cuh"
-#include "k_gbsa_lambda.cuh"
-#include "k_gbsa_lambda_jvp.cuh"
-// #include "k_gbsa_jvp.cuh"
+#include "k_gbsa.cuh"
+#include "k_gbsa_jvp.cuh"
 
 namespace timemachine {
 

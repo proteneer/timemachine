@@ -5,8 +5,7 @@
 #include "nonbonded.hpp"
 #include "gpu_utils.cuh"
 
-#include "k_nonbonded_deterministic_lambda.cuh"
-// #include "k_nonbonded_deterministic_lambda.cuh"
+#include "k_nonbonded.cuh"
 
 namespace timemachine {
 
