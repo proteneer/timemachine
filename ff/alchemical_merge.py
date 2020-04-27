@@ -46,6 +46,8 @@ def iterate_type(mol_type, mol_map, type):
             key = order(new_src, new_dst)
             if new_src < R_C and new_dst < R_C:
                 core_bonds[key] = param_idxs
+            elif new_src > R_C and new_dst > R_C:
+                core_bonds[key] = param_idxs
             else:
                 new_bond_idxs.append(key)
                 new_bond_params.append(param_idxs)
@@ -62,6 +64,8 @@ def iterate_type(mol_type, mol_map, type):
             key = order(new_src, new_dst)
             if new_src < R_C and new_dst < R_C:
                 core_angles[(key[0], new_mid, key[1])] = param_idxs
+            elif new_src > R_C and new_dst > R_C:
+                core_angles[(key[0], new_mid, key[1])] = param_idxs
             else:
                 new_angle_idxs.append((key[0], new_mid, key[1]))
                 new_angle_params.append(param_idxs)
@@ -77,6 +81,8 @@ def iterate_type(mol_type, mol_map, type):
                 lhs], mol_map[rhs], mol_map[dst]
             key = order(new_src, new_dst)
             if new_src < R_C and new_dst < R_C:
+                core_torsions[(key[0], new_lhs, new_rhs, key[1])] = param_idxs
+            elif new_src > R_C and new_dst > R_C:
                 core_torsions[(key[0], new_lhs, new_rhs, key[1])] = param_idxs
             else:
                 new_torsion_idxs.append((key[0], new_lhs, new_rhs, key[1]))
@@ -130,11 +136,12 @@ def core_check(core_a, core_b):
     new_idxs = []
     new_params = []
     for k, v in core_a.items():
-        if v != core_b[k]:
-            new_idxs.append(k)
-            new_params.append(v)
-        else:
-            good_core[k] = v
+        if k[0] < R_C and k[1] < R_C:
+            if v != core_b[k]:
+                new_idxs.append(k)
+                new_params.append(v)
+            else:
+                good_core[k] = v
 
     return good_core, new_idxs, new_params
 
@@ -248,7 +255,6 @@ for type in [
         combined_es_exclusion_params = []
         combined_lj_exclusion_params = []
         cutoff = mol1_type[-1]
-        print('cutoff = ', cutoff)
 
         for k, v in gc1.items():
             lambda_idxs.append(0)
@@ -316,7 +322,6 @@ for type in [
         combined_gb_radii = []
         combined_gb_scale = []
         gb_args = mol1_type[3:]
-        print(gb_args)
 
         for k, v in gc1.items():
             lambda_idxs.append(0)
@@ -342,11 +347,12 @@ for type in [
             combined_gb_radii.append(v[1])
             combined_gb_scale.append(v[2])
 
-        for l_idx, a, b, c in zip(lambda_idxs, combined_es_params,
-                                  combined_gb_radii, combined_gb_scale):
+        # for l_idx, a, b, c in zip(lambda_idxs, combined_es_params,
+        #                                 combined_gb_radii,
+        #                                 combined_gb_scale):
 
-            print(l_idx)
-            print(a, b, c)
+        #     print(l_idx)
+        #     print(a, b, c)
 
     else:
         lambda_idxs = []
@@ -395,11 +401,12 @@ for type in [
                 combined_bond_idxs.append(k)
                 combined_bond_params.append(v)
 
-            # for l_idx, bond_idxs, bond_params in zip(lambda_idxs,
-            #                                          combined_bond_idxs,
-            #                                          combined_bond_params):
-            #     print(l_idx, new_masses[bond_idxs[0]], new_masses[bond_idxs[1]],
-            #           bond_params)
+            for l_idx, bond_idxs, bond_params in zip(lambda_idxs,
+                                                     combined_bond_idxs,
+                                                     combined_bond_params):
+                if l_idx != 0:
+                    print(l_idx, new_masses[bond_idxs[0]],
+                          new_masses[bond_idxs[1]], bond_params)
 
         elif type == 'HarmonicAngle':
             combined_angle_idxs = []
@@ -425,11 +432,13 @@ for type in [
                 combined_angle_idxs.append(k)
                 combined_angle_params.append(v)
 
-            # for l_idx, angle_idxs, angle_params in zip(lambda_idxs,
-            #                                            combined_angle_idxs,
-            #                                            combined_angle_params):
-            #     print(l_idx, new_masses[angle_idxs[0]], new_masses[angle_idxs[1]],
-            #           new_masses[angle_idxs[2]], angle_params)
+            for l_idx, angle_idxs, angle_params in zip(lambda_idxs,
+                                                       combined_angle_idxs,
+                                                       combined_angle_params):
+                if l_idx != 0:
+                    print(l_idx, new_masses[angle_idxs[0]],
+                          new_masses[angle_idxs[1]], new_masses[angle_idxs[2]],
+                          angle_params)
 
         elif type == 'PeriodicTorsion':
             combined_torsion_idxs = []
@@ -455,8 +464,11 @@ for type in [
                 combined_torsion_idxs.append(k)
                 combined_torsion_params.append(v)
 
-            # for l_idx, torsion_idxs, torsion_params in zip(
-            #         lambda_idxs, combined_torsion_idxs, combined_torsion_params):
-            #     print(l_idx, new_masses[torsion_idxs[0]], torsion_idxs,
-            #           new_masses[torsion_idxs[1]], new_masses[torsion_idxs[2]],
-            #           new_masses[torsion_idxs[3]], torsion_params)
+            for l_idx, torsion_idxs, torsion_params in zip(
+                    lambda_idxs, combined_torsion_idxs,
+                    combined_torsion_params):
+                if l_idx != 0:
+                    print(l_idx, new_masses[torsion_idxs[0]], torsion_idxs,
+                          new_masses[torsion_idxs[1]],
+                          new_masses[torsion_idxs[2]],
+                          new_masses[torsion_idxs[3]], torsion_params)
