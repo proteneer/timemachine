@@ -207,14 +207,19 @@ def prepare_bonded_system(
     B,
     A,
     T,
-    precision):
+    precision,
+    params=None):
 
     N = x.shape[0]
     D = x.shape[1]
 
     atom_idxs = np.arange(N)
 
-    params = np.array([], dtype=np.float64);
+    if params is None:
+        params = np.array([], dtype=np.float64)
+    else:
+        print("PARAMS", params)
+
     bond_params = np.random.rand(P_bonds).astype(np.float64)
     bond_param_idxs = np.random.randint(low=0, high=P_bonds, size=(B,2), dtype=np.int32) + len(params)
     bond_idxs = []
@@ -222,54 +227,54 @@ def prepare_bonded_system(
         bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
     bond_idxs = np.array(bond_idxs, dtype=np.int32)
     params = np.concatenate([params, bond_params])
-    bond_lambda_idxs = np.random.randint(
-        low=-1,
-        high=2,
-        size=(B),
-        dtype=np.int32
-    )
+    # bond_lambda_idxs = np.random.randint(
+    #     low=-1,
+    #     high=2,
+    #     size=(B),
+    #     dtype=np.int32
+    # )
 
 
-    params = np.array([], dtype=np.float64);
-    angle_params = np.random.rand(P_angles).astype(np.float64)
-    angle_param_idxs = np.random.randint(low=0, high=P_angles, size=(A,2), dtype=np.int32) + len(params)
-    angle_idxs = []
-    for _ in range(A):
-        angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
-    angle_idxs = np.array(angle_idxs, dtype=np.int32)
-    params = np.concatenate([params, angle_params])
-    angle_lambda_idxs = np.random.randint(
-        low=-1,
-        high=2,
-        size=(A),
-        dtype=np.int32
-    )
+    # params = np.array([], dtype=np.float64);
+    # angle_params = np.random.rand(P_angles).astype(np.float64)
+    # angle_param_idxs = np.random.randint(low=0, high=P_angles, size=(A,2), dtype=np.int32) + len(params)
+    # angle_idxs = []
+    # for _ in range(A):
+    #     angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
+    # angle_idxs = np.array(angle_idxs, dtype=np.int32)
+    # params = np.concatenate([params, angle_params])
+    # angle_lambda_idxs = np.random.randint(
+    #     low=-1,
+    #     high=2,
+    #     size=(A),
+    #     dtype=np.int32
+    # )
 
-    params = np.array([], dtype=np.float64);
-    torsion_params = np.random.rand(P_torsions).astype(np.float64)
-    torsion_param_idxs = np.random.randint(low=0, high=P_torsions, size=(T,3), dtype=np.int32) + len(params)
-    torsion_idxs = []
-    for _ in range(T):
-        torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
-    torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
-    params = np.concatenate([params, torsion_params])
-    torsion_lambda_idxs = np.random.randint(
-        low=-1,
-        high=2,
-        size=(T),
-        dtype=np.int32
-    )
+    # params = np.array([], dtype=np.float64);
+    # torsion_params = np.random.rand(P_torsions).astype(np.float64)
+    # torsion_param_idxs = np.random.randint(low=0, high=P_torsions, size=(T,3), dtype=np.int32) + len(params)
+    # torsion_idxs = []
+    # for _ in range(T):
+    #     torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
+    # torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
+    # params = np.concatenate([params, torsion_params])
+    # torsion_lambda_idxs = np.random.randint(
+    #     low=-1,
+    #     high=2,
+    #     size=(T),
+    #     dtype=np.int32
+    # )
 
-    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, bond_lambda_idxs, precision=precision)
-    harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs, lambda_idxs=bond_lambda_idxs)
+    custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, precision=precision)
+    harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs)
 
-    custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, angle_lambda_idxs, precision=precision)
-    harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs, lambda_idxs=angle_lambda_idxs)
+    # custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, angle_lambda_idxs, precision=precision)
+    # harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs, lambda_idxs=angle_lambda_idxs)
 
-    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, torsion_lambda_idxs, precision=precision)
-    periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs, lambda_idxs=torsion_lambda_idxs)
+    # custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, torsion_lambda_idxs, precision=precision)
+    # periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs, lambda_idxs=torsion_lambda_idxs)
 
-    return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
+    return params, [harmonic_bond_fn], [custom_bonded]
 
 def hilbert_sort(conf, D):
     hc = HilbertCurve(64, D)
@@ -349,10 +354,10 @@ class GradientTest(unittest.TestCase):
         assert params.dtype == np.float64
 
 
+        ref_nrg = ref_nrg_fn(x, params, lamb)
         grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1, 2))
         ref_dx, ref_dp, ref_dl = grad_fn(x, params, lamb)
-
-        test_dx, test_dl = custom_force.execute_lambda(x, params, lamb)
+        test_dx, test_dl, test_nrg = custom_force.execute_lambda(x, params, lamb)
 
         self.assert_equal_vectors(
             np.array(ref_dx),

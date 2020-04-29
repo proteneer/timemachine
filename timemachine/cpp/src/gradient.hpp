@@ -4,7 +4,6 @@
 
 namespace timemachine {
 
-template <int D>
 class Gradient {
 
 public: 
@@ -21,7 +20,7 @@ public:
         const double lambda_tangent, // inference
         unsigned long long *h_out_coords_primals, // inference
         double *h_out_lambda_primals, // inference
-
+        double *h_out_energy,
         double *h_out_coords_tangents, // jvp
         double *h_out_params_tangents // jvp
     );
@@ -36,6 +35,7 @@ public:
         const double lambda_tangent,
         unsigned long long *d_out_coords_primals,
         double *d_out_lambda_primals,
+        double *d_out_energy_primal,
         double *d_out_coords_tangents,
         double *d_out_params_tangents,
         cudaStream_t stream

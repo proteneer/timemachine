@@ -28,16 +28,17 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
 pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/wrap_kernels.cpp
   src/gpu_utils.cu
-  src/nonbonded.cu
+  # src/nonbonded.cu
   src/neighborlist.cu
   src/harmonic_bond.cu
-  src/harmonic_angle.cu
-  src/periodic_torsion.cu
+  # src/harmonic_angle.cu
+  # src/periodic_torsion.cu
   src/gradient.cu
   src/integrator.cu
-  src/stepper.cu
-  src/context.cu
-  src/gbsa.cu
+  src/alchemical_gradient.cu
+  # src/stepper.cu
+  # src/context.cu
+  # src/gbsa.cu
   src/kernels/k_find_block_bounds.cu
 )
 

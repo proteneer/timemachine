@@ -47,7 +47,7 @@ class AlchemicalStepper : public Stepper {
 private:
 
     int count_;
-    std::vector<Gradient<3> *>forces_;
+    std::vector<Gradient *>forces_;
 
     const std::vector<double> lambda_schedule_; // [T]
     double *d_du_dl_; // [T]

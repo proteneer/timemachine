@@ -1,12 +1,13 @@
 
+#include <iostream>
+
 #include "gradient.hpp"
 #include "gpu_utils.cuh"
 #include "surreal.cuh"
 
 namespace timemachine {
 
-template<int D>
-void Gradient<D>::execute_lambda_host(
+void Gradient::execute_lambda_host(
     const int N,
     const int P,
     const double *h_in_coords_primals,
@@ -16,11 +17,15 @@ void Gradient<D>::execute_lambda_host(
     const double in_lambda_tangent,
     unsigned long long *h_out_coords_primals,
     double *h_out_lambda_primals,
+    double *h_out_energy,
     double *h_out_coords_tangents,
-    double *h_out_params_tangents) {
+    double *h_out_params_tangents
+) {
 
     double *d_in_coords_primals;
     double *d_in_params_primals;
+
+    const int D = 3;
 
     gpuErrchk(cudaMalloc(&d_in_coords_primals, N*D*sizeof(double)));
     gpuErrchk(cudaMalloc(&d_in_params_primals, P*sizeof(double)));
@@ -34,11 +39,15 @@ void Gradient<D>::execute_lambda_host(
     double *d_in_coords_tangents = nullptr;
     double *d_out_coords_tangents = nullptr;
     double *d_out_params_tangents = nullptr;
+    double *d_out_energy = nullptr;
+
     if(h_in_coords_tangents == nullptr) {
         gpuErrchk(cudaMalloc(&d_out_coords_primals, N*D*sizeof(unsigned long long)));
         gpuErrchk(cudaMemset(d_out_coords_primals, 0, N*D*sizeof(unsigned long long)));
         gpuErrchk(cudaMalloc(&d_out_lambda_primals, sizeof(double)));
         gpuErrchk(cudaMemset(d_out_lambda_primals, 0, sizeof(double)));
+        gpuErrchk(cudaMalloc(&d_out_energy, sizeof(double)));
+        gpuErrchk(cudaMemset(d_out_energy, 0, sizeof(double)));
     } else {
 
         gpuErrchk(cudaMalloc(&d_in_coords_tangents, N*D*sizeof(double)));
@@ -61,6 +70,7 @@ void Gradient<D>::execute_lambda_host(
         in_lambda_tangent,
         d_out_coords_primals,
         d_out_lambda_primals,
+        d_out_energy,
         d_out_coords_tangents,
         d_out_params_tangents,
         static_cast<cudaStream_t>(0)
@@ -71,6 +81,8 @@ void Gradient<D>::execute_lambda_host(
         gpuErrchk(cudaFree(d_out_coords_primals));
         gpuErrchk(cudaMemcpy(h_out_lambda_primals, d_out_lambda_primals, sizeof(*h_out_lambda_primals), cudaMemcpyDeviceToHost));
         gpuErrchk(cudaFree(d_out_lambda_primals));
+        gpuErrchk(cudaMemcpy(h_out_energy, d_out_energy, sizeof(*h_out_energy), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaFree(d_out_energy));
 
     } else {
         gpuErrchk(cudaMemcpy(h_out_coords_tangents, d_out_coords_tangents, N*D*sizeof(double), cudaMemcpyDeviceToHost));
@@ -85,9 +97,6 @@ void Gradient<D>::execute_lambda_host(
     gpuErrchk(cudaFree(d_in_params_primals));
 
 };
-
-template class Gradient<4>; 
-template class Gradient<3>;
 
 }
 
