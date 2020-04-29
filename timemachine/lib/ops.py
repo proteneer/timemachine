@@ -40,3 +40,6 @@ def PeriodicTorsion(*args, precision):
         return custom_ops.PeriodicTorsion_f32(*args)
     else:
         raise Exception("Unknown precision")
+
+def AlchemicalGradient(*args):
+    return custom_ops.AlchemicalGradient(*args)

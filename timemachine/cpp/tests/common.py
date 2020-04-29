@@ -217,8 +217,6 @@ def prepare_bonded_system(
 
     if params is None:
         params = np.array([], dtype=np.float64)
-    else:
-        print("PARAMS", params)
 
     bond_params = np.random.rand(P_bonds).astype(np.float64)
     bond_param_idxs = np.random.randint(low=0, high=P_bonds, size=(B,2), dtype=np.int32) + len(params)
@@ -359,13 +357,27 @@ class GradientTest(unittest.TestCase):
         ref_dx, ref_dp, ref_dl = grad_fn(x, params, lamb)
         test_dx, test_dl, test_nrg = custom_force.execute_lambda(x, params, lamb)
 
+
+        np.testing.assert_almost_equal(ref_nrg, test_nrg, rtol)
+        print("PASSED ENERGIES")
+
+        np.testing.assert_almost_equal(ref_dl, test_dl, rtol)
+        print("PASSED DU_DL")
+
+        print("ref_dx", ref_dx)
+        print("test_dx", test_dx)
         self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),
             rtol,
         )
+        print("PASSED FORCES")
 
-        np.testing.assert_almost_equal(ref_dl, test_dl, rtol)
+
+        assert 0
+
+
+
 
         x_tangent = np.random.rand(N, D).astype(np.float64)
         params_tangent = np.zeros_like(params)

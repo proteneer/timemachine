@@ -174,10 +174,10 @@ namespace py = pybind11;
 // }
 
 
-void declare_gradient(py::module &m, const char *typestr) {
+void declare_gradient(py::module &m) {
 
     using Class = timemachine::Gradient;
-    std::string pyclass_name = std::string("Gradient_") + typestr;
+    std::string pyclass_name = std::string("Gradient");
     py::class_<Class>(
         m,
         pyclass_name.c_str(),
@@ -254,10 +254,10 @@ void declare_gradient(py::module &m, const char *typestr) {
 
 
 
-void declare_alchemical_gradient(py::module &m, const char *typestr) {
+void declare_alchemical_gradient(py::module &m) {
 
     using Class = timemachine::AlchemicalGradient;
-    std::string pyclass_name = std::string("AlchemicalGradient_") + typestr;
+    std::string pyclass_name = std::string("AlchemicalGradient");
     py::class_<Class, timemachine::Gradient>(
         m,
         pyclass_name.c_str(),
@@ -492,9 +492,8 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 
 PYBIND11_MODULE(custom_ops, m) {
 
-    declare_gradient(m, "f64");
-    declare_alchemical_gradient(m, "f64");
-    declare_alchemical_gradient(m, "f32");
+    declare_gradient(m);
+    declare_alchemical_gradient(m);
 
     declare_harmonic_bond<double>(m, "f64");
     declare_harmonic_bond<float>(m, "f32");

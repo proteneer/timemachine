@@ -43,16 +43,16 @@ __global__ void k_linear_rescale_inference(
 
     const auto idx = blockDim.x*blockIdx.x + threadIdx.x;
 
-    if(idx == 0 && blockIdx.x == 0) {
+    if(idx == 0 && blockIdx.y == 0) {
         *uc_energy = (*u0_energy)*(1-lambda) + (*u1_energy)*lambda;
         *uc_du_dl = -(*u0_energy) + (*u1_energy) + (*u0_du_dl)*(1-lambda) + (*u1_du_dl)*lambda;
     }
 
     const auto dim = blockIdx.y;
 
-    if(idx < N*3) {
-        auto f0 = static_cast<double>(static_cast<long long>(u0_coord_grads[idx]))/FIXED_EXPONENT;
-        auto f1 = static_cast<double>(static_cast<long long>(u1_coord_grads[idx]))/FIXED_EXPONENT;
+    if(idx < N) {
+        auto f0 = static_cast<double>(static_cast<long long>(u0_coord_grads[idx*3+dim]))/FIXED_EXPONENT;
+        auto f1 = static_cast<double>(static_cast<long long>(u1_coord_grads[idx*3+dim]))/FIXED_EXPONENT;
         auto fc = (1-lambda)*f0 + lambda*f1;
         uc_coord_grads[idx*3+dim] = static_cast<unsigned long long>((long long) (fc*FIXED_EXPONENT));
     }
@@ -125,8 +125,8 @@ void AlchemicalGradient::execute_lambda_device(
         dim3 dimGrid(B, 3, 1); // x, y, z dims
 
         k_linear_rescale_inference<<<dimGrid, tpb, 0, stream>>>(
-            N,
             lambda_primal,
+            N,
             d_out_coords_primals_buffer_u0_,
             d_out_lambda_primal_buffer_u0_,
             d_out_energy_primal_buffer_u0_,
