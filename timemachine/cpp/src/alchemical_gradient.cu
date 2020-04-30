@@ -37,21 +37,21 @@ AlchemicalGradient::AlchemicalGradient(
 
 AlchemicalGradient::~AlchemicalGradient() {
 
-    gpuErrchk(cudaFree(&d_out_coords_primals_buffer_u0_));
-    gpuErrchk(cudaFree(&d_out_energy_primal_buffer_u0_));
-    gpuErrchk(cudaFree(&d_out_lambda_primal_buffer_u0_));
-    gpuErrchk(cudaFree(&d_out_jvp_coords_primals_buffer_u0_));
-    gpuErrchk(cudaFree(&d_out_jvp_coords_tangents_buffer_u0_));
-    gpuErrchk(cudaFree(&d_out_jvp_params_primals_buffer_u0_));
-    gpuErrchk(cudaFree(&d_out_jvp_params_tangents_buffer_u0_));
+    gpuErrchk(cudaFree(d_out_coords_primals_buffer_u0_));
+    gpuErrchk(cudaFree(d_out_energy_primal_buffer_u0_));
+    gpuErrchk(cudaFree(d_out_lambda_primal_buffer_u0_));
+    gpuErrchk(cudaFree(d_out_jvp_coords_primals_buffer_u0_));
+    gpuErrchk(cudaFree(d_out_jvp_coords_tangents_buffer_u0_));
+    gpuErrchk(cudaFree(d_out_jvp_params_primals_buffer_u0_));
+    gpuErrchk(cudaFree(d_out_jvp_params_tangents_buffer_u0_));
 
-    gpuErrchk(cudaFree(&d_out_coords_primals_buffer_u1_));
-    gpuErrchk(cudaFree(&d_out_energy_primal_buffer_u1_));
-    gpuErrchk(cudaFree(&d_out_lambda_primal_buffer_u1_));
-    gpuErrchk(cudaFree(&d_out_jvp_coords_primals_buffer_u1_));
-    gpuErrchk(cudaFree(&d_out_jvp_coords_tangents_buffer_u1_));
-    gpuErrchk(cudaFree(&d_out_jvp_params_primals_buffer_u1_));
-    gpuErrchk(cudaFree(&d_out_jvp_params_tangents_buffer_u1_));
+    gpuErrchk(cudaFree(d_out_coords_primals_buffer_u1_));
+    gpuErrchk(cudaFree(d_out_energy_primal_buffer_u1_));
+    gpuErrchk(cudaFree(d_out_lambda_primal_buffer_u1_));
+    gpuErrchk(cudaFree(d_out_jvp_coords_primals_buffer_u1_));
+    gpuErrchk(cudaFree(d_out_jvp_coords_tangents_buffer_u1_));
+    gpuErrchk(cudaFree(d_out_jvp_params_primals_buffer_u1_));
+    gpuErrchk(cudaFree(d_out_jvp_params_tangents_buffer_u1_));
 
 };
 
