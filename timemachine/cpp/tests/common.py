@@ -243,20 +243,13 @@ def prepare_bonded_system(
     angle_idxs = np.array(angle_idxs, dtype=np.int32)
     params = np.concatenate([params, angle_params])
 
-    # params = np.array([], dtype=np.float64);
-    # torsion_params = np.random.rand(P_torsions).astype(np.float64)
-    # torsion_param_idxs = np.random.randint(low=0, high=P_torsions, size=(T,3), dtype=np.int32) + len(params)
-    # torsion_idxs = []
-    # for _ in range(T):
-    #     torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
-    # torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
-    # params = np.concatenate([params, torsion_params])
-    # torsion_lambda_idxs = np.random.randint(
-    #     low=-1,
-    #     high=2,
-    #     size=(T),
-    #     dtype=np.int32
-    # )
+    torsion_params = np.random.rand(P_torsions).astype(np.float64)
+    torsion_param_idxs = np.random.randint(low=0, high=P_torsions, size=(T,3), dtype=np.int32) + len(params)
+    torsion_idxs = []
+    for _ in range(T):
+        torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
+    torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
+    params = np.concatenate([params, torsion_params])
 
     custom_bonded = ops.HarmonicBond(bond_idxs, bond_param_idxs, precision=precision)
     harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs, param_idxs=bond_param_idxs)
@@ -264,10 +257,10 @@ def prepare_bonded_system(
     custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, precision=precision)
     harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs)
 
-    # custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, torsion_lambda_idxs, precision=precision)
-    # periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs, lambda_idxs=torsion_lambda_idxs)
+    custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, precision=precision)
+    periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
 
-    return params, [harmonic_bond_fn, harmonic_angle_fn], [custom_bonded, custom_angles]
+    return params, [harmonic_bond_fn, harmonic_angle_fn, periodic_torsion_fn], [custom_bonded, custom_angles, custom_torsions]
 
 def hilbert_sort(conf, D):
     hc = HilbertCurve(64, D)

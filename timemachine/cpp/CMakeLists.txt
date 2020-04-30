@@ -32,7 +32,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/neighborlist.cu
   src/harmonic_bond.cu
   src/harmonic_angle.cu
-  # src/periodic_torsion.cu
+  src/periodic_torsion.cu
   src/gradient.cu
   src/integrator.cu
   

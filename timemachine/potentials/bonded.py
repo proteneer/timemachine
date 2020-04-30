@@ -8,7 +8,7 @@ def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
-    This implements a harmonic angle potential: V(t) = k*(t - t0)^2 or V(t) = k*(cos(t)-cos(t0))^2
+    This implements a harmonic angle potential: V(t) = k*(b - b0)^2
 
     Parameters:
     -----------
@@ -142,7 +142,7 @@ def signed_torsion_angle(ci, cj, ck, cl):
     return np.arctan2(y, x)
 
 
-def periodic_torsion(conf, params, lamb, box, torsion_idxs, param_idxs, lambda_idxs):
+def periodic_torsion(conf, params, lamb, box, torsion_idxs, param_idxs):
     """
     Compute the periodic torsional energy.
 
@@ -177,11 +177,5 @@ def periodic_torsion(conf, params, lamb, box, torsion_idxs, param_idxs, lambda_i
     period = params[param_idxs[:, 2]]
     angle = signed_torsion_angle(ci, cj, ck, cl)
 
-    prefactors_c = np.where(lambda_idxs ==  0, 1, 0)
-    prefactors_a = np.where(lambda_idxs ==  1, lamb, 0)
-    prefactors_b = np.where(lambda_idxs == -1, 1-lamb, 0)
-    prefactors = np.stack([prefactors_a, prefactors_b, prefactors_c])
-    prefactors = np.sum(prefactors, axis=0)
-
-    nrg = prefactors*ks*(1+np.cos(period * angle - phase))
+    nrg = ks*(1+np.cos(period * angle - phase))
     return np.sum(nrg, axis=-1)

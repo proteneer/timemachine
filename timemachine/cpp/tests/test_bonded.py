@@ -68,21 +68,23 @@ class TestBonded(GradientTest):
         P_angles = 6
         P_torsions = 13
  
-        # N = 64
-        # B = 35
-        # A = 36
-        # T = 37
+        N = 64
+        B = 35
+        A = 36
+        T = 37
 
-        N = 4
-        B = 6
-        A = 1
-        T = 1
+        # N = 4
+        # B = 6
+        # A = 1
+        # T = 1
 
         D = 3
 
         x = self.get_random_coords(N, D)
 
-        for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
+        # for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
+        for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
+
 
             params, ref_bonds0, custom_bonds0 = prepare_bonded_system(
                 x,

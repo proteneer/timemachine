@@ -87,7 +87,6 @@ void HarmonicBond<RealType>::execute_lambda_jvp_device(
 
     int tpb = 32;
     int blocks = (B_+tpb-1)/tpb;
-    const int D = 3;
 
     k_harmonic_bond_jvp<RealType><<<blocks, tpb, 0, stream>>>(
         B_,

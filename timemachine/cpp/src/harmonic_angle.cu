@@ -93,8 +93,6 @@ void HarmonicAngle<RealType>::execute_lambda_jvp_device(
     int tpb = 32;
     int blocks = (A_+tpb-1)/tpb;
 
-    const int D = 3;
-
     k_harmonic_angle_jvp<RealType, 3><<<blocks, tpb,  0, stream>>>(
         A_,
         d_coords_primals,
