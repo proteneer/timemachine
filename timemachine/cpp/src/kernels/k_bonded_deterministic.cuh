@@ -499,9 +499,6 @@ void __global__ k_periodic_torsion_jvp(
         atomicAdd(grad_coords_tangents + l_idx*D + d, (d_angle_dR3[d] * prefactor).imag);
     }
 
-
-    // atomicAdd(energy, kt*(1+cos(period*angle - phase)));
-
     Surreal<RealType> du_dkt = 1 + cos(period*angle - phase);
     Surreal<RealType> du_dphase = kt*sin(period*angle - phase);
     Surreal<RealType> du_dperiod = -kt*sin(period*angle - phase)*angle;

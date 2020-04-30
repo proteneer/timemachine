@@ -145,7 +145,7 @@ class TestNonbonded(GradientTest):
                     test_forces1[0]
                 )
 
-                for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
+                for lamb in [0.0, 1/10,  1/2, 1/1.2, 1]:
                     print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
                     self.compare_forces(
                         x,
@@ -183,7 +183,7 @@ class TestNonbonded(GradientTest):
                     precision=precision
                 )
 
-                for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
+                for lamb in [0.0, 1/10,  1/2, 1/1.2, 1]:
                     print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
                     for r, t in zip(ref_forces, test_forces):
                         self.compare_forces(    

@@ -27,8 +27,6 @@ void __global__ k_nonbonded_jvp(
     double *grad_params_primals,
     double *grad_params_tangents) {
 
-    // lambda_i = lambda_plane_idx[i]*cutoff + lambda_offset_idx[i]*cutoff*lambda
-
     if(blockIdx.y > blockIdx.x) {
         return;
     }
@@ -79,7 +77,6 @@ void __global__ k_nonbonded_jvp(
     if(atom_j_idx < N) {
         lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);        
     }
-
 
     Surreal<RealType> cj[3];
     Surreal<RealType> gj[3];
@@ -435,7 +432,7 @@ void __global__ k_nonbonded_inference(
     RealType lambda_i = lambda;
     RealType dlambda_i = 0;
     if(atom_i_idx < N) {
-        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);        
+        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);
         dlambda_i = cutoff*lambda_offset_idxs[atom_i_idx];
     }
 
@@ -457,7 +454,6 @@ void __global__ k_nonbonded_inference(
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType lambda_j = lambda;
     RealType dlambda_j = 0;
-
     if(atom_j_idx < N) {
         lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);
         dlambda_j = cutoff*lambda_offset_idxs[atom_j_idx];

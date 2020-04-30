@@ -35,8 +35,8 @@ public:
         const std::vector<int> &exclusion_idxs, // [E,2]
         const std::vector<int> &charge_scale_idxs, // [E]
         const std::vector<int> &lj_scale_idxs, // [E]
-        const std::vector<int> &lambda_plane_idxs, // [E]
-        const std::vector<int> &lambda_offset_idxs, // [E]
+        const std::vector<int> &lambda_plane_idxs, // N
+        const std::vector<int> &lambda_offset_idxs, // N
         double cutoff);
 
     ~Nonbonded();

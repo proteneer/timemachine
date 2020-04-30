@@ -54,9 +54,16 @@ def prepare_gbsa_system(
     scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, scale_params])
 
-    nonbonded_lambda_idxs = np.random.randint(
-        low=-1,
-        high=1,
+    lambda_plane_idxs = np.random.randint(
+        low=0,
+        high=2,
+        size=(N),
+        dtype=np.int32
+    )
+
+    lambda_offset_idxs = np.random.randint(
+        low=0,
+        high=2,
         size=(N),
         dtype=np.int32
     )
@@ -65,7 +72,8 @@ def prepare_gbsa_system(
         charge_param_idxs,
         radii_param_idxs,
         scale_param_idxs,
-        nonbonded_lambda_idxs,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
         alpha,
         beta,
         gamma,
@@ -81,9 +89,9 @@ def prepare_gbsa_system(
 
     # ideally cutoff is the max(cutoff_radii, cutoff_force)
     box = np.array([
-        [100.0, 0.0, 0.0, 0.0],
-        [0.0, 100.0, 0.0, 0.0],
-        [0.0, 0.0, 100.0, 0.0],
+        [10000.0, 0.0, 0.0, 0.0],
+        [0.0, 10000.0, 0.0, 0.0],
+        [0.0, 0.0, 10000.0, 0.0],
         [0.0, 0.0, 0.0, 2*cutoff_radii],
     ])
 
@@ -103,7 +111,8 @@ def prepare_gbsa_system(
         probe_radius=probe_radius,
         cutoff_radii=cutoff_radii,
         cutoff_force=cutoff_force,
-        lambda_idxs=nonbonded_lambda_idxs
+        lambda_plane_idxs=lambda_plane_idxs,
+        lambda_offset_idxs=lambda_offset_idxs
     )
 
     return params, [gbsa_obc_fn], [custom_gb]
@@ -356,13 +365,11 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
-        # return
-
         x_tangent = np.random.rand(N, D).astype(np.float64)
         params_tangent = np.zeros_like(params)
         lamb_tangent = np.random.rand()
 
-        test_x_tangent, test_p_tangent = custom_force.execute_lambda_jvp(
+        test_x_tangent, test_p_tangent, test_x_primal, test_p_primal = custom_force.execute_lambda_jvp(
             x,
             params,
             lamb,
@@ -370,6 +377,9 @@ class GradientTest(unittest.TestCase):
             params_tangent,
             lamb_tangent
         )
+
+        print("X_PRIMAL", test_x_primal)
+        print("DX", test_dx)
 
         primals = (x, params, lamb)
         tangents = (x_tangent, params_tangent, lamb_tangent)
@@ -383,7 +393,6 @@ class GradientTest(unittest.TestCase):
             test_x_tangent,
             rtol,
         )
-
         # TBD compare relative to the *norm* of the group of similar derivatives.
         # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
         #     err = abs((r - tt)/r)

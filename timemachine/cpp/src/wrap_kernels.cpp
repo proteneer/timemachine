@@ -9,7 +9,7 @@
 #include "harmonic_angle.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
-// #include "gbsa.hpp"
+#include "gbsa.hpp"
 #include "gradient.hpp"
 #include "alchemical_gradient.hpp"
 #include "stepper.hpp"
@@ -246,7 +246,7 @@ void declare_gradient(py::module &m) {
                 py_out_params_tangents.mutable_data()
             );
 
-            return py::make_tuple(py_out_coords_tangents, py_out_params_tangents);
+            return py::make_tuple(py_out_coords_tangents, py_out_params_tangents, py_out_coords_primals, py_out_params_primals);
     });
 
 }
@@ -423,63 +423,67 @@ void declare_nonbonded(py::module &m, const char *typestr) {
 }
 
 
-// template <typename RealType, int D>
-// void declare_gbsa(py::module &m, const char *typestr) {
+template <typename RealType>
+void declare_gbsa(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::GBSA<RealType, D>;
-//     std::string pyclass_name = std::string("GBSA_") + typestr;
-//     py::class_<Class, timemachine::Gradient<D> >(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const py::array_t<int, py::array::c_style> &charge_pi, // [N]
-//         const py::array_t<int, py::array::c_style> &radii_pi, // [N]
-//         const py::array_t<int, py::array::c_style> &scale_pi, // [N]
-//         const py::array_t<int, py::array::c_style> &lambda_pi, // [N]
-//         double alpha,
-//         double beta,
-//         double gamma,
-//         double dielectric_offset,
-//         double surface_tension,
-//         double solute_dielectric,
-//         double solvent_dielectric,
-//         double probe_radius,
-//         double cutoff_radii,
-//         double cutoff_force
-//     ){
-//         std::vector<int> charge_param_idxs(charge_pi.size());
-//         std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
-//         std::vector<int> atomic_radii_idxs(radii_pi.size());
-//         std::memcpy(atomic_radii_idxs.data(), radii_pi.data(), radii_pi.size()*sizeof(int));
-//         std::vector<int> scale_factor_idxs(scale_pi.size());
-//         std::memcpy(scale_factor_idxs.data(), scale_pi.data(), scale_pi.size()*sizeof(int));
-//         std::vector<int> lambda_idxs(lambda_pi.size());
-//         std::memcpy(lambda_idxs.data(), lambda_pi.data(), lambda_pi.size()*sizeof(int));
+    using Class = timemachine::GBSA<RealType>;
+    std::string pyclass_name = std::string("GBSA_") + typestr;
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &charge_pi, // [N]
+        const py::array_t<int, py::array::c_style> &radii_pi, // [N]
+        const py::array_t<int, py::array::c_style> &scale_pi, // [N]
+        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
+        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
+        double alpha,
+        double beta,
+        double gamma,
+        double dielectric_offset,
+        double surface_tension,
+        double solute_dielectric,
+        double solvent_dielectric,
+        double probe_radius,
+        double cutoff_radii,
+        double cutoff_force
+    ){
+        std::vector<int> charge_param_idxs(charge_pi.size());
+        std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
+        std::vector<int> atomic_radii_idxs(radii_pi.size());
+        std::memcpy(atomic_radii_idxs.data(), radii_pi.data(), radii_pi.size()*sizeof(int));
+        std::vector<int> scale_factor_idxs(scale_pi.size());
+        std::memcpy(scale_factor_idxs.data(), scale_pi.data(), scale_pi.size()*sizeof(int));
+        std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
+        std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
+        std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
+        std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
 
 
-//         return new timemachine::GBSA<RealType, D>(
-//             charge_param_idxs, // [N]
-//             atomic_radii_idxs, // [N]
-//             scale_factor_idxs, // 
-//             lambda_idxs,
-//             alpha,
-//             beta,
-//             gamma,
-//             dielectric_offset,
-//             surface_tension,
-//             solute_dielectric,
-//             solvent_dielectric,
-//             probe_radius,
-//             cutoff_radii,
-//             cutoff_force
-//         );
-//     }
-//     ));
+        return new timemachine::GBSA<RealType>(
+            charge_param_idxs, // [N]
+            atomic_radii_idxs, // [N]
+            scale_factor_idxs, // 
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            alpha,
+            beta,
+            gamma,
+            dielectric_offset,
+            surface_tension,
+            solute_dielectric,
+            solvent_dielectric,
+            probe_radius,
+            cutoff_radii,
+            cutoff_force
+        );
+    }
+    ));
 
-// }
+}
 
 PYBIND11_MODULE(custom_ops, m) {
 
@@ -498,8 +502,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded<double>(m, "f64");
     declare_nonbonded<float>(m, "f32");
 
-    // declare_gbsa<double, 3>(m, "f64_3d");
-    // declare_gbsa<float, 3>(m, "f32_3d");
+    declare_gbsa<double>(m, "f64");
+    declare_gbsa<float>(m, "f32");
 
     declare_stepper(m, "f64");
     declare_alchemical_stepper(m, "f64");
