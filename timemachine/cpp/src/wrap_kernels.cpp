@@ -2,7 +2,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 
-// #include "context.hpp"
+#include "context.hpp"
 // #include "optimizer.hpp"
 // #include "langevin.hpp"
 #include "harmonic_bond.hpp"
@@ -12,7 +12,7 @@
 // #include "gbsa.hpp"
 #include "gradient.hpp"
 #include "alchemical_gradient.hpp"
-// #include "stepper.hpp"
+#include "stepper.hpp"
 #include "fixed_point.hpp"
 
 #include <iostream>
@@ -20,158 +20,158 @@
 namespace py = pybind11;
 
 
-// void declare_stepper(py::module &m, const char *typestr) {
+void declare_stepper(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::Stepper;
-//     std::string pyclass_name = std::string("Stepper_") + typestr;
-//     py::class_<Class>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     );
+    using Class = timemachine::Stepper;
+    std::string pyclass_name = std::string("Stepper_") + typestr;
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    );
 
-// }
+}
 
-// void declare_alchemical_stepper(py::module &m, const char *typestr) {
+void declare_alchemical_stepper(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::AlchemicalStepper;
-//     std::string pyclass_name = std::string("AlchemicalStepper_") + typestr;
-//     py::class_<Class, timemachine::Stepper >(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const std::vector<timemachine::Gradient<3> *> system,
-//         const std::vector<double> &lambda_schedule
-//     ) {
-//         return new timemachine::AlchemicalStepper(
-//             system,
-//             lambda_schedule
-//         );
-//     }))
-//     .def("get_du_dl", [](timemachine::AlchemicalStepper &stepper) -> py::array_t<double, py::array::c_style> {
-//         const unsigned long long T = stepper.get_T();
-//         py::array_t<double, py::array::c_style> buffer({T});
-//         stepper.get_du_dl(buffer.mutable_data());
-//         return buffer;
-//     })
-//     .def("set_du_dl_adjoint", [](timemachine::AlchemicalStepper &stepper,
-//         const py::array_t<double, py::array::c_style> &adjoints) {
-//         stepper.set_du_dl_adjoint(adjoints.shape()[0], adjoints.data());
-//     });
-// }
+    using Class = timemachine::AlchemicalStepper;
+    std::string pyclass_name = std::string("AlchemicalStepper_") + typestr;
+    py::class_<Class, timemachine::Stepper >(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const std::vector<timemachine::Gradient*> system,
+        const std::vector<double> &lambda_schedule
+    ) {
+        return new timemachine::AlchemicalStepper(
+            system,
+            lambda_schedule
+        );
+    }))
+    .def("get_du_dl", [](timemachine::AlchemicalStepper &stepper) -> py::array_t<double, py::array::c_style> {
+        const unsigned long long T = stepper.get_T();
+        py::array_t<double, py::array::c_style> buffer({T});
+        stepper.get_du_dl(buffer.mutable_data());
+        return buffer;
+    })
+    .def("set_du_dl_adjoint", [](timemachine::AlchemicalStepper &stepper,
+        const py::array_t<double, py::array::c_style> &adjoints) {
+        stepper.set_du_dl_adjoint(adjoints.shape()[0], adjoints.data());
+    });
+}
 
-// void declare_reversible_context(py::module &m, const char *typestr) {
+void declare_reversible_context(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::ReversibleContext;
-//     std::string pyclass_name = std::string("ReversibleContext_") + typestr;
-//     py::class_<Class>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         timemachine::Stepper *stepper,
-//         // int N,
-//         const py::array_t<double, py::array::c_style> &x0,
-//         const py::array_t<double, py::array::c_style> &v0,
-//         const py::array_t<double, py::array::c_style> &coeff_cas,
-//         const py::array_t<double, py::array::c_style> &coeff_cbs,
-//         const py::array_t<double, py::array::c_style> &coeff_ccs,
-//         const py::array_t<double, py::array::c_style> &step_sizes,
-//         const py::array_t<double, py::array::c_style> &params,
-//         unsigned long long seed
-//     ) {
+    using Class = timemachine::ReversibleContext;
+    std::string pyclass_name = std::string("ReversibleContext_") + typestr;
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        timemachine::Stepper *stepper,
+        // int N,
+        const py::array_t<double, py::array::c_style> &x0,
+        const py::array_t<double, py::array::c_style> &v0,
+        const py::array_t<double, py::array::c_style> &coeff_cas,
+        const py::array_t<double, py::array::c_style> &coeff_cbs,
+        const py::array_t<double, py::array::c_style> &coeff_ccs,
+        const py::array_t<double, py::array::c_style> &step_sizes,
+        const py::array_t<double, py::array::c_style> &params,
+        unsigned long long seed
+    ) {
 
-//         int N = x0.shape()[0];
-//         int D = x0.shape()[1];
+        int N = x0.shape()[0];
+        int D = x0.shape()[1];
 
-//         if(N != v0.shape()[0]) {
-//             throw std::runtime_error("v0 N != x0 N");
-//         }
+        if(N != v0.shape()[0]) {
+            throw std::runtime_error("v0 N != x0 N");
+        }
 
-//         if(D != v0.shape()[1]) {
-//             throw std::runtime_error("v0 D != x0 D");
-//         }
+        if(D != v0.shape()[1]) {
+            throw std::runtime_error("v0 D != x0 D");
+        }
 
-//         int T = coeff_cas.shape()[0];
+        int T = coeff_cas.shape()[0];
 
-//         if(T != step_sizes.shape()[0]) {
-//             throw std::runtime_error("coeff_cas T != step_sizes T");
-//         }
+        if(T != step_sizes.shape()[0]) {
+            throw std::runtime_error("coeff_cas T != step_sizes T");
+        }
 
-//         int P = params.shape()[0];
+        int P = params.shape()[0];
 
-//         std::vector<double> x0_vec(x0.data(), x0.data()+x0.size());
-//         std::vector<double> v0_vec(v0.data(), v0.data()+v0.size());
-//         std::vector<double> coeff_cas_vec(coeff_cas.data(), coeff_cas.data()+coeff_cas.size());
-//         std::vector<double> coeff_cbs_vec(coeff_cbs.data(), coeff_cbs.data()+coeff_cbs.size());
-//         std::vector<double> coeff_ccs_vec(coeff_ccs.data(), coeff_ccs.data()+coeff_ccs.size());
-//         std::vector<double> step_sizes_vec(step_sizes.data(), step_sizes.data()+step_sizes.size());
-//         std::vector<double> params_vec(params.data(), params.data()+params.size());
+        std::vector<double> x0_vec(x0.data(), x0.data()+x0.size());
+        std::vector<double> v0_vec(v0.data(), v0.data()+v0.size());
+        std::vector<double> coeff_cas_vec(coeff_cas.data(), coeff_cas.data()+coeff_cas.size());
+        std::vector<double> coeff_cbs_vec(coeff_cbs.data(), coeff_cbs.data()+coeff_cbs.size());
+        std::vector<double> coeff_ccs_vec(coeff_ccs.data(), coeff_ccs.data()+coeff_ccs.size());
+        std::vector<double> step_sizes_vec(step_sizes.data(), step_sizes.data()+step_sizes.size());
+        std::vector<double> params_vec(params.data(), params.data()+params.size());
 
-//         return new timemachine::ReversibleContext(
-//             stepper,
-//             N,
-//             x0_vec,
-//             v0_vec,
-//             coeff_cas_vec,
-//             coeff_cbs_vec,
-//             coeff_ccs_vec,
-//             step_sizes_vec,
-//             params_vec,
-//             seed
-//         );
+        return new timemachine::ReversibleContext(
+            stepper,
+            N,
+            x0_vec,
+            v0_vec,
+            coeff_cas_vec,
+            coeff_cbs_vec,
+            coeff_ccs_vec,
+            step_sizes_vec,
+            params_vec,
+            seed
+        );
 
-//     }))
-//     .def("forward_mode", &timemachine::ReversibleContext::forward_mode)
-//     .def("backward_mode", &timemachine::ReversibleContext::backward_mode)
-//     .def("get_param_adjoint_accum", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
-//         unsigned int P = ctxt.P();
-//         py::array_t<double, py::array::c_style> buffer({P});
-//         ctxt.get_param_adjoint_accum(buffer.mutable_data());
-//         return buffer;
-//     })
-//     .def("get_last_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
-//         unsigned int N = ctxt.N();
-//         unsigned int D = 3;
-//         py::array_t<double, py::array::c_style> buffer({N, D});
-//         ctxt.get_last_coords(buffer.mutable_data());
-//         return buffer;
-//     })
-//     .def("get_all_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
-//         unsigned int N = ctxt.N();
-//         unsigned int F = ctxt.F();
-//         unsigned int D = 3;
-//         py::array_t<double, py::array::c_style> buffer({F, N, D});
-//         ctxt.get_all_coords(buffer.mutable_data());
-//         return buffer;
-//     })
-//     .def("set_x_t_adjoint", [](timemachine::ReversibleContext &ctxt,
-//         const py::array_t<double, py::array::c_style> &xt) {
-//         ctxt.set_x_t_adjoint(xt.data());
-//     })
-//     .def("get_x_t_adjoint", [](timemachine::ReversibleContext &ctxt) -> 
-//         py::array_t<double, py::array::c_style> {
-//         unsigned int N = ctxt.N();
-//         unsigned int D = 3;
-//         py::array_t<double, py::array::c_style> buffer({N, D});
-//         ctxt.get_x_t_adjoint(buffer.mutable_data());
-//         return buffer;
-//     })
-//     .def("get_v_t_adjoint", [](timemachine::ReversibleContext &ctxt) -> 
-//         py::array_t<double, py::array::c_style> {
-//         unsigned int N = ctxt.N();
-//         unsigned int D = 3;
-//         py::array_t<double, py::array::c_style> buffer({N, D});
-//         ctxt.get_v_t_adjoint(buffer.mutable_data());
-//         return buffer;
-//     });
-// }
+    }))
+    .def("forward_mode", &timemachine::ReversibleContext::forward_mode)
+    .def("backward_mode", &timemachine::ReversibleContext::backward_mode)
+    .def("get_param_adjoint_accum", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
+        unsigned int P = ctxt.P();
+        py::array_t<double, py::array::c_style> buffer({P});
+        ctxt.get_param_adjoint_accum(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_last_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
+        unsigned int N = ctxt.N();
+        unsigned int D = 3;
+        py::array_t<double, py::array::c_style> buffer({N, D});
+        ctxt.get_last_coords(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_all_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
+        unsigned int N = ctxt.N();
+        unsigned int F = ctxt.F();
+        unsigned int D = 3;
+        py::array_t<double, py::array::c_style> buffer({F, N, D});
+        ctxt.get_all_coords(buffer.mutable_data());
+        return buffer;
+    })
+    .def("set_x_t_adjoint", [](timemachine::ReversibleContext &ctxt,
+        const py::array_t<double, py::array::c_style> &xt) {
+        ctxt.set_x_t_adjoint(xt.data());
+    })
+    .def("get_x_t_adjoint", [](timemachine::ReversibleContext &ctxt) -> 
+        py::array_t<double, py::array::c_style> {
+        unsigned int N = ctxt.N();
+        unsigned int D = 3;
+        py::array_t<double, py::array::c_style> buffer({N, D});
+        ctxt.get_x_t_adjoint(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_v_t_adjoint", [](timemachine::ReversibleContext &ctxt) -> 
+        py::array_t<double, py::array::c_style> {
+        unsigned int N = ctxt.N();
+        unsigned int D = 3;
+        py::array_t<double, py::array::c_style> buffer({N, D});
+        ctxt.get_v_t_adjoint(buffer.mutable_data());
+        return buffer;
+    });
+}
 
 
 void declare_gradient(py::module &m) {
@@ -509,8 +509,8 @@ PYBIND11_MODULE(custom_ops, m) {
     // declare_gbsa<double, 3>(m, "f64_3d");
     // declare_gbsa<float, 3>(m, "f32_3d");
 
-    // declare_stepper(m, "f64");
-    // declare_alchemical_stepper(m, "f64");
-    // declare_reversible_context(m, "f64_3d");
+    declare_stepper(m, "f64");
+    declare_alchemical_stepper(m, "f64");
+    declare_reversible_context(m, "f64");
 
 }

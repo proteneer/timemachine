@@ -37,8 +37,11 @@ private:
     double *d_x_t_adjoint_; // [NxD]
     double *d_v_t_adjoint_; // [NxD]
 
-    double *d_dE_dx_jvp_; // [NxD]
-    double *d_dE_dp_jvp_; // [P]
+    double *d_dE_dx_jvp_primals_; // [NxD]
+    double *d_dE_dx_jvp_tangents_; // [NxD]
+
+    double *d_dE_dp_jvp_primals_; // [P]
+    double *d_dE_dp_jvp_tangents_; // [P]
 
     const int N_;
     const int P_;

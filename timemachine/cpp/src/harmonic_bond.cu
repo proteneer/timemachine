@@ -52,10 +52,8 @@ void HarmonicBond<RealType>::execute_lambda_inference_device(
     double *d_out_lambda_primals, // du/dl
     double *d_out_energy_primal, // U
     cudaStream_t stream) {
-
     int tpb = 32;
     int blocks = (B_+tpb-1)/tpb;
-
     k_harmonic_bond_inference<RealType><<<blocks, tpb, 0, stream>>>(
         B_,
         d_coords_primals,
@@ -65,8 +63,6 @@ void HarmonicBond<RealType>::execute_lambda_inference_device(
         d_out_coords_primals,
         d_out_energy_primal
     );
-
-    // cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
 
     // auto finish = std::chrono::high_resolution_clock::now();

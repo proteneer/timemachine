@@ -36,7 +36,6 @@ AlchemicalGradient::AlchemicalGradient(
 }
 
 AlchemicalGradient::~AlchemicalGradient() {
-
     gpuErrchk(cudaFree(d_out_coords_primals_buffer_u0_));
     gpuErrchk(cudaFree(d_out_energy_primal_buffer_u0_));
     gpuErrchk(cudaFree(d_out_lambda_primal_buffer_u0_));
@@ -231,7 +230,6 @@ void AlchemicalGradient::execute_lambda_inference_device(
     gpuErrchk(cudaMemsetAsync(d_out_coords_primals_buffer_u0_, 0, N*D*sizeof(*d_out_coords_primals_buffer_u0_), stream));
     gpuErrchk(cudaMemsetAsync(d_out_lambda_primal_buffer_u0_, 0, sizeof(*d_out_lambda_primal_buffer_u0_), stream));
     gpuErrchk(cudaMemsetAsync(d_out_energy_primal_buffer_u0_, 0, sizeof(*d_out_energy_primal_buffer_u0_), stream));
-
     u0_->execute_lambda_inference_device(
         N,
         P,
@@ -247,7 +245,6 @@ void AlchemicalGradient::execute_lambda_inference_device(
     gpuErrchk(cudaMemsetAsync(d_out_coords_primals_buffer_u1_, 0, N*D*sizeof(*d_out_coords_primals_buffer_u1_), stream));
     gpuErrchk(cudaMemsetAsync(d_out_lambda_primal_buffer_u1_, 0, sizeof(*d_out_lambda_primal_buffer_u1_), stream));
     gpuErrchk(cudaMemsetAsync(d_out_energy_primal_buffer_u1_, 0, sizeof(*d_out_energy_primal_buffer_u1_), stream));
-
     u1_->execute_lambda_inference_device(
         N,
         P,

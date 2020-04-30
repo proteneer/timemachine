@@ -31,8 +31,12 @@ ReversibleContext::~ReversibleContext() {
     gpuErrchk(cudaFree(d_x_t_adjoint_));
     gpuErrchk(cudaFree(d_v_t_adjoint_));
 
-    gpuErrchk(cudaFree(d_dE_dx_jvp_));
-    gpuErrchk(cudaFree(d_dE_dp_jvp_));
+    gpuErrchk(cudaFree(d_dE_dx_jvp_primals_));
+    gpuErrchk(cudaFree(d_dE_dx_jvp_tangents_));
+
+    gpuErrchk(cudaFree(d_dE_dp_jvp_primals_));
+    gpuErrchk(cudaFree(d_dE_dp_jvp_tangents_));
+
 };
 
 int round_up_even(int count) {
@@ -96,8 +100,10 @@ ReversibleContext::ReversibleContext(
     gpuErrchk(cudaMalloc(&d_x_t_adjoint_, N*D*sizeof(double))); // [NxD]
     gpuErrchk(cudaMalloc(&d_v_t_adjoint_, N*D*sizeof(double))); // [NxD]
 
-    gpuErrchk(cudaMalloc(&d_dE_dx_jvp_, N*D*sizeof(double))); // [NxD]
-    gpuErrchk(cudaMalloc(&d_dE_dp_jvp_, P*sizeof(double))); // [P]
+    gpuErrchk(cudaMalloc(&d_dE_dx_jvp_primals_, N*D*sizeof(double))); // [NxD]
+    gpuErrchk(cudaMalloc(&d_dE_dx_jvp_tangents_, N*D*sizeof(double))); // [NxD]
+    gpuErrchk(cudaMalloc(&d_dE_dp_jvp_primals_, P*sizeof(double))); // [P]
+    gpuErrchk(cudaMalloc(&d_dE_dp_jvp_tangents_, P*sizeof(double))); // [P]
 
     gpuErrchk(cudaMalloc(&d_params_grads_, P*sizeof(double))); // [P]
 
@@ -112,11 +118,10 @@ void ReversibleContext::forward_mode() {
 
     for(int t=0; t < step_sizes_.size(); t++) {
 
-        // compute gradients
         gpuErrchk(cudaMemset(d_forces_, 0, N_*D*sizeof(*d_forces_)));
-        // gpuErrchk(cudaMemset(d_params_grads_, 0, P_*sizeof(double))); # not used
 
-	auto start0 = std::chrono::high_resolution_clock::now();
+    	auto start0 = std::chrono::high_resolution_clock::now();
+
         stepper_->forward_step(
             N_,
             P_,
@@ -124,30 +129,30 @@ void ReversibleContext::forward_mode() {
             d_params_,
             d_forces_
         );
-	auto finish0 = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double> elapsed0 = finish0 - start0;
+    	auto finish0 = std::chrono::high_resolution_clock::now();
+    	std::chrono::duration<double> elapsed0 = finish0 - start0;
 
-	auto start = std::chrono::high_resolution_clock::now();
+    	auto start = std::chrono::high_resolution_clock::now();
 
-    curandErrchk(templateCurandNormal(cr_rng_, d_noise_buffer_, round_up_even(N_*D), 0.0, 1.0));
+        curandErrchk(templateCurandNormal(cr_rng_, d_noise_buffer_, round_up_even(N_*D), 0.0, 1.0));
 
-    step_forward<double>(
-        N_,
-        D,
-        coeff_cas_[t],
-        d_coeff_cbs_,
-        d_coeff_ccs_,
-        d_noise_buffer_,
-        d_coords_ + t*N_*D,
-        d_velocities_, 
-        d_forces_,
-        step_sizes_[t],
-        d_coords_ + (t+1)*N_*D,
-        d_velocities_
-    );
+        step_forward<double>(
+            N_,
+            D,
+            coeff_cas_[t],
+            d_coeff_cbs_,
+            d_coeff_ccs_,
+            d_noise_buffer_,
+            d_coords_ + t*N_*D,
+            d_velocities_, 
+            d_forces_,
+            step_sizes_[t],
+            d_coords_ + (t+1)*N_*D,
+            d_velocities_
+        );
 
-	auto finish = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double> elapsed = finish - start;
+    	auto finish = std::chrono::high_resolution_clock::now();
+    	std::chrono::duration<double> elapsed = finish - start;
 
     }
 
@@ -241,8 +246,10 @@ void ReversibleContext::backward_mode() {
         gpuErrchk(cudaPeekAtLastError());
 
         // important that we set the memory addresses to zero
-        gpuErrchk(cudaMemset(d_dE_dx_jvp_, 0, N_*D*sizeof(*d_dE_dx_jvp_)));
-        gpuErrchk(cudaMemset(d_dE_dp_jvp_, 0, P_*sizeof(*d_dE_dp_jvp_)));
+        gpuErrchk(cudaMemset(d_dE_dx_jvp_primals_, 0, N_*D*sizeof(*d_dE_dx_jvp_primals_)));
+        gpuErrchk(cudaMemset(d_dE_dx_jvp_tangents_, 0, N_*D*sizeof(*d_dE_dx_jvp_tangents_)));
+        gpuErrchk(cudaMemset(d_dE_dp_jvp_primals_, 0, P_*sizeof(*d_dE_dp_jvp_primals_)));
+        gpuErrchk(cudaMemset(d_dE_dp_jvp_tangents_, 0, P_*sizeof(*d_dE_dp_jvp_tangents_)));
 
         stepper_->backward_step(
             N_,
@@ -250,15 +257,17 @@ void ReversibleContext::backward_mode() {
             d_coords_ + t*N_*D,
             d_params_,
             d_x_t_tangent_,
-            d_dE_dx_jvp_,
-            d_dE_dp_jvp_
+            d_dE_dx_jvp_primals_,
+            d_dE_dx_jvp_tangents_,
+            d_dE_dp_jvp_primals_,
+            d_dE_dp_jvp_tangents_
         );
 
         size_t n_block_params = (P_ + tpb - 1) / tpb;
 
         // we can probably *directly* atomic add into this (and into the d_adjoint_xol in the above func)
         // also would let us save a little bit more buffer room
-        update_backward_2<<<n_block_params, tpb>>>(P_, d_dE_dp_jvp_, d_param_adjoint_accum_);
+        update_backward_2<<<n_block_params, tpb>>>(P_, d_dE_dp_jvp_tangents_, d_param_adjoint_accum_);
 
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
@@ -269,7 +278,7 @@ void ReversibleContext::backward_mode() {
             coeff_cas_[t],
             d_x_t_adjoint_,
             d_v_t_adjoint_,
-            d_dE_dx_jvp_,
+            d_dE_dx_jvp_tangents_,
             d_x_t_adjoint_,
             d_v_t_adjoint_  
         );

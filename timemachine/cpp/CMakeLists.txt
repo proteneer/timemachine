@@ -37,8 +37,8 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/integrator.cu
   
   src/alchemical_gradient.cu
-  # src/stepper.cu
-  # src/context.cu
+  src/stepper.cu
+  src/context.cu
   # src/gbsa.cu
   src/kernels/k_find_block_bounds.cu
 )

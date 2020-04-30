@@ -9,10 +9,11 @@ from jax.config import config; config.update("jax_enable_x64", True)
 
 from timemachine.lib import custom_ops
 from timemachine.lib import ops
-from timemachine.potentials import bonded, nonbonded
+from timemachine.potentials import bonded, nonbonded, alchemy
 
 from common import GradientTest
 from common import prepare_bonded_system, prepare_nonbonded_system
+
 class TestContext(unittest.TestCase):
 
     def setup_system(self, N):
@@ -33,7 +34,7 @@ class TestContext(unittest.TestCase):
 
         precision = np.float64
 
-        params, ref_bonded_potentials, test_bonded_potentials = prepare_bonded_system(
+        params, ref_bonded_potentials_0, test_bonded_potentials_0 = prepare_bonded_system(
             x0,
             P_bonds,
             P_angles,
@@ -42,6 +43,18 @@ class TestContext(unittest.TestCase):
             A,
             T,
             precision
+        )
+
+        params, ref_bonded_potentials_1, test_bonded_potentials_1 = prepare_bonded_system(
+            x0,
+            P_bonds,
+            P_angles,
+            P_torsions,
+            B,
+            A,
+            T,
+            precision,
+            params=params
         )
 
         masses = np.random.rand(N)
@@ -53,28 +66,66 @@ class TestContext(unittest.TestCase):
 
         cutoff = 1.5
 
-        new_params, ref_nonbonded_potentials, new_nonbonded_potentials = prepare_nonbonded_system(
-            x0,
-            E,
-            P_charges,
-            P_lj,
-            P_exc,
-            params=params,
-            p_scale=10.0,
-            cutoff=cutoff,
-            precision=precision
-        )
+        # params, ref_nonbonded_potentials_0, new_nonbonded_potentials_0 = prepare_nonbonded_system(
+        #     x0,
+        #     E,
+        #     P_charges,
+        #     P_lj,
+        #     P_exc,
+        #     params=params,
+        #     p_scale=10.0,
+        #     cutoff=cutoff,
+        #     precision=precision
+        # )
 
-        def total_potential(*args, **kwargs):
-            nrgs = []
-            for p in ref_bonded_potentials:
-                nrgs.append(p(*args, **kwargs))
-            for p in ref_nonbonded_potentials:
-                nrgs.append(p(*args, **kwargs))
-            return jnp.sum(nrgs)
+        # params, ref_nonbonded_potentials_1, new_nonbonded_potentials_1 = prepare_nonbonded_system(
+        #     x0,
+        #     E,
+        #     P_charges,
+        #     P_lj,
+        #     P_exc,
+        #     params=params,
+        #     p_scale=10.0,
+        #     cutoff=cutoff,
+        #     precision=precision
+        # # )
+
+        # ref_bonded_potentials = []
+        # test_bonded_potentials = []
+
+        # for a, b in zip(ref_bonded_potentials_0, ref_bonded_potentials_1):
+        #     ref_bonded_potentials.append(
+        #         functools.partial(alchemy.linear_rescale, fn0=a, fn1=b)
+        #     )
+
+        # for a, b in zip(test_bonded_potentials_0, test_bonded_potentials_1):
+        #     print("merging",a, b)
+        #     test_bonded_potentials.append(
+        #         ops.AlchemicalGradient(
+        #             N,
+        #             len(params),
+        #             a,
+        #             b
+        #         )
+        #     )
+
+        # def total_potential(*args, **kwargs):
+        #     nrgs = []
+        #     for p in ref_bonded_potentials:
+        #         nrgs.append(p(*args, **kwargs))
+        #     # for p in ref_nonbonded_potentials:
+        #         # nrgs.append(p(*args, **kwargs))
+        #     return jnp.sum(nrgs)
 
 
-        return total_potential, x0, new_params, masses, test_bonded_potentials + new_nonbonded_potentials
+        ref_potentials_0 = ref_bonded_potentials_0
+        ref_potentials_1 = ref_bonded_potentials_1
+
+        test_potentials_0 = test_bonded_potentials_0
+        test_potentials_1 = test_bonded_potentials_1
+
+        return x0, params, masses, [ref_potentials_0, ref_potentials_1], [test_potentials_0, test_bonded_potentials_1]
+        # return total_potential, x0, params, masses, test_bonded_potentials + new_nonbonded_potentials
 
 
     def test_reverse_mode_lambda(self):
@@ -87,7 +138,26 @@ class TestContext(unittest.TestCase):
 
         N = 4
 
-        ref_total_nrg_fn, x0, params, masses, test_energies = self.setup_system(N)
+        x0, params, masses, [ref_energies_0, ref_energies_1], [test_energies_0, test_energies_1] = self.setup_system(N)
+
+        ref_alchemical_fns = []
+        for ref_a, ref_b in zip(ref_energies_0, ref_energies_1):
+            ref_alchemical_fns.append(jax.partial(alchemy.linear_rescale, fn0=ref_a, fn1=ref_b))
+
+        def ref_total_nrg_fn(*args):
+            nrgs = []
+            for fn in ref_alchemical_fns:
+                nrgs.append(fn(*args))
+            return jnp.sum(nrgs)
+
+        test_alchemical_fns = []
+        for test_a, test_b in zip(test_energies_0, test_energies_1):
+            test_alchemical_fns.append(ops.AlchemicalGradient(
+                N,
+                len(params),
+                test_a,
+                test_b
+            ))
 
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
         N = len(masses)
@@ -126,15 +196,14 @@ class TestContext(unittest.TestCase):
 
         grad_fn = jax.grad(integrate_once_through, argnums=(2,))
         ref_dl_dp = grad_fn(x0, v0, params)
-
         stepper = custom_ops.AlchemicalStepper_f64(
-            test_energies,
+            test_alchemical_fns,
             lambda_schedule
         )
 
         seed = 1234
 
-        ctxt = custom_ops.ReversibleContext_f64_3d(
+        ctxt = custom_ops.ReversibleContext_f64(
             stepper,
             x0,
             v0,
@@ -148,10 +217,8 @@ class TestContext(unittest.TestCase):
 
         # run 5 steps forward
         ctxt.forward_mode()
-
         test_du_dls = stepper.get_du_dl()
         test_loss = loss_fn(test_du_dls)
-
         loss_grad_fn = jax.grad(loss_fn, argnums=(0,))
         dl_du_adjoint = loss_grad_fn(test_du_dls)[0]
 
@@ -162,7 +229,6 @@ class TestContext(unittest.TestCase):
         ctxt.set_x_t_adjoint(np.zeros_like(x0))
         ctxt.backward_mode()
         test_dl_dp = ctxt.get_param_adjoint_accum()
-
         np.testing.assert_allclose(test_dl_dp, ref_dl_dp[0], rtol=1e-6)
 
     # def test_reverse_mode(self):
@@ -260,3 +326,7 @@ class TestContext(unittest.TestCase):
     #     test_v_t_adjoint = ctxt.get_v_t_adjoint()
     #     np.testing.assert_almost_equal(test_x_t_adjoint, x_t_p, decimal=8)
     #     np.testing.assert_almost_equal(test_v_t_adjoint, v_t_p, decimal=8)
+
+
+if __name__ == "__main__":
+    unittest.main()
