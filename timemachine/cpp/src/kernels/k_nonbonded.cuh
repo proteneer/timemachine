@@ -15,14 +15,19 @@ void __global__ k_nonbonded_jvp(
     const double *params, // we do *not* support params tangent, ever!
     const double lambda,
     const double lambda_tangent,
-    const int *lambda_idxs,
+    const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
+    const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *charge_param_idxs,
     const int *lj_param_idxs, // [N,2]
     const double cutoff,
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
+    double *grad_coords_primals,
     double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
+    double *grad_params_primals,
     double *grad_params_tangents) {
+
+    // lambda_i = lambda_plane_idx[i]*cutoff + lambda_offset_idx[i]*cutoff*lambda
 
     if(blockIdx.y > blockIdx.x) {
         return;
@@ -43,18 +48,10 @@ void __global__ k_nonbonded_jvp(
     }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    Surreal<RealType> lambda_i;
+    Surreal<RealType> lambda_i(lambda, lambda_tangent);
     if(atom_i_idx < N) {
-        if(lambda_idxs[atom_i_idx] == 0) {
-            lambda_i = Surreal<RealType>(0, 0);
-        } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        }        
-    } else {
-        lambda_i = Surreal<RealType>(0, 0);
-    }
+        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);        
+    };
 
     Surreal<RealType> ci[3];
     Surreal<RealType> gi[3];
@@ -78,18 +75,11 @@ void __global__ k_nonbonded_jvp(
     Surreal<RealType> g_epsi(0.0, 0.0);
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    Surreal<RealType> lambda_j;
+    Surreal<RealType> lambda_j(lambda, lambda_tangent);
     if(atom_j_idx < N) {
-        if(lambda_idxs[atom_j_idx] == 0) {
-            lambda_j = Surreal<RealType>(0, 0);
-        } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        }        
-    } else {
-        lambda_j = Surreal<RealType>(0, 0);
+        lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);        
     }
+
 
     Surreal<RealType> cj[3];
     Surreal<RealType> gj[3];
@@ -191,20 +181,30 @@ void __global__ k_nonbonded_jvp(
     // doing reverse mode since we only ever have to do it once.
     for(int d=0; d < 3; d++) {
         if(atom_i_idx < N) {
-            atomicAdd(grad_coords_tangents + atom_i_idx*3 + d, gi[d].imag);            
+            atomicAdd(grad_coords_primals + atom_i_idx*3 + d, gi[d].real);
+            atomicAdd(grad_coords_tangents + atom_i_idx*3 + d, gi[d].imag);
         }
         if(atom_j_idx < N) {
-            atomicAdd(grad_coords_tangents + atom_j_idx*3 + d, gj[d].imag);            
+            atomicAdd(grad_coords_primals + atom_j_idx*3 + d, gj[d].real);
+            atomicAdd(grad_coords_tangents + atom_j_idx*3 + d, gj[d].imag);
         }
     }  
 
     if(atom_i_idx < N) {
-        atomicAdd(grad_params_tangents + charge_param_idx_i, g_qi.imag);        
+        atomicAdd(grad_params_primals + charge_param_idx_i, g_qi.real);
+        atomicAdd(grad_params_primals + lj_param_idx_sig_i, g_sigi.real);
+        atomicAdd(grad_params_primals + lj_param_idx_eps_i, g_epsi.real);
+
+        atomicAdd(grad_params_tangents + charge_param_idx_i, g_qi.imag);
         atomicAdd(grad_params_tangents + lj_param_idx_sig_i, g_sigi.imag);
         atomicAdd(grad_params_tangents + lj_param_idx_eps_i, g_epsi.imag);
     }
 
     if(atom_j_idx < N) {
+        atomicAdd(grad_params_primals + charge_param_idx_j, g_qj.real);
+        atomicAdd(grad_params_primals + lj_param_idx_sig_j, g_sigj.real);
+        atomicAdd(grad_params_primals + lj_param_idx_eps_j, g_epsj.real);
+
         atomicAdd(grad_params_tangents + charge_param_idx_j, g_qj.imag);
         atomicAdd(grad_params_tangents + lj_param_idx_sig_j, g_sigj.imag);
         atomicAdd(grad_params_tangents + lj_param_idx_eps_j, g_epsj.imag);
@@ -221,14 +221,17 @@ void __global__ k_nonbonded_exclusion_jvp(
     const double *params,
     const double lambda,
     const double lambda_tangent,
-    const int *lambda_idxs,
+    const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
+    const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
     const int *charge_scale_idxs, // [E]
     const int *lj_scale_idxs, // [E] 
     const int *charge_param_idxs, // [N]
     const int *lj_param_idxs, // [N,2]
     const double cutoff,
+    double *grad_coords_primals,
     double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
+    double *grad_params_primals,
     double *grad_params_tangents) {
 
     const int e_idx = blockIdx.x*blockDim.x + threadIdx.x;
@@ -237,14 +240,8 @@ void __global__ k_nonbonded_exclusion_jvp(
     }
 
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
-    Surreal<RealType> lambda_i;
-    if(lambda_idxs[atom_i_idx] == 0) {
-        lambda_i = Surreal<RealType>(0, 0);
-    } else if(lambda_idxs[atom_i_idx] == 1) {
-        lambda_i = cutoff*Surreal<RealType>(lambda, lambda_tangent);
-    } else if(lambda_idxs[atom_i_idx] == -1) {
-        lambda_i = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
-    }
+    Surreal<RealType> lambda_i(lambda, lambda_tangent);
+    lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);
 
     Surreal<RealType> ci[3];
     Surreal<RealType> gi[3] = {Surreal<RealType>(0.0, 0.0)};
@@ -268,14 +265,8 @@ void __global__ k_nonbonded_exclusion_jvp(
     Surreal<RealType> g_epsi(0.0, 0.0);
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
-    Surreal<RealType> lambda_j;
-    if(lambda_idxs[atom_j_idx] == 0) {
-        lambda_j = Surreal<RealType>(0, 0);
-    } else if(lambda_idxs[atom_j_idx] == 1) {
-        lambda_j = cutoff*Surreal<RealType>(lambda, lambda_tangent);
-    } else if(lambda_idxs[atom_j_idx] == -1) {
-        lambda_j = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
-    }
+    Surreal<RealType> lambda_j(lambda, lambda_tangent);
+    lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);
 
     Surreal<RealType> cj[3];
     Surreal<RealType> gj[3] = {Surreal<RealType>(0.0, 0.0)};
@@ -350,7 +341,9 @@ void __global__ k_nonbonded_exclusion_jvp(
         }
 
         for(int d=0; d < 3; d++) {
+            atomicAdd(grad_coords_primals + atom_i_idx*3 + d, gi[d].real);
             atomicAdd(grad_coords_tangents + atom_i_idx*3 + d, gi[d].imag);
+            atomicAdd(grad_coords_primals + atom_j_idx*3 + d, gj[d].real);
             atomicAdd(grad_coords_tangents + atom_j_idx*3 + d, gj[d].imag);
         }  
 
@@ -367,11 +360,21 @@ void __global__ k_nonbonded_exclusion_jvp(
         g_sigi += sig_grad/2;
         g_sigj += sig_grad/2;
 
+
+        atomicAdd(grad_params_primals + charge_param_idx_i, -charge_scale*g_qi.real);
+        atomicAdd(grad_params_primals + charge_param_idx_j, -charge_scale*g_qj.real);
+
         atomicAdd(grad_params_tangents + charge_param_idx_i, -charge_scale*g_qi.imag);
         atomicAdd(grad_params_tangents + charge_param_idx_j, -charge_scale*g_qj.imag);
 
+        atomicAdd(grad_params_primals + lj_param_idx_sig_i, -lj_scale*g_sigi.real);
+        atomicAdd(grad_params_primals + lj_param_idx_sig_j, -lj_scale*g_sigj.real);
+
         atomicAdd(grad_params_tangents + lj_param_idx_sig_i, -lj_scale*g_sigi.imag);
         atomicAdd(grad_params_tangents + lj_param_idx_sig_j, -lj_scale*g_sigj.imag);
+
+        atomicAdd(grad_params_primals + lj_param_idx_eps_i, -lj_scale*g_epsi.real);
+        atomicAdd(grad_params_primals + lj_param_idx_eps_j, -lj_scale*g_epsj.real);
 
         atomicAdd(grad_params_tangents + lj_param_idx_eps_i, -lj_scale*g_epsi.imag);
         atomicAdd(grad_params_tangents + lj_param_idx_eps_j, -lj_scale*g_epsj.imag);
@@ -379,6 +382,9 @@ void __global__ k_nonbonded_exclusion_jvp(
         // now do derivatives of the scales, which are just the negative unscaled energies!
         Surreal<RealType> charge_scale_grad = qi*qj*inv_dij; 
         Surreal<RealType> lj_scale_grad = 4*eps_ij*(sig6*inv_d6ij-1.0)*sig6*inv_d6ij;
+
+        atomicAdd(grad_params_primals + charge_scale_idx, -charge_scale_grad.real);
+        atomicAdd(grad_params_primals + lj_scale_idx, -lj_scale_grad.real);
 
         atomicAdd(grad_params_tangents + charge_scale_idx, -charge_scale_grad.imag);
         atomicAdd(grad_params_tangents + lj_scale_idx, -lj_scale_grad.imag);
@@ -396,14 +402,16 @@ void __global__ k_nonbonded_inference(
     const double *coords,
     const double *params,
     const double lambda,
-    const int *lambda_idxs,
+    const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
+    const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *charge_param_idxs, // [N]
     const int *lj_param_idxs, // [N,2]
     const double cutoff,
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
     unsigned long long *grad_coords,
-    double *du_dl) {
+    double *out_du_dl,
+    double *out_energy) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
@@ -424,17 +432,11 @@ void __global__ k_nonbonded_inference(
     }
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
-    RealType lambda_i;
+    RealType lambda_i = lambda;
+    RealType dlambda_i = 0;
     if(atom_i_idx < N) {
-        if(lambda_idxs[atom_i_idx] == 0) {
-            lambda_i = 0;
-        } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = cutoff*lambda;
-        } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + cutoff*lambda;
-        }        
-    } else {
-        lambda_i = 0;
+        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);        
+        dlambda_i = cutoff*lambda_offset_idxs[atom_i_idx];
     }
 
     RealType ci[3];
@@ -453,17 +455,12 @@ void __global__ k_nonbonded_inference(
     RealType eps_i = atom_i_idx < N ? params[lj_param_idx_eps_i] : 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    RealType lambda_j;
+    RealType lambda_j = lambda;
+    RealType dlambda_j = 0;
+
     if(atom_j_idx < N) {
-        if(lambda_idxs[atom_j_idx] == 0) {
-            lambda_j = 0;
-        } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = cutoff*lambda;
-        } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + cutoff*lambda;
-        }   
-    } else {
-        lambda_j = 0;
+        lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);
+        dlambda_j = cutoff*lambda_offset_idxs[atom_j_idx];
     }
 
     RealType cj[3];
@@ -481,6 +478,7 @@ void __global__ k_nonbonded_inference(
     RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
 
     RealType inv_cutoff = 1/cutoff;
+    RealType energy = 0; // spit this into three parts? (es, lj close, lj far?)
 
     // In inference mode, we don't care about gradients with respect to parameters.
     for(int round = 0; round < 32; round++) {
@@ -524,11 +522,13 @@ void __global__ k_nonbonded_inference(
 
             // this technically should be if lambda_idxs[i] == 0 and lamba_idxs[j] == 0
             // however, they both imply that delta_lambda = 0, so dxs[3] == 0, simplifying the equation
-            RealType dw_i = (lambda_i == 0) ? 0 : cutoff;
-            RealType dw_j = (lambda_j == 0) ? 0 : cutoff;
+            RealType dw_i = dlambda_i;
+            RealType dw_j = dlambda_j;
 
             du_dl_i -= (es_grad_prefactor + lj_grad_prefactor) * dxs[3] * dw_i;
             du_dl_j += (es_grad_prefactor + lj_grad_prefactor) * dxs[3] * dw_j;
+
+            energy += qi*qj*inv_dij + 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
         }
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
@@ -541,6 +541,7 @@ void __global__ k_nonbonded_inference(
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
         }
         lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        dlambda_j = __shfl_sync(0xffffffff, dlambda_j, srcLane);
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
@@ -553,7 +554,8 @@ void __global__ k_nonbonded_inference(
         }
     }
 
-    atomicAdd(du_dl, du_dl_i + du_dl_j);
+    atomicAdd(out_du_dl, du_dl_i + du_dl_j);
+    atomicAdd(out_energy, energy);
 
 }
 
@@ -563,7 +565,8 @@ void __global__ k_nonbonded_exclusion_inference(
     const double *coords,
     const double *params,
     const double lambda,
-    const int *lambda_idxs,
+    const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
+    const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
     const int *charge_scale_idxs, // [E]
     const int *lj_scale_idxs, // [E] 
@@ -571,7 +574,8 @@ void __global__ k_nonbonded_exclusion_inference(
     const int *lj_param_idxs, // [N,2]
     const double cutoff,
     unsigned long long *grad_coords,
-    double *du_dl) {
+    double *out_du_dl,
+    double *out_energy) {
 
     const int e_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(e_idx >= E) {
@@ -580,15 +584,9 @@ void __global__ k_nonbonded_exclusion_inference(
 
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
     RealType du_dl_i = 0;
-    RealType lambda_i;
-
-    if(lambda_idxs[atom_i_idx] == 0) {
-        lambda_i = 0;
-    } else if(lambda_idxs[atom_i_idx] == 1) {
-        lambda_i = cutoff*lambda;
-    } else if(lambda_idxs[atom_i_idx] == -1) {
-        lambda_i = cutoff + cutoff*lambda;
-    }
+    RealType lambda_i = lambda;
+    lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);
+    RealType dlambda_i = cutoff*lambda_offset_idxs[atom_i_idx];
 
     RealType ci[3];
     double gi[3] = {0};
@@ -606,15 +604,9 @@ void __global__ k_nonbonded_exclusion_inference(
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
     RealType du_dl_j = 0;
-    RealType lambda_j;
-
-    if(lambda_idxs[atom_j_idx] == 0) {
-        lambda_j = 0;
-    } else if(lambda_idxs[atom_j_idx] == 1) {
-        lambda_j = cutoff*lambda;
-    } else if(lambda_idxs[atom_j_idx] == -1) {
-        lambda_j = cutoff + cutoff*lambda;
-    }
+    RealType lambda_j = lambda;
+    lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);
+    RealType dlambda_j = cutoff*lambda_offset_idxs[atom_j_idx];
 
     RealType cj[3];
     double gj[3] = {0};
@@ -672,8 +664,8 @@ void __global__ k_nonbonded_exclusion_inference(
             gj[d] -= (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor)*dxs[d];
         }
 
-        RealType dw_i = (lambda_i == 0) ? 0 : cutoff;
-        RealType dw_j = (lambda_j == 0) ? 0 : cutoff;
+        RealType dw_i = dlambda_i;
+        RealType dw_j = dlambda_j;
 
         du_dl_i += (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor) * dxs[3] * dw_i;
         du_dl_j -= (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor) * dxs[3] * dw_j;
@@ -683,8 +675,9 @@ void __global__ k_nonbonded_exclusion_inference(
             atomicAdd(grad_coords + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
         }  
 
-        atomicAdd(du_dl, du_dl_i + du_dl_j);
-
+        atomicAdd(out_du_dl, du_dl_i + du_dl_j);
+        RealType energy = charge_scale*qi*qj*inv_dij + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+        atomicAdd(out_energy, -energy);
     }
 
 }

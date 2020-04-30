@@ -129,8 +129,6 @@ __global__ void k_linear_rescale_jvp(
 
 }
 
-
-
 void AlchemicalGradient::execute_lambda_jvp_device(
     const int N,
     const int P,

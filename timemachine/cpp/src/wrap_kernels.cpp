@@ -8,7 +8,7 @@
 #include "harmonic_bond.hpp"
 // #include "harmonic_angle.hpp"
 // #include "periodic_torsion.hpp"
-// #include "nonbonded.hpp"
+#include "nonbonded.hpp"
 // #include "gbsa.hpp"
 #include "gradient.hpp"
 #include "alchemical_gradient.hpp"
@@ -375,56 +375,60 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 // }
 
 
-// template <typename RealType, int D>
-// void declare_nonbonded(py::module &m, const char *typestr) {
+template <typename RealType>
+void declare_nonbonded(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::Nonbonded<RealType, D>;
-//     std::string pyclass_name = std::string("Nonbonded_") + typestr;
-//     py::class_<Class, timemachine::Gradient<D> >(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const py::array_t<int, py::array::c_style> &charge_pi,  // charge_param_idxs
-//         const py::array_t<int, py::array::c_style> &lj_pi,  // lj_param_idxs
-//         const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
-//         const py::array_t<int, py::array::c_style> &charge_scale_i,  // 
-//         const py::array_t<int, py::array::c_style> &lj_scale_i,  // 
-//         const py::array_t<int, py::array::c_style> &lambda_idxs_i,  // 
-//         double cutoff
-//     ){
-//         std::vector<int> charge_param_idxs(charge_pi.size());
-//         std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
-//         std::vector<int> lj_param_idxs(lj_pi.size());
-//         std::memcpy(lj_param_idxs.data(), lj_pi.data(), lj_pi.size()*sizeof(int));
+    using Class = timemachine::Nonbonded<RealType>;
+    std::string pyclass_name = std::string("Nonbonded_") + typestr;
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &charge_pi,  // charge_param_idxs
+        const py::array_t<int, py::array::c_style> &lj_pi,  // lj_param_idxs
+        const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
+        const py::array_t<int, py::array::c_style> &charge_scale_i,  // 
+        const py::array_t<int, py::array::c_style> &lj_scale_i,  // 
+        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
+        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
+        double cutoff){
+        std::vector<int> charge_param_idxs(charge_pi.size());
+        std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
+        std::vector<int> lj_param_idxs(lj_pi.size());
+        std::memcpy(lj_param_idxs.data(), lj_pi.data(), lj_pi.size()*sizeof(int));
 
-//         std::vector<int> exclusion_idxs(exclusion_i.size());
-//         std::memcpy(exclusion_idxs.data(), exclusion_i.data(), exclusion_i.size()*sizeof(int));
+        std::vector<int> exclusion_idxs(exclusion_i.size());
+        std::memcpy(exclusion_idxs.data(), exclusion_i.data(), exclusion_i.size()*sizeof(int));
 
-//         std::vector<int> charge_scale_idxs(charge_scale_i.size());
-//         std::memcpy(charge_scale_idxs.data(), charge_scale_i.data(), charge_scale_i.size()*sizeof(int));
+        std::vector<int> charge_scale_idxs(charge_scale_i.size());
+        std::memcpy(charge_scale_idxs.data(), charge_scale_i.data(), charge_scale_i.size()*sizeof(int));
 
-//         std::vector<int> lj_scale_idxs(lj_scale_i.size());
-//         std::memcpy(lj_scale_idxs.data(), lj_scale_i.data(), lj_scale_i.size()*sizeof(int));
+        std::vector<int> lj_scale_idxs(lj_scale_i.size());
+        std::memcpy(lj_scale_idxs.data(), lj_scale_i.data(), lj_scale_i.size()*sizeof(int));
 
-//         std::vector<int> lambda_idxs(lambda_idxs_i.size());
-//         std::memcpy(lambda_idxs.data(), lambda_idxs_i.data(), lambda_idxs_i.size()*sizeof(int));
+        std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
+        std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
 
-//         return new timemachine::Nonbonded<RealType, D>(
-//             charge_param_idxs,
-//             lj_param_idxs,
-//             exclusion_idxs,
-//             charge_scale_idxs,
-//             lj_scale_idxs,
-//             lambda_idxs,
-//             cutoff
-//         );
-//     }
-//     ));
+        std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
+        std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
 
-// }
+        return new timemachine::Nonbonded<RealType>(
+            charge_param_idxs,
+            lj_param_idxs,
+            exclusion_idxs,
+            charge_scale_idxs,
+            lj_scale_idxs,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            cutoff
+        );
+    }
+    ));
+
+}
 
 
 // template <typename RealType, int D>
@@ -499,8 +503,8 @@ PYBIND11_MODULE(custom_ops, m) {
     // declare_periodic_torsion<double, 3>(m, "f64_3d");
     // declare_periodic_torsion<float, 3>(m, "f32_3d");
 
-    // declare_nonbonded<double, 3>(m, "f64_3d");
-    // declare_nonbonded<float, 3>(m, "f32_3d");
+    declare_nonbonded<double>(m, "f64");
+    declare_nonbonded<float>(m, "f32");
 
     // declare_gbsa<double, 3>(m, "f64_3d");
     // declare_gbsa<float, 3>(m, "f32_3d");

@@ -6,8 +6,8 @@
 
 namespace timemachine {
 
-template<typename RealType, int D>
-class Nonbonded : public Gradient<D> {
+template<typename RealType>
+class Nonbonded : public Gradient {
 
 private:
 
@@ -16,16 +16,10 @@ private:
     int *d_exclusion_idxs_; // [E,2]
     int *d_charge_scale_idxs_; // [E]
     int *d_lj_scale_idxs_; // [E]
-    int *d_lambda_idxs_;
+    int *d_lambda_plane_idxs_;
+    int *d_lambda_offset_idxs_;
 
     double cutoff_;
-
-    double *d_tmp_coords_4d_;
-    double *d_tmp_grads_4d_;
-
-    // these buffers can be in RealType as well
-    // double *d_block_bounds_ctr_;
-    // double *d_block_bounds_ext_;
     Neighborlist nblist_;
 
 
@@ -41,25 +35,39 @@ public:
         const std::vector<int> &exclusion_idxs, // [E,2]
         const std::vector<int> &charge_scale_idxs, // [E]
         const std::vector<int> &lj_scale_idxs, // [E]
-        const std::vector<int> &lambda_idxs, // [E]
+        const std::vector<int> &lambda_plane_idxs, // [E]
+        const std::vector<int> &lambda_offset_idxs, // [E]
         double cutoff);
 
     ~Nonbonded();
 
-    virtual void execute_lambda_device(
+    virtual void execute_lambda_inference_device(
         const int N,
         const int P,
-        const double *d_coords,
+        const double *d_coords_primals,
+        const double *d_params_primals,
+        const double lambda_primal,
+        unsigned long long *d_out_coords_primals,
+        double *d_out_lambda_primals,
+        double *d_out_energy_primal,
+        cudaStream_t stream
+    ) override;
+
+    virtual void execute_lambda_jvp_device(
+        const int N,
+        const int P,
+        const double *d_coords_primals,
         const double *d_coords_tangents,
-        const double *d_params,
-        const double lambda,
-        const double lambda_tangents,
-        unsigned long long *d_out_coords,
-        double *d_out_du_dl,
+        const double *d_params_primals,
+        const double lambda_primal,
+        const double lambda_tangent,
+        double *d_out_coords_primals,
         double *d_out_coords_tangents,
+        double *d_out_params_primals,
         double *d_out_params_tangents,
         cudaStream_t stream
     ) override;
+
 
 
 };

@@ -52,7 +52,6 @@ public:
         cudaStream_t stream
     ) override;
 
-
     virtual void execute_lambda_jvp_device(
         const int N,
         const int P,

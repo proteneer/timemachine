@@ -128,6 +128,7 @@ def prepare_nonbonded_system(
         params = np.array([], dtype=np.float64)
 
     charge_params = (np.random.rand(P_charges).astype(np.float64) - 0.5)*np.sqrt(138.935456)/e_scale
+    # charge_params = np.zeros_like(charge_params)
     charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, charge_params])
 
@@ -158,9 +159,16 @@ def prepare_nonbonded_system(
     exclusion_lj_idxs = np.random.randint(low=0, high=P_exc, size=(E), dtype=np.int32) + len(params)
     params = np.concatenate([params, exclusion_params])
 
-    nonbonded_lambda_idxs = np.random.randint(
-        low=-1,
-        high=1,
+    nonbonded_lambda_plane_idxs = np.random.randint(
+        low=0,
+        high=2,
+        size=(N),
+        dtype=np.int32
+    )
+
+    nonbonded_lambda_offset_idxs = np.random.randint(
+        low=0,
+        high=2,
         size=(N),
         dtype=np.int32
     )
@@ -171,7 +179,8 @@ def prepare_nonbonded_system(
         exclusion_idxs,
         exclusion_charge_idxs,
         exclusion_lj_idxs,
-        nonbonded_lambda_idxs,
+        nonbonded_lambda_plane_idxs,
+        nonbonded_lambda_offset_idxs,
         cutoff,
         precision=precision
     )
@@ -193,7 +202,8 @@ def prepare_nonbonded_system(
         es_exclusion_scale_idxs=exclusion_charge_idxs,
         lj_exclusion_scale_idxs=exclusion_lj_idxs,
         cutoff=cutoff,
-        lambda_idxs=nonbonded_lambda_idxs
+        lambda_plane_idxs=nonbonded_lambda_plane_idxs,
+        lambda_offset_idxs=nonbonded_lambda_offset_idxs
     )
 
     return params, [ref_total_energy], [custom_nonbonded]
@@ -359,18 +369,16 @@ class GradientTest(unittest.TestCase):
 
 
         np.testing.assert_almost_equal(ref_nrg, test_nrg, rtol)
-        print("PASSED ENERGIES")
 
         np.testing.assert_almost_equal(ref_dl, test_dl, rtol)
-        print("PASSED DU_DL")
 
-        print("ref_dx", ref_dx)
-        print("test_dx", test_dx)
         self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),
             rtol,
         )
+
+        # return
 
         x_tangent = np.random.rand(N, D).astype(np.float64)
         params_tangent = np.zeros_like(params)
@@ -403,7 +411,6 @@ class GradientTest(unittest.TestCase):
         #     err = abs((r - tt)/r)
         #     if err > 1e-4:
         #         print(r_idx, err, r, tt)
-        print("PASSED JVP FOR FORCES")
 
         if precision == np.float64:
             np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
