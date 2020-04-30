@@ -378,9 +378,6 @@ class GradientTest(unittest.TestCase):
             lamb_tangent
         )
 
-        print("X_PRIMAL", test_x_primal)
-        print("DX", test_dx)
-
         primals = (x, params, lamb)
         tangents = (x_tangent, params_tangent, lamb_tangent)
 
@@ -393,11 +390,16 @@ class GradientTest(unittest.TestCase):
             test_x_tangent,
             rtol,
         )
+
         # TBD compare relative to the *norm* of the group of similar derivatives.
         # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
         #     err = abs((r - tt)/r)
         #     if err > 1e-4:
         #         print(r_idx, err, r, tt)
+
+        # print(ref_p_tangent)
+        # print(test_p_tangent)
+        # print(np.abs(ref_p_tangent - test_p_tangent))
 
         if precision == np.float64:
             np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)

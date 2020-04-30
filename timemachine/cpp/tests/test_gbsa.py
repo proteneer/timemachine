@@ -54,7 +54,7 @@ class TestGBSA(GradientTest):
         # x = self.get_random_coords(N, D) 
 
         x = self.get_water_coords(D, sort=True)
-        x = x[:8, :]
+        # x = x[:8, :]
 
         N = x.shape[0]
 
@@ -88,10 +88,7 @@ class TestGBSA(GradientTest):
                     precision=precision
                 )
 
-                # for lamb in [0.0, 1/10,  1/2, 1/1.2, 1]:
-                for lamb in [0.0, 0.0, 0.0, 0.0, 0.0]:
-
-                    print("LAMBDA-----------------------", lamb)
+                for lamb in [0.0, 1/10,  1/2, 1/1.2, 1.0]:
                     for r, t in zip(ref_forces, test_forces):
                         self.compare_forces(
                             x,

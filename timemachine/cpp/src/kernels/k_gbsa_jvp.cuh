@@ -361,7 +361,6 @@ __global__ void k_reduce_born_radii_jvp(
     if(atom_i_idx < N) {
         Surreal<double> br = offsetRadiusI*radiusI/(radiusI - offsetRadiusI*tanhSum);
 
-        // printf("br real/imag %f %f\n", br.real, br.imag);
         born_radii[atom_i_idx] = br;
         obc_chain[atom_i_idx] = br*br*(1 - tanhSum*tanhSum)*(alpha_obc - 2*beta_obc*sum + 3*gamma_obc*sum2)/radiusI;
         obc_chain_ri[atom_i_idx] = br*br*(1/(offsetRadiusI*offsetRadiusI) - tanhSum/(radiusI*radiusI));
@@ -529,9 +528,6 @@ __global__ void k_compute_born_energy_and_forces_jvp(
         if (atom_j_idx != atom_i_idx && r2.real < cutoff*cutoff && atom_i_idx < N && atom_j_idx < N) {
             
             Surreal<RealType> r = sqrt(r2);
-
-            printf("FINAL dij i %d j %d : %f\n", atom_i_idx, atom_j_idx, r.real);
-
             Surreal<RealType> rInverse = 1/r;
 
             RealType offsetRadiusJ      = radiusJ - dielectricOffset;

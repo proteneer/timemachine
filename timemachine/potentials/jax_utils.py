@@ -3,10 +3,6 @@ import jax.numpy as np
 
 def lambda_to_w(lamb, plane_idxs, offset_idxs, cutoff):
     d4 = cutoff*(plane_idxs + offset_idxs*lamb)
-    print(lamb)
-    print(plane_idxs)
-    print(offset_idxs)
-    print(d4)
     return d4
 
 def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):

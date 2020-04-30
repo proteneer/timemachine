@@ -47,9 +47,6 @@ def gbsa_obc(
     eye = np.eye(N, dtype=dij.dtype)
 
     r = dij + eye # so I don't have divide-by-zero nonsense
-
-    print(r)
-
     or1 = radii.reshape((N, 1)) - dielectric_offset
     or2 = radii.reshape((1, N)) - dielectric_offset
     sr2 = scales.reshape((1, N)) * or2
