@@ -17,9 +17,10 @@ def nonbonded(
     es_exclusion_scale_idxs,
     lj_exclusion_scale_idxs,
     cutoff,
-    lambda_idxs):
+    lambda_plane_idxs,
+    lambda_offset_idxs):
 
-    conf_4d = convert_to_4d(conf, lamb, lambda_idxs, cutoff)
+    conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
     lj = lennard_jones(conf_4d, params, box=box, param_idxs=lj_param_idxs, cutoff=cutoff)
     lj_exc = lennard_jones_exclusion(conf_4d, params, box=box, param_idxs=lj_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=lj_exclusion_scale_idxs)

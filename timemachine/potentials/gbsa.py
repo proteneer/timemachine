@@ -22,7 +22,8 @@ def gbsa_obc(
     gamma,
     cutoff_radii,
     cutoff_force,
-    lambda_idxs,
+    lambda_plane_idxs,
+    lambda_offset_idxs,
     dielectric_offset=0.009,
     surface_tension=28.3919551,
     solute_dielectric=1.0,
@@ -31,7 +32,7 @@ def gbsa_obc(
 
     assert cutoff_radii == cutoff_force
 
-    coords_4d = convert_to_4d(coords, lamb, lambda_idxs, cutoff_radii)
+    coords_4d = convert_to_4d(coords, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff_radii)
 
     N = len(radii_idxs)
 

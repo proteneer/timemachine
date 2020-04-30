@@ -3,14 +3,15 @@
 #include <pybind11/numpy.h>
 
 #include "context.hpp"
-#include "optimizer.hpp"
-#include "langevin.hpp"
+// #include "optimizer.hpp"
+// #include "langevin.hpp"
 #include "harmonic_bond.hpp"
 #include "harmonic_angle.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
 #include "gbsa.hpp"
 #include "gradient.hpp"
+#include "alchemical_gradient.hpp"
 #include "stepper.hpp"
 #include "fixed_point.hpp"
 
@@ -43,7 +44,7 @@ void declare_alchemical_stepper(py::module &m, const char *typestr) {
         py::dynamic_attr()
     )
     .def(py::init([](
-        const std::vector<timemachine::Gradient<3> *> system,
+        const std::vector<timemachine::Gradient*> system,
         const std::vector<double> &lambda_schedule
     ) {
         return new timemachine::AlchemicalStepper(
@@ -173,53 +174,48 @@ void declare_reversible_context(py::module &m, const char *typestr) {
 }
 
 
-template <int D>
-void declare_gradient(py::module &m, const char *typestr) {
+void declare_gradient(py::module &m) {
 
-    using Class = timemachine::Gradient<D>;
-    std::string pyclass_name = std::string("Gradient_") + typestr;
+    using Class = timemachine::Gradient;
+    std::string pyclass_name = std::string("Gradient");
     py::class_<Class>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
         py::dynamic_attr())
-    .def("execute_lambda", [](timemachine::Gradient<D> &grad,
+    .def("execute_lambda", [](timemachine::Gradient &grad,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
         double lambda) -> py::tuple  {
 
             const long unsigned int N = coords.shape()[0];
-            const long unsigned int DD = coords.shape()[1];
-
-            if(DD != D) throw std::runtime_error("D mismatch");
-
+            const long unsigned int D = coords.shape()[1];
             const long unsigned int P = params.shape()[0];
 
-            std::vector<unsigned long long> out_coords(N*DD);
+            std::vector<unsigned long long> out_coords(N*D);
 
             double out_du_dl = -9999999999; //debug use, make sure its overwritten
+            double out_energy = 9999999999; //debug use, make sure its overwrriten
 
-            grad.execute_lambda_host(
-                N,P,
+            grad.execute_lambda_inference_host(
+                N,
+                P,
                 coords.data(),
-                nullptr,
                 params.data(),
                 lambda,
-                0,
                 &out_coords[0],
                 &out_du_dl,
-                nullptr,
-                nullptr
+                &out_energy
             );
 
-            py::array_t<double, py::array::c_style> py_out_coords({N, DD});
+            py::array_t<double, py::array::c_style> py_out_coords({N, D});
             for(int i=0; i < out_coords.size(); i++) {
                 py_out_coords.mutable_data()[i] = static_cast<double>(static_cast<long long>(out_coords[i]))/FIXED_EXPONENT;
             }
 
-            return py::make_tuple(py_out_coords, out_du_dl);
+            return py::make_tuple(py_out_coords, out_du_dl, out_energy);
     })
-    .def("execute_lambda_jvp", [](timemachine::Gradient<D> &grad,
+    .def("execute_lambda_jvp", [](timemachine::Gradient &grad,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
         double lambda,
@@ -228,40 +224,66 @@ void declare_gradient(py::module &m, const char *typestr) {
         double lambda_tangent) -> py::tuple {
 
             const long unsigned int N = coords.shape()[0];
-            const long unsigned int DD = coords.shape()[1];
-
-            if(DD != D) throw std::runtime_error("D mismatch");
-
+            const long unsigned int D = coords.shape()[1];
             const long unsigned int P = params.shape()[0];
 
-            py::array_t<double, py::array::c_style> py_out_coords_tangents({N, DD});
+            py::array_t<double, py::array::c_style> py_out_coords_primals({N, D});
+            py::array_t<double, py::array::c_style> py_out_coords_tangents({N, D});
+
+            py::array_t<double, py::array::c_style> py_out_params_primals({P});
             py::array_t<double, py::array::c_style> py_out_params_tangents({P});
 
-            grad.execute_lambda_host(
+            grad.execute_lambda_jvp_host(
                 N,P,
                 coords.data(),
                 coords_tangents.data(),
                 params.data(),
                 lambda,
                 lambda_tangent,
-                nullptr,
-                nullptr,
+                py_out_coords_primals.mutable_data(),
                 py_out_coords_tangents.mutable_data(),
+                py_out_params_primals.mutable_data(),
                 py_out_params_tangents.mutable_data()
             );
 
-            return py::make_tuple(py_out_coords_tangents, py_out_params_tangents);
+            return py::make_tuple(py_out_coords_tangents, py_out_params_tangents, py_out_coords_primals, py_out_params_primals);
     });
 
 }
 
+void declare_alchemical_gradient(py::module &m) {
 
-template <typename RealType, int D>
+    using Class = timemachine::AlchemicalGradient;
+    std::string pyclass_name = std::string("AlchemicalGradient");
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        int N,
+        int P,
+        timemachine::Gradient *u0,
+        timemachine::Gradient *u1
+    ){
+        return new timemachine::AlchemicalGradient(
+            N,
+            P,
+            u0,
+            u1
+        );
+    }
+    ));
+
+}
+
+template <typename RealType>
 void declare_harmonic_bond(py::module &m, const char *typestr) {
 
-    using Class = timemachine::HarmonicBond<RealType, D>;
+    using Class = timemachine::HarmonicBond<RealType>;
     std::string pyclass_name = std::string("HarmonicBond_") + typestr;
-    py::class_<Class, timemachine::Gradient<D> >(
+    py::class_<Class, timemachine::Gradient>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -269,33 +291,28 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
     )
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &bond_idxs,
-        const py::array_t<int, py::array::c_style> &param_idxs,
-        const py::array_t<int, py::array::c_style> &lambda_idxs
+        const py::array_t<int, py::array::c_style> &param_idxs
     ){
         std::vector<int> vec_bond_idxs(bond_idxs.size());
         std::memcpy(vec_bond_idxs.data(), bond_idxs.data(), vec_bond_idxs.size()*sizeof(int));
         std::vector<int> vec_param_idxs(param_idxs.size());
         std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
-        std::vector<int> vec_lambda_idxs(lambda_idxs.size());
-        std::memcpy(vec_lambda_idxs.data(), lambda_idxs.data(), vec_lambda_idxs.size()*sizeof(int));
 
-        return new timemachine::HarmonicBond<RealType, D>(
+        return new timemachine::HarmonicBond<RealType>(
             vec_bond_idxs,
-            vec_param_idxs,
-            vec_lambda_idxs
+            vec_param_idxs
         );
     }
     ));
 
 }
 
-
-template <typename RealType, int D>
+template <typename RealType>
 void declare_harmonic_angle(py::module &m, const char *typestr) {
 
-    using Class = timemachine::HarmonicAngle<RealType, D>;
+    using Class = timemachine::HarmonicAngle<RealType>;
     std::string pyclass_name = std::string("HarmonicAngle_") + typestr;
-    py::class_<Class, timemachine::Gradient<D> >(
+    py::class_<Class, timemachine::Gradient>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -303,20 +320,16 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
     )
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &angle_idxs,
-        const py::array_t<int, py::array::c_style> &param_idxs,
-        const py::array_t<int, py::array::c_style> &lambda_idxs
+        const py::array_t<int, py::array::c_style> &param_idxs
     ){
         std::vector<int> vec_angle_idxs(angle_idxs.size());
         std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size()*sizeof(int));
         std::vector<int> vec_param_idxs(param_idxs.size());
         std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
-        std::vector<int> vec_lambda_idxs(lambda_idxs.size());
-        std::memcpy(vec_lambda_idxs.data(), lambda_idxs.data(), vec_lambda_idxs.size()*sizeof(int));
 
-        return new timemachine::HarmonicAngle<RealType, D>(
+        return new timemachine::HarmonicAngle<RealType>(
             vec_angle_idxs,
-            vec_param_idxs,
-            vec_lambda_idxs
+            vec_param_idxs
         );
     }
     ));
@@ -324,12 +337,12 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 }
 
 
-template <typename RealType, int D>
+template <typename RealType>
 void declare_periodic_torsion(py::module &m, const char *typestr) {
 
-    using Class = timemachine::PeriodicTorsion<RealType, D>;
+    using Class = timemachine::PeriodicTorsion<RealType>;
     std::string pyclass_name = std::string("PeriodicTorsion_") + typestr;
-    py::class_<Class, timemachine::Gradient<D> >(
+    py::class_<Class, timemachine::Gradient>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -337,20 +350,16 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
     )
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &torsion_idxs,
-        const py::array_t<int, py::array::c_style> &param_idxs,
-        const py::array_t<int, py::array::c_style> &lambda_idxs
+        const py::array_t<int, py::array::c_style> &param_idxs
     ){
         std::vector<int> vec_torsion_idxs(torsion_idxs.size());
         std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size()*sizeof(int));
         std::vector<int> vec_param_idxs(param_idxs.size());
         std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
-        std::vector<int> vec_lambda_idxs(lambda_idxs.size());
-        std::memcpy(vec_lambda_idxs.data(), lambda_idxs.data(), vec_lambda_idxs.size()*sizeof(int));
 
-        return new timemachine::PeriodicTorsion<RealType, D>(
+        return new timemachine::PeriodicTorsion<RealType>(
             vec_torsion_idxs,
-            vec_param_idxs,
-            vec_lambda_idxs
+            vec_param_idxs
         );
     }
     ));
@@ -358,12 +367,12 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 }
 
 
-template <typename RealType, int D>
+template <typename RealType>
 void declare_nonbonded(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Nonbonded<RealType, D>;
+    using Class = timemachine::Nonbonded<RealType>;
     std::string pyclass_name = std::string("Nonbonded_") + typestr;
-    py::class_<Class, timemachine::Gradient<D> >(
+    py::class_<Class, timemachine::Gradient>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -375,9 +384,9 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
         const py::array_t<int, py::array::c_style> &charge_scale_i,  // 
         const py::array_t<int, py::array::c_style> &lj_scale_i,  // 
-        const py::array_t<int, py::array::c_style> &lambda_idxs_i,  // 
-        double cutoff
-    ){
+        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
+        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
+        double cutoff){
         std::vector<int> charge_param_idxs(charge_pi.size());
         std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
         std::vector<int> lj_param_idxs(lj_pi.size());
@@ -392,16 +401,20 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         std::vector<int> lj_scale_idxs(lj_scale_i.size());
         std::memcpy(lj_scale_idxs.data(), lj_scale_i.data(), lj_scale_i.size()*sizeof(int));
 
-        std::vector<int> lambda_idxs(lambda_idxs_i.size());
-        std::memcpy(lambda_idxs.data(), lambda_idxs_i.data(), lambda_idxs_i.size()*sizeof(int));
+        std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
+        std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
 
-        return new timemachine::Nonbonded<RealType, D>(
+        std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
+        std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
+
+        return new timemachine::Nonbonded<RealType>(
             charge_param_idxs,
             lj_param_idxs,
             exclusion_idxs,
             charge_scale_idxs,
             lj_scale_idxs,
-            lambda_idxs,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
             cutoff
         );
     }
@@ -410,12 +423,12 @@ void declare_nonbonded(py::module &m, const char *typestr) {
 }
 
 
-template <typename RealType, int D>
+template <typename RealType>
 void declare_gbsa(py::module &m, const char *typestr) {
 
-    using Class = timemachine::GBSA<RealType, D>;
+    using Class = timemachine::GBSA<RealType>;
     std::string pyclass_name = std::string("GBSA_") + typestr;
-    py::class_<Class, timemachine::Gradient<D> >(
+    py::class_<Class, timemachine::Gradient>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -425,7 +438,8 @@ void declare_gbsa(py::module &m, const char *typestr) {
         const py::array_t<int, py::array::c_style> &charge_pi, // [N]
         const py::array_t<int, py::array::c_style> &radii_pi, // [N]
         const py::array_t<int, py::array::c_style> &scale_pi, // [N]
-        const py::array_t<int, py::array::c_style> &lambda_pi, // [N]
+        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
+        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
         double alpha,
         double beta,
         double gamma,
@@ -443,15 +457,18 @@ void declare_gbsa(py::module &m, const char *typestr) {
         std::memcpy(atomic_radii_idxs.data(), radii_pi.data(), radii_pi.size()*sizeof(int));
         std::vector<int> scale_factor_idxs(scale_pi.size());
         std::memcpy(scale_factor_idxs.data(), scale_pi.data(), scale_pi.size()*sizeof(int));
-        std::vector<int> lambda_idxs(lambda_pi.size());
-        std::memcpy(lambda_idxs.data(), lambda_pi.data(), lambda_pi.size()*sizeof(int));
+        std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
+        std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
+        std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
+        std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
 
 
-        return new timemachine::GBSA<RealType, D>(
+        return new timemachine::GBSA<RealType>(
             charge_param_idxs, // [N]
             atomic_radii_idxs, // [N]
             scale_factor_idxs, // 
-            lambda_idxs,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
             alpha,
             beta,
             gamma,
@@ -470,24 +487,26 @@ void declare_gbsa(py::module &m, const char *typestr) {
 
 PYBIND11_MODULE(custom_ops, m) {
 
-    declare_gradient<3>(m, "f64_3d");
-    declare_harmonic_bond<double, 3>(m, "f64_3d");
-    declare_harmonic_bond<float, 3>(m, "f32_3d");
+    declare_gradient(m);
+    declare_alchemical_gradient(m);
 
-    declare_harmonic_angle<double, 3>(m, "f64_3d");
-    declare_harmonic_angle<float, 3>(m, "f32_3d");
+    declare_harmonic_bond<double>(m, "f64");
+    declare_harmonic_bond<float>(m, "f32");
 
-    declare_periodic_torsion<double, 3>(m, "f64_3d");
-    declare_periodic_torsion<float, 3>(m, "f32_3d");
+    declare_harmonic_angle<double>(m, "f64");
+    declare_harmonic_angle<float>(m, "f32");
 
-    declare_nonbonded<double, 3>(m, "f64_3d");
-    declare_nonbonded<float, 3>(m, "f32_3d");
+    declare_periodic_torsion<double>(m, "f64");
+    declare_periodic_torsion<float>(m, "f32");
 
-    declare_gbsa<double, 3>(m, "f64_3d");
-    declare_gbsa<float, 3>(m, "f32_3d");
+    declare_nonbonded<double>(m, "f64");
+    declare_nonbonded<float>(m, "f32");
+
+    declare_gbsa<double>(m, "f64");
+    declare_gbsa<float>(m, "f32");
 
     declare_stepper(m, "f64");
     declare_alchemical_stepper(m, "f64");
-    declare_reversible_context(m, "f64_3d");
+    declare_reversible_context(m, "f64");
 
 }

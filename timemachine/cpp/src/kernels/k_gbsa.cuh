@@ -21,7 +21,8 @@ __global__ void k_compute_born_radii(
     const double* coords,
     const double* params,
     const double lambda,
-    const int* lambda_idxs,
+    const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
+    const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int* atomic_radii_idxs,
     const int* scale_factor_idxs,
     const double dielectric_offset,
@@ -45,17 +46,9 @@ __global__ void k_compute_born_radii(
     }
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
-    RealType lambda_i;
+    RealType lambda_i = lambda;
     if(atom_i_idx < N) {
-        if(lambda_idxs[atom_i_idx] == 0) {
-            lambda_i = 0;
-        } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = cutoff*lambda;
-        } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + cutoff*lambda;
-        }        
-    } else {
-        lambda_i = 0;
+        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);
     }
 
     RealType ci[3];
@@ -69,17 +62,9 @@ __global__ void k_compute_born_radii(
     RealType radiusIInverse  = 1/offsetRadiusI;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    RealType lambda_j;
+    RealType lambda_j = lambda;
     if(atom_j_idx < N) {
-        if(lambda_idxs[atom_j_idx] == 0) {
-            lambda_j = 0;
-        } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = cutoff*lambda;
-        } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + cutoff*lambda;
-        }   
-    } else {
-        lambda_j = 0;
+        lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);
     }
 
     // *always* accumulate in 64 bit.
@@ -171,7 +156,8 @@ void __global__ k_compute_born_first_loop_gpu(
     const double* coords,
     const double* params,
     const double lambda,
-    const int* lambda_idxs,
+    const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
+    const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int* charge_param_idxs,
     const double* born_radii,
     const double prefactor,
@@ -180,7 +166,8 @@ void __global__ k_compute_born_first_loop_gpu(
     const double *block_bounds_ext,
     unsigned long long *bornForces,
     unsigned long long *out_forces,
-    double *du_dl) {
+    double *du_dl,
+    double *out_energy) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
@@ -202,17 +189,11 @@ void __global__ k_compute_born_first_loop_gpu(
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     RealType du_dl_i = 0;
-    RealType lambda_i;
+    RealType dlambda_i = 0;
+    RealType lambda_i = lambda;
     if(atom_i_idx < N) {
-        if(lambda_idxs[atom_i_idx] == 0) {
-            lambda_i = 0;
-        } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = cutoff*lambda;
-        } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + cutoff*lambda;
-        }        
-    } else {
-        lambda_i = 0;
+        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);
+        dlambda_i = cutoff*lambda_offset_idxs[atom_i_idx];
     }
 
     RealType ci[3];
@@ -229,17 +210,11 @@ void __global__ k_compute_born_first_loop_gpu(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType du_dl_j = 0;
-    RealType lambda_j;
+    RealType dlambda_j = 0;
+    RealType lambda_j = lambda;
     if(atom_j_idx < N) {
-        if(lambda_idxs[atom_j_idx] == 0) {
-            lambda_j = 0;
-        } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = cutoff*lambda;
-        } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + cutoff*lambda;
-        }   
-    } else {
-        lambda_j = 0;
+        lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);
+        dlambda_j = cutoff*lambda_offset_idxs[atom_j_idx];
     }
 
     RealType cj[3];
@@ -252,6 +227,8 @@ void __global__ k_compute_born_first_loop_gpu(
     RealType born_radii_j = atom_j_idx < N ? born_radii[atom_j_idx] : 0;
     // RealType dE_dqj_accum = 0;
     RealType born_force_j_accum = 0;
+
+    RealType obc_energy = 0;
 
     // In inference mode, we don't care about gradients with respect to parameters.
     for(int round = 0; round < 32; round++) {
@@ -277,10 +254,13 @@ void __global__ k_compute_born_first_loop_gpu(
             RealType Gpol               = (prefactor*qi*qj)/denominator; 
             RealType dGpol_dr           = -Gpol*(1 - expTerm/4)/denominator2;  
             RealType dGpol_dalpha2_ij   = -(Gpol/2)*expTerm*(1 + D_ij)/denominator2;
+        
+            RealType energy = Gpol;
 
             if (atom_i_idx != atom_j_idx) {
 
                 // TBD: determine what we should do with cutoff
+                // FIX THIS since we need to update du/dq i and du/dpi computation
                 // energy -= qi*partialCharges[atom_j_idx]/cutoff;
                 // bornForces[atom_j_idx]        += dGpol_dalpha2_ij*born_radii[atom_i_idx];
                 born_force_j_accum += dGpol_dalpha2_ij*born_radii_i;
@@ -290,14 +270,17 @@ void __global__ k_compute_born_first_loop_gpu(
                     gj[d] -= dxs[d]*dGpol_dr;
                 }
 
-                RealType dw_i = (lambda_i == 0) ? 0 : cutoff;
-                RealType dw_j = (lambda_j == 0) ? 0 : cutoff;
+                RealType dw_i = dlambda_i;
+                RealType dw_j = dlambda_j; // shuffled
 
                 du_dl_i += dxs[3]*dGpol_dr*dw_i;
                 du_dl_j -= dxs[3]*dGpol_dr*dw_j;
 
+            } else {
+                energy *= 0.5;
             }
 
+            obc_energy += energy;
             born_force_i_accum += dGpol_dalpha2_ij*born_radii_j;
         }
 
@@ -311,6 +294,7 @@ void __global__ k_compute_born_first_loop_gpu(
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
         }
         lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        dlambda_j = __shfl_sync(0xffffffff, dlambda_j, srcLane);
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
@@ -332,6 +316,7 @@ void __global__ k_compute_born_first_loop_gpu(
     }
 
     atomicAdd(du_dl, du_dl_i + du_dl_j);
+    atomicAdd(out_energy, obc_energy);
 
 }
 
@@ -383,7 +368,8 @@ __global__ void k_reduce_born_forces(
     const double* obc_chain,
     const double surface_tension, // surface area factor
     const double probe_radius,
-    unsigned long long* bornForces // dU/Ri
+    unsigned long long* bornForces, // dU/Ri
+    double *energy
 ) {
 
     // surface area term
@@ -402,6 +388,7 @@ __global__ void k_reduce_born_forces(
         double r            = atomic_radii + probe_radius;
         double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
         double saTerm       = surface_tension*r*r*ratio6;
+        atomicAdd(energy, saTerm);
         born_force_i  -= 6.0*saTerm/born_radii[atomI];
     }
 
@@ -418,7 +405,8 @@ __global__ void k_compute_born_energy_and_forces(
     const double* coords,
     const double* params,
     const double lambda,
-    const int* lambda_idxs,
+    const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
+    const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int* atomic_radii_idxs,
     const int* scale_factor_idxs,
     const double* born_radii,
@@ -447,17 +435,11 @@ __global__ void k_compute_born_energy_and_forces(
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     RealType du_dl_i = 0;
-    RealType lambda_i;
+    RealType lambda_i = lambda;
+    RealType dlambda_i = 0;
     if(atom_i_idx < N) {
-        if(lambda_idxs[atom_i_idx] == 0) {
-            lambda_i = 0;
-        } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = cutoff*lambda;
-        } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + cutoff*lambda;
-        }        
-    } else {
-        lambda_i = 0;
+        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);
+        dlambda_i = cutoff*lambda_offset_idxs[atom_i_idx];
     }
 
     RealType ci[3];
@@ -474,17 +456,11 @@ __global__ void k_compute_born_energy_and_forces(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType du_dl_j = 0;
-    RealType lambda_j;
+    RealType lambda_j = lambda;
+    RealType dlambda_j = 0;
     if(atom_j_idx < N) {
-        if(lambda_idxs[atom_j_idx] == 0) {
-            lambda_j = 0;
-        } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = cutoff*lambda;
-        } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + cutoff*lambda;
-        }   
-    } else {
-        lambda_j = 0;
+        lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);
+        dlambda_j = cutoff*lambda_offset_idxs[atom_j_idx];
     }
 
     RealType cj[3];
@@ -583,8 +559,8 @@ __global__ void k_compute_born_energy_and_forces(
                     dPsi_dx_j[d] -= deriv;
                 }
 
-                RealType dw_i = (lambda_i == 0) ? 0 : cutoff;
-                RealType dw_j = (lambda_j == 0) ? 0 : cutoff;
+                RealType dw_i = dlambda_i;
+                RealType dw_j = dlambda_j;
 
                 du_dl_i += dxs[3]*de*dw_i;
                 du_dl_j -= dxs[3]*de*dw_j;
@@ -608,6 +584,7 @@ __global__ void k_compute_born_energy_and_forces(
         }
 
         lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        dlambda_j = __shfl_sync(0xffffffff, dlambda_j, srcLane);
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
 
     }

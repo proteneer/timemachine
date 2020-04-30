@@ -37,8 +37,10 @@ public:
         const double *coords,
         const double *params,
         const double *dx_tangent,
-        double *coords_jvp,
-        double *params_jvp) = 0;
+        double *coords_jvp_primals,
+        double *coords_jvp_tangents,
+        double *params_jvp_primals,
+        double *params_jvp_tangents) = 0;
 
 };
 
@@ -47,16 +49,20 @@ class AlchemicalStepper : public Stepper {
 private:
 
     int count_;
-    std::vector<Gradient<3> *>forces_;
+    std::vector<Gradient *>forces_;
 
     const std::vector<double> lambda_schedule_; // [T]
     double *d_du_dl_; // [T]
+    double *d_energies_; // [T]
     std::vector<double> du_dl_adjoint_; // [T], set later
+
 
 public:
 
+    virtual ~AlchemicalStepper();
+
     AlchemicalStepper(
-        std::vector<Gradient<3> *> forces,
+        std::vector<Gradient*> forces,
         const std::vector<double> &lambda_schedule
     );
 
@@ -73,8 +79,10 @@ public:
         const double *coords,
         const double *params,
         const double *dx_tangent,
-        double *coords_jvp,
-        double *params_jvp) override;
+        double *coords_jvp_primals,
+        double *coords_jvp_tangents,
+        double *params_jvp_primals,
+        double *params_jvp_tangents) override;
 
     void get_du_dl(double *buf);
 

@@ -14,7 +14,8 @@ __global__ void k_compute_born_radii_gpu_jvp(
     const double* params,
     const double lambda,
     const double lambda_tangent,
-    const int* lambda_idxs,
+    const int* lambda_plane_idxs,
+    const int* lambda_offset_idxs,
     const int* atomic_radii_idxs,
     const int* scale_factor_idxs,
     const double dielectric_offset,
@@ -38,18 +39,10 @@ __global__ void k_compute_born_radii_gpu_jvp(
     }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    Surreal<RealType> lambda_i;
+    Surreal<RealType> lambda_i(lambda, lambda_tangent);
     if(atom_i_idx < N) {
-        if(lambda_idxs[atom_i_idx] == 0) {
-            lambda_i = Surreal<RealType>(0, 0);
-        } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        }        
-    } else {
-        lambda_i = Surreal<RealType>(0, 0);
-    }
+        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);        
+    };
 
     Surreal<RealType> ci[3];
     for(int d=0; d < 3; d++) {
@@ -67,19 +60,10 @@ __global__ void k_compute_born_radii_gpu_jvp(
     const auto dielectricOffset = dielectric_offset;
 
     int atom_j_idx =  blockIdx.y*32 + threadIdx.x;
-    Surreal<RealType> lambda_j;
+    Surreal<RealType> lambda_j(lambda, lambda_tangent);
     if(atom_j_idx < N) {
-        if(lambda_idxs[atom_j_idx] == 0) {
-            lambda_j = Surreal<RealType>(0, 0);
-        } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        }        
-    } else {
-        lambda_j = Surreal<RealType>(0, 0);
+        lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);        
     }
-
 
     int radii_param_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
     int scale_param_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
@@ -150,9 +134,9 @@ __global__ void k_compute_born_radii_gpu_jvp(
                 sum.real += term.real;
                 sum.imag += term.imag;
 
-
             }
         }
+
         const int srcLane = (threadIdx.x + 1) % WARPSIZE;
         scaledRadiusJ = __shfl_sync(0xffffffff, scaledRadiusJ, srcLane);
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
@@ -177,7 +161,8 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     const double* params,
     const double lambda,
     const double lambda_tangent,
-    const int* lambda_idxs,
+    const int* lambda_plane_idxs,
+    const int* lambda_offset_idxs,
     const int* charge_param_idxs,
     const Surreal<double>* born_radii,
     const double prefactor,
@@ -185,8 +170,10 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
     Surreal<double> *bornForces,
-    double *out_HvP,
-    double *out_MvP) {
+    double *out_HvP_primals,
+    double *out_HvP_tangents,
+    double *out_MvP_primals,
+    double *out_MvP_tangents) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
@@ -207,23 +194,16 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    Surreal<RealType> lambda_i;
+    Surreal<RealType> lambda_i(lambda, lambda_tangent);
     if(atom_i_idx < N) {
-        if(lambda_idxs[atom_i_idx] == 0) {
-            lambda_i = Surreal<RealType>(0, 0);
-        } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        }        
-    } else {
-        lambda_i = Surreal<RealType>(0, 0);
-    }
+        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);        
+    };
 
     Surreal<RealType> ci[3];
     Surreal<RealType> gi[3];
     for(int d=0; d < 3; d++) {
-        gi[d] = Surreal<RealType>(0,0);
+        gi[d].real = 0;
+        gi[d].imag = 0;
         ci[d].real = atom_i_idx < N ? coords[atom_i_idx*3+d] : 0;
         ci[d].imag = atom_i_idx < N ? coords_tangents[atom_i_idx*3+d] : 0;
     }
@@ -237,23 +217,16 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     Surreal<RealType> born_force_i_accum(0, 0);
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    Surreal<RealType> lambda_j;
+    Surreal<RealType> lambda_j(lambda, lambda_tangent);
     if(atom_j_idx < N) {
-        if(lambda_idxs[atom_j_idx] == 0) {
-            lambda_j = Surreal<RealType>(0, 0);
-        } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        }        
-    } else {
-        lambda_j = Surreal<RealType>(0, 0);
+        lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);        
     }
 
     Surreal<RealType> cj[3];
     Surreal<RealType> gj[3];
     for(int d=0; d < 3; d++) {
-        gj[d] = Surreal<RealType>(0,0);
+        gj[d].real = 0;
+        gj[d].imag = 0;
         cj[d].real = atom_j_idx < N ? coords[atom_j_idx*3+d] : 0;
         cj[d].imag = atom_j_idx < N ? coords_tangents[atom_j_idx*3+d] : 0;
     }
@@ -331,21 +304,25 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
 
     for(int d=0; d < 3; d++) {
         if(atom_i_idx < N) {
-            atomicAdd(out_HvP + atom_i_idx*3 + d, gi[d].imag);
+            atomicAdd(out_HvP_primals + atom_i_idx*3 + d, gi[d].real);
+            atomicAdd(out_HvP_tangents + atom_i_idx*3 + d, gi[d].imag);
         }
         if(atom_j_idx < N) {
-            atomicAdd(out_HvP + atom_j_idx*3 + d, gj[d].imag);
+            atomicAdd(out_HvP_primals + atom_j_idx*3 + d, gj[d].real);
+            atomicAdd(out_HvP_tangents + atom_j_idx*3 + d, gj[d].imag);
         }
     }
 
     if(atom_i_idx < N) {
         atomicAddOffsetSplit(bornForces, atom_i_idx, born_force_i_accum); // add both real and imaginary part
-        atomicAdd(out_MvP + charge_param_idx_i, dE_dqi_accum.imag); 
+        atomicAdd(out_MvP_primals + charge_param_idx_i, dE_dqi_accum.real); 
+        atomicAdd(out_MvP_tangents + charge_param_idx_i, dE_dqi_accum.imag); 
     }
 
     if(atom_j_idx < N) {
         atomicAddOffsetSplit(bornForces, atom_j_idx, born_force_j_accum); // add both real and imaginary
-        atomicAdd(out_MvP + charge_param_idx_j, dE_dqj_accum.imag);
+        atomicAdd(out_MvP_primals + charge_param_idx_j, dE_dqj_accum.real);
+        atomicAdd(out_MvP_tangents + charge_param_idx_j, dE_dqj_accum.imag);
     }
 
 }
@@ -384,7 +361,6 @@ __global__ void k_reduce_born_radii_jvp(
     if(atom_i_idx < N) {
         Surreal<double> br = offsetRadiusI*radiusI/(radiusI - offsetRadiusI*tanhSum);
 
-        // printf("br real/imag %f %f\n", br.real, br.imag);
         born_radii[atom_i_idx] = br;
         obc_chain[atom_i_idx] = br*br*(1 - tanhSum*tanhSum)*(alpha_obc - 2*beta_obc*sum + 3*gamma_obc*sum2)/radiusI;
         obc_chain_ri[atom_i_idx] = br*br*(1/(offsetRadiusI*offsetRadiusI) - tanhSum/(radiusI*radiusI));
@@ -402,7 +378,8 @@ __global__ void k_reduce_born_forces_jvp(
     const double surface_tension, // surface area factor
     const double probe_radius,
     Surreal<double>* bornForces, // dU/Ri
-    double* out_MvP
+    double* out_MvP_primals,
+    double* out_MvP_tangents
 ) {
 
     int atomI =  blockIdx.x*32 + threadIdx.x;
@@ -428,7 +405,8 @@ __global__ void k_reduce_born_forces_jvp(
         radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
     }
     radii_derivs += bornForces[atomI] * obc_chain_ri[atomI];
-    atomicAdd(out_MvP + atomic_radii_idxs[atomI], radii_derivs.imag);
+    atomicAdd(out_MvP_primals + atomic_radii_idxs[atomI], radii_derivs.real);
+    atomicAdd(out_MvP_tangents + atomic_radii_idxs[atomI], radii_derivs.imag);
     bornForces[atomI] *= obc_chain[atomI];
 
 }
@@ -442,7 +420,8 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     const double* params,
     const double lambda,
     const double lambda_tangent,
-    const int *lambda_idxs,
+    const int* lambda_plane_idxs,
+    const int* lambda_offset_idxs,
     const int* atomic_radii_idxs,
     const int* scale_factor_idxs,
     const Surreal<double>* born_radii,
@@ -453,12 +432,12 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
     const Surreal<double>* bornForces,
-    double* out_HvP,
-    double* out_MvP) {
+    double* out_HvP_primals,
+    double* out_HvP_tangents,
+    double* out_MvP_primals,
+    double* out_MvP_tangents) {
 
     // we always do the full interaction matrix due to non-symmetry
-
-
     RealType block_d2ij = 0; 
     for(int d=0; d < D; d++) {
         RealType block_row_ctr = block_bounds_ctr[blockIdx.x*D+d];
@@ -476,23 +455,16 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     // (ytz): we can probably do this computation twice by flipping i and j, but we have more
     // parallelism as is
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    Surreal<RealType> lambda_i;
+    Surreal<RealType> lambda_i(lambda, lambda_tangent);
     if(atom_i_idx < N) {
-        if(lambda_idxs[atom_i_idx] == 0) {
-            lambda_i = Surreal<RealType>(0, 0);
-        } else if(lambda_idxs[atom_i_idx] == 1) {
-            lambda_i = cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        } else if(lambda_idxs[atom_i_idx] == -1) {
-            lambda_i = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        }        
-    } else {
-        lambda_i = Surreal<RealType>(0, 0);
-    }
+        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);        
+    };
 
     Surreal<RealType> ci[D];
-    RealType dPsi_dx_i_imag[D];
+    Surreal<RealType> dPsi_dx_i[D];
     for(int d=0; d < D; d++) {
-        dPsi_dx_i_imag[d] = 0;
+        dPsi_dx_i[d].real = 0;
+        dPsi_dx_i[d].imag = 0;
         ci[d].real = atom_i_idx < N ? coords[atom_i_idx*D+d] : 0;
         ci[d].imag = atom_i_idx < N ? coords_tangents[atom_i_idx*D+d] : 0;
     }
@@ -505,26 +477,20 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     Surreal<RealType> born_radii_i;
     born_radii_i.real = atom_i_idx < N ? born_radii[atom_i_idx].real : 0;
     born_radii_i.imag = atom_i_idx < N ? born_radii[atom_i_idx].imag : 0;
-    RealType dPsi_dri_imag = 0;
+
+    Surreal<RealType> dPsi_dri(0, 0);
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    Surreal<RealType> lambda_j;
+    Surreal<RealType> lambda_j(lambda, lambda_tangent);
     if(atom_j_idx < N) {
-        if(lambda_idxs[atom_j_idx] == 0) {
-            lambda_j = Surreal<RealType>(0, 0);
-        } else if(lambda_idxs[atom_j_idx] == 1) {
-            lambda_j = cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        } else if(lambda_idxs[atom_j_idx] == -1) {
-            lambda_j = cutoff + cutoff*Surreal<RealType>(lambda, lambda_tangent);
-        }        
-    } else {
-        lambda_j = Surreal<RealType>(0, 0);
+        lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);        
     }
 
     Surreal<RealType> cj[D];
-    RealType dPsi_dx_j_imag[D];
+    Surreal<RealType> dPsi_dx_j[D];
     for(int d=0; d < D; d++) {
-        dPsi_dx_j_imag[d] = 0;
+        dPsi_dx_j[d].real = 0;
+        dPsi_dx_j[d].imag = 0;
         cj[d].real = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
         cj[d].imag = atom_j_idx < N ? coords_tangents[atom_j_idx*D+d] : 0;
     }
@@ -537,8 +503,8 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     born_radii_j.real = atom_j_idx < N ? born_radii[atom_j_idx].real : 0;
     born_radii_j.imag = atom_j_idx < N ? born_radii[atom_j_idx].imag : 0;
 
-    RealType dPsi_drj_imag = 0;
-    RealType dPsi_dsj_imag = 0;
+    Surreal<RealType> dPsi_drj(0, 0);
+    Surreal<RealType> dPsi_dsj(0, 0);
 
     const RealType dielectricOffset = dielectric_offset;
     // const RealType cutoffDistance = cutoff;
@@ -562,7 +528,6 @@ __global__ void k_compute_born_energy_and_forces_jvp(
         if (atom_j_idx != atom_i_idx && r2.real < cutoff*cutoff && atom_i_idx < N && atom_j_idx < N) {
             
             Surreal<RealType> r = sqrt(r2);
-
             Surreal<RealType> rInverse = 1/r;
 
             RealType offsetRadiusJ      = radiusJ - dielectricOffset;
@@ -660,13 +625,18 @@ __global__ void k_compute_born_energy_and_forces_jvp(
                 // parameter derivatives wrt atomic radii and scale factors
 
                 // (TBD): only shuffle the imaginary parts 
-                dPsi_dri_imag += dpsi_dri.imag;
-                dPsi_drj_imag += dpsi_drj.imag;
-                dPsi_dsj_imag += dpsi_dsj.imag;
+                dPsi_dri += dpsi_dri;
+                dPsi_drj += dpsi_drj;
+                dPsi_dsj += dpsi_dsj;
+
+                // (TBD): only shuffle the imaginary parts 
+                // dPsi_dri_imag += dpsi_dri.imag;
+                // dPsi_drj_imag += dpsi_drj.imag;
+                // dPsi_dsj_imag += dpsi_dsj.imag;
 
                 for(int d=0; d < D; d++) {
-                    dPsi_dx_i_imag[d] += ((dxs[d]/r)*de).imag;
-                    dPsi_dx_j_imag[d] -= ((dxs[d]/r)*de).imag;
+                    dPsi_dx_i[d] += ((dxs[d]/r)*de);
+                    dPsi_dx_j[d] -= ((dxs[d]/r)*de);
                 }
             }
         }
@@ -676,32 +646,38 @@ __global__ void k_compute_born_energy_and_forces_jvp(
         born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
         radiusJ = __shfl_sync(0xffffffff, radiusJ, srcLane);
         scaleFactorJ = __shfl_sync(0xffffffff, scaleFactorJ, srcLane);
-        dPsi_drj_imag = __shfl_sync(0xffffffff, dPsi_drj_imag, srcLane);
-        dPsi_dsj_imag = __shfl_sync(0xffffffff, dPsi_dsj_imag, srcLane);
+        dPsi_drj = __shfl_sync(0xffffffff, dPsi_drj, srcLane);
+        dPsi_dsj = __shfl_sync(0xffffffff, dPsi_dsj, srcLane);
 
         for(int d=0; d < D; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
-            dPsi_dx_j_imag[d] = __shfl_sync(0xffffffff, dPsi_dx_j_imag[d], srcLane);
+            dPsi_dx_j[d] = __shfl_sync(0xffffffff, dPsi_dx_j[d], srcLane);
         }
         lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
     }
 
     for(int d=0; d < D; d++) {
         if(atom_i_idx < N) {
-            atomicAdd(out_HvP + atom_i_idx*D+d, dPsi_dx_i_imag[d]);
+            atomicAdd(out_HvP_primals + atom_i_idx*D+d, dPsi_dx_i[d].real);
+            atomicAdd(out_HvP_tangents + atom_i_idx*D+d, dPsi_dx_i[d].imag);
         }
         if(atom_j_idx < N) {
-            atomicAdd(out_HvP + atom_j_idx*D+d, dPsi_dx_j_imag[d]);
+            atomicAdd(out_HvP_primals + atom_j_idx*D+d, dPsi_dx_j[d].real);
+            atomicAdd(out_HvP_tangents + atom_j_idx*D+d, dPsi_dx_j[d].imag);
+
         }
     }
 
     if(atom_i_idx < N) {
-        atomicAdd(out_MvP + atomic_radii_idx_i, dPsi_dri_imag);
+        atomicAdd(out_MvP_primals + atomic_radii_idx_i, dPsi_dri.real);
+        atomicAdd(out_MvP_tangents + atomic_radii_idx_i, dPsi_dri.imag);
     }
 
     if(atom_j_idx < N) {
-        atomicAdd(out_MvP + atomic_radii_idx_j, dPsi_drj_imag);
-        atomicAdd(out_MvP + scale_factor_idx_j, dPsi_dsj_imag);
+        atomicAdd(out_MvP_primals + atomic_radii_idx_j, dPsi_drj.real);
+        atomicAdd(out_MvP_tangents + atomic_radii_idx_j, dPsi_drj.imag);
+        atomicAdd(out_MvP_primals + scale_factor_idx_j, dPsi_dsj.real);
+        atomicAdd(out_MvP_tangents + scale_factor_idx_j, dPsi_dsj.imag);
     }
 
 

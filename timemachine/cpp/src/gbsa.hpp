@@ -7,15 +7,16 @@
 
 namespace timemachine {
 
-template<typename RealType, int D>
-class GBSA : public Gradient<D> {
+template<typename RealType>
+class GBSA : public Gradient {
 
 private:
 
     int *d_charge_param_idxs_;
     int *d_atomic_radii_idxs_;
     int *d_scale_factor_idxs_;
-    int *d_lambda_idxs_;
+    int *d_lambda_plane_idxs_;
+    int *d_lambda_offset_idxs_;
 
     double *d_du_dl_buffer_;
 
@@ -50,7 +51,8 @@ public:
         const std::vector<int> &charge_param_idxs,
         const std::vector<int> &atomic_radii_idxs,
         const std::vector<int> &scale_factor_idxs,
-        const std::vector<int> &lambda_idxs, // [N]
+        const std::vector<int> &lambda_plane_idxs, // N
+        const std::vector<int> &lambda_offset_idxs, // N
         double alpha,
         double beta,
         double gamma,
@@ -66,7 +68,19 @@ public:
     // FIX ME with actual destructors later
     ~GBSA();
 
-    virtual void execute_lambda_device(
+    virtual void execute_lambda_inference_device(
+        const int N,
+        const int P,
+        const double *d_coords_primals,
+        const double *d_params_primals,
+        const double lambda_primal,
+        unsigned long long *d_out_coords_primals,
+        double *d_out_lambda_primals,
+        double *d_out_energy_primal,
+        cudaStream_t stream
+    ) override;
+
+    virtual void execute_lambda_jvp_device(
         const int N,
         const int P,
         const double *d_coords_primals,
@@ -74,13 +88,12 @@ public:
         const double *d_params_primals,
         const double lambda_primal,
         const double lambda_tangent,
-        unsigned long long *d_out_coords_primals,
-        double *d_out_lambda_primals,
+        double *d_out_coords_primals,
         double *d_out_coords_tangents,
+        double *d_out_params_primals,
         double *d_out_params_tangents,
         cudaStream_t stream
     ) override;
-
 };
 
 
