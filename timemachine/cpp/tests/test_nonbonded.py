@@ -49,55 +49,7 @@ class TestNonbonded(GradientTest):
         ref_mp = np.transpose(ref_mp, (2,0,1))
         return ref_mp
 
-    # def test_fast_nonbonded(self):
-    #     np.random.seed(125)
-    #     N = 65
-    #     D = 3
-    #     E = 10
-    #     P_charges = 4
-    #     P_lj = 5
-    #     P_exc = 7
-
-    #     # N = 33
-    #     # D = 3
-    #     # E = 10
-    #     # P_charges = 4
-    #     # P_lj = 5
-    #     # P_exc = 7
- 
-    #     x = self.get_random_coords(N, D)
-
-    #     for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
-    #         for cutoff in [50.0, 0.5, 0.3]:
-
-    #             params, ref_forces, test_forces = prepare_nonbonded_system(
-    #                 x,
-    #                 E,
-    #                 P_charges,
-    #                 P_lj,
-    #                 P_exc,
-    #                 p_scale=10.0,
-    #                 cutoff=cutoff,
-    #                 precision=precision
-    #             )
-
-    #             for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
-
-    #                 print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
-    #                 for r, t in zip(ref_forces, test_forces):
-    #                     self.compare_forces(
-    #                         x,
-    #                         params,
-    #                         lamb,
-    #                         r,
-    #                         t,
-    #                         precision,
-    #                         rtol=rtol
-    #                     )
-
-
-
-    def test_alchemical_nonbonded(self):
+    def test_fast_nonbonded(self):
         np.random.seed(125)
         N = 65
         D = 3
@@ -112,6 +64,45 @@ class TestNonbonded(GradientTest):
         # P_charges = 4
         # P_lj = 5
         # P_exc = 7
+ 
+        x = self.get_random_coords(N, D)
+
+        for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
+            for cutoff in [50.0, 0.5, 0.3]:
+
+                params, ref_forces, test_forces = prepare_nonbonded_system(
+                    x,
+                    E,
+                    P_charges,
+                    P_lj,
+                    P_exc,
+                    p_scale=10.0,
+                    cutoff=cutoff,
+                    precision=precision
+                )
+
+                for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
+
+                    print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
+                    for r, t in zip(ref_forces, test_forces):
+                        self.compare_forces(
+                            x,
+                            params,
+                            lamb,
+                            r,
+                            t,
+                            precision,
+                            rtol=rtol
+                        )
+
+    def test_alchemical_nonbonded(self):
+        np.random.seed(125)
+        N = 65
+        D = 3
+        E = 10
+        P_charges = 4
+        P_lj = 5
+        P_exc = 7
  
         x = self.get_random_coords(N, D)
 
@@ -155,9 +146,7 @@ class TestNonbonded(GradientTest):
                 )
 
                 for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
-
                     print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
-                    # for r, t in zip(ref_forces, test_forces):
                     self.compare_forces(
                         x,
                         params,
@@ -168,45 +157,43 @@ class TestNonbonded(GradientTest):
                         rtol=rtol
                     )
 
-                print("DONE ONE CUTOFF")
-
-    # def test_water_box(self):
+    def test_water_box(self):
         
-    #     np.random.seed(123)
-    #     P_charges = 4
-    #     P_lj = 5
-    #     P_exc = 7
-    #     dim = 3
+        np.random.seed(123)
+        P_charges = 4
+        P_lj = 5
+        P_exc = 7
+        dim = 3
 
-    #     for precision, rtol in [(np.float64, 5e-10), (np.float32, 2e-5)]:
+        for precision, rtol in [(np.float64, 5e-10), (np.float32, 2e-5)]:
 
-    #         x = self.get_water_coords(dim)
-    #         E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
-    #         for cutoff in [1000.0, 0.9, 0.5, 0.001]:
+            x = self.get_water_coords(dim)
+            E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
+            for cutoff in [1000.0, 0.9, 0.5, 0.001]:
 
-    #             params, ref_forces, test_forces = prepare_nonbonded_system(
-    #                 x,
-    #                 E,
-    #                 P_charges,
-    #                 P_lj,
-    #                 P_exc,
-    #                 p_scale=10.0,
-    #                 e_scale=0.5, # double the charges
-    #                 cutoff=cutoff,
-    #                 precision=precision
-    #             )
+                params, ref_forces, test_forces = prepare_nonbonded_system(
+                    x,
+                    E,
+                    P_charges,
+                    P_lj,
+                    P_exc,
+                    p_scale=10.0,
+                    e_scale=0.5, # double the charges
+                    cutoff=cutoff,
+                    precision=precision
+                )
 
-    #             for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
-    #                 print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
-    #                 for r, t in zip(ref_forces, test_forces):
-    #                     self.compare_forces(    
-    #                         x,
-    #                         params,
-    #                         lamb,
-    #                         r,
-    #                         t,
-    #                         precision,
-    #                         rtol)
+                for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
+                    print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
+                    for r, t in zip(ref_forces, test_forces):
+                        self.compare_forces(    
+                            x,
+                            params,
+                            lamb,
+                            r,
+                            t,
+                            precision,
+                            rtol)
 
 if __name__ == "__main__":
     unittest.main()
