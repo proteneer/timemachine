@@ -372,8 +372,6 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
-        return
-
         x_tangent = np.random.rand(N, D).astype(np.float64)
         params_tangent = np.zeros_like(params)
         lamb_tangent = np.random.rand()
@@ -405,6 +403,7 @@ class GradientTest(unittest.TestCase):
         #     err = abs((r - tt)/r)
         #     if err > 1e-4:
         #         print(r_idx, err, r, tt)
+        print("PASSED JVP FOR FORCES")
 
         if precision == np.float64:
             np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)

@@ -11,6 +11,7 @@ private:
     Gradient* u0_;
     Gradient* u1_;
 
+    // TDB we can get away with less buffer use
     unsigned long long *d_out_coords_primals_buffer_u0_;
     double *d_out_energy_primal_buffer_u0_;
     double *d_out_lambda_primal_buffer_u0_;
@@ -31,7 +32,7 @@ private:
 
 public: 
 
-    virtual ~AlchemicalGradient() {};
+    virtual ~AlchemicalGradient();
 
     AlchemicalGradient(
         const int N,

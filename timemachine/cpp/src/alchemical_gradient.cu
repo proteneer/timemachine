@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "fixed_point.hpp"
 #include "alchemical_gradient.hpp"
 #include "gpu_utils.cuh"
@@ -23,7 +25,6 @@ AlchemicalGradient::AlchemicalGradient(
     gpuErrchk(cudaMalloc(&d_out_jvp_params_primals_buffer_u0_, P*sizeof(*d_out_jvp_params_primals_buffer_u0_)));
     gpuErrchk(cudaMalloc(&d_out_jvp_params_tangents_buffer_u0_, P*sizeof(*d_out_jvp_params_tangents_buffer_u0_)));
 
-
     gpuErrchk(cudaMalloc(&d_out_coords_primals_buffer_u1_, N*D*sizeof(*d_out_coords_primals_buffer_u1_)));
     gpuErrchk(cudaMalloc(&d_out_energy_primal_buffer_u1_, sizeof(*d_out_energy_primal_buffer_u1_)));
     gpuErrchk(cudaMalloc(&d_out_lambda_primal_buffer_u1_, sizeof(*d_out_lambda_primal_buffer_u1_)));
@@ -33,6 +34,26 @@ AlchemicalGradient::AlchemicalGradient(
     gpuErrchk(cudaMalloc(&d_out_jvp_params_tangents_buffer_u1_, P*sizeof(*d_out_jvp_params_tangents_buffer_u1_)));
 
 }
+
+AlchemicalGradient::~AlchemicalGradient() {
+
+    gpuErrchk(cudaFree(&d_out_coords_primals_buffer_u0_));
+    gpuErrchk(cudaFree(&d_out_energy_primal_buffer_u0_));
+    gpuErrchk(cudaFree(&d_out_lambda_primal_buffer_u0_));
+    gpuErrchk(cudaFree(&d_out_jvp_coords_primals_buffer_u0_));
+    gpuErrchk(cudaFree(&d_out_jvp_coords_tangents_buffer_u0_));
+    gpuErrchk(cudaFree(&d_out_jvp_params_primals_buffer_u0_));
+    gpuErrchk(cudaFree(&d_out_jvp_params_tangents_buffer_u0_));
+
+    gpuErrchk(cudaFree(&d_out_coords_primals_buffer_u1_));
+    gpuErrchk(cudaFree(&d_out_energy_primal_buffer_u1_));
+    gpuErrchk(cudaFree(&d_out_lambda_primal_buffer_u1_));
+    gpuErrchk(cudaFree(&d_out_jvp_coords_primals_buffer_u1_));
+    gpuErrchk(cudaFree(&d_out_jvp_coords_tangents_buffer_u1_));
+    gpuErrchk(cudaFree(&d_out_jvp_params_primals_buffer_u1_));
+    gpuErrchk(cudaFree(&d_out_jvp_params_tangents_buffer_u1_));
+
+};
 
 __global__ void k_linear_rescale_inference(
     double lambda,
@@ -50,8 +71,8 @@ __global__ void k_linear_rescale_inference(
     const auto idx = blockDim.x*blockIdx.x + threadIdx.x;
 
     if(idx == 0 && blockIdx.y == 0) {
-        *uc_energy = (*u0_energy)*(1-lambda) + (*u1_energy)*lambda;
-        *uc_du_dl = -(*u0_energy) + (*u1_energy) + (*u0_du_dl)*(1-lambda) + (*u1_du_dl)*lambda;
+        atomicAdd(uc_energy, (*u0_energy)*(1-lambda) + (*u1_energy)*lambda);
+        atomicAdd(uc_du_dl, -(*u0_energy) + (*u1_energy) + (*u0_du_dl)*(1-lambda) + (*u1_du_dl)*lambda);
     }
 
     const auto dim = blockIdx.y;
@@ -60,7 +81,7 @@ __global__ void k_linear_rescale_inference(
         auto f0 = static_cast<double>(static_cast<long long>(u0_coord_grads[idx*3+dim]))/FIXED_EXPONENT;
         auto f1 = static_cast<double>(static_cast<long long>(u1_coord_grads[idx*3+dim]))/FIXED_EXPONENT;
         auto fc = (1-lambda)*f0 + lambda*f1;
-        uc_coord_grads[idx*3+dim] = static_cast<unsigned long long>((long long) (fc*FIXED_EXPONENT));
+        atomicAdd(uc_coord_grads + idx*3 + dim, static_cast<unsigned long long>((long long) (fc*FIXED_EXPONENT)));
     }
 
 }
@@ -94,19 +115,21 @@ __global__ void k_linear_rescale_jvp(
         Surreal<double> f0(coords_primals_u0[idx*3+dim], coords_tangents_u0[idx*3+dim]); 
         Surreal<double> f1(coords_primals_u1[idx*3+dim], coords_tangents_u1[idx*3+dim]); 
         auto fc = (1-lambda)*f0 + lambda*f1;
-        coords_primals_uc[idx*3+dim] = fc.real;
-        coords_tangents_uc[idx*3+dim] = fc.imag;
+        atomicAdd(coords_primals_uc + idx*3+dim, fc.real);
+        atomicAdd(coords_tangents_uc + idx*3+dim, fc.imag);
     }
 
-    if(idx < P && blockDim.y == 0) {
-        Surreal<double> p0(params_primals_u0[idx*3+dim], params_tangents_u0[idx*3+dim]); 
-        Surreal<double> p1(params_primals_u1[idx*3+dim], params_tangents_u1[idx*3+dim]);
+    if(idx < P && blockIdx.y == 0) {
+        Surreal<double> p0(params_primals_u0[idx], params_tangents_u0[idx]); 
+        Surreal<double> p1(params_primals_u1[idx], params_tangents_u1[idx]);
         auto pc = (1-lambda)*p0 + lambda*p1;
-        params_primals_uc[idx*3+dim] = pc.real;
-        params_tangents_uc[idx*3+dim] = pc.imag;
+        atomicAdd(params_primals_uc + idx, pc.real);
+        atomicAdd(params_tangents_uc + idx, pc.imag);
     }
 
 }
+
+
 
 void AlchemicalGradient::execute_lambda_jvp_device(
     const int N,
@@ -121,6 +144,75 @@ void AlchemicalGradient::execute_lambda_jvp_device(
     double *d_out_params_primals,
     double *d_out_params_tangents,
     cudaStream_t stream) {
+
+    const int D = 3;
+
+    gpuErrchk(cudaMemsetAsync(d_out_jvp_coords_primals_buffer_u0_, 0, N*D*sizeof(*d_out_jvp_coords_primals_buffer_u0_), stream));
+    gpuErrchk(cudaMemsetAsync(d_out_jvp_coords_tangents_buffer_u0_, 0, N*D*sizeof(*d_out_jvp_coords_tangents_buffer_u0_), stream));
+    gpuErrchk(cudaMemsetAsync(d_out_jvp_params_primals_buffer_u0_, 0, P*sizeof(*d_out_jvp_params_primals_buffer_u0_), stream));
+    gpuErrchk(cudaMemsetAsync(d_out_jvp_params_tangents_buffer_u0_, 0, P*sizeof(*d_out_jvp_params_tangents_buffer_u0_), stream));
+
+    u0_->execute_lambda_jvp_device(
+        N,
+        P,
+        d_coords_primals,
+        d_coords_tangents,
+        d_params_primals,
+        lambda_primal,
+        lambda_tangent,
+        d_out_jvp_coords_primals_buffer_u0_,
+        d_out_jvp_coords_tangents_buffer_u0_,
+        d_out_jvp_params_primals_buffer_u0_,
+        d_out_jvp_params_tangents_buffer_u0_,
+        stream
+    );
+
+    gpuErrchk(cudaMemsetAsync(d_out_jvp_coords_primals_buffer_u1_, 0, N*D*sizeof(*d_out_jvp_coords_primals_buffer_u1_), stream));
+    gpuErrchk(cudaMemsetAsync(d_out_jvp_coords_tangents_buffer_u1_, 0, N*D*sizeof(*d_out_jvp_coords_tangents_buffer_u1_), stream));
+    gpuErrchk(cudaMemsetAsync(d_out_jvp_params_primals_buffer_u1_, 0, P*sizeof(*d_out_jvp_params_primals_buffer_u1_), stream));
+    gpuErrchk(cudaMemsetAsync(d_out_jvp_params_tangents_buffer_u1_, 0, P*sizeof(*d_out_jvp_params_tangents_buffer_u1_), stream));
+    
+    u1_->execute_lambda_jvp_device(
+        N,
+        P,
+        d_coords_primals,
+        d_coords_tangents,
+        d_params_primals,
+        lambda_primal,
+        lambda_tangent,
+        d_out_jvp_coords_primals_buffer_u1_,
+        d_out_jvp_coords_tangents_buffer_u1_,
+        d_out_jvp_params_primals_buffer_u1_,
+        d_out_jvp_params_tangents_buffer_u1_,
+        stream
+    );
+
+    int tpb = 32;
+    int B = (max(N,P)+tpb-1)/tpb;
+    dim3 dimGrid(B, 3, 1); // x, y, z dims
+
+    k_linear_rescale_jvp<<<dimGrid, tpb, 0, stream>>>(
+        lambda_primal,
+        lambda_tangent,
+        N,
+        P,
+        d_out_jvp_coords_primals_buffer_u0_,
+        d_out_jvp_coords_tangents_buffer_u0_,
+        d_out_jvp_params_primals_buffer_u0_,
+        d_out_jvp_params_tangents_buffer_u0_,
+        d_out_jvp_coords_primals_buffer_u1_,
+        d_out_jvp_coords_tangents_buffer_u1_,
+        d_out_jvp_params_primals_buffer_u1_,
+        d_out_jvp_params_tangents_buffer_u1_,
+        d_out_coords_primals,
+        d_out_coords_tangents,
+        d_out_params_primals,
+        d_out_params_tangents
+    );
+
+    gpuErrchk(cudaPeekAtLastError());
+
+
 
 }
 
