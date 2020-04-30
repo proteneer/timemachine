@@ -23,12 +23,20 @@ public:
 
     ~HarmonicBond();
 
-    /*
-    Execute the force computation, the semantics are:
-    1. If d_coords_tangents == null, then out_coords != null, out_coords_tangent == null, out_params_tangents == null
-    2. If d_coords_tangents != null, then out_coords == null, out_coords_tangent != null, out_params_tangents != null
-    */
-    virtual void execute_lambda_device(
+    virtual void execute_lambda_inference_device(
+        const int N,
+        const int P,
+        const double *d_coords_primals,
+        const double *d_params_primals,
+        const double lambda_primal,
+        unsigned long long *d_out_coords_primals,
+        double *d_out_lambda_primals,
+        double *d_out_energy_primal,
+        cudaStream_t stream
+    ) override;
+
+
+    virtual void execute_lambda_jvp_device(
         const int N,
         const int P,
         const double *d_coords_primals,
@@ -36,10 +44,9 @@ public:
         const double *d_params_primals,
         const double lambda_primal,
         const double lambda_tangent,
-        unsigned long long *d_out_coords_primals,
-        double *d_out_lambda_primals,
-        double *d_energy,
+        double *d_out_coords_primals,
         double *d_out_coords_tangents,
+        double *d_out_params_primals,
         double *d_out_params_tangents,
         cudaStream_t stream
     ) override;

@@ -15,8 +15,7 @@ void __global__ k_harmonic_bond_inference(
     const int *bond_idxs,    // [b, 2]
     const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords,
-    double *energy
-) {
+    double *energy) {
 
     const auto b_idx = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -63,9 +62,10 @@ void __global__ k_harmonic_bond_jvp(
     const double *params,  // [p,]
     const int *bond_idxs,    // [b, 2]
     const int *param_idxs,   // [b, 2]
-    double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    double *grad_params_tangents
-) {
+    double *grad_coords_primals,
+    double *grad_coords_tangents,
+    double *grad_params_primals,
+    double *grad_params_tangents) {
 
     const auto b_idx = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -97,15 +97,21 @@ void __global__ k_harmonic_bond_jvp(
 
     for(int d=0; d < 3; d++) {
         Surreal<RealType> grad_delta = kb*db*dx[d]/dij;
+        atomicAdd(grad_coords_primals + src_idx*3 + d, grad_delta.real);
+        atomicAdd(grad_coords_primals + dst_idx*3 + d, -grad_delta.real);
+
         atomicAdd(grad_coords_tangents + src_idx*3 + d, grad_delta.imag);
         atomicAdd(grad_coords_tangents + dst_idx*3 + d, -grad_delta.imag);
     }
 
+    // avoid writing out to the real parts if possible
+    atomicAdd(grad_params_primals + kb_idx, (0.5*db*db).real);
     atomicAdd(grad_params_tangents + kb_idx, (0.5*db*db).imag);
+
+    atomicAdd(grad_params_primals + b0_idx, (-kb*db).real);
     atomicAdd(grad_params_tangents + b0_idx, (-kb*db).imag);
 
 }
-
 
 
 template<typename RealType, int D>

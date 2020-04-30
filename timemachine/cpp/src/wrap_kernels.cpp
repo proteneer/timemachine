@@ -197,18 +197,15 @@ void declare_gradient(py::module &m) {
             double out_du_dl = -9999999999; //debug use, make sure its overwritten
             double out_energy = 9999999999; //debug use, make sure its overwrriten
 
-            grad.execute_lambda_host(
-                N,P,
+            grad.execute_lambda_inference_host(
+                N,
+                P,
                 coords.data(),
-                nullptr,
                 params.data(),
                 lambda,
-                0,
                 &out_coords[0],
                 &out_du_dl,
-                &out_energy,
-                nullptr,
-                nullptr
+                &out_energy
             );
 
             py::array_t<double, py::array::c_style> py_out_coords({N, D});
@@ -230,20 +227,22 @@ void declare_gradient(py::module &m) {
             const long unsigned int D = coords.shape()[1];
             const long unsigned int P = params.shape()[0];
 
+            py::array_t<double, py::array::c_style> py_out_coords_primals({N, D});
             py::array_t<double, py::array::c_style> py_out_coords_tangents({N, D});
+
+            py::array_t<double, py::array::c_style> py_out_params_primals({P});
             py::array_t<double, py::array::c_style> py_out_params_tangents({P});
 
-            grad.execute_lambda_host(
+            grad.execute_lambda_jvp_host(
                 N,P,
                 coords.data(),
                 coords_tangents.data(),
                 params.data(),
                 lambda,
                 lambda_tangent,
-                nullptr,
-                nullptr,
-                nullptr,
+                py_out_coords_primals.mutable_data(),
                 py_out_coords_tangents.mutable_data(),
+                py_out_params_primals.mutable_data(),
                 py_out_params_tangents.mutable_data()
             );
 
@@ -251,8 +250,6 @@ void declare_gradient(py::module &m) {
     });
 
 }
-
-
 
 void declare_alchemical_gradient(py::module &m) {
 
@@ -280,7 +277,6 @@ void declare_alchemical_gradient(py::module &m) {
     ));
 
 }
-
 
 template <typename RealType>
 void declare_harmonic_bond(py::module &m, const char *typestr) {
@@ -310,7 +306,6 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
     ));
 
 }
-
 
 // template <typename RealType, int D>
 // void declare_harmonic_angle(py::module &m, const char *typestr) {
