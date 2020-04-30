@@ -57,6 +57,7 @@ class TestContext(unittest.TestCase):
             params=params
         )
 
+
         masses = np.random.rand(N)
 
         E = 1
@@ -66,65 +67,45 @@ class TestContext(unittest.TestCase):
 
         cutoff = 1.5
 
-        # params, ref_nonbonded_potentials_0, new_nonbonded_potentials_0 = prepare_nonbonded_system(
-        #     x0,
-        #     E,
-        #     P_charges,
-        #     P_lj,
-        #     P_exc,
-        #     params=params,
-        #     p_scale=10.0,
-        #     cutoff=cutoff,
-        #     precision=precision
-        # )
+        params, ref_nonbonded_potentials_0, test_nonbonded_potentials_0 = prepare_nonbonded_system(
+            x0,
+            E,
+            P_charges,
+            P_lj,
+            P_exc,
+            params=params,
+            p_scale=10.0,
+            cutoff=cutoff,
+            precision=precision
+        )
 
-        # params, ref_nonbonded_potentials_1, new_nonbonded_potentials_1 = prepare_nonbonded_system(
-        #     x0,
-        #     E,
-        #     P_charges,
-        #     P_lj,
-        #     P_exc,
-        #     params=params,
-        #     p_scale=10.0,
-        #     cutoff=cutoff,
-        #     precision=precision
-        # # )
+        params, ref_nonbonded_potentials_1, test_nonbonded_potentials_1 = prepare_nonbonded_system(
+            x0,
+            E,
+            P_charges,
+            P_lj,
+            P_exc,
+            params=params,
+            p_scale=10.0,
+            cutoff=cutoff,
+            precision=precision
+        )
 
-        # ref_bonded_potentials = []
-        # test_bonded_potentials = []
+        ref_potentials = [] #((ref_bonded_potentials_0, ref_bonded_potentials_1), (ref_nonbonded_potentials_0, ref_nonbonded_potentials_1))
+        test_potentials = [] #((test_bonded_potentials_0, test_bonded_potentials_1), (test_nonbonded_potentials_0, test_nonbonded_potentials_1))
 
-        # for a, b in zip(ref_bonded_potentials_0, ref_bonded_potentials_1):
-        #     ref_bonded_potentials.append(
-        #         functools.partial(alchemy.linear_rescale, fn0=a, fn1=b)
-        #     )
+        for a, b in zip(ref_bonded_potentials_0, ref_bonded_potentials_1):
+            ref_potentials.append((a,b))
+        for a, b in zip(ref_nonbonded_potentials_0, ref_nonbonded_potentials_1):
+            ref_potentials.append((a,b))
 
-        # for a, b in zip(test_bonded_potentials_0, test_bonded_potentials_1):
-        #     print("merging",a, b)
-        #     test_bonded_potentials.append(
-        #         ops.AlchemicalGradient(
-        #             N,
-        #             len(params),
-        #             a,
-        #             b
-        #         )
-        #     )
-
-        # def total_potential(*args, **kwargs):
-        #     nrgs = []
-        #     for p in ref_bonded_potentials:
-        #         nrgs.append(p(*args, **kwargs))
-        #     # for p in ref_nonbonded_potentials:
-        #         # nrgs.append(p(*args, **kwargs))
-        #     return jnp.sum(nrgs)
+        for a, b in zip(test_bonded_potentials_0, test_bonded_potentials_1):
+            test_potentials.append((a,b))
+        for a, b in zip(test_nonbonded_potentials_0, test_nonbonded_potentials_1):
+            test_potentials.append((a,b))
 
 
-        ref_potentials_0 = ref_bonded_potentials_0
-        ref_potentials_1 = ref_bonded_potentials_1
-
-        test_potentials_0 = test_bonded_potentials_0
-        test_potentials_1 = test_bonded_potentials_1
-
-        return x0, params, masses, [ref_potentials_0, ref_potentials_1], [test_potentials_0, test_bonded_potentials_1]
+        return x0, params, masses, ref_potentials, test_potentials
         # return total_potential, x0, params, masses, test_bonded_potentials + new_nonbonded_potentials
 
 
@@ -138,10 +119,10 @@ class TestContext(unittest.TestCase):
 
         N = 4
 
-        x0, params, masses, [ref_energies_0, ref_energies_1], [test_energies_0, test_energies_1] = self.setup_system(N)
+        x0, params, masses, ref_tuples, test_tuples = self.setup_system(N)
 
         ref_alchemical_fns = []
-        for ref_a, ref_b in zip(ref_energies_0, ref_energies_1):
+        for ref_a, ref_b in ref_tuples:
             ref_alchemical_fns.append(jax.partial(alchemy.linear_rescale, fn0=ref_a, fn1=ref_b))
 
         def ref_total_nrg_fn(*args):
@@ -151,7 +132,8 @@ class TestContext(unittest.TestCase):
             return jnp.sum(nrgs)
 
         test_alchemical_fns = []
-        for test_a, test_b in zip(test_energies_0, test_energies_1):
+        for test_a, test_b in test_tuples:
+
             test_alchemical_fns.append(ops.AlchemicalGradient(
                 N,
                 len(params),
