@@ -121,7 +121,8 @@ void __global__ k_harmonic_angle_inference(
     const double *params,  // [p,]
     const int *angle_idxs,    // [b, 3]
     const int *param_idxs,   // [b, 2]
-    unsigned long long *grad_coords
+    unsigned long long *grad_coords,
+    double *out_energy
 ) {
 
     const auto a_idx = blockDim.x*blockIdx.x + threadIdx.x;
@@ -178,6 +179,8 @@ void __global__ k_harmonic_angle_inference(
         atomicAdd(grad_coords + k_idx*D + d, static_cast<unsigned long long>((long long) (grad_k*FIXED_EXPONENT)));
     }
 
+    atomicAdd(out_energy, ka/2*delta*delta);
+
 }
 
 
@@ -189,8 +192,10 @@ void __global__ k_harmonic_angle_jvp(
     const double *params,  // [p,]
     const int *angle_idxs,    // [b, 3]
     const int *param_idxs,   // [b, 2]
-    double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    double *grad_params_tangents 
+    double *grad_coords_primals,
+    double *grad_coords_tangents,
+    double *grad_params_primals,
+    double *grad_params_tangents
 ) {
 
     const auto a_idx = blockDim.x*blockIdx.x + threadIdx.x;
@@ -245,22 +250,27 @@ void __global__ k_harmonic_angle_jvp(
 
     for(int d=0; d < MAXDIM; d++) {
         Surreal<RealType> grad_i = ka*delta*(rij[d]*top/(n3ij*njk) + (-rjk[d])/nijk);
+        atomicAdd(grad_coords_primals + i_idx*D + d, grad_i.real);
         atomicAdd(grad_coords_tangents + i_idx*D + d, grad_i.imag);
 
         Surreal<RealType> grad_j = ka*delta*((-rij[d]*top/(n3ij*njk) + (-rjk[d])*top/(nij*n3jk) + (rij[d] + rjk[d])/nijk));
+        atomicAdd(grad_coords_primals + j_idx*D + d, grad_j.real);
         atomicAdd(grad_coords_tangents + j_idx*D + d, grad_j.imag);
 
         Surreal<RealType> grad_k = ka*delta*(-rij[d]/nijk + rjk[d]*top/(nij*n3jk));
+        atomicAdd(grad_coords_primals + k_idx*D + d, grad_k.real);
         atomicAdd(grad_coords_tangents + k_idx*D + d, grad_k.imag);
     }
 
     // now we do dU/dp by hand
     Surreal<RealType> dka_grad = delta*delta/2;
 
+    atomicAdd(grad_params_primals + ka_idx, dka_grad.real);
     atomicAdd(grad_params_tangents + ka_idx, dka_grad.imag);
 
     Surreal<RealType> da0_grad = delta*ka*sin(a0);
 
+    atomicAdd(grad_params_primals + a0_idx, da0_grad.real);
     atomicAdd(grad_params_tangents + a0_idx, da0_grad.imag);
 }
 

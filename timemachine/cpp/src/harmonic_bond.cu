@@ -18,7 +18,6 @@ HarmonicBond<RealType>::HarmonicBond(
         throw std::runtime_error("bond_idxs.size() must be exactly 2*k");
     }
 
-
     for(int b=0; b < B_; b++) {
         auto src = bond_idxs[b*2+0];
         auto dst = bond_idxs[b*2+1];

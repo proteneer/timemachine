@@ -6,7 +6,7 @@
 // #include "optimizer.hpp"
 // #include "langevin.hpp"
 #include "harmonic_bond.hpp"
-// #include "harmonic_angle.hpp"
+#include "harmonic_angle.hpp"
 // #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
 // #include "gbsa.hpp"
@@ -307,38 +307,34 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 
 }
 
-// template <typename RealType, int D>
-// void declare_harmonic_angle(py::module &m, const char *typestr) {
+template <typename RealType>
+void declare_harmonic_angle(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::HarmonicAngle<RealType, D>;
-//     std::string pyclass_name = std::string("HarmonicAngle_") + typestr;
-//     py::class_<Class, timemachine::Gradient<D> >(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const py::array_t<int, py::array::c_style> &angle_idxs,
-//         const py::array_t<int, py::array::c_style> &param_idxs,
-//         const py::array_t<int, py::array::c_style> &lambda_idxs
-//     ){
-//         std::vector<int> vec_angle_idxs(angle_idxs.size());
-//         std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size()*sizeof(int));
-//         std::vector<int> vec_param_idxs(param_idxs.size());
-//         std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
-//         std::vector<int> vec_lambda_idxs(lambda_idxs.size());
-//         std::memcpy(vec_lambda_idxs.data(), lambda_idxs.data(), vec_lambda_idxs.size()*sizeof(int));
+    using Class = timemachine::HarmonicAngle<RealType>;
+    std::string pyclass_name = std::string("HarmonicAngle_") + typestr;
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &angle_idxs,
+        const py::array_t<int, py::array::c_style> &param_idxs
+    ){
+        std::vector<int> vec_angle_idxs(angle_idxs.size());
+        std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size()*sizeof(int));
+        std::vector<int> vec_param_idxs(param_idxs.size());
+        std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
 
-//         return new timemachine::HarmonicAngle<RealType, D>(
-//             vec_angle_idxs,
-//             vec_param_idxs,
-//             vec_lambda_idxs
-//         );
-//     }
-//     ));
+        return new timemachine::HarmonicAngle<RealType>(
+            vec_angle_idxs,
+            vec_param_idxs
+        );
+    }
+    ));
 
-// }
+}
 
 
 // template <typename RealType, int D>
@@ -497,8 +493,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_harmonic_bond<double>(m, "f64");
     declare_harmonic_bond<float>(m, "f32");
 
-    // declare_harmonic_angle<double, 3>(m, "f64_3d");
-    // declare_harmonic_angle<float, 3>(m, "f32_3d");
+    declare_harmonic_angle<double>(m, "f64");
+    declare_harmonic_angle<float>(m, "f32");
 
     // declare_periodic_torsion<double, 3>(m, "f64_3d");
     // declare_periodic_torsion<float, 3>(m, "f32_3d");

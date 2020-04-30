@@ -38,7 +38,7 @@ def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs):
     return energy
 
 
-def harmonic_angle(conf, params, lamb, box, angle_idxs, param_idxs, lambda_idxs, cos_angles=True):
+def harmonic_angle(conf, params, lamb, box, angle_idxs, param_idxs, cos_angles=True):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -84,10 +84,10 @@ def harmonic_angle(conf, params, lamb, box, angle_idxs, param_idxs, lambda_idxs,
 
     # (ytz): we used the squared version so that we make this energy being strictly positive
     if cos_angles:
-        energies = prefactors*kas/2*np.power(tb - np.cos(a0s), 2)
+        energies = kas/2*np.power(tb - np.cos(a0s), 2)
     else:
         angle = np.arccos(tb)
-        energies = prefactors*kas/2*np.power(angle - a0s, 2)
+        energies = kas/2*np.power(angle - a0s, 2)
 
     return np.sum(energies, -1)  # reduce over all angles
 
