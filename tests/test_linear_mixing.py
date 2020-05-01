@@ -6,6 +6,49 @@ from fe.linear_mixer import LinearMixer
 
 class TestLinearMixer(unittest.TestCase):
 
+    def test_mix_nonbonded(self):
+
+        map_a_to_b = {
+            0: 4,
+            1: 0,
+            2: 1
+        }
+
+        n_a = 5
+        n_b = 6
+
+
+        lm = LinearMixer(n_a, map_a_to_b)
+
+        lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(n_a, n_b)
+
+        np.testing.assert_equal(lambda_plane_idxs,  [1,1,1,1,1,0,0,0,0,0,0])
+        np.testing.assert_equal(lambda_offset_idxs, [0,0,0,1,1,0,0,1,1,0,1])
+
+    def test_mix_nonbonded_parameters(self):
+        n_a = 5
+        map_a_to_b = {
+            0: 4,
+            1: 0,
+            2: 1
+        }
+        lm = LinearMixer(n_a, map_a_to_b)
+        #                    0 1 2 3 4
+        params_a = np.array([1,5,3,2,0])
+        #                    5 6 7 8 9
+        params_b = np.array([6,5,2,2,3])
+        lhs_params, rhs_params = lm.mix_nonbonded_parameters(params_a, params_b)
+        np.testing.assert_equal(lhs_params, np.concatenate([params_a, params_b]))
+
+        #                        0 1 2 3 4 
+        new_params_a = np.array([3,6,5,2,0])
+        #                        
+        new_params_b = np.array([5,3,2,2,1])
+        np.testing.assert_equal(rhs_params, np.concatenate([new_params_a, new_params_b]))
+
+    def test_mix_angles(self):
+        
+
     def test_mix_bonds(self):
 
         n_a = 5
