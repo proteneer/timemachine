@@ -14,20 +14,18 @@ class LinearMixer():
         for src, dst in self.cmap_a_to_b.items():
             self.cmap_b_to_a[dst] = src
 
-    def mix_bonds(self,
+    def mix_arbitrary_bonds(self,
         a_bond_idxs,
         a_param_idxs,
         b_bond_idxs,
         b_param_idxs):
-
-        # left system:
-        # increment indices of b system by n_a
-        # param_idxs stays the same
+        """ Mix an arbitrary bonded term. This can be harmonic bond,
+        angle, torsions, exlcusions etc. """
 
         lhs_a_bond_idxs = deepcopy(a_bond_idxs)
         lhs_b_bond_idxs = []
-        for src, dst in b_bond_idxs:
-            lhs_b_bond_idxs.append((src+self.n_a, dst+self.n_a))
+        for atoms in b_bond_idxs:
+            lhs_b_bond_idxs.append(atoms+self.n_a)
 
         lhs_bond_idxs = np.concatenate([lhs_a_bond_idxs, lhs_b_bond_idxs])
         lhs_param_idxs = np.concatenate([a_param_idxs, b_param_idxs])
@@ -35,24 +33,25 @@ class LinearMixer():
         # right system:
         # turn b into a
         rhs_a_bond_idxs = []
-        for b_idx, (src, dst) in enumerate(b_bond_idxs):
-            src, dst = src + self.n_a, dst + self.n_a
-            src = self.cmap_b_to_a.get(src, src)
-            dst = self.cmap_b_to_a.get(dst, dst)
-            rhs_a_bond_idxs.append((src, dst))
+        for atoms in b_bond_idxs:
+            atoms = atoms + self.n_a
+            new_atoms = []
+            for a_idx in atoms:
+                new_atoms.append(self.cmap_b_to_a.get(a_idx, a_idx))
+            rhs_a_bond_idxs.append(new_atoms)
 
         # turn a into b
         rhs_b_bond_idxs = []
-        for src, dst in a_bond_idxs:
-            src = self.cmap_a_to_b.get(src, src)
-            dst = self.cmap_a_to_b.get(dst, dst)
-            rhs_b_bond_idxs.append((src, dst))
+        for atoms in a_bond_idxs:
+            new_atoms = []
+            for a_idx in atoms:
+                new_atoms.append(self.cmap_a_to_b.get(a_idx, a_idx))
+            rhs_b_bond_idxs.append(new_atoms)
 
         rhs_bond_idxs = np.concatenate([rhs_a_bond_idxs, rhs_b_bond_idxs])
         rhs_param_idxs = np.concatenate([b_param_idxs, a_param_idxs])
         
         return lhs_bond_idxs, lhs_param_idxs, rhs_bond_idxs, rhs_param_idxs
-
 
     def mix_lambda_planes(self, n_a, n_b):
 

@@ -46,9 +46,6 @@ class TestLinearMixer(unittest.TestCase):
         new_params_b = np.array([5,3,2,2,1])
         np.testing.assert_equal(rhs_params, np.concatenate([new_params_a, new_params_b]))
 
-    def test_mix_angles(self):
-        
-
     def test_mix_bonds(self):
 
         n_a = 5
@@ -92,7 +89,7 @@ class TestLinearMixer(unittest.TestCase):
             'b4'
         ])
 
-        lhs_bond_idxs, lhs_param_idxs, rhs_bond_idxs, rhs_param_idxs = lm.mix_bonds(a_bond_idxs, a_param_idxs, b_bond_idxs, b_param_idxs)
+        lhs_bond_idxs, lhs_param_idxs, rhs_bond_idxs, rhs_param_idxs = lm.mix_arbitrary_bonds(a_bond_idxs, a_param_idxs, b_bond_idxs, b_param_idxs)
 
         np.testing.assert_equal(lhs_bond_idxs, np.concatenate([a_bond_idxs, b_bond_idxs+n_a]))
         np.testing.assert_equal(lhs_param_idxs, np.concatenate([a_param_idxs, b_param_idxs]))
