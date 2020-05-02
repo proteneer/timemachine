@@ -51,7 +51,6 @@ class Simulation:
         cbs,
         ccs,
         lambda_schedule,
-        lambda_idxs,
         precision):
         """
         Create a simulation.
@@ -73,9 +72,6 @@ class Simulation:
         lambda_schedule: np.array, np.float64, [T]
             lambda parameter for each time step
 
-        lambda_idxs: np.array, np.int32, [N]
-            If lambda_idxs[atom_idx] is 0, then the particle is not modified.
-
         precision: either np.float64 or np.float32
             Precision in which we compute the force kernels. Note that integration
             is always done in 64bit.
@@ -93,7 +89,6 @@ class Simulation:
                 raise ValueError("cbs must all be <= 0")
 
         self.lambda_schedule = lambda_schedule
-        self.lambda_idxs = lambda_idxs
         self.precision = precision
 
     def run_forward_and_backward(
@@ -137,24 +132,23 @@ class Simulation:
         """
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
 
-        gradients = self.system.make_gradients(dimension=4, precision=self.precision)
+        gradients = self.system.make_gradients(precision=self.precision)
 
         # (ytz): debug use
-        # gradients = self.system.make_gradients(dimension=3, precision=self.precision)
         # for g in gradients:
-            # forces = g.execute(x0, self.system.params)
-            # print(g, forces, np.amax(np.abs(forces)))
-
+            # forces, du_dl, energy = g.execute_lambda(x0, self.system.params, 1.0)
+            # print(g, forces[1758:], np.amax(np.abs(forces[1758:])))
+            # print(g, forces[:1758], np.amax(np.abs(forces[:1758])))
+            # the two ligands are imploding on top of each other
         # assert 0
 
-        stepper = custom_ops.LambdaStepper_f64(
+        stepper = custom_ops.AlchemicalStepper_f64(
             gradients,
-            self.lambda_schedule,
-            self.lambda_idxs
+            self.lambda_schedule
         )
 
         v0 = np.zeros_like(x0)
-        ctxt = custom_ops.ReversibleContext_f64_3d(
+        ctxt = custom_ops.ReversibleContext_f64(
             stepper,
             x0,
             v0,
@@ -173,8 +167,16 @@ class Simulation:
 
         du_dls = stepper.get_du_dl()
 
+        print("avg du_dl:", np.mean(du_dls))
+
         start = time.time()
         x_final = ctxt.get_last_coords()[:, :3]
+
+        energies = stepper.get_energies()
+        for e_idx, e in enumerate(energies):
+            if e_idx > 1000:
+                break
+            # print(e)
 
         if check_coords(x_final) == False:
             print("Final for frame failed")

@@ -6,6 +6,95 @@ from fe.linear_mixer import LinearMixer
 
 class TestLinearMixer(unittest.TestCase):
 
+    def test_mix_exclusions(self):
+
+        map_a_to_b = {
+            0: 0,
+            1: 1,
+            2: 2
+        }
+
+        n_a = 6
+
+        lm = LinearMixer(n_a, map_a_to_b)
+
+        exc_a = np.array([
+            [0,1],
+            [0,2],
+            [1,2],
+            [2,3],
+            [3,4],
+            [4,5]
+        ], dtype=np.int32)
+
+        exc_a_params = np.array([
+            0.1,
+            0.2,
+            1.2,
+            2.3,
+            3.4,
+            4.5,
+        ])
+
+        exc_b = np.array([
+            [0,1],
+            [1,2],
+            [0,2],
+            [2,3]
+        ], dtype=np.int32)
+
+        exc_b_params = np.array([
+            6.7,
+            7.8,
+            6.8,
+            8.9
+        ])
+
+
+        (lhs_exclusions, lhs_param_exclusions), (rhs_exclusions, rhs_param_exclusions) = lm.mix_exclusions(
+            exc_a,
+            exc_a_params,
+            exc_b,
+            exc_b_params)
+
+        lhs = {}
+        for k, v in zip(lhs_exclusions, lhs_param_exclusions):
+            lhs[k] = v
+
+        assert lhs == {
+            (0,1) : 0.1,
+            (0,2) : 0.2,
+            (1,2) : 1.2,
+            (2,3) : 2.3,
+            (3,4) : 3.4,
+            (4,5) : 4.5,
+            (6,7) : 6.7,
+            (6,8) : 6.8,
+            (7,8) : 7.8,
+            (8,9) : 8.9,
+            (2,9) : 8.9,  
+            (3,8) : 2.3, # rhs exclusions
+        }
+
+        rhs = {}
+        for k, v in zip(rhs_exclusions, rhs_param_exclusions):
+            rhs[k] = v
+
+        assert rhs == {
+            (0,2) : 6.8,
+            (1,2) : 7.8,
+            (0,1) : 6.7,
+            (2,9) : 8.9,
+            (6,7) : 0.1,
+            (7,8) : 1.2,
+            (6,8) : 0.2,
+            (3,8) : 2.3,
+            (3,4) : 3.4,
+            (4,5) : 4.5,
+            (2,3) : 2.3,
+            (8,9) : 8.9,
+        }
+
     def test_mix_nonbonded(self):
 
         map_a_to_b = {

@@ -89,6 +89,7 @@ class Forcefield():
         self.params = global_params
         self.param_groups = global_param_groups
 
+        # 1-4 exclusions completely turned off though
         # hacky temp code to deal with exclusions
         exclusion_param = 1.0
         exclusion_param_group = 20

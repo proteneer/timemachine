@@ -1,18 +1,21 @@
 from copy import deepcopy
 import numpy as np
 
-
 class LinearMixer():
 
     def __init__(self, n_a, map_a_to_b):
         self.n_a = n_a
         self.cmap_a_to_b = {}
+        self.core_atoms = set()
         for src, dst in map_a_to_b.items():
             self.cmap_a_to_b[src] = dst + self.n_a
 
         self.cmap_b_to_a = {}
         for src, dst in self.cmap_a_to_b.items():
+            self.core_atoms.add(src)
+            self.core_atoms.add(dst)
             self.cmap_b_to_a[dst] = src
+
 
     def mix_arbitrary_bonds(self,
         a_bond_idxs,
@@ -52,6 +55,72 @@ class LinearMixer():
         rhs_param_idxs = np.concatenate([b_param_idxs, a_param_idxs])
         
         return lhs_bond_idxs, lhs_param_idxs, rhs_bond_idxs, rhs_param_idxs
+
+    def mix_exclusions(self,
+        exclusions_a,
+        exclusion_params_a,
+        exclusions_b,
+        exclusion_params_b):
+
+        lhs_exclusions = [] # dump *all* the exclusions
+        lhs_exclusion_params = []
+
+        for (src, dst), param in zip(exclusions_a, exclusion_params_a):
+            lhs_exclusions.append((src, dst))
+            lhs_exclusion_params.append(param)
+
+        for (src, dst), param in zip(exclusions_b, exclusion_params_b):
+            src, dst = src + self.n_a, dst + self.n_a
+            lhs_exclusions.append((src, dst))
+            lhs_exclusion_params.append(param)
+
+        rhs_exclusions = []
+        rhs_exclusion_params = []
+
+        for (src, dst), param in zip(exclusions_b, exclusion_params_b):
+            src, dst = src + self.n_a, dst + self.n_a
+            src = self.cmap_b_to_a.get(src, src)
+            dst = self.cmap_b_to_a.get(dst, dst)
+            rhs_exclusions.append((src, dst))
+            rhs_exclusion_params.append(param)
+
+        for (src, dst), param in zip(exclusions_a, exclusion_params_a):
+            src = self.cmap_a_to_b.get(src, src)
+            dst = self.cmap_a_to_b.get(dst, dst)
+            rhs_exclusions.append((src, dst))
+            rhs_exclusion_params.append(param)
+
+        # add non core exclusions from rhs into lhs
+        for (src, dst), rhs_param in zip(rhs_exclusions, rhs_exclusion_params):
+            if src not in self.core_atoms or dst not in self.core_atoms:
+                lhs_exclusions.append((src, dst))
+                lhs_exclusion_params.append(rhs_param)
+
+        # add non core exclusions from lhs into rhs
+        for (src, dst), lhs_param in zip(lhs_exclusions, lhs_exclusion_params):
+            if src not in self.core_atoms or dst not in self.core_atoms:
+                rhs_exclusions.append((src, dst))
+                rhs_exclusion_params.append(lhs_param)
+
+        # uniquify
+        def uniquify(keys, vals):
+            new_map = {}
+            for (src, dst), param in zip(keys, vals):
+                src, dst = sorted((src, dst))
+                new_map[(src, dst)] = param
+
+            sorted_keys = sorted(new_map.keys())
+
+            new_exc = []
+            new_params = []
+            for k in sorted_keys:
+                new_exc.append(k)
+                new_params.append(new_map[k])
+
+            return new_exc, new_params
+
+        return uniquify(lhs_exclusions, lhs_exclusion_params), uniquify(rhs_exclusions, rhs_exclusion_params)
+
 
     def mix_lambda_planes(self, n_a, n_b):
 

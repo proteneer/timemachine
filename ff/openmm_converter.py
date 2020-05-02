@@ -180,12 +180,17 @@ def deserialize_system(system, cutoff=10000):
             exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
             exclusion_param_idxs = np.array(exclusion_param_idxs, dtype=np.int32)
 
+            lambda_plane_idxs = np.zeros(len(masses), dtype=np.int32)
+            lambda_offset_idxs = np.zeros(len(masses), dtype=np.int32)
+
             nrg_fns["Nonbonded"] = (
                 charge_param_idxs,
                 lj_param_idxs,
                 exclusion_idxs,
                 exclusion_param_idxs,
                 exclusion_param_idxs,
+                lambda_plane_idxs,
+                lambda_offset_idxs,
                 cutoff
             )
 
@@ -224,21 +229,21 @@ def deserialize_system(system, cutoff=10000):
                 scale_param_idxs.append(scale_idx)               
 
     # post-process GBSA
-    nrg_fns["GBSA"] = (
-        np.array(charge_param_idxs, dtype=np.int32),
-        np.array(radius_param_idxs, dtype=np.int32),
-        np.array(scale_param_idxs, dtype=np.int32),
-        alpha,                         # alpha
-        beta,                          # beta
-        gamma,                         # gamma
-        dielectric_offset,             # dielectric_offset
-        surface_tension,               # surface_tension
-        solute_dielectric,             # solute_dielectric
-        solvent_dielectric,            # solvent_dieletric
-        probe_radius,                  # probe_radius
-        cutoff,                        # cutoff radii
-        cutoff                         # cutoff force
-    )
+    # nrg_fns["GBSA"] = (
+    #     np.array(charge_param_idxs, dtype=np.int32),
+    #     np.array(radius_param_idxs, dtype=np.int32),
+    #     np.array(scale_param_idxs, dtype=np.int32),
+    #     alpha,                         # alpha
+    #     beta,                          # beta
+    #     gamma,                         # gamma
+    #     dielectric_offset,             # dielectric_offset
+    #     surface_tension,               # surface_tension
+    #     solute_dielectric,             # solute_dielectric
+    #     solvent_dielectric,            # solvent_dieletric
+    #     probe_radius,                  # probe_radius
+    #     cutoff,                        # cutoff radii
+    #     cutoff                         # cutoff force
+    # )
 
     global_params = np.array(global_params)
     global_param_groups = np.array(global_param_groups) + 100

@@ -58,6 +58,12 @@ void declare_alchemical_stepper(py::module &m, const char *typestr) {
         stepper.get_du_dl(buffer.mutable_data());
         return buffer;
     })
+    .def("get_energies", [](timemachine::AlchemicalStepper &stepper) -> py::array_t<double, py::array::c_style> {
+        const unsigned long long T = stepper.get_T();
+        py::array_t<double, py::array::c_style> buffer({T});
+        stepper.get_energies(buffer.mutable_data());
+        return buffer;
+    })
     .def("set_du_dl_adjoint", [](timemachine::AlchemicalStepper &stepper,
         const py::array_t<double, py::array::c_style> &adjoints) {
         stepper.set_du_dl_adjoint(adjoints.shape()[0], adjoints.data());
