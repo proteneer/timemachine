@@ -2,6 +2,7 @@ import numpy as np
 
 from timemachine.lib import ops
 
+
 class System():
 
     def __init__(self, nrg_fns, params, param_groups, masses):
@@ -57,12 +58,15 @@ class System():
             elif a_name == "Nonbonded":
                 assert a_args[7] == b_args[7] # cutoff
                 es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
-
                 lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 exclusion_idxs = np.concatenate([a_args[2], b_args[2] + num_a_atoms], axis=0)
-
                 es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)  # [E, 1]
                 lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)  # [E, 1]
+
+                print("combined exclusions")
+                for src, dst in exclusion_idxs:
+                    if src == 26+1758 or dst == 26+1758:
+                        print(src-1758, dst-1758)
 
                 lambda_plane_idxs = np.concatenate([a_args[5], b_args[5]])
                 lambda_offset_idxs = np.concatenate([a_args[6], b_args[6]])
@@ -77,6 +81,7 @@ class System():
                     lambda_offset_idxs.astype(np.int32),
                     a_args[7]
                 )
+
             elif a_name == "GBSA":
 
                 # skip GB
@@ -107,6 +112,24 @@ class System():
                 raise Exception("Unknown potential", a_name)
 
         return System(c_nrgs, c_params, c_param_groups, c_masses)
+
+    # def make_alchemical_gradients(self, other, precision):
+
+    #     gradients = []
+    #     for k, v in self.nrg_fns.items():
+    #         other_v = other.nrg_fns[k]
+    #         op_fn = getattr(ops, k)
+    #         grad = op_fn(*v, precision=precision)
+    #         grad_other = op_fn(*other_v, precision=precision)
+    #         grad_alchem = ops.AlchemicalGradient(
+    #             len(self.masses),
+    #             len(self.params),
+    #             grad,
+    #             grad_other
+    #         )
+    #         gradients.append(grad_alchem)
+
+    #     return gradients
 
     def make_gradients(self, precision):
         """

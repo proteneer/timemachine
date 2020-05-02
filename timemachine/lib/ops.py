@@ -2,6 +2,18 @@ import numpy as np
 from timemachine.lib import custom_ops
 
 def Nonbonded(*args, precision):
+
+    # exclusion_idxs should be unique
+    exclusion_idxs = args[2]
+    exclusion_set = set()
+
+    for src, dst in exclusion_idxs:
+        src, dst = sorted((src, dst))
+        exclusion_set.add((src, dst))
+
+    assert len(exclusion_set) == exclusion_idxs.shape[0]
+
+
     if precision == np.float64:
         return custom_ops.Nonbonded_f64(*args)
     elif precision == np.float32:

@@ -85,6 +85,14 @@ if __name__ == "__main__":
     all_guest_mols = all_guest_mols[:2]
 
     a_to_b_map = atom_mapping.mcs_map(*all_guest_mols)
+
+    c = atom_mapping.mcs_map(*all_guest_mols)
+    d = atom_mapping.mcs_map(*all_guest_mols)
+    e = atom_mapping.mcs_map(*all_guest_mols)
+
+    assert c == d
+
+    assert d == e
     open_ff = forcefield.Forcefield(args.forcefield)
     
     all_nrg_fns = []
@@ -139,6 +147,20 @@ if __name__ == "__main__":
 
     lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(mol_a.GetNumAtoms(), mol_b.GetNumAtoms())
 
+    print(lambda_plane_idxs)
+    print(lambda_offset_idxs)
+
+    assert lambda_offset_idxs[26] == 1
+    assert lambda_offset_idxs[35] == 1
+    assert lambda_offset_idxs[36] == 1
+
+    assert lambda_offset_idxs[18+mol_a.GetNumAtoms()] == 1
+    assert lambda_offset_idxs[19+mol_a.GetNumAtoms()] == 1
+    assert lambda_offset_idxs[20+mol_a.GetNumAtoms()] == 1
+    assert lambda_offset_idxs[32+mol_a.GetNumAtoms()] == 1
+
+
+
     a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, a_cutoff = a_nrg_fns['Nonbonded']
     b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, b_cutoff = b_nrg_fns['Nonbonded']
 
@@ -148,8 +170,30 @@ if __name__ == "__main__":
     lhs_es_param_idxs, rhs_es_param_idxs = lm.mix_nonbonded_parameters(a_es_param_idxs, b_es_param_idxs)
     lhs_lj_param_idxs, rhs_lj_param_idxs = lm.mix_nonbonded_parameters(a_lj_param_idxs, b_lj_param_idxs)
 
-    lhs_exc_idxs, lhs_es_exc_param_idxs, rhs_exc_idxs, rhs_es_exc_param_idxs = lm.mix_arbitrary_bonds(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
-    _,            lhs_lj_exc_param_idxs,            _, rhs_lj_exc_param_idxs = lm.mix_arbitrary_bonds(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
+
+    (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
+    (_,            lhs_lj_exc_param_idxs), (           _, rhs_lj_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
+
+    assert (26, 15 + mol_a.GetNumAtoms()) in lhs_exc_idxs
+    assert (26, 16 + mol_a.GetNumAtoms()) in lhs_exc_idxs
+    assert (26, 17 + mol_a.GetNumAtoms()) in lhs_exc_idxs
+    assert (26, 3 + mol_a.GetNumAtoms()) in lhs_exc_idxs
+    assert (19, 26) in lhs_exc_idxs
+    assert (20, 26) in lhs_exc_idxs
+    assert (21, 26) in lhs_exc_idxs
+    # assert (19, 26) in lhs_exc_idxs
+
+    # print("OKAY")
+    # assert 0
+
+    lhs_exc_idxs = np.array(lhs_exc_idxs, dtype=np.int32)
+    rhs_exc_idxs = np.array(rhs_exc_idxs, dtype=np.int32)
+
+
+    lhs_es_exc_param_idxs = np.array(lhs_es_exc_param_idxs, dtype=np.int32) 
+    rhs_es_exc_param_idxs = np.array(rhs_es_exc_param_idxs, dtype=np.int32) 
+    lhs_lj_exc_param_idxs = np.array(lhs_lj_exc_param_idxs, dtype=np.int32) 
+    rhs_lj_exc_param_idxs = np.array(rhs_lj_exc_param_idxs, dtype=np.int32)
 
     lhs_nrg_fns['Nonbonded'] = (lhs_es_param_idxs, lhs_lj_param_idxs, lhs_exc_idxs, lhs_es_exc_param_idxs, lhs_lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, a_cutoff)
     rhs_nrg_fns['Nonbonded'] = (rhs_es_param_idxs, rhs_lj_param_idxs, rhs_exc_idxs, rhs_es_exc_param_idxs, rhs_lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, b_cutoff)
@@ -171,12 +215,12 @@ if __name__ == "__main__":
 
     temperature = 300
     # dt = 1.5e-3
-    dt = 1e-3
-    friction = 99
+    dt = 1.5e-3
+    friction = 40
 
-    target_system = lhs_combined_system
+    np.testing.assert_array_equal(lhs_combined_system.masses, rhs_combined_system.masses)
 
-    masses = np.array(target_system.masses)
+    masses = np.array(lhs_combined_system.masses)
     # masses = np.where(masses < 2.0, masses*8, masses)
 
     ca, cbs, ccs = langevin_coefficients(
@@ -193,59 +237,68 @@ if __name__ == "__main__":
     print("cbs", cbs)
     print("ccs", ccs)
  
-    complete_T = 10000
+    complete_T = 30000
 
-    complete_lambda = np.zeros(complete_T)+1.0
-    complete_cas = np.ones(complete_T)*ca
-    complete_dts = np.concatenate([
-        np.linspace(0, dt, 1000),
-        np.ones(complete_T-1000)*dt
-    ])
+    print("CUTOFF", args.cutoff)
 
-    sim = simulation.Simulation(
-        target_system,
-        complete_dts,
-        complete_cas,
-        cbs,
-        ccs,
-        complete_lambda,
-        precision
-    )
+    ti_lambdas = np.linspace(0, 1, 11)
 
-    intg_seed = np.random.randint(np.iinfo(np.int32).max)
+    all_du_dls = []
 
-    combined_ligand = Chem.CombineMols(mol_a, mol_b)
-    combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
-    combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-    out_file = os.path.join(args.out_dir, "rbfe.pdb")
-    writer = PDBWriter(combined_pdb_str, out_file)
+    for lambda_idx, lamb in enumerate(ti_lambdas):
 
-    host_conf = []
-    for x,y,z in host_pdb.positions:
-        host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-    host_conf = np.array(host_conf)
+        complete_lambda = np.zeros(complete_T) + lamb
+        complete_cas = np.ones(complete_T)*ca
+        complete_dts = np.concatenate([
+            np.linspace(0, dt, 1000),
+            np.ones(complete_T-1000)*dt
+        ])
 
-    print("num host atoms", host_conf.shape[0])
+        sim = simulation.Simulation(
+            lhs_combined_system,
+            rhs_combined_system,
+            complete_dts,
+            complete_cas,
+            cbs,
+            ccs,
+            complete_lambda,
+            precision
+        )
 
-    conformer = mol_a.GetConformer(0)
-    mol_a_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    mol_a_conf = mol_a_conf/10 # convert to md_units
+        # intg_seed = np.random.randint(np.iinfo(np.int32).max)
+        intg_seed = args.seed
 
-    conformer = mol_b.GetConformer(0)
-    mol_b_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    mol_b_conf = mol_b_conf/10 # convert to md_units
+        combined_ligand = Chem.CombineMols(mol_a, mol_b)
+        combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
+        combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+        out_file = os.path.join(args.out_dir, "rbfe_"+str(lamb)+".pdb")
+        writer = PDBWriter(combined_pdb_str, out_file)
+        # writer = None
 
-    x0 = np.concatenate([host_conf, mol_a_conf, mol_b_conf]) # combined geometry
-    v0 = np.zeros_like(x0)
+        host_conf = []
+        for x,y,z in host_pdb.positions:
+            host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+        host_conf = np.array(host_conf)
 
-    parent_conn, child_conn = Pipe()
-    arg = (x0, v0, intg_seed, writer, child_conn, 0)
-    p = Process(target=sim.run_forward_and_backward, args=arg)
+        print("num host atoms", host_conf.shape[0])
 
-    p.start()
-    parent_conn.recv()
-    parent_conn.send(None)
+        conformer = mol_a.GetConformer(0)
+        mol_a_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+        mol_a_conf = mol_a_conf/10 # convert to md_units
 
-    assert 0
+        conformer = mol_b.GetConformer(0)
+        mol_b_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+        mol_b_conf = mol_b_conf/10 # convert to md_units
 
+        x0 = np.concatenate([host_conf, mol_a_conf, mol_b_conf]) # combined geometry
+        v0 = np.zeros_like(x0)
 
+        # parent_conn, child_conn = Pipe()
+        du_dls = sim.run_forward_and_backward(x0, v0, intg_seed, writer, 0)
+
+        plt.plot(du_dls, label=str(lamb))
+
+        plt.ylabel("du_dl")
+        plt.xlabel("timestep")
+        plt.legend()
+        plt.savefig(os.path.join(args.out_dir, "lambda_du_dls"))

@@ -96,7 +96,15 @@ class Forcefield():
         self.params.append(exclusion_param)
         self.param_groups.append(exclusion_param_group)
 
+        exclusion_param = 0.5
+        exclusion_param_group = 21
+        self.params.append(exclusion_param)
+        self.param_groups.append(exclusion_param_group)
+
     def get_exclusion_idx(self):
+        return len(self.params)-2
+
+    def get_exclusion_idx_14(self):
         return len(self.params)-1
 
     def save(self, handle):
@@ -198,6 +206,8 @@ class Forcefield():
 
         exclusion_param_idx = self.get_exclusion_idx()
         exclusions = {}
+        exclusion_param_idx_14 = self.get_exclusion_idx_14()
+        exclusions_14 = {}
 
         N = mol.GetNumAtoms()
 
@@ -267,7 +277,7 @@ class Forcefield():
 
                     src, _, _, dst = atom_idxs
                     assert src < dst
-                    exclusions[(src, dst)] = exclusion_param_idx
+                    exclusions_14[(src, dst)] = exclusion_param_idx_14
 
             elif force_type == 'Improper':
 
@@ -364,6 +374,10 @@ class Forcefield():
         exclusion_param_idxs = []
 
         for k, v in exclusions.items():
+            exclusion_idxs.append(k)
+            exclusion_param_idxs.append(v)
+
+        for k, v in exclusions_14.items():
             exclusion_idxs.append(k)
             exclusion_param_idxs.append(v)
 
