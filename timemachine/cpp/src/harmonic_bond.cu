@@ -11,7 +11,10 @@ namespace timemachine {
 template <typename RealType>
 HarmonicBond<RealType>::HarmonicBond(
     const std::vector<int> &bond_idxs, // [N]
-    const std::vector<int> &param_idxs
+    const std::vector<int> &k_idxs,
+    const std::vector<int> &b_idxs,
+    const std::vector<int> &k_idxs_pi,
+    const std::vector<int> &b_idxs_pi
 ) : B_(bond_idxs.size()/2) {
 
     if(bond_idxs.size() % 2 != 0) {
@@ -26,11 +29,48 @@ HarmonicBond<RealType>::HarmonicBond(
         }
     }
 
+    if(B_ != k_idxs.size()) {
+        throw std::runtime_error("bad size on k_idxs");
+    }
+
+    if(B_ != b_idxs.size()) {
+        throw std::runtime_error("bad size on b_idxs");
+    }
+
+    if(B_ != k_idxs_pi.size()) {
+        throw std::runtime_error("bad size on k_idxs_pi");
+    }
+
+    if(B_ != b_idxs_pi.size()) {
+        throw std::runtime_error("bad size on b_idxs_pi");
+    }
+
+    for(int b=0; b < b_idxs.size(); b++) {
+        if(b_idxs[b] < 0) {
+            throw std::runtime_error("Bad b_idxs element < 0");
+        }
+    }
+
+    for(int b=0; b < b_idxs_pi.size(); b++) {
+        if(b_idxs_pi[b] < 0) {
+            throw std::runtime_error("Bad b_idxs_pi element < 0");
+        }
+    }
+
     gpuErrchk(cudaMalloc(&d_bond_idxs_, B_*2*sizeof(*d_bond_idxs_)));
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_*2*sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_param_idxs_, B_*2*sizeof(*d_param_idxs_)));
-    gpuErrchk(cudaMemcpy(d_param_idxs_, &param_idxs[0], B_*2*sizeof(*d_param_idxs_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMalloc(&d_k_idxs_, B_*sizeof(*d_k_idxs_)));
+    gpuErrchk(cudaMemcpy(d_k_idxs_, &k_idxs[0], B_*sizeof(*d_k_idxs_), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMalloc(&d_b_idxs_, B_*sizeof(*d_b_idxs_)));
+    gpuErrchk(cudaMemcpy(d_b_idxs_, &b_idxs[0], B_*sizeof(*d_b_idxs_), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMalloc(&d_k_idxs_pi_, B_*sizeof(*d_k_idxs_pi_)));
+    gpuErrchk(cudaMemcpy(d_k_idxs_pi_, &k_idxs_pi[0], B_*sizeof(*d_k_idxs_pi_), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMalloc(&d_b_idxs_pi_, B_*sizeof(*d_b_idxs_pi_)));
+    gpuErrchk(cudaMemcpy(d_b_idxs_pi_, &b_idxs_pi[0], B_*sizeof(*d_b_idxs_pi_), cudaMemcpyHostToDevice));
 
 };
 
@@ -38,7 +78,10 @@ template <typename RealType>
 HarmonicBond<RealType>::~HarmonicBond() {
     std::cout << "Hbond destructor called" << std::endl;
     gpuErrchk(cudaFree(d_bond_idxs_));
-    gpuErrchk(cudaFree(d_param_idxs_));
+    gpuErrchk(cudaFree(d_k_idxs_));
+    gpuErrchk(cudaFree(d_b_idxs_));
+    gpuErrchk(cudaFree(d_k_idxs_pi_));
+    gpuErrchk(cudaFree(d_b_idxs_pi_));
 };
 
 template <typename RealType>
@@ -49,7 +92,7 @@ void HarmonicBond<RealType>::execute_lambda_inference_device(
     const double *d_params_primals,
     const double lambda_primal,
     unsigned long long *d_out_coords_primals, // du/dx
-    double *d_out_lambda_primals, // du/dl
+    double *d_out_lambda_primal, // du/dl
     double *d_out_energy_primal, // U
     cudaStream_t stream) {
     int tpb = 32;
@@ -58,9 +101,14 @@ void HarmonicBond<RealType>::execute_lambda_inference_device(
         B_,
         d_coords_primals,
         d_params_primals,
+        lambda_primal,
         d_bond_idxs_,
-        d_param_idxs_,
+        d_k_idxs_,
+        d_b_idxs_,
+        d_k_idxs_pi_,
+        d_b_idxs_pi_,
         d_out_coords_primals,
+        d_out_lambda_primal,
         d_out_energy_primal
     );
     gpuErrchk(cudaPeekAtLastError());
@@ -94,8 +142,13 @@ void HarmonicBond<RealType>::execute_lambda_jvp_device(
         d_coords_primals,
         d_coords_tangents,
         d_params_primals,
+        lambda_primal,
+        lambda_tangent,
         d_bond_idxs_,
-        d_param_idxs_,
+        d_k_idxs_,
+        d_b_idxs_,
+        d_k_idxs_pi_,
+        d_b_idxs_pi_,
         d_out_coords_primals,
         d_out_coords_tangents,
         d_out_params_primals,

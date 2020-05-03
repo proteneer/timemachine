@@ -4,7 +4,16 @@ from timemachine.potentials.jax_utils import distance, delta_r
 
 
 # lamb is *not used* it is used in the alchemical stuffl ater
-def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs):
+def harmonic_bond(
+    conf,
+    params,
+    lamb,
+    box,
+    bond_idxs,
+    k_idxs,
+    b_idxs,
+    k_idxs_pi,
+    b_idxs_pi):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -17,7 +26,7 @@ def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs):
 
     params: shape [num_params,] np.array
         unique parameters
-
+    
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
 
@@ -31,10 +40,18 @@ def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs):
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
     dij = distance(ci, cj, box)
-    kbs = params[param_idxs[:, 0]]
-    r0s = params[param_idxs[:, 1]]
 
-    energy = np.sum(kbs/2 * np.power(dij - r0s, 2.0))
+    kbs_lhs = np.where(k_idxs == -1, 0, params[k_idxs])
+    kbs_rhs = np.where(k_idxs_pi == -1, 0, params[k_idxs_pi])
+
+    # should never be zero
+    b0s_lhs = params[b_idxs]
+    b0s_rhs = params[b_idxs_pi]
+
+    kbs = (1-lamb)*kbs_lhs + lamb*kbs_rhs
+    b0s = (1-lamb)*b0s_lhs + lamb*b0s_rhs
+
+    energy = np.sum(kbs*kbs/2 * np.power(dij - b0s, 2.0))
     return energy
 
 

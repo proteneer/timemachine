@@ -12,10 +12,15 @@ void __global__ k_harmonic_bond_inference(
     const int B,     // number of bonds
     const double *coords,  // [n, 3]
     const double *params,  // [p,]
-    const int *bond_idxs,    // [b, 2]
-    const int *param_idxs,   // [b, 2]
+    const double lambda,
+    const int *bond_idxs,    // [b]
+    const int *k_idxs,   // [b]
+    const int *b_idxs,   // [b]
+    const int *k_idxs_pi,   // [b]
+    const int *b_idxs_pi,   // [b]
     unsigned long long *grad_coords,
-    double *energy) {
+    double *out_du_dl,
+    double *out_energy) {
 
     const auto b_idx = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -34,22 +39,38 @@ void __global__ k_harmonic_bond_inference(
         d2ij += delta*delta;
     }
 
-    int kb_idx = param_idxs[b_idx*2+0];
-    int b0_idx = param_idxs[b_idx*2+1];
+    int kb_idx_lhs = k_idxs[b_idx];
+    int kb_idx_rhs = k_idxs_pi[b_idx];
+    int b0_idx_lhs = b_idxs[b_idx];
+    int b0_idx_rhs = b_idxs_pi[b_idx];
 
-    RealType kb = params[kb_idx];
-    RealType b0 = params[b0_idx];
+    RealType kb_lhs = (kb_idx_lhs == -1) ? 0 : params[kb_idx_lhs];
+    RealType kb_rhs = (kb_idx_rhs == -1) ? 0 : params[kb_idx_rhs];
+    RealType kb = (1-lambda)*kb_lhs + lambda*kb_rhs;
+    RealType dkb_dl = kb_rhs - kb_lhs;
+
+    // we should never have zero bond constants
+
+
+    RealType b0_lhs = params[b0_idx_lhs];
+    RealType b0_rhs = params[b0_idx_rhs];
+    RealType b0 = (1-lambda)*b0_lhs + lambda*b0_rhs;
+    RealType db0_dl = b0_rhs - b0_lhs;
 
     RealType dij = sqrt(d2ij);
     RealType db = dij - b0;
 
     for(int d=0; d < 3; d++) {
-        RealType grad_delta = kb*db*dx[d]/dij;
+        RealType grad_delta = kb*kb*db*dx[d]/dij;
         atomicAdd(grad_coords + src_idx*3 + d, static_cast<unsigned long long>((long long) (grad_delta*FIXED_EXPONENT)));
         atomicAdd(grad_coords + dst_idx*3 + d, static_cast<unsigned long long>((long long) (-grad_delta*FIXED_EXPONENT)));
     }
 
-    atomicAdd(energy, kb/2*db*db);
+    RealType du_dkb = kb*db*db;
+    RealType du_db0 = -kb*kb*db;
+
+    atomicAdd(out_du_dl, du_dkb*dkb_dl + du_db0*db0_dl);
+    atomicAdd(out_energy, kb*kb*db*db/2);
 
 }
 
@@ -60,8 +81,13 @@ void __global__ k_harmonic_bond_jvp(
     const double *coords,  
     const double *coords_tangent,  
     const double *params,  // [p,]
+    const double lambda_primal,
+    const double lambda_tangent,
     const int *bond_idxs,    // [b, 2]
-    const int *param_idxs,   // [b, 2]
+    const int *k_idxs,
+    const int *b_idxs,
+    const int *k_idxs_pi,
+    const int *b_idxs_pi,
     double *grad_coords_primals,
     double *grad_coords_tangents,
     double *grad_params_primals,
@@ -86,17 +112,27 @@ void __global__ k_harmonic_bond_jvp(
         d2ij += delta*delta;
     }
 
-    int kb_idx = param_idxs[b_idx*2+0];
-    int b0_idx = param_idxs[b_idx*2+1];
+    int kb_idx_lhs = k_idxs[b_idx];
+    int kb_idx_rhs = k_idxs_pi[b_idx];
+    int b0_idx_lhs = b_idxs[b_idx];
+    int b0_idx_rhs = b_idxs_pi[b_idx];
 
-    RealType kb = params[kb_idx];
-    RealType b0 = params[b0_idx];
+    RealType kb_lhs = (kb_idx_lhs == -1) ? 0 : params[kb_idx_lhs];
+    RealType kb_rhs = (kb_idx_rhs == -1) ? 0 : params[kb_idx_rhs];
+
+    Surreal<RealType> lambda(lambda_primal, lambda_tangent);
+    Surreal<RealType> kb = (1-lambda)*kb_lhs + lambda*kb_rhs;
+
+    // we should never have zero bond constants
+    RealType b0_lhs = params[b0_idx_lhs];
+    RealType b0_rhs = params[b0_idx_rhs];
+    Surreal<RealType> b0 = (1-lambda)*b0_lhs + lambda*b0_rhs;
 
     Surreal<RealType> dij = sqrt(d2ij);
     Surreal<RealType> db = dij - b0;
 
     for(int d=0; d < 3; d++) {
-        Surreal<RealType> grad_delta = kb*db*dx[d]/dij;
+        Surreal<RealType> grad_delta = kb*kb*db*dx[d]/dij;
         atomicAdd(grad_coords_primals + src_idx*3 + d, grad_delta.real);
         atomicAdd(grad_coords_primals + dst_idx*3 + d, -grad_delta.real);
 
@@ -105,11 +141,27 @@ void __global__ k_harmonic_bond_jvp(
     }
 
     // avoid writing out to the real parts if possible
-    atomicAdd(grad_params_primals + kb_idx, (0.5*db*db).real);
-    atomicAdd(grad_params_tangents + kb_idx, (0.5*db*db).imag);
 
-    atomicAdd(grad_params_primals + b0_idx, (-kb*db).real);
-    atomicAdd(grad_params_tangents + b0_idx, (-kb*db).imag);
+    if(kb_idx_lhs >= 0) {
+        atomicAdd(grad_params_primals + kb_idx_lhs, (kb*db*db*(1-lambda)).real);
+        atomicAdd(grad_params_tangents + kb_idx_lhs, (kb*db*db*(1-lambda)).imag);        
+    }
+
+    if(kb_idx_rhs >= 0) {
+        atomicAdd(grad_params_primals + kb_idx_rhs, (kb*db*db*lambda).real);
+        atomicAdd(grad_params_tangents + kb_idx_rhs, (kb*db*db*lambda).imag);        
+    }
+
+    if(b0_idx_lhs >= 0) {
+        atomicAdd(grad_params_primals + b0_idx_lhs, (-kb*kb*db*(1-lambda)).real);
+        atomicAdd(grad_params_tangents + b0_idx_lhs, (-kb*kb*db*(1-lambda)).imag);
+    }
+
+
+    if(b0_idx_rhs >= 0) {
+        atomicAdd(grad_params_primals + b0_idx_rhs, (-kb*kb*db*lambda).real);
+        atomicAdd(grad_params_tangents + b0_idx_rhs, (-kb*kb*db*lambda).imag);
+    }
 
 }
 

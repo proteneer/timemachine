@@ -11,7 +11,10 @@ class HarmonicBond : public Gradient {
 private:
 
     int *d_bond_idxs_;
-    int *d_param_idxs_;
+    int *d_k_idxs_;
+    int *d_b_idxs_;
+    int *d_k_idxs_pi_;
+    int *d_b_idxs_pi_;
 
     const int B_;
 
@@ -19,7 +22,10 @@ public:
 
     HarmonicBond(
         const std::vector<int> &bond_idxs, // [b, 2]
-        const std::vector<int> &param_idxs);
+        const std::vector<int> &k_idxs,
+        const std::vector<int> &b_idxs,
+        const std::vector<int> &k_idxs_pi,
+        const std::vector<int> &b_idxs_pi);
 
     ~HarmonicBond();
 

@@ -297,16 +297,30 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
     )
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &bond_idxs,
-        const py::array_t<int, py::array::c_style> &param_idxs
+        const py::array_t<int, py::array::c_style> &k_idxs,
+        const py::array_t<int, py::array::c_style> &b_idxs,
+        const py::array_t<int, py::array::c_style> &k_idxs_pi,
+        const py::array_t<int, py::array::c_style> &b_idxs_pi
     ){
         std::vector<int> vec_bond_idxs(bond_idxs.size());
         std::memcpy(vec_bond_idxs.data(), bond_idxs.data(), vec_bond_idxs.size()*sizeof(int));
-        std::vector<int> vec_param_idxs(param_idxs.size());
-        std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
+
+        std::vector<int> vec_k_idxs(k_idxs.size());
+        std::memcpy(vec_k_idxs.data(), k_idxs.data(), vec_k_idxs.size()*sizeof(int));
+        std::vector<int> vec_b_idxs(b_idxs.size());
+        std::memcpy(vec_b_idxs.data(), b_idxs.data(), vec_b_idxs.size()*sizeof(int));
+
+        std::vector<int> vec_k_idxs_pi(k_idxs_pi.size());
+        std::memcpy(vec_k_idxs_pi.data(), k_idxs_pi.data(), vec_k_idxs_pi.size()*sizeof(int));
+        std::vector<int> vec_b_idxs_pi(b_idxs_pi.size());
+        std::memcpy(vec_b_idxs_pi.data(), b_idxs_pi.data(), vec_b_idxs_pi.size()*sizeof(int));
 
         return new timemachine::HarmonicBond<RealType>(
             vec_bond_idxs,
-            vec_param_idxs
+            vec_k_idxs,
+            vec_b_idxs,
+            vec_k_idxs_pi,
+            vec_b_idxs_pi
         );
     }
     ));
