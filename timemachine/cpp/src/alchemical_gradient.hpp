@@ -8,8 +8,6 @@ class AlchemicalGradient : public Gradient {
 
 private:
 
-    const int exponent_;
-
     Gradient* u0_;
     Gradient* u1_;
 
@@ -39,7 +37,6 @@ public:
     AlchemicalGradient(
         const int N,
         const int P,
-        const int exponent,
         Gradient* u0,
         Gradient* u1);
 

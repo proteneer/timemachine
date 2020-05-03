@@ -84,60 +84,57 @@ class TestBonded(GradientTest):
 
         # for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
 
-        for exponent in [2,1,3]:
-            for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
+        for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
 
 
-                params, ref_bonds0, custom_bonds0 = prepare_bonded_system(
-                    x,
-                    P_bonds,
-                    P_angles,
-                    P_torsions,
-                    B,
-                    A,
-                    T,
-                    precision
+            params, ref_bonds0, custom_bonds0 = prepare_bonded_system(
+                x,
+                P_bonds,
+                P_angles,
+                P_torsions,
+                B,
+                A,
+                T,
+                precision
+            )
+
+            params, ref_bonds1, custom_bonds1 = prepare_bonded_system(
+                x,
+                P_bonds,
+                P_angles,
+                P_torsions,
+                B,
+                A,
+                T,
+                precision,
+                params
+            )
+
+            terms = len(ref_bonds0)
+
+            for idx in range(terms):
+                ref_fn = functools.partial(
+                    alchemy.linear_rescale,
+                    fn0 = ref_bonds0[idx],
+                    fn1 = ref_bonds1[idx]
                 )
 
-                params, ref_bonds1, custom_bonds1 = prepare_bonded_system(
-                    x,
-                    P_bonds,
-                    P_angles,
-                    P_torsions,
-                    B,
-                    A,
-                    T,
-                    precision,
-                    params
+                test_fn = ops.AlchemicalGradient(
+                    N,
+                    len(params),
+                    custom_bonds0[idx],
+                    custom_bonds1[idx]
                 )
 
-                terms = len(ref_bonds0)
-
-                for idx in range(terms):
-                    ref_fn = functools.partial(
-                        alchemy.linear_rescale,
-                        exponent=exponent,
-                        fn0 = ref_bonds0[idx],
-                        fn1 = ref_bonds1[idx]
+                for lamb in [0.0, 0.4, 0.5, 1.0]:
+                    # print("LAMBDA", lamb, "EXPONENT", exponent)
+                    # for r, t in zip(ref_bonds, custom_bonds):
+                    self.compare_forces(
+                        x,
+                        params,
+                        lamb,
+                        ref_fn,
+                        test_fn,
+                        precision,
+                        rtol
                     )
-
-                    test_fn = ops.AlchemicalGradient(
-                        N,
-                        len(params),
-                        exponent,
-                        custom_bonds0[idx],
-                        custom_bonds1[idx]
-                    )
-
-                    for lamb in [0.0, 0.4, 0.5, 1.0]:
-                        # print("LAMBDA", lamb, "EXPONENT", exponent)
-                        # for r, t in zip(ref_bonds, custom_bonds):
-                        self.compare_forces(
-                            x,
-                            params,
-                            lamb,
-                            ref_fn,
-                            test_fn,
-                            precision,
-                            rtol
-                        )
