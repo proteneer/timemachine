@@ -150,9 +150,11 @@ class Simulation:
             grad_other = op_fn(*other_v, precision=self.precision)
             handles.append(grad)
             handles.append(grad_other)
+            exponent = 2
             grad_alchem = ops.AlchemicalGradient(
                 len(self.lhs_system.masses),
                 len(self.lhs_system.params),
+                exponent,
                 grad,
                 grad_other
             )

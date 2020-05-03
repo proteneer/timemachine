@@ -10,8 +10,10 @@ namespace timemachine {
 AlchemicalGradient::AlchemicalGradient(
     const int N,
     const int P,
+    const int exponent,
     Gradient *u0,
     Gradient *u1) : 
+    exponent_(exponent),
     u0_(u0),
     u1_(u1) {
 
@@ -56,6 +58,7 @@ AlchemicalGradient::~AlchemicalGradient() {
 
 __global__ void k_linear_rescale_inference(
     double lambda,
+    const int exponent,
     const int N,
     const unsigned long long *u0_coord_grads,
     const double *u0_du_dl,
@@ -69,9 +72,19 @@ __global__ void k_linear_rescale_inference(
 
     const auto idx = blockDim.x*blockIdx.x + threadIdx.x;
 
+    double lambda_power = 1;
+    double lambda_power_less_one = 1;
+    for(int i=0; i < exponent; i++) {
+        lambda_power = lambda_power*lambda;
+        if(i == exponent - 2) {
+            lambda_power_less_one = lambda_power;
+        }
+    }
+    double lambda_derivative = exponent*lambda_power_less_one;
+
     if(idx == 0 && blockIdx.y == 0) {
-        atomicAdd(uc_energy, (*u0_energy)*(1-lambda) + (*u1_energy)*lambda);
-        atomicAdd(uc_du_dl, -(*u0_energy) + (*u1_energy) + (*u0_du_dl)*(1-lambda) + (*u1_du_dl)*lambda);
+        atomicAdd(uc_energy, (*u0_energy)*(1-lambda_power) + (*u1_energy)*lambda_power);
+        atomicAdd(uc_du_dl, -lambda_derivative*(*u0_energy) + lambda_derivative*(*u1_energy) + (*u0_du_dl)*(1-lambda_power) + (*u1_du_dl)*lambda_power);
     }
 
     const auto dim = blockIdx.y;
@@ -79,7 +92,7 @@ __global__ void k_linear_rescale_inference(
     if(idx < N) {
         auto f0 = static_cast<double>(static_cast<long long>(u0_coord_grads[idx*3+dim]))/FIXED_EXPONENT;
         auto f1 = static_cast<double>(static_cast<long long>(u1_coord_grads[idx*3+dim]))/FIXED_EXPONENT;
-        auto fc = (1-lambda)*f0 + lambda*f1;
+        auto fc = (1-lambda_power)*f0 + lambda_power*f1;
         atomicAdd(uc_coord_grads + idx*3 + dim, static_cast<unsigned long long>((long long) (fc*FIXED_EXPONENT)));
     }
 
@@ -88,6 +101,7 @@ __global__ void k_linear_rescale_inference(
 __global__ void k_linear_rescale_jvp(
     double lambda_primal,
     double lambda_tangent,
+    const int exponent,
     const int N,
     const int P,
     const double *coords_primals_u0,
@@ -109,11 +123,16 @@ __global__ void k_linear_rescale_jvp(
     const auto dim = blockIdx.y;
 
     Surreal<double> lambda(lambda_primal, lambda_tangent);
+    Surreal<double> lambda_power(1, 0);
+
+    for(int i=0; i < exponent; i++) {
+        lambda_power = lambda_power*lambda;
+    }
 
     if(idx < N) {
         Surreal<double> f0(coords_primals_u0[idx*3+dim], coords_tangents_u0[idx*3+dim]); 
         Surreal<double> f1(coords_primals_u1[idx*3+dim], coords_tangents_u1[idx*3+dim]); 
-        auto fc = (1-lambda)*f0 + lambda*f1;
+        auto fc = (1-lambda_power)*f0 + lambda_power*f1;
         atomicAdd(coords_primals_uc + idx*3+dim, fc.real);
         atomicAdd(coords_tangents_uc + idx*3+dim, fc.imag);
     }
@@ -121,7 +140,7 @@ __global__ void k_linear_rescale_jvp(
     if(idx < P && blockIdx.y == 0) {
         Surreal<double> p0(params_primals_u0[idx], params_tangents_u0[idx]); 
         Surreal<double> p1(params_primals_u1[idx], params_tangents_u1[idx]);
-        auto pc = (1-lambda)*p0 + lambda*p1;
+        auto pc = (1-lambda_power)*p0 + lambda_power*p1;
         atomicAdd(params_primals_uc + idx, pc.real);
         atomicAdd(params_tangents_uc + idx, pc.imag);
     }
@@ -191,6 +210,7 @@ void AlchemicalGradient::execute_lambda_jvp_device(
     k_linear_rescale_jvp<<<dimGrid, tpb, 0, stream>>>(
         lambda_primal,
         lambda_tangent,
+        exponent_,
         N,
         P,
         d_out_jvp_coords_primals_buffer_u0_,
@@ -263,6 +283,7 @@ void AlchemicalGradient::execute_lambda_inference_device(
 
     k_linear_rescale_inference<<<dimGrid, tpb, 0, stream>>>(
         lambda_primal,
+        exponent_,
         N,
         d_out_coords_primals_buffer_u0_,
         d_out_lambda_primal_buffer_u0_,

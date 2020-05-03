@@ -270,12 +270,14 @@ void declare_alchemical_gradient(py::module &m) {
     .def(py::init([](
         int N,
         int P,
+        int exponent,
         timemachine::Gradient *u0,
         timemachine::Gradient *u1
     ){
         return new timemachine::AlchemicalGradient(
             N,
             P,
+            exponent,
             u0,
             u1
         );
