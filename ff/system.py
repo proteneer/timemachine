@@ -2,6 +2,7 @@ import numpy as np
 
 from timemachine.lib import ops
 
+
 class System():
 
     def __init__(self, nrg_fns, params, param_groups, masses):
@@ -45,33 +46,42 @@ class System():
             if a_name == "HarmonicBond":
                 bond_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
                 bond_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-                c_nrgs["HarmonicBond"] = (bond_idxs, bond_param_idxs)
+                c_nrgs["HarmonicBond"] = (bond_idxs.astype(np.int32), bond_param_idxs)
             elif a_name == "HarmonicAngle":
                 angle_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
                 angle_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-                c_nrgs["HarmonicAngle"] = (angle_idxs, angle_param_idxs)
+                c_nrgs["HarmonicAngle"] = (angle_idxs.astype(np.int32), angle_param_idxs)
             elif a_name == "PeriodicTorsion":
                 torsion_idxs = np.concatenate([a_args[0], b_args[0] + num_a_atoms], axis=0)
                 torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
-                c_nrgs["PeriodicTorsion"] = (torsion_idxs, torsion_param_idxs)
+                c_nrgs["PeriodicTorsion"] = (torsion_idxs.astype(np.int32), torsion_param_idxs)
             elif a_name == "Nonbonded":
-                assert a_args[5] == b_args[5] # cutoff
+                assert a_args[7] == b_args[7] # cutoff
                 es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
-
                 lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 exclusion_idxs = np.concatenate([a_args[2], b_args[2] + num_a_atoms], axis=0)
-
                 es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)  # [E, 1]
                 lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)  # [E, 1]
 
+                print("combined exclusions")
+                for src, dst in exclusion_idxs:
+                    if src == 26+1758 or dst == 26+1758:
+                        print(src-1758, dst-1758)
+
+                lambda_plane_idxs = np.concatenate([a_args[5], b_args[5]])
+                lambda_offset_idxs = np.concatenate([a_args[6], b_args[6]])
+
                 c_nrgs["Nonbonded"] = (
-                    es_param_idxs,
-                    lj_param_idxs,
-                    exclusion_idxs,
-                    es_exclusion_param_idxs,
-                    lj_exclusion_param_idxs,
-                    a_args[5]
+                    es_param_idxs.astype(np.int32),
+                    lj_param_idxs.astype(np.int32),
+                    exclusion_idxs.astype(np.int32),
+                    es_exclusion_param_idxs.astype(np.int32),
+                    lj_exclusion_param_idxs.astype(np.int32),
+                    lambda_plane_idxs.astype(np.int32),
+                    lambda_offset_idxs.astype(np.int32),
+                    a_args[7]
                 )
+
             elif a_name == "GBSA":
 
                 # skip GB
@@ -103,14 +113,32 @@ class System():
 
         return System(c_nrgs, c_params, c_param_groups, c_masses)
 
-    def make_gradients(self, dimension, precision):
+    # def make_alchemical_gradients(self, other, precision):
+
+    #     gradients = []
+    #     for k, v in self.nrg_fns.items():
+    #         other_v = other.nrg_fns[k]
+    #         op_fn = getattr(ops, k)
+    #         grad = op_fn(*v, precision=precision)
+    #         grad_other = op_fn(*other_v, precision=precision)
+    #         grad_alchem = ops.AlchemicalGradient(
+    #             len(self.masses),
+    #             len(self.params),
+    #             grad,
+    #             grad_other
+    #         )
+    #         gradients.append(grad_alchem)
+
+    #     return gradients
+
+    def make_gradients(self, precision):
         """
         Instantiate time-machine based functional forms.
         """
         gradients = []
         for k, v in self.nrg_fns.items():
             op_fn = getattr(ops, k)
-            grad = op_fn(*v, dimension, precision=precision)
+            grad = op_fn(*v, precision=precision)
             gradients.append(grad)
 
         return gradients

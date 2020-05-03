@@ -118,6 +118,8 @@ void ReversibleContext::forward_mode() {
 
     for(int t=0; t < step_sizes_.size(); t++) {
 
+        // std::cout << t << std::endl;
+
         gpuErrchk(cudaMemset(d_forces_, 0, N_*D*sizeof(*d_forces_)));
 
     	auto start0 = std::chrono::high_resolution_clock::now();

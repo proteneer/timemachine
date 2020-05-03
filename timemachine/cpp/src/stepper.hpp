@@ -85,6 +85,7 @@ public:
         double *params_jvp_tangents) override;
 
     void get_du_dl(double *buf);
+    void get_energies(double *buf);
 
     int get_T() const {
         return lambda_schedule_.size();

@@ -119,10 +119,14 @@ void AlchemicalStepper::backward_step(
 
 };
 
-void AlchemicalStepper::get_du_dl(
-    double *buf) {
+void AlchemicalStepper::get_du_dl(double *buf) {
     const int T = get_T();
     cudaMemcpy(buf, d_du_dl_, T*sizeof(double), cudaMemcpyDeviceToHost);
+};
+
+void AlchemicalStepper::get_energies(double *buf) {
+    const int T = get_T();
+    cudaMemcpy(buf, d_energies_, T*sizeof(double), cudaMemcpyDeviceToHost);
 };
 
 void AlchemicalStepper::set_du_dl_adjoint(

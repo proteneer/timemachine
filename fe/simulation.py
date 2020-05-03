@@ -6,7 +6,7 @@ from rdkit import Chem
 
 from simtk.openmm import app
 
-from timemachine.lib import custom_ops
+from timemachine.lib import ops, custom_ops
 import traceback
 
 
@@ -16,6 +16,7 @@ import jax.numpy as jnp
 
 # import warnings
 # warnings.simplefilter("ignore", UserWarning)
+
 
 def check_coords(x):
     x3 = x[:, :3]
@@ -45,13 +46,13 @@ class Simulation:
     A serializable simulation object
     """
     def __init__(self,
-        system,
+        lhs_system,
+        rhs_system,
         step_sizes,
         cas,
         cbs,
         ccs,
         lambda_schedule,
-        lambda_idxs,
         precision):
         """
         Create a simulation.
@@ -73,9 +74,6 @@ class Simulation:
         lambda_schedule: np.array, np.float64, [T]
             lambda parameter for each time step
 
-        lambda_idxs: np.array, np.int32, [N]
-            If lambda_idxs[atom_idx] is 0, then the particle is not modified.
-
         precision: either np.float64 or np.float32
             Precision in which we compute the force kernels. Note that integration
             is always done in 64bit.
@@ -83,7 +81,8 @@ class Simulation:
         """
 
         self.step_sizes = step_sizes
-        self.system = system
+        self.lhs_system = lhs_system
+        self.rhs_system = rhs_system
         self.cas = cas
         self.cbs = cbs
         self.ccs = ccs
@@ -93,7 +92,6 @@ class Simulation:
                 raise ValueError("cbs must all be <= 0")
 
         self.lambda_schedule = lambda_schedule
-        self.lambda_idxs = lambda_idxs
         self.precision = precision
 
     def run_forward_and_backward(
@@ -102,7 +100,7 @@ class Simulation:
         v0,
         seed,
         pdb_writer,
-        pipe,
+        # pipe,
         gpu_idx):
         """
         Run a forward simulation
@@ -137,24 +135,52 @@ class Simulation:
         """
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
 
-        gradients = self.system.make_gradients(dimension=4, precision=self.precision)
+        # gradients = self.system.make_gradients(precision=self.precision)
+        # gradients = self.lhs_system.make_alchemical_gradients(self.rhs_system, precision=self.precision)
+
+
+        gradients = []
+        handles = []
+        for k, v in self.lhs_system.nrg_fns.items():
+
+            print("alchemically mixing", k)
+            other_v = self.rhs_system.nrg_fns[k]
+            op_fn = getattr(ops, k)
+            grad = op_fn(*v, precision=self.precision)
+            grad_other = op_fn(*other_v, precision=self.precision)
+            handles.append(grad)
+            handles.append(grad_other)
+            grad_alchem = ops.AlchemicalGradient(
+                len(self.lhs_system.masses),
+                len(self.lhs_system.params),
+                grad,
+                grad_other
+            )
+            gradients.append(grad_alchem)
+
+        # return gradients
+
+        # x_bad = np.load("frame_1888.npy")
 
         # (ytz): debug use
-        # gradients = self.system.make_gradients(dimension=3, precision=self.precision)
         # for g in gradients:
-            # forces = g.execute(x0, self.system.params)
-            # print(g, forces, np.amax(np.abs(forces)))
-
+            # forces, du_dl, energy = g.execute_lambda(x, self.system.params, 1.0)
+            # print(g, forces[1758:], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+            # print(g, forces[:1758], np.amax(np.abs(forces[:1758])))
+            # the two ligands are imploding on top of each other
         # assert 0
 
-        stepper = custom_ops.LambdaStepper_f64(
+        print("gradients", gradients)
+
+        stepper = custom_ops.AlchemicalStepper_f64(
             gradients,
-            self.lambda_schedule,
-            self.lambda_idxs
+            self.lambda_schedule
         )
 
         v0 = np.zeros_like(x0)
-        ctxt = custom_ops.ReversibleContext_f64_3d(
+
+        np.testing.assert_equal(self.lhs_system.params, self.rhs_system.params)
+        ctxt = custom_ops.ReversibleContext_f64(
             stepper,
             x0,
             v0,
@@ -162,7 +188,7 @@ class Simulation:
             self.cbs,
             self.ccs,
             self.step_sizes,
-            self.system.params,
+            self.lhs_system.params,
             seed
         )
 
@@ -172,13 +198,23 @@ class Simulation:
         print("fwd run time", time.time() - start)
 
         du_dls = stepper.get_du_dl()
-
         start = time.time()
         x_final = ctxt.get_last_coords()[:, :3]
 
+        energies = stepper.get_energies()
+        for e_idx, e in enumerate(energies):
+            if e_idx > 50:
+                break
+            # print(e)
+        # assert 0
+
         if check_coords(x_final) == False:
-            print("Final for frame failed")
+            print("Final frame FAILED")
             du_dls = None
+        else:
+            print("Final frame OK")
+
+        print("lambda:", self.lambda_schedule[0], "mean du_dls", np.mean(du_dls), "std du_dls", np.std(du_dls))
 
         if pdb_writer is not None:
             pdb_writer.write_header()
@@ -192,6 +228,10 @@ class Simulation:
                         print("failed to write on frame", frame_idx)
                         break
             pdb_writer.close()
+
+
+
+        return du_dls
 
         print("sending dudls back.")
         pipe.send(du_dls)

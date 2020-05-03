@@ -512,8 +512,21 @@ void __global__ k_nonbonded_inference(
             RealType lj_grad_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
 
             for(int d=0; d < 3; d++) {
-                gi[d] -= (es_grad_prefactor + lj_grad_prefactor) *  dxs[d];
-                gj[d] += (es_grad_prefactor + lj_grad_prefactor) *  dxs[d];
+
+                RealType force_i = (es_grad_prefactor + lj_grad_prefactor) *  dxs[d];
+                RealType force_j = (es_grad_prefactor + lj_grad_prefactor) *  dxs[d];
+
+                gi[d] -= force_i;
+                gj[d] += force_j;
+
+                // if(d == 2) {
+                //     if(atom_i_idx >= 1758 && atom_j_idx >= 1758) {
+                //         if(atom_i_idx - 1758 == 26 || atom_j_idx - 1758 == 26) {
+                //             printf("nonbonded  processing ixn %d %d dij %f lj %f es %f delta_lambda %f net force %f \n", atom_i_idx - 1758, atom_j_idx - 1758, 1/inv_dij, lj_grad_prefactor, es_grad_prefactor, delta_lambda, force_i);
+                //         }                
+                //     }
+                // }
+
             }
 
             // this technically should be if lambda_idxs[i] == 0 and lamba_idxs[j] == 0
@@ -542,6 +555,7 @@ void __global__ k_nonbonded_inference(
     }
 
     for(int d=0; d < 3; d++) {
+
         if(atom_i_idx < N) {
             atomicAdd(grad_coords + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));            
         }
@@ -599,6 +613,13 @@ void __global__ k_nonbonded_exclusion_inference(
     RealType eps_i = params[lj_param_idx_eps_i];
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
+
+        // if(d == 2) {
+            // if(atom_i_idx >= 1758 && atom_j_idx >= 1758) {
+
+            // }
+        // }
+
     RealType du_dl_j = 0;
     RealType lambda_j = lambda;
     lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);
@@ -667,9 +688,20 @@ void __global__ k_nonbonded_exclusion_inference(
         du_dl_j -= (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor) * dxs[3] * dw_j;
 
         for(int d=0; d < 3; d++) {
+
+            // if(d == 2) {
+            //     if(atom_i_idx - 1758 == 26 || atom_j_idx - 1758 == 26) {
+            //         printf("exclusion processing ixn %d %d force gi %f gj %f\n", atom_i_idx - 1758, atom_j_idx - 1758, gi[d], gj[d]);
+            //     }                   
+            // }
+             
+
             atomicAdd(grad_coords + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));
             atomicAdd(grad_coords + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
+
         }  
+
+
 
         atomicAdd(out_du_dl, du_dl_i + du_dl_j);
         RealType energy = charge_scale*qi*qj*inv_dij + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
