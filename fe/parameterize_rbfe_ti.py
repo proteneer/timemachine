@@ -249,7 +249,8 @@ if __name__ == "__main__":
     print("cbs", cbs)
     print("ccs", ccs)
  
-    complete_T = 10000
+    complete_T = 12000
+    equil_T = 2000
 
     print("CUTOFF", args.cutoff)
 
@@ -266,8 +267,8 @@ if __name__ == "__main__":
         complete_lambda = np.zeros(complete_T) + lamb
         complete_cas = np.ones(complete_T)*ca
         complete_dts = np.concatenate([
-            np.linspace(0, dt, 1000),
-            np.ones(complete_T-1000)*dt
+            np.linspace(0, dt, equil_T),
+            np.ones(complete_T-equil_T)*dt
         ])
 
         sim = simulation.Simulation(
@@ -343,7 +344,7 @@ if __name__ == "__main__":
             lamb_idx = b_idx+pc_idx
             lamb = ti_lambdas[b_idx+pc_idx]
             # TDB FIX ME
-            offset = 0
+            offset = equil_T
             du_dls = pc.recv()[offset:]
 
             pc.send(None)
@@ -368,6 +369,7 @@ if __name__ == "__main__":
         for p in all_processes[b_idx:b_idx+args.num_gpus]:
             p.join()
 
+    plt.close()
 
     plt.violinplot(all_du_dls, positions=ti_lambdas)
     plt.ylabel("du_dlambda")
