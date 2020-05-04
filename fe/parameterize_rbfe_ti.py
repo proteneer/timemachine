@@ -159,8 +159,6 @@ if __name__ == "__main__":
     assert lambda_offset_idxs[20+mol_a.GetNumAtoms()] == 1
     assert lambda_offset_idxs[32+mol_a.GetNumAtoms()] == 1
 
-
-
     a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, a_cutoff = a_nrg_fns['Nonbonded']
     b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, b_cutoff = b_nrg_fns['Nonbonded']
 
@@ -169,7 +167,6 @@ if __name__ == "__main__":
 
     lhs_es_param_idxs, rhs_es_param_idxs = lm.mix_nonbonded_parameters(a_es_param_idxs, b_es_param_idxs)
     lhs_lj_param_idxs, rhs_lj_param_idxs = lm.mix_nonbonded_parameters(a_lj_param_idxs, b_lj_param_idxs)
-
 
     (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
     (_,            lhs_lj_exc_param_idxs), (           _, rhs_lj_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
@@ -189,7 +186,6 @@ if __name__ == "__main__":
     lhs_exc_idxs = np.array(lhs_exc_idxs, dtype=np.int32)
     rhs_exc_idxs = np.array(rhs_exc_idxs, dtype=np.int32)
 
-
     lhs_es_exc_param_idxs = np.array(lhs_es_exc_param_idxs, dtype=np.int32) 
     rhs_es_exc_param_idxs = np.array(rhs_es_exc_param_idxs, dtype=np.int32) 
     lhs_lj_exc_param_idxs = np.array(lhs_lj_exc_param_idxs, dtype=np.int32) 
@@ -197,6 +193,21 @@ if __name__ == "__main__":
 
     lhs_nrg_fns['Nonbonded'] = (lhs_es_param_idxs, lhs_lj_param_idxs, lhs_exc_idxs, lhs_es_exc_param_idxs, lhs_lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, a_cutoff)
     rhs_nrg_fns['Nonbonded'] = (rhs_es_param_idxs, rhs_lj_param_idxs, rhs_exc_idxs, rhs_es_exc_param_idxs, rhs_lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, b_cutoff)
+
+    a_gb_args = a_nrg_fns['GBSA']
+    b_gb_args = b_nrg_fns['GBSA']
+
+    a_gb_charges, a_gb_radii, a_gb_scales = a_gb_args[:3]
+    b_gb_charges, b_gb_radii, b_gb_scales = b_gb_args[:3]
+
+    assert a_gb_args[3:] == b_gb_args[3:]
+
+    lhs_gb_charges, rhs_gb_charges = lm.mix_nonbonded_parameters(a_gb_charges, b_gb_charges)
+    lhs_gb_radii, rhs_gb_radii = lm.mix_nonbonded_parameters(a_gb_radii, b_gb_radii)
+    lhs_gb_scales, rhs_gb_scales = lm.mix_nonbonded_parameters(a_gb_scales, b_gb_scales)
+
+    lhs_nrg_fns['GBSA'] = (lhs_gb_charges, lhs_gb_radii, lhs_gb_scales, lambda_plane_idxs, lambda_offset_idxs, *a_gb_args[3:])
+    rhs_nrg_fns['GBSA'] = (rhs_gb_charges, rhs_gb_radii, rhs_gb_scales, lambda_plane_idxs, lambda_offset_idxs, *a_gb_args[3:])
 
     lhs_dual_system = system.System(lhs_nrg_fns, open_ff.params, open_ff.param_groups, combined_masses)
     rhs_dual_system = system.System(rhs_nrg_fns, open_ff.params, open_ff.param_groups, combined_masses)
@@ -237,7 +248,7 @@ if __name__ == "__main__":
     print("cbs", cbs)
     print("ccs", ccs)
  
-    complete_T = 30000
+    complete_T = 10000
 
     print("CUTOFF", args.cutoff)
 

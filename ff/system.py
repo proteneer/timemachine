@@ -63,11 +63,6 @@ class System():
                 es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)  # [E, 1]
                 lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)  # [E, 1]
 
-                print("combined exclusions")
-                for src, dst in exclusion_idxs:
-                    if src == 26+1758 or dst == 26+1758:
-                        print(src-1758, dst-1758)
-
                 lambda_plane_idxs = np.concatenate([a_args[5], b_args[5]])
                 lambda_offset_idxs = np.concatenate([a_args[6], b_args[6]])
 
@@ -91,22 +86,31 @@ class System():
                 charge_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0)
                 radius_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 scale_param_idxs = np.concatenate([a_args[2], b_args[2] + len(a_params)], axis=0)
+                lambda_plane_idxs = np.concatenate([a_args[3], b_args[3]])
+                lambda_offset_idxs = np.concatenate([a_args[4], b_args[4]])
 
-                assert a_args[3] == b_args[3] # alpha
-                assert a_args[4] == b_args[4] # beta
-                assert a_args[5] == b_args[5] # gamma
-                assert a_args[6] == b_args[6] # dielec_offset
-                assert a_args[7] == b_args[7] # surface tension
-                assert a_args[8] == b_args[8] # solute dielectric
-                assert a_args[9] == b_args[9] # solvent dielectric
-                assert a_args[10] == b_args[10] # probe_radius
+                # +2 is due to lambda
+                assert a_args[3+2] == b_args[3+2] # alpha
+                assert a_args[4+2] == b_args[4+2] # beta
+                assert a_args[5+2] == b_args[5+2] # gamma
+                assert a_args[6+2] == b_args[6+2] # dielec_offset
+                assert a_args[7+2] == b_args[7+2] # surface tension
+                assert a_args[8+2] == b_args[8+2] # solute dielectric
+                assert a_args[9+2] == b_args[9+2] # solvent dielectric
+                assert a_args[10+2] == b_args[10+2] # probe_radius
 
                 c_nrgs["GBSA"] = (
                     charge_param_idxs.astype(np.int32),
                     radius_param_idxs.astype(np.int32),
                     scale_param_idxs.astype(np.int32),
-                    *a_args[3:]
+                    lambda_plane_idxs.astype(np.int32),
+                    lambda_offset_idxs.astype(np.int32),
+                    *a_args[5:]
                 )
+
+                print(c_nrgs["GBSA"])
+
+                # assert 0
 
             else:
                 raise Exception("Unknown potential", a_name)
