@@ -169,8 +169,13 @@ if __name__ == "__main__":
     lhs_es_param_idxs, rhs_es_param_idxs = lm.mix_nonbonded_parameters(a_es_param_idxs, b_es_param_idxs)
     lhs_lj_param_idxs, rhs_lj_param_idxs = lm.mix_nonbonded_parameters(a_lj_param_idxs, b_lj_param_idxs)
 
-    (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
     (_,            lhs_lj_exc_param_idxs), (           _, rhs_lj_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
+    (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
+
+    for exc, param in zip(rhs_exc_idxs, rhs_lj_exc_param_idxs):
+        src, dst = exc
+        if src == 2 or dst == 2:
+            print("!!!", src, dst, param)
 
     assert (26, 15 + mol_a.GetNumAtoms()) in lhs_exc_idxs
     assert (26, 16 + mol_a.GetNumAtoms()) in lhs_exc_idxs
@@ -256,7 +261,7 @@ if __name__ == "__main__":
 
     # ti_lambdas = np.linspace(0, 1, args.num_windows)
 
-    ti_lambdas = np.array([0.001, 0.002, 0.004, 0.008, 0.01, 0.02, 0.03, 0.04, 0.05])
+    ti_lambdas = np.array([0.001, 0.01, 0.1])
 
     all_du_dls = []
     # all_args = []

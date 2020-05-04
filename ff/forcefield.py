@@ -6,6 +6,16 @@ from ff import system
 
 from timemachine import constants
 
+
+
+def assert_unique_exclusions(exclusion_idxs):
+    sorted_exclusion_idxs = set()
+    for src, dst in exclusion_idxs:
+        src, dst = sorted((src, dst))
+        sorted_exclusion_idxs.add((src, dst))
+    assert len(sorted_exclusion_idxs) == len(exclusion_idxs)
+
+
 class Forcefield():
 
     def __init__(self, handle):
@@ -261,6 +271,8 @@ class Forcefield():
                     assert src < dst
                     exclusions[(src, dst)] = exclusion_param_idx
 
+                    # print("1-3", self.params[exclusion_param_idx])
+
                 nrg_fns['HarmonicAngle'] = (
                     np.array(angle_idxs, dtype=np.int32),
                     np.array(angle_param_idxs, dtype=np.int32)
@@ -275,7 +287,6 @@ class Forcefield():
                         torsion_idxs.append(atom_idxs)
                         torsion_param_idxs.append(proper_torsion)
 
-                    src, _, _, dst = atom_idxs
                     assert src < dst
                     exclusions_14[(src, dst)] = exclusion_param_idx_14
 
@@ -370,18 +381,25 @@ class Forcefield():
             np.array(torsion_param_idxs, dtype=np.int32)
         )
 
+        # exclusion_idxs = []
+        # exclusion_param_idxs = []
+
+        exclusion_map = {}
+        # weaker exclusions
+        for k, v in exclusions_14.items():
+            exclusion_map[tuple(sorted(k))] = v
+
+        # override weaker exclusions with stronger exclusions
+        for k, v in exclusions.items():
+            exclusion_map[tuple(sorted(k))] = v
+
         exclusion_idxs = []
         exclusion_param_idxs = []
 
-        for k, v in exclusions.items():
+        for k, v in exclusion_map.items():
             exclusion_idxs.append(k)
             exclusion_param_idxs.append(v)
 
-        for k, v in exclusions_14.items():
-            exclusion_idxs.append(k)
-            exclusion_param_idxs.append(v)
-
-        exclusion_idxs = np.array(exclusion_idxs)
 
         nrg_fns['Nonbonded'] = (
             np.array(es_param_idxs, dtype=np.int32),

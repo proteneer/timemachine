@@ -534,6 +534,15 @@ void __global__ k_nonbonded_inference(
             RealType dw_i = dlambda_i;
             RealType dw_j = dlambda_j;
 
+            if(atom_i_idx > 1758 && atom_j_idx > 1758) {
+                if(atom_i_idx == 1760) {
+                    printf("ixn between %d %d value %f with dxs[3] %f\n", atom_i_idx-1758, atom_j_idx-1758, (lj_grad_prefactor) * dxs[3] * dw_i, dxs[3]);
+                } else if(atom_j_idx == 1760) {
+                    printf("ixn between %d %d value %f with dxs[3] %f\n", atom_i_idx-1758, atom_j_idx-1758, (lj_grad_prefactor) * dxs[3] * dw_j, dxs[3]);
+                }
+            }
+
+
             du_dl_i -= (es_grad_prefactor + lj_grad_prefactor) * dxs[3] * dw_i;
             du_dl_j += (es_grad_prefactor + lj_grad_prefactor) * dxs[3] * dw_j;
 
@@ -562,6 +571,14 @@ void __global__ k_nonbonded_inference(
         if(atom_j_idx < N) {
             atomicAdd(grad_coords + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));            
         }
+    }
+
+    if(atom_i_idx >= 1758 && abs(du_dl_i) > 100) {
+        printf("i %d du_dl %f\n", atom_i_idx, du_dl_i); 
+    }
+
+    if(atom_j_idx >= 1758 && abs(du_dl_j) > 100) {
+        printf("j %d du_dl %f\n", atom_j_idx, du_dl_j); 
     }
 
     atomicAdd(out_du_dl, du_dl_i + du_dl_j);
@@ -702,6 +719,23 @@ void __global__ k_nonbonded_exclusion_inference(
         }  
 
 
+        if(atom_i_idx > 1758 && atom_j_idx > 1758) {
+            if(atom_i_idx == 1760) {
+                printf("exc ixn between %d %d value %f with dxs[3] %f lj scale %f\n", atom_i_idx-1758, atom_j_idx-1758, (lj_scale*lj_grad_prefactor) * dxs[3] * dw_i, dxs[3], lj_scale);
+            } else if(atom_j_idx == 1760) {
+                printf("exc ixn between %d %d value %f with dxs[3] %f lj scale %f\n", atom_i_idx-1758, atom_j_idx-1758, (lj_scale*lj_grad_prefactor) * dxs[3] * dw_j, dxs[3], lj_scale);
+            }
+        }
+
+
+
+        // if(atom_i_idx >= 1758 && abs(du_dl_i) > 100) {
+        //     printf("exc i %d du_dl %f\n", atom_i_idx, du_dl_i); 
+        // }
+
+        // if(atom_j_idx >= 1758 && abs(du_dl_j) > 100) {
+        //     printf("exc j %d du_dl %f\n", atom_j_idx, du_dl_j); 
+        // }
 
         atomicAdd(out_du_dl, du_dl_i + du_dl_j);
         RealType energy = charge_scale*qi*qj*inv_dij + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;

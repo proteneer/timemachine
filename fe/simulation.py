@@ -164,12 +164,13 @@ class Simulation:
         # x_bad = np.load("frame_1888.npy")
 
         # (ytz): debug use
-        # for g in gradients:
-            # forces, du_dl, energy = g.execute_lambda(x, self.system.params, 1.0)
-            # print(g, forces[1758:], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+        for g in gradients:
+            forces, du_dl, energy = g.execute_lambda(x0, self.lhs_system.params, 0.001)
+            print(g, forces[1758:], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+            print("DU_DL", du_dl)
             # print(g, forces[:1758], np.amax(np.abs(forces[:1758])))
             # the two ligands are imploding on top of each other
-        # assert 0
+        assert 0
 
         print("gradients", gradients)
 
@@ -206,8 +207,6 @@ class Simulation:
         for e_idx, e in enumerate(energies):
             if e_idx > 50:
                 break
-            # print(e)
-        # assert 0
 
         if check_coords(x_final) == False:
             print("Final frame FAILED")

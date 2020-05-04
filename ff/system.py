@@ -60,6 +60,14 @@ class System():
                 es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
                 lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 exclusion_idxs = np.concatenate([a_args[2], b_args[2] + num_a_atoms], axis=0)
+
+                # exclusions must be unique. so we sanity check them here.
+                sorted_exclusion_idxs = set()
+                for src, dst in exclusion_idxs:
+                    src, dst = sorted((src, dst))
+                    sorted_exclusion_idxs.add((src, dst))
+                assert len(sorted_exclusion_idxs) == len(exclusion_idxs)
+
                 es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)  # [E, 1]
                 lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)  # [E, 1]
 

@@ -155,8 +155,11 @@ def prepare_nonbonded_system(
     exclusion_idxs = np.random.randint(low=0, high=N, size=(E,2), dtype=np.int32)
     for e_idx, (i,j) in enumerate(exclusion_idxs):
         if i == j:
-            exclusion_idxs[e_idx][0] = i
-            exclusion_idxs[e_idx][1] = (j+1) % N # mod is in case we overflow
+
+            src, dst = sorted(i, (j+1) % N)
+
+            exclusion_idxs[e_idx][0] = src
+            exclusion_idxs[e_idx][1] = dst # mod is in case we overflow
 
     for e_idx, (i,j) in enumerate(exclusion_idxs):
         if i == j:
