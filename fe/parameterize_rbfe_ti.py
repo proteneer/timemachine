@@ -252,7 +252,7 @@ if __name__ == "__main__":
 
     print("CUTOFF", args.cutoff)
 
-    ti_lambdas = np.linspace(0, 1, 11)
+    ti_lambdas = np.linspace(0, 1, 21)
 
     all_du_dls = []
 
@@ -307,9 +307,13 @@ if __name__ == "__main__":
         # parent_conn, child_conn = Pipe()
         du_dls = sim.run_forward_and_backward(x0, v0, intg_seed, writer, 0)
 
+        all_du_dls.append(du_dls)
+
         plt.plot(du_dls, label=str(lamb))
 
         plt.ylabel("du_dl")
         plt.xlabel("timestep")
         plt.legend()
         plt.savefig(os.path.join(args.out_dir, "lambda_du_dls"))
+
+    np.save("all_du_dls", all_du_dls)
