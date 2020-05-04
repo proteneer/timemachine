@@ -65,6 +65,7 @@ if __name__ == "__main__":
     parser.add_argument('--forcefield', type=str, required=True)
     parser.add_argument('--seed', type=int, required=True)
     parser.add_argument('--cutoff', type=float, required=True)
+    parser.add_argument('--num_windows', type=int, required=True)
     args = parser.parse_args()
 
     assert os.path.isdir(args.out_dir)
@@ -252,9 +253,13 @@ if __name__ == "__main__":
 
     print("CUTOFF", args.cutoff)
 
-    ti_lambdas = np.linspace(0, 1, 21)
+    ti_lambdas = np.linspace(0, 1, args.num_windows)
 
     all_du_dls = []
+    # all_args = []
+
+    all_processes = []
+    all_pcs = []
 
     for lambda_idx, lamb in enumerate(ti_lambdas):
 
@@ -304,16 +309,78 @@ if __name__ == "__main__":
         x0 = np.concatenate([host_conf, mol_a_conf, mol_b_conf]) # combined geometry
         v0 = np.zeros_like(x0)
 
-        # parent_conn, child_conn = Pipe()
-        du_dls = sim.run_forward_and_backward(x0, v0, intg_seed, writer, 0)
+        parent_conn, child_conn = Pipe()
 
-        all_du_dls.append(du_dls)
+        input_args = (x0, v0, intg_seed, writer, child_conn, lambda_idx % args.num_gpus)
+        p = Process(target=sim.run_forward_and_backward, args=input_args)
 
-        plt.plot(du_dls, label=str(lamb))
+        all_pcs.append(parent_conn)
+        all_processes.append(p)
+        # all_args.append(args)
 
-        plt.ylabel("du_dl")
-        plt.xlabel("timestep")
-        plt.legend()
-        plt.savefig(os.path.join(args.out_dir, "lambda_du_dls"))
+        # du_dls = sim.run_forward_and_backward(x0, v0, intg_seed, writer, lambda_idx % args.num_gpus)
+
+        # all_du_dls.append(du_dls)
+
+        # plt.plot(du_dls, label=str(lamb))
+
+        # plt.ylabel("du_dl")
+        # plt.xlabel("timestep")
+        # plt.legend()
+        # plt.savefig(os.path.join(args.out_dir, "lambda_du_dls"))
+
+    mean_du_dls = []
+    std_du_dls = []
+
+    for b_idx in range(0, len(all_processes), args.num_gpus):
+        for p in all_processes[b_idx:b_idx+args.num_gpus]:
+            p.start()
+
+
+        batch_du_dls = []
+        for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
+
+            lamb_idx = b_idx+pc_idx
+            lamb = ti_lambdas[b_idx+pc_idx]
+            # TDB FIX ME
+            offset = 0
+            du_dls = pc.recv()[offset:]
+
+            pc.send(None)
+
+            mean_du_dls.append(np.mean(du_dls))
+            std_du_dls.append(np.std(du_dls))
+            print("lamb", lamb, "mean/std", np.mean(du_dls), np.std(du_dls))
+
+            assert du_dls is not None
+            plt.plot(du_dls, label=str(lamb))
+
+            plt.ylabel("du_dl")
+            plt.xlabel("timestep")
+            plt.legend()
+
+            fpath = os.path.join(args.out_dir, "lambda_du_dls")
+            print(fpath)
+            plt.savefig(fpath)
+
+            all_du_dls.append(du_dls)
+
+        for p in all_processes[b_idx:b_idx+args.num_gpus]:
+            p.join()
+
+
+    plt.violinplot(all_du_dls, positions=ti_lambdas)
+    plt.ylabel("du_dlambda")
+    plt.savefig(os.path.join(args.out_dir, "violin_du_dls"))
+    plt.close()
+
+
+    plt.boxplot(all_du_dls, positions=ti_lambdas)
+    plt.ylabel("du_dlambda")
+    plt.savefig(os.path.join(args.out_dir, "boxplot_du_dls"))
+    plt.close()
+
+    print("mean_du_dls", mean_du_dls)
+    print("pred_dG", np.trapz(mean_du_dls, ti_lambdas))
 
     np.save("all_du_dls", all_du_dls)

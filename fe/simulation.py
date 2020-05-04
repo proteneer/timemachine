@@ -100,7 +100,7 @@ class Simulation:
         v0,
         seed,
         pdb_writer,
-        # pipe,
+        pipe,
         gpu_idx):
         """
         Run a forward simulation
@@ -229,11 +229,8 @@ class Simulation:
                         break
             pdb_writer.close()
 
-
-
-        return du_dls
-
-        print("sending dudls back.")
+        # return du_dls
+        # print("sending dudls back.")
         pipe.send(du_dls)
 
         du_dl_adjoints = pipe.recv()
