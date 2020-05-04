@@ -141,9 +141,10 @@ class Simulation:
 
         gradients = []
         handles = []
+        force_names = []
         for k, v in self.lhs_system.nrg_fns.items():
 
-            print("alchemically mixing", k)
+            force_names.append(k)
             other_v = self.rhs_system.nrg_fns[k]
             op_fn = getattr(ops, k)
             grad = op_fn(*v, precision=self.precision)
@@ -197,7 +198,7 @@ class Simulation:
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
-        du_dls = stepper.get_du_dl()
+
         start = time.time()
         x_final = ctxt.get_last_coords()[:, :3]
 
@@ -214,7 +215,11 @@ class Simulation:
         else:
             print("Final frame OK")
 
-        print("lambda:", self.lambda_schedule[0], "mean du_dls", np.mean(du_dls), "std du_dls", np.std(du_dls))
+
+        full_du_dls = stepper.get_du_dl()
+
+        for fname, du_dls in zip(force_names, full_du_dls):
+            print(fname, "lambda:", self.lambda_schedule[0], "mean du_dls", np.mean(du_dls), "std du_dls", np.std(du_dls))
 
         if pdb_writer is not None:
             pdb_writer.write_header()
@@ -231,7 +236,7 @@ class Simulation:
 
         # return du_dls
         # print("sending dudls back.")
-        pipe.send(du_dls)
+        pipe.send(full_du_dls)
 
         du_dl_adjoints = pipe.recv()
 

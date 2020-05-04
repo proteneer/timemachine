@@ -254,13 +254,16 @@ if __name__ == "__main__":
 
     print("CUTOFF", args.cutoff)
 
-    ti_lambdas = np.linspace(0, 1, args.num_windows)
+    # ti_lambdas = np.linspace(0, 1, args.num_windows)
+
+    ti_lambdas = np.array([0.001, 0.002, 0.004, 0.008, 0.01, 0.02, 0.03, 0.04, 0.05])
 
     all_du_dls = []
     # all_args = []
 
     all_processes = []
     all_pcs = []
+
 
     for lambda_idx, lamb in enumerate(ti_lambdas):
 
@@ -345,23 +348,23 @@ if __name__ == "__main__":
             lamb = ti_lambdas[b_idx+pc_idx]
             # TDB FIX ME
             offset = equil_T
-            du_dls = pc.recv()[offset:]
-
+            full_du_dls = pc.recv() # F, T
+            assert full_du_dls is not None
             pc.send(None)
 
-            mean_du_dls.append(np.mean(du_dls))
-            std_du_dls.append(np.std(du_dls))
-            print("lamb", lamb, "mean/std", np.mean(du_dls), np.std(du_dls))
+            for du_dls in full_du_dls:
 
-            assert du_dls is not None
-            plt.plot(du_dls, label=str(lamb))
+                mean_du_dls.append(np.mean(du_dls))
+                std_du_dls.append(np.std(du_dls))
+                print("lamb", lamb, "mean/std", np.mean(du_dls), np.std(du_dls))
 
-            plt.ylabel("du_dl")
-            plt.xlabel("timestep")
-            plt.legend()
+                plt.plot(du_dls, label=str(lamb))
 
-            fpath = os.path.join(args.out_dir, "lambda_du_dls")
-            print(fpath)
+                plt.ylabel("du_dl")
+                plt.xlabel("timestep")
+                plt.legend()
+
+            fpath = os.path.join(args.out_dir, "lambda_du_dls_"+str(pc_idx))
             plt.savefig(fpath)
 
             all_du_dls.append(du_dls)

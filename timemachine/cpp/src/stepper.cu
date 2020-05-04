@@ -44,10 +44,11 @@ AlchemicalStepper::AlchemicalStepper(
     count_(0),
     Stepper(forces.size()) {
 
+    const int F = forces.size();
     const int T = lambda_schedule_.size();
 
-    gpuErrchk(cudaMalloc(&d_du_dl_, T*sizeof(*d_du_dl_)));
-    gpuErrchk(cudaMemset(d_du_dl_, 0, T*sizeof(*d_du_dl_)));
+    gpuErrchk(cudaMalloc(&d_du_dl_, F*T*sizeof(*d_du_dl_)));
+    gpuErrchk(cudaMemset(d_du_dl_, 0, F*T*sizeof(*d_du_dl_)));
 
     gpuErrchk(cudaMalloc(&d_energies_, T*sizeof(*d_energies_)));
     gpuErrchk(cudaMemset(d_energies_, 0, T*sizeof(*d_energies_)));
@@ -61,6 +62,8 @@ void AlchemicalStepper::forward_step(
     const double *params,
     unsigned long long *dx) {
 
+    const int T = lambda_schedule_.size();
+
     gpuErrchk(cudaDeviceSynchronize());
     for(int f=0; f < forces_.size(); f++) {
         forces_[f]->execute_lambda_inference_device(
@@ -70,7 +73,7 @@ void AlchemicalStepper::forward_step(
             params,
             lambda_schedule_[count_],
             dx, // forces
-            d_du_dl_ + count_, // du_dl
+            d_du_dl_ + f*T + count_, // du_dl
             d_energies_ + count_, // energies
             this->get_stream(f)
         );
@@ -121,7 +124,8 @@ void AlchemicalStepper::backward_step(
 
 void AlchemicalStepper::get_du_dl(double *buf) {
     const int T = get_T();
-    cudaMemcpy(buf, d_du_dl_, T*sizeof(double), cudaMemcpyDeviceToHost);
+    const int F = forces_.size();
+    cudaMemcpy(buf, d_du_dl_, T*F*sizeof(double), cudaMemcpyDeviceToHost);
 };
 
 void AlchemicalStepper::get_energies(double *buf) {
