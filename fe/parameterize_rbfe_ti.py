@@ -356,10 +356,12 @@ if __name__ == "__main__":
             assert full_du_dls is not None
             pc.send(None)
 
+            mean_du_dls.append(np.mean(full_du_dls))
+            std_du_dls.append(np.std(full_du_dls))
+
             for du_dls in full_du_dls:
 
-                mean_du_dls.append(np.mean(du_dls))
-                std_du_dls.append(np.std(du_dls))
+
                 print("lamb", lamb, "mean/std", np.mean(du_dls), np.std(du_dls))
 
                 plt.plot(du_dls, label=str(lamb))
@@ -371,7 +373,7 @@ if __name__ == "__main__":
             fpath = os.path.join(args.out_dir, "lambda_du_dls_"+str(pc_idx))
             plt.savefig(fpath)
 
-            all_du_dls.append(du_dls)
+            all_du_dls.append(full_du_dls)
 
         for p in all_processes[b_idx:b_idx+args.num_gpus]:
             p.join()
