@@ -374,7 +374,7 @@ if __name__ == "__main__":
             fpath = os.path.join(args.out_dir, "lambda_du_dls_"+str(pc_idx))
             plt.savefig(fpath)
 
-            sum_du_dls.append(np.sum(sum_du_dls, axis=0))
+            sum_du_dls.append(np.sum(full_du_dls, axis=0))
             all_du_dls.append(full_du_dls)
 
         for p in all_processes[b_idx:b_idx+args.num_gpus]:
