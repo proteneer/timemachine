@@ -84,7 +84,7 @@ if __name__ == "__main__":
         all_guest_mols.append(guest_mol)
 
     # all_guest_mols = all_guest_mols[:2]
-    all_guest_mols = [all_guest_mols[14-1], all_guest_mols[19-1]]
+    all_guest_mols = [all_guest_mols[12-1], all_guest_mols[18-1]]
 
     a_to_b_map = atom_mapping.mcs_map(*all_guest_mols)
 
