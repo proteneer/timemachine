@@ -79,7 +79,7 @@ void AlchemicalStepper::forward_step(
         );
     }
 
-    throw std::runtime_error("fuck");
+    // throw std::runtime_error("fuck");
 
     gpuErrchk(cudaDeviceSynchronize());
     count_ += 1;

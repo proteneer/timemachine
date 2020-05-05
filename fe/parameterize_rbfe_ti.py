@@ -238,8 +238,6 @@ if __name__ == "__main__":
     np.testing.assert_array_equal(lhs_combined_system.masses, rhs_combined_system.masses)
 
     masses = np.array(lhs_combined_system.masses)
-    # masses = np.where(masses < 2.0, masses*8, masses)
-
     ca, cbs, ccs = langevin_coefficients(
         temperature,
         dt,
@@ -259,9 +257,10 @@ if __name__ == "__main__":
 
     print("CUTOFF", args.cutoff)
 
-    # ti_lambdas = np.linspace(0, 1, args.num_windows)
+    ti_lambdas = np.linspace(0, 1, args.num_windows)
+    # ti_lambdas = np.ones(args.num_windows)*0.2
 
-    ti_lambdas = np.array([0.001, 0.01, 0.1])
+    # ti_lambdas = np.array([0.001, 0.01, 0.1])
 
     all_du_dls = []
     # all_args = []
@@ -290,8 +289,8 @@ if __name__ == "__main__":
             precision
         )
 
-        # intg_seed = np.random.randint(np.iinfo(np.int32).max)
-        intg_seed = args.seed
+        intg_seed = np.random.randint(np.iinfo(np.int32).max)
+        # intg_seed = args.seed
 
         combined_ligand = Chem.CombineMols(mol_a, mol_b)
         combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)

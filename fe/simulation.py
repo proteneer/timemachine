@@ -161,16 +161,15 @@ class Simulation:
 
         # return gradients
 
-        # x_bad = np.load("frame_1888.npy")
+        # x_bad = np.load("all_coords.npy")[5000]
+        # # (ytz): debug use
+        # for g in gradients:
+        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.0001)
+        #     print(g, forces[1758:], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+        #     print("DU_DL", du_dl)
+        #     print("atom force", forces[1817])
 
-        # (ytz): debug use
-        for g in gradients:
-            forces, du_dl, energy = g.execute_lambda(x0, self.lhs_system.params, 0.001)
-            print(g, forces[1758:], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
-            print("DU_DL", du_dl)
-            # print(g, forces[:1758], np.amax(np.abs(forces[:1758])))
-            # the two ligands are imploding on top of each other
-        assert 0
+        # assert 0
 
         print("gradients", gradients)
 
@@ -199,6 +198,7 @@ class Simulation:
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
+        xs = ctxt.get_all_coords()
 
         start = time.time()
         x_final = ctxt.get_last_coords()[:, :3]
