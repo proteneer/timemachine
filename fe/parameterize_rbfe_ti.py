@@ -339,6 +339,7 @@ if __name__ == "__main__":
 
     mean_du_dls = []
     std_du_dls = []
+    sum_du_dls = []
 
     for b_idx in range(0, len(all_processes), args.num_gpus):
         for p in all_processes[b_idx:b_idx+args.num_gpus]:
@@ -373,6 +374,7 @@ if __name__ == "__main__":
             fpath = os.path.join(args.out_dir, "lambda_du_dls_"+str(pc_idx))
             plt.savefig(fpath)
 
+            sum_du_dls.append(np.sum(sum_du_dls, axis=0))
             all_du_dls.append(full_du_dls)
 
         for p in all_processes[b_idx:b_idx+args.num_gpus]:
@@ -380,13 +382,13 @@ if __name__ == "__main__":
 
     plt.close()
 
-    plt.violinplot(all_du_dls, positions=ti_lambdas)
+    plt.violinplot(sum_du_dls, positions=ti_lambdas)
     plt.ylabel("du_dlambda")
     plt.savefig(os.path.join(args.out_dir, "violin_du_dls"))
     plt.close()
 
 
-    plt.boxplot(all_du_dls, positions=ti_lambdas)
+    plt.boxplot(sum_du_dls, positions=ti_lambdas)
     plt.ylabel("du_dlambda")
     plt.savefig(os.path.join(args.out_dir, "boxplot_du_dls"))
     plt.close()
