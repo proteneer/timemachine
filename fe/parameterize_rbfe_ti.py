@@ -230,170 +230,172 @@ if __name__ == "__main__":
     lhs_combined_system = host_system.merge(lhs_dual_system)
     rhs_combined_system = host_system.merge(rhs_dual_system)
 
-    temperature = 300
-    # dt = 1.5e-3
-    dt = 1.5e-3
-    friction = 40
+    for _ in range(100):
 
-    np.testing.assert_array_equal(lhs_combined_system.masses, rhs_combined_system.masses)
+        temperature = 300
+        # dt = 1.5e-3
+        dt = 1.5e-3
+        friction = 40
 
-    masses = np.array(lhs_combined_system.masses)
-    ca, cbs, ccs = langevin_coefficients(
-        temperature,
-        dt,
-        friction,
-        masses
-    )
+        np.testing.assert_array_equal(lhs_combined_system.masses, rhs_combined_system.masses)
 
-    cbs *= -1
-
-    print("Integrator coefficients:")
-    print("ca", ca)
-    print("cbs", cbs)
-    print("ccs", ccs)
- 
-    complete_T = 12000
-    equil_T = 2000
-
-    print("CUTOFF", args.cutoff)
-
-    ti_lambdas = np.linspace(0, 1, args.num_windows)
-    # ti_lambdas = np.ones(args.num_windows)*0.2
-
-    # ti_lambdas = np.array([0.001, 0.01, 0.1])
-
-    all_du_dls = []
-    # all_args = []
-
-    all_processes = []
-    all_pcs = []
-
-
-    for lambda_idx, lamb in enumerate(ti_lambdas):
-
-        complete_lambda = np.zeros(complete_T) + lamb
-        complete_cas = np.ones(complete_T)*ca
-        complete_dts = np.concatenate([
-            np.linspace(0, dt, equil_T),
-            np.ones(complete_T-equil_T)*dt
-        ])
-
-        sim = simulation.Simulation(
-            lhs_combined_system,
-            rhs_combined_system,
-            complete_dts,
-            complete_cas,
-            cbs,
-            ccs,
-            complete_lambda,
-            precision
+        masses = np.array(lhs_combined_system.masses)
+        ca, cbs, ccs = langevin_coefficients(
+            temperature,
+            dt,
+            friction,
+            masses
         )
 
-        intg_seed = np.random.randint(np.iinfo(np.int32).max)
-        # intg_seed = args.seed
+        cbs *= -1
 
-        combined_ligand = Chem.CombineMols(mol_a, mol_b)
-        combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
-        combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-        out_file = os.path.join(args.out_dir, "rbfe_"+str(lamb)+".pdb")
-        writer = PDBWriter(combined_pdb_str, out_file)
-        # writer = None
+        print("Integrator coefficients:")
+        print("ca", ca)
+        print("cbs", cbs)
+        print("ccs", ccs)
+     
+        complete_T = 12000
+        equil_T = 2000
 
-        host_conf = []
-        for x,y,z in host_pdb.positions:
-            host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-        host_conf = np.array(host_conf)
+        print("CUTOFF", args.cutoff)
 
-        print("num host atoms", host_conf.shape[0])
+        ti_lambdas = np.linspace(0, 1, args.num_windows)
+        # ti_lambdas = np.ones(args.num_windows)*0.2
 
-        conformer = mol_a.GetConformer(0)
-        mol_a_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-        mol_a_conf = mol_a_conf/10 # convert to md_units
+        # ti_lambdas = np.array([0.001, 0.01, 0.1])
 
-        conformer = mol_b.GetConformer(0)
-        mol_b_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-        mol_b_conf = mol_b_conf/10 # convert to md_units
+        all_du_dls = []
+        # all_args = []
 
-        x0 = np.concatenate([host_conf, mol_a_conf, mol_b_conf]) # combined geometry
-        v0 = np.zeros_like(x0)
-
-        parent_conn, child_conn = Pipe()
-
-        input_args = (x0, v0, intg_seed, writer, child_conn, lambda_idx % args.num_gpus)
-        p = Process(target=sim.run_forward_and_backward, args=input_args)
-
-        all_pcs.append(parent_conn)
-        all_processes.append(p)
-        # all_args.append(args)
-
-        # du_dls = sim.run_forward_and_backward(x0, v0, intg_seed, writer, lambda_idx % args.num_gpus)
-
-        # all_du_dls.append(du_dls)
-
-        # plt.plot(du_dls, label=str(lamb))
-
-        # plt.ylabel("du_dl")
-        # plt.xlabel("timestep")
-        # plt.legend()
-        # plt.savefig(os.path.join(args.out_dir, "lambda_du_dls"))
-
-    mean_du_dls = []
-    std_du_dls = []
-    sum_du_dls = []
-
-    for b_idx in range(0, len(all_processes), args.num_gpus):
-        for p in all_processes[b_idx:b_idx+args.num_gpus]:
-            p.start()
+        all_processes = []
+        all_pcs = []
 
 
-        batch_du_dls = []
-        for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
+        for lambda_idx, lamb in enumerate(ti_lambdas):
 
-            lamb_idx = b_idx+pc_idx
-            lamb = ti_lambdas[b_idx+pc_idx]
-            # TDB FIX ME
-            offset = equil_T
-            full_du_dls = pc.recv() # F, T
-            assert full_du_dls is not None
-            pc.send(None)
+            complete_lambda = np.zeros(complete_T) + lamb
+            complete_cas = np.ones(complete_T)*ca
+            complete_dts = np.concatenate([
+                np.linspace(0, dt, equil_T),
+                np.ones(complete_T-equil_T)*dt
+            ])
 
-            mean_du_dls.append(np.mean(full_du_dls))
-            std_du_dls.append(np.std(full_du_dls))
+            sim = simulation.Simulation(
+                lhs_combined_system,
+                rhs_combined_system,
+                complete_dts,
+                complete_cas,
+                cbs,
+                ccs,
+                complete_lambda,
+                precision
+            )
 
-            for du_dls in full_du_dls:
+            intg_seed = np.random.randint(np.iinfo(np.int32).max)
+            # intg_seed = args.seed
+
+            combined_ligand = Chem.CombineMols(mol_a, mol_b)
+            combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
+            combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+            out_file = os.path.join(args.out_dir, "rbfe_"+str(lamb)+".pdb")
+            writer = PDBWriter(combined_pdb_str, out_file)
+            # writer = None
+
+            host_conf = []
+            for x,y,z in host_pdb.positions:
+                host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+            host_conf = np.array(host_conf)
+
+            print("num host atoms", host_conf.shape[0])
+
+            conformer = mol_a.GetConformer(0)
+            mol_a_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+            mol_a_conf = mol_a_conf/10 # convert to md_units
+
+            conformer = mol_b.GetConformer(0)
+            mol_b_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+            mol_b_conf = mol_b_conf/10 # convert to md_units
+
+            x0 = np.concatenate([host_conf, mol_a_conf, mol_b_conf]) # combined geometry
+            v0 = np.zeros_like(x0)
+
+            parent_conn, child_conn = Pipe()
+
+            input_args = (x0, v0, intg_seed, writer, child_conn, lambda_idx % args.num_gpus)
+            p = Process(target=sim.run_forward_and_backward, args=input_args)
+
+            all_pcs.append(parent_conn)
+            all_processes.append(p)
+            # all_args.append(args)
+
+            # du_dls = sim.run_forward_and_backward(x0, v0, intg_seed, writer, lambda_idx % args.num_gpus)
+
+            # all_du_dls.append(du_dls)
+
+            # plt.plot(du_dls, label=str(lamb))
+
+            # plt.ylabel("du_dl")
+            # plt.xlabel("timestep")
+            # plt.legend()
+            # plt.savefig(os.path.join(args.out_dir, "lambda_du_dls"))
+
+        mean_du_dls = []
+        std_du_dls = []
+        sum_du_dls = []
+
+        for b_idx in range(0, len(all_processes), args.num_gpus):
+            for p in all_processes[b_idx:b_idx+args.num_gpus]:
+                p.start()
 
 
-                print("lamb", lamb, "mean/std", np.mean(du_dls), np.std(du_dls))
+            batch_du_dls = []
+            for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
 
-                plt.plot(du_dls, label=str(lamb))
+                lamb_idx = b_idx+pc_idx
+                lamb = ti_lambdas[b_idx+pc_idx]
+                # TDB FIX ME
+                offset = equil_T
+                full_du_dls = pc.recv() # F, T
+                assert full_du_dls is not None
+                pc.send(None)
 
-                plt.ylabel("du_dl")
-                plt.xlabel("timestep")
-                plt.legend()
+                mean_du_dls.append(np.mean(full_du_dls))
+                std_du_dls.append(np.std(full_du_dls))
 
-            fpath = os.path.join(args.out_dir, "lambda_du_dls_"+str(pc_idx))
-            plt.savefig(fpath)
-
-            sum_du_dls.append(np.sum(full_du_dls, axis=0))
-            all_du_dls.append(full_du_dls)
-
-        for p in all_processes[b_idx:b_idx+args.num_gpus]:
-            p.join()
-
-    plt.close()
-
-    plt.violinplot(sum_du_dls, positions=ti_lambdas)
-    plt.ylabel("du_dlambda")
-    plt.savefig(os.path.join(args.out_dir, "violin_du_dls"))
-    plt.close()
+                for du_dls in full_du_dls:
 
 
-    plt.boxplot(sum_du_dls, positions=ti_lambdas)
-    plt.ylabel("du_dlambda")
-    plt.savefig(os.path.join(args.out_dir, "boxplot_du_dls"))
-    plt.close()
+                    print("lamb", lamb, "mean/std", np.mean(du_dls), np.std(du_dls))
 
-    print("mean_du_dls", mean_du_dls)
-    print("pred_dG", np.trapz(mean_du_dls, ti_lambdas))
+                    plt.plot(du_dls, label=str(lamb))
 
-    np.save("all_du_dls", all_du_dls)
+                    plt.ylabel("du_dl")
+                    plt.xlabel("timestep")
+                    plt.legend()
+
+                fpath = os.path.join(args.out_dir, "lambda_du_dls_"+str(pc_idx))
+                plt.savefig(fpath)
+
+                sum_du_dls.append(np.sum(full_du_dls, axis=0))
+                all_du_dls.append(full_du_dls)
+
+            for p in all_processes[b_idx:b_idx+args.num_gpus]:
+                p.join()
+
+        plt.close()
+
+        plt.violinplot(sum_du_dls, positions=ti_lambdas)
+        plt.ylabel("du_dlambda")
+        plt.savefig(os.path.join(args.out_dir, "violin_du_dls"))
+        plt.close()
+
+
+        plt.boxplot(sum_du_dls, positions=ti_lambdas)
+        plt.ylabel("du_dlambda")
+        plt.savefig(os.path.join(args.out_dir, "boxplot_du_dls"))
+        plt.close()
+
+        print("mean_du_dls", mean_du_dls)
+        print("pred_dG", np.trapz(mean_du_dls, ti_lambdas))
+
+        np.save("all_du_dls", all_du_dls)
