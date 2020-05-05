@@ -88,13 +88,13 @@ if __name__ == "__main__":
 
     a_to_b_map = atom_mapping.mcs_map(*all_guest_mols)
 
-    c = atom_mapping.mcs_map(*all_guest_mols)
-    d = atom_mapping.mcs_map(*all_guest_mols)
-    e = atom_mapping.mcs_map(*all_guest_mols)
+    # c = atom_mapping.mcs_map(*all_guest_mols)
+    # d = atom_mapping.mcs_map(*all_guest_mols)
+    # e = atom_mapping.mcs_map(*all_guest_mols)
 
-    assert c == d
+    # assert c == d
+    # assert d == e
 
-    assert d == e
     open_ff = forcefield.Forcefield(args.forcefield)
     
     all_nrg_fns = []

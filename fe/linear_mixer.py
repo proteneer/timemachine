@@ -86,19 +86,14 @@ class LinearMixer():
             pkey = tuple(sorted((src, dst)))
             assert pkey not in lhs_exclusions
             lhs_exclusions[pkey] = param
-            # lhs_exclusions.append((src, dst))
-            # lhs_exclusion_params.append(param)
 
         for (src, dst), param in zip(exclusions_b, exclusion_params_b):
             src, dst = src + self.n_a, dst + self.n_a
             pkey = tuple(sorted((src, dst)))
             assert pkey not in lhs_exclusions
             lhs_exclusions[pkey] = param
-            # lhs_exclusions.append((src, dst))
-            # lhs_exclusion_params.append(param)
 
         rhs_exclusions = {}
-        # rhs_exclusion_params = 
 
         for (src, dst), param in zip(exclusions_b, exclusion_params_b):
             src, dst = src + self.n_a, dst + self.n_a
@@ -119,6 +114,7 @@ class LinearMixer():
             # rhs_exclusions.append((src, dst))
             # rhs_exclusion_params.append(param)
 
+        # merge exclusions
         # add non core exclusions from rhs into lhs
         for (src, dst), param in rhs_exclusions.items():
             if src not in self.core_atoms or dst not in self.core_atoms:
