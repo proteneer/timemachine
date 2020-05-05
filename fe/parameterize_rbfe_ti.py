@@ -83,7 +83,8 @@ if __name__ == "__main__":
     for guest_idx, guest_mol in enumerate(suppl):
         all_guest_mols.append(guest_mol)
 
-    all_guest_mols = all_guest_mols[:2]
+    # all_guest_mols = all_guest_mols[:2]
+    all_guest_mols = [all_guest_mols[14-1], all_guest_mols[19-1]]
 
     a_to_b_map = atom_mapping.mcs_map(*all_guest_mols)
 
@@ -151,14 +152,14 @@ if __name__ == "__main__":
     print(lambda_plane_idxs)
     print(lambda_offset_idxs)
 
-    assert lambda_offset_idxs[26] == 1
-    assert lambda_offset_idxs[35] == 1
-    assert lambda_offset_idxs[36] == 1
+    # assert lambda_offset_idxs[26] == 1
+    # assert lambda_offset_idxs[35] == 1
+    # assert lambda_offset_idxs[36] == 1
 
-    assert lambda_offset_idxs[18+mol_a.GetNumAtoms()] == 1
-    assert lambda_offset_idxs[19+mol_a.GetNumAtoms()] == 1
-    assert lambda_offset_idxs[20+mol_a.GetNumAtoms()] == 1
-    assert lambda_offset_idxs[32+mol_a.GetNumAtoms()] == 1
+    # assert lambda_offset_idxs[18+mol_a.GetNumAtoms()] == 1
+    # assert lambda_offset_idxs[19+mol_a.GetNumAtoms()] == 1
+    # assert lambda_offset_idxs[20+mol_a.GetNumAtoms()] == 1
+    # assert lambda_offset_idxs[32+mol_a.GetNumAtoms()] == 1
 
     a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, a_cutoff = a_nrg_fns['Nonbonded']
     b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, b_cutoff = b_nrg_fns['Nonbonded']
@@ -172,22 +173,13 @@ if __name__ == "__main__":
     (_,            lhs_lj_exc_param_idxs), (           _, rhs_lj_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
     (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
 
-    for exc, param in zip(rhs_exc_idxs, rhs_lj_exc_param_idxs):
-        src, dst = exc
-        if src == 2 or dst == 2:
-            print("!!!", src, dst, param)
-
-    assert (26, 15 + mol_a.GetNumAtoms()) in lhs_exc_idxs
-    assert (26, 16 + mol_a.GetNumAtoms()) in lhs_exc_idxs
-    assert (26, 17 + mol_a.GetNumAtoms()) in lhs_exc_idxs
-    assert (26, 3 + mol_a.GetNumAtoms()) in lhs_exc_idxs
-    assert (19, 26) in lhs_exc_idxs
-    assert (20, 26) in lhs_exc_idxs
-    assert (21, 26) in lhs_exc_idxs
+    # assert (26, 15 + mol_a.GetNumAtoms()) in lhs_exc_idxs
+    # assert (26, 16 + mol_a.GetNumAtoms()) in lhs_exc_idxs
+    # assert (26, 17 + mol_a.GetNumAtoms()) in lhs_exc_idxs
+    # assert (26, 3 + mol_a.GetNumAtoms()) in lhs_exc_idxs
     # assert (19, 26) in lhs_exc_idxs
-
-    # print("OKAY")
-    # assert 0
+    # assert (20, 26) in lhs_exc_idxs
+    # assert (21, 26) in lhs_exc_idxs
 
     lhs_exc_idxs = np.array(lhs_exc_idxs, dtype=np.int32)
     rhs_exc_idxs = np.array(rhs_exc_idxs, dtype=np.int32)
