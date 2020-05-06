@@ -84,9 +84,11 @@ if __name__ == "__main__":
         all_guest_mols.append(guest_mol)
 
     # all_guest_mols = all_guest_mols[:2]
-    all_guest_mols = [all_guest_mols[12-1], all_guest_mols[18-1]]
+    all_guest_mols = [all_guest_mols[0], all_guest_mols[2]]
 
     a_to_b_map = atom_mapping.mcs_map(*all_guest_mols)
+
+    # assert 0
 
     # c = atom_mapping.mcs_map(*all_guest_mols)
     # d = atom_mapping.mcs_map(*all_guest_mols)
@@ -338,7 +340,6 @@ if __name__ == "__main__":
         for b_idx in range(0, len(all_processes), args.num_gpus):
             for p in all_processes[b_idx:b_idx+args.num_gpus]:
                 p.start()
-
 
             batch_du_dls = []
             for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
