@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument('--out_dir', type=str, required=True)
     parser.add_argument('--precision', type=str, required=True)    
     parser.add_argument('--complex_pdb', type=str, required=True)
-    parser.add_argument('--ligand_sdf', type=str, required=True, description='First two ligands are chosen')
+    parser.add_argument('--ligand_sdf', type=str, required=True)
     parser.add_argument('--num_gpus', type=int, required=True)
     parser.add_argument('--forcefield', type=str, required=True)
     parser.add_argument('--seed', type=int, required=True)
