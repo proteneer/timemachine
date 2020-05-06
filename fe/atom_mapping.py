@@ -32,7 +32,8 @@ def mcs_map(a, b):
     # core_pattern = rdFMCS.FindMCS([a, b], ringMatchesRingOnly=True, completeRingsOnly=False, atomCompare=rdFMCS.AtomCompare.CompareAny).smartsString
     print(rdkit.__version__)
     print(dir(rdFMCS.AtomCompare))
-    core_pattern = rdFMCS.FindMCS([a, b], ringMatchesRingOnly=True, completeRingsOnly=False, atomCompare=rdFMCS.AtomCompare.CompareAnyHeavyAtom).smartsString
+    core_pattern = rdFMCS.FindMCS([a, b], ringMatchesRingOnly=True, completeRingsOnly=False, atomCompare=rdFMCS.AtomCompare.CompareAny).smartsString
+    # core_pattern = rdFMCS.FindMCS([a, b], ringMatchesRingOnly=True, completeRingsOnly=False, atomCompare=rdFMCS.AtomCompare.CompareAnyHeavyAtom).smartsString
     print("end MCS")
     core = Chem.MolFromSmarts(core_pattern)
 
