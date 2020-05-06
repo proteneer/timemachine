@@ -23,21 +23,34 @@ def compute_distance(mol_a, mol_b, a_to_b):
 
     return all_dists
 
+class CompareDist(rdFMCS.MCSAtomCompare):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def compare(self, p, mol1, atom1, mol2, atom2):
+
+        x_i = mol1.GetConformer(0).GetAtomPosition(atom1)
+        x_j = mol2.GetConformer(0).GetAtomPosition(atom2)
+
+        if np.linalg.norm(x_i-x_j) > 0.5:
+            return False
+        else:
+            return True
+
 def mcs_map(a, b):
     """
     Find the MCS map of going from A to B
     """
-    print("start MCS")
-    # core_pattern = rdFMCS.FindMCS([a, b], ringMatchesRingOnly=True, completeRingsOnly=False).smartsString
-    # core_pattern = rdFMCS.FindMCS([a, b], ringMatchesRingOnly=True, completeRingsOnly=False, atomCompare=rdFMCS.AtomCompare.CompareAny).smartsString
-    print(rdkit.__version__)
-    print(dir(rdFMCS.AtomCompare))
-    core_pattern = rdFMCS.FindMCS([a, b], ringMatchesRingOnly=True, completeRingsOnly=False, atomCompare=rdFMCS.AtomCompare.CompareAny).smartsString
-    # core_pattern = rdFMCS.FindMCS([a, b], ringMatchesRingOnly=True, completeRingsOnly=False, atomCompare=rdFMCS.AtomCompare.CompareAnyHeavyAtom).smartsString
-    print("end MCS")
-    core = Chem.MolFromSmarts(core_pattern)
+    params = rdFMCS.MCSParameters()
+    params.AtomTyper = CompareDist()
+    core_pattern = rdFMCS.FindMCS([a, b], params).smartsString
 
-    # TBD take the cross product and pick the atom mapping that has the smallest RMSD
+    # figure out ring stuff later
+    # ringCompare=Chem.rdFMCS.RingCompare.StrictRingFusion).smartsString
+    # ringCompare=Chem.rdFMCS.RingCompare.PermissiveRingFusion).smartsString
+    # ringCompare=Chem.rdFMCS.RingCompare.IgnoreRingFusion).smartsString
+    core = Chem.MolFromSmarts(core_pattern)
 
     a_to_core = {}
     core_to_b = {}

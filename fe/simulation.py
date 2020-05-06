@@ -135,10 +135,6 @@ class Simulation:
         """
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
 
-        # gradients = self.system.make_gradients(precision=self.precision)
-        # gradients = self.lhs_system.make_alchemical_gradients(self.rhs_system, precision=self.precision)
-
-
         gradients = []
         handles = []
         force_names = []
@@ -159,17 +155,9 @@ class Simulation:
             )
             gradients.append(grad_alchem)
 
-        # return gradients
-
-        # x_bad = np.load("all_coords.npy")[5000]
-        # # (ytz): debug use
         # for g in gradients:
         #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.0001)
         #     print(g, forces[1758:], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
-        #     print("DU_DL", du_dl)
-        #     print("atom force", forces[1817])
-
-        # assert 0
 
         print("gradients", gradients)
 
@@ -209,11 +197,10 @@ class Simulation:
                 break
 
         if check_coords(x_final) == False:
-            print("Final frame FAILED")
+            print("WARNING: ------ Final frame FAILED")
             du_dls = None
         else:
             print("Final frame OK")
-
 
         full_du_dls = stepper.get_du_dl()
 

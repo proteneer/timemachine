@@ -56,11 +56,11 @@ def get_masses(m):
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Quick Test')
+    parser = argparse.ArgumentParser(description='Relative Binding Free Energy Script')
     parser.add_argument('--out_dir', type=str, required=True)
     parser.add_argument('--precision', type=str, required=True)    
     parser.add_argument('--complex_pdb', type=str, required=True)
-    parser.add_argument('--ligand_sdf', type=str, required=True)
+    parser.add_argument('--ligand_sdf', type=str, required=True, description='Ligand SDF with exactly two molecules')
     parser.add_argument('--num_gpus', type=int, required=True)
     parser.add_argument('--forcefield', type=str, required=True)
     parser.add_argument('--seed', type=int, required=True)
@@ -84,18 +84,9 @@ if __name__ == "__main__":
         all_guest_mols.append(guest_mol)
 
     # all_guest_mols = all_guest_mols[:2]
-    all_guest_mols = [all_guest_mols[0], all_guest_mols[2]]
+    all_guest_mols = [all_guest_mols[0], all_guest_mols[1]]
 
     a_to_b_map = atom_mapping.mcs_map(*all_guest_mols)
-
-    # assert 0
-
-    # c = atom_mapping.mcs_map(*all_guest_mols)
-    # d = atom_mapping.mcs_map(*all_guest_mols)
-    # e = atom_mapping.mcs_map(*all_guest_mols)
-
-    # assert c == d
-    # assert d == e
 
     open_ff = forcefield.Forcefield(args.forcefield)
     
@@ -151,18 +142,6 @@ if __name__ == "__main__":
 
     lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(mol_a.GetNumAtoms(), mol_b.GetNumAtoms())
 
-    print(lambda_plane_idxs)
-    print(lambda_offset_idxs)
-
-    # assert lambda_offset_idxs[26] == 1
-    # assert lambda_offset_idxs[35] == 1
-    # assert lambda_offset_idxs[36] == 1
-
-    # assert lambda_offset_idxs[18+mol_a.GetNumAtoms()] == 1
-    # assert lambda_offset_idxs[19+mol_a.GetNumAtoms()] == 1
-    # assert lambda_offset_idxs[20+mol_a.GetNumAtoms()] == 1
-    # assert lambda_offset_idxs[32+mol_a.GetNumAtoms()] == 1
-
     a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, a_cutoff = a_nrg_fns['Nonbonded']
     b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, b_cutoff = b_nrg_fns['Nonbonded']
 
@@ -174,14 +153,6 @@ if __name__ == "__main__":
 
     (_,            lhs_lj_exc_param_idxs), (           _, rhs_lj_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
     (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
-
-    # assert (26, 15 + mol_a.GetNumAtoms()) in lhs_exc_idxs
-    # assert (26, 16 + mol_a.GetNumAtoms()) in lhs_exc_idxs
-    # assert (26, 17 + mol_a.GetNumAtoms()) in lhs_exc_idxs
-    # assert (26, 3 + mol_a.GetNumAtoms()) in lhs_exc_idxs
-    # assert (19, 26) in lhs_exc_idxs
-    # assert (20, 26) in lhs_exc_idxs
-    # assert (21, 26) in lhs_exc_idxs
 
     lhs_exc_idxs = np.array(lhs_exc_idxs, dtype=np.int32)
     rhs_exc_idxs = np.array(rhs_exc_idxs, dtype=np.int32)
@@ -227,7 +198,6 @@ if __name__ == "__main__":
     for _ in range(100):
 
         temperature = 300
-        # dt = 1.5e-3
         dt = 1.5e-3
         friction = 40
 
@@ -254,16 +224,10 @@ if __name__ == "__main__":
         print("CUTOFF", args.cutoff)
 
         ti_lambdas = np.linspace(0, 1, args.num_windows)
-        # ti_lambdas = np.ones(args.num_windows)*0.2
-
-        # ti_lambdas = np.array([0.001, 0.01, 0.1])
-
         all_du_dls = []
-        # all_args = []
 
         all_processes = []
         all_pcs = []
-
 
         for lambda_idx, lamb in enumerate(ti_lambdas):
 
@@ -285,8 +249,8 @@ if __name__ == "__main__":
                 precision
             )
 
-            intg_seed = np.random.randint(np.iinfo(np.int32).max)
-            # intg_seed = args.seed
+            # intg_seed = np.random.randint(np.iinfo(np.int32).max)
+            intg_seed = args.seed
 
             combined_ligand = Chem.CombineMols(mol_a, mol_b)
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
@@ -320,18 +284,7 @@ if __name__ == "__main__":
 
             all_pcs.append(parent_conn)
             all_processes.append(p)
-            # all_args.append(args)
 
-            # du_dls = sim.run_forward_and_backward(x0, v0, intg_seed, writer, lambda_idx % args.num_gpus)
-
-            # all_du_dls.append(du_dls)
-
-            # plt.plot(du_dls, label=str(lamb))
-
-            # plt.ylabel("du_dl")
-            # plt.xlabel("timestep")
-            # plt.legend()
-            # plt.savefig(os.path.join(args.out_dir, "lambda_du_dls"))
 
         mean_du_dls = []
         std_du_dls = []
@@ -346,7 +299,7 @@ if __name__ == "__main__":
 
                 lamb_idx = b_idx+pc_idx
                 lamb = ti_lambdas[b_idx+pc_idx]
-                # TDB FIX ME
+
                 offset = equil_T
                 full_du_dls = pc.recv() # F, T
                 assert full_du_dls is not None
@@ -357,11 +310,7 @@ if __name__ == "__main__":
 
                 for du_dls in full_du_dls:
 
-
-                    print("lamb", lamb, "mean/std", np.mean(du_dls), np.std(du_dls))
-
                     plt.plot(du_dls, label=str(lamb))
-
                     plt.ylabel("du_dl")
                     plt.xlabel("timestep")
                     plt.legend()

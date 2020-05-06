@@ -149,7 +149,6 @@ class Forcefield():
             for v in values["params"]:
                 smirks = v[0]
                 param_idxs = v[1:]
-                # print(smirks, param_idxs)
                 param_vals = recursive_lookup(param_idxs)
 
                 # coerce into numpy array as new_params may be a jax array
@@ -380,9 +379,6 @@ class Forcefield():
             np.array(torsion_idxs, dtype=np.int32),
             np.array(torsion_param_idxs, dtype=np.int32)
         )
-
-        # exclusion_idxs = []
-        # exclusion_param_idxs = []
 
         exclusion_map = {}
         # weaker exclusions
