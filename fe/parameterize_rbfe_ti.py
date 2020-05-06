@@ -293,7 +293,7 @@ if __name__ == "__main__":
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
             out_file = os.path.join(args.out_dir, "rbfe_"+str(lamb)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file)
-            # writer = None
+            writer = None
 
             host_conf = []
             for x,y,z in host_pdb.positions:
