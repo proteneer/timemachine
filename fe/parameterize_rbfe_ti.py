@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument('--out_dir', type=str, required=True)
     parser.add_argument('--precision', type=str, required=True)    
     parser.add_argument('--complex_pdb', type=str, required=True)
-    parser.add_argument('--ligand_sdf', type=str, required=True, description='Ligand SDF with exactly two molecules')
+    parser.add_argument('--ligand_sdf', type=str, required=True, description='First two ligands are chosen')
     parser.add_argument('--num_gpus', type=int, required=True)
     parser.add_argument('--forcefield', type=str, required=True)
     parser.add_argument('--seed', type=int, required=True)
@@ -83,10 +83,17 @@ if __name__ == "__main__":
     for guest_idx, guest_mol in enumerate(suppl):
         all_guest_mols.append(guest_mol)
 
-    # all_guest_mols = all_guest_mols[:2]
     all_guest_mols = [all_guest_mols[0], all_guest_mols[1]]
 
+
+    print("Ligand A Name:", all_guest_mols[0].GetProp("_Name"))
+    print("Ligand B Name:", all_guest_mols[1].GetProp("_Name"))
+
+    print("LHS End State B (complex) A (solvent)")
+    print("RHS End State A (complex) B (solvent)")
+
     a_to_b_map = atom_mapping.mcs_map(*all_guest_mols)
+
 
     open_ff = forcefield.Forcefield(args.forcefield)
     
@@ -338,6 +345,6 @@ if __name__ == "__main__":
         plt.close()
 
         print("mean_du_dls", mean_du_dls)
-        print("pred_dG", np.trapz(mean_du_dls, ti_lambdas))
+        print("pred_dG LHS->RHS (B to A)", np.trapz(mean_du_dls, ti_lambdas))
 
         np.save("all_du_dls", all_du_dls)
