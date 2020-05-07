@@ -1,7 +1,8 @@
 import numpy as np
 
 from timemachine.lib import ops
-
+from fe import linear_mixer
+from ff import system
 
 class System():
 
@@ -11,6 +12,117 @@ class System():
         self.params = params
         self.param_groups = param_groups
         self.masses = masses
+
+    def mix(self, other, self_to_other_map):
+        """
+        Alchemically mix two ligand systems together.
+
+        Parameters
+        ----------
+        other: system.System
+            The other ligand we wish to morph into
+
+        self_to_other_map: dict
+            Mapping of atoms in self to atoms in other
+
+        """
+        a_masses = self.masses
+        b_masses = other.masses
+        a_to_b_map = self_to_other_map
+
+        combined_masses = np.concatenate([a_masses, b_masses])
+
+        a_nrg_fns = self.nrg_fns
+        b_nrg_fns = other.nrg_fns
+
+        np.testing.assert_equal(self.params, other.params)
+        np.testing.assert_equal(self.param_groups, other.param_groups)
+
+        a_bond_idxs, a_bond_param_idxs = a_nrg_fns['HarmonicBond']
+        b_bond_idxs, b_bond_param_idxs = b_nrg_fns['HarmonicBond']
+
+        n_a = len(a_masses)
+        n_b = len(b_masses)
+
+        lm = linear_mixer.LinearMixer(n_a, a_to_b_map)
+
+        lhs_bond_idxs, lhs_bond_param_idxs, rhs_bond_idxs, rhs_bond_param_idxs = lm.mix_arbitrary_bonds(
+            a_bond_idxs, a_bond_param_idxs,
+            b_bond_idxs, b_bond_param_idxs
+        )
+
+        lhs_nrg_fns = {}
+        rhs_nrg_fns = {}
+
+        lhs_nrg_fns['HarmonicBond'] = (lhs_bond_idxs, lhs_bond_param_idxs)
+        rhs_nrg_fns['HarmonicBond'] = (rhs_bond_idxs, rhs_bond_param_idxs)
+
+        a_angle_idxs, a_angle_param_idxs = a_nrg_fns['HarmonicAngle']
+        b_angle_idxs, b_angle_param_idxs = b_nrg_fns['HarmonicAngle']
+
+        lhs_angle_idxs, lhs_angle_param_idxs, rhs_angle_idxs, rhs_angle_param_idxs = lm.mix_arbitrary_bonds(
+            a_angle_idxs, a_angle_param_idxs,
+            b_angle_idxs, b_angle_param_idxs
+        )
+
+        lhs_nrg_fns['HarmonicAngle'] = (lhs_angle_idxs, lhs_angle_param_idxs)
+        rhs_nrg_fns['HarmonicAngle'] = (rhs_angle_idxs, rhs_angle_param_idxs)
+
+        a_torsion_idxs, a_torsion_param_idxs = a_nrg_fns['PeriodicTorsion']
+        b_torsion_idxs, b_torsion_param_idxs = b_nrg_fns['PeriodicTorsion']
+
+        lhs_torsion_idxs, lhs_torsion_param_idxs, rhs_torsion_idxs, rhs_torsion_param_idxs = lm.mix_arbitrary_bonds(
+            a_torsion_idxs, a_torsion_param_idxs,
+            b_torsion_idxs, b_torsion_param_idxs
+        )
+
+        lhs_nrg_fns['PeriodicTorsion'] = (lhs_torsion_idxs, lhs_torsion_param_idxs)
+        rhs_nrg_fns['PeriodicTorsion'] = (rhs_torsion_idxs, rhs_torsion_param_idxs)
+
+        lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(n_a, n_b)
+
+        a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, a_cutoff = a_nrg_fns['Nonbonded']
+        b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, b_cutoff = b_nrg_fns['Nonbonded']
+
+        assert a_cutoff == b_cutoff
+
+        lhs_es_param_idxs, rhs_es_param_idxs = lm.mix_nonbonded_parameters(a_es_param_idxs, b_es_param_idxs)
+        lhs_lj_param_idxs, rhs_lj_param_idxs = lm.mix_nonbonded_parameters(a_lj_param_idxs, b_lj_param_idxs)
+
+        (_,            lhs_lj_exc_param_idxs), (           _, rhs_lj_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
+        (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
+
+        lhs_exc_idxs = np.array(lhs_exc_idxs, dtype=np.int32)
+        rhs_exc_idxs = np.array(rhs_exc_idxs, dtype=np.int32)
+
+        lhs_es_exc_param_idxs = np.array(lhs_es_exc_param_idxs, dtype=np.int32) 
+        rhs_es_exc_param_idxs = np.array(rhs_es_exc_param_idxs, dtype=np.int32) 
+        lhs_lj_exc_param_idxs = np.array(lhs_lj_exc_param_idxs, dtype=np.int32) 
+        rhs_lj_exc_param_idxs = np.array(rhs_lj_exc_param_idxs, dtype=np.int32)
+
+        lhs_nrg_fns['Nonbonded'] = (lhs_es_param_idxs, lhs_lj_param_idxs, lhs_exc_idxs, lhs_es_exc_param_idxs, lhs_lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, a_cutoff)
+        rhs_nrg_fns['Nonbonded'] = (rhs_es_param_idxs, rhs_lj_param_idxs, rhs_exc_idxs, rhs_es_exc_param_idxs, rhs_lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, b_cutoff)
+
+        a_gb_args = a_nrg_fns['GBSA']
+        b_gb_args = b_nrg_fns['GBSA']
+
+        a_gb_charges, a_gb_radii, a_gb_scales = a_gb_args[:3]
+        b_gb_charges, b_gb_radii, b_gb_scales = b_gb_args[:3]
+
+        assert a_gb_args[3:] == b_gb_args[3:]
+
+        lhs_gb_charges, rhs_gb_charges = lm.mix_nonbonded_parameters(a_gb_charges, b_gb_charges)
+        lhs_gb_radii, rhs_gb_radii = lm.mix_nonbonded_parameters(a_gb_radii, b_gb_radii)
+        lhs_gb_scales, rhs_gb_scales = lm.mix_nonbonded_parameters(a_gb_scales, b_gb_scales)
+
+        lhs_nrg_fns['GBSA'] = (lhs_gb_charges, lhs_gb_radii, lhs_gb_scales, lambda_plane_idxs, lambda_offset_idxs, *a_gb_args[3:])
+        rhs_nrg_fns['GBSA'] = (rhs_gb_charges, rhs_gb_radii, rhs_gb_scales, lambda_plane_idxs, lambda_offset_idxs, *a_gb_args[3:])
+
+        lhs_system = system.System(lhs_nrg_fns, self.params, self.param_groups, combined_masses)
+        rhs_system = system.System(rhs_nrg_fns, self.params, self.param_groups, combined_masses)
+
+        return lhs_system, rhs_system
+
 
     def merge(self, other):
         """
@@ -90,7 +202,6 @@ class System():
                 # skip GB
                 # print("skipping GB")
                 # continue
-
                 charge_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0)
                 radius_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 scale_param_idxs = np.concatenate([a_args[2], b_args[2] + len(a_params)], axis=0)
@@ -115,10 +226,6 @@ class System():
                     lambda_offset_idxs.astype(np.int32),
                     *a_args[5:]
                 )
-
-                print(c_nrgs["GBSA"])
-
-                # assert 0
 
             else:
                 raise Exception("Unknown potential", a_name)

@@ -159,8 +159,6 @@ class Simulation:
         #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.0001)
         #     print(g, forces[1758:], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
 
-        print("gradients", gradients)
-
         stepper = custom_ops.AlchemicalStepper_f64(
             gradients,
             self.lambda_schedule
@@ -182,7 +180,7 @@ class Simulation:
         )
 
         start = time.time()
-        print("start_forward_mode")
+        # print("start_forward_mode")
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
@@ -205,7 +203,7 @@ class Simulation:
         full_du_dls = stepper.get_du_dl()
 
         for fname, du_dls in zip(force_names, full_du_dls):
-            print(fname, "lambda:", self.lambda_schedule[0], "mean du_dls", np.mean(du_dls), "std du_dls", np.std(du_dls))
+            print(fname, "lambda:", "{:.2f}".format(self.lambda_schedule[0]), "mean du_dls", np.mean(du_dls), "std du_dls", np.std(du_dls))
 
         if pdb_writer is not None:
             pdb_writer.write_header()
@@ -220,17 +218,13 @@ class Simulation:
                         break
             pdb_writer.close()
 
-        # return du_dls
-        # print("sending dudls back.")
         pipe.send(full_du_dls)
 
         du_dl_adjoints = pipe.recv()
 
         if du_dl_adjoints is not None:
             stepper.set_du_dl_adjoint(du_dl_adjoints)
-            # ctxt.set_x_t_adjoint(np.zeros_like(x0))
-            x_t_adjoint = np.random.rand(*x0.shape).reshape(x0.shape)/10
-            ctxt.set_x_t_adjoint(x_t_adjoint)
+            ctxt.set_x_t_adjoint(np.zeros_like(x0))
             start = time.time()
             ctxt.backward_mode()
             print("bkwd run time", time.time() - start)

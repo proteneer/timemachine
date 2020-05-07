@@ -33,7 +33,6 @@ from jax.experimental import optimizers
 
 from fe import simulation
 from fe import loss, bar
-from fe import linear_mixer
 from fe import atom_mapping
 from fe.pdb_writer import PDBWriter
 
@@ -48,11 +47,6 @@ from rdkit.Chem import rdFMCS
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18
 
-def get_masses(m):
-    masses = []
-    for a in m.GetAtoms():
-        masses.append(a.GetMass())
-    return masses
 
 if __name__ == "__main__":
 
@@ -66,6 +60,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, required=True)
     parser.add_argument('--cutoff', type=float, required=True)
     parser.add_argument('--num_windows', type=int, required=True)
+    parser.add_argument('--write_frames', type=bool, required=True)
     args = parser.parse_args()
 
     assert os.path.isdir(args.out_dir)
@@ -85,110 +80,39 @@ if __name__ == "__main__":
 
     all_guest_mols = [all_guest_mols[0], all_guest_mols[1]]
 
+    mol_a = all_guest_mols[0]
+    mol_b = all_guest_mols[1]
 
-    print("Ligand A Name:", all_guest_mols[0].GetProp("_Name"))
-    print("Ligand B Name:", all_guest_mols[1].GetProp("_Name"))
+    a_name = mol_a.GetProp("_Name")
+    b_name = mol_b.GetProp("_Name")
+
+    print("Ligand A Name:", a_name)
+    print("Ligand B Name:", b_name)
 
     print("LHS End State B (complex) A (solvent)")
     print("RHS End State A (complex) B (solvent)")
 
     a_to_b_map = atom_mapping.mcs_map(*all_guest_mols)
 
+    print("Atom Mapping:", a_to_b_map)
+
+    svg_a, svg_b = atom_mapping.draw_mapping(mol_a, mol_b, a_to_b_map)
+
+
+    with open(os.path.join(args.out_dir, 'atom_mapping_A_'+str(a_name)+'.svg'), 'w') as fh:
+        fh.write(svg_a)
+
+    with open(os.path.join(args.out_dir, 'atom_mapping_B_'+str(b_name)+'.svg'), 'w') as fh:
+        fh.write(svg_b)
 
     open_ff = forcefield.Forcefield(args.forcefield)
-    
     all_nrg_fns = []
-    mol_a = all_guest_mols[0]
-    mol_b = all_guest_mols[1]
 
-    lhs_nrg_fns = {}
-    rhs_nrg_fns = {}
+    # combined_masses = np.concatenate([a_masses, b_masses])
+    a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=False)
+    b_system = open_ff.parameterize(mol_b, cutoff=args.cutoff, am1=False)
 
-    a_masses = get_masses(mol_a)
-    b_masses = get_masses(mol_b)
-
-    combined_masses = np.concatenate([a_masses, b_masses])
-
-    a_nrg_fns = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=False)
-    b_nrg_fns = open_ff.parameterize(mol_b, cutoff=args.cutoff, am1=False)
-
-    a_bond_idxs, a_bond_param_idxs = a_nrg_fns['HarmonicBond']
-    b_bond_idxs, b_bond_param_idxs = b_nrg_fns['HarmonicBond']
-
-    lm = linear_mixer.LinearMixer(mol_a.GetNumAtoms(), a_to_b_map)
-
-    lhs_bond_idxs, lhs_bond_param_idxs, rhs_bond_idxs, rhs_bond_param_idxs = lm.mix_arbitrary_bonds(
-        a_bond_idxs, a_bond_param_idxs,
-        b_bond_idxs, b_bond_param_idxs
-    )
-
-    lhs_nrg_fns['HarmonicBond'] = (lhs_bond_idxs, lhs_bond_param_idxs)
-    rhs_nrg_fns['HarmonicBond'] = (rhs_bond_idxs, rhs_bond_param_idxs)
-
-    a_angle_idxs, a_angle_param_idxs = a_nrg_fns['HarmonicAngle']
-    b_angle_idxs, b_angle_param_idxs = b_nrg_fns['HarmonicAngle']
-
-    lhs_angle_idxs, lhs_angle_param_idxs, rhs_angle_idxs, rhs_angle_param_idxs = lm.mix_arbitrary_bonds(
-        a_angle_idxs, a_angle_param_idxs,
-        b_angle_idxs, b_angle_param_idxs
-    )
-
-    lhs_nrg_fns['HarmonicAngle'] = (lhs_angle_idxs, lhs_angle_param_idxs)
-    rhs_nrg_fns['HarmonicAngle'] = (rhs_angle_idxs, rhs_angle_param_idxs)
-
-    a_torsion_idxs, a_torsion_param_idxs = a_nrg_fns['PeriodicTorsion']
-    b_torsion_idxs, b_torsion_param_idxs = b_nrg_fns['PeriodicTorsion']
-
-    lhs_torsion_idxs, lhs_torsion_param_idxs, rhs_torsion_idxs, rhs_torsion_param_idxs = lm.mix_arbitrary_bonds(
-        a_torsion_idxs, a_torsion_param_idxs,
-        b_torsion_idxs, b_torsion_param_idxs
-    )
-
-    lhs_nrg_fns['PeriodicTorsion'] = (lhs_torsion_idxs, lhs_torsion_param_idxs)
-    rhs_nrg_fns['PeriodicTorsion'] = (rhs_torsion_idxs, rhs_torsion_param_idxs)
-
-    lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(mol_a.GetNumAtoms(), mol_b.GetNumAtoms())
-
-    a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, a_cutoff = a_nrg_fns['Nonbonded']
-    b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, b_cutoff = b_nrg_fns['Nonbonded']
-
-    assert a_cutoff == args.cutoff
-    assert a_cutoff == b_cutoff
-
-    lhs_es_param_idxs, rhs_es_param_idxs = lm.mix_nonbonded_parameters(a_es_param_idxs, b_es_param_idxs)
-    lhs_lj_param_idxs, rhs_lj_param_idxs = lm.mix_nonbonded_parameters(a_lj_param_idxs, b_lj_param_idxs)
-
-    (_,            lhs_lj_exc_param_idxs), (           _, rhs_lj_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
-    (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
-
-    lhs_exc_idxs = np.array(lhs_exc_idxs, dtype=np.int32)
-    rhs_exc_idxs = np.array(rhs_exc_idxs, dtype=np.int32)
-
-    lhs_es_exc_param_idxs = np.array(lhs_es_exc_param_idxs, dtype=np.int32) 
-    rhs_es_exc_param_idxs = np.array(rhs_es_exc_param_idxs, dtype=np.int32) 
-    lhs_lj_exc_param_idxs = np.array(lhs_lj_exc_param_idxs, dtype=np.int32) 
-    rhs_lj_exc_param_idxs = np.array(rhs_lj_exc_param_idxs, dtype=np.int32)
-
-    lhs_nrg_fns['Nonbonded'] = (lhs_es_param_idxs, lhs_lj_param_idxs, lhs_exc_idxs, lhs_es_exc_param_idxs, lhs_lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, a_cutoff)
-    rhs_nrg_fns['Nonbonded'] = (rhs_es_param_idxs, rhs_lj_param_idxs, rhs_exc_idxs, rhs_es_exc_param_idxs, rhs_lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, b_cutoff)
-
-    a_gb_args = a_nrg_fns['GBSA']
-    b_gb_args = b_nrg_fns['GBSA']
-
-    a_gb_charges, a_gb_radii, a_gb_scales = a_gb_args[:3]
-    b_gb_charges, b_gb_radii, b_gb_scales = b_gb_args[:3]
-
-    assert a_gb_args[3:] == b_gb_args[3:]
-
-    lhs_gb_charges, rhs_gb_charges = lm.mix_nonbonded_parameters(a_gb_charges, b_gb_charges)
-    lhs_gb_radii, rhs_gb_radii = lm.mix_nonbonded_parameters(a_gb_radii, b_gb_radii)
-    lhs_gb_scales, rhs_gb_scales = lm.mix_nonbonded_parameters(a_gb_scales, b_gb_scales)
-
-    lhs_nrg_fns['GBSA'] = (lhs_gb_charges, lhs_gb_radii, lhs_gb_scales, lambda_plane_idxs, lambda_offset_idxs, *a_gb_args[3:])
-    rhs_nrg_fns['GBSA'] = (rhs_gb_charges, rhs_gb_radii, rhs_gb_scales, lambda_plane_idxs, lambda_offset_idxs, *a_gb_args[3:])
-
-    lhs_dual_system = system.System(lhs_nrg_fns, open_ff.params, open_ff.param_groups, combined_masses)
-    rhs_dual_system = system.System(rhs_nrg_fns, open_ff.params, open_ff.param_groups, combined_masses)
+    lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map)
 
     host_pdb_file = args.complex_pdb
     host_pdb = app.PDBFile(host_pdb_file)
@@ -199,16 +123,16 @@ if __name__ == "__main__":
         rigidWater=False)
 
     host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff)
-    lhs_combined_system = host_system.merge(lhs_dual_system)
-    rhs_combined_system = host_system.merge(rhs_dual_system)
+    lhs_combined_system = host_system.merge(lhs_system)
+    rhs_combined_system = host_system.merge(rhs_system)
 
-    for _ in range(100):
+    # run in n-plicate to make sure we're invariant to the initial seed
+    replicates = 16
+    for r_idx in range(16):
 
         temperature = 300
         dt = 1.5e-3
         friction = 40
-
-        np.testing.assert_array_equal(lhs_combined_system.masses, rhs_combined_system.masses)
 
         masses = np.array(lhs_combined_system.masses)
         ca, cbs, ccs = langevin_coefficients(
@@ -227,8 +151,6 @@ if __name__ == "__main__":
      
         complete_T = 12000
         equil_T = 2000
-
-        print("CUTOFF", args.cutoff)
 
         ti_lambdas = np.linspace(0, 1, args.num_windows)
         all_du_dls = []
@@ -256,22 +178,21 @@ if __name__ == "__main__":
                 precision
             )
 
-            # intg_seed = np.random.randint(np.iinfo(np.int32).max)
-            intg_seed = args.seed
+            intg_seed = np.random.randint(np.iinfo(np.int32).max)
 
             combined_ligand = Chem.CombineMols(mol_a, mol_b)
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-            out_file = os.path.join(args.out_dir, "rbfe_"+str(lamb)+".pdb")
+            out_file = os.path.join(args.out_dir, str(r_idx)+"_rbfe_"+str(lamb)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file)
-            writer = None
+
+            if args.write_frames is False:
+                writer = None
 
             host_conf = []
             for x,y,z in host_pdb.positions:
                 host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
             host_conf = np.array(host_conf)
-
-            print("num host atoms", host_conf.shape[0])
 
             conformer = mol_a.GetConformer(0)
             mol_a_conf = np.array(conformer.GetPositions(), dtype=np.float64)
@@ -316,35 +237,33 @@ if __name__ == "__main__":
                 std_du_dls.append(np.std(full_du_dls))
 
                 for du_dls in full_du_dls:
-
-                    plt.plot(du_dls, label=str(lamb))
+                    plt.plot(du_dls, "{:.2f}".format(lamb))
                     plt.ylabel("du_dl")
                     plt.xlabel("timestep")
                     plt.legend()
 
-                fpath = os.path.join(args.out_dir, "lambda_du_dls_"+str(pc_idx))
+                fpath = os.path.join(args.out_dir, str(r_idx)+"_lambda_du_dls_"+str(pc_idx))
                 plt.savefig(fpath)
 
                 sum_du_dls.append(np.sum(full_du_dls, axis=0))
                 all_du_dls.append(full_du_dls)
 
-            for p in all_processes[b_idx:b_idx+args.num_gpus]:
+            for p in all_processes[b_idx:b_idx + args.num_gpus]:
                 p.join()
 
         plt.close()
 
         plt.violinplot(sum_du_dls, positions=ti_lambdas)
         plt.ylabel("du_dlambda")
-        plt.savefig(os.path.join(args.out_dir, "violin_du_dls"))
+        plt.savefig(os.path.join(args.out_dir, str(r_idx)+"_violin_du_dls"))
         plt.close()
-
 
         plt.boxplot(sum_du_dls, positions=ti_lambdas)
         plt.ylabel("du_dlambda")
-        plt.savefig(os.path.join(args.out_dir, "boxplot_du_dls"))
+        plt.savefig(os.path.join(args.out_dir, str(r_idx)+"_boxplot_du_dls"))
         plt.close()
 
         print("mean_du_dls", mean_du_dls)
         print("pred_dG LHS->RHS (B to A)", np.trapz(mean_du_dls, ti_lambdas))
 
-        np.save("all_du_dls", all_du_dls)
+        np.save(str(r_idx)+"_all_du_dls", all_du_dls)

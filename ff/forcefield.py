@@ -6,14 +6,19 @@ from ff import system
 
 from timemachine import constants
 
-
-
 def assert_unique_exclusions(exclusion_idxs):
     sorted_exclusion_idxs = set()
     for src, dst in exclusion_idxs:
         src, dst = sorted((src, dst))
         sorted_exclusion_idxs.add((src, dst))
     assert len(sorted_exclusion_idxs) == len(exclusion_idxs)
+
+
+def get_masses(m):
+    masses = []
+    for a in m.GetAtoms():
+        masses.append(a.GetMass())
+    return masses
 
 
 class Forcefield():
@@ -165,6 +170,9 @@ class Forcefield():
         """
         Given a RDKit Molecule, return a parameterized system.
         """
+
+        # temporary
+        assert cutoff == 1.0
 
         def match_smirks(mol, smirks):
             
@@ -413,4 +421,6 @@ class Forcefield():
             *gb_args
         )
 
-        return nrg_fns
+        masses = get_masses(mol)
+
+        return system.System(nrg_fns, self.params, self.param_groups, masses)

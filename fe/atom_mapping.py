@@ -3,8 +3,55 @@ import numpy as np
 import rdkit
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
+from rdkit.Chem.Draw import rdMolDraw2D
 
 from timemachine.potentials import jax_utils
+
+def draw_mapping(mol_a, mol_b, a_to_b_map):
+    """
+    Draw a colored atom mapping between two mols.
+
+    Parameters
+    ----------
+    mol_a: rdkit.ROMol
+
+    mol_b: rdkit.ROMol
+
+    a_to_b_map: dict
+        atom mapping going from a to b
+
+    Returns
+    -------
+    (str, str)
+        SVG Text 
+
+    """
+    colors = []
+    for _ in a_to_b_map.keys():
+        colors.append((np.random.rand(), np.random.rand(), np.random.rand()))
+
+    a_cols = {}
+    b_cols = {}
+    for a_idx, b_idx in a_to_b_map.items():
+        col = (np.random.rand(), np.random.rand(), np.random.rand())
+        a_cols[a_idx] = col
+        b_cols[b_idx] = col
+
+    d = rdMolDraw2D.MolDraw2DSVG(500, 500) # or MolDraw2DCairo to get PNGs
+    rdMolDraw2D.PrepareAndDrawMolecule(d, mol_a, highlightAtoms=a_to_b_map.keys(), highlightAtomColors=a_cols)
+    d.FinishDrawing()
+    svg = d.GetDrawingText()
+
+    mol_a_svg = svg
+
+    d = rdMolDraw2D.MolDraw2DSVG(500, 500) # or MolDraw2DCairo to get PNGs
+    rdMolDraw2D.PrepareAndDrawMolecule(d, mol_b, highlightAtoms=a_to_b_map.values(), highlightAtomColors=b_cols)
+    d.FinishDrawing()
+    svg = d.GetDrawingText()
+
+    mol_b_svg = svg
+
+    return mol_a_svg, mol_b_svg
 
 def compute_distance(mol_a, mol_b, a_to_b):
     conformer_a = mol_a.GetConformer(0)
@@ -25,7 +72,8 @@ def compute_distance(mol_a, mol_b, a_to_b):
 
 class CompareDist(rdFMCS.MCSAtomCompare):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, cutoff, *args, **kwargs):
+        self.cutoff = cutoff
         super().__init__(*args, **kwargs)
 
     def compare(self, p, mol1, atom1, mol2, atom2):
@@ -43,7 +91,8 @@ def mcs_map(a, b):
     Find the MCS map of going from A to B
     """
     params = rdFMCS.MCSParameters()
-    params.AtomTyper = CompareDist()
+    cutoff = 0.5 # atom mapping cutoff in *angstroms*
+    params.AtomTyper = CompareDist(cutoff)
     core_pattern = rdFMCS.FindMCS([a, b], params).smartsString
 
     # figure out ring stuff later
@@ -88,6 +137,7 @@ def mcs_map(a, b):
     for d in all_dists[min_mean_arg]:
         if d > 0.5:
             print("REALLY BAD WARNING: Matched core atoms that have a distance of", d)
+            assert 0
             # assert 0
 
     return all_a_to_bs[min_mean_arg]
