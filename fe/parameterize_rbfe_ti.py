@@ -221,8 +221,8 @@ if __name__ == "__main__":
                 precision
             )
 
-            # intg_seed = np.random.randint(np.iinfo(np.int32).max)
-            intg_seed = 2020
+            intg_seed = np.random.randint(np.iinfo(np.int32).max)
+            # intg_seed = 2020
 
             combined_ligand = Chem.CombineMols(mol_a, mol_b)
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
