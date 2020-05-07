@@ -105,10 +105,9 @@ if __name__ == "__main__":
     for guest_idx, guest_mol in enumerate(suppl):
         all_guest_mols.append(guest_mol)
 
-    all_guest_mols = [all_guest_mols[0], all_guest_mols[1]]
+    all_guest_mols = [all_guest_mols[0], all_guest_mols[2]]
 
-    mol_a = all_guest_mols[0]
-    mol_b = all_guest_mols[1]
+    mol_a, mol_b = all_guest_mols
 
     mol_a_dG = convert_uIC50_to_kJ_per_mole(float(mol_a.GetProp("IC50[uM](SPA)")))
     mol_b_dG = convert_uIC50_to_kJ_per_mole(float(mol_b.GetProp("IC50[uM](SPA)")))
