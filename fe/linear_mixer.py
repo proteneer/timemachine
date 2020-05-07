@@ -31,12 +31,6 @@ class LinearMixer():
         a_param_idxs,
         b_bond_idxs,
         b_param_idxs):
-
-        # TDB guarantee that exclusions are max/unique
-
-        """ Mix an arbitrary bonded term. This can be harmonic bond,
-        angle, torsions, exlcusions etc. """
-
         lhs_a_bond_idxs = deepcopy(a_bond_idxs)
         lhs_b_bond_idxs = []
         for atoms in b_bond_idxs:
@@ -77,9 +71,6 @@ class LinearMixer():
         assert_unique_exclusions(exclusions_a)
         assert_unique_exclusions(exclusions_b)
 
-        # lhs_exclusions = [] # dump *all* the exclusions
-        # lhs_exclusion_params = []
-
         lhs_exclusions = {}
 
         for (src, dst), param in zip(exclusions_a, exclusion_params_a):
@@ -102,8 +93,6 @@ class LinearMixer():
             pkey = tuple(sorted((src, dst)))
             assert pkey not in rhs_exclusions
             rhs_exclusions[pkey] = param
-            # rhs_exclusions.append((src, dst))
-            # rhs_exclusion_params.append(param)
 
         for (src, dst), param in zip(exclusions_a, exclusion_params_a):
             src = self.cmap_a_to_b.get(src, src)
@@ -111,8 +100,6 @@ class LinearMixer():
             pkey = tuple(sorted((src, dst)))
             assert pkey not in rhs_exclusions
             rhs_exclusions[pkey] = param
-            # rhs_exclusions.append((src, dst))
-            # rhs_exclusion_params.append(param)
 
         # merge exclusions
         # add non core exclusions from rhs into lhs
