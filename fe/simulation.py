@@ -195,15 +195,19 @@ class Simulation:
                 break
 
         if check_coords(x_final) == False:
-            print("WARNING: ------ Final frame FAILED")
+            print("FATAL WARNING: ------ Final frame FAILED ------")
             du_dls = None
-        else:
-            print("Final frame OK")
 
         full_du_dls = stepper.get_du_dl()
 
+
+
         for fname, du_dls in zip(force_names, full_du_dls):
-            print(fname, "lambda:", "{:.2f}".format(self.lambda_schedule[0]), "mean du_dls", np.mean(du_dls), "std du_dls", np.std(du_dls))
+            print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+
+        total_du_dls = np.sum(full_du_dls, axis=0)
+
+        print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(total_du_dls)), "+-", "{:7.2f}".format(np.std(total_du_dls)), "\t <- Total")
 
         if pdb_writer is not None:
             pdb_writer.write_header()
