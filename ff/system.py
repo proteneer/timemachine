@@ -170,6 +170,13 @@ class System():
             elif a_name == "Nonbonded":
                 assert a_args[7] == b_args[7] # cutoff
                 es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
+
+                # print(b_params)
+                # print(b_args[0])
+                print("Ligand pair net charge", np.sum(np.array(b_params)[np.array(b_args[0])]))
+
+                # assert 0
+
                 lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 exclusion_idxs = np.concatenate([a_args[2], b_args[2] + num_a_atoms], axis=0)
 

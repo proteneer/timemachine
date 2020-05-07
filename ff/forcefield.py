@@ -108,19 +108,21 @@ class Forcefield():
         # hacky temp code to deal with exclusions
         exclusion_param = 1.0
         exclusion_param_group = 20
+        self.exclusion_param_idx = len(self.params)
         self.params.append(exclusion_param)
         self.param_groups.append(exclusion_param_group)
 
         exclusion_param = 0.5
         exclusion_param_group = 21
+        self.exclusion_param_idx_14 = len(self.params)
         self.params.append(exclusion_param)
         self.param_groups.append(exclusion_param_group)
 
     def get_exclusion_idx(self):
-        return len(self.params)-2
+        return self.exclusion_param_idx
 
     def get_exclusion_idx_14(self):
-        return len(self.params)-1
+        return self.exclusion_param_idx_14
 
     def save(self, handle):
         with open(handle, "w") as fh:
@@ -347,7 +349,7 @@ class Forcefield():
 
                     es_param_idxs = np.arange(mol.GetNumAtoms()) + len(self.params)
                     for index, atom in enumerate(oemol.GetAtoms()):
-                        q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+                        q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)/2
                         self.params.append(q)
                         self.param_groups.append(23)
 

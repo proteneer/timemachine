@@ -138,8 +138,20 @@ if __name__ == "__main__":
     all_nrg_fns = []
 
     # combined_masses = np.concatenate([a_masses, b_masses])
-    a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=False)
-    b_system = open_ff.parameterize(mol_b, cutoff=args.cutoff, am1=False)
+
+    print(len(open_ff.params))
+
+    a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True)
+
+    print(len(open_ff.params))
+
+    b_system = open_ff.parameterize(mol_b, cutoff=args.cutoff, am1=True)
+
+    print(len(open_ff.params))
+
+
+    print(len(a_system.params))
+    print(len(b_system.params))
 
     lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map)
 
