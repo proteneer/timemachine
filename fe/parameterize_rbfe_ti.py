@@ -290,7 +290,6 @@ if __name__ == "__main__":
                 assert full_du_dls is not None
                 total_du_dls = np.sum(full_du_dls, axis=0)
 
-                print("TDDS", total_du_dls.shape)
                 plt.plot(total_du_dls, label="{:.2f}".format(lamb))
                 plt.ylabel("du_dl")
                 plt.xlabel("timestep")
