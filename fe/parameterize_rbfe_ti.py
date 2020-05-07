@@ -51,16 +51,16 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Relative Binding Free Energy Script')
-    parser.add_argument('--out_dir', type=str, required=True)
-    parser.add_argument('--precision', type=str, required=True)    
-    parser.add_argument('--complex_pdb', type=str, required=True)
-    parser.add_argument('--ligand_sdf', type=str, required=True)
-    parser.add_argument('--num_gpus', type=int, required=True)
-    parser.add_argument('--forcefield', type=str, required=True)
-    parser.add_argument('--seed', type=int, required=True)
-    parser.add_argument('--cutoff', type=float, required=True)
-    parser.add_argument('--num_windows', type=int, required=True)
-    parser.add_argument('--write_frames', type=bool, required=True)
+    parser.add_argument('--out_dir', type=str, required=True, help='Location of all output files')
+    parser.add_argument('--precision', type=str, required=True, help='Either single or double precision. Double is 8x slower.')
+    parser.add_argument('--protein_pdb', type=str, required=True, help='Prepared protein PDB file. This should not have any waters.')
+    parser.add_argument('--ligand_sdf', type=str, required=True, help='The ligand sdf used along with posed 3D coordinates. Only the first two ligands are used.')
+    parser.add_argument('--num_gpus', type=int, required=True, help='Number of gpus available.')
+    parser.add_argument('--forcefield', type=str, required=True, help='Small molecule forcefield to be loaded.')
+    parser.add_argument('--seed', type=int, required=True, help='Random seed used for all the random number generators.')
+    parser.add_argument('--cutoff', type=float, required=True, help='Nonbonded cutoff. Please set this to 1.0 for now.')
+    parser.add_argument('--num_windows', type=int, required=True, help='Number of lambda windows to be linearly spaced.')
+    parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     args = parser.parse_args()
 
     assert os.path.isdir(args.out_dir)
@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map)
 
-    host_pdb_file = args.complex_pdb
+    host_pdb_file = args.protein_pdb
     host_pdb = app.PDBFile(host_pdb_file)
     amber_ff = app.ForceField('amber99sbildn.xml', 'amber99_obc.xml')
     host_system = amber_ff.createSystem(host_pdb.topology,
@@ -184,9 +184,10 @@ if __name__ == "__main__":
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
             out_file = os.path.join(args.out_dir, str(r_idx)+"_rbfe_"+str(lamb)+".pdb")
-            writer = PDBWriter(combined_pdb_str, out_file)
+            writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
 
-            if args.write_frames is False:
+            # zero-out
+            if args.n_frames is 0:
                 writer = None
 
             host_conf = []
@@ -237,7 +238,7 @@ if __name__ == "__main__":
                 std_du_dls.append(np.std(full_du_dls))
 
                 for du_dls in full_du_dls:
-                    plt.plot(du_dls, "{:.2f}".format(lamb))
+                    plt.plot(du_dls, label="{:.2f}".format(lamb))
                     plt.ylabel("du_dl")
                     plt.xlabel("timestep")
                     plt.legend()

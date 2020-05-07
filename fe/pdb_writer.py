@@ -3,11 +3,11 @@ from simtk.openmm.app import PDBFile
 
 class PDBWriter():
 
-    def __init__(self, pdb_str, out_filepath):
+    def __init__(self, pdb_str, out_filepath, n_frames):
         self.pdb_str = pdb_str
         self.out_filepath = out_filepath
         self.outfile = None
-        self.n_frames = 50
+        self.n_frames = n_frames
 
     def write_header(self):
         """
