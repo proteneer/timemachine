@@ -260,10 +260,7 @@ if __name__ == "__main__":
             all_pcs.append(parent_conn)
             all_processes.append(p)
 
-
-        mean_du_dls = []
-        std_du_dls = []
-        sum_du_dls = []
+        sum_du_dls = [] # [L, T]
         all_du_dls = [] # [L, F, T] num lambda windows, num forces, num steps
 
         # run inference loop to generate all_du_dls
@@ -282,19 +279,15 @@ if __name__ == "__main__":
                 assert full_du_dls is not None
                 total_du_dls = np.sum(full_du_dls, axis=0)
 
-                mean_du_dls.append(np.mean(total_du_dls))
-                std_du_dls.append(np.std(total_du_dls))
-
-                for du_dls in full_du_dls:
-                    plt.plot(du_dls, label="{:.2f}".format(lamb))
-                    plt.ylabel("du_dl")
-                    plt.xlabel("timestep")
-                    plt.legend()
+                plt.plot(total_du_dls, label="{:.2f}".format(lamb))
+                plt.ylabel("du_dl")
+                plt.xlabel("timestep")
+                plt.legend()
 
                 fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_du_dls_"+str(pc_idx))
                 plt.savefig(fpath)
 
-                sum_du_dls.append(np.sum(full_du_dls, axis=0))
+                sum_du_dls.append(total_du_dls)
                 all_du_dls.append(full_du_dls)
 
         # compute loss and derivatives w.r.t. adjoints
@@ -354,8 +347,7 @@ if __name__ == "__main__":
         plt.savefig(os.path.join(args.out_dir, str(epoch)+"_boxplot_du_dls"))
         plt.close()
 
-        print("mean_du_dls", mean_du_dls)
-        print("Epoch", epoch, "pred_ddG LHS->RHS (B to A)", np.trapz(mean_du_dls, ti_lambdas), "true ddG", true_ddG, "loss", loss)
+        print("Epoch", epoch, "pred_ddG LHS->RHS (B to A)", np.trapz(np.mean(sum_du_dls, axis=-1), ti_lambdas), "true ddG", true_ddG, "loss", loss)
 
         filtered_grad = np.array(filtered_grad)
         opt_state = opt_update(epoch, filtered_grad, opt_state)
