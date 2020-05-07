@@ -103,6 +103,10 @@ void AlchemicalStepper::backward_step(
     if(count_ >= du_dl_adjoint_.size()) {
         throw std::runtime_error("You probably forgot to set du_dl adjoints!\n");
     }
+
+
+    const int T = lambda_schedule_.size();
+
     for(int f=0; f < forces_.size(); f++) {
         forces_[f]->execute_lambda_jvp_device(
             N,
@@ -111,7 +115,7 @@ void AlchemicalStepper::backward_step(
             dx_tangent,
             params,
             lambda_schedule_[count_],
-            du_dl_adjoint_[count_],
+            du_dl_adjoint_[f*T + count_], // FIX
             coords_jvp_primals,
             coords_jvp_tangents,
             params_jvp_primals,
@@ -136,13 +140,13 @@ void AlchemicalStepper::get_energies(double *buf) {
 };
 
 void AlchemicalStepper::set_du_dl_adjoint(
-    const int T,
+    const int FT,
     const double *adj) {
-    if(T != lambda_schedule_.size()) {
+    if(FT != lambda_schedule_.size()*get_F()) {
         throw std::runtime_error("adjoint size not the same as lambda schedule size");
     }
-    du_dl_adjoint_.resize(T);
-    memcpy(&du_dl_adjoint_[0], adj, T*sizeof(double));
+    du_dl_adjoint_.resize(FT);
+    memcpy(&du_dl_adjoint_[0], adj, FT*sizeof(double));
 };
 
 };

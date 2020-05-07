@@ -21,7 +21,6 @@ ReversibleContext::~ReversibleContext() {
     gpuErrchk(cudaFree(d_noise_buffer_));
 
     gpuErrchk(cudaFree(d_coords_));
-    gpuErrchk(cudaFree(d_du_dls_));
 
     gpuErrchk(cudaFree(d_velocities_));
     gpuErrchk(cudaFree(d_forces_));
@@ -83,8 +82,6 @@ ReversibleContext::ReversibleContext(
     gpuErrchk(cudaMemcpy(d_coeff_ccs_, &coeff_ccs[0], N*sizeof(double), cudaMemcpyHostToDevice));
 
     gpuErrchk(cudaMalloc(&d_coords_, F*N*D*sizeof(double)));
-    gpuErrchk(cudaMalloc(&d_du_dls_, F*sizeof(double)));
-    cudaMemset(d_du_dls_, 0, F*sizeof(double));
     gpuErrchk(cudaMemcpy(d_coords_, &x0[0], N*D*sizeof(double), cudaMemcpyHostToDevice));
 
     gpuErrchk(cudaMalloc(&d_velocities_, N*D*sizeof(double)));

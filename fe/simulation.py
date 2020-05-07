@@ -98,6 +98,7 @@ class Simulation:
         self,
         x0,
         v0,
+        params,
         seed,
         pdb_writer,
         pipe,
@@ -112,6 +113,9 @@ class Simulation:
 
         v0: np.array, np.float64, [N, 3]
             Starting velocities
+
+        params: np.array, np.float64, [P]
+            Epoch parameters
 
         seed: int
             Random number used to seed the thermostat
@@ -175,7 +179,7 @@ class Simulation:
             self.cbs,
             self.ccs,
             self.step_sizes,
-            self.lhs_system.params,
+            params,
             seed
         )
 

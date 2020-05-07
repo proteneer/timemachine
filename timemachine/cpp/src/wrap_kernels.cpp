@@ -67,7 +67,7 @@ void declare_alchemical_stepper(py::module &m, const char *typestr) {
     })
     .def("set_du_dl_adjoint", [](timemachine::AlchemicalStepper &stepper,
         const py::array_t<double, py::array::c_style> &adjoints) {
-        stepper.set_du_dl_adjoint(adjoints.shape()[0], adjoints.data());
+        stepper.set_du_dl_adjoint(adjoints.size(), adjoints.data());
     });
 }
 
