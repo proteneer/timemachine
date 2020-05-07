@@ -15,51 +15,51 @@ from timemachine.potentials import alchemy
 
 class TestBonded(GradientTest):
 
-    # def test_bonded(self):
-    #     np.random.seed(125)
+    def test_bonded(self):
+        np.random.seed(125)
 
-    #     P_bonds = 4
-    #     P_angles = 6
-    #     P_torsions = 13
+        P_bonds = 4
+        P_angles = 6
+        P_torsions = 13
  
-    #     N = 64
-    #     B = 35
-    #     A = 36
-    #     T = 37
+        N = 64
+        B = 35
+        A = 36
+        T = 37
 
-    #     # N = 4
-    #     # B = 6
-    #     # A = 1
-    #     # T = 1
+        # N = 4
+        # B = 6
+        # A = 1
+        # T = 1
 
-    #     D = 3
+        D = 3
 
-    #     x = self.get_random_coords(N, D)
+        x = self.get_random_coords(N, D)
 
-    #     for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
+        for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
 
-    #         params, ref_bonds, custom_bonds = prepare_bonded_system(
-    #             x,
-    #             P_bonds,
-    #             P_angles,
-    #             P_torsions,
-    #             B,
-    #             A,
-    #             T,
-    #             precision
-    #         )
+            params, ref_bonds, custom_bonds = prepare_bonded_system(
+                x,
+                P_bonds,
+                P_angles,
+                P_torsions,
+                B,
+                A,
+                T,
+                precision
+            )
 
-    #         for lamb in [0.0, 0.4, 0.5, 1.0]:
-    #             for r, t in zip(ref_bonds, custom_bonds):
-    #                 self.compare_forces(
-    #                     x,
-    #                     params,
-    #                     lamb,
-    #                     r,
-    #                     t,
-    #                     precision,
-    #                     rtol
-    #                 )
+            for lamb in [0.0, 0.4, 0.5, 1.0]:
+                for r, t in zip(ref_bonds, custom_bonds):
+                    self.compare_forces(
+                        x,
+                        params,
+                        lamb,
+                        r,
+                        t,
+                        precision,
+                        rtol
+                    )
 
     def test_alchemical_bonded(self):
         np.random.seed(125)
