@@ -308,12 +308,16 @@ if __name__ == "__main__":
         # compute the adjoints
         all_dl_dps = []
         for b_idx in range(0, len(all_processes), args.num_gpus):
+
+            # kick off batch
             for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
                 lamb_idx = b_idx+pc_idx
-
-
                 du_dl_adjoints = all_du_dl_adjoints[lamb_idx]
                 pc.send(du_dl_adjoints)
+
+
+            # sync the batch
+            for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
                 all_dl_dps.append(pc.recv())
 
         for p in all_processes:
