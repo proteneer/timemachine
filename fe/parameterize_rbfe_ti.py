@@ -295,7 +295,7 @@ if __name__ == "__main__":
         all_du_dls = np.array(all_du_dls)
 
         loss = loss_fn(all_du_dls, true_ddG, ti_lambdas)
-        print("loss", loss, "pred_ddG", np.trapz(sum_du_dls, ti_lambdas), "true_ddG", true_ddG)
+        print("loss", loss, "pred_ddG", np.trapz(np.mean(sum_du_dls, axis=1), ti_lambdas), "true_ddG", true_ddG)
 
         # all_du_dl_adjoints = loss_fn_grad(all_du_dls, true_ddG, ti_lambdas)[0]
 
