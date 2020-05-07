@@ -83,6 +83,7 @@ class TestBonded(GradientTest):
         x = self.get_random_coords(N, D)
 
         # for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
+
         for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
 
 
@@ -126,7 +127,7 @@ class TestBonded(GradientTest):
                 )
 
                 for lamb in [0.0, 0.4, 0.5, 1.0]:
-                    print("LAMBDA", lamb)
+                    # print("LAMBDA", lamb, "EXPONENT", exponent)
                     # for r, t in zip(ref_bonds, custom_bonds):
                     self.compare_forces(
                         x,

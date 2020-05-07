@@ -100,7 +100,7 @@ class Simulation:
         v0,
         seed,
         pdb_writer,
-        # pipe,
+        pipe,
         gpu_idx):
         """
         Run a forward simulation
@@ -135,15 +135,12 @@ class Simulation:
         """
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
 
-        # gradients = self.system.make_gradients(precision=self.precision)
-        # gradients = self.lhs_system.make_alchemical_gradients(self.rhs_system, precision=self.precision)
-
-
         gradients = []
         handles = []
+        force_names = []
         for k, v in self.lhs_system.nrg_fns.items():
 
-            print("alchemically mixing", k)
+            force_names.append(k)
             other_v = self.rhs_system.nrg_fns[k]
             op_fn = getattr(ops, k)
             grad = op_fn(*v, precision=self.precision)
@@ -158,19 +155,9 @@ class Simulation:
             )
             gradients.append(grad_alchem)
 
-        # return gradients
-
-        # x_bad = np.load("frame_1888.npy")
-
-        # (ytz): debug use
         # for g in gradients:
-            # forces, du_dl, energy = g.execute_lambda(x, self.system.params, 1.0)
-            # print(g, forces[1758:], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
-            # print(g, forces[:1758], np.amax(np.abs(forces[:1758])))
-            # the two ligands are imploding on top of each other
-        # assert 0
-
-        print("gradients", gradients)
+        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.0001)
+        #     print(g, forces[1758:], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
 
         stepper = custom_ops.AlchemicalStepper_f64(
             gradients,
@@ -193,11 +180,12 @@ class Simulation:
         )
 
         start = time.time()
-        print("start_forward_mode")
+        # print("start_forward_mode")
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
-        du_dls = stepper.get_du_dl()
+        xs = ctxt.get_all_coords()
+
         start = time.time()
         x_final = ctxt.get_last_coords()[:, :3]
 
@@ -205,16 +193,21 @@ class Simulation:
         for e_idx, e in enumerate(energies):
             if e_idx > 50:
                 break
-            # print(e)
-        # assert 0
 
         if check_coords(x_final) == False:
-            print("Final frame FAILED")
+            print("FATAL WARNING: ------ Final frame FAILED ------")
             du_dls = None
-        else:
-            print("Final frame OK")
 
-        print("lambda:", self.lambda_schedule[0], "mean du_dls", np.mean(du_dls), "std du_dls", np.std(du_dls))
+        full_du_dls = stepper.get_du_dl()
+
+
+
+        for fname, du_dls in zip(force_names, full_du_dls):
+            print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+
+        total_du_dls = np.sum(full_du_dls, axis=0)
+
+        print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(total_du_dls)), "+-", "{:7.2f}".format(np.std(total_du_dls)), "\t <- Total")
 
         if pdb_writer is not None:
             pdb_writer.write_header()
@@ -229,20 +222,13 @@ class Simulation:
                         break
             pdb_writer.close()
 
-
-
-        return du_dls
-
-        print("sending dudls back.")
-        pipe.send(du_dls)
+        pipe.send(full_du_dls)
 
         du_dl_adjoints = pipe.recv()
 
         if du_dl_adjoints is not None:
             stepper.set_du_dl_adjoint(du_dl_adjoints)
-            # ctxt.set_x_t_adjoint(np.zeros_like(x0))
-            x_t_adjoint = np.random.rand(*x0.shape).reshape(x0.shape)/10
-            ctxt.set_x_t_adjoint(x_t_adjoint)
+            ctxt.set_x_t_adjoint(np.zeros_like(x0))
             start = time.time()
             ctxt.backward_mode()
             print("bkwd run time", time.time() - start)

@@ -1,6 +1,15 @@
 from copy import deepcopy
 import numpy as np
 
+
+def assert_unique_exclusions(exclusion_idxs):
+    sorted_exclusion_idxs = set()
+    for src, dst in exclusion_idxs:
+        src, dst = sorted((src, dst))
+        sorted_exclusion_idxs.add((src, dst))
+    assert len(sorted_exclusion_idxs) == len(exclusion_idxs)
+
+
 class LinearMixer():
 
     def __init__(self, n_a, map_a_to_b):
@@ -22,9 +31,6 @@ class LinearMixer():
         a_param_idxs,
         b_bond_idxs,
         b_param_idxs):
-        """ Mix an arbitrary bonded term. This can be harmonic bond,
-        angle, torsions, exlcusions etc. """
-
         lhs_a_bond_idxs = deepcopy(a_bond_idxs)
         lhs_b_bond_idxs = []
         for atoms in b_bond_idxs:
@@ -62,64 +68,65 @@ class LinearMixer():
         exclusions_b,
         exclusion_params_b):
 
-        lhs_exclusions = [] # dump *all* the exclusions
-        lhs_exclusion_params = []
+        assert_unique_exclusions(exclusions_a)
+        assert_unique_exclusions(exclusions_b)
+
+        lhs_exclusions = {}
 
         for (src, dst), param in zip(exclusions_a, exclusion_params_a):
-            lhs_exclusions.append((src, dst))
-            lhs_exclusion_params.append(param)
+            pkey = tuple(sorted((src, dst)))
+            assert pkey not in lhs_exclusions
+            lhs_exclusions[pkey] = param
 
         for (src, dst), param in zip(exclusions_b, exclusion_params_b):
             src, dst = src + self.n_a, dst + self.n_a
-            lhs_exclusions.append((src, dst))
-            lhs_exclusion_params.append(param)
+            pkey = tuple(sorted((src, dst)))
+            assert pkey not in lhs_exclusions
+            lhs_exclusions[pkey] = param
 
-        rhs_exclusions = []
-        rhs_exclusion_params = []
+        rhs_exclusions = {}
 
         for (src, dst), param in zip(exclusions_b, exclusion_params_b):
             src, dst = src + self.n_a, dst + self.n_a
             src = self.cmap_b_to_a.get(src, src)
             dst = self.cmap_b_to_a.get(dst, dst)
-            rhs_exclusions.append((src, dst))
-            rhs_exclusion_params.append(param)
+            pkey = tuple(sorted((src, dst)))
+            assert pkey not in rhs_exclusions
+            rhs_exclusions[pkey] = param
 
         for (src, dst), param in zip(exclusions_a, exclusion_params_a):
             src = self.cmap_a_to_b.get(src, src)
             dst = self.cmap_a_to_b.get(dst, dst)
-            rhs_exclusions.append((src, dst))
-            rhs_exclusion_params.append(param)
+            pkey = tuple(sorted((src, dst)))
+            assert pkey not in rhs_exclusions
+            rhs_exclusions[pkey] = param
 
+        # merge exclusions
         # add non core exclusions from rhs into lhs
-        for (src, dst), rhs_param in zip(rhs_exclusions, rhs_exclusion_params):
+        for (src, dst), param in rhs_exclusions.items():
             if src not in self.core_atoms or dst not in self.core_atoms:
-                lhs_exclusions.append((src, dst))
-                lhs_exclusion_params.append(rhs_param)
+                lhs_exclusions[(src, dst)] = param
 
         # add non core exclusions from lhs into rhs
-        for (src, dst), lhs_param in zip(lhs_exclusions, lhs_exclusion_params):
+        for(src, dst), param in lhs_exclusions.items():
             if src not in self.core_atoms or dst not in self.core_atoms:
-                rhs_exclusions.append((src, dst))
-                rhs_exclusion_params.append(lhs_param)
+                rhs_exclusions[src, dst] = param
 
-        # uniquify
-        def uniquify(keys, vals):
-            new_map = {}
-            for (src, dst), param in zip(keys, vals):
-                src, dst = sorted((src, dst))
-                new_map[(src, dst)] = param
+        lhs_exclusion_idxs = []
+        lhs_exclusion_params = []
 
-            sorted_keys = sorted(new_map.keys())
+        for k, v in lhs_exclusions.items():
+            lhs_exclusion_idxs.append(k)
+            lhs_exclusion_params.append(v)
 
-            new_exc = []
-            new_params = []
-            for k in sorted_keys:
-                new_exc.append(k)
-                new_params.append(new_map[k])
+        rhs_exclusion_idxs = []
+        rhs_exclusion_params = []
 
-            return new_exc, new_params
+        for k, v in rhs_exclusions.items():
+            rhs_exclusion_idxs.append(k)
+            rhs_exclusion_params.append(v)
 
-        return uniquify(lhs_exclusions, lhs_exclusion_params), uniquify(rhs_exclusions, rhs_exclusion_params)
+        return (lhs_exclusion_idxs, lhs_exclusion_params), (rhs_exclusion_idxs, rhs_exclusion_params)
 
 
     def mix_lambda_planes(self, n_a, n_b):

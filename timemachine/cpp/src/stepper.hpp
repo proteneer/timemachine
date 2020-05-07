@@ -52,7 +52,7 @@ private:
     std::vector<Gradient *>forces_;
 
     const std::vector<double> lambda_schedule_; // [T]
-    double *d_du_dl_; // [T]
+    double *d_du_dl_; // [T*FORCE_TYPES]
     double *d_energies_; // [T]
     std::vector<double> du_dl_adjoint_; // [T], set later
 
@@ -89,6 +89,10 @@ public:
 
     int get_T() const {
         return lambda_schedule_.size();
+    }
+
+    int get_F() const {
+        return forces_.size();
     }
 
     void set_du_dl_adjoint(

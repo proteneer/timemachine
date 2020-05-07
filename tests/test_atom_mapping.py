@@ -1,5 +1,6 @@
 import numpy as np
 from rdkit import Chem
+from rdkit.Chem import rdDistGeom
 
 import unittest
 from fe import atom_mapping

@@ -81,7 +81,7 @@ class TestNonbonded(GradientTest):
                     precision=precision
                 )
 
-                for lamb in [0.0, cutoff/10,  cutoff/2, cutoff/1.2, cutoff]:
+                for lamb in [0.0, 1.0/10.0,  1.0/2.0, 1.0/1.2, 1.0]:
 
                     print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
                     for r, t in zip(ref_forces, test_forces):
@@ -145,7 +145,7 @@ class TestNonbonded(GradientTest):
                     test_forces1[0]
                 )
 
-                for lamb in [0.0, 1/10,  1/2, 1/1.2, 1]:
+                for lamb in [0.0, 1/10,  1/2, 1/1.2, 1.0]:
                     print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
                     self.compare_forces(
                         x,
@@ -168,7 +168,8 @@ class TestNonbonded(GradientTest):
         for precision, rtol in [(np.float64, 5e-10), (np.float32, 2e-5)]:
 
             x = self.get_water_coords(dim)
-            E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
+            # E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
+            E = 100
             for cutoff in [1000.0, 0.9, 0.5, 0.001]:
 
                 params, ref_forces, test_forces = prepare_nonbonded_system(
@@ -183,7 +184,7 @@ class TestNonbonded(GradientTest):
                     precision=precision
                 )
 
-                for lamb in [0.0, 1/10,  1/2, 1/1.2, 1]:
+                for lamb in [0.0, 1/10,  1/2, 1/1.2, 1.]:
                     print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
                     for r, t in zip(ref_forces, test_forces):
                         self.compare_forces(    

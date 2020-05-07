@@ -54,7 +54,8 @@ void declare_alchemical_stepper(py::module &m, const char *typestr) {
     }))
     .def("get_du_dl", [](timemachine::AlchemicalStepper &stepper) -> py::array_t<double, py::array::c_style> {
         const unsigned long long T = stepper.get_T();
-        py::array_t<double, py::array::c_style> buffer({T});
+        const unsigned long long F = stepper.get_F();
+        py::array_t<double, py::array::c_style> buffer({F, T});
         stepper.get_du_dl(buffer.mutable_data());
         return buffer;
     })

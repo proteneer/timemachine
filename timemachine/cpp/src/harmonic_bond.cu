@@ -36,7 +36,6 @@ HarmonicBond<RealType>::HarmonicBond(
 
 template <typename RealType>
 HarmonicBond<RealType>::~HarmonicBond() {
-    std::cout << "Hbond destructor called" << std::endl;
     gpuErrchk(cudaFree(d_bond_idxs_));
     gpuErrchk(cudaFree(d_param_idxs_));
 };
