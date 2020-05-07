@@ -105,7 +105,7 @@ if __name__ == "__main__":
     for guest_idx, guest_mol in enumerate(suppl):
         all_guest_mols.append(guest_mol)
 
-    all_guest_mols = [all_guest_mols[0], all_guest_mols[2]]
+    all_guest_mols = [all_guest_mols[0], all_guest_mols[1]]
 
     mol_a, mol_b = all_guest_mols
 
