@@ -222,8 +222,8 @@ if __name__ == "__main__":
                 precision
             )
 
-            intg_seed = np.random.randint(np.iinfo(np.int32).max)
-            # intg_seed = 2020
+            # intg_seed = np.random.randint(np.iinfo(np.int32).max)
+            intg_seed = 2020
 
             combined_ligand = Chem.CombineMols(mol_a, mol_b)
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
@@ -295,59 +295,60 @@ if __name__ == "__main__":
         all_du_dls = np.array(all_du_dls)
 
         loss = loss_fn(all_du_dls, true_ddG, ti_lambdas)
+        print("loss", loss)
 
-        all_du_dl_adjoints = loss_fn_grad(all_du_dls, true_ddG, ti_lambdas)[0]
+        # all_du_dl_adjoints = loss_fn_grad(all_du_dls, true_ddG, ti_lambdas)[0]
 
-        # compute the adjoints
-        all_dl_dps = []
-        for b_idx in range(0, len(all_processes), args.num_gpus):
+        # # compute the adjoints
+        # all_dl_dps = []
+        # for b_idx in range(0, len(all_processes), args.num_gpus):
 
-            # kick off batch
-            for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
-                lamb_idx = b_idx+pc_idx
-                du_dl_adjoints = all_du_dl_adjoints[lamb_idx]
-                pc.send(du_dl_adjoints)
+        #     # kick off batch
+        #     for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
+        #         lamb_idx = b_idx+pc_idx
+        #         du_dl_adjoints = all_du_dl_adjoints[lamb_idx]
+        #         pc.send(du_dl_adjoints)
 
 
-            # sync the batch
-            for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
-                all_dl_dps.append(pc.recv())
+        #     # sync the batch
+        #     for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
+        #         all_dl_dps.append(pc.recv())
 
-        for p in all_processes:
-            p.join()
+        # for p in all_processes:
+        #     p.join()
 
-        dl_dps = np.sum(all_dl_dps, axis=0)
+        # dl_dps = np.sum(all_dl_dps, axis=0)
 
-        allowed_groups = {
-            # 7: 0.5,
-            14: 0.5, # small_molecule charge
-            12: 1e-2, # GB atomic radii
-            13: 1e-2 # GB scale factor
-        }
+        # allowed_groups = {
+        #     # 7: 0.5,
+        #     14: 0.5, # small_molecule charge
+        #     12: 1e-2, # GB atomic radii
+        #     13: 1e-2 # GB scale factor
+        # }
 
-        filtered_grad = []
-        for g_idx, (g, gp) in enumerate(zip(dl_dps, lhs_combined_system.param_groups)):
-            if gp in allowed_groups:
-                pf = allowed_groups[gp]
-                filtered_grad.append(g*pf)
-                if g != 0:
-                    print("derivs", g_idx, '\t group', gp, '\t', g, '\t adjusted to', g*pf, '\t old val', lhs_combined_system.params[g_idx])
-            else:
-                filtered_grad.append(0)
+        # filtered_grad = []
+        # for g_idx, (g, gp) in enumerate(zip(dl_dps, lhs_combined_system.param_groups)):
+        #     if gp in allowed_groups:
+        #         pf = allowed_groups[gp]
+        #         filtered_grad.append(g*pf)
+        #         if g != 0:
+        #             print("derivs", g_idx, '\t group', gp, '\t', g, '\t adjusted to', g*pf, '\t old val', lhs_combined_system.params[g_idx])
+        #     else:
+        #         filtered_grad.append(0)
 
-        plt.close()
+        # plt.close()
 
-        plt.violinplot(sum_du_dls, positions=ti_lambdas)
-        plt.ylabel("du_dlambda")
-        plt.savefig(os.path.join(args.out_dir, str(epoch)+"_violin_du_dls"))
-        plt.close()
+        # plt.violinplot(sum_du_dls, positions=ti_lambdas)
+        # plt.ylabel("du_dlambda")
+        # plt.savefig(os.path.join(args.out_dir, str(epoch)+"_violin_du_dls"))
+        # plt.close()
 
-        plt.boxplot(sum_du_dls, positions=ti_lambdas)
-        plt.ylabel("du_dlambda")
-        plt.savefig(os.path.join(args.out_dir, str(epoch)+"_boxplot_du_dls"))
-        plt.close()
+        # plt.boxplot(sum_du_dls, positions=ti_lambdas)
+        # plt.ylabel("du_dlambda")
+        # plt.savefig(os.path.join(args.out_dir, str(epoch)+"_boxplot_du_dls"))
+        # plt.close()
 
-        print("Epoch", epoch, "pred_ddG LHS->RHS (B to A)", np.trapz(np.mean(sum_du_dls, axis=-1), ti_lambdas), "true ddG", true_ddG, "loss", loss)
+        # print("Epoch", epoch, "pred_ddG LHS->RHS (B to A)", np.trapz(np.mean(sum_du_dls, axis=-1), ti_lambdas), "true ddG", true_ddG, "loss", loss)
 
-        filtered_grad = np.array(filtered_grad)
-        opt_state = opt_update(epoch, filtered_grad, opt_state)
+        # filtered_grad = np.array(filtered_grad)
+        # opt_state = opt_update(epoch, filtered_grad, opt_state)
