@@ -225,14 +225,14 @@ class System():
                 assert a_args[9+2] == b_args[9+2] # solvent dielectric
                 assert a_args[10+2] == b_args[10+2] # probe_radius
 
-                c_nrgs["GBSA"] = (
-                    charge_param_idxs.astype(np.int32),
-                    radius_param_idxs.astype(np.int32),
-                    scale_param_idxs.astype(np.int32),
-                    lambda_plane_idxs.astype(np.int32),
-                    lambda_offset_idxs.astype(np.int32),
-                    *a_args[5:]
-                )
+                # c_nrgs["GBSA"] = (
+                #     charge_param_idxs.astype(np.int32),
+                #     radius_param_idxs.astype(np.int32),
+                #     scale_param_idxs.astype(np.int32),
+                #     lambda_plane_idxs.astype(np.int32),
+                #     lambda_offset_idxs.astype(np.int32),
+                #     *a_args[5:]
+                # )
 
             else:
                 raise Exception("Unknown potential", a_name)

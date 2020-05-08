@@ -174,7 +174,7 @@ class Forcefield():
         """
 
         # temporary
-        assert cutoff == 1.0
+        # assert cutoff == 1.0
 
         def match_smirks(mol, smirks):
             

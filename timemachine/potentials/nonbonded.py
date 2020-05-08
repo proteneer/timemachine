@@ -158,6 +158,8 @@ def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_s
     eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
 
     if cutoff is not None:
+        sw = np.power(np.cos((np.pi*dij)/(2*cutoff)), 2)
+        eij = eij*sw
         eij = np.where(dij > cutoff, np.zeros_like(eij), eij)
 
     src_idxs = exclusions[:, 0]
@@ -172,7 +174,10 @@ def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_s
 
     scale_ij = params[exclusion_scale_idxs]
     eij_exc = scale_ij*qij/dij
+
     if cutoff is not None:
+        sw = np.power(np.cos((np.pi*dij)/(2*cutoff)), 2)
+        eij_exc = eij_exc*sw
         eij_exc = np.where(dij > cutoff, np.zeros_like(eij_exc), eij_exc)
         eij_exc = np.where(src_idxs == dst_idxs, np.zeros_like(eij_exc), eij_exc)
 
