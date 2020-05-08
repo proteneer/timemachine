@@ -206,10 +206,10 @@ if __name__ == "__main__":
         complete_T = 12000
         equil_T = 2000
 
-        # ti_lambdas = np.linspace(0, 1, args.num_windows)
+        ti_lambdas = np.linspace(0, 1, args.num_windows)
         # ti_lambdas = np.ones(args.num_windows)*0.1
         # ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
-        ti_lambdas = np.array([0.17, 0.17, 0.17, 0.17, 0.17, 0.17, 0.17])
+        # ti_lambdas = np.array([0.17, 0.17, 0.17, 0.17, 0.17, 0.17, 0.17])
         # all_du_dls = []
 
         all_processes = []
