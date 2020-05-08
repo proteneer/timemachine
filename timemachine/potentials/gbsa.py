@@ -83,7 +83,7 @@ def gbsa_obc(
     E = 0.0
     # single particle
     # ACE
-    # E += np.sum(surface_tension * (radii + probe_radius) ** 2 * (radii / B) ** 6)
+    E += np.sum(surface_tension * (radii + probe_radius) ** 2 * (radii / B) ** 6)
 
     # on-diagonal
     charges = params[charge_idxs]
@@ -95,7 +95,7 @@ def gbsa_obc(
 
     ixns = - (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
 
-    # ixns = ixns*sw
+    ixns = ixns*sw
     ixns = np.where(dij > cutoff_force, 0, ixns)
 
     E += np.sum(np.triu(ixns, k=1))

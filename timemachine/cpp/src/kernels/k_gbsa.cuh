@@ -266,45 +266,45 @@ void __global__ k_compute_born_first_loop_gpu(
         
             RealType energy = Gpol;
 
-            // RealType inner = (PI*r)/(2*cutoff);
-            // RealType sw = cos(inner);
-            // sw = sw*sw;
+            RealType inner = (PI*r)/(2*cutoff);
+            RealType sw = cos(inner);
+            sw = sw*sw;
             
 
-            // RealType dsw_dr = -(PI/cutoff)*sin(inner)*cos(inner);
-            // RealType dsw_dr_dot_E = dsw_dr*energy;
+            RealType dsw_dr = -(PI/cutoff)*sin(inner)*cos(inner);
+            RealType dsw_dr_dot_E = dsw_dr*energy;
 
 
             if (atom_i_idx != atom_j_idx) {
                 
-                // energy = sw*energy;
+                energy = sw*energy;
 
-                born_force_j_accum += dGpol_dalpha2_ij*born_radii_i;
+                born_force_j_accum += sw*dGpol_dalpha2_ij*born_radii_i;
 
                 for(int d=0; d < 3; d++) {
 
-                    gi[d] += dxs[d]*dGpol_dr;
-                    gj[d] -= dxs[d]*dGpol_dr;
-                    // gi[d] += dxs[d]*sw*dGpol_dr + dsw_dr_dot_E*dxs[d]/r;
-                    // gj[d] -= dxs[d]*sw*dGpol_dr + dsw_dr_dot_E*dxs[d]/r;
+                    // gi[d] += dxs[d]*dGpol_dr;
+                    // gj[d] -= dxs[d]*dGpol_dr;
+                    gi[d] += dxs[d]*sw*dGpol_dr + dsw_dr_dot_E*dxs[d]/r;
+                    gj[d] -= dxs[d]*sw*dGpol_dr + dsw_dr_dot_E*dxs[d]/r;
                 }
 
                 RealType dw_i = dlambda_i;
                 RealType dw_j = dlambda_j; // shuffled
 
 
-                du_dl_i += dxs[3]*dGpol_dr*dw_i;
-                du_dl_j -= dxs[3]*dGpol_dr*dw_j;
+                // du_dl_i += dxs[3]*dGpol_dr*dw_i;
+                // du_dl_j -= dxs[3]*dGpol_dr*dw_j;
 
-                // du_dl_i += dxs[3]*sw*dGpol_dr*dw_i + dsw_dr_dot_E*dxs[3]/r;
-                // du_dl_j -= dxs[3]*sw*dGpol_dr*dw_j + dsw_dr_dot_E*dxs[3]/r;
+                du_dl_i += (dxs[3]*sw*dGpol_dr + dsw_dr_dot_E*dxs[3]/r)*dw_i;
+                du_dl_j -= (dxs[3]*sw*dGpol_dr + dsw_dr_dot_E*dxs[3]/r)*dw_j;
 
             } else {
                 energy *= 0.5;
             }
 
             obc_energy += energy;
-            born_force_i_accum += dGpol_dalpha2_ij*born_radii_j;
+            born_force_i_accum += sw*dGpol_dalpha2_ij*born_radii_j;
         }
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE;
@@ -408,14 +408,14 @@ __global__ void k_reduce_born_forces(
 
 
     // ACE term
-    // if (br > 0.0) {
-    //     double atomic_radii = params[atomic_radii_idxs[atomI]];
-    //     double r            = atomic_radii + probe_radius;
-    //     double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
-    //     double saTerm       = surface_tension*r*r*ratio6;
-    //     atomicAdd(energy, saTerm);
-    //     born_force_i  -= 6.0*saTerm/born_radii[atomI];
-    // }
+    if (br > 0.0) {
+        double atomic_radii = params[atomic_radii_idxs[atomI]];
+        double r            = atomic_radii + probe_radius;
+        double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
+        double saTerm       = surface_tension*r*r*ratio6;
+        atomicAdd(energy, saTerm);
+        born_force_i  -= 6.0*saTerm/born_radii[atomI];
+    }
 
     born_force_i *= obc_chain[atomI];
     bornForces[atomI] = static_cast<unsigned long long>((long long) (born_force_i*FIXED_EXPONENT_BORN_FORCES));
