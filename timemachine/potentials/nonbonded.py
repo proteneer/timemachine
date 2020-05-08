@@ -94,6 +94,11 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
     sig6 = sig2*sig2*sig2
 
     eij = 4*eps_ij*(sig6-1.0)*sig6
+
+    if cutoff is not None:
+        sw = np.power(np.cos((np.pi*dij)/(2*cutoff)), 2)
+        eij = eij*sw
+
     eij = np.where(keep_mask, eij, np.zeros_like(eij))
     return np.sum(eij/2)
 
@@ -128,6 +133,8 @@ def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, e
     eij_exc = scale_ij*4*eps_ij*(sig6-1.0)*sig6
 
     if cutoff is not None:
+        sw = np.power(np.cos((np.pi*dij)/(2*cutoff)), 2)
+        eij_exc = eij_exc*sw
         eij_exc = np.where(dij > cutoff, np.zeros_like(eij_exc), eij_exc)
         eij_exc = np.where(src_idxs == dst_idxs, np.zeros_like(eij_exc), eij_exc)
 

@@ -112,6 +112,7 @@ void __global__ k_nonbonded_inference(
             RealType inv_d3ij = inv_dij*inv_d2ij;
             RealType inv_d4ij = inv_d2ij*inv_d2ij;
             RealType inv_d6ij = inv_d4ij*inv_d2ij;
+            RealType inv_d7ij = inv_d6ij*inv_dij;
             RealType inv_d8ij = inv_d4ij*inv_d4ij;
             RealType es_grad_prefactor = -qi*qj*inv_d2ij;
 
@@ -124,9 +125,10 @@ void __global__ k_nonbonded_inference(
             RealType sig6 = sig4*sig2;
 
             RealType sig6_inv_d6ij = sig6*inv_d6ij;
-            RealType sig6_inv_d8ij = sig6*inv_d8ij;
+            RealType sig6_inv_d7ij = sig6*inv_d7ij;
+            // RealType sig6_inv_d8ij = sig6*inv_d8ij;
 
-            RealType lj_grad_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
+            RealType lj_grad_prefactor = -24*eps_ij*sig6_inv_d7ij*(sig6_inv_d6ij*2 - 1);
 
             // smooth rescale switch using cosine rule
             RealType inner = (PI*dij)/(2*cutoff);
@@ -135,24 +137,27 @@ void __global__ k_nonbonded_inference(
 
             // faster alternate form exists
             RealType dsw_dr = -(PI/cutoff)*sin(inner)*cos(inner);
-            RealType raw_es_energy = qi*qj*inv_dij;
+            RealType es_energy = qi*qj*inv_dij;
+            RealType lj_energy = 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+            RealType energy_sum = es_energy + lj_energy;
+            RealType grad_sum = es_grad_prefactor + lj_grad_prefactor;
 
-            energy += sw*raw_es_energy + 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+            energy += sw*energy_sum;
 
-            RealType product_rule = dsw_dr*raw_es_energy + sw*es_grad_prefactor;
+            RealType product_rule = dsw_dr*energy_sum + sw*grad_sum;
 
             for(int d=0; d < 3; d++) {
-                RealType force_i = (-product_rule/dij + lj_grad_prefactor) * dxs[d];
-                RealType force_j = (-product_rule/dij + lj_grad_prefactor) * dxs[d];
-                gi[d] -= force_i;
+                RealType force_i = product_rule * (-dxs[d]/dij);
+                RealType force_j = product_rule * (-dxs[d]/dij);
+                gi[d] -= force_i; // flip this fucking sign later so it's correct derivatives
                 gj[d] += force_j;
             }
 
             RealType dw_i = dlambda_i;
             RealType dw_j = dlambda_j;
 
-            du_dl_i -= (-product_rule/dij + lj_grad_prefactor) * dxs[3] * dw_i;
-            du_dl_j += (-product_rule/dij + lj_grad_prefactor) * dxs[3] * dw_j;
+            du_dl_i -= product_rule * (-dxs[3]/dij) * dw_i;
+            du_dl_j += product_rule * (-dxs[3]/dij) * dw_j;
 
         }
 
@@ -250,7 +255,7 @@ void __global__ k_nonbonded_exclusion_inference(
     RealType sig_j = params[lj_param_idx_sig_j];
     RealType eps_j = params[lj_param_idx_eps_j];
 
-    RealType charge_scale = params[charge_scale_idxs[e_idx]];
+    RealType es_scale = params[charge_scale_idxs[e_idx]];
     RealType lj_scale = params[lj_scale_idxs[e_idx]];
 
     RealType dxs[4];
@@ -279,36 +284,36 @@ void __global__ k_nonbonded_exclusion_inference(
         RealType sig4_inv_d4ij = sig2_inv_d2ij*sig2_inv_d2ij;
         RealType sig6_inv_d6ij = sig4_inv_d4ij*sig2_inv_d2ij;
         RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
+        RealType sig6_inv_d7ij = sig6_inv_d6ij*inv_dij;
         RealType sig8_inv_d8ij = sig4_inv_d4ij*sig4_inv_d4ij;
         RealType sig12_inv_d12ij = sig8_inv_d8ij*sig4_inv_d4ij;
         RealType sig12_inv_d14ij = sig12_inv_d12ij*inv_d2ij;
-
-        // RealType lj_grad_prefactor = 24*eps_ij*(sig12rij7*2 - sig6rij4);
-        RealType lj_grad_prefactor = 24*eps_ij*sig12_inv_d14ij*2 - 24*eps_ij*sig6_inv_d8ij;
+        RealType lj_grad_prefactor = -24*eps_ij*sig6_inv_d7ij*(sig6_inv_d6ij*2 - 1);
 
         RealType inner = (PI*dij)/(2*cutoff);
         RealType sw = cos(inner);
         sw = sw*sw;
 
         RealType dsw_dr = -(PI/cutoff)*sin(inner)*cos(inner);
-        RealType raw_es_energy = qi*qj*inv_dij;
+        RealType es_energy = qi*qj*inv_dij;
+        RealType lj_energy = 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+        RealType energy_sum = es_scale*es_energy + lj_scale*lj_energy;
+        RealType grad_sum = es_scale*es_grad_prefactor + lj_scale*lj_grad_prefactor;
 
-        RealType energy = sw*charge_scale*raw_es_energy + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
-        
-        RealType product_rule = charge_scale*(dsw_dr*raw_es_energy + sw*es_grad_prefactor);
-
+        RealType energy = sw*energy_sum;
         atomicAdd(out_energy, -energy);
+        RealType product_rule = dsw_dr*energy_sum + sw*grad_sum;
 
         for(int d=0; d < 3; d++) {
-            gi[d] += (-product_rule/dij + lj_scale * lj_grad_prefactor)*dxs[d];
-            gj[d] -= (-product_rule/dij + lj_scale * lj_grad_prefactor)*dxs[d];
+            gi[d] += product_rule * (-dxs[d]/dij);
+            gj[d] -= product_rule * (-dxs[d]/dij);
         }
 
         RealType dw_i = dlambda_i;
         RealType dw_j = dlambda_j;
 
-        du_dl_i += (-product_rule/dij + lj_scale * lj_grad_prefactor) * dxs[3] * dw_i;
-        du_dl_j -= (-product_rule/dij + lj_scale * lj_grad_prefactor) * dxs[3] * dw_j;
+        du_dl_i += product_rule * (-dxs[3]/dij) * dw_i;
+        du_dl_j -= product_rule * (-dxs[3]/dij) * dw_j;
 
         for(int d=0; d < 3; d++) {
             atomicAdd(grad_coords + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));

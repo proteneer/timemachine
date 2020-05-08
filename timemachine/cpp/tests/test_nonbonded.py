@@ -49,53 +49,53 @@ class TestNonbonded(GradientTest):
         ref_mp = np.transpose(ref_mp, (2,0,1))
         return ref_mp
 
-    # def test_fast_nonbonded(self):
-    #     np.random.seed(125)
-    #     N = 65
-    #     D = 3
-    #     E = 10
-    #     P_charges = 4
-    #     P_lj = 5
-    #     P_exc = 7
+    def test_fast_nonbonded(self):
+        np.random.seed(125)
+        N = 65
+        D = 3
+        E = 10
+        P_charges = 4
+        P_lj = 5
+        P_exc = 7
 
-    #     # N = 33
-    #     # D = 3
-    #     # E = 10
-    #     # P_charges = 4
-    #     # P_lj = 5
-    #     # P_exc = 7
+        # N = 33
+        # D = 3
+        # E = 10
+        # P_charges = 4
+        # P_lj = 5
+        # P_exc = 7
  
-    #     x = self.get_random_coords(N, D)
+        x = self.get_random_coords(N, D)
 
-    #     for precision, rtol in [(np.float64, 1e-9), (np.float32, 3e-5)]:
-    #         for cutoff in [50.0, 0.5, 0.3]:
+        for precision, rtol in [(np.float64, 1e-9), (np.float32, 3e-5)]:
+            for cutoff in [50.0, 0.5, 0.3]:
 
-    #             # E = 0
+                # E = 0
 
-    #             params, ref_forces, test_forces = prepare_nonbonded_system(
-    #                 x,
-    #                 E,
-    #                 P_charges,
-    #                 P_lj,
-    #                 P_exc,
-    #                 p_scale=10.0,
-    #                 cutoff=cutoff,
-    #                 precision=precision
-    #             )
+                params, ref_forces, test_forces = prepare_nonbonded_system(
+                    x,
+                    E,
+                    P_charges,
+                    P_lj,
+                    P_exc,
+                    p_scale=10.0,
+                    cutoff=cutoff,
+                    precision=precision
+                )
 
-    #             for lamb in [0.0, 1.0/10.0,  1.0/2.0, 1.0/1.2, 1.0]:
+                for lamb in [0.0, 1.0/10.0,  1.0/2.0, 1.0/1.2, 1.0]:
 
-    #                 print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
-    #                 for r, t in zip(ref_forces, test_forces):
-    #                     self.compare_forces(
-    #                         x,
-    #                         params,
-    #                         lamb,
-    #                         r,
-    #                         t,
-    #                         precision,
-    #                         rtol=rtol
-    #                     )
+                    print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
+                    for r, t in zip(ref_forces, test_forces):
+                        self.compare_forces(
+                            x,
+                            params,
+                            lamb,
+                            r,
+                            t,
+                            precision,
+                            rtol=rtol
+                        )
 
     # def test_alchemical_nonbonded(self):
     #     np.random.seed(125)

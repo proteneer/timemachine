@@ -127,6 +127,15 @@ __global__ void k_compute_born_radii(
                 if (offsetRadiusI < (scaledRadiusJ - r)) {
                     term += 2*(radiusIInverse - l_ij);
                 }
+
+
+                RealType inner = (PI*r)/(2*cutoff);
+                RealType sw = cos(inner);
+                sw = sw*sw;
+
+                // at some point we need to compute the derivative of term with respect to the distance
+                term = sw*term;
+
                 sum += term;
             }
         }
@@ -257,24 +266,38 @@ void __global__ k_compute_born_first_loop_gpu(
         
             RealType energy = Gpol;
 
-            if (atom_i_idx != atom_j_idx) {
+            // RealType inner = (PI*r)/(2*cutoff);
+            // RealType sw = cos(inner);
+            // sw = sw*sw;
+            
 
-                // TBD: determine what we should do with cutoff
-                // FIX THIS since we need to update du/dq i and du/dpi computation
-                // energy -= qi*partialCharges[atom_j_idx]/cutoff;
-                // bornForces[atom_j_idx]        += dGpol_dalpha2_ij*born_radii[atom_i_idx];
+            // RealType dsw_dr = -(PI/cutoff)*sin(inner)*cos(inner);
+            // RealType dsw_dr_dot_E = dsw_dr*energy;
+
+
+            if (atom_i_idx != atom_j_idx) {
+                
+                // energy = sw*energy;
+
                 born_force_j_accum += dGpol_dalpha2_ij*born_radii_i;
 
                 for(int d=0; d < 3; d++) {
+
                     gi[d] += dxs[d]*dGpol_dr;
                     gj[d] -= dxs[d]*dGpol_dr;
+                    // gi[d] += dxs[d]*sw*dGpol_dr + dsw_dr_dot_E*dxs[d]/r;
+                    // gj[d] -= dxs[d]*sw*dGpol_dr + dsw_dr_dot_E*dxs[d]/r;
                 }
 
                 RealType dw_i = dlambda_i;
                 RealType dw_j = dlambda_j; // shuffled
 
+
                 du_dl_i += dxs[3]*dGpol_dr*dw_i;
                 du_dl_j -= dxs[3]*dGpol_dr*dw_j;
+
+                // du_dl_i += dxs[3]*sw*dGpol_dr*dw_i + dsw_dr_dot_E*dxs[3]/r;
+                // du_dl_j -= dxs[3]*sw*dGpol_dr*dw_j + dsw_dr_dot_E*dxs[3]/r;
 
             } else {
                 energy *= 0.5;
@@ -383,17 +406,19 @@ __global__ void k_reduce_born_forces(
     double born_force_i = static_cast<double>(static_cast<long long>(bornForces[atomI]))/FIXED_EXPONENT_BORN_FORCES;
     double br = born_radii[atomI];
 
-    if (br > 0.0) {
-        double atomic_radii = params[atomic_radii_idxs[atomI]];
-        double r            = atomic_radii + probe_radius;
-        double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
-        double saTerm       = surface_tension*r*r*ratio6;
-        atomicAdd(energy, saTerm);
-        born_force_i  -= 6.0*saTerm/born_radii[atomI];
-    }
+
+    // ACE term
+    // if (br > 0.0) {
+    //     double atomic_radii = params[atomic_radii_idxs[atomI]];
+    //     double r            = atomic_radii + probe_radius;
+    //     double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
+    //     double saTerm       = surface_tension*r*r*ratio6;
+    //     atomicAdd(energy, saTerm);
+    //     born_force_i  -= 6.0*saTerm/born_radii[atomI];
+    // }
 
     born_force_i *= obc_chain[atomI];
-    bornForces[atomI] = static_cast<unsigned long long>((long long) ( born_force_i*FIXED_EXPONENT_BORN_FORCES));
+    bornForces[atomI] = static_cast<unsigned long long>((long long) (born_force_i*FIXED_EXPONENT_BORN_FORCES));
 
 }
 
@@ -539,7 +564,7 @@ __global__ void k_compute_born_energy_and_forces(
                 RealType de2 = (u_ij*du_dr - l_ij*dl_dr)*t1;
                 RealType de3 = (u_ij2 - l_ij2)*dt1_dr/2;
                 RealType de4 = rInverse*(rInverse*ratio - (du_dr/u_ij - dl_dr/l_ij));
-                RealType de = de1 + (de2 + de3 - de4)/2;
+                RealType de = de1 + (de2 + de3 - de4)/2; // this is the derivative with respect to r
 
                 if(offsetRadiusI > arss) {
                     // if(offsetRadiusI < (scaledRadiusJ - r)) {
@@ -551,10 +576,26 @@ __global__ void k_compute_born_energy_and_forces(
                     }
                 }
 
-                de *= rInverse*born_force_i*offsetRadiusI/2;
+                // needed for switch rescale
+                RealType term = l_ij - u_ij + r*(u_ij2 - l_ij2)/4 + scaledRadiusJ*scaledRadiusJ*rInverse*(l_ij2 - u_ij2)/4 + rInverse*ratio/2;
+                if (offsetRadiusI < (scaledRadiusJ - r)) {
+                    RealType radiusIInverse  = 1/offsetRadiusI;
+                    term += 2*(radiusIInverse - l_ij);
+                }
+
+                RealType inner = (PI*r)/(2*cutoff);
+                RealType sw = cos(inner);
+                sw = sw*sw;
+                // energy = sw*energy;
+
+                RealType dsw_dr = -(PI/cutoff)*sin(inner)*cos(inner);
+
+                de = dsw_dr*term + de*sw;
+
+                de *= born_force_i*offsetRadiusI/2;
 
                 for(int d=0; d < 3; d++) {
-                    RealType deriv = dxs[d]*de;
+                    RealType deriv = dxs[d]*de*rInverse;
                     dPsi_dx_i[d] += deriv;
                     dPsi_dx_j[d] -= deriv;
                 }
@@ -562,8 +603,8 @@ __global__ void k_compute_born_energy_and_forces(
                 RealType dw_i = dlambda_i;
                 RealType dw_j = dlambda_j;
 
-                du_dl_i += dxs[3]*de*dw_i;
-                du_dl_j -= dxs[3]*de*dw_j;
+                du_dl_i += dxs[3]*de*dw_i*rInverse;
+                du_dl_j -= dxs[3]*de*dw_j*rInverse;
 
             }
         }
