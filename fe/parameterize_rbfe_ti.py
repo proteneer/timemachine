@@ -241,7 +241,7 @@ if __name__ == "__main__":
             combined_ligand = Chem.CombineMols(mol_a, mol_b)
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-            out_file = os.path.join(args.out_dir, str(epoch)+"_rbfe_"+str(lamb_idx)+".pdb")
+            out_file = os.path.join(args.out_dir, str(epoch)+"_rbfe_"+str(lambda_idx)+".pdb")
             writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
 
             # zero-out
