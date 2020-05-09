@@ -131,8 +131,8 @@ def deserialize_system(system, cutoff=10000):
 
                 # this needs to be scaled by sqrt(eps0)
                 charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
-                print("WARNING: strengthening protein charges 10 percent due to cutoffs")
-                charge = charge*1.1 # due to cutoffs
+                # print("WARNING: strengthening protein charges 10 percent due to cutoffs")
+                # charge = charge*1.1 # due to cutoffs
                 sig = value(sig)
                 eps = value(eps)
 

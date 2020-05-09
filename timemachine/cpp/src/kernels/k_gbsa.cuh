@@ -13,6 +13,8 @@
 // since we need to do a full O(N^2) computing and we don't need to broadcast the forces,
 // this should just be extremely efficient already
 
+#define RADII_EXP 8
+
 
 // nope, still need to parallelize out
 template<typename RealType>
@@ -129,7 +131,7 @@ __global__ void k_compute_born_radii(
                 }
 
 
-                RealType inner = (PI*r)/(2*cutoff);
+                RealType inner = (PI*pow(r,RADII_EXP))/(2*cutoff);
                 RealType sw = cos(inner);
                 sw = sw*sw;
 
@@ -583,12 +585,12 @@ __global__ void k_compute_born_energy_and_forces(
                     term += 2*(radiusIInverse - l_ij);
                 }
 
-                RealType inner = (PI*r)/(2*cutoff);
+                RealType inner = (PI*pow(r, RADII_EXP))/(2*cutoff);
                 RealType sw = cos(inner);
                 sw = sw*sw;
                 // energy = sw*energy;
 
-                RealType dsw_dr = -(PI/cutoff)*sin(inner)*cos(inner);
+                RealType dsw_dr = -(RADII_EXP)*pow(r, RADII_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
 
                 de = dsw_dr*term + de*sw;
 
