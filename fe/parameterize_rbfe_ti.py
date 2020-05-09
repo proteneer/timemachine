@@ -241,8 +241,8 @@ if __name__ == "__main__":
             combined_ligand = Chem.CombineMols(mol_a, mol_b)
             combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-            # out_file = os.path.join(args.out_dir, str(epoch)+"_rbfe_"+str(lamb)+".pdb")
-            # writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
+            out_file = os.path.join(args.out_dir, str(epoch)+"_rbfe_"+str(lamb_idx)+".pdb")
+            writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
 
             # zero-out
             # if args.n_frames is 0:
@@ -298,8 +298,9 @@ if __name__ == "__main__":
                 plt.xlabel("timestep")
                 plt.legend()
 
-                fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_du_dls_"+str(pc_idx))
+                fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_du_dls_"+str(lamb_idx))
                 plt.savefig(fpath)
+                plt.close()
 
                 sum_du_dls.append(total_du_dls)
                 all_du_dls.append(full_du_dls)
@@ -310,6 +311,17 @@ if __name__ == "__main__":
 
         loss = loss_fn(all_du_dls, true_ddG, ti_lambdas)
         print("loss", loss, "pred_ddG", np.trapz(np.mean(sum_du_dls, axis=1), ti_lambdas), "true_ddG", true_ddG)
+
+        plt.close()
+        plt.violinplot(sum_du_dls, positions=ti_lambdas)
+        plt.ylabel("du_dlambda")
+        plt.savefig(os.path.join(args.out_dir, str(epoch)+"_violin_du_dls"))
+        plt.close()
+
+        plt.boxplot(sum_du_dls, positions=ti_lambdas)
+        plt.ylabel("du_dlambda")
+        plt.savefig(os.path.join(args.out_dir, str(epoch)+"_boxplot_du_dls"))
+        plt.close()
 
         # if args.train is True:
 
@@ -352,17 +364,6 @@ if __name__ == "__main__":
         #         else:
         #             filtered_grad.append(0)
 
-        #     plt.close()
-
-        #     plt.violinplot(sum_du_dls, positions=ti_lambdas)
-        #     plt.ylabel("du_dlambda")
-        #     plt.savefig(os.path.join(args.out_dir, str(epoch)+"_violin_du_dls"))
-        #     plt.close()
-
-        #     plt.boxplot(sum_du_dls, positions=ti_lambdas)
-        #     plt.ylabel("du_dlambda")
-        #     plt.savefig(os.path.join(args.out_dir, str(epoch)+"_boxplot_du_dls"))
-        #     plt.close()
 
         #     print("Epoch", epoch, "pred_ddG LHS->RHS (B to A)", np.trapz(np.mean(sum_du_dls, axis=-1), ti_lambdas), "true ddG", true_ddG, "loss", loss)
 
