@@ -268,12 +268,12 @@ void __global__ k_compute_born_first_loop_gpu(
         
             RealType energy = Gpol;
 
-            RealType inner = (PI*r)/(2*cutoff);
+            RealType inner = (PI*pow(r,8))/(2*cutoff);
             RealType sw = cos(inner);
             sw = sw*sw;
             
 
-            RealType dsw_dr = -(PI/cutoff)*sin(inner)*cos(inner);
+            RealType dsw_dr = -(RADII_EXP)*pow(r, RADII_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
             RealType dsw_dr_dot_E = dsw_dr*energy;
 
 

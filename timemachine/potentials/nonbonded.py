@@ -5,6 +5,8 @@ from jax.scipy.special import erf, erfc
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.potentials.jax_utils import delta_r, distance, lambda_to_w, convert_to_4d
 
+def switch_fn(dij, cutoff):
+    return np.power(np.cos((np.pi*np.power(dij, 8))/(2*cutoff)), 2)
 
 def nonbonded(
     conf,
@@ -96,7 +98,7 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
     eij = 4*eps_ij*(sig6-1.0)*sig6
 
     if cutoff is not None:
-        sw = np.power(np.cos((np.pi*dij)/(2*cutoff)), 2)
+        sw = switch_fn(dij, cutoff)
         eij = eij*sw
 
     eij = np.where(keep_mask, eij, np.zeros_like(eij))
@@ -133,7 +135,7 @@ def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, e
     eij_exc = scale_ij*4*eps_ij*(sig6-1.0)*sig6
 
     if cutoff is not None:
-        sw = np.power(np.cos((np.pi*dij)/(2*cutoff)), 2)
+        sw = switch_fn(dij, cutoff)
         eij_exc = eij_exc*sw
         eij_exc = np.where(dij > cutoff, np.zeros_like(eij_exc), eij_exc)
         eij_exc = np.where(src_idxs == dst_idxs, np.zeros_like(eij_exc), eij_exc)
@@ -165,7 +167,7 @@ def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_s
     eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
 
     if cutoff is not None:
-        sw = np.power(np.cos((np.pi*dij)/(2*cutoff)), 2)
+        sw = switch_fn(dij, cutoff)
         eij = eij*sw
         eij = np.where(dij > cutoff, np.zeros_like(eij), eij)
 
@@ -183,7 +185,7 @@ def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_s
     eij_exc = scale_ij*qij/dij
 
     if cutoff is not None:
-        sw = np.power(np.cos((np.pi*dij)/(2*cutoff)), 2)
+        sw = switch_fn(dij, cutoff)
         eij_exc = eij_exc*sw
         eij_exc = np.where(dij > cutoff, np.zeros_like(eij_exc), eij_exc)
         eij_exc = np.where(src_idxs == dst_idxs, np.zeros_like(eij_exc), eij_exc)

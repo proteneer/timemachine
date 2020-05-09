@@ -7,6 +7,8 @@
 // reverse mode we don't care at all
 #define WARPSIZE 32
 
+#define NB_EXP 8
+
 // assume D = 3
 // template <typename RealType, int D>
 template <typename RealType>
@@ -131,12 +133,12 @@ void __global__ k_nonbonded_inference(
             RealType lj_grad_prefactor = -24*eps_ij*sig6_inv_d7ij*(sig6_inv_d6ij*2 - 1);
 
             // smooth rescale switch using cosine rule
-            RealType inner = (PI*dij)/(2*cutoff);
+            RealType inner = (PI*pow(dij, NB_EXP))/(2*cutoff);
             RealType sw = cos(inner);
             sw = sw*sw;
 
             // faster alternate form exists
-            RealType dsw_dr = -(PI/cutoff)*sin(inner)*cos(inner);
+            RealType dsw_dr = -(NB_EXP)*pow(dij, NB_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
             RealType es_energy = qi*qj*inv_dij;
             RealType lj_energy = 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
             RealType energy_sum = es_energy + lj_energy;
@@ -290,11 +292,11 @@ void __global__ k_nonbonded_exclusion_inference(
         RealType sig12_inv_d14ij = sig12_inv_d12ij*inv_d2ij;
         RealType lj_grad_prefactor = -24*eps_ij*sig6_inv_d7ij*(sig6_inv_d6ij*2 - 1);
 
-        RealType inner = (PI*dij)/(2*cutoff);
+        RealType inner = (PI*pow(dij, NB_EXP))/(2*cutoff);
         RealType sw = cos(inner);
         sw = sw*sw;
 
-        RealType dsw_dr = -(PI/cutoff)*sin(inner)*cos(inner);
+        RealType dsw_dr = -(NB_EXP)*pow(dij, NB_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
         RealType es_energy = qi*qj*inv_dij;
         RealType lj_energy = 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
         RealType energy_sum = es_scale*es_energy + lj_scale*lj_energy;

@@ -68,7 +68,7 @@ class TestNonbonded(GradientTest):
         x = self.get_random_coords(N, D)
 
         for precision, rtol in [(np.float64, 1e-9), (np.float32, 3e-5)]:
-            for cutoff in [50.0, 0.5, 0.3]:
+            for cutoff in [1.0, 50.0, 0.5, 0.3]:
 
                 # E = 0
 

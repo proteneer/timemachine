@@ -81,25 +81,6 @@ def gbsa_obc(
 
     B = 1 / (1 / offset_radius - np.tanh(psi_term) / radii)
 
-#     print(B)
-
-
-#     import matplotlib.pyplot as plt
-#     plt.hist(B)
-#     plt.show()
-
-#     print(np.mean(B), np.std(B))
-
-# # [0.222987   0.12540398 0.11749384 ... 0.17581854 0.21853554 0.12827665]
-# # 0.21031612950428988 0.07887738004469615
-
-
-# # [0.22032246 0.1245343  0.11694911 ... 0.17242771 0.21165318 0.1262422 ]
-# # 0.18322581030088647 0.04637126547253851
-
-
-#     assert 0
-
     E = 0.0
     # single particle
     # ACE
@@ -115,7 +96,7 @@ def gbsa_obc(
 
     ixns = - (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
 
-    sw = np.power(np.cos((np.pi*dij)/(2*cutoff_radii)), 2)
+    # sw = np.power(np.cos((np.pi*dij)/(2*cutoff_radii)), 2)
     ixns = ixns*sw
     ixns = np.where(dij > cutoff_force, 0, ixns)
 
