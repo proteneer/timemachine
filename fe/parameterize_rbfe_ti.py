@@ -298,12 +298,13 @@ if __name__ == "__main__":
                 plt.xlabel("timestep")
                 plt.legend()
 
-                fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_du_dls_"+str(lamb_idx))
+                fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_du_dls")
                 plt.savefig(fpath)
-                plt.close()
+
 
                 sum_du_dls.append(total_du_dls)
                 all_du_dls.append(full_du_dls)
+
 
         # compute loss and derivatives w.r.t. adjoints
         true_ddG = mol_a_dG - mol_b_dG
