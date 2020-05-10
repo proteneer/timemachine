@@ -13,7 +13,7 @@
 // since we need to do a full O(N^2) computing and we don't need to broadcast the forces,
 // this should just be extremely efficient already
 
-#define RADII_EXP 8
+#define RADII_EXP 4
 
 
 // nope, still need to parallelize out
@@ -135,6 +135,7 @@ __global__ void k_compute_born_radii(
                 RealType sw = cos(inner);
                 sw = sw*sw;
 
+                // sw = 1;
                 // at some point we need to compute the derivative of term with respect to the distance
                 term = sw*term;
 
@@ -271,9 +272,11 @@ void __global__ k_compute_born_first_loop_gpu(
             RealType inner = (PI*pow(r,8))/(2*cutoff);
             RealType sw = cos(inner);
             sw = sw*sw;
-            
-
             RealType dsw_dr = -(RADII_EXP)*pow(r, RADII_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
+
+            // sw = 1;
+            // dsw_dr = 0;
+
             RealType dsw_dr_dot_E = dsw_dr*energy;
 
 
@@ -588,9 +591,12 @@ __global__ void k_compute_born_energy_and_forces(
                 RealType inner = (PI*pow(r, RADII_EXP))/(2*cutoff);
                 RealType sw = cos(inner);
                 sw = sw*sw;
-                // energy = sw*energy;
+
 
                 RealType dsw_dr = -(RADII_EXP)*pow(r, RADII_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
+
+                // sw = 1;
+                // dsw_dr = 0;
 
                 de = dsw_dr*term + de*sw;
 

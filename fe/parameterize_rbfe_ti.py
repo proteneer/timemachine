@@ -106,7 +106,7 @@ if __name__ == "__main__":
     for guest_idx, guest_mol in enumerate(suppl):
         all_guest_mols.append(guest_mol)
 
-    all_guest_mols = [all_guest_mols[0], all_guest_mols[2]]
+    all_guest_mols = [all_guest_mols[0], all_guest_mols[1]]
 
     mol_a, mol_b = all_guest_mols
 
@@ -203,7 +203,7 @@ if __name__ == "__main__":
         print("cbs", cbs)
         print("ccs", ccs)
      
-        complete_T = 12000
+        complete_T = 20000
         equil_T = 2000
 
         ti_lambdas = np.linspace(0, 1, args.num_windows)
@@ -247,7 +247,7 @@ if __name__ == "__main__":
             # zero-out
             # if args.n_frames is 0:
                 # writer = None
-            # writer = None
+            writer = None
 
             host_conf = []
             for x,y,z in host_pdb.positions:
@@ -310,7 +310,7 @@ if __name__ == "__main__":
         true_ddG = mol_a_dG - mol_b_dG
         all_du_dls = np.array(all_du_dls)
 
-        loss = loss_fn(all_du_dls, true_ddG, ti_lambdas)
+        loss = loss_fn(all_du_dls[:, :, equil_T:], true_ddG, ti_lambdas)
         print("loss", loss, "pred_ddG", np.trapz(np.mean(sum_du_dls, axis=1), ti_lambdas), "true_ddG", true_ddG)
 
         plt.close()

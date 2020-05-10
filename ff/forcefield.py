@@ -349,7 +349,9 @@ class Forcefield():
 
                     es_param_idxs = np.arange(mol.GetNumAtoms()) + len(self.params)
                     for index, atom in enumerate(oemol.GetAtoms()):
-                        q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+                        q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)/2
+                        # q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+                        # q = 0
                         # print("WARNING: strengthening AM1BCC charges 10 percent due to cutoffs")
                         # q = q*1.1
                         self.params.append(q)
