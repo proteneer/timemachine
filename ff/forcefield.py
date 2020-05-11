@@ -112,7 +112,7 @@ class Forcefield():
         self.params.append(exclusion_param)
         self.param_groups.append(exclusion_param_group)
 
-        exclusion_param = 0.5
+        exclusion_param = 1.0
         exclusion_param_group = 21
         self.exclusion_param_idx_14 = len(self.params)
         self.params.append(exclusion_param)
@@ -290,14 +290,18 @@ class Forcefield():
             elif force_type == "Proper":
 
                 for atom_idxs, (p_idx, _) in vd.items():
+
                     pp = params[p_idx]
                     components = pp[1]
                     for proper_torsion in components:
+
+
                         torsion_idxs.append(atom_idxs)
                         torsion_param_idxs.append(proper_torsion)
 
-                    assert src < dst
-                    exclusions_14[(src, dst)] = exclusion_param_idx_14
+                        src, _, _, dst = atom_idxs
+                        assert src < dst
+                        exclusions_14[(src, dst)] = exclusion_param_idx_14
 
             elif force_type == 'Improper':
 
@@ -349,11 +353,8 @@ class Forcefield():
 
                     es_param_idxs = np.arange(mol.GetNumAtoms()) + len(self.params)
                     for index, atom in enumerate(oemol.GetAtoms()):
-                        q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)/2
-                        # q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
-                        # q = 0
-                        # print("WARNING: strengthening AM1BCC charges 10 percent due to cutoffs")
-                        # q = q*1.1
+                        q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+                        q = 0
                         self.params.append(q)
                         self.param_groups.append(23)
 
@@ -396,6 +397,10 @@ class Forcefield():
 
         exclusion_map = {}
         # weaker exclusions
+        print("1-4 exclusions", exclusions_14)
+
+        # assert 0
+
         for k, v in exclusions_14.items():
             exclusion_map[tuple(sorted(k))] = v
 

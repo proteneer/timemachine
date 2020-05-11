@@ -142,6 +142,8 @@ class Simulation:
         gradients = []
         handles = []
         force_names = []
+
+
         for k, v in self.lhs_system.nrg_fns.items():
 
             force_names.append(k)
@@ -159,9 +161,13 @@ class Simulation:
             )
             gradients.append(grad_alchem)
 
+        # x_bad = np.load("all_coords.npy")[3497]
+
         # for g in gradients:
-        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.0001)
-        #     print(g, forces[1758:], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
+        #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+
+        # assert 0
 
         stepper = custom_ops.AlchemicalStepper_f64(
             gradients,
@@ -188,7 +194,13 @@ class Simulation:
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
-        xs = ctxt.get_all_coords()
+        # xs = ctxt.get_all_coords()
+
+        # np.save("all_coords.npy", xs)
+        # # np.save("debug_coords.npy", xs[6000])
+
+        # assert 0
+
 
         start = time.time()
         x_final = ctxt.get_last_coords()[:, :3]

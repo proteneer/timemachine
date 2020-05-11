@@ -106,7 +106,8 @@ if __name__ == "__main__":
     for guest_idx, guest_mol in enumerate(suppl):
         all_guest_mols.append(guest_mol)
 
-    all_guest_mols = [all_guest_mols[0], all_guest_mols[1]]
+    # to self
+    all_guest_mols = [all_guest_mols[0], all_guest_mols[0]]
 
     mol_a, mol_b = all_guest_mols
 
@@ -123,7 +124,12 @@ if __name__ == "__main__":
     print("RHS End State A (complex) B (solvent)")
 
     a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
-    a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Bonded')
+    a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
+    # a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Bonded')
+    # a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Bonded')
+
+    del a_to_b_map_nonbonded[14]
+    del a_to_b_map_bonded[14]
 
     print("Nonbonded Atom Mapping:", a_to_b_map_nonbonded)
     print("Bonded Atom Mapping:", a_to_b_map_bonded)
@@ -149,9 +155,9 @@ if __name__ == "__main__":
 
     # combined_masses = np.concatenate([a_masses, b_masses])
 
-    a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True)
+    a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=False)
 
-    b_system = open_ff.parameterize(mol_b, cutoff=args.cutoff, am1=True)
+    b_system = open_ff.parameterize(mol_b, cutoff=args.cutoff, am1=False)
 
 
     lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map_nonbonded, a_to_b_map_bonded)
@@ -206,9 +212,9 @@ if __name__ == "__main__":
         complete_T = 20000
         equil_T = 2000
 
-        # ti_lambdas = np.linspace(0, 1, args.num_windows)
-        # ti_lambdas = np.ones(args.num_windows)*0.1
-        ti_lambdas = np.array([0.33, 0.33, 0.33, 0.33, 0.33, 0.33, 0.33])
+        ti_lambdas = np.linspace(0, 1, args.num_windows)
+        # ti_lambdas = np.ones(args.num_windows)*0.2
+        # ti_lambdas = np.array([0.33, 0.33, 0.33, 0.33, 0.33, 0.33, 0.33])
         # ti_lambdas = np.array([0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07])
         # all_du_dls = []
 

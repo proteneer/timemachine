@@ -113,11 +113,42 @@ class System():
         lhs_es_param_idxs, rhs_es_param_idxs = lm.mix_nonbonded_parameters(a_es_param_idxs, b_es_param_idxs)
         lhs_lj_param_idxs, rhs_lj_param_idxs = lm.mix_nonbonded_parameters(a_lj_param_idxs, b_lj_param_idxs)
 
+
+        print(lhs_lj_param_idxs[14])
+        print(lhs_lj_param_idxs[51])
+
+        print(rhs_lj_param_idxs[14])
+        print(rhs_lj_param_idxs[51])
+
+        # same parameters....
+
+        # assert 0
+
         (_,            lhs_lj_exc_param_idxs), (           _, rhs_lj_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
         (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
 
         lhs_exc_idxs = np.array(lhs_exc_idxs, dtype=np.int32)
         rhs_exc_idxs = np.array(rhs_exc_idxs, dtype=np.int32)
+
+        # print(lhs_exc_idxs)
+        # for pair in lhs_exc_idxs:
+        #     # if pair[0] == 14 or pair[1] == 14:
+        #         # print(pair)
+
+        #     if pair[0] == 51 or pair[1] == 51:
+        #         print(pair)
+
+
+        # print(rhs_exc_idxs)
+        for pair in rhs_exc_idxs:
+
+            if pair[0] == 14 or pair[1] == 14:
+                print(pair)
+
+            if pair[0] == 51 or pair[1] == 51:
+                print(pair)
+
+        # assert 0
 
         lhs_es_exc_param_idxs = np.array(lhs_es_exc_param_idxs, dtype=np.int32) 
         rhs_es_exc_param_idxs = np.array(rhs_es_exc_param_idxs, dtype=np.int32) 

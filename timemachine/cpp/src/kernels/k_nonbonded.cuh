@@ -163,6 +163,19 @@ void __global__ k_nonbonded_inference(
             RealType dw_i = dlambda_i;
             RealType dw_j = dlambda_j;
 
+            // if(atom_i_idx == 1758+51 || atom_j_idx == 1758+51) {
+            //     // auto contrib = -dxs[3]/dij;
+            //     // auto contrib = product_rule * (-dxs[3]/dij) * dw_i;
+            //     // auto contrib = -dxs[3]/dij;
+            //     if(atom_i_idx < 1758 || atom_j_idx < 1758) {
+            //         if(abs(lj_grad_prefactor) > 5.0) {
+            //             auto dw = -dxs[3]/dij;
+            //             // printf("atom_i_idx %d atom_j_idx %d lj_grad_prefactor %f dij %f sig_ij %f gx %f gy %f gz %f U %f dw %f pr %f FINAL CONTRIB %f \n", atom_i_idx, atom_j_idx, lj_grad_prefactor, dij, sig_ij, eps_ij, gi[0], gi[1], gi[2], lj_energy, dw, product_rule, product_rule * (-dxs[3]/dij) * dw_i);
+            //             printf("atom_i_idx %d atom_j_idx %d product_rule %f final %f scale %f dw_i %f energy %f\n", atom_i_idx, atom_j_idx, product_rule, product_rule * (-dxs[3]/dij) * dw_i,  (-dxs[3]/dij), dw_i, lj_energy);
+            //         }                    
+            //     }
+            // }
+
             du_dl_i -= product_rule * (-dxs[3]/dij) * dw_i;
             du_dl_j += product_rule * (-dxs[3]/dij) * dw_j;
 
