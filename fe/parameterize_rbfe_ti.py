@@ -122,17 +122,26 @@ if __name__ == "__main__":
     print("LHS End State B (complex) A (solvent)")
     print("RHS End State A (complex) B (solvent)")
 
-    a_to_b_map = atom_mapping.mcs_map(*all_guest_mols)
+    a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
+    a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Bonded')
 
-    print("Atom Mapping:", a_to_b_map)
+    print("Nonbonded Atom Mapping:", a_to_b_map_nonbonded)
+    print("Bonded Atom Mapping:", a_to_b_map_bonded)
 
-    svg_a, svg_b = atom_mapping.draw_mapping(mol_a, mol_b, a_to_b_map)
+    svg_a, svg_b = atom_mapping.draw_mapping(mol_a, mol_b, a_to_b_map_nonbonded)
 
-
-    with open(os.path.join(args.out_dir, 'atom_mapping_A_'+str(a_name)+'.svg'), 'w') as fh:
+    with open(os.path.join(args.out_dir, 'atom_mapping_A_nonbonded'+str(a_name)+'.svg'), 'w') as fh:
         fh.write(svg_a)
 
-    with open(os.path.join(args.out_dir, 'atom_mapping_B_'+str(b_name)+'.svg'), 'w') as fh:
+    with open(os.path.join(args.out_dir, 'atom_mapping_B_nonbonded'+str(b_name)+'.svg'), 'w') as fh:
+        fh.write(svg_b)
+
+    svg_a, svg_b = atom_mapping.draw_mapping(mol_a, mol_b, a_to_b_map_bonded)
+
+    with open(os.path.join(args.out_dir, 'atom_mapping_A_bonded'+str(a_name)+'.svg'), 'w') as fh:
+        fh.write(svg_a)
+
+    with open(os.path.join(args.out_dir, 'atom_mapping_B_bonded'+str(b_name)+'.svg'), 'w') as fh:
         fh.write(svg_b)
 
     open_ff = forcefield.Forcefield(args.forcefield)
@@ -140,21 +149,12 @@ if __name__ == "__main__":
 
     # combined_masses = np.concatenate([a_masses, b_masses])
 
-    print(len(open_ff.params))
-
     a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True)
-
-    print(len(open_ff.params))
 
     b_system = open_ff.parameterize(mol_b, cutoff=args.cutoff, am1=True)
 
-    print(len(open_ff.params))
 
-
-    print(len(a_system.params))
-    print(len(b_system.params))
-
-    lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map)
+    lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map_nonbonded, a_to_b_map_bonded)
 
     host_pdb_file = args.protein_pdb
     host_pdb = app.PDBFile(host_pdb_file)
@@ -186,7 +186,7 @@ if __name__ == "__main__":
 
         temperature = 300
         dt = 1.5e-3
-        friction = 40
+        friction = 91
 
         masses = np.array(lhs_combined_system.masses)
         ca, cbs, ccs = langevin_coefficients(
@@ -206,9 +206,9 @@ if __name__ == "__main__":
         complete_T = 20000
         equil_T = 2000
 
-        ti_lambdas = np.linspace(0, 1, args.num_windows)
+        # ti_lambdas = np.linspace(0, 1, args.num_windows)
         # ti_lambdas = np.ones(args.num_windows)*0.1
-        # ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
+        ti_lambdas = np.array([0.33, 0.33, 0.33, 0.33, 0.33, 0.33, 0.33])
         # ti_lambdas = np.array([0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07])
         # all_du_dls = []
 

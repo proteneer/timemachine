@@ -45,6 +45,7 @@ void __global__ k_harmonic_bond_inference(
 
     for(int d=0; d < 3; d++) {
         RealType grad_delta = kb*db*dx[d]/dij;
+
         atomicAdd(grad_coords + src_idx*3 + d, static_cast<unsigned long long>((long long) (grad_delta*FIXED_EXPONENT)));
         atomicAdd(grad_coords + dst_idx*3 + d, static_cast<unsigned long long>((long long) (-grad_delta*FIXED_EXPONENT)));
     }

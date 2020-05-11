@@ -13,7 +13,7 @@ class System():
         self.param_groups = param_groups
         self.masses = masses
 
-    def mix(self, other, self_to_other_map):
+    def mix(self, other, self_to_other_map_nonbonded, self_to_other_map_bonded):
         """
         Alchemically mix two ligand systems together.
 
@@ -28,7 +28,8 @@ class System():
         """
         a_masses = self.masses
         b_masses = other.masses
-        a_to_b_map = self_to_other_map
+        a_to_b_map_nonbonded = self_to_other_map_nonbonded
+        a_to_b_map_bonded = self_to_other_map_bonded
 
         combined_masses = np.concatenate([a_masses, b_masses])
 
@@ -44,7 +45,7 @@ class System():
         n_a = len(a_masses)
         n_b = len(b_masses)
 
-        lm = linear_mixer.LinearMixer(n_a, a_to_b_map)
+        lm = linear_mixer.LinearMixer(n_a, a_to_b_map_bonded)
 
         lhs_bond_idxs, lhs_bond_param_idxs, rhs_bond_idxs, rhs_bond_param_idxs = lm.mix_arbitrary_bonds(
             a_bond_idxs, a_bond_param_idxs,
@@ -54,8 +55,27 @@ class System():
         lhs_nrg_fns = {}
         rhs_nrg_fns = {}
 
+        # bonded mixing
+        # for bonded mixing to work well we need make sure that that the bond types match *exactly*
+
         lhs_nrg_fns['HarmonicBond'] = (lhs_bond_idxs, lhs_bond_param_idxs)
         rhs_nrg_fns['HarmonicBond'] = (rhs_bond_idxs, rhs_bond_param_idxs)
+
+        # print(lhs_bond_idxs)
+        # print(rhs_bond_idxs)
+
+        # set_a = set()
+        # for pair in lhs_bond_idxs:
+        #     set_a.add(tuple(pair))
+
+
+        # set_b = set()
+        # for pair in rhs_bond_idxs:
+        #     set_b.add(tuple(pair))
+
+        # print(set_a == set_b)
+
+        # assert 0
 
         a_angle_idxs, a_angle_param_idxs = a_nrg_fns['HarmonicAngle']
         b_angle_idxs, b_angle_param_idxs = b_nrg_fns['HarmonicAngle']
@@ -78,6 +98,10 @@ class System():
 
         lhs_nrg_fns['PeriodicTorsion'] = (lhs_torsion_idxs, lhs_torsion_param_idxs)
         rhs_nrg_fns['PeriodicTorsion'] = (rhs_torsion_idxs, rhs_torsion_param_idxs)
+
+
+        # nonbonded mixing
+        lm = linear_mixer.LinearMixer(n_a, a_to_b_map_nonbonded)
 
         lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(n_a, n_b)
 

@@ -429,4 +429,7 @@ class Forcefield():
 
         masses = get_masses(mol)
 
+        print("masses", masses[14], masses[13])
+        # assert 0
+
         return system.System(nrg_fns, self.params, self.param_groups, masses)
