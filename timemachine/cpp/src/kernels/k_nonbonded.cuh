@@ -50,8 +50,8 @@ void __global__ k_nonbonded_inference(
     RealType lambda_i = lambda;
     RealType dlambda_i = 0;
     if(atom_i_idx < N) {
-        lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);
-        dlambda_i = cutoff*lambda_offset_idxs[atom_i_idx];
+        lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
+        dlambda_i = lambda_offset_idxs[atom_i_idx];
     }
 
     RealType ci[3];
@@ -73,8 +73,8 @@ void __global__ k_nonbonded_inference(
     RealType lambda_j = lambda;
     RealType dlambda_j = 0;
     if(atom_j_idx < N) {
-        lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);
-        dlambda_j = cutoff*lambda_offset_idxs[atom_j_idx];
+        lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;
+        dlambda_j = lambda_offset_idxs[atom_j_idx];
     }
 
     RealType cj[3];
@@ -140,9 +140,8 @@ void __global__ k_nonbonded_inference(
             // faster alternate form exists
             RealType dsw_dr = -(NB_EXP)*pow(dij, NB_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
 
-
-            // sw = 1;
-            // dsw_dr = 0;
+            sw = 1;
+            dsw_dr = 0;
 
             RealType es_energy = qi*qj*inv_dij;
             RealType lj_energy = 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
@@ -153,9 +152,36 @@ void __global__ k_nonbonded_inference(
 
             RealType product_rule = dsw_dr*energy_sum + sw*grad_sum;
 
+
+            // testing code, renormalize the force by removing the 4D component
+            RealType fij3 = 0;
+            RealType fij4 = 0;
+
             for(int d=0; d < 3; d++) {
-                RealType force_i = product_rule * (-dxs[d]/dij);
-                RealType force_j = product_rule * (-dxs[d]/dij);
+                fij3 += pow(product_rule * (-dxs[d]/dij), 2);
+                fij4 += pow(product_rule * (-dxs[d]/dij), 2);
+            }
+
+            fij4 += pow(product_rule * (-dxs[3]/dij), 2);
+
+            fij3 = sqrt(fij3);
+            fij4 = sqrt(fij4);
+
+
+            RealType force_norm_ratio;
+            if(fij4 == 0 && fij3 == 0) {
+                force_norm_ratio = 1.0;
+            } else {
+                force_norm_ratio = fij4/fij3;
+            }
+
+            force_norm_ratio = 1.0;
+
+            // printf("%f force_norm_ratio\n", force_norm_ratio);
+
+            for(int d=0; d < 3; d++) {
+                RealType force_i = product_rule * (-dxs[d]/dij) * force_norm_ratio;
+                RealType force_j = product_rule * (-dxs[d]/dij) * force_norm_ratio;
                 gi[d] -= force_i; // flip this fucking sign later so it's correct derivatives
                 gj[d] += force_j;
             }
@@ -236,8 +262,8 @@ void __global__ k_nonbonded_exclusion_inference(
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
     RealType du_dl_i = 0;
     RealType lambda_i = lambda;
-    lambda_i = cutoff*(lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i);
-    RealType dlambda_i = cutoff*lambda_offset_idxs[atom_i_idx];
+    lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
+    RealType dlambda_i = lambda_offset_idxs[atom_i_idx];
 
     RealType ci[3];
     double gi[3] = {0};
@@ -257,8 +283,8 @@ void __global__ k_nonbonded_exclusion_inference(
 
     RealType du_dl_j = 0;
     RealType lambda_j = lambda;
-    lambda_j = cutoff*(lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j);
-    RealType dlambda_j = cutoff*lambda_offset_idxs[atom_j_idx];
+    lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;
+    RealType dlambda_j = lambda_offset_idxs[atom_j_idx];
 
     RealType cj[3];
     double gj[3] = {0};
@@ -316,8 +342,8 @@ void __global__ k_nonbonded_exclusion_inference(
 
         RealType dsw_dr = -(NB_EXP)*pow(dij, NB_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
 
-        // sw = 1;
-        // dsw_dr = 0;
+        sw = 1;
+        dsw_dr = 0;
 
         RealType es_energy = qi*qj*inv_dij;
         RealType lj_energy = 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
@@ -328,9 +354,35 @@ void __global__ k_nonbonded_exclusion_inference(
         atomicAdd(out_energy, -energy);
         RealType product_rule = dsw_dr*energy_sum + sw*grad_sum;
 
+        RealType fij3 = 0;
+        RealType fij4 = 0;
+
         for(int d=0; d < 3; d++) {
-            gi[d] += product_rule * (-dxs[d]/dij);
-            gj[d] -= product_rule * (-dxs[d]/dij);
+            fij3 += pow(product_rule * (-dxs[d]/dij), 2);
+            fij4 += pow(product_rule * (-dxs[d]/dij), 2);
+        }
+
+        fij4 += pow(product_rule * (-dxs[3]/dij), 2);
+
+        fij3 = sqrt(fij3);
+        fij4 = sqrt(fij4);
+
+        RealType force_norm_ratio;
+        if(fij4 == 0 && fij3 == 0) {
+            force_norm_ratio = 1.0;
+        } else {
+            force_norm_ratio = fij4/fij3;
+        }
+
+        // if(abs(force_norm_ratio - 1.0) > 1e-6) {
+        //     printf("WTF EXCLUSIONS? %f\n", force_norm_ratio);
+        // }
+        force_norm_ratio = 1.0;
+        // printf("%f force_norm_ratio exclusion\n", force_norm_ratio);
+
+        for(int d=0; d < 3; d++) {
+            gi[d] += product_rule * (-dxs[d]/dij) * force_norm_ratio;
+            gj[d] -= product_rule * (-dxs[d]/dij) * force_norm_ratio;
         }
 
         RealType dw_i = dlambda_i;

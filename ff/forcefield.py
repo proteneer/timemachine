@@ -112,7 +112,7 @@ class Forcefield():
         self.params.append(exclusion_param)
         self.param_groups.append(exclusion_param_group)
 
-        exclusion_param = 1.0
+        exclusion_param = 0.5
         exclusion_param_group = 21
         self.exclusion_param_idx_14 = len(self.params)
         self.params.append(exclusion_param)
@@ -280,8 +280,6 @@ class Forcefield():
                     assert src < dst
                     exclusions[(src, dst)] = exclusion_param_idx
 
-                    # print("1-3", self.params[exclusion_param_idx])
-
                 nrg_fns['HarmonicAngle'] = (
                     np.array(angle_idxs, dtype=np.int32),
                     np.array(angle_param_idxs, dtype=np.int32)
@@ -354,7 +352,7 @@ class Forcefield():
                     es_param_idxs = np.arange(mol.GetNumAtoms()) + len(self.params)
                     for index, atom in enumerate(oemol.GetAtoms()):
                         q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
-                        q = 0
+                        # q = 0
                         self.params.append(q)
                         self.param_groups.append(23)
 
@@ -433,8 +431,5 @@ class Forcefield():
         )
 
         masses = get_masses(mol)
-
-        print("masses", masses[14], masses[13])
-        # assert 0
 
         return system.System(nrg_fns, self.params, self.param_groups, masses)

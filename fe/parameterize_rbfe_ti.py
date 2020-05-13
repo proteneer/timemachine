@@ -123,13 +123,14 @@ if __name__ == "__main__":
     print("LHS End State B (complex) A (solvent)")
     print("RHS End State A (complex) B (solvent)")
 
-    a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
-    a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
-    # a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Bonded')
-    # a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Bonded')
-
+    # a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
+    # a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
+    a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Bonded')
     del a_to_b_map_nonbonded[14]
-    del a_to_b_map_bonded[14]
+    a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
+
+    # del a_to_b_map_nonbonded[14]
+    # del a_to_b_map_bonded[14]
 
     print("Nonbonded Atom Mapping:", a_to_b_map_nonbonded)
     print("Bonded Atom Mapping:", a_to_b_map_bonded)
@@ -155,10 +156,8 @@ if __name__ == "__main__":
 
     # combined_masses = np.concatenate([a_masses, b_masses])
 
-    a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=False)
-
-    b_system = open_ff.parameterize(mol_b, cutoff=args.cutoff, am1=False)
-
+    a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True)
+    b_system = open_ff.parameterize(mol_b, cutoff=args.cutoff, am1=True)
 
     lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map_nonbonded, a_to_b_map_bonded)
 
@@ -192,7 +191,7 @@ if __name__ == "__main__":
 
         temperature = 300
         dt = 1.5e-3
-        friction = 91
+        friction = 40
 
         masses = np.array(lhs_combined_system.masses)
         ca, cbs, ccs = langevin_coefficients(
@@ -209,13 +208,19 @@ if __name__ == "__main__":
         print("cbs", cbs)
         print("ccs", ccs)
      
-        complete_T = 20000
+        # complete_T = 200000
+        # complete_T = 100000
+        complete_T = 40000
         equil_T = 2000
 
-        ti_lambdas = np.linspace(0, 1, args.num_windows)
+        # ti_lambdas = np.linspace(0, 1, args.num_windows)
         # ti_lambdas = np.ones(args.num_windows)*0.2
-        # ti_lambdas = np.array([0.33, 0.33, 0.33, 0.33, 0.33, 0.33, 0.33])
-        # ti_lambdas = np.array([0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07])
+        # ti_lambdas = np.array([0.07, 0.13, 0.20, 0.27, 0.33, 0.33, 0.33])
+        # ti_lambdas = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
+        #
+         # ti_lambdas = np.array([0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07])
+        # ti_lambdas = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
         # all_du_dls = []
 
         all_processes = []
@@ -253,7 +258,7 @@ if __name__ == "__main__":
             # zero-out
             # if args.n_frames is 0:
                 # writer = None
-            writer = None
+            # writer = None
 
             host_conf = []
             for x,y,z in host_pdb.positions:
@@ -282,6 +287,8 @@ if __name__ == "__main__":
         sum_du_dls = [] # [L, T]
         all_du_dls = [] # [L, F, T] num lambda windows, num forces, num steps
 
+        all_energies = []
+
         # run inference loop to generate all_du_dls
         for b_idx in range(0, len(all_processes), args.num_gpus):
             for p in all_processes[b_idx:b_idx+args.num_gpus]:
@@ -294,7 +301,7 @@ if __name__ == "__main__":
                 lamb = ti_lambdas[b_idx+pc_idx]
 
                 offset = equil_T # TBD use this
-                full_du_dls = pc.recv() # F, T
+                full_du_dls, full_energies = pc.recv() # (F, T), (T)
                 pc.send(None)
                 assert full_du_dls is not None
                 total_du_dls = np.sum(full_du_dls, axis=0)
@@ -303,10 +310,18 @@ if __name__ == "__main__":
                 plt.ylabel("du_dl")
                 plt.xlabel("timestep")
                 plt.legend()
-
-                fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_du_dls")
+                fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_du_dls_"+str(lamb_idx))
                 plt.savefig(fpath)
+                plt.clf()
 
+                plt.plot(full_energies, label="{:.2f}".format(lamb))
+                plt.ylabel("U")
+                plt.xlabel("timestep")
+                plt.legend()
+
+                fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_energies_"+str(lamb_idx))
+                plt.savefig(fpath)
+                plt.clf()
 
                 sum_du_dls.append(total_du_dls)
                 all_du_dls.append(full_du_dls)
@@ -316,19 +331,19 @@ if __name__ == "__main__":
         true_ddG = mol_a_dG - mol_b_dG
         all_du_dls = np.array(all_du_dls)
 
-        loss = loss_fn(all_du_dls[:, :, equil_T:], true_ddG, ti_lambdas)
+        loss = loss_fn(all_du_dls[:, :, complete_T//2:], true_ddG, ti_lambdas)
         print("loss", loss, "pred_ddG", np.trapz(np.mean(sum_du_dls, axis=1), ti_lambdas), "true_ddG", true_ddG)
 
-        plt.close()
+        plt.clf()
         plt.violinplot(sum_du_dls, positions=ti_lambdas)
         plt.ylabel("du_dlambda")
         plt.savefig(os.path.join(args.out_dir, str(epoch)+"_violin_du_dls"))
-        plt.close()
+        plt.clf()
 
         plt.boxplot(sum_du_dls, positions=ti_lambdas)
         plt.ylabel("du_dlambda")
         plt.savefig(os.path.join(args.out_dir, str(epoch)+"_boxplot_du_dls"))
-        plt.close()
+        plt.clf()
 
         # if args.train is True:
 

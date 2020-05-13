@@ -105,6 +105,9 @@ class System():
 
         lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(n_a, n_b)
 
+        # print(lambda_offset_idxs)
+        # assert 0
+
         a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, a_cutoff = a_nrg_fns['Nonbonded']
         b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, b_cutoff = b_nrg_fns['Nonbonded']
 
@@ -293,24 +296,6 @@ class System():
                 raise Exception("Unknown potential", a_name)
 
         return System(c_nrgs, c_params, c_param_groups, c_masses)
-
-    # def make_alchemical_gradients(self, other, precision):
-
-    #     gradients = []
-    #     for k, v in self.nrg_fns.items():
-    #         other_v = other.nrg_fns[k]
-    #         op_fn = getattr(ops, k)
-    #         grad = op_fn(*v, precision=precision)
-    #         grad_other = op_fn(*other_v, precision=precision)
-    #         grad_alchem = ops.AlchemicalGradient(
-    #             len(self.masses),
-    #             len(self.params),
-    #             grad,
-    #             grad_other
-    #         )
-    #         gradients.append(grad_alchem)
-
-    #     return gradients
 
     def make_gradients(self, precision):
         """

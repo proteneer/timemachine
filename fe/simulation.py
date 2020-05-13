@@ -194,9 +194,9 @@ class Simulation:
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
-        # xs = ctxt.get_all_coords()
+        xs = ctxt.get_all_coords()
 
-        # np.save("all_coords.npy", xs)
+        np.save("all_coords.npy", xs)
         # # np.save("debug_coords.npy", xs[6000])
 
         # assert 0
@@ -217,13 +217,25 @@ class Simulation:
         full_du_dls = stepper.get_du_dl()
 
 
+        print("Max nonbonded arg", np.argmax(full_du_dls[3]))
 
-        for fname, du_dls in zip(force_names, full_du_dls):
+        full_energies = stepper.get_energies()
+
+        # equil_du_dls = full_du_dls
+        equil_du_dls = full_du_dls[:, len(self.step_sizes)//2:]
+
+        # print(equil_du_dls.shape)
+
+        # assert 0
+
+        for fname, du_dls in zip(force_names, equil_du_dls):
             print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+            # print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.trapz(du_dls, self.lambda_schedule)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
 
-        total_du_dls = np.sum(full_du_dls, axis=0)
+        total_equil_du_dls = np.sum(equil_du_dls, axis=0)
 
-        print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(total_du_dls)), "+-", "{:7.2f}".format(np.std(total_du_dls)), "\t <- Total")
+        print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
+        # print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.trapz(total_equil_du_dls, self.lambda_schedule)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
 
         if pdb_writer is not None:
             pdb_writer.write_header()
@@ -238,7 +250,7 @@ class Simulation:
                         break
             pdb_writer.close()
 
-        pipe.send(full_du_dls)
+        pipe.send((full_du_dls, full_energies))
 
         du_dl_adjoints = pipe.recv()
 
