@@ -191,7 +191,7 @@ if __name__ == "__main__":
 
         temperature = 300
         dt = 1.5e-3
-        friction = 40
+        friction = 20
 
         masses = np.array(lhs_combined_system.masses)
         ca, cbs, ccs = langevin_coefficients(
@@ -209,8 +209,8 @@ if __name__ == "__main__":
         print("ccs", ccs)
      
         # complete_T = 200000
-        # complete_T = 100000
-        complete_T = 40000
+        complete_T = 100000
+        # complete_T = 40000
         equil_T = 2000
 
         # ti_lambdas = np.linspace(0, 1, args.num_windows)

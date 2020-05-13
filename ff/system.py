@@ -117,6 +117,8 @@ class System():
         lhs_lj_param_idxs, rhs_lj_param_idxs = lm.mix_nonbonded_parameters(a_lj_param_idxs, b_lj_param_idxs)
 
 
+
+
         print(lhs_lj_param_idxs[14])
         print(lhs_lj_param_idxs[51])
 
@@ -200,6 +202,8 @@ class System():
         c_masses = np.concatenate([a_masses, b_masses]) # combined masses
         c_params = np.concatenate([a_params, b_params]) # combined parameters
         c_param_groups = np.concatenate([a_param_groups, b_param_groups]) # combine parameter groups
+
+        print("combined_masses", c_masses[1629])
 
         assert a_nrgs.keys() == b_nrgs.keys()
 

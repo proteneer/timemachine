@@ -161,11 +161,50 @@ class Simulation:
             )
             gradients.append(grad_alchem)
 
-        # x_bad = np.load("all_coords.npy")[3497]
 
-        # for g in gradients:
+        x_bad = np.load("all_coords.npy")[15821-20]
+
+        # for g in gradients[3:]:
         #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
         #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+
+        #     print(g, "DU_DL", du_dl, energy)
+
+        # x_bad = np.load("all_coords.npy")[15821-10]
+
+        # for g in gradients[3:]:
+        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
+        #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+
+        #     print(g, "DU_DL", du_dl, energy)
+
+
+
+        # x_bad = np.load("all_coords.npy")[15821]
+
+        # for g in gradients[3:]:
+        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
+        #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+
+        #     print(g, "DU_DL", du_dl, energy)
+
+
+        # x_bad = np.load("all_coords.npy")[15821+10]
+
+        # for g in gradients[3:]:
+        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
+        #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+
+        #     print(g, "DU_DL", du_dl, energy)
+
+
+        # x_bad = np.load("all_coords.npy")[15821+20]
+
+        # for g in gradients[3:]:
+        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
+        #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
+
+        #     print(g, "DU_DL", du_dl, energy)
 
         # assert 0
 
@@ -217,19 +256,19 @@ class Simulation:
         full_du_dls = stepper.get_du_dl()
 
 
-        print("Max nonbonded arg", np.argmax(full_du_dls[3]))
+        print("Max nonbonded arg", np.argmin(full_du_dls[3]))
 
         full_energies = stepper.get_energies()
 
         # equil_du_dls = full_du_dls
-        equil_du_dls = full_du_dls[:, len(self.step_sizes)//2:]
+        equil_du_dls = full_du_dls[:, 5000:]
 
         # print(equil_du_dls.shape)
 
         # assert 0
 
         for fname, du_dls in zip(force_names, equil_du_dls):
-            print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+            print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
             # print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.trapz(du_dls, self.lambda_schedule)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
 
         total_equil_du_dls = np.sum(equil_du_dls, axis=0)
