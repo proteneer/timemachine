@@ -89,6 +89,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_windows', type=int, required=True, help='Number of lambda windows to be linearly spaced.')
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--train', type=bool, required=True, help='Whether or not we train.')
+    parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
     args = parser.parse_args()
 
     assert os.path.isdir(args.out_dir)
@@ -208,18 +209,22 @@ if __name__ == "__main__":
         print("cbs", cbs)
         print("ccs", ccs)
      
+
         # complete_T = 200000
-        complete_T = 100000
+        complete_T = args.steps
         # complete_T = 40000
         equil_T = 2000
+
+        assert args.complete_T > equil_T
 
         # ti_lambdas = np.linspace(0, 1, args.num_windows)
         # ti_lambdas = np.ones(args.num_windows)*0.2
         # ti_lambdas = np.array([0.07, 0.13, 0.20, 0.27, 0.33, 0.33, 0.33])
         # ti_lambdas = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-        ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
+        # ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
         # ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.8, 1.2, 1.5, 2.0, 2.5, 4.0, 10.0])
-        # ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.8, 1.2, 1.5, 2.0, 2.5, 4.0, 10.0])
+
+        ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.8, 1.2, 1.5, 2.0, 2.5, 4.0])
         #
          # ti_lambdas = np.array([0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07])
         # ti_lambdas = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
@@ -333,16 +338,18 @@ if __name__ == "__main__":
         true_ddG = mol_a_dG - mol_b_dG
         all_du_dls = np.array(all_du_dls)
 
-        loss = loss_fn(all_du_dls[:, :, complete_T//2:], true_ddG, ti_lambdas)
-        print("loss", loss, "pred_ddG", np.trapz(np.mean(sum_du_dls, axis=1), ti_lambdas), "true_ddG", true_ddG)
+        safe_T = equil_T*2
+
+        loss = loss_fn(all_du_dls[:, :, safe_T:], true_ddG, ti_lambdas)
+        print("loss", loss, "pred_ddG", np.trapz(np.mean(sum_du_dls[:, safe_T:], axis=1), ti_lambdas), "true_ddG", true_ddG)
 
         plt.clf()
-        plt.violinplot(sum_du_dls, positions=ti_lambdas)
+        plt.violinplot(sum_du_dls[:, safe_T:], positions=ti_lambdas)
         plt.ylabel("du_dlambda")
         plt.savefig(os.path.join(args.out_dir, str(epoch)+"_violin_du_dls"))
         plt.clf()
 
-        plt.boxplot(sum_du_dls, positions=ti_lambdas)
+        plt.boxplot(sum_du_dls[:, safe_T:], positions=ti_lambdas)
         plt.ylabel("du_dlambda")
         plt.savefig(os.path.join(args.out_dir, str(epoch)+"_boxplot_du_dls"))
         plt.clf()

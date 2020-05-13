@@ -261,7 +261,7 @@ class Simulation:
         full_energies = stepper.get_energies()
 
         # equil_du_dls = full_du_dls
-        equil_du_dls = full_du_dls[:, 5000:]
+        equil_du_dls = full_du_dls[:, 4000:]
 
         # print(equil_du_dls.shape)
 
