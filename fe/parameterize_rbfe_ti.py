@@ -349,12 +349,12 @@ if __name__ == "__main__":
         print("loss", loss, "pred_ddG", np.trapz(np.mean(sum_du_dls[:, safe_T:], axis=1), ti_lambdas), "true_ddG", true_ddG)
 
         plt.clf()
-        plt.violinplot(sum_du_dls[:, safe_T:], positions=ti_lambdas)
+        plt.violinplot(sum_du_dls[:, safe_T:].tolist(), positions=ti_lambdas)
         plt.ylabel("du_dlambda")
         plt.savefig(os.path.join(args.out_dir, str(epoch)+"_violin_du_dls"))
         plt.clf()
 
-        plt.boxplot(sum_du_dls[:, safe_T:], positions=ti_lambdas)
+        plt.boxplot(sum_du_dls[:, safe_T:].tolist(), positions=ti_lambdas)
         plt.ylabel("du_dlambda")
         plt.savefig(os.path.join(args.out_dir, str(epoch)+"_boxplot_du_dls"))
         plt.clf()
