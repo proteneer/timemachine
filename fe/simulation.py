@@ -162,7 +162,7 @@ class Simulation:
             gradients.append(grad_alchem)
 
 
-        x_bad = np.load("all_coords.npy")[15821-20]
+        # x_bad = np.load("all_coords.npy")[15821-20]
 
         # for g in gradients[3:]:
         #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
