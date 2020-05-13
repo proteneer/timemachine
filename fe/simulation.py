@@ -233,14 +233,12 @@ class Simulation:
         ctxt.forward_mode()
         print("fwd run time", time.time() - start)
 
-        xs = ctxt.get_all_coords()
+        # xs = ctxt.get_all_coords()
 
-        np.save("all_coords.npy", xs)
+        # np.save("all_coords.npy", xs)
         # # np.save("debug_coords.npy", xs[6000])
 
         # assert 0
-
-
         start = time.time()
         x_final = ctxt.get_last_coords()[:, :3]
 

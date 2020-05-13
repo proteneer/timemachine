@@ -265,7 +265,7 @@ if __name__ == "__main__":
             # zero-out
             # if args.n_frames is 0:
                 # writer = None
-            # writer = None
+            writer = None
 
             host_conf = []
             for x,y,z in host_pdb.positions:
@@ -334,9 +334,11 @@ if __name__ == "__main__":
                 all_du_dls.append(full_du_dls)
 
 
+
         # compute loss and derivatives w.r.t. adjoints
         true_ddG = mol_a_dG - mol_b_dG
         all_du_dls = np.array(all_du_dls)
+        sum_du_dls = np.array(sum_du_dls)
 
         safe_T = equil_T*2
 
