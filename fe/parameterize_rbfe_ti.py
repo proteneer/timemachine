@@ -340,6 +340,9 @@ if __name__ == "__main__":
         all_du_dls = np.array(all_du_dls)
         sum_du_dls = np.array(sum_du_dls)
 
+        print(all_du_dls.shape)
+        print(sum_du_dls.shape)
+
         safe_T = equil_T*2
 
         loss = loss_fn(all_du_dls[:, :, safe_T:], true_ddG, ti_lambdas)
