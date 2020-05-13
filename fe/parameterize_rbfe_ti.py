@@ -215,7 +215,7 @@ if __name__ == "__main__":
         # complete_T = 40000
         equil_T = 2000
 
-        assert args.complete_T > equil_T
+        assert complete_T > equil_T
 
         # ti_lambdas = np.linspace(0, 1, args.num_windows)
         # ti_lambdas = np.ones(args.num_windows)*0.2
