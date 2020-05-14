@@ -93,8 +93,8 @@ if __name__ == "__main__":
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--train', type=bool, required=True, help='Whether or not we train.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
-    parser.add_argument('--a_idx', type=int, require=True, help='A index')
-    parser.add_argument('--b_idx', type=int, require=True, help='B index')
+    parser.add_argument('--a_idx', type=int, required=True, help='A index')
+    parser.add_argument('--b_idx', type=int, required=True, help='B index')
 
     args = parser.parse_args()
 
