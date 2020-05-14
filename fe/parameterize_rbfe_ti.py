@@ -128,6 +128,9 @@ if __name__ == "__main__":
     # a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
     a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Bonded')
     del a_to_b_map_nonbonded[14]
+    del a_to_b_map_nonbonded[22]
+    del a_to_b_map_nonbonded[23]
+    del a_to_b_map_nonbonded[24]
     a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
     # del a_to_b_map_bonded[14]
 
