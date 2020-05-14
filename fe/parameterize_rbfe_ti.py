@@ -108,7 +108,7 @@ if __name__ == "__main__":
         all_guest_mols.append(guest_mol)
 
     # to self
-    all_guest_mols = [all_guest_mols[0], all_guest_mols[0]]
+    all_guest_mols = [all_guest_mols[0], all_guest_mols[2]]
 
     mol_a, mol_b = all_guest_mols
 
@@ -126,16 +126,12 @@ if __name__ == "__main__":
 
     # a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
     # a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
-    a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Bonded')
-    del a_to_b_map_nonbonded[14]
-    del a_to_b_map_nonbonded[22]
-    del a_to_b_map_nonbonded[23]
-    del a_to_b_map_nonbonded[24]
-    a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
-    # del a_to_b_map_bonded[14]
-
+    a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
     # del a_to_b_map_nonbonded[14]
-    # del a_to_b_map_bonded[14]
+    # del a_to_b_map_nonbonded[22]
+    # del a_to_b_map_nonbonded[23]
+    # del a_to_b_map_nonbonded[24]
+    a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
 
     print("Nonbonded Atom Mapping:", a_to_b_map_nonbonded)
     print("Bonded Atom Mapping:", a_to_b_map_bonded)
@@ -228,7 +224,7 @@ if __name__ == "__main__":
         # ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
         # ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.8, 1.2, 1.5, 2.0, 2.5, 4.0, 10.0])
 
-        ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0])
+        ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 1.0, 2.0, 5.0])
         #
          # ti_lambdas = np.array([0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07])
         # ti_lambdas = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])

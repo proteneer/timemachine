@@ -102,7 +102,8 @@ class Simulation:
         seed,
         pdb_writer,
         pipe,
-        gpu_idx):
+        gpu_idx,
+        stage):
         """
         Run a forward simulation
 
@@ -129,6 +130,8 @@ class Simulation:
         gpu_idx: int
             which gpu we run the job on
 
+        stage: int
+
 
         The pipe will ping-pong in two passes. If the simulation is stable, ie. the coords
         of the last frame is well defined, then we return du_dls. Otherwise, a None is sent
@@ -140,26 +143,47 @@ class Simulation:
         os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
 
         gradients = []
-        handles = []
         force_names = []
 
+        if stage == 1:
 
-        for k, v in self.lhs_system.nrg_fns.items():
+            for k, v in self.lhs_system.nrg_fns.items():
 
-            force_names.append(k)
-            other_v = self.rhs_system.nrg_fns[k]
-            op_fn = getattr(ops, k)
-            grad = op_fn(*v, precision=self.precision)
-            grad_other = op_fn(*other_v, precision=self.precision)
-            handles.append(grad)
-            handles.append(grad_other)
-            grad_alchem = ops.AlchemicalGradient(
-                len(self.lhs_system.masses),
-                len(self.lhs_system.params),
-                grad,
-                grad_other
-            )
-            gradients.append(grad_alchem)
+                force_names.append(k)
+                op_fn = getattr(ops, k)
+                grad = op_fn(*v, precision=self.precision)
+                gradients.append(grad)
+
+        elif stage == 2:
+
+            raise Exception("Unsupported")
+
+            for k, v in self.lhs_system.nrg_fns.items():
+
+                force_names.append(k)
+                other_v = self.rhs_system.nrg_fns[k]
+                op_fn = getattr(ops, k)
+                grad = op_fn(*v, precision=self.precision)
+                grad_other = op_fn(*other_v, precision=self.precision)
+                grad_alchem = ops.AlchemicalGradient(
+                    len(self.lhs_system.masses),
+                    len(self.lhs_system.params),
+                    grad,
+                    grad_other
+                )
+                gradients.append(grad_alchem)
+
+
+        elif stage == 3:
+
+            assert 0
+
+            for k, v in self.rhs_system.nrg_fns.items():
+
+                force_names.append(k)
+                op_fn = getattr(ops, k)
+                grad = op_fn(*v, precision=self.precision)
+                gradients.append(grad)
 
 
         # x_bad = np.load("all_coords.npy")[15821-20]

@@ -105,6 +105,9 @@ class System():
 
         lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(n_a, n_b)
 
+        print(lambda_plane_idxs)
+        print(lambda_offset_idxs)
+
         # print(lambda_offset_idxs)
         # assert 0
 
