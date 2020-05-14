@@ -93,6 +93,9 @@ if __name__ == "__main__":
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--train', type=bool, required=True, help='Whether or not we train.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
+    parser.add_argument('--a_idx', type=int, require=True, help='A index')
+    parser.add_argument('--b_idx', type=int, require=True, help='B index')
+
     args = parser.parse_args()
 
     assert os.path.isdir(args.out_dir)
@@ -111,7 +114,7 @@ if __name__ == "__main__":
         all_guest_mols.append(guest_mol)
 
     # to self
-    all_guest_mols = [all_guest_mols[0], all_guest_mols[2]]
+    all_guest_mols = [args.a_idx, args.b_idx]
 
     mol_a, mol_b = all_guest_mols
 
