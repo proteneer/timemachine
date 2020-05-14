@@ -129,6 +129,7 @@ if __name__ == "__main__":
     a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Bonded')
     del a_to_b_map_nonbonded[14]
     a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
+    # del a_to_b_map_bonded[14]
 
     # del a_to_b_map_nonbonded[14]
     # del a_to_b_map_bonded[14]
@@ -192,7 +193,7 @@ if __name__ == "__main__":
 
         temperature = 300
         dt = 1.5e-3
-        friction = 20
+        friction = 40
 
         masses = np.array(lhs_combined_system.masses)
         ca, cbs, ccs = langevin_coefficients(
