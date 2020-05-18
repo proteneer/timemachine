@@ -43,11 +43,18 @@ void __global__ k_nonbonded_inference(
     }
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
-    RealType lambda_i = lambda;
-    RealType dlambda_i = 0;
+    // RealType lambda_i = lambda;
+    int lambda_plane_i = 0;
+    int lambda_offset_i = 0;
+
+    // RealType dlambda_i = 0;
     if(atom_i_idx < N) {
-        lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
-        dlambda_i = lambda_offset_idxs[atom_i_idx];
+        // lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
+
+        lambda_plane_i = lambda_plane_idxs[atom_i_idx];
+        lambda_offset_i = lambda_offset_idxs[atom_i_idx];
+
+        // dlambda_i = lambda_offset_idxs[atom_i_idx];
     }
 
     RealType ci[3];
@@ -66,11 +73,18 @@ void __global__ k_nonbonded_inference(
     RealType eps_i = atom_i_idx < N ? params[lj_param_idx_eps_i] : 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    RealType lambda_j = lambda;
-    RealType dlambda_j = 0;
+    // RealType lambda_i = lambda;
+    int lambda_plane_j = 0;
+    int lambda_offset_j = 0;
+
+    // RealType dlambda_i = 0;
     if(atom_j_idx < N) {
-        lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;
-        dlambda_j = lambda_offset_idxs[atom_j_idx];
+        // lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
+
+        lambda_plane_j = lambda_plane_idxs[atom_j_idx];
+        lambda_offset_j = lambda_offset_idxs[atom_j_idx];
+
+        // dlambda_i = lambda_offset_idxs[atom_i_idx];
     }
 
     RealType cj[3];
@@ -88,6 +102,8 @@ void __global__ k_nonbonded_inference(
     RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
 
     RealType inv_cutoff = 1/cutoff;
+
+    // revert this to RealType
     double energy = 0; // spit this into three parts? (es, lj close, lj far?)
 
     // In inference mode, we don't care about gradients with respect to parameters.
@@ -98,13 +114,19 @@ void __global__ k_nonbonded_inference(
             dxs[d] = ci[d] - cj[d];
         }
 
-        RealType delta_lambda = lambda_i - lambda_j;
+        // we can optimize this later if need be
+        RealType delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
+
         dxs[3] = delta_lambda;
 
         RealType inv_dij = fast_vec_rnorm<RealType, 4>(dxs);
 
-
         if(atom_j_idx < atom_i_idx && inv_dij > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
+
+
+            // if(atom_j_idx < N && atom_i_idx < N) {
+                // printf("atom_i_idx %d atom_j_idx %d dij %f pi %d pj %d oi %d oj %d\n", atom_i_idx, atom_j_idx, 1/inv_dij, lambda_plane_i, lambda_plane_j, lambda_offset_i, lambda_offset_j);
+            // }
 
             RealType inv_d2ij = inv_dij*inv_dij;
             RealType inv_d3ij = inv_dij*inv_d2ij;
@@ -138,8 +160,8 @@ void __global__ k_nonbonded_inference(
 
             // this technically should be if lambda_idxs[i] == 0 and lamba_idxs[j] == 0
             // however, they both imply that delta_lambda = 0, so dxs[3] == 0, simplifying the equation
-            RealType dw_i = dlambda_i;
-            RealType dw_j = dlambda_j;
+            int dw_i = lambda_offset_i;
+            int dw_j = lambda_offset_j;
 
             du_dl_i -= (es_grad_prefactor + lj_grad_prefactor) * dxs[3] * dw_i;
             du_dl_j += (es_grad_prefactor + lj_grad_prefactor) * dxs[3] * dw_j;
@@ -156,8 +178,8 @@ void __global__ k_nonbonded_inference(
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane); // needs to support real
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
         }
-        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
-        dlambda_j = __shfl_sync(0xffffffff, dlambda_j, srcLane);
+        lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+        lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane);
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
@@ -210,8 +232,11 @@ void __global__ k_nonbonded_exclusion_inference(
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
     RealType du_dl_i = 0;
     RealType lambda_i = lambda;
-    lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
-    RealType dlambda_i = lambda_offset_idxs[atom_i_idx];
+    // lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
+    int lambda_plane_i = lambda_plane_idxs[atom_i_idx];
+    int lambda_offset_i = lambda_offset_idxs[atom_i_idx];
+
+    // RealType dlambda_i = lambda_offset_idxs[atom_i_idx];
 
     RealType ci[3];
     double gi[3] = {0};
@@ -237,8 +262,11 @@ void __global__ k_nonbonded_exclusion_inference(
 
     RealType du_dl_j = 0;
     RealType lambda_j = lambda;
-    lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;
-    RealType dlambda_j = lambda_offset_idxs[atom_j_idx];
+
+    int lambda_plane_j = lambda_plane_idxs[atom_j_idx];
+    int lambda_offset_j = lambda_offset_idxs[atom_j_idx];
+    // lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;
+    // RealType dlambda_j = lambda_offset_idxs[atom_j_idx];
 
     RealType cj[3];
     double gj[3] = {0};
@@ -263,7 +291,7 @@ void __global__ k_nonbonded_exclusion_inference(
         dxs[d] = ci[d] - cj[d];
     }
 
-    RealType delta_lambda = lambda_i - lambda_j;
+    RealType delta_lambda = cutoff*(lambda_plane_i - lambda_plane_j) + lambda*(lambda_offset_i - lambda_offset_j);
     dxs[3] = delta_lambda;
 
     RealType inv_dij = fast_vec_rnorm<RealType, 4>(dxs);
@@ -296,8 +324,8 @@ void __global__ k_nonbonded_exclusion_inference(
             gj[d] -= (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor)*dxs[d];
         }
 
-        RealType dw_i = dlambda_i;
-        RealType dw_j = dlambda_j;
+        int dw_i = lambda_offset_i;
+        int dw_j = lambda_offset_j;
 
         du_dl_i += (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor) * dxs[3] * dw_i;
         du_dl_j -= (charge_scale * es_grad_prefactor + lj_scale * lj_grad_prefactor) * dxs[3] * dw_j;

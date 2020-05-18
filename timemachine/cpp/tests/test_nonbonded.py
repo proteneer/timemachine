@@ -60,7 +60,7 @@ class TestNonbonded(GradientTest):
 
         # N = 5
         # D = 3
-        # E = 10
+        # E = 25
         # P_charges = 4
         # P_lj = 5
         # P_exc = 7
@@ -76,10 +76,14 @@ class TestNonbonded(GradientTest):
                 # stage 1 and 3 use this
                 lambda_plane_idxs = np.random.randint(
                     low=0,
-                    high=1,
+                    high=2,
                     size=(N),
                     dtype=np.int32
-                )
+                )*2 # put everything at 2*Cutoff intervals
+
+                print(lambda_plane_idxs)
+
+                # assert 0
 
                 lambda_offset_idxs = np.random.randint(
                     low=0,
@@ -105,7 +109,7 @@ class TestNonbonded(GradientTest):
                 )
 
             for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-                for cutoff in [1.0, 50.0, 0.5, 0.3]:
+                for cutoff in [10000, 50.0, 1.0, 0.5, 0.3]:
                     # E = 0
                     params, ref_forces, test_forces = prepare_nonbonded_system(
                         x,
@@ -119,7 +123,8 @@ class TestNonbonded(GradientTest):
                         cutoff=cutoff,
                         precision=precision
                     )
-                    for lamb in [0.0,  0.1, 0.5, 0.75, 1.0, 2.0]:
+                    # for lamb in [0.0,  0.1, 0.5, 0.75, 1.0, 2.0]:
+                    for lamb in [0.1]:
                         print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
                         for r, t in zip(ref_forces, test_forces):
                             self.compare_forces(
@@ -267,7 +272,7 @@ class TestNonbonded(GradientTest):
 
                     # for lamb in [0.0, 0.0, 0.1, 0.5, 0.75, 1.0]:
                     for lamb in [0.0, 0.1]:
-                        print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
+                        print("lambda", lamb, "cutoff", cutoff, "precision", precision)
                         for r, t in zip(ref_forces, test_forces):
                             self.compare_forces(    
                                 x,
