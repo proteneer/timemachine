@@ -62,9 +62,10 @@ def gbsa_obc(
     I -= np.diag(np.diag(I))
 
     # switch I only for now
-    inner = (np.pi*np.power(dij,8))/(2*cutoff_radii)
-    sw = np.power(np.cos(inner), 2)
-    I = I*sw
+    # inner = (np.pi*np.power(dij,8))/(2*cutoff_radii)
+    # sw = np.power(np.cos(inner), 2)
+    # I = I*sw
+
     I = np.where(dij > cutoff_radii, 0, I)
     I = np.sum(I, axis=1)
 
@@ -97,7 +98,7 @@ def gbsa_obc(
     ixns = - (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
 
     # sw = np.power(np.cos((np.pi*dij)/(2*cutoff_radii)), 2)
-    ixns = ixns*sw
+    # ixns = ixns*sw
     ixns = np.where(dij > cutoff_force, 0, ixns)
 
     E += np.sum(np.triu(ixns, k=1))

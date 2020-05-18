@@ -105,7 +105,7 @@ void __global__ k_nonbonded_jvp(
             d2ij += dxs[d]*dxs[d];
         }
 
-        Surreal<RealType> delta_lambda = apply_delta(lambda_i - lambda_j, 2*cutoff);
+        Surreal<RealType> delta_lambda = lambda_i - lambda_j;
         dxs[3] = delta_lambda; 
         d2ij += delta_lambda * delta_lambda;
 
@@ -298,7 +298,7 @@ void __global__ k_nonbonded_exclusion_jvp(
         d2ij += dx*dx;
     }
 
-    Surreal<RealType> delta_lambda = apply_delta(lambda_i - lambda_j, 2*cutoff);
+    Surreal<RealType> delta_lambda = lambda_i - lambda_j;
     dxs[3] = delta_lambda; 
     d2ij += delta_lambda * delta_lambda;
 

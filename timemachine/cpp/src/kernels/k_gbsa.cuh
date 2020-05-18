@@ -93,7 +93,7 @@ __global__ void k_compute_born_radii(
             dxs[d] = ci[d] - cj[d];
         }
         RealType delta_lambda = lambda_i - lambda_j;
-        dxs[3] = apply_delta(delta_lambda, 2*cutoff); 
+        dxs[3] = apply_delta(delta_lambda, BOXSIZE); 
 
         RealType r = fast_vec_norm<RealType, 4>(dxs);
         RealType rInverse = 1/r;
@@ -131,7 +131,7 @@ __global__ void k_compute_born_radii(
                 }
 
 
-                RealType inner = (PI*pow(r,RADII_EXP))/(2*cutoff);
+                RealType inner = (PI*pow(r,RADII_EXP))/(BOXSIZE);
                 RealType sw = cos(inner);
                 sw = sw*sw;
 
@@ -250,7 +250,7 @@ void __global__ k_compute_born_first_loop_gpu(
             dxs[d] = ci[d] - cj[d];
         }
         RealType delta_lambda = lambda_i - lambda_j;
-        dxs[3] = apply_delta(delta_lambda, 2*cutoff); 
+        dxs[3] = apply_delta(delta_lambda, BOXSIZE); 
         RealType r = fast_vec_norm<RealType, 4>(dxs);
         RealType r2 = r*r;
         RealType rInverse = 1/r;
@@ -269,7 +269,7 @@ void __global__ k_compute_born_first_loop_gpu(
         
             RealType energy = Gpol;
 
-            RealType inner = (PI*pow(r,8))/(2*cutoff);
+            RealType inner = (PI*pow(r,8))/(BOXSIZE);
             RealType sw = cos(inner);
             sw = sw*sw;
             RealType dsw_dr = -(RADII_EXP)*pow(r, RADII_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
@@ -519,7 +519,7 @@ __global__ void k_compute_born_energy_and_forces(
             dxs[d] = ci[d] - cj[d];
         }
         RealType delta_lambda = lambda_i - lambda_j;
-        dxs[3] = apply_delta(delta_lambda, 2*cutoff); 
+        dxs[3] = apply_delta(delta_lambda, BOXSIZE); 
         RealType r = fast_vec_norm<RealType, 4>(dxs);
 
         if (atom_j_idx != atom_i_idx && r < cutoff && atom_j_idx < N && atom_i_idx < N) {
@@ -588,7 +588,7 @@ __global__ void k_compute_born_energy_and_forces(
                     term += 2*(radiusIInverse - l_ij);
                 }
 
-                RealType inner = (PI*pow(r, RADII_EXP))/(2*cutoff);
+                RealType inner = (PI*pow(r, RADII_EXP))/(BOXSIZE);
                 RealType sw = cos(inner);
                 sw = sw*sw;
 

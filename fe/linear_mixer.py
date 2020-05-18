@@ -162,6 +162,39 @@ class LinearMixer():
 
         return lambda_plane_idxs, lambda_offset_idxs
 
+
+    def mix_lambda_planes_stage_2(self, n_a, n_b):
+        """
+        For stage 2 mixing we want:
+        C_B to be +0
+        R_B to be +1
+        C_A to be +2
+        R_A to be +3
+        """
+        assert n_a == self.n_a
+        # lambda_plane_idxs = np.concatenate([np.ones(n_a, dtype=np.int32), np.zeros(n_b, dtype=np.int32)])
+        lambda_plane_idxs = []
+
+        for a_idx in range(n_a):
+            if a_idx in self.cmap_a_to_b:
+                # C_A
+                lambda_plane_idxs.append(2)
+            else:
+                # R_A
+                lambda_plane_idxs.append(3)
+
+        for b_idx in range(n_b):
+            if b_idx + n_a in self.cmap_b_to_a:
+                # C_B
+                lambda_plane_idxs.append(0)
+            else:
+                # R_B
+                lambda_plane_idxs.append(1)
+
+        lambda_offset_idxs = np.zeros_like(lambda_plane_idxs)
+
+        return lambda_plane_idxs, lambda_offset_idxs
+
     def mix_nonbonded_parameters(self, params_a, params_b):
         """
         Mix parameter indices.

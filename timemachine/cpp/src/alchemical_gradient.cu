@@ -75,6 +75,10 @@ __global__ void k_linear_rescale_inference(
     f_lambda = f_lambda*f_lambda;
     double df = PI*sin((PI*lambda)/2)*cos((PI*lambda)/2);
 
+    // linear_scaling
+    // double f_lambda = lambda;
+    // double df = 1;
+
     if(idx == 0 && blockIdx.y == 0) {
         atomicAdd(uc_energy, (*u0_energy)*(1-f_lambda) + (*u1_energy)*f_lambda);
         atomicAdd(uc_du_dl, -df*(*u0_energy) + df*(*u1_energy) + (*u0_du_dl)*(1-f_lambda) + (*u1_du_dl)*f_lambda);
@@ -239,6 +243,9 @@ void AlchemicalGradient::execute_lambda_inference_device(
     gpuErrchk(cudaMemsetAsync(d_out_coords_primals_buffer_u0_, 0, N*D*sizeof(*d_out_coords_primals_buffer_u0_), stream));
     gpuErrchk(cudaMemsetAsync(d_out_lambda_primal_buffer_u0_, 0, sizeof(*d_out_lambda_primal_buffer_u0_), stream));
     gpuErrchk(cudaMemsetAsync(d_out_energy_primal_buffer_u0_, 0, sizeof(*d_out_energy_primal_buffer_u0_), stream));
+
+    // std::cout << "A" << std::endl;
+
     u0_->execute_lambda_inference_device(
         N,
         P,
@@ -252,6 +259,7 @@ void AlchemicalGradient::execute_lambda_inference_device(
     );
 
 
+    // std::cout << "B" << std::endl;
 
     cudaDeviceSynchronize();
 
@@ -270,6 +278,8 @@ void AlchemicalGradient::execute_lambda_inference_device(
         d_out_energy_primal_buffer_u1_,
         stream
     );
+
+    // std::cout << "C" << std::endl;
 
     int tpb = 32;
     int B = (N+tpb-1)/tpb;

@@ -129,7 +129,7 @@ class Simulation:
 
         gpu_idx: int
             which gpu we run the job on
-
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
         stage: int
 
 
@@ -144,46 +144,68 @@ class Simulation:
 
         gradients = []
         force_names = []
+        handles = []
 
-        if stage == 1:
+        for k, v in self.lhs_system.nrg_fns.items():
 
-            for k, v in self.lhs_system.nrg_fns.items():
+            force_names.append(k)
+            other_v = self.rhs_system.nrg_fns[k]
+            op_fn = getattr(ops, k)
+            grad = op_fn(*v, precision=self.precision)
+            grad_other = op_fn(*other_v, precision=self.precision)
 
-                force_names.append(k)
-                op_fn = getattr(ops, k)
-                grad = op_fn(*v, precision=self.precision)
-                gradients.append(grad)
+            # (ytz): this is a hack to deal with python's shitty ref
+            # count mechanism destroying a pybind owned object
+            handles.append(grad)
+            handles.append(grad_other)
+            grad_alchem = ops.AlchemicalGradient(
+                len(self.lhs_system.masses),
+                len(self.lhs_system.params),
+                grad,
+                grad_other
+            )
+            gradients.append(grad_alchem)
+        
 
-        elif stage == 2:
+        print("done")
 
-            raise Exception("Unsupported")
+        # if stage == 1:
 
-            for k, v in self.lhs_system.nrg_fns.items():
+        #     for k, v in self.lhs_system.nrg_fns.items():
 
-                force_names.append(k)
-                other_v = self.rhs_system.nrg_fns[k]
-                op_fn = getattr(ops, k)
-                grad = op_fn(*v, precision=self.precision)
-                grad_other = op_fn(*other_v, precision=self.precision)
-                grad_alchem = ops.AlchemicalGradient(
-                    len(self.lhs_system.masses),
-                    len(self.lhs_system.params),
-                    grad,
-                    grad_other
-                )
-                gradients.append(grad_alchem)
+        #         force_names.append(k)
+        #         op_fn = getattr(ops, k)
+        #         grad = op_fn(*v, precision=self.precision)
+        #         gradients.append(grad)
+
+        # elif stage == 2:
+
+        #     # raise Exception("Unsupported")
+
+        #     print("Making alchemical potentials")
+
+        #     for k, v in self.lhs_system.nrg_fns.items():
+
+        #         force_names.append(k)
+        #         other_v = self.rhs_system.nrg_fns[k]
+        #         op_fn = getattr(ops, k)
+        #         grad = op_fn(*v, precision=self.precision)
+        #         grad_other = op_fn(*other_v, precision=self.precision)
+        #         grad_alchem = ops.AlchemicalGradient(
+        #             len(self.lhs_system.masses),
+        #             len(self.lhs_system.params),
+        #             grad,
+        #             grad_other
+        #         )
+        #         gradients.append(grad_alchem)
 
 
-        elif stage == 3:
+        #     print("done")
 
-            assert 0
+        # elif stage == 3:
 
-            for k, v in self.rhs_system.nrg_fns.items():
+        #     raise Exception("Unsupported")
 
-                force_names.append(k)
-                op_fn = getattr(ops, k)
-                grad = op_fn(*v, precision=self.precision)
-                gradients.append(grad)
 
 
         # x_bad = np.load("all_coords.npy")[15821-20]
@@ -253,8 +275,12 @@ class Simulation:
         )
 
         start = time.time()
-        # print("start_forward_mode")
-        ctxt.forward_mode()
+        print("start_forward_mode")
+        try:
+            ctxt.forward_mode()
+        except e:
+            print(e)
+
         print("fwd run time", time.time() - start)
 
         # xs = ctxt.get_all_coords()

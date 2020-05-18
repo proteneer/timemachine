@@ -133,6 +133,7 @@ if __name__ == "__main__":
     # a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
     # a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
     a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
+    # This does an exact atom mapping
     a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
 
     print("R_A", mol_a.GetNumAtoms()-len(a_to_b_map_nonbonded))
@@ -165,7 +166,9 @@ if __name__ == "__main__":
     a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True)
     b_system = open_ff.parameterize(mol_b, cutoff=args.cutoff, am1=True)
 
-    lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map_nonbonded, a_to_b_map_bonded)
+    stage = 2
+
+    lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map_nonbonded, a_to_b_map_bonded, stage=stage)
 
     host_pdb_file = args.protein_pdb
     host_pdb = app.PDBFile(host_pdb_file)
@@ -198,7 +201,7 @@ if __name__ == "__main__":
 
         # for stage in [1, 3]:
 
-        stage = 1
+
 
         print("Starting epoch -----"+str(epoch)+'-----')
 
@@ -236,7 +239,8 @@ if __name__ == "__main__":
         # ti_lambdas = np.array([0.07, 0.13, 0.20, 0.27, 0.33, 0.33, 0.33])
         # ti_lambdas = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
         # ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
-        ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.8, 1.2, 1.5, 2.0, 4.0, 10.0])
+        # ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.8, 1.2, 1.5, 2.0, 4.0, 10.0])
+        ti_lambdas = np.array([0.0, 0.05, 0.1, 0.2, 0.4, 0.6, 0.8, 0.9, 0.95, 1.0])
 
         # ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0])
         # ti_lambdas = np.array([0.0, 0.2, 0.5])
@@ -302,6 +306,8 @@ if __name__ == "__main__":
 
             input_args = (x0, v0, epoch_params, intg_seed, writer, child_conn, lambda_idx % args.num_gpus, stage)
             p = Process(target=sim.run_forward_and_backward, args=input_args)
+
+            # sim.run_forward_and_backward(*input_args)
 
             all_pcs.append(parent_conn)
             all_processes.append(p)

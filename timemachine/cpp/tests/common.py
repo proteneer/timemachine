@@ -26,6 +26,8 @@ def prepare_gbsa_system(
     probe_radius,
     cutoff_radii,
     cutoff_force,
+    lambda_plane_idxs,
+    lambda_offset_idxs,
     params=None,
     precision=np.float64):
 
@@ -54,19 +56,19 @@ def prepare_gbsa_system(
     scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
     params = np.concatenate([params, scale_params])
 
-    lambda_plane_idxs = np.random.randint(
-        low=0,
-        high=2,
-        size=(N),
-        dtype=np.int32
-    )
+    # lambda_plane_idxs = np.random.randint(
+    #     low=0,
+    #     high=2,
+    #     size=(N),
+    #     dtype=np.int32
+    # )
 
-    lambda_offset_idxs = np.random.randint(
-        low=0,
-        high=2,
-        size=(N),
-        dtype=np.int32
-    )
+    # lambda_offset_idxs = np.random.randint(
+    #     low=0,
+    #     high=2,
+    #     size=(N),
+    #     dtype=np.int32
+    # )
 
     custom_gb = ops.GBSA(
         charge_param_idxs,
@@ -88,12 +90,14 @@ def prepare_gbsa_system(
     )
 
     # ideally cutoff is the max(cutoff_radii, cutoff_force)
-    box = np.array([
-        [10000.0, 0.0, 0.0, 0.0],
-        [0.0, 10000.0, 0.0, 0.0],
-        [0.0, 0.0, 10000.0, 0.0],
-        [0.0, 0.0, 0.0, 2*cutoff_radii],
-    ])
+    # box = np.array([
+        # [10000.0, 0.0, 0.0, 0.0],
+        # [0.0, 10000.0, 0.0, 0.0],
+        # [0.0, 0.0, 10000.0, 0.0],
+        # [0.0, 0.0, 0.0, 2*cutoff_radii],
+    # ])
+
+    box = None
 
     gbsa_obc_fn = functools.partial(
         gbsa.gbsa_obc,
@@ -124,6 +128,8 @@ def prepare_nonbonded_system(
     P_charges,
     P_lj,
     P_exc,
+    lambda_plane_idxs,
+    lambda_offset_idxs,
     params=None,
     p_scale=4.0,
     e_scale=1.0,
@@ -145,7 +151,8 @@ def prepare_nonbonded_system(
     lj_sig_idxs = np.random.randint(low=0, high=P_lj, size=(N,), dtype=np.int32) + len(params)
     params = np.concatenate([params, lj_sig_params])
 
-    lj_eps_params = np.random.rand(P_lj)*0
+
+    lj_eps_params = np.random.rand(P_lj)
     lj_eps_idxs = np.random.randint(low=0, high=P_lj, size=(N,), dtype=np.int32) + len(params)
     params = np.concatenate([params, lj_eps_params])
 
@@ -168,39 +175,28 @@ def prepare_nonbonded_system(
     exclusion_lj_idxs = np.random.randint(low=0, high=P_exc, size=(E), dtype=np.int32) + len(params)
     params = np.concatenate([params, exclusion_params])
 
-    nonbonded_lambda_plane_idxs = np.random.randint(
-        low=0,
-        high=2,
-        size=(N),
-        dtype=np.int32
-    )
-
-    nonbonded_lambda_offset_idxs = np.random.randint(
-        low=0,
-        high=2,
-        size=(N),
-        dtype=np.int32
-    )
-
     custom_nonbonded = ops.Nonbonded(
         charge_param_idxs,
         lj_param_idxs,
         exclusion_idxs,
         exclusion_charge_idxs,
         exclusion_lj_idxs,
-        nonbonded_lambda_plane_idxs,
-        nonbonded_lambda_offset_idxs,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
         cutoff,
         precision=precision
     )
 
+    # disable PBCs
     # make sure this is big enough!
-    box = np.array([
-        [100.0, 0.0, 0.0, 0.0],
-        [0.0, 100.0, 0.0, 0.0],
-        [0.0, 0.0, 100.0, 0.0],
-        [0.0, 0.0, 0.0, 2*cutoff],
-    ])
+    # box = np.array([
+    #     [100.0, 0.0, 0.0, 0.0],
+    #     [0.0, 100.0, 0.0, 0.0],
+    #     [0.0, 0.0, 100.0, 0.0],
+    #     [0.0, 0.0, 0.0, 2*cutoff],
+    # ])
+
+    box = None
 
     ref_total_energy = functools.partial(
         nonbonded.nonbonded,
@@ -211,8 +207,8 @@ def prepare_nonbonded_system(
         es_exclusion_scale_idxs=exclusion_charge_idxs,
         lj_exclusion_scale_idxs=exclusion_lj_idxs,
         cutoff=cutoff,
-        lambda_plane_idxs=nonbonded_lambda_plane_idxs,
-        lambda_offset_idxs=nonbonded_lambda_offset_idxs
+        lambda_plane_idxs=lambda_plane_idxs,
+        lambda_offset_idxs=lambda_offset_idxs
     )
 
     return params, [ref_total_energy], [custom_nonbonded]
@@ -368,9 +364,6 @@ class GradientTest(unittest.TestCase):
             np.testing.assert_almost_equal(ref_dl, test_dl, 1e-5)
         else:
             np.testing.assert_allclose(ref_dl, test_dl, rtol)
-
-        return
-        assert 0
 
         x_tangent = np.random.rand(N, D).astype(np.float64)
         params_tangent = np.zeros_like(params)

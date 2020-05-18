@@ -22,6 +22,9 @@ def nonbonded(
     lambda_plane_idxs,
     lambda_offset_idxs):
 
+
+    assert box is None
+
     conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
     lj = lennard_jones(conf_4d, params, box=box, param_idxs=lj_param_idxs, cutoff=cutoff)
@@ -61,6 +64,9 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
         greater than cutoff is fully discarded.
     
     """
+
+    assert box is None
+
     sig = params[param_idxs[:, 0]]
     eps = params[param_idxs[:, 1]]
 
@@ -97,9 +103,9 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
 
     eij = 4*eps_ij*(sig6-1.0)*sig6
 
-    if cutoff is not None:
-        sw = switch_fn(dij, cutoff)
-        eij = eij*sw
+    # if cutoff is not None:
+        # sw = switch_fn(dij, cutoff)
+        # eij = eij*sw
 
     eij = np.where(keep_mask, eij, np.zeros_like(eij))
     return np.sum(eij/2)
@@ -135,8 +141,8 @@ def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, e
     eij_exc = scale_ij*4*eps_ij*(sig6-1.0)*sig6
 
     if cutoff is not None:
-        sw = switch_fn(dij, cutoff)
-        eij_exc = eij_exc*sw
+        # sw = switch_fn(dij, cutoff)
+        # eij_exc = eij_exc*sw
         eij_exc = np.where(dij > cutoff, np.zeros_like(eij_exc), eij_exc)
         eij_exc = np.where(src_idxs == dst_idxs, np.zeros_like(eij_exc), eij_exc)
 
@@ -158,6 +164,9 @@ def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_s
     qij = np.multiply(qi, qj)
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
+
+    assert box is None
+
     dij = distance(ri, rj, box)
 
     # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
@@ -166,9 +175,11 @@ def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_s
     dij = np.where(keep_mask, dij, np.zeros_like(dij))
     eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
 
+    # print(dij)
+
     if cutoff is not None:
-        sw = switch_fn(dij, cutoff)
-        eij = eij*sw
+        # sw = switch_fn(dij, cutoff)
+        # eij = eij*sw
         eij = np.where(dij > cutoff, np.zeros_like(eij), eij)
 
     src_idxs = exclusions[:, 0]
@@ -185,8 +196,8 @@ def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_s
     eij_exc = scale_ij*qij/dij
 
     if cutoff is not None:
-        sw = switch_fn(dij, cutoff)
-        eij_exc = eij_exc*sw
+        # sw = switch_fn(dij, cutoff)
+        # eij_exc = eij_exc*sw
         eij_exc = np.where(dij > cutoff, np.zeros_like(eij_exc), eij_exc)
         eij_exc = np.where(src_idxs == dst_idxs, np.zeros_like(eij_exc), eij_exc)
 

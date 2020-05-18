@@ -13,7 +13,7 @@ class System():
         self.param_groups = param_groups
         self.masses = masses
 
-    def mix(self, other, self_to_other_map_nonbonded, self_to_other_map_bonded):
+    def mix(self, other, self_to_other_map_nonbonded, self_to_other_map_bonded, stage):
         """
         Alchemically mix two ligand systems together.
 
@@ -55,27 +55,8 @@ class System():
         lhs_nrg_fns = {}
         rhs_nrg_fns = {}
 
-        # bonded mixing
-        # for bonded mixing to work well we need make sure that that the bond types match *exactly*
-
         lhs_nrg_fns['HarmonicBond'] = (lhs_bond_idxs, lhs_bond_param_idxs)
         rhs_nrg_fns['HarmonicBond'] = (rhs_bond_idxs, rhs_bond_param_idxs)
-
-        # print(lhs_bond_idxs)
-        # print(rhs_bond_idxs)
-
-        # set_a = set()
-        # for pair in lhs_bond_idxs:
-        #     set_a.add(tuple(pair))
-
-
-        # set_b = set()
-        # for pair in rhs_bond_idxs:
-        #     set_b.add(tuple(pair))
-
-        # print(set_a == set_b)
-
-        # assert 0
 
         a_angle_idxs, a_angle_param_idxs = a_nrg_fns['HarmonicAngle']
         b_angle_idxs, b_angle_param_idxs = b_nrg_fns['HarmonicAngle']
@@ -103,7 +84,12 @@ class System():
         # nonbonded mixing
         lm = linear_mixer.LinearMixer(n_a, a_to_b_map_nonbonded)
 
-        lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(n_a, n_b)
+        if stage == 2:
+            print("Stage 2 lambda mixing")
+            lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes_stage_2(n_a, n_b)
+        else:
+            lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(n_a, n_b)
+
 
         print(lambda_plane_idxs)
         print(lambda_offset_idxs)
