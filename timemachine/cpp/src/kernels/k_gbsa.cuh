@@ -4,8 +4,6 @@
 #include "surreal.cuh"
 #include "kernel_utils.cuh"
 
-#include "k_periodic_utils.cuh"
-
 #define WARPSIZE 32
 
 #include <cooperative_groups.h>
@@ -93,7 +91,7 @@ __global__ void k_compute_born_radii(
             dxs[d] = ci[d] - cj[d];
         }
         RealType delta_lambda = lambda_i - lambda_j;
-        dxs[3] = apply_delta(delta_lambda, BOXSIZE); 
+        dxs[3] = delta_lambda;
 
         RealType r = fast_vec_norm<RealType, 4>(dxs);
         RealType rInverse = 1/r;
@@ -131,12 +129,11 @@ __global__ void k_compute_born_radii(
                 }
 
 
-                RealType inner = (PI*pow(r,RADII_EXP))/(BOXSIZE);
-                RealType sw = cos(inner);
-                sw = sw*sw;
+                // RealType inner = (PI*pow(r,RADII_EXP))/(BOXSIZE);
+                // RealType sw = cos(inner);
+                // sw = sw*sw;
 
-                sw = 1;
-                // at some point we need to compute the derivative of term with respect to the distance
+                RealType sw = 1;
                 term = sw*term;
 
                 sum += term;
@@ -250,7 +247,7 @@ void __global__ k_compute_born_first_loop_gpu(
             dxs[d] = ci[d] - cj[d];
         }
         RealType delta_lambda = lambda_i - lambda_j;
-        dxs[3] = apply_delta(delta_lambda, BOXSIZE); 
+        dxs[3] = delta_lambda;
         RealType r = fast_vec_norm<RealType, 4>(dxs);
         RealType r2 = r*r;
         RealType rInverse = 1/r;
@@ -269,13 +266,13 @@ void __global__ k_compute_born_first_loop_gpu(
         
             RealType energy = Gpol;
 
-            RealType inner = (PI*pow(r,8))/(BOXSIZE);
-            RealType sw = cos(inner);
-            sw = sw*sw;
-            RealType dsw_dr = -(RADII_EXP)*pow(r, RADII_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
+            // RealType inner = (PI*pow(r,8))/(BOXSIZE);
+            // RealType sw = cos(inner);
+            // sw = sw*sw;
+            // RealType dsw_dr = -(RADII_EXP)*pow(r, RADII_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
 
-            sw = 1;
-            dsw_dr = 0;
+            RealType sw = 1;
+            RealType dsw_dr = 0;
 
             RealType dsw_dr_dot_E = dsw_dr*energy;
 
@@ -519,7 +516,7 @@ __global__ void k_compute_born_energy_and_forces(
             dxs[d] = ci[d] - cj[d];
         }
         RealType delta_lambda = lambda_i - lambda_j;
-        dxs[3] = apply_delta(delta_lambda, BOXSIZE); 
+        dxs[3] = delta_lambda; 
         RealType r = fast_vec_norm<RealType, 4>(dxs);
 
         if (atom_j_idx != atom_i_idx && r < cutoff && atom_j_idx < N && atom_i_idx < N) {
@@ -588,15 +585,13 @@ __global__ void k_compute_born_energy_and_forces(
                     term += 2*(radiusIInverse - l_ij);
                 }
 
-                RealType inner = (PI*pow(r, RADII_EXP))/(BOXSIZE);
-                RealType sw = cos(inner);
-                sw = sw*sw;
+                // RealType inner = (PI*pow(r, RADII_EXP))/(BOXSIZE);
+                // RealType sw = cos(inner);
+                // sw = sw*sw;
+                // RealType dsw_dr = -(RADII_EXP)*pow(r, RADII_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
 
-
-                RealType dsw_dr = -(RADII_EXP)*pow(r, RADII_EXP-1)*(PI/cutoff)*sin(inner)*cos(inner);
-
-                sw = 1;
-                dsw_dr = 0;
+                RealType sw = 1;
+                RealType dsw_dr = 0;
 
                 de = dsw_dr*term + de*sw;
 

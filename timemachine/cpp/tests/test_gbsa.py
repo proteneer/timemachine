@@ -64,38 +64,80 @@ class TestGBSA(GradientTest):
  
         # for cutoff in [0.1, 1.0, 1.5, 2.0, 500.0]:
         # for cutoff in [50.0, 2.0, 1.0, 0.5, 0.1]:
-        for cutoff in [1.0]:
-            print("Testing cutoff @", cutoff)
-            for precision, rtol in [(np.float64, 1e-9), (np.float32, 8e-5)]:
-                params, ref_forces, test_forces = prepare_gbsa_system(
-                    x,
-                    P_charges,
-                    P_radii,
-                    P_scale_factors,
-                    alpha=0.35,
-                    beta=0.645,
-                    gamma=0.65,
-                    dielectric_offset=dielectric_offset,
-                    surface_tension=28.3919551,
-                    solute_dielectric=solute_dielectric,
-                    solvent_dielectric=solvent_dielectric,
-                    probe_radius=0.14,
-                    cutoff_radii=cutoff,
-                    cutoff_force=cutoff,
-                    precision=precision
+
+        for l_idx in range(2):
+
+            if l_idx == 0:
+
+                # stage 1 and 3 use this
+                lambda_plane_idxs = np.random.randint(
+                    low=0,
+                    high=1,
+                    size=(N),
+                    dtype=np.int32
                 )
 
-                for lamb in [0.0, 1/10,  1/2, 1/1.2, 1.0]:
-                    for r, t in zip(ref_forces, test_forces):
-                        self.compare_forces(
-                            x,
-                            params,
-                            lamb,
-                            r,
-                            t,
-                            precision,
-                            rtol=rtol
-                        )
+                lambda_offset_idxs = np.random.randint(
+                    low=0,
+                    high=2,
+                    size=(N),
+                    dtype=np.int32
+                )
+            elif l_idx == 1:
+
+                # stage 2 has fully decoupled lambdas
+                lambda_plane_idxs = np.random.randint(
+                    low=0,
+                    high=4,
+                    size=(N),
+                    dtype=np.int32
+                )
+
+                lambda_offset_idxs = np.random.randint(
+                    low=0,
+                    high=1,
+                    size=(N),
+                    dtype=np.int32
+                )
+
+
+            for cutoff in [10000.0]:
+                print("Testing cutoff @", cutoff)
+                for precision, rtol in [(np.float64, 1e-9), (np.float32, 8e-5)]:
+                    params, ref_forces, test_forces = prepare_gbsa_system(
+                        x,
+                        P_charges,
+                        P_radii,
+                        P_scale_factors,
+                        alpha=0.35,
+                        beta=0.645,
+                        gamma=0.65,
+                        dielectric_offset=dielectric_offset,
+                        surface_tension=28.3919551,
+                        solute_dielectric=solute_dielectric,
+                        solvent_dielectric=solvent_dielectric,
+                        probe_radius=0.14,
+                        cutoff_radii=cutoff,
+                        cutoff_force=cutoff,
+                        precision=precision,
+                        lambda_plane_idxs=lambda_plane_idxs,
+                        lambda_offset_idxs=lambda_offset_idxs
+                    )
+
+                    for lamb in [0.0, 0.1,  0.5, 5.0]:
+
+
+                        print(cutoff, lamb, precision)
+                        for r, t in zip(ref_forces, test_forces):
+                            self.compare_forces(
+                                x,
+                                params,
+                                lamb,
+                                r,
+                                t,
+                                precision,
+                                rtol=rtol
+                            )
 
     # def test_alchemical_gbsa(self):
 
