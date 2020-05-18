@@ -46,9 +46,12 @@ __global__ void k_compute_born_radii(
     }
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
-    RealType lambda_i = lambda;
+    int lambda_plane_i = 0;
+    int lambda_offset_i = 0;
+
     if(atom_i_idx < N) {
-        lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
+        lambda_plane_i = lambda_plane_idxs[atom_i_idx];
+        lambda_offset_i = lambda_offset_idxs[atom_i_idx];
     }
 
     RealType ci[3];
@@ -62,9 +65,12 @@ __global__ void k_compute_born_radii(
     RealType radiusIInverse  = 1/offsetRadiusI;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    RealType lambda_j = lambda;
+    int lambda_plane_j = 0;
+    int lambda_offset_j = 0;
+
     if(atom_j_idx < N) {
-        lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;
+        lambda_plane_j = lambda_plane_idxs[atom_j_idx];
+        lambda_offset_j = lambda_offset_idxs[atom_j_idx];
     }
 
     // *always* accumulate in 64 bit.
@@ -90,7 +96,9 @@ __global__ void k_compute_born_radii(
         for(int d=0; d < 3; d++) {
             dxs[d] = ci[d] - cj[d];
         }
-        RealType delta_lambda = lambda_i - lambda_j;
+        // RealType delta_lambda = lambda_i - lambda_j;
+        RealType delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
+
         dxs[3] = delta_lambda;
 
         RealType r = fast_vec_norm<RealType, 4>(dxs);
@@ -147,7 +155,8 @@ __global__ void k_compute_born_radii(
         for(int d=0; d < 3; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
         }
-        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+        lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane);
 
     }
     
@@ -198,11 +207,12 @@ void __global__ k_compute_born_first_loop_gpu(
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     RealType du_dl_i = 0;
-    RealType dlambda_i = 0;
-    RealType lambda_i = lambda;
+    int lambda_plane_i = 0;
+    int lambda_offset_i = 0;
+
     if(atom_i_idx < N) {
-        lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
-        dlambda_i = lambda_offset_idxs[atom_i_idx];
+        lambda_plane_i = lambda_plane_idxs[atom_i_idx];
+        lambda_offset_i = lambda_offset_idxs[atom_i_idx];
     }
 
     RealType ci[3];
@@ -219,11 +229,12 @@ void __global__ k_compute_born_first_loop_gpu(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType du_dl_j = 0;
-    RealType dlambda_j = 0;
-    RealType lambda_j = lambda;
+    int lambda_plane_j = 0;
+    int lambda_offset_j = 0;
+
     if(atom_j_idx < N) {
-        lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;
-        dlambda_j = lambda_offset_idxs[atom_j_idx];
+        lambda_plane_j = lambda_plane_idxs[atom_j_idx];
+        lambda_offset_j = lambda_offset_idxs[atom_j_idx];
     }
 
     RealType cj[3];
@@ -246,7 +257,8 @@ void __global__ k_compute_born_first_loop_gpu(
         for(int d=0; d < 3; d++) {
             dxs[d] = ci[d] - cj[d];
         }
-        RealType delta_lambda = lambda_i - lambda_j;
+        RealType delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
+
         dxs[3] = delta_lambda;
         RealType r = fast_vec_norm<RealType, 4>(dxs);
         RealType r2 = r*r;
@@ -291,8 +303,8 @@ void __global__ k_compute_born_first_loop_gpu(
                     gj[d] -= dxs[d]*sw*dGpol_dr + dsw_dr_dot_E*dxs[d]/r;
                 }
 
-                RealType dw_i = dlambda_i;
-                RealType dw_j = dlambda_j; // shuffled
+                int dw_i = lambda_offset_i;
+                int dw_j = lambda_offset_j;
 
 
                 // du_dl_i += dxs[3]*dGpol_dr*dw_i;
@@ -318,8 +330,8 @@ void __global__ k_compute_born_first_loop_gpu(
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
         }
-        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
-        dlambda_j = __shfl_sync(0xffffffff, dlambda_j, srcLane);
+        lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+        lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane);
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
@@ -462,11 +474,12 @@ __global__ void k_compute_born_energy_and_forces(
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
     RealType du_dl_i = 0;
-    RealType lambda_i = lambda;
-    RealType dlambda_i = 0;
+    int lambda_plane_i = 0;
+    int lambda_offset_i = 0;
+
     if(atom_i_idx < N) {
-        lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
-        dlambda_i = lambda_offset_idxs[atom_i_idx];
+        lambda_plane_i = lambda_plane_idxs[atom_i_idx];
+        lambda_offset_i = lambda_offset_idxs[atom_i_idx];
     }
 
     RealType ci[3];
@@ -483,11 +496,12 @@ __global__ void k_compute_born_energy_and_forces(
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     RealType du_dl_j = 0;
-    RealType lambda_j = lambda;
-    RealType dlambda_j = 0;
+    int lambda_plane_j = 0;
+    int lambda_offset_j = 0;
+
     if(atom_j_idx < N) {
-        lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;
-        dlambda_j = lambda_offset_idxs[atom_j_idx];
+        lambda_plane_j = lambda_plane_idxs[atom_j_idx];
+        lambda_offset_j = lambda_offset_idxs[atom_j_idx];
     }
 
     RealType cj[3];
@@ -515,7 +529,9 @@ __global__ void k_compute_born_energy_and_forces(
         for(int d=0; d < 3; d++) {
             dxs[d] = ci[d] - cj[d];
         }
-        RealType delta_lambda = lambda_i - lambda_j;
+        // RealType delta_lambda = lambda_i - lambda_j;
+        RealType delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
+
         dxs[3] = delta_lambda; 
         RealType r = fast_vec_norm<RealType, 4>(dxs);
 
@@ -603,8 +619,8 @@ __global__ void k_compute_born_energy_and_forces(
                     dPsi_dx_j[d] -= deriv;
                 }
 
-                RealType dw_i = dlambda_i;
-                RealType dw_j = dlambda_j;
+                int dw_i = lambda_offset_i;
+                int dw_j = lambda_offset_j;
 
                 du_dl_i += dxs[3]*de*dw_i*rInverse;
                 du_dl_j -= dxs[3]*de*dw_j*rInverse;
@@ -627,8 +643,8 @@ __global__ void k_compute_born_energy_and_forces(
             dPsi_dx_j[d] = __shfl_sync(0xffffffff, dPsi_dx_j[d], srcLane);
         }
 
-        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
-        dlambda_j = __shfl_sync(0xffffffff, dlambda_j, srcLane);
+        lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+        lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane);
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
 
     }

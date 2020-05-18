@@ -1,3 +1,5 @@
+// MODIFIED
+
 #include <stdexcept>
 #include <iostream> 
 #include "../fixed_point.hpp"
@@ -12,7 +14,7 @@ __global__ void k_compute_born_radii_gpu_jvp(
     const double* coords,
     const double* coords_tangents,
     const double* params,
-    const double lambda,
+    const double lambda_primal,
     const double lambda_tangent,
     const int* lambda_plane_idxs,
     const int* lambda_offset_idxs,
@@ -39,10 +41,14 @@ __global__ void k_compute_born_radii_gpu_jvp(
     }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    Surreal<RealType> lambda_i(lambda, lambda_tangent);
+
+    int lambda_plane_i = 0;
+    int lambda_offset_i = 0;
+
     if(atom_i_idx < N) {
-        lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;        
-    };
+        lambda_plane_i = lambda_plane_idxs[atom_i_idx];
+        lambda_offset_i = lambda_offset_idxs[atom_i_idx];
+    }
 
     Surreal<RealType> ci[3];
     for(int d=0; d < 3; d++) {
@@ -60,11 +66,12 @@ __global__ void k_compute_born_radii_gpu_jvp(
     const auto dielectricOffset = dielectric_offset;
 
     int atom_j_idx =  blockIdx.y*32 + threadIdx.x;
-    Surreal<RealType> lambda_j(lambda, lambda_tangent);
+    int lambda_plane_j = 0;
+    int lambda_offset_j = 0;
     if(atom_j_idx < N) {
-        lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;        
+        lambda_plane_j = lambda_plane_idxs[atom_j_idx];
+        lambda_offset_j = lambda_offset_idxs[atom_j_idx];
     }
-
     int radii_param_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
     int scale_param_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
 
@@ -80,6 +87,8 @@ __global__ void k_compute_born_radii_gpu_jvp(
     RealType offsetRadiusJ   = radiusJ - dielectric_offset; 
     RealType scaledRadiusJ   = offsetRadiusJ*scaleFactorJ;
 
+    Surreal<RealType> lambda(lambda_primal, lambda_tangent);
+
     for(int round = 0; round < 32; round++) {
 
         Surreal<RealType> r2(0,0);
@@ -87,8 +96,8 @@ __global__ void k_compute_born_radii_gpu_jvp(
             Surreal<RealType> dx = ci[d] - cj[d];
             r2 += dx*dx;
         }
-
-        Surreal<RealType> delta_lambda = lambda_i - lambda_j;
+        // Surreal<RealType> delta_lambda = lambda_i - lambda_j;
+        Surreal<RealType> delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
         r2 += delta_lambda * delta_lambda;
 
         if(atom_j_idx != atom_i_idx && r2.real < cutoff*cutoff && atom_i_idx < N && atom_j_idx < N) {
@@ -143,7 +152,9 @@ __global__ void k_compute_born_radii_gpu_jvp(
         for(int d=0; d < 3; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
         }
-        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        // lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+        lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane);
     }
 
     if(atom_i_idx < N) {
@@ -159,7 +170,7 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     const double* coords,
     const double* coords_tangents,
     const double* params,
-    const double lambda,
+    const double lambda_primal,
     const double lambda_tangent,
     const int* lambda_plane_idxs,
     const int* lambda_offset_idxs,
@@ -194,10 +205,13 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    Surreal<RealType> lambda_i(lambda, lambda_tangent);
+    int lambda_plane_i = 0;
+    int lambda_offset_i = 0;
+
     if(atom_i_idx < N) {
-        lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;        
-    };
+        lambda_plane_i = lambda_plane_idxs[atom_i_idx];
+        lambda_offset_i = lambda_offset_idxs[atom_i_idx];
+    }
 
     Surreal<RealType> ci[3];
     Surreal<RealType> gi[3];
@@ -217,9 +231,12 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     Surreal<RealType> born_force_i_accum(0, 0);
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    Surreal<RealType> lambda_j(lambda, lambda_tangent);
+    int lambda_plane_j = 0;
+    int lambda_offset_j = 0;
+
     if(atom_j_idx < N) {
-        lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;        
+        lambda_plane_j = lambda_plane_idxs[atom_j_idx];
+        lambda_offset_j = lambda_offset_idxs[atom_j_idx];
     }
 
     Surreal<RealType> cj[3];
@@ -238,6 +255,8 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     Surreal<RealType> dE_dqj_accum(0, 0);
     Surreal<RealType> born_force_j_accum(0, 0);
 
+    Surreal<RealType> lambda(lambda_primal, lambda_tangent);
+
     // In inference mode, we don't care about gradients with respect to parameters.
     for(int round = 0; round < 32; round++) {
 
@@ -248,7 +267,7 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
             r2 += dxs[d]*dxs[d];
         }
 
-        Surreal<RealType> delta_lambda = lambda_i - lambda_j;
+        Surreal<RealType> delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
         r2 += delta_lambda * delta_lambda;
 
         if(atom_j_idx <= atom_i_idx && r2.real < cutoff*cutoff && atom_j_idx < N && atom_i_idx < N) {
@@ -299,7 +318,9 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
         }
-        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        // lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+        lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane);
     }
 
     for(int d=0; d < 3; d++) {
@@ -418,7 +439,7 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     const double* coords,
     const double* coords_tangents,
     const double* params,
-    const double lambda,
+    const double lambda_primal,
     const double lambda_tangent,
     const int* lambda_plane_idxs,
     const int* lambda_offset_idxs,
@@ -455,10 +476,13 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     // (ytz): we can probably do this computation twice by flipping i and j, but we have more
     // parallelism as is
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    Surreal<RealType> lambda_i(lambda, lambda_tangent);
+    int lambda_plane_i = 0;
+    int lambda_offset_i = 0;
+
     if(atom_i_idx < N) {
-        lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;        
-    };
+        lambda_plane_i = lambda_plane_idxs[atom_i_idx];
+        lambda_offset_i = lambda_offset_idxs[atom_i_idx];
+    }
 
     Surreal<RealType> ci[D];
     Surreal<RealType> dPsi_dx_i[D];
@@ -481,9 +505,12 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     Surreal<RealType> dPsi_dri(0, 0);
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    Surreal<RealType> lambda_j(lambda, lambda_tangent);
+    int lambda_plane_j = 0;
+    int lambda_offset_j = 0;
+
     if(atom_j_idx < N) {
-        lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;        
+        lambda_plane_j = lambda_plane_idxs[atom_j_idx];
+        lambda_offset_j = lambda_offset_idxs[atom_j_idx];
     }
 
     Surreal<RealType> cj[D];
@@ -513,6 +540,8 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     RealType offsetRadiusI  = radiusI - dielectricOffset;
     RealType radiusIInverse  = 1/offsetRadiusI;
 
+    Surreal<RealType> lambda(lambda_primal, lambda_tangent);
+
     for(int round = 0; round < 32; round++) {
 
         Surreal<RealType> dxs[3];
@@ -522,7 +551,8 @@ __global__ void k_compute_born_energy_and_forces_jvp(
             r2 += dxs[d]*dxs[d];
         }
 
-        Surreal<RealType> delta_lambda = lambda_i - lambda_j;
+        // Surreal<RealType> delta_lambda = lambda_i - lambda_j;
+        Surreal<RealType> delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
         r2 += delta_lambda * delta_lambda;
 
         if (atom_j_idx != atom_i_idx && r2.real < cutoff*cutoff && atom_i_idx < N && atom_j_idx < N) {
@@ -653,7 +683,9 @@ __global__ void k_compute_born_energy_and_forces_jvp(
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
             dPsi_dx_j[d] = __shfl_sync(0xffffffff, dPsi_dx_j[d], srcLane);
         }
-        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        // lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+        lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane);
     }
 
     for(int d=0; d < D; d++) {

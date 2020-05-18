@@ -365,7 +365,7 @@ class GradientTest(unittest.TestCase):
         else:
             np.testing.assert_allclose(ref_dl, test_dl, rtol)
 
-        # print("FIRST ORDER PASSED")
+        print("FIRST ORDER PASSED")
 
         # return
 
@@ -407,7 +407,18 @@ class GradientTest(unittest.TestCase):
         # print(np.abs(ref_p_tangent - test_p_tangent))
 
         if precision == np.float64:
+            
+            print(np.amax(ref_p_tangent - test_p_tangent), np.amin(ref_p_tangent - test_p_tangent))
+
+            for a, b in zip(ref_p_tangent, test_p_tangent):
+                try:
+                    np.testing.assert_allclose(a, b, rtol=1e-8)
+                except:
+                    print("FUCKED", a, b)
+                    assert 0
+
             np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
+
         else:
             self.assert_param_derivs(ref_p_tangent, test_p_tangent)
 
