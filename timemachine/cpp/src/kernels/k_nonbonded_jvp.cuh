@@ -9,7 +9,7 @@ void __global__ k_nonbonded_jvp(
     const double *coords, // maybe Surreal or Real
     const double *coords_tangent, // maybe Surreal or Real
     const double *params, // we do *not* support params tangent, ever!
-    const double lambda,
+    const double lambda_primal,
     const double lambda_tangent,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
@@ -42,10 +42,14 @@ void __global__ k_nonbonded_jvp(
     }
 
     int atom_i_idx =  blockIdx.x*32 + threadIdx.x;
-    Surreal<RealType> lambda_i(lambda, lambda_tangent);
+
+    int lambda_plane_i = 0;
+    int lambda_offset_i = 0;
+
     if(atom_i_idx < N) {
-        lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
-    };
+        lambda_plane_i = lambda_plane_idxs[atom_i_idx];
+        lambda_offset_i = lambda_offset_idxs[atom_i_idx];
+    }
 
     Surreal<RealType> ci[3];
     Surreal<RealType> gi[3];
@@ -69,9 +73,12 @@ void __global__ k_nonbonded_jvp(
     Surreal<RealType> g_epsi(0.0, 0.0);
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    Surreal<RealType> lambda_j(lambda, lambda_tangent);
+    int lambda_plane_j = 0;
+    int lambda_offset_j = 0;
+
     if(atom_j_idx < N) {
-        lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;
+        lambda_plane_j = lambda_plane_idxs[atom_j_idx];
+        lambda_offset_j = lambda_offset_idxs[atom_j_idx];
     }
 
     Surreal<RealType> cj[3];
@@ -96,6 +103,8 @@ void __global__ k_nonbonded_jvp(
     Surreal<RealType> g_sigj(0.0, 0.0);
     Surreal<RealType> g_epsj(0.0, 0.0);
 
+    Surreal<RealType> lambda(lambda_primal, lambda_tangent);
+
     for(int round = 0; round < 32; round++) {
 
         Surreal<RealType> dxs[4];
@@ -105,7 +114,7 @@ void __global__ k_nonbonded_jvp(
             d2ij += dxs[d]*dxs[d];
         }
 
-        Surreal<RealType> delta_lambda = lambda_i - lambda_j;
+        Surreal<RealType> delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
         dxs[3] = delta_lambda; 
         d2ij += delta_lambda * delta_lambda;
 
@@ -165,7 +174,8 @@ void __global__ k_nonbonded_jvp(
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane);
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
         }
-        lambda_j = __shfl_sync(0xffffffff, lambda_j, srcLane);
+        lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+        lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane);
     }
 
     // we should always accumulate in double precision
@@ -212,7 +222,7 @@ void __global__ k_nonbonded_exclusion_jvp(
     const double *coords,
     const double *coords_tangent,
     const double *params,
-    const double lambda,
+    const double lambda_primal,
     const double lambda_tangent,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
@@ -233,8 +243,8 @@ void __global__ k_nonbonded_exclusion_jvp(
     }
 
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
-    Surreal<RealType> lambda_i(lambda, lambda_tangent);
-    lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
+    int lambda_plane_i = lambda_plane_idxs[atom_i_idx];
+    int lambda_offset_i = lambda_offset_idxs[atom_i_idx];
 
     Surreal<RealType> ci[3];
     Surreal<RealType> gi[3] = {Surreal<RealType>(0.0, 0.0)};
@@ -258,8 +268,8 @@ void __global__ k_nonbonded_exclusion_jvp(
     Surreal<RealType> g_epsi(0.0, 0.0);
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
-    Surreal<RealType> lambda_j(lambda, lambda_tangent);
-    lambda_j = cutoff*lambda_plane_idxs[atom_j_idx] + lambda_offset_idxs[atom_j_idx]*lambda_j;
+    int lambda_plane_j = lambda_plane_idxs[atom_j_idx];
+    int lambda_offset_j = lambda_offset_idxs[atom_j_idx];
 
     Surreal<RealType> cj[3];
     Surreal<RealType> gj[3] = {Surreal<RealType>(0.0, 0.0)};
@@ -298,7 +308,11 @@ void __global__ k_nonbonded_exclusion_jvp(
         d2ij += dx*dx;
     }
 
-    Surreal<RealType> delta_lambda = lambda_i - lambda_j;
+    Surreal<RealType> lambda(lambda_primal, lambda_tangent);
+
+    Surreal<RealType> delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
+
+    // Surreal<RealType> delta_lambda = lambda_i - lambda_j;
     dxs[3] = delta_lambda; 
     d2ij += delta_lambda * delta_lambda;
 

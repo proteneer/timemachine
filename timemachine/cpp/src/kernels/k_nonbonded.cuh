@@ -43,18 +43,12 @@ void __global__ k_nonbonded_inference(
     }
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
-    // RealType lambda_i = lambda;
     int lambda_plane_i = 0;
     int lambda_offset_i = 0;
 
-    // RealType dlambda_i = 0;
     if(atom_i_idx < N) {
-        // lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
-
         lambda_plane_i = lambda_plane_idxs[atom_i_idx];
         lambda_offset_i = lambda_offset_idxs[atom_i_idx];
-
-        // dlambda_i = lambda_offset_idxs[atom_i_idx];
     }
 
     RealType ci[3];
@@ -73,18 +67,12 @@ void __global__ k_nonbonded_inference(
     RealType eps_i = atom_i_idx < N ? params[lj_param_idx_eps_i] : 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    // RealType lambda_i = lambda;
     int lambda_plane_j = 0;
     int lambda_offset_j = 0;
 
-    // RealType dlambda_i = 0;
     if(atom_j_idx < N) {
-        // lambda_i = cutoff*lambda_plane_idxs[atom_i_idx] + lambda_offset_idxs[atom_i_idx]*lambda_i;
-
         lambda_plane_j = lambda_plane_idxs[atom_j_idx];
         lambda_offset_j = lambda_offset_idxs[atom_j_idx];
-
-        // dlambda_i = lambda_offset_idxs[atom_i_idx];
     }
 
     RealType cj[3];
