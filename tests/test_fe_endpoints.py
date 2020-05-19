@@ -93,6 +93,7 @@ class TestEndpoints(unittest.TestCase):
 
             # (ytz): lambda doesn't actually matter
             test_grads, test_du_dl, test_energy = rhs_op.execute_lambda(x_ab, self.ff.params, 0.0)
+
             ref_bond_idxs = np.concatenate([b_bond_idxs, a_bond_idxs+self.mol_b.GetNumAtoms()])
             ref_param_idxs = np.concatenate([b_param_idxs, a_param_idxs])
 
@@ -108,3 +109,71 @@ class TestEndpoints(unittest.TestCase):
 
             np.testing.assert_almost_equal(test_energy, ref_energy)
 
+    def test_nonbonded_mixing(self):
+
+            a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, cutoff = self.a_system.nrg_fns["Nonbonded"]
+            b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, cutoff = self.b_system.nrg_fns["Nonbonded"]
+            
+            mixer = linear_mixer.LinearMixer(self.mol_a.GetNumAtoms(), self.atom_mapping_a_to_b)
+
+            lhs_es_param_idxs, rhs_es_param_idxs = mixer.mix_nonbonded_parameters(a_es_param_idxs, b_es_param_idxs)
+            lhs_lj_param_idxs, rhs_lj_param_idxs = mixer.mix_nonbonded_parameters(a_lj_param_idxs, b_lj_param_idxs)
+
+            (lhs_dummy,    lhs_lj_exc_param_idxs), (rhs_dummy,    rhs_lj_exc_param_idxs) = mixer.mix_exclusions(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
+            (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = mixer.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
+
+            n_a = self.mol_a.GetNumAtoms()
+            n_b = self.mol_b.GetNumAtoms()
+
+            lambda_plane_idxs, lambda_offset_idxs = mixer.mix_lambda_planes_stage_2(n_a, n_b)
+
+            # lhs_nrg_fns['Nonbonded'] = (lhs_es_param_idxs, lhs_lj_param_idxs, lhs_exc_idxs, lhs_es_exc_param_idxs, lhs_lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, a_cutoff)
+            rhs_op = ops.Nonbonded(
+                np.array(rhs_es_param_idxs, dtype=np.int32),
+                np.array(rhs_lj_param_idxs, dtype=np.int32),
+                np.array(rhs_exc_idxs, dtype=np.int32),
+                np.array(rhs_es_exc_param_idxs, dtype=np.int32),
+                np.array(rhs_lj_exc_param_idxs, dtype=np.int32),
+                np.array(lambda_plane_idxs, dtype=np.int32),
+                np.array(lambda_offset_idxs, dtype=np.int32),
+                cutoff,
+                precision=np.float64
+            )
+
+            x_ab = np.concatenate([self.mol_a_conf, self.mol_b_conf])
+
+            test_grads, test_du_dl, test_energy = rhs_op.execute_lambda(x_ab, self.ff.params, 0.0)
+
+            print(test_grads, test_du_dl, test_energy)
+
+            ref_es_param_idxs = np.concatenate([b_es_param_idxs, a_es_param_idxs])
+            ref_lj_param_idxs = np.concatenate([b_lj_param_idxs, a_lj_param_idxs])
+            ref_exc_idxs = np.concatenate([b_exc_idxs, a_exc_idxs+self.mol_b.GetNumAtoms()])
+            ref_es_exc_param_idxs = np.concatenate([b_es_exc_param_idxs, a_es_exc_param_idxs])
+            ref_lj_exc_param_idxs = np.concatenate([b_lj_exc_param_idxs, a_lj_exc_param_idxs])
+
+            b_to_a = {}
+            for src, dst in self.atom_mapping_a_to_b.items():
+                b_to_a[dst] = src
+
+            mixer = linear_mixer.LinearMixer(self.mol_b.GetNumAtoms(), b_to_a)
+            lambda_plane_idxs, lambda_offset_idxs = mixer.mix_lambda_planes_stage_2(n_b, n_a)
+
+            ref_op = ops.Nonbonded(
+                np.array(ref_es_param_idxs, dtype=np.int32),
+                np.array(ref_lj_param_idxs, dtype=np.int32),
+                np.array(ref_exc_idxs, dtype=np.int32),
+                np.array(ref_es_exc_param_idxs, dtype=np.int32),
+                np.array(ref_lj_exc_param_idxs, dtype=np.int32),
+                np.array(lambda_plane_idxs, dtype=np.int32),
+                np.array(lambda_offset_idxs, dtype=np.int32),
+                cutoff,
+                precision=np.float64
+            )
+
+            new_a_conf, new_b_conf = swap_coords(self.mol_a_conf, self.mol_b_conf, self.atom_mapping_a_to_b)
+            x_ba = np.concatenate([new_b_conf, new_a_conf])
+
+            ref_grads, ref_du_dl, ref_energy = ref_op.execute_lambda(x_ba, self.ff.params, 0.0)
+
+            np.testing.assert_almost_equal(test_energy, ref_energy)
