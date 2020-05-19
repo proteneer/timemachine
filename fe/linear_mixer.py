@@ -39,9 +39,6 @@ class LinearMixer():
         lhs_bond_idxs = np.concatenate([lhs_a_bond_idxs, lhs_b_bond_idxs])
         lhs_param_idxs = np.concatenate([a_param_idxs, b_param_idxs])
 
-        print(self.cmap_a_to_b)
-        print(self.cmap_b_to_a)
-
         # right system:
         # turn b into a
         rhs_a_bond_idxs = []
@@ -64,13 +61,6 @@ class LinearMixer():
         rhs_bond_idxs = np.concatenate([rhs_a_bond_idxs, rhs_b_bond_idxs])
         rhs_param_idxs = np.concatenate([b_param_idxs, a_param_idxs])
         
-
-
-        # print(lhs_param_idxs)
-        # print(rhs_param_idxs)
-
-        # assert 0
-
         return lhs_bond_idxs, lhs_param_idxs, rhs_bond_idxs, rhs_param_idxs
 
     def mix_exclusions(self,
