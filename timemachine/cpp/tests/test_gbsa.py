@@ -66,7 +66,6 @@ class TestGBSA(GradientTest):
         # for cutoff in [50.0, 2.0, 1.0, 0.5, 0.1]:
 
         for l_idx in range(2):
-
             if l_idx == 0:
 
                 # stage 1 and 3 use this
@@ -102,9 +101,15 @@ class TestGBSA(GradientTest):
 
 
             # very high cutoffs, eg. 100,000 will still fail this.
-            for cutoff in [1000.0]:
+            for cutoff in [100.0]:
                 print("Testing cutoff @", cutoff)
+
+                # its likely the jax reference double precision implementation
+                # has more double precision error than we do since it uses the
+                # naive form of calculating the 4D distances
                 for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
+                # for precision, rtol in [(np.float64, 1e-9)]:
+
                     params, ref_forces, test_forces = prepare_gbsa_system(
                         x,
                         P_charges,
@@ -125,9 +130,8 @@ class TestGBSA(GradientTest):
                         lambda_offset_idxs=lambda_offset_idxs
                     )
 
-                    # for lamb in [0.0, 0.1,  0.5, 5.0]:
-                    for lamb in [0.0, 0.1, 0.5]:
-                        print(cutoff, lamb, precision)
+                    for lamb in [0.0, 0.1,0.5, 5.0]:
+                        print("cutoff", cutoff, "lambda", lamb, "precision", precision)
                         for r, t in zip(ref_forces, test_forces):
                             self.compare_forces(
                                 x,
