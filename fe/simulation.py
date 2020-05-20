@@ -103,7 +103,7 @@ class Simulation:
         pdb_writer,
         pipe,
         gpu_idx,
-        stage):
+        keep_offset):
         """
         Run a forward simulation
 
@@ -129,9 +129,9 @@ class Simulation:
 
         gpu_idx: int
             which gpu we run the job on
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
-        stage: int
 
+        keep_offset: int
+            we keep the frames after this number in computation of du_dl (tbd move this out)
 
         The pipe will ping-pong in two passes. If the simulation is stable, ie. the coords
         of the last frame is well defined, then we return du_dls. Otherwise, a None is sent
@@ -146,7 +146,7 @@ class Simulation:
         force_names = []
         handles = []
 
-        if stage == 1:
+        if self.rhs_system is None:
 
             for k, v in self.lhs_system.nrg_fns.items():
 
@@ -155,7 +155,9 @@ class Simulation:
                 grad = op_fn(*v, precision=self.precision)
                 gradients.append(grad)
 
-        elif stage == 2:
+        else:
+
+            np.testing.assert_equal(self.lhs_system.params, self.rhs_system.params)
 
             # raise Exception("Unsupported")
             for k, v in self.lhs_system.nrg_fns.items():
@@ -177,25 +179,6 @@ class Simulation:
                     grad_other
                 )
                 gradients.append(grad_alchem)
-            
-            print("done")
-
-        elif stage == 3:
-
-            for k, v in self.rhs_system.nrg_fns.items():
-
-                force_names.append(k)
-                op_fn = getattr(ops, k)
-                grad = op_fn(*v, precision=self.precision)
-                gradients.append(grad)
-
-
-        for g in gradients:
-            forces, du_dl, energy = g.execute_lambda(x0, self.lhs_system.params, 0.0)
-            print(forces[1758:])
-            print(g, np.amax(np.abs(forces)), du_dl, energy)
-
-        assert 0
 
         stepper = custom_ops.AlchemicalStepper_f64(
             gradients,
@@ -204,7 +187,7 @@ class Simulation:
 
         v0 = np.zeros_like(x0)
 
-        np.testing.assert_equal(self.lhs_system.params, self.rhs_system.params)
+
         ctxt = custom_ops.ReversibleContext_f64(
             stepper,
             x0,
@@ -229,28 +212,24 @@ class Simulation:
         # xs = ctxt.get_all_coords()
         # np.save("all_coords.npy", xs)
         # # np.save("debug_coords.npy", xs[6000])
-
         # assert 0
-        start = time.time()
-        x_final = ctxt.get_last_coords()
 
         full_energies = stepper.get_energies()
-        for e_idx, e in enumerate(full_energies):
-            print(e_idx, e)
-            if e_idx > 50:
-                break
+        # for e_idx, e in enumerate(full_energies):
+        #     print(e_idx, e)
+        #     if e_idx > 50:
+        #         break
+
+        start = time.time()
+        x_final = ctxt.get_last_coords()
 
         if check_coords(x_final) == False:
             print("FATAL WARNING: ------ Final frame FAILED ------")
             du_dls = None
 
         full_du_dls = stepper.get_du_dl()
-        equil_du_dls = full_du_dls[4000:]
 
-        # print(equil_du_dls.shape)
-
-        # assert 0
-
+        equil_du_dls = full_du_dls[:, keep_offset:]
         for fname, du_dls in zip(force_names, equil_du_dls):
             print("lambda:", "{:.3f}".format(self.lambda_schedule[0]), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
             # print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.trapz(du_dls, self.lambda_schedule)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)

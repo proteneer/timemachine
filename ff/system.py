@@ -13,7 +13,7 @@ class System():
         self.param_groups = param_groups
         self.masses = masses
 
-    def mix(self, other, self_to_other_map_nonbonded, self_to_other_map_bonded, stage):
+    def mix(self, other, self_to_other_map_nonbonded, self_to_other_map_bonded):
         """
         Alchemically mix two ligand systems together.
 
@@ -84,14 +84,7 @@ class System():
         # nonbonded mixing
         lm = linear_mixer.LinearMixer(n_a, a_to_b_map_nonbonded)
 
-        if stage == 2:
-            # print("Stage 2 lambda mixing")
-            lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes_stage_2(n_a, n_b)
-        elif stage == 1 or stage == 3:
-            # print("Stage 1/3 lambda mixing")
-            lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(n_a, n_b)
-        else:
-            raise Exception("Unknown stage")
+        lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes_stage_middle(n_a, n_b)
 
         a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, a_cutoff = a_nrg_fns['Nonbonded']
         b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, b_cutoff = b_nrg_fns['Nonbonded']
@@ -139,7 +132,7 @@ class System():
         return lhs_system, rhs_system
 
 
-    def merge(self, other):
+    def merge(self, other, core_map=None):
         """
         Duplicate merge two systems into two sets of parameters.
         """
@@ -183,7 +176,10 @@ class System():
                 torsion_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 c_nrgs["PeriodicTorsion"] = (torsion_idxs.astype(np.int32), torsion_param_idxs)
             elif a_name == "Nonbonded":
-                assert a_args[7] == b_args[7] # cutoff
+
+                # print("???", a_args[7], b_args[7])
+                assert a_args[-1] == b_args[-1] # cutoff
+
                 es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
 
                 # print(b_params)
@@ -205,18 +201,22 @@ class System():
                 es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)  # [E, 1]
                 lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)  # [E, 1]
 
-                lambda_plane_idxs = np.concatenate([a_args[5], b_args[5]])
-                lambda_offset_idxs = np.concatenate([a_args[6], b_args[6]])
+                if core_map:
+                    mixer = linear_mixer.LinearMixer(len(a_masses), core_map)
+                    lambda_plane_idxs, lambda_offset_idxs = mixer.mix_lambda_planes(len(a_masses), len(b_masses))
+                else:
+                    lambda_plane_idxs = np.concatenate([a_args[5], b_args[5]])
+                    lambda_offset_idxs = np.concatenate([a_args[6], b_args[6]])
 
                 c_nrgs["Nonbonded"] = (
-                    es_param_idxs.astype(np.int32),
-                    lj_param_idxs.astype(np.int32),
-                    exclusion_idxs.astype(np.int32),
-                    es_exclusion_param_idxs.astype(np.int32),
-                    lj_exclusion_param_idxs.astype(np.int32),
-                    lambda_plane_idxs.astype(np.int32),
-                    lambda_offset_idxs.astype(np.int32),
-                    a_args[7]
+                    np.array(es_param_idxs, dtype=np.int32),
+                    np.array(lj_param_idxs, dtype=np.int32),
+                    np.array(exclusion_idxs, dtype=np.int32),
+                    np.array(es_exclusion_param_idxs, dtype=np.int32),
+                    np.array(lj_exclusion_param_idxs, dtype=np.int32),
+                    np.array(lambda_plane_idxs, dtype=np.int32),
+                    np.array(lambda_offset_idxs, dtype=np.int32),
+                    a_args[-1]
                 )
 
             elif a_name == "GBSA":
@@ -224,29 +224,39 @@ class System():
                 # skip GB
                 # print("skipping GB")
                 # continue
+
+                # (ytz): ugly ass code
                 charge_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0)
                 radius_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 scale_param_idxs = np.concatenate([a_args[2], b_args[2] + len(a_params)], axis=0)
-                lambda_plane_idxs = np.concatenate([a_args[3], b_args[3]])
-                lambda_offset_idxs = np.concatenate([a_args[4], b_args[4]])
+
+                if core_map:
+                    mixer = linear_mixer.LinearMixer(len(a_masses), core_map)
+                    lambda_plane_idxs, lambda_offset_idxs = mixer.mix_lambda_planes(len(a_masses), len(b_masses))
+                    offset = 0
+                else:
+                    lambda_plane_idxs = np.concatenate([a_args[3], b_args[3]])
+                    lambda_offset_idxs = np.concatenate([a_args[4], b_args[4]])
+                    offset = 2
 
                 # +2 is due to lambda
-                assert a_args[3+2] == b_args[3+2] # alpha
-                assert a_args[4+2] == b_args[4+2] # beta
-                assert a_args[5+2] == b_args[5+2] # gamma
-                assert a_args[6+2] == b_args[6+2] # dielec_offset
-                assert a_args[7+2] == b_args[7+2] # surface tension
-                assert a_args[8+2] == b_args[8+2] # solute dielectric
-                assert a_args[9+2] == b_args[9+2] # solvent dielectric
-                assert a_args[10+2] == b_args[10+2] # probe_radius
+                assert a_args[3+offset] == b_args[3+offset] # alpha
+                assert a_args[4+offset] == b_args[4+offset] # beta
+                assert a_args[5+offset] == b_args[5+offset] # gamma
+                assert a_args[6+offset] == b_args[6+offset] # dielec_offset
+                assert a_args[7+offset] == b_args[7+offset] # surface tension
+                assert a_args[8+offset] == b_args[8+offset] # solute dielectric
+                assert a_args[9+offset] == b_args[9+offset] # solvent dielectric
+                assert a_args[10+offset] == b_args[10+offset] # probe_radius
+
 
                 c_nrgs["GBSA"] = (
-                    charge_param_idxs.astype(np.int32),
-                    radius_param_idxs.astype(np.int32),
-                    scale_param_idxs.astype(np.int32),
-                    lambda_plane_idxs.astype(np.int32),
-                    lambda_offset_idxs.astype(np.int32),
-                    *a_args[5:]
+                    np.array(charge_param_idxs, dtype=np.int32),
+                    np.array(radius_param_idxs, dtype=np.int32),
+                    np.array(scale_param_idxs, dtype=np.int32),
+                    np.array(lambda_plane_idxs, dtype=np.int32),
+                    np.array(lambda_offset_idxs, dtype=np.int32),
+                    *a_args[3+offset:]
                 )
 
             else:

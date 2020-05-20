@@ -104,7 +104,7 @@ class LinearMixer():
         # we may introduce an endpoint where two particles are excluded but
         # there lacks a bond - which can cause a numerical overflow in how we
         # compute the exclusions
-        
+
         # merge exclusions
         # add non core exclusions from rhs into lhs
         # for (src, dst), param in rhs_exclusions.items():
@@ -136,7 +136,7 @@ class LinearMixer():
     def mix_lambda_planes(self, n_a, n_b):
 
         assert n_a == self.n_a
-        lambda_plane_idxs = np.concatenate([np.ones(n_a, dtype=np.int32), np.zeros(n_b, dtype=np.int32)])
+        lambda_plane_idxs = np.concatenate([np.ones(n_a, dtype=np.int32)*2, np.zeros(n_b, dtype=np.int32)])
         lambda_offset_idxs = []
 
         for a_idx in range(n_a):
@@ -156,7 +156,7 @@ class LinearMixer():
         return lambda_plane_idxs, lambda_offset_idxs
 
 
-    def mix_lambda_planes_stage_2(self, n_a, n_b):
+    def mix_lambda_planes_stage_middle(self, n_a, n_b):
         """
         For stage 2 mixing we want:
         C_B to be +0

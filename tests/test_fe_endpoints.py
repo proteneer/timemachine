@@ -109,7 +109,7 @@ class TestEndpoints(unittest.TestCase):
 
             np.testing.assert_almost_equal(test_energy, ref_energy)
 
-    def test_nonbonded_mixing(self):
+    def test_nonbonded_mixing_stage_2(self):
 
             a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, cutoff = self.a_system.nrg_fns["Nonbonded"]
             b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, cutoff = self.b_system.nrg_fns["Nonbonded"]

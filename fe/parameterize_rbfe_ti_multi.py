@@ -131,6 +131,10 @@ if __name__ == "__main__":
     # a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
     # a_to_b_map_bonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
     a_to_b_map_nonbonded = atom_mapping.mcs_map(*all_guest_mols, variant='Nonbonded')
+    
+    b_to_a_map_nonbonded = {}
+    for src, dst in a_to_b_map_nonbonded.items():
+        b_to_a_map_nonbonded[dst] = src
 
     print("R_A", mol_a.GetNumAtoms()-len(a_to_b_map_nonbonded))
     print("R_B", mol_b.GetNumAtoms()-len(a_to_b_map_nonbonded))
@@ -167,21 +171,37 @@ if __name__ == "__main__":
     host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff)
 
     
-    stage_ddGs = []
 
     for epoch in range(100):
 
         print("=====Begin Epoch", epoch, "=====")
 
-        for stage in [1, 2, 3]:
+
+        stage_ddGs = []
+
+        epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
+
+        if not os.path.exists(epoch_dir):
+            os.makedirs(epoch_dir)
+
+        for stage in [0, 1, 2]:
+        # for stage in [3]:
 
             print("---Starting stage---", stage)
 
-            lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map_nonbonded, a_to_b_map_nonbonded, stage=stage)
-            lhs_combined_system = host_system.merge(lhs_system)
-            rhs_combined_system = host_system.merge(rhs_system)
+            if stage == 0:
+                lhs_combined_system = host_system.merge(a_system.merge(b_system, a_to_b_map_nonbonded))
+                rhs_combined_system = None
+            elif stage == 1:
+                lhs_system, rhs_system = a_system.mix(b_system, a_to_b_map_nonbonded, a_to_b_map_nonbonded)
+                lhs_combined_system = host_system.merge(lhs_system)
+                rhs_combined_system = host_system.merge(rhs_system)
+            elif stage == 2:
+                tmp_system = b_system.merge(a_system, b_to_a_map_nonbonded)
+                lhs_combined_system = host_system.merge(tmp_system)
+                rhs_combined_system = None
 
-            np.testing.assert_equal(lhs_combined_system.params, rhs_combined_system.params)
+            # np.testing.assert_equal(lhs_combined_system.params, rhs_combined_system.params)
 
 
             epoch_params = lhs_combined_system.params
@@ -207,16 +227,21 @@ if __name__ == "__main__":
          
             complete_T = args.steps
             equil_T = 2000
+            keep_offset = equil_T*2
 
             assert complete_T > equil_T
 
-            if stage == 1 or 3:
-                # fast
-                ti_lambdas = np.array([0.00, 0.1, 1.0])
+            if stage == 0 or stage == 2:
+                # testing
+                ti_lambdas = np.array([0.0, 0.1, 20.0])
+                # production
                 # ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.8, 1.2, 1.5, 2.0, 4.0, 10.0])
-            elif stage == 2:
-                ti_lambdas = np.linspace([0.0, 0.5, 1.0])
-                # ti_lambdas = np.linspace([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+            elif stage == 1:
+
+                # testing
+                ti_lambdas = np.array([0.0, 0.5, 1.0])
+                # production
+                # ti_lambdas = np.array([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
             else:
                 raise Exception("Unknown stage", stage)
 
@@ -246,16 +271,19 @@ if __name__ == "__main__":
                 intg_seed = np.random.randint(np.iinfo(np.int32).max)
                 # intg_seed = 2020
 
-                combined_ligand = Chem.CombineMols(mol_a, mol_b)
+                if stage == 0 or stage == 1:
+                    combined_ligand = Chem.CombineMols(mol_a, mol_b)
+                elif stage == 2:
+                    combined_ligand = Chem.CombineMols(mol_b, mol_a)
                 combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), combined_ligand)
                 combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-                out_file = os.path.join(args.out_dir, str(epoch)+"_rbfe_"+str(lambda_idx)+".pdb")
+                out_file = os.path.join(epoch_dir, "frames_lamb_"+str(lambda_idx)+".pdb")
                 writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
 
                 # zero-out
                 # if args.n_frames is 0:
                     # writer = None
-                writer = None
+                # writer = None
 
                 host_conf = []
                 for x,y,z in host_pdb.positions:
@@ -270,12 +298,15 @@ if __name__ == "__main__":
                 mol_b_conf = np.array(conformer.GetPositions(), dtype=np.float64)
                 mol_b_conf = mol_b_conf/10 # convert to md_units
 
-                x0 = np.concatenate([host_conf, mol_a_conf, mol_b_conf]) # combined geometry
+                if stage == 0 or stage == 1:
+                    x0 = np.concatenate([host_conf, mol_a_conf, mol_b_conf]) # stack a onto b
+                elif stage == 2:
+                    x0 = np.concatenate([host_conf, mol_b_conf, mol_a_conf]) # stack b onto a
                 v0 = np.zeros_like(x0)
 
                 parent_conn, child_conn = Pipe()
 
-                input_args = (x0, v0, epoch_params, intg_seed, writer, child_conn, lambda_idx % args.num_gpus, stage)
+                input_args = (x0, v0, epoch_params, intg_seed, writer, child_conn, lambda_idx % args.num_gpus, keep_offset)
                 p = Process(target=sim.run_forward_and_backward, args=input_args)
 
                 # sim.run_forward_and_backward(*input_args)
@@ -303,13 +334,14 @@ if __name__ == "__main__":
                     full_du_dls, full_energies = pc.recv() # (F, T), (T)
                     pc.send(None)
                     assert full_du_dls is not None
+
                     total_du_dls = np.sum(full_du_dls, axis=0)
 
                     plt.plot(total_du_dls, label="{:.2f}".format(lamb))
                     plt.ylabel("du_dl")
                     plt.xlabel("timestep")
                     plt.legend()
-                    fpath = os.path.join(args.out_dir, str(epoch)+"_stage_"+str(stage)+"_lambda_du_dls_"+str(lamb_idx))
+                    fpath = os.path.join(epoch_dir, "stage_"+str(stage)+"_lambda_du_dls_"+str(lamb_idx))
                     plt.savefig(fpath)
                     plt.clf()
 
@@ -318,7 +350,7 @@ if __name__ == "__main__":
                     plt.xlabel("timestep")
                     plt.legend()
 
-                    fpath = os.path.join(args.out_dir, str(epoch)+"_stage_"+str(stage)+"_lambda_energies_"+str(lamb_idx))
+                    fpath = os.path.join(epoch_dir, "stage_"+str(stage)+"_lambda_energies_"+str(lamb_idx))
                     plt.savefig(fpath)
                     plt.clf()
 
@@ -332,20 +364,25 @@ if __name__ == "__main__":
             all_du_dls = np.array(all_du_dls)
             sum_du_dls = np.array(sum_du_dls)
 
-            safe_T = equil_T*2
-
             # loss = loss_fn(all_du_dls[:, :, safe_T:], true_ddG, ti_lambdas)
 
-            stage_ddG = np.trapz(np.mean(sum_du_dls[:, safe_T:], axis=1), ti_lambdas)
-            print("stage_"+str(stage)+"_pred_ddG", stage_ddG)
+            ddG = np.trapz(np.mean(sum_du_dls[:, keep_offset:], axis=1), ti_lambdas)
+            stage_ddGs.append(ddG)
+            print("stage_"+str(stage)+"_pred_ddG", ddG)
 
             plt.clf()
-            plt.violinplot(sum_du_dls[:, safe_T:].tolist(), positions=ti_lambdas)
+            plt.violinplot(sum_du_dls[:, keep_offset:].tolist(), positions=ti_lambdas)
             plt.ylabel("du_dlambda")
-            plt.savefig(os.path.join(args.out_dir, str(epoch)+"_stage_"+str(stage)+"_violin_du_dls"))
+            plt.savefig(os.path.join(epoch_dir, "stage_"+str(stage)+"_violin_du_dls"))
             plt.clf()
 
-            plt.boxplot(sum_du_dls[:, safe_T:].tolist(), positions=ti_lambdas)
+            plt.plot(ti_lambdas, np.mean(sum_du_dls[:, keep_offset:], axis=1), label='mean')
+            plt.boxplot(sum_du_dls[:, keep_offset:].tolist(), positions=ti_lambdas)
+            plt.legend()
             plt.ylabel("du_dlambda")
-            plt.savefig(os.path.join(args.out_dir, str(epoch)+"_stage_"+str(stage)+"_boxplot_du_dls"))
+            plt.savefig(os.path.join(epoch_dir, "stage_"+str(stage)+"_boxplot_du_dls"))
             plt.clf()
+
+        print("Epoch Summary")
+        print("Stage ddGs (0,1,2)", stage_ddGs)
+        print("Final ddG", stage_ddGs[0]+stage_ddGs[1]-stage_ddGs[2])
