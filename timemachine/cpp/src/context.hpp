@@ -27,7 +27,6 @@ private:
     double *d_coeff_ccs_; // [N]
 
     double *d_coords_; // [TxNxD]
-    double *d_du_dls_; // [T]
 
     double *d_velocities_; // [NxD]
     unsigned long long *d_forces_; // [NxD], change this to uint128

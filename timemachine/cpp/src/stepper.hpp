@@ -96,7 +96,7 @@ public:
     }
 
     void set_du_dl_adjoint(
-        const int T,
+        const int FT,
         const double *adj);
 
 };

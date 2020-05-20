@@ -108,19 +108,21 @@ class Forcefield():
         # hacky temp code to deal with exclusions
         exclusion_param = 1.0
         exclusion_param_group = 20
+        self.exclusion_param_idx = len(self.params)
         self.params.append(exclusion_param)
         self.param_groups.append(exclusion_param_group)
 
         exclusion_param = 0.5
         exclusion_param_group = 21
+        self.exclusion_param_idx_14 = len(self.params)
         self.params.append(exclusion_param)
         self.param_groups.append(exclusion_param_group)
 
     def get_exclusion_idx(self):
-        return len(self.params)-2
+        return self.exclusion_param_idx
 
     def get_exclusion_idx_14(self):
-        return len(self.params)-1
+        return self.exclusion_param_idx_14
 
     def save(self, handle):
         with open(handle, "w") as fh:
@@ -166,13 +168,17 @@ class Forcefield():
 
         return raw_ff
 
-    def parameterize(self, mol, cutoff=10000, am1=False):
+    def parameterize(self, mol, cutoff=10000, am1=False, zero_charges=False):
         """
         Given a RDKit Molecule, return a parameterized system.
         """
 
+        if am1 is False:
+            print("Cannot zero out charges if am1 is False")
+            assert zero_charges is False
+
         # temporary
-        assert cutoff == 1.0
+        # assert cutoff == 1.0
 
         def match_smirks(mol, smirks):
             
@@ -278,8 +284,6 @@ class Forcefield():
                     assert src < dst
                     exclusions[(src, dst)] = exclusion_param_idx
 
-                    # print("1-3", self.params[exclusion_param_idx])
-
                 nrg_fns['HarmonicAngle'] = (
                     np.array(angle_idxs, dtype=np.int32),
                     np.array(angle_param_idxs, dtype=np.int32)
@@ -288,14 +292,18 @@ class Forcefield():
             elif force_type == "Proper":
 
                 for atom_idxs, (p_idx, _) in vd.items():
+
                     pp = params[p_idx]
                     components = pp[1]
                     for proper_torsion in components:
+
+
                         torsion_idxs.append(atom_idxs)
                         torsion_param_idxs.append(proper_torsion)
 
-                    assert src < dst
-                    exclusions_14[(src, dst)] = exclusion_param_idx_14
+                        src, _, _, dst = atom_idxs
+                        assert src < dst
+                        exclusions_14[(src, dst)] = exclusion_param_idx_14
 
             elif force_type == 'Improper':
 
@@ -348,6 +356,9 @@ class Forcefield():
                     es_param_idxs = np.arange(mol.GetNumAtoms()) + len(self.params)
                     for index, atom in enumerate(oemol.GetAtoms()):
                         q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+                        if zero_charges:
+                            print("warning -setting AM1 charges to 0-")
+                            q = 0
                         self.params.append(q)
                         self.param_groups.append(23)
 
@@ -390,6 +401,10 @@ class Forcefield():
 
         exclusion_map = {}
         # weaker exclusions
+        # print("1-4 exclusions", exclusions_14)
+
+        # assert 0
+
         for k, v in exclusions_14.items():
             exclusion_map[tuple(sorted(k))] = v
 
@@ -422,5 +437,8 @@ class Forcefield():
         )
 
         masses = get_masses(mol)
+
+        # TEMP hacky
+        # masses = np.ones_like(masses)
 
         return system.System(nrg_fns, self.params, self.param_groups, masses)

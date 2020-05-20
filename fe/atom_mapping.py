@@ -86,14 +86,20 @@ class CompareDist(rdFMCS.MCSAtomCompare):
         else:
             return True
 
-def mcs_map(a, b):
+def mcs_map(a, b, variant):
     """
     Find the MCS map of going from A to B
     """
-    params = rdFMCS.MCSParameters()
-    cutoff = 0.5 # atom mapping cutoff in *angstroms*
-    params.AtomTyper = CompareDist(cutoff)
-    core_pattern = rdFMCS.FindMCS([a, b], params).smartsString
+
+    if variant == "Nonbonded":
+        params = rdFMCS.MCSParameters()
+        cutoff = 0.5 # atom mapping cutoff in *angstroms*
+        params.AtomTyper = CompareDist(cutoff)
+        core_pattern = rdFMCS.FindMCS([a, b], params).smartsString
+    elif variant == "Bonded":
+        core_pattern = rdFMCS.FindMCS([a, b]).smartsString
+    else:
+        raise Exception("Unknown MCS Variant:", variant)
 
     # figure out ring stuff later
     # ringCompare=Chem.rdFMCS.RingCompare.StrictRingFusion).smartsString

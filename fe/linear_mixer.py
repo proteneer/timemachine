@@ -25,7 +25,6 @@ class LinearMixer():
             self.core_atoms.add(dst)
             self.cmap_b_to_a[dst] = src
 
-
     def mix_arbitrary_bonds(self,
         a_bond_idxs,
         a_param_idxs,
@@ -101,16 +100,21 @@ class LinearMixer():
             assert pkey not in rhs_exclusions
             rhs_exclusions[pkey] = param
 
+        # (ytz): this is commented out because it's buggy
+        # we may introduce an endpoint where two particles are excluded but
+        # there lacks a bond - which can cause a numerical overflow in how we
+        # compute the exclusions
+
         # merge exclusions
         # add non core exclusions from rhs into lhs
-        for (src, dst), param in rhs_exclusions.items():
-            if src not in self.core_atoms or dst not in self.core_atoms:
-                lhs_exclusions[(src, dst)] = param
+        # for (src, dst), param in rhs_exclusions.items():
+        #     if src not in self.core_atoms or dst not in self.core_atoms:
+        #         lhs_exclusions[(src, dst)] = param
 
-        # add non core exclusions from lhs into rhs
-        for(src, dst), param in lhs_exclusions.items():
-            if src not in self.core_atoms or dst not in self.core_atoms:
-                rhs_exclusions[src, dst] = param
+        # # add non core exclusions from lhs into rhs
+        # for(src, dst), param in lhs_exclusions.items():
+        #     if src not in self.core_atoms or dst not in self.core_atoms:
+        #         rhs_exclusions[src, dst] = param
 
         lhs_exclusion_idxs = []
         lhs_exclusion_params = []
@@ -132,7 +136,7 @@ class LinearMixer():
     def mix_lambda_planes(self, n_a, n_b):
 
         assert n_a == self.n_a
-        lambda_plane_idxs = np.concatenate([np.ones(n_a, dtype=np.int32), np.zeros(n_b, dtype=np.int32)])
+        lambda_plane_idxs = np.concatenate([np.ones(n_a, dtype=np.int32)*2, np.zeros(n_b, dtype=np.int32)])
         lambda_offset_idxs = []
 
         for a_idx in range(n_a):
@@ -148,6 +152,39 @@ class LinearMixer():
                 lambda_offset_idxs.append(0)
             else:
                 lambda_offset_idxs.append(1)
+
+        return lambda_plane_idxs, lambda_offset_idxs
+
+
+    def mix_lambda_planes_stage_middle(self, n_a, n_b):
+        """
+        For stage 2 mixing we want:
+        C_B to be +0
+        R_B to be +1
+        C_A to be +2
+        R_A to be +3
+        """
+        assert n_a == self.n_a
+        # lambda_plane_idxs = np.concatenate([np.ones(n_a, dtype=np.int32), np.zeros(n_b, dtype=np.int32)])
+        lambda_plane_idxs = []
+
+        for a_idx in range(n_a):
+            if a_idx in self.cmap_a_to_b:
+                # C_A
+                lambda_plane_idxs.append(2)
+            else:
+                # R_A
+                lambda_plane_idxs.append(3)
+
+        for b_idx in range(n_b):
+            if b_idx + n_a in self.cmap_b_to_a:
+                # C_B
+                lambda_plane_idxs.append(0)
+            else:
+                # R_B
+                lambda_plane_idxs.append(1)
+
+        lambda_offset_idxs = np.zeros_like(lambda_plane_idxs)
 
         return lambda_plane_idxs, lambda_offset_idxs
 

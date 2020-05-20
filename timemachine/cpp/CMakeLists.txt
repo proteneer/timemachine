@@ -6,7 +6,7 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.6 REQUIRED)
 find_package(PythonLibs 3.6 REQUIRED)
 
-string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=sm_60 -O2 -lineinfo")
+string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=sm_60 -O3 -lineinfo")
 # string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=sm_60 -g -G -lineinfo")
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
