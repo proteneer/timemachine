@@ -127,7 +127,6 @@ class TestEndpoints(unittest.TestCase):
 
             lambda_plane_idxs, lambda_offset_idxs = mixer.mix_lambda_planes_stage_2(n_a, n_b)
 
-            # lhs_nrg_fns['Nonbonded'] = (lhs_es_param_idxs, lhs_lj_param_idxs, lhs_exc_idxs, lhs_es_exc_param_idxs, lhs_lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, a_cutoff)
             rhs_op = ops.Nonbonded(
                 np.array(rhs_es_param_idxs, dtype=np.int32),
                 np.array(rhs_lj_param_idxs, dtype=np.int32),
@@ -143,8 +142,6 @@ class TestEndpoints(unittest.TestCase):
             x_ab = np.concatenate([self.mol_a_conf, self.mol_b_conf])
 
             test_grads, test_du_dl, test_energy = rhs_op.execute_lambda(x_ab, self.ff.params, 0.0)
-
-            print(test_grads, test_du_dl, test_energy)
 
             ref_es_param_idxs = np.concatenate([b_es_param_idxs, a_es_param_idxs])
             ref_lj_param_idxs = np.concatenate([b_lj_param_idxs, a_lj_param_idxs])

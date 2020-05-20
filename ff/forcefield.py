@@ -168,10 +168,14 @@ class Forcefield():
 
         return raw_ff
 
-    def parameterize(self, mol, cutoff=10000, am1=False):
+    def parameterize(self, mol, cutoff=10000, am1=False, zero_charges=False):
         """
         Given a RDKit Molecule, return a parameterized system.
         """
+
+        if am1 is False:
+            print("Cannot zero out charges if am1 is False")
+            assert zero_charges is False
 
         # temporary
         # assert cutoff == 1.0
@@ -352,7 +356,9 @@ class Forcefield():
                     es_param_idxs = np.arange(mol.GetNumAtoms()) + len(self.params)
                     for index, atom in enumerate(oemol.GetAtoms()):
                         q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
-                        # q = 0
+                        if zero_charges:
+                            print("warning -setting AM1 charges to 0-")
+                            q = 0
                         self.params.append(q)
                         self.param_groups.append(23)
 
@@ -431,5 +437,8 @@ class Forcefield():
         )
 
         masses = get_masses(mol)
+
+        # TEMP hacky
+        # masses = np.ones_like(masses)
 
         return system.System(nrg_fns, self.params, self.param_groups, masses)

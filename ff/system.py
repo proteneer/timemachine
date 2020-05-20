@@ -85,17 +85,13 @@ class System():
         lm = linear_mixer.LinearMixer(n_a, a_to_b_map_nonbonded)
 
         if stage == 2:
-            print("Stage 2 lambda mixing")
+            # print("Stage 2 lambda mixing")
             lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes_stage_2(n_a, n_b)
-        else:
+        elif stage == 1 or stage == 3:
+            # print("Stage 1/3 lambda mixing")
             lambda_plane_idxs, lambda_offset_idxs = lm.mix_lambda_planes(n_a, n_b)
-
-
-        print(lambda_plane_idxs)
-        print(lambda_offset_idxs)
-
-        # print(lambda_offset_idxs)
-        # assert 0
+        else:
+            raise Exception("Unknown stage")
 
         a_es_param_idxs, a_lj_param_idxs, a_exc_idxs, a_es_exc_param_idxs, a_lj_exc_param_idxs, a_cutoff = a_nrg_fns['Nonbonded']
         b_es_param_idxs, b_lj_param_idxs, b_exc_idxs, b_es_exc_param_idxs, b_lj_exc_param_idxs, b_cutoff = b_nrg_fns['Nonbonded']
@@ -105,19 +101,6 @@ class System():
         lhs_es_param_idxs, rhs_es_param_idxs = lm.mix_nonbonded_parameters(a_es_param_idxs, b_es_param_idxs)
         lhs_lj_param_idxs, rhs_lj_param_idxs = lm.mix_nonbonded_parameters(a_lj_param_idxs, b_lj_param_idxs)
 
-
-
-
-        print(lhs_lj_param_idxs[14])
-        print(lhs_lj_param_idxs[51])
-
-        print(rhs_lj_param_idxs[14])
-        print(rhs_lj_param_idxs[51])
-
-        # same parameters....
-
-        # assert 0
-
         (lhs_dummy,    lhs_lj_exc_param_idxs), (rhs_dummy,    rhs_lj_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_lj_exc_param_idxs, b_exc_idxs, b_lj_exc_param_idxs)
         (lhs_exc_idxs, lhs_es_exc_param_idxs), (rhs_exc_idxs, rhs_es_exc_param_idxs) = lm.mix_exclusions(a_exc_idxs, a_es_exc_param_idxs, b_exc_idxs, b_es_exc_param_idxs)
 
@@ -126,26 +109,6 @@ class System():
 
         lhs_exc_idxs = np.array(lhs_exc_idxs, dtype=np.int32)
         rhs_exc_idxs = np.array(rhs_exc_idxs, dtype=np.int32)
-
-        # print(lhs_exc_idxs)
-        # for pair in lhs_exc_idxs:
-        #     # if pair[0] == 14 or pair[1] == 14:
-        #         # print(pair)
-
-        #     if pair[0] == 51 or pair[1] == 51:
-        #         print(pair)
-
-
-        # print(rhs_exc_idxs)
-        for pair in rhs_exc_idxs:
-
-            if pair[0] == 14 or pair[1] == 14:
-                print(pair)
-
-            if pair[0] == 51 or pair[1] == 51:
-                print(pair)
-
-        # assert 0
 
         lhs_es_exc_param_idxs = np.array(lhs_es_exc_param_idxs, dtype=np.int32) 
         rhs_es_exc_param_idxs = np.array(rhs_es_exc_param_idxs, dtype=np.int32) 
@@ -194,8 +157,6 @@ class System():
         c_masses = np.concatenate([a_masses, b_masses]) # combined masses
         c_params = np.concatenate([a_params, b_params]) # combined parameters
         c_param_groups = np.concatenate([a_param_groups, b_param_groups]) # combine parameter groups
-
-        print("combined_masses", c_masses[1629])
 
         assert a_nrgs.keys() == b_nrgs.keys()
 

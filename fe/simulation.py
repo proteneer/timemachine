@@ -146,113 +146,56 @@ class Simulation:
         force_names = []
         handles = []
 
-        for k, v in self.lhs_system.nrg_fns.items():
+        if stage == 1:
 
-            force_names.append(k)
-            other_v = self.rhs_system.nrg_fns[k]
-            op_fn = getattr(ops, k)
-            grad = op_fn(*v, precision=self.precision)
-            grad_other = op_fn(*other_v, precision=self.precision)
+            for k, v in self.lhs_system.nrg_fns.items():
 
-            # (ytz): this is a hack to deal with python's shitty ref
-            # count mechanism destroying a pybind owned object
-            handles.append(grad)
-            handles.append(grad_other)
-            grad_alchem = ops.AlchemicalGradient(
-                len(self.lhs_system.masses),
-                len(self.lhs_system.params),
-                grad,
-                grad_other
-            )
-            gradients.append(grad_alchem)
-        
+                force_names.append(k)
+                op_fn = getattr(ops, k)
+                grad = op_fn(*v, precision=self.precision)
+                gradients.append(grad)
 
-        print("done")
+        elif stage == 2:
 
-        # if stage == 1:
+            # raise Exception("Unsupported")
+            for k, v in self.lhs_system.nrg_fns.items():
 
-        #     for k, v in self.lhs_system.nrg_fns.items():
+                force_names.append(k)
+                other_v = self.rhs_system.nrg_fns[k]
+                op_fn = getattr(ops, k)
+                grad = op_fn(*v, precision=self.precision)
+                grad_other = op_fn(*other_v, precision=self.precision)
 
-        #         force_names.append(k)
-        #         op_fn = getattr(ops, k)
-        #         grad = op_fn(*v, precision=self.precision)
-        #         gradients.append(grad)
+                # (ytz): this is a hack to deal with python's shitty ref
+                # count mechanism destroying a pybind owned object
+                handles.append(grad)
+                handles.append(grad_other)
+                grad_alchem = ops.AlchemicalGradient(
+                    len(self.lhs_system.masses),
+                    len(self.lhs_system.params),
+                    grad,
+                    grad_other
+                )
+                gradients.append(grad_alchem)
+            
+            print("done")
 
-        # elif stage == 2:
+        elif stage == 3:
 
-        #     # raise Exception("Unsupported")
+            for k, v in self.rhs_system.nrg_fns.items():
 
-        #     print("Making alchemical potentials")
-
-        #     for k, v in self.lhs_system.nrg_fns.items():
-
-        #         force_names.append(k)
-        #         other_v = self.rhs_system.nrg_fns[k]
-        #         op_fn = getattr(ops, k)
-        #         grad = op_fn(*v, precision=self.precision)
-        #         grad_other = op_fn(*other_v, precision=self.precision)
-        #         grad_alchem = ops.AlchemicalGradient(
-        #             len(self.lhs_system.masses),
-        #             len(self.lhs_system.params),
-        #             grad,
-        #             grad_other
-        #         )
-        #         gradients.append(grad_alchem)
+                force_names.append(k)
+                op_fn = getattr(ops, k)
+                grad = op_fn(*v, precision=self.precision)
+                gradients.append(grad)
 
 
-        #     print("done")
+        for g in gradients:
+            forces, du_dl, energy = g.execute_lambda(x0, self.lhs_system.params, 0.0)
+            print(forces[1758:])
+            print(g, np.amax(np.abs(forces)), du_dl, energy)
 
-        # elif stage == 3:
-
-        #     raise Exception("Unsupported")
-
-
-
-        # x_bad = np.load("all_coords.npy")[15821-20]
-
-        # for g in gradients[3:]:
-        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
-        #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
-
-        #     print(g, "DU_DL", du_dl, energy)
-
-        # x_bad = np.load("all_coords.npy")[15821-10]
-
-        # for g in gradients[3:]:
-        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
-        #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
-
-        #     print(g, "DU_DL", du_dl, energy)
-
-
-
-        # x_bad = np.load("all_coords.npy")[15821]
-
-        # for g in gradients[3:]:
-        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
-        #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
-
-        #     print(g, "DU_DL", du_dl, energy)
-
-
-        # x_bad = np.load("all_coords.npy")[15821+10]
-
-        # for g in gradients[3:]:
-        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
-        #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
-
-        #     print(g, "DU_DL", du_dl, energy)
-
-
-        # x_bad = np.load("all_coords.npy")[15821+20]
-
-        # for g in gradients[3:]:
-        #     forces, du_dl, energy = g.execute_lambda(x_bad, self.lhs_system.params, 0.20)
-        #     print(g, forces[1758+14], forces[1758+51], np.amax(np.abs(forces[1758:])), np.argmax(np.abs(forces[1758:]), axis=0))
-
-        #     print(g, "DU_DL", du_dl, energy)
-
-        # assert 0
+        assert 0
 
         stepper = custom_ops.AlchemicalStepper_f64(
             gradients,
@@ -275,7 +218,7 @@ class Simulation:
         )
 
         start = time.time()
-        print("start_forward_mode")
+        # print("start_forward_mode")
         try:
             ctxt.forward_mode()
         except e:
@@ -284,16 +227,16 @@ class Simulation:
         print("fwd run time", time.time() - start)
 
         # xs = ctxt.get_all_coords()
-
         # np.save("all_coords.npy", xs)
         # # np.save("debug_coords.npy", xs[6000])
 
         # assert 0
         start = time.time()
-        x_final = ctxt.get_last_coords()[:, :3]
+        x_final = ctxt.get_last_coords()
 
-        energies = stepper.get_energies()
-        for e_idx, e in enumerate(energies):
+        full_energies = stepper.get_energies()
+        for e_idx, e in enumerate(full_energies):
+            print(e_idx, e)
             if e_idx > 50:
                 break
 
@@ -302,26 +245,19 @@ class Simulation:
             du_dls = None
 
         full_du_dls = stepper.get_du_dl()
-
-
-        print("Max nonbonded arg", np.argmin(full_du_dls[3]))
-
-        full_energies = stepper.get_energies()
-
-        # equil_du_dls = full_du_dls
-        equil_du_dls = full_du_dls[:, 4000:]
+        equil_du_dls = full_du_dls[4000:]
 
         # print(equil_du_dls.shape)
 
         # assert 0
 
         for fname, du_dls in zip(force_names, equil_du_dls):
-            print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+            print("lambda:", "{:.3f}".format(self.lambda_schedule[0]), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
             # print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.trapz(du_dls, self.lambda_schedule)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
 
         total_equil_du_dls = np.sum(equil_du_dls, axis=0)
 
-        print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
+        print("lambda:", "{:.3f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
         # print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.trapz(total_equil_du_dls, self.lambda_schedule)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
 
         if pdb_writer is not None:

@@ -25,7 +25,6 @@ class LinearMixer():
             self.core_atoms.add(dst)
             self.cmap_b_to_a[dst] = src
 
-
     def mix_arbitrary_bonds(self,
         a_bond_idxs,
         a_param_idxs,
@@ -50,7 +49,6 @@ class LinearMixer():
             rhs_a_bond_idxs.append(new_atoms)
 
         # turn a into b
-
         rhs_b_bond_idxs = []
         for atoms in a_bond_idxs:
             new_atoms = []
@@ -102,16 +100,21 @@ class LinearMixer():
             assert pkey not in rhs_exclusions
             rhs_exclusions[pkey] = param
 
+        # (ytz): this is commented out because it's buggy
+        # we may introduce an endpoint where two particles are excluded but
+        # there lacks a bond - which can cause a numerical overflow in how we
+        # compute the exclusions
+        
         # merge exclusions
         # add non core exclusions from rhs into lhs
-        for (src, dst), param in rhs_exclusions.items():
-            if src not in self.core_atoms or dst not in self.core_atoms:
-                lhs_exclusions[(src, dst)] = param
+        # for (src, dst), param in rhs_exclusions.items():
+        #     if src not in self.core_atoms or dst not in self.core_atoms:
+        #         lhs_exclusions[(src, dst)] = param
 
-        # add non core exclusions from lhs into rhs
-        for(src, dst), param in lhs_exclusions.items():
-            if src not in self.core_atoms or dst not in self.core_atoms:
-                rhs_exclusions[src, dst] = param
+        # # add non core exclusions from lhs into rhs
+        # for(src, dst), param in lhs_exclusions.items():
+        #     if src not in self.core_atoms or dst not in self.core_atoms:
+        #         rhs_exclusions[src, dst] = param
 
         lhs_exclusion_idxs = []
         lhs_exclusion_params = []
