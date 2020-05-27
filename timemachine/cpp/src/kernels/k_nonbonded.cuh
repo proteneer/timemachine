@@ -136,9 +136,9 @@ void __global__ k_nonbonded_inference(
 
             RealType lj_grad_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
 
-            if(atom_i_idx >= 1758 && atom_j_idx >= 1758 && abs(lj_grad_prefactor) > 1000) {
-                printf("i %d j %d lj_grad_prefactor %f\n", atom_i_idx, atom_j_idx, lj_grad_prefactor); 
-            }
+            // if(atom_i_idx >= 1758 && atom_j_idx >= 1758 && abs(lj_grad_prefactor) > 1000) {
+            //     printf("i %d j %d lj_grad_prefactor %f\n", atom_i_idx, atom_j_idx, lj_grad_prefactor); 
+            // }
 
             for(int d=0; d < 3; d++) {
 
