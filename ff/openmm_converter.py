@@ -131,14 +131,9 @@ def deserialize_system(system, cutoff=10000, pocket_atoms=None):
             for a_idx in range(num_atoms):
                 scale_matrix[a_idx][a_idx] = 0
                 charge, sig, eps = force.getParticleParameters(a_idx)
-
-
                 # this needs to be scaled by sqrt(eps0)
                 charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
 
-
-                if a_idx == 1629:
-                    print("INSERTING CHARGE", charge)
                 # print("WARNING: strengthening protein charges 10 percent due to cutoffs")
                 # charge = charge*1.1 # due to cutoffs
                 sig = value(sig)

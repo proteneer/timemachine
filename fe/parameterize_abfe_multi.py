@@ -121,6 +121,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
     parser.add_argument('--a_idx', type=int, required=True, help='A index')
+    parser.add_argument('--pocket_cutoff', type=float, required=True, help='How far from the pocket do we grab atoms.')
 
     args = parser.parse_args()
 
@@ -170,7 +171,18 @@ if __name__ == "__main__":
 
     lambda_plane_idxs = np.zeros(mol_a.GetNumAtoms())
 
-    pocket_atoms = [1025, 1033, 1034, 1037, 1038, 1122, 1039, 1041, 1042, 1123, 1040, 1043, 614, 1124, 1633, 1560, 1563, 1564, 1565, 1566, 1567, 1568, 1125, 1126, 1571, 616, 1572, 1574, 1575, 1576, 1577, 1573, 1072, 1075, 1076, 1077, 1078, 1079, 1084, 1086, 1599, 1600, 1601, 1087, 1603, 1088, 1602, 1091, 1092, 88, 89, 1626, 1627, 90, 1629, 1628, 1119, 1120, 1632, 1634, 1635, 94, 100, 102, 615, 103, 1127, 618, 1129, 620, 621, 622, 623, 1128, 617, 1130, 1138, 619, 127, 128, 131, 132, 133, 660, 661, 662, 663, 150, 153, 154, 155, 156, 157, 158, 666, 667, 161, 162, 163, 164, 165, 674, 673, 676, 680, 169, 681, 684, 685, 686, 687, 688, 689, 690, 691, 692, 693, 1562, 696, 698, 186, 700, 699, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 221, 249, 250, 1278, 255, 1279, 1285, 262, 263, 264, 1288, 1286, 1287, 1289, 1307, 1308, 1309, 1310, 1311, 1312, 1313, 802, 1314, 1316, 1317, 1318, 806, 1319, 1320, 1321, 1323, 805, 813, 814, 815, 671, 808, 809, 1331, 672, 1338, 1339, 1340, 1341, 1342, 1343, 1344, 853, 854, 855, 856, 857, 858, 859, 860, 861, 862, 863, 864, 865, 866, 867, 868, 869, 870, 871, 872, 873, 874, 875, 876, 877, 878, 366, 879, 375, 376, 915, 916, 917, 918, 921, 922, 923, 924, 926, 927, 928, 929, 432, 442, 443, 444, 800, 801, 803, 804, 1113, 1114, 1115, 1004, 1005, 1007, 1010, 1011, 1117, 1012, 1013, 1118, 1019]
+    host_conf = []
+    for x,y,z in host_pdb.positions:
+        host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+    host_conf = np.array(host_conf)
+
+    conformer = mol_a.GetConformer(0)
+    mol_a_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+    mol_a_conf = mol_a_conf/10 # convert to md_units
+
+    x0 = np.concatenate([host_conf, mol_a_conf]) # combined geometry
+
+    pocket_atoms = find_pocket_neighbors(x0, host_conf.shape[0], cutoff=args.pocket_cutoff)
 
     host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff, pocket_atoms=pocket_atoms)
     # host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff, pocket_atoms=None)
@@ -270,21 +282,6 @@ if __name__ == "__main__":
             # if args.n_frames is 0:
                 # writer = None
             # writer = None
-
-            host_conf = []
-            for x,y,z in host_pdb.positions:
-                host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-            host_conf = np.array(host_conf)
-
-            conformer = mol_a.GetConformer(0)
-            mol_a_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-            mol_a_conf = mol_a_conf/10 # convert to md_units
-
-            x0 = np.concatenate([host_conf, mol_a_conf]) # combined geometry
-
-            pocket_atoms2 = find_pocket_neighbors(x0, host_conf.shape[0])
-
-            assert set(pocket_atoms) == set(pocket_atoms2)
 
             v0 = np.zeros_like(x0)
 
