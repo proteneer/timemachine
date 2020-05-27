@@ -14,7 +14,7 @@ from timemachine import constants
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
-def deserialize_system(system, cutoff=10000):
+def deserialize_system(system, cutoff=10000, pocket_atoms=None):
     """
     Deserialize an OpenMM XML file
 
@@ -49,7 +49,10 @@ def deserialize_system(system, cutoff=10000):
 
     lambda_plane_idxs = np.zeros(len(masses), dtype=np.int32)
     lambda_offset_idxs = np.zeros(len(masses), dtype=np.int32)
-
+    if pocket_atoms:
+        lambda_offset_idxs[pocket_atoms] = 1
+        # print("setting plane_idxs")
+        # lambda_plane_idxs[pocket_atoms] = 10
 
     for force in system.getForces():
 
@@ -141,6 +144,12 @@ def deserialize_system(system, cutoff=10000):
                 sig = value(sig)
                 eps = value(eps)
 
+                # override default amber types
+                if sig == 0 or eps == 0:
+                    print(sig, eps)
+                    sig = 0.1
+                    eps = 0.1
+
                 charge_idx = insert_parameters(charge, 14)
                 sig_idx = insert_parameters(sig, 10)
                 eps_idx = insert_parameters(eps, 11)
@@ -149,6 +158,35 @@ def deserialize_system(system, cutoff=10000):
                 lj_param_idxs.append([sig_idx, eps_idx])
 
             charge_param_idxs = np.array(charge_param_idxs, dtype=np.int32)
+
+            # pocket_atoms = [1025, 1033, 1034, 1037, 1038, 1122, 1039, 1041, 1042, 1123, 1040, 1043, 614, 1124, 1633, 1560, 1563, 1564, 1565, 1566, 1567, 1568, 1125, 1126, 1571, 616, 1572, 1574, 1575, 1576, 1577, 1573, 1072, 1075, 1076, 1077, 1078, 1079, 1084, 1086, 1599, 1600, 1601, 1087, 1603, 1088, 1602, 1091, 1092, 88, 89, 1626, 1627, 90, 1629, 1628, 1119, 1120, 1632, 1634, 1635, 94, 100, 102, 615, 103, 1127, 618, 1129, 620, 621, 622, 623, 1128, 617, 1130, 1138, 619, 127, 128, 131, 132, 133, 660, 661, 662, 663, 150, 153, 154, 155, 156, 157, 158, 666, 667, 161, 162, 163, 164, 165, 674, 673, 676, 680, 169, 681, 684, 685, 686, 687, 688, 689, 690, 691, 692, 693, 1562, 696, 698, 186, 700, 699, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 221, 249, 250, 1278, 255, 1279, 1285, 262, 263, 264, 1288, 1286, 1287, 1289, 1307, 1308, 1309, 1310, 1311, 1312, 1313, 802, 1314, 1316, 1317, 1318, 806, 1319, 1320, 1321, 1323, 805, 813, 814, 815, 671, 808, 809, 1331, 672, 1338, 1339, 1340, 1341, 1342, 1343, 1344, 853, 854, 855, 856, 857, 858, 859, 860, 861, 862, 863, 864, 865, 866, 867, 868, 869, 870, 871, 872, 873, 874, 875, 876, 877, 878, 366, 879, 375, 376, 915, 916, 917, 918, 921, 922, 923, 924, 926, 927, 928, 929, 432, 442, 443, 444, 800, 801, 803, 804, 1113, 1114, 1115, 1004, 1005, 1007, 1010, 1011, 1117, 1012, 1013, 1118, 1019]
+
+            # lj_param_idxs = np.array(lj_param_idxs)
+
+            # print(lj_param_idxs[pocket_atoms])
+
+            # global_params = np.array(global_params)
+
+            # print("sig", global_params[lj_param_idxs[pocket_atoms][:, 0]])
+            # print("eps", global_params[lj_param_idxs[pocket_atoms][:, 1]])
+
+            # for pocket_idx, sig in zip(pocket_atoms, global_params[lj_param_idxs[pocket_atoms][:, 0]]):
+            #     if sig == 0:
+            #         print(masses[pocket_idx], sig)
+
+            # assert 0
+
+            # print("sig0", np.argwhere(global_params[lj_param_idxs[pocket_atoms][:, 0]] == 0))
+            # print("eps0", np.argwhere(global_params[lj_param_idxs[pocket_atoms][:, 1]] == 0))
+
+            # masses = np.array(masses)
+
+            # print("masses", masses[np.argwhere(global_params[lj_param_idxs[pocket_atoms][:, 0]] == 0)])
+
+
+
+            # assert 0
+
 
             print("net protein charge:", np.sum(np.array(global_params)[charge_param_idxs]))
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)

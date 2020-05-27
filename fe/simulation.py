@@ -215,10 +215,12 @@ class Simulation:
         # assert 0
 
         full_energies = stepper.get_energies()
-        # for e_idx, e in enumerate(full_energies):
-        #     print(e_idx, e)
-        #     if e_idx > 50:
-        #         break
+
+        print("FULL ENERGIES", full_energies)
+        for e_idx, e in enumerate(full_energies):
+            print("energy", e_idx, e)
+            if e_idx > 50:
+                break
 
         start = time.time()
         x_final = ctxt.get_last_coords()
