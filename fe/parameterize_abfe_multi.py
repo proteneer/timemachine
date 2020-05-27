@@ -117,7 +117,7 @@ if __name__ == "__main__":
     parser.add_argument('--forcefield', type=str, required=True, help='Small molecule forcefield to be loaded.')
     parser.add_argument('--seed', type=int, required=True, help='Random seed used for all the random number generators.')
     parser.add_argument('--cutoff', type=float, required=True, help='Nonbonded cutoff. Please set this to 1.0 for now.')
-    parser.add_argument('--num_windows', type=int, required=True, help='Number of lambda windows to be linearly spaced.')
+    parser.add_argument('--lamb', type=float, required=True, help='Which lambda window we run at.')
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
     parser.add_argument('--a_idx', type=int, required=True, help='A index')
@@ -226,7 +226,8 @@ if __name__ == "__main__":
         # ti_lambdas = np.array([0.0, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.4, 0.5, 0.6, 0.8, 0.9, 1.5])
         # ti_lambdas = np.array([0.0, 0.1, 0.2, 0.25])
         # ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
-        ti_lambdas = np.array([0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50])
+        ti_lambdas = np.ones(args.num_gpus)*args.lamb
+        # ti_lambdas = np.array([0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50])
 
         # ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0])
         # ti_lambdas = np.array([0.0, 0.2, 0.5])
