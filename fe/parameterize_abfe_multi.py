@@ -121,7 +121,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
     parser.add_argument('--a_idx', type=int, required=True, help='A index')
-    parser.add_argument('--pocket_cutoff', type=float, required=True, help='How far from the pocket do we grab atoms.')
+    parser.add_argument('--pocket_cutoff', type=float, required=True, help='How far from the pocket do we grab atoms in (nanometers).')
 
     args = parser.parse_args()
 
