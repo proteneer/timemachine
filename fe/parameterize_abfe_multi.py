@@ -91,19 +91,19 @@ def setup_lambda_idxs(nrg_fns):
     nrg_fns['Nonbonded'] = es_param_idxs, lj_param_idxs, exc_idxs, es_exc_param_idxs, lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, cutoff
     nrg_fns['GBSA'] = (gb_charges, gb_radii, gb_scales, lambda_plane_idxs, lambda_offset_idxs, *gb_args[3:])
 
-def find_pocket_neighbors(conf, n_host, cutoff=0.5):
-    """
-    Find all protein atoms that we within cutoff of a ligand atom.
-    """
-    ri = np.expand_dims(conf, axis=0)
-    rj = np.expand_dims(conf, axis=1)
-    dij = jax_utils.distance(ri, rj)
-    all_nbs = []
-    for l_idx, dists in enumerate(dij[n_host:]):
-        nbs = np.argwhere(dists[:n_host] < cutoff)
-        all_nbs.extend(nbs.reshape(-1).tolist())
+# def find_pocket_neighbors(conf, n_host, cutoff=0.5):
+#     """
+#     Find all protein atoms that we within cutoff of a ligand atom.
+#     """
+#     ri = np.expand_dims(conf, axis=0)
+#     rj = np.expand_dims(conf, axis=1)
+#     dij = jax_utils.distance(ri, rj)
+#     all_nbs = []
+#     for l_idx, dists in enumerate(dij[n_host:]):
+#         nbs = np.argwhere(dists[:n_host] < cutoff)
+#         all_nbs.extend(nbs.reshape(-1).tolist())
 
-    return list(set(all_nbs))
+#     return list(set(all_nbs))
 
 
 if __name__ == "__main__":
@@ -154,8 +154,8 @@ if __name__ == "__main__":
     open_ff = forcefield.Forcefield(args.forcefield)
     all_nrg_fns = []
 
-    a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True, zero_charges=True)
-    # a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True, zero_charges=False)
+    # a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True, zero_charges=True)
+    a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True, zero_charges=False)
 
     setup_lambda_idxs(a_system.nrg_fns)
 
@@ -182,9 +182,8 @@ if __name__ == "__main__":
 
     x0 = np.concatenate([host_conf, mol_a_conf]) # combined geometry
 
-    pocket_atoms = find_pocket_neighbors(x0, host_conf.shape[0], cutoff=args.pocket_cutoff)
-
-    host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff, pocket_atoms=pocket_atoms)
+    # pocket_atoms = find_pocket_neighbors(x0, host_conf.shape[0], cutoff=args.pocket_cutoff)
+    host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff, pocket_atoms=None)
     # host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff, pocket_atoms=None)
     combined_system = host_system.merge(a_system)
 
@@ -238,7 +237,7 @@ if __name__ == "__main__":
         # ti_lambdas = np.array([0.0, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.4, 0.5, 0.6, 0.8, 0.9, 1.5])
         # ti_lambdas = np.array([0.0, 0.1, 0.2, 0.25])
         # ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
-        ti_lambdas = np.ones(args.num_gpus)*args.lamb
+        ti_lambdas = np.ones(8)*args.lamb
         # ti_lambdas = np.array([0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50])
 
         # ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0])
