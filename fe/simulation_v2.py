@@ -30,9 +30,6 @@ def setup_harmonic_core_restraints(conf, nha, core_atoms, params):
     bond_param_idxs = []
     bond_idxs = []
 
-
-    print("START PARAMS LENGTH", params.shape)
-
     for l_idx, dists in enumerate(dij[nha:]):
         if l_idx in core_atoms:
 
@@ -50,12 +47,8 @@ def setup_harmonic_core_restraints(conf, nha, core_atoms, params):
                 bond_param_idxs.append([k_idx, b_idx])
                 bond_idxs.append([l_idx + nha, p_idx])
 
-    print(np.array(bond_idxs, dtype=np.int32))
-    print(np.array(bond_param_idxs, dtype=np.int32))
-
-    print("CORE RESTRAINTS", bond_idxs)
-
-    print("END PARAMS LENGTH", params.shape)
+    # print(np.array(bond_idxs, dtype=np.int32))
+    # print(np.array(bond_param_idxs, dtype=np.int32))
 
     return ops.HarmonicBond(
         np.array(bond_idxs, dtype=np.int32),
@@ -100,7 +93,6 @@ def check_coords(x):
 
     return True
 
-# check_coords = jax.jit(check_coords, static_argnums=(0,))
 
 class Simulation:
     """
@@ -161,7 +153,8 @@ class Simulation:
         seed,
         pdb_writer,
         pipe,
-        gpu_idx):
+        gpu_idx,
+        du_dl_cutoff):
         """
         Run a forward simulation
 
@@ -249,8 +242,6 @@ class Simulation:
             seed
         )
 
-        print("WTF PARAMS?", params.shape)
-
         start = time.time()
         print("start_forward_mode")
         try:
@@ -277,35 +268,6 @@ class Simulation:
 
         xs = ctxt.get_all_coords()
 
-        # np.save("all_coords.npy", xs)
-
-        # for g in gradients:
-        #     forces, du_dl, energy = g.execute_lambda(xs[1460], self.system.params, 0.0)
-        #     print(g, np.amax(np.abs(forces)), du_dl, energy)
-
-        # print("--")
-
-        # for g in gradients:
-        #     forces, du_dl, energy = g.execute_lambda(xs[1469], self.system.params, 0.0)
-        #     print(g, np.amax(np.abs(forces)), du_dl, energy)
-
-        # print("--")
-        # for g in gradients:
-        #     forces, du_dl, energy = g.execute_lambda(xs[1470], self.system.params, 0.0)
-        #     print(g, np.amax(np.abs(forces)), du_dl, energy)
-
-        # print("--")
-        # for g in gradients:
-        #     forces, du_dl, energy = g.execute_lambda(xs[1471], self.system.params, 0.0)
-        #     print(g, np.amax(np.abs(forces)), du_dl, energy)
-
-        # print("--")
-        # for g in gradients:
-        #     forces, du_dl, energy = g.execute_lambda(xs[1472], self.system.params, 0.0)
-        #     print(g, np.amax(np.abs(forces)), du_dl, energy)
-
-        # assert 0
-
         if check_coords(x_final) == False:
             print("FATAL WARNING: ------ Final frame FAILED ------")
             du_dls = None
@@ -318,7 +280,7 @@ class Simulation:
         full_energies = stepper.get_energies()
 
         # equil_du_dls = full_du_dls
-        equil_du_dls = full_du_dls[:, 20000:]
+        equil_du_dls = full_du_dls[:, du_dl_cutoff:]
 
         # print(equil_du_dls.shape)
 

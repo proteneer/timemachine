@@ -120,7 +120,6 @@ if __name__ == "__main__":
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
     parser.add_argument('--a_idx', type=int, required=True, help='A index')
-    parser.add_argument('--pocket_cutoff', type=float, required=True, help='How far from the pocket do we grab atoms in (nanometers).')
 
     args = parser.parse_args()
 
@@ -223,8 +222,11 @@ if __name__ == "__main__":
         complete_T = args.steps
         # complete_T = 40000
         equil_T = 2000
+        du_dl_cutoff = 20000
 
         assert complete_T > equil_T
+        assert complete_T > du_dl_cutoff
+
 
         # ti_lambdas = np.linspace(0, 1, args.num_windows)
         # ti_lambdas = np.ones(args.num_windows)*0.2
@@ -233,7 +235,7 @@ if __name__ == "__main__":
         # ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
         # ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.8, 1.2, 1.5, 2.0, 4.0, 10.0])
         #                        0     1     2    3     4      5     6      7      8     9   10   11   12   13   14  15
-        ti_lambdas = np.array([0.0, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.4, 0.5, 0.6, 0.8, 0.9, 1.5])
+        # ti_lambdas = np.array([0.0, 0.025, 0.05, 0.1, 0.125, 0.15, 0.175, 0.2, 0.225, 0.25, 0.3, 0.4, 0.5, 0.6, 0.8, 0.9, 1.5])
         # ti_lambdas = np.array([0.0, 0.1, 0.2, 0.25])
         # ti_lambdas = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
         # ti_lambdas = np.ones(8)*args.lamb
@@ -242,15 +244,14 @@ if __name__ == "__main__":
         # ti_lambdas = np.array([0.00, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1.0])
         # ti_lambdas = np.array([0.0, 0.2, 0.5])
         #
-
-        ti_lambdas = np.concatenate([
-            np.linspace(0.0, 0.5, 16, endpoint=False),
-            np.linspace(0.5, 5.0, 8)
-        ])
-         # ti_lambdas = np.array([0.07, 0.07, 0.07, 0.07, 0.07, 0.07, 0.07])
-        # ti_lambdas = np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-        # all_du_dls = []
-
+        if args.lamb:
+            ti_lambdas = np.ones(args.num_gpus)*args.lamb
+        else:
+            ti_lambdas = np.concatenate([
+                np.linspace(0.0, 0.5, 16, endpoint=False),
+                np.linspace(0.5, 5.0, 8)
+            ])
+        
         all_processes = []
         all_pcs = []
 
@@ -290,7 +291,7 @@ if __name__ == "__main__":
 
             parent_conn, child_conn = Pipe()
 
-            input_args = (x0, v0, epoch_params, intg_seed, writer, child_conn, lambda_idx % args.num_gpus)
+            input_args = (x0, v0, epoch_params, intg_seed, writer, child_conn, lambda_idx % args.num_gpus, du_dl_cutoff)
             p = Process(target=sim.run_forward_and_backward, args=input_args)
 
             # sim.run_forward_and_backward(*input_args)
@@ -346,7 +347,7 @@ if __name__ == "__main__":
         all_du_dls = np.array(all_du_dls)
         sum_du_dls = np.array(sum_du_dls)
 
-        safe_T = equil_T*2
+        safe_T = du_dl_cutoff
 
         # loss = loss_fn(all_du_dls[:, :, safe_T:], true_ddG, ti_lambdas)
 
