@@ -34,7 +34,6 @@ from jax.experimental import optimizers
 
 from fe import simulation_v2
 from fe import loss, bar
-from fe import atom_mapping
 from fe.pdb_writer import PDBWriter
 
 from ff import forcefield
