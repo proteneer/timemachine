@@ -31,25 +31,31 @@ def setup_harmonic_core_restraints(conf, nha, core_atoms, params):
     bond_idxs = []
 
 
+    print("START PARAMS LENGTH", params.shape)
+
     for l_idx, dists in enumerate(dij[nha:]):
         if l_idx in core_atoms:
 
-            p_idx = np.argmin(dists[:nha])
-            k = 50000.0
-            k_idx = len(params)
-            params = np.concatenate([params, [k]])
+            nns = np.argsort(dists[:nha])
+            for p_idx in nns[:10]:
+                # p_idx = np.argmin(dists[:nha])
+                k = 1000.0
+                k_idx = len(params)
+                params = np.concatenate([params, [k]])
 
-            b = dists[p_idx]
-            b_idx = len(params)
-            params = np.concatenate([params, [b]])
+                b = dists[p_idx]
+                b_idx = len(params)
+                params = np.concatenate([params, [b]])
 
-            bond_param_idxs.append([k_idx, b_idx])
-            bond_idxs.append([l_idx + nha, p_idx])
+                bond_param_idxs.append([k_idx, b_idx])
+                bond_idxs.append([l_idx + nha, p_idx])
 
     print(np.array(bond_idxs, dtype=np.int32))
     print(np.array(bond_param_idxs, dtype=np.int32))
 
     print("CORE RESTRAINTS", bond_idxs)
+
+    print("END PARAMS LENGTH", params.shape)
 
     return ops.HarmonicBond(
         np.array(bond_idxs, dtype=np.int32),
@@ -239,9 +245,11 @@ class Simulation:
             self.cbs,
             self.ccs,
             self.step_sizes,
-            params,
+            new_params,
             seed
         )
+
+        print("WTF PARAMS?", params.shape)
 
         start = time.time()
         print("start_forward_mode")
@@ -310,7 +318,7 @@ class Simulation:
         full_energies = stepper.get_energies()
 
         # equil_du_dls = full_du_dls
-        equil_du_dls = full_du_dls[:, -25000:]
+        equil_du_dls = full_du_dls[:, 20000:]
 
         # print(equil_du_dls.shape)
 
