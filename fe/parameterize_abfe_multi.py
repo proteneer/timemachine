@@ -248,8 +248,8 @@ if __name__ == "__main__":
             ti_lambdas = np.ones(args.num_gpus)*args.lamb
         else:
             ti_lambdas = np.concatenate([
-                np.linspace(0.0, 0.5, 16, endpoint=False),
-                np.linspace(0.5, 5.0, 8)
+                np.linspace(0.0, 0.5, 24, endpoint=False),
+                np.linspace(0.5, 1.0, 8)
             ])
         
         all_processes = []
