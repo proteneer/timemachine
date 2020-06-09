@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument('--forcefield', type=str, required=True, help='Small molecule forcefield to be loaded.')
     parser.add_argument('--seed', type=int, required=True, help='Random seed used for all the random number generators.')
     parser.add_argument('--cutoff', type=float, required=True, help='Nonbonded cutoff. Please set this to 1.0 for now.')
-    parser.add_argument('--lamb', type=float, required=True, help='Which lambda window we run at.')
+    parser.add_argument('--lamb', type=float, required=False, help='Which lambda window we run at.')
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
     parser.add_argument('--a_idx', type=int, required=True, help='A index')
