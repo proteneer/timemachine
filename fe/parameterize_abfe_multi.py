@@ -103,16 +103,15 @@ def setup_core_restraints(
     dij = jax_utils.distance(ri, rj)
     all_nbs = []
 
-    # bond_params = []
     bond_param_idxs = []
     bond_idxs = []
 
     for l_idx, dists in enumerate(dij[nha:]):
         if l_idx in core_atoms:
-
             nns = np.argsort(dists[:nha])
+
+            # restrain to 10 nearby atoms
             for p_idx in nns[:10]:
-                # p_idx = np.argmin(dists[:nha])
                 k = 500.0
                 k_idx = len(params)
                 params = np.concatenate([params, [k]])
@@ -126,9 +125,6 @@ def setup_core_restraints(
 
     bond_idxs = np.array(bond_idxs, dtype=np.int32)
     bond_param_idxs = np.array(bond_param_idxs, dtype=np.int32)
-
-    # print(np.array(bond_idxs, dtype=np.int32))
-    # print(np.array(bond_param_idxs, dtype=np.int32))
 
     B = bond_idxs.shape[0]
 
@@ -259,7 +255,7 @@ if __name__ == "__main__":
 
             if stage == 0 or stage == 2:
 
-                ti_lambdas = np.linspace(0.0, 1.0, 11)
+                ti_lambdas = np.linspace(0.0, 1.0, 16)
 
             elif stage == 1:
 
