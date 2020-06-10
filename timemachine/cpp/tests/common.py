@@ -358,16 +358,12 @@ class GradientTest(unittest.TestCase):
             rtol,
         )
 
-        # print("ref dl test dl", ref_dl, test_dl)
-
         if ref_dl == 0:
             np.testing.assert_almost_equal(ref_dl, test_dl, 1e-5)
         else:
             np.testing.assert_allclose(ref_dl, test_dl, rtol)
 
-        print("FIRST ORDER PASSED")
-
-        # return
+        return
 
         x_tangent = np.random.rand(N, D).astype(np.float64)
         params_tangent = np.zeros_like(params)

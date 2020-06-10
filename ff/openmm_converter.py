@@ -14,7 +14,7 @@ from timemachine import constants
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
-def deserialize_system(system, cutoff=10000, pocket_atoms=None):
+def deserialize_system(system, cutoff=10000):
     """
     Deserialize an OpenMM XML file
 
@@ -47,10 +47,10 @@ def deserialize_system(system, cutoff=10000, pocket_atoms=None):
     nrg_fns = {}
 
 
-    lambda_plane_idxs = np.zeros(len(masses), dtype=np.int32)
-    lambda_offset_idxs = np.zeros(len(masses), dtype=np.int32)
-    if pocket_atoms:
-        lambda_offset_idxs[pocket_atoms] = 1
+    # lambda_plane_idxs = np.zeros(len(masses), dtype=np.int32)
+    # lambda_offset_idxs = np.zeros(len(masses), dtype=np.int32)
+    # if pocket_atoms:
+        # lambda_offset_idxs[pocket_atoms] = 1
         # print("setting plane_idxs")
         # lambda_plane_idxs[pocket_atoms] = 10
 
@@ -139,11 +139,11 @@ def deserialize_system(system, cutoff=10000, pocket_atoms=None):
                 sig = value(sig)
                 eps = value(eps)
 
+                # (ytz): this is only necessary if the protein atoms are allowed to be in a separate plane
                 # override default amber types
-                if sig == 0 or eps == 0:
-                    print(sig, eps)
-                    sig = 0.1
-                    eps = 0.1
+                # if sig == 0 or eps == 0:
+                    # sig = 0.1
+                    # eps = 0.1
 
                 charge_idx = insert_parameters(charge, 14)
                 sig_idx = insert_parameters(sig, 10)
@@ -183,7 +183,7 @@ def deserialize_system(system, cutoff=10000, pocket_atoms=None):
             # assert 0
 
 
-            print("net protein charge:", np.sum(np.array(global_params)[charge_param_idxs]))
+            print("Protein net charge:", np.sum(np.array(global_params)[charge_param_idxs]))
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
 
             # 1 here means we fully remove the interaction
@@ -231,8 +231,6 @@ def deserialize_system(system, cutoff=10000, pocket_atoms=None):
                 exclusion_idxs,
                 exclusion_param_idxs,
                 exclusion_param_idxs,
-                lambda_plane_idxs,
-                lambda_offset_idxs,
                 cutoff
             )
 
@@ -275,8 +273,6 @@ def deserialize_system(system, cutoff=10000, pocket_atoms=None):
         np.array(charge_param_idxs, dtype=np.int32),
         np.array(radius_param_idxs, dtype=np.int32),
         np.array(scale_param_idxs, dtype=np.int32),
-        np.array(lambda_plane_idxs, dtype=np.int32),
-        np.array(lambda_offset_idxs, dtype=np.int32),
         alpha,                         # alpha
         beta,                          # beta
         gamma,                         # gamma

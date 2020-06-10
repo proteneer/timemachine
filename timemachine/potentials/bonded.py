@@ -3,6 +3,43 @@ import jax.numpy as np
 from timemachine.potentials.jax_utils import distance, delta_r
 
 
+def flat_bottom(conf, params, lamb, lamb_flags, box, bond_idxs, param_idxs):
+    """
+    Compute the harmonic bond energy given a collection of molecules.
+
+    This implements a harmonic angle potential: V(t) = k*(b - b0)^2
+
+    Parameters:
+    -----------
+    conf: shape [num_atoms, 3] np.array
+        atomic coordinates
+
+    params: shape [num_params,] np.array
+        unique parameters
+
+    box: shape [3, 3] np.array
+        periodic boundary vectors, if not None
+
+    bond_idxs: [num_bonds, 2] np.array
+        each element (src, dst) is a unique bond in the conformation
+
+    param_idxs: [num_bonds, 2] np.array
+        each element (k_idx, r_idx) maps into params for bond constants and ideal lengths
+
+    """
+    f_lambda = np.sin(np.pi*lamb/2)
+    f_lambda = np.where(lamb_flags != 0, f_lambda*f_lambda, 1)
+
+    ci = conf[bond_idxs[:, 0]]
+    cj = conf[bond_idxs[:, 1]]
+    dij = distance(ci, cj, box)
+    kbs = params[param_idxs[:, 0]]
+    r0s = params[param_idxs[:, 1]]
+
+    energy = np.sum(f_lambda * (kbs/2) * np.power(dij - r0s, 2.0))
+
+    return energy
+
 # lamb is *not used* it is used in the alchemical stuffl ater
 def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs):
     """

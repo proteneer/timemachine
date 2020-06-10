@@ -7,6 +7,7 @@
 // #include "langevin.hpp"
 #include "harmonic_bond.hpp"
 #include "harmonic_angle.hpp"
+#include "flat_bottom.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
 #include "gbsa.hpp"
@@ -314,6 +315,45 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 
 }
 
+
+template <typename RealType>
+void declare_flat_bottom(py::module &m, const char *typestr) {
+
+    using Class = timemachine::FlatBottom<RealType>;
+    std::string pyclass_name = std::string("FlatBottom_") + typestr;
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &bond_idxs,
+        const py::array_t<int, py::array::c_style> &param_idxs,
+        const py::array_t<int, py::array::c_style> &lambda_flags,
+        const int flat_bottom
+    ){
+        std::vector<int> vec_bond_idxs(bond_idxs.size());
+        std::memcpy(vec_bond_idxs.data(), bond_idxs.data(), vec_bond_idxs.size()*sizeof(int));
+        std::vector<int> vec_param_idxs(param_idxs.size());
+        std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
+
+        std::vector<int> vec_lambda_flags(lambda_flags.size());
+        std::memcpy(vec_lambda_flags.data(), lambda_flags.data(), vec_lambda_flags.size()*sizeof(int));
+
+
+        return new timemachine::FlatBottom<RealType>(
+            vec_bond_idxs,
+            vec_param_idxs,
+            vec_lambda_flags,
+            flat_bottom
+        );
+    }
+    ));
+
+}
+
+
 template <typename RealType>
 void declare_harmonic_angle(py::module &m, const char *typestr) {
 
@@ -496,6 +536,10 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_gradient(m);
     declare_alchemical_gradient(m);
+
+
+    declare_flat_bottom<double>(m, "f64");
+    declare_flat_bottom<float>(m, "f32");
 
     declare_harmonic_bond<double>(m, "f64");
     declare_harmonic_bond<float>(m, "f32");

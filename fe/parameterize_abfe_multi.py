@@ -90,19 +90,77 @@ def setup_lambda_idxs(nrg_fns):
     nrg_fns['Nonbonded'] = es_param_idxs, lj_param_idxs, exc_idxs, es_exc_param_idxs, lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, cutoff
     nrg_fns['GBSA'] = (gb_charges, gb_radii, gb_scales, lambda_plane_idxs, lambda_offset_idxs, *gb_args[3:])
 
-# def find_pocket_neighbors(conf, n_host, cutoff=0.5):
-#     """
-#     Find all protein atoms that we within cutoff of a ligand atom.
-#     """
-#     ri = np.expand_dims(conf, axis=0)
-#     rj = np.expand_dims(conf, axis=1)
-#     dij = jax_utils.distance(ri, rj)
-#     all_nbs = []
-#     for l_idx, dists in enumerate(dij[n_host:]):
-#         nbs = np.argwhere(dists[:n_host] < cutoff)
-#         all_nbs.extend(nbs.reshape(-1).tolist())
 
-#     return list(set(all_nbs))
+def setup_core_restraints(
+    conf,
+    nha,
+    core_atoms,
+    params,
+    nrg_fns,
+    stage):
+    ri = np.expand_dims(conf, axis=0)
+    rj = np.expand_dims(conf, axis=1)
+    dij = jax_utils.distance(ri, rj)
+    all_nbs = []
+
+    # bond_params = []
+    bond_param_idxs = []
+    bond_idxs = []
+
+    for l_idx, dists in enumerate(dij[nha:]):
+        if l_idx in core_atoms:
+
+            nns = np.argsort(dists[:nha])
+            for p_idx in nns[:10]:
+                # p_idx = np.argmin(dists[:nha])
+                k = 500.0
+                k_idx = len(params)
+                params = np.concatenate([params, [k]])
+
+                b = dists[p_idx]
+                b_idx = len(params)
+                params = np.concatenate([params, [b]])
+
+                bond_param_idxs.append([k_idx, b_idx])
+                bond_idxs.append([l_idx + nha, p_idx])
+
+    bond_idxs = np.array(bond_idxs, dtype=np.int32)
+    bond_param_idxs = np.array(bond_param_idxs, dtype=np.int32)
+
+    # print(np.array(bond_idxs, dtype=np.int32))
+    # print(np.array(bond_param_idxs, dtype=np.int32))
+
+    B = bond_idxs.shape[0]
+
+    if stage == 0:
+        lambda_flags = np.ones(B, dtype=np.int32)
+    elif stage == 1:
+        lambda_flags = np.zeros(B, dtype=np.int32)
+    elif stage == 2:
+        lambda_flags = np.ones(B, dtype=np.int32)
+
+    nrg_fns['FlatBottom'] = (
+        bond_idxs,
+        bond_param_idxs,
+        lambda_flags,
+        0
+    )
+
+    return params
+
+def find_pocket_neighbors(conf, n_host, cutoff=0.5):
+    """
+    Find all protein atoms that we within cutoff of a ligand atom.
+    """
+    ri = np.expand_dims(conf, axis=0)
+    rj = np.expand_dims(conf, axis=1)
+    dij = jax_utils.distance(ri, rj)
+    all_nbs = []
+    for l_idx, dists in enumerate(dij[n_host:]):
+        nbs = np.argwhere(dists[:n_host] < cutoff)
+        all_nbs.extend(nbs.reshape(-1).tolist())
+
+    return list(set(all_nbs))
 
 
 if __name__ == "__main__":
@@ -141,21 +199,16 @@ if __name__ == "__main__":
     mol_a = all_guest_mols[args.a_idx]
 
     mol_a_dG = convert_uIC50_to_kJ_per_mole(float(mol_a.GetProp("IC50[uM](SPA)")))
-    # mol_b_dG = convert_uIC50_to_kJ_per_mole(float(mol_b.GetProp("IC50[uM](SPA)")))
 
     a_name = mol_a.GetProp("_Name")
-    # b_name = mol_b.GetProp("_Name")
 
     print("Ligand A Name:", a_name)
- 
 
     open_ff = forcefield.Forcefield(args.forcefield)
     all_nrg_fns = []
 
     # a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True, zero_charges=True)
     a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True, zero_charges=False)
-
-    setup_lambda_idxs(a_system.nrg_fns)
 
     host_pdb_file = args.protein_pdb
     host_pdb = app.PDBFile(host_pdb_file)
@@ -180,53 +233,9 @@ if __name__ == "__main__":
 
     x0 = np.concatenate([host_conf, mol_a_conf]) # combined geometry
 
-    # pocket_atoms = find_pocket_neighbors(x0, host_conf.shape[0], cutoff=args.pocket_cutoff)
-    host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff, pocket_atoms=None)
-    # host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff, pocket_atoms=None)
-    combined_system = host_system.merge(a_system)
+    host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff)
 
-    lr = 1e-3
-    opt_init, opt_update, get_params = optimizers.sgd(lr)
-
-    opt_state = opt_init(combined_system.params)
-
-    for epoch in range(100):
-
-        stage_ddGs = []
-
-        print("Starting epoch -----"+str(epoch)+'-----')
-
-        epoch_params = get_params(opt_state)
-
-        temperature = 300
-        dt = 1.5e-3
-        friction = 40
-
-        masses = np.array(combined_system.masses)
-        ca, cbs, ccs = langevin_coefficients(
-            temperature,
-            dt,
-            friction,
-            masses
-        )
-
-        cbs *= -1
-
-        print("Integrator coefficients:")
-        print("ca", ca)
-        print("cbs", cbs)
-        print("ccs", ccs)
-     
-
-        # complete_T = 200000
-        complete_T = args.steps
-        # complete_T = 40000
-        equil_T = 2000
-        du_dl_cutoff = 20000
-
-        assert complete_T > equil_T
-        assert complete_T > du_dl_cutoff
-
+    for stage in [0]:
 
         # ti_lambdas = np.linspace(0, 1, args.num_windows)
         # ti_lambdas = np.ones(args.num_windows)*0.2
@@ -247,120 +256,179 @@ if __name__ == "__main__":
         if args.lamb:
             ti_lambdas = np.ones(args.num_gpus)*args.lamb
         else:
-            ti_lambdas = np.concatenate([
-                np.linspace(0.0, 0.5, 24, endpoint=False),
-                np.linspace(0.5, 1.0, 8)
-            ])
-        
-        all_processes = []
-        all_pcs = []
 
-        for lambda_idx, lamb in enumerate(ti_lambdas):
+            if stage == 0 or stage == 2:
 
-            complete_lambda = np.zeros(complete_T) + lamb
-            complete_cas = np.ones(complete_T)*ca
-            complete_dts = np.concatenate([
-                np.linspace(0, dt, equil_T),
-                np.ones(complete_T-equil_T)*dt
-            ])
+                ti_lambdas = np.linspace(0.0, 1.0, 11)
 
-            sim = simulation_v2.Simulation(
-                combined_system,
-                complete_dts,
-                complete_cas,
-                cbs,
-                ccs,
-                complete_lambda,
-                precision
+            elif stage == 1:
+
+                ti_lambdas = np.concatenate([
+                    np.linspace(0.0, 0.5, 24, endpoint=False),
+                    np.linspace(0.5, 1.0, 8)
+                ])
+
+            else:
+
+                raise Exception("Unknown stage.")
+
+        for epoch in range(100):
+
+            combined_system = host_system.merge(a_system, stage=stage)
+            core_atoms = [4,5,6,7,8,9,10,11,12,13,15,16,18]
+
+            nha = host_conf.shape[0]
+            new_params = setup_core_restraints(
+                x0,
+                nha,
+                core_atoms,
+                combined_system.params,
+                combined_system.nrg_fns,
+                stage=stage
             )
 
-            intg_seed = np.random.randint(np.iinfo(np.int32).max)
-            # intg_seed = 2020
+            stage_ddGs = []
 
-            combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), mol_a)
-            combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-            out_file = os.path.join(args.out_dir, str(epoch)+"_rbfe_"+str(lambda_idx)+".pdb")
-            writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
+            print("Starting epoch -----"+str(epoch)+'-----')
 
-            # zero-out
-            # if args.n_frames is 0:
+            # epoch_params = get_params(opt_state)
+
+            temperature = 300
+            dt = 1.5e-3
+            friction = 40
+
+            masses = np.array(combined_system.masses)
+            ca, cbs, ccs = langevin_coefficients(
+                temperature,
+                dt,
+                friction,
+                masses
+            )
+
+            cbs *= -1
+
+            print("Integrator coefficients:")
+            print("ca", ca)
+            print("cbs", cbs)
+            print("ccs", ccs)
+         
+
+            # complete_T = 200000
+            complete_T = args.steps
+            # complete_T = 40000
+            equil_T = 2000
+            du_dl_cutoff = 20000
+
+            assert complete_T > equil_T
+            assert complete_T > du_dl_cutoff
+            
+            all_processes = []
+            all_pcs = []
+
+            for lambda_idx, lamb in enumerate(ti_lambdas):
+
+                complete_lambda = np.zeros(complete_T) + lamb
+                complete_cas = np.ones(complete_T)*ca
+                complete_dts = np.concatenate([
+                    np.linspace(0, dt, equil_T),
+                    np.ones(complete_T-equil_T)*dt
+                ])
+
+                sim = simulation_v2.Simulation(
+                    combined_system,
+                    complete_dts,
+                    complete_cas,
+                    cbs,
+                    ccs,
+                    complete_lambda,
+                    precision
+                )
+
+                intg_seed = np.random.randint(np.iinfo(np.int32).max)
+                # intg_seed = 2020
+
+                combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), mol_a)
+                combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+                out_file = os.path.join(args.out_dir, str(epoch)+"_rbfe_"+str(lambda_idx)+".pdb")
+                writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
+
+                # zero-out
+                # if args.n_frames is 0:
+                    # writer = None
                 # writer = None
-            # writer = None
 
-            v0 = np.zeros_like(x0)
+                v0 = np.zeros_like(x0)
 
-            parent_conn, child_conn = Pipe()
+                parent_conn, child_conn = Pipe()
 
-            input_args = (x0, v0, epoch_params, intg_seed, writer, child_conn, lambda_idx % args.num_gpus, du_dl_cutoff)
-            p = Process(target=sim.run_forward_and_backward, args=input_args)
+                input_args = (x0, v0, new_params, intg_seed, writer, child_conn, lambda_idx % args.num_gpus, du_dl_cutoff)
+                p = Process(target=sim.run_forward_and_backward, args=input_args)
 
-            # sim.run_forward_and_backward(*input_args)
+                # sim.run_forward_and_backward(*input_args)
 
-            all_pcs.append(parent_conn)
-            all_processes.append(p)
+                all_pcs.append(parent_conn)
+                all_processes.append(p)
 
-        sum_du_dls = [] # [L, T]
-        all_du_dls = [] # [L, F, T] num lambda windows, num forces, num steps
+            sum_du_dls = [] # [L, T]
+            all_du_dls = [] # [L, F, T] num lambda windows, num forces, num steps
 
-        all_energies = []
+            all_energies = []
 
-        # run inference loop to generate all_du_dls
-        for b_idx in range(0, len(all_processes), args.num_gpus):
-            for p in all_processes[b_idx:b_idx+args.num_gpus]:
-                p.start()
+            # run inference loop to generate all_du_dls
+            for b_idx in range(0, len(all_processes), args.num_gpus):
+                for p in all_processes[b_idx:b_idx+args.num_gpus]:
+                    p.start()
 
-            batch_du_dls = []
-            for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
+                batch_du_dls = []
+                for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
 
-                lamb_idx = b_idx+pc_idx
-                lamb = ti_lambdas[b_idx+pc_idx]
+                    lamb_idx = b_idx+pc_idx
+                    lamb = ti_lambdas[b_idx+pc_idx]
 
-                offset = equil_T # TBD use this
-                full_du_dls, full_energies = pc.recv() # (F, T), (T)
-                pc.send(None)
-                assert full_du_dls is not None
-                total_du_dls = np.sum(full_du_dls, axis=0)
+                    offset = equil_T # TBD use this
+                    full_du_dls, full_energies = pc.recv() # (F, T), (T)
+                    pc.send(None)
+                    assert full_du_dls is not None
+                    total_du_dls = np.sum(full_du_dls, axis=0)
 
-                plt.plot(total_du_dls, label="{:.2f}".format(lamb))
-                plt.ylabel("du_dl")
-                plt.xlabel("timestep")
-                plt.legend()
-                fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_du_dls_"+str(lamb_idx))
-                plt.savefig(fpath)
-                plt.clf()
+                    plt.plot(total_du_dls, label="{:.2f}".format(lamb))
+                    plt.ylabel("du_dl")
+                    plt.xlabel("timestep")
+                    plt.legend()
+                    fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_du_dls_"+str(lamb_idx))
+                    plt.savefig(fpath)
+                    plt.clf()
 
-                plt.plot(full_energies, label="{:.2f}".format(lamb))
-                plt.ylabel("U")
-                plt.xlabel("timestep")
-                plt.legend()
+                    plt.plot(full_energies, label="{:.2f}".format(lamb))
+                    plt.ylabel("U")
+                    plt.xlabel("timestep")
+                    plt.legend()
 
-                fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_energies_"+str(lamb_idx))
-                plt.savefig(fpath)
-                plt.clf()
+                    fpath = os.path.join(args.out_dir, str(epoch)+"_lambda_energies_"+str(lamb_idx))
+                    plt.savefig(fpath)
+                    plt.clf()
 
-                sum_du_dls.append(total_du_dls)
-                all_du_dls.append(full_du_dls)
+                    sum_du_dls.append(total_du_dls)
+                    all_du_dls.append(full_du_dls)
 
+            # compute loss and derivatives w.r.t. adjoints
+            all_du_dls = np.array(all_du_dls)
+            sum_du_dls = np.array(sum_du_dls)
 
+            safe_T = du_dl_cutoff
 
-        # compute loss and derivatives w.r.t. adjoints
-        all_du_dls = np.array(all_du_dls)
-        sum_du_dls = np.array(sum_du_dls)
+            # loss = loss_fn(all_du_dls[:, :, safe_T:], true_ddG, ti_lambdas)
 
-        safe_T = du_dl_cutoff
+            stage_ddG = np.trapz(np.mean(sum_du_dls[:, safe_T:], axis=1), ti_lambdas)
+            print("pred_ddG", stage_ddG)
 
-        # loss = loss_fn(all_du_dls[:, :, safe_T:], true_ddG, ti_lambdas)
+            plt.clf()
+            plt.violinplot(sum_du_dls[:, safe_T:].tolist(), positions=ti_lambdas)
+            plt.ylabel("du_dlambda")
+            plt.savefig(os.path.join(args.out_dir, str(epoch)+"_violin_du_dls"))
+            plt.clf()
 
-        stage_ddG = np.trapz(np.mean(sum_du_dls[:, safe_T:], axis=1), ti_lambdas)
-        print("pred_ddG", stage_ddG)
-
-        plt.clf()
-        plt.violinplot(sum_du_dls[:, safe_T:].tolist(), positions=ti_lambdas)
-        plt.ylabel("du_dlambda")
-        plt.savefig(os.path.join(args.out_dir, str(epoch)+"_violin_du_dls"))
-        plt.clf()
-
-        plt.boxplot(sum_du_dls[:, safe_T:].tolist(), positions=ti_lambdas)
-        plt.ylabel("du_dlambda")
-        plt.savefig(os.path.join(args.out_dir, str(epoch)+"_boxplot_du_dls"))
-        plt.clf()
+            plt.boxplot(sum_du_dls[:, safe_T:].tolist(), positions=ti_lambdas)
+            plt.ylabel("du_dlambda")
+            plt.savefig(os.path.join(args.out_dir, str(epoch)+"_boxplot_du_dls"))
+            plt.clf()

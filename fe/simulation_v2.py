@@ -20,58 +20,6 @@ from timemachine.potentials import jax_utils
 # warnings.simplefilter("ignore", UserWarning)
 
 
-def setup_harmonic_core_restraints(conf, nha, core_atoms, params):
-    ri = np.expand_dims(conf, axis=0)
-    rj = np.expand_dims(conf, axis=1)
-    dij = jax_utils.distance(ri, rj)
-    all_nbs = []
-
-    # bond_params = []
-    bond_param_idxs = []
-    bond_idxs = []
-
-    for l_idx, dists in enumerate(dij[nha:]):
-        if l_idx in core_atoms:
-
-            nns = np.argsort(dists[:nha])
-            for p_idx in nns[:10]:
-                # p_idx = np.argmin(dists[:nha])
-                k = 1000.0
-                k_idx = len(params)
-                params = np.concatenate([params, [k]])
-
-                b = dists[p_idx]
-                b_idx = len(params)
-                params = np.concatenate([params, [b]])
-
-                bond_param_idxs.append([k_idx, b_idx])
-                bond_idxs.append([l_idx + nha, p_idx])
-
-    # print(np.array(bond_idxs, dtype=np.int32))
-    # print(np.array(bond_param_idxs, dtype=np.int32))
-
-    return ops.HarmonicBond(
-        np.array(bond_idxs, dtype=np.int32),
-        np.array(bond_param_idxs, dtype=np.int32),
-        precision=np.float32), params
-
-
-
-def find_pocket_neighbors(conf, n_host, cutoff=0.5):
-    """
-    Find all protein atoms that we within cutoff of a ligand atom.
-    """
-    ri = np.expand_dims(conf, axis=0)
-    rj = np.expand_dims(conf, axis=1)
-    dij = jax_utils.distance(ri, rj)
-    all_nbs = []
-    for l_idx, dists in enumerate(dij[n_host:]):
-        nbs = np.argwhere(dists[:n_host] < cutoff)
-        all_nbs.extend(nbs.reshape(-1).tolist())
-
-    return list(set(all_nbs))
-
-
 def check_coords(x):
     x3 = x[:, :3]
     ri = np.expand_dims(x3, 0)
@@ -194,8 +142,6 @@ class Simulation:
         force_names = []
         handles = []
 
-        nha = 1758
-
         for k, v in self.system.nrg_fns.items():
 
             force_names.append(k)
@@ -203,12 +149,6 @@ class Simulation:
             grad = op_fn(*v, precision=self.precision)
             gradients.append(grad)
 
-
-        pocket_atoms = find_pocket_neighbors(x0, nha)
-        core_atoms = [4,5,6,7,8,9,10,11,12,13,15,16,18]
-        core_restraints, new_params = setup_harmonic_core_restraints(x0, nha, core_atoms, self.system.params)
-        force_names.append("CoreRestraints")
-        gradients.append(core_restraints)
 
         # x_bad = np.load("all_coords.npy")[1471]
         # print('--')
@@ -238,7 +178,7 @@ class Simulation:
             self.cbs,
             self.ccs,
             self.step_sizes,
-            new_params,
+            params,
             seed
         )
 
