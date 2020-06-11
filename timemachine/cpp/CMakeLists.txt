@@ -31,6 +31,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/gpu_utils.cu
   src/nonbonded.cu
   src/neighborlist.cu
+  src/flat_bottom.cu
   src/harmonic_bond.cu
   src/harmonic_angle.cu
   src/periodic_torsion.cu

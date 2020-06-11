@@ -14,14 +14,14 @@ from timemachine import constants
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
-def deserialize_system(system, cutoff=10000):
+def deserialize_system(system):
     """
     Deserialize an OpenMM XML file
 
     Parameters
     ----------
-    filepath: str
-        Location to an existing xml file to be deserialized
+    system: openmm.System
+        A system object to be deserialized
 
     Returns
 
@@ -45,11 +45,6 @@ def deserialize_system(system, cutoff=10000):
         masses.append(value(system.getParticleMass(p)))
 
     nrg_fns = {}
-
-
-    lambda_plane_idxs = np.zeros(len(masses), dtype=np.int32)
-    lambda_offset_idxs = np.zeros(len(masses), dtype=np.int32)
-
 
     for force in system.getForces():
 
@@ -128,18 +123,19 @@ def deserialize_system(system, cutoff=10000):
             for a_idx in range(num_atoms):
                 scale_matrix[a_idx][a_idx] = 0
                 charge, sig, eps = force.getParticleParameters(a_idx)
-
-
                 # this needs to be scaled by sqrt(eps0)
                 charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
 
-
-                if a_idx == 1629:
-                    print("INSERTING CHARGE", charge)
                 # print("WARNING: strengthening protein charges 10 percent due to cutoffs")
                 # charge = charge*1.1 # due to cutoffs
                 sig = value(sig)
                 eps = value(eps)
+
+                # (ytz): this is only necessary if the protein atoms are allowed to be in a separate plane
+                # override default amber types
+                # if sig == 0 or eps == 0:
+                    # sig = 0.1
+                    # eps = 0.1
 
                 charge_idx = insert_parameters(charge, 14)
                 sig_idx = insert_parameters(sig, 10)
@@ -150,7 +146,7 @@ def deserialize_system(system, cutoff=10000):
 
             charge_param_idxs = np.array(charge_param_idxs, dtype=np.int32)
 
-            print("net protein charge:", np.sum(np.array(global_params)[charge_param_idxs]))
+            print("Protein net charge:", np.sum(np.array(global_params)[charge_param_idxs]))
             lj_param_idxs = np.array(lj_param_idxs, dtype=np.int32)
 
             # 1 here means we fully remove the interaction
@@ -197,10 +193,7 @@ def deserialize_system(system, cutoff=10000):
                 lj_param_idxs,
                 exclusion_idxs,
                 exclusion_param_idxs,
-                exclusion_param_idxs,
-                lambda_plane_idxs,
-                lambda_offset_idxs,
-                cutoff
+                exclusion_param_idxs
             )
 
         if isinstance(force, mm.GBSAOBCForce):
@@ -242,8 +235,6 @@ def deserialize_system(system, cutoff=10000):
         np.array(charge_param_idxs, dtype=np.int32),
         np.array(radius_param_idxs, dtype=np.int32),
         np.array(scale_param_idxs, dtype=np.int32),
-        np.array(lambda_plane_idxs, dtype=np.int32),
-        np.array(lambda_offset_idxs, dtype=np.int32),
         alpha,                         # alpha
         beta,                          # beta
         gamma,                         # gamma
@@ -251,9 +242,9 @@ def deserialize_system(system, cutoff=10000):
         surface_tension,               # surface_tension
         solute_dielectric,             # solute_dielectric
         solvent_dielectric,            # solvent_dieletric
-        probe_radius,                  # probe_radius
-        cutoff,                        # cutoff radii
-        cutoff                         # cutoff force
+        probe_radius                   # probe_radius
+        # cutoff,                      # cutoff radii
+        # cutoff                       # cutoff force
     )
 
     global_params = np.array(global_params)

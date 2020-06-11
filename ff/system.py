@@ -132,9 +132,24 @@ class System():
         return lhs_system, rhs_system
 
 
-    def merge(self, other, core_map=None):
+    def merge(self, other, stage, nonbonded_cutoff):
         """
         Duplicate merge two systems into two sets of parameters.
+
+        Parameters
+        ----------
+
+        other: timemachine.System
+            merge other into self
+
+        stage: 0,1, or 2
+            0 - attach restraints
+            1 - decouple
+            2 - detach restraints
+
+        nonbonded_cutoff: float
+            cutoff to be used for both GB and and Nonbonded forces
+
         """
         a_masses = self.masses
         a_params = self.params
@@ -154,6 +169,24 @@ class System():
         assert a_nrgs.keys() == b_nrgs.keys()
 
         c_nrgs = {}
+
+        N_A = len(a_masses)
+        N_B = len(b_masses)
+        N_C = N_A + N_B
+
+        if stage == 0:
+            lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+            lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+        elif stage == 1:
+            lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+            lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+            lambda_offset_idxs[N_A:] = 1
+        elif stage == 2:
+            lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+            lambda_plane_idxs[N_A:] = 1
+            lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+        else:
+            raise Exception("Unknown stage")
 
         for force_type in a_nrgs.keys():
 
@@ -177,16 +210,9 @@ class System():
                 c_nrgs["PeriodicTorsion"] = (torsion_idxs.astype(np.int32), torsion_param_idxs)
             elif a_name == "Nonbonded":
 
-                # print("???", a_args[7], b_args[7])
-                assert a_args[-1] == b_args[-1] # cutoff
-
                 es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
 
-                # print(b_params)
-                # print(b_args[0])
-                print("Ligand pair net charge", np.sum(np.array(b_params)[np.array(b_args[0])]))
-
-                # assert 0
+                print("Ligand net charge", np.sum(np.array(b_params)[np.array(b_args[0])]))
 
                 lj_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 exclusion_idxs = np.concatenate([a_args[2], b_args[2] + num_a_atoms], axis=0)
@@ -201,13 +227,6 @@ class System():
                 es_exclusion_param_idxs = np.concatenate([a_args[3], b_args[3] + len(a_params)], axis=0)  # [E, 1]
                 lj_exclusion_param_idxs = np.concatenate([a_args[4], b_args[4] + len(a_params)], axis=0)  # [E, 1]
 
-                if core_map:
-                    mixer = linear_mixer.LinearMixer(len(a_masses), core_map)
-                    lambda_plane_idxs, lambda_offset_idxs = mixer.mix_lambda_planes(len(a_masses), len(b_masses))
-                else:
-                    lambda_plane_idxs = np.concatenate([a_args[5], b_args[5]])
-                    lambda_offset_idxs = np.concatenate([a_args[6], b_args[6]])
-
                 c_nrgs["Nonbonded"] = (
                     np.array(es_param_idxs, dtype=np.int32),
                     np.array(lj_param_idxs, dtype=np.int32),
@@ -216,7 +235,7 @@ class System():
                     np.array(lj_exclusion_param_idxs, dtype=np.int32),
                     np.array(lambda_plane_idxs, dtype=np.int32),
                     np.array(lambda_offset_idxs, dtype=np.int32),
-                    a_args[-1]
+                    nonbonded_cutoff
                 )
 
             elif a_name == "GBSA":
@@ -225,30 +244,18 @@ class System():
                 # print("skipping GB")
                 # continue
 
-                # (ytz): ugly ass code
                 charge_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0)
                 radius_param_idxs = np.concatenate([a_args[1], b_args[1] + len(a_params)], axis=0)
                 scale_param_idxs = np.concatenate([a_args[2], b_args[2] + len(a_params)], axis=0)
 
-                if core_map:
-                    mixer = linear_mixer.LinearMixer(len(a_masses), core_map)
-                    lambda_plane_idxs, lambda_offset_idxs = mixer.mix_lambda_planes(len(a_masses), len(b_masses))
-                    offset = 0
-                else:
-                    lambda_plane_idxs = np.concatenate([a_args[3], b_args[3]])
-                    lambda_offset_idxs = np.concatenate([a_args[4], b_args[4]])
-                    offset = 2
-
-                # +2 is due to lambda
-                assert a_args[3+offset] == b_args[3+offset] # alpha
-                assert a_args[4+offset] == b_args[4+offset] # beta
-                assert a_args[5+offset] == b_args[5+offset] # gamma
-                assert a_args[6+offset] == b_args[6+offset] # dielec_offset
-                assert a_args[7+offset] == b_args[7+offset] # surface tension
-                assert a_args[8+offset] == b_args[8+offset] # solute dielectric
-                assert a_args[9+offset] == b_args[9+offset] # solvent dielectric
-                assert a_args[10+offset] == b_args[10+offset] # probe_radius
-
+                assert a_args[3] == b_args[3] # alpha
+                assert a_args[4] == b_args[4] # beta
+                assert a_args[5] == b_args[5] # gamma
+                assert a_args[6] == b_args[6] # dielec_offset
+                assert a_args[7] == b_args[7] # surface tension
+                assert a_args[8] == b_args[8] # solute dielectric
+                assert a_args[9] == b_args[9] # solvent dielectric
+                assert a_args[10] == b_args[10] # probe_radius
 
                 c_nrgs["GBSA"] = (
                     np.array(charge_param_idxs, dtype=np.int32),
@@ -256,7 +263,9 @@ class System():
                     np.array(scale_param_idxs, dtype=np.int32),
                     np.array(lambda_plane_idxs, dtype=np.int32),
                     np.array(lambda_offset_idxs, dtype=np.int32),
-                    *a_args[3+offset:]
+                    *a_args[3:],
+                    nonbonded_cutoff,
+                    nonbonded_cutoff
                 )
 
             else:
