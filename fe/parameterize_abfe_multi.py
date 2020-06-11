@@ -44,9 +44,6 @@ import jax.numpy as jnp
 from rdkit.Chem import rdFMCS
 
 
-# multistage protocol for RBFE.
-
-
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18
 
@@ -79,12 +76,43 @@ def loss_fn(all_du_dls, true_ddG, lambda_schedule):
 loss_fn_grad = jax.grad(loss_fn, argnums=(0,))
 
 def setup_core_restraints(
+    k,
+    count,
     conf,
     nha,
     core_atoms,
     params,
     nrg_fns,
     stage):
+    """
+    Setup core restraints
+
+    Parameters
+    ----------
+    k: float
+        Force constant of each restraint
+
+    count: int
+        Number of host atoms we restrain each ligand to
+
+    nha: int
+        Number of host atoms
+
+    core_atoms: list of int
+        atoms we're restraining. This is indexed by the total number of atoms in the system.
+
+    params: np.array float
+        fundamental parameters we're modifying
+
+    nrg_fns: dict
+        nrg fns from the timemachine System object.
+
+    stage: 0,1,2
+        0 - attach restraint
+        1 - decouple
+        2 - detach restraint
+
+    """
     ri = np.expand_dims(conf, axis=0)
     rj = np.expand_dims(conf, axis=1)
     dij = jax_utils.distance(ri, rj)
@@ -99,7 +127,6 @@ def setup_core_restraints(
 
             # restrain to 10 nearby atoms
             for p_idx in nns[:10]:
-                k = 500.0
                 k_idx = len(params)
                 params = np.concatenate([params, [k]])
 
@@ -147,6 +174,8 @@ if __name__ == "__main__":
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
     parser.add_argument('--a_idx', type=int, required=True, help='A index')
+    parser.add_argument('--restr_force', type=float, required=True, help='Strength of the each restraint term, in kJ/mol.')
+    parser.add_argument('--restr_count', type=int, required=True, help='Number of host atoms we restrain each core atom to.')
 
     args = parser.parse_args()
 
@@ -204,8 +233,16 @@ if __name__ == "__main__":
 
     host_system = openmm_converter.deserialize_system(host_system)
 
-    print("Warning: manually setting core atoms, use the geometric MCS script later to deal with this.")
-    core_atoms = [4,5,6,7,8,9,10,11,12,13,15,16,18]
+    # (use this if you want to manually set the core)
+    # print("Warning: manually setting core atoms, use the geometric MCS script later to deal with this.")
+    # core_atoms = [4,5,6,7,8,9,10,11,12,13,15,16,18], specific to mol name 338
+    core_smarts = '[#6]1:[#6]:[#6]:[#6](:[#6](:[#6]:1-[#8]-[#6](:[#6]-[#1]):[#6])-[#1])-[#1]'
+
+    print("Using core smarts:", core_smarts)
+    core_query = Chem.MolFromSmarts(core_smarts)
+    core_atoms = mol_a.GetSubstructMatch(core_query)
+
+    print("Core atoms to be restrained:", core_atoms)
 
     for epoch in range(100):
 
@@ -217,7 +254,7 @@ if __name__ == "__main__":
 
         for stage in [0, 1, 2]:
 
-            print("Stage", stage)
+            print("---Starting stage", stage, '---')
 
             stage_dir = os.path.join(epoch_dir, "stage_"+str(stage))
 
@@ -228,11 +265,13 @@ if __name__ == "__main__":
                 ti_lambdas = np.ones(args.num_gpus)*args.lamb
             else:
                 if stage == 0 or stage == 2:
+                    # lambda spans from [0, 1], and are analytically zero at endpoints
                     ti_lambdas = np.linspace(0.0, 1.0, 16)
                 elif stage == 1:
+                    # lambda spans from [0, inf], is close enough to zero over [0, 1.2] cutoff
                     ti_lambdas = np.concatenate([
                         np.linspace(0.0, 0.5, 24, endpoint=False),
-                        np.linspace(0.5, 1.0, 8)
+                        np.linspace(0.5, 1.2, 8)
                     ])
                 else:
                     raise Exception("Unknown stage.")
@@ -245,6 +284,8 @@ if __name__ == "__main__":
 
             nha = host_conf.shape[0]
             new_params = setup_core_restraints(
+                args.restr_force,
+                args.restr_count,
                 x0,
                 nha,
                 core_atoms,
@@ -275,6 +316,8 @@ if __name__ == "__main__":
             complete_T = args.steps
 
             equil_T = 2000
+
+            # we use only samples after this number of steps when computing dGs
             du_dl_cutoff = 20000
 
             assert complete_T > equil_T
@@ -307,7 +350,7 @@ if __name__ == "__main__":
 
                 combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), mol_a)
                 combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-                out_file = os.path.join(stage_dir, str(epoch)+"_rbfe_"+str(lambda_idx)+".pdb")
+                out_file = os.path.join(stage_dir, str(epoch)+"_abfe_"+str(lambda_idx)+".pdb")
                 writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
 
                 # zero-out
