@@ -9,15 +9,12 @@ from simtk.openmm import app
 from timemachine.lib import ops, custom_ops
 import traceback
 
-
 import jax
 import jax.numpy as jnp
-
-
 from timemachine.potentials import jax_utils
 
-# import warnings
-# warnings.simplefilter("ignore", UserWarning)
+import warnings
+warnings.simplefilter("ignore", UserWarning)
 
 
 def check_coords(x):
@@ -192,11 +189,9 @@ class Simulation:
         print("fwd run time", time.time() - start)
 
         # xs = ctxt.get_all_coords()
-
-
-        # # np.save("debug_coords.npy", xs[6000])
-
+        # np.save("debug_coords.npy", xs[6000])
         # assert 0
+
         start = time.time()
         x_final = ctxt.get_last_coords()[:, :3]
 
@@ -218,22 +213,14 @@ class Simulation:
         print("Max nonbonded arg", np.argmin(full_du_dls[3]))
 
         full_energies = stepper.get_energies()
-
-        # equil_du_dls = full_du_dls
         equil_du_dls = full_du_dls[:, du_dl_cutoff:]
-
-        # print(equil_du_dls.shape)
-
-        # assert 0
 
         for fname, du_dls in zip(force_names, equil_du_dls):
             print("lambda:", "{:.3f}".format(self.lambda_schedule[0]), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
-            # print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.trapz(du_dls, self.lambda_schedule)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
 
         total_equil_du_dls = np.sum(equil_du_dls, axis=0)
 
         print("lambda:", "{:.3f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
-        # print("lambda:", "{:.2f}".format(self.lambda_schedule[0]), "\t mean/std du_dls", "{:8.2f}".format(np.trapz(total_equil_du_dls, self.lambda_schedule)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
 
         if pdb_writer is not None:
             pdb_writer.write_header()

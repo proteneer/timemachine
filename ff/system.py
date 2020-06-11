@@ -132,9 +132,24 @@ class System():
         return lhs_system, rhs_system
 
 
-    def merge(self, other, stage):
+    def merge(self, other, stage, nonbonded_cutoff):
         """
         Duplicate merge two systems into two sets of parameters.
+
+        Parameters
+        ----------
+
+        other: timemachine.System
+            merge other into self
+
+        stage: 0,1, or 2
+            0 - attach restraints
+            1 - decouple
+            2 - detach restraints
+
+        nonbonded_cutoff: float
+            cutoff to be used for both GB and and Nonbonded forces
+
         """
         a_masses = self.masses
         a_params = self.params
@@ -195,8 +210,6 @@ class System():
                 c_nrgs["PeriodicTorsion"] = (torsion_idxs.astype(np.int32), torsion_param_idxs)
             elif a_name == "Nonbonded":
 
-                assert a_args[-1] == b_args[-1] # cutoff
-
                 es_param_idxs = np.concatenate([a_args[0], b_args[0] + len(a_params)], axis=0) # [N,]
 
                 print("Ligand net charge", np.sum(np.array(b_params)[np.array(b_args[0])]))
@@ -222,7 +235,7 @@ class System():
                     np.array(lj_exclusion_param_idxs, dtype=np.int32),
                     np.array(lambda_plane_idxs, dtype=np.int32),
                     np.array(lambda_offset_idxs, dtype=np.int32),
-                    a_args[-1]
+                    nonbonded_cutoff
                 )
 
             elif a_name == "GBSA":
@@ -250,7 +263,9 @@ class System():
                     np.array(scale_param_idxs, dtype=np.int32),
                     np.array(lambda_plane_idxs, dtype=np.int32),
                     np.array(lambda_offset_idxs, dtype=np.int32),
-                    *a_args[3:]
+                    *a_args[3:],
+                    nonbonded_cutoff,
+                    nonbonded_cutoff
                 )
 
             else:

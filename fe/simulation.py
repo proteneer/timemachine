@@ -8,14 +8,11 @@ from simtk.openmm import app
 
 from timemachine.lib import ops, custom_ops
 import traceback
-
-
 import jax
 import jax.numpy as jnp
 
-
-# import warnings
-# warnings.simplefilter("ignore", UserWarning)
+import warnings
+warnings.simplefilter("ignore", UserWarning)
 
 
 def check_coords(x):
@@ -216,11 +213,10 @@ class Simulation:
 
         full_energies = stepper.get_energies()
 
-        print("FULL ENERGIES", full_energies)
-        for e_idx, e in enumerate(full_energies):
-            print("energy", e_idx, e)
-            if e_idx > 50:
-                break
+        # for e_idx, e in enumerate(full_energies):
+        #     print("energy", e_idx, e)
+        #     if e_idx > 50:
+        #         break
 
         start = time.time()
         x_final = ctxt.get_last_coords()

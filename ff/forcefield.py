@@ -168,7 +168,7 @@ class Forcefield():
 
         return raw_ff
 
-    def parameterize(self, mol, cutoff=10000, am1=False, zero_charges=False):
+    def parameterize(self, mol, am1=False, zero_charges=False):
         """
         Given a RDKit Molecule, return a parameterized system.
         """
@@ -176,9 +176,6 @@ class Forcefield():
         if am1 is False:
             print("Cannot zero out charges if am1 is False")
             assert zero_charges is False
-
-        # temporary
-        # assert cutoff == 1.0
 
         def match_smirks(mol, smirks):
             
@@ -389,9 +386,7 @@ class Forcefield():
                     props["surface_tension"],
                     props["solute_dielectric"],
                     props["solvent_dielectric"],
-                    props["probe_radius"],
-                    cutoff,
-                    cutoff
+                    props["probe_radius"]
                 )
 
         nrg_fns['PeriodicTorsion'] = (
@@ -425,8 +420,7 @@ class Forcefield():
             np.array(lj_param_idxs, dtype=np.int32),
             np.array(exclusion_idxs, dtype=np.int32),
             np.array(exclusion_param_idxs, dtype=np.int32),
-            np.array(exclusion_param_idxs, dtype=np.int32),
-            cutoff
+            np.array(exclusion_param_idxs, dtype=np.int32)
         )
 
         nrg_fns['GBSA'] = (

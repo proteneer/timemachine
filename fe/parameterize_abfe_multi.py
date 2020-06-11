@@ -78,19 +78,6 @@ def loss_fn(all_du_dls, true_ddG, lambda_schedule):
 
 loss_fn_grad = jax.grad(loss_fn, argnums=(0,))
 
-def setup_lambda_idxs(nrg_fns):
-    es_param_idxs, lj_param_idxs, exc_idxs, es_exc_param_idxs, lj_exc_param_idxs, cutoff = nrg_fns['Nonbonded']
-    gb_args = nrg_fns['GBSA']
-    gb_charges, gb_radii, gb_scales = gb_args[:3]
-    n_a = len(es_param_idxs)
-
-    lambda_plane_idxs = np.zeros(n_a, dtype=np.int32)
-    lambda_offset_idxs = np.ones(n_a, dtype=np.int32)
-
-    nrg_fns['Nonbonded'] = es_param_idxs, lj_param_idxs, exc_idxs, es_exc_param_idxs, lj_exc_param_idxs, lambda_plane_idxs, lambda_offset_idxs, cutoff
-    nrg_fns['GBSA'] = (gb_charges, gb_radii, gb_scales, lambda_plane_idxs, lambda_offset_idxs, *gb_args[3:])
-
-
 def setup_core_restraints(
     conf,
     nha,
@@ -144,20 +131,6 @@ def setup_core_restraints(
 
     return params
 
-def find_pocket_neighbors(conf, n_host, cutoff=0.5):
-    """
-    Find all protein atoms that we within cutoff of a ligand atom.
-    """
-    ri = np.expand_dims(conf, axis=0)
-    rj = np.expand_dims(conf, axis=1)
-    dij = jax_utils.distance(ri, rj)
-    all_nbs = []
-    for l_idx, dists in enumerate(dij[n_host:]):
-        nbs = np.argwhere(dists[:n_host] < cutoff)
-        all_nbs.extend(nbs.reshape(-1).tolist())
-
-    return list(set(all_nbs))
-
 
 if __name__ == "__main__":
 
@@ -204,7 +177,7 @@ if __name__ == "__main__":
     all_nrg_fns = []
 
     # a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True, zero_charges=True)
-    a_system = open_ff.parameterize(mol_a, cutoff=args.cutoff, am1=True, zero_charges=False)
+    a_system = open_ff.parameterize(mol_a, am1=True, zero_charges=False)
 
     host_pdb_file = args.protein_pdb
     host_pdb = app.PDBFile(host_pdb_file)
@@ -229,14 +202,12 @@ if __name__ == "__main__":
 
     x0 = np.concatenate([host_conf, mol_a_conf]) # combined geometry
 
-    host_system = openmm_converter.deserialize_system(host_system, cutoff=args.cutoff)
-
+    host_system = openmm_converter.deserialize_system(host_system)
 
     print("Warning: manually setting core atoms, use the geometric MCS script later to deal with this.")
     core_atoms = [4,5,6,7,8,9,10,11,12,13,15,16,18]
 
     for epoch in range(100):
-
 
         print("Starting epoch -----"+str(epoch)+'-----')
 
@@ -266,8 +237,11 @@ if __name__ == "__main__":
                 else:
                     raise Exception("Unknown stage.")
 
-            combined_system = host_system.merge(a_system, stage=stage)
-
+            combined_system = host_system.merge(
+                a_system,
+                stage=stage,
+                nonbonded_cutoff=1000.0
+            )
 
             nha = host_conf.shape[0]
             new_params = setup_core_restraints(
@@ -297,11 +271,9 @@ if __name__ == "__main__":
             print("ca", ca)
             print("cbs", cbs)
             print("ccs", ccs)
-         
 
-            # complete_T = 200000
             complete_T = args.steps
-            # complete_T = 40000
+
             equil_T = 2000
             du_dl_cutoff = 20000
 

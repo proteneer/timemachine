@@ -123,7 +123,7 @@ class TestNonbonded(GradientTest):
                         cutoff=cutoff,
                         precision=precision
                     )
-                    # for lamb in [0.0,  0.1, 0.5, 0.75, 1.0, 2.0]:
+
                     for lamb in [0.1]:
                         print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
                         for r, t in zip(ref_forces, test_forces):
@@ -137,67 +137,6 @@ class TestNonbonded(GradientTest):
                                 rtol=rtol
                             )
 
-    # def test_alchemical_nonbonded(self):
-    #     np.random.seed(125)
-    #     N = 65
-    #     D = 3
-    #     E = 10
-    #     P_charges = 4
-    #     P_lj = 5
-    #     P_exc = 7
- 
-    #     x = self.get_random_coords(N, D)
-
-    #     for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
-    #         for cutoff in [50.0, 0.5, 0.3]:
-
-    #             params, ref_forces0, test_forces0 = prepare_nonbonded_system(
-    #                 x,
-    #                 E,
-    #                 P_charges,
-    #                 P_lj,
-    #                 P_exc,
-    #                 p_scale=10.0,
-    #                 cutoff=cutoff,
-    #                 precision=precision
-    #             )
-
-    #             params, ref_forces1, test_forces1 = prepare_nonbonded_system(
-    #                 x,
-    #                 E,
-    #                 P_charges,
-    #                 P_lj,
-    #                 P_exc,
-    #                 p_scale=10.0,
-    #                 cutoff=cutoff,
-    #                 precision=precision,
-    #                 params=params
-    #             )
-
-    #             ref_fn = functools.partial(
-    #                 alchemy.linear_rescale,
-    #                 fn0 = ref_forces0[0],
-    #                 fn1 = ref_forces1[0]
-    #             )
-
-    #             test_fn = ops.AlchemicalGradient(
-    #                 N,
-    #                 len(params),
-    #                 test_forces0[0],
-    #                 test_forces1[0]
-    #             )
-
-    #             for lamb in [0.0, 1/10,  1/2, 1/1.2, 1.0]:
-    #                 print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
-    #                 self.compare_forces(
-    #                     x,
-    #                     params,
-    #                     lamb,
-    #                     ref_fn,
-    #                     test_fn,
-    #                     precision,
-    #                     rtol=rtol
-    #                 )
 
     def test_water_box(self):
         

@@ -65,6 +65,7 @@ void FlatBottom<RealType>::execute_lambda_inference_device(
     double *d_out_lambda_primals, // du/dl
     double *d_out_energy_primal, // U
     cudaStream_t stream) {
+
     int tpb = 32;
     int blocks = (B_+tpb-1)/tpb;
     k_flat_bottom_inference<RealType><<<blocks, tpb, 0, stream>>>(
@@ -102,28 +103,31 @@ void FlatBottom<RealType>::execute_lambda_jvp_device(
     double *d_out_params_tangents,
     cudaStream_t stream) {
 
-    // int tpb = 32;
-    // int blocks = (B_+tpb-1)/tpb;
+    int tpb = 32;
+    int blocks = (B_+tpb-1)/tpb;
 
-    // k_harmonic_bond_jvp<RealType><<<blocks, tpb, 0, stream>>>(
-    //     B_,
-    //     d_coords_primals,
-    //     d_coords_tangents,
-    //     d_params_primals,
-    //     d_bond_idxs_,
-    //     d_param_idxs_,
-    //     d_out_coords_primals,
-    //     d_out_coords_tangents,
-    //     d_out_params_primals,
-    //     d_out_params_tangents
-    // );
+    k_flat_bottom_jvp<RealType><<<blocks, tpb, 0, stream>>>(
+        B_,
+        d_coords_primals,
+        d_coords_tangents,
+        d_params_primals,
+        lambda_primal,
+        lambda_tangent,
+        d_bond_idxs_,
+        d_param_idxs_,
+        d_lambda_flags_,
+        d_out_coords_primals,
+        d_out_coords_tangents,
+        d_out_params_primals,
+        d_out_params_tangents
+    );
 
-    // // cudaDeviceSynchronize();
-    // gpuErrchk(cudaPeekAtLastError());
+    // cudaDeviceSynchronize();
+    gpuErrchk(cudaPeekAtLastError());
 
-    // // auto finish = std::chrono::high_resolution_clock::now();
-    // // std::chrono::duration<double> elapsed = finish - start;
-    // // std::cout << "FlatBottom Elapsed time: " << elapsed.count() << " s\n";
+    // auto finish = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double> elapsed = finish - start;
+    // std::cout << "FlatBottom Elapsed time: " << elapsed.count() << " s\n";
 
 }
 
