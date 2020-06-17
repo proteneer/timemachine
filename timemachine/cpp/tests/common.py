@@ -350,6 +350,8 @@ class GradientTest(unittest.TestCase):
         ref_dx, ref_dp, ref_dl = grad_fn(x, params, lamb)
         test_dx, test_dl, test_nrg = custom_force.execute_lambda(x, params, lamb)
 
+        print("ref_nrg", ref_nrg, "test_nrg", test_nrg)
+
         np.testing.assert_allclose(ref_nrg, test_nrg, rtol)
 
         self.assert_equal_vectors(

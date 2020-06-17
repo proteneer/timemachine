@@ -18,7 +18,7 @@ class TestBonded(GradientTest):
 
     def test_restraint(self):
 
-        B = 4
+        B = 8
 
         P = 24
         params = np.random.rand(24)

@@ -126,7 +126,7 @@ def setup_core_restraints(
             nns = np.argsort(dists[:nha])
 
             # restrain to 10 nearby atoms
-            for p_idx in nns[:10]:
+            for p_idx in nns[:count]:
                 k_idx = len(params)
                 params = np.concatenate([params, [k]])
 
@@ -134,7 +134,11 @@ def setup_core_restraints(
                 b_idx = len(params)
                 params = np.concatenate([params, [b]])
 
-                bond_param_idxs.append([k_idx, b_idx])
+                a = 1.0
+                a_idx = len(params)
+                params = np.concatenate([params, [a]])
+
+                bond_param_idxs.append([k_idx, b_idx, a_idx])
                 bond_idxs.append([l_idx + nha, p_idx])
 
     bond_idxs = np.array(bond_idxs, dtype=np.int32)
@@ -149,11 +153,10 @@ def setup_core_restraints(
     elif stage == 2:
         lambda_flags = np.ones(B, dtype=np.int32)
 
-    nrg_fns['FlatBottom'] = (
+    nrg_fns['Restraint'] = (
         bond_idxs,
         bond_param_idxs,
-        lambda_flags,
-        0
+        lambda_flags
     )
 
     return params
@@ -252,7 +255,9 @@ if __name__ == "__main__":
     
         epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
 
-        for stage in [0, 1, 2]:
+        # for stage in [0, 1, 2]:
+        for stage in [2]:
+        # for stage in [2]:
 
             print("---Starting stage", stage, '---')
 
@@ -264,15 +269,17 @@ if __name__ == "__main__":
             if args.lamb:
                 ti_lambdas = np.ones(args.num_gpus)*args.lamb
             else:
-                if stage == 0 or stage == 2:
+                if stage == 0:
                     # lambda spans from [0, 1], and are analytically zero at endpoints
-                    ti_lambdas = np.linspace(0.0, 1.0, 16)
+                    ti_lambdas = np.linspace(4.0, 0.0, 24)
                 elif stage == 1:
                     # lambda spans from [0, inf], is close enough to zero over [0, 1.2] cutoff
                     ti_lambdas = np.concatenate([
                         np.linspace(0.0, 0.5, 24, endpoint=False),
                         np.linspace(0.5, 1.2, 8)
                     ])
+                elif stage == 2:
+                    ti_lambdas = np.linspace(0.0, 4.0, 24)
                 else:
                     raise Exception("Unknown stage.")
 
@@ -432,4 +439,4 @@ if __name__ == "__main__":
             
             stage_dGs.append(stage_dG)
 
-        print("epoch", epoch, "stage_dGs", stage_dGs, "final dG", stage_dGs[0]+stage_dGs[1]-stage_dGs[2])
+        print("epoch", epoch, "stage_dGs", stage_dGs, "final dG", stage_dGs[0]+stage_dGs[1]+stage_dGs[2])

@@ -26,29 +26,36 @@ void __global__ k_restraint_inference(
         return;
     }
 
-    // double f_lambda = sin(lambda*PI/2);
-    // f_lambda = f_lambda*f_lambda;
+    // RealType f_lambda = sin(lambda*PI/2);
+    double f_lambda = lambda*lambda_flags[b_idx];
+    double df = lambda_flags[b_idx];
     // double df = PI*sin((PI*lambda)/2)*cos((PI*lambda)/2);
 
-    double f_lambda = lambda;
-    double df = 1;
+    // double f_lambda = lambda;
+    // double df = 1;
 
     // zero out otherwise
     if(lambda_flags[b_idx] == 0) {
-        f_lambda = 1;
+        f_lambda = 0;
         df = 0;
     }
 
     int src_idx = bond_idxs[b_idx*2+0];
     int dst_idx = bond_idxs[b_idx*2+1];
 
-    RealType dx[3];
+    RealType dx[4];
     RealType d2ij = 0; // initialize your summed variables!
     for(int d=0; d < 3; d++) {
         RealType delta = coords[src_idx*3+d] - coords[dst_idx*3+d];
         dx[d] = delta;
         d2ij += delta*delta;
     }
+
+    RealType w = f_lambda;
+
+    dx[3] = w;
+    d2ij += w*w;
+    // process the 4D stuff
 
     int kb_idx = param_idxs[b_idx*3+0];
     int b0_idx = param_idxs[b_idx*3+1];
@@ -61,7 +68,7 @@ void __global__ k_restraint_inference(
     RealType dij = sqrt(d2ij);
     RealType db = dij - b0;
 
-    RealType prefactor = f_lambda*2*a0*exp(-a0*(-b0+dij))*(1-exp(-a0*(-b0+dij)))*kb;
+    RealType prefactor = 2*a0*exp(-a0*(-b0+dij))*(1-exp(-a0*(-b0+dij)))*kb;
 
     for(int d=0; d < 3; d++) {
         RealType grad_delta = prefactor*dx[d]/dij;
@@ -72,8 +79,8 @@ void __global__ k_restraint_inference(
     double term = (1-exp(-a0*db));
     double u = kb*term*term;
 
-    atomicAdd(du_dl, df*u);
-    atomicAdd(energy, f_lambda*u);
+    atomicAdd(du_dl, df*prefactor*(w/dij));
+    atomicAdd(energy, u);
 
 }
 
