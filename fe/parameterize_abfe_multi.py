@@ -255,9 +255,7 @@ if __name__ == "__main__":
     
         epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
 
-        # for stage in [0, 1, 2]:
-        for stage in [2]:
-        # for stage in [2]:
+        for stage in [0, 1, 2]:
 
             print("---Starting stage", stage, '---')
 
