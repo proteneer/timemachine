@@ -1,5 +1,5 @@
+pytest
 scipy==1.1.0
 pymbar==3.0.5
-pytest
-jax
-jaxlib
+jax==0.1.61
+jaxlib==0.1.41

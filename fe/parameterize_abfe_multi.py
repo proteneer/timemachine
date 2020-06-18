@@ -1,6 +1,7 @@
 import copy
 import argparse
 import time
+import datetime
 import numpy as np
 from io import StringIO
 import itertools
@@ -146,11 +147,16 @@ def setup_core_restraints(
 
     B = bond_idxs.shape[0]
 
+    # w = lambda*lambda_flags
+    # w = 0 implies that restraints are on
+    # w = +inf/-inf implies that restraints are off
     if stage == 0:
         lambda_flags = np.ones(B, dtype=np.int32)
     elif stage == 1:
+        # fully interacting restraint, w always zero
         lambda_flags = np.zeros(B, dtype=np.int32)
     elif stage == 2:
+        # we can decouple the 
         lambda_flags = np.ones(B, dtype=np.int32)
 
     nrg_fns['Restraint'] = (
@@ -164,15 +170,13 @@ def setup_core_restraints(
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Relative Binding Free Energy Script')
+    parser = argparse.ArgumentParser(description='Absolute Binding Free Energy Script')
     parser.add_argument('--out_dir', type=str, required=True, help='Location of all output files')
     parser.add_argument('--precision', type=str, required=True, help='Either single or double precision. Double is 8x slower.')
     parser.add_argument('--protein_pdb', type=str, required=True, help='Prepared protein PDB file. This should not have any waters.')
     parser.add_argument('--ligand_sdf', type=str, required=True, help='The ligand sdf used along with posed 3D coordinates. Only the first two ligands are used.')
     parser.add_argument('--num_gpus', type=int, required=True, help='Number of gpus available.')
     parser.add_argument('--forcefield', type=str, required=True, help='Small molecule forcefield to be loaded.')
-    parser.add_argument('--seed', type=int, required=True, help='Random seed used for all the random number generators.')
-    parser.add_argument('--cutoff', type=float, required=True, help='Nonbonded cutoff. Please set this to 1.0 for now.')
     parser.add_argument('--lamb', type=float, required=False, help='Which lambda window we run at.')
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
@@ -181,6 +185,32 @@ if __name__ == "__main__":
     parser.add_argument('--restr_count', type=int, required=True, help='Number of host atoms we restrain each core atom to.')
 
     args = parser.parse_args()
+
+
+    print(r"""
+   __---~~~~--__                      __--~~~~---__
+  `\---~~~~~~~~\\                    //~~~~~~~~---/'
+    \/~~~~~~~~~\||                  ||/~~~~~~~~~\/
+                `\\                //'
+                  `\\            //'
+                    ||          ||
+          ______--~~~~~~~~~~~~~~~~~~--______
+     ___ // _-~                        ~-_ \\ ___
+    `\__)\/~          timemachine         ~\/(__/'
+     _--`-___                            ___-'--_
+   /~     `\ ~~~~~~~~------------~~~~~~~~ /'     ~\
+  /|        `\         ________         /'        |\
+ | `\   ______`\_      \------/      _/'______   /' |
+ |   `\_~-_____\ ~-________________-~ /_____-~_/'   |
+ `.     ~-__________________________________-~     .'
+  `.      [_______/------|~~|------\_______]      .'
+   `\--___((____)(________\/________)(____))___--/'
+    |>>>>>>||                            ||<<<<<<|
+    `\<<<<</'                            `\>>>>>/'
+    """)
+
+    print("Launch Time:", datetime.datetime.now())
+    print("Arguments:", " ".join(sys.argv))
 
     assert os.path.isdir(args.out_dir)
 
@@ -351,7 +381,7 @@ if __name__ == "__main__":
                 )
 
                 intg_seed = np.random.randint(np.iinfo(np.int32).max)
-                # intg_seed = 2020
+                # intg_seed = 2020, debug use if we want reproducibility
 
                 combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), mol_a)
                 combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))

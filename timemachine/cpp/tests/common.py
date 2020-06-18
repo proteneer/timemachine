@@ -365,8 +365,6 @@ class GradientTest(unittest.TestCase):
         else:
             np.testing.assert_allclose(ref_dl, test_dl, rtol)
 
-        return
-
         x_tangent = np.random.rand(N, D).astype(np.float64)
         params_tangent = np.zeros_like(params)
         lamb_tangent = np.random.rand()
@@ -414,7 +412,6 @@ class GradientTest(unittest.TestCase):
                 except:
                     print("FUCKED", a, b)
                     assert 0
-
             np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
 
         else:
