@@ -153,10 +153,9 @@ def setup_core_restraints(
     if stage == 0:
         lambda_flags = np.ones(B, dtype=np.int32)
     elif stage == 1:
-        # fully interacting restraint, w always zero
+        # fully interacting
         lambda_flags = np.zeros(B, dtype=np.int32)
     elif stage == 2:
-        # we can decouple the 
         lambda_flags = np.ones(B, dtype=np.int32)
 
     nrg_fns['Restraint'] = (
