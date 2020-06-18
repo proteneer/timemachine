@@ -1,9 +1,8 @@
 import jax.numpy as np
 
-from timemachine.potentials.jax_utils import distance, delta_r
+from timemachine.potentials.jax_utils import distance, delta_r, convert_to_4d
 
-
-def flat_bottom(conf, params, lamb, lamb_flags, box, bond_idxs, param_idxs):
+def restraint(conf, params, lamb, lamb_flags, box, bond_idxs, param_idxs):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -17,6 +16,12 @@ def flat_bottom(conf, params, lamb, lamb_flags, box, bond_idxs, param_idxs):
     params: shape [num_params,] np.array
         unique parameters
 
+    lamb: float
+        lambda value for 4d decoupling
+
+    lamb_flags: np.array
+        equivalent to offset_idxs, adjusts how much we offset by
+
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
 
@@ -27,16 +32,19 @@ def flat_bottom(conf, params, lamb, lamb_flags, box, bond_idxs, param_idxs):
         each element (k_idx, r_idx) maps into params for bond constants and ideal lengths
 
     """
-    f_lambda = np.sin(np.pi*lamb/2)
-    f_lambda = np.where(lamb_flags != 0, f_lambda*f_lambda, 1)
+    f_lambda = lamb*lamb_flags
 
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
-    dij = distance(ci, cj, box)
-    kbs = params[param_idxs[:, 0]]
-    r0s = params[param_idxs[:, 1]]
 
-    energy = np.sum(f_lambda * (kbs/2) * np.power(dij - r0s, 2.0))
+    dij = np.sqrt(np.sum(np.power(ci - cj, 2), axis=-1) + f_lambda*f_lambda)
+    kbs = params[param_idxs[:, 0]]
+    b0s = params[param_idxs[:, 1]]
+    a0s = params[param_idxs[:, 2]]
+
+    term = 1 - np.exp(-a0s*(dij - b0s))
+
+    energy = np.sum(kbs * term*term)
 
     return energy
 

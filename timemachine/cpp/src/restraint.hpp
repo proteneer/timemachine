@@ -6,7 +6,7 @@
 namespace timemachine {
 
 template<typename RealType>
-class FlatBottom : public Gradient {
+class Restraint : public Gradient {
 
 private:
 
@@ -19,13 +19,12 @@ private:
 
 public:
 
-    FlatBottom(
+    Restraint(
         const std::vector<int> &bond_idxs, // [b, 2]
         const std::vector<int> &param_idxs,
-        const std::vector<int> &lambda_flags,
-        int flat_bottom);
+        const std::vector<int> &lambda_flags);
 
-    ~FlatBottom();
+    ~Restraint();
 
     virtual void execute_lambda_inference_device(
         const int N,

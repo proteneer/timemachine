@@ -2,27 +2,27 @@
 #include <iostream>
 #include <vector>
 #include <complex>
-#include "flat_bottom.hpp"
+#include "restraint.hpp"
 #include "gpu_utils.cuh"
-#include "k_flat_bottom.cuh"
+#include "k_restraint.cuh"
 
 namespace timemachine {
 
 template <typename RealType>
-FlatBottom<RealType>::FlatBottom(
+Restraint<RealType>::Restraint(
     const std::vector<int> &bond_idxs, // [N]
     const std::vector<int> &param_idxs,
-    const std::vector<int> &lambda_flags,
-    int flat_bottom
-) : B_(bond_idxs.size()/2),
-    flat_bottom_(flat_bottom) {
+    const std::vector<int> &lambda_flags
+) : B_(bond_idxs.size()/2) {
 
-    if(flat_bottom_ != 0) {
-        throw std::runtime_error("flat bottom must be set to 0 for now");        
-    }
 
     if(bond_idxs.size() % 2 != 0) {
         throw std::runtime_error("bond_idxs.size() must be exactly 2*k");
+    }
+
+
+    if(param_idxs.size() % 3 != 0) {
+        throw std::runtime_error("param_idxs.size() must be exactly 2*k");
     }
 
     for(int b=0; b < B_; b++) {
@@ -42,20 +42,20 @@ FlatBottom<RealType>::FlatBottom(
     gpuErrchk(cudaMalloc(&d_bond_idxs_, B_*2*sizeof(*d_bond_idxs_)));
     gpuErrchk(cudaMemcpy(d_bond_idxs_, &bond_idxs[0], B_*2*sizeof(*d_bond_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_param_idxs_, B_*2*sizeof(*d_param_idxs_)));
-    gpuErrchk(cudaMemcpy(d_param_idxs_, &param_idxs[0], B_*2*sizeof(*d_param_idxs_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMalloc(&d_param_idxs_, B_*3*sizeof(*d_param_idxs_)));
+    gpuErrchk(cudaMemcpy(d_param_idxs_, &param_idxs[0], B_*3*sizeof(*d_param_idxs_), cudaMemcpyHostToDevice));
 
 };
 
 template <typename RealType>
-FlatBottom<RealType>::~FlatBottom() {
+Restraint<RealType>::~Restraint() {
     gpuErrchk(cudaFree(d_bond_idxs_));
     gpuErrchk(cudaFree(d_param_idxs_));
     gpuErrchk(cudaFree(d_lambda_flags_));
 };
 
 template <typename RealType>
-void FlatBottom<RealType>::execute_lambda_inference_device(
+void Restraint<RealType>::execute_lambda_inference_device(
     const int N,
     const int P,
     const double *d_coords_primals,
@@ -68,7 +68,7 @@ void FlatBottom<RealType>::execute_lambda_inference_device(
 
     int tpb = 32;
     int blocks = (B_+tpb-1)/tpb;
-    k_flat_bottom_inference<RealType><<<blocks, tpb, 0, stream>>>(
+    k_restraint_inference<RealType><<<blocks, tpb, 0, stream>>>(
         B_,
         d_coords_primals,
         d_params_primals,
@@ -84,12 +84,12 @@ void FlatBottom<RealType>::execute_lambda_inference_device(
 
     // auto finish = std::chrono::high_resolution_clock::now();
     // std::chrono::duration<double> elapsed = finish - start;
-    // std::cout << "FlatBottom Elapsed time: " << elapsed.count() << " s\n";
+    // std::cout << "Restraint Elapsed time: " << elapsed.count() << " s\n";
 
 };
 
 template <typename RealType>
-void FlatBottom<RealType>::execute_lambda_jvp_device(
+void Restraint<RealType>::execute_lambda_jvp_device(
     const int N,
     const int P,
     const double *d_coords_primals,
@@ -106,7 +106,7 @@ void FlatBottom<RealType>::execute_lambda_jvp_device(
     int tpb = 32;
     int blocks = (B_+tpb-1)/tpb;
 
-    k_flat_bottom_jvp<RealType><<<blocks, tpb, 0, stream>>>(
+    k_restraint_jvp<RealType><<<blocks, tpb, 0, stream>>>(
         B_,
         d_coords_primals,
         d_coords_tangents,
@@ -127,11 +127,11 @@ void FlatBottom<RealType>::execute_lambda_jvp_device(
 
     // auto finish = std::chrono::high_resolution_clock::now();
     // std::chrono::duration<double> elapsed = finish - start;
-    // std::cout << "FlatBottom Elapsed time: " << elapsed.count() << " s\n";
+    // std::cout << "Restraint Elapsed time: " << elapsed.count() << " s\n";
 
 }
 
-template class FlatBottom<double>;
-template class FlatBottom<float>;
+template class Restraint<double>;
+template class Restraint<float>;
 
 } // namespace timemachine

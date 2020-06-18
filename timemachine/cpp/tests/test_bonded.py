@@ -16,13 +16,13 @@ from timemachine.potentials import alchemy, bonded
 class TestBonded(GradientTest):
 
 
-    def test_flat_bottom(self):
+    def test_restraint(self):
 
-        B = 10
+        B = 8
 
         P = 24
         params = np.random.rand(24)
-        p_idxs = np.random.randint(0, P, size=(B, 2))
+        p_idxs = np.random.randint(0, P, size=(B, 3))
 
         N = 50
         D = 3
@@ -42,18 +42,17 @@ class TestBonded(GradientTest):
 
 
             ref_nrg = jax.partial(
-                bonded.flat_bottom,
+                bonded.restraint,
                 lamb_flags=lambda_flags,
                 box=None,
                 bond_idxs=b_idxs,
                 param_idxs = p_idxs
             )
 
-            test_nrg = ops.FlatBottom(
+            test_nrg = ops.Restraint(
                 np.array(b_idxs, dtype=np.int32),
                 np.array(p_idxs, dtype=np.int32),
                 np.array(lambda_flags, dtype=np.int32),
-                0,
                 precision=precision
             )
 

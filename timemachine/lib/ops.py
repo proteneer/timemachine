@@ -37,11 +37,11 @@ def HarmonicBond(*args, precision):
     else:
         raise Exception("Unknown precision")
 
-def FlatBottom(*args, precision):
+def Restraint(*args, precision):
     if precision == np.float64:
-        return custom_ops.FlatBottom_f64(*args)
+        return custom_ops.Restraint_f64(*args)
     elif precision == np.float32:
-        return custom_ops.FlatBottom_f32(*args)
+        return custom_ops.Restraint_f32(*args)
     else:
         raise Exception("Unknown precision")
 

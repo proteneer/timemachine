@@ -1,6 +1,10 @@
+import matplotlib
+matplotlib.use('Agg')
+
 import copy
 import argparse
 import time
+import datetime
 import numpy as np
 from io import StringIO
 import itertools
@@ -126,7 +130,7 @@ def setup_core_restraints(
             nns = np.argsort(dists[:nha])
 
             # restrain to 10 nearby atoms
-            for p_idx in nns[:10]:
+            for p_idx in nns[:count]:
                 k_idx = len(params)
                 params = np.concatenate([params, [k]])
 
@@ -134,7 +138,11 @@ def setup_core_restraints(
                 b_idx = len(params)
                 params = np.concatenate([params, [b]])
 
-                bond_param_idxs.append([k_idx, b_idx])
+                a = 1.0
+                a_idx = len(params)
+                params = np.concatenate([params, [a]])
+
+                bond_param_idxs.append([k_idx, b_idx, a_idx])
                 bond_idxs.append([l_idx + nha, p_idx])
 
     bond_idxs = np.array(bond_idxs, dtype=np.int32)
@@ -142,18 +150,21 @@ def setup_core_restraints(
 
     B = bond_idxs.shape[0]
 
+    # w = lambda*lambda_flags
+    # w = 0 implies that restraints are on
+    # w = +inf/-inf implies that restraints are off
     if stage == 0:
         lambda_flags = np.ones(B, dtype=np.int32)
     elif stage == 1:
+        # fully interacting
         lambda_flags = np.zeros(B, dtype=np.int32)
     elif stage == 2:
         lambda_flags = np.ones(B, dtype=np.int32)
 
-    nrg_fns['FlatBottom'] = (
+    nrg_fns['Restraint'] = (
         bond_idxs,
         bond_param_idxs,
-        lambda_flags,
-        0
+        lambda_flags
     )
 
     return params
@@ -161,15 +172,13 @@ def setup_core_restraints(
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Relative Binding Free Energy Script')
+    parser = argparse.ArgumentParser(description='Absolute Binding Free Energy Script')
     parser.add_argument('--out_dir', type=str, required=True, help='Location of all output files')
     parser.add_argument('--precision', type=str, required=True, help='Either single or double precision. Double is 8x slower.')
     parser.add_argument('--protein_pdb', type=str, required=True, help='Prepared protein PDB file. This should not have any waters.')
     parser.add_argument('--ligand_sdf', type=str, required=True, help='The ligand sdf used along with posed 3D coordinates. Only the first two ligands are used.')
     parser.add_argument('--num_gpus', type=int, required=True, help='Number of gpus available.')
     parser.add_argument('--forcefield', type=str, required=True, help='Small molecule forcefield to be loaded.')
-    parser.add_argument('--seed', type=int, required=True, help='Random seed used for all the random number generators.')
-    parser.add_argument('--cutoff', type=float, required=True, help='Nonbonded cutoff. Please set this to 1.0 for now.')
     parser.add_argument('--lamb', type=float, required=False, help='Which lambda window we run at.')
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
@@ -178,6 +187,32 @@ if __name__ == "__main__":
     parser.add_argument('--restr_count', type=int, required=True, help='Number of host atoms we restrain each core atom to.')
 
     args = parser.parse_args()
+
+
+    print(r"""
+   __---~~~~--__                      __--~~~~---__
+  `\---~~~~~~~~\\                    //~~~~~~~~---/'
+    \/~~~~~~~~~\||                  ||/~~~~~~~~~\/
+                `\\                //'
+                  `\\            //'
+                    ||          ||
+          ______--~~~~~~~~~~~~~~~~~~--______
+     ___ // _-~                        ~-_ \\ ___
+    `\__)\/~          timemachine         ~\/(__/'
+     _--`-___                            ___-'--_
+   /~     `\ ~~~~~~~~------------~~~~~~~~ /'     ~\
+  /|        `\         ________         /'        |\
+ | `\   ______`\_      \------/      _/'______   /' |
+ |   `\_~-_____\ ~-________________-~ /_____-~_/'   |
+ `.     ~-__________________________________-~     .'
+  `.      [_______/------|~~|------\_______]      .'
+   `\--___((____)(________\/________)(____))___--/'
+    |>>>>>>||                            ||<<<<<<|
+    `\<<<<</'                            `\>>>>>/'
+    """)
+
+    print("Launch Time:", datetime.datetime.now())
+    print("Arguments:", " ".join(sys.argv))
 
     assert os.path.isdir(args.out_dir)
 
@@ -264,15 +299,18 @@ if __name__ == "__main__":
             if args.lamb:
                 ti_lambdas = np.ones(args.num_gpus)*args.lamb
             else:
-                if stage == 0 or stage == 2:
-                    # lambda spans from [0, 1], and are analytically zero at endpoints
-                    ti_lambdas = np.linspace(0.0, 1.0, 16)
+                if stage == 0:
+                    # we need to goto a larger lambda for the morse potential to decay to zero.
+                    ti_lambdas = np.linspace(8.5, 0.0, 32)
                 elif stage == 1:
                     # lambda spans from [0, inf], is close enough to zero over [0, 1.2] cutoff
                     ti_lambdas = np.concatenate([
                         np.linspace(0.0, 0.5, 24, endpoint=False),
                         np.linspace(0.5, 1.2, 8)
                     ])
+                elif stage == 2:
+                    # we need to goto a larger lambda for the morse potential to decay to zero.
+                    ti_lambdas = np.linspace(0.0, 8.5, 32)
                 else:
                     raise Exception("Unknown stage.")
 
@@ -346,7 +384,7 @@ if __name__ == "__main__":
                 )
 
                 intg_seed = np.random.randint(np.iinfo(np.int32).max)
-                # intg_seed = 2020
+                # intg_seed = 2020, debug use if we want reproducibility
 
                 combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), mol_a)
                 combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
@@ -432,4 +470,4 @@ if __name__ == "__main__":
             
             stage_dGs.append(stage_dG)
 
-        print("epoch", epoch, "stage_dGs", stage_dGs, "final dG", stage_dGs[0]+stage_dGs[1]-stage_dGs[2])
+        print("epoch", epoch, "stage_dGs", stage_dGs, "final dG", stage_dGs[0]+stage_dGs[1]+stage_dGs[2])
