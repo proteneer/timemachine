@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')
+
 import copy
 import argparse
 import time
