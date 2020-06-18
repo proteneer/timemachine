@@ -298,8 +298,8 @@ if __name__ == "__main__":
                 ti_lambdas = np.ones(args.num_gpus)*args.lamb
             else:
                 if stage == 0:
-                    # lambda spans from [0, 1], and are analytically zero at endpoints
-                    ti_lambdas = np.linspace(5.5, 0.0, 32)
+                    # we need to goto a larger lambda for the morse potential to decay to zero.
+                    ti_lambdas = np.linspace(8.5, 0.0, 32)
                 elif stage == 1:
                     # lambda spans from [0, inf], is close enough to zero over [0, 1.2] cutoff
                     ti_lambdas = np.concatenate([
@@ -307,7 +307,8 @@ if __name__ == "__main__":
                         np.linspace(0.5, 1.2, 8)
                     ])
                 elif stage == 2:
-                    ti_lambdas = np.linspace(0.0, 5.5, 32)
+                    # we need to goto a larger lambda for the morse potential to decay to zero.
+                    ti_lambdas = np.linspace(0.0, 8.5, 32)
                 else:
                     raise Exception("Unknown stage.")
 

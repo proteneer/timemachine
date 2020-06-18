@@ -93,17 +93,9 @@ void __global__ k_restraint_jvp(
         return;
     }
 
-
     Surreal<RealType> lambda(lambda_primal, lambda_tangent);
     Surreal<RealType> f_lambda = lambda*lambda_flags[b_idx];
     Surreal<RealType> df(lambda_flags[b_idx], 0);
-
-    // if(lambda_flags[b_idx] == 0) {
-    //     f_lambda.real = 0;
-    //     f_lambda.imag = 0;
-    //     df.real = 0;
-    //     df.imag = 0;
-    // }
 
     int src_idx = bond_idxs[b_idx*2+0];
     int dst_idx = bond_idxs[b_idx*2+1];

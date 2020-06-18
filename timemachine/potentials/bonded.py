@@ -16,6 +16,12 @@ def restraint(conf, params, lamb, lamb_flags, box, bond_idxs, param_idxs):
     params: shape [num_params,] np.array
         unique parameters
 
+    lamb: float
+        lambda value for 4d decoupling
+
+    lamb_flags: np.array
+        equivalent to offset_idxs, adjusts how much we offset by
+
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
 
@@ -26,19 +32,10 @@ def restraint(conf, params, lamb, lamb_flags, box, bond_idxs, param_idxs):
         each element (k_idx, r_idx) maps into params for bond constants and ideal lengths
 
     """
-
-
-    # lambda_plane_idxs = np.zeros_like(lamb_flags)
-
-    # conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lamb_flags, 100000.0)
-
-    # f_lambda = np.sin(np.pi*lamb/2)
     f_lambda = lamb*lamb_flags
-    # f_lambda = np.where(lamb_flags != 0, f_lambda*f_lambda, 1)
 
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
-    # dij = distance(ci, cj, box)
 
     dij = np.sqrt(np.sum(np.power(ci - cj, 2), axis=-1) + f_lambda*f_lambda)
     kbs = params[param_idxs[:, 0]]
