@@ -332,7 +332,6 @@ class Forcefield():
                 if am1:
                     print("WARNING: using AM1BCC, you should not train your forcefield when this option is turned on. Also: this function should not be called more than once.")
 
-
                     # imported here for optional dependency
                     from openeye import oechem
                     from openeye import oequacpac
