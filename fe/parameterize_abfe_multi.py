@@ -81,6 +81,7 @@ loss_fn_grad = jax.grad(loss_fn, argnums=(0,))
 
 def setup_core_restraints(
     k,
+    alpha,
     count,
     conf,
     nha,
@@ -138,7 +139,7 @@ def setup_core_restraints(
                 b_idx = len(params)
                 params = np.concatenate([params, [b]])
 
-                a = 1.0
+                a = alpha
                 a_idx = len(params)
                 params = np.concatenate([params, [a]])
 
@@ -184,6 +185,7 @@ if __name__ == "__main__":
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
     parser.add_argument('--a_idx', type=int, required=True, help='A index')
     parser.add_argument('--restr_force', type=float, required=True, help='Strength of the each restraint term, in kJ/mol.')
+    parser.add_argument('--restr_alpha', type=float, required=True, help='Width of the well.')
     parser.add_argument('--restr_count', type=int, required=True, help='Number of host atoms we restrain each core atom to.')
 
     args = parser.parse_args()
@@ -297,7 +299,7 @@ if __name__ == "__main__":
                 os.makedirs(stage_dir)
 
             if args.lamb:
-                ti_lambdas = np.ones(args.num_gpus)*args.lamb
+                ti_lambdas = np.ones(8)*args.lamb
             else:
                 if stage == 0:
                     # we need to goto a larger lambda for the morse potential to decay to zero.
@@ -323,6 +325,7 @@ if __name__ == "__main__":
             nha = host_conf.shape[0]
             new_params = setup_core_restraints(
                 args.restr_force,
+                args.restr_alpha,
                 args.restr_count,
                 x0,
                 nha,
