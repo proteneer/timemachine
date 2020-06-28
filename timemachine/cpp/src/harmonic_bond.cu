@@ -4,7 +4,7 @@
 #include <complex>
 #include "harmonic_bond.hpp"
 #include "gpu_utils.cuh"
-#include "k_bonded_deterministic.cuh"
+#include "k_bonded.cuh"
 
 namespace timemachine {
 

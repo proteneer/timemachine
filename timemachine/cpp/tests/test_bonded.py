@@ -43,8 +43,6 @@ class TestBonded(GradientTest):
                 bond_idxs=b_idxs
             )
 
-
-
             ref_nrg_params = jax.partial(
                 ref_nrg,
                 params=params
