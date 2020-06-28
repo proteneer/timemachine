@@ -13,7 +13,6 @@ void __global__ k_harmonic_bond_inference(
     const double *coords,  // [n, 3]
     const double *params,  // [p,]
     const int *bond_idxs,    // [b, 2]
-    const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords,
     double *energy) {
 
@@ -34,11 +33,11 @@ void __global__ k_harmonic_bond_inference(
         d2ij += delta*delta;
     }
 
-    int kb_idx = param_idxs[b_idx*2+0];
-    int b0_idx = param_idxs[b_idx*2+1];
+    // int kb_idx = param_idxs[b_idx*2+0];
+    // int b0_idx = param_idxs[b_idx*2+1];
 
-    RealType kb = params[kb_idx];
-    RealType b0 = params[b0_idx];
+    RealType kb = params[b_idx*2+0];
+    RealType b0 = params[b_idx*2+1];
 
     RealType dij = sqrt(d2ij);
     RealType db = dij - b0;
@@ -62,7 +61,7 @@ void __global__ k_harmonic_bond_jvp(
     const double *coords_tangent,  
     const double *params,  // [p,]
     const int *bond_idxs,    // [b, 2]
-    const int *param_idxs,   // [b, 2]
+    // const int *param_idxs,   // [b, 2]
     double *grad_coords_primals,
     double *grad_coords_tangents,
     double *grad_params_primals,
@@ -87,8 +86,8 @@ void __global__ k_harmonic_bond_jvp(
         d2ij += delta*delta;
     }
 
-    int kb_idx = param_idxs[b_idx*2+0];
-    int b0_idx = param_idxs[b_idx*2+1];
+    int kb_idx = b_idx*2+0;
+    int b0_idx = b_idx*2+1;
 
     RealType kb = params[kb_idx];
     RealType b0 = params[b0_idx];

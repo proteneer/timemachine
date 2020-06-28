@@ -412,7 +412,6 @@ if __name__ == "__main__":
                 all_processes.append(p)
 
             sum_du_dls = [] # [L, T]
-            all_du_dls = [] # [L, F, T] num lambda windows, num forces, num steps
 
             all_energies = []
 

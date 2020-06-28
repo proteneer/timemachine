@@ -57,9 +57,9 @@ AlchemicalStepper::AlchemicalStepper(
 
 void AlchemicalStepper::forward_step(
     const int N,
-    const int P,
+    // const int P,
     const double *coords,
-    const double *params,
+    // const double *params,
     unsigned long long *dx) {
 
     const int T = lambda_schedule_.size();
@@ -68,9 +68,9 @@ void AlchemicalStepper::forward_step(
     for(int f=0; f < forces_.size(); f++) {
         forces_[f]->execute_lambda_inference_device(
             N,
-            P,
+            // P,
             coords,
-            params,
+            // params,
             lambda_schedule_[count_],
             dx, // forces
             d_du_dl_ + f*T + count_, // du_dl
@@ -88,14 +88,14 @@ void AlchemicalStepper::forward_step(
 
 void AlchemicalStepper::backward_step(
     const int N,
-    const int P,
+    // const int P,
     const double *coords,
-    const double *params,
+    // const double *params,
     const double *dx_tangent,
     double *coords_jvp_primals,
-    double *coords_jvp_tangents,
-    double *params_jvp_primals,
-    double *params_jvp_tangents) {
+    double *coords_jvp_tangents) {
+    // double *params_jvp_primals,
+    // double *params_jvp_tangents) {
 
     count_ -= 1;
 
@@ -110,16 +110,16 @@ void AlchemicalStepper::backward_step(
     for(int f=0; f < forces_.size(); f++) {
         forces_[f]->execute_lambda_jvp_device(
             N,
-            P,
+            // P,
             coords,
             dx_tangent,
-            params,
+            // params,
             lambda_schedule_[count_],
             du_dl_adjoint_[f*T + count_], // FIX
             coords_jvp_primals,
             coords_jvp_tangents,
-            params_jvp_primals,
-            params_jvp_tangents,
+            // params_jvp_primals,
+            // params_jvp_tangents,
             this->get_stream(f)
         );
     }

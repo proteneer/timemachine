@@ -30,6 +30,7 @@ class BondedHandler():
     def parameterize_ligand(params, param_idxs):
         return params[param_idxs]
 
+# its trivial to re-use this for everything except the torsions
 class HarmonicBondHandler(BondedHandler):
 
     def __init__(self, smirks, params):
@@ -54,9 +55,7 @@ class HarmonicBondHandler(BondedHandler):
         """
 
         bond_idxs, param_idxs = self.generate_bonded_idxs(mol, self.smirks)
-
         param_fn = functools.partial(self.parameterize_ligand, param_idxs=param_idxs)
-
         sys_params, vjp_fn = jax.vjp(param_fn, self.params)
 
         return bond_idxs, (sys_params, vjp_fn)

@@ -12,7 +12,7 @@ void __global__ k_restraint_inference(
     const double *params,  // [p,]
     const double lambda,
     const int *bond_idxs,    // [b, 2]
-    const int *param_idxs,   // [b, 3]
+    // const int *param_idxs,   // [b, 3]
     const int *lambda_flags,
     unsigned long long *grad_coords,
     double *du_dl,
@@ -43,9 +43,9 @@ void __global__ k_restraint_inference(
     dx[3] = w; // unused
     d2ij += w*w;
 
-    int kb_idx = param_idxs[b_idx*3+0];
-    int b0_idx = param_idxs[b_idx*3+1];
-    int a0_idx = param_idxs[b_idx*3+2];
+    int kb_idx = b_idx*3+0;
+    int b0_idx = b_idx*3+1;
+    int a0_idx = b_idx*3+2;
 
     RealType kb = params[kb_idx];
     RealType b0 = params[b0_idx];
@@ -80,7 +80,6 @@ void __global__ k_restraint_jvp(
     const double lambda_primal,
     const double lambda_tangent,
     const int *bond_idxs,    // [b, 2]
-    const int *param_idxs,   // [b, 2]
     const int *lambda_flags,
     double *grad_coords_primals,
     double *grad_coords_tangents,
@@ -115,9 +114,9 @@ void __global__ k_restraint_jvp(
     dx[3] = w; // unused
     d2ij += w*w;
 
-    int kb_idx = param_idxs[b_idx*3+0];
-    int b0_idx = param_idxs[b_idx*3+1];
-    int a0_idx = param_idxs[b_idx*3+2];
+    int kb_idx = b_idx*3+0;
+    int b0_idx = b_idx*3+1;
+    int a0_idx = b_idx*3+2;
 
     RealType kb = params[kb_idx];
     RealType b0 = params[b0_idx];
@@ -144,7 +143,6 @@ void __global__ k_restraint_jvp(
     Surreal<RealType> du_db = -2*a0*kb*exp(-a0*db)*(1 - exp(-a0*db));
     Surreal<RealType> du_da = 2*kb*db*exp(-a0*db)*(1 - exp(-a0*db));
 
-    // avoid writing out to the real parts if possible
     atomicAdd(grad_params_primals + kb_idx, du_dk.real);
     atomicAdd(grad_params_tangents + kb_idx, du_dk.imag);
 

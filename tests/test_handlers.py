@@ -158,7 +158,6 @@ class TestNonbondedHandlers(unittest.TestCase):
 
         np.testing.assert_equal(exc_idxs, expected_idxs)
 
-
         expected_scales = [0., 0.2, 0.2, 0.5, 0.5, 0., 0., 0.2, 0.2, 0.2, 0.5, 0.5, 0., 0., 0.2]
         np.testing.assert_equal(scales, expected_scales)
 
