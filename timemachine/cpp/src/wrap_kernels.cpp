@@ -10,7 +10,7 @@
 #include "restraint.hpp"
 // #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
-// #include "gbsa.hpp"
+#include "gbsa.hpp"
 #include "gradient.hpp"
 // #include "alchemical_gradient.hpp"
 // #include "stepper.hpp"
@@ -509,73 +509,98 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         py::array_t<double, py::array::c_style> buffer({N, 2});
         grad.get_du_dlj_tangents(buffer.mutable_data());
         return buffer;
-    })
-    ;
+    });
 
 }
 
 
-// template <typename RealType>
-// void declare_gbsa(py::module &m, const char *typestr) {
+template <typename RealType>
+void declare_gbsa(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::GBSA<RealType>;
-//     std::string pyclass_name = std::string("GBSA_") + typestr;
-//     py::class_<Class, timemachine::Gradient>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const py::array_t<int, py::array::c_style> &charge_pi, // [N]
-//         const py::array_t<int, py::array::c_style> &radii_pi, // [N]
-//         const py::array_t<int, py::array::c_style> &scale_pi, // [N]
-//         const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
-//         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
-//         double alpha,
-//         double beta,
-//         double gamma,
-//         double dielectric_offset,
-//         double surface_tension,
-//         double solute_dielectric,
-//         double solvent_dielectric,
-//         double probe_radius,
-//         double cutoff_radii,
-//         double cutoff_force
-//     ){
-//         std::vector<int> charge_param_idxs(charge_pi.size());
-//         std::memcpy(charge_param_idxs.data(), charge_pi.data(), charge_pi.size()*sizeof(int));
-//         std::vector<int> atomic_radii_idxs(radii_pi.size());
-//         std::memcpy(atomic_radii_idxs.data(), radii_pi.data(), radii_pi.size()*sizeof(int));
-//         std::vector<int> scale_factor_idxs(scale_pi.size());
-//         std::memcpy(scale_factor_idxs.data(), scale_pi.data(), scale_pi.size()*sizeof(int));
-//         std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
-//         std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
-//         std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
-//         std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
+    using Class = timemachine::GBSA<RealType>;
+    std::string pyclass_name = std::string("GBSA_") + typestr;
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<double, py::array::c_style> &charge_params_i, // [N]
+        const py::array_t<double, py::array::c_style> &gb_params_i, // [N, 2]
+        // const py::array_t<int, py::array::c_style> &radii_pi, // [N]
+        // const py::array_t<int, py::array::c_style> &scale_pi, // [N]
+        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
+        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
+        double alpha,
+        double beta,
+        double gamma,
+        double dielectric_offset,
+        double surface_tension,
+        double solute_dielectric,
+        double solvent_dielectric,
+        double probe_radius,
+        double cutoff_radii,
+        double cutoff_force) {
+
+        std::vector<double> charge_params(charge_params_i.size());
+        std::memcpy(charge_params.data(), charge_params_i.data(), charge_params_i.size()*sizeof(double));
+        std::vector<double> gb_params(gb_params_i.size());
+        std::memcpy(gb_params.data(), gb_params_i.data(), gb_params_i.size()*sizeof(double));
+        // std::vector<int> scale_factor_idxs(scale_pi.size());
+        // std::memcpy(scale_factor_idxs.data(), scale_pi.data(), scale_pi.size()*sizeof(int));
+        std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
+        std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
+        std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
+        std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
 
 
-//         return new timemachine::GBSA<RealType>(
-//             charge_param_idxs, // [N]
-//             atomic_radii_idxs, // [N]
-//             scale_factor_idxs, // 
-//             lambda_plane_idxs,
-//             lambda_offset_idxs,
-//             alpha,
-//             beta,
-//             gamma,
-//             dielectric_offset,
-//             surface_tension,
-//             solute_dielectric,
-//             solvent_dielectric,
-//             probe_radius,
-//             cutoff_radii,
-//             cutoff_force
-//         );
-//     }
-//     ));
+        return new timemachine::GBSA<RealType>(
+            charge_params,
+            gb_params,
+            // charge_param_idxs, // [N]
+            // atomic_radii_idxs, // [N]
+            // scale_factor_idxs, // 
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            alpha,
+            beta,
+            gamma,
+            dielectric_offset,
+            surface_tension,
+            solute_dielectric,
+            solvent_dielectric,
+            probe_radius,
+            cutoff_radii,
+            cutoff_force
+        );
+    }))
+    .def("get_du_dcharge_primals", [](timemachine::GBSA<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+        const int N = grad.num_atoms();
+        py::array_t<double, py::array::c_style> buffer(N);
+        grad.get_du_dcharge_primals(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_du_dcharge_tangents", [](timemachine::GBSA<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+        const int N = grad.num_atoms();
+        py::array_t<double, py::array::c_style> buffer(N);
+        grad.get_du_dcharge_tangents(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_du_dgb_primals", [](timemachine::GBSA<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+        const int N = grad.num_atoms();
+        py::array_t<double, py::array::c_style> buffer({N, 2});
+        grad.get_du_dgb_primals(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_du_dgb_tangents", [](timemachine::GBSA<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+        const int N = grad.num_atoms();
+        py::array_t<double, py::array::c_style> buffer({N, 2});
+        grad.get_du_dgb_tangents(buffer.mutable_data());
+        return buffer;
+    });
 
-// }
+}
 
 PYBIND11_MODULE(custom_ops, m) {
 
@@ -597,8 +622,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded<double>(m, "f64");
     declare_nonbonded<float>(m, "f32");
 
-    // declare_gbsa<double>(m, "f64");
-    // declare_gbsa<float>(m, "f32");
+    declare_gbsa<double>(m, "f64");
+    declare_gbsa<float>(m, "f32");
 
     declare_stepper(m, "f64");
     declare_alchemical_stepper(m, "f64");

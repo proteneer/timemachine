@@ -13,9 +13,9 @@ from hilbertcurve.hilbertcurve import HilbertCurve
 
 def prepare_gbsa_system(
     x,
-    P_charges,
-    P_radii,
-    P_scale_factors,
+    # P_charges,
+    # P_radii,
+    # P_scale_factors,
     alpha,
     beta,
     gamma,
@@ -41,21 +41,22 @@ def prepare_gbsa_system(
         params = np.array([], dtype=np.float64)
 
     # charges
-    charge_params = (np.random.rand(P_charges).astype(np.float64)-0.5)*np.sqrt(138.935456)
-    charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
-    params = np.concatenate([params, charge_params])
+    charge_params = (np.random.rand(N).astype(np.float64)-0.5)*np.sqrt(138.935456)
+    # charge_param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32) + len(params)
+    # params = np.concatenate([params, charge_params])
 
     # gb radiis
-    radii_params = 1.5*np.random.rand(P_radii).astype(np.float64) + 1.0 # 1.0 to 2.5
+    radii_params = 1.5*np.random.rand(N).astype(np.float64) + 1.0 # 1.0 to 2.5
     radii_params = radii_params/10 # convert to nm form
-    radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
-    params = np.concatenate([params, radii_params])
+    # radii_param_idxs = np.random.randint(low=0, high=P_radii, size=(N), dtype=np.int32) + len(params)
+    # params = np.concatenate([params, radii_params])
 
     # scale factors
-    scale_params = np.random.rand(P_scale_factors).astype(np.float64)/3 + 0.75
-    scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
-    params = np.concatenate([params, scale_params])
+    scale_params = np.random.rand(N).astype(np.float64)/3 + 0.75
+    # scale_param_idxs = np.random.randint(low=0, high=P_scale_factors, size=(N), dtype=np.int32) + len(params)
+    # params = np.concatenate([params, scale_params])
 
+    gb_params = np.stack([radii_params, scale_params], axis=1)
     # lambda_plane_idxs = np.random.randint(
     #     low=0,
     #     high=2,
@@ -70,10 +71,12 @@ def prepare_gbsa_system(
     #     dtype=np.int32
     # )
 
-    custom_gb = ops.GBSA(
-        charge_param_idxs,
-        radii_param_idxs,
-        scale_param_idxs,
+    custom_gb_ctor = functools.partial(ops.GBSA,
+        charge_params,
+        gb_params,
+        # charge_param_idxs,
+        # radii_param_idxs,
+        # scale_param_idxs,
         lambda_plane_idxs,
         lambda_offset_idxs,
         alpha,
@@ -101,10 +104,12 @@ def prepare_gbsa_system(
 
     gbsa_obc_fn = functools.partial(
         gbsa.gbsa_obc,
-        box=box,
-        charge_idxs=charge_param_idxs,
-        radii_idxs=radii_param_idxs,
-        scale_idxs=scale_param_idxs,
+        # box=box,
+        # charge_idxs=charge_param_idxs,
+        # radii_idxs=radii_param_idxs,
+        # scale_idxs=scale_param_idxs,
+        # charge_params=charge_params,
+        # gb_params=gb_params,
         alpha=alpha,
         beta=beta,
         gamma=gamma,
@@ -119,8 +124,7 @@ def prepare_gbsa_system(
         lambda_offset_idxs=lambda_offset_idxs
     )
 
-    return params, [gbsa_obc_fn], [custom_gb]
-
+    return (charge_params, gb_params), gbsa_obc_fn, custom_gb_ctor
 
 def prepare_nonbonded_system(
     x,
@@ -357,6 +361,9 @@ class GradientTest(unittest.TestCase):
             np.testing.assert_almost_equal(ref_dl, test_dl, 1e-5)
         else:
             np.testing.assert_allclose(ref_dl, test_dl, rtol)
+
+        # print("skipping jvp tests")
+        # return
 
         # x_tangent = np.random.randn(*x.shape)
         # lamb_tangent = np.random.rand()

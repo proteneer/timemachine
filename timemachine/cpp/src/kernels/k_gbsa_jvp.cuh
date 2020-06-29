@@ -13,13 +13,14 @@ __global__ void k_compute_born_radii_gpu_jvp(
     const int N,
     const double* coords,
     const double* coords_tangents,
-    const double* params,
+    // const double* params,
     const double lambda_primal,
     const double lambda_tangent,
     const int* lambda_plane_idxs,
     const int* lambda_offset_idxs,
-    const int* atomic_radii_idxs,
-    const int* scale_factor_idxs,
+    const double *gb_params,
+    // const int* atomic_radii_idxs,
+    // const int* scale_factor_idxs,
     const double dielectric_offset,
     const double cutoff,
     const double *block_bounds_ctr,
@@ -55,9 +56,9 @@ __global__ void k_compute_born_radii_gpu_jvp(
         ci[d].real = atom_i_idx < N ? coords[atom_i_idx*3+d] : 0;
         ci[d].imag = atom_i_idx < N ? coords_tangents[atom_i_idx*3+d] : 0;
     }
-    int radii_param_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
+    int radii_param_idx_i = atom_i_idx < N ? atom_i_idx*2 + 0 : 0;
 
-    RealType radiusI = atom_i_idx < N ? params[radii_param_idx_i] : 0;
+    RealType radiusI = atom_i_idx < N ? gb_params[radii_param_idx_i] : 0;
     RealType offsetRadiusI   = radiusI - dielectric_offset;
 
     // test accumulation in RealType precision 
@@ -72,8 +73,9 @@ __global__ void k_compute_born_radii_gpu_jvp(
         lambda_plane_j = lambda_plane_idxs[atom_j_idx];
         lambda_offset_j = lambda_offset_idxs[atom_j_idx];
     }
-    int radii_param_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
-    int scale_param_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
+
+    int radii_param_idx_j = atom_j_idx < N ? atom_j_idx*2+0 : 0;
+    int scale_param_idx_j = atom_j_idx < N ? atom_j_idx*2+1 : 0;
 
     Surreal<RealType> cj[3];
     for(int d=0; d < 3; d++) {
@@ -81,8 +83,8 @@ __global__ void k_compute_born_radii_gpu_jvp(
         cj[d].imag = atom_j_idx < N ? coords_tangents[atom_j_idx*3+d] : 0;
     }
 
-    RealType radiusJ = atom_j_idx < N ? params[radii_param_idx_j] : 0;
-    RealType scaleFactorJ = atom_j_idx < N ? params[scale_param_idx_j] : 0;
+    RealType radiusJ = atom_j_idx < N ? gb_params[radii_param_idx_j] : 0;
+    RealType scaleFactorJ = atom_j_idx < N ? gb_params[scale_param_idx_j] : 0;
     RealType scaleFactorJ2 = scaleFactorJ*scaleFactorJ;
     RealType offsetRadiusJ   = radiusJ - dielectric_offset; 
     RealType scaledRadiusJ   = offsetRadiusJ*scaleFactorJ;
@@ -169,12 +171,13 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     const int N,
     const double* coords,
     const double* coords_tangents,
-    const double* params,
+    // const double* params,
     const double lambda_primal,
     const double lambda_tangent,
     const int* lambda_plane_idxs,
     const int* lambda_offset_idxs,
-    const int* charge_param_idxs,
+    // const int* charge_param_idxs,
+    const double *charge_params,
     const Surreal<double>* born_radii,
     const double prefactor,
     const double cutoff,
@@ -183,8 +186,8 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
     Surreal<double> *bornForces,
     double *out_HvP_primals,
     double *out_HvP_tangents,
-    double *out_MvP_primals,
-    double *out_MvP_tangents) {
+    double *out_grad_charge_primals,
+    double *out_grad_charge_tangents) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
@@ -221,8 +224,8 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
         ci[d].real = atom_i_idx < N ? coords[atom_i_idx*3+d] : 0;
         ci[d].imag = atom_i_idx < N ? coords_tangents[atom_i_idx*3+d] : 0;
     }
-    int charge_param_idx_i = atom_i_idx < N ? charge_param_idxs[atom_i_idx] : 0;
-    RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
+    int charge_param_idx_i = atom_i_idx < N ? atom_i_idx : 0;
+    RealType qi = atom_i_idx < N ? charge_params[charge_param_idx_i] : 0;
     Surreal<RealType> born_radii_i;
     born_radii_i.real = atom_i_idx < N ? born_radii[atom_i_idx].real : 0;
     born_radii_i.imag = atom_i_idx < N ? born_radii[atom_i_idx].imag : 0;
@@ -247,8 +250,8 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
         cj[d].real = atom_j_idx < N ? coords[atom_j_idx*3+d] : 0;
         cj[d].imag = atom_j_idx < N ? coords_tangents[atom_j_idx*3+d] : 0;
     }
-    int charge_param_idx_j = atom_j_idx < N ? charge_param_idxs[atom_j_idx] : 0;
-    RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
+    int charge_param_idx_j = atom_j_idx < N ? atom_j_idx : 0;
+    RealType qj = atom_j_idx < N ? charge_params[charge_param_idx_j] : 0;
     Surreal<RealType> born_radii_j;
     born_radii_j.real = atom_j_idx < N ? born_radii[atom_j_idx].real : 0;
     born_radii_j.imag = atom_j_idx < N ? born_radii[atom_j_idx].imag : 0;
@@ -336,22 +339,22 @@ void __global__ k_compute_born_first_loop_gpu_jvp(
 
     if(atom_i_idx < N) {
         atomicAddOffsetSplit(bornForces, atom_i_idx, born_force_i_accum); // add both real and imaginary part
-        atomicAdd(out_MvP_primals + charge_param_idx_i, dE_dqi_accum.real); 
-        atomicAdd(out_MvP_tangents + charge_param_idx_i, dE_dqi_accum.imag); 
+        atomicAdd(out_grad_charge_primals + charge_param_idx_i, dE_dqi_accum.real); 
+        atomicAdd(out_grad_charge_tangents + charge_param_idx_i, dE_dqi_accum.imag); 
     }
 
     if(atom_j_idx < N) {
         atomicAddOffsetSplit(bornForces, atom_j_idx, born_force_j_accum); // add both real and imaginary
-        atomicAdd(out_MvP_primals + charge_param_idx_j, dE_dqj_accum.real);
-        atomicAdd(out_MvP_tangents + charge_param_idx_j, dE_dqj_accum.imag);
+        atomicAdd(out_grad_charge_primals + charge_param_idx_j, dE_dqj_accum.real);
+        atomicAdd(out_grad_charge_tangents + charge_param_idx_j, dE_dqj_accum.imag);
     }
 
 }
 
 __global__ void k_reduce_born_radii_jvp(
     const int N,
-    const double *params,
-    const int* atomic_radii_idxs,
+    const double *gb_params,
+    // const int* atomic_radii_idxs,
     const double dielectric_offset,
     const double alpha_obc,
     const double beta_obc,
@@ -366,8 +369,8 @@ __global__ void k_reduce_born_radii_jvp(
         return;
     }
 
-    int radii_param_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
-    double radiusI = atom_i_idx < N ? params[radii_param_idx_i] : 0;
+    int radii_param_idx_i = atom_i_idx < N ? atom_i_idx*2+0 : 0;
+    double radiusI = atom_i_idx < N ? gb_params[radii_param_idx_i] : 0;
     double offsetRadiusI = radiusI - dielectric_offset;
 
     Surreal<double> sum = born_radii[atom_i_idx];
@@ -391,26 +394,29 @@ __global__ void k_reduce_born_radii_jvp(
 // this is entirely done in double precision
 __global__ void k_reduce_born_forces_jvp(
     const int N,
-    const double* params,
-    const int* atomic_radii_idxs,
+    const double* gb_params,
+    // const int* atomic_radii_idxs,
     const Surreal<double>* born_radii,
     const Surreal<double>* obc_chain,
     const Surreal<double>* obc_chain_ri,
     const double surface_tension, // surface area factor
     const double probe_radius,
     Surreal<double>* bornForces, // dU/Ri
-    double* out_MvP_primals,
-    double* out_MvP_tangents
+    double *out_grad_gb_primals,
+    double *out_grad_gb_tangents
+    // double* out_MvP_primals,
+    // double* out_MvP_tangents
 ) {
 
     int atomI =  blockIdx.x*32 + threadIdx.x;
     if(atomI >= N) {
         return;
     }
-
+    
+    int atomic_radii_idx_i = atomI*2 + 0;
     Surreal<double> radii_derivs(0, 0);
     if (born_radii[atomI] > 0.0) {
-        double atomic_radii = params[atomic_radii_idxs[atomI]];
+        double atomic_radii = gb_params[atomic_radii_idx_i];
         double r            = atomic_radii + probe_radius;
 
         Surreal<double> ar = atomic_radii/born_radii[atomI];
@@ -426,8 +432,8 @@ __global__ void k_reduce_born_forces_jvp(
         radii_derivs += 2*pow(atomic_radii, 5)*surface_tension*(probe_radius + atomic_radii)*(3*probe_radius + 4*atomic_radii)/br6;
     }
     radii_derivs += bornForces[atomI] * obc_chain_ri[atomI];
-    atomicAdd(out_MvP_primals + atomic_radii_idxs[atomI], radii_derivs.real);
-    atomicAdd(out_MvP_tangents + atomic_radii_idxs[atomI], radii_derivs.imag);
+    atomicAdd(out_grad_gb_primals + atomic_radii_idx_i, radii_derivs.real);
+    atomicAdd(out_grad_gb_tangents + atomic_radii_idx_i, radii_derivs.imag);
     bornForces[atomI] *= obc_chain[atomI];
 
 }
@@ -438,13 +444,14 @@ __global__ void k_compute_born_energy_and_forces_jvp(
     const int N,
     const double* coords,
     const double* coords_tangents,
-    const double* params,
+    // const double* params,
     const double lambda_primal,
     const double lambda_tangent,
     const int* lambda_plane_idxs,
     const int* lambda_offset_idxs,
-    const int* atomic_radii_idxs,
-    const int* scale_factor_idxs,
+    const double *gb_params,
+    // const int* atomic_radii_idxs,
+    // const int* scale_factor_idxs,
     const Surreal<double>* born_radii,
     const Surreal<double>* obc_chain,
     const Surreal<double>* obc_chain_ri,
@@ -493,8 +500,8 @@ __global__ void k_compute_born_energy_and_forces_jvp(
         ci[d].imag = atom_i_idx < N ? coords_tangents[atom_i_idx*D+d] : 0;
     }
 
-    int atomic_radii_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
-    RealType radiusI = atom_i_idx < N ? params[atomic_radii_idx_i] : 0;
+    int atomic_radii_idx_i = atom_i_idx < N ? atom_i_idx*2+0 : 0;
+    RealType radiusI = atom_i_idx < N ? gb_params[atomic_radii_idx_i] : 0;
     Surreal<RealType> born_force_i;
     born_force_i.real = atom_i_idx < N ? bornForces[atom_i_idx].real : 0;
     born_force_i.imag = atom_i_idx < N ? bornForces[atom_i_idx].imag : 0;
@@ -521,11 +528,11 @@ __global__ void k_compute_born_energy_and_forces_jvp(
         cj[d].real = atom_j_idx < N ? coords[atom_j_idx*D+d] : 0;
         cj[d].imag = atom_j_idx < N ? coords_tangents[atom_j_idx*D+d] : 0;
     }
-    int atomic_radii_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
-    RealType radiusJ = atom_j_idx < N ? params[atomic_radii_idx_j] : 0;
+    int atomic_radii_idx_j = atom_j_idx < N ? atom_j_idx*2+0 : 0;
+    RealType radiusJ = atom_j_idx < N ? gb_params[atomic_radii_idx_j] : 0;
 
-    int scale_factor_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
-    RealType scaleFactorJ = atom_j_idx < N ? params[scale_factor_idx_j] : 0;
+    int scale_factor_idx_j = atom_j_idx < N ? atom_j_idx*2+1 : 0;
+    RealType scaleFactorJ = atom_j_idx < N ? gb_params[scale_factor_idx_j] : 0;
     Surreal<RealType> born_radii_j;
     born_radii_j.real = atom_j_idx < N ? born_radii[atom_j_idx].real : 0;
     born_radii_j.imag = atom_j_idx < N ? born_radii[atom_j_idx].imag : 0;

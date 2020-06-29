@@ -16,7 +16,6 @@ from timemachine.lib import custom_ops
 from timemachine.potentials import alchemy
 from timemachine.lib import ops, custom_ops
 
-
 np.set_printoptions(linewidth=500)
 
 class TestNonbonded(GradientTest):
@@ -76,16 +75,11 @@ class TestNonbonded(GradientTest):
                 dtype=np.int32
             )
 
-            # print("lpi", lambda_plane_idxs)
-            # print("loi", lambda_offset_idxs)
-
-            # TEMP MOVE
             x_tangent = np.random.randn(*x_primal.shape)
             lamb_tangent = np.random.rand()
 
+            for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
 
-            # for precision, rtol in [(np.float64, 1e-9), (np.float32, 1e-4)]:
-            for precision, rtol in [(np.float32, 5e-5)]:
                 for cutoff in [10000.0]:
                     # E = 0 # DEBUG!
                     (charge_params, lj_params), ref_nb, test_force_ctor = prepare_nonbonded_system(
@@ -134,14 +128,13 @@ class TestNonbonded(GradientTest):
                         test_du_dcharge_tangents = test_force.get_du_dcharge_tangents()
                         np.testing.assert_almost_equal(ref_du_dcharge_tangents, test_du_dcharge_tangents, rtol)
 
-                        # ref_du_dlj_primals = ref_primals[3]
-                        # test_du_dlj_primals = test_force.get_du_dlj_primals()
-                        # np.testing.assert_almost_equal(ref_du_dlj_primals, test_du_dlj_primals, rtol)
+                        ref_du_dlj_primals = ref_primals[3]
+                        test_du_dlj_primals = test_force.get_du_dlj_primals()
+                        np.testing.assert_almost_equal(ref_du_dlj_primals, test_du_dlj_primals, rtol)
 
-                        # ref_du_dlj_tangents = ref_tangents[3]
-                        # test_du_dlj_tangents = test_force.get_du_dlj_tangents()
-                        # print(ref_du_dlj_tangents, test_du_dlj_tangents)
-                        # np.testing.assert_almost_equal(ref_du_dlj_tangents, test_du_dlj_tangents, rtol)
+                        ref_du_dlj_tangents = ref_tangents[3]
+                        test_du_dlj_tangents = test_force.get_du_dlj_tangents()
+                        np.testing.assert_almost_equal(ref_du_dlj_tangents, test_du_dlj_tangents, rtol)
 
 
 if __name__ == "__main__":
