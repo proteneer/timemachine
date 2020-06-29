@@ -120,7 +120,7 @@ void __global__ k_harmonic_angle_inference(
     const double *coords,  // [n, 3]
     const double *params,  // [p,]
     const int *angle_idxs,    // [b, 3]
-    const int *param_idxs,   // [b, 2]
+    // const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords,
     double *out_energy
 ) {
@@ -160,8 +160,8 @@ void __global__ k_harmonic_angle_inference(
     RealType n3ij = nij*nij*nij;
     RealType n3jk = njk*njk*njk;
 
-    int ka_idx = param_idxs[a_idx*2+0];
-    int a0_idx = param_idxs[a_idx*2+1];
+    int ka_idx = a_idx*2+0;
+    int a0_idx = a_idx*2+1;
 
     RealType ka = params[ka_idx];
     RealType a0 = params[a0_idx];
@@ -191,7 +191,7 @@ void __global__ k_harmonic_angle_jvp(
     const double *coords_tangent,  // [n, 3]
     const double *params,  // [p,]
     const int *angle_idxs,    // [b, 3]
-    const int *param_idxs,   // [b, 2]
+    // const int *param_idxs,   // [b, 2]
     double *grad_coords_primals,
     double *grad_coords_tangents,
     double *grad_params_primals,
@@ -240,8 +240,8 @@ void __global__ k_harmonic_angle_jvp(
     Surreal<RealType> n3ij = nij*nij*nij;
     Surreal<RealType> n3jk = njk*njk*njk;
 
-    int ka_idx = param_idxs[a_idx*2+0];
-    int a0_idx = param_idxs[a_idx*2+1];
+    int ka_idx = a_idx*2+0;
+    int a0_idx = a_idx*2+1;
 
     RealType ka = params[ka_idx];
     RealType a0 = params[a0_idx];

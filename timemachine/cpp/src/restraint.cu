@@ -17,11 +17,11 @@ Restraint<RealType>::Restraint(
 
 
     if(bond_idxs.size() % 2 != 0) {
-        throw std::runtime_error("bond_idxs.size() must be exactly 2*k");
+        throw std::runtime_error("bond_idxs.size() must be exactly 2*B");
     }
 
     if(params.size() % 3 != 0) {
-        throw std::runtime_error("params.size() must be exactly 3*k");
+        throw std::runtime_error("params.size() must be exactly 3*B");
     }
     
     if(params.size()/3 != B_) {

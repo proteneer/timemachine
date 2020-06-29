@@ -36,6 +36,7 @@ public:
 
 
     void get_du_dp_primals(double *buf);
+
     void get_du_dp_tangents(double *buf);
 
     virtual void execute_lambda_inference_device(

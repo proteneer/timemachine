@@ -6,7 +6,7 @@
 // #include "optimizer.hpp"
 // #include "langevin.hpp"
 #include "harmonic_bond.hpp"
-// #include "harmonic_angle.hpp"
+#include "harmonic_angle.hpp"
 #include "restraint.hpp"
 // #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
@@ -372,34 +372,46 @@ void declare_restraint(py::module &m, const char *typestr) {
 }
 
 
-// template <typename RealType>
-// void declare_harmonic_angle(py::module &m, const char *typestr) {
+template <typename RealType>
+void declare_harmonic_angle(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::HarmonicAngle<RealType>;
-//     std::string pyclass_name = std::string("HarmonicAngle_") + typestr;
-//     py::class_<Class, timemachine::Gradient>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const py::array_t<int, py::array::c_style> &angle_idxs,
-//         const py::array_t<int, py::array::c_style> &param_idxs
-//     ){
-//         std::vector<int> vec_angle_idxs(angle_idxs.size());
-//         std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size()*sizeof(int));
-//         std::vector<int> vec_param_idxs(param_idxs.size());
-//         std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
+    using Class = timemachine::HarmonicAngle<RealType>;
+    std::string pyclass_name = std::string("HarmonicAngle_") + typestr;
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &angle_idxs,
+        const py::array_t<double, py::array::c_style> &params_i
+    ){
+        std::vector<int> vec_angle_idxs(angle_idxs.size());
+        std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size()*sizeof(int));
+        std::vector<double> params(params_i.size());
+        std::memcpy(params.data(), params_i.data(), params.size()*sizeof(double));
 
-//         return new timemachine::HarmonicAngle<RealType>(
-//             vec_angle_idxs,
-//             vec_param_idxs
-//         );
-//     }
-//     ));
+        return new timemachine::HarmonicAngle<RealType>(
+            vec_angle_idxs,
+            params
+        );
+    }
+    ))
+    .def("get_du_dp_primals", [](timemachine::HarmonicAngle<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+        const int A = grad.num_angles();
+        py::array_t<double, py::array::c_style> buffer({A, 2});
+        grad.get_du_dp_primals(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_du_dp_tangents", [](timemachine::HarmonicAngle<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+        const int A = grad.num_angles();
+        py::array_t<double, py::array::c_style> buffer({A, 2});
+        grad.get_du_dp_tangents(buffer.mutable_data());
+        return buffer;
+    });;
 
-// }
+}
 
 
 // template <typename RealType>
@@ -613,8 +625,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_harmonic_bond<double>(m, "f64");
     declare_harmonic_bond<float>(m, "f32");
 
-    // declare_harmonic_angle<double>(m, "f64");
-    // declare_harmonic_angle<float>(m, "f32");
+    declare_harmonic_angle<double>(m, "f64");
+    declare_harmonic_angle<float>(m, "f32");
 
     // declare_periodic_torsion<double>(m, "f64");
     // declare_periodic_torsion<float>(m, "f32");

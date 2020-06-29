@@ -11,7 +11,7 @@
 // since we need to do a full O(N^2) computing and we don't need to broadcast the forces,
 // this should just be extremely efficient already
 
-#define RADII_EXP 4
+// #define RADII_EXP 4, used for switching function shenanigans, disabled for now
 
 
 // nope, still need to parallelize out

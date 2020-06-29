@@ -85,7 +85,7 @@ def harmonic_bond(conf, lamb, params, box, bond_idxs):
     return energy
 
 
-def harmonic_angle(conf, lamb, params, box, angle_idxs, param_idxs, cos_angles=True):
+def harmonic_angle(conf, lamb, params, box, angle_idxs, cos_angles=True):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -118,8 +118,8 @@ def harmonic_angle(conf, lamb, params, box, angle_idxs, param_idxs, cos_angles=T
     cj = conf[angle_idxs[:, 1]]
     ck = conf[angle_idxs[:, 2]]
 
-    kas = params[param_idxs[:, 0]]
-    a0s = params[param_idxs[:, 1]]
+    kas = params[:, 0]
+    a0s = params[:, 1]
 
     vij = delta_r(ci, cj, box)
     vjk = delta_r(ck, cj, box)

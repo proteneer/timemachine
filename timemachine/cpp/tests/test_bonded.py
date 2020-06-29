@@ -89,19 +89,11 @@ class TestBonded(GradientTest):
                 np.testing.assert_almost_equal(ref_du_dp_tangents, test_du_dp_tangents, rtol)
 
 
-    def test_bonded(self):
+    def test_harmonic_bond(self):
         np.random.seed(125)
 
         N = 64
         B = 35
-        A = 36
-        T = 37
-
-        # N = 4
-        # B = 6
-        # A = 1
-        # T = 1
-
         D = 3
 
         x = self.get_random_coords(N, D)
@@ -127,7 +119,7 @@ class TestBonded(GradientTest):
             harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs)
             grad_fn = jax.grad(harmonic_bond_fn, argnums=(0, 1, 2))
 
-            harmonic_bond_fn_params = functools.partial(
+            harmonic_bond_fn_parameterized = functools.partial(
                 harmonic_bond_fn,
                 params=bond_params
             )
@@ -140,7 +132,7 @@ class TestBonded(GradientTest):
                 lamb,
                 x_tangent,
                 lamb_tangent,
-                harmonic_bond_fn_params,
+                harmonic_bond_fn_parameterized,
                 custom_bonded,
                 precision,
                 rtol
@@ -159,7 +151,70 @@ class TestBonded(GradientTest):
             test_du_dp_tangents = custom_bonded.get_du_dp_tangents()
             np.testing.assert_almost_equal(ref_du_dp_tangents, test_du_dp_tangents, rtol)
 
-            # compre du_dps
+
+    def test_harmonic_angle(self):
+        np.random.seed(125)
+
+        N = 64
+        A = 25
+        D = 3
+
+        x = self.get_random_coords(N, D)
+
+        atom_idxs = np.arange(N)
+        angle_params = np.random.rand(A, 2).astype(np.float64)
+        angle_idxs = []
+        for _ in range(A):
+            angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
+        angle_idxs = np.array(angle_idxs, dtype=np.int32)
+
+        lamb = 0.0
+
+        for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
+
+            custom_angle = ops.HarmonicAngle(
+                angle_idxs,
+                angle_params,
+                precision=precision
+            )
+
+            # test the parameter derivatives for correctness.
+            harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs)
+            grad_fn = jax.grad(harmonic_angle_fn, argnums=(0, 1, 2))
+
+            harmonic_angle_fn_parameterized = functools.partial(
+                harmonic_angle_fn,
+                params=angle_params
+            )
+
+            x_tangent = np.random.randn(*x.shape)
+            lamb_tangent = np.random.rand()
+
+            self.compare_forces(
+                x,
+                lamb,
+                x_tangent,
+                lamb_tangent,
+                harmonic_angle_fn_parameterized,
+                custom_angle,
+                precision,
+                rtol
+            )
+
+            primals = (x, lamb, angle_params)
+            tangents = (x_tangent, lamb_tangent, np.zeros_like(angle_params))
+
+            ref_primals, ref_tangents = jax.jvp(grad_fn, primals, tangents)
+
+            ref_du_dp_primals = ref_primals[2]
+            test_du_dp_primals = custom_angle.get_du_dp_primals()
+            np.testing.assert_almost_equal(ref_du_dp_primals, test_du_dp_primals, rtol)
+
+            ref_du_dp_tangents = ref_tangents[2]
+            test_du_dp_tangents = custom_angle.get_du_dp_tangents()
+            np.testing.assert_almost_equal(ref_du_dp_tangents, test_du_dp_tangents, rtol)
+
+
 
     # def test_alchemical_bonded(self):
     #     np.random.seed(125)
