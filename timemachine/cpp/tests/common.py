@@ -143,12 +143,7 @@ def prepare_nonbonded_system(
     eps_params = np.random.rand(N)
     lj_params = np.stack([sig_params, eps_params], axis=1)
 
-    # lj_params = np.random.rand(N, 2)/p_scale # we want these to be pretty small for numerical stability
-    # lj_params[:, 1] = 0
-
     atom_idxs = np.arange(N)
-    # exclusion_idxs = []
-    # for _ in range(E):
     exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
     exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
 

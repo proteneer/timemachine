@@ -243,40 +243,24 @@ class TestContext(unittest.TestCase):
             precision
         )
 
+        E = 2
 
-        # instantiate the restraints
-        # test_bond = test_bond(bond_params)
-        # test_restr = test_restr(restr_params)
+        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+
+        (charge_params, lj_params), ref_nb_fn, test_nb_ctor = prepare_nonbonded_system(
+            x0,
+            E,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            p_scale=10.0,
+            cutoff=1000.0,
+            precision=precision       
+        )
+
+        test_nb = test_nb_ctor()
 
         masses = np.random.rand(N)
-
-        # # return x0, bond_params, masses, ref_potentials, test_potentials
-
-        # # N = 4
-
-        # # x0, params, masses, ref_tuples, test_tuples = self.setup_system(N)
-
-        # ref_alchemical_fns = []
-        # for ref_a, ref_b in ref_tuples:
-        #     ref_alchemical_fns.append(jax.partial(alchemy.linear_rescale, fn0=ref_a, fn1=ref_b))
-
-        # def ref_total_nrg_fn(*args):
-        #     nrgs = []
-        #     for fn in ref_alchemical_fns:
-        #         nrgs.append(fn(*args))
-        #     return jnp.sum(nrgs)
-
-
-        # test_alchemical_fns = []
-
-        # for test_a, test_b in test_tuples:
-
-        #     test_alchemical_fns.append(ops.AlchemicalGradient(
-        #         N,
-        #         len(params),
-        #         test_a,
-        #         test_b
-        #     ))
 
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
         N = len(masses)
@@ -296,14 +280,21 @@ class TestContext(unittest.TestCase):
             du_dls = np.sum(du_dls, axis=0)
             return jnp.sum(du_dls*du_dls)/du_dls.shape[0]            
 
-        def integrate_once_through(x_t, v_t, bond_params, restr_params):
+        def integrate_once_through(
+            x_t,
+            v_t,
+            bond_params,
+            restr_params,
+            charge_params,
+            lj_params):
 
             ref_bond_impl = functools.partial(ref_bond, params=bond_params)
             ref_restr_impl = functools.partial(ref_restr, params=restr_params)
+            ref_nb_impl = functools.partial(ref_nb_fn, charge_params=charge_params, lj_params=lj_params)
 
             def ref_total_nrg_fn(*args):
                 nrgs = []
-                for fn in [ref_bond_impl, ref_restr_impl]:
+                for fn in [ref_bond_impl, ref_restr_impl, ref_nb_impl]:
                     nrgs.append(fn(*args))
                 return jnp.sum(nrgs)
 
@@ -325,13 +316,27 @@ class TestContext(unittest.TestCase):
             return loss_fn(all_du_dls)
 
         # when we have multiple parameters, we need to set this up correctly
-        ref_loss = integrate_once_through(x0, v0, bond_params, restr_params)
+        ref_loss = integrate_once_through(
+            x0,
+            v0,
+            bond_params,
+            restr_params,
+            charge_params,
+            lj_params
+        )
 
         grad_fn = jax.grad(integrate_once_through, argnums=(2, 3))
-        ref_dl_dp_bond, ref_dl_dp_restr = grad_fn(x0, v0, bond_params, restr_params)
+        ref_dl_dp_bond, ref_dl_dp_restr = grad_fn(
+            x0,
+            v0,
+            bond_params,
+            restr_params,
+            charge_params,
+            lj_params
+        )
 
         stepper = custom_ops.AlchemicalStepper_f64(
-            [test_bond, test_restr],
+            [test_bond, test_restr, test_nb],
             lambda_schedule
         )
 

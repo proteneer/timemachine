@@ -61,19 +61,8 @@ class TestNonbonded(GradientTest):
             N = x_primal.shape[0]
             E = N//5
 
-            lambda_plane_idxs = np.random.randint(
-                low=0,
-                high=2,
-                size=(N),
-                dtype=np.int32
-            )
-
-            lambda_offset_idxs = np.random.randint(
-                low=0,
-                high=2,
-                size=(N),
-                dtype=np.int32
-            )
+            lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+            lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
             x_tangent = np.random.randn(*x_primal.shape)
             lamb_tangent = np.random.rand()
