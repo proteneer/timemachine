@@ -303,7 +303,7 @@ void __global__ k_periodic_torsion_inference(
     const double *coords,  // [n, 3]
     const double *params,  // [p,]
     const int *torsion_idxs,    // [b, 4]
-    const int *param_idxs,   // [b, 2]
+    // const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords,
     double *energy
 ) {
@@ -375,9 +375,9 @@ void __global__ k_periodic_torsion_inference(
     RealType x = dot_product(n1, n2);
     RealType angle = atan2(y, x);
 
-    int kt_idx = param_idxs[t_idx*3+0];
-    int phase_idx = param_idxs[t_idx*3+1];
-    int period_idx = param_idxs[t_idx*3+2];
+    int kt_idx = t_idx*3+0;
+    int phase_idx = t_idx*3+1;
+    int period_idx = t_idx*3+2;
 
     RealType kt = params[kt_idx];
     RealType phase = params[phase_idx];
@@ -404,7 +404,7 @@ void __global__ k_periodic_torsion_jvp(
     const double *coords_tangent, 
     const double *params,  // [p,]
     const int *torsion_idxs,    // [b, 4]
-    const int *param_idxs,   // [b, 2]
+    // const int *param_idxs,   // [b, 2]
     double *grad_coords_primals,
     double *grad_coords_tangents,
     double *grad_params_primals,
@@ -478,9 +478,9 @@ void __global__ k_periodic_torsion_jvp(
     Surreal<RealType> x = dot_product(n1, n2);
     Surreal<RealType> angle = atan2(y, x);
 
-    int kt_idx = param_idxs[t_idx*3+0];
-    int phase_idx = param_idxs[t_idx*3+1];
-    int period_idx = param_idxs[t_idx*3+2];
+    int kt_idx = t_idx*3+0;
+    int phase_idx = t_idx*3+1;
+    int period_idx = t_idx*3+2;
 
     RealType kt = params[kt_idx];
     RealType phase = params[phase_idx];

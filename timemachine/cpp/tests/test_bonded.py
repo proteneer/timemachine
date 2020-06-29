@@ -13,8 +13,8 @@ from common import prepare_bonded_system
 from timemachine.lib import ops
 from timemachine.potentials import alchemy, bonded
 
-class TestBonded(GradientTest):
 
+class TestBonded(GradientTest):
 
     def test_restraint(self):
 
@@ -215,81 +215,66 @@ class TestBonded(GradientTest):
             np.testing.assert_almost_equal(ref_du_dp_tangents, test_du_dp_tangents, rtol)
 
 
+    def test_periodic_torsion(self):
+        np.random.seed(125)
 
-    # def test_alchemical_bonded(self):
-    #     np.random.seed(125)
+        N = 64
+        T = 25
+        D = 3
 
-    #     P_bonds = 4
-    #     P_angles = 6
-    #     P_torsions = 13
- 
-    #     N = 64
-    #     B = 35
-    #     A = 36
-    #     T = 37
+        x = self.get_random_coords(N, D)
 
-    #     # N = 4
-    #     # B = 6
-    #     # A = 1
-    #     # T = 1
+        atom_idxs = np.arange(N)
+        torsion_params = np.random.rand(T, 3).astype(np.float64)
+        torsion_idxs = []
+        for _ in range(T):
+            torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
 
-    #     D = 3
+        torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
 
-    #     x = self.get_random_coords(N, D)
+        lamb = 0.0
 
-    #     # for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
+        for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
 
-    #     for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
+            custom_torsion = ops.PeriodicTorsion(
+                torsion_idxs,
+                torsion_params,
+                precision=precision
+            )
 
+            # test the parameter derivatives for correctness.
+            periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs)
+            grad_fn = jax.grad(periodic_torsion_fn, argnums=(0, 1, 2))
 
-    #         params, ref_bonds0, custom_bonds0 = prepare_bonded_system(
-    #             x,
-    #             P_bonds,
-    #             P_angles,
-    #             P_torsions,
-    #             B,
-    #             A,
-    #             T,
-    #             precision
-    #         )
+            periodic_torsion_fn_parameterized = functools.partial(
+                periodic_torsion_fn,
+                params=torsion_params
+            )
 
-    #         params, ref_bonds1, custom_bonds1 = prepare_bonded_system(
-    #             x,
-    #             P_bonds,
-    #             P_angles,
-    #             P_torsions,
-    #             B,
-    #             A,
-    #             T,
-    #             precision,
-    #             params
-    #         )
+            x_tangent = np.random.randn(*x.shape)
+            lamb_tangent = np.random.rand()
 
-    #         terms = len(ref_bonds0)
+            self.compare_forces(
+                x,
+                lamb,
+                x_tangent,
+                lamb_tangent,
+                periodic_torsion_fn_parameterized,
+                custom_torsion,
+                precision,
+                rtol
+            )
 
-    #         for idx in range(terms):
-    #             ref_fn = functools.partial(
-    #                 alchemy.linear_rescale,
-    #                 fn0 = ref_bonds0[idx],
-    #                 fn1 = ref_bonds1[idx]
-    #             )
+            primals = (x, lamb, torsion_params)
+            tangents = (x_tangent, lamb_tangent, np.zeros_like(torsion_params))
 
-    #             test_fn = ops.AlchemicalGradient(
-    #                 N,
-    #                 len(params),
-    #                 custom_bonds0[idx],
-    #                 custom_bonds1[idx]
-    #             )
+            ref_primals, ref_tangents = jax.jvp(grad_fn, primals, tangents)
 
-    #             for lamb in [0.0, 0.4, 0.5, 1.0]:
-    #                 # print("LAMBDA", lamb, "EXPONENT", exponent)
-    #                 # for r, t in zip(ref_bonds, custom_bonds):
-    #                 self.compare_forces(
-    #                     x,
-    #                     params,
-    #                     lamb,
-    #                     ref_fn,
-    #                     test_fn,
-    #                     precision,
-    #                     rtol
-    #                 )
+            ref_du_dp_primals = ref_primals[2]
+            test_du_dp_primals = custom_torsion.get_du_dp_primals()
+            np.testing.assert_almost_equal(ref_du_dp_primals, test_du_dp_primals, rtol)
+
+            ref_du_dp_tangents = ref_tangents[2]
+            test_du_dp_tangents = custom_torsion.get_du_dp_tangents()
+            np.testing.assert_almost_equal(ref_du_dp_tangents, test_du_dp_tangents, rtol)
+

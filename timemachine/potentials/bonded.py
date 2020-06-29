@@ -189,7 +189,7 @@ def signed_torsion_angle(ci, cj, ck, cl):
     return np.arctan2(y, x)
 
 
-def periodic_torsion(conf, lamb, params, box, torsion_idxs, param_idxs):
+def periodic_torsion(conf, lamb, params, box, torsion_idxs):
     """
     Compute the periodic torsional energy.
 
@@ -219,9 +219,9 @@ def periodic_torsion(conf, lamb, params, box, torsion_idxs, param_idxs):
     ck = conf[torsion_idxs[:, 2]]
     cl = conf[torsion_idxs[:, 3]]
 
-    ks = params[param_idxs[:, 0]]
-    phase = params[param_idxs[:, 1]]
-    period = params[param_idxs[:, 2]]
+    ks = params[:, 0]
+    phase = params[:, 1]
+    period = params[:, 2]
     angle = signed_torsion_angle(ci, cj, ck, cl)
 
     nrg = ks*(1+np.cos(period * angle - phase))

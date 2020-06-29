@@ -8,7 +8,7 @@
 #include "harmonic_bond.hpp"
 #include "harmonic_angle.hpp"
 #include "restraint.hpp"
-// #include "periodic_torsion.hpp"
+#include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
 #include "gbsa.hpp"
 #include "gradient.hpp"
@@ -409,39 +409,51 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
         py::array_t<double, py::array::c_style> buffer({A, 2});
         grad.get_du_dp_tangents(buffer.mutable_data());
         return buffer;
-    });;
+    });
 
 }
 
 
-// template <typename RealType>
-// void declare_periodic_torsion(py::module &m, const char *typestr) {
+template <typename RealType>
+void declare_periodic_torsion(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::PeriodicTorsion<RealType>;
-//     std::string pyclass_name = std::string("PeriodicTorsion_") + typestr;
-//     py::class_<Class, timemachine::Gradient>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const py::array_t<int, py::array::c_style> &torsion_idxs,
-//         const py::array_t<int, py::array::c_style> &param_idxs
-//     ){
-//         std::vector<int> vec_torsion_idxs(torsion_idxs.size());
-//         std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size()*sizeof(int));
-//         std::vector<int> vec_param_idxs(param_idxs.size());
-//         std::memcpy(vec_param_idxs.data(), param_idxs.data(), vec_param_idxs.size()*sizeof(int));
+    using Class = timemachine::PeriodicTorsion<RealType>;
+    std::string pyclass_name = std::string("PeriodicTorsion_") + typestr;
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &torsion_idxs,
+        const py::array_t<double, py::array::c_style> &params
+    ){
+        std::vector<int> vec_torsion_idxs(torsion_idxs.size());
+        std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size()*sizeof(int));
+        std::vector<double> vec_params(params.size());
+        std::memcpy(vec_params.data(), params.data(), vec_params.size()*sizeof(double));
 
-//         return new timemachine::PeriodicTorsion<RealType>(
-//             vec_torsion_idxs,
-//             vec_param_idxs
-//         );
-//     }
-//     ));
+        return new timemachine::PeriodicTorsion<RealType>(
+            vec_torsion_idxs,
+            vec_params
+        );
+    }
+    ))
+    .def("get_du_dp_primals", [](timemachine::PeriodicTorsion<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+        const int T = grad.num_torsions();
+        py::array_t<double, py::array::c_style> buffer({T, 3});
+        grad.get_du_dp_primals(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_du_dp_tangents", [](timemachine::PeriodicTorsion<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+        const int T = grad.num_torsions();
+        py::array_t<double, py::array::c_style> buffer({T, 3});
+        grad.get_du_dp_tangents(buffer.mutable_data());
+        return buffer;
+    });;
 
-// }
+}
 
 
 template <typename RealType>
@@ -628,8 +640,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_harmonic_angle<double>(m, "f64");
     declare_harmonic_angle<float>(m, "f32");
 
-    // declare_periodic_torsion<double>(m, "f64");
-    // declare_periodic_torsion<float>(m, "f32");
+    declare_periodic_torsion<double>(m, "f64");
+    declare_periodic_torsion<float>(m, "f32");
 
     declare_nonbonded<double>(m, "f64");
     declare_nonbonded<float>(m, "f32");

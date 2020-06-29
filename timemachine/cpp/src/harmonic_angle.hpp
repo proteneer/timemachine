@@ -27,6 +27,14 @@ public:
 
     ~HarmonicAngle();
 
+    int num_angles() const {
+        return A_;
+    }
+
+    void get_du_dp_primals(double *buf);
+
+    void get_du_dp_tangents(double *buf);
+
     virtual void execute_lambda_inference_device(
         const int N,
         // const int P,
@@ -38,14 +46,6 @@ public:
         double *d_out_energy_primal,
         cudaStream_t stream
     ) override;
-
-    int num_angles() const {
-        return A_;
-    }
-
-    void get_du_dp_primals(double *buf);
-
-    void get_du_dp_tangents(double *buf);
 
     virtual void execute_lambda_jvp_device(
         const int N,
