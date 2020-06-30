@@ -1,10 +1,10 @@
-import jax
 
 import functools
 import numpy as np
 
-from ff.handlers.utils import match_smirks, sort_tuple
+import jax
 
+from ff.handlers.utils import match_smirks, sort_tuple
 
 def generate_vd_idxs(mol, smirks):
     """

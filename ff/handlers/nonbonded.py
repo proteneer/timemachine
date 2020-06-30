@@ -135,113 +135,14 @@ class NonbondedHandler:
             rdkit molecule, should have hydrogens pre-added
 
         """
-        # if aux_params is not None:
-            # assert len(aux_params.shape) == 1
 
         param_idxs = generate_nonbonded_idxs(mol, self.smirks)
         param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
         return jax.vjp(param_fn, self.params)
 
-        # return combined_params, vjp_fn
-
 SimpleChargeHandler = NonbondedHandler
 LennardJonesHandler = NonbondedHandler
 GBHandler = NonbondedHandler
-
-
-# class SimpleChargeHandler(NonbondedHandler):
-
-#     def __init__(self, smirks, params):
-#         """
-#         Parameters
-#         ----------
-#         smirks: list of str (P,)
-#             SMIRKS patterns for each pattern
-
-#         params: np.array, (P,)
-#             normalized charge for each
-
-#         """
-        
-#         assert len(smirks) == params.shape[0]
-
-#         self.smirks = smirks
-#         self.params = params
-
-#     def parameterize(self, mol, aux_params=None):
-#         """
-#         Carry out parameterization of given molecule, with an option to attach additional parameters
-#         via concateation. Typically aux_params are protein charges etc.
-
-#         Parameters
-#         ----------
-#         mol: Chem.ROMol
-#             rdkit molecule, should have hydrogens pre-added
-
-#         aux_params: np.array, (Q, 2)
-#             number of additional parameters to append to final result.
-
-#         """
-#         if aux_params is not None:
-#             assert len(aux_params.shape) == 1
-
-#         param_idxs = self.generate_nonbonded_idxs(mol, self.smirks)
-#         if aux_params is None:
-#             param_fn = functools.partial(self.parameterize_ligand, param_idxs=param_idxs)
-#         else:
-#             param_fn = functools.partial(self.parameterize_complex, param_idxs=param_idxs, aux_params=aux_params)
-
-#         combined_params, vjp_fn = jax.vjp(param_fn, self.params)
-
-#         return combined_params, vjp_fn
-
-
-# class LennardJonesHandler(NonbondedHandler):
-
-#     def __init__(self, smirks, params):
-#         """
-#         Parameters
-#         ----------
-#         smirks: list of str (P,)
-#             SMIRKS patterns for each pattern
-
-#         params: np.array, (P,2)
-#             lennard jones parameters for (sig, eps) corresponding to each pattern
-
-#         """
-#         assert len(smirks) == params.shape[0]
-#         assert params.shape[1] == 2
-
-#         self.smirks = smirks
-#         self.params = params
-
-#     def parameterize(self, mol, aux_params=None):
-#         """
-#         Carry out parameterization of given molecule, with an option to attach additional parameters
-#         via concateation.
-
-#         Parameters
-#         ----------
-#         mol: Chem.ROMol
-#             rdkit molecule, should have hydrogens pre-added
-
-#         aux_params: np.array, (Q, 2)
-#             number of additional parameters to append to final result.
-
-#         """
-#         if aux_params is not None:
-#             assert aux_params.shape[1] == 2
-
-#         param_idxs = self.generate_nonbonded_idxs(mol, self.smirks)
-#         if aux_params is None:
-#             param_fn = functools.partial(self.parameterize_ligand, param_idxs=param_idxs)
-#         else:
-#             param_fn = functools.partial(self.parameterize_complex, param_idxs=param_idxs, aux_params=aux_params)
-
-#         combined_params, vjp_fn = jax.vjp(param_fn, self.params)
-
-#         return combined_params, vjp_fn
-
 
 
 class AM1BCCHandler():
