@@ -280,7 +280,7 @@ class TestBondedHandlers(unittest.TestCase):
         mask = np.argwhere(params > 90)
         assert np.all(adjoints[mask] == 0.0) == True
 
-    def test_gb_handler(self):
+    def test_gbsa_handler(self):
 
         patterns = [
            ['[*:1]', 99., 99.],
@@ -299,7 +299,7 @@ class TestBondedHandlers(unittest.TestCase):
         smirks = [x[0] for x in patterns]
         params = np.array([[x[1], x[2]] for x in patterns])
 
-        gbh = nonbonded.GBHandler(smirks, params)
+        gbh = nonbonded.GBSAHandler(smirks, params)
 
         mol = Chem.MolFromSmiles("C1CNCOC1F")
 

@@ -142,7 +142,7 @@ class NonbondedHandler:
 
 SimpleChargeHandler = NonbondedHandler
 LennardJonesHandler = NonbondedHandler
-GBHandler = NonbondedHandler
+GBSAHandler = NonbondedHandler
 
 
 class AM1BCCHandler():
