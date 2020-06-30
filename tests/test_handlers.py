@@ -257,15 +257,7 @@ class TestBondedHandlers(unittest.TestCase):
 
         mol = Chem.MolFromSmiles("C1CNCOC1F")
 
-        NL = mol.GetNumAtoms()
-        NP = 13
-        aux_es_params = np.random.rand(NP,) + 10
-
-        es_params, es_vjp_fn = sch.parameterize(mol, aux_es_params)
-
-        assert es_params.shape == (NP + NL,)
-
-        np.testing.assert_almost_equal(es_params[NL:], aux_es_params)
+        es_params, es_vjp_fn = sch.parameterize(mol)
 
         ligand_params = np.array([
             0.1, # C
@@ -277,7 +269,7 @@ class TestBondedHandlers(unittest.TestCase):
             1.0  # F
         ])
 
-        np.testing.assert_almost_equal(es_params[:NL], ligand_params)
+        np.testing.assert_almost_equal(es_params, ligand_params)
 
         es_params_adjoints = np.random.randn(*es_params.shape)
 
@@ -311,15 +303,7 @@ class TestBondedHandlers(unittest.TestCase):
 
         mol = Chem.MolFromSmiles("C1CNCOC1F")
 
-        NL = mol.GetNumAtoms()
-        NP = 13
-        aux_gb_params = np.random.rand(NP, 2) + 10
-
-        gb_params, gb_vjp_fn = gbh.parameterize(mol, aux_gb_params)
-
-        assert gb_params.shape == (NP + NL, 2)
-
-        np.testing.assert_almost_equal(gb_params[NL:], aux_gb_params)
+        gb_params, gb_vjp_fn = gbh.parameterize(mol)
 
         ligand_params = np.array([
             [0.1, 0.2], # C
@@ -331,7 +315,7 @@ class TestBondedHandlers(unittest.TestCase):
             [0.7, 0.8]  # F
         ])
 
-        np.testing.assert_almost_equal(gb_params[:NL], ligand_params)
+        np.testing.assert_almost_equal(gb_params, ligand_params)
 
         gb_params_adjoints = np.random.randn(*gb_params.shape)
 
@@ -390,15 +374,8 @@ class TestBondedHandlers(unittest.TestCase):
 
         mol = Chem.MolFromSmiles("C1CNCOC1F")
 
-        NL = mol.GetNumAtoms()
-        NP = 13
-        aux_lj_params = np.random.rand(NP, 2) + 10
+        lj_params, lj_vjp_fn = ljh.parameterize(mol)
 
-        lj_params, lj_vjp_fn = ljh.parameterize(mol, aux_lj_params)
-
-        assert lj_params.shape == (NP + NL, 2)
-
-        np.testing.assert_almost_equal(lj_params[NL:], aux_lj_params)
 
         ligand_params = np.array([
             [0.1, 0.2], # C
@@ -410,7 +387,7 @@ class TestBondedHandlers(unittest.TestCase):
             [1.0, 1.1]  # F
         ])
 
-        np.testing.assert_almost_equal(lj_params[:NL], ligand_params)
+        np.testing.assert_almost_equal(lj_params, ligand_params)
 
         lj_params_adjoints = np.random.randn(*lj_params.shape)
 

@@ -75,44 +75,6 @@ def generate_exclusion_idxs(mol, scale12, scale13, scale14):
     return np.array(idxs, dtype=np.int32), np.array(scales, dtype=np.float64)
 
 
-
-
-
-# class NonbondedHandler():
-
-#     @staticmethod
-#     def generate_nonbonded_idxs(mol, smirks):
-#         """
-#         Parameterize Nonbonded indices given a mol.
-
-#         Parameters
-#         ----------
-#         smirks: list of str
-#             SMIRKS patterns for the forcefield type.
-
-#         mol: ROMol
-#             RDKit ROMol object.
-
-#         """
-#         N = mol.GetNumAtoms()
-#         param_idxs = np.zeros(N, dtype=np.int32)
-#         for p_idx, patt in enumerate(smirks):
-#             matches = match_smirks(mol, patt)
-#             for m in matches:
-#                 param_idxs[m[0]] = p_idx
-
-#         return param_idxs
-
-#     @staticmethod
-#     def parameterize_ligand(params, param_idxs):
-#         return params[param_idxs]
-
-#     @staticmethod
-#     def parameterize_complex(params, param_idxs, aux_params):
-#         mol_sys_params = NonbondedHandler.parameterize_ligand(params, param_idxs)
-#         return jnp.concatenate([mol_sys_params, aux_params])
-
-
 def generate_nonbonded_idxs(mol, smirks):
     """
     Parameterize Nonbonded indices given a mol.
@@ -138,9 +100,9 @@ def generate_nonbonded_idxs(mol, smirks):
 def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
-def parameterize_complex(params, param_idxs, aux_params):
-    mol_sys_params = parameterize_ligand(params, param_idxs)
-    return jnp.concatenate([mol_sys_params, aux_params])
+# def parameterize_complex(params, param_idxs, aux_params):
+#     mol_sys_params = parameterize_ligand(params, param_idxs)
+#     return jnp.concatenate([mol_sys_params, aux_params])
 
 
 class NonbondedHandler:
@@ -162,7 +124,7 @@ class NonbondedHandler:
         self.smirks = smirks
         self.params = params
 
-    def parameterize(self, mol, aux_params=None):
+    def parameterize(self, mol):
         """
         Carry out parameterization of given molecule, with an option to attach additional parameters
         via concateation. Typically aux_params are protein charges etc.
@@ -172,22 +134,15 @@ class NonbondedHandler:
         mol: Chem.ROMol
             rdkit molecule, should have hydrogens pre-added
 
-        aux_params: np.array, (Q, ?)
-            number of additional parameters to append to final result.
-
         """
         # if aux_params is not None:
             # assert len(aux_params.shape) == 1
 
         param_idxs = generate_nonbonded_idxs(mol, self.smirks)
-        if aux_params is None:
-            param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
-        else:
-            param_fn = functools.partial(parameterize_complex, param_idxs=param_idxs, aux_params=aux_params)
+        param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
+        return jax.vjp(param_fn, self.params)
 
-        combined_params, vjp_fn = jax.vjp(param_fn, self.params)
-
-        return combined_params, vjp_fn
+        # return combined_params, vjp_fn
 
 SimpleChargeHandler = NonbondedHandler
 LennardJonesHandler = NonbondedHandler
