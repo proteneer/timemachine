@@ -7,7 +7,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
 
-class TestNonbondedHandlers(unittest.TestCase):
+class TestBondedHandlers(unittest.TestCase):
 
     def test_harmonic_bond(self):
 
@@ -122,6 +122,42 @@ class TestNonbondedHandlers(unittest.TestCase):
 
         # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
         mask = np.argwhere(bond_params > 90)
+        assert np.all(ff_adjoints[mask] == 0.0) == True
+
+    def test_improper_torsion(self):
+
+        patterns = [
+            ['[*:1]~[#6X3:2](~[*:3])~[*:4]', 1.5341333333333333, 3.141592653589793, 2.0],
+            ['[*:1]~[#6X3:2](~[#8X1:3])~[#8:4]', 99., 99., 99.],
+            ['[*:1]~[#7X3$(*~[#15,#16](!-[*])):2](~[*:3])~[*:4]', 99., 99., 99.],
+            ['[*:1]~[#7X3$(*~[#6X3]):2](~[*:3])~[*:4]', 1.3946666666666667, 3.141592653589793, 2.0],
+            ['[*:1]~[#7X3$(*~[#7X2]):2](~[*:3])~[*:4]', 99., 99., 99.],
+            ['[*:1]~[#7X3$(*@1-[*]=,:[*][*]=,:[*]@1):2](~[*:3])~[*:4]', 99., 99., 99.],
+            ['[*:1]~[#6X3:2](=[#7X2,#7X3+1:3])~[#7:4]', 99., 99., 99.]
+        ]
+
+        smirks = [x[0] for x in patterns]
+        params = np.array([[x[1], x[2], x[3]] for x in patterns])
+        imp_handler = bonded.ImproperTorsionHandler(smirks, params)
+
+        mol = Chem.MolFromSmiles("CNC(C)=O") # peptide
+        mol = Chem.AddHs(mol)
+
+        torsion_idxs, (params, vjp_fn) = imp_handler.parameterize(mol)
+
+        assert torsion_idxs.shape[0] == 6 # we expect two sets of impropers, each with 3 components.
+        assert torsion_idxs.shape[1] == 4
+
+        assert params.shape[0] == 6
+        assert params.shape[1] == 3
+
+        param_adjoints = np.random.randn(*params.shape)
+
+        # # test that we can use the adjoints
+        ff_adjoints = vjp_fn(param_adjoints)[0]
+
+        # # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
+        mask = np.argwhere(params > 90)
         assert np.all(ff_adjoints[mask] == 0.0) == True
 
     def test_exclusions(self):

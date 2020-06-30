@@ -31,7 +31,8 @@ class Forcefield():
         ----------
         handle: str or dict
             If str, then the handle is interpret as a path to be opened. If dict,
-            then the handle will be used directly
+            then the handle will be used directly.
+
         """
 
         if isinstance(handle, str):
@@ -71,9 +72,6 @@ class Forcefield():
         # (ytz): temporary useful debug code. remove later
         # print(recursive_replace([0.5, 0.6], (2,3)))
         # print(recursive_replace([[4.0, 2.0], [5.0, 1.0], [4.0, 233.0], [645.0, 1.0]], (11,12)))
-        # print(global_params)
-        # print(global_param_groups)
-        # assert 0
 
         group_map = {
             "Angle": (0,1),
