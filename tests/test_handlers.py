@@ -288,6 +288,61 @@ class TestBondedHandlers(unittest.TestCase):
         mask = np.argwhere(params > 90)
         assert np.all(adjoints[mask] == 0.0) == True
 
+    def test_gb_handler(self):
+
+        patterns = [
+           ['[*:1]', 99., 99.],
+           ['[#1:1]', 99., 99.],
+           ['[#1:1]~[#7]', 99., 99.],
+           ['[#6:1]', 0.1, 0.2],
+           ['[#7:1]', 0.3, 0.4],
+           ['[#8:1]', 0.5, 0.6],
+           ['[#9:1]', 0.7, 0.8],
+           ['[#14:1]', 99., 99.],
+           ['[#15:1]', 99., 99.],
+           ['[#16:1]', 99., 99.],
+           ['[#17:1]', 99., 99.]
+        ]
+
+        smirks = [x[0] for x in patterns]
+        params = np.array([[x[1], x[2]] for x in patterns])
+
+        gbh = nonbonded.GBHandler(smirks, params)
+
+        mol = Chem.MolFromSmiles("C1CNCOC1F")
+
+        NL = mol.GetNumAtoms()
+        NP = 13
+        aux_gb_params = np.random.rand(NP, 2) + 10
+
+        gb_params, gb_vjp_fn = gbh.parameterize(mol, aux_gb_params)
+
+        assert gb_params.shape == (NP + NL, 2)
+
+        np.testing.assert_almost_equal(gb_params[NL:], aux_gb_params)
+
+        ligand_params = np.array([
+            [0.1, 0.2], # C
+            [0.1, 0.2], # C
+            [0.3, 0.4], # N
+            [0.1, 0.2], # C
+            [0.5, 0.6], # O
+            [0.1, 0.2], # C
+            [0.7, 0.8]  # F
+        ])
+
+        np.testing.assert_almost_equal(gb_params[:NL], ligand_params)
+
+        gb_params_adjoints = np.random.randn(*gb_params.shape)
+
+        # test that we can use the adjoints
+        adjoints = gb_vjp_fn(gb_params_adjoints)[0]
+
+        # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
+        mask = np.argwhere(params > 90)
+        assert np.all(adjoints[mask] == 0.0) == True
+
+
     def test_lennard_jones_handler(self):
 
         patterns = [

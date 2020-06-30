@@ -75,39 +75,218 @@ def generate_exclusion_idxs(mol, scale12, scale13, scale14):
     return np.array(idxs, dtype=np.int32), np.array(scales, dtype=np.float64)
 
 
-class NonbondedHandler():
 
-    @staticmethod
-    def generate_nonbonded_idxs(mol, smirks):
+
+
+# class NonbondedHandler():
+
+#     @staticmethod
+#     def generate_nonbonded_idxs(mol, smirks):
+#         """
+#         Parameterize Nonbonded indices given a mol.
+
+#         Parameters
+#         ----------
+#         smirks: list of str
+#             SMIRKS patterns for the forcefield type.
+
+#         mol: ROMol
+#             RDKit ROMol object.
+
+#         """
+#         N = mol.GetNumAtoms()
+#         param_idxs = np.zeros(N, dtype=np.int32)
+#         for p_idx, patt in enumerate(smirks):
+#             matches = match_smirks(mol, patt)
+#             for m in matches:
+#                 param_idxs[m[0]] = p_idx
+
+#         return param_idxs
+
+#     @staticmethod
+#     def parameterize_ligand(params, param_idxs):
+#         return params[param_idxs]
+
+#     @staticmethod
+#     def parameterize_complex(params, param_idxs, aux_params):
+#         mol_sys_params = NonbondedHandler.parameterize_ligand(params, param_idxs)
+#         return jnp.concatenate([mol_sys_params, aux_params])
+
+
+def generate_nonbonded_idxs(mol, smirks):
+    """
+    Parameterize Nonbonded indices given a mol.
+
+    Parameters
+    ----------
+    smirks: list of str
+        SMIRKS patterns for the forcefield type.
+
+    mol: ROMol
+        RDKit ROMol object.
+
+    """
+    N = mol.GetNumAtoms()
+    param_idxs = np.zeros(N, dtype=np.int32)
+    for p_idx, patt in enumerate(smirks):
+        matches = match_smirks(mol, patt)
+        for m in matches:
+            param_idxs[m[0]] = p_idx
+
+    return param_idxs
+
+def parameterize_ligand(params, param_idxs):
+    return params[param_idxs]
+
+def parameterize_complex(params, param_idxs, aux_params):
+    mol_sys_params = parameterize_ligand(params, param_idxs)
+    return jnp.concatenate([mol_sys_params, aux_params])
+
+
+class NonbondedHandler:
+
+    def __init__(self, smirks, params):
         """
-        Parameterize Nonbonded indices given a mol.
+        Parameters
+        ----------
+        smirks: list of str (P,)
+            SMIRKS patterns for each pattern
+
+        params: np.array, (P,)
+            normalized charge for each
+
+        """
+        
+        assert len(smirks) == params.shape[0]
+
+        self.smirks = smirks
+        self.params = params
+
+    def parameterize(self, mol, aux_params=None):
+        """
+        Carry out parameterization of given molecule, with an option to attach additional parameters
+        via concateation. Typically aux_params are protein charges etc.
 
         Parameters
         ----------
-        smirks: list of str
-            SMIRKS patterns for the forcefield type.
+        mol: Chem.ROMol
+            rdkit molecule, should have hydrogens pre-added
 
-        mol: ROMol
-            RDKit ROMol object.
+        aux_params: np.array, (Q, ?)
+            number of additional parameters to append to final result.
 
         """
-        N = mol.GetNumAtoms()
-        param_idxs = np.zeros(N, dtype=np.int32)
-        for p_idx, patt in enumerate(smirks):
-            matches = match_smirks(mol, patt)
-            for m in matches:
-                param_idxs[m[0]] = p_idx
+        # if aux_params is not None:
+            # assert len(aux_params.shape) == 1
 
-        return param_idxs
+        param_idxs = generate_nonbonded_idxs(mol, self.smirks)
+        if aux_params is None:
+            param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
+        else:
+            param_fn = functools.partial(parameterize_complex, param_idxs=param_idxs, aux_params=aux_params)
 
-    @staticmethod
-    def parameterize_ligand(params, param_idxs):
-        return params[param_idxs]
+        combined_params, vjp_fn = jax.vjp(param_fn, self.params)
 
-    @staticmethod
-    def parameterize_complex(params, param_idxs, aux_params):
-        mol_sys_params = NonbondedHandler.parameterize_ligand(params, param_idxs)
-        return jnp.concatenate([mol_sys_params, aux_params])
+        return combined_params, vjp_fn
+
+SimpleChargeHandler = NonbondedHandler
+LennardJonesHandler = NonbondedHandler
+GBHandler = NonbondedHandler
+
+
+# class SimpleChargeHandler(NonbondedHandler):
+
+#     def __init__(self, smirks, params):
+#         """
+#         Parameters
+#         ----------
+#         smirks: list of str (P,)
+#             SMIRKS patterns for each pattern
+
+#         params: np.array, (P,)
+#             normalized charge for each
+
+#         """
+        
+#         assert len(smirks) == params.shape[0]
+
+#         self.smirks = smirks
+#         self.params = params
+
+#     def parameterize(self, mol, aux_params=None):
+#         """
+#         Carry out parameterization of given molecule, with an option to attach additional parameters
+#         via concateation. Typically aux_params are protein charges etc.
+
+#         Parameters
+#         ----------
+#         mol: Chem.ROMol
+#             rdkit molecule, should have hydrogens pre-added
+
+#         aux_params: np.array, (Q, 2)
+#             number of additional parameters to append to final result.
+
+#         """
+#         if aux_params is not None:
+#             assert len(aux_params.shape) == 1
+
+#         param_idxs = self.generate_nonbonded_idxs(mol, self.smirks)
+#         if aux_params is None:
+#             param_fn = functools.partial(self.parameterize_ligand, param_idxs=param_idxs)
+#         else:
+#             param_fn = functools.partial(self.parameterize_complex, param_idxs=param_idxs, aux_params=aux_params)
+
+#         combined_params, vjp_fn = jax.vjp(param_fn, self.params)
+
+#         return combined_params, vjp_fn
+
+
+# class LennardJonesHandler(NonbondedHandler):
+
+#     def __init__(self, smirks, params):
+#         """
+#         Parameters
+#         ----------
+#         smirks: list of str (P,)
+#             SMIRKS patterns for each pattern
+
+#         params: np.array, (P,2)
+#             lennard jones parameters for (sig, eps) corresponding to each pattern
+
+#         """
+#         assert len(smirks) == params.shape[0]
+#         assert params.shape[1] == 2
+
+#         self.smirks = smirks
+#         self.params = params
+
+#     def parameterize(self, mol, aux_params=None):
+#         """
+#         Carry out parameterization of given molecule, with an option to attach additional parameters
+#         via concateation.
+
+#         Parameters
+#         ----------
+#         mol: Chem.ROMol
+#             rdkit molecule, should have hydrogens pre-added
+
+#         aux_params: np.array, (Q, 2)
+#             number of additional parameters to append to final result.
+
+#         """
+#         if aux_params is not None:
+#             assert aux_params.shape[1] == 2
+
+#         param_idxs = self.generate_nonbonded_idxs(mol, self.smirks)
+#         if aux_params is None:
+#             param_fn = functools.partial(self.parameterize_ligand, param_idxs=param_idxs)
+#         else:
+#             param_fn = functools.partial(self.parameterize_complex, param_idxs=param_idxs, aux_params=aux_params)
+
+#         combined_params, vjp_fn = jax.vjp(param_fn, self.params)
+
+#         return combined_params, vjp_fn
+
 
 
 class AM1BCCHandler():
@@ -149,116 +328,4 @@ class AM1BCCHandler():
             return None 
 
         return np.array(charges, dtype=np.float64), vjp_fn
-
-
-class SimpleChargeHandler(NonbondedHandler):
-
-    def __init__(self, smirks, params):
-        """
-        Parameters
-        ----------
-        smirks: list of str (P,)
-            SMIRKS patterns for each pattern
-
-        params: np.array, (P,)
-            normalized charge for each
-
-        """
-        
-        assert len(smirks) == params.shape[0]
-
-        self.smirks = smirks
-        self.params = params
-
-    def parameterize(self, mol, aux_params=None):
-        """
-        Carry out parameterization of given molecule, with an option to attach additional parameters
-        via concateation.
-
-        Parameters
-        ----------
-        mol: Chem.ROMol
-            rdkit molecule, should have hydrogens pre-added
-
-        aux_params: np.array, (Q, 2)
-            number of additional parameters to append to final result.
-
-        """
-        if aux_params is not None:
-            assert len(aux_params.shape) == 1
-
-        param_idxs = self.generate_nonbonded_idxs(mol, self.smirks)
-        if aux_params is None:
-            param_fn = functools.partial(self.parameterize_ligand, param_idxs=param_idxs)
-        else:
-            param_fn = functools.partial(self.parameterize_complex, param_idxs=param_idxs, aux_params=aux_params)
-
-        param_fn(self.params)
-
-        combined_params, vjp_fn = jax.vjp(param_fn, self.params)
-
-        return combined_params, vjp_fn
-
-
-class LennardJonesHandler(NonbondedHandler):
-
-    def __init__(self, smirks, params):
-        """
-        Parameters
-        ----------
-        smirks: list of str (P,)
-            SMIRKS patterns for each pattern
-
-        params: np.array, (P,2)
-            lennard jones parameters for (sig, eps) corresponding to each pattern
-
-        """
-        assert len(smirks) == params.shape[0]
-        assert params.shape[1] == 2
-
-        self.smirks = smirks
-        self.params = params
-
-    def parameterize(self, mol, aux_params=None):
-        """
-        Carry out parameterization of given molecule, with an option to attach additional parameters
-        via concateation.
-
-        Parameters
-        ----------
-        mol: Chem.ROMol
-            rdkit molecule, should have hydrogens pre-added
-
-        aux_params: np.array, (Q, 2)
-            number of additional parameters to append to final result.
-
-        """
-        if aux_params is not None:
-            assert aux_params.shape[1] == 2
-
-        param_idxs = self.generate_nonbonded_idxs(mol, self.smirks)
-        if aux_params is None:
-            param_fn = functools.partial(self.parameterize_ligand, param_idxs=param_idxs)
-        else:
-            param_fn = functools.partial(self.parameterize_complex, param_idxs=param_idxs, aux_params=aux_params)
-
-        combined_params, vjp_fn = jax.vjp(param_fn, self.params)
-
-        return combined_params, vjp_fn
-
-    def serialize(self):
-        # not implemented yet
-        assert 0
-        res = []
-        for s, p in zip(self.smirks, self.params):
-            res.append([s, p[0], p[1]])
-
-        return {'params': res}
-
-
-
-    @classmethod
-    def deseralize(cls, obj):
-        # not implemented yet
-        assert 0
 
