@@ -59,10 +59,19 @@ class ReversibleBondHandler:
 
         return np.array(bond_idxs, dtype=np.int32), (np.array(sys_params, dtype=np.float64), vjp_fn)
 
-# the logic for these are the exact same.
-HarmonicBondHandler = ReversibleBondHandler
-HarmonicAngleHandler = ReversibleBondHandler
-PeriodicTorsionHandler = ReversibleBondHandler
+# we need to subclass to get the names backout
+class HarmonicBondHandler(ReversibleBondHandler):
+    pass
+
+class HarmonicAngleHandler(ReversibleBondHandler):
+    pass
+
+class PeriodicTorsionHandler(ReversibleBondHandler):
+    pass
+
+# HarmonicBondHandler = ReversibleBondHandler
+# HarmonicAngleHandler = ReversibleBondHandler
+# PeriodicTorsionHandler = ReversibleBondHandler
 
 class ImproperTorsionHandler:
 
