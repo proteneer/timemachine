@@ -1,16 +1,11 @@
 import ast
 import io
 import pprint
+import numpy as np
 
 from ff.handlers import bonded, nonbonded
 
 _SUFFIX = "Handler"
-
-# def save(self, handle):
-#     with open(handle, "w") as fh:
-#         pp = pprint.PrettyPrinter(width=500, compact=False, stream=fh)
-#         pp._sorted = lambda x:x
-#         pp.pprint(self.serialize())
 
 def serialize(handler):
     """
@@ -21,15 +16,24 @@ def serialize(handler):
 
     Returns
     -------
-    A python object can be the turned into a string format.
+    str
+        serialized string representation.
 
     """
     key = type(handler).__name__[:-len(_SUFFIX)]
     patterns = []
     for smi, p in zip(handler.smirks, handler.params):
-        patterns.append((smi, *p))
+        if isinstance(p, (list, tuple, np.ndarray)):
+            patterns.append((smi, *p))
+        else:
+            # SimpleCharges only have one parameter
+            patterns.append((smi, p))
 
-    result = {key: {'patterns': patterns}}
+    body = {'patterns': patterns}
+    if handler.props is not None:
+        body['props'] = handler.props
+
+    result = {key: body}
 
     buf = io.StringIO()
     pp = pprint.PrettyPrinter(width=500, compact=False, stream=buf)
@@ -37,7 +41,6 @@ def serialize(handler):
     pp.pprint(result)
 
     return buf.getvalue()
-    # return result
 
 def deserialize(obj):
     """
@@ -51,8 +54,6 @@ def deserialize(obj):
     a handler from either bonded or nonbonded
 
     """
-
-    # if isinstance(handle, str):
     obj_dict = ast.literal_eval(obj)
 
     handlers = []
@@ -79,11 +80,16 @@ def deserialize(obj):
         patterns = v['patterns']
         smirks = []
         params = []
+
         for elems in patterns:
             smirks.append(elems[0])
             params.append(elems[1:])
 
+        params = np.array(params, dtype=np.float64)
+        params = np.squeeze(params) # remove single dimension entries, eg. charge params
 
-        handlers.append(ctor(smirks, params))
+        props = v.get('props')
+
+        handlers.append(ctor(smirks, params, props))
 
     return handlers

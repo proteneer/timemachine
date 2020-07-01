@@ -100,14 +100,10 @@ def generate_nonbonded_idxs(mol, smirks):
 def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
-# def parameterize_complex(params, param_idxs, aux_params):
-#     mol_sys_params = parameterize_ligand(params, param_idxs)
-#     return jnp.concatenate([mol_sys_params, aux_params])
-
 
 class NonbondedHandler:
 
-    def __init__(self, smirks, params):
+    def __init__(self, smirks, params, props):
         """
         Parameters
         ----------
@@ -123,6 +119,7 @@ class NonbondedHandler:
 
         self.smirks = smirks
         self.params = params
+        self.props = props
 
     def parameterize(self, mol):
         """
@@ -140,14 +137,16 @@ class NonbondedHandler:
         param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
         return jax.vjp(param_fn, self.params)
 
-SimpleChargeHandler = NonbondedHandler
-LennardJonesHandler = NonbondedHandler
-GBSAHandler = NonbondedHandler
+class SimpleChargeHandler(NonbondedHandler):
+    pass
 
+class LennardJonesHandler(NonbondedHandler):
+    pass
+
+class GBSAHandler(NonbondedHandler):
+    pass
 
 class AM1BCCHandler():
-
-    # initially we will add bond patterns into this.
 
     def parameterize(self, mol):
         """

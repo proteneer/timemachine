@@ -105,7 +105,8 @@ def test_harmonic_bond():
 
     smirks = [x[0] for x in patterns]
     params = np.array([[x[1], x[2]] for x in patterns])
-    hbh = bonded.HarmonicBondHandler(smirks, params)
+    props = None
+    hbh = bonded.HarmonicBondHandler(smirks, params, None)
 
     obj = serialization.serialize(hbh)
     all_handlers = serialization.deserialize(obj)
@@ -116,277 +117,185 @@ def test_harmonic_bond():
     np.testing.assert_equal(new_hbh.smirks, hbh.smirks)
     np.testing.assert_equal(new_hbh.params, hbh.params)
 
-
-# def test_improper_torsion(self):
-
-#     patterns = [
-#         ['[*:1]~[#6X3:2](~[*:3])~[*:4]', 1.5341333333333333, 3.141592653589793, 2.0],
-#         ['[*:1]~[#6X3:2](~[#8X1:3])~[#8:4]', 99., 99., 99.],
-#         ['[*:1]~[#7X3$(*~[#15,#16](!-[*])):2](~[*:3])~[*:4]', 99., 99., 99.],
-#         ['[*:1]~[#7X3$(*~[#6X3]):2](~[*:3])~[*:4]', 1.3946666666666667, 3.141592653589793, 2.0],
-#         ['[*:1]~[#7X3$(*~[#7X2]):2](~[*:3])~[*:4]', 99., 99., 99.],
-#         ['[*:1]~[#7X3$(*@1-[*]=,:[*][*]=,:[*]@1):2](~[*:3])~[*:4]', 99., 99., 99.],
-#         ['[*:1]~[#6X3:2](=[#7X2,#7X3+1:3])~[#7:4]', 99., 99., 99.]
-#     ]
-
-#     smirks = [x[0] for x in patterns]
-#     params = np.array([[x[1], x[2], x[3]] for x in patterns])
-#     imp_handler = bonded.ImproperTorsionHandler(smirks, params)
-
-#     mol = Chem.MolFromSmiles("CNC(C)=O") # peptide
-#     mol = Chem.AddHs(mol)
-
-#     torsion_idxs, (params, vjp_fn) = imp_handler.parameterize(mol)
-
-#     assert torsion_idxs.shape[0] == 6 # we expect two sets of impropers, each with 3 components.
-#     assert torsion_idxs.shape[1] == 4
-
-#     assert params.shape[0] == 6
-#     assert params.shape[1] == 3
-
-#     param_adjoints = np.random.randn(*params.shape)
-
-#     # # test that we can use the adjoints
-#     ff_adjoints = vjp_fn(param_adjoints)[0]
-
-#     # # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
-#     mask = np.argwhere(params > 90)
-#     assert np.all(ff_adjoints[mask] == 0.0) == True
-
-# def test_exclusions(self):
-
-#     mol = Chem.MolFromSmiles("FC(F)=C(F)F")
-#     exc_idxs, scales = nonbonded.generate_exclusion_idxs(
-#         mol,
-#         scale12=0.0,
-#         scale13=0.2,
-#         scale14=0.5
-#     )
-
-#     for pair, scale in zip(exc_idxs, scales):
-#         src, dst = pair
-#         assert src < dst
-
-#     expected_idxs = np.array([
-#         [0, 1],
-#         [0, 2],
-#         [0, 3],
-#         [0, 4],
-#         [0, 5],
-#         [1, 2],
-#         [1, 3],
-#         [1, 4],
-#         [1, 5],
-#         [2, 3],
-#         [2, 4],
-#         [2, 5],
-#         [3, 4],
-#         [3, 5],
-#         [4, 5]]
-#     )
-
-#     np.testing.assert_equal(exc_idxs, expected_idxs)
-
-#     expected_scales = [0., 0.2, 0.2, 0.5, 0.5, 0., 0., 0.2, 0.2, 0.2, 0.5, 0.5, 0., 0., 0.2]
-#     np.testing.assert_equal(scales, expected_scales)
-
-# def test_am1_bcc(self):
-#     # currently takes no parameters
-#     am1h = nonbonded.AM1BCCHandler()
-#     mol = Chem.AddHs(Chem.MolFromSmiles("C1CNCOC1F"))
-#     AllChem.EmbedMolecule(mol)
-#     charges, vjp_fn = am1h.parameterize(mol)
-
-#     assert len(charges) == mol.GetNumAtoms()
-
-#     charges_adjoints = np.random.randn(*charges.shape)
-
-#     assert vjp_fn(charges_adjoints) == None
-
-# def test_simple_charge_handler(self):
-
-#     patterns = [
-#         ['[#1:1]', 99.],
-#         ['[#1:1]-[#6X4]', 99.],
-#         ['[#1:1]-[#6X4]-[#7,#8,#9,#16,#17,#35]', 99.],
-#         ['[#1:1]-[#6X4](-[#7,#8,#9,#16,#17,#35])-[#7,#8,#9,#16,#17,#35]', 99.],
-#         ['[#1:1]-[#6X4](-[#7,#8,#9,#16,#17,#35])(-[#7,#8,#9,#16,#17,#35])-[#7,#8,#9,#16,#17,#35]', 99.],
-#         ['[#1:1]-[#6X4]~[*+1,*+2]', 99.],
-#         ['[#1:1]-[#6X3]', 99.],
-#         ['[#1:1]-[#6X3]~[#7,#8,#9,#16,#17,#35]', 99.],
-#         ['[#1:1]-[#6X3](~[#7,#8,#9,#16,#17,#35])~[#7,#8,#9,#16,#17,#35]', 99.],
-#         ['[#1:1]-[#6X2]', 99.],
-#         ['[#1:1]-[#7]', 99.],
-#         ['[#1:1]-[#8]', 99.],
-#         ['[#1:1]-[#16]', 99.],
-#         ['[#6:1]', 0.7],
-#         ['[#6X2:1]', 99.],
-#         ['[#6X4:1]', 0.1],
-#         ['[#8:1]', 99.],
-#         ['[#8X2H0+0:1]', 0.5],
-#         ['[#8X2H1+0:1]', 99.],
-#         ['[#7:1]', 0.3],
-#         ['[#16:1]', 99.],
-#         ['[#15:1]', 99.],
-#         ['[#9:1]', 1.0],
-#         ['[#17:1]', 99.],
-#         ['[#35:1]', 99.],
-#         ['[#53:1]', 99.],
-#         ['[#3+1:1]', 99.],
-#         ['[#11+1:1]', 99.],
-#         ['[#19+1:1]', 99.],
-#         ['[#37+1:1]', 99.],
-#         ['[#55+1:1]', 99.],
-#         ['[#9X0-1:1]', 99.],
-#         ['[#17X0-1:1]', 99.],
-#         ['[#35X0-1:1]', 99.],
-#         ['[#53X0-1:1]', 99.],
-#     ]
-
-#     smirks = [x[0] for x in patterns]
-#     params = np.array([x[1] for x in patterns])
-
-#     sch = nonbonded.SimpleChargeHandler(smirks, params)
-
-#     mol = Chem.MolFromSmiles("C1CNCOC1F")
-
-#     es_params, es_vjp_fn = sch.parameterize(mol)
-
-#     ligand_params = np.array([
-#         0.1, # C
-#         0.1, # C
-#         0.3, # N
-#         0.1, # C
-#         0.5, # O
-#         0.1, # C
-#         1.0  # F
-#     ])
-
-#     np.testing.assert_almost_equal(es_params, ligand_params)
-
-#     es_params_adjoints = np.random.randn(*es_params.shape)
-
-#     # test that we can use the adjoints
-#     adjoints = es_vjp_fn(es_params_adjoints)[0]
-
-#     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
-#     mask = np.argwhere(params > 90)
-#     assert np.all(adjoints[mask] == 0.0) == True
-
-# def test_gbsa_handler(self):
-
-#     patterns = [
-#        ['[*:1]', 99., 99.],
-#        ['[#1:1]', 99., 99.],
-#        ['[#1:1]~[#7]', 99., 99.],
-#        ['[#6:1]', 0.1, 0.2],
-#        ['[#7:1]', 0.3, 0.4],
-#        ['[#8:1]', 0.5, 0.6],
-#        ['[#9:1]', 0.7, 0.8],
-#        ['[#14:1]', 99., 99.],
-#        ['[#15:1]', 99., 99.],
-#        ['[#16:1]', 99., 99.],
-#        ['[#17:1]', 99., 99.]
-#     ]
-
-#     smirks = [x[0] for x in patterns]
-#     params = np.array([[x[1], x[2]] for x in patterns])
-
-#     gbh = nonbonded.GBSAHandler(smirks, params)
-
-#     mol = Chem.MolFromSmiles("C1CNCOC1F")
-
-#     gb_params, gb_vjp_fn = gbh.parameterize(mol)
-
-#     ligand_params = np.array([
-#         [0.1, 0.2], # C
-#         [0.1, 0.2], # C
-#         [0.3, 0.4], # N
-#         [0.1, 0.2], # C
-#         [0.5, 0.6], # O
-#         [0.1, 0.2], # C
-#         [0.7, 0.8]  # F
-#     ])
-
-#     np.testing.assert_almost_equal(gb_params, ligand_params)
-
-#     gb_params_adjoints = np.random.randn(*gb_params.shape)
-
-#     # test that we can use the adjoints
-#     adjoints = gb_vjp_fn(gb_params_adjoints)[0]
-
-#     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
-#     mask = np.argwhere(params > 90)
-#     assert np.all(adjoints[mask] == 0.0) == True
+    assert new_hbh.props == hbh.props
 
 
-# def test_lennard_jones_handler(self):
+def test_improper_torsion():
 
-#     patterns = [
-#         ['[#1:1]', 99., 999.],
-#         ['[#1:1]-[#6X4]', 99., 999.],
-#         ['[#1:1]-[#6X4]-[#7,#8,#9,#16,#17,#35]', 99., 999.],
-#         ['[#1:1]-[#6X4](-[#7,#8,#9,#16,#17,#35])-[#7,#8,#9,#16,#17,#35]', 99., 999.],
-#         ['[#1:1]-[#6X4](-[#7,#8,#9,#16,#17,#35])(-[#7,#8,#9,#16,#17,#35])-[#7,#8,#9,#16,#17,#35]', 99., 999.],
-#         ['[#1:1]-[#6X4]~[*+1,*+2]', 99., 999.],
-#         ['[#1:1]-[#6X3]', 99., 999.],
-#         ['[#1:1]-[#6X3]~[#7,#8,#9,#16,#17,#35]', 99., 999.],
-#         ['[#1:1]-[#6X3](~[#7,#8,#9,#16,#17,#35])~[#7,#8,#9,#16,#17,#35]', 99., 999.],
-#         ['[#1:1]-[#6X2]', 99., 999.],
-#         ['[#1:1]-[#7]', 99., 999.],
-#         ['[#1:1]-[#8]', 99., 999.],
-#         ['[#1:1]-[#16]', 99., 999.],
-#         ['[#6:1]', 0.7, 0.8],
-#         ['[#6X2:1]', 99., 999.],
-#         ['[#6X4:1]', 0.1, 0.2],
-#         ['[#8:1]', 99., 999.],
-#         ['[#8X2H0+0:1]', 0.5, 0.6],
-#         ['[#8X2H1+0:1]', 99., 999.],
-#         ['[#7:1]', 0.3, 0.4],
-#         ['[#16:1]', 99., 999.],
-#         ['[#15:1]', 99., 999.],
-#         ['[#9:1]', 1.0, 1.1],
-#         ['[#17:1]', 99., 999.],
-#         ['[#35:1]', 99., 999.],
-#         ['[#53:1]', 99., 999.],
-#         ['[#3+1:1]', 99., 999.],
-#         ['[#11+1:1]', 99., 999.],
-#         ['[#19+1:1]', 99., 999.],
-#         ['[#37+1:1]', 99., 999.],
-#         ['[#55+1:1]', 99., 999.],
-#         ['[#9X0-1:1]', 99., 999.],
-#         ['[#17X0-1:1]', 99., 999.],
-#         ['[#35X0-1:1]', 99., 999.],
-#         ['[#53X0-1:1]', 99., 999.],
-#     ]
+    patterns = [
+        ['[*:1]~[#6X3:2](~[*:3])~[*:4]', 1.5341333333333333, 3.141592653589793, 2.0],
+        ['[*:1]~[#6X3:2](~[#8X1:3])~[#8:4]', 99., 99., 99.],
+        ['[*:1]~[#7X3$(*~[#15,#16](!-[*])):2](~[*:3])~[*:4]', 99., 99., 99.],
+        ['[*:1]~[#7X3$(*~[#6X3]):2](~[*:3])~[*:4]', 1.3946666666666667, 3.141592653589793, 2.0],
+        ['[*:1]~[#7X3$(*~[#7X2]):2](~[*:3])~[*:4]', 99., 99., 99.],
+        ['[*:1]~[#7X3$(*@1-[*]=,:[*][*]=,:[*]@1):2](~[*:3])~[*:4]', 99., 99., 99.],
+        ['[*:1]~[#6X3:2](=[#7X2,#7X3+1:3])~[#7:4]', 99., 99., 99.]
+    ]
 
-#     smirks = [x[0] for x in patterns]
-#     params = np.array([[x[1], x[2]] for x in patterns])
+    smirks = [x[0] for x in patterns]
+    params = np.array([[x[1], x[2], x[3]] for x in patterns])
+    imph = bonded.ImproperTorsionHandler(smirks, params, None)
 
-#     ljh = nonbonded.LennardJonesHandler(smirks, params)
+    obj = serialization.serialize(imph)
+    all_handlers = serialization.deserialize(obj)
 
-#     mol = Chem.MolFromSmiles("C1CNCOC1F")
+    assert len(all_handlers) == 1
 
-#     lj_params, lj_vjp_fn = ljh.parameterize(mol)
+    new_imph = all_handlers[0]
+    np.testing.assert_equal(new_imph.smirks, imph.smirks)
+    np.testing.assert_equal(new_imph.params, imph.params)
+    assert new_imph.props == imph.props
 
 
-#     ligand_params = np.array([
-#         [0.1, 0.2], # C
-#         [0.1, 0.2], # C
-#         [0.3, 0.4], # N
-#         [0.1, 0.2], # C
-#         [0.5, 0.6], # O
-#         [0.1, 0.2], # C
-#         [1.0, 1.1]  # F
-#     ])
+def test_simple_charge_handler():
 
-#     np.testing.assert_almost_equal(lj_params, ligand_params)
+    patterns = [
+        ['[#1:1]', 99.],
+        ['[#1:1]-[#6X4]', 99.],
+        ['[#1:1]-[#6X4]-[#7,#8,#9,#16,#17,#35]', 99.],
+        ['[#1:1]-[#6X4](-[#7,#8,#9,#16,#17,#35])-[#7,#8,#9,#16,#17,#35]', 99.],
+        ['[#1:1]-[#6X4](-[#7,#8,#9,#16,#17,#35])(-[#7,#8,#9,#16,#17,#35])-[#7,#8,#9,#16,#17,#35]', 99.],
+        ['[#1:1]-[#6X4]~[*+1,*+2]', 99.],
+        ['[#1:1]-[#6X3]', 99.],
+        ['[#1:1]-[#6X3]~[#7,#8,#9,#16,#17,#35]', 99.],
+        ['[#1:1]-[#6X3](~[#7,#8,#9,#16,#17,#35])~[#7,#8,#9,#16,#17,#35]', 99.],
+        ['[#1:1]-[#6X2]', 99.],
+        ['[#1:1]-[#7]', 99.],
+        ['[#1:1]-[#8]', 99.],
+        ['[#1:1]-[#16]', 99.],
+        ['[#6:1]', 0.7],
+        ['[#6X2:1]', 99.],
+        ['[#6X4:1]', 0.1],
+        ['[#8:1]', 99.],
+        ['[#8X2H0+0:1]', 0.5],
+        ['[#8X2H1+0:1]', 99.],
+        ['[#7:1]', 0.3],
+        ['[#16:1]', 99.],
+        ['[#15:1]', 99.],
+        ['[#9:1]', 1.0],
+        ['[#17:1]', 99.],
+        ['[#35:1]', 99.],
+        ['[#53:1]', 99.],
+        ['[#3+1:1]', 99.],
+        ['[#11+1:1]', 99.],
+        ['[#19+1:1]', 99.],
+        ['[#37+1:1]', 99.],
+        ['[#55+1:1]', 99.],
+        ['[#9X0-1:1]', 99.],
+        ['[#17X0-1:1]', 99.],
+        ['[#35X0-1:1]', 99.],
+        ['[#53X0-1:1]', 99.],
+    ]
 
-#     lj_params_adjoints = np.random.randn(*lj_params.shape)
+    smirks = [x[0] for x in patterns]
+    params = np.array([x[1] for x in patterns])
+    props = None
 
-#     # test that we can use the adjoints
-#     adjoints = lj_vjp_fn(lj_params_adjoints)[0]
+    sch = nonbonded.SimpleChargeHandler(smirks, params, props)
+    obj = serialization.serialize(sch)
+    all_handlers = serialization.deserialize(obj)
 
-#     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
-#     mask = np.argwhere(params > 90)
-#     assert np.all(adjoints[mask] == 0.0) == True
+    assert len(all_handlers) == 1
+
+    new_sch = all_handlers[0]
+    np.testing.assert_equal(new_sch.smirks, sch.smirks)
+    np.testing.assert_equal(new_sch.params, sch.params)
+    assert new_sch.props == sch.props
+
+
+def test_gbsa_handler():
+
+    patterns = [
+       ['[*:1]', 99., 99.],
+       ['[#1:1]', 99., 99.],
+       ['[#1:1]~[#7]', 99., 99.],
+       ['[#6:1]', 0.1, 0.2],
+       ['[#7:1]', 0.3, 0.4],
+       ['[#8:1]', 0.5, 0.6],
+       ['[#9:1]', 0.7, 0.8],
+       ['[#14:1]', 99., 99.],
+       ['[#15:1]', 99., 99.],
+       ['[#16:1]', 99., 99.],
+       ['[#17:1]', 99., 99.]
+    ]
+
+    props = {
+        'solvent_dielectric' : 78.3, # matches OBC2,
+        'solute_dielectric' : 1.0,
+        'probe_radius' : 0.14,
+        'surface_tension' : 28.3919551,
+        'dielectric_offset' : 0.009,
+        # GBOBC1
+        'alpha' : 0.8,
+        'beta' : 0.0,
+        'gamma' : 2.909125
+    }
+
+    smirks = [x[0] for x in patterns]
+    params = np.array([[x[1], x[2]] for x in patterns])
+
+    gbh = nonbonded.GBSAHandler(smirks, params, props)
+
+    obj = serialization.serialize(gbh)
+    all_handlers = serialization.deserialize(obj)
+
+    assert len(all_handlers) == 1
+
+    new_gbh = all_handlers[0]
+    np.testing.assert_equal(new_gbh.smirks, gbh.smirks)
+    np.testing.assert_equal(new_gbh.params, gbh.params)
+    assert new_gbh.props == gbh.props
+
+
+def test_lennard_jones_handler():
+
+    patterns = [
+        ['[#1:1]', 99., 999.],
+        ['[#1:1]-[#6X4]', 99., 999.],
+        ['[#1:1]-[#6X4]-[#7,#8,#9,#16,#17,#35]', 99., 999.],
+        ['[#1:1]-[#6X4](-[#7,#8,#9,#16,#17,#35])-[#7,#8,#9,#16,#17,#35]', 99., 999.],
+        ['[#1:1]-[#6X4](-[#7,#8,#9,#16,#17,#35])(-[#7,#8,#9,#16,#17,#35])-[#7,#8,#9,#16,#17,#35]', 99., 999.],
+        ['[#1:1]-[#6X4]~[*+1,*+2]', 99., 999.],
+        ['[#1:1]-[#6X3]', 99., 999.],
+        ['[#1:1]-[#6X3]~[#7,#8,#9,#16,#17,#35]', 99., 999.],
+        ['[#1:1]-[#6X3](~[#7,#8,#9,#16,#17,#35])~[#7,#8,#9,#16,#17,#35]', 99., 999.],
+        ['[#1:1]-[#6X2]', 99., 999.],
+        ['[#1:1]-[#7]', 99., 999.],
+        ['[#1:1]-[#8]', 99., 999.],
+        ['[#1:1]-[#16]', 99., 999.],
+        ['[#6:1]', 0.7, 0.8],
+        ['[#6X2:1]', 99., 999.],
+        ['[#6X4:1]', 0.1, 0.2],
+        ['[#8:1]', 99., 999.],
+        ['[#8X2H0+0:1]', 0.5, 0.6],
+        ['[#8X2H1+0:1]', 99., 999.],
+        ['[#7:1]', 0.3, 0.4],
+        ['[#16:1]', 99., 999.],
+        ['[#15:1]', 99., 999.],
+        ['[#9:1]', 1.0, 1.1],
+        ['[#17:1]', 99., 999.],
+        ['[#35:1]', 99., 999.],
+        ['[#53:1]', 99., 999.],
+        ['[#3+1:1]', 99., 999.],
+        ['[#11+1:1]', 99., 999.],
+        ['[#19+1:1]', 99., 999.],
+        ['[#37+1:1]', 99., 999.],
+        ['[#55+1:1]', 99., 999.],
+        ['[#9X0-1:1]', 99., 999.],
+        ['[#17X0-1:1]', 99., 999.],
+        ['[#35X0-1:1]', 99., 999.],
+        ['[#53X0-1:1]', 99., 999.],
+    ]
+
+    smirks = [x[0] for x in patterns]
+    params = np.array([[x[1], x[2]] for x in patterns])
+    props = None
+
+    ljh = nonbonded.LennardJonesHandler(smirks, params, props)
+    obj = serialization.serialize(ljh)
+    all_handlers = serialization.deserialize(obj)
+
+    ljh = all_handlers[0]
+    np.testing.assert_equal(ljh.smirks, ljh.smirks)
+    np.testing.assert_equal(ljh.params, ljh.params)
+    assert ljh.props == ljh.props

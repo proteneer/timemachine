@@ -32,9 +32,10 @@ def parameterize_ligand(params, param_idxs):
 # its trivial to re-use this for everything except the ImproperTorsions
 class ReversibleBondHandler:
 
-    def __init__(self, smirks, params):
+    def __init__(self, smirks, params, props):
         self.smirks = smirks
         self.params = params
+        self.props = props
         assert len(self.smirks) == len(self.params)
 
     def parameterize(self, mol):
@@ -75,9 +76,10 @@ class PeriodicTorsionHandler(ReversibleBondHandler):
 
 class ImproperTorsionHandler:
 
-    def __init__(self, smirks, params):
+    def __init__(self, smirks, params, props):
         self.smirks = smirks
         self.params = params
+        self.props = props
         assert self.params.shape[1] == 3
         assert len(self.smirks) == len(self.params)
 
