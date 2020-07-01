@@ -6,7 +6,7 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
-from ff.handlers import serialization
+from ff.handlers.deserialize import deserialize
 
 
 def test_harmonic_bond():
@@ -108,8 +108,8 @@ def test_harmonic_bond():
     props = None
     hbh = bonded.HarmonicBondHandler(smirks, params, None)
 
-    obj = serialization.serialize(hbh)
-    all_handlers = serialization.deserialize(obj)
+    obj = hbh.serialize()
+    all_handlers = deserialize(obj)
 
     assert len(all_handlers) == 1
 
@@ -136,8 +136,8 @@ def test_improper_torsion():
     params = np.array([[x[1], x[2], x[3]] for x in patterns])
     imph = bonded.ImproperTorsionHandler(smirks, params, None)
 
-    obj = serialization.serialize(imph)
-    all_handlers = serialization.deserialize(obj)
+    obj = imph.serialize()
+    all_handlers = deserialize(obj)
 
     assert len(all_handlers) == 1
 
@@ -192,8 +192,8 @@ def test_simple_charge_handler():
     props = None
 
     sch = nonbonded.SimpleChargeHandler(smirks, params, props)
-    obj = serialization.serialize(sch)
-    all_handlers = serialization.deserialize(obj)
+    obj = sch.serialize()
+    all_handlers = deserialize(obj)
 
     assert len(all_handlers) == 1
 
@@ -236,8 +236,8 @@ def test_gbsa_handler():
 
     gbh = nonbonded.GBSAHandler(smirks, params, props)
 
-    obj = serialization.serialize(gbh)
-    all_handlers = serialization.deserialize(obj)
+    obj = gbh.serialize()
+    all_handlers = deserialize(obj)
 
     assert len(all_handlers) == 1
 
@@ -292,8 +292,8 @@ def test_lennard_jones_handler():
     props = None
 
     ljh = nonbonded.LennardJonesHandler(smirks, params, props)
-    obj = serialization.serialize(ljh)
-    all_handlers = serialization.deserialize(obj)
+    obj = ljh.serialize()
+    all_handlers = deserialize(obj)
 
     ljh = all_handlers[0]
     np.testing.assert_equal(ljh.smirks, ljh.smirks)

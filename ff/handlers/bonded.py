@@ -5,6 +5,7 @@ import numpy as np
 import jax
 
 from ff.handlers.utils import match_smirks, sort_tuple
+from ff.handlers.serialize import SerializableMixIn
 
 def generate_vd_idxs(mol, smirks):
     """
@@ -30,7 +31,7 @@ def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
 # its trivial to re-use this for everything except the ImproperTorsions
-class ReversibleBondHandler:
+class ReversibleBondHandler(SerializableMixIn):
 
     def __init__(self, smirks, params, props):
         self.smirks = smirks
@@ -67,14 +68,54 @@ class HarmonicBondHandler(ReversibleBondHandler):
 class HarmonicAngleHandler(ReversibleBondHandler):
     pass
 
-class PeriodicTorsionHandler(ReversibleBondHandler):
-    pass
+class ProperTorsionHandler():
 
-# HarmonicBondHandler = ReversibleBondHandler
-# HarmonicAngleHandler = ReversibleBondHandler
-# PeriodicTorsionHandler = ReversibleBondHandler
+    def __init__(self, smirks, params, props):
+        """
+        Parameters
+        ----------
+        smirks:
+            --
 
-class ImproperTorsionHandler:
+        params: list of list
+        """
+        # self.smirks = smirks
+
+        # raw_params = params # internals is a 
+        self.counts = []
+        self.smirks = []
+        self.params = []
+        for smi, terms in zip(smirks, params):
+            self.smirks.append(smi)
+            self.counts.append(len(terms))
+            for term in terms:
+                self.params.append(term)
+        
+        self.counts = np.array(self.counts, dtype=np.int32)
+        # prefix sum of size + 1
+        self.pfxsum = np.concatenate([[0], np.cumsum(self.counts)]) 
+        self.params = np.array(self.params, dtype=np.float64)
+
+    def parameterize(self, mol):
+        torsion_idxs, param_idxs = generate_vd_idxs(mol, self.smirks)
+        scatter_idxs = []
+        n_smirks = len(self.counts) # number of patterns
+
+        repeats = []
+        for p_idx in param_idxs:
+            start = self.pfxsum[p_idx]
+            end = self.pfxsum[p_idx+1]
+            scatter_idxs.extend((range(start, end)))
+            repeats.append(self.counts[p_idx])
+
+        scatter_idxs = np.array(scatter_idxs).flatten()
+        param_fn = functools.partial(parameterize_ligand, param_idxs=scatter_idxs)
+        sys_params, vjp_fn = jax.vjp(param_fn, self.params)
+
+        return np.repeat(torsion_idxs, repeats, axis=0).astype(np.int32), (np.array(sys_params, dtype=np.float64), vjp_fn)
+
+
+class ImproperTorsionHandler(SerializableMixIn):
 
     def __init__(self, smirks, params, props):
         self.smirks = smirks

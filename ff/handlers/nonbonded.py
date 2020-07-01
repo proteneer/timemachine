@@ -8,9 +8,10 @@ import networkx as nx
 from rdkit import Chem
 
 from ff.handlers.utils import match_smirks, sort_tuple
-from simtk.openmm.app.forcefield import _findExclusions
+from ff.handlers.serialize import SerializableMixIn
 
 from timemachine import constants
+
 
 def convert_to_nx(mol):
     """
@@ -101,7 +102,7 @@ def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
 
-class NonbondedHandler:
+class NonbondedHandler(SerializableMixIn):
 
     def __init__(self, smirks, params, props):
         """

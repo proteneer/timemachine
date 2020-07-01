@@ -122,6 +122,41 @@ def test_harmonic_bond():
     mask = np.argwhere(bond_params > 90)
     assert np.all(ff_adjoints[mask] == 0.0) == True
 
+def test_proper_torsion():
+
+    # proper torsions have a variadic number of terms
+
+    patterns = [
+        ['[*:1]-[#6X3:2]=[#6X3:3]-[*:4]', [[99., 99., 99.]]],
+        ['[*:1]-[#6X3:2]=[#6X3:3]-[#35:4]', [[99., 99., 99.]]],
+        ['[#9:1]-[#6X3:2]=[#6X3:3]-[#35:4]', [[1., 2., 3.], [4., 5., 6.]]],
+        ['[#35:1]-[#6X3:2]=[#6X3:3]-[#35:4]', [[7., 8., 9.], [1., 3., 5.], [4., 4., 4.]]],
+        ['[#9:1]-[#6X3:2]=[#6X3:3]-[#9:4]', [[7., 8., 9.]]],
+    ]
+
+    smirks = [x[0] for x in patterns]
+    params = [x[1] for x in patterns]
+    props = None
+
+    hbh = bonded.ProperTorsionHandler(smirks, params, props)
+
+    mol = Chem.MolFromSmiles("FC(Br)=C(Br)F")
+
+    torsion_idxs, (torsion_params, torsion_vjp_fn) = hbh.parameterize(mol)
+
+    print(torsion_idxs)
+    print(torsion_params)
+
+    assert torsion_idxs.shape == (8, 4)
+    assert torsion_params.shape == (8, 3)
+
+    torsion_param_adjoints = np.random.randn(*torsion_params.shape)
+
+    ff_adjoints = torsion_vjp_fn(torsion_param_adjoints)[0]
+
+    mask = np.argwhere(torsion_params > 90)
+    assert np.all(ff_adjoints[mask] == 0.0) == True
+
 
 def test_improper_torsion():
 
