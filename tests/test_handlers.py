@@ -103,7 +103,8 @@ def test_harmonic_bond():
 
     smirks = [x[0] for x in patterns]
     params = np.array([[x[1], x[2]] for x in patterns])
-    hbh = bonded.HarmonicBondHandler(smirks, params)
+    props = None
+    hbh = bonded.HarmonicBondHandler(smirks, params, props)
 
     mol = Chem.MolFromSmiles("C1CNCOC1F")
 
@@ -169,7 +170,8 @@ def test_improper_torsion():
 
     smirks = [x[0] for x in patterns]
     params = np.array([[x[1], x[2], x[3]] for x in patterns])
-    imp_handler = bonded.ImproperTorsionHandler(smirks, params)
+    props = None
+    imp_handler = bonded.ImproperTorsionHandler(smirks, params, props)
 
     mol = Chem.MolFromSmiles("CNC(C)=O") # peptide
     mol = Chem.AddHs(mol)
@@ -283,8 +285,9 @@ def test_simple_charge_handler():
 
     smirks = [x[0] for x in patterns]
     params = np.array([x[1] for x in patterns])
+    props = None
 
-    sch = nonbonded.SimpleChargeHandler(smirks, params)
+    sch = nonbonded.SimpleChargeHandler(smirks, params, props)
 
     mol = Chem.MolFromSmiles("C1CNCOC1F")
 
@@ -329,8 +332,8 @@ def test_gbsa_handler():
 
     smirks = [x[0] for x in patterns]
     params = np.array([[x[1], x[2]] for x in patterns])
-
-    gbh = nonbonded.GBSAHandler(smirks, params)
+    props = {'foo': 'bar'}
+    gbh = nonbonded.GBSAHandler(smirks, params, props)
 
     mol = Chem.MolFromSmiles("C1CNCOC1F")
 
@@ -400,8 +403,9 @@ def test_lennard_jones_handler():
 
     smirks = [x[0] for x in patterns]
     params = np.array([[x[1], x[2]] for x in patterns])
+    props = None
 
-    ljh = nonbonded.LennardJonesHandler(smirks, params)
+    ljh = nonbonded.LennardJonesHandler(smirks, params, props)
 
     mol = Chem.MolFromSmiles("C1CNCOC1F")
 
