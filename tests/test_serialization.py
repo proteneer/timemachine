@@ -120,6 +120,34 @@ def test_harmonic_bond():
     assert new_hbh.props == hbh.props
 
 
+def test_proper_torsion():
+
+    # proper torsions have a variadic number of terms
+
+    patterns = [
+        ['[*:1]-[#6X3:2]=[#6X3:3]-[*:4]', [[99., 99., 99.]]],
+        ['[*:1]-[#6X3:2]=[#6X3:3]-[#35:4]', [[99., 99., 99.]]],
+        ['[#9:1]-[#6X3:2]=[#6X3:3]-[#35:4]', [[1., 2., 3.], [4., 5., 6.]]],
+        ['[#35:1]-[#6X3:2]=[#6X3:3]-[#35:4]', [[7., 8., 9.], [1., 3., 5.], [4., 4., 4.]]],
+        ['[#9:1]-[#6X3:2]=[#6X3:3]-[#9:4]', [[7., 8., 9.]]],
+    ]
+
+    smirks = [x[0] for x in patterns]
+    params = [x[1] for x in patterns]
+    props = None
+
+    ph = bonded.ProperTorsionHandler(smirks, params, None)
+    obj = ph.serialize()
+    all_handlers = deserialize(obj)
+
+    assert len(all_handlers) == 1
+
+    new_ph = all_handlers[0]
+    np.testing.assert_equal(new_ph.smirks, ph.smirks)
+    np.testing.assert_equal(new_ph.params, ph.params)
+    assert new_ph.props == ph.props
+
+
 def test_improper_torsion():
 
     patterns = [

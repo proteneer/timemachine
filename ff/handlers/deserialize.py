@@ -45,10 +45,13 @@ def deserialize(obj):
 
         for elems in patterns:
             smirks.append(elems[0])
-            params.append(elems[1:])
+            if len(elems) == 2:
+                params.append(elems[1])
+            else:
+                params.append(elems[1:])
 
-        params = np.array(params, dtype=np.float64)
-        params = np.squeeze(params) # remove single dimension entries, eg. charge params
+        #params = np.array(params, dtype=np.float64)
+        #params = np.squeeze(params) # remove single dimension entries, eg. charge params
 
         props = v.get('props')
 

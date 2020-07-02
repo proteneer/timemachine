@@ -144,9 +144,6 @@ def test_proper_torsion():
 
     torsion_idxs, (torsion_params, torsion_vjp_fn) = hbh.parameterize(mol)
 
-    print(torsion_idxs)
-    print(torsion_params)
-
     assert torsion_idxs.shape == (8, 4)
     assert torsion_params.shape == (8, 3)
 

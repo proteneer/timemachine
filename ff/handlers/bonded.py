@@ -5,7 +5,8 @@ import numpy as np
 import jax
 
 from ff.handlers.utils import match_smirks, sort_tuple
-from ff.handlers.serialize import SerializableMixIn
+from ff.handlers.serialize import SerializableMixIn, bin_to_str
+from ff.handlers.suffix import _SUFFIX
 
 def generate_vd_idxs(mol, smirks):
     """
@@ -35,7 +36,7 @@ class ReversibleBondHandler(SerializableMixIn):
 
     def __init__(self, smirks, params, props):
         self.smirks = smirks
-        self.params = params
+        self.params = np.array(params, dtype=np.float64)
         self.props = props
         assert len(self.smirks) == len(self.params)
 
@@ -95,6 +96,7 @@ class ProperTorsionHandler():
         # prefix sum of size + 1
         self.pfxsum = np.concatenate([[0], np.cumsum(self.counts)]) 
         self.params = np.array(self.params, dtype=np.float64)
+        self.props = props
 
     def parameterize(self, mol):
         torsion_idxs, param_idxs = generate_vd_idxs(mol, self.smirks)
@@ -114,12 +116,33 @@ class ProperTorsionHandler():
 
         return np.repeat(torsion_idxs, repeats, axis=0).astype(np.int32), (np.array(sys_params, dtype=np.float64), vjp_fn)
 
+    # this needs a custom serializer unfortunately
+    def serialize(self):
+
+        list_params = []
+        counter = 0
+        for smi_idx, smi in enumerate(self.smirks):
+            t_params = []
+            for _ in range(self.counts[smi_idx]):
+                t_params.append(self.params[counter].tolist())
+                counter += 1
+            list_params.append(t_params)
+
+        key = type(self).__name__[:-len(_SUFFIX)]
+        patterns = []
+        for smi, p in zip(self.smirks, list_params):
+            patterns.append((smi, p))
+
+        body = {'patterns': patterns}
+        result = {key: body}
+
+        return bin_to_str(result)
 
 class ImproperTorsionHandler(SerializableMixIn):
 
     def __init__(self, smirks, params, props):
         self.smirks = smirks
-        self.params = params
+        self.params = np.array(params, dtype=np.float64)
         self.props = props
         assert self.params.shape[1] == 3
         assert len(self.smirks) == len(self.params)

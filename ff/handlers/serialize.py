@@ -4,6 +4,14 @@ import numpy as np
 
 from ff.handlers.suffix import _SUFFIX
 
+
+def bin_to_str(binary):
+    buf = io.StringIO()
+    pp = pprint.PrettyPrinter(width=500, compact=False, stream=buf)
+    pp._sorted = lambda x:x
+    pp.pprint(binary)
+    return buf.getvalue()
+
 class SerializableMixIn():
 
     def serialize(self):
@@ -34,10 +42,5 @@ class SerializableMixIn():
             body['props'] = handler.props
 
         result = {key: body}
-
-        buf = io.StringIO()
-        pp = pprint.PrettyPrinter(width=500, compact=False, stream=buf)
-        pp._sorted = lambda x:x
-        pp.pprint(result)
-
-        return buf.getvalue()
+        
+        return bin_to_str(result)

@@ -116,10 +116,10 @@ class NonbondedHandler(SerializableMixIn):
 
         """
         
-        assert len(smirks) == params.shape[0]
+        assert len(smirks) == len(params)
 
         self.smirks = smirks
-        self.params = params
+        self.params = np.array(params, dtype=np.float64)
         self.props = props
 
     def parameterize(self, mol):
