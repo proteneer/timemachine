@@ -44,7 +44,9 @@ def deserialize_system(system):
     for p in range(system.getNumParticles()):
         masses.append(value(system.getParticleMass(p)))
 
-    nrg_fns = {}
+    # this should not be a dict since we may have more than one instance of a given
+    # force.
+    nrg_fns = []
 
     nb_charge_params = None
     gb_charge_params = None
@@ -66,8 +68,7 @@ def deserialize_system(system):
 
             bond_idxs = np.array(bond_idxs, dtype=np.int32)
             bond_params = np.array(bond_params, dtype=np.float64)
-
-            nrg_fns["HarmonicBond"] = (bond_idxs, bond_params)
+            nrg_fns.append(("HarmonicBond", (bond_idxs, bond_params)))
 
         if isinstance(force, mm.HarmonicAngleForce):
 
@@ -89,7 +90,7 @@ def deserialize_system(system):
             angle_idxs = np.array(angle_idxs, dtype=np.int32)
             angle_params = np.array(angle_params, dtype=np.float64)
 
-            nrg_fns["HarmonicAngle"] = (angle_idxs, angle_params)
+            nrg_fns.append(("HarmonicAngle", (angle_idxs, angle_params)))
 
         if isinstance(force, mm.PeriodicTorsionForce):
             # this also includes any possible ImproperTorsions
@@ -112,7 +113,7 @@ def deserialize_system(system):
 
             torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
             torsion_params = np.array(torsion_params, dtype=np.float64)
-            nrg_fns["PeriodicTorsion"] = (torsion_idxs, torsion_params)
+            nrg_fns.append(("PeriodicTorsion", (torsion_idxs, torsion_params)))
 
         if isinstance(force, mm.NonbondedForce):
 
@@ -163,6 +164,8 @@ def deserialize_system(system):
 
             # validate exclusions/exceptions to make sure they make sense
             for a_idx in range(force.getNumExceptions()):
+
+                # tbd charge scale factors
                 src, dst, new_cp, new_sig, new_eps = force.getExceptionParameters(a_idx)
                 new_sig = value(new_sig)
                 new_eps = value(new_eps)
@@ -177,8 +180,17 @@ def deserialize_system(system):
 
                 nb_exclusion_idxs.append([src, dst])
 
-                # sanity check this
-                lj_scale_factor = 1 - new_eps/expected_eps
+                # sanity check this (expected_eps can be zero), redo this thing
+
+                # the lj_scale factor measures how much we *remove*
+                if expected_eps == 0:
+                    if new_eps == 0:
+                        lj_scale_factor = 1
+                    else:
+                        raise RuntimeError("Divide by zero in epsilon calculation")
+                else:
+                    lj_scale_factor = 1 - new_eps/expected_eps
+
                 lj_exclusion_params.append(lj_scale_factor)
 
                 # tbd fix charge_scale_factors using new_cp
@@ -190,18 +202,16 @@ def deserialize_system(system):
                 # else:
                 #     exclusion_params.append(scale_idx_full)
 
-            charge_exclusion_params = np.array(lj_exclusion_params)
-
             nb_exclusion_idxs = np.array(nb_exclusion_idxs, dtype=np.int32)
             # exclusion_param_idxs = np.array(exclusion_param_idxs, dtype=np.int32)
 
-            nrg_fns["LennardJones"] = (
+            nrg_fns.append(("LennardJones", 
                 # charge_param_idxs,
                 lj_params,
-                nb_exclusion_idxs,
-                lj_exclusion_params
+                # nb_exclusion_idxs,
+                # lj_exclusion_params
                 # exclusion_param_idxs
-            )
+            ))
 
         if isinstance(force, mm.GBSAOBCForce):
 
@@ -244,7 +254,7 @@ def deserialize_system(system):
                 # post-process GBSA
             gb_params = np.array(gb_params, dtype=np.float64)
 
-            nrg_fns["GBSA"] = (
+            nrg_fns.append(("GBSA", (
                 # np.array(charge_param_idxs, dtype=np.int32),
                 # np.array(, dtype=np.int32),
                 # np.array(scale_param_idxs, dtype=np.int32),
@@ -259,14 +269,19 @@ def deserialize_system(system):
                 probe_radius                   # probe_radius
                 # cutoff,                      # cutoff radii
                 # cutoff                       # cutoff force
-            )
+            )))
 
-    # reconcile charges
+    # ensure GB charges and NB charges are consistent 
     if gb_charge_params is not None and nb_charge_params is not None:
         np.testing.assert_almost_equal(gb_charge_params, nb_charge_params)
 
-    nrg_fns['Charges'] = gb_charge_params
+    gb_charge_params = np.array(gb_charge_params)
 
+    nrg_fns.append(('Charges', gb_charge_params))
+
+    charge_exclusion_params = np.array(lj_exclusion_params)
+
+    nrg_fns.append(('Exclusions', (nb_exclusion_idxs, lj_exclusion_params, charge_exclusion_params)))
     # post-process GBSA
     # nrg_fns["GBSA"] = (
     #     np.array(charge_param_idxs, dtype=np.int32),
