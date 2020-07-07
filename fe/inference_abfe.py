@@ -11,43 +11,25 @@ import itertools
 import os
 import sys
 
-from fe import runner
-
+from multiprocessing import Process, Pipe
+from matplotlib import pyplot as plt
 from jax.config import config as jax_config
 # this always needs to be set
 jax_config.update("jax_enable_x64", True)
 
-from scipy.stats import special_ortho_group
 import jax
+import jax.numpy as jnp
+
 import rdkit
 from rdkit import Chem
 from rdkit.Chem import AllChem
-
-
-from simtk.openmm.app import PDBFile
-
-
-# from fe.utils import to_md_units, write
-from fe import math_utils, setup_system
-
-from multiprocessing import Process, Pipe
-from matplotlib import pyplot as plt
-
-from jax.experimental import optimizers
-
-from fe import simulation_v2
-from fe import loss, bar
-from fe.pdb_writer import PDBWriter
-
-from ff import forcefield
-from ff import system
-from ff import openmm_converter
-import jax.numpy as jnp
-
-
-
 from rdkit.Chem import rdFMCS
 
+from simtk.openmm.app import PDBFile
+from fe import runner
+from fe import math_utils, setup_system
+from fe import loss, bar
+from fe.pdb_writer import PDBWriter
 
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18

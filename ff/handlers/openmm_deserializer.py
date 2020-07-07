@@ -7,8 +7,6 @@ from simtk.openmm.app import PDBFile
 from simtk.openmm.app import forcefield as ff
 from simtk import unit
 
-from ff.system import System
-
 from timemachine import constants
 
 def value(quantity):
@@ -24,20 +22,10 @@ def deserialize_system(system):
         A system object to be deserialized
 
     Returns
+    -------
+    list of energy functions, masses
 
     """
-    # global_params = []
-    # global_param_groups = []
-    # test_potentials = []
-
-    # def insert_parameters(obj, group):
-    #     """
-    #     Attempts to insert a value v and return the index it belongs to
-    #     """
-    #     p_idx = len(global_params)
-    #     global_params.append(obj)
-    #     global_param_groups.append(group)
-    #     return p_idx
 
     masses = []
 
@@ -81,9 +69,6 @@ def deserialize_system(system):
                 angle = value(angle)
                 k = value(k)
 
-                # k_idx = insert_parameters(k, 0)
-                # a_idx = insert_parameters(angle, 1)
-
                 angle_idxs.append([src_idx, mid_idx, dst_idx])
                 angle_params.append((k, angle))
 
@@ -93,7 +78,6 @@ def deserialize_system(system):
             nrg_fns.append(("HarmonicAngle", (angle_idxs, angle_params)))
 
         if isinstance(force, mm.PeriodicTorsionForce):
-            # this also includes any possible ImproperTorsions
 
             torsion_idxs = []
             torsion_params = []
@@ -103,10 +87,6 @@ def deserialize_system(system):
 
                 phase = value(phase)
                 k = value(k)
-
-                # k_idx = insert_parameters(k, 4)
-                # phase_idx = insert_parameters(phase, 5)
-                # period_idx = insert_parameters(period, 6)
 
                 torsion_params.append((k, phase, period))
                 torsion_idxs.append([a_idx, b_idx, c_idx, d_idx])
@@ -206,11 +186,7 @@ def deserialize_system(system):
             # exclusion_param_idxs = np.array(exclusion_param_idxs, dtype=np.int32)
 
             nrg_fns.append(("LennardJones", 
-                # charge_param_idxs,
                 lj_params,
-                # nb_exclusion_idxs,
-                # lj_exclusion_params
-                # exclusion_param_idxs
             ))
 
         if isinstance(force, mm.GBSAOBCForce):
@@ -244,20 +220,9 @@ def deserialize_system(system):
                 radius = value(radius)
                 gb_params.append((radius, scale))
 
-                # radius_idx = insert_parameters(radius, 12)
-                # scale_idx = insert_parameters(scale, 13)
-                
-                # radius_param_idxs.append(radius_idx)
-                # scale_param_idxs.append(scale_idx)               
-
-
-                # post-process GBSA
             gb_params = np.array(gb_params, dtype=np.float64)
 
             nrg_fns.append(("GBSA", (
-                # np.array(charge_param_idxs, dtype=np.int32),
-                # np.array(, dtype=np.int32),
-                # np.array(scale_param_idxs, dtype=np.int32),
                 gb_params,
                 alpha,                         # alpha
                 beta,                          # beta
@@ -267,8 +232,6 @@ def deserialize_system(system):
                 solute_dielectric,             # solute_dielectric
                 solvent_dielectric,            # solvent_dieletric
                 probe_radius                   # probe_radius
-                # cutoff,                      # cutoff radii
-                # cutoff                       # cutoff force
             )))
 
     # ensure GB charges and NB charges are consistent 
@@ -282,25 +245,5 @@ def deserialize_system(system):
     charge_exclusion_params = np.array(lj_exclusion_params)
 
     nrg_fns.append(('Exclusions', (nb_exclusion_idxs, lj_exclusion_params, charge_exclusion_params)))
-    # post-process GBSA
-    # nrg_fns["GBSA"] = (
-    #     np.array(charge_param_idxs, dtype=np.int32),
-    #     np.array(radius_param_idxs, dtype=np.int32),
-    #     np.array(scale_param_idxs, dtype=np.int32),
-    #     alpha,                         # alpha
-    #     beta,                          # beta
-    #     gamma,                         # gamma
-    #     dielectric_offset,             # dielectric_offset
-    #     surface_tension,               # surface_tension
-    #     solute_dielectric,             # solute_dielectric
-    #     solvent_dielectric,            # solvent_dieletric
-    #     probe_radius                   # probe_radius
-    #     # cutoff,                      # cutoff radii
-    #     # cutoff                       # cutoff force
-    # )
-
-    # global_params = np.array(global_params)
-    # global_param_groups = np.array(global_param_groups) + 100
 
     return nrg_fns, masses
-    # System(nrg_fns, global_params, global_param_groups, np.array(masses))

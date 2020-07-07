@@ -43,13 +43,21 @@ def simulate(system, precision, gpu_idx, pipe):
 
     pipe.send((full_du_dls, energies))
 
+    # pipe.close()
 
-    pipe.close()
 
-        # for e_idx, e in enumerate(energies):
-        #     if e_idx % 100 == 0:
-        #         print(e_idx, e)
+    # pipe.send((full_du_dls, full_energies))
 
-        # return ctxt.get_all_coords()
-    # except Exception as e:
-        # print("FATAL", e)
+    # du_dl_adjoints = pipe.recv()
+
+    # if du_dl_adjoints is not None:
+    #     stepper.set_du_dl_adjoint(du_dl_adjoints)
+    #     ctxt.set_x_t_adjoint(np.zeros_like(x0))
+    #     start = time.time()
+    #     ctxt.backward_mode()
+    #     print("bkwd run time", time.time() - start)
+    #     dL_dp = ctxt.get_param_adjoint_accum()
+    #     pipe.send(dL_dp)
+
+    # pipe.close()
+    # return
