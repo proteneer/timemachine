@@ -219,20 +219,25 @@ if __name__ == "__main__":
             all_processes.append(p)
             all_pipes.append(parent_conn)
 
+        stage_du_dls = []
         for b_idx in range(0, len(all_processes), args.num_gpus):
 
             for p in all_processes[b_idx:b_idx+args.num_gpus]:
                 p.start()
 
             batch_du_dls = []
+
             for pc_idx, pc in enumerate(all_pipes[b_idx:b_idx+args.num_gpus]):
 
                 lamb_idx = b_idx+pc_idx
                 lamb = ti_lambdas[b_idx+pc_idx]
 
                 full_du_dls, full_energies = pc.recv() # (F, T), (T)
+
                 # pc.send(None)
                 assert full_du_dls is not None
+
+                np.save(os.path.join(stage_dir, "lambda_"+str(lamb_idx)+"_full_du_dls"), full_du_dls)
                 total_du_dls = np.sum(full_du_dls, axis=0)
 
                 plt.plot(total_du_dls, label="{:.2f}".format(lamb))
@@ -253,18 +258,25 @@ if __name__ == "__main__":
                 plt.clf()
 
                 du_dl_cutoff = 4000
-                full_du_dls = runner.simulate(system, precision=np.float32)
                 equil_du_dls = full_du_dls[:, du_dl_cutoff:]
 
                 for f, du_dls in zip(final_gradients, equil_du_dls):
                     fname = f[0]
-                    print("lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+                    print("lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
 
-                total_equil_du_dls = np.sum(equil_du_dls, axis=0)
+                total_equil_du_dls = np.sum(equil_du_dls, axis=0) # [1, T]
+                print("lambda:", "{:.3f}".format(lamb), "\t mean", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
 
+                stage_du_dls.append(total_equil_du_dls)
 
-                # sum_du_dls.append(total_du_dls)
-                # all_du_dls.append(full_du_dls)
+        stage_dG = np.trapz(np.mean(stage_du_dls, axis=1), ti_lambdas)
+        print("stage", stage, "pred_dG", stage_dG)
+        stage_dGs.append(stage_dG)
+
+        plt.boxplot(stage_du_dls, positions=ti_lambdas)
+        plt.ylabel(r"$\frac{du}{d\lambda}$")
+        plt.savefig(os.path.join(stage_dir, "boxplot_du_dls"))
+        plt.clf()
 
         combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), mol_a)
         combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
@@ -291,203 +303,5 @@ if __name__ == "__main__":
             # print(system)
 
 
-
-    assert 0
-
-    for epoch in range(100):
-
-        print("Starting epoch -----"+str(epoch)+'-----')
-
-        stage_dGs = []
+    print("epoch", epoch, "stage_dGs", stage_dGs, "final dG", stage_dGs[0]+stage_dGs[1]+stage_dGs[2])
     
-        epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
-
-        # if not os.path.exists(epoch_dir):
-            # os.makedirs(epoch_dir)
-
-        for stage in [0, 1, 2]:
-
-            print("---Starting stage", stage, '---')
-
-            stage_dir = os.path.join(epoch_dir, "stage_"+str(stage))
-
-            print("stage_dir", stage_dir)
-
-            if not os.path.exists(stage_dir):
-                os.makedirs(stage_dir)
-
-            if args.lamb:
-                ti_lambdas = np.ones(8)*args.lamb
-            else:
-                if stage == 0:
-                    # we need to goto a larger lambda for the morse potential to decay to zero.
-                    ti_lambdas = np.linspace(8.5, 0.0, 32)
-                elif stage == 1:
-                    # lambda spans from [0, inf], is close enough to zero over [0, 1.2] cutoff
-                    ti_lambdas = np.concatenate([
-                        np.linspace(0.0, 0.5, 24, endpoint=False),
-                        np.linspace(0.5, 1.2, 8)
-                    ])
-                elif stage == 2:
-                    # we need to goto a larger lambda for the morse potential to decay to zero.
-                    ti_lambdas = np.linspace(0.0, 8.5, 32)
-                else:
-                    raise Exception("Unknown stage.")
-
-            combined_system = host_system.merge(
-                a_system,
-                stage=stage,
-                nonbonded_cutoff=1000.0
-            )
-
-            nha = host_conf.shape[0]
-            new_params = setup_core_restraints(
-                args.restr_force,
-                args.restr_alpha,
-                args.restr_count,
-                x0,
-                nha,
-                core_atoms,
-                combined_system.params,
-                combined_system.nrg_fns,
-                stage=stage
-            )
-
-            temperature = 300
-            dt = 1.5e-3
-            friction = 40
-
-            masses = np.array(combined_system.masses)
-            ca, cbs, ccs = langevin_coefficients(
-                temperature,
-                dt,
-                friction,
-                masses
-            )
-
-            cbs *= -1
-
-            print("Integrator coefficients:")
-            print("ca", ca)
-            print("cbs", cbs)
-            print("ccs", ccs)
-
-            complete_T = args.steps
-
-            equil_T = 2000
-
-            # we use only samples after this number of steps when computing dGs
-            du_dl_cutoff = 20000
-
-            assert complete_T > equil_T
-            assert complete_T > du_dl_cutoff
-            
-            all_processes = []
-            all_pcs = []
-
-            for lambda_idx, lamb in enumerate(ti_lambdas):
-
-                complete_lambda = np.zeros(complete_T) + lamb
-                complete_cas = np.ones(complete_T)*ca
-                complete_dts = np.concatenate([
-                    np.linspace(0, dt, equil_T),
-                    np.ones(complete_T-equil_T)*dt
-                ])
-
-                sim = simulation_v2.Simulation(
-                    combined_system,
-                    complete_dts,
-                    complete_cas,
-                    cbs,
-                    ccs,
-                    complete_lambda,
-                    precision
-                )
-
-                intg_seed = np.random.randint(np.iinfo(np.int32).max)
-                # intg_seed = 2020, debug use if we want reproducibility
-
-                combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), mol_a)
-                combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-                out_file = os.path.join(stage_dir, str(epoch)+"_abfe_"+str(lambda_idx)+".pdb")
-                writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
-
-                # zero-out
-                # if args.n_frames is 0:
-                    # writer = None
-                # writer = None
-
-                v0 = np.zeros_like(x0)
-
-                parent_conn, child_conn = Pipe()
-
-                input_args = (x0, v0, new_params, intg_seed, writer, child_conn, lambda_idx % args.num_gpus, du_dl_cutoff)
-                p = Process(target=sim.run_forward_and_backward, args=input_args)
-
-                # sim.run_forward_and_backward(*input_args)
-
-                all_pcs.append(parent_conn)
-                all_processes.append(p)
-
-            sum_du_dls = [] # [L, T]
-
-            all_energies = []
-
-            # run inference loop to generate all_du_dls
-            for b_idx in range(0, len(all_processes), args.num_gpus):
-                for p in all_processes[b_idx:b_idx+args.num_gpus]:
-                    print("starting")
-                    p.start()
-
-                batch_du_dls = []
-                for pc_idx, pc in enumerate(all_pcs[b_idx:b_idx+args.num_gpus]):
-
-                    lamb_idx = b_idx+pc_idx
-                    lamb = ti_lambdas[b_idx+pc_idx]
-
-                    full_du_dls, full_energies = pc.recv() # (F, T), (T)
-                    # pc.send(None)
-                    assert full_du_dls is not None
-                    total_du_dls = np.sum(full_du_dls, axis=0)
-
-                    plt.plot(total_du_dls, label="{:.2f}".format(lamb))
-                    plt.ylabel("du_dl")
-                    plt.xlabel("timestep")
-                    plt.legend()
-                    fpath = os.path.join(stage_dir, "lambda_du_dls_"+str(lamb_idx))
-                    plt.savefig(fpath)
-                    plt.clf()
-
-                    plt.plot(full_energies, label="{:.2f}".format(lamb))
-                    plt.ylabel("U")
-                    plt.xlabel("timestep")
-                    plt.legend()
-
-                    fpath = os.path.join(stage_dir, "lambda_energies_"+str(lamb_idx))
-                    plt.savefig(fpath)
-                    plt.clf()
-
-                    sum_du_dls.append(total_du_dls)
-                    all_du_dls.append(full_du_dls)
-
-            # compute loss and derivatives w.r.t. adjoints
-            all_du_dls = np.array(all_du_dls)
-            sum_du_dls = np.array(sum_du_dls)
-
-            stage_dG = np.trapz(np.mean(sum_du_dls[:, du_dl_cutoff:], axis=1), ti_lambdas)
-            print("stage", stage, "pred_dG", stage_dG)
-
-            plt.clf()
-            plt.violinplot(sum_du_dls[:, du_dl_cutoff:].tolist(), positions=ti_lambdas)
-            plt.ylabel("du_dlambda")
-            plt.savefig(os.path.join(stage_dir, "violin_du_dls"))
-            plt.clf()
-
-            plt.boxplot(sum_du_dls[:, du_dl_cutoff:].tolist(), positions=ti_lambdas)
-            plt.ylabel("du_dlambda")
-            plt.savefig(os.path.join(stage_dir, "boxplot_du_dls"))
-            plt.clf()
-            
-            stage_dGs.append(stage_dG)
-
-        print("epoch", epoch, "stage_dGs", stage_dGs, "final dG", stage_dGs[0]+stage_dGs[1]+stage_dGs[2])
