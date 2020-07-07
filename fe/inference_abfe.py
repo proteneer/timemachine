@@ -109,27 +109,14 @@ if __name__ == "__main__":
     a_name = mol_a.GetProp("_Name")
 
     # process the host first
-
     host_pdb_file = args.protein_pdb
     host_pdb = PDBFile(host_pdb_file)
-    # amber_ff = app.ForceField('amber99sbildn.xml', 'amber99_obc.xml')
-    # host_system = amber_ff.createSystem(
-    #     host_pdb.topology,
-    #     nonbondedMethod=app.NoCutoff,
-    #     constraints=None,
-    #     rigidWater=False
-    # )
-
 
     core_smarts = '[#6]1:[#6]:[#6]:[#6](:[#6](:[#6]:1-[#8]-[#6](:[#6]-[#1]):[#6])-[#1])-[#1]'
 
     print("Using core smarts:", core_smarts)
     core_query = Chem.MolFromSmarts(core_smarts)
     core_atoms = mol_a.GetSubstructMatch(core_query)
-
-    # stage = 0
-    # lamb = 0.25
-
 
     stage_dGs = []
 
@@ -194,8 +181,6 @@ if __name__ == "__main__":
 
             gpu_idx = lambda_idx % args.num_gpus
             parent_conn, child_conn = Pipe()
-            # runner.simulate(system, precision, gpu_idx, child_conn)
-            # assert 0
 
             p = Process(target=runner.simulate, args=(system, precision, gpu_idx, child_conn))
             all_processes.append(p)
@@ -216,7 +201,6 @@ if __name__ == "__main__":
 
                 full_du_dls, full_energies = pc.recv() # (F, T), (T)
 
-                # pc.send(None)
                 assert full_du_dls is not None
 
                 np.save(os.path.join(stage_dir, "lambda_"+str(lamb_idx)+"_full_du_dls"), full_du_dls)
@@ -265,24 +249,24 @@ if __name__ == "__main__":
         out_file = os.path.join("debug.pdb")
         writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
 
-            # assert 0
+        # assert 0
 
-            # writer.write_header()
-            # xs = all_coords
-            # for frame_idx, x in enumerate(xs):
-            #     if frame_idx > 11500 and frame_idx < 11550:
-            #         # break
-            #     # interval = max(1, xs.shape[0]//writer.n_frames)
-            #     # if frame_idx % interval == 0:
-            #         # if check_coords(x):
-            #         writer.write(x*10)
-            #         # else:
-            #             # print("failed to write on frame", frame_idx)
-            #             # break
-            # writer.close()
+        # writer.write_header()
+        # xs = all_coords
+        # for frame_idx, x in enumerate(xs):
+        #     if frame_idx > 11500 and frame_idx < 11550:
+        #         # break
+        #     # interval = max(1, xs.shape[0]//writer.n_frames)
+        #     # if frame_idx % interval == 0:
+        #         # if check_coords(x):
+        #         writer.write(x*10)
+        #         # else:
+        #             # print("failed to write on frame", frame_idx)
+        #             # break
+        # writer.close()
 
-            # assert 0
-            # print(system)
+        # assert 0
+        # print(system)
 
 
     print("epoch", epoch, "stage_dGs", stage_dGs, "final dG", stage_dGs[0]+stage_dGs[1]+stage_dGs[2])
