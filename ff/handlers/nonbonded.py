@@ -133,7 +133,6 @@ class NonbondedHandler(SerializableMixIn):
             rdkit molecule, should have hydrogens pre-added
 
         """
-
         param_idxs = generate_nonbonded_idxs(mol, self.smirks)
         param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
         return jax.vjp(param_fn, self.params)

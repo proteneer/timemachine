@@ -43,7 +43,6 @@ def deserialize_system(system):
 
         if isinstance(force, mm.HarmonicBondForce):
             bond_idxs = []
-            # param_idxs = []
             bond_params = []
 
             for b_idx in range(force.getNumBonds()):

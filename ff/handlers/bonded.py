@@ -75,10 +75,12 @@ class ProperTorsionHandler():
         """
         Parameters
         ----------
-        smirks:
-            --
+        smirks: list str
+            list of smirks patterns
 
         params: list of list
+            each torsion may have a variadic number of terms.
+
         """
         # self.smirks = smirks
 
@@ -116,9 +118,7 @@ class ProperTorsionHandler():
 
         return np.repeat(torsion_idxs, repeats, axis=0).astype(np.int32), (np.array(sys_params, dtype=np.float64), vjp_fn)
 
-    # this needs a custom serializer unfortunately
     def serialize(self):
-
         list_params = []
         counter = 0
         for smi_idx, smi in enumerate(self.smirks):
