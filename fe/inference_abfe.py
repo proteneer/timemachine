@@ -292,7 +292,16 @@ if __name__ == "__main__":
             out_file = os.path.join("debug.pdb")
             writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
 
-            all_coords = runner.simulate(system, precision=np.float32)
+            du_dl_cutoff = 4000
+            full_du_dls = runner.simulate(system, precision=np.float32)
+            equil_du_dls = full_du_dls[:, du_dl_cutoff]
+
+            for f, du_dls in zip(final_gradients, equil_du_dls):
+                fname = f[0]
+                print("lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+
+            total_equil_du_dls = np.sum(equil_du_dls, axis=0)
+
 
             writer.write_header()
             xs = all_coords

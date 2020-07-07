@@ -21,24 +21,10 @@ def simulate(system, precision):
 
     integrator = system.integrator
 
-    for g in gradients:
-        forces, du_dl, energy = g.execute_lambda(system.x0, integrator.lambs[0])
-        norms = np.linalg.norm(forces, axis=1)
-        highest_forces = np.argsort(norms)[::-1][:5]
-        print(g, highest_forces)
-        print(forces[highest_forces])
-
-
-    print(integrator.dts)
-    print(integrator.cas)
-
-    # assert 0
-
     stepper = custom_ops.AlchemicalStepper_f64(
         gradients,
         integrator.lambs
     )
-
 
     ctxt = custom_ops.ReversibleContext_f64(
         stepper,
@@ -53,7 +39,9 @@ def simulate(system, precision):
 
     ctxt.forward_mode()
 
+    full_du_dls = stepper.get_du_dl()
 
+    return full_du_dls
 
     energies = stepper.get_energies()
     for e_idx, e in enumerate(energies):
