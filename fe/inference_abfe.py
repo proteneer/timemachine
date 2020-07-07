@@ -81,9 +81,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-
-    print(r"""launching the timemachine.""")
-
     print("Launch Time:", datetime.datetime.now())
     print("Arguments:", " ".join(sys.argv))
 
