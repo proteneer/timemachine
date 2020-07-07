@@ -293,8 +293,8 @@ def create_system(
 
     final_gradients.append((
         'Nonbonded', (
-        combined_charge_params,
-        combined_lj_params,
+        np.asarray(combined_charge_params),
+        np.asarray(combined_lj_params),
         combined_exclusion_idxs,
         combined_charge_exclusion_scales,
         combined_lj_exclusion_scales,
@@ -306,8 +306,8 @@ def create_system(
 
     final_gradients.append((
         'GBSA', (
-        combined_charge_params,
-        combined_gb_params,
+        np.asarray(combined_charge_params),
+        np.asarray(combined_gb_params),
         combined_lambda_plane_idxs,
         combined_lambda_offset_idxs,
         *host_gb_props,
@@ -338,6 +338,11 @@ def create_system(
         core_atoms,
         stage=stage
     ))
+
+    # for f in final_gradients:
+        # print("FOOBAR", f[0])
+
+    # assert 0
 
     # temperature = 300
     # dt = 1.5e-3

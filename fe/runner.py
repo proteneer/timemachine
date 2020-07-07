@@ -1,23 +1,22 @@
 # runs a system.
+import os
 import numpy as np
 
 from timemachine.lib import custom_ops, ops
 
-def simulate(system, precision):
+def simulate(system, precision, gpu_idx, pipe):
 
+    # try:
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
     gradients = []
     force_names = []
 
     for grad_name, grad_args in system.gradients:
         force_names.append(grad_name)
         op_fn = getattr(ops, grad_name)
-        # print(grad_name)
-        # if grad_name == "GBSA" or grad_name == "Nonbonded":
-        if grad_name == "GBSA":
-            print("skipping", grad_name)
-            continue
         grad = op_fn(*grad_args, precision=precision)
         gradients.append(grad)
+
 
     integrator = system.integrator
 
@@ -39,20 +38,18 @@ def simulate(system, precision):
 
     ctxt.forward_mode()
 
-    full_du_dls = stepper.get_du_dl()
-
-    return full_du_dls
-
+    full_du_dls = stepper.get_du_dl() # [FxT]
     energies = stepper.get_energies()
-    for e_idx, e in enumerate(energies):
-        if e_idx % 100 == 0:
-            print(e_idx, e)
-        # if e_idx > 1600:
-            # break
-    # assert 0
 
-    # x_final = ctxt.get_last_coords()[:, :3]
+    pipe.send((full_du_dls, energies))
 
-    # return all_xs
-    # print(x_final)
-    return ctxt.get_all_coords()
+
+    pipe.close()
+
+        # for e_idx, e in enumerate(energies):
+        #     if e_idx % 100 == 0:
+        #         print(e_idx, e)
+
+        # return ctxt.get_all_coords()
+    # except Exception as e:
+        # print("FATAL", e)

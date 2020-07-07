@@ -80,98 +80,6 @@ def loss_fn(all_du_dls, true_ddG, lambda_schedule):
 
 loss_fn_grad = jax.grad(loss_fn, argnums=(0,))
 
-def setup_core_restraints(
-    k,
-    alpha,
-    count,
-    conf,
-    nha,
-    core_atoms,
-    params,
-    nrg_fns,
-    stage):
-    """
-    Setup core restraints
-
-    Parameters
-    ----------
-    k: float
-        Force constant of each restraint
-
-    count: int
-        Number of host atoms we restrain each ligand to
-
-    nha: int
-        Number of host atoms
-
-    core_atoms: list of int
-        atoms we're restraining. This is indexed by the total number of atoms in the system.
-
-    params: np.array float
-        fundamental parameters we're modifying
-
-    nrg_fns: dict
-        nrg fns from the timemachine System object.
-
-    stage: 0,1,2
-        0 - attach restraint
-        1 - decouple
-        2 - detach restraint
-
-    """
-    ri = np.expand_dims(conf, axis=0)
-    rj = np.expand_dims(conf, axis=1)
-    dij = jax_utils.distance(ri, rj)
-    all_nbs = []
-
-    bond_param_idxs = []
-    bond_idxs = []
-
-    for l_idx, dists in enumerate(dij[nha:]):
-        if l_idx in core_atoms:
-            nns = np.argsort(dists[:nha])
-
-            # restrain to 10 nearby atoms
-            for p_idx in nns[:count]:
-                k_idx = len(params)
-                params = np.concatenate([params, [k]])
-
-                b = dists[p_idx]
-                b_idx = len(params)
-                params = np.concatenate([params, [b]])
-
-                a = alpha
-                a_idx = len(params)
-                params = np.concatenate([params, [a]])
-
-                bond_param_idxs.append([k_idx, b_idx, a_idx])
-                bond_idxs.append([l_idx + nha, p_idx])
-
-    bond_idxs = np.array(bond_idxs, dtype=np.int32)
-    bond_param_idxs = np.array(bond_param_idxs, dtype=np.int32)
-
-    B = bond_idxs.shape[0]
-
-    # w = lambda*lambda_flags
-    # w = 0 implies that restraints are on
-    # w = +inf/-inf implies that restraints are off
-    if stage == 0:
-        lambda_flags = np.ones(B, dtype=np.int32)
-    elif stage == 1:
-        # fully interacting
-        lambda_flags = np.zeros(B, dtype=np.int32)
-    elif stage == 2:
-        lambda_flags = np.ones(B, dtype=np.int32)
-
-    nrg_fns['Restraint'] = (
-        bond_idxs,
-        bond_param_idxs,
-        lambda_flags
-    )
-
-    return params
-
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Absolute Binding Free Energy Script')
@@ -240,7 +148,19 @@ if __name__ == "__main__":
     # stage = 0
     # lamb = 0.25
 
+
+    stage_dGs = []
+
+    epoch = 0
+    epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
+
     for stage in [0,1,2]:
+
+        print("---Starting stage", stage, '---')
+        stage_dir = os.path.join(epoch_dir, "stage_"+str(stage))
+
+        if not os.path.exists(stage_dir):
+            os.makedirs(stage_dir)
 
         x0, combined_masses, final_gradients = setup_system.create_system(
             mol_a,
@@ -255,7 +175,7 @@ if __name__ == "__main__":
 
         if stage == 0:
             # we need to goto a larger lambda for the morse potential to decay to zero.
-            ti_lambdas = np.linspace(8.5, 0.0, 32)
+            ti_lambdas = np.linspace(7.0, 0.0, 32)
         elif stage == 1:
             # lambda spans from [0, inf], is close enough to zero over [0, 1.2] cutoff
             ti_lambdas = np.concatenate([
@@ -264,10 +184,13 @@ if __name__ == "__main__":
             ])
         elif stage == 2:
             # we need to goto a larger lambda for the morse potential to decay to zero.
-            ti_lambdas = np.linspace(0.0, 8.5, 32)
+            ti_lambdas = np.linspace(0.0, 7.0, 32)
         else:
             raise Exception("Unknown stage.")
 
+
+        all_processes = []
+        all_pipes = []
         for lambda_idx, lamb in enumerate(ti_lambdas):
 
             intg = setup_system.Integrator(
@@ -277,7 +200,7 @@ if __name__ == "__main__":
                 friction=40.0,
                 masses=combined_masses,
                 lamb=lamb,
-                seed=1234
+                seed=np.random.randint(np.iinfo(np.int32).max)
             )
 
             system = setup_system.System(
@@ -287,38 +210,85 @@ if __name__ == "__main__":
                 intg
             )
 
-            combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), mol_a)
-            combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-            out_file = os.path.join("debug.pdb")
-            writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
+            gpu_idx = lambda_idx % args.num_gpus
+            parent_conn, child_conn = Pipe()
+            # runner.simulate(system, precision, gpu_idx, child_conn)
+            # assert 0
 
-            du_dl_cutoff = 4000
-            full_du_dls = runner.simulate(system, precision=np.float32)
-            equil_du_dls = full_du_dls[:, du_dl_cutoff]
+            p = Process(target=runner.simulate, args=(system, precision, gpu_idx, child_conn))
+            all_processes.append(p)
+            all_pipes.append(parent_conn)
 
-            for f, du_dls in zip(final_gradients, equil_du_dls):
-                fname = f[0]
-                print("lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+        for b_idx in range(0, len(all_processes), args.num_gpus):
 
-            total_equil_du_dls = np.sum(equil_du_dls, axis=0)
+            for p in all_processes[b_idx:b_idx+args.num_gpus]:
+                p.start()
+
+            batch_du_dls = []
+            for pc_idx, pc in enumerate(all_pipes[b_idx:b_idx+args.num_gpus]):
+
+                lamb_idx = b_idx+pc_idx
+                lamb = ti_lambdas[b_idx+pc_idx]
+
+                full_du_dls, full_energies = pc.recv() # (F, T), (T)
+                # pc.send(None)
+                assert full_du_dls is not None
+                total_du_dls = np.sum(full_du_dls, axis=0)
+
+                plt.plot(total_du_dls, label="{:.2f}".format(lamb))
+                plt.ylabel("du_dl")
+                plt.xlabel("timestep")
+                plt.legend()
+                fpath = os.path.join(stage_dir, "lambda_du_dls_"+str(lamb_idx))
+                plt.savefig(fpath)
+                plt.clf()
+
+                plt.plot(full_energies, label="{:.2f}".format(lamb))
+                plt.ylabel("U")
+                plt.xlabel("timestep")
+                plt.legend()
+
+                fpath = os.path.join(stage_dir, "lambda_energies_"+str(lamb_idx))
+                plt.savefig(fpath)
+                plt.clf()
+
+                du_dl_cutoff = 4000
+                full_du_dls = runner.simulate(system, precision=np.float32)
+                equil_du_dls = full_du_dls[:, du_dl_cutoff:]
+
+                for f, du_dls in zip(final_gradients, equil_du_dls):
+                    fname = f[0]
+                    print("lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean/std du_dls", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+
+                total_equil_du_dls = np.sum(equil_du_dls, axis=0)
 
 
-            writer.write_header()
-            xs = all_coords
-            for frame_idx, x in enumerate(xs):
-                if frame_idx > 11500 and frame_idx < 11550:
-                    # break
-                # interval = max(1, xs.shape[0]//writer.n_frames)
-                # if frame_idx % interval == 0:
-                    # if check_coords(x):
-                    writer.write(x*10)
-                    # else:
-                        # print("failed to write on frame", frame_idx)
-                        # break
-            writer.close()
+                # sum_du_dls.append(total_du_dls)
+                # all_du_dls.append(full_du_dls)
 
-            assert 0
-            print(system)
+        combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdb_file, removeHs=False), mol_a)
+        combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+        out_file = os.path.join("debug.pdb")
+        writer = PDBWriter(combined_pdb_str, out_file, args.n_frames)
+
+            # assert 0
+
+            # writer.write_header()
+            # xs = all_coords
+            # for frame_idx, x in enumerate(xs):
+            #     if frame_idx > 11500 and frame_idx < 11550:
+            #         # break
+            #     # interval = max(1, xs.shape[0]//writer.n_frames)
+            #     # if frame_idx % interval == 0:
+            #         # if check_coords(x):
+            #         writer.write(x*10)
+            #         # else:
+            #             # print("failed to write on frame", frame_idx)
+            #             # break
+            # writer.close()
+
+            # assert 0
+            # print(system)
 
 
 
@@ -332,11 +302,16 @@ if __name__ == "__main__":
     
         epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
 
+        # if not os.path.exists(epoch_dir):
+            # os.makedirs(epoch_dir)
+
         for stage in [0, 1, 2]:
 
             print("---Starting stage", stage, '---')
 
             stage_dir = os.path.join(epoch_dir, "stage_"+str(stage))
+
+            print("stage_dir", stage_dir)
 
             if not os.path.exists(stage_dir):
                 os.makedirs(stage_dir)
@@ -461,6 +436,7 @@ if __name__ == "__main__":
             # run inference loop to generate all_du_dls
             for b_idx in range(0, len(all_processes), args.num_gpus):
                 for p in all_processes[b_idx:b_idx+args.num_gpus]:
+                    print("starting")
                     p.start()
 
                 batch_du_dls = []
@@ -469,9 +445,8 @@ if __name__ == "__main__":
                     lamb_idx = b_idx+pc_idx
                     lamb = ti_lambdas[b_idx+pc_idx]
 
-                    offset = equil_T # TBD use this
                     full_du_dls, full_energies = pc.recv() # (F, T), (T)
-                    pc.send(None)
+                    # pc.send(None)
                     assert full_du_dls is not None
                     total_du_dls = np.sum(full_du_dls, axis=0)
 
