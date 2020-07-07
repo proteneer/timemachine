@@ -159,7 +159,6 @@ def create_system(
     num_host_atoms = len(host_masses)
     num_guest_atoms = guest_mol.GetNumAtoms()
 
-
     final_gradients = []
 
     for item in host_fns: 
@@ -188,16 +187,9 @@ def create_system(
         scale14=0.5
     )
 
-    # offset
     guest_exclusion_idxs += num_host_atoms
-    # print(guest_exclusion_idxs)
-    # print(guest_scales)
-    # assert 0
-
-
     guest_lj_exclusion_scales = guest_scales
     guest_charge_exclusion_scales = guest_scales
-
 
     host_exclusion_idxs = host_exclusions[0]
     host_lj_exclusion_scales = host_exclusions[1]
@@ -339,31 +331,6 @@ def create_system(
         stage=stage
     ))
 
-    # for f in final_gradients:
-        # print("FOOBAR", f[0])
-
-    # assert 0
-
-    # temperature = 300
-    # dt = 1.5e-3
-    # friction = 40
-
     combined_masses = np.concatenate([host_masses, guest_masses])
 
-    # integrator = Integrator(dt, temperature, friction, combined_masses)
-    # ca, cbs, ccs = langevin_coefficients(
-    #     temperature,
-    #     dt,
-    #     friction,
-    #     combined_masses
-    # )
-
-    # cbs *= -1
-
-    # print("Integrator coefficients:")
-    # print("ca", ca)
-    # print("cbs", cbs)
-    # print("ccs", ccs)
-
     return x0, combined_masses, final_gradients
-    # return System(x0, v0, final_gradients, integrator)

@@ -19,13 +19,10 @@ template<typename RealType>
 __global__ void k_compute_born_radii(
     const int N,
     const double* coords,
-    // const double* params,
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double *gb_params,
-    // const int* atomic_radii_idxs,
-    // const int* scale_factor_idxs,
     const double dielectric_offset,
     const double cutoff,
     const double *block_bounds_ctr,
@@ -174,7 +171,6 @@ template <typename RealType>
 void __global__ k_compute_born_first_loop_gpu(
     const int N,
     const double* coords,
-    // const double* params,
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
@@ -363,7 +359,6 @@ void __global__ k_compute_born_first_loop_gpu(
 __global__ void k_reduce_born_radii(
     const int N,
     const double *gb_params,
-    // const int* atomic_radii_idxs,
     const double dielectric_offset,
     const double alpha_obc,
     const double beta_obc,
@@ -402,7 +397,6 @@ __global__ void k_reduce_born_radii(
 __global__ void k_reduce_born_forces(
     const int N,
     const double* gb_params,
-    // const int* atomic_radii_idxs,
     const double* born_radii,
     const double* obc_chain,
     const double surface_tension, // surface area factor
@@ -446,12 +440,9 @@ template <typename RealType>
 __global__ void k_compute_born_energy_and_forces(
     const int N,
     const double* coords,
-    // const double* params,
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-    // const int* atomic_radii_idxs,
-    // const int* scale_factor_idxs,
     const double *gb_params,
     const double *born_radii,
     const double *obc_chain,
@@ -636,7 +627,6 @@ __global__ void k_compute_born_energy_and_forces(
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE;
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
-        // atomJ = __shfl_sync(0xffffffff, atomJ, srcLane);
         born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
         radiusJ = __shfl_sync(0xffffffff, radiusJ, srcLane);
         scaleFactorJ = __shfl_sync(0xffffffff, scaleFactorJ, srcLane);

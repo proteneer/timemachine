@@ -12,9 +12,6 @@ class GBSA : public Gradient {
 
 private:
 
-    // int *d_charge_param_idxs_;
-    // int *d_atomic_radii_idxs_;
-    // int *d_scale_factor_idxs_;
     double *d_charge_params_;
     double *d_gb_params_;
 

@@ -194,16 +194,12 @@ void Nonbonded<RealType>::execute_lambda_inference_device(
 template <typename RealType>
 void Nonbonded<RealType>::execute_lambda_jvp_device(
     const int N,
-    // const int P,
     const double *d_coords_primals,
     const double *d_coords_tangents,
-    // const double *d_params_primals,
     const double lambda_primal,
     const double lambda_tangent,
     double *d_out_coords_primals,
     double *d_out_coords_tangents,
-    // double *d_out_params_primals,
-    // double *d_out_params_tangents,
     cudaStream_t stream) {
 
     if(N != N_) {
@@ -227,7 +223,6 @@ void Nonbonded<RealType>::execute_lambda_jvp_device(
         N_,
         d_coords_primals,
         d_coords_tangents,
-        // d_params_primals,
         lambda_primal,
         lambda_tangent,
         d_lambda_plane_idxs_,
@@ -253,7 +248,6 @@ void Nonbonded<RealType>::execute_lambda_jvp_device(
             E_,
             d_coords_primals,
             d_coords_tangents,
-            // d_params_primals,
             lambda_primal,
             lambda_tangent,
             d_lambda_plane_idxs_,

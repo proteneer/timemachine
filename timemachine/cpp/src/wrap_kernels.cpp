@@ -3,8 +3,6 @@
 #include <pybind11/numpy.h>
 
 #include "context.hpp"
-// #include "optimizer.hpp"
-// #include "langevin.hpp"
 #include "harmonic_bond.hpp"
 #include "harmonic_angle.hpp"
 #include "restraint.hpp"
@@ -12,8 +10,6 @@
 #include "nonbonded.hpp"
 #include "gbsa.hpp"
 #include "gradient.hpp"
-// #include "alchemical_gradient.hpp"
-// #include "stepper.hpp"
 #include "fixed_point.hpp"
 
 #include <iostream>
@@ -256,33 +252,6 @@ void declare_gradient(py::module &m) {
     });
 
 }
-
-// void declare_alchemical_gradient(py::module &m) {
-
-//     using Class = timemachine::AlchemicalGradient;
-//     std::string pyclass_name = std::string("AlchemicalGradient");
-//     py::class_<Class, timemachine::Gradient>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         int N,
-//         int P,
-//         timemachine::Gradient *u0,
-//         timemachine::Gradient *u1
-//     ){
-//         return new timemachine::AlchemicalGradient(
-//             N,
-//             P,
-//             u0,
-//             u1
-//         );
-//     }
-//     ));
-
-// }
 
 template <typename RealType>
 void declare_harmonic_bond(py::module &m, const char *typestr) {

@@ -11,7 +11,7 @@ template<typename RealType>
 void __global__ k_harmonic_bond_inference(
     const int B,     // number of bonds
     const double *coords,  // [n, 3]
-    const double *params,  // [p,]
+    const double *params,  // [p, 2]
     const int *bond_idxs,    // [b, 2]
     unsigned long long *grad_coords,
     double *energy) {
@@ -33,8 +33,6 @@ void __global__ k_harmonic_bond_inference(
         d2ij += delta*delta;
     }
 
-    // int kb_idx = param_idxs[b_idx*2+0];
-    // int b0_idx = param_idxs[b_idx*2+1];
 
     RealType kb = params[b_idx*2+0];
     RealType b0 = params[b_idx*2+1];
@@ -59,9 +57,8 @@ void __global__ k_harmonic_bond_jvp(
     const int B,     // number of bonds
     const double *coords,  
     const double *coords_tangent,  
-    const double *params,  // [p,]
+    const double *params,  // [p, 2]
     const int *bond_idxs,    // [b, 2]
-    // const int *param_idxs,   // [b, 2]
     double *grad_coords_primals,
     double *grad_coords_tangents,
     double *grad_params_primals,
@@ -118,9 +115,8 @@ template<typename RealType, int D>
 void __global__ k_harmonic_angle_inference(
     const int A,     // number of bonds
     const double *coords,  // [n, 3]
-    const double *params,  // [p,]
+    const double *params,  // [p, 2]
     const int *angle_idxs,    // [b, 3]
-    // const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords,
     double *out_energy
 ) {
@@ -189,9 +185,8 @@ void __global__ k_harmonic_angle_jvp(
     const int A,     // number of bonds
     const double *coords,  // [n, 3]
     const double *coords_tangent,  // [n, 3]
-    const double *params,  // [p,]
+    const double *params,  // [p, 2]
     const int *angle_idxs,    // [b, 3]
-    // const int *param_idxs,   // [b, 2]
     double *grad_coords_primals,
     double *grad_coords_tangents,
     double *grad_params_primals,
@@ -301,9 +296,8 @@ template<typename RealType, int D>
 void __global__ k_periodic_torsion_inference(
     const int T,     // number of bonds
     const double *coords,  // [n, 3]
-    const double *params,  // [p,]
+    const double *params,  // [p, 3]
     const int *torsion_idxs,    // [b, 4]
-    // const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords,
     double *energy
 ) {
@@ -402,9 +396,8 @@ void __global__ k_periodic_torsion_jvp(
     const int T,     // number of bonds
     const double *coords,  // [n, 3]
     const double *coords_tangent, 
-    const double *params,  // [p,]
+    const double *params,  // [p, 3]
     const int *torsion_idxs,    // [b, 4]
-    // const int *param_idxs,   // [b, 2]
     double *grad_coords_primals,
     double *grad_coords_tangents,
     double *grad_params_primals,

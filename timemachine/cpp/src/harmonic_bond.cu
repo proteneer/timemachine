@@ -44,8 +44,6 @@ HarmonicBond<RealType>::HarmonicBond(
     gpuErrchk(cudaMalloc(&d_du_dp_tangents_, B_*2*sizeof(*d_du_dp_tangents_)));
     gpuErrchk(cudaMemset(d_du_dp_tangents_, 0, B_*2*sizeof(*d_du_dp_tangents_)));
 
-    // gpuErrchk(cudaMemcpy(d_du_dp_primals_, &params[0], B_*2*sizeof(*d_params_), cudaMemcpyHostToDevice));
-
 };
 
 template <typename RealType>
@@ -70,7 +68,6 @@ void HarmonicBond<RealType>::get_du_dp_tangents(double *buf) {
 template <typename RealType>
 void HarmonicBond<RealType>::execute_lambda_inference_device(
     const int N,
-    // const int P,
     const double *d_coords_primals,
     const double lambda_primal,
     unsigned long long *d_out_coords_primals, // du/dx
@@ -89,24 +86,17 @@ void HarmonicBond<RealType>::execute_lambda_inference_device(
     );
     gpuErrchk(cudaPeekAtLastError());
 
-    // auto finish = std::chrono::high_resolution_clock::now();
-    // std::chrono::duration<double> elapsed = finish - start;
-    // std::cout << "HarmonicBond Elapsed time: " << elapsed.count() << " s\n";
-
 };
 
 template <typename RealType>
 void HarmonicBond<RealType>::execute_lambda_jvp_device(
     const int N,
-    // const int P,
     const double *d_coords_primals,
     const double *d_coords_tangents,
     const double lambda_primal, // unused
     const double lambda_tangent, // unused
     double *d_out_coords_primals,
     double *d_out_coords_tangents,
-    // double *d_out_params_primals,
-    // double *d_out_params_tangents,
     cudaStream_t stream) {
 
     int tpb = 32;
