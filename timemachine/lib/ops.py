@@ -7,6 +7,8 @@ def Nonbonded(*args, precision):
     exclusion_idxs = args[2]
     exclusion_set = set()
 
+    # print(exclusion_idxs)
+
     for src, dst in exclusion_idxs:
         src, dst = sorted((src, dst))
         exclusion_set.add((src, dst))

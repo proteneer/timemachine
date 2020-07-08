@@ -2,7 +2,7 @@ import jax.numpy as np
 
 from timemachine.potentials.jax_utils import distance, delta_r, convert_to_4d
 
-def restraint(conf, params, lamb, lamb_flags, box, bond_idxs, param_idxs):
+def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -38,9 +38,9 @@ def restraint(conf, params, lamb, lamb_flags, box, bond_idxs, param_idxs):
     cj = conf[bond_idxs[:, 1]]
 
     dij = np.sqrt(np.sum(np.power(ci - cj, 2), axis=-1) + f_lambda*f_lambda)
-    kbs = params[param_idxs[:, 0]]
-    b0s = params[param_idxs[:, 1]]
-    a0s = params[param_idxs[:, 2]]
+    kbs = params[:, 0]
+    b0s = params[:, 1]
+    a0s = params[:, 2]
 
     term = 1 - np.exp(-a0s*(dij - b0s))
 
@@ -49,7 +49,7 @@ def restraint(conf, params, lamb, lamb_flags, box, bond_idxs, param_idxs):
     return energy
 
 # lamb is *not used* it is used in the alchemical stuffl ater
-def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs):
+def harmonic_bond(conf, lamb, params, box, bond_idxs):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -60,7 +60,7 @@ def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs):
     conf: shape [num_atoms, 3] np.array
         atomic coordinates
 
-    params: shape [num_params,] np.array
+    params: shape [num_params, 2] np.array
         unique parameters
 
     box: shape [3, 3] np.array
@@ -73,17 +73,19 @@ def harmonic_bond(conf, params, lamb, box, bond_idxs, param_idxs):
         each element (k_idx, r_idx) maps into params for bond constants and ideal lengths
 
     """
+    assert params.shape == bond_idxs.shape
+
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
     dij = distance(ci, cj, box)
-    kbs = params[param_idxs[:, 0]]
-    r0s = params[param_idxs[:, 1]]
+    kbs = params[:, 0]
+    r0s = params[:, 1]
 
     energy = np.sum(kbs/2 * np.power(dij - r0s, 2.0))
     return energy
 
 
-def harmonic_angle(conf, params, lamb, box, angle_idxs, param_idxs, cos_angles=True):
+def harmonic_angle(conf, lamb, params, box, angle_idxs, cos_angles=True):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -116,8 +118,8 @@ def harmonic_angle(conf, params, lamb, box, angle_idxs, param_idxs, cos_angles=T
     cj = conf[angle_idxs[:, 1]]
     ck = conf[angle_idxs[:, 2]]
 
-    kas = params[param_idxs[:, 0]]
-    a0s = params[param_idxs[:, 1]]
+    kas = params[:, 0]
+    a0s = params[:, 1]
 
     vij = delta_r(ci, cj, box)
     vjk = delta_r(ck, cj, box)
@@ -187,7 +189,7 @@ def signed_torsion_angle(ci, cj, ck, cl):
     return np.arctan2(y, x)
 
 
-def periodic_torsion(conf, params, lamb, box, torsion_idxs, param_idxs):
+def periodic_torsion(conf, lamb, params, box, torsion_idxs):
     """
     Compute the periodic torsional energy.
 
@@ -217,9 +219,9 @@ def periodic_torsion(conf, params, lamb, box, torsion_idxs, param_idxs):
     ck = conf[torsion_idxs[:, 2]]
     cl = conf[torsion_idxs[:, 3]]
 
-    ks = params[param_idxs[:, 0]]
-    phase = params[param_idxs[:, 1]]
-    period = params[param_idxs[:, 2]]
+    ks = params[:, 0]
+    phase = params[:, 1]
+    period = params[:, 2]
     angle = signed_torsion_angle(ci, cj, ck, cl)
 
     nrg = ks*(1+np.cos(period * angle - phase))

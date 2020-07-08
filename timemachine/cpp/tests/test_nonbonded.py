@@ -16,7 +16,6 @@ from timemachine.lib import custom_ops
 from timemachine.potentials import alchemy
 from timemachine.lib import ops, custom_ops
 
-
 np.set_printoptions(linewidth=500)
 
 class TestNonbonded(GradientTest):
@@ -50,177 +49,82 @@ class TestNonbonded(GradientTest):
         return ref_mp
 
     def test_fast_nonbonded(self):
-        np.random.seed(125)
-        N = 65
+        np.random.seed(4321)
         D = 3
-        E = 10
-        P_charges = 4
-        P_lj = 5
-        P_exc = 7
 
-        # N = 5
-        # D = 3
-        # E = 25
-        # P_charges = 4
-        # P_lj = 5
-        # P_exc = 7
- 
-        x = self.get_random_coords(N, D)
 
-        # we generate two sets of lambda idxs, for stage 1 and stage 3 we have l_idx == 0
-        # for stage 2 we have l_idx == 1 (i.e. deleted atoms are respectively at the cutoff)
-        for l_idx in range(2):
+        # small_system = self.get_random_coords(43, D)
+        large_system = self.get_water_coords(D, sort=True)
 
-            if l_idx == 0:
+        for x_primal in [large_system]:
 
-                # stage 1 and 3 use this
-                lambda_plane_idxs = np.random.randint(
-                    low=0,
-                    high=2,
-                    size=(N),
-                    dtype=np.int32
-                )*2 # put everything at 2*Cutoff intervals
+            N = x_primal.shape[0]
+            E = N//5
 
-                print(lambda_plane_idxs)
+            lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+            lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
-                # assert 0
-
-                lambda_offset_idxs = np.random.randint(
-                    low=0,
-                    high=2,
-                    size=(N),
-                    dtype=np.int32
-                )
-            elif l_idx == 1:
-
-                # stage 2 has fully decoupled lambdas
-                lambda_plane_idxs = np.random.randint(
-                    low=0,
-                    high=4,
-                    size=(N),
-                    dtype=np.int32
-                )
-
-                lambda_offset_idxs = np.random.randint(
-                    low=0,
-                    high=1,
-                    size=(N),
-                    dtype=np.int32
-                )
+            x_tangent = np.random.randn(*x_primal.shape)
+            lamb_tangent = np.random.rand()
 
             for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-                for cutoff in [10000, 50.0, 1.0, 0.5, 0.3]:
-                    # E = 0
-                    params, ref_forces, test_forces = prepare_nonbonded_system(
-                        x,
-                        E,
-                        P_charges,
-                        P_lj,
-                        P_exc,
-                        lambda_plane_idxs,
-                        lambda_offset_idxs,
-                        p_scale=10.0,
-                        cutoff=cutoff,
-                        precision=precision
-                    )
 
-                    for lamb in [0.1]:
-                        print("lambda", lamb, "cutoff", cutoff, "precsion", precision)
-                        for r, t in zip(ref_forces, test_forces):
-                            self.compare_forces(
-                                x,
-                                params,
-                                lamb,
-                                r,
-                                t,
-                                precision,
-                                rtol=rtol
-                            )
-
-
-    def test_water_box(self):
-        
-        np.random.seed(123)
-
-        P_lj = 50
-        P_exc = 7
-        x = self.get_water_coords(3)
-
-        P_charges = x.shape[0]
-
-        N = x.shape[0]
-
-        for l_idx in range(2):
-
-            if l_idx == 0:
-
-                # stage 1 and 3 use this
-                lambda_plane_idxs = np.random.randint(
-                    low=0,
-                    high=1,
-                    size=(N),
-                    dtype=np.int32
-                )
-
-                lambda_offset_idxs = np.random.randint(
-                    low=0,
-                    high=2,
-                    size=(N),
-                    dtype=np.int32
-                )
-            elif l_idx == 1:
-
-                # stage 2 has fully decoupled lambdas
-                lambda_plane_idxs = np.random.randint(
-                    low=0,
-                    high=4,
-                    size=(N),
-                    dtype=np.int32
-                )
-
-                lambda_offset_idxs = np.random.randint(
-                    low=0,
-                    high=1,
-                    size=(N),
-                    dtype=np.int32
-                )
-
-            for precision, rtol in [(np.float64, 5e-10), (np.float32, 5e-5)]:
-
-
-                # E = x.shape[0] # each water 2 bonds and 1 angle constraint, so we remove them.
-                E = 100
-                # for cutoff in [1.0, 2.0, 5.0, 1000.0]:
-                # we may get a large error due to a particle-particle interaction just barely missing the cutoff distance?
                 for cutoff in [10000.0]:
-
-
-                    params, ref_forces, test_forces = prepare_nonbonded_system(
-                        x,
+                    # E = 0 # DEBUG!
+                    (charge_params, lj_params), ref_nb, test_force_ctor = prepare_nonbonded_system(
+                        x_primal,
                         E,
-                        P_charges,
-                        P_lj,
-                        P_exc,
                         lambda_plane_idxs,
                         lambda_offset_idxs,
                         p_scale=10.0,
-                        e_scale=1.0, # double the charges
                         cutoff=cutoff,
                         precision=precision
                     )
 
-                    for lamb in [0.0, 0.0, 0.1, 0.5, 0.75, 1.0]:
-                    # for lamb in [0.0, 0.1]:
-                        print("lambda", lamb, "cutoff", cutoff, "precision", precision)
-                        for r, t in zip(ref_forces, test_forces):
-                            self.compare_forces(    
-                                x,
-                                params,
-                                lamb,
-                                r,
-                                t,
-                                precision,
-                                rtol)
+                    ref_nb_parameterized = functools.partial(ref_nb,
+                        charge_params=charge_params,
+                        lj_params=lj_params
+                    )
+
+                    for lamb_primal in [0.0, 0.1, 0.2]:
+
+                        test_force = test_force_ctor()
+
+                        print("lambda", lamb_primal, "cutoff", cutoff, "precision", precision, "xshape", x_primal.shape)
+
+                        self.compare_forces(
+                            x_primal,
+                            lamb_primal,
+                            x_tangent,
+                            lamb_tangent,
+                            ref_nb_parameterized,
+                            test_force,
+                            precision,
+                            rtol=rtol
+                        )
+
+                        primals = (x_primal, lamb_primal, charge_params, lj_params)
+                        tangents = (x_tangent, lamb_tangent, np.zeros_like(charge_params), np.zeros_like(lj_params))
+
+                        grad_fn = jax.grad(ref_nb, argnums=(0, 1, 2, 3))
+                        ref_primals, ref_tangents = jax.jvp(grad_fn, primals, tangents)
+
+                        ref_du_dcharge_primals = ref_primals[2]
+                        test_du_dcharge_primals = test_force.get_du_dcharge_primals()
+                        np.testing.assert_almost_equal(ref_du_dcharge_primals, test_du_dcharge_primals, rtol)
+
+                        ref_du_dcharge_tangents = ref_tangents[2]
+                        test_du_dcharge_tangents = test_force.get_du_dcharge_tangents()
+                        np.testing.assert_almost_equal(ref_du_dcharge_tangents, test_du_dcharge_tangents, rtol)
+
+                        ref_du_dlj_primals = ref_primals[3]
+                        test_du_dlj_primals = test_force.get_du_dlj_primals()
+                        np.testing.assert_almost_equal(ref_du_dlj_primals, test_du_dlj_primals, rtol)
+
+                        ref_du_dlj_tangents = ref_tangents[3]
+                        test_du_dlj_tangents = test_force.get_du_dlj_tangents()
+                        np.testing.assert_almost_equal(ref_du_dlj_tangents, test_du_dlj_tangents, rtol)
+
 
 if __name__ == "__main__":
     unittest.main()

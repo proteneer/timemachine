@@ -11,12 +11,14 @@ def step(x):
 
 def gbsa_obc(
     coords,
-    params,
+    # params,
     lamb,
-    box,
-    charge_idxs,
-    radii_idxs,
-    scale_idxs,
+    # box,
+    charge_params,
+    gb_params,
+    # charge_idxs,
+    # radii_idxs,
+    # scale_idxs,
     alpha,
     beta,
     gamma,
@@ -30,14 +32,16 @@ def gbsa_obc(
     solvent_dielectric=78.5,
     probe_radius=0.14):
 
+    box = None
+
     assert cutoff_radii == cutoff_force
 
     coords_4d = convert_to_4d(coords, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff_radii)
 
-    N = len(radii_idxs)
+    N = len(charge_params)
 
-    radii = params[radii_idxs]
-    scales = params[scale_idxs]
+    radii = gb_params[:, 0]
+    scales = gb_params[:, 1]
 
     ri = np.expand_dims(coords_4d, 0)
     rj = np.expand_dims(coords_4d, 1)
@@ -88,7 +92,8 @@ def gbsa_obc(
     E += np.sum(surface_tension * (radii + probe_radius) ** 2 * (radii / B) ** 6)
 
     # on-diagonal
-    charges = params[charge_idxs]
+    charges = charge_params
+
     E += np.sum(-0.5 * (1 / solute_dielectric - 1 / solvent_dielectric) * charges ** 2 / B)
 
     # particle pair

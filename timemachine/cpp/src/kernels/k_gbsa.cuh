@@ -11,7 +11,7 @@
 // since we need to do a full O(N^2) computing and we don't need to broadcast the forces,
 // this should just be extremely efficient already
 
-#define RADII_EXP 4
+// #define RADII_EXP 4, used for switching function shenanigans, disabled for now
 
 
 // nope, still need to parallelize out
@@ -19,12 +19,10 @@ template<typename RealType>
 __global__ void k_compute_born_radii(
     const int N,
     const double* coords,
-    const double* params,
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-    const int* atomic_radii_idxs,
-    const int* scale_factor_idxs,
+    const double *gb_params,
     const double dielectric_offset,
     const double cutoff,
     const double *block_bounds_ctr,
@@ -58,9 +56,10 @@ __global__ void k_compute_born_radii(
     for(int d=0; d < 3; d++) {
         ci[d] = atom_i_idx < N ? coords[atom_i_idx*3+d] : 0;
     }
-    int radii_param_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
+    // int radii_param_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
+    int radii_param_idx_i = atom_i_idx < N ? atom_i_idx*2 + 0: 0;
 
-    RealType radiusI = atom_i_idx < N ? params[radii_param_idx_i] : 0;
+    RealType radiusI = atom_i_idx < N ? gb_params[radii_param_idx_i] : 0;
     RealType offsetRadiusI   = radiusI - dielectric_offset;
     RealType radiusIInverse  = 1/offsetRadiusI;
 
@@ -81,11 +80,11 @@ __global__ void k_compute_born_radii(
         cj[d] = atom_j_idx < N ? coords[atom_j_idx*3+d] : 0;
     }
 
-    int radii_param_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
-    int scale_param_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
+    int radii_param_idx_j = atom_j_idx < N ? atom_j_idx*2+0 : 0;
+    int scale_param_idx_j = atom_j_idx < N ? atom_j_idx*2+1 : 0;
 
-    RealType radiusJ = atom_j_idx < N ? params[radii_param_idx_j] : 0;
-    RealType scaleFactorJ = atom_j_idx < N ? params[scale_param_idx_j] : 0;
+    RealType radiusJ = atom_j_idx < N ? gb_params[radii_param_idx_j] : 0;
+    RealType scaleFactorJ = atom_j_idx < N ? gb_params[scale_param_idx_j] : 0;
 
     RealType offsetRadiusJ = radiusJ - dielectric_offset; 
     RealType scaledRadiusJ = offsetRadiusJ*scaleFactorJ;
@@ -172,11 +171,10 @@ template <typename RealType>
 void __global__ k_compute_born_first_loop_gpu(
     const int N,
     const double* coords,
-    const double* params,
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-    const int* charge_param_idxs,
+    const double* charge_params,
     const double* born_radii,
     const double prefactor,
     const double cutoff,
@@ -220,8 +218,8 @@ void __global__ k_compute_born_first_loop_gpu(
     for(int d=0; d < 3; d++) {
         ci[d] = atom_i_idx < N ? coords[atom_i_idx*3+d] : 0;
     }
-    int charge_param_idx_i = atom_i_idx < N ? charge_param_idxs[atom_i_idx] : 0;
-    RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
+    int charge_param_idx_i = atom_i_idx < N ? atom_i_idx : 0;
+    RealType qi = atom_i_idx < N ? charge_params[charge_param_idx_i] : 0;
     RealType born_radii_i = atom_i_idx < N ? born_radii[atom_i_idx] : 0;
 
     // RealType dE_dqi_accum = 0;
@@ -242,8 +240,8 @@ void __global__ k_compute_born_first_loop_gpu(
     for(int d=0; d < 3; d++) {
         cj[d] = atom_j_idx < N ? coords[atom_j_idx*3+d] : 0;
     }
-    int charge_param_idx_j = atom_j_idx < N ? charge_param_idxs[atom_j_idx] : 0;
-    RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
+    int charge_param_idx_j = atom_j_idx < N ? atom_j_idx : 0;
+    RealType qj = atom_j_idx < N ? charge_params[charge_param_idx_j] : 0;
     RealType born_radii_j = atom_j_idx < N ? born_radii[atom_j_idx] : 0;
     // RealType dE_dqj_accum = 0;
     RealType born_force_j_accum = 0;
@@ -262,7 +260,7 @@ void __global__ k_compute_born_first_loop_gpu(
         dxs[3] = delta_lambda;
         RealType r = fast_vec_norm<RealType, 4>(dxs);
         RealType r2 = r*r;
-        RealType rInverse = 1/r;
+        // RealType rInverse = 1/r;
         // RealType rInverse = fast_vec_rnorm<RealType, D>(dxs);
 
         if(atom_j_idx <= atom_i_idx && r < cutoff && atom_j_idx < N && atom_i_idx < N) {
@@ -360,8 +358,7 @@ void __global__ k_compute_born_first_loop_gpu(
 
 __global__ void k_reduce_born_radii(
     const int N,
-    const double *params,
-    const int* atomic_radii_idxs,
+    const double *gb_params,
     const double dielectric_offset,
     const double alpha_obc,
     const double beta_obc,
@@ -376,8 +373,8 @@ __global__ void k_reduce_born_radii(
         return;
     }
 
-    int radii_param_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
-    double radiusI = atom_i_idx < N ? params[radii_param_idx_i] : 0;
+    int radii_param_idx_i = atom_i_idx < N ? atom_i_idx*2+0 : 0;
+    double radiusI = atom_i_idx < N ? gb_params[radii_param_idx_i] : 0;
     double offsetRadiusI   = radiusI - dielectric_offset;
 
     double sum = static_cast<double>(static_cast<long long>(born_psi[atom_i_idx]))/FIXED_BORN_PSI;
@@ -399,8 +396,7 @@ __global__ void k_reduce_born_radii(
 // this is entirely done in double precision
 __global__ void k_reduce_born_forces(
     const int N,
-    const double* params,
-    const int* atomic_radii_idxs,
+    const double* gb_params,
     const double* born_radii,
     const double* obc_chain,
     const double surface_tension, // surface area factor
@@ -423,7 +419,9 @@ __global__ void k_reduce_born_forces(
 
     // ACE term
     if (br > 0.0) {
-        double atomic_radii = params[atomic_radii_idxs[atomI]];
+        int atomic_radii_idx_i = atomI*2 + 0;
+        // double atomic_radii = params[atomic_radii_idxs[atomI]];
+        double atomic_radii = gb_params[atomic_radii_idx_i];
         double r            = atomic_radii + probe_radius;
         double ratio6       = pow(atomic_radii/born_radii[atomI], 6.0);
         double saTerm       = surface_tension*r*r*ratio6;
@@ -442,14 +440,12 @@ template <typename RealType>
 __global__ void k_compute_born_energy_and_forces(
     const int N,
     const double* coords,
-    const double* params,
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-    const int* atomic_radii_idxs,
-    const int* scale_factor_idxs,
-    const double* born_radii,
-    const double* obc_chain,
+    const double *gb_params,
+    const double *born_radii,
+    const double *obc_chain,
     const double dielectric_offset,
     const double cutoff,
     const double *block_bounds_ctr,
@@ -488,8 +484,8 @@ __global__ void k_compute_born_energy_and_forces(
         ci[d] = atom_i_idx < N ? coords[atom_i_idx*3+d] : 0;
     }
 
-    int atomic_radii_idx_i = atom_i_idx < N ? atomic_radii_idxs[atom_i_idx] : 0;
-    RealType radiusI = atom_i_idx < N ? params[atomic_radii_idx_i] : 0;
+    int atomic_radii_idx_i = atom_i_idx < N ? atom_i_idx*2+0 : 0;
+    RealType radiusI = atom_i_idx < N ? gb_params[atomic_radii_idx_i] : 0;
     RealType born_force_i = atom_i_idx < N ? static_cast<RealType>(static_cast<long long>(bornForces[atom_i_idx]))/FIXED_EXPONENT_BORN_FORCES : 0;
     // RealType born_radii_i = atom_i_idx < N ? born_radii[atom_i_idx] : 0;
     // RealType dPsi_dri = 0;
@@ -509,11 +505,12 @@ __global__ void k_compute_born_energy_and_forces(
     for(int d=0; d < 3; d++) {
         cj[d] = atom_j_idx < N ? coords[atom_j_idx*3+d] : 0;
     }
-    int atomic_radii_idx_j = atom_j_idx < N ? atomic_radii_idxs[atom_j_idx] : 0;
-    RealType radiusJ = atom_j_idx < N ? params[atomic_radii_idx_j] : 0;
 
-    int scale_factor_idx_j = atom_j_idx < N ? scale_factor_idxs[atom_j_idx] : 0;
-    RealType scaleFactorJ = atom_j_idx < N ? params[scale_factor_idx_j] : 0;
+    int atomic_radii_idx_j = atom_j_idx < N ? atom_j_idx*2+0 : 0;
+    RealType radiusJ = atom_j_idx < N ? gb_params[atomic_radii_idx_j] : 0;
+
+    int scale_factor_idx_j = atom_j_idx < N ? atom_j_idx*2+1 : 0;
+    RealType scaleFactorJ = atom_j_idx < N ? gb_params[scale_factor_idx_j] : 0;
     RealType born_radii_j = atom_j_idx < N ? born_radii[atom_j_idx] : 0;
 
     const RealType dielectricOffset = dielectric_offset;
@@ -630,7 +627,6 @@ __global__ void k_compute_born_energy_and_forces(
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE;
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
-        // atomJ = __shfl_sync(0xffffffff, atomJ, srcLane);
         born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
         radiusJ = __shfl_sync(0xffffffff, radiusJ, srcLane);
         scaleFactorJ = __shfl_sync(0xffffffff, scaleFactorJ, srcLane);

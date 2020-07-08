@@ -12,9 +12,14 @@ class GBSA : public Gradient {
 
 private:
 
-    int *d_charge_param_idxs_;
-    int *d_atomic_radii_idxs_;
-    int *d_scale_factor_idxs_;
+    double *d_charge_params_;
+    double *d_gb_params_;
+
+    double *d_du_dcharge_primals_;
+    double *d_du_dgb_primals_;
+    double *d_du_dcharge_tangents_;
+    double *d_du_dgb_tangents_;
+
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
 
@@ -48,9 +53,8 @@ private:
 public:
 
     GBSA(
-        const std::vector<int> &charge_param_idxs,
-        const std::vector<int> &atomic_radii_idxs,
-        const std::vector<int> &scale_factor_idxs,
+        const std::vector<double> &charge_params,
+        const std::vector<double> &gb_params,
         const std::vector<int> &lambda_plane_idxs, // N
         const std::vector<int> &lambda_offset_idxs, // N
         double alpha,
@@ -65,14 +69,21 @@ public:
         double cutoff_force
     );
 
-    // FIX ME with actual destructors later
     ~GBSA();
+
+    int num_atoms() const {
+        return N_;
+    }
+
+    void get_du_dcharge_primals(double *buf);
+    void get_du_dcharge_tangents(double *buf);
+
+    void get_du_dgb_primals(double *buf);
+    void get_du_dgb_tangents(double *buf);
 
     virtual void execute_lambda_inference_device(
         const int N,
-        const int P,
         const double *d_coords_primals,
-        const double *d_params_primals,
         const double lambda_primal,
         unsigned long long *d_out_coords_primals,
         double *d_out_lambda_primals,
@@ -82,16 +93,12 @@ public:
 
     virtual void execute_lambda_jvp_device(
         const int N,
-        const int P,
         const double *d_coords_primals,
         const double *d_coords_tangents,
-        const double *d_params_primals,
         const double lambda_primal,
         const double lambda_tangent,
         double *d_out_coords_primals,
         double *d_out_coords_tangents,
-        double *d_out_params_primals,
-        double *d_out_params_tangents,
         cudaStream_t stream
     ) override;
 };

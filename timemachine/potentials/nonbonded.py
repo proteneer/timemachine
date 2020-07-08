@@ -10,32 +10,33 @@ def switch_fn(dij, cutoff):
 
 def nonbonded(
     conf,
-    params,
     lamb,
-    box,
-    es_param_idxs,
-    lj_param_idxs,
+    charge_params,
+    lj_params,
     exclusion_idxs,
-    es_exclusion_scale_idxs,
-    lj_exclusion_scale_idxs,
+    charge_scales,
+    lj_scales,
     cutoff,
     lambda_plane_idxs,
     lambda_offset_idxs):
 
 
-    assert box is None
+    # assert box is None
 
+    # print("ORIGINAL !", conf[0])
     conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
-    lj = lennard_jones(conf_4d, params, box=box, param_idxs=lj_param_idxs, cutoff=cutoff)
-    lj_exc = lennard_jones_exclusion(conf_4d, params, box=box, param_idxs=lj_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=lj_exclusion_scale_idxs)
-    es =               simple_energy(conf_4d, params, box=box, param_idxs=es_param_idxs, cutoff=cutoff, exclusions=exclusion_idxs, exclusion_scale_idxs=es_exclusion_scale_idxs)
+    # print(conf_4d)
 
+    lj = lennard_jones(conf_4d, lj_params, cutoff)
+    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, exclusion_idxs, lj_scales, cutoff)
+    es = simple_energy(conf_4d, charge_params, exclusion_idxs, charge_scales, cutoff)
+    # print(lj, lj_exc, es)
     return lj - lj_exc + es
 
 
 
-def lennard_jones(conf, params, box, param_idxs, cutoff):
+def lennard_jones(conf, lj_params, cutoff):
     """
     Implements a non-periodic LJ612 potential using the Lorentz−Berthelot combining
     rules, where sig_ij = (sig_i + sig_j)/2 and eps_ij = sqrt(eps_i * eps_j).
@@ -64,11 +65,11 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
         greater than cutoff is fully discarded.
     
     """
-
+    box = None
     assert box is None
 
-    sig = params[param_idxs[:, 0]]
-    eps = params[param_idxs[:, 1]]
+    sig = lj_params[:, 0]
+    eps = lj_params[:, 1]
 
     sig_i = np.expand_dims(sig, 0)
     sig_j = np.expand_dims(sig, 1)
@@ -112,22 +113,29 @@ def lennard_jones(conf, params, box, param_idxs, cutoff):
 
 
 # now we compute the exclusions
-def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
+def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff):
 
-    src_idxs = exclusions[:, 0]
-    dst_idxs = exclusions[:, 1]
+    box = None
+    assert box is None
+
+    assert exclusion_idxs.shape[1] == 2
+    # assert exclusion_idxs.shape[0] == conf.shape[0]
+    assert exclusion_idxs.shape[0] == lj_scales.shape[0]
+
+    src_idxs = exclusion_idxs[:, 0]
+    dst_idxs = exclusion_idxs[:, 1]
     ri = conf[src_idxs]
     rj = conf[dst_idxs]
     dij = distance(ri, rj, box)
 
-    sig_idxs = param_idxs[:, 0] 
-    sig_i = params[sig_idxs[src_idxs]]
-    sig_j = params[sig_idxs[dst_idxs]]
+    sig_params = lj_params[:, 0] 
+    sig_i = sig_params[src_idxs]
+    sig_j = sig_params[dst_idxs]
     sig_ij = (sig_i + sig_j)/2
 
-    eps_idxs = param_idxs[:, 1] 
-    eps_i = params[eps_idxs[src_idxs]]
-    eps_j = params[eps_idxs[dst_idxs]]
+    eps_params = lj_params[:, 1] 
+    eps_i = eps_params[src_idxs]
+    eps_j = eps_params[dst_idxs]
     eps_ij = np.sqrt(eps_i * eps_j)
 
     if cutoff is not None:
@@ -137,7 +145,7 @@ def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, e
     sig2 *= sig2
     sig6 = sig2*sig2*sig2
 
-    scale_ij = params[exclusion_scale_idxs]
+    scale_ij = lj_scales
     eij_exc = scale_ij*4*eps_ij*(sig6-1.0)*sig6
 
     if cutoff is not None:
@@ -150,15 +158,17 @@ def lennard_jones_exclusion(conf, params, box, param_idxs, cutoff, exclusions, e
     return np.sum(eij_exc)
 
 
-def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_scale_idxs):
+def simple_energy(conf, charge_params, exclusion_idxs, charge_scales, cutoff):
     """
     Numerically stable implementation of the pairwise term:
     
     eij = qi*qj/dij
 
     """
+
+    box = None
     # charges = params[param_idxs]
-    charges = params[param_idxs]
+    charges = charge_params
     qi = np.expand_dims(charges, 0) # (1, N)
     qj = np.expand_dims(charges, 1) # (N, 1)
     qij = np.multiply(qi, qj)
@@ -182,8 +192,8 @@ def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_s
         # eij = eij*sw
         eij = np.where(dij > cutoff, np.zeros_like(eij), eij)
 
-    src_idxs = exclusions[:, 0]
-    dst_idxs = exclusions[:, 1]
+    src_idxs = exclusion_idxs[:, 0]
+    dst_idxs = exclusion_idxs[:, 1]
     ri = conf[src_idxs]
     rj = conf[dst_idxs]
     dij = distance(ri, rj, box)
@@ -192,7 +202,7 @@ def simple_energy(conf, params, box, param_idxs, cutoff, exclusions, exclusion_s
     qj = charges[dst_idxs]
     qij = np.multiply(qi, qj)
 
-    scale_ij = params[exclusion_scale_idxs]
+    scale_ij = charge_scales
     eij_exc = scale_ij*qij/dij
 
     if cutoff is not None:

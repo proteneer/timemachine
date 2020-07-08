@@ -11,9 +11,8 @@ template<typename RealType>
 void __global__ k_harmonic_bond_inference(
     const int B,     // number of bonds
     const double *coords,  // [n, 3]
-    const double *params,  // [p,]
+    const double *params,  // [p, 2]
     const int *bond_idxs,    // [b, 2]
-    const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords,
     double *energy) {
 
@@ -34,11 +33,9 @@ void __global__ k_harmonic_bond_inference(
         d2ij += delta*delta;
     }
 
-    int kb_idx = param_idxs[b_idx*2+0];
-    int b0_idx = param_idxs[b_idx*2+1];
 
-    RealType kb = params[kb_idx];
-    RealType b0 = params[b0_idx];
+    RealType kb = params[b_idx*2+0];
+    RealType b0 = params[b_idx*2+1];
 
     RealType dij = sqrt(d2ij);
     RealType db = dij - b0;
@@ -60,9 +57,8 @@ void __global__ k_harmonic_bond_jvp(
     const int B,     // number of bonds
     const double *coords,  
     const double *coords_tangent,  
-    const double *params,  // [p,]
+    const double *params,  // [p, 2]
     const int *bond_idxs,    // [b, 2]
-    const int *param_idxs,   // [b, 2]
     double *grad_coords_primals,
     double *grad_coords_tangents,
     double *grad_params_primals,
@@ -87,8 +83,8 @@ void __global__ k_harmonic_bond_jvp(
         d2ij += delta*delta;
     }
 
-    int kb_idx = param_idxs[b_idx*2+0];
-    int b0_idx = param_idxs[b_idx*2+1];
+    int kb_idx = b_idx*2+0;
+    int b0_idx = b_idx*2+1;
 
     RealType kb = params[kb_idx];
     RealType b0 = params[b0_idx];
@@ -119,9 +115,8 @@ template<typename RealType, int D>
 void __global__ k_harmonic_angle_inference(
     const int A,     // number of bonds
     const double *coords,  // [n, 3]
-    const double *params,  // [p,]
+    const double *params,  // [p, 2]
     const int *angle_idxs,    // [b, 3]
-    const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords,
     double *out_energy
 ) {
@@ -161,8 +156,8 @@ void __global__ k_harmonic_angle_inference(
     RealType n3ij = nij*nij*nij;
     RealType n3jk = njk*njk*njk;
 
-    int ka_idx = param_idxs[a_idx*2+0];
-    int a0_idx = param_idxs[a_idx*2+1];
+    int ka_idx = a_idx*2+0;
+    int a0_idx = a_idx*2+1;
 
     RealType ka = params[ka_idx];
     RealType a0 = params[a0_idx];
@@ -190,9 +185,8 @@ void __global__ k_harmonic_angle_jvp(
     const int A,     // number of bonds
     const double *coords,  // [n, 3]
     const double *coords_tangent,  // [n, 3]
-    const double *params,  // [p,]
+    const double *params,  // [p, 2]
     const int *angle_idxs,    // [b, 3]
-    const int *param_idxs,   // [b, 2]
     double *grad_coords_primals,
     double *grad_coords_tangents,
     double *grad_params_primals,
@@ -241,8 +235,8 @@ void __global__ k_harmonic_angle_jvp(
     Surreal<RealType> n3ij = nij*nij*nij;
     Surreal<RealType> n3jk = njk*njk*njk;
 
-    int ka_idx = param_idxs[a_idx*2+0];
-    int a0_idx = param_idxs[a_idx*2+1];
+    int ka_idx = a_idx*2+0;
+    int a0_idx = a_idx*2+1;
 
     RealType ka = params[ka_idx];
     RealType a0 = params[a0_idx];
@@ -302,9 +296,8 @@ template<typename RealType, int D>
 void __global__ k_periodic_torsion_inference(
     const int T,     // number of bonds
     const double *coords,  // [n, 3]
-    const double *params,  // [p,]
+    const double *params,  // [p, 3]
     const int *torsion_idxs,    // [b, 4]
-    const int *param_idxs,   // [b, 2]
     unsigned long long *grad_coords,
     double *energy
 ) {
@@ -376,9 +369,9 @@ void __global__ k_periodic_torsion_inference(
     RealType x = dot_product(n1, n2);
     RealType angle = atan2(y, x);
 
-    int kt_idx = param_idxs[t_idx*3+0];
-    int phase_idx = param_idxs[t_idx*3+1];
-    int period_idx = param_idxs[t_idx*3+2];
+    int kt_idx = t_idx*3+0;
+    int phase_idx = t_idx*3+1;
+    int period_idx = t_idx*3+2;
 
     RealType kt = params[kt_idx];
     RealType phase = params[phase_idx];
@@ -403,9 +396,8 @@ void __global__ k_periodic_torsion_jvp(
     const int T,     // number of bonds
     const double *coords,  // [n, 3]
     const double *coords_tangent, 
-    const double *params,  // [p,]
+    const double *params,  // [p, 3]
     const int *torsion_idxs,    // [b, 4]
-    const int *param_idxs,   // [b, 2]
     double *grad_coords_primals,
     double *grad_coords_tangents,
     double *grad_params_primals,
@@ -479,9 +471,9 @@ void __global__ k_periodic_torsion_jvp(
     Surreal<RealType> x = dot_product(n1, n2);
     Surreal<RealType> angle = atan2(y, x);
 
-    int kt_idx = param_idxs[t_idx*3+0];
-    int phase_idx = param_idxs[t_idx*3+1];
-    int period_idx = param_idxs[t_idx*3+2];
+    int kt_idx = t_idx*3+0;
+    int phase_idx = t_idx*3+1;
+    int period_idx = t_idx*3+2;
 
     RealType kt = params[kt_idx];
     RealType phase = params[phase_idx];

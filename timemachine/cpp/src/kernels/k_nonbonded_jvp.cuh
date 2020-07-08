@@ -8,20 +8,22 @@ void __global__ k_nonbonded_jvp(
     const int N,
     const double *coords, // maybe Surreal or Real
     const double *coords_tangent, // maybe Surreal or Real
-    const double *params, // we do *not* support params tangent, ever!
+    // const double *params, // we do *not* support params tangent, ever!
     const double lambda_primal,
     const double lambda_tangent,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-    const int *charge_param_idxs,
-    const int *lj_param_idxs, // [N,2]
+    const double *charge_params,
+    const double *lj_params, // [N,2]
     const double cutoff,
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
     double *grad_coords_primals,
     double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    double *grad_params_primals,
-    double *grad_params_tangents) {
+    double *grad_charge_params_primals,
+    double *grad_charge_params_tangents,
+    double *grad_lj_params_primals,
+    double *grad_lj_params_tangents) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
@@ -60,13 +62,13 @@ void __global__ k_nonbonded_jvp(
         ci[d].real = atom_i_idx < N ? coords[atom_i_idx*3+d] : 0;
         ci[d].imag = atom_i_idx < N ? coords_tangent[atom_i_idx*3+d] : 0;
     }
-    int charge_param_idx_i = atom_i_idx < N ? charge_param_idxs[atom_i_idx] : 0;
-    int lj_param_idx_sig_i = atom_i_idx < N ? lj_param_idxs[atom_i_idx*2+0] : 0;
-    int lj_param_idx_eps_i = atom_i_idx < N ? lj_param_idxs[atom_i_idx*2+1] : 0;
+    int charge_param_idx_i = atom_i_idx < N ? atom_i_idx : 0;
+    int lj_param_idx_sig_i = atom_i_idx < N ? atom_i_idx*2+0 : 0;
+    int lj_param_idx_eps_i = atom_i_idx < N ? atom_i_idx*2+1 : 0;
 
-    RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
-    RealType sig_i = atom_i_idx < N ? params[lj_param_idx_sig_i] : 1;
-    RealType eps_i = atom_i_idx < N ? params[lj_param_idx_eps_i] : 0;
+    RealType qi = atom_i_idx < N ? charge_params[charge_param_idx_i] : 0;
+    RealType sig_i = atom_i_idx < N ? lj_params[lj_param_idx_sig_i] : 1;
+    RealType eps_i = atom_i_idx < N ? lj_params[lj_param_idx_eps_i] : 0;
 
     Surreal<RealType> g_qi(0.0, 0.0);
     Surreal<RealType> g_sigi(0.0, 0.0);
@@ -91,13 +93,13 @@ void __global__ k_nonbonded_jvp(
         cj[d].imag = atom_j_idx < N ? coords_tangent[atom_j_idx*3+d] : 0;
     }
 
-    int charge_param_idx_j = atom_j_idx < N ? charge_param_idxs[atom_j_idx] : 0;
-    int lj_param_idx_sig_j = atom_j_idx < N ? lj_param_idxs[atom_j_idx*2+0] : 0;
-    int lj_param_idx_eps_j = atom_j_idx < N ? lj_param_idxs[atom_j_idx*2+1] : 0;
+    int charge_param_idx_j = atom_j_idx < N ? atom_j_idx : 0;
+    int lj_param_idx_sig_j = atom_j_idx < N ? atom_j_idx*2+0 : 0;
+    int lj_param_idx_eps_j = atom_j_idx < N ? atom_j_idx*2+1 : 0;
 
-    RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
-    RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 1;
-    RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
+    RealType qj = atom_j_idx < N ? charge_params[charge_param_idx_j] : 0;
+    RealType sig_j = atom_j_idx < N ? lj_params[lj_param_idx_sig_j] : 1;
+    RealType eps_j = atom_j_idx < N ? lj_params[lj_param_idx_eps_j] : 0;
 
     Surreal<RealType> g_qj(0.0, 0.0);
     Surreal<RealType> g_sigj(0.0, 0.0);
@@ -194,26 +196,25 @@ void __global__ k_nonbonded_jvp(
     }  
 
     if(atom_i_idx < N) {
-        atomicAdd(grad_params_primals + charge_param_idx_i, g_qi.real);
-        atomicAdd(grad_params_primals + lj_param_idx_sig_i, g_sigi.real);
-        atomicAdd(grad_params_primals + lj_param_idx_eps_i, g_epsi.real);
+        atomicAdd(grad_charge_params_primals + charge_param_idx_i, g_qi.real);
+        atomicAdd(grad_lj_params_primals + lj_param_idx_sig_i, g_sigi.real);
+        atomicAdd(grad_lj_params_primals + lj_param_idx_eps_i, g_epsi.real);
 
-        atomicAdd(grad_params_tangents + charge_param_idx_i, g_qi.imag);
-        atomicAdd(grad_params_tangents + lj_param_idx_sig_i, g_sigi.imag);
-        atomicAdd(grad_params_tangents + lj_param_idx_eps_i, g_epsi.imag);
+        atomicAdd(grad_charge_params_tangents + charge_param_idx_i, g_qi.imag);
+        atomicAdd(grad_lj_params_tangents + lj_param_idx_sig_i, g_sigi.imag);
+        atomicAdd(grad_lj_params_tangents + lj_param_idx_eps_i, g_epsi.imag);
     }
 
     if(atom_j_idx < N) {
-        atomicAdd(grad_params_primals + charge_param_idx_j, g_qj.real);
-        atomicAdd(grad_params_primals + lj_param_idx_sig_j, g_sigj.real);
-        atomicAdd(grad_params_primals + lj_param_idx_eps_j, g_epsj.real);
+        atomicAdd(grad_charge_params_primals + charge_param_idx_j, g_qj.real);
+        atomicAdd(grad_lj_params_primals + lj_param_idx_sig_j, g_sigj.real);
+        atomicAdd(grad_lj_params_primals + lj_param_idx_eps_j, g_epsj.real);
 
-        atomicAdd(grad_params_tangents + charge_param_idx_j, g_qj.imag);
-        atomicAdd(grad_params_tangents + lj_param_idx_sig_j, g_sigj.imag);
-        atomicAdd(grad_params_tangents + lj_param_idx_eps_j, g_epsj.imag);
+        atomicAdd(grad_charge_params_tangents + charge_param_idx_j, g_qj.imag);
+        atomicAdd(grad_lj_params_tangents + lj_param_idx_sig_j, g_sigj.imag);
+        atomicAdd(grad_lj_params_tangents + lj_param_idx_eps_j, g_epsj.imag);
     }
 }
-
 
 
 template<typename RealType>
@@ -221,21 +222,23 @@ void __global__ k_nonbonded_exclusion_jvp(
     const int E, // number of exclusions
     const double *coords,
     const double *coords_tangent,
-    const double *params,
+    // const double *params,
     const double lambda_primal,
     const double lambda_tangent,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
-    const int *charge_scale_idxs, // [E]
-    const int *lj_scale_idxs, // [E] 
-    const int *charge_param_idxs, // [N]
-    const int *lj_param_idxs, // [N,2]
+    const double *charge_scales, // [E]
+    const double *lj_scales, // [E] 
+    const double *charge_params, // [N]
+    const double *lj_params, // [N,2]
     const double cutoff,
     double *grad_coords_primals,
     double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    double *grad_params_primals,
-    double *grad_params_tangents) {
+    double *grad_charge_params_primals,
+    double *grad_charge_params_tangents,
+    double *grad_lj_params_primals,
+    double *grad_lj_params_tangents) {
 
     const int e_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(e_idx >= E) {
@@ -255,13 +258,13 @@ void __global__ k_nonbonded_exclusion_jvp(
         ci[d].real = coords[atom_i_idx*3+d];
         ci[d].imag = coords_tangent[atom_i_idx*3+d];
     }
-    int charge_param_idx_i = charge_param_idxs[atom_i_idx];
-    int lj_param_idx_sig_i = lj_param_idxs[atom_i_idx*2+0];
-    int lj_param_idx_eps_i = lj_param_idxs[atom_i_idx*2+1];
+    int charge_param_idx_i = atom_i_idx;
+    int lj_param_idx_sig_i = atom_i_idx*2+0;
+    int lj_param_idx_eps_i = atom_i_idx*2+1;
 
-    RealType qi = params[charge_param_idx_i];
-    RealType sig_i = params[lj_param_idx_sig_i];
-    RealType eps_i = params[lj_param_idx_eps_i];
+    RealType qi = charge_params[charge_param_idx_i];
+    RealType sig_i = lj_params[lj_param_idx_sig_i];
+    RealType eps_i = lj_params[lj_param_idx_eps_i];
 
     Surreal<RealType> g_qi(0.0, 0.0);
     Surreal<RealType> g_sigi(0.0, 0.0);
@@ -281,23 +284,23 @@ void __global__ k_nonbonded_exclusion_jvp(
         cj[d].imag = coords_tangent[atom_j_idx*3+d];
     }
 
-    int charge_param_idx_j = charge_param_idxs[atom_j_idx];
-    int lj_param_idx_sig_j = lj_param_idxs[atom_j_idx*2+0];
-    int lj_param_idx_eps_j = lj_param_idxs[atom_j_idx*2+1];
+    int charge_param_idx_j = atom_j_idx;
+    int lj_param_idx_sig_j = atom_j_idx*2+0;
+    int lj_param_idx_eps_j = atom_j_idx*2+1;
 
-    RealType qj = params[charge_param_idx_j];
-    RealType sig_j = params[lj_param_idx_sig_j];
-    RealType eps_j = params[lj_param_idx_eps_j];
+    RealType qj = charge_params[charge_param_idx_j];
+    RealType sig_j = lj_params[lj_param_idx_sig_j];
+    RealType eps_j = lj_params[lj_param_idx_eps_j];
 
     Surreal<RealType> g_qj(0.0, 0.0);
     Surreal<RealType> g_sigj(0.0, 0.0);
     Surreal<RealType> g_epsj(0.0, 0.0);
 
-    int charge_scale_idx = charge_scale_idxs[e_idx];
-    RealType charge_scale = params[charge_scale_idx];
+    // int charge_scale_idx = charge_scale_idxs[e_idx];
+    RealType charge_scale = charge_scales[e_idx];
     
-    int lj_scale_idx = lj_scale_idxs[e_idx];
-    RealType lj_scale = params[lj_scale_idx];
+    // int lj_scale_idx = lj_scale_idxs[e_idx];
+    RealType lj_scale = lj_scales[e_idx];
 
     Surreal<RealType> dxs[4];
     Surreal<RealType> d2ij(0.0, 0.0);
@@ -367,34 +370,33 @@ void __global__ k_nonbonded_exclusion_jvp(
         g_sigi += sig_grad/2;
         g_sigj += sig_grad/2;
 
+        atomicAdd(grad_charge_params_primals + charge_param_idx_i, -charge_scale*g_qi.real);
+        atomicAdd(grad_charge_params_primals + charge_param_idx_j, -charge_scale*g_qj.real);
 
-        atomicAdd(grad_params_primals + charge_param_idx_i, -charge_scale*g_qi.real);
-        atomicAdd(grad_params_primals + charge_param_idx_j, -charge_scale*g_qj.real);
+        atomicAdd(grad_charge_params_tangents + charge_param_idx_i, -charge_scale*g_qi.imag);
+        atomicAdd(grad_charge_params_tangents + charge_param_idx_j, -charge_scale*g_qj.imag);
 
-        atomicAdd(grad_params_tangents + charge_param_idx_i, -charge_scale*g_qi.imag);
-        atomicAdd(grad_params_tangents + charge_param_idx_j, -charge_scale*g_qj.imag);
+        atomicAdd(grad_lj_params_primals + lj_param_idx_sig_i, -lj_scale*g_sigi.real);
+        atomicAdd(grad_lj_params_primals + lj_param_idx_sig_j, -lj_scale*g_sigj.real);
 
-        atomicAdd(grad_params_primals + lj_param_idx_sig_i, -lj_scale*g_sigi.real);
-        atomicAdd(grad_params_primals + lj_param_idx_sig_j, -lj_scale*g_sigj.real);
+        atomicAdd(grad_lj_params_tangents + lj_param_idx_sig_i, -lj_scale*g_sigi.imag);
+        atomicAdd(grad_lj_params_tangents + lj_param_idx_sig_j, -lj_scale*g_sigj.imag);
 
-        atomicAdd(grad_params_tangents + lj_param_idx_sig_i, -lj_scale*g_sigi.imag);
-        atomicAdd(grad_params_tangents + lj_param_idx_sig_j, -lj_scale*g_sigj.imag);
+        atomicAdd(grad_lj_params_primals + lj_param_idx_eps_i, -lj_scale*g_epsi.real);
+        atomicAdd(grad_lj_params_primals + lj_param_idx_eps_j, -lj_scale*g_epsj.real);
 
-        atomicAdd(grad_params_primals + lj_param_idx_eps_i, -lj_scale*g_epsi.real);
-        atomicAdd(grad_params_primals + lj_param_idx_eps_j, -lj_scale*g_epsj.real);
-
-        atomicAdd(grad_params_tangents + lj_param_idx_eps_i, -lj_scale*g_epsi.imag);
-        atomicAdd(grad_params_tangents + lj_param_idx_eps_j, -lj_scale*g_epsj.imag);
+        atomicAdd(grad_lj_params_tangents + lj_param_idx_eps_i, -lj_scale*g_epsi.imag);
+        atomicAdd(grad_lj_params_tangents + lj_param_idx_eps_j, -lj_scale*g_epsj.imag);
 
         // now do derivatives of the scales, which are just the negative unscaled energies!
-        Surreal<RealType> charge_scale_grad = qi*qj*inv_dij; 
-        Surreal<RealType> lj_scale_grad = 4*eps_ij*(sig6*inv_d6ij-1.0)*sig6*inv_d6ij;
+        // Surreal<RealType> charge_scale_grad = qi*qj*inv_dij; 
+        // Surreal<RealType> lj_scale_grad = 4*eps_ij*(sig6*inv_d6ij-1.0)*sig6*inv_d6ij;
 
-        atomicAdd(grad_params_primals + charge_scale_idx, -charge_scale_grad.real);
-        atomicAdd(grad_params_primals + lj_scale_idx, -lj_scale_grad.real);
+        // atomicAdd(grad_params_primals + charge_scale_idx, -charge_scale_grad.real);
+        // atomicAdd(grad_params_primals + lj_scale_idx, -lj_scale_grad.real);
 
-        atomicAdd(grad_params_tangents + charge_scale_idx, -charge_scale_grad.imag);
-        atomicAdd(grad_params_tangents + lj_scale_idx, -lj_scale_grad.imag);
+        // atomicAdd(grad_params_tangents + charge_scale_idx, -charge_scale_grad.imag);
+        // atomicAdd(grad_params_tangents + lj_scale_idx, -lj_scale_grad.imag);
 
     }
 
