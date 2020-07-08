@@ -6,7 +6,6 @@ from timemachine.lib import custom_ops, ops
 
 def simulate(system, precision, gpu_idx, pipe):
 
-    # try:
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
     gradients = []
     force_names = []
