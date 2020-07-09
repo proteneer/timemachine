@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+service Worker {
+	rpc ForwardMode(ForwardRequest) returns (ForwardReply) {}
+ 	rpc BackwardMode(BackwardRequest) returns (BackwardReply) {}
+}
+
+// The request message containing the user's name.
+message ForwardRequest {
+	bool inference = 1;
+	bytes system = 2; // pickle object
+    string precision = 3;
+}
+
+message ForwardReply {
+	bytes du_dls = 1; // numpy array
+    bytes energies = 2; // numpy array
+}
+
+// The response message containing the greetings
+message BackwardRequest {
+	bytes adjoint_du_dls = 1; // pickle
+}
+
+message BackwardReply {
+	bytes dl_dps = 1; // pickle
+}
