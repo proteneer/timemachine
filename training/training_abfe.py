@@ -136,7 +136,12 @@ if __name__ == "__main__":
     ff_raw = open(args.forcefield, "r").read()
     ff_handlers = deserialize(ff_raw)
 
-    channel = grpc.insecure_channel('localhost:50051')
+    channel = grpc.insecure_channel('localhost:50051',
+        options = [
+            ('grpc.max_send_message_length', 500 * 1024 * 1024),
+            ('grpc.max_receive_message_length', 500 * 1024 * 1024)
+        ]
+    )
     stub = service_pb2_grpc.WorkerStub(channel)
 
     for epoch in range(100):
@@ -263,11 +268,20 @@ if __name__ == "__main__":
             expected_du_dl = 50.0
             loss = loss_fn(full_du_dls, expected_du_dl)
             print("LOSS", loss)
-            du_dl_grad = loss_fn_grad(full_du_dls, expected_du_dl)[0]
+            adjoint_du_dls = loss_fn_grad(full_du_dls, expected_du_dl)[0]
 
-            print("sending adjoints")
-            pc.send(np.asarray(du_dl_grad))
-            dL_dps = pc.recv()
+            request = service_pb2.BackwardRequest(
+                adjoint_du_dls=pickle.dumps(np.asarray(adjoint_du_dls)),
+            )
+
+            response = stub.BackwardMode(request)
+
+            dL_dps = pickle.loads(response.dl_dps)
+            # full_energies = pickle.loads(response.energies)
+
+
+            # pc.send(np.asarray(du_dl_grad))
+            # dL_dps = pc.recv()
 
         assert len(final_gradients) == len(final_vjp_fns)
         assert len(final_gradients) == len(dL_dps)

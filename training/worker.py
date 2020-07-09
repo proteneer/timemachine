@@ -71,6 +71,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         # store and set state for backwards mode use.
         if request.inference is False:
+            print("SETTING STATE")
             self.state = (ctxt, gradients, force_names, stepper, system)
 
 
@@ -80,8 +81,10 @@ class Worker(service_pb2_grpc.WorkerServicer):
         assert self.state is not None
 
         ctxt, gradients, force_names, stepper, system = self.state
+        print("RESTORED STATE")
+        adjoint_du_dls = pickle.loads(request.adjoint_du_dls)
 
-        stepper.set_du_dl_adjoint(du_dl_adjoints)
+        stepper.set_du_dl_adjoint(adjoint_du_dls)
         ctxt.set_x_t_adjoint(np.zeros_like(system.x0))
         start = time.time()
         print("start backwards mode")
@@ -109,11 +112,18 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         reply = service_pb2.BackwardReply(dl_dps=pickle.dumps(dl_dps))
 
+        self.state = None
+
         return reply
 
 
 def serve():
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1),
+        options = [
+            ('grpc.max_send_message_length', 50 * 1024 * 1024),
+            ('grpc.max_receive_message_length', 50 * 1024 * 1024)
+        ]
+    )
     service_pb2_grpc.add_WorkerServicer_to_server(Worker(), server)
     server.add_insecure_port('[::]:50051')
     server.start()
