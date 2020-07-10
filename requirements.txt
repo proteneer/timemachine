@@ -1,4 +1,7 @@
 pytest
+grpcio==1.30.0
+grpcio-tools==1.30.0
+protobuf==3.12.2
 scipy==1.1.0
 pymbar==3.0.5
 jax==0.1.61
