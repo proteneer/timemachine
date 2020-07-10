@@ -1,6 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')
-import pickle
+# import pickle
 import copy
 import argparse
 import time
@@ -14,12 +14,11 @@ import sys
 from ff.handlers.deserialize import deserialize
 
 from multiprocessing import Process, Pipe
-from matplotlib import pyplot as plt
+
 from jax.config import config as jax_config
 # this always needs to be set
 jax_config.update("jax_enable_x64", True)
 
-import jax
 import jax.numpy as jnp
 
 import rdkit
@@ -28,8 +27,8 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import rdFMCS
 
 from simtk.openmm.app import PDBFile
-from fe import runner
-from fe import math_utils, setup_system
+from fe import dataset
+
 from fe import loss, bar
 from fe.pdb_writer import PDBWriter
 from ff.handlers import bonded, nonbonded
@@ -37,99 +36,11 @@ from ff.handlers import bonded, nonbonded
 
 import grpc
 
-from training import service_pb2
+from training import trainer
 from training import service_pb2_grpc
 
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18
-
-
-# def loss_fn(all_du_dls, true_ddG, lambda_schedule):
-#     """
-#     Loss function. Currently set to L1.
-
-#     Parameters:
-#     -----------
-#     all_du_dls: shape [L, F, T] np.array
-#         Where L is the number of lambda windows, F is the number of forces, and T is the total number of equilibrated steps
-
-#     true_ddG: scalar
-#         True ddG of the edge.
-
-#     Returns:
-#     --------
-#     scalar
-#         Loss
-
-#     """
-#     assert all_du_dls.ndim == 3
-
-#     total_du_dls = jnp.sum(all_du_dls, axis=1) # shape [L, T]
-#     mean_du_dls = jnp.mean(total_du_dls, axis=1) # shape [L]
-#     pred_ddG = math_utils.trapz(mean_du_dls, lambda_schedule)
-#     return jnp.abs(pred_ddG - true_ddG)
-
-def loss_fn(all_du_dls, lambda_schedules, expected_dG, du_dl_cutoff):
-    """
-    Parameters
-    ----------
-    all_du_dls: list of full_stage_du_dls (usually 3 stages)
-    """
-
-    stage_dGs = []
-    for stage_du_dls, ti_lambdas in zip(all_du_dls, lambda_schedules):
-        du_dls = []
-        for lamb_full_du_dls in stage_du_dls:
-            du_dls.append(jnp.mean(jnp.sum(lamb_full_du_dls[:, du_dl_cutoff:], axis=0)))
-        du_dls = jnp.concatenate([du_dls])
-        dG = math_utils.trapz(du_dls, ti_lambdas)
-        stage_dGs.append(dG)
-
-    pred_dG = jnp.sum(stage_dGs)
-
-    return jnp.abs(pred_dG - expected_dG)
-
-loss_fn_grad = jax.grad(loss_fn, argnums=(0,))
-# F = 6
-# T = 3000
-
-# test_input = [
-#     [np.random.randn(F, T)+5, np.random.randn(F, T), np.random.randn(F, T), np.random.randn(F, T)], # stage 0
-#     [np.random.randn(F, T), np.random.randn(F, T), np.random.randn(F, T)], # stage 1
-#     [np.random.randn(F, T), np.random.randn(F, T)] # stage 2
-# ]
-
-# lamba_schedules = [
-#     np.array([0.0, 0.3, 5.0, 6.0]),
-#     np.array([2.0, 3.0, 4.0]),
-#     np.array([1.0, 2.0])
-# ]
-
-
-#     # pred_du_dl = jnp.mean(jnp.sum(all_du_dls))
-
-# # def loss_fn(full_du_dl, expected_du_dl):
-    
-# #     pred_du_dl = jnp.mean(jnp.sum(full_du_dl, axis=0))
-# #     print("PREDICTED", pred_du_dl, "EXPECTED", expected_du_dl)
-# #     # return (expected_du_dl - pred_du_dl)**2
-# #     return jnp.abs(expected_du_dl - pred_du_dl)
-
-
-
-# # loss_fn(test_input, lamba_schedules, 50.0, 100)
-# # stage_adjoint_du_dls = loss_fn_grad(test_input, lamba_schedules, 50.0, 100)[0]
-
-# for stage_idx, add in enumerate(stage_adjoint_du_dls):
-#     print("stage", stage_idx)
-#     for x_idx, x in enumerate(add):
-#         print(x_idx, x)
-#     # print(stage_idx, add)
-
-
-
-# assert 0
-
 
 if __name__ == "__main__":
 
@@ -158,24 +69,22 @@ if __name__ == "__main__":
     suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
 
     all_guest_mols = []
-    for guest_idx, guest_mol in enumerate(suppl):
-        all_guest_mols.append(guest_mol)
 
-    mol_a = all_guest_mols[args.a_idx]
-    num_guest_atoms = mol_a.GetNumAtoms()
-    mol_a_dG = convert_uIC50_to_kJ_per_mole(float(mol_a.GetProp("IC50[uM](SPA)")))
+    data = []
 
-    a_name = mol_a.GetProp("_Name")
+    for guest_idx, mol in enumerate(suppl):
+        mol_dG = convert_uIC50_to_kJ_per_mole(float(mol.GetProp("IC50[uM](SPA)")))
+        data.append((mol, mol_dG))
+
+    full_dataset = dataset.Dataset(data)
+    train_frac = 0.6
+    train_dataset, test_dataset = full_dataset.split(0.6)
 
     # process the host first
     host_pdb_file = args.protein_pdb
     host_pdb = PDBFile(host_pdb_file)
 
     core_smarts = '[#6]1:[#6]:[#6]:[#6](:[#6](:[#6]:1-[#8]-[#6](:[#6]-[#1]):[#6])-[#1])-[#1]'
-
-    print("Using core smarts:", core_smarts)
-    core_query = Chem.MolFromSmarts(core_smarts)
-    core_atoms = mol_a.GetSubstructMatch(core_query)
 
     stage_dGs = []
 
@@ -211,10 +120,40 @@ if __name__ == "__main__":
         np.array([0.2, 2.0])
     ]
 
+    engine = trainer.Trainer(
+        host_pdb, 
+        stubs,
+        ff_handlers,
+        lambda_schedule,
+        core_smarts,
+        args.restr_force,
+        args.restr_alpha,
+        args.restr_count,
+        args.steps,
+        args.precision)
 
     for epoch in range(100):
-        print("Epoch", epoch)
+
+        print("Starting Epoch", epoch)
+
+        train_dataset.shuffle()
         epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
+
+        for mol, experiment_dG in test_dataset.data:
+            print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
+            mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
+            engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
+        
+        for mol, experiment_dG in train_dataset.data:
+            # core_query = Chem.MolFromSmarts(core_smarts)
+            # core_atoms = mol.GetSubstructMatch(core_query)
+            print("train mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
+            mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
+            engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
+
+        continue
+
+        print("Epoch", epoch)
 
         # for stage in [0,1,2]:
         # stage = 1
@@ -303,8 +242,6 @@ if __name__ == "__main__":
                 forward_futures.append(response_future)
 
             stage_forward_futures.append(forward_futures)
-
-
 
         # step 2. Run forward mode on the jobs
 
