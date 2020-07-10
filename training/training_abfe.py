@@ -72,7 +72,7 @@ if __name__ == "__main__":
     data = []
 
     for guest_idx, mol in enumerate(suppl):
-        mol_dG = convert_uIC50_to_kJ_per_mole(float(mol.GetProp("IC50[uM](SPA)")))
+        mol_dG = -1*convert_uIC50_to_kJ_per_mole(float(mol.GetProp("IC50[uM](SPA)")))
         data.append((mol, mol_dG))
 
     full_dataset = dataset.Dataset(data)
@@ -157,14 +157,18 @@ if __name__ == "__main__":
         train_dataset.shuffle()
         epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
 
-        # for mol, experiment_dG in test_dataset.data:
-        #     print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
-        #     mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
-        #     engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
+        for mol, experiment_dG in test_dataset.data:
+            print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
+            mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
+            loss, dG = engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
         
+            print("loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
+
         for mol, experiment_dG in train_dataset.data:
             print("train mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
-            engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
+            loss, dG = engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
+
+            print("loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
 
         continue
