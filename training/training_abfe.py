@@ -162,13 +162,13 @@ if __name__ == "__main__":
             mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
             loss, dG = engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
         
-            print("loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
+            print("test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
 
         for mol, experiment_dG in train_dataset.data:
             print("train mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
             loss, dG = engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
 
-            print("loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
+            print("train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
 
         continue
