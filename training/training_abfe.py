@@ -31,7 +31,6 @@ from fe import dataset
 
 from fe import loss, bar
 from fe.pdb_writer import PDBWriter
-from ff.handlers import bonded, nonbonded
 
 
 import grpc
@@ -97,7 +96,11 @@ if __name__ == "__main__":
         50002,
         50003,
         50004,
-        50005
+        50005,
+        50006,
+        50007,
+        50008,
+        50009
     ]
 
     stubs = []
@@ -114,10 +117,25 @@ if __name__ == "__main__":
         stub = service_pb2_grpc.WorkerStub(channel)
         stubs.append(stub)
 
+    # lambda_schedule = [
+    #     np.array([0.5, 0.7]),
+    #     np.array([0.4, 1.0]),
+    #     np.array([0.2, 2.0])
+    # ]
+
+    # lambda_schedule = [
+    #     np.linspace(7.0, 0.0, 32),
+    #     np.concatenate([
+    #         np.linspace(0.0, 0.5, 24, endpoint=False),
+    #         np.linspace(0.5, 1.2, 8)
+    #     ]), 
+    #     np.linspace(0.0, 7.0, 32)
+    # ]
+
     lambda_schedule = [
-        np.array([0.5, 0.7]),
-        np.array([0.4, 1.0]),
-        np.array([0.2, 2.0])
+        np.linspace(7.0, 0.0, 3),
+        np.linspace(0.0, 1.2, 4),
+        np.linspace(0.0, 7.0, 3)
     ]
 
     engine = trainer.Trainer(
@@ -139,212 +157,14 @@ if __name__ == "__main__":
         train_dataset.shuffle()
         epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
 
-        for mol, experiment_dG in test_dataset.data:
-            print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
-            mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
-            engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
+        # for mol, experiment_dG in test_dataset.data:
+        #     print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
+        #     mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
+        #     engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
         
         for mol, experiment_dG in train_dataset.data:
-            # core_query = Chem.MolFromSmarts(core_smarts)
-            # core_atoms = mol.GetSubstructMatch(core_query)
             print("train mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
             engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
 
         continue
-
-        print("Epoch", epoch)
-
-        # for stage in [0,1,2]:
-        # stage = 1
-
-        
-        # stage 1 ti_lambdas
-        stage_forward_futures = []
-        stub_idx = 0
-
-        # step 1. Prepare the jobs
-
-        for stage in [0,1,2]:
-
-            # if stage == 0:
-            #     # we need to goto a larger lambda for the morse potential to decay to zero.
-            #     ti_lambdas = np.linspace(7.0, 0.0, 32)
-
-            #     ti_lambdas = [0.5, 0.7]
-            # elif stage == 1:
-            #     # lambda spans from [0, inf], is close enough to zero over [0, 1.2] cutoff
-            #     ti_lambdas = np.concatenate([
-            #         np.linspace(0.0, 0.5, 24, endpoint=False),
-            #         np.linspace(0.5, 1.2, 8)
-            #     ])
-
-            #     ti_lambdas = [0.4, 1.0]
-            # elif stage == 2:
-            #     # we need to goto a larger lambda for the morse potential to decay to zero.
-            #     ti_lambdas = np.linspace(0.0, 7.0, 32)
-
-            #     ti_lambdas = [0.2, 2.0]
-            # else:
-            #     raise Exception("Unknown stage.")
-
-            # print("---Starting stage", stage, '---')
-            stage_dir = os.path.join(epoch_dir, "stage_"+str(stage))
-
-            if not os.path.exists(stage_dir):
-                os.makedirs(stage_dir)
-
-            x0, combined_masses, final_gradients, final_vjp_fns = setup_system.create_system(
-                mol_a,
-                host_pdb,
-                ff_handlers,
-                stage,
-                core_atoms,
-                args.restr_force,
-                args.restr_alpha,
-                args.restr_count
-            )
-
-            ti_lambdas = lambda_schedule[stage]
-
-            forward_futures = []
-
-            for lamb_idx, lamb in enumerate(ti_lambdas):
-
-                intg = setup_system.Integrator(
-                    steps=args.steps,
-                    dt=1.5e-3,
-                    temperature=300.0,
-                    friction=40.0,  
-                    masses=combined_masses,
-                    lamb=lamb,
-                    seed=np.random.randint(np.iinfo(np.int32).max)
-                )
-
-                system = setup_system.System(
-                    x0,
-                    np.zeros_like(x0),
-                    final_gradients,
-                    intg
-                )
-
-                request = service_pb2.ForwardRequest(
-                    inference=False,
-                    system=pickle.dumps(system),
-                    precision=args.precision
-                )
-
-                stub = stubs[stub_idx]
-                stub_idx += 1
-
-                # launch asynchronously
-                response_future = stub.ForwardMode.future(request)
-                forward_futures.append(response_future)
-
-            stage_forward_futures.append(forward_futures)
-
-        # step 2. Run forward mode on the jobs
-
-        du_dl_cutoff = 4000
-
-        all_du_dls = []
-        for stage_idx, stage_futures in enumerate(stage_forward_futures):
-            stage_du_dls = []
-            for future in stage_futures:
-
-                print("waiting on future")
-                response = future.result()
-
-                full_du_dls = pickle.loads(response.du_dls)
-                full_energies = pickle.loads(response.energies)
-
-                assert full_du_dls is not None
-
-                np.save(os.path.join(stage_dir, "lambda_"+str(lamb_idx)+"_full_du_dls"), full_du_dls)
-                total_du_dls = np.sum(full_du_dls, axis=0)
-
-                plt.plot(total_du_dls, label="{:.2f}".format(lamb))
-                plt.ylabel("du_dl")
-                plt.xlabel("timestep")
-                plt.legend()
-                fpath = os.path.join(stage_dir, "lambda_du_dls_"+str(lamb_idx))
-                plt.savefig(fpath)
-                plt.clf()
-
-                plt.plot(full_energies, label="{:.2f}".format(lamb))
-                plt.ylabel("U")
-                plt.xlabel("timestep")
-                plt.legend()
-
-                fpath = os.path.join(stage_dir, "lambda_energies_"+str(lamb_idx))
-                plt.savefig(fpath)
-                plt.clf()
-
-                equil_du_dls = full_du_dls[:, du_dl_cutoff:]
-
-                for f, du_dls in zip(final_gradients, equil_du_dls):
-                    fname = f[0]
-                    print("lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
-
-                total_equil_du_dls = np.sum(equil_du_dls, axis=0) # [1, T]
-                print("lambda:", "{:.3f}".format(lamb), "\t mean", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
-
-                stage_du_dls.append(full_du_dls)
-
-            all_du_dls.append(stage_du_dls)
-
-        expected_dG = 60.0
-        loss = loss_fn(all_du_dls, lambda_schedule, expected_dG, du_dl_cutoff)
-        all_adjoint_du_dls = loss_fn_grad(all_du_dls, lambda_schedule, expected_dG, du_dl_cutoff)[0]
-
-        # step 3. run backward mode
-        stage_backward_futures = []
-
-        stub_idx = 0
-        for stage_idx, adjoint_du_dls in enumerate(all_adjoint_du_dls):
-
-            futures = []
-            for lambda_du_dls in adjoint_du_dls:
-                request = service_pb2.BackwardRequest(
-                    adjoint_du_dls=pickle.dumps(np.asarray(lambda_du_dls)),
-                )
-
-                # futures.append(response_future)
-                futures.append(stubs[stub_idx].BackwardMode.future(request))
-                stub_idx += 1
-
-            stage_backward_futures.append(futures)
-
-        charge_derivatives = []
-        gb_derivatives = []
-
-        for stage_idx, stage_futures in enumerate(stage_backward_futures):
-            print("stage_idx", stage_idx)
-            for future in stage_futures:
-                backward_response = future.result()
-                dl_dps = pickle.loads(backward_response.dl_dps)
-
-                for g, vjp_fn, dl_dp in zip(final_gradients, final_vjp_fns, dl_dps):
-
-                    # train charges only
-                    if g[0] == 'Nonbonded':
-                        # 0 is for charges
-                        # 1 is for lj terms
-                        charge_derivatives.append(vjp_fn[0](dl_dp[0]))
-                    elif g[0] == 'GBSA':
-                        # 0 is for charges
-                        # 1 is for gb terms
-                        charge_derivatives.append(vjp_fn[0](dl_dp[0]))
-                        gb_derivatives.append(vjp_fn[1](dl_dp[1]))
-
-
-        charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
-        charge_lr = 1e-3
-
-        print(charge_gradients)
-
-        for h in ff_handlers:
-            if isinstance(h, nonbonded.SimpleChargeHandler):
-                h.params -= charge_gradients*charge_lr
-
-        assert 0

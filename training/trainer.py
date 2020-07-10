@@ -11,6 +11,9 @@ from training import service_pb2
 from matplotlib import pyplot as plt
 import pickle
 
+from ff.handlers import bonded, nonbonded
+
+
 def dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff):
     stage_dGs = []
     for stage_du_dls, ti_lambdas in zip(all_du_dls, lambda_schedules):
@@ -24,14 +27,19 @@ def dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff):
     pred_dG = jnp.sum(stage_dGs)
     return pred_dG
 
+
 def loss_fn(all_du_dls, lambda_schedules, expected_dG, du_dl_cutoff):
     """
+
     Parameters
     ----------
-    all_du_dls: list of full_stage_du_dls (usually 3 stages)
+    all_du_dls: list of nd.array
+        list of full_stage_du_dls (usually 3 stages)
+
     """
     pred_dG = dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff)
     return jnp.abs(pred_dG - expected_dG)
+
 
 loss_fn_grad = jax.grad(loss_fn, argnums=(0,))
 
@@ -49,6 +57,12 @@ class Trainer():
             restr_count,
             steps,
             precision):
+
+        n_workers = len(stubs)
+        n_lambdas = np.sum([len(x) for x in lambda_schedule])
+
+        print(n_workers, n_lambdas)
+        assert n_workers == n_lambdas
 
         self.host_pdb = host_pdb
         self.stubs = stubs
@@ -76,29 +90,7 @@ class Trainer():
         stub_idx = 0
 
         # step 1. Prepare the jobs
-
         for stage in [0,1,2]:
-
-            # if stage == 0:
-            #     # we need to goto a larger lambda for the morse potential to decay to zero.
-            #     ti_lambdas = np.linspace(7.0, 0.0, 32)
-
-            #     ti_lambdas = [0.5, 0.7]
-            # elif stage == 1:
-            #     # lambda spans from [0, inf], is close enough to zero over [0, 1.2] cutoff
-            #     ti_lambdas = np.concatenate([
-            #         np.linspace(0.0, 0.5, 24, endpoint=False),
-            #         np.linspace(0.5, 1.2, 8)
-            #     ])
-
-            #     ti_lambdas = [0.4, 1.0]
-            # elif stage == 2:
-            #     # we need to goto a larger lambda for the morse potential to decay to zero.
-            #     ti_lambdas = np.linspace(0.0, 7.0, 32)
-
-            #     ti_lambdas = [0.2, 2.0]
-            # else:
-            #     raise Exception("Unknown stage.")
 
             # print("---Starting stage", stage, '---')
             stage_dir = os.path.join(run_dir, "stage_"+str(stage))

@@ -20,10 +20,6 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
     def __init__(self):
         self.state = None
-        # md_ctxt = None
-        # self.gradients = None
-        # self.force_names = None
-        # self.
 
     def ForwardMode(self, request, context):
         assert self.state is None
@@ -147,35 +143,3 @@ if __name__ == '__main__':
 
     logging.basicConfig()
     serve(args)
-
-
-# class Worker():
-
-#   def __init__(self):
-#       self.ctxt = None
-
-#   def forward_mode(self, request):
-
-#       assert self.ctxt is None
-
-#       system_xml, precision = request.data()
-#       reply = Reply()
-#       self.ctxt = initialize()
-#       du_dls = self.ctxt.simulate()
-#       reply.du_dls = du_dls
-    
-#       if request.inference:
-#           self.ctxt = None
-
-#       self.send(reply)
-
-#   def backwards_mode():
-
-#       assert self.ctxt is not None
-#       self.ctxt.reverse_mode()
-
-#       parameter_adjoints = None
-#       self.send(parameter_adjoints)
-
-#       # ensure this can only ever be ran once
-#       self.ctxt = None
