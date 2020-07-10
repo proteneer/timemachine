@@ -48,12 +48,9 @@ if __name__ == "__main__":
     parser.add_argument('--precision', type=str, required=True, help='Either single or double precision. Double is 8x slower.')
     parser.add_argument('--protein_pdb', type=str, required=True, help='Prepared protein PDB file. This should not have any waters.')
     parser.add_argument('--ligand_sdf', type=str, required=True, help='The ligand sdf used along with posed 3D coordinates. Only the first two ligands are used.')
-    parser.add_argument('--num_gpus', type=int, required=True, help='Number of gpus available.')
     parser.add_argument('--forcefield', type=str, required=True, help='Small molecule forcefield to be loaded.')
-    parser.add_argument('--lamb', type=float, required=False, help='Which lambda window we run at.')
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
-    parser.add_argument('--a_idx', type=int, required=True, help='A index')
     parser.add_argument('--restr_force', type=float, required=True, help='Strength of the each restraint term, in kJ/mol.')
     parser.add_argument('--restr_alpha', type=float, required=True, help='Width of the well.')
     parser.add_argument('--restr_count', type=int, required=True, help='Number of host atoms we restrain each core atom to.')
@@ -153,7 +150,6 @@ if __name__ == "__main__":
     for epoch in range(100):
 
         print("Starting Epoch", epoch)
-
         train_dataset.shuffle()
         epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
 
@@ -161,14 +157,10 @@ if __name__ == "__main__":
             print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
             loss, dG = engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
-        
             print("test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
 
         for mol, experiment_dG in train_dataset.data:
             print("train mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
             loss, dG = engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
-
             print("train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
-
-        continue

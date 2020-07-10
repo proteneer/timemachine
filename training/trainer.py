@@ -36,6 +36,16 @@ def loss_fn(all_du_dls, lambda_schedules, expected_dG, du_dl_cutoff):
     all_du_dls: list of nd.array
         list of full_stage_du_dls (usually 3 stages)
 
+    lambda_schedules: list of nd.array
+        combined lambda schedule
+
+    expected_dG: float
+        deltaG of unbinding. (Note the sign)
+
+    du_dl_cutoff: int
+        number of frames in the equilibration phase.
+    
+
     """
     pred_dG = dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff)
     return jnp.abs(pred_dG - expected_dG)
@@ -56,12 +66,10 @@ class Trainer():
             restr_alpha,
             restr_count,
             steps,
-            precision):
+            precision):got
 
         n_workers = len(stubs)
         n_lambdas = np.sum([len(x) for x in lambda_schedule])
-
-        print(n_workers, n_lambdas)
         assert n_workers == n_lambdas
 
         self.host_pdb = host_pdb
@@ -75,7 +83,7 @@ class Trainer():
         self.steps = steps
         self.precision = precision
 
-    def run_mol(self, mol_a, inference, run_dir, experiment_dG):
+    def run_mol(self, mol, inference, run_dir, experiment_dG):
 
         host_pdb = self.host_pdb
         lambda_schedule = self.lambda_schedule
@@ -83,7 +91,7 @@ class Trainer():
         stubs = self.stubs
 
         core_query = Chem.MolFromSmarts(self.core_smarts)
-        core_atoms = mol_a.GetSubstructMatch(core_query)
+        core_atoms = mol.GetSubstructMatch(core_query)
 
         # stage 1 ti_lambdas
         stage_forward_futures = []
@@ -99,7 +107,7 @@ class Trainer():
                 os.makedirs(stage_dir)
 
             x0, combined_masses, final_gradients, final_vjp_fns = setup_system.create_system(
-                mol_a,
+                mol,
                 host_pdb,
                 ff_handlers,
                 stage,
@@ -156,7 +164,6 @@ class Trainer():
             stage_du_dls = []
             for future in stage_futures:
 
-                print("waiting on future")
                 response = future.result()
 
                 full_du_dls = pickle.loads(response.du_dls)
