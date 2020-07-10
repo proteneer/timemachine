@@ -4,7 +4,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from fe import math_utils, setup_system
+from fe import math_utils, system
 from rdkit import Chem
 
 from training import service_pb2
@@ -66,7 +66,7 @@ class Trainer():
             restr_alpha,
             restr_count,
             steps,
-            precision):got
+            precision):
 
         n_workers = len(stubs)
         n_lambdas = np.sum([len(x) for x in lambda_schedule])
@@ -106,7 +106,7 @@ class Trainer():
             if not os.path.exists(stage_dir):
                 os.makedirs(stage_dir)
 
-            x0, combined_masses, final_gradients, final_vjp_fns = setup_system.create_system(
+            x0, combined_masses, final_gradients, final_vjp_fns = system.create_system(
                 mol,
                 host_pdb,
                 ff_handlers,
@@ -123,7 +123,7 @@ class Trainer():
 
             for lamb_idx, lamb in enumerate(ti_lambdas):
 
-                intg = setup_system.Integrator(
+                intg = system.Integrator(
                     steps=self.steps,
                     dt=1.5e-3,
                     temperature=300.0,
@@ -133,7 +133,7 @@ class Trainer():
                     seed=np.random.randint(np.iinfo(np.int32).max)
                 )
 
-                system = setup_system.System(
+                complex_system = system.System(
                     x0,
                     np.zeros_like(x0),
                     final_gradients,
@@ -142,7 +142,7 @@ class Trainer():
 
                 request = service_pb2.ForwardRequest(
                     inference=inference,
-                    system=pickle.dumps(system),
+                    system=pickle.dumps(complex_system),
                     precision=self.precision
                 )
 

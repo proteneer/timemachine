@@ -26,21 +26,15 @@ public:
 
     virtual void forward_step(
         const int N,
-        // const int P,
         const double *coords,
-        // const double *params,
         unsigned long long *dx) = 0;
 
     virtual void backward_step(
         const int N,
-        // const int P,
         const double *coords,
-        // const double *params,
         const double *dx_tangent,
         double *coords_jvp_primals,
         double *coords_jvp_tangents) = 0;
-        // double *params_jvp_primals,
-        // double *params_jvp_tangents) = 0;
 
 };
 
@@ -68,21 +62,15 @@ public:
 
     virtual void forward_step(
         const int N,
-        // const int P,
         const double *coords,
-        // const double *params,
         unsigned long long *dx) override;
 
     virtual void backward_step(
         const int N,
-        // const int P,
         const double *coords,
-        // const double *params,
         const double *dx_tangent,
         double *coords_jvp_primals,
         double *coords_jvp_tangents) override;
-        // double *params_jvp_primals,
-        // double *params_jvp_tangents) override;
 
     void get_du_dl(double *buf);
     void get_energies(double *buf);
@@ -100,6 +88,5 @@ public:
         const double *adj);
 
 };
-
 
 } // namespace

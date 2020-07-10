@@ -3,6 +3,8 @@ import jax.numpy as jnp
 def trapz(y, x, dx=1.0, axis=-1):
     """
     Isomorphic API to numpy's trapz. Refer to np.trapz for documentation.
+
+    y and x must be numpy arrays.
     """
     d = jnp.diff(x)
     # reshape to correct shape
@@ -18,11 +20,3 @@ def trapz(y, x, dx=1.0, axis=-1):
 
     ret = (d * (y[tuple(slice1)] + y[tuple(slice2)]) / 2.0).sum(axis)
     return ret
-        
-# samples = 64
-# ys = onp.random.rand(samples)
-# xs = onp.linspace(0, 1, samples)
-
-# trapz(ys, xs)
-# trapz_grad_fn = jax.grad(trapz, argnums=(0,))
-# trapz_grad_fn(ys, xs)

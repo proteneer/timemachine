@@ -11,8 +11,6 @@
 namespace timemachine {
 
 ReversibleContext::~ReversibleContext() {
-    // gpuErrchk(cudaFree(d_params_));
-    // gpuErrchk(cudaFree(d_params_grads_));
 
     curandErrchk(curandDestroyGenerator(cr_rng_));
 
@@ -26,15 +24,11 @@ ReversibleContext::~ReversibleContext() {
     gpuErrchk(cudaFree(d_forces_));
 
     gpuErrchk(cudaFree(d_x_t_tangent_));
-    // gpuErrchk(cudaFree(d_param_adjoint_accum_));
     gpuErrchk(cudaFree(d_x_t_adjoint_));
     gpuErrchk(cudaFree(d_v_t_adjoint_));
 
     gpuErrchk(cudaFree(d_dE_dx_jvp_primals_));
     gpuErrchk(cudaFree(d_dE_dx_jvp_tangents_));
-
-    // gpuErrchk(cudaFree(d_dE_dp_jvp_primals_));
-    // gpuErrchk(cudaFree(d_dE_dp_jvp_tangents_));
 
 };
 
@@ -55,16 +49,13 @@ ReversibleContext::ReversibleContext(
     const std::vector<double> &coeff_cbs,
     const std::vector<double> &coeff_ccs,
     const std::vector<double> &step_sizes,
-    // const std::vector<double> &params,
     unsigned long long seed) :
         N_(N),
-        // P_(params.size()),
         stepper_(stepper),
         coeff_cas_(coeff_cas),
         step_sizes_(step_sizes) {
 
     size_t T = step_sizes.size();
-    // size_t P = P_;
     size_t F = T+1; // number of frames is number of steps + 1
 
     assert(x0.size() == N*D);
@@ -73,7 +64,6 @@ ReversibleContext::ReversibleContext(
     assert(coeff_cbs.size() == N);
     assert(coeff_ccs.size() == N);
     assert(step_sizes.size() == T);
-    // assert(params.size() == P);
 
     gpuErrchk(cudaMalloc(&d_coeff_cbs_, N*sizeof(double)));
     gpuErrchk(cudaMemcpy(d_coeff_cbs_, &coeff_cbs[0], N*sizeof(double), cudaMemcpyHostToDevice));
@@ -89,21 +79,13 @@ ReversibleContext::ReversibleContext(
 
     gpuErrchk(cudaMalloc(&d_forces_, N*D*sizeof(*d_forces_)));
 
-    // gpuErrchk(cudaMalloc(&d_params_, P*sizeof(double)));
-    // gpuErrchk(cudaMemcpy(d_params_, &params[0], P*sizeof(double), cudaMemcpyHostToDevice));
 
     gpuErrchk(cudaMalloc(&d_x_t_tangent_, N*D*sizeof(double))); // [NxD]
-    // gpuErrchk(cudaMalloc(&d_param_adjoint_accum_, P*sizeof(double))); // [P]
     gpuErrchk(cudaMalloc(&d_x_t_adjoint_, N*D*sizeof(double))); // [NxD]
     gpuErrchk(cudaMalloc(&d_v_t_adjoint_, N*D*sizeof(double))); // [NxD]
 
     gpuErrchk(cudaMalloc(&d_dE_dx_jvp_primals_, N*D*sizeof(double))); // [NxD]
     gpuErrchk(cudaMalloc(&d_dE_dx_jvp_tangents_, N*D*sizeof(double))); // [NxD]
-    // gpuErrchk(cudaMalloc(&d_dE_dp_jvp_primals_, P*sizeof(double))); // [P]
-    // gpuErrchk(cudaMalloc(&d_dE_dp_jvp_tangents_, P*sizeof(double))); // [P]
-
-    // gpuErrchk(cudaMalloc(&d_params_grads_, P*sizeof(double))); // [P]
-
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
 
     gpuErrchk(cudaMalloc((void**)&d_noise_buffer_, round_up_even(N*D)*sizeof(double)));
@@ -115,17 +97,13 @@ void ReversibleContext::forward_mode() {
 
     for(int t=0; t < step_sizes_.size(); t++) {
 
-        // std::cout << t << std::endl;
-
         gpuErrchk(cudaMemset(d_forces_, 0, N_*D*sizeof(*d_forces_)));
 
     	auto start0 = std::chrono::high_resolution_clock::now();
 
         stepper_->forward_step(
             N_,
-            // P_,
             d_coords_ + t*N_*D,
-            // d_params_,
             d_forces_
         );
     	auto finish0 = std::chrono::high_resolution_clock::now();
@@ -178,18 +156,6 @@ __global__ void update_backward_1(
 
 };
 
-// __global__ void update_backward_2(
-//     int P,
-//     const double *d_dE_dp_jvp,
-//     double *d_adjoint_params) {
-
-//     int p_idx = blockIdx.x*blockDim.x + threadIdx.x;
-//     if(p_idx >= P) {
-//         return;
-//     }
-//     d_adjoint_params[p_idx] += d_dE_dp_jvp[p_idx];
-// }
-
 __global__ void update_backward_3(
     const int N,
     const int D,
@@ -222,7 +188,6 @@ void ReversibleContext::backward_mode() {
     // d_x_t adjoint has been set via set_x_t_adjoint() but we should make it possible
     // to set the rest of the initial adjoints as well.
     gpuErrchk(cudaMemset(d_v_t_adjoint_, 0, N_*D*sizeof(*d_v_t_adjoint_)));
-    // gpuErrchk(cudaMemset(d_param_adjoint_accum_, 0, P_*sizeof(double)));
 
     // compute derivatives
     for(int t = step_sizes_.size()-1; t >= 0; t--) {
@@ -247,27 +212,14 @@ void ReversibleContext::backward_mode() {
         // important that we set the memory addresses to zero
         gpuErrchk(cudaMemset(d_dE_dx_jvp_primals_, 0, N_*D*sizeof(*d_dE_dx_jvp_primals_)));
         gpuErrchk(cudaMemset(d_dE_dx_jvp_tangents_, 0, N_*D*sizeof(*d_dE_dx_jvp_tangents_)));
-        // gpuErrchk(cudaMemset(d_dE_dp_jvp_primals_, 0, P_*sizeof(*d_dE_dp_jvp_primals_)));
-        // gpuErrchk(cudaMemset(d_dE_dp_jvp_tangents_, 0, P_*sizeof(*d_dE_dp_jvp_tangents_)));
 
         stepper_->backward_step(
             N_,
-            // P_,
             d_coords_ + t*N_*D,
-            // d_params_,
             d_x_t_tangent_,
             d_dE_dx_jvp_primals_,
             d_dE_dx_jvp_tangents_
-            // d_dE_dp_jvp_primals_,
-            // d_dE_dp_jvp_tangents_
         );
-
-        // size_t n_block_params = (P_ + tpb - 1) / tpb;
-
-        // have each Gradient class take of this going forward.
-        // we can probably *directly* atomic add into this (and into the d_adjoint_xol in the above func)
-        // also would let us save a little bit more buffer room
-        // update_backward_2<<<n_block_params, tpb>>>(P_, d_dE_dp_jvp_tangents_, d_param_adjoint_accum_);
 
         cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
@@ -297,10 +249,6 @@ void ReversibleContext::get_last_coords(double *out_buffer) const {
 void ReversibleContext::get_all_coords(double *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_coords_, (step_sizes_.size()+1)*N_*D*sizeof(double), cudaMemcpyDeviceToHost));
 }
-
-// void ReversibleContext::get_param_adjoint_accum(double *out_buffer) const {
-    // gpuErrchk(cudaMemcpy(out_buffer, d_param_adjoint_accum_, P_*sizeof(double), cudaMemcpyDeviceToHost));
-// }
 
 void ReversibleContext::get_x_t_adjoint(double *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_x_t_adjoint_, N_*D*sizeof(double), cudaMemcpyDeviceToHost));

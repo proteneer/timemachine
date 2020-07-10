@@ -84,9 +84,6 @@ def EXP_loss(
     complex_dG = EXP(complex_du_dls, lambda_schedule)
     solvent_dG = EXP(solvent_du_dls, lambda_schedule)
 
-    print("complex_dG", complex_dG)
-    print("solvent_dG", solvent_dG)
-
     pred_dG = solvent_dG - complex_dG
     loss = jnp.power(true_dG - pred_dG, 2)
 
