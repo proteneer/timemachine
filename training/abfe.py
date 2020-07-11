@@ -94,10 +94,10 @@ if __name__ == "__main__":
         50003,
         50004,
         50005,
-        50006,
-        50007,
-        50008,
-        50009
+        # 50006,
+        # 50007,
+        # 50008,
+        # 50009
     ]
 
     stubs = []
@@ -114,11 +114,11 @@ if __name__ == "__main__":
         stub = service_pb2_grpc.WorkerStub(channel)
         stubs.append(stub)
 
-    # lambda_schedule = [
-    #     np.array([0.5, 0.7]),
-    #     np.array([0.4, 1.0]),
-    #     np.array([0.2, 2.0])
-    # ]
+    lambda_schedule = [
+        np.array([0.5, 0.7]),
+        np.array([0.4, 1.0]),
+        np.array([0.2, 2.0])
+    ]
 
     # lambda_schedule = [
     #     np.linspace(7.0, 0.0, 32),
@@ -129,11 +129,11 @@ if __name__ == "__main__":
     #     np.linspace(0.0, 7.0, 32)
     # ]
 
-    lambda_schedule = [
-        np.linspace(7.0, 0.0, 3),
-        np.linspace(0.0, 1.2, 4),
-        np.linspace(0.0, 7.0, 3)
-    ]
+    # lambda_schedule = [
+    #     np.linspace(7.0, 0.0, 3),
+    #     np.linspace(0.0, 1.2, 4),
+    #     np.linspace(0.0, 7.0, 3)
+    # ]
 
     engine = trainer.Trainer(
         host_pdb, 
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     for epoch in range(100):
 
         print("Starting Epoch", epoch)
-        train_dataset.shuffle()
+        # train_dataset.shuffle()
         epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
 
         for mol, experiment_dG in test_dataset.data:
