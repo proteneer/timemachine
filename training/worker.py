@@ -13,6 +13,8 @@ import grpc
 import service_pb2
 import service_pb2_grpc
 
+from threading import Event
+from training import registration
 
 from timemachine.lib import custom_ops, ops
 
@@ -115,9 +117,6 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
 
 def serve(args):
-
-
-
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1),
         options = [
             ('grpc.max_send_message_length', 50 * 1024 * 1024),
@@ -127,19 +126,30 @@ def serve(args):
     service_pb2_grpc.add_WorkerServicer_to_server(Worker(), server)
     server.add_insecure_port('[::]:'+str(args.port))
     server.start()
+
+    # register 
+
+    channel = grpc.insecure_channel(args.registry)
+    stub = service_pb2_grpc.RegistrationStub(channel)
+
+    self_ip = 'localhost:'+str(args.port)
+    request = service_pb2.WorkerInfo(ip=self_ip)
+
+    reply = stub.RegisterWorker(request)
+
     server.wait_for_termination()
 
-
 if __name__ == '__main__':
-
 
 
     parser = argparse.ArgumentParser(description='Worker Server')
     parser.add_argument('--gpu_idx', type=int, required=True, help='Location of all output files')
     parser.add_argument('--port', type=int, required=True, help='Either single or double precision. Double is 8x slower.')
+    parser.add_argument('--registry', type=str, required=True, help='Where to register our worker')
     args = parser.parse_args()
 
     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_idx)
+
 
     logging.basicConfig()
     serve(args)

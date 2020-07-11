@@ -1,6 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')
-# import pickle
+
 import copy
 import argparse
 import time
@@ -32,10 +32,10 @@ from fe import dataset
 from fe import loss, bar
 from fe.pdb_writer import PDBWriter
 
-
 import grpc
-
-from training import trainer
+import threading
+from concurrent import futures
+from training import trainer, registration
 from training import service_pb2_grpc
 
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
@@ -51,6 +51,7 @@ if __name__ == "__main__":
     parser.add_argument('--forcefield', type=str, required=True, help='Small molecule forcefield to be loaded.')
     parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
     parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
+    parser.add_argument('--reg_port', type=int, required=True, help='Port used for registration purposes.')
     parser.add_argument('--restr_force', type=float, required=True, help='Strength of the each restraint term, in kJ/mol.')
     parser.add_argument('--restr_alpha', type=float, required=True, help='Width of the well.')
     parser.add_argument('--restr_count', type=int, required=True, help='Number of host atoms we restrain each core atom to.')
@@ -87,24 +88,29 @@ if __name__ == "__main__":
     ff_raw = open(args.forcefield, "r").read()
     ff_handlers = deserialize(ff_raw)
 
-    ports = [
-        50000,
-        50001,
-        50002,
-        50003,
-        50004,
-        50005,
-        # 50006,
-        # 50007,
-        # 50008,
-        # 50009
-    ]
 
+    ip_list = []
+    expected_workers = 6
+    stop_event = threading.Event()
+
+    registry = registration.Registry(ip_list, expected_workers, stop_event)
+
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=16))
+    service_pb2_grpc.add_RegistrationServicer_to_server(registry, server)
+    server.add_insecure_port('[::]:'+str(args.reg_port))
+    server.start()
+    print("Waiting for stop event...")
+    stop_event.wait()
+    server.stop(32)
+
+    server.wait_for_termination()
+
+    print("Detected workers:", ip_list)
     stubs = []
 
-    for port in ports:
+    for address in ip_list:
 
-        channel = grpc.insecure_channel('localhost:'+str(port),
+        channel = grpc.insecure_channel(address,
             options = [
                 ('grpc.max_send_message_length', 500 * 1024 * 1024),
                 ('grpc.max_receive_message_length', 500 * 1024 * 1024)
