@@ -94,7 +94,7 @@ class Trainer():
 
         for fut in futures:
             fut.result()
-            
+
 
     def run_mol(self, mol, inference, run_dir, experiment_dG):
 
@@ -175,7 +175,7 @@ class Trainer():
         all_du_dls = []
         for stage_idx, stage_futures in enumerate(stage_forward_futures):
             stage_du_dls = []
-            for future in stage_futures:
+            for lamb_idx, (future, lamb) in enumerate(zip(stage_futures, lambda_schedule[stage_idx])):
 
                 response = future.result()
 
