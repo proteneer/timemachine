@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from fe import math_utils, system
 from rdkit import Chem
 
+from training import setup_system
 from training import service_pb2
 from matplotlib import pyplot as plt
 import pickle
@@ -106,7 +107,7 @@ class Trainer():
             if not os.path.exists(stage_dir):
                 os.makedirs(stage_dir)
 
-            x0, combined_masses, final_gradients, final_vjp_fns = system.create_system(
+            x0, combined_masses, final_gradients, final_vjp_fns = setup_system.create_system(
                 mol,
                 host_pdb,
                 ff_handlers,

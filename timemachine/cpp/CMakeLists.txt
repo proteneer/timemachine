@@ -20,7 +20,7 @@ set(LIBRARY_NAME custom_ops)
 set(PYBIND_SRC_DIR pybind11)
 
 if(NOT EXISTS ${PYBIND_SRC_DIR})
-  execute_process(COMMAND git clone --branch tm0.1 git@github.com:proteneer/pybind11.git ${PYBIND_SRC_DIR})
+  execute_process(COMMAND git clone --branch tm0.1 https://github.com/proteneer/pybind11.git ${PYBIND_SRC_DIR})
 endif()
 
 add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
