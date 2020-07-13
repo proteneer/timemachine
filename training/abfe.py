@@ -144,8 +144,9 @@ if __name__ == "__main__":
 
     for epoch in range(100):
 
-        print("Starting Epoch", epoch)
+        print("Starting Epoch", epoch, datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
         epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
+
 
         for mol, experiment_dG in test_dataset.data:
             print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
