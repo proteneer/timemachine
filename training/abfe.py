@@ -87,24 +87,19 @@ if __name__ == "__main__":
     ff_raw = open(args.forcefield, "r").read()
     ff_handlers = deserialize(ff_raw)
 
-    ports = [
-        50000,
-        50001,
-        50002,
-        50003,
-        50004,
-        50005,
-        # 50006,
-        # 50007,
-        # 50008,
-        # 50009
+    worker_address_list = [
+        'localhost:50000',
+        'localhost:50001',
+        'localhost:50002',
+        'localhost:50003',
+        'localhost:50004',
+        'localhost:50005'
     ]
 
     stubs = []
 
-    for port in ports:
-
-        channel = grpc.insecure_channel('localhost:'+str(port),
+    for address in worker_address_list:
+        channel = grpc.insecure_channel(address,
             options = [
                 ('grpc.max_send_message_length', 500 * 1024 * 1024),
                 ('grpc.max_receive_message_length', 500 * 1024 * 1024)
@@ -150,17 +145,20 @@ if __name__ == "__main__":
     for epoch in range(100):
 
         print("Starting Epoch", epoch)
-        # train_dataset.shuffle()
         epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
 
         for mol, experiment_dG in test_dataset.data:
             print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
+            start_time = time.time()
             loss, dG = engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
-            print("test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
+            print("test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)
+
+        train_dataset.shuffle()
 
         for mol, experiment_dG in train_dataset.data:
             print("train mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
+            start_time = time.time()
             loss, dG = engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
-            print("train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
+            print("train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)

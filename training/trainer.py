@@ -84,6 +84,18 @@ class Trainer():
         self.steps = steps
         self.precision = precision
 
+        print("resetting state on workers...")
+
+        futures = []
+        for stub in self.stubs:
+            request = service_pb2.EmptyMessage()
+            response_future = stub.ResetState.future(request)
+            futures.append(response_future)
+
+        for fut in futures:
+            fut.result()
+            
+
     def run_mol(self, mol, inference, run_dir, experiment_dG):
 
         host_pdb = self.host_pdb
@@ -232,7 +244,6 @@ class Trainer():
             gb_derivatives = []
 
             for stage_idx, stage_futures in enumerate(stage_backward_futures):
-                print("stage_idx", stage_idx)
                 for future in stage_futures:
                     backward_response = future.result()
                     dl_dps = pickle.loads(backward_response.dl_dps)

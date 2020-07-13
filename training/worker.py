@@ -21,6 +21,11 @@ class Worker(service_pb2_grpc.WorkerServicer):
     def __init__(self):
         self.state = None
 
+    def ResetState(self, request, context):
+        self.state = None
+        reply = service_pb2.EmptyMessage()
+        return reply
+
     def ForwardMode(self, request, context):
         assert self.state is None
 

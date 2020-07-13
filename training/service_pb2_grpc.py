@@ -24,6 +24,11 @@ class WorkerStub(object):
                 request_serializer=service__pb2.BackwardRequest.SerializeToString,
                 response_deserializer=service__pb2.BackwardReply.FromString,
                 )
+        self.ResetState = channel.unary_unary(
+                '/Worker/ResetState',
+                request_serializer=service__pb2.EmptyMessage.SerializeToString,
+                response_deserializer=service__pb2.EmptyMessage.FromString,
+                )
 
 
 class WorkerServicer(object):
@@ -41,6 +46,12 @@ class WorkerServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ResetState(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_WorkerServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -53,6 +64,11 @@ def add_WorkerServicer_to_server(servicer, server):
                     servicer.BackwardMode,
                     request_deserializer=service__pb2.BackwardRequest.FromString,
                     response_serializer=service__pb2.BackwardReply.SerializeToString,
+            ),
+            'ResetState': grpc.unary_unary_rpc_method_handler(
+                    servicer.ResetState,
+                    request_deserializer=service__pb2.EmptyMessage.FromString,
+                    response_serializer=service__pb2.EmptyMessage.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -93,5 +109,21 @@ class Worker(object):
         return grpc.experimental.unary_unary(request, target, '/Worker/BackwardMode',
             service__pb2.BackwardRequest.SerializeToString,
             service__pb2.BackwardReply.FromString,
+            options, channel_credentials,
+            call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def ResetState(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Worker/ResetState',
+            service__pb2.EmptyMessage.SerializeToString,
+            service__pb2.EmptyMessage.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)

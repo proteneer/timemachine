@@ -19,10 +19,35 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rservice.proto\"F\n\x0e\x46orwardRequest\x12\x11\n\tinference\x18\x01 \x01(\x08\x12\x0e\n\x06system\x18\x02 \x01(\x0c\x12\x11\n\tprecision\x18\x03 \x01(\t\"0\n\x0c\x46orwardReply\x12\x0e\n\x06\x64u_dls\x18\x01 \x01(\x0c\x12\x10\n\x08\x65nergies\x18\x02 \x01(\x0c\")\n\x0f\x42\x61\x63kwardRequest\x12\x16\n\x0e\x61\x64joint_du_dls\x18\x01 \x01(\x0c\"\x1f\n\rBackwardReply\x12\x0e\n\x06\x64l_dps\x18\x01 \x01(\x0c\x32m\n\x06Worker\x12/\n\x0b\x46orwardMode\x12\x0f.ForwardRequest\x1a\r.ForwardReply\"\x00\x12\x32\n\x0c\x42\x61\x63kwardMode\x12\x10.BackwardRequest\x1a\x0e.BackwardReply\"\x00\x62\x06proto3'
+  serialized_pb=b'\n\rservice.proto\"\x0e\n\x0c\x45mptyMessage\"F\n\x0e\x46orwardRequest\x12\x11\n\tinference\x18\x01 \x01(\x08\x12\x0e\n\x06system\x18\x02 \x01(\x0c\x12\x11\n\tprecision\x18\x03 \x01(\t\"0\n\x0c\x46orwardReply\x12\x0e\n\x06\x64u_dls\x18\x01 \x01(\x0c\x12\x10\n\x08\x65nergies\x18\x02 \x01(\x0c\")\n\x0f\x42\x61\x63kwardRequest\x12\x16\n\x0e\x61\x64joint_du_dls\x18\x01 \x01(\x0c\"\x1f\n\rBackwardReply\x12\x0e\n\x06\x64l_dps\x18\x01 \x01(\x0c\x32\x9b\x01\n\x06Worker\x12/\n\x0b\x46orwardMode\x12\x0f.ForwardRequest\x1a\r.ForwardReply\"\x00\x12\x32\n\x0c\x42\x61\x63kwardMode\x12\x10.BackwardRequest\x1a\x0e.BackwardReply\"\x00\x12,\n\nResetState\x12\r.EmptyMessage\x1a\r.EmptyMessage\"\x00\x62\x06proto3'
 )
 
 
+
+
+_EMPTYMESSAGE = _descriptor.Descriptor(
+  name='EmptyMessage',
+  full_name='EmptyMessage',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=17,
+  serialized_end=31,
+)
 
 
 _FORWARDREQUEST = _descriptor.Descriptor(
@@ -66,8 +91,8 @@ _FORWARDREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=17,
-  serialized_end=87,
+  serialized_start=33,
+  serialized_end=103,
 )
 
 
@@ -105,8 +130,8 @@ _FORWARDREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=89,
-  serialized_end=137,
+  serialized_start=105,
+  serialized_end=153,
 )
 
 
@@ -137,8 +162,8 @@ _BACKWARDREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=139,
-  serialized_end=180,
+  serialized_start=155,
+  serialized_end=196,
 )
 
 
@@ -169,15 +194,23 @@ _BACKWARDREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=182,
-  serialized_end=213,
+  serialized_start=198,
+  serialized_end=229,
 )
 
+DESCRIPTOR.message_types_by_name['EmptyMessage'] = _EMPTYMESSAGE
 DESCRIPTOR.message_types_by_name['ForwardRequest'] = _FORWARDREQUEST
 DESCRIPTOR.message_types_by_name['ForwardReply'] = _FORWARDREPLY
 DESCRIPTOR.message_types_by_name['BackwardRequest'] = _BACKWARDREQUEST
 DESCRIPTOR.message_types_by_name['BackwardReply'] = _BACKWARDREPLY
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
+
+EmptyMessage = _reflection.GeneratedProtocolMessageType('EmptyMessage', (_message.Message,), {
+  'DESCRIPTOR' : _EMPTYMESSAGE,
+  '__module__' : 'service_pb2'
+  # @@protoc_insertion_point(class_scope:EmptyMessage)
+  })
+_sym_db.RegisterMessage(EmptyMessage)
 
 ForwardRequest = _reflection.GeneratedProtocolMessageType('ForwardRequest', (_message.Message,), {
   'DESCRIPTOR' : _FORWARDREQUEST,
@@ -216,8 +249,8 @@ _WORKER = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=215,
-  serialized_end=324,
+  serialized_start=232,
+  serialized_end=387,
   methods=[
   _descriptor.MethodDescriptor(
     name='ForwardMode',
@@ -236,6 +269,16 @@ _WORKER = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=_BACKWARDREQUEST,
     output_type=_BACKWARDREPLY,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
+    name='ResetState',
+    full_name='Worker.ResetState',
+    index=2,
+    containing_service=None,
+    input_type=_EMPTYMESSAGE,
+    output_type=_EMPTYMESSAGE,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
   ),
