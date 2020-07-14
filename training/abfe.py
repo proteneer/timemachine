@@ -160,6 +160,5 @@ if __name__ == "__main__":
             print("train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)
 
         epoch_params = serialize_handlers(ff_handlers)
-        with open(os.path.join(epoch_dir, "end_epoch_params.py")) as fh:
+        with open(os.path.join(epoch_dir, "end_epoch_params.py"), 'w') as fh:
             fh.write(epoch_params)
-        # write epoch ff parameters
