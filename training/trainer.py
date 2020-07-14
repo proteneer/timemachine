@@ -66,7 +66,10 @@ class Trainer():
             restr_force,
             restr_alpha,
             restr_count,
-            steps,
+            intg_steps,
+            intg_dt,
+            intg_temperature,
+            intg_friction,
             precision):
 
         n_workers = len(stubs)
@@ -81,7 +84,10 @@ class Trainer():
         self.restr_force = restr_force
         self.restr_alpha = restr_alpha
         self.restr_count = restr_count
-        self.steps = steps
+        self.intg_steps = intg_steps
+        self.intg_dt = intg_dt
+        self.intg_temperature = intg_temperature
+        self.intg_friction = intg_friction
         self.precision = precision
 
         print("resetting state on workers...")
@@ -137,10 +143,10 @@ class Trainer():
             for lamb_idx, lamb in enumerate(ti_lambdas):
 
                 intg = system.Integrator(
-                    steps=self.steps,
-                    dt=1.5e-3,
-                    temperature=300.0,
-                    friction=40.0,  
+                    steps=self.intg_steps,
+                    dt=self.intg_dt,
+                    temperature=self.intg_dt,
+                    friction=self.intg_friction,  
                     masses=combined_masses,
                     lamb=lamb,
                     seed=np.random.randint(np.iinfo(np.int32).max)
