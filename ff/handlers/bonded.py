@@ -136,7 +136,7 @@ class ProperTorsionHandler():
         body = {'patterns': patterns}
         result = {key: body}
 
-        return bin_to_str(result)
+        return result
 
 class ImproperTorsionHandler(SerializableMixIn):
 

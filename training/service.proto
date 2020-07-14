@@ -1,9 +1,14 @@
+// compile with python -m grpc_tools.protoc -I ./ --python_out=. --grpc_python_out=. service.proto
+
 syntax = "proto3";
 
 service Worker {
     rpc ForwardMode(ForwardRequest) returns (ForwardReply) {}
     rpc BackwardMode(BackwardRequest) returns (BackwardReply) {}
+    rpc ResetState(EmptyMessage) returns (EmptyMessage) {}
 }
+
+message EmptyMessage {}
 
 // The request message containing the user's name.
 message ForwardRequest {

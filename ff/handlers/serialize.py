@@ -4,6 +4,20 @@ import numpy as np
 
 from ff.handlers.suffix import _SUFFIX
 
+def serialize_handlers(all_handlers):
+
+    final_ff = {}
+
+    for handler in all_handlers:
+        ff_obj = handler.serialize()
+
+        for k in ff_obj.keys():
+            assert k not in final_ff
+
+        final_ff.update(ff_obj)
+
+    return bin_to_str(final_ff)
+
 
 def bin_to_str(binary):
     buf = io.StringIO()
@@ -43,4 +57,4 @@ class SerializableMixIn():
 
         result = {key: body}
         
-        return bin_to_str(result)
+        return result

@@ -7,6 +7,7 @@ import jax.numpy as jnp
 from fe import math_utils, system
 from rdkit import Chem
 
+from training import setup_system
 from training import service_pb2
 from matplotlib import pyplot as plt
 import pickle
@@ -65,7 +66,10 @@ class Trainer():
             restr_force,
             restr_alpha,
             restr_count,
-            steps,
+            intg_steps,
+            intg_dt,
+            intg_temperature,
+            intg_friction,
             precision):
 
         n_workers = len(stubs)
@@ -80,8 +84,23 @@ class Trainer():
         self.restr_force = restr_force
         self.restr_alpha = restr_alpha
         self.restr_count = restr_count
-        self.steps = steps
+        self.intg_steps = intg_steps
+        self.intg_dt = intg_dt
+        self.intg_temperature = intg_temperature
+        self.intg_friction = intg_friction
         self.precision = precision
+
+        print("resetting state on workers...")
+
+        futures = []
+        for stub in self.stubs:
+            request = service_pb2.EmptyMessage()
+            response_future = stub.ResetState.future(request)
+            futures.append(response_future)
+
+        for fut in futures:
+            fut.result()
+
 
     def run_mol(self, mol, inference, run_dir, experiment_dG):
 
@@ -106,7 +125,7 @@ class Trainer():
             if not os.path.exists(stage_dir):
                 os.makedirs(stage_dir)
 
-            x0, combined_masses, final_gradients, final_vjp_fns = system.create_system(
+            x0, combined_masses, final_gradients, final_vjp_fns = setup_system.create_system(
                 mol,
                 host_pdb,
                 ff_handlers,
@@ -124,10 +143,10 @@ class Trainer():
             for lamb_idx, lamb in enumerate(ti_lambdas):
 
                 intg = system.Integrator(
-                    steps=self.steps,
-                    dt=1.5e-3,
-                    temperature=300.0,
-                    friction=40.0,  
+                    steps=self.intg_steps,
+                    dt=self.intg_dt,
+                    temperature=self.intg_dt,
+                    friction=self.intg_friction,  
                     masses=combined_masses,
                     lamb=lamb,
                     seed=np.random.randint(np.iinfo(np.int32).max)
@@ -161,8 +180,11 @@ class Trainer():
 
         all_du_dls = []
         for stage_idx, stage_futures in enumerate(stage_forward_futures):
+
+            stage_dir = os.path.join(run_dir, "stage_"+str(stage_idx))
+
             stage_du_dls = []
-            for future in stage_futures:
+            for lamb_idx, (future, lamb) in enumerate(zip(stage_futures, lambda_schedule[stage_idx])):
 
                 response = future.result()
 
@@ -231,7 +253,6 @@ class Trainer():
             gb_derivatives = []
 
             for stage_idx, stage_futures in enumerate(stage_backward_futures):
-                print("stage_idx", stage_idx)
                 for future in stage_futures:
                     backward_response = future.result()
                     dl_dps = pickle.loads(backward_response.dl_dps)

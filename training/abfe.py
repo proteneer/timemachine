@@ -11,6 +11,7 @@ import itertools
 import os
 import sys
 
+from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize
 
 from multiprocessing import Process, Pipe
@@ -32,7 +33,7 @@ from fe import dataset
 from fe import loss, bar
 from fe.pdb_writer import PDBWriter
 
-
+import configparser
 import grpc
 
 from training import trainer
@@ -44,32 +45,29 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Absolute Binding Free Energy Script')
-    parser.add_argument('--out_dir', type=str, required=True, help='Location of all output files')
-    parser.add_argument('--precision', type=str, required=True, help='Either single or double precision. Double is 8x slower.')
-    parser.add_argument('--protein_pdb', type=str, required=True, help='Prepared protein PDB file. This should not have any waters.')
-    parser.add_argument('--ligand_sdf', type=str, required=True, help='The ligand sdf used along with posed 3D coordinates. Only the first two ligands are used.')
-    parser.add_argument('--forcefield', type=str, required=True, help='Small molecule forcefield to be loaded.')
-    parser.add_argument('--n_frames', type=int, required=True, help='Number of PDB frames to write. If 0 then writing is skipped entirely.')
-    parser.add_argument('--steps', type=int, required=True, help='Number of steps we run')
-    parser.add_argument('--restr_force', type=float, required=True, help='Strength of the each restraint term, in kJ/mol.')
-    parser.add_argument('--restr_alpha', type=float, required=True, help='Width of the well.')
-    parser.add_argument('--restr_count', type=int, required=True, help='Number of host atoms we restrain each core atom to.')
+    parser.add_argument('--config_file', type=str, required=True, help='Location of config file.')
 
     args = parser.parse_args()
 
     print("Launch Time:", datetime.datetime.now())
-    print("Arguments:", " ".join(sys.argv))
 
-    assert os.path.isdir(args.out_dir)
+    config = configparser.ConfigParser()
+    config.read(args.config_file)
+    print("Config Settings:")
+    config.write(sys.stdout)
 
-    suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
+    general_cfg = config['general']
+
+    assert os.path.isdir(general_cfg['out_dir'])
+
+    suppl = Chem.SDMolSupplier(general_cfg['ligand_sdf'], removeHs=False)
 
     all_guest_mols = []
 
     data = []
 
     for guest_idx, mol in enumerate(suppl):
-        mol_dG = -1*convert_uIC50_to_kJ_per_mole(float(mol.GetProp("IC50[uM](SPA)")))
+        mol_dG = -1*convert_uIC50_to_kJ_per_mole(float(mol.GetProp(general_cfg['bind_prop'])))
         data.append((mol, mol_dG))
 
     full_dataset = dataset.Dataset(data)
@@ -77,34 +75,24 @@ if __name__ == "__main__":
     train_dataset, test_dataset = full_dataset.split(0.6)
 
     # process the host first
-    host_pdb_file = args.protein_pdb
+    host_pdb_file = general_cfg['protein_pdb']
     host_pdb = PDBFile(host_pdb_file)
 
-    core_smarts = '[#6]1:[#6]:[#6]:[#6](:[#6](:[#6]:1-[#8]-[#6](:[#6]-[#1]):[#6])-[#1])-[#1]'
-
+    # (tbd): set to MCS if this is None
     stage_dGs = []
 
-    ff_raw = open(args.forcefield, "r").read()
+    ff_raw = open(general_cfg['forcefield'], "r").read()
     ff_handlers = deserialize(ff_raw)
 
-    ports = [
-        50000,
-        50001,
-        50002,
-        50003,
-        50004,
-        50005,
-        # 50006,
-        # 50007,
-        # 50008,
-        # 50009
-    ]
+
+    worker_address_list = []
+    for address in config['workers']['hosts'].split(','):
+        worker_address_list.append(address)
 
     stubs = []
 
-    for port in ports:
-
-        channel = grpc.insecure_channel('localhost:'+str(port),
+    for address in worker_address_list:
+        channel = grpc.insecure_channel(address,
             options = [
                 ('grpc.max_send_message_length', 500 * 1024 * 1024),
                 ('grpc.max_receive_message_length', 500 * 1024 * 1024)
@@ -114,53 +102,64 @@ if __name__ == "__main__":
         stub = service_pb2_grpc.WorkerStub(channel)
         stubs.append(stub)
 
-    lambda_schedule = [
-        np.array([0.5, 0.7]),
-        np.array([0.4, 1.0]),
-        np.array([0.2, 2.0])
-    ]
+    lambda_schedule = []
+    for stage_idx, (_, v) in enumerate(config['lambda_schedule'].items()):
+        stage_schedule = np.array([float(x) for x in v.split(',')])
+        if stage_idx == 0:
+            # stage 0 must be monotonically decreasing
+            assert np.all(np.diff(stage_schedule) < 0)
+        else:
+            # stage 1 and 2 must be monotonically increasing
+            assert np.all(np.diff(stage_schedule) > 0)
+        lambda_schedule.append(stage_schedule)
 
-    # lambda_schedule = [
-    #     np.linspace(7.0, 0.0, 32),
-    #     np.concatenate([
-    #         np.linspace(0.0, 0.5, 24, endpoint=False),
-    #         np.linspace(0.5, 1.2, 8)
-    #     ]), 
-    #     np.linspace(0.0, 7.0, 32)
-    # ]
-
-    # lambda_schedule = [
-    #     np.linspace(7.0, 0.0, 3),
-    #     np.linspace(0.0, 1.2, 4),
-    #     np.linspace(0.0, 7.0, 3)
-    # ]
+    restr_cfg = config['restraints']
+    intg_cfg = config['integrator']
 
     engine = trainer.Trainer(
         host_pdb, 
         stubs,
         ff_handlers,
         lambda_schedule,
-        core_smarts,
-        args.restr_force,
-        args.restr_alpha,
-        args.restr_count,
-        args.steps,
-        args.precision)
+        restr_cfg['core_smarts'],
+        float(restr_cfg['force']),
+        float(restr_cfg['alpha']),
+        int(restr_cfg['count']),
+        int(intg_cfg['steps']),
+        float(intg_cfg['dt']),
+        float(intg_cfg['temperature']),
+        float(intg_cfg['friction']),
+        general_cfg['precision'])
 
     for epoch in range(100):
 
-        print("Starting Epoch", epoch)
-        # train_dataset.shuffle()
-        epoch_dir = os.path.join(args.out_dir, "epoch_"+str(epoch))
+        print("Starting Epoch", epoch, datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+        epoch_dir = os.path.join(general_cfg['out_dir'], "epoch_"+str(epoch))
+
+        if not os.path.exists(epoch_dir):
+            os.makedirs(epoch_dir)
+
+        epoch_params = serialize_handlers(ff_handlers)
+        with open(os.path.join(epoch_dir, "start_epoch_params.py"), 'w') as fh:
+            fh.write(epoch_params)
 
         for mol, experiment_dG in test_dataset.data:
             print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
+            start_time = time.time()
             loss, dG = engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
-            print("test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
+            print("test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)
+
+        train_dataset.shuffle()
 
         for mol, experiment_dG in train_dataset.data:
             print("train mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
+            start_time = time.time()
             loss, dG = engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
-            print("train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG)
+            print("train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)
+
+        epoch_params = serialize_handlers(ff_handlers)
+        with open(os.path.join(epoch_dir, "end_epoch_params.py")) as fh:
+            fh.write(epoch_params)
+        # write epoch ff parameters
