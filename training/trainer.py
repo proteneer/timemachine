@@ -180,6 +180,9 @@ class Trainer():
 
         all_du_dls = []
         for stage_idx, stage_futures in enumerate(stage_forward_futures):
+
+            stage_dir = os.path.join(run_dir, "stage_"+str(stage_idx))
+
             stage_du_dls = []
             for lamb_idx, (future, lamb) in enumerate(zip(stage_futures, lambda_schedule[stage_idx])):
 
