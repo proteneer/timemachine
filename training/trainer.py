@@ -225,9 +225,9 @@ class Trainer():
 
                 stage_du_dls.append(full_du_dls)
 
-
-
             sum_du_dls = np.sum(stage_du_dls, axis=1) # [L,F,T], lambda windows, num forces, num frames
+            print(sum_du_dls.shape)
+
 
             plt.boxplot(sum_du_dls[:, du_dl_cutoff:].tolist(), positions=ti_lambdas)
             plt.ylabel("du_dlambda")
