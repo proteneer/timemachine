@@ -367,7 +367,7 @@
       'gamma' : 2.909125
     }
   },
-  'SimpleCharges': {
+  'SimpleCharge': {
     'patterns': [
         ['[#1:1]', 0.0000],
         ['[#1:1]-[#6X4]', 0.0616],
