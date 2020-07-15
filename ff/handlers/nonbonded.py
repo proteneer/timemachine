@@ -184,3 +184,94 @@ class AM1BCCHandler():
 
         return np.array(charges, dtype=np.float64), vjp_fn
 
+class AM1CCCHandler():
+
+    def parameterize(self, mol):
+        """
+        Parameters
+        ----------
+
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        """
+        # imported here for optional dependency
+        from openeye import oechem
+        from openeye import oequacpac
+        import json
+
+        mb = Chem.MolToMolBlock(mol)
+        ims = oechem.oemolistream()
+        ims.SetFormat(oechem.OEFormat_SDF)
+        ims.openstring(mb)
+
+        for buf_mol in ims.GetOEMols():
+            oemol = oechem.OEMol(buf_mol)
+
+        result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1Charges())
+
+        if result is False:
+            raise Exception('Unable to assign charges')
+
+        charges = [] 
+        for index, atom in enumerate(oemol.GetAtoms()):
+            q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+            charges.append(q)
+
+        smirks_remove_duplicates = []
+        all_matched_bonds = set()
+
+        with open('original-am1-bcc-ct.json') as file:
+            bcc_patterns = json.load(file)
+
+        for i, patterns in enumerate(bcc_patterns):
+            smirks = patterns['smirks']
+
+            if smirks in smirks_remove_duplicates:
+                continue
+
+            smirks_remove_duplicates.append(smirks)
+            bcc_correction = patterns['value']*np.sqrt(constants.ONE_4PI_EPS0)
+
+            substructure_search = oechem.OESubSearch(smirks)
+            substructure_search.SetMaxMatches(0)
+
+            matched_bonds = set()
+            matches = []
+            for match in substructure_search.Match(oemol_am1):
+
+                matched_indices = {
+                    atom_match.pattern.GetMapIdx() - 1: atom_match.target.GetIdx()
+                    for atom_match in match.GetAtoms()
+                    if atom_match.pattern.GetMapIdx() != 0
+                }
+                matches.append(matched_indices)
+
+        for matched_indices in matches:
+
+            forward_matched_bond = (matched_indices[0], matched_indices[1])
+            reverse_matched_bond = (matched_indices[1], matched_indices[0])
+
+            if (
+                forward_matched_bond in matched_bonds
+                or reverse_matched_bond in matched_bonds 
+                or forward_matched_bond in all_matched_bonds 
+                or reverse_matched_bond in all_matched_bonds
+            ):
+                continue
+
+            matched_bonds.add(forward_matched_bond)
+            all_matched_bonds.add(forward_matched_bond)
+
+        for b in matched_bonds:
+            charges[b[0]] = charges[b[0]] + bcc_correction
+            charges[b[1]] = charges[b[1]] - bcc_correction
+
+        param_idxs = generate_nonbonded_idxs(mol, smirks_remove_duplicates)
+        param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
+
+        ### I need to pass the right bcc_parameters
+        return np.array(charges, dtype=np.float64), jax.vjp(param_fn, bcc_parameters)
+
+
+
