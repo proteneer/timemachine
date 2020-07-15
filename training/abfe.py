@@ -84,7 +84,6 @@ if __name__ == "__main__":
     ff_raw = open(general_cfg['forcefield'], "r").read()
     ff_handlers = deserialize(ff_raw)
 
-
     worker_address_list = []
     for address in config['workers']['hosts'].split(','):
         worker_address_list.append(address)
