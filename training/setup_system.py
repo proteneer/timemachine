@@ -75,7 +75,6 @@ def setup_core_restraints(
     elif stage == 2:
         lambda_flags = np.ones(B, dtype=np.int32)
 
-
     return ('Restraint', (
         bond_idxs,
         bond_params,
@@ -236,6 +235,11 @@ def create_system(
         elif isinstance(handle, nonbonded.GBSAHandler):
             guest_gb_params, guest_gb_vjp_fn = results
             combined_gb_params, combined_gb_vjp_fn = concat_with_vjps(host_gb_params, guest_gb_params, None, guest_gb_vjp_fn)
+            # handler_vjps.append(gb_adjoint_fn)
+        elif isinstance(handle, nonbonded.AM1BCCHandler):
+            # ill defined behavior if both SimpleChargeHandler and AM1Handler is present
+            guest_charge_params, guest_charge_vjp_fn = results
+            combined_charge_params, combined_charge_vjp_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
             # handler_vjps.append(gb_adjoint_fn)
         else:
             raise Exception("Unknown Handler", handle)

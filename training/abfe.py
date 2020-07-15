@@ -27,7 +27,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdFMCS
 
-from simtk.openmm.app import PDBFile
+
 from fe import dataset
 
 from fe import loss, bar
@@ -75,15 +75,13 @@ if __name__ == "__main__":
     train_dataset, test_dataset = full_dataset.split(0.6)
 
     # process the host first
-    host_pdb_file = general_cfg['protein_pdb']
-    host_pdb = PDBFile(host_pdb_file)
+    host_pdbfile = general_cfg['protein_pdb']
 
     # (tbd): set to MCS if this is None
     stage_dGs = []
 
     ff_raw = open(general_cfg['forcefield'], "r").read()
     ff_handlers = deserialize(ff_raw)
-
 
     worker_address_list = []
     for address in config['workers']['hosts'].split(','):
@@ -117,11 +115,13 @@ if __name__ == "__main__":
     intg_cfg = config['integrator']
 
     engine = trainer.Trainer(
-        host_pdb, 
+        host_pdbfile, 
         stubs,
         ff_handlers,
         lambda_schedule,
+        int(general_cfg['du_dl_cutoff']),
         restr_cfg['core_smarts'],
+        int(general_cfg['n_frames']),
         float(restr_cfg['force']),
         float(restr_cfg['alpha']),
         int(restr_cfg['count']),
@@ -147,7 +147,7 @@ if __name__ == "__main__":
             print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
             start_time = time.time()
-            loss, dG = engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
+            dG, loss = engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
             print("test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)
 
         train_dataset.shuffle()
@@ -156,10 +156,9 @@ if __name__ == "__main__":
             print("train mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
             start_time = time.time()
-            loss, dG = engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
+            dG, loss = engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
             print("train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)
 
         epoch_params = serialize_handlers(ff_handlers)
-        with open(os.path.join(epoch_dir, "end_epoch_params.py")) as fh:
+        with open(os.path.join(epoch_dir, "end_epoch_params.py"), 'w') as fh:
             fh.write(epoch_params)
-        # write epoch ff parameters

@@ -146,7 +146,15 @@ class LennardJonesHandler(NonbondedHandler):
 class GBSAHandler(NonbondedHandler):
     pass
 
-class AM1BCCHandler():
+class AM1BCCHandler(SerializableMixIn):
+
+    def __init__(self, smirks, params, props):
+        assert len(smirks) == 0
+        assert len(params) == 0
+        assert props is None
+        self.smirks = []
+        self.params = []
+        self.props = None
 
     def parameterize(self, mol):
         """
@@ -183,4 +191,3 @@ class AM1BCCHandler():
             return None 
 
         return np.array(charges, dtype=np.float64), vjp_fn
-

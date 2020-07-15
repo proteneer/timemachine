@@ -6,6 +6,7 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
+from ff.handlers.serialize import bin_to_str
 from ff.handlers.deserialize import deserialize
 
 
@@ -109,7 +110,7 @@ def test_harmonic_bond():
     hbh = bonded.HarmonicBondHandler(smirks, params, None)
 
     obj = hbh.serialize()
-    all_handlers = deserialize(obj)
+    all_handlers = deserialize(bin_to_str(obj))
 
     assert len(all_handlers) == 1
 
@@ -138,7 +139,7 @@ def test_proper_torsion():
 
     ph = bonded.ProperTorsionHandler(smirks, params, None)
     obj = ph.serialize()
-    all_handlers = deserialize(obj)
+    all_handlers = deserialize(bin_to_str(obj))
 
     assert len(all_handlers) == 1
 
@@ -165,7 +166,7 @@ def test_improper_torsion():
     imph = bonded.ImproperTorsionHandler(smirks, params, None)
 
     obj = imph.serialize()
-    all_handlers = deserialize(obj)
+    all_handlers = deserialize(bin_to_str(obj))
 
     assert len(all_handlers) == 1
 
@@ -221,7 +222,7 @@ def test_simple_charge_handler():
 
     sch = nonbonded.SimpleChargeHandler(smirks, params, props)
     obj = sch.serialize()
-    all_handlers = deserialize(obj)
+    all_handlers = deserialize(bin_to_str(obj))
 
     assert len(all_handlers) == 1
 
@@ -265,7 +266,7 @@ def test_gbsa_handler():
     gbh = nonbonded.GBSAHandler(smirks, params, props)
 
     obj = gbh.serialize()
-    all_handlers = deserialize(obj)
+    all_handlers = deserialize(bin_to_str(obj))
 
     assert len(all_handlers) == 1
 
@@ -273,6 +274,22 @@ def test_gbsa_handler():
     np.testing.assert_equal(new_gbh.smirks, gbh.smirks)
     np.testing.assert_equal(new_gbh.params, gbh.params)
     assert new_gbh.props == gbh.props
+
+
+def test_am1bcc():
+
+    smirks = []
+    params = []
+    props = None
+
+    am1 = nonbonded.AM1BCCHandler(smirks, params, props)
+    obj = am1.serialize()
+    all_handlers = deserialize(bin_to_str(obj))
+
+    am1 = all_handlers[0]
+    np.testing.assert_equal(am1.smirks, am1.smirks)
+    np.testing.assert_equal(am1.params, am1.params)
+    assert am1.props == am1.props
 
 
 def test_lennard_jones_handler():
@@ -321,7 +338,7 @@ def test_lennard_jones_handler():
 
     ljh = nonbonded.LennardJonesHandler(smirks, params, props)
     obj = ljh.serialize()
-    all_handlers = deserialize(obj)
+    all_handlers = deserialize(bin_to_str(obj))
 
     ljh = all_handlers[0]
     np.testing.assert_equal(ljh.smirks, ljh.smirks)
