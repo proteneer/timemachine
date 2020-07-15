@@ -118,13 +118,11 @@ class Trainer():
         ff_handlers = self.ff_handlers
         stubs = self.stubs
         du_dl_cutoff = self.du_dl_cutoff
-        # pdb_writer = self.pdb_writer
 
         host_pdb = PDBFile(host_pdbfile)
 
 
         combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), mol)
-        combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
 
         core_query = Chem.MolFromSmarts(self.core_smarts)
         core_atoms = mol.GetSubstructMatch(core_query)
@@ -211,6 +209,8 @@ class Trainer():
 
                 # write frames
                 out_file = os.path.join(stage_dir, "frames_"+str(lamb_idx)+".pdb")
+                # make sure we do StringIO here as it's single-pass.
+                combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
                 pdb_writer = PDBWriter(combined_pdb_str, out_file)
                 pdb_writer.write_header()
                 for frame_idx, x in enumerate(frames):

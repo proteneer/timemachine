@@ -76,7 +76,6 @@ if __name__ == "__main__":
 
     # process the host first
     host_pdbfile = general_cfg['protein_pdb']
-    # host_pdb = PDBFile(host_pdb_file)
 
     # (tbd): set to MCS if this is None
     stage_dGs = []
