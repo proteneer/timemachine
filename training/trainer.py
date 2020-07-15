@@ -77,6 +77,7 @@ class Trainer():
         n_lambdas = np.sum([len(x) for x in lambda_schedule])
         assert n_workers == n_lambdas
 
+        self.du_dl_cutoff = du_dl_cutoff
         self.host_pdb = host_pdb
         self.stubs = stubs
         self.ff_handlers = ff_handlers
@@ -109,6 +110,7 @@ class Trainer():
         lambda_schedule = self.lambda_schedule
         ff_handlers = self.ff_handlers
         stubs = self.stubs
+        du_dl_cutoff = self.du_dl_cutoff
 
         core_query = Chem.MolFromSmarts(self.core_smarts)
         core_atoms = mol.GetSubstructMatch(core_query)
