@@ -243,6 +243,37 @@ def test_am1_bcc():
 
     assert vjp_fn(charges_adjoints) == None
 
+def test_am1_ccc():
+    
+    patterns = [
+        ['#6X4:1]-[#6X1,#6X2:2]', -0.0269],
+    ]
+
+    smirks = [x[0] for x in patterns]
+    params = np.array([x[1] for x in patterns])
+
+    am1h = nonbonded.AM1BCCHandler()
+    mol = Chem.AddHs(Chem.MolFromSmiles("CC#C"))
+    AllChem.EmbedMolecule(mol)
+    charges, vjp_fn = am1h.parameterize(mol)
+
+    ligand_params = np.array([
+        -0.57,
+        -1.34,
+        -1.61,
+        0.64,
+        0.64,
+        0.64,
+        1.93,
+    ])
+
+    np.testing.assert_almost_equal(charges, ligand_params, decimal=2)
+ 
+    charges_adjoints = np.random.randn(*charges.shape)
+
+    assert vjp_fn(charges_adjoints) == None
+    
+
 def test_simple_charge_handler():
 
     patterns = [
