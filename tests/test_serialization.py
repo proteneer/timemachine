@@ -276,6 +276,22 @@ def test_gbsa_handler():
     assert new_gbh.props == gbh.props
 
 
+def test_am1bcc():
+
+    smirks = []
+    params = []
+    props = None
+
+    am1 = nonbonded.AM1BCCHandler(smirks, params, props)
+    obj = am1.serialize()
+    all_handlers = deserialize(bin_to_str(obj))
+
+    am1 = all_handlers[0]
+    np.testing.assert_equal(am1.smirks, am1.smirks)
+    np.testing.assert_equal(am1.params, am1.params)
+    assert am1.props == am1.props
+
+
 def test_lennard_jones_handler():
 
     patterns = [
