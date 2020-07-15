@@ -121,6 +121,7 @@ if __name__ == "__main__":
         stubs,
         ff_handlers,
         lambda_schedule,
+        int(general_cfg['du_dl_cutoff']),
         restr_cfg['core_smarts'],
         float(restr_cfg['force']),
         float(restr_cfg['alpha']),

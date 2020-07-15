@@ -75,7 +75,6 @@ def setup_core_restraints(
     elif stage == 2:
         lambda_flags = np.ones(B, dtype=np.int32)
 
-
     return ('Restraint', (
         bond_idxs,
         bond_params,

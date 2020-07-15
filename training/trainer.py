@@ -62,6 +62,7 @@ class Trainer():
             stubs,
             ff_handlers,
             lambda_schedule,
+            du_dl_cutoff,
             core_smarts,
             restr_force,
             restr_alpha,
@@ -176,8 +177,6 @@ class Trainer():
 
         # step 2. Run forward mode on the jobs
 
-        du_dl_cutoff = 4000
-
         all_du_dls = []
         for stage_idx, stage_futures in enumerate(stage_forward_futures):
 
@@ -225,6 +224,13 @@ class Trainer():
                 stage_du_dls.append(full_du_dls)
 
             all_du_dls.append(stage_du_dls)
+
+        sum_du_dls = np.sum(all_du_dls, axis=1) # [L,F,T], lambda windows, num forces, num frames
+
+        plt.boxplot(sum_du_dls[:, du_dl_cutoff:].tolist(), positions=ti_lambdas)
+        plt.ylabel("du_dlambda")
+        plt.savefig(os.path.join(stage_dir, "boxplot_du_dls"))
+        plt.clf()
 
         pred_dG = dG_TI(all_du_dls, lambda_schedule, du_dl_cutoff)
         loss = loss_fn(all_du_dls, lambda_schedule, experiment_dG, du_dl_cutoff)
