@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rservice.proto\"\x0e\n\x0c\x45mptyMessage\"F\n\x0e\x46orwardRequest\x12\x11\n\tinference\x18\x01 \x01(\x08\x12\x0e\n\x06system\x18\x02 \x01(\x0c\x12\x11\n\tprecision\x18\x03 \x01(\t\"0\n\x0c\x46orwardReply\x12\x0e\n\x06\x64u_dls\x18\x01 \x01(\x0c\x12\x10\n\x08\x65nergies\x18\x02 \x01(\x0c\")\n\x0f\x42\x61\x63kwardRequest\x12\x16\n\x0e\x61\x64joint_du_dls\x18\x01 \x01(\x0c\"\x1f\n\rBackwardReply\x12\x0e\n\x06\x64l_dps\x18\x01 \x01(\x0c\x32\x9b\x01\n\x06Worker\x12/\n\x0b\x46orwardMode\x12\x0f.ForwardRequest\x1a\r.ForwardReply\"\x00\x12\x32\n\x0c\x42\x61\x63kwardMode\x12\x10.BackwardRequest\x1a\x0e.BackwardReply\"\x00\x12,\n\nResetState\x12\r.EmptyMessage\x1a\r.EmptyMessage\"\x00\x62\x06proto3'
+  serialized_pb=b'\n\rservice.proto\"\x0e\n\x0c\x45mptyMessage\"X\n\x0e\x46orwardRequest\x12\x11\n\tinference\x18\x01 \x01(\x08\x12\x0e\n\x06system\x18\x02 \x01(\x0c\x12\x11\n\tprecision\x18\x03 \x01(\t\x12\x10\n\x08n_frames\x18\x04 \x01(\x05\"@\n\x0c\x46orwardReply\x12\x0e\n\x06\x64u_dls\x18\x01 \x01(\x0c\x12\x10\n\x08\x65nergies\x18\x02 \x01(\x0c\x12\x0e\n\x06\x66rames\x18\x03 \x01(\x0c\")\n\x0f\x42\x61\x63kwardRequest\x12\x16\n\x0e\x61\x64joint_du_dls\x18\x01 \x01(\x0c\"\x1f\n\rBackwardReply\x12\x0e\n\x06\x64l_dps\x18\x01 \x01(\x0c\x32\x9b\x01\n\x06Worker\x12/\n\x0b\x46orwardMode\x12\x0f.ForwardRequest\x1a\r.ForwardReply\"\x00\x12\x32\n\x0c\x42\x61\x63kwardMode\x12\x10.BackwardRequest\x1a\x0e.BackwardReply\"\x00\x12,\n\nResetState\x12\r.EmptyMessage\x1a\r.EmptyMessage\"\x00\x62\x06proto3'
 )
 
 
@@ -79,6 +79,13 @@ _FORWARDREQUEST = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='n_frames', full_name='ForwardRequest.n_frames', index=3,
+      number=4, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -92,7 +99,7 @@ _FORWARDREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=33,
-  serialized_end=103,
+  serialized_end=121,
 )
 
 
@@ -118,6 +125,13 @@ _FORWARDREPLY = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='frames', full_name='ForwardReply.frames', index=2,
+      number=3, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -130,8 +144,8 @@ _FORWARDREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=105,
-  serialized_end=153,
+  serialized_start=123,
+  serialized_end=187,
 )
 
 
@@ -162,8 +176,8 @@ _BACKWARDREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=155,
-  serialized_end=196,
+  serialized_start=189,
+  serialized_end=230,
 )
 
 
@@ -194,8 +208,8 @@ _BACKWARDREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=198,
-  serialized_end=229,
+  serialized_start=232,
+  serialized_end=263,
 )
 
 DESCRIPTOR.message_types_by_name['EmptyMessage'] = _EMPTYMESSAGE
@@ -249,8 +263,8 @@ _WORKER = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=232,
-  serialized_end=387,
+  serialized_start=266,
+  serialized_end=421,
   methods=[
   _descriptor.MethodDescriptor(
     name='ForwardMode',

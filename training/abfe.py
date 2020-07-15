@@ -27,7 +27,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdFMCS
 
-from simtk.openmm.app import PDBFile
+
 from fe import dataset
 
 from fe import loss, bar
@@ -75,8 +75,8 @@ if __name__ == "__main__":
     train_dataset, test_dataset = full_dataset.split(0.6)
 
     # process the host first
-    host_pdb_file = general_cfg['protein_pdb']
-    host_pdb = PDBFile(host_pdb_file)
+    host_pdbfile = general_cfg['protein_pdb']
+    # host_pdb = PDBFile(host_pdb_file)
 
     # (tbd): set to MCS if this is None
     stage_dGs = []
@@ -116,12 +116,13 @@ if __name__ == "__main__":
     intg_cfg = config['integrator']
 
     engine = trainer.Trainer(
-        host_pdb, 
+        host_pdbfile, 
         stubs,
         ff_handlers,
         lambda_schedule,
         int(general_cfg['du_dl_cutoff']),
         restr_cfg['core_smarts'],
+        int(general_cfg['n_frames']),
         float(restr_cfg['force']),
         float(restr_cfg['alpha']),
         int(restr_cfg['count']),

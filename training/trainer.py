@@ -3,6 +3,7 @@ import os
 import numpy as np
 import jax
 import jax.numpy as jnp
+from io import StringIO
 
 from fe import math_utils, system
 from rdkit import Chem
@@ -11,6 +12,9 @@ from training import setup_system
 from training import service_pb2
 from matplotlib import pyplot as plt
 import pickle
+
+from fe.pdb_writer import PDBWriter
+from simtk.openmm.app import PDBFile
 
 from ff.handlers import bonded, nonbonded
 
@@ -58,12 +62,13 @@ loss_fn_grad = jax.grad(loss_fn, argnums=(0,))
 class Trainer():
 
     def __init__(self,
-            host_pdb,
+            host_pdbfile,
             stubs,
             ff_handlers,
             lambda_schedule,
             du_dl_cutoff,
             core_smarts,
+            n_frames,
             restr_force,
             restr_alpha,
             restr_count,
@@ -78,11 +83,12 @@ class Trainer():
         assert n_workers == n_lambdas
 
         self.du_dl_cutoff = du_dl_cutoff
-        self.host_pdb = host_pdb
+        self.host_pdbfile = host_pdbfile
         self.stubs = stubs
         self.ff_handlers = ff_handlers
         self.lambda_schedule = lambda_schedule
         self.core_smarts = core_smarts
+        self.n_frames = n_frames
         self.restr_force = restr_force
         self.restr_alpha = restr_alpha
         self.restr_count = restr_count
@@ -91,6 +97,7 @@ class Trainer():
         self.intg_temperature = intg_temperature
         self.intg_friction = intg_friction
         self.precision = precision
+
 
         print("resetting state on workers...")
 
@@ -106,11 +113,18 @@ class Trainer():
 
     def run_mol(self, mol, inference, run_dir, experiment_dG):
 
-        host_pdb = self.host_pdb
+        host_pdbfile = self.host_pdbfile
         lambda_schedule = self.lambda_schedule
         ff_handlers = self.ff_handlers
         stubs = self.stubs
         du_dl_cutoff = self.du_dl_cutoff
+        # pdb_writer = self.pdb_writer
+
+        host_pdb = PDBFile(host_pdbfile)
+
+
+        combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), mol)
+        combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
 
         core_query = Chem.MolFromSmarts(self.core_smarts)
         core_atoms = mol.GetSubstructMatch(core_query)
@@ -148,7 +162,7 @@ class Trainer():
                 intg = system.Integrator(
                     steps=self.intg_steps,
                     dt=self.intg_dt,
-                    temperature=self.intg_dt,
+                    temperature=self.intg_temperature,
                     friction=self.intg_friction,  
                     masses=combined_masses,
                     lamb=lamb,
@@ -165,7 +179,8 @@ class Trainer():
                 request = service_pb2.ForwardRequest(
                     inference=inference,
                     system=pickle.dumps(complex_system),
-                    precision=self.precision
+                    precision=self.precision,
+                    n_frames=self.n_frames
                 )
 
                 stub = stubs[stub_idx]
@@ -185,12 +200,28 @@ class Trainer():
             stage_dir = os.path.join(run_dir, "stage_"+str(stage_idx))
 
             stage_du_dls = []
+
             for lamb_idx, (future, lamb) in enumerate(zip(stage_futures, lambda_schedule[stage_idx])):
 
                 response = future.result()
 
                 full_du_dls = pickle.loads(response.du_dls)
                 full_energies = pickle.loads(response.energies)
+                frames = pickle.loads(response.frames)
+
+                # write frames
+                out_file = os.path.join(stage_dir, "frames_"+str(lamb_idx)+".pdb")
+                pdb_writer = PDBWriter(combined_pdb_str, out_file)
+                pdb_writer.write_header()
+                for frame_idx, x in enumerate(frames):
+                    # interval = max(1, xs.shape[0]//pdb_writer.n_frames)
+                    # if frame_idx % interval == 0:
+                        # if check_coords(x):
+                    pdb_writer.write(x*10)
+                        # else:
+                            # print("failed to write on frame", frame_idx)
+                            # break
+                pdb_writer.close()
 
                 assert full_du_dls is not None
 

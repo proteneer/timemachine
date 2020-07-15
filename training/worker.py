@@ -67,16 +67,28 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         start = time.time()
         ctxt.forward_mode()
-        print("fwd run time", time.time() - start)
 
         full_du_dls = stepper.get_du_dl() # [FxT]
         energies = stepper.get_energies()
-        reply = service_pb2.ForwardReply(du_dls=pickle.dumps(full_du_dls), energies=pickle.dumps(energies))
+
+        keep_idxs = []
+        xs = ctxt.get_all_coords()
+        interval = max(1, xs.shape[0]//request.n_frames)
+        for frame_idx in range(xs.shape[0]):
+            if frame_idx % interval == 0:
+                keep_idxs.append(frame_idx)
+
+        frames = xs[keep_idxs]
+
+        reply = service_pb2.ForwardReply(
+            du_dls=pickle.dumps(full_du_dls),
+            energies=pickle.dumps(energies),
+            frames=pickle.dumps(frames)
+        )
 
         # store and set state for backwards mode use.
         if request.inference is False:
             self.state = (ctxt, gradients, force_names, stepper, system)
-
 
         return reply
 

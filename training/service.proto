@@ -15,11 +15,13 @@ message ForwardRequest {
     bool inference = 1;
     bytes system = 2; // pickle object
     string precision = 3;
+    int32 n_frames = 4;
 }
 
 message ForwardReply {
     bytes du_dls = 1; // numpy array
     bytes energies = 2; // numpy array
+    bytes frames = 3;
 }
 
 // The response message containing the greetings

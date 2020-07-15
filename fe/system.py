@@ -31,6 +31,10 @@ class Integrator():
             np.ones(steps-equilibrium_steps)*dt
         ])
 
+        print(complete_dts)
+        print(complete_cas)
+        print(ccs)
+
         self.dts = complete_dts
         self.cas = complete_cas
         self.cbs = -cbs
