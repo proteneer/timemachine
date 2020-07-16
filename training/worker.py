@@ -72,13 +72,15 @@ class Worker(service_pb2_grpc.WorkerServicer):
         energies = stepper.get_energies()
 
         keep_idxs = []
-        xs = ctxt.get_all_coords()
-        interval = max(1, xs.shape[0]//request.n_frames)
-        for frame_idx in range(xs.shape[0]):
-            if frame_idx % interval == 0:
-                keep_idxs.append(frame_idx)
 
-        frames = xs[keep_idxs]
+        if request.n_frames > 0:
+            xs = ctxt.get_all_coords()
+            interval = max(1, xs.shape[0]//request.n_frames)
+            for frame_idx in range(xs.shape[0]):
+                if frame_idx % interval == 0:
+                    keep_idxs.append(frame_idx)
+
+        frames = np.zeros((0, *system.x0.shape), dtype=system.x0.dtype)
 
         reply = service_pb2.ForwardReply(
             du_dls=pickle.dumps(full_du_dls),
