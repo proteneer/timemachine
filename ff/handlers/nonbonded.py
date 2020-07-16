@@ -245,7 +245,7 @@ class AM1CCCHandler(SerializableMixIn):
         bond_idx_params = []
 
         for index in range(len(self.smirks)):
-            smirk = self.smirks[index]
+            smirk = self.smirks[index]  
             param = self.params[index]*np.sqrt(constants.ONE_4PI_EPS0)
 
             substructure_search = oechem.OESubSearch(smirk)
@@ -254,12 +254,13 @@ class AM1CCCHandler(SerializableMixIn):
             matched_bonds = []
             matches = []
             for match in substructure_search.Match(oemol):
-
+                
                 matched_indices = {
                     atom_match.pattern.GetMapIdx() - 1: atom_match.target.GetIdx()
                     for atom_match in match.GetAtoms()
                     if atom_match.pattern.GetMapIdx() != 0
                 }
+               
                 matches.append(matched_indices)
 
             for matched_indices in matches:
