@@ -269,7 +269,7 @@ def test_am1_ccc():
         2.60,
     ])
 
-    np.testing.assert_almost_equal(es_params, ligand_params, decimal=1)
+    np.testing.assert_almost_equal(es_params, ligand_params, decimal=2)
  
     es_params_adjoints = np.random.randn(*es_params.shape)
 
