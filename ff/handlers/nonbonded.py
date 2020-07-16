@@ -12,6 +12,7 @@ from ff.handlers.serialize import SerializableMixIn
 
 from timemachine import constants
 
+from jax import ops
 
 def convert_to_nx(mol):
     """
@@ -101,6 +102,11 @@ def generate_nonbonded_idxs(mol, smirks):
 def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
+def apply_bcc(params, bond_idxs, bond_idx_params, am1_charges):
+    deltas = params[bond_idx_params]
+    incremented = ops.index_add(am1_charges, bond_idxs[:, 0], deltas)
+    decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)    
+    return decremented 
 
 class NonbondedHandler(SerializableMixIn):
 
@@ -184,7 +190,25 @@ class AM1BCCHandler():
 
         return np.array(charges, dtype=np.float64), vjp_fn
 
-class AM1CCCHandler():
+class AM1CCCHandler(SerializableMixIn):
+
+    def __init__(self, smirks, params, props):
+        """
+        Parameters
+        ----------
+        smirks: list of str (P,)
+            SMIRKS patterns for each pattern
+
+        params: np.array, (P,)
+            normalized charge for each
+
+        """
+        
+        assert len(smirks) == len(params)
+
+        self.smirks = smirks
+        self.params = np.array(params, dtype=np.float64)
+        self.props = props
 
     def parameterize(self, mol):
         """
@@ -198,7 +222,6 @@ class AM1CCCHandler():
         # imported here for optional dependency
         from openeye import oechem
         from openeye import oequacpac
-        import json
 
         mb = Chem.MolToMolBlock(mol)
         ims = oechem.oemolistream()
@@ -213,32 +236,24 @@ class AM1CCCHandler():
         if result is False:
             raise Exception('Unable to assign charges')
 
-        charges = [] 
+        am1_charges = [] 
         for index, atom in enumerate(oemol.GetAtoms()):
             q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
-            charges.append(q)
+            am1_charges.append(q)
 
-        smirks_remove_duplicates = []
-        all_matched_bonds = set()
+        bond_idxs = []
+        bond_idx_params = []
 
-        with open('original-am1-bcc-ct.json') as file:
-            bcc_patterns = json.load(file)
+        for index in range(len(self.smirks)):
+            smirk = self.smirks[index]
+            param = self.params[index]*np.sqrt(constants.ONE_4PI_EPS0)
 
-        for i, patterns in enumerate(bcc_patterns):
-            smirks = patterns['smirks']
-
-            if smirks in smirks_remove_duplicates:
-                continue
-
-            smirks_remove_duplicates.append(smirks)
-            bcc_correction = patterns['value']*np.sqrt(constants.ONE_4PI_EPS0)
-
-            substructure_search = oechem.OESubSearch(smirks)
+            substructure_search = oechem.OESubSearch(smirk)
             substructure_search.SetMaxMatches(0)
 
-            matched_bonds = set()
+            matched_bonds = []
             matches = []
-            for match in substructure_search.Match(oemol_am1):
+            for match in substructure_search.Match(oemol):
 
                 matched_indices = {
                     atom_match.pattern.GetMapIdx() - 1: atom_match.target.GetIdx()
@@ -247,31 +262,30 @@ class AM1CCCHandler():
                 }
                 matches.append(matched_indices)
 
-        for matched_indices in matches:
+            for matched_indices in matches:
 
-            forward_matched_bond = (matched_indices[0], matched_indices[1])
-            reverse_matched_bond = (matched_indices[1], matched_indices[0])
+                forward_matched_bond = [matched_indices[0], matched_indices[1]]
+                reverse_matched_bond = [matched_indices[1], matched_indices[0]]
 
-            if (
-                forward_matched_bond in matched_bonds
-                or reverse_matched_bond in matched_bonds 
-                or forward_matched_bond in all_matched_bonds 
-                or reverse_matched_bond in all_matched_bonds
-            ):
-                continue
+                if (
+                    forward_matched_bond in matched_bonds
+                    or reverse_matched_bond in matched_bonds
+                    or forward_matched_bond in bond_idxs 
+                    or reverse_matched_bond in bond_idxs
+                ):
+                    continue
 
-            matched_bonds.add(forward_matched_bond)
-            all_matched_bonds.add(forward_matched_bond)
+                matched_bonds.append(forward_matched_bond)
+                bond_idxs.append(forward_matched_bond)
+                bond_idx_params.append(index)
+        
+        bcc_fn = functools.partial(
+            apply_bcc,
+            bond_idxs = np.array(bond_idxs),
+            bond_idx_params = np.array(bond_idx_params, dtype=np.int32),
+            am1_charges = np.array(am1_charges)
+            )
 
-        for b in matched_bonds:
-            charges[b[0]] = charges[b[0]] + bcc_correction
-            charges[b[1]] = charges[b[1]] - bcc_correction
+        charges, vjp_fn = jax.vjp(bcc_fn, self.params)
 
-        param_idxs = generate_nonbonded_idxs(mol, smirks_remove_duplicates)
-        param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
-
-        ### I need to pass the right bcc_parameters
-        return np.array(charges, dtype=np.float64), jax.vjp(param_fn, bcc_parameters)
-
-
-
+        return np.array(charges, dtype=np.float64), vjp_fn

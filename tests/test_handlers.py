@@ -246,33 +246,38 @@ def test_am1_bcc():
 def test_am1_ccc():
     
     patterns = [
-        ['#6X4:1]-[#6X1,#6X2:2]', -0.0269],
+        ['[#6X4:1]-[#6X1,#6X2:2]', -0.0269],
+        ['[#16:1]-[#8:2]', 99.]
     ]
 
     smirks = [x[0] for x in patterns]
-    params = np.array([x[1] for x in patterns])
+    params = np.array([x[1]*np.sqrt(138.935456) for x in patterns])
+    props = None
 
-    am1h = nonbonded.AM1BCCHandler()
+    am1h = nonbonded.AM1CCCHandler(smirks, params, props)
     mol = Chem.AddHs(Chem.MolFromSmiles("CC#C"))
     AllChem.EmbedMolecule(mol)
-    charges, vjp_fn = am1h.parameterize(mol)
+    es_params, es_vjp_fn = am1h.parameterize(mol)
 
     ligand_params = np.array([
-        -0.57,
-        -1.34,
-        -1.61,
-        0.64,
-        0.64,
-        0.64,
-        1.93,
+        -1.65,
+        -1.65,
+        -2.61,
+        1.10,
+        1.10,
+        1.10,
+        2.60,
     ])
 
-    np.testing.assert_almost_equal(charges, ligand_params, decimal=2)
+    np.testing.assert_almost_equal(es_params, ligand_params, decimal=1)
  
-    charges_adjoints = np.random.randn(*charges.shape)
+    es_params_adjoints = np.random.randn(*es_params.shape)
 
-    assert vjp_fn(charges_adjoints) == None
-    
+    adjoints = es_vjp_fn(es_params_adjoints)[0]
+
+    # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
+    mask = np.argwhere(params > 90)
+    assert np.all(adjoints[mask] == 0.0) == True    
 
 def test_simple_charge_handler():
 
