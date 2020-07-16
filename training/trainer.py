@@ -76,6 +76,7 @@ class Trainer():
             intg_dt,
             intg_temperature,
             intg_friction,
+            charge_lr,
             precision):
 
         n_workers = len(stubs)
@@ -96,6 +97,7 @@ class Trainer():
         self.intg_dt = intg_dt
         self.intg_temperature = intg_temperature
         self.intg_friction = intg_friction
+        self.charge_lr = charge_lr
         self.precision = precision
 
 
@@ -196,7 +198,6 @@ class Trainer():
         for stage_idx, stage_futures in enumerate(stage_forward_futures):
 
             stage_dir = os.path.join(run_dir, "stage_"+str(stage_idx))
-
             stage_du_dls = []
 
             for lamb_idx, (future, lamb) in enumerate(zip(stage_futures, lambda_schedule[stage_idx])):
@@ -205,25 +206,22 @@ class Trainer():
 
                 full_du_dls = pickle.loads(response.du_dls)
                 full_energies = pickle.loads(response.energies)
-                frames = pickle.loads(response.frames)
 
-                # write frames
-                out_file = os.path.join(stage_dir, "frames_"+str(lamb_idx)+".pdb")
-                # make sure we do StringIO here as it's single-pass.
-                combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-                pdb_writer = PDBWriter(combined_pdb_str, out_file)
-                pdb_writer.write_header()
-                for frame_idx, x in enumerate(frames):
-                    # interval = max(1, xs.shape[0]//pdb_writer.n_frames)
-                    # if frame_idx % interval == 0:
-                        # if check_coords(x):
-                    pdb_writer.write(x*10)
-                        # else:
-                            # print("failed to write on frame", frame_idx)
-                            # break
-                pdb_writer.close()
+                if self.n_frames > 0:
 
-                assert full_du_dls is not None
+                    frames = pickle.loads(response.frames)
+
+                    # write frames
+                    out_file = os.path.join(stage_dir, "frames_"+str(lamb_idx)+".pdb")
+                    # make sure we do StringIO here as it's single-pass.
+                    combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+                    pdb_writer = PDBWriter(combined_pdb_str, out_file)
+                    pdb_writer.write_header()
+                    for frame_idx, x in enumerate(frames):
+                        pdb_writer.write(x*10)
+                    pdb_writer.close()
+
+                    assert full_du_dls is not None
 
                 np.save(os.path.join(stage_dir, "lambda_"+str(lamb_idx)+"_full_du_dls"), full_du_dls)
                 total_du_dls = np.sum(full_du_dls, axis=0)
@@ -291,7 +289,7 @@ class Trainer():
                 stage_backward_futures.append(futures)
 
             charge_derivatives = []
-            gb_derivatives = []
+            # gb_derivatives = []
 
             for stage_idx, stage_futures in enumerate(stage_backward_futures):
                 for future in stage_futures:
@@ -309,11 +307,11 @@ class Trainer():
                             # 0 is for charges
                             # 1 is for gb terms
                             charge_derivatives.append(vjp_fn[0](dl_dp[0]))
-                            gb_derivatives.append(vjp_fn[1](dl_dp[1]))
+                            # gb_derivatives.append(vjp_fn[1](dl_dp[1]))
 
 
             charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
-            charge_lr = 1e-3
+            charge_lr = self.charge_lr
 
             for h in ff_handlers:
                 if isinstance(h, nonbonded.SimpleChargeHandler):

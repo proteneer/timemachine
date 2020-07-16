@@ -71,8 +71,8 @@ if __name__ == "__main__":
         data.append((mol, mol_dG))
 
     full_dataset = dataset.Dataset(data)
-    train_frac = 0.6
-    train_dataset, test_dataset = full_dataset.split(0.6)
+    train_frac = float(general_cfg['train_frac'])
+    train_dataset, test_dataset = full_dataset.split(train_frac)
 
     # process the host first
     host_pdbfile = general_cfg['protein_pdb']
@@ -113,6 +113,7 @@ if __name__ == "__main__":
 
     restr_cfg = config['restraints']
     intg_cfg = config['integrator']
+    lr_config = config['learning_rates']
 
     engine = trainer.Trainer(
         host_pdbfile, 
@@ -129,7 +130,9 @@ if __name__ == "__main__":
         float(intg_cfg['dt']),
         float(intg_cfg['temperature']),
         float(intg_cfg['friction']),
-        general_cfg['precision'])
+        float(lr_config['charge']),
+        general_cfg['precision']
+    )
 
     for epoch in range(100):
 
@@ -148,7 +151,7 @@ if __name__ == "__main__":
             mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
             start_time = time.time()
             dG, loss = engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
-            print("test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)
+            print(mol.GetProp("_Name"), "test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)
 
         train_dataset.shuffle()
 
@@ -157,7 +160,7 @@ if __name__ == "__main__":
             mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
             start_time = time.time()
             dG, loss = engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
-            print("train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)
+            print(mol.GetProp("_Name"), "train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time)
 
         epoch_params = serialize_handlers(ff_handlers)
         with open(os.path.join(epoch_dir, "end_epoch_params.py"), 'w') as fh:
