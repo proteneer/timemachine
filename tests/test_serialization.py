@@ -175,7 +175,6 @@ def test_improper_torsion():
     np.testing.assert_equal(new_imph.params, imph.params)
     assert new_imph.props == imph.props
 
-
 def test_simple_charge_handler():
 
     patterns = [
@@ -291,6 +290,36 @@ def test_am1bcc():
     np.testing.assert_equal(am1.params, am1.params)
     assert am1.props == am1.props
 
+def test_am1ccc():
+
+    patterns = [
+        ['[#6X4:1]-[#1:2]', 0.46323257920556493],
+        ['[#6X3$(*=[#8,#16]):1]-[#6a:2]', 0.24281402370571598],
+        ['[#6X3$(*=[#8,#16]):1]-[#8X1,#8X2:2]', 1.0620166764992722],
+        ['[#6X3$(*=[#8,#16]):1]=[#8X1$(*=[#6X3]-[#8X2]):2]', 2.227759732057297],
+        ['[#6X3$(*=[#8,#16]):1]=[#8X1,#8X2:2]', 2.8182928673804217],
+        ['[#6a:1]-[#8X1,#8X2:2]', 0.5315976926761063],
+        ['[#6a:1]-[#1:2]', 0.0],
+        ['[#6a:1]:[#6a:2]', 0.0],
+        ['[#6a:1]:[#6a:2]', 0.0],
+        ['[#8X1,#8X2:1]-[#1:2]', -2.3692047944101415],
+        ['[#16:1]-[#8:2]', 99.]
+    ]
+
+    smirks = [x[0] for x in patterns]
+    params = np.array([x[1]*np.sqrt(138.935456) for x in patterns])
+    props = None
+    
+    am1h = nonbonded.AM1CCCHandler(smirks, params, props)
+    obj = am1h.serialize()
+    all_handlers = deserialize(bin_to_str(obj))
+
+    assert len(all_handlers) == 1
+
+    new_am1h = all_handlers[0]
+    np.testing.assert_equal(new_am1h.smirks, am1h.smirks)
+    np.testing.assert_equal(new_am1h.params, am1h.params)
+    assert new_am1h.props == am1h.props
 
 def test_lennard_jones_handler():
 
