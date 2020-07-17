@@ -328,7 +328,7 @@ def create_system(
     backbone_atoms = []
     for r_idx, residue in enumerate(host_pdb.getTopology().residues()):
         for a in residue.atoms():
-            if a.name == 'C' or a.name == 'CA' or a.name == 'N' or a.name == 'O':
+            if a.name == 'CA':
                 backbone_atoms.append(a.index)
 
     final_gradients.append(setup_core_restraints(
