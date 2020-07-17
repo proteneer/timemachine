@@ -246,7 +246,7 @@ class AM1CCCHandler(SerializableMixIn):
 
         am1_charges = [] 
         for index, atom in enumerate(oemol.GetAtoms()):
-            q = atom.GetPartialCharge()
+            q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
             am1_charges.append(q)
 
         bond_idxs = []
