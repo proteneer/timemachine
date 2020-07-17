@@ -232,7 +232,11 @@ def test_exclusions():
 
 def test_am1_bcc():
     # currently takes no parameters
-    am1h = nonbonded.AM1BCCHandler()
+    smirks = []
+    params = []
+    props = None
+
+    am1h = nonbonded.AM1BCCHandler(smirks, params, props)
     mol = Chem.AddHs(Chem.MolFromSmiles("C1CNCOC1F"))
     AllChem.EmbedMolecule(mol)
     charges, vjp_fn = am1h.parameterize(mol)
@@ -243,6 +247,65 @@ def test_am1_bcc():
 
     assert vjp_fn(charges_adjoints) == None
 
+def test_am1_ccc():
+    
+    patterns = [
+        ['[#6X4:1]-[#1:2]', 0.46323257920556493],
+        ['[#6X3$(*=[#8,#16]):1]-[#6a:2]', 0.24281402370571598],
+        ['[#6X3$(*=[#8,#16]):1]-[#8X1,#8X2:2]', 1.0620166764992722],
+        ['[#6X3$(*=[#8,#16]):1]=[#8X1$(*=[#6X3]-[#8X2]):2]', 2.227759732057297],
+        ['[#6X3$(*=[#8,#16]):1]=[#8X1,#8X2:2]', 2.8182928673804217],
+        ['[#6a:1]-[#8X1,#8X2:2]', 0.5315976926761063],
+        ['[#6a:1]-[#1:2]', 0.0],
+        ['[#6a:1]:[#6a:2]', 0.0],
+        ['[#6a:1]:[#6a:2]', 0.0],
+        ['[#8X1,#8X2:1]-[#1:2]', -2.3692047944101415],
+        ['[#16:1]-[#8:2]', 99.]
+    ]
+
+    smirks = [x[0] for x in patterns]
+    params = np.array([x[1]*np.sqrt(138.935456) for x in patterns])
+    props = None
+
+    am1h = nonbonded.AM1CCCHandler(smirks, params, props)
+    mol = Chem.AddHs(Chem.MolFromSmiles("O=C(C)Oc1ccccc1C(=O)O"))
+    AllChem.EmbedMolecule(mol)
+    es_params, es_vjp_fn = am1h.parameterize(mol)
+
+    ligand_params = np.array([
+        -30.174, 
+        42.523, 
+        13.834, 
+        -21.405, 
+        7.714,
+        -1.699, 
+        -0.996,  
+        -1.746, 
+        -0.715,  
+        -4.242,
+        45.864,
+        -30.518,
+        -44.084,  
+        -4.086,  
+        -4.082,
+        -4.027,  
+        1.801,  
+        1.669,  
+        1.691,  
+        1.903,
+        30.775
+    ])
+    
+    np.testing.assert_almost_equal(es_params, ligand_params, decimal=1)
+ 
+    es_params_adjoints = np.random.randn(*es_params.shape)
+
+    adjoints = es_vjp_fn(es_params_adjoints)[0]
+
+    # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
+    mask = np.argwhere(params > 90)
+    assert np.all(adjoints[mask] == 0.0) == True
+    
 def test_simple_charge_handler():
 
     patterns = [

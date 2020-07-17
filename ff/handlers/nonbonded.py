@@ -12,6 +12,7 @@ from ff.handlers.serialize import SerializableMixIn
 
 from timemachine import constants
 
+from jax import ops
 
 def convert_to_nx(mol):
     """
@@ -101,6 +102,11 @@ def generate_nonbonded_idxs(mol, smirks):
 def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
+def apply_bcc(params, bond_idxs, bond_idx_params, am1_charges):
+    deltas = params[bond_idx_params]
+    incremented = ops.index_add(am1_charges, bond_idxs[:, 0], deltas)
+    decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)    
+    return decremented 
 
 class NonbondedHandler(SerializableMixIn):
 
@@ -189,5 +195,106 @@ class AM1BCCHandler(SerializableMixIn):
 
         def vjp_fn(*args, **kwargs):
             return None 
+
+        return np.array(charges, dtype=np.float64), vjp_fn
+
+class AM1CCCHandler(SerializableMixIn):
+
+    def __init__(self, smirks, params, props):
+        """
+        Parameters
+        ----------
+        smirks: list of str (P,)
+            SMIRKS patterns for each pattern
+
+        params: np.array, (P,)
+            normalized charge for each
+
+        """
+        
+        assert len(smirks) == len(params)
+
+        self.smirks = smirks
+        self.params = np.array(params, dtype=np.float64)
+        self.props = props
+
+    def parameterize(self, mol):
+        """
+        Parameters
+        ----------
+
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        """
+        # imported here for optional dependency
+        from openeye import oechem
+        from openeye import oequacpac
+
+        mb = Chem.MolToMolBlock(mol)
+        ims = oechem.oemolistream()
+        ims.SetFormat(oechem.OEFormat_SDF)
+        ims.openstring(mb)
+
+        for buf_mol in ims.GetOEMols():
+            oemol = oechem.OEMol(buf_mol)
+
+        result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1Charges())
+
+        if result is False:
+            raise Exception('Unable to assign charges')
+
+        am1_charges = [] 
+        for index, atom in enumerate(oemol.GetAtoms()):
+            q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+            am1_charges.append(q)
+
+        bond_idxs = []
+        bond_idx_params = []
+
+        for index in range(len(self.smirks)):
+            smirk = self.smirks[index]  
+            param = self.params[index]*np.sqrt(constants.ONE_4PI_EPS0)
+
+            substructure_search = oechem.OESubSearch(smirk)
+            substructure_search.SetMaxMatches(0)
+
+            matched_bonds = []
+            matches = []
+            for match in substructure_search.Match(oemol):
+                
+                matched_indices = {
+                    atom_match.pattern.GetMapIdx() - 1: atom_match.target.GetIdx()
+                    for atom_match in match.GetAtoms()
+                    if atom_match.pattern.GetMapIdx() != 0
+                }
+               
+                matches.append(matched_indices)
+
+            for matched_indices in matches:
+
+                forward_matched_bond = [matched_indices[0], matched_indices[1]]
+                reverse_matched_bond = [matched_indices[1], matched_indices[0]]
+
+                if (
+                    forward_matched_bond in matched_bonds
+                    or reverse_matched_bond in matched_bonds
+                    or forward_matched_bond in bond_idxs 
+                    or reverse_matched_bond in bond_idxs
+                ):
+                    continue
+
+                matched_bonds.append(forward_matched_bond)
+                bond_idxs.append(forward_matched_bond)
+                bond_idx_params.append(index)
+        
+        bcc_fn = functools.partial(
+            apply_bcc,
+            bond_idxs = np.array(bond_idxs),
+            bond_idx_params = np.array(bond_idx_params, dtype=np.int32),
+            am1_charges = np.array(am1_charges)
+            )
+
+        charges, vjp_fn = jax.vjp(bcc_fn, self.params)
 
         return np.array(charges, dtype=np.float64), vjp_fn
