@@ -16,6 +16,7 @@ def setup_core_restraints(
     conf,
     nha,
     core_atoms,
+    backbone_atoms,
     stage):
     """
     Setup core restraints
@@ -34,6 +35,8 @@ def setup_core_restraints(
     core_atoms: list of int
         atoms we're restraining. This is indexed by the total number of atoms in the system.
 
+    backbone_atoms: list of backbone atoms
+
     stage: 0,1,2
         0 - attach restraint
         1 - decouple
@@ -51,13 +54,26 @@ def setup_core_restraints(
     for l_idx, dists in enumerate(dij[nha:]):
         if l_idx in core_atoms:
             nns = np.argsort(dists[:nha])
+            # restrain to count nearby backbone atoms to enable
+            # side-chain sampling
 
-            # restrain to 10 nearby atoms
-            for p_idx in nns[:count]:
-                a = alpha
-                b = dists[p_idx]
-                bond_params.append((k, b, a))
-                bond_idxs.append([l_idx + nha, p_idx])
+            counter = 0
+
+            for p_idx in nns:
+
+                if counter == count:
+                    break
+
+                if p_idx in backbone_atoms:
+                    a = alpha
+                    b = dists[p_idx]
+                    bond_params.append((k, b, a))
+                    bond_idxs.append([l_idx + nha, p_idx])
+                    counter += 1
+
+            # corner case where we haven't found sufficient candidates
+            if counter != count:
+                raise Exception("Failed to find", count, "neighbors")
 
     bond_idxs = np.array(bond_idxs, dtype=np.int32)
     bond_params = np.array(bond_params, dtype=np.float64)
@@ -309,6 +325,12 @@ def create_system(
     v0 = np.zeros_like(x0)
 
     # build restraints using the coordinates
+    backbone_atoms = []
+    for r_idx, residue in enumerate(host_pdb.getTopology().residues()):
+        for a in residue.atoms():
+            if a.name == 'C' or a.name == 'CA' or a.name == 'N' or a.name == 'O':
+                backbone_atoms.append(a.index)
+
     final_gradients.append(setup_core_restraints(
         restr_force,
         restr_alpha,
@@ -316,6 +338,7 @@ def create_system(
         x0,
         num_host_atoms,
         core_atoms,
+        backbone_atoms,
         stage=stage
     ))
 
