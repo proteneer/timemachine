@@ -246,7 +246,7 @@ class AM1CCCHandler(SerializableMixIn):
 
         am1_charges = [] 
         for index, atom in enumerate(oemol.GetAtoms()):
-            q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+            q = atom.GetPartialCharge()
             am1_charges.append(q)
 
         bond_idxs = []
@@ -254,7 +254,7 @@ class AM1CCCHandler(SerializableMixIn):
 
         for index in range(len(self.smirks)):
             smirk = self.smirks[index]  
-            param = self.params[index]*np.sqrt(constants.ONE_4PI_EPS0)
+            param = self.params[index]
 
             substructure_search = oechem.OESubSearch(smirk)
             substructure_search.SetMaxMatches(0)

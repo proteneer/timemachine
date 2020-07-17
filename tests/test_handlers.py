@@ -264,7 +264,7 @@ def test_am1_ccc():
     ]
 
     smirks = [x[0] for x in patterns]
-    params = np.array([x[1]*np.sqrt(138.935456) for x in patterns])
+    params = np.array([x[1] for x in patterns])
     props = None
 
     am1h = nonbonded.AM1CCCHandler(smirks, params, props)
@@ -273,30 +273,30 @@ def test_am1_ccc():
     es_params, es_vjp_fn = am1h.parameterize(mol)
 
     ligand_params = np.array([
-        -30.174, 
-        42.523, 
-        13.834, 
-        -21.405, 
-        7.714,
-        -1.699, 
-        -0.996,  
-        -1.746, 
-        -0.715,  
-        -4.242,
-        45.864,
-        -30.518,
-        -44.084,  
-        -4.086,  
-        -4.082,
-        -4.027,  
-        1.801,  
-        1.669,  
-        1.691,  
-        1.903,
-        30.775
+        -2.55709,  
+        3.61157,
+        1.17583, 
+        -1.82404,  
+        0.65942, 
+        -0.14635,
+        -0.08357,
+        -0.14904,
+        -0.06003,
+        -0.36259,  
+        3.89163, 
+        -2.59012,
+        -3.74298, 
+        -0.34616, 
+        -0.34042, 
+        -0.34671,  
+        0.15218,  
+        0.14129,
+        0.14365,  
+        0.16203,  
+        2.61148
     ])
     
-    np.testing.assert_almost_equal(es_params, ligand_params, decimal=1)
+    np.testing.assert_almost_equal(es_params, ligand_params, decimal=5)
  
     es_params_adjoints = np.random.randn(*es_params.shape)
 
