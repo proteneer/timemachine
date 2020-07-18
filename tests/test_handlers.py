@@ -436,6 +436,48 @@ def test_gbsa_handler():
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0) == True
 
+from ff.handlers.deserialize import deserialize
+
+
+
+
+def test_am1_differences():
+
+    ff_raw = open("ff/params/smirnoff_1_1_0_ccc.py").read()
+    ff_handlers = deserialize(ff_raw)
+    for ccc in ff_handlers:
+        if isinstance(ccc, nonbonded.AM1CCCHandler):
+            break
+
+    suppl = Chem.SDMolSupplier('tests/ligands_40.sdf', removeHs=False)
+    bcc = nonbonded.AM1BCCHandler([], [], None)
+
+    # mols = []
+    for mol in suppl:
+
+        print(Chem.MolToSmiles(mol))
+        ccc_params, vjp_fn = ccc.parameterize(mol)
+        bcc_params, vjp_fn = bcc.parameterize(mol)
+
+        # np.set_printoptions(precision=2)
+        # print("net_charge", "CCC", np.sum(ccc_params), "BCC", np.sum(bcc_params))
+        print("  CCC    BCC  S ?")
+        for atom_idx, atom in enumerate(mol.GetAtoms()):
+            b = bcc_params[atom_idx]
+            c = ccc_params[atom_idx]
+            print("{:6.2f}".format(c), "{:6.2f}".format(b), atom.GetSymbol(), end="")
+            if np.abs(b-c) > 0.1:
+                print(" *")
+            else:
+                print(" ")
+
+
+        # mol_dG = -1*convert_uIC50_to_kJ_per_mole(float(mol.GetProp(general_cfg['bind_prop'])))
+        # data.append((mol, mol_dG))
+
+    # handle)
+
+
 
 def test_lennard_jones_handler():
 
