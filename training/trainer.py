@@ -29,6 +29,8 @@ def dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff):
         dG = math_utils.trapz(du_dls, ti_lambdas)
         stage_dGs.append(dG)
 
+    print("stage_dGs", stage_dGs)
+
     pred_dG = jnp.sum(stage_dGs)
     return pred_dG
 
