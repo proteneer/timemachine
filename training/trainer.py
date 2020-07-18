@@ -81,7 +81,7 @@ class Trainer():
 
         n_workers = len(stubs)
         n_lambdas = np.sum([len(x) for x in lambda_schedule])
-        assert n_workers == n_lambdas
+        # assert n_workers == n_lambdas
 
         self.du_dl_cutoff = du_dl_cutoff
         self.host_pdbfile = host_pdbfile
@@ -115,6 +115,10 @@ class Trainer():
 
     def run_mol(self, mol, inference, run_dir, experiment_dG):
 
+        # we can only multiplex in inference mode.
+        if inference is False:
+            assert np.sum([len(x) for x in self.lambda_schedule]) == len(self.stubs)
+
         host_pdbfile = self.host_pdbfile
         lambda_schedule = self.lambda_schedule
         ff_handlers = self.ff_handlers
@@ -122,7 +126,6 @@ class Trainer():
         du_dl_cutoff = self.du_dl_cutoff
 
         host_pdb = PDBFile(host_pdbfile)
-
 
         combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), mol)
 
@@ -183,7 +186,7 @@ class Trainer():
                     n_frames=self.n_frames
                 )
 
-                stub = stubs[stub_idx]
+                stub = stubs[stub_idx % len(stubs)]
                 stub_idx += 1
 
                 # launch asynchronously
@@ -208,10 +211,7 @@ class Trainer():
                 full_energies = pickle.loads(response.energies)
 
                 if self.n_frames > 0:
-
                     frames = pickle.loads(response.frames)
-
-                    # write frames
                     out_file = os.path.join(stage_dir, "frames_"+str(lamb_idx)+".pdb")
                     # make sure we do StringIO here as it's single-pass.
                     combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
@@ -223,7 +223,8 @@ class Trainer():
 
                     assert full_du_dls is not None
 
-                np.save(os.path.join(stage_dir, "lambda_"+str(lamb_idx)+"_full_du_dls"), full_du_dls)
+                # we don't really want to save this full buffer, way too large
+                # np.save(os.path.join(stage_dir, "lambda_"+str(lamb_idx)+"_full_du_dls"), full_du_dls)
                 total_du_dls = np.sum(full_du_dls, axis=0)
 
                 plt.plot(total_du_dls, label="{:.2f}".format(lamb))
