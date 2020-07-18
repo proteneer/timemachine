@@ -4,15 +4,17 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import networkx as nx
+import pickle
 
 from rdkit import Chem
-
 from ff.handlers.utils import match_smirks, sort_tuple
 from ff.handlers.serialize import SerializableMixIn
 
 from timemachine import constants
 
 from jax import ops
+
+import base64
 
 def convert_to_nx(mol):
     """
@@ -239,15 +241,22 @@ class AM1CCCHandler(SerializableMixIn):
         for buf_mol in ims.GetOEMols():
             oemol = oechem.OEMol(buf_mol)
 
-        result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1Charges())
+        # check for cache
+        cache_key = 'AM1Cache'
+        if not mol.HasProp(cache_key):
+            result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1Charges())
+            if result is False:
+                raise Exception('Unable to assign charges')
 
-        if result is False:
-            raise Exception('Unable to assign charges')
+            am1_charges = [] 
+            for index, atom in enumerate(oemol.GetAtoms()):
+                q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+                am1_charges.append(q)
 
-        am1_charges = [] 
-        for index, atom in enumerate(oemol.GetAtoms()):
-            q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
-            am1_charges.append(q)
+            mol.SetProp(cache_key, base64.b64encode(pickle.dumps(am1_charges)))
+
+        else:
+            am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_key)))
 
         bond_idxs = []
         bond_idx_params = []

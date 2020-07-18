@@ -305,6 +305,19 @@ def test_am1_ccc():
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0) == True
+
+    import time
+    start = time.time()
+    es_params_from_cache, _ = am1h.parameterize(mol)
+    end = time.time()
+
+    # second pass should be very fast
+    assert end-start < 1.0
+
+    # should be *exactly* identical since we're loading from cache
+    np.testing.assert_equal(es_params_from_cache, es_params)
+
+
     
 def test_simple_charge_handler():
 
