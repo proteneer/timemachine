@@ -326,8 +326,13 @@ class Trainer():
 
             for h in ff_handlers:
                 if isinstance(h, nonbonded.SimpleChargeHandler):
+                    # debug for now
+                    assert 0
                     h.params -= charge_gradients*charge_lr
                 elif isinstance(h, nonbonded.AM1CCCHandler):
-                    h.params -= charge_gradients*charge_lr
+                    if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)):
+                        print("Fatal Derivatives:", charge_gradients)
+                    else:
+                        h.params -= charge_gradients*charge_lr
 
         return pred_dG, loss
