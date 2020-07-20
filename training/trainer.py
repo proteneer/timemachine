@@ -68,6 +68,7 @@ class Trainer():
     def __init__(self,
             host_pdbfile,
             stubs,
+            stub_hosts,
             ff_handlers,
             lambda_schedule,
             du_dl_cutoff,
@@ -90,6 +91,7 @@ class Trainer():
         self.du_dl_cutoff = du_dl_cutoff
         self.host_pdbfile = host_pdbfile
         self.stubs = stubs
+        self.stub_hosts = stub_hosts
         self.ff_handlers = ff_handlers
         self.lambda_schedule = lambda_schedule
         self.core_smarts = core_smarts
@@ -105,10 +107,12 @@ class Trainer():
         self.precision = precision
 
 
-        print("resetting state on workers...")
+
 
         futures = []
-        for stub in self.stubs:
+        print("resetting state on workers...")
+        for stub, host in zip(self.stubs, self.stub_hosts):
+            print("resetting", host)
             request = service_pb2.EmptyMessage()
             response_future = stub.ResetState.future(request)
             futures.append(response_future)

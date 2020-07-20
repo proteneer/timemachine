@@ -118,6 +118,7 @@ if __name__ == "__main__":
     engine = trainer.Trainer(
         host_pdbfile, 
         stubs,
+        worker_address_list,
         ff_handlers,
         lambda_schedule,
         int(general_cfg['du_dl_cutoff']),
