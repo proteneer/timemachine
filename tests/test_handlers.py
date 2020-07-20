@@ -5,6 +5,7 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
+from ff.handlers.deserialize import deserialize
 
 
 def test_harmonic_bond():
@@ -272,6 +273,7 @@ def test_am1_ccc():
     AllChem.EmbedMolecule(mol)
     es_params, es_vjp_fn = am1h.parameterize(mol)
 
+    # TBD update with AM1 Symmetrize=True
     ligand_params = np.array([
         -6.10964,  
         7.08282, 
@@ -305,6 +307,19 @@ def test_am1_ccc():
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0) == True
+
+    import time
+    start = time.time()
+    es_params_from_cache, _ = am1h.parameterize(mol)
+    end = time.time()
+
+    # second pass should be very fast
+    assert end-start < 1.0
+
+    # should be *exactly* identical since we're loading from cache
+    np.testing.assert_equal(es_params_from_cache, es_params)
+
+
     
 def test_simple_charge_handler():
 
@@ -422,6 +437,41 @@ def test_gbsa_handler():
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0) == True
+
+
+def test_am1_differences():
+
+    ff_raw = open("ff/params/smirnoff_1_1_0_ccc.py").read()
+    ff_handlers = deserialize(ff_raw)
+    for ccc in ff_handlers:
+        if isinstance(ccc, nonbonded.AM1CCCHandler):
+            break
+
+    suppl = Chem.SDMolSupplier('tests/ligands_40.sdf', removeHs=False)
+    am1 = nonbonded.AM1Handler([], [], None)
+    bcc = nonbonded.AM1BCCHandler([], [], None)
+
+    for mol in suppl:
+
+        am1_params, vjp_fn = am1.parameterize(mol)
+        ccc_params, vjp_fn = ccc.parameterize(mol)
+        bcc_params, vjp_fn = bcc.parameterize(mol)
+
+        if np.sum(np.abs(ccc_params - bcc_params)) > 0.1:
+        
+            print(mol.GetProp("_Name"), Chem.MolToSmiles(mol))
+            print("  AM1    CCC    BCC  S ?")
+            for atom_idx, atom in enumerate(mol.GetAtoms()):
+                a = am1_params[atom_idx]
+                b = bcc_params[atom_idx]
+                c = ccc_params[atom_idx]
+                print("{:6.2f}".format(a), "{:6.2f}".format(c), "{:6.2f}".format(b), atom.GetSymbol(), end="")
+                if np.abs(b-c) > 0.1:
+                    print(" *")
+                else:
+                    print(" ")
+
+            assert 0
 
 
 def test_lennard_jones_handler():

@@ -4,15 +4,18 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import networkx as nx
+import pickle
 
 from rdkit import Chem
-
 from ff.handlers.utils import match_smirks, sort_tuple
 from ff.handlers.serialize import SerializableMixIn
+from ff.handlers.bcc_aromaticity import AromaticityModel
 
 from timemachine import constants
 
 from jax import ops
+
+import base64
 
 def convert_to_nx(mol):
     """
@@ -152,6 +155,53 @@ class LennardJonesHandler(NonbondedHandler):
 class GBSAHandler(NonbondedHandler):
     pass
 
+
+class AM1Handler(SerializableMixIn):
+
+    def __init__(self, smirks, params, props):
+        assert len(smirks) == 0
+        assert len(params) == 0
+        assert props is None
+        self.smirks = []
+        self.params = []
+        self.props = None
+
+    def parameterize(self, mol):
+        """
+        Parameters
+        ----------
+
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        """
+        # imported here for optional dependency
+        from openeye import oechem
+        from openeye import oequacpac
+
+        mb = Chem.MolToMolBlock(mol)
+        ims = oechem.oemolistream()
+        ims.SetFormat(oechem.OEFormat_SDF)
+        ims.openstring(mb)
+
+        for buf_mol in ims.GetOEMols():
+            oemol = oechem.OEMol(buf_mol)
+
+        result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1Charges(symmetrize=True))
+
+        if result is False:
+            raise Exception('Unable to assign charges')
+
+        charges = [] 
+        for index, atom in enumerate(oemol.GetAtoms()):
+            q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+            charges.append(q)
+
+        def vjp_fn(*args, **kwargs):
+            return None 
+
+        return np.array(charges, dtype=np.float64), vjp_fn
+
 class AM1BCCHandler(SerializableMixIn):
 
     def __init__(self, smirks, params, props):
@@ -238,16 +288,25 @@ class AM1CCCHandler(SerializableMixIn):
 
         for buf_mol in ims.GetOEMols():
             oemol = oechem.OEMol(buf_mol)
+            # AromaticityModel.assign(oe_molecule, bcc_collection.aromaticity_model)
+            AromaticityModel.assign(oemol)
 
-        result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1Charges())
+        # check for cache
+        cache_key = 'AM1Cache'
+        if not mol.HasProp(cache_key):
+            result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1Charges(symmetrize=True))
+            if result is False:
+                raise Exception('Unable to assign charges')
 
-        if result is False:
-            raise Exception('Unable to assign charges')
+            am1_charges = [] 
+            for index, atom in enumerate(oemol.GetAtoms()):
+                q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
+                am1_charges.append(q)
 
-        am1_charges = [] 
-        for index, atom in enumerate(oemol.GetAtoms()):
-            q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
-            am1_charges.append(q)
+            mol.SetProp(cache_key, base64.b64encode(pickle.dumps(am1_charges)))
+
+        else:
+            am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_key)))
 
         bond_idxs = []
         bond_idx_params = []
