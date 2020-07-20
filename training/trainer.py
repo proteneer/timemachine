@@ -327,5 +327,7 @@ class Trainer():
             for h in ff_handlers:
                 if isinstance(h, nonbonded.SimpleChargeHandler):
                     h.params -= charge_gradients*charge_lr
+                elif isinstance(h, nonbonded.AM1CCCHandler):
+                    h.params -= charge_gradients*charge_lr
 
         return pred_dG, loss
