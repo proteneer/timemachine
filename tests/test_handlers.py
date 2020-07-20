@@ -460,9 +460,6 @@ def test_am1_differences():
         if np.sum(np.abs(ccc_params - bcc_params)) > 0.1:
         
             print(mol.GetProp("_Name"), Chem.MolToSmiles(mol))
-
-            # np.set_printoptions(precision=2)
-            # print("net_charge", "CCC", np.sum(ccc_params), "BCC", np.sum(bcc_params))
             print("  AM1    CCC    BCC  S ?")
             for atom_idx, atom in enumerate(mol.GetAtoms()):
                 a = am1_params[atom_idx]
@@ -474,7 +471,7 @@ def test_am1_differences():
                 else:
                     print(" ")
 
-            # assert 0
+            assert 0
 
 
 def test_lennard_jones_handler():
