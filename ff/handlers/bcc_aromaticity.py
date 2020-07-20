@@ -8,8 +8,6 @@ from typing import Any, Dict, List, Callable, Type, TypeVar
 
 T = TypeVar("T")
 
-
-
 class RechargeException(BaseException):
     pass
 
@@ -323,7 +321,6 @@ class AromaticityModel:
         cls._set_aromatic(case_5_matches, oe_molecule)
 
     @classmethod
-    # def assign(cls, oe_molecule: oechem.OEMol, model: AromaticityModels):
     def assign(cls, oe_molecule: oechem.OEMol):
         """Clears the current aromaticity flags on a molecule and assigns
         new ones based on the specified aromaticity model.
@@ -335,8 +332,4 @@ class AromaticityModel:
         model
             The aromaticity model to apply.
         """
-
-        # if model == AromaticityModels.AM1BCC:
         cls._assign_am1bcc(oe_molecule)
-        # else:
-            # raise NotImplementedError()

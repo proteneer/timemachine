@@ -19,7 +19,7 @@ from simtk.openmm.app import PDBFile
 from ff.handlers import bonded, nonbonded
 
 
-def dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff):
+def compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff):
     stage_dGs = []
     for stage_du_dls, ti_lambdas in zip(all_du_dls, lambda_schedules):
         du_dls = []
@@ -29,8 +29,10 @@ def dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff):
         dG = math_utils.trapz(du_dls, ti_lambdas)
         stage_dGs.append(dG)
 
-    print("stage_dGs", stage_dGs)
+    return stage_dGs
 
+def dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff):
+    stage_dGs = compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff)
     pred_dG = jnp.sum(stage_dGs)
     return pred_dG
 
@@ -270,6 +272,8 @@ class Trainer():
 
         pred_dG = dG_TI(all_du_dls, lambda_schedule, du_dl_cutoff)
         loss = loss_fn(all_du_dls, lambda_schedule, experiment_dG, du_dl_cutoff)
+
+        print("mol", mol.GetProp("_Name"), "stage dGs:", compute_dGs(all_du_dls, lambda_schedule, du_dl_cutoff))
 
         if not inference:
 
