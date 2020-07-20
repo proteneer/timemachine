@@ -19,7 +19,7 @@ from simtk.openmm.app import PDBFile
 from ff.handlers import bonded, nonbonded
 
 
-def dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff):
+def compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff):
     stage_dGs = []
     for stage_du_dls, ti_lambdas in zip(all_du_dls, lambda_schedules):
         du_dls = []
@@ -29,8 +29,10 @@ def dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff):
         dG = math_utils.trapz(du_dls, ti_lambdas)
         stage_dGs.append(dG)
 
-    print("stage_dGs", stage_dGs)
+    return stage_dGs
 
+def dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff):
+    stage_dGs = compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff)
     pred_dG = jnp.sum(stage_dGs)
     return pred_dG
 
@@ -66,6 +68,7 @@ class Trainer():
     def __init__(self,
             host_pdbfile,
             stubs,
+            stub_hosts,
             ff_handlers,
             lambda_schedule,
             du_dl_cutoff,
@@ -88,6 +91,7 @@ class Trainer():
         self.du_dl_cutoff = du_dl_cutoff
         self.host_pdbfile = host_pdbfile
         self.stubs = stubs
+        self.stub_hosts = stub_hosts
         self.ff_handlers = ff_handlers
         self.lambda_schedule = lambda_schedule
         self.core_smarts = core_smarts
@@ -103,10 +107,12 @@ class Trainer():
         self.precision = precision
 
 
-        print("resetting state on workers...")
+
 
         futures = []
-        for stub in self.stubs:
+        print("resetting state on workers...")
+        for stub, host in zip(self.stubs, self.stub_hosts):
+            print("resetting", host)
             request = service_pb2.EmptyMessage()
             response_future = stub.ResetState.future(request)
             futures.append(response_future)
@@ -271,6 +277,8 @@ class Trainer():
         pred_dG = dG_TI(all_du_dls, lambda_schedule, du_dl_cutoff)
         loss = loss_fn(all_du_dls, lambda_schedule, experiment_dG, du_dl_cutoff)
 
+        print("mol", mol.GetProp("_Name"), "stage dGs:", compute_dGs(all_du_dls, lambda_schedule, du_dl_cutoff))
+
         if not inference:
 
             all_adjoint_du_dls = loss_fn_grad(all_du_dls, lambda_schedule, experiment_dG, du_dl_cutoff)[0]
@@ -318,6 +326,13 @@ class Trainer():
 
             for h in ff_handlers:
                 if isinstance(h, nonbonded.SimpleChargeHandler):
+                    # debug for now
+                    assert 0
                     h.params -= charge_gradients*charge_lr
+                elif isinstance(h, nonbonded.AM1CCCHandler):
+                    if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)):
+                        print("Fatal Derivatives:", charge_gradients)
+                    else:
+                        h.params -= charge_gradients*charge_lr
 
         return pred_dG, loss
