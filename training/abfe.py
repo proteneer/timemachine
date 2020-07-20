@@ -90,6 +90,7 @@ if __name__ == "__main__":
     stubs = []
 
     for address in worker_address_list:
+        print("connecting to", address)
         channel = grpc.insecure_channel(address,
             options = [
                 ('grpc.max_send_message_length', 500 * 1024 * 1024),
