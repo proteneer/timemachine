@@ -5,6 +5,7 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
+from ff.handlers.deserialize import deserialize
 
 
 def test_harmonic_bond():
@@ -272,6 +273,7 @@ def test_am1_ccc():
     AllChem.EmbedMolecule(mol)
     es_params, es_vjp_fn = am1h.parameterize(mol)
 
+    # TBD update with AM1 Symmetrize=True
     ligand_params = np.array([
         -6.10964,  
         7.08282, 
@@ -436,10 +438,6 @@ def test_gbsa_handler():
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0) == True
 
-from ff.handlers.deserialize import deserialize
-
-
-
 
 def test_am1_differences():
 
@@ -450,33 +448,33 @@ def test_am1_differences():
             break
 
     suppl = Chem.SDMolSupplier('tests/ligands_40.sdf', removeHs=False)
+    am1 = nonbonded.AM1Handler([], [], None)
     bcc = nonbonded.AM1BCCHandler([], [], None)
 
-    # mols = []
     for mol in suppl:
 
-        print(Chem.MolToSmiles(mol))
+        am1_params, vjp_fn = am1.parameterize(mol)
         ccc_params, vjp_fn = ccc.parameterize(mol)
         bcc_params, vjp_fn = bcc.parameterize(mol)
 
-        # np.set_printoptions(precision=2)
-        # print("net_charge", "CCC", np.sum(ccc_params), "BCC", np.sum(bcc_params))
-        print("  CCC    BCC  S ?")
-        for atom_idx, atom in enumerate(mol.GetAtoms()):
-            b = bcc_params[atom_idx]
-            c = ccc_params[atom_idx]
-            print("{:6.2f}".format(c), "{:6.2f}".format(b), atom.GetSymbol(), end="")
-            if np.abs(b-c) > 0.1:
-                print(" *")
-            else:
-                print(" ")
+        if np.sum(np.abs(ccc_params - bcc_params)) > 0.1:
+        
+            print(mol.GetProp("_Name"), Chem.MolToSmiles(mol))
 
+            # np.set_printoptions(precision=2)
+            # print("net_charge", "CCC", np.sum(ccc_params), "BCC", np.sum(bcc_params))
+            print("  AM1    CCC    BCC  S ?")
+            for atom_idx, atom in enumerate(mol.GetAtoms()):
+                a = am1_params[atom_idx]
+                b = bcc_params[atom_idx]
+                c = ccc_params[atom_idx]
+                print("{:6.2f}".format(a), "{:6.2f}".format(c), "{:6.2f}".format(b), atom.GetSymbol(), end="")
+                if np.abs(b-c) > 0.1:
+                    print(" *")
+                else:
+                    print(" ")
 
-        # mol_dG = -1*convert_uIC50_to_kJ_per_mole(float(mol.GetProp(general_cfg['bind_prop'])))
-        # data.append((mol, mol_dG))
-
-    # handle)
-
+            # assert 0
 
 
 def test_lennard_jones_handler():
