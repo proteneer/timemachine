@@ -145,7 +145,8 @@ class Trainer():
         stub_idx = 0
 
         # step 1. Prepare the jobs
-        for stage in [0,1,2]:
+        # for stage in [0,1,2]:
+        for stage in [0,1]:
 
             # print("---Starting stage", stage, '---')
             stage_dir = os.path.join(run_dir, "stage_"+str(stage))
@@ -169,6 +170,8 @@ class Trainer():
             forward_futures = []
 
             for lamb_idx, lamb in enumerate(ti_lambdas):
+
+                print("STEPS", self.intg_steps)
 
                 intg = system.Integrator(
                     steps=self.intg_steps,
@@ -220,6 +223,7 @@ class Trainer():
 
                 if self.n_frames > 0:
                     frames = pickle.loads(response.frames)
+                    print("FRAMES", frames)
                     out_file = os.path.join(stage_dir, "frames_"+str(lamb_idx)+".pdb")
                     # make sure we do StringIO here as it's single-pass.
                     combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
@@ -230,6 +234,8 @@ class Trainer():
                     pdb_writer.close()
 
                     assert full_du_dls is not None
+
+                print("done writing frames")
 
                 # we don't really want to save this full buffer, way too large
                 # np.save(os.path.join(stage_dir, "lambda_"+str(lamb_idx)+"_full_du_dls"), full_du_dls)

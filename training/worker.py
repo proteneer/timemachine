@@ -79,8 +79,10 @@ class Worker(service_pb2_grpc.WorkerServicer):
             for frame_idx in range(xs.shape[0]):
                 if frame_idx % interval == 0:
                     keep_idxs.append(frame_idx)
-
-        frames = np.zeros((0, *system.x0.shape), dtype=system.x0.dtype)
+            print("KI", keep_idxs)
+            frames = xs[keep_idxs]
+        else:
+            frames = np.zeros((0, *system.x0.shape), dtype=system.x0.dtype)
 
         reply = service_pb2.ForwardReply(
             du_dls=pickle.dumps(full_du_dls),

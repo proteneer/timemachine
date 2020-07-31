@@ -8,9 +8,11 @@
 #include "restraint.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
+#include "lennard_jones.hpp"
 #include "gbsa.hpp"
 #include "gradient.hpp"
 #include "fixed_point.hpp"
+
 
 #include <iostream>
 
@@ -507,6 +509,97 @@ void declare_nonbonded(py::module &m, const char *typestr) {
 }
 
 
+
+template <typename RealType>
+void declare_lennard_jones(py::module &m, const char *typestr) {
+
+    using Class = timemachine::LennardJones<RealType>;
+    std::string pyclass_name = std::string("LennardJones_") + typestr;
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        // const py::array_t<double, py::array::c_style> &charge_i,  // charge_param_idxs
+        const py::array_t<double, py::array::c_style> &lj_i,  // lj_param_idxs
+        const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
+        // const py::array_t<double, py::array::c_style> &charge_scale_i,  // 
+        const py::array_t<double, py::array::c_style> &lj_scale_i,  // 
+        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
+        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
+        const py::array_t<int, py::array::c_style> &lambda_group_idxs_i,  //
+        double cutoff) {
+
+        // std::vector<double> charge_params(charge_i.size());
+        // std::memcpy(charge_params.data(), charge_i.data(), charge_i.size()*sizeof(double));
+
+        std::vector<double> lj_params(lj_i.size());
+        std::memcpy(lj_params.data(), lj_i.data(), lj_i.size()*sizeof(double));
+
+        std::vector<int> exclusion_idxs(exclusion_i.size());
+        std::memcpy(exclusion_idxs.data(), exclusion_i.data(), exclusion_i.size()*sizeof(int));
+
+        // std::vector<double> charge_scales(charge_scale_i.size());
+        // std::memcpy(charge_scales.data(), charge_scale_i.data(), charge_scale_i.size()*sizeof(double));
+
+        std::vector<double> lj_scales(lj_scale_i.size());
+        std::memcpy(lj_scales.data(), lj_scale_i.data(), lj_scale_i.size()*sizeof(double));
+
+        std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
+        std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
+
+        std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
+        std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
+
+        std::vector<int> lambda_group_idxs(lambda_group_idxs_i.size());
+        std::memcpy(lambda_group_idxs.data(), lambda_group_idxs_i.data(), lambda_group_idxs_i.size()*sizeof(int));
+
+
+
+        return new timemachine::LennardJones<RealType>(
+            // charge_params,
+            lj_params,
+            exclusion_idxs,
+            // charge_scales,
+            lj_scales,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            lambda_group_idxs,
+            cutoff
+        );
+    }
+    ))
+    // .def("get_du_dcharge_primals", [](timemachine::LennardJones<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+    //     const int N = grad.num_atoms();
+    //     py::array_t<double, py::array::c_style> buffer(N);
+    //     grad.get_du_dcharge_primals(buffer.mutable_data());
+    //     return buffer;
+    // })
+    // .def("get_du_dcharge_tangents", [](timemachine::LennardJones<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+    //     const int N = grad.num_atoms();
+    //     py::array_t<double, py::array::c_style> buffer(N);
+    //     grad.get_du_dcharge_tangents(buffer.mutable_data());
+    //     return buffer;
+    // })
+    .def("get_du_dlj_primals", [](timemachine::LennardJones<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+        const int N = grad.num_atoms();
+        py::array_t<double, py::array::c_style> buffer({N, 2});
+        grad.get_du_dlj_primals(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_du_dlj_tangents", [](timemachine::LennardJones<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+        const int N = grad.num_atoms();
+        py::array_t<double, py::array::c_style> buffer({N, 2});
+        grad.get_du_dlj_tangents(buffer.mutable_data());
+        return buffer;
+    });
+
+}
+
+
+
 template <typename RealType>
 void declare_gbsa(py::module &m, const char *typestr) {
 
@@ -608,6 +701,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_harmonic_angle<double>(m, "f64");
     declare_harmonic_angle<float>(m, "f32");
+
+    declare_lennard_jones<double>(m, "f64");
+    declare_lennard_jones<float>(m, "f32");
 
     declare_periodic_torsion<double>(m, "f64");
     declare_periodic_torsion<float>(m, "f32");

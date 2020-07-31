@@ -9,6 +9,23 @@ from fe.utils import to_md_units
 
 from timemachine.potentials import jax_utils
 
+def find_protein_pocket_atoms(conf, nha, search_radius):
+    ri = np.expand_dims(conf, axis=0)
+    rj = np.expand_dims(conf, axis=1)
+    dij = jax_utils.distance(ri, rj)
+    pocket_atoms = set()
+
+    for l_idx, dists in enumerate(dij[nha:]):
+        # if l_idx in core_atoms:
+        nns = np.argsort(dists[:nha])
+
+        for p_idx in nns:
+            if dists[p_idx] < search_radius:
+                pocket_atoms.add(p_idx)
+
+
+    return list(pocket_atoms)
+
 def setup_core_restraints(
     k,
     alpha,
@@ -243,6 +260,9 @@ def create_system(
         elif isinstance(handle, nonbonded.LennardJonesHandler):
             guest_lj_params, guest_lj_vjp_fn = results
             combined_lj_params, combined_lj_vjp_fn = concat_with_vjps(host_lj_params, guest_lj_params, None, guest_lj_vjp_fn)
+
+            # final_gradients.append(("LennardJones", (torsion_idxs, torsion_params)))
+            # final_vjp_fns.append(combined_lj_vjp_fn)
             # handler_vjps.append(lj_adjoint_fn)
         elif isinstance(handle, nonbonded.SimpleChargeHandler):
             guest_charge_params, guest_charge_vjp_fn = results
@@ -269,52 +289,35 @@ def create_system(
     # combined_lj_params, lj_adjoint_fn = concat_with_vjps(host_lj_params, guest_lj_params, None, guest_lj_vjp_fn)
     # combined_gb_params, gb_adjoint_fn = concat_with_vjps(host_gb_params, guest_gb_params, None, guest_gb_vjp_fn)
 
-    # WIP
-    N_C = num_host_atoms + num_guest_atoms
-    N_A = num_host_atoms
 
-    if stage == 0:
-        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-    elif stage == 1:
-        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs[N_A:] = 1
-    elif stage == 2:
-        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_plane_idxs[N_A:] = 1
-        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
 
-    # assert 0
 
-    cutoff = 100000.0
+    # final_gradients.append((
+    #     'Nonbonded', (
+    #     np.asarray(combined_charge_params),
+    #     np.asarray(combined_lj_params),
+    #     combined_exclusion_idxs,
+    #     combined_charge_exclusion_scales,
+    #     combined_lj_exclusion_scales,
+    #     combined_lambda_plane_idxs,
+    #     combined_lambda_offset_idxs,
+    #     cutoff
+    #     )
+    # ))
+    # final_vjp_fns.append((combined_charge_vjp_fn, combined_lj_vjp_fn))
 
-    final_gradients.append((
-        'Nonbonded', (
-        np.asarray(combined_charge_params),
-        np.asarray(combined_lj_params),
-        combined_exclusion_idxs,
-        combined_charge_exclusion_scales,
-        combined_lj_exclusion_scales,
-        combined_lambda_plane_idxs,
-        combined_lambda_offset_idxs,
-        cutoff
-        )
-    ))
-    final_vjp_fns.append((combined_charge_vjp_fn, combined_lj_vjp_fn))
-
-    final_gradients.append((
-        'GBSA', (
-        np.asarray(combined_charge_params),
-        np.asarray(combined_gb_params),
-        combined_lambda_plane_idxs,
-        combined_lambda_offset_idxs,
-        *host_gb_props,
-        cutoff,
-        cutoff
-        )
-    ))
-    final_vjp_fns.append((combined_charge_vjp_fn, combined_gb_vjp_fn))
+    # final_gradients.append((
+    #     'GBSA', (
+    #     np.asarray(combined_charge_params),
+    #     np.asarray(combined_gb_params),
+    #     combined_lambda_plane_idxs,
+    #     combined_lambda_offset_idxs,
+    #     *host_gb_props,
+    #     cutoff,
+    #     cutoff
+    #     )
+    # ))
+    # final_vjp_fns.append((combined_charge_vjp_fn, combined_gb_vjp_fn))
 
     host_conf = []
     for x,y,z in host_pdb.positions:
@@ -328,25 +331,88 @@ def create_system(
     x0 = np.concatenate([host_conf, mol_a_conf]) # combined geometry
     v0 = np.zeros_like(x0)
 
-    # build restraints using the coordinates
-    backbone_atoms = []
-    for r_idx, residue in enumerate(host_pdb.getTopology().residues()):
-        for a in residue.atoms():
-            if a.name == 'CA':
-                backbone_atoms.append(a.index)
+    search_radius = 0.5 # 10A
+    # search_radius = 0.0 # 10A
 
-    final_gradients.append(setup_core_restraints(
-        restr_force,
-        restr_alpha,
-        restr_count,
-        x0,
-        num_host_atoms,
-        core_atoms,
-        backbone_atoms,
-        stage=stage
+    pocket_atoms = find_protein_pocket_atoms(x0, num_host_atoms, search_radius)
+
+    print("pocket_atoms", pocket_atoms)
+
+    N_C = num_host_atoms + num_guest_atoms
+    N_A = num_host_atoms
+
+
+    if stage == 0:
+        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+        combined_lambda_offset_idxs[num_host_atoms:] = 1
+        combined_lambda_offset_idxs[pocket_atoms] = 1
+
+        # grouping for vdw terms
+        combined_lambda_group_idxs = np.ones(N_C, dtype=np.int32)
+        combined_lambda_group_idxs[num_host_atoms:] = 2
+        combined_lambda_group_idxs[pocket_atoms] = 3
+        print("CLGI", combined_lambda_group_idxs)
+    elif stage == 1:
+        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+        combined_lambda_plane_idxs[num_host_atoms:] = 1
+        combined_lambda_plane_idxs[pocket_atoms] = 1
+
+        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+        combined_lambda_offset_idxs[num_host_atoms:] = 1 # push out ligand from binding pocket
+
+        # grouping for vdw terms
+        combined_lambda_group_idxs = np.ones(N_C, dtype=np.int32)
+        combined_lambda_group_idxs[num_host_atoms:] = 2
+
+        print("CLGI", combined_lambda_group_idxs)
+    else:
+        assert 0
+    # elif stage == 2:
+        # combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+        # combined_lambda_plane_idxs[N_A:] = 1
+        # combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+
+    # assert 0
+
+    cutoff = 100000.0
+
+
+    final_gradients.append((
+        'LennardJones', (
+        np.asarray(combined_lj_params),
+        combined_exclusion_idxs,
+        combined_lj_exclusion_scales,
+        combined_lambda_plane_idxs,
+        combined_lambda_offset_idxs,
+        combined_lambda_group_idxs,
+        cutoff
+        )
     ))
+    final_vjp_fns.append((combined_lj_vjp_fn))
 
-    final_vjp_fns.append(None)
+
+    # build restraints using the coordinates
+    # backbone_atoms = []
+    # for r_idx, residue in enumerate(host_pdb.getTopology().residues()):
+    #     for a in residue.atoms():
+    #         if a.name == 'CA':
+    #             backbone_atoms.append(a.index)
+
+
+
+    # final_gradients.append(setup_core_restraints(
+    #     restr_force,
+    #     restr_alpha,
+    #     restr_count,
+    #     x0,
+    #     num_host_atoms,
+    #     core_atoms,
+    #     backbone_atoms,
+    #     stage=stage
+    # ))
+
+    # final_vjp_fns.append(None)
 
     combined_masses = np.concatenate([host_masses, guest_masses])
 
