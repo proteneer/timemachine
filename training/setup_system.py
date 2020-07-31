@@ -153,11 +153,11 @@ def create_system(
     guest_mol,
     host_pdb,
     handlers,
-    stage,
-    core_atoms,
-    restr_force,
-    restr_alpha,
-    restr_count):
+    stage):
+    # core_atoms,
+    # restr_force,
+    # restr_alpha,
+    # restr_count):
     """
     Initialize a self-encompassing System object that we can serialize and simulate.
 
@@ -336,11 +336,8 @@ def create_system(
 
     pocket_atoms = find_protein_pocket_atoms(x0, num_host_atoms, search_radius)
 
-    print("pocket_atoms", pocket_atoms)
-
     N_C = num_host_atoms + num_guest_atoms
     N_A = num_host_atoms
-
 
     if stage == 0:
         combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
@@ -352,7 +349,6 @@ def create_system(
         combined_lambda_group_idxs = np.ones(N_C, dtype=np.int32)
         combined_lambda_group_idxs[num_host_atoms:] = 2
         combined_lambda_group_idxs[pocket_atoms] = 3
-        print("CLGI", combined_lambda_group_idxs)
     elif stage == 1:
         combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
         combined_lambda_plane_idxs[num_host_atoms:] = 1
@@ -364,16 +360,8 @@ def create_system(
         # grouping for vdw terms
         combined_lambda_group_idxs = np.ones(N_C, dtype=np.int32)
         combined_lambda_group_idxs[num_host_atoms:] = 2
-
-        print("CLGI", combined_lambda_group_idxs)
     else:
         assert 0
-    # elif stage == 2:
-        # combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        # combined_lambda_plane_idxs[N_A:] = 1
-        # combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-
-    # assert 0
 
     cutoff = 100000.0
 

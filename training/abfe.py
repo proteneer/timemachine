@@ -113,7 +113,6 @@ if __name__ == "__main__":
             # assert np.all(np.diff(stage_schedule) > 0)
         lambda_schedule.append(stage_schedule)
 
-    restr_cfg = config['restraints']
     intg_cfg = config['integrator']
     lr_config = config['learning_rates']
 
@@ -124,11 +123,11 @@ if __name__ == "__main__":
         ff_handlers,
         lambda_schedule,
         int(general_cfg['du_dl_cutoff']),
-        restr_cfg['core_smarts'],
+        # restr_cfg['core_smarts'],
         int(general_cfg['n_frames']),
-        float(restr_cfg['force']),
-        float(restr_cfg['alpha']),
-        int(restr_cfg['count']),
+        # float(restr_cfg['force']),
+        # float(restr_cfg['alpha']),
+        # int(restr_cfg['count']),
         int(intg_cfg['steps']),
         float(intg_cfg['dt']),
         float(intg_cfg['temperature']),
