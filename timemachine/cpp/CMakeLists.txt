@@ -38,6 +38,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/periodic_torsion.cu
   src/integrator.cu
   src/lennard_jones.cu
+  src/electrostatics.cu
   src/stepper.cu
   src/context.cu
   src/gbsa.cu

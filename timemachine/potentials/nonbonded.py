@@ -5,8 +5,10 @@ from jax.scipy.special import erf, erfc
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.potentials.jax_utils import delta_r, distance, lambda_to_w, convert_to_4d
 
+
 def switch_fn(dij, cutoff):
     return np.power(np.cos((np.pi*np.power(dij, 8))/(2*cutoff)), 2)
+
 
 def nonbonded(
     conf,
@@ -20,7 +22,6 @@ def nonbonded(
     lambda_plane_idxs,
     lambda_offset_idxs):
 
-
     # assert box is None
 
     conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
@@ -30,6 +31,23 @@ def nonbonded(
     es = simple_energy(conf_4d, charge_params, exclusion_idxs, charge_scales, cutoff)
 
     return lj - lj_exc + es
+
+
+def nongroup_electrostatics(
+    conf,
+    lamb,
+    charge_params,
+    exclusion_idxs,
+    charge_scales,
+    cutoff,
+    lambda_plane_idxs,
+    lambda_offset_idxs):
+
+    # assert box is None
+
+    conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+
+    return simple_energy(conf_4d, charge_params, exclusion_idxs, charge_scales, cutoff)
 
 
 def group_lennard_jones(

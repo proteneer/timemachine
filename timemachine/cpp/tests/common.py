@@ -188,6 +188,59 @@ def prepare_lj_system(
     return lj_params, ref_total_energy, custom_nonbonded_ctor
 
 
+
+def prepare_es_system(
+    x,
+    E, # number of exclusions
+    lambda_plane_idxs,
+    lambda_offset_idxs,
+    p_scale,
+    cutoff=100.0,
+    precision=np.float64):
+
+    N = x.shape[0]
+    D = x.shape[1]
+
+    charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
+
+    atom_idxs = np.arange(N)
+    exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
+    exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
+
+    charge_scales = np.random.rand(E)
+
+    custom_nonbonded_ctor = functools.partial(ops.Electrostatics,
+        charge_params,
+        exclusion_idxs,
+        charge_scales,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
+        cutoff,
+        precision=precision
+    )
+
+    # disable PBCs
+    # make sure this is big enough!
+    # box = np.array([
+    #     [100.0, 0.0, 0.0, 0.0],
+    #     [0.0, 100.0, 0.0, 0.0],
+    #     [0.0, 0.0, 100.0, 0.0],
+    #     [0.0, 0.0, 0.0, 2*cutoff],
+    # ])
+
+    ref_total_energy = functools.partial(
+        nonbonded.nongroup_electrostatics,
+        exclusion_idxs=exclusion_idxs,
+        charge_scales=charge_scales,
+        cutoff=cutoff,
+        lambda_plane_idxs=lambda_plane_idxs,
+        lambda_offset_idxs=lambda_offset_idxs
+    )
+
+    return charge_params, ref_total_energy, custom_nonbonded_ctor
+
+
+
 def prepare_nonbonded_system(
     x,
     E, # number of exclusions

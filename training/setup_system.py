@@ -289,36 +289,6 @@ def create_system(
     # combined_lj_params, lj_adjoint_fn = concat_with_vjps(host_lj_params, guest_lj_params, None, guest_lj_vjp_fn)
     # combined_gb_params, gb_adjoint_fn = concat_with_vjps(host_gb_params, guest_gb_params, None, guest_gb_vjp_fn)
 
-
-
-
-    # final_gradients.append((
-    #     'Nonbonded', (
-    #     np.asarray(combined_charge_params),
-    #     np.asarray(combined_lj_params),
-    #     combined_exclusion_idxs,
-    #     combined_charge_exclusion_scales,
-    #     combined_lj_exclusion_scales,
-    #     combined_lambda_plane_idxs,
-    #     combined_lambda_offset_idxs,
-    #     cutoff
-    #     )
-    # ))
-    # final_vjp_fns.append((combined_charge_vjp_fn, combined_lj_vjp_fn))
-
-    # final_gradients.append((
-    #     'GBSA', (
-    #     np.asarray(combined_charge_params),
-    #     np.asarray(combined_gb_params),
-    #     combined_lambda_plane_idxs,
-    #     combined_lambda_offset_idxs,
-    #     *host_gb_props,
-    #     cutoff,
-    #     cutoff
-    #     )
-    # ))
-    # final_vjp_fns.append((combined_charge_vjp_fn, combined_gb_vjp_fn))
-
     host_conf = []
     for x,y,z in host_pdb.positions:
         host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
@@ -378,6 +348,33 @@ def create_system(
         )
     ))
     final_vjp_fns.append((combined_lj_vjp_fn))
+
+    final_gradients.append((
+        'Electrostatics', (
+        np.asarray(combined_charge_params),
+        # np.asarray(combined_lj_params),
+        combined_exclusion_idxs,
+        combined_charge_exclusion_scales,
+        # combined_lj_exclusion_scales,
+        combined_lambda_plane_idxs,
+        combined_lambda_offset_idxs,
+        cutoff
+        )
+    ))
+    final_vjp_fns.append((combined_charge_vjp_fn))
+
+    final_gradients.append((
+        'GBSA', (
+        np.asarray(combined_charge_params),
+        np.asarray(combined_gb_params),
+        combined_lambda_plane_idxs,
+        combined_lambda_offset_idxs,
+        *host_gb_props,
+        cutoff,
+        cutoff
+        )
+    ))
+    final_vjp_fns.append((combined_charge_vjp_fn, combined_gb_vjp_fn))
 
 
     # build restraints using the coordinates
