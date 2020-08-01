@@ -349,6 +349,19 @@ def create_system(
     ))
     final_vjp_fns.append((combined_lj_vjp_fn))
 
+    # set up lambdas for electrostatics
+
+    if stage == 0:
+        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+        combined_lambda_offset_idxs[num_host_atoms:] = 1
+    elif stage == 1:
+        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+        combined_lambda_plane_idxs[num_host_atoms:] = 1
+        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+    else:
+        assert 0
+
     final_gradients.append((
         'Electrostatics', (
         np.asarray(combined_charge_params),
