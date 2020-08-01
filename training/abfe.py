@@ -58,7 +58,9 @@ if __name__ == "__main__":
 
     general_cfg = config['general']
 
-    assert os.path.isdir(general_cfg['out_dir'])
+    if not os.path.exists(general_cfg['out_dir']):
+        os.makedirs(general_cfg['out_dir'])
+    # assert os.path.isdir()
 
     suppl = Chem.SDMolSupplier(general_cfg['ligand_sdf'], removeHs=False)
 
