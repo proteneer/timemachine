@@ -109,15 +109,12 @@ void declare_reversible_context(py::module &m, const char *typestr) {
             throw std::runtime_error("coeff_cas T != step_sizes T");
         }
 
-        // int P = params.shape()[0];
-
         std::vector<double> x0_vec(x0.data(), x0.data()+x0.size());
         std::vector<double> v0_vec(v0.data(), v0.data()+v0.size());
         std::vector<double> coeff_cas_vec(coeff_cas.data(), coeff_cas.data()+coeff_cas.size());
         std::vector<double> coeff_cbs_vec(coeff_cbs.data(), coeff_cbs.data()+coeff_cbs.size());
         std::vector<double> coeff_ccs_vec(coeff_ccs.data(), coeff_ccs.data()+coeff_ccs.size());
         std::vector<double> step_sizes_vec(step_sizes.data(), step_sizes.data()+step_sizes.size());
-        // std::vector<double> params_vec(params.data(), params.data()+params.size());
 
         return new timemachine::ReversibleContext(
             stepper,
@@ -128,19 +125,12 @@ void declare_reversible_context(py::module &m, const char *typestr) {
             coeff_cbs_vec,
             coeff_ccs_vec,
             step_sizes_vec,
-            // params_vec,
             seed
         );
 
     }))
     .def("forward_mode", &timemachine::ReversibleContext::forward_mode)
     .def("backward_mode", &timemachine::ReversibleContext::backward_mode)
-    // .def("get_param_adjoint_accum", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
-    //     unsigned int P = ctxt.P();
-    //     py::array_t<double, py::array::c_style> buffer({P});
-    //     ctxt.get_param_adjoint_accum(buffer.mutable_data());
-    //     return buffer;
-    // })
     .def("get_last_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.N();
         unsigned int D = 3;
@@ -190,12 +180,10 @@ void declare_gradient(py::module &m) {
         py::dynamic_attr())
     .def("execute_lambda", [](timemachine::Gradient &grad,
         const py::array_t<double, py::array::c_style> &coords,
-        // const py::array_t<double, py::array::c_style> &params,
         double lambda) -> py::tuple  {
 
             const long unsigned int N = coords.shape()[0];
             const long unsigned int D = coords.shape()[1];
-            // const long unsigned int P = params.shape()[0];
 
             std::vector<unsigned long long> out_coords(N*D);
 
@@ -204,9 +192,7 @@ void declare_gradient(py::module &m) {
 
             grad.execute_lambda_inference_host(
                 N,
-                // P,
                 coords.data(),
-                // params.data(),
                 lambda,
                 &out_coords[0],
                 &out_du_dl,
@@ -222,33 +208,24 @@ void declare_gradient(py::module &m) {
     })
     .def("execute_lambda_jvp", [](timemachine::Gradient &grad,
         const py::array_t<double, py::array::c_style> &coords,
-        // const py::array_t<double, py::array::c_style> &params,
         double lambda,
         const py::array_t<double, py::array::c_style> &coords_tangents,
-        // const py::array_t<double, py::array::c_style> &params_tangents,
         double lambda_tangent) -> py::tuple {
 
             const long unsigned int N = coords.shape()[0];
             const long unsigned int D = coords.shape()[1];
-            // const long unsigned int P = params.shape()[0];
 
             py::array_t<double, py::array::c_style> py_out_coords_primals({N, D});
             py::array_t<double, py::array::c_style> py_out_coords_tangents({N, D});
-
-            // py::array_t<double, py::array::c_style> py_out_params_primals({P});
-            // py::array_t<double, py::array::c_style> py_out_params_tangents({P});
 
             grad.execute_lambda_jvp_host(
                 N,
                 coords.data(),
                 coords_tangents.data(),
-                // params.data(),
                 lambda,
                 lambda_tangent,
                 py_out_coords_primals.mutable_data(),
                 py_out_coords_tangents.mutable_data()
-                // py_out_params_primals.mutable_data(),
-                // py_out_params_tangents.mutable_data()
             );
 
             return py::make_tuple(py_out_coords_tangents, py_out_coords_primals);
@@ -532,17 +509,11 @@ void declare_electrostatics(py::module &m, const char *typestr) {
         std::vector<double> charge_params(charge_i.size());
         std::memcpy(charge_params.data(), charge_i.data(), charge_i.size()*sizeof(double));
 
-        // std::vector<double> lj_params(lj_i.size());
-        // std::memcpy(lj_params.data(), lj_i.data(), lj_i.size()*sizeof(double));
-
         std::vector<int> exclusion_idxs(exclusion_i.size());
         std::memcpy(exclusion_idxs.data(), exclusion_i.data(), exclusion_i.size()*sizeof(int));
 
         std::vector<double> charge_scales(charge_scale_i.size());
         std::memcpy(charge_scales.data(), charge_scale_i.data(), charge_scale_i.size()*sizeof(double));
-
-        // std::vector<double> lj_scales(lj_scale_i.size());
-        // std::memcpy(lj_scales.data(), lj_scale_i.data(), lj_scale_i.size()*sizeof(double));
 
         std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
         std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
@@ -552,10 +523,8 @@ void declare_electrostatics(py::module &m, const char *typestr) {
 
         return new timemachine::Electrostatics<RealType>(
             charge_params,
-            // lj_params,
             exclusion_idxs,
             charge_scales,
-            // lj_scales,
             lambda_plane_idxs,
             lambda_offset_idxs,
             cutoff
@@ -592,27 +561,19 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
         py::dynamic_attr()
     )
     .def(py::init([](
-        // const py::array_t<double, py::array::c_style> &charge_i,  // charge_param_idxs
         const py::array_t<double, py::array::c_style> &lj_i,  // lj_param_idxs
         const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
-        // const py::array_t<double, py::array::c_style> &charge_scale_i,  // 
         const py::array_t<double, py::array::c_style> &lj_scale_i,  // 
         const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
         const py::array_t<int, py::array::c_style> &lambda_group_idxs_i,  //
         double cutoff) {
 
-        // std::vector<double> charge_params(charge_i.size());
-        // std::memcpy(charge_params.data(), charge_i.data(), charge_i.size()*sizeof(double));
-
         std::vector<double> lj_params(lj_i.size());
         std::memcpy(lj_params.data(), lj_i.data(), lj_i.size()*sizeof(double));
 
         std::vector<int> exclusion_idxs(exclusion_i.size());
         std::memcpy(exclusion_idxs.data(), exclusion_i.data(), exclusion_i.size()*sizeof(int));
-
-        // std::vector<double> charge_scales(charge_scale_i.size());
-        // std::memcpy(charge_scales.data(), charge_scale_i.data(), charge_scale_i.size()*sizeof(double));
 
         std::vector<double> lj_scales(lj_scale_i.size());
         std::memcpy(lj_scales.data(), lj_scale_i.data(), lj_scale_i.size()*sizeof(double));
@@ -626,13 +587,9 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
         std::vector<int> lambda_group_idxs(lambda_group_idxs_i.size());
         std::memcpy(lambda_group_idxs.data(), lambda_group_idxs_i.data(), lambda_group_idxs_i.size()*sizeof(int));
 
-
-
         return new timemachine::LennardJones<RealType>(
-            // charge_params,
             lj_params,
             exclusion_idxs,
-            // charge_scales,
             lj_scales,
             lambda_plane_idxs,
             lambda_offset_idxs,
@@ -641,18 +598,6 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
         );
     }
     ))
-    // .def("get_du_dcharge_primals", [](timemachine::LennardJones<RealType> &grad) -> py::array_t<double, py::array::c_style> {
-    //     const int N = grad.num_atoms();
-    //     py::array_t<double, py::array::c_style> buffer(N);
-    //     grad.get_du_dcharge_primals(buffer.mutable_data());
-    //     return buffer;
-    // })
-    // .def("get_du_dcharge_tangents", [](timemachine::LennardJones<RealType> &grad) -> py::array_t<double, py::array::c_style> {
-    //     const int N = grad.num_atoms();
-    //     py::array_t<double, py::array::c_style> buffer(N);
-    //     grad.get_du_dcharge_tangents(buffer.mutable_data());
-    //     return buffer;
-    // })
     .def("get_du_dlj_primals", [](timemachine::LennardJones<RealType> &grad) -> py::array_t<double, py::array::c_style> {
         const int N = grad.num_atoms();
         py::array_t<double, py::array::c_style> buffer({N, 2});
@@ -684,8 +629,6 @@ void declare_gbsa(py::module &m, const char *typestr) {
     .def(py::init([](
         const py::array_t<double, py::array::c_style> &charge_params_i, // [N]
         const py::array_t<double, py::array::c_style> &gb_params_i, // [N, 2]
-        // const py::array_t<int, py::array::c_style> &radii_pi, // [N]
-        // const py::array_t<int, py::array::c_style> &scale_pi, // [N]
         const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
         double alpha,
@@ -703,8 +646,6 @@ void declare_gbsa(py::module &m, const char *typestr) {
         std::memcpy(charge_params.data(), charge_params_i.data(), charge_params_i.size()*sizeof(double));
         std::vector<double> gb_params(gb_params_i.size());
         std::memcpy(gb_params.data(), gb_params_i.data(), gb_params_i.size()*sizeof(double));
-        // std::vector<int> scale_factor_idxs(scale_pi.size());
-        // std::memcpy(scale_factor_idxs.data(), scale_pi.data(), scale_pi.size()*sizeof(int));
         std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
         std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
         std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
@@ -714,9 +655,6 @@ void declare_gbsa(py::module &m, const char *typestr) {
         return new timemachine::GBSA<RealType>(
             charge_params,
             gb_params,
-            // charge_param_idxs, // [N]
-            // atomic_radii_idxs, // [N]
-            // scale_factor_idxs, // 
             lambda_plane_idxs,
             lambda_offset_idxs,
             alpha,
