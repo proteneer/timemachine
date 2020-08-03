@@ -6,8 +6,17 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.6 REQUIRED)
 find_package(PythonLibs 3.6 REQUIRED)
 
-string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=sm_60 -O3 -lineinfo")
-# string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=sm_60 -g -G -lineinfo")
+set(CUDA_ARCH sm_60 CACHE STRING "Specific CUDA architecture we're targetting.")
+set(BUILD_TEST OFF CACHE STRING "Whether or not we're building for tests.")
+
+if(BUILD_TEST)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point_test.hpp ${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point.hpp COPYONLY)
+else(BUILD_TEST)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point_prod.hpp ${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point.hpp COPYONLY)
+endif(BUILD_TEST)
+
+string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo")
+message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	get_filename_component(PARENT_DIR ${CMAKE_CURRENT_SOURCE_DIR} DIRECTORY)
@@ -15,8 +24,6 @@ if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 endif()
 
 set(LIBRARY_NAME custom_ops)
-
-# clone pybind if we can't find it in the build dir
 set(PYBIND_SRC_DIR pybind11)
 
 if(NOT EXISTS ${PYBIND_SRC_DIR})
@@ -27,6 +34,7 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
 
 # NO_EXTRAS is needed since cuda doesn't use flto
 pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
+  src/fixed_point.hpp
   src/wrap_kernels.cpp
   src/gradient.cu
   src/gpu_utils.cu
@@ -53,4 +61,3 @@ target_link_libraries(${LIBRARY_NAME} -lcurand -lcudart)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION "lib")
-
