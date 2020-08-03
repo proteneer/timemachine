@@ -19,35 +19,6 @@ np.set_printoptions(linewidth=500)
 
 class TestNonbonded(GradientTest):
 
-    def get_water_system(self,
-        D,
-        P_charges,
-        P_lj,
-        sort=False):
-
-        x = np.load("water.npy").astype(np.float64)
-        if sort:
-            perm = hilbert_sort(x, D)
-            x = x[perm, :]
-
-        N = x.shape[0]
-
-        params = np.random.rand(P_charges).astype(np.float64)
-        params = np.zeros_like(params)
-        param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32)
-
-        lj_params = np.random.rand(P_lj)/10 # we want these to be pretty small for numerical stability reasons
-        lj_param_idxs = np.random.randint(low=0, high=P_lj, size=(N,2), dtype=np.int32)
-        lj_param_idxs = lj_param_idxs + len(params) # offset 
-
-        return x, np.concatenate([params, lj_params]), param_idxs, lj_param_idxs
-
-    def get_ref_mp(self, x, params, param_idxs, cutoff):
-        ref_mp = mixed_fn(x, params, param_idxs, cutoff)[0][0]
-        ref_mp = np.transpose(ref_mp, (2,0,1))
-        return ref_mp
-
-    # @unittest.skip("debug")
     def test_electrostatics(self):
         np.random.seed(4321)
         D = 3
@@ -136,7 +107,6 @@ class TestNonbonded(GradientTest):
             E = N//5
 
             lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-            lambda_plane_idxs = np.zeros_like(lambda_plane_idxs)
             lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
             lambda_group_idxs = np.random.randint(low=0, high=3, size=N, dtype=np.int32)
 

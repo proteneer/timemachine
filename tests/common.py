@@ -391,7 +391,7 @@ class GradientTest(unittest.TestCase):
         return x
 
     def get_water_coords(self, D, sort=False):
-        x = np.load("water.npy").astype(np.float32).astype(np.float64)
+        x = np.load("tests/data/water.npy").astype(np.float32).astype(np.float64)
         x = x[:, :D]
 
         # x = (x).astype(np.float64)

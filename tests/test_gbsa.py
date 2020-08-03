@@ -17,28 +17,6 @@ from timemachine.lib import ops, custom_ops
 
 class TestGBSA(GradientTest):
 
-    def get_water_system(self,
-        D,
-        P_charges,
-        P_lj,
-        sort=False):
-
-        x = np.load("water.npy").astype(np.float64)
-        if sort:
-            perm = hilbert_sort(x, D)
-            x = x[perm, :]
-
-        N = x.shape[0]
-
-        params = np.random.rand(P_charges).astype(np.float64)
-        params = np.zeros_like(params)
-        param_idxs = np.random.randint(low=0, high=P_charges, size=(N), dtype=np.int32)
-
-        lj_params = np.random.rand(P_lj)/10 # we want these to be pretty small for numerical stability reasons
-        lj_param_idxs = np.random.randint(low=0, high=P_lj, size=(N,2), dtype=np.int32)
-        lj_param_idxs = lj_param_idxs + len(params) # offset 
-
-        return x, np.concatenate([params, lj_params]), param_idxs, lj_param_idxs
 
     def get_ref_mp(self, x, params, param_idxs, cutoff):
         ref_mp = mixed_fn(x, params, param_idxs, cutoff)[0][0]
