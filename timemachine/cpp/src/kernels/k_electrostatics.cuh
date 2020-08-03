@@ -53,12 +53,8 @@ void __global__ k_electrostatics_inference(
     }
     
     int charge_param_idx_i = atom_i_idx < N ? atom_i_idx : 0;
-    // int lj_param_idx_sig_i = atom_i_idx < N ? atom_i_idx*2+0 : 0;
-    // int lj_param_idx_eps_i = atom_i_idx < N ? atom_i_idx*2+1 : 0;
 
     RealType qi = atom_i_idx < N ? charge_params[charge_param_idx_i] : 0;
-    // RealType sig_i = atom_i_idx < N ? lj_params[lj_param_idx_sig_i] : 1;
-    // RealType eps_i = atom_i_idx < N ? lj_params[lj_param_idx_eps_i] : 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     int lambda_plane_j = 0;
@@ -77,13 +73,8 @@ void __global__ k_electrostatics_inference(
     }
 
     int charge_param_idx_j = atom_j_idx < N ? atom_j_idx : 0;
-    // int lj_param_idx_sig_j = atom_j_idx < N ? atom_j_idx*2+0 : 0;
-    // int lj_param_idx_eps_j = atom_j_idx < N ? atom_j_idx*2+1 : 0;
 
     RealType qj = atom_j_idx < N ? charge_params[charge_param_idx_j] : 0;
-    // RealType sig_j = atom_j_idx < N ? lj_params[lj_param_idx_sig_j] : 1;
-    // RealType eps_j = atom_j_idx < N ? lj_params[lj_param_idx_eps_j] : 0;
-
     RealType inv_cutoff = 1/cutoff;
 
     // revert this to RealType
@@ -110,23 +101,7 @@ void __global__ k_electrostatics_inference(
 
             RealType inv_d2ij = inv_dij*inv_dij;
             RealType inv_d3ij = inv_dij*inv_d2ij;
-            // RealType inv_d4ij = inv_d2ij*inv_d2ij;
-            // RealType inv_d6ij = inv_d4ij*inv_d2ij;
-            // RealType inv_d8ij = inv_d4ij*inv_d4ij;
             RealType es_grad_prefactor = qi*qj*inv_d3ij;
-
-            // lennard jones force
-            // RealType eps_ij = overloaded_sqrt(eps_i * eps_j);
-            // RealType sig_ij = (sig_i + sig_j)/2;
-
-            // RealType sig2 = sig_ij*sig_ij;
-            // RealType sig4 = sig2*sig2;
-            // RealType sig6 = sig4*sig2;
-
-            // RealType sig6_inv_d6ij = sig6*inv_d6ij;
-            // RealType sig6_inv_d8ij = sig6*inv_d8ij;
-
-            // RealType lj_grad_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
 
             for(int d=0; d < 3; d++) {
 
@@ -146,15 +121,12 @@ void __global__ k_electrostatics_inference(
             du_dl_i -= es_grad_prefactor * dxs[3] * dw_i;
             du_dl_j += es_grad_prefactor * dxs[3] * dw_j;
 
-            // RealType nrg =  qi*qj*inv_dij + 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
             energy += qi*qj*inv_dij;
         }
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
         qj = __shfl_sync(0xffffffff, qj, srcLane);
-        // sig_j = __shfl_sync(0xffffffff, sig_j, srcLane);
-        // eps_j = __shfl_sync(0xffffffff, eps_j, srcLane);
         for(size_t d=0; d < 3; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane); // needs to support real
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
@@ -189,9 +161,7 @@ void __global__ k_electrostatics_exclusion_inference(
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
     const double *charge_scales, // [E]
-    // const double *lj_scales, // [E] 
     const double *charge_params, // [N]
-    // const double *lj_params, // [N,2]
     const double cutoff,
     unsigned long long *grad_coords,
     double *out_du_dl,
@@ -216,12 +186,8 @@ void __global__ k_electrostatics_exclusion_inference(
     }
 
     int charge_param_idx_i = atom_i_idx;
-    // int lj_param_idx_sig_i = atom_i_idx*2+0;
-    // int lj_param_idx_eps_i = atom_i_idx*2+1;
 
     RealType qi = charge_params[charge_param_idx_i];
-    // RealType sig_i = lj_params[lj_param_idx_sig_i];
-    // RealType eps_i = lj_params[lj_param_idx_eps_i];
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
 
@@ -238,15 +204,8 @@ void __global__ k_electrostatics_exclusion_inference(
     }
 
     int charge_param_idx_j = atom_j_idx;
-    // int lj_param_idx_sig_j = atom_j_idx*2+0;
-    // int lj_param_idx_eps_j = atom_j_idx*2+1;
-
     RealType qj = charge_params[charge_param_idx_j];
-    // RealType sig_j = lj_params[lj_param_idx_sig_j];
-    // RealType eps_j = lj_params[lj_param_idx_eps_j];
-
     RealType charge_scale = charge_scales[e_idx];
-    // RealType lj_scale = lj_scales[e_idx];
 
     RealType dxs[4];
     for(int d=0; d < 3; d++) {
@@ -264,21 +223,6 @@ void __global__ k_electrostatics_exclusion_inference(
         RealType inv_d2ij = inv_dij*inv_dij;
         RealType inv_d3ij = inv_dij*inv_d2ij;
         RealType es_grad_prefactor = qi*qj*inv_d3ij;
-
-        // lennard jones force
-        // RealType eps_ij = sqrt(eps_i * eps_j);
-        // RealType sig_ij = (sig_i + sig_j)/2;
-
-        // RealType sig2_inv_d2ij = sig_ij*sig_ij*inv_d2ij; // avoid using inv_dij as much as we can due to loss of precision
-        // RealType sig4_inv_d4ij = sig2_inv_d2ij*sig2_inv_d2ij;
-        // RealType sig6_inv_d6ij = sig4_inv_d4ij*sig2_inv_d2ij;
-        // RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
-        // RealType sig8_inv_d8ij = sig4_inv_d4ij*sig4_inv_d4ij;
-        // RealType sig12_inv_d12ij = sig8_inv_d8ij*sig4_inv_d4ij;
-        // RealType sig12_inv_d14ij = sig12_inv_d12ij*inv_d2ij;
-
-        // RealType lj_grad_prefactor = 24*eps_ij*(sig12rij7*2 - sig6rij4);
-        // RealType lj_grad_prefactor = 24*eps_ij*sig12_inv_d14ij*2 - 24*eps_ij*sig6_inv_d8ij;
 
         #pragma unroll
         for(int d=0; d < 3; d++) {

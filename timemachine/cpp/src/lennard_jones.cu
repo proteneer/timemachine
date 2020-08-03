@@ -36,14 +36,6 @@ LennardJones<RealType>::LennardJones(
         throw std::runtime_error("charge scale idxs size not half of exclusion size!");
     }
 
-    // if(charge_scales.size() != lj_scales.size()) {
-    //     throw std::runtime_error("Charge scale idxs does not match LJ scale idxs!");
-    // }
-
-    // if(charge_params.size()*2 != lj_params.size()) {
-    //     throw std::runtime_error("Charge param idxs not half of lj param idxs!");
-    // }
-
     gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_*sizeof(*d_lambda_plane_idxs_)));
     gpuErrchk(cudaMemcpy(d_lambda_plane_idxs_, &lambda_plane_idxs[0], N_*sizeof(*d_lambda_plane_idxs_), cudaMemcpyHostToDevice));
 
@@ -56,23 +48,11 @@ LennardJones<RealType>::LennardJones(
     gpuErrchk(cudaMalloc(&d_exclusion_idxs_, E_*2*sizeof(*d_exclusion_idxs_)));
     gpuErrchk(cudaMemcpy(d_exclusion_idxs_, &exclusion_idxs[0], E_*2*sizeof(*d_exclusion_idxs_), cudaMemcpyHostToDevice));
 
-    // gpuErrchk(cudaMalloc(&d_charge_scales_, E_*sizeof(*d_charge_scales_)));
-    // gpuErrchk(cudaMemcpy(d_charge_scales_, &charge_scales[0], E_*sizeof(*d_charge_scales_), cudaMemcpyHostToDevice));
-
     gpuErrchk(cudaMalloc(&d_lj_scales_, E_*sizeof(*d_lj_scales_)));
     gpuErrchk(cudaMemcpy(d_lj_scales_, &lj_scales[0], E_*sizeof(*d_lj_scales_), cudaMemcpyHostToDevice));
 
-    // gpuErrchk(cudaMalloc(&d_charge_params_, N_*sizeof(*d_charge_params_)));
-    // gpuErrchk(cudaMemcpy(d_charge_params_, &charge_params[0], N_*sizeof(*d_charge_params_), cudaMemcpyHostToDevice));
-
     gpuErrchk(cudaMalloc(&d_lj_params_, N_*2*sizeof(*d_lj_params_)));
     gpuErrchk(cudaMemcpy(d_lj_params_, &lj_params[0], N_*2*sizeof(*d_lj_params_), cudaMemcpyHostToDevice));
-
-    // gpuErrchk(cudaMalloc(&d_du_dcharge_primals_, N_*sizeof(*d_du_dcharge_primals_)));
-    // gpuErrchk(cudaMemset(d_du_dcharge_primals_, 0, N_*sizeof(*d_du_dcharge_primals_)));
-
-    // gpuErrchk(cudaMalloc(&d_du_dcharge_tangents_, N_*sizeof(*d_du_dcharge_tangents_)));
-    // gpuErrchk(cudaMemset(d_du_dcharge_tangents_, 0, N_*sizeof(*d_du_dcharge_tangents_)));
 
     gpuErrchk(cudaMalloc(&d_du_dlj_primals_, N_*2*sizeof(*d_du_dlj_primals_)));
     gpuErrchk(cudaMemset(d_du_dlj_primals_, 0, N_*2*sizeof(*d_du_dlj_primals_)));
@@ -85,31 +65,18 @@ LennardJones<RealType>::LennardJones(
 
 template <typename RealType>
 LennardJones<RealType>::~LennardJones() {
-    // gpuErrchk(cudaFree(d_charge_params_));
+
     gpuErrchk(cudaFree(d_lj_params_));
     gpuErrchk(cudaFree(d_exclusion_idxs_));
-    // gpuErrchk(cudaFree(d_charge_scales_));
     gpuErrchk(cudaFree(d_lj_scales_));
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
     gpuErrchk(cudaFree(d_lambda_group_idxs_));
 
-    // gpuErrchk(cudaFree(d_du_dcharge_primals_));
-    // gpuErrchk(cudaFree(d_du_dcharge_tangents_));
     gpuErrchk(cudaFree(d_du_dlj_primals_));
     gpuErrchk(cudaFree(d_du_dlj_tangents_));
 };
 
-
-// template <typename RealType>
-// void LennardJones<RealType>::get_du_dcharge_primals(double *buf) {
-//     gpuErrchk(cudaMemcpy(buf, d_du_dcharge_primals_, N_*sizeof(*d_du_dcharge_primals_), cudaMemcpyDeviceToHost));
-// }
-
-// template <typename RealType>
-// void LennardJones<RealType>::get_du_dcharge_tangents(double *buf) {
-//     gpuErrchk(cudaMemcpy(buf, d_du_dcharge_tangents_, N_*sizeof(*d_du_dcharge_tangents_), cudaMemcpyDeviceToHost));
-// }
 
 template <typename RealType>
 void LennardJones<RealType>::get_du_dlj_primals(double *buf) {
@@ -153,12 +120,10 @@ void LennardJones<RealType>::execute_lambda_inference_device(
     k_lennard_jones_inference<RealType><<<dimGrid, tpb, 0, stream>>>(
         N_,
         d_coords_primals,
-        // d_params_primals,
         lambda_primal,
         d_lambda_plane_idxs_,
         d_lambda_offset_idxs_,
         d_lambda_group_idxs_,
-        // d_charge_params_,
         d_lj_params_,
         cutoff_,
         nblist_.get_block_bounds_ctr(),
@@ -175,15 +140,12 @@ void LennardJones<RealType>::execute_lambda_inference_device(
         k_lennard_jones_exclusion_inference<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
             E_,
             d_coords_primals,
-            // d_params_primals,
             lambda_primal,
             d_lambda_plane_idxs_,
             d_lambda_offset_idxs_,
             d_lambda_group_idxs_,
             d_exclusion_idxs_,
-            // d_charge_scales_,
             d_lj_scales_,
-            // d_charge_params_,
             d_lj_params_,
             cutoff_,
             d_out_coords_primals,
@@ -233,15 +195,12 @@ void LennardJones<RealType>::execute_lambda_jvp_device(
         d_lambda_plane_idxs_,
         d_lambda_offset_idxs_,
         d_lambda_group_idxs_,
-        // d_charge_params_,
         d_lj_params_,
         cutoff_,
         nblist_.get_block_bounds_ctr(),
         nblist_.get_block_bounds_ext(),
         d_out_coords_primals,
         d_out_coords_tangents,
-        // d_du_dcharge_primals_,
-        // d_du_dcharge_tangents_,
         d_du_dlj_primals_,
         d_du_dlj_tangents_
     );
@@ -260,15 +219,11 @@ void LennardJones<RealType>::execute_lambda_jvp_device(
             d_lambda_offset_idxs_,
             d_lambda_group_idxs_,
             d_exclusion_idxs_,
-            // d_charge_scales_,
             d_lj_scales_,
-            // d_charge_params_,
             d_lj_params_,
             cutoff_,
             d_out_coords_primals,
             d_out_coords_tangents,
-            // d_du_dcharge_primals_,
-            // d_du_dcharge_tangents_,
             d_du_dlj_primals_,
             d_du_dlj_tangents_
         );            

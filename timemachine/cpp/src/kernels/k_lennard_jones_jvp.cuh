@@ -62,15 +62,12 @@ void __global__ k_lennard_jones_jvp(
         ci[d].imag = atom_i_idx < N ? coords_tangent[atom_i_idx*3+d] : 0;
     }
 
-    // int charge_param_idx_i = atom_i_idx < N ? atom_i_idx : 0;
     int lj_param_idx_sig_i = atom_i_idx < N ? atom_i_idx*2+0 : 0;
     int lj_param_idx_eps_i = atom_i_idx < N ? atom_i_idx*2+1 : 0;
 
-    // RealType qi = atom_i_idx < N ? charge_params[charge_param_idx_i] : 0;
     RealType sig_i = atom_i_idx < N ? lj_params[lj_param_idx_sig_i] : 1;
     RealType eps_i = atom_i_idx < N ? lj_params[lj_param_idx_eps_i] : 0;
 
-    // Surreal<RealType> g_qi(0.0, 0.0);
     Surreal<RealType> g_sigi(0.0, 0.0);
     Surreal<RealType> g_epsi(0.0, 0.0);
 
@@ -95,15 +92,12 @@ void __global__ k_lennard_jones_jvp(
         cj[d].imag = atom_j_idx < N ? coords_tangent[atom_j_idx*3+d] : 0;
     }
 
-    // int charge_param_idx_j = atom_j_idx < N ? atom_j_idx : 0;
     int lj_param_idx_sig_j = atom_j_idx < N ? atom_j_idx*2+0 : 0;
     int lj_param_idx_eps_j = atom_j_idx < N ? atom_j_idx*2+1 : 0;
 
-    // RealType qj = atom_j_idx < N ? charge_params[charge_param_idx_j] : 0;
     RealType sig_j = atom_j_idx < N ? lj_params[lj_param_idx_sig_j] : 1;
     RealType eps_j = atom_j_idx < N ? lj_params[lj_param_idx_eps_j] : 0;
 
-    // Surreal<RealType> g_qj(0.0, 0.0);
     Surreal<RealType> g_sigj(0.0, 0.0);
     Surreal<RealType> g_epsj(0.0, 0.0);
 
@@ -121,29 +115,21 @@ void __global__ k_lennard_jones_jvp(
         if((lambda_group_j & lambda_group_i) > 0) {
             // do nothing
             // 3D
-            // dxs[3] = 0;
         } else {
             // 4D
             Surreal<RealType> delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
             d2ij += delta_lambda * delta_lambda;
-            // dxs[3] = delta_lambda;
         }
-
-        // Surreal<RealType> delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
-        // dxs[3] = delta_lambda; 
 
         if(atom_j_idx < atom_i_idx && d2ij.real < cutoff*cutoff && atom_j_idx < N && atom_i_idx < N) {
 
-            // Surreal<RealType> inv_dij = rsqrt(d2ij);
             Surreal<RealType> inv_d2ij = 1/d2ij;
             Surreal<RealType> inv_d4ij = inv_d2ij*inv_d2ij;
             Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
             Surreal<RealType> inv_d8ij = inv_d4ij*inv_d4ij;
             Surreal<RealType> inv_d14ij = inv_d8ij*inv_d6ij;
-            // Surreal<RealType> inv_d3ij = inv_d2ij*inv_dij;
 
             // lennard jones force
-            // RealType eps_ij = overloaded_sqrt(eps_i*eps_j);
             RealType eps_ij = overloaded_sqrt(eps_i*eps_j);
             RealType sig_ij = (sig_i+sig_j)/2;
 
@@ -225,22 +211,17 @@ void __global__ k_lennard_jones_exclusion_jvp(
     const int E, // number of exclusions
     const double *coords,
     const double *coords_tangent,
-    // const double *params,
     const double lambda_primal,
     const double lambda_tangent,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *lambda_group_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
-    // const double *charge_scales, // [E]
     const double *lj_scales, // [E] 
-    // const double *charge_params, // [N]
     const double *lj_params, // [N,2]
     const double cutoff,
     double *grad_coords_primals,
     double *grad_coords_tangents, // *always* int64 for accumulation purposes, but we discard the primals
-    // double *grad_charge_params_primals,
-    // double *grad_charge_params_tangents,
     double *grad_lj_params_primals,
     double *grad_lj_params_tangents) {
 
@@ -263,15 +244,13 @@ void __global__ k_lennard_jones_exclusion_jvp(
         ci[d].real = coords[atom_i_idx*3+d];
         ci[d].imag = coords_tangent[atom_i_idx*3+d];
     }
-    // int charge_param_idx_i = atom_i_idx;
+
     int lj_param_idx_sig_i = atom_i_idx*2+0;
     int lj_param_idx_eps_i = atom_i_idx*2+1;
 
-    // RealType qi = charge_params[charge_param_idx_i];
     RealType sig_i = lj_params[lj_param_idx_sig_i];
     RealType eps_i = lj_params[lj_param_idx_eps_i];
 
-    // Surreal<RealType> g_qi(0.0, 0.0);
     Surreal<RealType> g_sigi(0.0, 0.0);
     Surreal<RealType> g_epsi(0.0, 0.0);
 
@@ -294,57 +273,38 @@ void __global__ k_lennard_jones_exclusion_jvp(
     int lj_param_idx_sig_j = atom_j_idx*2+0;
     int lj_param_idx_eps_j = atom_j_idx*2+1;
 
-    // RealType qj = charge_params[charge_param_idx_j];
     RealType sig_j = lj_params[lj_param_idx_sig_j];
     RealType eps_j = lj_params[lj_param_idx_eps_j];
 
-    // Surreal<RealType> g_qj(0.0, 0.0);
     Surreal<RealType> g_sigj(0.0, 0.0);
     Surreal<RealType> g_epsj(0.0, 0.0);
 
-    // int charge_scale_idx = charge_scale_idxs[e_idx];
-    // RealType charge_scale = charge_scales[e_idx];
-    
-    // int lj_scale_idx = lj_scale_idxs[e_idx];
     RealType lj_scale = lj_scales[e_idx];
 
-    // Surreal<RealType> dxs[4];
     Surreal<RealType> d2ij(0.0, 0.0);
     #pragma unroll
     for(int d=0; d < 3; d++) {
         Surreal<RealType> dx = ci[d] - cj[d];
-        // dxs[d] = dx;
         d2ij += dx*dx;
     }
 
     Surreal<RealType> lambda(lambda_primal, lambda_tangent);
 
-    // Surreal<RealType> delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
-
-    // Surreal<RealType> delta_lambda = lambda_i - lambda_j;
-    // dxs[3] = delta_lambda; 
-    // d2ij += delta_lambda * delta_lambda;
-
     if((lambda_group_j & lambda_group_i) > 0) {
-        // do nothing
-        // 3D
-        // dxs[3] = 0;
+        // 3D do nothing
     } else {
         // 4D
         Surreal<RealType> delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
         d2ij += delta_lambda * delta_lambda;
-        // dxs[3] = delta_lambda;
     }
 
     if(d2ij.real < cutoff*cutoff) {
 
         Surreal<RealType> inv_dij = rsqrt(d2ij);
         Surreal<RealType> inv_d2ij = 1/d2ij;
-        Surreal<RealType> inv_d3ij = inv_dij*inv_d2ij;
         Surreal<RealType> inv_d4ij = inv_d2ij*inv_d2ij;
         Surreal<RealType> inv_d6ij = inv_d4ij*inv_d2ij;
         Surreal<RealType> inv_d8ij = inv_d4ij*inv_d4ij;
-        // Surreal<RealType> es_grad_prefactor = qi*qj*inv_d3ij;
 
         // lennard jones force
         RealType eps_ij = sqrt(eps_i * eps_j);
@@ -373,11 +333,6 @@ void __global__ k_lennard_jones_exclusion_jvp(
             atomicAdd(grad_coords_primals + atom_j_idx*3 + d, gj[d].real);
             atomicAdd(grad_coords_tangents + atom_j_idx*3 + d, gj[d].imag);
         }  
-
-        // dE_dp 
-        // Charge
-        // g_qi += qj*inv_dij;
-        // g_qj += qi*inv_dij;
 
         // vDw
         Surreal<RealType> eps_grad = 4*(sig6*inv_d6ij-1.0)*sig6*inv_d6ij;

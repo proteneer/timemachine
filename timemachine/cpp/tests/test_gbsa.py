@@ -12,7 +12,6 @@ import functools
 from common import GradientTest
 from common import prepare_gbsa_system
 
-from timemachine.potentials import alchemy
 from timemachine.lib import ops, custom_ops
 
 

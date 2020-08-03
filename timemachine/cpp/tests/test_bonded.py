@@ -11,7 +11,7 @@ import functools
 from common import GradientTest
 from common import prepare_bonded_system
 from timemachine.lib import ops
-from timemachine.potentials import alchemy, bonded
+from timemachine.potentials import bonded
 
 
 class TestBonded(GradientTest):
