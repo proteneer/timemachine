@@ -274,29 +274,10 @@ def test_am1_ccc():
     es_params, es_vjp_fn = am1h.parameterize(mol)
 
     # TBD update with AM1 Symmetrize=True
-    ligand_params = np.array([
-        -6.10964,  
-        7.08282, 
-        -1.13114, 
-        -4.30969,  
-        2.03826, 
-        -1.72508,
-        -0.98504, 
-        -1.75676, 
-        -0.70758, 
-        -1.65461,  
-        7.76460, 
-        -6.49890,
-        -7.10592,  
-        0.91672,  
-        0.98443,  
-        0.91019,  
-        1.79381,  
-        1.66542,
-        1.69322,  
-        1.90992,  
-        5.22498
-    ])
+    ligand_params = np.array([-6.10948,  7.08286, -1.13097, -4.3096,  2.03822, -1.72492,
+        -0.98493, -1.75663, -0.70852, -1.65444,  7.76463, -6.49881,
+        -7.10585,  0.93707,  0.93707,  0.93707,  1.79376,  1.6654,
+        1.69322,  1.90986,  5.22498])
     
     np.testing.assert_almost_equal(es_params, ligand_params, decimal=5)
  
@@ -447,7 +428,7 @@ def test_am1_differences():
         if isinstance(ccc, nonbonded.AM1CCCHandler):
             break
 
-    suppl = Chem.SDMolSupplier('tests/ligands_40.sdf', removeHs=False)
+    suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
     am1 = nonbonded.AM1Handler([], [], None)
     bcc = nonbonded.AM1BCCHandler([], [], None)
 

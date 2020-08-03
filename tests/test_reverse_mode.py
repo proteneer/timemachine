@@ -9,10 +9,11 @@ from jax.config import config; config.update("jax_enable_x64", True)
 
 from timemachine.lib import custom_ops
 from timemachine.lib import ops
-from timemachine.potentials import bonded, nonbonded, alchemy
+from timemachine.potentials import bonded, nonbonded
 
 from common import GradientTest
-from common import prepare_bonded_system, prepare_restraints, prepare_nonbonded_system
+# from common import prepare_bonded_system, prepare_restraints, prepare_nonbonded_system
+from common import prepare_lj_system
 
 class TestContext(unittest.TestCase):
 
@@ -229,34 +230,46 @@ class TestContext(unittest.TestCase):
 
         precision = np.float64
  
-        (bond_params, ref_bond), test_bond = prepare_bonded_system(
-            x0,
-            B,
-            A,
-            T,
-            precision
-        )
+        # (bond_params, ref_bond), test_bond = prepare_bonded_system(
+        #     x0,
+        #     B,
+        #     A,
+        #     T,
+        #     precision
+        # )
 
-        (restr_params, ref_restr), test_restr = prepare_restraints(
-            x0,
-            B,
-            precision
-        )
+        # (restr_params, ref_restr), test_restr = prepare_restraints(
+        #     x0,
+        #     B,
+        #     precision
+        # )
 
         E = 2
 
         lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+        lambda_group_idxs = np.random.randint(low=0, high=3, size=N, dtype=np.int32)
 
-        (charge_params, lj_params), ref_nb_fn, test_nb_ctor = prepare_nonbonded_system(
+        lj_params, ref_nb_fn, test_nb_ctor = prepare_lj_system(
             x0,
             E,
             lambda_plane_idxs,
             lambda_offset_idxs,
+            lambda_group_idxs,
             p_scale=10.0,
-            cutoff=1000.0,
+            cutoff=100.0,
             precision=precision       
         )
+
+        # (charge_params, lj_params), ref_nb_fn, test_nb_ctor = prepare_nonbonded_system(
+        #     x0,
+        #     E,
+        #     lambda_plane_idxs,
+        #     lambda_offset_idxs,
+        #     p_scale=10.0,
+        #     cutoff=1000.0,
+        #     precision=precision       
+        # )
 
         test_nb = test_nb_ctor()
 
@@ -283,18 +296,20 @@ class TestContext(unittest.TestCase):
         def integrate_once_through(
             x_t,
             v_t,
-            bond_params,
-            restr_params,
-            charge_params,
+            # bond_params,
+            # restr_params,
+            # charge_params,
             lj_params):
 
-            ref_bond_impl = functools.partial(ref_bond, params=bond_params)
-            ref_restr_impl = functools.partial(ref_restr, params=restr_params)
-            ref_nb_impl = functools.partial(ref_nb_fn, charge_params=charge_params, lj_params=lj_params)
+            # ref_bond_impl = functools.partial(ref_bond, params=bond_params)
+            # ref_restr_impl = functools.partial(ref_restr, params=restr_params)
+            # ref_nb_impl = functools.partial(ref_nb_fn, charge_params=charge_params, lj_params=lj_params)
+            ref_nb_impl = functools.partial(ref_nb_fn, lj_params=lj_params)
 
             def ref_total_nrg_fn(*args):
                 nrgs = []
-                for fn in [ref_bond_impl, ref_restr_impl, ref_nb_impl]:
+                # for fn in [ref_bond_impl, ref_restr_impl, ref_nb_impl]:
+                for fn in [ref_nb_impl]:
                     nrgs.append(fn(*args))
                 return jnp.sum(nrgs)
 
@@ -319,24 +334,35 @@ class TestContext(unittest.TestCase):
         ref_loss = integrate_once_through(
             x0,
             v0,
-            bond_params,
-            restr_params,
-            charge_params,
+            # bond_params,
+            # restr_params,
+            # charge_params,
             lj_params
         )
 
-        grad_fn = jax.grad(integrate_once_through, argnums=(2, 3))
-        ref_dl_dp_bond, ref_dl_dp_restr = grad_fn(
+        grad_fn = jax.grad(integrate_once_through, argnums=(2))
+
+        ref_dl_dlj = grad_fn(
             x0,
             v0,
-            bond_params,
-            restr_params,
-            charge_params,
+            # bond_params,
+            # restr_params,
+            # charge_params,
             lj_params
         )
 
+        # ref_dl_dp_bond, ref_dl_dp_restr = grad_fn(
+        #     x0,
+        #     v0,
+        #     bond_params,
+        #     restr_params,
+        #     charge_params,
+        #     lj_params
+        # )
+
         stepper = custom_ops.AlchemicalStepper_f64(
-            [test_bond, test_restr, test_nb],
+            # [test_bond, test_restr, test_nb],
+            [test_nb],
             lambda_schedule
         )
 
@@ -367,11 +393,17 @@ class TestContext(unittest.TestCase):
         ctxt.set_x_t_adjoint(np.zeros_like(x0))
         ctxt.backward_mode()
 
-        test_dl_dp = test_bond.get_du_dp_tangents()
-        np.testing.assert_allclose(test_dl_dp, ref_dl_dp_bond, rtol=1e-6)
+        test_dl_dlj = test_nb.get_du_dlj_tangents()
+        np.testing.assert_allclose(test_dl_dlj, ref_dl_dlj, rtol=1e-6)
 
-        test_dl_dp = test_restr.get_du_dp_tangents()
-        np.testing.assert_allclose(test_dl_dp, ref_dl_dp_restr, rtol=1e-6)
+        print(test_dl_dlj)
+        print(ref_dl_dlj)
+
+        # test_dl_dp = test_bond.get_du_dp_tangents()
+        # np.testing.assert_allclose(test_dl_dp, ref_dl_dp_bond, rtol=1e-6)
+
+        # test_dl_dp = test_restr.get_du_dp_tangents()
+        # np.testing.assert_allclose(test_dl_dp, ref_dl_dp_restr, rtol=1e-6)
 
 if __name__ == "__main__":
     unittest.main()
