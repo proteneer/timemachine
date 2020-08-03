@@ -391,8 +391,10 @@ class GradientTest(unittest.TestCase):
         return x
 
     def get_water_coords(self, D, sort=False):
-        x = np.load("water.npy").astype(np.float64)
+        x = np.load("water.npy").astype(np.float32).astype(np.float64)
         x = x[:, :D]
+
+        # x = (x).astype(np.float64)
         # if sort:
             # perm = hilbert_sort(x, D)
             # x = x[perm]
@@ -441,8 +443,8 @@ class GradientTest(unittest.TestCase):
 
 
     def compare_forces(self, x, lamb, x_tangent, lamb_tangent, ref_nrg_fn, custom_force, precision, rtol=None):
-        # this is actually sort of important, don't remove me!
-        x = (x.astype(np.float32)).astype(np.float64)
+        # this is actually sort of important for 64bit, don't remove me!
+        #
         # params = (params.astype(np.float32)).astype(np.float64)
 
         N = x.shape[0]
@@ -458,9 +460,6 @@ class GradientTest(unittest.TestCase):
 
         np.testing.assert_allclose(ref_nrg, test_nrg, rtol)
 
-        # print("REF", ref_dx)
-        # print("TEST", test_dx)
-
         self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),
@@ -471,12 +470,6 @@ class GradientTest(unittest.TestCase):
             np.testing.assert_almost_equal(ref_dl, test_dl, 1e-5)
         else:
             np.testing.assert_allclose(ref_dl, test_dl, rtol)
-
-        print("WARNING: skipping jvp tests")
-        return
-
-        # x_tangent = np.random.randn(*x.shape)
-        # lamb_tangent = np.random.rand()
 
         test_x_tangent, test_x_primal = custom_force.execute_lambda_jvp(
             x,

@@ -6,7 +6,7 @@
 #include "gpu_utils.cuh"
 
 #include "k_electrostatics.cuh"
-// #include "k_Electrostatics_jvp.cuh"
+#include "k_electrostatics_jvp.cuh"
 
 namespace timemachine {
 
@@ -119,7 +119,6 @@ void Electrostatics<RealType>::execute_lambda_inference_device(
         d_lambda_plane_idxs_,
         d_lambda_offset_idxs_,
         d_charge_params_,
-        // d_lj_params_,
         cutoff_,
         nblist_.get_block_bounds_ctr(),
         nblist_.get_block_bounds_ext(),
@@ -135,15 +134,12 @@ void Electrostatics<RealType>::execute_lambda_inference_device(
         k_electrostatics_exclusion_inference<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
             E_,
             d_coords_primals,
-            // d_params_primals,
             lambda_primal,
             d_lambda_plane_idxs_,
             d_lambda_offset_idxs_,
             d_exclusion_idxs_,
             d_charge_scales_,
-            // d_lj_scales_,
             d_charge_params_,
-            // d_lj_params_,
             cutoff_,
             d_out_coords_primals,
             d_out_lambda_primals,
@@ -166,73 +162,66 @@ void Electrostatics<RealType>::execute_lambda_jvp_device(
     double *d_out_coords_tangents,
     cudaStream_t stream) {
 
-    // if(N != N_) {
-    //     throw std::runtime_error("N != N_");
-    // }
+    if(N != N_) {
+        throw std::runtime_error("N != N_");
+    }
 
-    // const int tpb = 32;
-    // const int B = (N_+tpb-1)/tpb;
-    // const int D = 3;
+    const int tpb = 32;
+    const int B = (N_+tpb-1)/tpb;
+    const int D = 3;
 
-    // nblist_.compute_block_bounds(N_, D, d_coords_primals, stream);
+    nblist_.compute_block_bounds(N_, D, d_coords_primals, stream);
 
-    // gpuErrchk(cudaPeekAtLastError());
+    gpuErrchk(cudaPeekAtLastError());
 
-    // dim3 dimGrid(B, B, 1); // x, y, z dims
-    // dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
+    dim3 dimGrid(B, B, 1); // x, y, z dims
+    dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
 
-    // auto start = std::chrono::high_resolution_clock::now();
+    auto start = std::chrono::high_resolution_clock::now();
 
-    // k_Electrostatics_jvp<RealType><<<dimGrid, tpb, 0, stream>>>(
-    //     N_,
-    //     d_coords_primals,
-    //     d_coords_tangents,
-    //     lambda_primal,
-    //     lambda_tangent,
-    //     d_lambda_plane_idxs_,
-    //     d_lambda_offset_idxs_,
-    //     d_charge_params_,
-    //     d_lj_params_,
-    //     cutoff_,
-    //     nblist_.get_block_bounds_ctr(),
-    //     nblist_.get_block_bounds_ext(),
-    //     d_out_coords_primals,
-    //     d_out_coords_tangents,
-    //     d_du_dcharge_primals_,
-    //     d_du_dcharge_tangents_,
-    //     d_du_dlj_primals_,
-    //     d_du_dlj_tangents_
-    // );
+    k_electrostatics_jvp<RealType><<<dimGrid, tpb, 0, stream>>>(
+        N_,
+        d_coords_primals,
+        d_coords_tangents,
+        lambda_primal,
+        lambda_tangent,
+        d_lambda_plane_idxs_,
+        d_lambda_offset_idxs_,
+        d_charge_params_,
+        cutoff_,
+        nblist_.get_block_bounds_ctr(),
+        nblist_.get_block_bounds_ext(),
+        d_out_coords_primals,
+        d_out_coords_tangents,
+        d_du_dcharge_primals_,
+        d_du_dcharge_tangents_
+    );
 
-    // // cudaDeviceSynchronize();
-    // gpuErrchk(cudaPeekAtLastError());
+    // cudaDeviceSynchronize();
+    gpuErrchk(cudaPeekAtLastError());
 
-    // if(E_ > 0) {
-    //     k_Electrostatics_exclusion_jvp<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
-    //         E_,
-    //         d_coords_primals,
-    //         d_coords_tangents,
-    //         lambda_primal,
-    //         lambda_tangent,
-    //         d_lambda_plane_idxs_,
-    //         d_lambda_offset_idxs_,
-    //         d_exclusion_idxs_,
-    //         d_charge_scales_,
-    //         d_lj_scales_,
-    //         d_charge_params_,
-    //         d_lj_params_,
-    //         cutoff_,
-    //         d_out_coords_primals,
-    //         d_out_coords_tangents,
-    //         d_du_dcharge_primals_,
-    //         d_du_dcharge_tangents_,
-    //         d_du_dlj_primals_,
-    //         d_du_dlj_tangents_
-    //     );            
+    if(E_ > 0) {
+        k_electrostatics_exclusion_jvp<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
+            E_,
+            d_coords_primals,
+            d_coords_tangents,
+            lambda_primal,
+            lambda_tangent,
+            d_lambda_plane_idxs_,
+            d_lambda_offset_idxs_,
+            d_exclusion_idxs_,
+            d_charge_scales_,
+            d_charge_params_,
+            cutoff_,
+            d_out_coords_primals,
+            d_out_coords_tangents,
+            d_du_dcharge_primals_,
+            d_du_dcharge_tangents_
+        );            
 
-    //     // cudaDeviceSynchronize();
-    //     gpuErrchk(cudaPeekAtLastError());
-    // }
+        // cudaDeviceSynchronize();
+        gpuErrchk(cudaPeekAtLastError());
+    }
 
 
 

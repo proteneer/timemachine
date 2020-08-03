@@ -53,8 +53,8 @@ void __global__ k_electrostatics_inference(
     }
     
     int charge_param_idx_i = atom_i_idx < N ? atom_i_idx : 0;
-    int lj_param_idx_sig_i = atom_i_idx < N ? atom_i_idx*2+0 : 0;
-    int lj_param_idx_eps_i = atom_i_idx < N ? atom_i_idx*2+1 : 0;
+    // int lj_param_idx_sig_i = atom_i_idx < N ? atom_i_idx*2+0 : 0;
+    // int lj_param_idx_eps_i = atom_i_idx < N ? atom_i_idx*2+1 : 0;
 
     RealType qi = atom_i_idx < N ? charge_params[charge_param_idx_i] : 0;
     // RealType sig_i = atom_i_idx < N ? lj_params[lj_param_idx_sig_i] : 1;
@@ -77,8 +77,8 @@ void __global__ k_electrostatics_inference(
     }
 
     int charge_param_idx_j = atom_j_idx < N ? atom_j_idx : 0;
-    int lj_param_idx_sig_j = atom_j_idx < N ? atom_j_idx*2+0 : 0;
-    int lj_param_idx_eps_j = atom_j_idx < N ? atom_j_idx*2+1 : 0;
+    // int lj_param_idx_sig_j = atom_j_idx < N ? atom_j_idx*2+0 : 0;
+    // int lj_param_idx_eps_j = atom_j_idx < N ? atom_j_idx*2+1 : 0;
 
     RealType qj = atom_j_idx < N ? charge_params[charge_param_idx_j] : 0;
     // RealType sig_j = atom_j_idx < N ? lj_params[lj_param_idx_sig_j] : 1;
@@ -110,9 +110,9 @@ void __global__ k_electrostatics_inference(
 
             RealType inv_d2ij = inv_dij*inv_dij;
             RealType inv_d3ij = inv_dij*inv_d2ij;
-            RealType inv_d4ij = inv_d2ij*inv_d2ij;
-            RealType inv_d6ij = inv_d4ij*inv_d2ij;
-            RealType inv_d8ij = inv_d4ij*inv_d4ij;
+            // RealType inv_d4ij = inv_d2ij*inv_d2ij;
+            // RealType inv_d6ij = inv_d4ij*inv_d2ij;
+            // RealType inv_d8ij = inv_d4ij*inv_d4ij;
             RealType es_grad_prefactor = qi*qj*inv_d3ij;
 
             // lennard jones force
