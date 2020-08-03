@@ -1,6 +1,6 @@
 # Time Machine
 
-A high-performance differentiable molecular dynamics and optimization engine.
+A high-performance differentiable molecular dynamics and optimization engine. Computes analytical derivatives of the MD observable (eg. free energies) with respect to the forcefield parameters.
 
 ## Features
 
@@ -21,6 +21,21 @@ We currently support the following functional forms. Parameters that can be opti
 4. LennardJones 612 (sigma, epsilon)
 5. Non-periodic electrostatics (charge)
 6. GBSA (charge, atomic radii, atomic scale factors)
+
+## Running Tests
+
+Note: when running tests, it's important we set the fixed point to a sufficient level of precision via BUILD_TEST=ON. This is done with CMake flags using instructions below. When running actual simulations, it's important to set BUILD_TEST=OFF.
+
+```
+pip install -r requirements.txt
+cd timemachine/cpp
+mkdir build
+cd build
+cmake -DBUILD_TEST=ON -DCUDA_ARCH=sm_70 ../
+make -j4 install
+cd ../../
+pytest -xsv tests/
+```
 
 # License
 

@@ -6,7 +6,7 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.6 REQUIRED)
 find_package(PythonLibs 3.6 REQUIRED)
 
-set(CUDA_ARCH sm_60 CACHE STRING "Specific CUDA architecture we're targetting.")
+set(CUDA_ARCH sm_70 CACHE STRING "Specific CUDA architecture we're targetting.")
 set(BUILD_TEST OFF CACHE STRING "Whether or not we're building for tests.")
 
 if(BUILD_TEST)
