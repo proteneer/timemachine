@@ -58,7 +58,9 @@ if __name__ == "__main__":
 
     general_cfg = config['general']
 
-    assert os.path.isdir(general_cfg['out_dir'])
+    if not os.path.exists(general_cfg['out_dir']):
+        os.makedirs(general_cfg['out_dir'])
+    # assert os.path.isdir()
 
     suppl = Chem.SDMolSupplier(general_cfg['ligand_sdf'], removeHs=False)
 
@@ -104,15 +106,15 @@ if __name__ == "__main__":
     lambda_schedule = []
     for stage_idx, (_, v) in enumerate(config['lambda_schedule'].items()):
         stage_schedule = np.array([float(x) for x in v.split(',')])
-        if stage_idx == 0:
+        if stage_idx == 0 or stage_idx == 1:
             # stage 0 must be monotonically decreasing
-            assert np.all(np.diff(stage_schedule) < 0)
-        else:
-            # stage 1 and 2 must be monotonically increasing
             assert np.all(np.diff(stage_schedule) > 0)
+        else:
+            raise Exception("unknown stage")
+            # stage 1 and 2 must be monotonically increasing
+            # assert np.all(np.diff(stage_schedule) > 0)
         lambda_schedule.append(stage_schedule)
 
-    restr_cfg = config['restraints']
     intg_cfg = config['integrator']
     lr_config = config['learning_rates']
 
@@ -123,11 +125,11 @@ if __name__ == "__main__":
         ff_handlers,
         lambda_schedule,
         int(general_cfg['du_dl_cutoff']),
-        restr_cfg['core_smarts'],
+        # restr_cfg['core_smarts'],
         int(general_cfg['n_frames']),
-        float(restr_cfg['force']),
-        float(restr_cfg['alpha']),
-        int(restr_cfg['count']),
+        # float(restr_cfg['force']),
+        # float(restr_cfg['alpha']),
+        # int(restr_cfg['count']),
         int(intg_cfg['steps']),
         float(intg_cfg['dt']),
         float(intg_cfg['temperature']),

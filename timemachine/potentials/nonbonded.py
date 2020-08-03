@@ -5,8 +5,10 @@ from jax.scipy.special import erf, erfc
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.potentials.jax_utils import delta_r, distance, lambda_to_w, convert_to_4d
 
+
 def switch_fn(dij, cutoff):
     return np.power(np.cos((np.pi*np.power(dij, 8))/(2*cutoff)), 2)
+
 
 def nonbonded(
     conf,
@@ -20,23 +22,54 @@ def nonbonded(
     lambda_plane_idxs,
     lambda_offset_idxs):
 
-
     # assert box is None
 
-    # print("ORIGINAL !", conf[0])
     conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
-    # print(conf_4d)
 
     lj = lennard_jones(conf_4d, lj_params, cutoff)
     lj_exc = lennard_jones_exclusion(conf_4d, lj_params, exclusion_idxs, lj_scales, cutoff)
     es = simple_energy(conf_4d, charge_params, exclusion_idxs, charge_scales, cutoff)
-    # print(lj, lj_exc, es)
+
     return lj - lj_exc + es
 
 
+def nongroup_electrostatics(
+    conf,
+    lamb,
+    charge_params,
+    exclusion_idxs,
+    charge_scales,
+    cutoff,
+    lambda_plane_idxs,
+    lambda_offset_idxs):
 
-def lennard_jones(conf, lj_params, cutoff):
+    # assert box is None
+
+    conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+
+    return simple_energy(conf_4d, charge_params, exclusion_idxs, charge_scales, cutoff)
+
+
+def group_lennard_jones(
+    conf,
+    lamb,
+    lj_params,
+    exclusion_idxs,
+    lj_scales,
+    cutoff,
+    lambda_plane_idxs,
+    lambda_offset_idxs,
+    lambda_group_idxs):
+
+    conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+
+    lj = lennard_jones(conf_4d, lj_params, cutoff, lambda_group_idxs)
+    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, exclusion_idxs, lj_scales, cutoff, lambda_group_idxs)
+
+    return lj - lj_exc
+
+
+def lennard_jones(conf, lj_params, cutoff, groups=None):
     """
     Implements a non-periodic LJ612 potential using the Lorentz−Berthelot combining
     rules, where sig_ij = (sig_i + sig_j)/2 and eps_ij = sqrt(eps_i * eps_j).
@@ -85,12 +118,16 @@ def lennard_jones(conf, lj_params, cutoff):
 
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
-    dij = distance(ri, rj, box)
+    gi = np.expand_dims(groups, axis=0)
+    gj = np.expand_dims(groups, axis=1)
+    gij = np.bitwise_and(gi, gj) > 0
+
+    # print(gij)
+    dij = distance(ri, rj, box, gij)
 
     if cutoff is not None:
         eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
 
-    # keep_mask = scale_matrix > 0
     N = conf.shape[0]
     keep_mask = np.ones((N,N)) - np.eye(N)
 
@@ -113,7 +150,7 @@ def lennard_jones(conf, lj_params, cutoff):
 
 
 # now we compute the exclusions
-def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff):
+def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff, groups=None):
 
     box = None
     assert box is None
@@ -126,7 +163,11 @@ def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff):
     dst_idxs = exclusion_idxs[:, 1]
     ri = conf[src_idxs]
     rj = conf[dst_idxs]
-    dij = distance(ri, rj, box)
+
+    gi = groups[src_idxs]
+    gj = groups[dst_idxs]
+    gij = np.bitwise_and(gi, gj) > 0
+    dij = distance(ri, rj, box, gij)
 
     sig_params = lj_params[:, 0] 
     sig_i = sig_params[src_idxs]

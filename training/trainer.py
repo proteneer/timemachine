@@ -72,11 +72,11 @@ class Trainer():
             ff_handlers,
             lambda_schedule,
             du_dl_cutoff,
-            core_smarts,
+            # core_smarts,
             n_frames,
-            restr_force,
-            restr_alpha,
-            restr_count,
+            # restr_force,
+            # restr_alpha,
+            # restr_count,
             intg_steps,
             intg_dt,
             intg_temperature,
@@ -94,19 +94,17 @@ class Trainer():
         self.stub_hosts = stub_hosts
         self.ff_handlers = ff_handlers
         self.lambda_schedule = lambda_schedule
-        self.core_smarts = core_smarts
+        # self.core_smarts = core_smarts
         self.n_frames = n_frames
-        self.restr_force = restr_force
-        self.restr_alpha = restr_alpha
-        self.restr_count = restr_count
+        # self.restr_force = restr_force
+        # self.restr_alpha = restr_alpha
+        # self.restr_count = restr_count
         self.intg_steps = intg_steps
         self.intg_dt = intg_dt
         self.intg_temperature = intg_temperature
         self.intg_friction = intg_friction
         self.charge_lr = charge_lr
         self.precision = precision
-
-
 
 
         futures = []
@@ -134,18 +132,14 @@ class Trainer():
         du_dl_cutoff = self.du_dl_cutoff
 
         host_pdb = PDBFile(host_pdbfile)
-
         combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), mol)
-
-        core_query = Chem.MolFromSmarts(self.core_smarts)
-        core_atoms = mol.GetSubstructMatch(core_query)
 
         # stage 1 ti_lambdas
         stage_forward_futures = []
         stub_idx = 0
 
         # step 1. Prepare the jobs
-        for stage in [0,1,2]:
+        for stage, ti_lambdas in enumerate(self.lambda_schedule):
 
             # print("---Starting stage", stage, '---')
             stage_dir = os.path.join(run_dir, "stage_"+str(stage))
@@ -157,14 +151,8 @@ class Trainer():
                 mol,
                 host_pdb,
                 ff_handlers,
-                stage,
-                core_atoms,
-                self.restr_force,
-                self.restr_alpha,
-                self.restr_count
+                stage
             )
-
-            ti_lambdas = lambda_schedule[stage]
 
             forward_futures = []
 

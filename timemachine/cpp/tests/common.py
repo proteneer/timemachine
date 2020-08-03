@@ -126,6 +126,121 @@ def prepare_gbsa_system(
 
     return (charge_params, gb_params), gbsa_obc_fn, custom_gb_ctor
 
+
+def prepare_lj_system(
+    x,
+    E, # number of exclusions
+    lambda_plane_idxs,
+    lambda_offset_idxs,
+    lambda_group_idxs,
+    p_scale,
+    cutoff=100.0,
+    precision=np.float64):
+
+    N = x.shape[0]
+    D = x.shape[1]
+
+    # charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
+    sig_params = np.random.rand(N) / p_scale
+    eps_params = np.random.rand(N)
+    lj_params = np.stack([sig_params, eps_params], axis=1)
+
+    atom_idxs = np.arange(N)
+    exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
+    exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
+
+    # charge_scales = np.random.rand(E)
+    lj_scales = np.random.rand(E)
+
+    custom_nonbonded_ctor = functools.partial(ops.LennardJones,
+        # charge_params,
+        lj_params,
+        exclusion_idxs,
+        # charge_scales,
+        lj_scales,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
+        lambda_group_idxs,
+        cutoff,
+        precision=precision
+    )
+
+    # disable PBCs
+    # make sure this is big enough!
+    # box = np.array([
+    #     [100.0, 0.0, 0.0, 0.0],
+    #     [0.0, 100.0, 0.0, 0.0],
+    #     [0.0, 0.0, 100.0, 0.0],
+    #     [0.0, 0.0, 0.0, 2*cutoff],
+    # ])
+
+    ref_total_energy = functools.partial(
+        nonbonded.group_lennard_jones,
+        exclusion_idxs=exclusion_idxs,
+        # charge_scales=charge_scales,
+        lj_scales=lj_scales,
+        cutoff=cutoff,
+        lambda_plane_idxs=lambda_plane_idxs,
+        lambda_offset_idxs=lambda_offset_idxs,
+        lambda_group_idxs=lambda_group_idxs
+    )
+
+    return lj_params, ref_total_energy, custom_nonbonded_ctor
+
+
+
+def prepare_es_system(
+    x,
+    E, # number of exclusions
+    lambda_plane_idxs,
+    lambda_offset_idxs,
+    p_scale,
+    cutoff=100.0,
+    precision=np.float64):
+
+    N = x.shape[0]
+    D = x.shape[1]
+
+    charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
+
+    atom_idxs = np.arange(N)
+    exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
+    exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
+
+    charge_scales = np.random.rand(E)
+
+    custom_nonbonded_ctor = functools.partial(ops.Electrostatics,
+        charge_params,
+        exclusion_idxs,
+        charge_scales,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
+        cutoff,
+        precision=precision
+    )
+
+    # disable PBCs
+    # make sure this is big enough!
+    # box = np.array([
+    #     [100.0, 0.0, 0.0, 0.0],
+    #     [0.0, 100.0, 0.0, 0.0],
+    #     [0.0, 0.0, 100.0, 0.0],
+    #     [0.0, 0.0, 0.0, 2*cutoff],
+    # ])
+
+    ref_total_energy = functools.partial(
+        nonbonded.nongroup_electrostatics,
+        exclusion_idxs=exclusion_idxs,
+        charge_scales=charge_scales,
+        cutoff=cutoff,
+        lambda_plane_idxs=lambda_plane_idxs,
+        lambda_offset_idxs=lambda_offset_idxs
+    )
+
+    return charge_params, ref_total_energy, custom_nonbonded_ctor
+
+
+
 def prepare_nonbonded_system(
     x,
     E, # number of exclusions
@@ -276,8 +391,10 @@ class GradientTest(unittest.TestCase):
         return x
 
     def get_water_coords(self, D, sort=False):
-        x = np.load("water.npy").astype(np.float64)
+        x = np.load("water.npy").astype(np.float32).astype(np.float64)
         x = x[:, :D]
+
+        # x = (x).astype(np.float64)
         # if sort:
             # perm = hilbert_sort(x, D)
             # x = x[perm]
@@ -326,8 +443,8 @@ class GradientTest(unittest.TestCase):
 
 
     def compare_forces(self, x, lamb, x_tangent, lamb_tangent, ref_nrg_fn, custom_force, precision, rtol=None):
-        # this is actually sort of important, don't remove me!
-        x = (x.astype(np.float32)).astype(np.float64)
+        # this is actually sort of important for 64bit, don't remove me!
+        #
         # params = (params.astype(np.float32)).astype(np.float64)
 
         N = x.shape[0]
@@ -343,9 +460,6 @@ class GradientTest(unittest.TestCase):
 
         np.testing.assert_allclose(ref_nrg, test_nrg, rtol)
 
-        # print("REF", ref_dx)
-        # print("TEST", test_dx)
-
         self.assert_equal_vectors(
             np.array(ref_dx),
             np.array(test_dx),
@@ -356,12 +470,6 @@ class GradientTest(unittest.TestCase):
             np.testing.assert_almost_equal(ref_dl, test_dl, 1e-5)
         else:
             np.testing.assert_allclose(ref_dl, test_dl, rtol)
-
-        # print("skipping jvp tests")
-        # return
-
-        # x_tangent = np.random.randn(*x.shape)
-        # lamb_tangent = np.random.rand()
 
         test_x_tangent, test_x_primal = custom_force.execute_lambda_jvp(
             x,
