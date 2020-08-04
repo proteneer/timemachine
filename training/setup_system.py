@@ -26,94 +26,6 @@ def find_protein_pocket_atoms(conf, nha, search_radius):
 
     return list(pocket_atoms)
 
-def setup_core_restraints(
-    k,
-    alpha,
-    count,
-    conf,
-    nha,
-    core_atoms,
-    backbone_atoms,
-    stage):
-    """
-    Setup core restraints
-
-    Parameters
-    ----------
-    k: float
-        Force constant of each restraint
-
-    count: int
-        Number of host atoms we restrain each guest_mol to
-
-    nha: int
-        Number of host atoms
-
-    core_atoms: list of int
-        atoms we're restraining. This is indexed by the total number of atoms in the system.
-
-    backbone_atoms: list of backbone atoms
-
-    stage: 0,1,2
-        0 - attach restraint
-        1 - decouple
-        2 - detach restraint
-
-    """
-    ri = np.expand_dims(conf, axis=0)
-    rj = np.expand_dims(conf, axis=1)
-    dij = jax_utils.distance(ri, rj)
-    all_nbs = []
-
-    bond_idxs = []
-    bond_params = []
-
-    for l_idx, dists in enumerate(dij[nha:]):
-        if l_idx in core_atoms:
-            nns = np.argsort(dists[:nha])
-            # restrain to count nearby backbone atoms to enable
-            # side-chain sampling
-
-            counter = 0
-
-            for p_idx in nns:
-
-                if counter == count:
-                    break
-
-                if p_idx in backbone_atoms:
-                    a = alpha
-                    b = dists[p_idx]
-                    bond_params.append((k, b, a))
-                    bond_idxs.append([l_idx + nha, p_idx])
-                    counter += 1
-
-            # corner case where we haven't found sufficient candidates
-            if counter != count:
-                raise Exception("Failed to find", count, "neighbors")
-
-    bond_idxs = np.array(bond_idxs, dtype=np.int32)
-    bond_params = np.array(bond_params, dtype=np.float64)
-
-    B = bond_idxs.shape[0]
-
-    # w = lambda*lambda_flags
-    # w = 0 implies that restraints are on
-    # w = +inf/-inf implies that restraints are off
-    if stage == 0:
-        lambda_flags = np.ones(B, dtype=np.int32)
-    elif stage == 1:
-        # fully interacting
-        lambda_flags = np.zeros(B, dtype=np.int32)
-    elif stage == 2:
-        lambda_flags = np.ones(B, dtype=np.int32)
-
-    return ('Restraint', (
-        bond_idxs,
-        bond_params,
-        lambda_flags
-    ))
-
 
 def concat_with_vjps(p_a, p_b, vjp_a, vjp_b):
     """
@@ -388,29 +300,6 @@ def create_system(
         )
     ))
     final_vjp_fns.append((combined_charge_vjp_fn, combined_gb_vjp_fn))
-
-
-    # build restraints using the coordinates
-    # backbone_atoms = []
-    # for r_idx, residue in enumerate(host_pdb.getTopology().residues()):
-    #     for a in residue.atoms():
-    #         if a.name == 'CA':
-    #             backbone_atoms.append(a.index)
-
-
-
-    # final_gradients.append(setup_core_restraints(
-    #     restr_force,
-    #     restr_alpha,
-    #     restr_count,
-    #     x0,
-    #     num_host_atoms,
-    #     core_atoms,
-    #     backbone_atoms,
-    #     stage=stage
-    # ))
-
-    # final_vjp_fns.append(None)
 
     combined_masses = np.concatenate([host_masses, guest_masses])
 
