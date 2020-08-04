@@ -29,6 +29,7 @@ class TestGBSA(GradientTest):
         np.random.seed(1523)
 
         x = self.get_water_coords(D, sort=True)
+        x = x[:1033] # reduce memory footprint for autodiff
         N = x.shape[0]
 
         P_charges = N
