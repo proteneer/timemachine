@@ -65,11 +65,8 @@ def create_system(
     guest_mol,
     host_pdb,
     handlers,
+    search_radius,
     stage):
-    # core_atoms,
-    # restr_force,
-    # restr_alpha,
-    # restr_count):
     """
     Initialize a self-encompassing System object that we can serialize and simulate.
 
@@ -213,7 +210,7 @@ def create_system(
     x0 = np.concatenate([host_conf, mol_a_conf]) # combined geometry
     v0 = np.zeros_like(x0)
 
-    search_radius = 0.5 # 10A
+    # search_radius = 0.5 # 10A
     # search_radius = 0.0 # 10A
 
     pocket_atoms = find_protein_pocket_atoms(x0, num_host_atoms, search_radius)

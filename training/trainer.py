@@ -72,11 +72,8 @@ class Trainer():
             ff_handlers,
             lambda_schedule,
             du_dl_cutoff,
-            # core_smarts,
+            search_radius,
             n_frames,
-            # restr_force,
-            # restr_alpha,
-            # restr_count,
             intg_steps,
             intg_dt,
             intg_temperature,
@@ -86,7 +83,6 @@ class Trainer():
 
         n_workers = len(stubs)
         n_lambdas = np.sum([len(x) for x in lambda_schedule])
-        # assert n_workers == n_lambdas
 
         self.du_dl_cutoff = du_dl_cutoff
         self.host_pdbfile = host_pdbfile
@@ -94,11 +90,8 @@ class Trainer():
         self.stub_hosts = stub_hosts
         self.ff_handlers = ff_handlers
         self.lambda_schedule = lambda_schedule
-        # self.core_smarts = core_smarts
+        self.search_radius = search_radius
         self.n_frames = n_frames
-        # self.restr_force = restr_force
-        # self.restr_alpha = restr_alpha
-        # self.restr_count = restr_count
         self.intg_steps = intg_steps
         self.intg_dt = intg_dt
         self.intg_temperature = intg_temperature
@@ -151,6 +144,7 @@ class Trainer():
                 mol,
                 host_pdb,
                 ff_handlers,
+                self.search_radius,
                 stage
             )
 
@@ -244,10 +238,10 @@ class Trainer():
 
                 for f, du_dls in zip(final_gradients, equil_du_dls):
                     fname = f[0]
-                    print("lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+                    print("mol", mol.GetProp("_Name"), "stage:", stage_idx, "lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
 
                 total_equil_du_dls = np.sum(equil_du_dls, axis=0) # [1, T]
-                print("lambda:", "{:.3f}".format(lamb), "\t mean", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
+                print("mol", mol.GetProp("_Name"), "stage:", stage_idx, "lambda:", "{:.3f}".format(lamb), "\t mean", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
 
                 stage_du_dls.append(full_du_dls)
 
