@@ -80,6 +80,7 @@ def create_system(
 
     """
     # host_system = protein_system
+    print("creating system with stage:", stage)
 
     guest_masses = np.array([a.GetMass() for a in guest_mol.GetAtoms()], dtype=np.float64)
 

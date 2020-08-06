@@ -103,20 +103,29 @@ if __name__ == "__main__":
         stub = service_pb2_grpc.WorkerStub(channel)
         stubs.append(stub)
 
-    lambda_schedule = []
-    for stage_idx, (_, v) in enumerate(config['lambda_schedule'].items()):
+
+    intg_cfg = config['integrator']
+    lr_config = config['learning_rates']
+
+
+    lambda_schedule = {}
+
+    for stage_str, v in config['lambda_schedule'].items():
+
+        stage = int(stage_str)
+
         stage_schedule = np.array([float(x) for x in v.split(',')])
-        if stage_idx == 0 or stage_idx == 1:
+
+        assert stage not in lambda_schedule
+
+        if stage == 0 or stage == 1:
             # stage 0 must be monotonically decreasing
             assert np.all(np.diff(stage_schedule) > 0)
         else:
             raise Exception("unknown stage")
             # stage 1 and 2 must be monotonically increasing
             # assert np.all(np.diff(stage_schedule) > 0)
-        lambda_schedule.append(stage_schedule)
-
-    intg_cfg = config['integrator']
-    lr_config = config['learning_rates']
+        lambda_schedule[stage] = stage_schedule
 
     engine = trainer.Trainer(
         host_pdbfile, 
