@@ -60,7 +60,6 @@ if __name__ == "__main__":
 
     if not os.path.exists(general_cfg['out_dir']):
         os.makedirs(general_cfg['out_dir'])
-    # assert os.path.isdir()
 
     suppl = Chem.SDMolSupplier(general_cfg['ligand_sdf'], removeHs=False)
 
@@ -79,7 +78,6 @@ if __name__ == "__main__":
     # process the host first
     host_pdbfile = general_cfg['protein_pdb']
 
-    # (tbd): set to MCS if this is None
     stage_dGs = []
 
     ff_raw = open(general_cfg['forcefield'], "r").read()
@@ -103,17 +101,14 @@ if __name__ == "__main__":
         stub = service_pb2_grpc.WorkerStub(channel)
         stubs.append(stub)
 
-
     intg_cfg = config['integrator']
     lr_config = config['learning_rates']
-
 
     lambda_schedule = {}
 
     for stage_str, v in config['lambda_schedule'].items():
 
         stage = int(stage_str)
-
         stage_schedule = np.array([float(x) for x in v.split(',')])
 
         assert stage not in lambda_schedule

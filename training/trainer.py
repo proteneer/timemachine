@@ -80,6 +80,53 @@ class Trainer():
             intg_friction,
             charge_lr,
             precision):
+        """
+        Parameters
+        ----------
+
+        host_pdbfile: path
+            location of a pdb file for the protein
+
+        stubs: gRPC stubs
+            each stub corresponds to worker address
+
+        stub_hosts: list of str
+            each item corresponds to an ip address
+
+        ff_handlers: list of ff.handlers from handlers.nonbonded or handlers.bonded
+            handlers that can parameterize the guest
+
+        lambda_schedule: dict of (stage_idx, array)
+            dictionary of stage idxs and the corresponding arrays
+
+        du_dl_cutoff: int
+            number of steps we discard when estimating <du_dl>
+
+        search_radius: float
+            how far in nm when searching for restraints (typical=~0.3)
+
+        n_frames: int
+            number of frames we store, sampled evenly from the trajectory
+
+        intg_steps: int
+            number of steps we run the simulation for
+
+        intg_dt: float
+            time step in picoseconds (typical=1.5e-3)
+
+        intg_temperature: float
+            temperature of the simulation in Kelvins (typical=300)
+
+        intg_friction: float
+            thermostat friction coefficient in 1/picseconds, (typical=40)
+
+        charge_lr: float
+            how much we adjust the charge by in parameter space
+
+        precision: str
+            allowed values are "single" or "double", (typical=single)
+
+        """
 
         self.du_dl_cutoff = du_dl_cutoff
         self.host_pdbfile = host_pdbfile
@@ -110,6 +157,25 @@ class Trainer():
 
 
     def run_mol(self, mol, inference, run_dir, experiment_dG):
+        """
+        Compute the absolute unbinding free energy of given molecule. The molecule should be
+        free of clashes and correctly posed within the binding pocket.
+
+        Parameters
+        ----------
+        mol: Chem.ROMol
+            RDKit molecule
+
+        inference: bool
+            If True, then we compute the forcefield parameter derivatives, otherwise skip.
+
+        run_dir: str
+            path of where we store all the output files
+
+        experiment_dG: float
+            experimental unbinding free energy.
+
+        """
 
         # we can only multiplex in inference mode.
         if inference is False:
@@ -124,7 +190,6 @@ class Trainer():
         host_pdb = PDBFile(host_pdbfile)
         combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), mol)
 
-        # stage 1 ti_lambdas
         stage_forward_futures = []
         stub_idx = 0
 
@@ -183,7 +248,6 @@ class Trainer():
             stage_forward_futures.append((stage, forward_futures))
 
         # step 2. Run forward mode on the jobs
-
         all_du_dls = []
         all_lambdas = []
         for stage, stage_futures in stage_forward_futures:
