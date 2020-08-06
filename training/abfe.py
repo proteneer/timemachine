@@ -60,7 +60,6 @@ if __name__ == "__main__":
 
     if not os.path.exists(general_cfg['out_dir']):
         os.makedirs(general_cfg['out_dir'])
-    # assert os.path.isdir()
 
     suppl = Chem.SDMolSupplier(general_cfg['ligand_sdf'], removeHs=False)
 
@@ -79,7 +78,6 @@ if __name__ == "__main__":
     # process the host first
     host_pdbfile = general_cfg['protein_pdb']
 
-    # (tbd): set to MCS if this is None
     stage_dGs = []
 
     ff_raw = open(general_cfg['forcefield'], "r").read()
@@ -103,20 +101,26 @@ if __name__ == "__main__":
         stub = service_pb2_grpc.WorkerStub(channel)
         stubs.append(stub)
 
-    lambda_schedule = []
-    for stage_idx, (_, v) in enumerate(config['lambda_schedule'].items()):
+    intg_cfg = config['integrator']
+    lr_config = config['learning_rates']
+
+    lambda_schedule = {}
+
+    for stage_str, v in config['lambda_schedule'].items():
+
+        stage = int(stage_str)
         stage_schedule = np.array([float(x) for x in v.split(',')])
-        if stage_idx == 0 or stage_idx == 1:
+
+        assert stage not in lambda_schedule
+
+        if stage == 0 or stage == 1:
             # stage 0 must be monotonically decreasing
             assert np.all(np.diff(stage_schedule) > 0)
         else:
             raise Exception("unknown stage")
             # stage 1 and 2 must be monotonically increasing
             # assert np.all(np.diff(stage_schedule) > 0)
-        lambda_schedule.append(stage_schedule)
-
-    intg_cfg = config['integrator']
-    lr_config = config['learning_rates']
+        lambda_schedule[stage] = stage_schedule
 
     engine = trainer.Trainer(
         host_pdbfile, 
@@ -125,11 +129,8 @@ if __name__ == "__main__":
         ff_handlers,
         lambda_schedule,
         int(general_cfg['du_dl_cutoff']),
-        # restr_cfg['core_smarts'],
+        float(general_cfg['search_radius']),
         int(general_cfg['n_frames']),
-        # float(restr_cfg['force']),
-        # float(restr_cfg['alpha']),
-        # int(restr_cfg['count']),
         int(intg_cfg['steps']),
         float(intg_cfg['dt']),
         float(intg_cfg['temperature']),

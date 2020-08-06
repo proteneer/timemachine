@@ -120,6 +120,10 @@ class Worker(service_pb2_grpc.WorkerServicer):
                 dl_dps.append(g.get_du_dp_tangents())
             elif f_name == 'Nonbonded':
                 dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dlj_tangents()))
+            elif f_name == 'LennardJones':
+                dl_dps.append(g.get_du_dlj_tangents())
+            elif f_name == 'Electrostatics':
+                dl_dps.append(g.get_du_dcharge_tangents())
             elif f_name == 'GBSA':
                 dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dgb_tangents()))
             elif f_name == 'Restraint':

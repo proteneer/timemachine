@@ -72,21 +72,61 @@ class Trainer():
             ff_handlers,
             lambda_schedule,
             du_dl_cutoff,
-            # core_smarts,
+            search_radius,
             n_frames,
-            # restr_force,
-            # restr_alpha,
-            # restr_count,
             intg_steps,
             intg_dt,
             intg_temperature,
             intg_friction,
             charge_lr,
             precision):
+        """
+        Parameters
+        ----------
 
-        n_workers = len(stubs)
-        n_lambdas = np.sum([len(x) for x in lambda_schedule])
-        # assert n_workers == n_lambdas
+        host_pdbfile: path
+            location of a pdb file for the protein
+
+        stubs: gRPC stubs
+            each stub corresponds to worker address
+
+        stub_hosts: list of str
+            each item corresponds to an ip address
+
+        ff_handlers: list of ff.handlers from handlers.nonbonded or handlers.bonded
+            handlers that can parameterize the guest
+
+        lambda_schedule: dict of (stage_idx, array)
+            dictionary of stage idxs and the corresponding arrays
+
+        du_dl_cutoff: int
+            number of steps we discard when estimating <du_dl>
+
+        search_radius: float
+            how far in nm when searching for restraints (typical=~0.3)
+
+        n_frames: int
+            number of frames we store, sampled evenly from the trajectory
+
+        intg_steps: int
+            number of steps we run the simulation for
+
+        intg_dt: float
+            time step in picoseconds (typical=1.5e-3)
+
+        intg_temperature: float
+            temperature of the simulation in Kelvins (typical=300)
+
+        intg_friction: float
+            thermostat friction coefficient in 1/picseconds, (typical=40)
+
+        charge_lr: float
+            how much we adjust the charge by in parameter space
+
+        precision: str
+            allowed values are "single" or "double", (typical=single)
+
+        """
 
         self.du_dl_cutoff = du_dl_cutoff
         self.host_pdbfile = host_pdbfile
@@ -94,11 +134,8 @@ class Trainer():
         self.stub_hosts = stub_hosts
         self.ff_handlers = ff_handlers
         self.lambda_schedule = lambda_schedule
-        # self.core_smarts = core_smarts
+        self.search_radius = search_radius
         self.n_frames = n_frames
-        # self.restr_force = restr_force
-        # self.restr_alpha = restr_alpha
-        # self.restr_count = restr_count
         self.intg_steps = intg_steps
         self.intg_dt = intg_dt
         self.intg_temperature = intg_temperature
@@ -120,10 +157,29 @@ class Trainer():
 
 
     def run_mol(self, mol, inference, run_dir, experiment_dG):
+        """
+        Compute the absolute unbinding free energy of given molecule. The molecule should be
+        free of clashes and correctly posed within the binding pocket.
+
+        Parameters
+        ----------
+        mol: Chem.ROMol
+            RDKit molecule
+
+        inference: bool
+            If True, then we compute the forcefield parameter derivatives, otherwise skip.
+
+        run_dir: str
+            path of where we store all the output files
+
+        experiment_dG: float
+            experimental unbinding free energy.
+
+        """
 
         # we can only multiplex in inference mode.
         if inference is False:
-            assert np.sum([len(x) for x in self.lambda_schedule]) == len(self.stubs)
+            assert np.sum([len(x) for x in self.lambda_schedule.values()]) == len(self.stubs)
 
         host_pdbfile = self.host_pdbfile
         lambda_schedule = self.lambda_schedule
@@ -134,12 +190,11 @@ class Trainer():
         host_pdb = PDBFile(host_pdbfile)
         combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), mol)
 
-        # stage 1 ti_lambdas
         stage_forward_futures = []
         stub_idx = 0
 
         # step 1. Prepare the jobs
-        for stage, ti_lambdas in enumerate(self.lambda_schedule):
+        for stage, ti_lambdas in self.lambda_schedule.items():
 
             # print("---Starting stage", stage, '---')
             stage_dir = os.path.join(run_dir, "stage_"+str(stage))
@@ -151,6 +206,7 @@ class Trainer():
                 mol,
                 host_pdb,
                 ff_handlers,
+                self.search_radius,
                 stage
             )
 
@@ -189,17 +245,17 @@ class Trainer():
                 response_future = stub.ForwardMode.future(request)
                 forward_futures.append(response_future)
 
-            stage_forward_futures.append(forward_futures)
+            stage_forward_futures.append((stage, forward_futures))
 
         # step 2. Run forward mode on the jobs
-
         all_du_dls = []
-        for stage_idx, stage_futures in enumerate(stage_forward_futures):
+        all_lambdas = []
+        for stage, stage_futures in stage_forward_futures:
 
-            stage_dir = os.path.join(run_dir, "stage_"+str(stage_idx))
+            stage_dir = os.path.join(run_dir, "stage_"+str(stage))
             stage_du_dls = []
 
-            for lamb_idx, (future, lamb) in enumerate(zip(stage_futures, lambda_schedule[stage_idx])):
+            for lamb_idx, (future, lamb) in enumerate(zip(stage_futures, lambda_schedule[stage])):
 
                 response = future.result()
 
@@ -244,38 +300,39 @@ class Trainer():
 
                 for f, du_dls in zip(final_gradients, equil_du_dls):
                     fname = f[0]
-                    print("lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+                    print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
 
                 total_equil_du_dls = np.sum(equil_du_dls, axis=0) # [1, T]
-                print("lambda:", "{:.3f}".format(lamb), "\t mean", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
+                print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t mean", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
 
                 stage_du_dls.append(full_du_dls)
 
             sum_du_dls = np.sum(stage_du_dls, axis=1) # [L,F,T], lambda windows, num forces, num frames
 
-            ti_lambdas = lambda_schedule[stage_idx]
+            ti_lambdas = lambda_schedule[stage]
             plt.boxplot(sum_du_dls[:, du_dl_cutoff:].tolist(), positions=ti_lambdas)
             plt.ylabel("du_dlambda")
             plt.savefig(os.path.join(stage_dir, "boxplot_du_dls"))
             plt.clf()
 
             all_du_dls.append(stage_du_dls)
+            all_lambdas.append(ti_lambdas)
 
 
-        pred_dG = dG_TI(all_du_dls, lambda_schedule, du_dl_cutoff)
-        loss = loss_fn(all_du_dls, lambda_schedule, experiment_dG, du_dl_cutoff)
+        pred_dG = dG_TI(all_du_dls, all_lambdas, du_dl_cutoff)
+        loss = loss_fn(all_du_dls, all_lambdas, experiment_dG, du_dl_cutoff)
 
-        print("mol", mol.GetProp("_Name"), "stage dGs:", compute_dGs(all_du_dls, lambda_schedule, du_dl_cutoff))
+        print("mol", mol.GetProp("_Name"), "stage dGs:", compute_dGs(all_du_dls, all_lambdas, du_dl_cutoff))
 
         if not inference:
 
-            all_adjoint_du_dls = loss_fn_grad(all_du_dls, lambda_schedule, experiment_dG, du_dl_cutoff)[0]
+            all_adjoint_du_dls = loss_fn_grad(all_du_dls, all_lambdas, experiment_dG, du_dl_cutoff)[0]
 
             # step 3. run backward mode
             stage_backward_futures = []
 
             stub_idx = 0
-            for stage_idx, adjoint_du_dls in enumerate(all_adjoint_du_dls):
+            for adjoint_du_dls in all_adjoint_du_dls:
 
                 futures = []
                 for lambda_du_dls in adjoint_du_dls:
@@ -290,7 +347,7 @@ class Trainer():
             charge_derivatives = []
             # gb_derivatives = []
 
-            for stage_idx, stage_futures in enumerate(stage_backward_futures):
+            for stage_futures in stage_backward_futures:
                 for future in stage_futures:
                     backward_response = future.result()
                     dl_dps = pickle.loads(backward_response.dl_dps)
