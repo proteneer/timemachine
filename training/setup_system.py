@@ -10,15 +10,29 @@ from fe.utils import to_md_units
 from timemachine.potentials import jax_utils
 
 def find_protein_pocket_atoms(conf, nha, search_radius):
+    """
+    Find atoms in the protein that are close to the binding pocket. This simply grabs the
+    protein atoms that are within search_radius nm of each ligand atom.
+
+    Parameters
+    ----------
+    conf: np.array [N,3]
+        conformation of the ligand
+
+    nha: int
+        number of host atoms
+
+    search_radius: float
+        how far we search into the binding pocket.
+
+    """
     ri = np.expand_dims(conf, axis=0)
     rj = np.expand_dims(conf, axis=1)
     dij = jax_utils.distance(ri, rj)
     pocket_atoms = set()
 
     for l_idx, dists in enumerate(dij[nha:]):
-        # if l_idx in core_atoms:
         nns = np.argsort(dists[:nha])
-
         for p_idx in nns:
             if dists[p_idx] < search_radius:
                 pocket_atoms.add(p_idx)
@@ -26,12 +40,10 @@ def find_protein_pocket_atoms(conf, nha, search_radius):
 
     return list(pocket_atoms)
 
-
 def concat_with_vjps(p_a, p_b, vjp_a, vjp_b):
     """
     Returns the combined parameters p_c, and a vjp_fn that can take in adjoint with shape
     of p_c and returns adjoints of primitives of p_a and p_b.
-
 
     i.e. 
        vjp_a            
@@ -40,6 +52,7 @@ def concat_with_vjps(p_a, p_b, vjp_a, vjp_b):
                  +-----> C
        vjp_b    /
     B' -----> B
+
     """
     p_c, vjp_c = jax.vjp(jnp.concatenate, [p_a, p_b])
     adjoints = np.random.randn(*p_c.shape)
@@ -56,7 +69,6 @@ def concat_with_vjps(p_a, p_b, vjp_a, vjp_b):
         else:
             ad_b = None
 
-        # return ad_a, ad_b
         return ad_b[0]
 
     return p_c, adjoint_fn
@@ -74,13 +86,21 @@ def create_system(
     ----------
 
     guest_mol: rdkit.ROMol
+        guest molecule
+        
+    host_pdb: openmm.PDBFile
+        host system from OpenMM
 
-    protein: openmm.System
+    handlers: list of timemachine.ops.Gradients
+        forcefield handlers used to parameterize the system
 
+    search_radius: float
+        how far away we search from the ligand to define the binding pocket atoms.
 
+    stage: int (0 or 1)
+        a free energy specific variable that determines how we decouple.
+ 
     """
-    # host_system = protein_system
-    print("creating system with stage:", stage)
 
     guest_masses = np.array([a.GetMass() for a in guest_mol.GetAtoms()], dtype=np.float64)
 
@@ -116,8 +136,6 @@ def create_system(
             final_gradients.append((item[0], item[1]))
             final_vjp_fns.append(None)
 
-    # print("Ligand A Name:", a_name)
-
     guest_exclusion_idxs, guest_scales = nonbonded.generate_exclusion_idxs(
         guest_mol,
         scale12=1.0,
@@ -136,8 +154,6 @@ def create_system(
     combined_exclusion_idxs = np.concatenate([host_exclusion_idxs, guest_exclusion_idxs])
     combined_lj_exclusion_scales = np.concatenate([host_lj_exclusion_scales, guest_lj_exclusion_scales])
     combined_charge_exclusion_scales = np.concatenate([host_charge_exclusion_scales, guest_charge_exclusion_scales])
-
-    # handler_vjps = []
 
     for handle in handlers:
         results = handle.parameterize(guest_mol)
@@ -170,7 +186,6 @@ def create_system(
         elif isinstance(handle, nonbonded.LennardJonesHandler):
             guest_lj_params, guest_lj_vjp_fn = results
             combined_lj_params, combined_lj_vjp_fn = concat_with_vjps(host_lj_params, guest_lj_params, None, guest_lj_vjp_fn)
-
             # final_gradients.append(("LennardJones", (torsion_idxs, torsion_params)))
             # final_vjp_fns.append(combined_lj_vjp_fn)
             # handler_vjps.append(lj_adjoint_fn)
@@ -210,9 +225,6 @@ def create_system(
 
     x0 = np.concatenate([host_conf, mol_a_conf]) # combined geometry
     v0 = np.zeros_like(x0)
-
-    # search_radius = 0.5 # 10A
-    # search_radius = 0.0 # 10A
 
     pocket_atoms = find_protein_pocket_atoms(x0, num_host_atoms, search_radius)
 
@@ -275,10 +287,8 @@ def create_system(
     final_gradients.append((
         'Electrostatics', (
         np.asarray(combined_charge_params),
-        # np.asarray(combined_lj_params),
         combined_exclusion_idxs,
         combined_charge_exclusion_scales,
-        # combined_lj_exclusion_scales,
         combined_lambda_plane_idxs,
         combined_lambda_offset_idxs,
         cutoff
