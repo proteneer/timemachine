@@ -17,6 +17,8 @@ private:
     int N_;
     int N_A_;
     int N_B_;
+    int lambda_flag_;
+    int lambda_offset_;
 
     double kb_;
     double b0_;
@@ -35,7 +37,9 @@ public:
         const std::vector<int> &group_b_idxs,
         const std::vector<double> &masses,
         const double kb,
-        const double b0
+        const double b0,
+        const int lambda_flag,
+        const int lambda_offset
     );
 
     ~CentroidRestraint();

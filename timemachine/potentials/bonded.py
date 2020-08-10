@@ -3,7 +3,7 @@ import jax.numpy as np
 from timemachine.potentials.jax_utils import distance, delta_r, convert_to_4d
 
 
-def centroid_restraint(conf, lamb, params, group_a_idxs, group_b_idxs, kb, b0):
+def centroid_restraint(conf, lamb, params, lamb_flag, lamb_offset, group_a_idxs, group_b_idxs, kb, b0):
 
     xi = conf[group_a_idxs]
     xj = conf[group_b_idxs]
@@ -15,7 +15,9 @@ def centroid_restraint(conf, lamb, params, group_a_idxs, group_b_idxs, kb, b0):
     dij = np.sqrt(np.sum(dx*dx))
     delta = dij - b0
 
-    return lamb*kb*delta*delta
+    lamb_final = lamb*lamb_flag + lamb_offset
+
+    return lamb_final*kb*delta*delta
 
 def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     """

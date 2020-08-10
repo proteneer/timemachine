@@ -231,70 +231,90 @@ def create_system(
     N_C = num_host_atoms + num_guest_atoms
     N_A = num_host_atoms
 
-    if stage == 0:
-        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs[num_host_atoms:] = 1
-        combined_lambda_offset_idxs[pocket_atoms] = 1
+    # if stage == 0:
+    #     combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+    #     combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+    #     combined_lambda_offset_idxs[num_host_atoms:] = 1
+    #     combined_lambda_offset_idxs[pocket_atoms] = 1
 
-        # grouping for vdw terms
-        combined_lambda_group_idxs = np.ones(N_C, dtype=np.int32)
-        combined_lambda_group_idxs[num_host_atoms:] = 2
-        combined_lambda_group_idxs[pocket_atoms] = 3
-    elif stage == 1:
-        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_plane_idxs[num_host_atoms:] = 1
-        combined_lambda_plane_idxs[pocket_atoms] = 1
+    #     # grouping for vdw terms
+    #     combined_lambda_group_idxs = np.ones(N_C, dtype=np.int32)
+    #     combined_lambda_group_idxs[num_host_atoms:] = 2
+    #     combined_lambda_group_idxs[pocket_atoms] = 3
+    # elif stage == 1:
+    #     combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+    #     combined_lambda_plane_idxs[num_host_atoms:] = 1
+    #     combined_lambda_plane_idxs[pocket_atoms] = 1
 
-        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs[num_host_atoms:] = 1 # push out ligand from binding pocket
+    #     combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+    #     combined_lambda_offset_idxs[num_host_atoms:] = 1 # push out ligand from binding pocket
 
-        # grouping for vdw terms
-        combined_lambda_group_idxs = np.ones(N_C, dtype=np.int32)
-        combined_lambda_group_idxs[num_host_atoms:] = 2
-    else:
-        assert 0
+    #     # grouping for vdw terms
+    #     combined_lambda_group_idxs = np.ones(N_C, dtype=np.int32)
+    #     combined_lambda_group_idxs[num_host_atoms:] = 2
+    # else:
+    #     assert 0
 
     cutoff = 100000.0
 
-
-    final_gradients.append((
-        'LennardJones', (
-        np.asarray(combined_lj_params),
-        combined_exclusion_idxs,
-        combined_lj_exclusion_scales,
-        combined_lambda_plane_idxs,
-        combined_lambda_offset_idxs,
-        combined_lambda_group_idxs,
-        cutoff
-        )
-    ))
-    final_vjp_fns.append((combined_lj_vjp_fn))
+    # final_gradients.append((
+    #     'LennardJones', (
+    #     np.asarray(combined_lj_params),
+    #     combined_exclusion_idxs,
+    #     combined_lj_exclusion_scales,
+    #     combined_lambda_plane_idxs,
+    #     combined_lambda_offset_idxs,
+    #     combined_lambda_group_idxs,
+    #     cutoff
+    #     )
+    # ))
+    # final_vjp_fns.append((combined_lj_vjp_fn))
 
     # set up lambdas for electrostatics
 
     if stage == 0:
+        # assert 0
+        # combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+        # combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+        # combined_lambda_offset_idxs[num_host_atoms:] = 1
+
+        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+    elif stage == 1:
+        # combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+        # combined_lambda_plane_idxs[num_host_atoms:] = 1
+        # combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
         combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
         combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
         combined_lambda_offset_idxs[num_host_atoms:] = 1
-    elif stage == 1:
-        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_plane_idxs[num_host_atoms:] = 1
-        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
     else:
         assert 0
 
+    # final_gradients.append((
+    #     'Electrostatics', (
+    #     np.asarray(combined_charge_params),
+    #     combined_exclusion_idxs,
+    #     combined_charge_exclusion_scales,
+    #     combined_lambda_plane_idxs,
+    #     combined_lambda_offset_idxs,
+    #     cutoff
+    #     )
+    # ))
+    # final_vjp_fns.append((combined_charge_vjp_fn))
+
     final_gradients.append((
-        'Electrostatics', (
+        'Nonbonded', (
         np.asarray(combined_charge_params),
+        np.asarray(combined_lj_params),
         combined_exclusion_idxs,
         combined_charge_exclusion_scales,
+        combined_lj_exclusion_scales,
         combined_lambda_plane_idxs,
         combined_lambda_offset_idxs,
         cutoff
         )
     ))
-    final_vjp_fns.append((combined_charge_vjp_fn))
+    final_vjp_fns.append((combined_charge_vjp_fn, combined_lj_vjp_fn))
 
     final_gradients.append((
         'GBSA', (
@@ -309,6 +329,39 @@ def create_system(
     ))
     final_vjp_fns.append((combined_charge_vjp_fn, combined_gb_vjp_fn))
 
+    ligand_idxs = np.arange(N_A, N_C, dtype=np.int32)
+
+    avg_xi = np.mean(x0[ligand_idxs], axis=0)
+    avg_xj = np.mean(x0[pocket_atoms], axis=0)
+    ctr_dij = np.sqrt(np.sum((avg_xi - avg_xj)**2))
+
+    print("centroid distance", ctr_dij)
+
     combined_masses = np.concatenate([host_masses, guest_masses])
+
+    print("ligand idxs", ligand_idxs)
+    print("pocket idxs", pocket_atoms)
+
+    # restraints
+    if stage == 0:
+        lamb_flag = 1
+        lamb_offset = 0
+    if stage == 1:
+        lamb_flag = 0
+        lamb_offset = 1
+
+    final_gradients.append((
+        'CentroidRestraint', (
+            ligand_idxs,
+            pocket_atoms,
+            combined_masses,
+            1000.0,
+            ctr_dij,
+            lamb_flag,
+            lamb_offset
+        )
+    ))
+
+    final_vjp_fns.append(lambda x: None)
 
     return x0, combined_masses, final_gradients, final_vjp_fns

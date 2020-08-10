@@ -10,6 +10,8 @@ void __global__ k_centroid_restraint_inference(
     const int N,     // number of bonds
     const double *coords,  // [n, 3]
     const double lambda,
+    const int lambda_flag,
+    const int lambda_offset,
     const int *group_a_idxs,
     const int *group_b_idxs,
     const int N_A,
@@ -27,6 +29,10 @@ void __global__ k_centroid_restraint_inference(
     if(t_idx != 0) {
         return;
     }
+
+    // stage 0               1         0.5          0
+    // stage 1               0         3.5          1
+    double lambda_full = lambda_flag*lambda + lambda_offset;
 
     double group_a_ctr[3] = {0};
     for(int d=0; d < 3; d++) {
@@ -50,12 +56,12 @@ void __global__ k_centroid_restraint_inference(
 
     double dij = sqrt(dx*dx + dy*dy + dz*dz);
 
-    double nrg = lambda*kb*(dij-b0)*(dij-b0);
+    double nrg = lambda_full*kb*(dij-b0)*(dij-b0);
 
     atomicAdd(energy, nrg);
-    atomicAdd(du_dl, kb*(dij-b0)*(dij-b0));
+    atomicAdd(du_dl, lambda_flag*kb*(dij-b0)*(dij-b0));
 
-    double du_ddij = 2*lambda*kb*(dij-b0);
+    double du_ddij = 2*lambda_full*kb*(dij-b0);
 
     // grads
     for(int d=0; d < 3; d++) {

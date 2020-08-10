@@ -14,12 +14,16 @@ CentroidRestraint<RealType>::CentroidRestraint(
     const std::vector<int> &group_b_idxs,
     const std::vector<double> &masses,
     const double kb,
-    const double b0
+    const double b0,
+    const int lambda_flag,
+    const int lambda_offset
 ) : N_(masses.size()),
     N_A_(group_a_idxs.size()),
     N_B_(group_b_idxs.size()),
     kb_(kb),
-    b0_(b0) {
+    b0_(b0),
+    lambda_flag_(lambda_flag),
+    lambda_offset_(lambda_offset) {
 
     for(int i=0; i < group_a_idxs.size(); i++) {
         if(group_a_idxs[i] >= N_ || group_a_idxs[i] < 0) {
@@ -64,10 +68,14 @@ void CentroidRestraint<RealType>::execute_lambda_inference_device(
 
     int tpb = 32;
     // int blocks = (B_+tpb-1)/tpb;
+    // printf("LAMBDA PRIMAL %f\n", lambda_primal);
+
     k_centroid_restraint_inference<RealType><<<1, tpb, 0, stream>>>(
         N_,
         d_coords_primals,
         lambda_primal,
+        lambda_flag_,
+        lambda_offset_,
         d_group_a_idxs_,
         d_group_b_idxs_,
         N_A_,

@@ -339,7 +339,9 @@ void declare_centroid_restraint(py::module &m, const char *typestr) {
         const py::array_t<int, py::array::c_style> &group_b_idxs,
         const py::array_t<double, py::array::c_style> &masses,
         double kb,
-        double b0
+        double b0,
+        int lambda_flag,
+        int lambda_offset
     ){
         std::vector<int> vec_group_a_idxs(group_a_idxs.size());
         std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
@@ -353,7 +355,9 @@ void declare_centroid_restraint(py::module &m, const char *typestr) {
             vec_group_b_idxs,
             vec_masses,
             kb,
-            b0
+            b0,
+            lambda_flag,
+            lambda_offset
         );
     }
     ));
