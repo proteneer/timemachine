@@ -7,6 +7,7 @@
 #include "harmonic_angle.hpp"
 #include "restraint.hpp"
 #include "centroid_restraint.hpp"
+#include "boresch_like_restraint.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
 #include "lennard_jones.hpp"
@@ -90,8 +91,7 @@ void declare_reversible_context(py::module &m, const char *typestr) {
         const py::array_t<double, py::array::c_style> &coeff_cbs,
         const py::array_t<double, py::array::c_style> &coeff_ccs,
         const py::array_t<double, py::array::c_style> &step_sizes,
-        unsigned long long seed
-    ) {
+        unsigned long long seed) {
 
         int N = x0.shape()[0];
         int D = x0.shape()[1];
@@ -322,7 +322,6 @@ void declare_restraint(py::module &m, const char *typestr) {
 }
 
 
-
 template <typename RealType>
 void declare_centroid_restraint(py::module &m, const char *typestr) {
 
@@ -348,7 +347,7 @@ void declare_centroid_restraint(py::module &m, const char *typestr) {
         std::vector<int> vec_group_b_idxs(group_b_idxs.size());
         std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
         std::vector<double> vec_masses(masses.size());
-        std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(int));
+        std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
 
         return new timemachine::CentroidRestraint<RealType>(
             vec_group_a_idxs,
@@ -356,6 +355,48 @@ void declare_centroid_restraint(py::module &m, const char *typestr) {
             vec_masses,
             kb,
             b0,
+            lambda_flag,
+            lambda_offset
+        );
+    }
+    ));
+
+}
+
+template <typename RealType>
+void declare_boresch_like_restraint(py::module &m, const char *typestr) {
+
+    using Class = timemachine::BoreschLikeRestraint<RealType>;
+    std::string pyclass_name = std::string("BoreschLikeRestraint_") + typestr;
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &bond_idxs,
+        const py::array_t<int, py::array::c_style> &angle_idxs,
+        const py::array_t<double, py::array::c_style> &bond_params,
+        const py::array_t<double, py::array::c_style> &angle_params,
+        int lambda_flag,
+        int lambda_offset) {
+
+        std::vector<int> vec_angle_idxs(angle_idxs.size());
+        std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size()*sizeof(int));
+        std::vector<int> vec_bond_idxs(bond_idxs.size());
+        std::memcpy(vec_bond_idxs.data(), bond_idxs.data(), vec_bond_idxs.size()*sizeof(int));
+
+        std::vector<double> vec_bond_params(bond_params.size());
+        std::memcpy(vec_bond_params.data(), bond_params.data(), vec_bond_params.size()*sizeof(double));
+        std::vector<double> vec_angle_params(angle_params.size());
+        std::memcpy(vec_angle_params.data(), angle_params.data(), vec_angle_params.size()*sizeof(double));
+
+        return new timemachine::BoreschLikeRestraint<RealType>(
+            vec_bond_idxs,
+            vec_angle_idxs,
+            vec_bond_params,
+            vec_angle_params,
             lambda_flag,
             lambda_offset
         );
@@ -745,6 +786,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_gradient(m);
     // declare_alchemical_gradient(m);
+
+    declare_boresch_like_restraint<double>(m, "f64");
+    declare_boresch_like_restraint<float>(m, "f32");
 
     declare_centroid_restraint<double>(m, "f64");
     declare_centroid_restraint<float>(m, "f32");

@@ -2,6 +2,39 @@ import jax.numpy as np
 
 from timemachine.potentials.jax_utils import distance, delta_r, convert_to_4d
 
+def boresch_like_restraint(
+    conf,
+    lamb,
+    lamb_flag,
+    lamb_offset,
+    bond_idxs,
+    bond_params,
+    angle_idxs,
+    angle_params):
+
+    assert bond_idxs.shape[0] == 1
+    assert bond_idxs.shape[1] == 2
+
+    assert bond_idxs.shape[0] == 1
+    assert bond_idxs.shape[1] == 2
+
+    lamb_final = lamb*lamb_flag + lamb_offset
+    bond_nrg = harmonic_bond(conf, 1.0, bond_params, None, bond_idxs)
+    angle_nrg = harmonic_angle(conf, 1.0, angle_params, None, angle_idxs, cos_angles=True)
+
+    return lamb_final*(angle_nrg + bond_nrg)
+
+#   E = lambda_restraints * {
+#         K_r/2 * [|r3 - l1| - r_aA0]^2 +
+#         + K_thetaA/2 * [angle(r2,r3,l1) - theta_A0]^2 +
+#         + K_thetaB/2 * [angle(r3,l1,l2) - theta_B0]^2 +
+#         + K_phiA/2 * hav(dihedral(r1,r2,r3,l1) - phi_A0) * 2 +
+#         + K_phiB/2 * hav(dihedral(r2,r3,l1,l2) - phi_B0) * 2 +
+#         + K_phiC/2 * hav(dihedral(r3,l1,l2,l3) - phi_C0) * 2
+#   }
+
+
+
 
 def centroid_restraint(conf, lamb, params, lamb_flag, lamb_offset, group_a_idxs, group_b_idxs, kb, b0):
 

@@ -352,8 +352,10 @@ class AM1CCCHandler(SerializableMixIn):
             bond_idxs = np.array(bond_idxs),
             bond_idx_params = np.array(bond_idx_params, dtype=np.int32),
             am1_charges = np.array(am1_charges)
-            )
+        )
 
         charges, vjp_fn = jax.vjp(bcc_fn, self.params)
+
+        # charges = np.zeros_like(charges)
 
         return np.array(charges, dtype=np.float64), vjp_fn
