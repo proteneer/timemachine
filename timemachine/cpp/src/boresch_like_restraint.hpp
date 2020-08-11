@@ -12,12 +12,15 @@ private:
 
     int *d_bond_idxs_;
     int *d_angle_idxs_;
+    int *d_torsion_idxs_;
 
     double *d_bond_params_;
     double *d_angle_params_;
+    double *d_torsion_params_;
 
     int N_A_;
     int N_B_;
+    int N_T_;
     int lambda_flag_;
     int lambda_offset_;
 
@@ -26,8 +29,10 @@ public:
     BoreschLikeRestraint(
         const std::vector<int> &bond_idxs,
         const std::vector<int> &angle_idxs,
+        const std::vector<int> &torsion_idxs,
         const std::vector<double> &bond_params,
         const std::vector<double> &angle_params,
+        const std::vector<double> &torsion_params,
         const int lambda_flag,
         const int lambda_offset);
 

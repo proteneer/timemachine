@@ -283,125 +283,130 @@ void __global__ k_boresch_angle_inference(
 // }
 
 
-// template<typename RealType>
-// inline __device__ RealType dot_product(
-//     const RealType a[3],
-//     const RealType b[3]) {
+template<typename RealType>
+inline __device__ RealType dot_product(
+    const RealType a[3],
+    const RealType b[3]) {
 
-//     return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
-// }
-
-
-// template<typename RealType>
-// inline __device__ void cross_product(
-//     const RealType a[3],
-//     const RealType b[3],
-//     RealType c[3]) {
-//     // fix this one indexed garbage later
-//     c[1-1] = a[2-1]*b[3-1] - a[3-1]*b[2-1];
-//     c[2-1] = a[3-1]*b[1-1] - a[1-1]*b[3-1];
-//     c[3-1] = a[1-1]*b[2-1] - a[2-1]*b[1-1];
-
-// }
+    return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+}
 
 
-// template<typename RealType, int D>
-// void __global__ k_periodic_torsion_inference(
-//     const int T,     // number of bonds
-//     const double *coords,  // [n, 3]
-//     const double *params,  // [p, 3]
-//     const int *torsion_idxs,    // [b, 4]
-//     unsigned long long *grad_coords,
-//     double *energy
-// ) {
+template<typename RealType>
+inline __device__ void cross_product(
+    const RealType a[3],
+    const RealType b[3],
+    RealType c[3]) {
+    // fix this one indexed garbage later
+    c[1-1] = a[2-1]*b[3-1] - a[3-1]*b[2-1];
+    c[2-1] = a[3-1]*b[1-1] - a[1-1]*b[3-1];
+    c[3-1] = a[1-1]*b[2-1] - a[2-1]*b[1-1];
 
-//     const auto t_idx = blockDim.x*blockIdx.x + threadIdx.x;
+}
 
-//     if(t_idx >= T) {
-//         return;
-//     }
 
-//     int i_idx = torsion_idxs[t_idx*4+0];
-//     int j_idx = torsion_idxs[t_idx*4+1];
-//     int k_idx = torsion_idxs[t_idx*4+2];
-//     int l_idx = torsion_idxs[t_idx*4+3];
+template<typename RealType, int D>
+void __global__ k_boresch_torsion_inference(
+    const int T,     // number of bonds
+    const double *coords,  // [n, 3]
+    const double lambda,
+    const int lambda_flag,
+    const int lambda_offset,
+    const double *params,  // [p, 2]
+    const int *torsion_idxs,    // [b, 4]
+    unsigned long long *grad_coords,
+    double *du_dl,
+    double *energy
+) {
 
-//     RealType rij[3];
-//     RealType rkj[3];
-//     RealType rkl[3];
+    const auto t_idx = blockDim.x*blockIdx.x + threadIdx.x;
 
-//     RealType rkj_norm_square = 0;
+    if(t_idx >= T) {
+        return;
+    }
 
-//     // (todo) cap to three dims, while keeping stride at 4
-//     for(int d=0; d < 3; d++) {
-//         RealType vij = coords[j_idx*D+d] - coords[i_idx*D+d];
-//         RealType vkj = coords[j_idx*D+d] - coords[k_idx*D+d];
-//         RealType vkl = coords[l_idx*D+d] - coords[k_idx*D+d];
-//         rij[d] = vij;
-//         rkj[d] = vkj;
-//         rkl[d] = vkl;
-//         rkj_norm_square += vkj*vkj;
-//     }
+    int i_idx = torsion_idxs[t_idx*4+0];
+    int j_idx = torsion_idxs[t_idx*4+1];
+    int k_idx = torsion_idxs[t_idx*4+2];
+    int l_idx = torsion_idxs[t_idx*4+3];
 
-//     RealType rkj_norm = sqrt(rkj_norm_square);
-//     RealType n1[3], n2[3];
+    RealType rij[3];
+    RealType rkj[3];
+    RealType rkl[3];
 
-//     cross_product(rij, rkj, n1);
-//     cross_product(rkj, rkl, n2);
+    RealType rkj_norm_square = 0;
 
-//     RealType n1_norm_square, n2_norm_square;
+    // (todo) cap to three dims, while keeping stride at 4
+    for(int d=0; d < 3; d++) {
+        RealType vij = coords[j_idx*D+d] - coords[i_idx*D+d];
+        RealType vkj = coords[j_idx*D+d] - coords[k_idx*D+d];
+        RealType vkl = coords[l_idx*D+d] - coords[k_idx*D+d];
+        rij[d] = vij;
+        rkj[d] = vkj;
+        rkl[d] = vkl;
+        rkj_norm_square += vkj*vkj;
+    }
 
-//     n1_norm_square = dot_product(n1, n1);
-//     n2_norm_square = dot_product(n2, n2);
+    RealType rkj_norm = sqrt(rkj_norm_square);
+    RealType n1[3], n2[3];
 
-//     RealType n3[3];
-//     cross_product(n1, n2, n3);
+    cross_product(rij, rkj, n1);
+    cross_product(rkj, rkl, n2);
 
-//     RealType d_angle_dR0[3];
-//     RealType d_angle_dR3[3];
-//     RealType d_angle_dR1[3];
-//     RealType d_angle_dR2[3];
+    RealType n1_norm_square, n2_norm_square;
 
-//     RealType rij_dot_rkj = dot_product(rij, rkj);
-//     RealType rkl_dot_rkj = dot_product(rkl, rkj);
+    n1_norm_square = dot_product(n1, n1);
+    n2_norm_square = dot_product(n2, n2);
 
-//     for(int d=0; d < 3; d++) {
-//         d_angle_dR0[d] = rkj_norm/n1_norm_square * n1[d];
-//         d_angle_dR3[d] = -rkj_norm/n2_norm_square * n2[d];
-//         d_angle_dR1[d] = (rij_dot_rkj/rkj_norm_square - 1)*d_angle_dR0[d] - d_angle_dR3[d]*rkl_dot_rkj/rkj_norm_square;
-//         d_angle_dR2[d] = (rkl_dot_rkj/rkj_norm_square - 1)*d_angle_dR3[d] - d_angle_dR0[d]*rij_dot_rkj/rkj_norm_square;
-//     }
+    RealType n3[3];
+    cross_product(n1, n2, n3);
 
-//     RealType rkj_n = sqrt(dot_product(rkj, rkj));
+    RealType d_angle_dR0[3];
+    RealType d_angle_dR3[3];
+    RealType d_angle_dR1[3];
+    RealType d_angle_dR2[3];
 
-//     for(int d=0; d < 3; d++) {
-//         rkj[d] /= rkj_n;
-//     }
+    RealType rij_dot_rkj = dot_product(rij, rkj);
+    RealType rkl_dot_rkj = dot_product(rkl, rkj);
 
-//     RealType y = dot_product(n3, rkj);
-//     RealType x = dot_product(n1, n2);
-//     RealType angle = atan2(y, x);
+    for(int d=0; d < 3; d++) {
+        d_angle_dR0[d] = rkj_norm/n1_norm_square * n1[d];
+        d_angle_dR3[d] = -rkj_norm/n2_norm_square * n2[d];
+        d_angle_dR1[d] = (rij_dot_rkj/rkj_norm_square - 1)*d_angle_dR0[d] - d_angle_dR3[d]*rkl_dot_rkj/rkj_norm_square;
+        d_angle_dR2[d] = (rkl_dot_rkj/rkj_norm_square - 1)*d_angle_dR3[d] - d_angle_dR0[d]*rij_dot_rkj/rkj_norm_square;
+    }
 
-//     int kt_idx = t_idx*3+0;
-//     int phase_idx = t_idx*3+1;
-//     int period_idx = t_idx*3+2;
+    RealType rkj_n = sqrt(dot_product(rkj, rkj));
 
-//     RealType kt = params[kt_idx];
-//     RealType phase = params[phase_idx];
-//     RealType period = params[period_idx];
+    for(int d=0; d < 3; d++) {
+        rkj[d] /= rkj_n;
+    }
 
-//     RealType prefactor = kt*sin(period*angle - phase)*period;
+    RealType y = dot_product(n3, rkj);
+    RealType x = dot_product(n1, n2);
+    RealType angle = atan2(y, x);
 
-//     for(int d=0; d < 3; d++) {
-//         atomicAdd(grad_coords + i_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR0[d] * prefactor * FIXED_EXPONENT)));
-//         atomicAdd(grad_coords + j_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR1[d] * prefactor * FIXED_EXPONENT)));
-//         atomicAdd(grad_coords + k_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR2[d] * prefactor * FIXED_EXPONENT)));
-//         atomicAdd(grad_coords + l_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR3[d] * prefactor * FIXED_EXPONENT)));
-//     }
+    int kt_idx = t_idx*2+0;
+    int phase_idx = t_idx*2+1;
 
-//     atomicAdd(energy, kt*(1+cos(period*angle - phase)));
+    RealType kt = params[kt_idx]/2; // this extra 1/2 is only present for the restraint torsion
+    RealType phase = params[phase_idx];
 
-// }
+    double lambda_full = lambda_flag*lambda + lambda_offset;
+
+    RealType prefactor = -lambda_full*kt*sin(angle - phase);
+
+    for(int d=0; d < 3; d++) {
+        atomicAdd(grad_coords + i_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR0[d] * prefactor * FIXED_EXPONENT)));
+        atomicAdd(grad_coords + j_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR1[d] * prefactor * FIXED_EXPONENT)));
+        atomicAdd(grad_coords + k_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR2[d] * prefactor * FIXED_EXPONENT)));
+        atomicAdd(grad_coords + l_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR3[d] * prefactor * FIXED_EXPONENT)));
+    }
+
+    atomicAdd(energy, lambda_full*kt*(1-cos(angle - phase)));
+    atomicAdd(du_dl, lambda_flag*kt*(1-cos(angle - phase)));
+
+}
 
 
 // template<typename RealType, int D>

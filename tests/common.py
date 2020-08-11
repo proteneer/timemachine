@@ -461,11 +461,9 @@ class GradientTest(unittest.TestCase):
 
         print(ref_dl, test_dl)
         print(ref_nrg, test_nrg)
-        print(ref_dx, "\n", test_dx)
+        # print(ref_dx, "\n", test_dx)
 
         np.testing.assert_allclose(ref_nrg, test_nrg, rtol)
-
-
 
         self.assert_equal_vectors(
             np.array(ref_dx),

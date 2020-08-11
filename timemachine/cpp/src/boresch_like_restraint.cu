@@ -12,12 +12,15 @@ template <typename RealType>
 BoreschLikeRestraint<RealType>::BoreschLikeRestraint(
     const std::vector<int> &bond_idxs,
     const std::vector<int> &angle_idxs,
+    const std::vector<int> &torsion_idxs,
     const std::vector<double> &bond_params,
     const std::vector<double> &angle_params,
+    const std::vector<double> &torsion_params,
     const int lambda_flag,
     const int lambda_offset
-) : N_A_(angle_idxs.size()/3),
-    N_B_(bond_idxs.size()/2),
+) : N_B_(bond_idxs.size()/2),
+    N_A_(angle_idxs.size()/3),
+    N_T_(torsion_idxs.size()/4),
     lambda_flag_(lambda_flag),
     lambda_offset_(lambda_offset) {
 
@@ -27,6 +30,10 @@ BoreschLikeRestraint<RealType>::BoreschLikeRestraint(
 
     if(angle_idxs.size() % 3 != 0) {
         throw std::runtime_error("Fatal on angle_idxs");
+    }
+
+    if(torsion_idxs.size() % 4 != 0) {
+        throw std::runtime_error("Fatal on torsion_idxs");
     }
 
     gpuErrchk(cudaMalloc(&d_bond_idxs_, bond_idxs.size()*sizeof(*d_bond_idxs_)));
@@ -41,14 +48,23 @@ BoreschLikeRestraint<RealType>::BoreschLikeRestraint(
     gpuErrchk(cudaMalloc(&d_angle_params_, angle_params.size()*sizeof(*d_angle_params_)));
     gpuErrchk(cudaMemcpy(d_angle_params_, &angle_params[0], angle_params.size()*sizeof(*d_angle_params_), cudaMemcpyHostToDevice));
 
+    gpuErrchk(cudaMalloc(&d_torsion_idxs_, torsion_idxs.size()*sizeof(*d_torsion_idxs_)));
+    gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], torsion_idxs.size()*sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMalloc(&d_torsion_params_, torsion_params.size()*sizeof(*d_torsion_params_)));
+    gpuErrchk(cudaMemcpy(d_torsion_params_, &torsion_params[0], torsion_params.size()*sizeof(*d_torsion_params_), cudaMemcpyHostToDevice));
+
+
 };
 
 template <typename RealType>
 BoreschLikeRestraint<RealType>::~BoreschLikeRestraint() {
     gpuErrchk(cudaFree(d_bond_idxs_));
     gpuErrchk(cudaFree(d_angle_idxs_));
+    gpuErrchk(cudaFree(d_torsion_idxs_));
     gpuErrchk(cudaFree(d_bond_params_));
     gpuErrchk(cudaFree(d_angle_params_));
+    gpuErrchk(cudaFree(d_torsion_params_));
 };
 
 
@@ -91,6 +107,21 @@ void BoreschLikeRestraint<RealType>::execute_lambda_inference_device(
         d_out_coords_primals,
         d_out_lambda_primals,
         d_out_energy_primal);
+
+    blocks = (N_T_+tpb-1)/tpb;
+    const int D = 3;
+    k_boresch_torsion_inference<RealType, D><<<blocks, tpb, 0, stream>>>(
+        N_T_,
+        d_coords_primals,
+        lambda_primal,
+        lambda_flag_,
+        lambda_offset_,
+        d_torsion_params_,
+        d_torsion_idxs_,
+        d_out_coords_primals,
+        d_out_lambda_primals,
+        d_out_energy_primal
+    );
 
     gpuErrchk(cudaPeekAtLastError());
 

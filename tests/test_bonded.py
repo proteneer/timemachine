@@ -41,6 +41,14 @@ class TestBonded(GradientTest):
                 angle_idxs.append(np.random.choice(atom_idxs, size=3, replace=False))
             angle_idxs = np.array(angle_idxs, dtype=np.int32)
 
+            T = 3
+            torsion_params = np.random.rand(T, 2).astype(np.float64)
+            torsion_idxs = []
+            for _ in range(T):
+                torsion_idxs.append(np.random.choice(atom_idxs, size=4, replace=False))
+
+            torsion_idxs = np.array(torsion_idxs, dtype=np.int32)    
+
             for lamb_offset in [0, 1]:
                 for lamb_flag in [0, 1]:
 
@@ -51,7 +59,9 @@ class TestBonded(GradientTest):
                         bond_idxs=bond_idxs,
                         bond_params=bond_params,
                         angle_idxs=angle_idxs,
-                        angle_params=angle_params
+                        angle_params=angle_params,
+                        torsion_idxs=torsion_idxs,
+                        torsion_params=torsion_params,
                     )
 
                     for lamb_primal in [0.0, 0.1, 0.5, 0.7, 1.0]:
@@ -60,8 +70,10 @@ class TestBonded(GradientTest):
                         test_nrg = ops.BoreschLikeRestraint(
                             bond_idxs,
                             angle_idxs,
+                            torsion_idxs,
                             bond_params,
                             angle_params,
+                            torsion_params,
                             lamb_flag,
                             lamb_offset,
                             precision=precision

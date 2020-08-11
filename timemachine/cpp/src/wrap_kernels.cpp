@@ -377,8 +377,10 @@ void declare_boresch_like_restraint(py::module &m, const char *typestr) {
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &bond_idxs,
         const py::array_t<int, py::array::c_style> &angle_idxs,
+        const py::array_t<int, py::array::c_style> &torsion_idxs,
         const py::array_t<double, py::array::c_style> &bond_params,
         const py::array_t<double, py::array::c_style> &angle_params,
+        const py::array_t<double, py::array::c_style> &torsion_params,
         int lambda_flag,
         int lambda_offset) {
 
@@ -386,17 +388,23 @@ void declare_boresch_like_restraint(py::module &m, const char *typestr) {
         std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size()*sizeof(int));
         std::vector<int> vec_bond_idxs(bond_idxs.size());
         std::memcpy(vec_bond_idxs.data(), bond_idxs.data(), vec_bond_idxs.size()*sizeof(int));
+        std::vector<int> vec_torsion_idxs(torsion_idxs.size());
+        std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size()*sizeof(int));
 
         std::vector<double> vec_bond_params(bond_params.size());
         std::memcpy(vec_bond_params.data(), bond_params.data(), vec_bond_params.size()*sizeof(double));
         std::vector<double> vec_angle_params(angle_params.size());
         std::memcpy(vec_angle_params.data(), angle_params.data(), vec_angle_params.size()*sizeof(double));
+        std::vector<double> vec_torsion_params(torsion_params.size());
+        std::memcpy(vec_torsion_params.data(), torsion_params.data(), vec_torsion_params.size()*sizeof(double));
 
         return new timemachine::BoreschLikeRestraint<RealType>(
             vec_bond_idxs,
             vec_angle_idxs,
+            vec_torsion_idxs,
             vec_bond_params,
             vec_angle_params,
+            vec_torsion_params,
             lambda_flag,
             lambda_offset
         );
