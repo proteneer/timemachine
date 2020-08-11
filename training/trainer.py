@@ -210,11 +210,11 @@ class Trainer():
                 stage
             )
 
-            li = final_gradients[-1][1][0]
-            pi = final_gradients[-1][1][1]
+            # li = final_gradients[-1][1][0]
+            # pi = final_gradients[-1][1][1]
 
-            print(li)
-            print(pi)
+            # print(li)
+            # print(pi)
 
             # assert 0
 
@@ -278,7 +278,8 @@ class Trainer():
                     pdb_writer = PDBWriter(combined_pdb_str, out_file)
                     pdb_writer.write_header()
                     for frame_idx, x in enumerate(frames):
-
+                        li = [1035-1]
+                        pi = [1766-1]
                         avg_xi = np.mean(x[li], axis=0)
                         avg_xj = np.mean(x[pi], axis=0)
                         ctr_dij = np.sqrt(np.sum((avg_xi - avg_xj)**2))
