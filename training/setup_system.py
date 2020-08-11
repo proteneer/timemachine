@@ -382,12 +382,8 @@ def create_system(
     boresch_angle_params = np.asarray([[100.0, angle(*x)] for x in boresch_angle_idxs])
     boresch_torsion_params = np.array([[100.0, torsion(*x)] for x in boresch_torsion_idxs])
 
-
-
     # # print(angle(r2,r3,l1), angle(r3,l1,l2))
     # # print(torsion(r1,r2,r3,l1), torsion(r2,r3,l1,l2), torsion(r3,l1,l2,l3))
-
-    # assert 0
 
 
     avg_xi = np.mean(x0[ligand_idxs], axis=0)
