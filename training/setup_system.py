@@ -390,11 +390,11 @@ def create_system(
     # assert 0
 
 
-    # avg_xi = np.mean(x0[ligand_idxs], axis=0)
-    # avg_xj = np.mean(x0[pocket_atoms], axis=0)
-    # ctr_dij = np.sqrt(np.sum((avg_xi - avg_xj)**2))
+    avg_xi = np.mean(x0[ligand_idxs], axis=0)
+    avg_xj = np.mean(x0[pocket_atoms], axis=0)
+    ctr_dij = np.sqrt(np.sum((avg_xi - avg_xj)**2))
 
-    # print("centroid distance", ctr_dij)
+    print("centroid distance", ctr_dij)
 
     combined_masses = np.concatenate([host_masses, guest_masses])
 
@@ -409,30 +409,30 @@ def create_system(
         lamb_flag = 0
         lamb_offset = 1
 
-    final_gradients.append((
-        'BoreschLikeRestraint', (
-            boresch_bond_idxs,
-            boresch_angle_idxs,
-            boresch_torsion_idxs,
-            boresch_bond_params,
-            boresch_angle_params,
-            boresch_torsion_params,
-            lamb_flag,
-            lamb_offset,
-        )
-    ))
-
     # final_gradients.append((
-    #     'CentroidRestraint', (
-    #         ligand_idxs,
-    #         pocket_atoms,
-    #         combined_masses,
-    #         1000.0,
-    #         ctr_dij,
+    #     'BoreschLikeRestraint', (
+    #         boresch_bond_idxs,
+    #         boresch_angle_idxs,
+    #         boresch_torsion_idxs,
+    #         boresch_bond_params,
+    #         boresch_angle_params,
+    #         boresch_torsion_params,
     #         lamb_flag,
-    #         lamb_offset
+    #         lamb_offset,
     #     )
     # ))
+
+    final_gradients.append((
+        'CentroidRestraint', (
+            ligand_idxs,
+            pocket_atoms,
+            combined_masses,
+            1000.0,
+            ctr_dij,
+            lamb_flag,
+            lamb_offset
+        )
+    ))
 
     final_vjp_fns.append(lambda x: None)
 
