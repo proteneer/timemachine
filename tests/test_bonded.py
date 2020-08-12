@@ -38,7 +38,7 @@ class TestBonded(GradientTest):
 
                     ref_nrg = jax.partial(
                         bonded.centroid_restraint,
-                        params=None,
+                        masses=masses,
                         group_a_idxs=gai,
                         group_b_idxs=gbi,
                         kb=kb,
@@ -48,8 +48,6 @@ class TestBonded(GradientTest):
                     )
 
                     for lamb_primal in [0.0, 0.1, 0.5, 0.7, 1.0]:
-
-                        print("LAMBDA", lamb_primal)
 
                         # we need to clear the du_dp buffer each time, so we need
                         # to instantiate test_nrg inside here

@@ -35,19 +35,27 @@ void __global__ k_centroid_restraint_inference(
     double lambda_full = lambda_flag*lambda + lambda_offset;
 
     double group_a_ctr[3] = {0};
+    double mass_a_sums[3] = {0};
     for(int d=0; d < 3; d++) {
-        for(int i=0; i < N_A; i++) {
-            group_a_ctr[d] += coords[group_a_idxs[i]*3+d];
-        }
-        group_a_ctr[d] /= N_A;
-    }
-    double group_b_ctr[3] = {0};
 
-    for(int d=0; d < 3; d++) {
-        for(int i=0; i < N_B; i++) {
-            group_b_ctr[d] += coords[group_b_idxs[i]*3+d];
+        for(int i=0; i < N_A; i++) {
+            double mass_i = masses[group_a_idxs[i]];
+            group_a_ctr[d] += mass_i*coords[group_a_idxs[i]*3+d];
+            mass_a_sums[d] += mass_i;
         }
-        group_b_ctr[d] /= N_B;
+        group_a_ctr[d] /= mass_a_sums[d];
+    }
+
+    double group_b_ctr[3] = {0};
+    double mass_b_sums[3] = {0};
+    for(int d=0; d < 3; d++) {
+
+        for(int i=0; i < N_B; i++) {
+            double mass_i = masses[group_b_idxs[i]];
+            group_b_ctr[d] += mass_i*coords[group_b_idxs[i]*3+d];
+            mass_b_sums[d] += mass_i;
+        }
+        group_b_ctr[d] /= mass_b_sums[d];
     }
 
     double dx = group_a_ctr[0] - group_b_ctr[0];
@@ -68,11 +76,13 @@ void __global__ k_centroid_restraint_inference(
         double ddij_dxi = (group_a_ctr[d] - group_b_ctr[d])/dij;
 
         for(int i=0; i < N_A; i++) {
-            double dx = du_ddij*ddij_dxi/N_A;
+            double mass_i = masses[group_a_idxs[i]];
+            double dx = du_ddij*ddij_dxi*(mass_i/mass_a_sums[d]);
             atomicAdd(grad_coords + group_a_idxs[i]*3 + d, static_cast<unsigned long long>((long long) (dx*FIXED_EXPONENT)));
         }
         for(int i=0; i < N_B; i++) {
-            double dx = -du_ddij*ddij_dxi/N_B;
+            double mass_i = masses[group_b_idxs[i]];
+            double dx = -du_ddij*ddij_dxi*(mass_i/mass_b_sums[d]);
             atomicAdd(grad_coords + group_b_idxs[i]*3 + d, static_cast<unsigned long long>((long long) (dx*FIXED_EXPONENT)));
         }
     }
@@ -114,25 +124,31 @@ void __global__ k_centroid_restraint_jvp(
 
 
     Surreal<double> group_a_ctr[3];
+    double mass_a_sums[3] = {0};
     for(int d=0; d < 3; d++) {
         group_a_ctr[d].real = 0;
         group_a_ctr[d].imag = 0;
         for(int i=0; i < N_A; i++) {
-            group_a_ctr[d].real += coords_primal[group_a_idxs[i]*3+d];
-            group_a_ctr[d].imag += coords_tangent[group_a_idxs[i]*3+d];
+            double mass_i = masses[group_a_idxs[i]];
+            group_a_ctr[d].real += mass_i*coords_primal[group_a_idxs[i]*3+d];
+            group_a_ctr[d].imag += mass_i*coords_tangent[group_a_idxs[i]*3+d];
+            mass_a_sums[d] += mass_i;
         }
-        group_a_ctr[d] /= N_A;
+        group_a_ctr[d] /=  mass_a_sums[d];
     }
 
     Surreal<double> group_b_ctr[3];
+    double mass_b_sums[3] = {0};
     for(int d=0; d < 3; d++) {
         group_b_ctr[d].real = 0;
         group_b_ctr[d].imag = 0;
         for(int i=0; i < N_B; i++) {
-            group_b_ctr[d].real += coords_primal[group_b_idxs[i]*3+d];
-            group_b_ctr[d].imag += coords_tangent[group_b_idxs[i]*3+d];
+            double mass_i = masses[group_b_idxs[i]];
+            group_b_ctr[d].real += mass_i*coords_primal[group_b_idxs[i]*3+d];
+            group_b_ctr[d].imag += mass_i*coords_tangent[group_b_idxs[i]*3+d];
+            mass_b_sums[d] += mass_i;
         }
-        group_b_ctr[d] /= N_B;
+        group_b_ctr[d] /= mass_b_sums[d];
     }
 
     Surreal<double> dx = group_a_ctr[0] - group_b_ctr[0];
@@ -147,12 +163,14 @@ void __global__ k_centroid_restraint_jvp(
         Surreal<double> ddij_dxi = (group_a_ctr[d] - group_b_ctr[d])/dij;
 
         for(int i=0; i < N_A; i++) {
-            Surreal<double> dx = du_ddij*ddij_dxi/N_A;
+            double mass_i = masses[group_a_idxs[i]];
+            Surreal<double> dx = du_ddij*ddij_dxi*(mass_i/mass_a_sums[d]);
             atomicAdd(grad_coords_primals + group_a_idxs[i]*3 + d, dx.real);
             atomicAdd(grad_coords_tangents + group_a_idxs[i]*3 + d, dx.imag);
         }
         for(int i=0; i < N_B; i++) {
-            Surreal<double> dx = -du_ddij*ddij_dxi/N_B;
+            double mass_i = masses[group_b_idxs[i]];
+            Surreal<double> dx = -du_ddij*ddij_dxi*(mass_i/mass_b_sums[d]);
             atomicAdd(grad_coords_primals + group_b_idxs[i]*3 + d, dx.real);
             atomicAdd(grad_coords_tangents + group_b_idxs[i]*3 + d, dx.imag);
         }
