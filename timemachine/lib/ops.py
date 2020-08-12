@@ -91,15 +91,6 @@ def Restraint(*args, precision):
     else:
         raise Exception("Unknown precision")
 
-
-def BoreschLikeRestraint(*args, precision):
-    if precision == np.float64:
-        return custom_ops.BoreschLikeRestraint_f64(*args)
-    elif precision == np.float32:
-        return custom_ops.BoreschLikeRestraint_f32(*args)
-    else:
-        raise Exception("Unknown precision")
-
 def CentroidRestraint(*args, precision):
     if precision == np.float64:
         return custom_ops.CentroidRestraint_f64(*args)

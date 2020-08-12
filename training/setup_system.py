@@ -335,68 +335,6 @@ def create_system(
 
     ligand_idxs = np.arange(N_A, N_C, dtype=np.int32)
 
-
-    r1, r2, r3 = [1019-1, 1020-1, 1035-1]
-    l1, l2, l3 = [1766-1, 1769-1, 1795-1]
-
-
-    # K_r/2 * [|r3 - l1| - r_aA0]^2 +
-    # + K_thetaA/2 * [angle(r2,r3,l1) - theta_A0]^2 +
-    # + K_thetaB/2 * [angle(r3,l1,l2) - theta_B0]^2 +
-    # + K_phiA/2 * hav(dihedral(r1,r2,r3,l1) - phi_A0) * 2 +
-    # + K_phiB/2 * hav(dihedral(r2,r3,l1,l2) - phi_B0) * 2 +
-    # + K_phiC/2 * hav(dihedral(r3,l1,l2,l3) - phi_C0) * 2
-
-    def bond(a, b):
-        ci = np.expand_dims(x0[a], axis=0)
-        cj = np.expand_dims(x0[b], axis=0)
-        return jax_utils.distance(ci, cj, None)[0]
-
-    def angle(a, b, c):
-        ci = np.expand_dims(x0[a], axis=0)
-        cj = np.expand_dims(x0[b], axis=0)
-        ck = np.expand_dims(x0[c], axis=0)
-
-        vij = ci - cj
-        vjk = ck - cj
-
-        top = np.sum(np.multiply(vij, vjk), -1)
-        bot = np.linalg.norm(vij, axis=-1)*np.linalg.norm(vjk, axis=-1)
-
-        tb = top/bot
-        angle = np.arccos(tb)
-        return angle[0]
-
-    def torsion(a,b,c,d):
-        ci = np.expand_dims(x0[a], axis=0)
-        cj = np.expand_dims(x0[b], axis=0)
-        ck = np.expand_dims(x0[c], axis=0)
-        cl = np.expand_dims(x0[d], axis=0)
-        return bonded_utils.signed_torsion_angle(ci, cj, ck, cl)[0]
-
-    boresch_bond_idxs = [[r3,l1]]
-    boresch_angle_idxs = [[r2,r3,l1], [r3,l1,l2]]
-    boresch_torsion_idxs = [[r1,r2,r3,l1], [r2,r3,l1,l2], [r3,l1,l2,l3]]
-
-    boresch_bond_params = np.asarray([[1000.0, bond(*x)*1.1] for x in boresch_bond_idxs])
-    boresch_angle_params = np.asarray([[100.0, angle(*x)] for x in boresch_angle_idxs])
-    boresch_torsion_params = np.array([[100.0, torsion(*x)] for x in boresch_torsion_idxs])
-
-    # # print(angle(r2,r3,l1), angle(r3,l1,l2))
-    # # print(torsion(r1,r2,r3,l1), torsion(r2,r3,l1,l2), torsion(r3,l1,l2,l3))
-
-
-    avg_xi = np.mean(x0[ligand_idxs], axis=0)
-    avg_xj = np.mean(x0[pocket_atoms], axis=0)
-    ctr_dij = np.sqrt(np.sum((avg_xi - avg_xj)**2))
-
-    print("centroid distance", ctr_dij)
-
-    combined_masses = np.concatenate([host_masses, guest_masses])
-
-    # print("ligand idxs", ligand_idxs)
-    # print("pocket idxs", pocket_atoms)
-
     # restraints
     if stage == 0:
         lamb_flag = 1
@@ -405,19 +343,14 @@ def create_system(
         lamb_flag = 0
         lamb_offset = 1
 
-    # final_gradients.append((
-    #     'BoreschLikeRestraint', (
-    #         boresch_bond_idxs,
-    #         boresch_angle_idxs,
-    #         boresch_torsion_idxs,
-    #         boresch_bond_params,
-    #         boresch_angle_params,
-    #         boresch_torsion_params,
-    #         lamb_flag,
-    #         lamb_offset,
-    #     )
-    # ))
+    # CoM
+    avg_xi = np.mean(x0[ligand_idxs], axis=0)
+    avg_xj = np.mean(x0[pocket_atoms], axis=0)
+    ctr_dij = np.sqrt(np.sum((avg_xi - avg_xj)**2))
 
+    combined_masses = np.concatenate([host_masses, guest_masses])
+
+    # restraints
     final_gradients.append((
         'CentroidRestraint', (
             ligand_idxs,

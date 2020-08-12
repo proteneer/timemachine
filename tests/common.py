@@ -477,9 +477,9 @@ class GradientTest(unittest.TestCase):
             np.testing.assert_allclose(ref_dl, test_dl, rtol)
 
 
-        print("FIRST ORDER PASSED, SKIPPING VJPs")
+        # print("FIRST ORDER PASSED, SKIPPING VJPs")
 
-        return
+        # return
 
         test_x_tangent, test_x_primal = custom_force.execute_lambda_jvp(
             x,
