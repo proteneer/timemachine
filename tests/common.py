@@ -458,11 +458,6 @@ class GradientTest(unittest.TestCase):
         ref_dx, ref_dl = grad_fn(x, lamb)
         test_dx, test_dl, test_nrg = custom_force.execute_lambda(x, lamb)
 
-
-        print(ref_dl, test_dl)
-        print(ref_nrg, test_nrg)
-        # print(ref_dx, "\n", test_dx)
-
         np.testing.assert_allclose(ref_nrg, test_nrg, rtol)
 
         self.assert_equal_vectors(
@@ -475,11 +470,6 @@ class GradientTest(unittest.TestCase):
             np.testing.assert_almost_equal(ref_dl, test_dl, 1e-5)
         else:
             np.testing.assert_allclose(ref_dl, test_dl, rtol)
-
-
-        # print("FIRST ORDER PASSED, SKIPPING VJPs")
-
-        # return
 
         test_x_tangent, test_x_primal = custom_force.execute_lambda_jvp(
             x,

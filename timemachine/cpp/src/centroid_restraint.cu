@@ -67,8 +67,6 @@ void CentroidRestraint<RealType>::execute_lambda_inference_device(
     cudaStream_t stream) {
 
     int tpb = 32;
-    // int blocks = (B_+tpb-1)/tpb;
-    // printf("LAMBDA PRIMAL %f\n", lambda_primal);
 
     k_centroid_restraint_inference<RealType><<<1, tpb, 0, stream>>>(
         N_,

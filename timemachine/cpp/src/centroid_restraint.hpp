@@ -23,13 +23,6 @@ private:
     double kb_;
     double b0_;
 
-    // int *d_lambda_flags_;
-    // int flat_bottom_;
-    // double *d_params_;
-    // double *d_du_dp_primals_;
-    // double *d_du_dp_tangents_;
-    // const int B_;
-
 public:
 
     CentroidRestraint(
@@ -43,14 +36,6 @@ public:
     );
 
     ~CentroidRestraint();
-
-    // int num_bonds() const {
-    //     return B_;
-    // }
-
-    // void get_du_dp_primals(double *buf);
-
-    // void get_du_dp_tangents(double *buf);
 
     virtual void execute_lambda_inference_device(
         const int N,

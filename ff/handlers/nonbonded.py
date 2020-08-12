@@ -356,6 +356,4 @@ class AM1CCCHandler(SerializableMixIn):
 
         charges, vjp_fn = jax.vjp(bcc_fn, self.params)
 
-        # charges = np.zeros_like(charges)
-
         return np.array(charges, dtype=np.float64), vjp_fn
