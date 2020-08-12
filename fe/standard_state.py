@@ -8,6 +8,14 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 def harmonic_com_vol(kb, b0, T):
     """
     Compute the volume component of the standard state correction.
+
+    Parameters: see harmonic_com_ssc
+
+    Returns
+    -------
+    float
+        Restraint volume when released into infinity, in units of nm^3
+
     """
     kT = kB * (T*unit.kelvin)
     kT = kT.value_in_unit(unit.kilojoules_per_mole)

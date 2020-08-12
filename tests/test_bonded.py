@@ -75,20 +75,9 @@ class TestBonded(GradientTest):
                             rtol
                         )
 
-                        # primals = (x_primal, lamb_primal, params)
-                        # tangents = (x_tangent, lamb_tangent, np.zeros_like(params))
-
-                        # grad_fn = jax.grad(ref_nrg, argnums=(0, 1, 2))
-                        # ref_primals, ref_tangents = jax.jvp(grad_fn, primals, tangents)
-
-                        # ref_du_dp_primals = ref_primals[2]
-                        # test_du_dp_primals = test_nrg.get_du_dp_primals()
-                        # np.testing.assert_almost_equal(ref_du_dp_primals, test_du_dp_primals, rtol)
-
-                        # ref_du_dp_tangents = ref_tangents[2]
-                        # test_du_dp_tangents = test_nrg.get_du_dp_tangents()
-                        # np.testing.assert_almost_equal(ref_du_dp_tangents, test_du_dp_tangents, rtol)
-
+                        # (ytz): we do not compute derivatives w.r.t. centroid restraints. the only one that
+                        # would make sense would be the force constant. interestingly enough it would act sort
+                        # as a bias correction term?
 
 
     def test_restraint(self):
