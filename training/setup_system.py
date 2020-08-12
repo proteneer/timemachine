@@ -10,6 +10,8 @@ from fe.utils import to_md_units
 from timemachine.potentials import jax_utils
 from timemachine.potentials import bonded as bonded_utils
 
+from fe import standard_state
+
 def find_protein_pocket_atoms(conf, nha, search_radius):
     """
     Find atoms in the protein that are close to the binding pocket. This simply grabs the
@@ -78,7 +80,9 @@ def create_system(
     guest_mol,
     host_pdb,
     handlers,
-    search_radius,
+    restr_search_radius,
+    restr_force_constant,
+    intg_temperature,
     stage):
     """
     Initialize a self-encompassing System object that we can serialize and simulate.
@@ -95,8 +99,14 @@ def create_system(
     handlers: list of timemachine.ops.Gradients
         forcefield handlers used to parameterize the system
 
-    search_radius: float
+    restr_search_radius: float
         how far away we search from the ligand to define the binding pocket atoms.
+
+    restr_force_constant: float
+        strength of the harmonic oscillator for the restraint
+
+    intg_temperature: float
+        temperature of the integrator in Kelvin
 
     stage: int (0 or 1)
         a free energy specific variable that determines how we decouple.
@@ -227,7 +237,7 @@ def create_system(
     x0 = np.concatenate([host_conf, mol_a_conf]) # combined geometry
     v0 = np.zeros_like(x0)
 
-    pocket_atoms = find_protein_pocket_atoms(x0, num_host_atoms, search_radius)
+    pocket_atoms = find_protein_pocket_atoms(x0, num_host_atoms, restr_search_radius)
 
     N_C = num_host_atoms + num_guest_atoms
     N_A = num_host_atoms
@@ -356,7 +366,7 @@ def create_system(
             ligand_idxs,
             pocket_atoms,
             combined_masses,
-            1000.0,
+            restr_force_constant,
             ctr_dij,
             lamb_flag,
             lamb_offset
@@ -365,4 +375,14 @@ def create_system(
 
     final_vjp_fns.append(lambda x: None)
 
-    return x0, combined_masses, final_gradients, final_vjp_fns
+    # print(restr_force_constant, ctr_dij, intg_temperature)
+
+    ssc = standard_state.harmonic_com_ssc(
+        restr_force_constant,
+        ctr_dij,
+        intg_temperature
+    )
+
+    # assert 0
+
+    return x0, combined_masses, ssc, final_gradients, final_vjp_fns

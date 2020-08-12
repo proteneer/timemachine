@@ -104,6 +104,7 @@ if __name__ == "__main__":
 
     intg_cfg = config['integrator']
     lr_config = config['learning_rates']
+    restr_config = config['restraints']
 
     lambda_schedule = {}
 
@@ -130,7 +131,8 @@ if __name__ == "__main__":
         ff_handlers,
         lambda_schedule,
         int(general_cfg['du_dl_cutoff']),
-        float(general_cfg['search_radius']),
+        float(restr_config['search_radius']),
+        float(restr_config['force_constant']),
         int(general_cfg['n_frames']),
         int(intg_cfg['steps']),
         float(intg_cfg['dt']),
