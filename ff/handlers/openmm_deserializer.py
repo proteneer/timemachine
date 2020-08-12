@@ -25,6 +25,9 @@ def deserialize_system(system):
     -------
     list of energy functions, masses
 
+    Note: We add a small epsilon (1e-3) to all zero eps values to prevent
+    a singularity from occuring in the lennard jones derivatives
+
     """
 
     masses = []
@@ -109,11 +112,11 @@ def deserialize_system(system):
                 sig = value(sig)
                 eps = value(eps)
 
-                # (ytz): this is only necessary if the protein atoms are allowed to be in a separate plane
+                # increment eps by 1e-3 if we have eps==0 to avoid a singularity in parameter derivatives
                 # override default amber types
-                # if sig == 0 or eps == 0:
-                    # sig = 0.1
-                    # eps = 0.1
+                if eps == 0:
+                    print("Warning: overriding eps by 1e-3 to avoid a singularity")
+                    eps += 1e-3
 
                 # charge_idx = insert_parameters(charge, 14)
                 # sig_idx = insert_parameters(sig, 10)

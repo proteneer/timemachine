@@ -361,6 +361,7 @@ class Trainer():
 
             charge_derivatives = []
             # gb_derivatives = []
+            lj_derivatives = []
 
             for stage_futures in stage_backward_futures:
                 for future in stage_futures:
@@ -374,25 +375,30 @@ class Trainer():
                             # 0 is for charges
                             # 1 is for lj terms
                             charge_derivatives.append(vjp_fn[0](dl_dp[0]))
+                            lj_derivatives.append(vjp_fn[1](dl_dp[1]))
                         elif g[0] == 'GBSA':
                             # 0 is for charges
                             # 1 is for gb terms
                             charge_derivatives.append(vjp_fn[0](dl_dp[0]))
                             # gb_derivatives.append(vjp_fn[1](dl_dp[1]))
 
-
             charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
+            lj_gradients = np.sum(lj_derivatives, axis=0) # reduce
             charge_lr = self.charge_lr
+            lj_lr = self.charge_lr # FIXME
+
+            print("LJ DERIVATIVES AMAX SIG", np.amax(np.abs(lj_lr*lj_gradients[:, 0])))
+            print("LJ DERIVATIVES AMAX EPS", np.amax(np.abs(lj_lr*lj_gradients[:, 1])))
 
             for h in ff_handlers:
                 if isinstance(h, nonbonded.SimpleChargeHandler):
                     # debug for now
                     assert 0
-                    h.params -= charge_gradients*charge_lr
+                    h.params -= charge_gradients*self.charge_lr
                 elif isinstance(h, nonbonded.AM1CCCHandler):
                     if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)):
                         print("Fatal Derivatives:", charge_gradients)
                     else:
-                        h.params -= charge_gradients*charge_lr
+                        h.params -= charge_gradients*self.charge_lr
 
         return pred_dG, loss
