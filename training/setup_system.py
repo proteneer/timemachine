@@ -308,14 +308,10 @@ def create_system(
 
     final_vjp_fns.append(lambda x: None)
 
-    # print(restr_force_constant, ctr_dij, intg_temperature)
-
     ssc = standard_state.harmonic_com_ssc(
         restr_force_constant,
         ctr_dij,
         intg_temperature
     )
-
-    # assert 0
 
     return x0, combined_masses, ssc, final_gradients, final_vjp_fns
