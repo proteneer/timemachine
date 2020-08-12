@@ -6,6 +6,7 @@
 #include "harmonic_bond.hpp"
 #include "harmonic_angle.hpp"
 #include "restraint.hpp"
+#include "centroid_restraint.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
 #include "lennard_jones.hpp"
@@ -89,8 +90,7 @@ void declare_reversible_context(py::module &m, const char *typestr) {
         const py::array_t<double, py::array::c_style> &coeff_cbs,
         const py::array_t<double, py::array::c_style> &coeff_ccs,
         const py::array_t<double, py::array::c_style> &step_sizes,
-        unsigned long long seed
-    ) {
+        unsigned long long seed) {
 
         int N = x0.shape()[0];
         int D = x0.shape()[1];
@@ -316,7 +316,49 @@ void declare_restraint(py::module &m, const char *typestr) {
         py::array_t<double, py::array::c_style> buffer({B, 3});
         grad.get_du_dp_tangents(buffer.mutable_data());
         return buffer;
-    });;
+    });
+
+}
+
+
+template <typename RealType>
+void declare_centroid_restraint(py::module &m, const char *typestr) {
+
+    using Class = timemachine::CentroidRestraint<RealType>;
+    std::string pyclass_name = std::string("CentroidRestraint_") + typestr;
+    py::class_<Class, timemachine::Gradient>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &group_a_idxs,
+        const py::array_t<int, py::array::c_style> &group_b_idxs,
+        const py::array_t<double, py::array::c_style> &masses,
+        double kb,
+        double b0,
+        int lambda_flag,
+        int lambda_offset
+    ){
+        std::vector<int> vec_group_a_idxs(group_a_idxs.size());
+        std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
+        std::vector<int> vec_group_b_idxs(group_b_idxs.size());
+        std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
+        std::vector<double> vec_masses(masses.size());
+        std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
+
+        return new timemachine::CentroidRestraint<RealType>(
+            vec_group_a_idxs,
+            vec_group_b_idxs,
+            vec_masses,
+            kb,
+            b0,
+            lambda_flag,
+            lambda_offset
+        );
+    }
+    ));
 
 }
 
@@ -699,7 +741,9 @@ void declare_gbsa(py::module &m, const char *typestr) {
 PYBIND11_MODULE(custom_ops, m) {
 
     declare_gradient(m);
-    // declare_alchemical_gradient(m);
+
+    declare_centroid_restraint<double>(m, "f64");
+    declare_centroid_restraint<float>(m, "f32");
 
     declare_restraint<double>(m, "f64");
     declare_restraint<float>(m, "f32");

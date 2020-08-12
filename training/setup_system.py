@@ -8,6 +8,9 @@ from ff.handlers import bonded, nonbonded, openmm_deserializer
 from fe.utils import to_md_units
 
 from timemachine.potentials import jax_utils
+from timemachine.potentials import bonded as bonded_utils
+
+from fe import standard_state
 
 def find_protein_pocket_atoms(conf, nha, search_radius):
     """
@@ -77,7 +80,9 @@ def create_system(
     guest_mol,
     host_pdb,
     handlers,
-    search_radius,
+    restr_search_radius,
+    restr_force_constant,
+    intg_temperature,
     stage):
     """
     Initialize a self-encompassing System object that we can serialize and simulate.
@@ -94,8 +99,14 @@ def create_system(
     handlers: list of timemachine.ops.Gradients
         forcefield handlers used to parameterize the system
 
-    search_radius: float
+    restr_search_radius: float
         how far away we search from the ligand to define the binding pocket atoms.
+
+    restr_force_constant: float
+        strength of the harmonic oscillator for the restraint
+
+    intg_temperature: float
+        temperature of the integrator in Kelvin
 
     stage: int (0 or 1)
         a free energy specific variable that determines how we decouple.
@@ -209,11 +220,6 @@ def create_system(
         else:
             raise Exception("Unknown Handler", handle)
 
-    # (use the below vjps for correctness)
-    # combined_charge_params, charge_adjoint_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
-    # combined_lj_params, lj_adjoint_fn = concat_with_vjps(host_lj_params, guest_lj_params, None, guest_lj_vjp_fn)
-    # combined_gb_params, gb_adjoint_fn = concat_with_vjps(host_gb_params, guest_gb_params, None, guest_gb_vjp_fn)
-
     host_conf = []
     for x,y,z in host_pdb.positions:
         host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
@@ -226,75 +232,36 @@ def create_system(
     x0 = np.concatenate([host_conf, mol_a_conf]) # combined geometry
     v0 = np.zeros_like(x0)
 
-    pocket_atoms = find_protein_pocket_atoms(x0, num_host_atoms, search_radius)
+    pocket_atoms = find_protein_pocket_atoms(x0, num_host_atoms, restr_search_radius)
 
     N_C = num_host_atoms + num_guest_atoms
     N_A = num_host_atoms
 
+    cutoff = 100000.0
+
     if stage == 0:
         combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
         combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs[num_host_atoms:] = 1
-        combined_lambda_offset_idxs[pocket_atoms] = 1
-
-        # grouping for vdw terms
-        combined_lambda_group_idxs = np.ones(N_C, dtype=np.int32)
-        combined_lambda_group_idxs[num_host_atoms:] = 2
-        combined_lambda_group_idxs[pocket_atoms] = 3
     elif stage == 1:
         combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_plane_idxs[num_host_atoms:] = 1
-        combined_lambda_plane_idxs[pocket_atoms] = 1
-
         combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs[num_host_atoms:] = 1 # push out ligand from binding pocket
-
-        # grouping for vdw terms
-        combined_lambda_group_idxs = np.ones(N_C, dtype=np.int32)
-        combined_lambda_group_idxs[num_host_atoms:] = 2
+        combined_lambda_offset_idxs[num_host_atoms:] = 1
     else:
         assert 0
 
-    cutoff = 100000.0
-
-
     final_gradients.append((
-        'LennardJones', (
+        'Nonbonded', (
+        np.asarray(combined_charge_params),
         np.asarray(combined_lj_params),
         combined_exclusion_idxs,
+        combined_charge_exclusion_scales,
         combined_lj_exclusion_scales,
         combined_lambda_plane_idxs,
         combined_lambda_offset_idxs,
-        combined_lambda_group_idxs,
         cutoff
         )
     ))
-    final_vjp_fns.append((combined_lj_vjp_fn))
-
-    # set up lambdas for electrostatics
-
-    if stage == 0:
-        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs[num_host_atoms:] = 1
-    elif stage == 1:
-        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_plane_idxs[num_host_atoms:] = 1
-        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-    else:
-        assert 0
-
-    final_gradients.append((
-        'Electrostatics', (
-        np.asarray(combined_charge_params),
-        combined_exclusion_idxs,
-        combined_charge_exclusion_scales,
-        combined_lambda_plane_idxs,
-        combined_lambda_offset_idxs,
-        cutoff
-        )
-    ))
-    final_vjp_fns.append((combined_charge_vjp_fn))
+    final_vjp_fns.append((combined_charge_vjp_fn, combined_lj_vjp_fn))
 
     final_gradients.append((
         'GBSA', (
@@ -309,6 +276,42 @@ def create_system(
     ))
     final_vjp_fns.append((combined_charge_vjp_fn, combined_gb_vjp_fn))
 
+    ligand_idxs = np.arange(N_A, N_C, dtype=np.int32)
+
+    # restraints
+    if stage == 0:
+        lamb_flag = 1
+        lamb_offset = 0
+    if stage == 1:
+        lamb_flag = 0
+        lamb_offset = 1
+
+    # unweighted center of mass restraints
+    avg_xi = np.mean(x0[ligand_idxs], axis=0)
+    avg_xj = np.mean(x0[pocket_atoms], axis=0)
+    ctr_dij = np.sqrt(np.sum((avg_xi - avg_xj)**2))
+
     combined_masses = np.concatenate([host_masses, guest_masses])
 
-    return x0, combined_masses, final_gradients, final_vjp_fns
+    # restraints
+    final_gradients.append((
+        'CentroidRestraint', (
+            ligand_idxs,
+            pocket_atoms,
+            combined_masses,
+            restr_force_constant,
+            ctr_dij,
+            lamb_flag,
+            lamb_offset
+        )
+    ))
+
+    final_vjp_fns.append(lambda x: None)
+
+    ssc = standard_state.harmonic_com_ssc(
+        restr_force_constant,
+        ctr_dij,
+        intg_temperature
+    )
+
+    return x0, combined_masses, ssc, final_gradients, final_vjp_fns

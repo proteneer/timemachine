@@ -2,6 +2,22 @@ import jax.numpy as np
 
 from timemachine.potentials.jax_utils import distance, delta_r, convert_to_4d
 
+def centroid_restraint(conf, lamb, masses, lamb_flag, lamb_offset, group_a_idxs, group_b_idxs, kb, b0):
+
+    xi = conf[group_a_idxs]
+    xj = conf[group_b_idxs]
+
+    avg_xi = np.average(xi, axis=0, weights=masses[group_a_idxs])
+    avg_xj = np.average(xj, axis=0, weights=masses[group_b_idxs])
+
+    dx = avg_xi - avg_xj
+    dij = np.sqrt(np.sum(dx*dx))
+    delta = dij - b0
+
+    lamb_final = lamb*lamb_flag + lamb_offset
+
+    return lamb_final*kb*delta*delta
+
 def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     """
     Compute the harmonic bond energy given a collection of molecules.

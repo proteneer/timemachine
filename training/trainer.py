@@ -31,19 +31,22 @@ def compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff):
 
     return stage_dGs
 
-def dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff):
+def dG_TI(all_du_dls, ssc, lambda_schedules, du_dl_cutoff):
     stage_dGs = compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff)
-    pred_dG = jnp.sum(stage_dGs)
+    pred_dG = jnp.sum(stage_dGs) + ssc
     return pred_dG
 
 
-def loss_fn(all_du_dls, lambda_schedules, expected_dG, du_dl_cutoff):
+def loss_fn(all_du_dls, ssc, lambda_schedules, expected_dG, du_dl_cutoff):
     """
 
     Parameters
     ----------
     all_du_dls: list of nd.array
         list of full_stage_du_dls (usually 3 stages)
+
+    ssc: float
+        standard state correction in kJ/mol
 
     lambda_schedules: list of nd.array
         combined lambda schedule
@@ -56,7 +59,7 @@ def loss_fn(all_du_dls, lambda_schedules, expected_dG, du_dl_cutoff):
     
 
     """
-    pred_dG = dG_TI(all_du_dls, lambda_schedules, du_dl_cutoff)
+    pred_dG = dG_TI(all_du_dls, ssc, lambda_schedules, du_dl_cutoff)
     return jnp.abs(pred_dG - expected_dG)
 
 
@@ -72,7 +75,8 @@ class Trainer():
             ff_handlers,
             lambda_schedule,
             du_dl_cutoff,
-            search_radius,
+            restr_search_radius,
+            restr_force_constant,
             n_frames,
             intg_steps,
             intg_dt,
@@ -102,8 +106,11 @@ class Trainer():
         du_dl_cutoff: int
             number of steps we discard when estimating <du_dl>
 
-        search_radius: float
+        restr_search_radius: float
             how far in nm when searching for restraints (typical=~0.3)
+
+        restr_force_constant: float
+            strength of the force constant used for restraints
 
         n_frames: int
             number of frames we store, sampled evenly from the trajectory
@@ -134,7 +141,8 @@ class Trainer():
         self.stub_hosts = stub_hosts
         self.ff_handlers = ff_handlers
         self.lambda_schedule = lambda_schedule
-        self.search_radius = search_radius
+        self.restr_search_radius = restr_search_radius
+        self.restr_force_constant= restr_force_constant
         self.n_frames = n_frames
         self.intg_steps = intg_steps
         self.intg_dt = intg_dt
@@ -202,11 +210,13 @@ class Trainer():
             if not os.path.exists(stage_dir):
                 os.makedirs(stage_dir)
 
-            x0, combined_masses, final_gradients, final_vjp_fns = setup_system.create_system(
+            x0, combined_masses, ssc, final_gradients, final_vjp_fns = setup_system.create_system(
                 mol,
                 host_pdb,
                 ff_handlers,
-                self.search_radius,
+                self.restr_search_radius,
+                self.restr_force_constant,
+                self.intg_temperature,
                 stage
             )
 
@@ -315,18 +325,23 @@ class Trainer():
             plt.savefig(os.path.join(stage_dir, "boxplot_du_dls"))
             plt.clf()
 
+            plt.plot(ti_lambdas, np.mean(sum_du_dls[:, du_dl_cutoff:], axis=1))
+            plt.ylabel("du_dlambda")
+            plt.savefig(os.path.join(stage_dir, "avg_du_dls"))
+            plt.clf()
+
             all_du_dls.append(stage_du_dls)
             all_lambdas.append(ti_lambdas)
 
 
-        pred_dG = dG_TI(all_du_dls, all_lambdas, du_dl_cutoff)
-        loss = loss_fn(all_du_dls, all_lambdas, experiment_dG, du_dl_cutoff)
+        pred_dG = dG_TI(all_du_dls, ssc, all_lambdas, du_dl_cutoff)
+        loss = loss_fn(all_du_dls, ssc, all_lambdas, experiment_dG, du_dl_cutoff)
 
-        print("mol", mol.GetProp("_Name"), "stage dGs:", compute_dGs(all_du_dls, all_lambdas, du_dl_cutoff))
+        print("mol", mol.GetProp("_Name"), "stage dGs:", compute_dGs(all_du_dls, all_lambdas, du_dl_cutoff), "ssc:", ssc)
 
         if not inference:
 
-            all_adjoint_du_dls = loss_fn_grad(all_du_dls, all_lambdas, experiment_dG, du_dl_cutoff)[0]
+            all_adjoint_du_dls = loss_fn_grad(all_du_dls, ssc, all_lambdas, experiment_dG, du_dl_cutoff)[0]
 
             # step 3. run backward mode
             stage_backward_futures = []

@@ -15,6 +15,69 @@ from timemachine.potentials import bonded
 
 class TestBonded(GradientTest):
 
+    def test_centroid_restraint(self):
+
+        N = 10
+
+        for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
+
+            x_primal = self.get_random_coords(N, 3)
+            x_tangent = np.random.randn(*x_primal.shape)
+            lamb_tangent = np.random.rand()
+
+            gai = np.random.randint(0, N, 4, dtype=np.int32)
+            gbi = np.random.randint(0, N, 3, dtype=np.int32)
+
+            kb = 5.4
+            b0 = 2.3
+
+            masses = np.random.rand(N)
+
+            for lamb_offset in [0, 1]:
+                for lamb_flag in [0, 1]:
+
+                    ref_nrg = jax.partial(
+                        bonded.centroid_restraint,
+                        masses=masses,
+                        group_a_idxs=gai,
+                        group_b_idxs=gbi,
+                        kb=kb,
+                        b0=b0,
+                        lamb_flag=lamb_flag,
+                        lamb_offset=lamb_offset
+                    )
+
+                    for lamb_primal in [0.0, 0.1, 0.5, 0.7, 1.0]:
+
+                        # we need to clear the du_dp buffer each time, so we need
+                        # to instantiate test_nrg inside here
+                        test_nrg = ops.CentroidRestraint(
+                            gai,
+                            gbi,
+                            masses,
+                            kb,
+                            b0,
+                            lamb_flag,
+                            lamb_offset,
+                            precision=precision
+                        )
+
+                        self.compare_forces(
+                            x_primal,
+                            lamb_primal,
+                            x_tangent,
+                            lamb_tangent,
+                            ref_nrg,
+                            test_nrg,
+                            precision,
+                            rtol
+                        )
+
+                        # (ytz): we do not compute derivatives w.r.t. centroid restraints. the only one that
+                        # would make sense would be the force constant. interestingly enough it would act sort
+                        # as a bias correction term?
+
+
     def test_restraint(self):
 
         B = 8
@@ -169,8 +232,9 @@ class TestBonded(GradientTest):
 
         lamb = 0.0
 
-        for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
+        for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
 
+            print(precision, rtol)
             custom_angle = ops.HarmonicAngle(
                 angle_idxs,
                 angle_params,
