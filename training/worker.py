@@ -13,21 +13,26 @@ import grpc
 import service_pb2
 import service_pb2_grpc
 
+from threading import Lock
 
 from timemachine.lib import custom_ops, ops
 
 class Worker(service_pb2_grpc.WorkerServicer):
 
     def __init__(self):
-        self.state = None
+        self.states = {}
+        self.mutex = Lock()
 
     def ResetState(self, request, context):
-        self.state = None
+        self.mutex.acquire()
+        self.states = {}
+        self.mutex.release()
         reply = service_pb2.EmptyMessage()
         return reply
 
     def ForwardMode(self, request, context):
-        assert self.state is None
+        # assert self.state is None
+        assert request.key not in self.states
 
         if request.precision == 'single':
             precision = np.float32
@@ -66,8 +71,10 @@ class Worker(service_pb2_grpc.WorkerServicer):
         )
 
         start = time.time()
-        ctxt.forward_mode()
 
+        # ensure only one GPU can be running at given time.
+        self.mutex.acquire()
+        ctxt.forward_mode()
         full_du_dls = stepper.get_du_dl() # [FxT]
         energies = stepper.get_energies()
 
@@ -84,29 +91,30 @@ class Worker(service_pb2_grpc.WorkerServicer):
             frames = np.zeros((0, *system.x0.shape), dtype=system.x0.dtype)
 
         reply = service_pb2.ForwardReply(
-            du_dls=pickle.dumps(full_du_dls),
+            du_dls=pickle.dumps(full_du_dls), # tbd strip zeros
             energies=pickle.dumps(energies),
-            frames=pickle.dumps(frames)
+            frames=pickle.dumps(frames),
         )
 
         # store and set state for backwards mode use.
         if request.inference is False:
-            self.state = (ctxt, gradients, force_names, stepper, system)
+            self.states[request.key] = (ctxt, gradients, force_names, stepper, system)
+
+        self.mutex.release()
 
         return reply
 
     def BackwardMode(self, request, context):
-        assert self.state is not None
 
-        ctxt, gradients, force_names, stepper, system = self.state
+        ctxt, gradients, force_names, stepper, system = self.states[request.key]
+
         adjoint_du_dls = pickle.loads(request.adjoint_du_dls)
+
         stepper.set_du_dl_adjoint(adjoint_du_dls)
         ctxt.set_x_t_adjoint(np.zeros_like(system.x0))
-        start = time.time()
-        print("start backwards mode")
+
+        self.mutex.acquire()
         ctxt.backward_mode()
-        print("bkwd run time", time.time() - start)
-        # not a valid method, grab directly from handlers
 
         # note that we have multiple HarmonicBonds/Angles/Torsions that correspond to different parameters
         dl_dps = []
@@ -133,14 +141,15 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         reply = service_pb2.BackwardReply(dl_dps=pickle.dumps(dl_dps))
 
-        self.state = None
+        # zero out
+        del self.states[request.key]
+
+        self.mutex.release()
 
         return reply
 
 
 def serve(args):
-
-
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1),
         options = [
