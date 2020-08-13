@@ -25,15 +25,13 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
     def ResetState(self, request, context):
         self.mutex.acquire()
-        self.states = {}
+        self.states.clear()
         self.mutex.release()
         reply = service_pb2.EmptyMessage()
         return reply
 
     def ForwardMode(self, request, context):
         # assert self.state is None
-        assert request.key not in self.states
-
         if request.precision == 'single':
             precision = np.float32
         elif request.precision == 'double':
@@ -74,6 +72,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         # ensure only one GPU can be running at given time.
         self.mutex.acquire()
+        
         ctxt.forward_mode()
         full_du_dls = stepper.get_du_dl() # [FxT]
         energies = stepper.get_energies()
@@ -162,10 +161,7 @@ def serve(args):
     server.start()
     server.wait_for_termination()
 
-
 if __name__ == '__main__':
-
-
 
     parser = argparse.ArgumentParser(description='Worker Server')
     parser.add_argument('--gpu_idx', type=int, required=True, help='Location of all output files')
