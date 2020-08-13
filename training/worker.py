@@ -100,7 +100,6 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         ctxt, gradients, force_names, stepper, system = self.state
         adjoint_du_dls = pickle.loads(request.adjoint_du_dls)
-
         stepper.set_du_dl_adjoint(adjoint_du_dls)
         ctxt.set_x_t_adjoint(np.zeros_like(system.x0))
         start = time.time()
@@ -126,9 +125,10 @@ class Worker(service_pb2_grpc.WorkerServicer):
                 dl_dps.append(g.get_du_dcharge_tangents())
             elif f_name == 'GBSA':
                 dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dgb_tangents()))
-            elif f_name == 'Restraint':
-                dl_dps.append(g.get_du_dp_tangents())
+            elif f_name == 'CentroidRestraint':
+                dl_dps.append(None)
             else:
+                print("f_name")
                 raise Exception("Unknown Gradient")
 
         reply = service_pb2.BackwardReply(dl_dps=pickle.dumps(dl_dps))

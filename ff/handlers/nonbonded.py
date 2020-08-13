@@ -150,7 +150,31 @@ class SimpleChargeHandler(NonbondedHandler):
     pass
 
 class LennardJonesHandler(NonbondedHandler):
-    pass
+
+    def parameterize(self, mol):
+        """
+        Parameters
+        ----------
+
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        Returns
+        -------
+        tuple
+            (parameters of shape [N,2], vjp_fn)
+
+        """
+        param_idxs = generate_nonbonded_idxs(mol, self.smirks)
+
+        def param_fn(p):
+            params = p[param_idxs]
+            sigmas = params[:, 0]
+            epsilons = jnp.power(params[:, 1], 2) # resolves a super annoying singularity
+            return jnp.stack([sigmas, epsilons], axis=1)
+
+        return jax.vjp(param_fn, self.params)
+
 
 class GBSAHandler(NonbondedHandler):
     pass

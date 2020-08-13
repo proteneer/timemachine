@@ -128,6 +128,10 @@ if __name__ == "__main__":
             # assert np.all(np.diff(stage_schedule) > 0)
         lambda_schedule[stage] = stage_schedule
 
+    learning_rates = {}
+    for k, v in config['learning_rates'].items():
+        learning_rates[k] = np.array([float(x) for x in v.split(',')])
+
     engine = trainer.Trainer(
         host_pdbfile, 
         stubs,
@@ -142,7 +146,7 @@ if __name__ == "__main__":
         float(intg_cfg['dt']),
         float(intg_cfg['temperature']),
         float(intg_cfg['friction']),
-        float(lr_config['charge']),
+        learning_rates,
         general_cfg['precision']
     )
 

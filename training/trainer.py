@@ -82,7 +82,7 @@ class Trainer():
             intg_dt,
             intg_temperature,
             intg_friction,
-            charge_lr,
+            learning_rates,
             precision):
         """
         Parameters
@@ -127,7 +127,7 @@ class Trainer():
         intg_friction: float
             thermostat friction coefficient in 1/picseconds, (typical=40)
 
-        charge_lr: float
+        learning_rates: dict of learning rates
             how much we adjust the charge by in parameter space
 
         precision: str
@@ -148,7 +148,7 @@ class Trainer():
         self.intg_dt = intg_dt
         self.intg_temperature = intg_temperature
         self.intg_friction = intg_friction
-        self.charge_lr = charge_lr
+        self.learning_rates = learning_rates
         self.precision = precision
 
 
@@ -361,6 +361,7 @@ class Trainer():
 
             charge_derivatives = []
             # gb_derivatives = []
+            lj_derivatives = []
 
             for stage_futures in stage_backward_futures:
                 for future in stage_futures:
@@ -374,25 +375,34 @@ class Trainer():
                             # 0 is for charges
                             # 1 is for lj terms
                             charge_derivatives.append(vjp_fn[0](dl_dp[0]))
+                            lj_derivatives.append(vjp_fn[1](dl_dp[1]))
                         elif g[0] == 'GBSA':
                             # 0 is for charges
                             # 1 is for gb terms
                             charge_derivatives.append(vjp_fn[0](dl_dp[0]))
                             # gb_derivatives.append(vjp_fn[1](dl_dp[1]))
 
-
             charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
-            charge_lr = self.charge_lr
+            lj_gradients = np.sum(lj_derivatives, axis=0) # reduce
 
             for h in ff_handlers:
                 if isinstance(h, nonbonded.SimpleChargeHandler):
                     # debug for now
                     assert 0
-                    h.params -= charge_gradients*charge_lr
+                    h.params -= charge_gradients*self.learning_rates['charge']
                 elif isinstance(h, nonbonded.AM1CCCHandler):
                     if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)):
-                        print("Fatal Derivatives:", charge_gradients)
+                        print("Fatal Charge Derivatives:", charge_gradients)
                     else:
-                        h.params -= charge_gradients*charge_lr
+                        h.params -= charge_gradients*self.learning_rates['charge']
+                elif isinstance(h, nonbonded.LennardJonesHandler):
+                    if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)):
+                        print("Fatal LJ Derivatives:", lj_gradients)
+                    else:
+                        # print("LJ DERIVATIVES AMAX SIG", np.amax(np.abs((lj_lr*lj_gradients)[:, 0])))
+                        # print("LJ DERIVATIVES AMAX EPS", np.amax(np.abs((lj_lr*lj_gradients)[:, 1])))
+                        # print("before", h.params)
+                        h.params -= lj_gradients*self.learning_rates['lj']
+                        # print("after", h.params)
 
         return pred_dG, loss

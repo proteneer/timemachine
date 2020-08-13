@@ -4,6 +4,13 @@ from timemachine.lib import custom_ops
 def Nonbonded(*args, precision):
 
     # exclusion_idxs should be unique
+    lj_params = args[1]
+    lj_eps = lj_params[:, 1]
+    singular_idxs = np.argwhere(lj_eps <= 0.0)
+    if len(singular_idxs) > 0:
+        raise Exception("Singular eps values detected at" + repr(singular_idxs))
+
+
     exclusion_idxs = args[2]
     exclusion_set = set()
 
