@@ -16,7 +16,7 @@ class Integrator():
 
     def __init__(self, steps, dt, temperature, friction, masses, lamb, seed):
 
-        equilibrium_steps = 2000
+        minimization_steps = 2000
 
         ca, cbs, ccs = langevin_coefficients(
             temperature,
@@ -27,8 +27,8 @@ class Integrator():
 
         complete_cas = np.ones(steps)*ca
         complete_dts = np.concatenate([
-            np.linspace(0, dt, equilibrium_steps),
-            np.ones(steps-equilibrium_steps)*dt
+            np.linspace(0, dt, minimization_steps),
+            np.ones(steps-minimization_steps)*dt
         ])
 
         self.dts = complete_dts

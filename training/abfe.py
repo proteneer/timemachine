@@ -27,7 +27,6 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdFMCS
 
-
 from fe import dataset
 
 from fe import loss, bar
