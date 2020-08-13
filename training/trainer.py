@@ -388,9 +388,7 @@ class Trainer():
             charge_lr = self.charge_lr
             # lj_lr = self.charge_lr # FIXME
 
-            lj_lr = np.array([[1e-5,1e-4]])
-
-
+            lj_lr = np.array([[1e-5, 1e-4]])
 
             for h in ff_handlers:
                 if isinstance(h, nonbonded.SimpleChargeHandler):

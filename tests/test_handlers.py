@@ -507,13 +507,13 @@ def test_lennard_jones_handler():
 
 
     ligand_params = np.array([
-        [0.1, 0.2], # C
-        [0.1, 0.2], # C
-        [0.3, 0.4], # N
-        [0.1, 0.2], # C
-        [0.5, 0.6], # O
-        [0.1, 0.2], # C
-        [1.0, 1.1]  # F
+        [0.1, 0.2**2], # C
+        [0.1, 0.2**2], # C
+        [0.3, 0.4**2], # N
+        [0.1, 0.2**2], # C
+        [0.5, 0.6**2], # O
+        [0.1, 0.2**2], # C
+        [1.0, 1.1**2]  # F
     ])
 
     np.testing.assert_almost_equal(lj_params, ligand_params)
