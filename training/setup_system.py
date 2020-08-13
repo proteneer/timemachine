@@ -12,6 +12,7 @@ from timemachine.potentials import bonded as bonded_utils
 
 from fe import standard_state
 
+
 def find_protein_pocket_atoms(conf, nha, search_radius):
     """
     Find atoms in the protein that are close to the binding pocket. This simply grabs the
