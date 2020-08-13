@@ -231,8 +231,7 @@ class Trainer():
                     friction=self.intg_friction,  
                     masses=combined_masses,
                     lamb=lamb,
-                    seed=1234
-                    # seed=np.random.randint(np.iinfo(np.int32).max)
+                    seed=np.random.randint(np.iinfo(np.int32).max)
                 )
 
                 complex_system = system.System(
