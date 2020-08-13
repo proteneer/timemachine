@@ -153,6 +153,16 @@ class LennardJonesHandler(NonbondedHandler):
 
     def parameterize(self, mol):
         """
+        Parameters
+        ----------
+
+        mol: Chem.ROMol
+            molecule to be parameterized.
+
+        Returns
+        -------
+        tuple
+            (parameters of shape [N,2], vjp_fn)
 
         """
         param_idxs = generate_nonbonded_idxs(mol, self.smirks)
@@ -165,7 +175,6 @@ class LennardJonesHandler(NonbondedHandler):
 
         return jax.vjp(param_fn, self.params)
 
-        
 
 class GBSAHandler(NonbondedHandler):
     pass
