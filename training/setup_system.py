@@ -195,22 +195,8 @@ def create_system(
             final_vjp_fns.append(torsion_vjp_fn)
             # handler_vjps.append(torsion_vjp_fn)
         elif isinstance(handle, nonbonded.LennardJonesHandler):
-            
-
-            # handle.params[:, 1] = np.sqrt(handle.params[:, 1])
-            
-            # from ff.handlers import serialize
-            # print(serialize.bin_to_str(handle.serialize()))
-
-            # assert 0
-
-
             guest_lj_params, guest_lj_vjp_fn = results
             combined_lj_params, combined_lj_vjp_fn = concat_with_vjps(host_lj_params, guest_lj_params, None, guest_lj_vjp_fn)
-
-
-
-
             # final_gradients.append(("LennardJones", (torsion_idxs, torsion_params)))
             # final_vjp_fns.append(combined_lj_vjp_fn)
             # handler_vjps.append(lj_adjoint_fn)
