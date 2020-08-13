@@ -231,7 +231,8 @@ class Trainer():
                     friction=self.intg_friction,  
                     masses=combined_masses,
                     lamb=lamb,
-                    seed=np.random.randint(np.iinfo(np.int32).max)
+                    seed=1234
+                    # seed=np.random.randint(np.iinfo(np.int32).max)
                 )
 
                 complex_system = system.System(
@@ -385,10 +386,11 @@ class Trainer():
             charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
             lj_gradients = np.sum(lj_derivatives, axis=0) # reduce
             charge_lr = self.charge_lr
-            lj_lr = self.charge_lr # FIXME
+            # lj_lr = self.charge_lr # FIXME
 
-            print("LJ DERIVATIVES AMAX SIG", np.amax(np.abs(lj_lr*lj_gradients[:, 0])))
-            print("LJ DERIVATIVES AMAX EPS", np.amax(np.abs(lj_lr*lj_gradients[:, 1])))
+            lj_lr = np.array([[1e-5,1e-4]])
+
+
 
             for h in ff_handlers:
                 if isinstance(h, nonbonded.SimpleChargeHandler):
@@ -400,5 +402,14 @@ class Trainer():
                         print("Fatal Derivatives:", charge_gradients)
                     else:
                         h.params -= charge_gradients*self.charge_lr
+                elif isinstance(h, nonbonded.LennardJonesHandler):
+                    if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)):
+                        print("Fatal Derivatives:", lj_gradients)
+                    else:
+                        print("LJ DERIVATIVES AMAX SIG", np.amax(np.abs((lj_lr*lj_gradients)[:, 0])))
+                        print("LJ DERIVATIVES AMAX EPS", np.amax(np.abs((lj_lr*lj_gradients)[:, 1])))
+                        print("before", h.params)
+                        h.params -= lj_gradients*lj_lr
+                        print("after", h.params)
 
         return pred_dG, loss
