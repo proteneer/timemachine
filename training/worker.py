@@ -111,7 +111,8 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         adjoint_du_dls = pickle.loads(request.adjoint_du_dls)
 
-        print(request.key, "adjoint_du_dls", adjoint_du_dls)
+        print(request.key, "adjoint_du_dls", np.mean(adjoint_du_dls))
+        print(request.key, "last frame", ctxt.get_last_coords())
 
         stepper.set_du_dl_adjoint(adjoint_du_dls)
         ctxt.set_x_t_adjoint(np.zeros_like(system.x0))
@@ -143,6 +144,8 @@ class Worker(service_pb2_grpc.WorkerServicer):
                 raise Exception("Unknown Gradient")
 
         reply = service_pb2.BackwardReply(dl_dps=pickle.dumps(dl_dps))
+
+        print(request.key, "DL_DPs", dl_dps)
 
         # zero out
         del self.states[request.key]
