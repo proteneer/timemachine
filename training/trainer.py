@@ -231,7 +231,8 @@ class Trainer():
                     friction=self.intg_friction,  
                     masses=combined_masses,
                     lamb=lamb,
-                    seed=np.random.randint(np.iinfo(np.int32).max)
+                    seed=1234
+                    # seed=np.random.randint(np.iinfo(np.int32).max)
                 )
 
                 complex_system = system.System(
@@ -391,10 +392,11 @@ class Trainer():
                     assert 0
                     h.params -= charge_gradients*self.learning_rates['charge']
                 elif isinstance(h, nonbonded.AM1CCCHandler):
-                    if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)):
-                        print("Fatal Charge Derivatives:", charge_gradients)
-                    else:
-                        h.params -= charge_gradients*self.learning_rates['charge']
+                    continue
+                    # if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)):
+                        # print("Fatal Charge Derivatives:", charge_gradients)
+                    # else:
+                        # h.params -= charge_gradients*self.learning_rates['charge']
                 elif isinstance(h, nonbonded.LennardJonesHandler):
                     if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)):
                         print("Fatal LJ Derivatives:", lj_gradients)
