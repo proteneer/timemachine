@@ -31,7 +31,9 @@ class Worker(service_pb2_grpc.WorkerServicer):
         return reply
 
     def ForwardMode(self, request, context):
-        # assert self.state is None
+
+        print(request.key)
+
         if request.precision == 'single':
             precision = np.float32
         elif request.precision == 'double':
@@ -108,6 +110,8 @@ class Worker(service_pb2_grpc.WorkerServicer):
         ctxt, gradients, force_names, stepper, system = self.states[request.key]
 
         adjoint_du_dls = pickle.loads(request.adjoint_du_dls)
+
+        print(request.key, "adjoint_du_dls", adjoint_du_dls)
 
         stepper.set_du_dl_adjoint(adjoint_du_dls)
         ctxt.set_x_t_adjoint(np.zeros_like(system.x0))

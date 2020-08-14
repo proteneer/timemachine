@@ -366,13 +366,15 @@ class Trainer():
             for a_idx, adjoint_du_dls in enumerate(all_adjoint_du_dls):
 
                 futures = []
-                for l_idx, lambda_du_dls in enumerate(adjoint_du_dls):
+                for l_idx, adjoint_lambda_du_dls in enumerate(adjoint_du_dls):
 
                     state_key = stage_state_keys[a_idx][l_idx]
 
+                    print("sending", state_key, adjoint_lambda_du_dls)
+
                     request = service_pb2.BackwardRequest(
                         key=state_key,
-                        adjoint_du_dls=pickle.dumps(np.asarray(lambda_du_dls)),
+                        adjoint_du_dls=pickle.dumps(np.asarray(adjoint_lambda_du_dls)),
                     )
                     futures.append(stubs[stub_idx % len(stubs)].BackwardMode.future(request))
                     stub_idx += 1
@@ -412,10 +414,10 @@ class Trainer():
                     h.params -= charge_gradients*self.learning_rates['charge']
                 elif isinstance(h, nonbonded.AM1CCCHandler):
                     continue # FIX ME LATER
-                    if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)):
-                        print("Fatal Charge Derivatives:", charge_gradients)
-                    else:
-                        h.params -= charge_gradients*self.learning_rates['charge']
+                    # if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)):
+                    #     print("Fatal Charge Derivatives:", charge_gradients)
+                    # else:
+                        # h.params -= charge_gradients*self.learning_rates['charge']
                 elif isinstance(h, nonbonded.LennardJonesHandler):
                     if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)):
                         print("Fatal LJ Derivatives:", lj_gradients)
