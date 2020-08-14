@@ -401,8 +401,8 @@ class Trainer():
                     if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)):
                         print("Fatal LJ Derivatives:", lj_gradients)
                     else:
-                        # print("LJ DERIVATIVES AMAX SIG", np.amax(np.abs((lj_lr*lj_gradients)[:, 0])))
-                        # print("LJ DERIVATIVES AMAX EPS", np.amax(np.abs((lj_lr*lj_gradients)[:, 1])))
+                        print("LJ DERIVATIVES AMAX SIG", np.amax(np.abs((self.learning_rates['lj']*lj_gradients)[:, 0])))
+                        print("LJ DERIVATIVES AMAX EPS", np.amax(np.abs((self.learning_rates['lj']*lj_gradients)[:, 1])))
                         # print("before", h.params)
                         h.params -= lj_gradients*self.learning_rates['lj']
                         # print("after", h.params)
