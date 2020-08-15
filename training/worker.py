@@ -13,21 +13,24 @@ import grpc
 import service_pb2
 import service_pb2_grpc
 
+from threading import Lock
 
 from timemachine.lib import custom_ops, ops
 
 class Worker(service_pb2_grpc.WorkerServicer):
 
     def __init__(self):
-        self.state = None
+        self.states = {}
+        self.mutex = Lock()
 
     def ResetState(self, request, context):
-        self.state = None
+        with self.mutex:
+            self.states.clear()
+
         reply = service_pb2.EmptyMessage()
         return reply
 
     def ForwardMode(self, request, context):
-        assert self.state is None
 
         if request.precision == 'single':
             precision = np.float32
@@ -66,81 +69,80 @@ class Worker(service_pb2_grpc.WorkerServicer):
         )
 
         start = time.time()
-        ctxt.forward_mode()
 
-        full_du_dls = stepper.get_du_dl() # [FxT]
-        energies = stepper.get_energies()
+        # ensure only one GPU can be running at given time.
 
-        keep_idxs = []
+        with self.mutex:
 
-        if request.n_frames > 0:
-            xs = ctxt.get_all_coords()
-            interval = max(1, xs.shape[0]//request.n_frames)
-            for frame_idx in range(xs.shape[0]):
-                if frame_idx % interval == 0:
-                    keep_idxs.append(frame_idx)
-            frames = xs[keep_idxs]
-        else:
-            frames = np.zeros((0, *system.x0.shape), dtype=system.x0.dtype)
+            ctxt.forward_mode()
+            full_du_dls = stepper.get_du_dl() # [FxT]
+            energies = stepper.get_energies()
 
-        reply = service_pb2.ForwardReply(
-            du_dls=pickle.dumps(full_du_dls),
-            energies=pickle.dumps(energies),
-            frames=pickle.dumps(frames)
-        )
+            keep_idxs = []
 
-        # store and set state for backwards mode use.
-        if request.inference is False:
-            self.state = (ctxt, gradients, force_names, stepper, system)
+            if request.n_frames > 0:
+                xs = ctxt.get_all_coords()
+                interval = max(1, xs.shape[0]//request.n_frames)
+                for frame_idx in range(xs.shape[0]):
+                    if frame_idx % interval == 0:
+                        keep_idxs.append(frame_idx)
+                frames = xs[keep_idxs]
+            else:
+                frames = np.zeros((0, *system.x0.shape), dtype=system.x0.dtype)
 
-        return reply
+
+            # store and set state for backwards mode use.
+            if request.inference is False:
+                self.states[request.key] = (ctxt, gradients, force_names, stepper, system)
+
+            return service_pb2.ForwardReply(
+                du_dls=pickle.dumps(full_du_dls), # tbd strip zeros
+                energies=pickle.dumps(energies),
+                frames=pickle.dumps(frames),
+            )
 
     def BackwardMode(self, request, context):
-        assert self.state is not None
 
-        ctxt, gradients, force_names, stepper, system = self.state
+        ctxt, gradients, force_names, stepper, system = self.states[request.key]
+
         adjoint_du_dls = pickle.loads(request.adjoint_du_dls)
+
         stepper.set_du_dl_adjoint(adjoint_du_dls)
         ctxt.set_x_t_adjoint(np.zeros_like(system.x0))
-        start = time.time()
-        print("start backwards mode")
-        ctxt.backward_mode()
-        print("bkwd run time", time.time() - start)
-        # not a valid method, grab directly from handlers
 
-        # note that we have multiple HarmonicBonds/Angles/Torsions that correspond to different parameters
-        dl_dps = []
-        for f_name, g in zip(force_names, gradients):
-            if f_name == 'HarmonicBond':
-                dl_dps.append(g.get_du_dp_tangents())
-            elif f_name == 'HarmonicAngle':
-                dl_dps.append(g.get_du_dp_tangents())
-            elif f_name == 'PeriodicTorsion':
-                dl_dps.append(g.get_du_dp_tangents())
-            elif f_name == 'Nonbonded':
-                dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dlj_tangents()))
-            elif f_name == 'LennardJones':
-                dl_dps.append(g.get_du_dlj_tangents())
-            elif f_name == 'Electrostatics':
-                dl_dps.append(g.get_du_dcharge_tangents())
-            elif f_name == 'GBSA':
-                dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dgb_tangents()))
-            elif f_name == 'CentroidRestraint':
-                dl_dps.append(None)
-            else:
-                print("f_name")
-                raise Exception("Unknown Gradient")
+        with self.mutex:
 
-        reply = service_pb2.BackwardReply(dl_dps=pickle.dumps(dl_dps))
+            ctxt.backward_mode()
 
-        self.state = None
+            # note that we have multiple HarmonicBonds/Angles/Torsions that correspond to different parameters
+            dl_dps = []
+            for f_name, g in zip(force_names, gradients):
+                if f_name == 'HarmonicBond':
+                    dl_dps.append(g.get_du_dp_tangents())
+                elif f_name == 'HarmonicAngle':
+                    dl_dps.append(g.get_du_dp_tangents())
+                elif f_name == 'PeriodicTorsion':
+                    dl_dps.append(g.get_du_dp_tangents())
+                elif f_name == 'Nonbonded':
+                    dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dlj_tangents()))
+                elif f_name == 'LennardJones':
+                    dl_dps.append(g.get_du_dlj_tangents())
+                elif f_name == 'Electrostatics':
+                    dl_dps.append(g.get_du_dcharge_tangents())
+                elif f_name == 'GBSA':
+                    dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dgb_tangents()))
+                elif f_name == 'CentroidRestraint':
+                    dl_dps.append(None)
+                else:
+                    print("f_name")
+                    raise Exception("Unknown Gradient")
 
-        return reply
+            del self.states[request.key]
+
+            return service_pb2.BackwardReply(dl_dps=pickle.dumps(dl_dps))
 
 
 def serve(args):
-
-
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1),
         options = [
@@ -153,10 +155,7 @@ def serve(args):
     server.start()
     server.wait_for_termination()
 
-
 if __name__ == '__main__':
-
-
 
     parser = argparse.ArgumentParser(description='Worker Server')
     parser.add_argument('--gpu_idx', type=int, required=True, help='Location of all output files')

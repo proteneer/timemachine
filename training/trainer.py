@@ -183,11 +183,12 @@ class Trainer():
         experiment_dG: float
             experimental unbinding free energy.
 
-        """
+        Returns
+        -------
+        float, float
+            Predicted unbinding free energy, and loss relative to experimental dG
 
-        # we can only multiplex in inference mode.
-        if inference is False:
-            assert np.sum([len(x) for x in self.lambda_schedule.values()]) == len(self.stubs)
+        """
 
         host_pdbfile = self.host_pdbfile
         lambda_schedule = self.lambda_schedule
@@ -199,9 +200,12 @@ class Trainer():
         combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), mol)
 
         stage_forward_futures = []
+        stage_state_keys = []
+
         stub_idx = 0
 
         # step 1. Prepare the jobs
+
         for stage, ti_lambdas in self.lambda_schedule.items():
 
             # print("---Starting stage", stage, '---')
@@ -221,6 +225,7 @@ class Trainer():
             )
 
             forward_futures = []
+            state_keys = []
 
             for lamb_idx, lamb in enumerate(ti_lambdas):
 
@@ -241,12 +246,20 @@ class Trainer():
                     intg
                 )
 
+                # build a hash 
+                state_key = str(stage)+"_"+str(lamb_idx)
+
                 request = service_pb2.ForwardRequest(
                     inference=inference,
                     system=pickle.dumps(complex_system),
                     precision=self.precision,
-                    n_frames=self.n_frames
+                    n_frames=self.n_frames,
+                    key=state_key
                 )
+
+                state_keys.append(state_key)
+
+                # stage_state_keys.append(state_key)
 
                 stub = stubs[stub_idx % len(stubs)]
                 stub_idx += 1
@@ -256,6 +269,7 @@ class Trainer():
                 forward_futures.append(response_future)
 
             stage_forward_futures.append((stage, forward_futures))
+            stage_state_keys.append(state_keys)
 
         # step 2. Run forward mode on the jobs
         all_du_dls = []
@@ -347,14 +361,20 @@ class Trainer():
             stage_backward_futures = []
 
             stub_idx = 0
-            for adjoint_du_dls in all_adjoint_du_dls:
+            for a_idx, adjoint_du_dls in enumerate(all_adjoint_du_dls):
 
                 futures = []
-                for lambda_du_dls in adjoint_du_dls:
+                for l_idx, adjoint_lambda_du_dls in enumerate(adjoint_du_dls):
+
+                    state_key = stage_state_keys[a_idx][l_idx]
+
+                    print("sending", state_key, adjoint_lambda_du_dls)
+
                     request = service_pb2.BackwardRequest(
-                        adjoint_du_dls=pickle.dumps(np.asarray(lambda_du_dls)),
+                        key=state_key,
+                        adjoint_du_dls=pickle.dumps(np.asarray(adjoint_lambda_du_dls)),
                     )
-                    futures.append(stubs[stub_idx].BackwardMode.future(request))
+                    futures.append(stubs[stub_idx % len(stubs)].BackwardMode.future(request))
                     stub_idx += 1
 
                 stage_backward_futures.append(futures)
@@ -385,24 +405,28 @@ class Trainer():
             charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
             lj_gradients = np.sum(lj_derivatives, axis=0) # reduce
 
+            # In order to improve the stability of training, we allow each parameter to move no more than by the learning_rate
+            # amount. 
+
             for h in ff_handlers:
                 if isinstance(h, nonbonded.SimpleChargeHandler):
-                    # debug for now
+                    # disable training to SimpleCharges
                     assert 0
                     h.params -= charge_gradients*self.learning_rates['charge']
                 elif isinstance(h, nonbonded.AM1CCCHandler):
-                    if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)):
-                        print("Fatal Charge Derivatives:", charge_gradients)
+                    if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)) or np.any(np.amax(np.abs(charge_gradients)) > 10000.0):
+                        print("Skipping Fatal Charge Derivatives:", charge_gradients)
                     else:
-                        h.params -= charge_gradients*self.learning_rates['charge']
+                        scale_factor = np.amax(np.abs(charge_gradients))/self.learning_rates['charge']
+                        h.params -= charge_gradients/scale_factor
                 elif isinstance(h, nonbonded.LennardJonesHandler):
-                    if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)):
-                        print("Fatal LJ Derivatives:", lj_gradients)
+                    if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)) or np.any(np.amax(np.abs(charge_gradients)) > 10000.0):
+                        print("Skipping Fatal LJ Derivatives:", lj_gradients)
                     else:
-                        # print("LJ DERIVATIVES AMAX SIG", np.amax(np.abs((lj_lr*lj_gradients)[:, 0])))
-                        # print("LJ DERIVATIVES AMAX EPS", np.amax(np.abs((lj_lr*lj_gradients)[:, 1])))
-                        # print("before", h.params)
-                        h.params -= lj_gradients*self.learning_rates['lj']
-                        # print("after", h.params)
+                        lj_sig_scale = np.amax(np.abs(lj_gradients[:, 0]))/self.learning_rates['lj'][0]
+                        lj_eps_scale = np.amax(np.abs(lj_gradients[:, 1]))/self.learning_rates['lj'][1]
+                        lj_scale_factors = np.array([lj_sig_scale, lj_eps_scale])
+                        h.params -= lj_gradients/lj_scale_factors
 
         return pred_dG, loss
+
