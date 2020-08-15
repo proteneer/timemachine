@@ -183,13 +183,12 @@ class Trainer():
         experiment_dG: float
             experimental unbinding free energy.
 
+        Returns
+        -------
+        float, float
+            Predicted unbinding free energy, and loss relative to experimental dG
+
         """
-
-        # we can only multiplex in inference mode.
-        # enable multiplexing in backward mode as well
-
-        # if inference is False:
-            # assert np.sum([len(x) for x in self.lambda_schedule.values()]) == len(self.stubs)
 
         host_pdbfile = self.host_pdbfile
         lambda_schedule = self.lambda_schedule
@@ -237,8 +236,7 @@ class Trainer():
                     friction=self.intg_friction,  
                     masses=combined_masses,
                     lamb=lamb,
-                    seed=1234
-                    # seed=np.random.randint(np.iinfo(np.int32).max)
+                    seed=np.random.randint(np.iinfo(np.int32).max)
                 )
 
                 complex_system = system.System(
