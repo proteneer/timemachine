@@ -407,37 +407,27 @@ class Trainer():
             charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
             lj_gradients = np.sum(lj_derivatives, axis=0) # reduce
 
-            # compute a learning rate such that the max parameter changes by no more than the learning rate.
+            # In order to improve the stability of training, we allow each parameter to move no more than by the learning_rate
+            # amount. 
 
             for h in ff_handlers:
                 if isinstance(h, nonbonded.SimpleChargeHandler):
-                    # debug for now
+                    # disable training to SimpleCharges
                     assert 0
                     h.params -= charge_gradients*self.learning_rates['charge']
                 elif isinstance(h, nonbonded.AM1CCCHandler):
-                    continue
                     if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)) or np.any(np.amax(np.abs(charge_gradients)) > 10000.0):
-                        print("Fatal Charge Derivatives:", charge_gradients)
+                        print("Skipping Fatal Charge Derivatives:", charge_gradients)
                     else:
-
-                        # should we clip or rescale
                         scale_factor = np.amax(np.abs(charge_gradients))/self.learning_rates['charge']
-                        print("Adjusting by", charge_gradients/scale_factor, "max raw elem", np.any(np.amax(np.abs(charge_gradients))))
                         h.params -= charge_gradients/scale_factor
-                        # h.params -= charge_gradients*self.learning_rates['charge']
                 elif isinstance(h, nonbonded.LennardJonesHandler):
-                    # continue
-                    if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)):
-                        print("Fatal LJ Derivatives:", lj_gradients)
+                    if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)) or np.any(np.amax(np.abs(charge_gradients)) > 10000.0):
+                        print("Skipping Fatal LJ Derivatives:", lj_gradients)
                     else:
-
                         lj_sig_scale = np.amax(np.abs(lj_gradients[:, 0]))/self.learning_rates['lj'][0]
                         lj_eps_scale = np.amax(np.abs(lj_gradients[:, 1]))/self.learning_rates['lj'][1]
-
                         lj_scale_factors = np.array([lj_sig_scale, lj_eps_scale])
-                        # print("LJ DERIVATIVES AMAX SIG", np.amax(np.abs((self.learning_rates['lj']*lj_gradients)[:, 0])))
-                        # print("LJ DERIVATIVES AMAX EPS", np.amax(np.abs((self.learning_rates['lj']*lj_gradients)[:, 1])))
-                        # h.params -= lj_gradients*self.learning_rates['lj']
                         h.params -= lj_gradients/lj_scale_factors
 
         return pred_dG, loss

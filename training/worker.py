@@ -24,9 +24,9 @@ class Worker(service_pb2_grpc.WorkerServicer):
         self.mutex = Lock()
 
     def ResetState(self, request, context):
-        self.mutex.acquire()
-        self.states.clear()
-        self.mutex.release()
+        with self.mutex:
+            self.states.clear()
+
         reply = service_pb2.EmptyMessage()
         return reply
 
