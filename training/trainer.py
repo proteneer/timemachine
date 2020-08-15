@@ -339,7 +339,9 @@ class Trainer():
             plt.savefig(os.path.join(stage_dir, "boxplot_du_dls"))
             plt.clf()
 
-            plt.plot(ti_lambdas, np.mean(sum_du_dls[:, du_dl_cutoff:], axis=1))
+            avg_du_dls = np.mean(sum_du_dls[:, du_dl_cutoff:], axis=1)
+            np.save(os.path.join(stage_dir, "avg_du_dls"), avg_du_dls)
+            plt.plot(ti_lambdas, avg_du_dls)
             plt.ylabel("du_dlambda")
             plt.savefig(os.path.join(stage_dir, "avg_du_dls"))
             plt.clf()
