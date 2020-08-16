@@ -425,8 +425,10 @@ class Trainer():
                 stage_backward_futures.append(futures)
 
             charge_derivatives = []
-            # gb_derivatives = []
             lj_derivatives = []
+
+            raw_charge_derivs = []
+            raw_lj_derivs = []
 
             for stage_futures in stage_backward_futures:
                 for future in stage_futures:
@@ -441,18 +443,54 @@ class Trainer():
                         if g[0] == 'Nonbonded':
                             # 0 is for charges
                             # 1 is for lj terms
+
+
                             charge_derivatives.append(vjp_fn[0](dl_dp[0]))
                             lj_derivatives.append(vjp_fn[1](dl_dp[1]))
+
+                            raw_charge_derivs.append(dl_dp[0])
+                            raw_lj_derivs.append(dl_dp[1])
                         elif g[0] == 'GBSA':
                             # 0 is for charges
                             # 1 is for gb terms
+
                             charge_derivatives.append(vjp_fn[0](dl_dp[0]))
-                            # gb_derivatives.append(vjp_fn[1](dl_dp[1]))
 
-                    print(timer.ping("VJP time"))
+                            raw_charge_derivs.append(dl_dp[0])
 
-            charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
-            lj_gradients = np.sum(lj_derivatives, axis=0) # reduce
+                    timer.ping("VJP time")
+
+            correct_charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
+            correct_lj_gradients = np.sum(lj_derivatives, axis=0) # reduce
+
+            print("correct_charge_gradients", correct_charge_gradients)
+            print("correct_lj_gradients", correct_lj_gradients)
+
+            # test_charge_derivatives = []
+            # test_lj_derivatives = []
+
+            sum_charge_derivs = np.sum(raw_charge_derivs, axis=0)
+            sum_lj_derivs = np.sum(raw_lj_derivs, axis=0)
+
+            for g, vjp_fn in zip(final_gradients, final_vjp_fns):
+
+                # train charges only
+                if g[0] == 'Nonbonded':
+                    # 0 is for charges
+                    # 1 is for lj terms
+
+
+                    print("test_charge_gradients", vjp_fn[0](sum_charge_derivs))
+                    print("test_lj_gradients", vjp_fn[1](sum_lj_derivs))
+
+
+                    np.testing.assert_allclose(correct_charge_gradients, vjp_fn[0](sum_charge_derivs))
+                    np.testing.assert_allclose(correct_lj_gradients, vjp_fn[1](sum_lj_derivs))
+                    # test_charge_derivatives.append(vjp_fn[0](dl_dp[0]))
+                    # test_lj_derivatives.append(vjp_fn[1](dl_dp[1]))
+
+
+            assert 0
 
             # In order to improve the stability of training, we allow each parameter to move no more than by the learning_rate
             # amount. 
