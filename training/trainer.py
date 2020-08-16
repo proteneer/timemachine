@@ -18,6 +18,21 @@ from simtk.openmm.app import PDBFile
 
 from ff.handlers import bonded, nonbonded
 
+import time
+
+class Timer():
+
+    def __init__(self):
+        self.start_time = time.time()
+        self.last_time = time.time()
+
+    def ping(self, name):
+
+        print(name, time.time() - self.last_time)
+        self.last_time = time.time()
+
+    def total(self):
+        print("total", time.time() - start_time)
 
 def compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff):
     stage_dGs = []
@@ -246,7 +261,7 @@ class Trainer():
                     intg
                 )
 
-                # build a hash 
+                # build fhash 
                 state_key = str(stage)+"_"+str(lamb_idx)
 
                 request = service_pb2.ForwardRequest(
@@ -257,8 +272,6 @@ class Trainer():
                     key=state_key
                 )
 
-                state_keys.append(state_key)
-
                 # stage_state_keys.append(state_key)
 
                 stub = stubs[stub_idx % len(stubs)]
@@ -267,6 +280,7 @@ class Trainer():
                 # launch asynchronously
                 response_future = stub.ForwardMode.future(request)
                 forward_futures.append(response_future)
+                state_keys.append(state_key)
 
             stage_forward_futures.append((stage, forward_futures))
             stage_state_keys.append(state_keys)
@@ -274,6 +288,7 @@ class Trainer():
         # step 2. Run forward mode on the jobs
         all_du_dls = []
         all_lambdas = []
+
         for stage, stage_futures in stage_forward_futures:
 
             stage_dir = os.path.join(run_dir, "stage_"+str(stage))
@@ -283,8 +298,25 @@ class Trainer():
 
                 response = future.result()
 
-                full_du_dls = pickle.loads(response.du_dls)
+                stripped_du_dls = pickle.loads(response.du_dls)
+
+                timer = Timer()
+
+                full_du_dls = []
+
+                for du_dls in stripped_du_dls:
+                    if du_dls is None:
+                        full_du_dls.append(np.zeros(self.intg_steps, dtype=np.float64))
+                    else:
+                        full_du_dls.append(du_dls)
+
+                full_du_dls = np.array(full_du_dls)
+
+                timer.ping("a")
+
                 full_energies = pickle.loads(response.energies)
+
+                timer.ping("b")
 
                 if self.n_frames > 0:
                     frames = pickle.loads(response.frames)
@@ -299,35 +331,46 @@ class Trainer():
 
                     assert full_du_dls is not None
 
+                timer.ping("c")
+
                 # we don't really want to save this full buffer, way too large
                 # np.save(os.path.join(stage_dir, "lambda_"+str(lamb_idx)+"_full_du_dls"), full_du_dls)
-                total_du_dls = np.sum(full_du_dls, axis=0)
+                # total_du_dls = np.sum(full_du_dls, axis=0)
 
-                plt.plot(total_du_dls, label="{:.2f}".format(lamb))
-                plt.ylabel("du_dl")
-                plt.xlabel("timestep")
-                plt.legend()
-                fpath = os.path.join(stage_dir, "lambda_du_dls_"+str(lamb_idx))
-                plt.savefig(fpath)
-                plt.clf()
+                # plt.plot(total_du_dls, label="{:.2f}".format(lamb))
+                # plt.ylabel("du_dl")
+                # plt.xlabel("timestep")
+                # plt.legend()
+                # fpath = os.path.join(stage_dir, "lambda_du_dls_"+str(lamb_idx))
+                # plt.savefig(fpath)
+                # plt.clf()
 
-                plt.plot(full_energies, label="{:.2f}".format(lamb))
-                plt.ylabel("U")
-                plt.xlabel("timestep")
-                plt.legend()
+                # timer.ping("d")
 
-                fpath = os.path.join(stage_dir, "lambda_energies_"+str(lamb_idx))
-                plt.savefig(fpath)
-                plt.clf()
+                # plt.plot(full_energies, label="{:.2f}".format(lamb))
+                # plt.ylabel("U")
+                # plt.xlabel("timestep")
+                # plt.legend()
+
+                # fpath = os.path.join(stage_dir, "lambda_energies_"+str(lamb_idx))
+                # plt.savefig(fpath)
+                # plt.clf()
 
                 equil_du_dls = full_du_dls[:, du_dl_cutoff:]
 
+                timer.ping("e")
+
                 for f, du_dls in zip(final_gradients, equil_du_dls):
-                    fname = f[0]
-                    print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+                    if np.any(du_dls > 0):
+                        fname = f[0]
+                        print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
 
                 total_equil_du_dls = np.sum(equil_du_dls, axis=0) # [1, T]
                 print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t mean", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
+
+                timer.ping("f")
+
+                print("total")
 
                 stage_du_dls.append(full_du_dls)
 
@@ -390,6 +433,8 @@ class Trainer():
                     backward_response = future.result()
                     dl_dps = pickle.loads(backward_response.dl_dps)
 
+                    timer = Timer()
+
                     for g, vjp_fn, dl_dp in zip(final_gradients, final_vjp_fns, dl_dps):
 
                         # train charges only
@@ -403,6 +448,8 @@ class Trainer():
                             # 1 is for gb terms
                             charge_derivatives.append(vjp_fn[0](dl_dp[0]))
                             # gb_derivatives.append(vjp_fn[1](dl_dp[1]))
+
+                    print(timer.ping("VJP time"))
 
             charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
             lj_gradients = np.sum(lj_derivatives, axis=0) # reduce

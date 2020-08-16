@@ -71,12 +71,22 @@ class Worker(service_pb2_grpc.WorkerServicer):
         start = time.time()
 
         # ensure only one GPU can be running at given time.
+        total_size = 0 
 
         with self.mutex:
 
             ctxt.forward_mode()
             full_du_dls = stepper.get_du_dl() # [FxT]
+            stripped_du_dls = []
             energies = stepper.get_energies()
+
+            for force_du_dls in full_du_dls:
+                # zero out 
+                if np.all(force_du_dls) == 0:
+                    stripped_du_dls.append(None)
+                else:
+                    stripped_du_dls.append(force_du_dls)
+                    total_size += len(force_du_dls)
 
             keep_idxs = []
 
@@ -95,8 +105,12 @@ class Worker(service_pb2_grpc.WorkerServicer):
             if request.inference is False:
                 self.states[request.key] = (ctxt, gradients, force_names, stepper, system)
 
+            # raw size if we stored only floats
+
+            print("original size", full_du_dls.size*8, "stripped size", total_size*8, "pickle size", len(pickle.dumps(stripped_du_dls)))
+
             return service_pb2.ForwardReply(
-                du_dls=pickle.dumps(full_du_dls), # tbd strip zeros
+                du_dls=pickle.dumps(stripped_du_dls), # tbd strip zeros
                 energies=pickle.dumps(energies),
                 frames=pickle.dumps(frames),
             )
@@ -138,6 +152,8 @@ class Worker(service_pb2_grpc.WorkerServicer):
                     raise Exception("Unknown Gradient")
 
             del self.states[request.key]
+
+            # this can be super slow
 
             return service_pb2.BackwardReply(dl_dps=pickle.dumps(dl_dps))
 
