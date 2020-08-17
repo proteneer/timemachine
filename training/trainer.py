@@ -261,18 +261,17 @@ class Trainer():
                     intg
                 )
 
-                # build fhash 
-                state_key = str(stage)+"_"+str(lamb_idx)
+                # this key is used for us to chase down the forward-mode coordinates
+                # when we compute derivatives in backwards mode.
+                key = str(stage)+"_"+str(lamb_idx)
 
                 request = service_pb2.ForwardRequest(
                     inference=inference,
                     system=pickle.dumps(complex_system),
                     precision=self.precision,
                     n_frames=self.n_frames,
-                    key=state_key
+                    key=key
                 )
-
-                # stage_state_keys.append(state_key)
 
                 stub = stubs[stub_idx % len(stubs)]
                 stub_idx += 1
@@ -280,7 +279,7 @@ class Trainer():
                 # launch asynchronously
                 response_future = stub.ForwardMode.future(request)
                 forward_futures.append(response_future)
-                state_keys.append(state_key)
+                state_keys.append(key)
 
             stage_forward_futures.append((stage, forward_futures))
             stage_state_keys.append(state_keys)
@@ -302,6 +301,7 @@ class Trainer():
 
                 full_du_dls = []
 
+                # unpack sparse du_dls into full set
                 for du_dls in stripped_du_dls:
                     if du_dls is None:
                         full_du_dls.append(np.zeros(self.intg_steps, dtype=np.float64))
@@ -324,7 +324,7 @@ class Trainer():
 
                     assert full_du_dls is not None
 
-                # we don't really want to save this full buffer, way too large
+                # we don't really want to save this full buffer
                 # np.save(os.path.join(stage_dir, "lambda_"+str(lamb_idx)+"_full_du_dls"), full_du_dls)
                 # total_du_dls = np.sum(full_du_dls, axis=0)
 
@@ -395,10 +395,10 @@ class Trainer():
                 futures = []
                 for l_idx, adjoint_lambda_du_dls in enumerate(adjoint_du_dls):
 
-                    state_key = stage_state_keys[a_idx][l_idx]
+                    key = stage_state_keys[a_idx][l_idx]
 
                     request = service_pb2.BackwardRequest(
-                        key=state_key,
+                        key=key,
                         adjoint_du_dls=pickle.dumps(np.asarray(adjoint_lambda_du_dls)),
                     )
                     futures.append(stubs[stub_idx % len(stubs)].BackwardMode.future(request))
@@ -434,6 +434,9 @@ class Trainer():
             sum_charge_derivs = np.sum(raw_charge_derivs, axis=0)
             sum_lj_derivs = np.sum(raw_lj_derivs, axis=0)
 
+            # (ytz): the learning rate determines the magnitude we're allowed to move each parameter.
+            # every component of the derivative is adjusted so that the max element moves precisely
+            # by the lr amount.
             for h, vjp_fn in handler_vjp_fns.items():
 
                 if isinstance(h, nonbonded.SimpleChargeHandler):
