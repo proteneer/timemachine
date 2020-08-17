@@ -131,7 +131,7 @@ def create_system(
 
     # Name, Args, vjp_fn
     final_gradients = []
-    final_vjp_fns = []
+    # final_vjp_fns = []
 
     for item in host_fns: 
 
@@ -146,7 +146,7 @@ def create_system(
             host_exclusions = item[1]
         else:
             final_gradients.append((item[0], item[1]))
-            final_vjp_fns.append(None)
+            # final_vjp_fns.append(None)
 
     guest_exclusion_idxs, guest_scales = nonbonded.generate_exclusion_idxs(
         guest_mol,
@@ -167,59 +167,68 @@ def create_system(
     combined_lj_exclusion_scales = np.concatenate([host_lj_exclusion_scales, guest_lj_exclusion_scales])
     combined_charge_exclusion_scales = np.concatenate([host_charge_exclusion_scales, guest_charge_exclusion_scales])
 
+    # decouple this
+
+    handler_vjp_fns = {}
+
     for handle in handlers:
         results = handle.parameterize(guest_mol)
 
         if isinstance(handle, bonded.HarmonicBondHandler):
-            bond_idxs, (bond_params, bond_vjp_fn) = results
+            bond_idxs, (bond_params, handler_vjp_fn) = results
             bond_idxs += num_host_atoms
             final_gradients.append(("HarmonicBond", (bond_idxs, bond_params)))
-            final_vjp_fns.append((bond_vjp_fn))
+
+            # final_vjp_fns.append((bond_vjp_fn))
             # handler_vjps.append(bond_vjp_fn)
         elif isinstance(handle, bonded.HarmonicAngleHandler):
-            angle_idxs, (angle_params, angle_vjp_fn) = results
+            angle_idxs, (angle_params, handler_vjp_fn) = results
             angle_idxs += num_host_atoms
             final_gradients.append(("HarmonicAngle", (angle_idxs, angle_params)))
-            final_vjp_fns.append(angle_vjp_fn)
+            # handler_vjp_fns["HarmonicAngle"] = angle_vjp_fn
+            # final_vjp_fns.append(angle_vjp_fn)
             # handler_vjps.append(angle_vjp_fn)
         elif isinstance(handle, bonded.ProperTorsionHandler):
-            torsion_idxs, (torsion_params, torsion_vjp_fn) = results
+            torsion_idxs, (torsion_params, handler_vjp_fn) = results
             torsion_idxs += num_host_atoms
             final_gradients.append(("PeriodicTorsion", (torsion_idxs, torsion_params)))
-            final_vjp_fns.append(torsion_vjp_fn)
+            # handler_vjp_fns["ProperTorsionHandler"] = torsion_vjp_fn
+            # final_vjp_fns.append(torsion_vjp_fn)
             # handler_vjps.append(torsion_vjp_fn)
             # guest_vjp_fns.append(torsion_vjp_fn)
         elif isinstance(handle, bonded.ImproperTorsionHandler):
-            torsion_idxs, (torsion_params, torsion_vjp_fn) = results
+            torsion_idxs, (torsion_params, handler_vjp_fn) = results
             torsion_idxs += num_host_atoms
             final_gradients.append(("PeriodicTorsion", (torsion_idxs, torsion_params)))
-            final_vjp_fns.append(torsion_vjp_fn)
+            # final_vjp_fns.append(torsion_vjp_fn)
             # handler_vjps.append(torsion_vjp_fn)
         elif isinstance(handle, nonbonded.LennardJonesHandler):
             guest_lj_params, guest_lj_vjp_fn = results
-            combined_lj_params, combined_lj_vjp_fn = concat_with_vjps(host_lj_params, guest_lj_params, None, guest_lj_vjp_fn)
+            combined_lj_params, handler_vjp_fn = concat_with_vjps(host_lj_params, guest_lj_params, None, guest_lj_vjp_fn)
             # final_gradients.append(("LennardJones", (torsion_idxs, torsion_params)))
             # final_vjp_fns.append(combined_lj_vjp_fn)
             # handler_vjps.append(lj_adjoint_fn)
         elif isinstance(handle, nonbonded.SimpleChargeHandler):
             guest_charge_params, guest_charge_vjp_fn = results
-            combined_charge_params, combined_charge_vjp_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
+            combined_charge_params, handler_vjp_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
             # handler_vjps.append(charge_adjoint_fn)
         elif isinstance(handle, nonbonded.GBSAHandler):
             guest_gb_params, guest_gb_vjp_fn = results
-            combined_gb_params, combined_gb_vjp_fn = concat_with_vjps(host_gb_params, guest_gb_params, None, guest_gb_vjp_fn)
+            combined_gb_params, handler_vjp_fn = concat_with_vjps(host_gb_params, guest_gb_params, None, guest_gb_vjp_fn)
             # handler_vjps.append(gb_adjoint_fn)
         elif isinstance(handle, nonbonded.AM1BCCHandler):
             # ill defined behavior if both SimpleChargeHandler and AM1Handler is present
             guest_charge_params, guest_charge_vjp_fn = results
-            combined_charge_params, combined_charge_vjp_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
+            combined_charge_params, handler_vjp_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
             # handler_vjps.append(gb_adjoint_fn)
         elif isinstance(handle, nonbonded.AM1CCCHandler):
             guest_charge_params, guest_charge_vjp_fn = results
-            combined_charge_params, combined_charge_vjp_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
+            combined_charge_params, handler_vjp_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
             # handler_vjps.append(gb_adjoint_fn)
         else:
             raise Exception("Unknown Handler", handle)
+
+        handler_vjp_fns[handle] = handler_vjp_fn
 
     host_conf = []
     for x,y,z in host_pdb.positions:
@@ -262,7 +271,7 @@ def create_system(
         cutoff
         )
     ))
-    final_vjp_fns.append((combined_charge_vjp_fn, combined_lj_vjp_fn))
+    # final_vjp_fns.append((combined_charge_vjp_fn, combined_lj_vjp_fn))
 
     final_gradients.append((
         'GBSA', (
@@ -275,7 +284,7 @@ def create_system(
         cutoff
         )
     ))
-    final_vjp_fns.append((combined_charge_vjp_fn, combined_gb_vjp_fn))
+    # final_vjp_fns.append((combined_charge_vjp_fn, combined_gb_vjp_fn))
 
     ligand_idxs = np.arange(N_A, N_C, dtype=np.int32)
 
@@ -307,7 +316,7 @@ def create_system(
         )
     ))
 
-    final_vjp_fns.append(lambda x: None)
+    # final_vjp_fns.append(lambda x: None)
 
     ssc = standard_state.harmonic_com_ssc(
         restr_force_constant,
@@ -315,4 +324,4 @@ def create_system(
         intg_temperature
     )
 
-    return x0, combined_masses, ssc, final_gradients, final_vjp_fns
+    return x0, combined_masses, ssc, final_gradients, handler_vjp_fns
