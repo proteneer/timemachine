@@ -154,10 +154,6 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
             del self.states[request.key]
 
-            # this can be super slow
-
-            print("derivatives size:", len(pickle.dumps(dl_dps)))
-
             return service_pb2.BackwardReply(dl_dps=pickle.dumps(dl_dps))
 
 
