@@ -191,19 +191,44 @@ def create_system(
             final_gradients.append(("PeriodicTorsion", (torsion_idxs, torsion_params)))
         elif isinstance(handle, nonbonded.LennardJonesHandler):
             guest_lj_params, guest_lj_vjp_fn = results
-            combined_lj_params, handler_vjp_fn = concat_with_vjps(host_lj_params, guest_lj_params, None, guest_lj_vjp_fn)
+            combined_lj_params, handler_vjp_fn = concat_with_vjps(
+                host_lj_params,
+                guest_lj_params,
+                None,
+                guest_lj_vjp_fn
+            )
         elif isinstance(handle, nonbonded.SimpleChargeHandler):
             guest_charge_params, guest_charge_vjp_fn = results
-            combined_charge_params, handler_vjp_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
+            combined_charge_params, handler_vjp_fn = concat_with_vjps(
+                host_charge_params,
+                guest_charge_params,
+                None,
+                guest_charge_vjp_fn
+            )
         elif isinstance(handle, nonbonded.GBSAHandler):
             guest_gb_params, guest_gb_vjp_fn = results
-            combined_gb_params, handler_vjp_fn = concat_with_vjps(host_gb_params, guest_gb_params, None, guest_gb_vjp_fn)
+            combined_gb_params, handler_vjp_fn = concat_with_vjps(
+                host_gb_params,
+                guest_gb_params,
+                None,
+                guest_gb_vjp_fn
+            )
         elif isinstance(handle, nonbonded.AM1BCCHandler):
             guest_charge_params, guest_charge_vjp_fn = results
-            combined_charge_params, handler_vjp_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
+            combined_charge_params, handler_vjp_fn = concat_with_vjps(
+                host_charge_params,
+                guest_charge_params,
+                None,
+                guest_charge_vjp_fn
+            )
         elif isinstance(handle, nonbonded.AM1CCCHandler):
             guest_charge_params, guest_charge_vjp_fn = results
-            combined_charge_params, handler_vjp_fn = concat_with_vjps(host_charge_params, guest_charge_params, None, guest_charge_vjp_fn)
+            combined_charge_params, handler_vjp_fn = concat_with_vjps(
+                host_charge_params,
+                guest_charge_params,
+                None,
+                guest_charge_vjp_fn
+            )
         else:
             raise Exception("Unknown Handler", handle)
 
@@ -292,8 +317,6 @@ def create_system(
             lamb_offset
         )
     ))
-
-    # final_vjp_fns.append(lambda x: None)
 
     ssc = standard_state.harmonic_com_ssc(
         restr_force_constant,
