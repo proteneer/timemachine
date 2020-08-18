@@ -67,13 +67,8 @@ if __name__ == "__main__":
     data = []
 
     for guest_idx, mol in enumerate(suppl):
-        # if guest_idx == 5:
-            # break
-        if mol.GetProp("_Name") != "43":
-            continue
         mol_dG = -1*convert_uIC50_to_kJ_per_mole(float(mol.GetProp(general_cfg['bind_prop'])))
         data.append((mol, mol_dG))
-        # break
 
     full_dataset = dataset.Dataset(data)
     train_frac = float(general_cfg['train_frac'])

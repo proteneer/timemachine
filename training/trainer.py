@@ -18,6 +18,21 @@ from simtk.openmm.app import PDBFile
 
 from ff.handlers import bonded, nonbonded
 
+import time
+
+class Timer():
+
+    def __init__(self):
+        self.start_time = time.time()
+        self.last_time = time.time()
+
+    def ping(self, name):
+
+        print(name, time.time() - self.last_time)
+        self.last_time = time.time()
+
+    def total(self):
+        print("total", time.time() - start_time)
 
 def compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff):
     stage_dGs = []
@@ -214,7 +229,7 @@ class Trainer():
             if not os.path.exists(stage_dir):
                 os.makedirs(stage_dir)
 
-            x0, combined_masses, ssc, final_gradients, final_vjp_fns = setup_system.create_system(
+            x0, combined_masses, ssc, final_gradients, handler_vjp_fns = setup_system.create_system(
                 mol,
                 host_pdb,
                 ff_handlers,
@@ -246,20 +261,17 @@ class Trainer():
                     intg
                 )
 
-                # build a hash 
-                state_key = str(stage)+"_"+str(lamb_idx)
+                # this key is used for us to chase down the forward-mode coordinates
+                # when we compute derivatives in backwards mode.
+                key = str(stage)+"_"+str(lamb_idx)
 
                 request = service_pb2.ForwardRequest(
                     inference=inference,
                     system=pickle.dumps(complex_system),
                     precision=self.precision,
                     n_frames=self.n_frames,
-                    key=state_key
+                    key=key
                 )
-
-                state_keys.append(state_key)
-
-                # stage_state_keys.append(state_key)
 
                 stub = stubs[stub_idx % len(stubs)]
                 stub_idx += 1
@@ -267,6 +279,7 @@ class Trainer():
                 # launch asynchronously
                 response_future = stub.ForwardMode.future(request)
                 forward_futures.append(response_future)
+                state_keys.append(key)
 
             stage_forward_futures.append((stage, forward_futures))
             stage_state_keys.append(state_keys)
@@ -274,6 +287,7 @@ class Trainer():
         # step 2. Run forward mode on the jobs
         all_du_dls = []
         all_lambdas = []
+
         for stage, stage_futures in stage_forward_futures:
 
             stage_dir = os.path.join(run_dir, "stage_"+str(stage))
@@ -283,7 +297,18 @@ class Trainer():
 
                 response = future.result()
 
-                full_du_dls = pickle.loads(response.du_dls)
+                stripped_du_dls = pickle.loads(response.du_dls)
+
+                full_du_dls = []
+
+                # unpack sparse du_dls into full set
+                for du_dls in stripped_du_dls:
+                    if du_dls is None:
+                        full_du_dls.append(np.zeros(self.intg_steps, dtype=np.float64))
+                    else:
+                        full_du_dls.append(du_dls)
+
+                full_du_dls = np.array(full_du_dls)
                 full_energies = pickle.loads(response.energies)
 
                 if self.n_frames > 0:
@@ -299,36 +324,38 @@ class Trainer():
 
                     assert full_du_dls is not None
 
-                # we don't really want to save this full buffer, way too large
+                # we don't really want to save this full buffer
                 # np.save(os.path.join(stage_dir, "lambda_"+str(lamb_idx)+"_full_du_dls"), full_du_dls)
-                total_du_dls = np.sum(full_du_dls, axis=0)
+                # total_du_dls = np.sum(full_du_dls, axis=0)
 
-                plt.plot(total_du_dls, label="{:.2f}".format(lamb))
-                plt.ylabel("du_dl")
-                plt.xlabel("timestep")
-                plt.legend()
-                fpath = os.path.join(stage_dir, "lambda_du_dls_"+str(lamb_idx))
-                plt.savefig(fpath)
-                plt.clf()
+                # plt.plot(total_du_dls, label="{:.2f}".format(lamb))
+                # plt.ylabel("du_dl")
+                # plt.xlabel("timestep")
+                # plt.legend()
+                # fpath = os.path.join(stage_dir, "lambda_du_dls_"+str(lamb_idx))
+                # plt.savefig(fpath)
+                # plt.clf()
 
-                plt.plot(full_energies, label="{:.2f}".format(lamb))
-                plt.ylabel("U")
-                plt.xlabel("timestep")
-                plt.legend()
+                # timer.ping("d")
 
-                fpath = os.path.join(stage_dir, "lambda_energies_"+str(lamb_idx))
-                plt.savefig(fpath)
-                plt.clf()
+                # plt.plot(full_energies, label="{:.2f}".format(lamb))
+                # plt.ylabel("U")
+                # plt.xlabel("timestep")
+                # plt.legend()
+
+                # fpath = os.path.join(stage_dir, "lambda_energies_"+str(lamb_idx))
+                # plt.savefig(fpath)
+                # plt.clf()
 
                 equil_du_dls = full_du_dls[:, du_dl_cutoff:]
 
                 for f, du_dls in zip(final_gradients, equil_du_dls):
-                    fname = f[0]
-                    print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+                    if np.any(np.abs(du_dls) > 0):
+                        fname = f[0]
+                        print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
 
                 total_equil_du_dls = np.sum(equil_du_dls, axis=0) # [1, T]
                 print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t mean", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
-
                 stage_du_dls.append(full_du_dls)
 
             sum_du_dls = np.sum(stage_du_dls, axis=1) # [L,F,T], lambda windows, num forces, num frames
@@ -339,7 +366,9 @@ class Trainer():
             plt.savefig(os.path.join(stage_dir, "boxplot_du_dls"))
             plt.clf()
 
-            plt.plot(ti_lambdas, np.mean(sum_du_dls[:, du_dl_cutoff:], axis=1))
+            avg_du_dls = np.mean(sum_du_dls[:, du_dl_cutoff:], axis=1)
+            np.save(os.path.join(stage_dir, "avg_du_dls"), avg_du_dls)
+            plt.plot(ti_lambdas, avg_du_dls)
             plt.ylabel("du_dlambda")
             plt.savefig(os.path.join(stage_dir, "avg_du_dls"))
             plt.clf()
@@ -366,12 +395,10 @@ class Trainer():
                 futures = []
                 for l_idx, adjoint_lambda_du_dls in enumerate(adjoint_du_dls):
 
-                    state_key = stage_state_keys[a_idx][l_idx]
-
-                    print("sending", state_key, adjoint_lambda_du_dls)
+                    key = stage_state_keys[a_idx][l_idx]
 
                     request = service_pb2.BackwardRequest(
-                        key=state_key,
+                        key=key,
                         adjoint_du_dls=pickle.dumps(np.asarray(adjoint_lambda_du_dls)),
                     )
                     futures.append(stubs[stub_idx % len(stubs)].BackwardMode.future(request))
@@ -379,54 +406,59 @@ class Trainer():
 
                 stage_backward_futures.append(futures)
 
-            charge_derivatives = []
-            # gb_derivatives = []
-            lj_derivatives = []
+            raw_charge_derivs = []
+            raw_lj_derivs = []
 
+            # (ytz): we compute the vjps using a trick:
+            # since vjp_fn(y0_adjoint) + vjp_fn(y1_adjoint) == vjp_fn(y0_adjoint + y1_adjoint)
+            # reduce the raw derivatives of size Q, then compute the vjp(Q_adjoint) to get P_adjoint
             for stage_futures in stage_backward_futures:
                 for future in stage_futures:
                     backward_response = future.result()
                     dl_dps = pickle.loads(backward_response.dl_dps)
 
-                    for g, vjp_fn, dl_dp in zip(final_gradients, final_vjp_fns, dl_dps):
+                    for g, dl_dp in zip(final_gradients, dl_dps):
 
                         # train charges only
                         if g[0] == 'Nonbonded':
                             # 0 is for charges
                             # 1 is for lj terms
-                            charge_derivatives.append(vjp_fn[0](dl_dp[0]))
-                            lj_derivatives.append(vjp_fn[1](dl_dp[1]))
+                            raw_charge_derivs.append(dl_dp[0])
+                            raw_lj_derivs.append(dl_dp[1])
                         elif g[0] == 'GBSA':
                             # 0 is for charges
                             # 1 is for gb terms
-                            charge_derivatives.append(vjp_fn[0](dl_dp[0]))
-                            # gb_derivatives.append(vjp_fn[1](dl_dp[1]))
+                            raw_charge_derivs.append(dl_dp[0])
 
-            charge_gradients = np.sum(charge_derivatives, axis=0) # reduce
-            lj_gradients = np.sum(lj_derivatives, axis=0) # reduce
 
-            # In order to improve the stability of training, we allow each parameter to move no more than by the learning_rate
-            # amount. 
+            sum_charge_derivs = np.sum(raw_charge_derivs, axis=0)
+            sum_lj_derivs = np.sum(raw_lj_derivs, axis=0)
 
-            for h in ff_handlers:
+            # (ytz): the learning rate determines the magnitude we're allowed to move each parameter.
+            # every component of the derivative is adjusted so that the max element moves precisely
+            # by the lr amount.
+            for h, vjp_fn in handler_vjp_fns.items():
+
                 if isinstance(h, nonbonded.SimpleChargeHandler):
                     # disable training to SimpleCharges
                     assert 0
                     h.params -= charge_gradients*self.learning_rates['charge']
                 elif isinstance(h, nonbonded.AM1CCCHandler):
+                    charge_gradients = vjp_fn(sum_charge_derivs)
                     if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)) or np.any(np.amax(np.abs(charge_gradients)) > 10000.0):
                         print("Skipping Fatal Charge Derivatives:", charge_gradients)
                     else:
-                        scale_factor = np.amax(np.abs(charge_gradients))/self.learning_rates['charge']
-                        h.params -= charge_gradients/scale_factor
+                        charge_scale_factor = np.amax(np.abs(charge_gradients))/self.learning_rates['charge']
+                        h.params -= charge_gradients/charge_scale_factor
                 elif isinstance(h, nonbonded.LennardJonesHandler):
-                    if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)) or np.any(np.amax(np.abs(charge_gradients)) > 10000.0):
+                    lj_gradients = vjp_fn(sum_lj_derivs)
+                    if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)) or np.any(np.amax(np.abs(lj_gradients)) > 10000.0):
                         print("Skipping Fatal LJ Derivatives:", lj_gradients)
                     else:
                         lj_sig_scale = np.amax(np.abs(lj_gradients[:, 0]))/self.learning_rates['lj'][0]
                         lj_eps_scale = np.amax(np.abs(lj_gradients[:, 1]))/self.learning_rates['lj'][1]
-                        lj_scale_factors = np.array([lj_sig_scale, lj_eps_scale])
-                        h.params -= lj_gradients/lj_scale_factors
+                        lj_scale_factor = np.array([lj_sig_scale, lj_eps_scale])
+                        h.params -= lj_gradients/lj_scale_factor
 
         return pred_dG, loss
 

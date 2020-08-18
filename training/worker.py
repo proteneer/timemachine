@@ -71,12 +71,22 @@ class Worker(service_pb2_grpc.WorkerServicer):
         start = time.time()
 
         # ensure only one GPU can be running at given time.
+        total_size = 0 
 
         with self.mutex:
 
             ctxt.forward_mode()
             full_du_dls = stepper.get_du_dl() # [FxT]
+            stripped_du_dls = []
             energies = stepper.get_energies()
+
+            for force_du_dls in full_du_dls:
+                # zero out 
+                if np.all(force_du_dls) == 0:
+                    stripped_du_dls.append(None)
+                else:
+                    stripped_du_dls.append(force_du_dls)
+                    total_size += len(force_du_dls)
 
             keep_idxs = []
 
@@ -96,7 +106,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
                 self.states[request.key] = (ctxt, gradients, force_names, stepper, system)
 
             return service_pb2.ForwardReply(
-                du_dls=pickle.dumps(full_du_dls), # tbd strip zeros
+                du_dls=pickle.dumps(stripped_du_dls), # tbd strip zeros
                 energies=pickle.dumps(energies),
                 frames=pickle.dumps(frames),
             )
@@ -118,17 +128,22 @@ class Worker(service_pb2_grpc.WorkerServicer):
             dl_dps = []
             for f_name, g in zip(force_names, gradients):
                 if f_name == 'HarmonicBond':
-                    dl_dps.append(g.get_du_dp_tangents())
+                    # dl_dps.append(g.get_du_dp_tangents())
+                    dl_dps.append(None)
                 elif f_name == 'HarmonicAngle':
-                    dl_dps.append(g.get_du_dp_tangents())
+                    # dl_dps.append(g.get_du_dp_tangents())
+                    dl_dps.append(None)
                 elif f_name == 'PeriodicTorsion':
-                    dl_dps.append(g.get_du_dp_tangents())
+                    # dl_dps.append(g.get_du_dp_tangents())
+                    dl_dps.append(None)
                 elif f_name == 'Nonbonded':
                     dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dlj_tangents()))
                 elif f_name == 'LennardJones':
-                    dl_dps.append(g.get_du_dlj_tangents())
+                    # dl_dps.append(g.get_du_dlj_tangents())
+                    dl_dps.append(None)
                 elif f_name == 'Electrostatics':
-                    dl_dps.append(g.get_du_dcharge_tangents())
+                    # dl_dps.append(g.get_du_dcharge_tangents())
+                    dl_dps.append(None)
                 elif f_name == 'GBSA':
                     dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dgb_tangents()))
                 elif f_name == 'CentroidRestraint':
