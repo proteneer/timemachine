@@ -35,27 +35,32 @@ def integrate(triples):
 def estimate(triples, ssc):
 
     # Compute the mean
+    print(triples.ndim)
     if triples.ndim == 2:
-        return np.array([integrate(triples)]) + ssc
+        print("SINGLE")
+        return np.array([integrate(triples) + ssc])
 
     # Compute the CI
+    print("TUPLE")
     results = []
     for arr in triples:
         dG = integrate(arr)
         results.append(dG)
 
-    return np.array(results) +   ssc
+    print(np.array(results) + ssc)
 
-def ti_ci(all_du_dls, stage_lambdas, ssc, du_dl_cutoff):
+    return np.array(results) + ssc
+
+def ti_ci(all_du_dls, ssc, stage_lambdas, du_dl_cutoff):
     """
     Compute the bootstrap confidence interval under thermodynamic integration.
 
     Parameters
     ----------
-    avg_du_dls: list of np.array
-        Average du_dls for each stage
+    all_du_dls: list of np.array [S, L, F, T]
+        all_du_dls for each stage
 
-    stage_lambdas: list of np.array
+    stage_lambdas: list of np.array [S, L]
         Lambda schedule for each stage
 
     ssc: float
@@ -67,27 +72,23 @@ def ti_ci(all_du_dls, stage_lambdas, ssc, du_dl_cutoff):
 
     """
 
-    avg_du_dls = []
-    for du_dls in all_du_dls:
-        avg_du_dls.append(np.sum(lamb_full_du_dls[:, du_dl_cutoff:], axis=0))
+    multi_stage_avg_du_dls = []
 
+    for stage_du_dls in all_du_dls:
+        avg_du_dls = []
+        for lamb_full_du_dls in stage_du_dls:
+            avg_du_dls.append(np.mean(np.sum(lamb_full_du_dls[:, du_dl_cutoff:], axis=0)))
+        avg_du_dls = np.concatenate([avg_du_dls])
+        multi_stage_avg_du_dls.append(avg_du_dls)
+
+    # sample from triples
     triples = []
-    for stage_idx, (stage_lambdas, stage_du_dls) in enumerate(zip(avg_du_dls, stage_lambdas)):
-        for d, l in zip(stage_lambdas, stage_du_dls):
+    for stage_idx, (stage_du_dls, lambdas) in enumerate(zip(multi_stage_avg_du_dls, stage_lambdas)):
+
+        for d, l in zip(stage_du_dls, lambdas):
             triples.append((stage_idx, d, l))
 
     stat_fn = functools.partial(estimate, ssc=ssc)
 
     return bs.bootstrap(np.array(triples), stat_func=stat_fn)
 
-
-# stage_0_du_dls = np.random.rand(10)
-# stage_0_lambdas = np.linspace(0, 1, 10)
-
-# stage_1_du_dls = np.load("/home/yutong/Downloads/67.npy")
-# stage_1_lambdas = np.concatenate([
-#     np.linspace(0, 0.15, 40, endpoint=False),
-#     np.linspace(0.15, 0.33, 160, endpoint=False),
-#     np.linspace(0.33, 0.6, 100, endpoint=False),
-#     np.linspace(0.6, 1.5, 20),
-# ])
