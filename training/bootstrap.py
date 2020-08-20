@@ -1,4 +1,6 @@
-# bootstrap TI estimate of free energy
+# (ytz): bootstrap TI estimate of free energy, this is fairly redundant
+# we need to cleanup/refactor this with the actual estimater code so
+# it's jess janky
 
 import numpy as np
 
@@ -6,6 +8,7 @@ import bootstrapped.bootstrap as bs
 import bootstrapped.stats_functions as bs_stats
 
 import functools
+
 
 def integrate(triples):
 
@@ -35,19 +38,14 @@ def integrate(triples):
 def estimate(triples, ssc):
 
     # Compute the mean
-    print(triples.ndim)
     if triples.ndim == 2:
-        print("SINGLE")
         return np.array([integrate(triples) + ssc])
 
     # Compute the CI
-    print("TUPLE")
     results = []
     for arr in triples:
         dG = integrate(arr)
         results.append(dG)
-
-    print(np.array(results) + ssc)
 
     return np.array(results) + ssc
 
@@ -74,6 +72,7 @@ def ti_ci(all_du_dls, ssc, stage_lambdas, du_dl_cutoff):
 
     multi_stage_avg_du_dls = []
 
+    # compute the means
     for stage_du_dls in all_du_dls:
         avg_du_dls = []
         for lamb_full_du_dls in stage_du_dls:
