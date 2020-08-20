@@ -8,7 +8,7 @@ from io import StringIO
 from fe import math_utils, system
 from rdkit import Chem
 
-from training import setup_system
+from training import setup_system, bootstrap
 from training import service_pb2
 from matplotlib import pyplot as plt
 import pickle
@@ -17,6 +17,7 @@ from fe.pdb_writer import PDBWriter
 from simtk.openmm.app import PDBFile
 
 from ff.handlers import bonded, nonbonded
+
 
 import time
 
@@ -149,6 +150,7 @@ class Trainer():
             allowed values are "single" or "double", (typical=single)
 
         """
+
 
         self.du_dl_cutoff = du_dl_cutoff
         self.host_pdbfile = host_pdbfile
@@ -378,6 +380,7 @@ class Trainer():
 
 
         pred_dG = dG_TI(all_du_dls, ssc, all_lambdas, du_dl_cutoff)
+        ci = bootstrap.ti_ci(all_du_dls, ssc, all_lambdas, du_dl_cutoff)
         loss = loss_fn(all_du_dls, ssc, all_lambdas, experiment_dG, du_dl_cutoff)
 
         print("mol", mol.GetProp("_Name"), "stage dGs:", compute_dGs(all_du_dls, all_lambdas, du_dl_cutoff), "ssc:", ssc)
@@ -460,5 +463,5 @@ class Trainer():
                         lj_scale_factor = np.array([lj_sig_scale, lj_eps_scale])
                         h.params -= lj_gradients/lj_scale_factor
 
-        return pred_dG, loss
+        return pred_dG, ci, loss
 
