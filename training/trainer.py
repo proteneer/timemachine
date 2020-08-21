@@ -274,10 +274,7 @@ class Trainer():
 
                 elif stage == 1:
 
-                    assert 0
-                    # fix stepping etc.
-
-                    lambda_schedule = np.concatenate([
+                        lambda_schedule = np.concatenate([
                         np.linspace(0.75, lamb, 2000),
                         np.zeros(self.intg_steps-2000) + lamb
                     ])
