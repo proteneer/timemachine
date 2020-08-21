@@ -231,7 +231,7 @@ class Trainer():
             if not os.path.exists(stage_dir):
                 os.makedirs(stage_dir)
 
-            x0, combined_masses, ssc, final_gradients, handler_vjp_fns = setup_system.create_system(
+            x0, combined_masses, ssc, final_gradients, handler_vjp_fns = setup_system.create_systems(
                 mol,
                 host_pdb,
                 ff_handlers,
@@ -246,32 +246,64 @@ class Trainer():
 
             for lamb_idx, lamb in enumerate(ti_lambdas):
 
-                intg = system.Integrator(
-                    steps=self.intg_steps,
-                    dt=self.intg_dt,
-                    temperature=self.intg_temperature,
-                    friction=self.intg_friction,  
-                    masses=combined_masses,
-                    lamb=lamb,
-                    seed=np.random.randint(np.iinfo(np.int32).max)
-                )
+                if stage == 0:
 
-                complex_system = system.System(
+                    min_steps = 3000
+
+                    minimization_intg = system.Integrator(
+                        steps=min_steps,
+                        dt=1.5e-3,
+                        temperature=self.intg_temperature,
+                        friction=self.intg_friction,  
+                        masses=combined_masses,
+                        lambs=np.linspace(1.0, 0.0, min_steps),
+                        seed=np.random.randint(np.iinfo(np.int32).max)
+                    )
+
+                    dynamics_intg = system.Integrator(
+                        steps=self.intg_steps,
+                        dt=self.intg_dt,
+                        temperature=self.intg_temperature,
+                        friction=self.intg_friction,  
+                        masses=combined_masses,
+                        lambs=np.zeros(self.intg_steps) + lamb,
+                        seed=np.random.randint(np.iinfo(np.int32).max)
+                    )
+
+                    integrators = [minimization_intg, dynamics_intg]
+
+                elif stage == 1:
+
+                    assert 0
+                    # fix stepping etc.
+
+                    integrators = [system.Integrator(
+                        steps=self.intg_steps,
+                        dt=self.intg_dt,
+                        temperature=self.intg_temperature,
+                        friction=self.intg_friction,  
+                        masses=combined_masses,
+                        lamb=lamb,
+                        seed=np.random.randint(np.iinfo(np.int32).max)
+                    )]
+
+                # complex_system = system.System(
                     # x0,
                     # np.zeros_like(x0),
-                    final_gradients,
-                    intg
-                )
+                    # final_gradients,
+                    # intg
+                # )
 
                 # this key is used for us to chase down the forward-mode coordinates
                 # when we compute derivatives in backwards mode.
                 key = str(stage)+"_"+str(lamb_idx)
 
                 request = service_pb2.ForwardRequest(
-                    x0=x0,
-                    v0=np.zeros_like(x0),
+                    x0=pickle.dumps(x0),
+                    v0=pickle.dumps(np.zeros_like(x0)),
                     inference=inference,
-                    system=pickle.dumps(complex_system),
+                    gradients=pickle.dumps(final_gradients),
+                    integrators=pickle.dumps(integrators),
                     precision=self.precision,
                     n_frames=self.n_frames,
                     key=key
@@ -301,18 +333,23 @@ class Trainer():
 
                 response = future.result()
 
-                stripped_du_dls = pickle.loads(response.du_dls)
+                full_du_dls = pickle.loads(response.du_dls)
 
-                full_du_dls = []
+                # stripped_du_dls = pickle.loads(response.du_dls)
 
-                # unpack sparse du_dls into full set
-                for du_dls in stripped_du_dls:
-                    if du_dls is None:
-                        full_du_dls.append(np.zeros(self.intg_steps, dtype=np.float64))
-                    else:
-                        full_du_dls.append(du_dls)
+                # full_du_dls = []
+
+                # # unpack sparse du_dls into full set
+                # for du_dls in stripped_du_dls:
+                #     if du_dls is None:
+                #         full_du_dls.append(np.zeros(self.intg_steps, dtype=np.float64))
+                #     else:
+                #         full_du_dls.append(du_dls)
 
                 full_du_dls = np.array(full_du_dls)
+
+                print("FDD SHAPE", full_du_dls.shape)
+
                 full_energies = pickle.loads(response.energies)
 
                 if self.n_frames > 0:
@@ -353,10 +390,16 @@ class Trainer():
 
                 equil_du_dls = full_du_dls[:, du_dl_cutoff:]
 
-                for f, du_dls in zip(final_gradients, equil_du_dls):
-                    if np.any(np.abs(du_dls) > 0):
-                        fname = f[0]
-                        print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+
+                for du_dls in equil_du_dls:
+                    print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)))
+
+
+                # for f, du_dls in zip(final_gradients, equil_du_dls):
+                #     # if np.any(np.abs(du_dls) > 0):
+                #     if True:
+                #         fname = f[0]
+                #         print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
 
                 total_equil_du_dls = np.sum(equil_du_dls, axis=0) # [1, T]
                 print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t mean", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")

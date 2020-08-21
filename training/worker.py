@@ -39,34 +39,40 @@ class Worker(service_pb2_grpc.WorkerServicer):
         else:
             raise Exception("Unknown precision")
 
-        systems = pickle.loads(request.system)
+        # systems = pickle.loads(request.systems)
+
+        gradients = pickle.loads(request.gradients)
+        integrators = pickle.loads(request.integrators)
+
+        assert len(gradient) == len(integrators)
 
         with self.mutex:
 
-            x0 = request.x0
-            v0 = request.v0
+            x0 = pickle.loads(request.x0)
+            v0 = pickle.loads(request.v0)
 
             all_du_dls = []
             all_energies = []
             all_frames = []
 
-            assert request.n_frames = 0
+            all_ctxts = []
 
-            for system in request.systems:
+            assert request.n_frames == 0
 
-                gradients = []
+            for gradient, integrator in zip(gradients, integrators):
+
+                grads = []
                 force_names = []
 
-                for grad_name, grad_args in system.gradients:
+                # instantiate gradients
+                for grad_name, grad_args in gradient:
                     force_names.append(grad_name)
                     op_fn = getattr(ops, grad_name)
                     grad = op_fn(*grad_args, precision=precision)
-                    gradients.append(grad)
-
-                integrator = system.integrator
-
+                    grads.append(grad)
+ 
                 stepper = custom_ops.AlchemicalStepper_f64(
-                    gradients,
+                    grads,
                     integrator.lambs
                 )
 
@@ -101,27 +107,28 @@ class Worker(service_pb2_grpc.WorkerServicer):
                 else:
                     frames = np.zeros((0, *x0.shape), dtype=x0.dtype)
 
+                x0 = ctxt.get_last_coords()
+                v0 = ctxt.get_last_velocities()
 
-                # store and set state for backwards mode use.
-                if request.inference is False:
-                    self.states[request.key] = (ctxt, gradients, force_names, stepper, system)
+                all_ctxts.append(ctxt)
 
-                x0 = ctxt.get_last_x_t()
-                v0 = ctxt.get_last_v_t()
+            # store and set state for backwards mode use.
+            if request.inference is False:
+                self.states[request.key] = (all_ctxts, gradients, force_names, stepper, integrators)
 
-            all_du_dls = np.concatenate(all_du_dls)
+            all_du_dls = np.concatenate(all_du_dls, axis=-1)
             energies = np.concatenate(all_energies)
 
-            stripped_du_dls = []
-            for force_du_dls in all_du_dls:
+            # stripped_du_dls = []
+            # for force_du_dls in all_du_dls:
                 # zero out 
-                if np.all(force_du_dls) == 0:
-                    stripped_du_dls.append(None)
-                else:
-                    stripped_du_dls.append(force_du_dls)
+                # if np.all(force_du_dls) == 0:
+                    # stripped_du_dls.append(None)
+                # else:
+                    # stripped_du_dls.append(force_du_dls)
 
             return service_pb2.ForwardReply(
-                du_dls=pickle.dumps(stripped_du_dls), # tbd strip zeros
+                du_dls=pickle.dumps(all_du_dls), # tbd strip zeros
                 energies=pickle.dumps(energies),
                 frames=pickle.dumps(frames)
             )
@@ -134,8 +141,8 @@ class Worker(service_pb2_grpc.WorkerServicer):
         adjoint_du_dls = pickle.loads(request.adjoint_du_dls)
 
         stepper.set_du_dl_adjoint(adjoint_du_dls)
-        ctxt.set_x_t_adjoint(request.adjoint_x_t)
-        ctxt.set_v_t_adjoint(request.adjoint_v_t)
+        # ctxt.set_x_t_adjoint(request.adjoint_x_t)
+        # ctxt.set_v_t_adjoint(request.adjoint_v_t)
 
         with self.mutex:
 

@@ -1,7 +1,8 @@
+import copy
+
 import jax
 import jax.numpy as jnp
 import numpy as np
-
 from simtk.openmm import app
 
 from ff.handlers import bonded, nonbonded, openmm_deserializer
@@ -258,9 +259,11 @@ def create_systems(
     if stage == 0:
         lamb_flag = 1
         lamb_offset = 0
-    if stage == 1:
+    elif stage == 1:
         lamb_flag = 0
         lamb_offset = 1
+    else:
+        assert 0
 
     # unweighted center of mass restraints
     avg_xi = np.mean(x0[ligand_idxs], axis=0)

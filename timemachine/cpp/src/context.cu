@@ -251,7 +251,7 @@ void ReversibleContext::get_last_coords(double *out_buffer) const {
 }
 
 void ReversibleContext::get_last_velocities(double *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_velocities_ + step_sizes_.size()*N_*D, N_*D*sizeof(double), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(out_buffer, d_velocities_ + 0*N_*D, N_*D*sizeof(double), cudaMemcpyDeviceToHost));
 }
 
 void ReversibleContext::get_all_coords(double *out_buffer) const {

@@ -3,18 +3,18 @@ from timemachine.integrator import langevin_coefficients
 
 class System():
 
-    def __init__(self, x0, v0, gradients, integrator):
+    def __init__(self, gradients, integrator):
         # fully contained class that allows simulations to be run forward
         # and backward
-        self.x0 = x0
-        self.v0 = v0
+        # self.x0 = x0
+        # self.v0 = v0
         self.gradients = gradients
         self.integrator = integrator
 
 
 class Integrator():
 
-    def __init__(self, steps, dt, temperature, friction, masses, lamb, seed):
+    def __init__(self, steps, dt, temperature, friction, masses, lambs, seed):
 
         minimization_steps = 2000
 
@@ -35,5 +35,6 @@ class Integrator():
         self.cas = complete_cas
         self.cbs = -cbs
         self.ccs = ccs
-        self.lambs = np.zeros(steps) + lamb
+        # self.lambs = np.zeros(steps) + lamb
+        self.lambs = lambs
         self.seed = seed
