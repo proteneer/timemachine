@@ -285,7 +285,7 @@ class Trainer():
                         temperature=self.intg_temperature,
                         friction=self.intg_friction,  
                         masses=combined_masses,
-                        lamb=lambda_schedule,
+                        lambs=lambda_schedule,
                         seed=np.random.randint(np.iinfo(np.int32).max)
                     )]
 
