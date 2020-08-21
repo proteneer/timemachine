@@ -44,7 +44,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
         gradients = pickle.loads(request.gradients)
         integrators = pickle.loads(request.integrators)
 
-        assert len(gradient) == len(integrators)
+        assert len(gradients) == len(integrators)
 
         with self.mutex:
 
