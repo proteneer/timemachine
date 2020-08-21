@@ -32,7 +32,7 @@ class Integrator():
         ])
 
         assert len(complete_cas) == len(complete_dts)
-        assert len(complete_dts) == len(self.lambs)
+        assert len(complete_dts) == len(lambs)
 
         self.dts = complete_dts
         self.cas = complete_cas
