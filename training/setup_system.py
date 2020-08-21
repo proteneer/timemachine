@@ -77,7 +77,7 @@ def concat_with_vjps(p_a, p_b, vjp_a, vjp_b):
 
     return p_c, adjoint_fn
 
-def create_system(
+def create_systems(
     guest_mol,
     host_pdb,
     handlers,
@@ -251,42 +251,6 @@ def create_system(
     N_C = num_host_atoms + num_guest_atoms
     N_A = num_host_atoms
 
-    cutoff = 100000.0
-
-    if stage == 0:
-        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-    elif stage == 1:
-        combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-        combined_lambda_offset_idxs[num_host_atoms:] = 1
-    else:
-        assert 0
-
-    final_gradients.append((
-        'Nonbonded', (
-        np.asarray(combined_charge_params),
-        np.asarray(combined_lj_params),
-        combined_exclusion_idxs,
-        combined_charge_exclusion_scales,
-        combined_lj_exclusion_scales,
-        combined_lambda_plane_idxs,
-        combined_lambda_offset_idxs,
-        cutoff
-        )
-    ))
-
-    final_gradients.append((
-        'GBSA', (
-        np.asarray(combined_charge_params),
-        np.asarray(combined_gb_params),
-        combined_lambda_plane_idxs,
-        combined_lambda_offset_idxs,
-        *host_gb_props,
-        cutoff,
-        cutoff
-        )
-    ))
 
     ligand_idxs = np.arange(N_A, N_C, dtype=np.int32)
 
@@ -324,4 +288,44 @@ def create_system(
         intg_temperature
     )
 
-    return x0, combined_masses, ssc, final_gradients, handler_vjp_fns
+    fixed_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+    fixed_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+
+    movable_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+    movable_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+    movable_lambda_offset_idxs[num_host_atoms:] = 1
+
+    nb_cutoff = 100000.0
+
+    if stage == 0:
+
+        minimization_gradients = copy.deepcopy(final_gradients)
+        attach_gradients = copy.deepcopy(final_gradients)
+
+        minimization_gradients.append((
+            'Nonbonded', (
+            np.asarray(combined_charge_params),
+            np.asarray(combined_lj_params),
+            combined_exclusion_idxs,
+            combined_charge_exclusion_scales,
+            combined_lj_exclusion_scales,
+            fixed_lambda_plane_idxs,
+            fixed_lambda_offset_idxs,
+            nb_cutoff
+            )
+        ))
+
+        attach_gradients.append((
+            'GBSA', (
+            np.asarray(combined_charge_params),
+            np.asarray(combined_gb_params),
+            movable_lambda_plane_idxs,
+            movable_lambda_offset_idxs,
+            *host_gb_props,
+            nb_cutoff,
+            nb_cutoff
+            )
+        ))
+
+
+    return x0, combined_masses, ssc, [minimization_gradients, attach_gradients], handler_vjp_fns

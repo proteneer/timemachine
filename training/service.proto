@@ -13,10 +13,12 @@ message EmptyMessage {}
 // The request message containing the user's name.
 message ForwardRequest {
     bool inference = 1;
-    bytes system = 2; // pickle object
-    string precision = 3;
-    int32 n_frames = 4;
-    string key = 5;
+    bytes systems = 2; // pickle object
+    bytes x0 = 3;
+    bytes v0 = 4;
+    string precision = 5;
+    int32 n_frames = 6;
+    string key = 7;
 }
 
 message ForwardReply {
@@ -33,4 +35,6 @@ message BackwardRequest {
 
 message BackwardReply {
     bytes dl_dps = 1; // pickle
+    bytes adjoint_x_t = 2; // final frame adjoints
+    bytes adjoint_v_t = 3; // final velocities adjoints
 }

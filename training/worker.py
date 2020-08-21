@@ -39,77 +39,93 @@ class Worker(service_pb2_grpc.WorkerServicer):
         else:
             raise Exception("Unknown precision")
 
-        system = pickle.loads(request.system)
-
-        gradients = []
-        force_names = []
-
-        for grad_name, grad_args in system.gradients:
-            force_names.append(grad_name)
-            op_fn = getattr(ops, grad_name)
-            grad = op_fn(*grad_args, precision=precision)
-            gradients.append(grad)
-
-        integrator = system.integrator
-
-        stepper = custom_ops.AlchemicalStepper_f64(
-            gradients,
-            integrator.lambs
-        )
-
-        ctxt = custom_ops.ReversibleContext_f64(
-            stepper,
-            system.x0,
-            system.v0,
-            integrator.cas,
-            integrator.cbs,
-            integrator.ccs,
-            integrator.dts,
-            integrator.seed
-        )
-
-        start = time.time()
-
-        # ensure only one GPU can be running at given time.
-        total_size = 0 
+        systems = pickle.loads(request.system)
 
         with self.mutex:
 
-            ctxt.forward_mode()
-            full_du_dls = stepper.get_du_dl() # [FxT]
-            stripped_du_dls = []
-            energies = stepper.get_energies()
+            x0 = request.x0
+            v0 = request.v0
 
-            for force_du_dls in full_du_dls:
+            all_du_dls = []
+            all_energies = []
+            all_frames = []
+
+            assert request.n_frames = 0
+
+            for system in request.systems:
+
+                gradients = []
+                force_names = []
+
+                for grad_name, grad_args in system.gradients:
+                    force_names.append(grad_name)
+                    op_fn = getattr(ops, grad_name)
+                    grad = op_fn(*grad_args, precision=precision)
+                    gradients.append(grad)
+
+                integrator = system.integrator
+
+                stepper = custom_ops.AlchemicalStepper_f64(
+                    gradients,
+                    integrator.lambs
+                )
+
+                ctxt = custom_ops.ReversibleContext_f64(
+                    stepper,
+                    x0,
+                    v0,
+                    integrator.cas,
+                    integrator.cbs,
+                    integrator.ccs,
+                    integrator.dts,
+                    integrator.seed
+                )
+
+                start = time.time()
+
+                # ensure only one GPU can be running at given time.
+                ctxt.forward_mode()
+
+                all_du_dls.append(stepper.get_du_dl())
+                all_energies.append(stepper.get_energies())
+
+                keep_idxs = []
+
+                if request.n_frames > 0:
+                    xs = ctxt.get_all_coords()
+                    interval = max(1, xs.shape[0]//request.n_frames)
+                    for frame_idx in range(xs.shape[0]):
+                        if frame_idx % interval == 0:
+                            keep_idxs.append(frame_idx)
+                    frames = xs[keep_idxs]
+                else:
+                    frames = np.zeros((0, *x0.shape), dtype=x0.dtype)
+
+
+                # store and set state for backwards mode use.
+                if request.inference is False:
+                    self.states[request.key] = (ctxt, gradients, force_names, stepper, system)
+
+                x0 = ctxt.get_last_x_t()
+                v0 = ctxt.get_last_v_t()
+
+            all_du_dls = np.concatenate(all_du_dls)
+            energies = np.concatenate(all_energies)
+
+            stripped_du_dls = []
+            for force_du_dls in all_du_dls:
                 # zero out 
                 if np.all(force_du_dls) == 0:
                     stripped_du_dls.append(None)
                 else:
                     stripped_du_dls.append(force_du_dls)
-                    total_size += len(force_du_dls)
-
-            keep_idxs = []
-
-            if request.n_frames > 0:
-                xs = ctxt.get_all_coords()
-                interval = max(1, xs.shape[0]//request.n_frames)
-                for frame_idx in range(xs.shape[0]):
-                    if frame_idx % interval == 0:
-                        keep_idxs.append(frame_idx)
-                frames = xs[keep_idxs]
-            else:
-                frames = np.zeros((0, *system.x0.shape), dtype=system.x0.dtype)
-
-
-            # store and set state for backwards mode use.
-            if request.inference is False:
-                self.states[request.key] = (ctxt, gradients, force_names, stepper, system)
 
             return service_pb2.ForwardReply(
                 du_dls=pickle.dumps(stripped_du_dls), # tbd strip zeros
                 energies=pickle.dumps(energies),
-                frames=pickle.dumps(frames),
+                frames=pickle.dumps(frames)
             )
+
 
     def BackwardMode(self, request, context):
 
@@ -118,7 +134,8 @@ class Worker(service_pb2_grpc.WorkerServicer):
         adjoint_du_dls = pickle.loads(request.adjoint_du_dls)
 
         stepper.set_du_dl_adjoint(adjoint_du_dls)
-        ctxt.set_x_t_adjoint(np.zeros_like(system.x0))
+        ctxt.set_x_t_adjoint(request.adjoint_x_t)
+        ctxt.set_v_t_adjoint(request.adjoint_v_t)
 
         with self.mutex:
 
@@ -154,7 +171,11 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
             del self.states[request.key]
 
-            return service_pb2.BackwardReply(dl_dps=pickle.dumps(dl_dps))
+            return service_pb2.BackwardReply(
+                dl_dps=pickle.dumps(dl_dps),
+                adjoint_x_t=adjoint_x_t,
+                adjoint_v_t=adjoint_v_t
+            )
 
 
 def serve(args):

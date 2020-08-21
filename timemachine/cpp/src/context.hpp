@@ -54,8 +54,11 @@ public:
 
     void get_all_coords(double *out_buffer) const;
     void get_last_coords(double *out_buffer) const;
+    void get_last_velocities(double *out_buffer) const;
 
     void set_x_t_adjoint(const double *buffer);
+    void set_v_t_adjoint(const double *buffer);
+
     void get_x_t_adjoint(double *buffer) const;
     void get_v_t_adjoint(double *buffer) const;
     void forward_mode();

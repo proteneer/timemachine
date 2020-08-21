@@ -182,6 +182,10 @@ void ReversibleContext::set_x_t_adjoint(const double *buffer) {
     gpuErrchk(cudaMemcpy(d_x_t_adjoint_, buffer, N_*D*sizeof(*buffer), cudaMemcpyHostToDevice));
 }
 
+void ReversibleContext::set_v_t_adjoint(const double *buffer) {
+    gpuErrchk(cudaMemcpy(d_v_t_adjoint_, buffer, N_*D*sizeof(*buffer), cudaMemcpyHostToDevice));
+}
+
 void ReversibleContext::backward_mode() {
 
     // initialized
@@ -244,6 +248,10 @@ void ReversibleContext::backward_mode() {
 
 void ReversibleContext::get_last_coords(double *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_coords_ + step_sizes_.size()*N_*D, N_*D*sizeof(double), cudaMemcpyDeviceToHost));
+}
+
+void ReversibleContext::get_last_velocities(double *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_velocities_ + step_sizes_.size()*N_*D, N_*D*sizeof(double), cudaMemcpyDeviceToHost));
 }
 
 void ReversibleContext::get_all_coords(double *out_buffer) const {

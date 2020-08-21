@@ -257,8 +257,8 @@ class Trainer():
                 )
 
                 complex_system = system.System(
-                    x0,
-                    np.zeros_like(x0),
+                    # x0,
+                    # np.zeros_like(x0),
                     final_gradients,
                     intg
                 )
@@ -268,6 +268,8 @@ class Trainer():
                 key = str(stage)+"_"+str(lamb_idx)
 
                 request = service_pb2.ForwardRequest(
+                    x0=x0,
+                    v0=np.zeros_like(x0),
                     inference=inference,
                     system=pickle.dumps(complex_system),
                     precision=self.precision,
