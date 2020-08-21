@@ -31,6 +31,9 @@ class Integrator():
             np.ones(steps-minimization_steps)*dt
         ])
 
+        assert len(complete_cas) == len(complete_dts)
+        assert len(complete_dts) == len(self.lambs)
+
         self.dts = complete_dts
         self.cas = complete_cas
         self.cbs = -cbs

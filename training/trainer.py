@@ -277,6 +277,11 @@ class Trainer():
                     assert 0
                     # fix stepping etc.
 
+                    lambda_schedule = np.concatenate([
+                        np.linspace(0.75, lamb, 2000),
+                        np.zeros(self.intg_steps-2000) + lamb
+                    ])
+
                     integrators = [system.Integrator(
                         steps=self.intg_steps,
                         dt=self.intg_dt,
