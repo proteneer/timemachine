@@ -299,10 +299,38 @@ def create_systems(
 
     if stage == 0:
 
+        # make two copies
         minimization_gradients = copy.deepcopy(final_gradients)
         attach_gradients = copy.deepcopy(final_gradients)
 
+        # we want to use this to do minimization first
         minimization_gradients.append((
+            'Nonbonded', (
+            np.asarray(combined_charge_params),
+            np.asarray(combined_lj_params),
+            combined_exclusion_idxs,
+            combined_charge_exclusion_scales,
+            combined_lj_exclusion_scales,
+            movable_lambda_plane_idxs,
+            movable_lambda_offset_idxs,
+            nb_cutoff
+            )
+        ))
+
+        minimization_gradients.append((
+            'GBSA', (
+            np.asarray(combined_charge_params),
+            np.asarray(combined_gb_params),
+            movable_lambda_plane_idxs,
+            movable_lambda_offset_idxs,
+            *host_gb_props,
+            nb_cutoff,
+            nb_cutoff
+            )
+        ))
+
+        # full on dynamics after ligand has been inserted
+        attach_gradients.append((
             'Nonbonded', (
             np.asarray(combined_charge_params),
             np.asarray(combined_lj_params),
@@ -319,6 +347,35 @@ def create_systems(
             'GBSA', (
             np.asarray(combined_charge_params),
             np.asarray(combined_gb_params),
+            fixed_lambda_plane_idxs,
+            fixed_lambda_offset_idxs,
+            *host_gb_props,
+            nb_cutoff,
+            nb_cutoff
+            )
+        ))
+
+        combined_gradients = [minimization_gradients, attach_gradients]
+
+    elif stage == 1:
+
+        final_gradients.append((
+            'Nonbonded', (
+            np.asarray(combined_charge_params),
+            np.asarray(combined_lj_params),
+            combined_exclusion_idxs,
+            combined_charge_exclusion_scales,
+            combined_lj_exclusion_scales,
+            movable_lambda_plane_idxs,
+            movable_lambda_offset_idxs,
+            nb_cutoff
+            )
+        ))
+
+        final_gradients.append((
+            'GBSA', (
+            np.asarray(combined_charge_params),
+            np.asarray(combined_gb_params),
             movable_lambda_plane_idxs,
             movable_lambda_offset_idxs,
             *host_gb_props,
@@ -327,5 +384,6 @@ def create_systems(
             )
         ))
 
+        combined_gradients = [final_gradients]
 
-    return x0, combined_masses, ssc, [minimization_gradients, attach_gradients], handler_vjp_fns
+    return x0, combined_masses, ssc, combined_gradients, handler_vjp_fns
