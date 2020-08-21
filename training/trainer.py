@@ -274,7 +274,7 @@ class Trainer():
 
                 elif stage == 1:
 
-                    lambda_schedule = np.concatenate([
+                    schedule = np.concatenate([
                         np.linspace(0.75, lamb, 2000),
                         np.zeros(self.intg_steps-2000) + lamb
                     ])
@@ -285,7 +285,7 @@ class Trainer():
                         temperature=self.intg_temperature,
                         friction=self.intg_friction,  
                         masses=combined_masses,
-                        lambs=lambda_schedule,
+                        lambs=schedule,
                         seed=np.random.randint(np.iinfo(np.int32).max)
                     )]
 
