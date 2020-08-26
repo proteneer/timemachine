@@ -11,24 +11,6 @@ from matplotlib import pyplot as plt
 # recenter into the home box
 def recenter(conf, b):
 
-    # for (auto& mol : molecules) {
-    #     // Find the molecule center.
-
-    #     Vec3 center;
-    #     for (int j : mol)
-    #         center += positions[j];
-    #     center *= 1.0/mol.size();
-
-    #     // Find the displacement to move it into the first periodic box.
-    #     Vec3 diff;
-    #     diff += periodicBoxSize[2]*floor(center[2]/periodicBoxSize[2][2]);
-    #     diff += periodicBoxSize[1]*floor((center[1]-diff[1])/periodicBoxSize[1][1]);
-    #     diff += periodicBoxSize[0]*floor((center[0]-diff[0])/periodicBoxSize[0][0]);
-
-    #     // Translate all the particles in the molecule.
-    #     for (int j : mol)
-    #         positions[j] -= diff;
-
     new_coords = []
 
     periodicBoxSize = np.array([
@@ -79,59 +61,73 @@ def setup_system():
     # cc = np.zeros_like(cc)
 
     # print(ca, cb, cc)
-    num_steps = 10000
-    volume = 5.0
+    num_steps = 20000
+    volume = 1.0
     box_length = np.cbrt(volume)
+
+    p_ext = -25.0
 
     def integrate_once_through(
         x_t,
         v_t,
+        vol_xt,
+        vol_vt,
         lj_params):
 
-        # ref_lj_impl = functools.partial(lennard_jones, lj_params=lj_params, volume=1.0)
         grad_fn = jax.grad(lennard_jones, argnums=(0,2))
         grad_fn = jax.jit(grad_fn)
-        # dU_dv_fn = jax.grad(lennard_jones, argnums=(2,))
 
+        nrg_fn = jax.jit(lennard_jones)
 
         p_ints = []
 
         for step in range(num_steps):
 
+            force, p_int = grad_fn(x_t, lj_params, vol_xt)
+            p_ints.append(p_int)
 
-            force, p_int = grad_fn(x_t, lj_params, volume)
-
-
-            if step % 20 == 0:
-                print(step, p_int)
-                p_ints.append(p_int)
+            if step % 100 == 0:
+                e = nrg_fn(x_t, lj_params, vol_xt)
+                print("step", step, "vol_xt", vol_xt, "u", e, "p_int", p_int)
+                
 
             if step % 1000 == 0:
-                e = lennard_jones(x_t, lj_params, volume)
-                # p_int = dU_dv_fn(x_t, lj_params, volume)[0]
-                # print(step, e, p_int)
+                e = nrg_fn(x_t, lj_params, vol_xt)
 
+                box_length = np.cbrt(vol_xt)
                 x_centered = recenter(x_t, box_length)
-
                 plt.xlim(0, box_length)
                 plt.ylim(0, box_length)
                 plt.scatter(x_centered[:, 0], x_centered[:, 1])
                 plt.savefig('barostat_frames/'+str(step))
                 plt.clf()
 
-
             noise = np.random.randn(*conf.shape)
+
+            vol_noise = np.random.randn()/10
+            vol_vt = 0.5*vol_vt - 0.01*(p_int - p_ext) + vol_noise
+            # vol_vt = 0
+            vol_xt = vol_xt + vol_vt*1.5e-3
+
             v_t = ca*v_t + cb*force + cc*noise
             x_t = x_t + v_t*dt
 
-        print("avg pressure", np.mean(p_ints))
+        p_ints = np.array(p_ints)
+        equil_steps = num_steps//2
+        print(p_ints)
+        print(type(p_ints))
+        print("avg pressure", np.mean(p_ints[equil_steps:]))
 
         return x_t
 
     x0 = np.copy(conf)
     v0 = np.zeros_like(x0)
 
-    x_final = integrate_once_through(x0,v0,lj_params)
+    vol_xt = volume
+    vol_vt = np.zeros_like(vol_xt)
+
+    x_final = integrate_once_through(x0, v0, vol_xt, vol_vt, lj_params)
+
     print(x_final)
     
     # print(lj_params)
