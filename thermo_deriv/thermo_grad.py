@@ -102,9 +102,9 @@ class ThermodynamicEngine():
         Z = self.Z(params)
         avg_O = self.O_Z(params)/Z
         avg_dU_dp = self.dU_dp_Z(params)/Z
-        avg_O_dot_dU_dp_Z = self.O_dot_dU_dp_Z(params)/Z
+        avg_O_dot_dU_dp = self.O_dot_dU_dp_Z(params)/Z
 
-        dO_dp = (avg_O*avg_dU_dp - avg_O_dot_dU_dp_Z)/self.kT
+        dO_dp = (avg_O*avg_dU_dp - avg_O_dot_dU_dp)/self.kT
 
         return avg_O, dO_dp
 
