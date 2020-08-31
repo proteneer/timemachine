@@ -45,24 +45,16 @@ def lennard_jones(conf, lj_params, volume):
     
     """
     
-    box_length = np.cbrt(volume)
+    
+    N = conf.shape[0]
     D = conf.shape[-1]
+    box_length = np.sqrt(volume)
+    # box_length = volume
     box = np.eye(D) * box_length
 
-    sig = lj_params[:, 0]
-    eps = lj_params[:, 1]
 
-    sig_i = np.expand_dims(sig, 0)
-    sig_j = np.expand_dims(sig, 1)
-    sig_ij = (sig_i + sig_j)/2
-    sig_ij_raw = sig_ij
-
-    eps_i = np.expand_dims(eps, 0)
-    eps_j = np.expand_dims(eps, 1)
-
-    eps_ij = np.sqrt(eps_i * eps_j)
-
-    eps_ij_raw = eps_ij
+    sig_ij = lj_params[0]
+    eps_ij = lj_params[1]
 
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
@@ -71,10 +63,6 @@ def lennard_jones(conf, lj_params, volume):
 
     N = conf.shape[0]
     keep_mask = np.ones((N,N)) - np.eye(N)
-
-    # (ytz): this avoids a nan in the gradient in both jax and tensorflow
-    sig_ij = np.where(keep_mask, sig_ij, np.zeros_like(sig_ij))
-    eps_ij = np.where(keep_mask, eps_ij, np.zeros_like(eps_ij))
 
     sig2 = sig_ij/dij
     sig2 *= sig2
