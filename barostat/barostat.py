@@ -65,7 +65,7 @@ def setup_system():
 
     D = conf.shape[-1]
 
-    sigma = 0.2/1.122
+    sigma = 0.1/1.122
     eps = 1.0
 
     # lj_params = np.ones_like(conf)

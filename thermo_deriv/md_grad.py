@@ -4,7 +4,7 @@ from jax.config import config; config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from quadpy import quad
-from thermo_deriv.lj_non_periodic import lennard_jones
+from thermo_deriv.lj import lennard_jones
 from timemachine.integrator import langevin_coefficients
 import numpy as np
 import functools
@@ -126,21 +126,27 @@ mde = MDEngine(U_fn, O_fn, 300.0)
 
 sigma = [0.1, 0.2, 0.3]
 eps = [1.0, 1.2, 1.3]
+
 lj_params = np.stack([sigma, eps], axis=1)
+
+lj_params = np.array([[ 0.46376733, 0.98690623],
+ [ 0.22144344, 1.1992469 ],
+ [-0.04232389, 1.30928384]])
+# lj_params = np.array([0.1, 1.0])
 
 
 def loss_fn(O_pred):
-    O_true = 0.35
+    O_true = 0.65
     return jnp.abs(O_pred-O_true)
 
 loss_grad_fn = jax.grad(loss_fn)
 
-for epoch in range(10):
+for epoch in range(100):
     O_pred, dO_dp = mde.O_and_dO_dp(lj_params)
     loss = loss_fn(O_pred)
     dL_dO = loss_grad_fn(O_pred)
     dL_dp = dL_dO * dO_dp
-    print("epoch", epoch, "params", lj_params, "loss", loss, "O", O_pred)
+    print("epoch", epoch, "params", lj_params, "loss", loss, "O", O_pred, "dL_dp", dL_dp, "dL_dO", dL_dO, "dO_dp", dO_dp)
     lj_params -= 0.1*dL_dp
 
 # print(mde.O_and_dO_dp(lj_params))
