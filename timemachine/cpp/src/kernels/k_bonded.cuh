@@ -14,6 +14,7 @@ void __global__ k_harmonic_bond_inference(
     const double *params,  // [p, 2]
     const int *bond_idxs,    // [b, 2]
     unsigned long long *grad_coords,
+    double *d_du_dp,
     double *energy) {
 
     const auto b_idx = blockDim.x*blockIdx.x + threadIdx.x;

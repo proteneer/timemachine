@@ -36,22 +36,22 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
 pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/fixed_point.hpp
   src/wrap_kernels.cpp
-  src/gradient.cu
+  src/potential.cu
   src/gpu_utils.cu
-  src/nonbonded.cu
-  src/neighborlist.cu
-  src/restraint.cu
+  # src/nonbonded.cu
+  # src/neighborlist.cu
+  # src/restraint.cu
   src/harmonic_bond.cu
   src/harmonic_angle.cu
   src/periodic_torsion.cu
-  src/integrator.cu
-  src/lennard_jones.cu
-  src/electrostatics.cu
-  src/stepper.cu
-  src/context.cu
-  src/gbsa.cu
-  src/centroid_restraint.cu
-  src/kernels/k_find_block_bounds.cu
+  # src/integrator.cu
+  # src/lennard_jones.cu
+  # src/electrostatics.cu
+  # src/stepper.cu
+  # src/context.cu
+  # src/gbsa.cu
+  # src/centroid_restraint.cu
+  # src/kernels/k_find_block_bounds.cu
 )
 
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})

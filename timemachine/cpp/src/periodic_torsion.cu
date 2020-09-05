@@ -4,14 +4,13 @@
 #include <complex>
 #include "periodic_torsion.hpp"
 #include "gpu_utils.cuh"
-#include "k_bonded.cuh"
+#include "k_periodic_torsion.cuh"
 
 namespace timemachine {
 
 template <typename RealType>
 PeriodicTorsion<RealType>::PeriodicTorsion(
-    const std::vector<int> &torsion_idxs, // [A, 4]
-    const std::vector<double> &params // [A, 3]
+    const std::vector<int> &torsion_idxs // [A, 4]
 ) : T_(torsion_idxs.size()/4) {
 
     if(torsion_idxs.size() % 4 != 0) {
@@ -31,45 +30,25 @@ PeriodicTorsion<RealType>::PeriodicTorsion(
     gpuErrchk(cudaMalloc(&d_torsion_idxs_, T_*4*sizeof(*d_torsion_idxs_)));
     gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], T_*4*sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_params_, T_*3*sizeof(*d_params_)));
-    gpuErrchk(cudaMemcpy(d_params_, &params[0], T_*3*sizeof(*d_params_), cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&d_du_dp_primals_, T_*3*sizeof(*d_du_dp_primals_)));
-    gpuErrchk(cudaMemset(d_du_dp_primals_, 0, T_*3*sizeof(*d_du_dp_primals_)));
-
-    gpuErrchk(cudaMalloc(&d_du_dp_tangents_, T_*3*sizeof(*d_du_dp_tangents_)));
-    gpuErrchk(cudaMemset(d_du_dp_tangents_, 0, T_*3*sizeof(*d_du_dp_tangents_)));
-
 };
 
 template <typename RealType>
 PeriodicTorsion<RealType>::~PeriodicTorsion() {
     gpuErrchk(cudaFree(d_torsion_idxs_));
-
-    gpuErrchk(cudaFree(d_params_));
-    gpuErrchk(cudaFree(d_du_dp_primals_));
-    gpuErrchk(cudaFree(d_du_dp_tangents_));
-
 };
 
 template <typename RealType>
-void PeriodicTorsion<RealType>::get_du_dp_primals(double *buf) {
-    gpuErrchk(cudaMemcpy(buf, d_du_dp_primals_, T_*3*sizeof(*d_params_), cudaMemcpyDeviceToHost));
-}
-
-template <typename RealType>
-void PeriodicTorsion<RealType>::get_du_dp_tangents(double *buf) {
-    gpuErrchk(cudaMemcpy(buf, d_du_dp_tangents_, T_*3*sizeof(*d_params_), cudaMemcpyDeviceToHost));
-}
-
-template <typename RealType>
-void PeriodicTorsion<RealType>::execute_lambda_inference_device(
+void PeriodicTorsion<RealType>::execute_device(
     const int N,
-    const double *d_coords_primals,
-    const double lambda_primal,
-    unsigned long long *d_out_coords_primals, // du/dx
-    double *d_out_lambda_primal, // du/dl, unused
-    double *d_out_energy_primal, // U
+    const int P,
+    const double *d_x,
+    const double *d_p,
+    const double *d_box,
+    const double lambda,
+    unsigned long long *d_du_dx,
+    double *d_du_dp,
+    double *d_du_dl,
+    double *d_u,
     cudaStream_t stream) {
 
     int tpb = 32;
@@ -77,13 +56,14 @@ void PeriodicTorsion<RealType>::execute_lambda_inference_device(
 
     const int D = 3;
 
-    k_periodic_torsion_inference<RealType, D><<<blocks, tpb, 0, stream>>>(
+    k_periodic_torsion<RealType, D><<<blocks, tpb, 0, stream>>>(
         T_,
-        d_coords_primals,
-        d_params_,
+        d_x,
+        d_p,
         d_torsion_idxs_,
-        d_out_coords_primals,
-        d_out_energy_primal
+        d_du_dx,
+        d_du_dp,
+        d_u
     );
 
     cudaDeviceSynchronize();
@@ -91,36 +71,36 @@ void PeriodicTorsion<RealType>::execute_lambda_inference_device(
 
 };
 
-template <typename RealType>
-void PeriodicTorsion<RealType>::execute_lambda_jvp_device(
-    const int N,
-    const double *d_coords_primals,
-    const double *d_coords_tangents,
-    const double lambda_primal, // unused
-    const double lambda_tangent, // unused
-    double *d_out_coords_primals,
-    double *d_out_coords_tangents,
-    cudaStream_t stream) {
+// template <typename RealType>
+// void PeriodicTorsion<RealType>::execute_lambda_jvp_device(
+//     const int N,
+//     const double *d_coords_primals,
+//     const double *d_coords_tangents,
+//     const double lambda_primal, // unused
+//     const double lambda_tangent, // unused
+//     double *d_out_coords_primals,
+//     double *d_out_coords_tangents,
+//     cudaStream_t stream) {
 
-    int tpb = 32;
-    int blocks = (T_+tpb-1)/tpb;
-    const int D = 3;
-    k_periodic_torsion_jvp<RealType, D><<<blocks, tpb, 0, stream>>>(
-        T_,
-        d_coords_primals,
-        d_coords_tangents,
-        d_params_,
-        d_torsion_idxs_,
-        d_out_coords_primals,
-        d_out_coords_tangents,
-        d_du_dp_primals_,
-        d_du_dp_tangents_
-    );
+//     int tpb = 32;
+//     int blocks = (T_+tpb-1)/tpb;
+//     const int D = 3;
+//     k_periodic_torsion_jvp<RealType, D><<<blocks, tpb, 0, stream>>>(
+//         T_,
+//         d_coords_primals,
+//         d_coords_tangents,
+//         d_params_,
+//         d_torsion_idxs_,
+//         d_out_coords_primals,
+//         d_out_coords_tangents,
+//         d_du_dp_primals_,
+//         d_du_dp_tangents_
+//     );
 
-    cudaDeviceSynchronize();
-    gpuErrchk(cudaPeekAtLastError());
+//     cudaDeviceSynchronize();
+//     gpuErrchk(cudaPeekAtLastError());
 
-};
+// };
 
 template class PeriodicTorsion<double>;
 template class PeriodicTorsion<float>;

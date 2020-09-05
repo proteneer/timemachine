@@ -34,8 +34,6 @@ def delta_r(ri, rj, box=None):
     diff = ri - rj # this can be either N,N,3 or B,3
     dims = ri.shape[-1]
 
-    # assert box is not None
-
     # box is None for harmonic bonds, not None for nonbonded terms
     if box is not None:
         for d in range(dims):
@@ -44,11 +42,8 @@ def delta_r(ri, rj, box=None):
     return diff
 
 def distance(ri, rj, box=None, gij=None):
-    assert box is None
+    # assert box is None
     if gij is not None:
-
-
-
         deltas_4d = np.power(ri - rj, 2)   
         # print(deltas_4d.shape)
         deltas_3d = deltas_4d[..., :3]

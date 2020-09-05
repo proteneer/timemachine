@@ -1,6 +1,7 @@
 import jax.numpy as np
 
 def delta_r(ri, rj, box=None):
+
     diff = ri - rj # this can be either N,N,3 or B,3
     dims = ri.shape[-1]
 

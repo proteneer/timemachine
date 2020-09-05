@@ -442,99 +442,21 @@ class GradientTest(unittest.TestCase):
                 np.testing.assert_allclose(ref, test, rtol=5e-3)
 
 
-    def compare_forces(self, x, lamb, x_tangent, lamb_tangent, ref_nrg_fn, custom_force, precision, rtol=None):
-        # this is actually sort of important for 64bit, don't remove me!
-        #
-        # params = (params.astype(np.float32)).astype(np.float64)
-
-        N = x.shape[0]
-        D = x.shape[1]
-
-        assert x.dtype == np.float64
-        # assert params.dtype == np.float64
-
-        ref_nrg = ref_nrg_fn(x, lamb)
-        grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
-        ref_dx, ref_dl = grad_fn(x, lamb)
-        test_dx, test_dl, test_nrg = custom_force.execute_lambda(x, lamb)
-
-        np.testing.assert_allclose(ref_nrg, test_nrg, rtol)
-
-        self.assert_equal_vectors(
-            np.array(ref_dx),
-            np.array(test_dx),
-            rtol,
-        )
-
-        if ref_dl == 0:
-            np.testing.assert_almost_equal(ref_dl, test_dl, 1e-5)
-        else:
-            np.testing.assert_allclose(ref_dl, test_dl, rtol)
-
-        test_x_tangent, test_x_primal = custom_force.execute_lambda_jvp(
-            x,
-            lamb,
-            x_tangent,
-            lamb_tangent
-        )
-
-        primals = (x, lamb)
-        tangents = (x_tangent, lamb_tangent)
-
-        _, t = jax.jvp(grad_fn, primals, tangents)
-
-        self.assert_equal_vectors(
-            t[0],
-            test_x_tangent,
-            rtol,
-        )
-
-        return
-
-        assert 0
-
-        ref_p_tangent = t[1] # use t[2] after switcheroo
-
-        # TBD compare relative to the *norm* of the group of similar derivatives.
-        # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
-        #     err = abs((r - tt)/r)
-        #     if err > 1e-4:
-        #         print(r_idx, err, r, tt)
-
-        # print(ref_p_tangent)
-        # print(test_p_tangent)
-        # print(np.abs(ref_p_tangent - test_p_tangent))
-
-        if precision == np.float64:
-            
-            print(np.amax(ref_p_tangent - test_p_tangent), np.amin(ref_p_tangent - test_p_tangent))
-
-            for a, b in zip(ref_p_tangent, test_p_tangent):
-                try:
-                    np.testing.assert_allclose(a, b, rtol=1e-8)
-                except:
-                    assert 0
-            np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
-
-        else:
-            self.assert_param_derivs(ref_p_tangent, test_p_tangent)
-
-
-
-    # def compare_forces(self, x, params, lamb, ref_nrg_fn, custom_force, precision, rtol=None):
-    #     x = (x.astype(np.float32)).astype(np.float64)
-    #     params = (params.astype(np.float32)).astype(np.float64)
+    # def compare_forces(self, x, lamb, x_tangent, lamb_tangent, ref_nrg_fn, custom_force, precision, rtol=None):
+    #     # this is actually sort of important for 64bit, don't remove me!
+    #     #
+    #     # params = (params.astype(np.float32)).astype(np.float64)
 
     #     N = x.shape[0]
     #     D = x.shape[1]
 
     #     assert x.dtype == np.float64
-    #     assert params.dtype == np.float64
+    #     # assert params.dtype == np.float64
 
-    #     ref_nrg = ref_nrg_fn(x, params, lamb)
-    #     grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1, 2))
-    #     ref_dx, ref_dp, ref_dl = grad_fn(x, params, lamb)
-    #     test_dx, test_dl, test_nrg = custom_force.execute_lambda(x, params, lamb)
+    #     ref_nrg = ref_nrg_fn(x, lamb)
+    #     grad_fn = jax.grad(ref_nrg_fn, argnums=(0, 1))
+    #     ref_dx, ref_dl = grad_fn(x, lamb)
+    #     test_dx, test_dl, test_nrg = custom_force.execute_lambda(x, lamb)
 
     #     np.testing.assert_allclose(ref_nrg, test_nrg, rtol)
 
@@ -549,32 +471,29 @@ class GradientTest(unittest.TestCase):
     #     else:
     #         np.testing.assert_allclose(ref_dl, test_dl, rtol)
 
-    #     x_tangent = np.random.rand(N, D).astype(np.float64)
-    #     params_tangent = np.zeros_like(params)
-    #     lamb_tangent = np.random.rand()
-
-
-    #     test_x_tangent, test_p_tangent, test_x_primal, test_p_primal = custom_force.execute_lambda_jvp(
+    #     test_x_tangent, test_x_primal = custom_force.execute_lambda_jvp(
     #         x,
-    #         params,
     #         lamb,
     #         x_tangent,
-    #         params_tangent,
     #         lamb_tangent
     #     )
 
-    #     primals = (x, params, lamb)
-    #     tangents = (x_tangent, params_tangent, lamb_tangent)
+    #     primals = (x, lamb)
+    #     tangents = (x_tangent, lamb_tangent)
 
     #     _, t = jax.jvp(grad_fn, primals, tangents)
-
-    #     ref_p_tangent = t[1]
 
     #     self.assert_equal_vectors(
     #         t[0],
     #         test_x_tangent,
     #         rtol,
     #     )
+
+    #     return
+
+    #     assert 0
+
+    #     ref_p_tangent = t[1] # use t[2] after switcheroo
 
     #     # TBD compare relative to the *norm* of the group of similar derivatives.
     #     # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
@@ -599,4 +518,101 @@ class GradientTest(unittest.TestCase):
 
     #     else:
     #         self.assert_param_derivs(ref_p_tangent, test_p_tangent)
+
+
+
+    def compare_forces(
+        self,
+        x,
+        params,
+        box,
+        lamb,
+        ref_potential,
+        test_potential,
+        precision,
+        rtol=None):
+        x = (x.astype(np.float32)).astype(np.float64)
+        params = (params.astype(np.float32)).astype(np.float64)
+
+        N = x.shape[0]
+        D = x.shape[1]
+
+        assert x.dtype == np.float64
+        assert params.dtype == np.float64
+
+        ref_u = ref_potential(x, params, box, lamb)
+        grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
+        ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
+        test_du_dx, test_du_dp, test_du_dl, test_u = test_potential.execute(x, params, box, lamb)
+
+        np.testing.assert_allclose(ref_u, test_u, rtol)
+
+        self.assert_equal_vectors(
+            np.array(ref_du_dx),
+            np.array(test_du_dx),
+            rtol
+        )
+        np.testing.assert_allclose(
+            np.array(ref_du_dp),
+            np.array(test_du_dp),
+            rtol
+        )
+
+        if ref_du_dl == 0:
+            np.testing.assert_almost_equal(ref_du_dl, test_du_dl, 1e-5)
+        else:
+            np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol)
+
+        # assert 0
+
+        # x_tangent = np.random.rand(N, D).astype(np.float64)
+        # params_tangent = np.zeros_like(params)
+        # lamb_tangent = np.random.rand()
+
+
+        # test_x_tangent, test_p_tangent, test_x_primal, test_p_primal = test_potential.execute_lambda_jvp(
+        #     x,
+        #     params,
+        #     lamb,
+        #     x_tangent,
+        #     params_tangent,
+        #     lamb_tangent
+        # )
+
+        # primals = (x, params, lamb)
+        # tangents = (x_tangent, params_tangent, lamb_tangent)
+
+        # _, t = jax.jvp(grad_fn, primals, tangents)
+
+        # ref_p_tangent = t[1]
+
+        # self.assert_equal_vectors(
+        #     t[0],
+        #     test_x_tangent,
+        #     rtol,
+        # )
+
+        # # TBD compare relative to the *norm* of the group of similar derivatives.
+        # # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
+        # #     err = abs((r - tt)/r)
+        # #     if err > 1e-4:
+        # #         print(r_idx, err, r, tt)
+
+        # # print(ref_p_tangent)
+        # # print(test_p_tangent)
+        # # print(np.abs(ref_p_tangent - test_p_tangent))
+
+        # if precision == np.float64:
+            
+        #     print(np.amax(ref_p_tangent - test_p_tangent), np.amin(ref_p_tangent - test_p_tangent))
+
+        #     for a, b in zip(ref_p_tangent, test_p_tangent):
+        #         try:
+        #             np.testing.assert_allclose(a, b, rtol=1e-8)
+        #         except:
+        #             assert 0
+        #     np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
+
+        # else:
+        #     self.assert_param_derivs(ref_p_tangent, test_p_tangent)
 
