@@ -26,6 +26,12 @@ public:
 
     void step();
 
+    int num_atoms() const;
+
+    void get_x_t(double *out_buffer) const;
+
+    void get_v_t(double *out_buffer) const;
+
 private:
 
     // compute u, du/dx, du/dp, du/dl as needed

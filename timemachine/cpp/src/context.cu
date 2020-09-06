@@ -72,6 +72,21 @@ void Context::step() {
 
 };
 
+
+int Context::num_atoms() const {
+    return N_;
+}
+
+void Context::get_x_t(double *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_x_t_, N_*3*sizeof(double), cudaMemcpyDeviceToHost));
+}
+
+
+void Context::get_v_t(double *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_v_t_, N_*3*sizeof(double), cudaMemcpyDeviceToHost));
+}
+
+
 // void Context::compute(unsigned int flags) {
 
 //     double *u = (flags & ComputeFlags::u) ? d_u_t_ : nullptr;

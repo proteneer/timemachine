@@ -143,15 +143,22 @@ void declare_context(py::module &m) {
         );
 
     }))
-    .def("step", &timemachine::Context::step);
+    .def("step", &timemachine::Context::step)
     // .def("backward_mode", &timemachine::ReversibleContext::backward_mode)
-    // .def("get_last_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
-    //     unsigned int N = ctxt.N();
-    //     unsigned int D = 3;
-    //     py::array_t<double, py::array::c_style> buffer({N, D});
-    //     ctxt.get_last_coords(buffer.mutable_data());
-    //     return buffer;
-    // })
+    .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+        unsigned int N = ctxt.num_atoms();
+        unsigned int D = 3;
+        py::array_t<double, py::array::c_style> buffer({N, D});
+        ctxt.get_x_t(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_v_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+        unsigned int N = ctxt.num_atoms();
+        unsigned int D = 3;
+        py::array_t<double, py::array::c_style> buffer({N, D});
+        ctxt.get_v_t(buffer.mutable_data());
+        return buffer;
+    });
     // .def("get_all_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
     //     unsigned int N = ctxt.N();
     //     unsigned int F = ctxt.F();

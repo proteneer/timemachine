@@ -32,6 +32,13 @@ LangevinIntegrator::LangevinIntegrator(
 
 }
 
+LangevinIntegrator::~LangevinIntegrator() {
+    gpuErrchk(cudaFree(d_cbs_));
+    gpuErrchk(cudaFree(d_ccs_));
+    gpuErrchk(cudaFree(d_noise_));
+    curandErrchk(curandDestroyGenerator(cr_rng_));
+}
+
 
 template <typename RealType>
 __global__ void update_forward(

@@ -8,6 +8,8 @@ class Integrator {
 
 public:
 
+    virtual ~Integrator() {};
+
     virtual void step_fwd(
         double *d_x_t,
         double *d_v_t,
@@ -40,6 +42,8 @@ public:
         const double *h_ccs,
         int seed
     );
+
+    virtual ~LangevinIntegrator();
 
     virtual void step_fwd(
         double *d_x_t,
