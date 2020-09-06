@@ -7,11 +7,14 @@ template <typename RealType>
 void __global__ k_lennard_jones_inference(
     const int N,
     const double *coords,
+    const double *lj_params, // [N,2]
+    const double *box,
     const double lambda,
     const int *lambda_plane_idxs, // -1 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // -1 or 1, how much we offset from the plane by cutoff
     // const int *lambda_group_idxs, // 0 or 1, how we do the group mixing
-    const double *lj_params, // [N,2]
+
+
     const double cutoff,
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
@@ -97,14 +100,19 @@ void __global__ k_lennard_jones_inference(
     // revert this to RealType
 
     // tbd: deprecate this when we don't need energies any more.
-    double energy = 0; // spit this into three parts? (es, lj close, lj far?)
+    RealType energy = 0;
+
+    RealType bx[3] = {box[0*3+0], box[1*3+1], box[2*3+2]};
 
     // In inference mode, we don't care about gradients with respect to parameters.
     for(int round = 0; round < 32; round++) {
 
+        // first three dimensions are periodic
         RealType dxs[4];
         for(int d=0; d < 3; d++) {
-            dxs[d] = ci[d] - cj[d];
+            RealType delta = ci[d] - cj[d];
+            delta -= floor(delta/bx[d]+static_cast<RealType>(0.5))*bx[d];
+            dxs[d] = delta;
         }
 
         // we can optimize this later if need be
@@ -213,13 +221,15 @@ template<typename RealType>
 void __global__ k_lennard_jones_exclusion_inference(
     const int E, // number of exclusions
     const double *coords,
+    const double *lj_params, // [N,2]
+    const double *box,
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     // const int *lambda_group_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
     const double *lj_scales, // [E] 
-    const double *lj_params, // [N,2]
+
     const double cutoff,
     unsigned long long *du_dx,
     double *du_dp,
@@ -239,7 +249,7 @@ void __global__ k_lennard_jones_exclusion_inference(
     // int lambda_group_i = lambda_group_idxs[atom_i_idx];
 
     RealType ci[3];
-    double gi[3] = {0};
+    RealType gi[3] = {0};
     #pragma unroll
     for(int d=0; d < 3; d++) {
         ci[d] = coords[atom_i_idx*3+d];
@@ -263,7 +273,7 @@ void __global__ k_lennard_jones_exclusion_inference(
     // int lambda_group_j = lambda_group_idxs[atom_j_idx];
 
     RealType cj[3];
-    double gj[3] = {0};
+    RealType gj[3] = {0};
     #pragma unroll
     for(int d=0; d < 3; d++) {
         cj[d] = coords[atom_j_idx*3+d];
@@ -280,9 +290,14 @@ void __global__ k_lennard_jones_exclusion_inference(
 
     RealType lj_scale = lj_scales[e_idx];
 
+    RealType bx[3] = {box[0*3+0], box[1*3+1], box[2*3+2]};
+
     RealType dxs[4];
     for(int d=0; d < 3; d++) {
-        dxs[d] = ci[d] - cj[d];
+        // dxs[d] = ci[d] - cj[d];
+        RealType delta = ci[d] - cj[d];
+        delta -= floor(delta/bx[d]+static_cast<RealType>(0.5))*bx[d];
+        dxs[d] = delta;
     }
 
     int dw_i = 0;
@@ -301,6 +316,17 @@ void __global__ k_lennard_jones_exclusion_inference(
 
     RealType inv_dij = fast_vec_rnorm<RealType, 4>(dxs);
     RealType inv_cutoff = 1/cutoff;
+
+    // // In inference mode, we don't care about gradients with respect to parameters.
+    // for(int round = 0; round < 32; round++) {
+
+    //     // first three dimensions are periodic
+    //     RealType dxs[4];
+    //     for(int d=0; d < 3; d++) {
+    //         RealType delta = ci[d] - cj[d];
+    //         delta -= floor(delta/bx[d]+static_cast<RealType>(0.5))*bx[d];
+    //         dxs[d] = delta;
+    //     }
 
     if(inv_dij > inv_cutoff) {
 

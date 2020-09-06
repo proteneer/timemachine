@@ -1,6 +1,7 @@
 import numpy as onp
 import jax.numpy as np
 from jax.scipy.special import erf, erfc
+from jax.ops import index_update, index
 
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.potentials.jax_utils import delta_r, distance, lambda_to_w, convert_to_4d
@@ -61,20 +62,27 @@ def lennard_jones_v2(
     lambda_plane_idxs,
     lambda_offset_idxs):
 
-    print(conf)
-    print(lj_params)
-    print(box)
-    print(lamb)
+    # print(conf)
+    # print(lj_params)
+    # print(box)
+    # print(lamb)
 
     conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
-    lj = lennard_jones(conf_4d, lj_params, cutoff)
-    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, exclusion_idxs, lj_scales, cutoff)
+    box_4d = np.eye(4)*1000
+    box_4d = index_update(box_4d, index[:3, :3], box)
+
+    # print(box)
+    # print(box_4d)
+    # assert 0
+
+    lj = lennard_jones(conf_4d, lj_params, box_4d, cutoff)
+    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, box_4d, exclusion_idxs, lj_scales, cutoff)
 
     return lj - lj_exc
 
 
-def lennard_jones(conf, lj_params, cutoff, groups=None):
+def lennard_jones(conf, lj_params, box, cutoff):
     """
     Implements a non-periodic LJ612 potential using the Lorentz−Berthelot combining
     rules, where sig_ij = (sig_i + sig_j)/2 and eps_ij = sqrt(eps_i * eps_j).
@@ -103,8 +111,8 @@ def lennard_jones(conf, lj_params, cutoff, groups=None):
         greater than cutoff is fully discarded.
     
     """
-    box = None
-    assert box is None
+    # box = None
+    # assert box is None
 
     sig = lj_params[:, 0]
     eps = lj_params[:, 1]
@@ -128,6 +136,8 @@ def lennard_jones(conf, lj_params, cutoff, groups=None):
     # gij = np.bitwise_and(gi, gj) > 0
 
     # print(gij)
+
+    # print("BOX", box)
     dij = distance(ri, rj, box)
 
     if cutoff is not None:
@@ -155,10 +165,10 @@ def lennard_jones(conf, lj_params, cutoff, groups=None):
 
 
 # now we compute the exclusions
-def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff, groups=None):
+def lennard_jones_exclusion(conf, lj_params, box, exclusion_idxs, lj_scales, cutoff, groups=None):
 
-    box = None
-    assert box is None
+    # box = None
+    # assert box is None
 
     assert exclusion_idxs.shape[1] == 2
     # assert exclusion_idxs.shape[0] == conf.shape[0]
@@ -169,9 +179,6 @@ def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff, 
     ri = conf[src_idxs]
     rj = conf[dst_idxs]
 
-    # gi = groups[src_idxs]
-    # gj = groups[dst_idxs]
-    # gij = np.bitwise_and(gi, gj) > 0
     dij = distance(ri, rj, box)
 
     sig_params = lj_params[:, 0] 

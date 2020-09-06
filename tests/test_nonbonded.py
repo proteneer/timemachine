@@ -101,6 +101,17 @@ class TestNonbonded(GradientTest):
         # test_system = self.get_random_coords(128, D)
         test_system = self.get_water_coords(D, sort=True)
 
+        padding = 0.3
+        diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
+        box = np.eye(3)
+        np.fill_diagonal(box, diag)
+        # print(box)
+        # assert 0
+
+        # box = np.eye(3)*100
+        # print()
+        # assert 0
+
         for coords in [test_system]:
 
             N = coords.shape[0]
@@ -133,7 +144,6 @@ class TestNonbonded(GradientTest):
                     #     lj_params=lj_params
                     # )
                     # non periodic for now - switch to periodic next!
-                    box = np.eye(3)*100
 
                     for lamb in [0.0, 0.1, 0.2]:
 
