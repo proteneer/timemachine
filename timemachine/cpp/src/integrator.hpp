@@ -36,8 +36,8 @@ public:
         int N,
         double dt,
         double ca,
-        double *h_cbs,
-        double *h_ccs,
+        const double *h_cbs,
+        const double *h_ccs,
         int seed
     );
 

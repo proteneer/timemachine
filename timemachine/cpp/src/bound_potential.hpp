@@ -10,8 +10,9 @@ namespace timemachine {
 struct BoundPotential {
 
     BoundPotential(
+        Potential *potential,
         std::vector<int> shape,
-        double *h_p
+        const double *h_p
     );
 
     ~BoundPotential();

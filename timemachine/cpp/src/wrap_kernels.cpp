@@ -4,6 +4,7 @@
 
 // #include "context.hpp"
 #include "potential.hpp"
+#include "bound_potential.hpp"
 #include "harmonic_bond.hpp"
 #include "harmonic_angle.hpp"
 // #include "restraint.hpp"
@@ -15,6 +16,8 @@
 // #include "gbsa.hpp"
 // #include "gradient.hpp"
 #include "fixed_point.hpp"
+#include "integrator.hpp"
+#include "observable.hpp"
 
 
 #include <iostream>
@@ -170,6 +173,86 @@ namespace py = pybind11;
 // }
 
 
+
+
+
+void declare_observable(py::module &m) {
+
+    using Class = timemachine::Observable;
+    std::string pyclass_name = std::string("Observable");
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    );
+}
+
+void declare_avg_partial_u_partial_theta(py::module &m) {
+
+    using Class = timemachine::AvgPartialUPartialTheta;
+    std::string pyclass_name = std::string("AvgPartialUPartialTheta");
+    py::class_<Class, timemachine::Observable>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](std::vector<timemachine::BoundPotential *> bps) {
+
+        return new timemachine::AvgPartialUPartialTheta(
+            bps
+        );
+
+    }
+    ));
+
+}
+
+void declare_integrator(py::module &m) {
+
+    using Class = timemachine::Integrator;
+    std::string pyclass_name = std::string("Integrator");
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    );
+}
+
+
+void declare_langevin_integrator(py::module &m) {
+
+    using Class = timemachine::LangevinIntegrator;
+    std::string pyclass_name = std::string("LangevinIntegrator");
+    py::class_<Class, timemachine::Integrator>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        double dt,
+        double ca,
+        const py::array_t<double, py::array::c_style> &cbs,
+        const py::array_t<double, py::array::c_style> &ccs,
+        int seed) {
+
+        return new timemachine::LangevinIntegrator(
+            cbs.size(),
+            dt,
+            ca,
+            cbs.data(),
+            ccs.data(),
+            seed
+        );
+
+    }
+    ));
+
+}
+
 void declare_potential(py::module &m) {
 
     using Class = timemachine::Potential;
@@ -226,6 +309,34 @@ void declare_potential(py::module &m) {
 
             return py::make_tuple(py_du_dx, py_du_dp, du_dl, u);
     });
+
+}
+
+
+void declare_bound_potential(py::module &m) {
+
+    using Class = timemachine::BoundPotential;
+    std::string pyclass_name = std::string("BoundPotential");
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr())
+    .def(py::init([](
+        timemachine::Potential* potential,
+        const py::array_t<double, py::array::c_style> &params
+    ){
+
+        std::vector<int> pshape(params.shape(), params.shape()+params.ndim());
+
+        // std::vector<int> vec_bond_idxs(bond_idxs.data(), bond_idxs.data()+bond_idxs.size());
+        return new timemachine::BoundPotential(
+            potential,
+            pshape,
+            params.data()
+        );
+    }
+    ));
 
 }
 
@@ -680,7 +791,15 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
 
 PYBIND11_MODULE(custom_ops, m) {
 
+    declare_integrator(m);
+    declare_langevin_integrator(m);
+
+    declare_observable(m);
+    declare_avg_partial_u_partial_theta(m);
+
     declare_potential(m);
+    declare_bound_potential(m);
+
 
     // declare_centroid_restraint<double>(m, "f64");
     // declare_centroid_restraint<float>(m, "f32");

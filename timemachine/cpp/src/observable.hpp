@@ -12,6 +12,7 @@ public:
 
     virtual void collect(
         int step,
+        int N,
         double *d_x_t,
         double *d_box_t,
         double lambda
@@ -37,11 +38,16 @@ public:
 
     virtual void collect(
         int step,
+        int N,
         double *d_x_t,
         double *d_box_t,
         double lambda
     ) override;
 
 };
+
+// TBD
+// AvgPartialUPartialLambda
+
 
 }

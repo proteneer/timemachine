@@ -41,6 +41,7 @@ void Context::step() {
     // data (cheap pointers in any case)
     for(int i=0; i < observables_.size(); i++) {
         observables_[i]->collect(
+            N_,
             step_,
             d_x_t_,
             d_box_t_,

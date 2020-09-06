@@ -37,7 +37,7 @@ inline void curandAssert(curandStatus_t code, const char *file, int line, bool a
 
 // safe is for use of gpuErrchk
 template<typename T>
-T* gpuErrchkCudaMallocAndCopy(T *host_array, int count) {
+T* gpuErrchkCudaMallocAndCopy(const T *host_array, int count) {
     T* device_array;
     gpuErrchk(cudaMalloc(&device_array, count*sizeof(*host_array)));
     gpuErrchk(cudaMemcpy(device_array, host_array, count*sizeof(*host_array), cudaMemcpyHostToDevice));

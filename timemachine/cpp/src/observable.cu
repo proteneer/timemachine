@@ -22,9 +22,26 @@ AvgPartialUPartialTheta::AvgPartialUPartialTheta(
 
 void AvgPartialUPartialTheta::collect(
     int step,
+    int N,
     double *d_x_t,
     double *d_box_t,
     double lambda) {
+
+    for(int i=0; i < bps_.size(); i++) {
+
+        bps_[i]->execute_device(
+            N,
+            d_x_t,
+            d_box_t,
+            lambda,
+            nullptr,
+            d_du_dp_[i],
+            nullptr,
+            nullptr,
+            static_cast<cudaStream_t>(0) // TBD: parallelize me!
+        );
+
+    }
 
 }
 

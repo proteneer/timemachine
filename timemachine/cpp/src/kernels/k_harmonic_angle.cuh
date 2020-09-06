@@ -53,15 +53,17 @@ void __global__ k_harmonic_angle_inference(
 
     RealType delta = top/nijk - cos(a0);
 
-    for(int d=0; d < 3; d++) {
-        RealType grad_i = ka*delta*(rij[d]*top/(n3ij*njk) + (-rjk[d])/nijk);
-        atomicAdd(du_dx + i_idx*D + d, static_cast<unsigned long long>((long long) (grad_i*FIXED_EXPONENT)));
+    if(du_dx) {
+        for(int d=0; d < 3; d++) {
+            RealType grad_i = ka*delta*(rij[d]*top/(n3ij*njk) + (-rjk[d])/nijk);
+            atomicAdd(du_dx + i_idx*D + d, static_cast<unsigned long long>((long long) (grad_i*FIXED_EXPONENT)));
 
-        RealType grad_j = ka*delta*((-rij[d]*top/(n3ij*njk) + (-rjk[d])*top/(nij*n3jk) + (rij[d] + rjk[d])/nijk));
-        atomicAdd(du_dx + j_idx*D + d, static_cast<unsigned long long>((long long) (grad_j*FIXED_EXPONENT)));
+            RealType grad_j = ka*delta*((-rij[d]*top/(n3ij*njk) + (-rjk[d])*top/(nij*n3jk) + (rij[d] + rjk[d])/nijk));
+            atomicAdd(du_dx + j_idx*D + d, static_cast<unsigned long long>((long long) (grad_j*FIXED_EXPONENT)));
 
-        RealType grad_k = ka*delta*(-rij[d]/nijk + rjk[d]*top/(nij*n3jk));
-        atomicAdd(du_dx + k_idx*D + d, static_cast<unsigned long long>((long long) (grad_k*FIXED_EXPONENT)));
+            RealType grad_k = ka*delta*(-rij[d]/nijk + rjk[d]*top/(nij*n3jk));
+            atomicAdd(du_dx + k_idx*D + d, static_cast<unsigned long long>((long long) (grad_k*FIXED_EXPONENT)));
+        }
     }
 
     if(du_dp) {

@@ -109,11 +109,13 @@ void __global__ k_periodic_torsion(
 
     RealType prefactor = kt*sin(period*angle - phase)*period;
 
-    for(int d=0; d < 3; d++) {
-        atomicAdd(du_dx + i_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR0[d] * prefactor * FIXED_EXPONENT)));
-        atomicAdd(du_dx + j_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR1[d] * prefactor * FIXED_EXPONENT)));
-        atomicAdd(du_dx + k_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR2[d] * prefactor * FIXED_EXPONENT)));
-        atomicAdd(du_dx + l_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR3[d] * prefactor * FIXED_EXPONENT)));
+    if(du_dx) {
+        for(int d=0; d < 3; d++) {
+            atomicAdd(du_dx + i_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR0[d] * prefactor * FIXED_EXPONENT)));
+            atomicAdd(du_dx + j_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR1[d] * prefactor * FIXED_EXPONENT)));
+            atomicAdd(du_dx + k_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR2[d] * prefactor * FIXED_EXPONENT)));
+            atomicAdd(du_dx + l_idx*D + d, static_cast<unsigned long long>((long long) (d_angle_dR3[d] * prefactor * FIXED_EXPONENT)));
+        }   
     }
 
     if(du_dp) {

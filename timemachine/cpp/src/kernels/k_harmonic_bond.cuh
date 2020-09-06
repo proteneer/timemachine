@@ -36,10 +36,12 @@ void __global__ k_harmonic_bond(
     RealType dij = sqrt(d2ij);
     RealType db = dij - b0;
 
-    for(int d=0; d < 3; d++) {
-        RealType grad_delta = kb*db*dx[d]/dij;
-        atomicAdd(du_dx + src_idx*3 + d, static_cast<unsigned long long>((long long) (grad_delta*FIXED_EXPONENT)));
-        atomicAdd(du_dx + dst_idx*3 + d, static_cast<unsigned long long>((long long) (-grad_delta*FIXED_EXPONENT)));
+    if(du_dx) {
+        for(int d=0; d < 3; d++) {
+            RealType grad_delta = kb*db*dx[d]/dij;
+            atomicAdd(du_dx + src_idx*3 + d, static_cast<unsigned long long>((long long) (grad_delta*FIXED_EXPONENT)));
+            atomicAdd(du_dx + dst_idx*3 + d, static_cast<unsigned long long>((long long) (-grad_delta*FIXED_EXPONENT)));
+        }
     }
 
     if(du_dp) {

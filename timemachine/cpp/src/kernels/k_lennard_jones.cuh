@@ -187,18 +187,21 @@ void __global__ k_lennard_jones_inference(
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
-    for(int d=0; d < 3; d++) {
-
-        if(atom_i_idx < N) {
-            atomicAdd(du_dx + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));            
-        }
-
-        if(atom_j_idx < N) {
-            atomicAdd(du_dx + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));            
-        }
+    if(du_dx) { 
+        for(int d=0; d < 3; d++) {
+            if(atom_i_idx < N) {
+                atomicAdd(du_dx + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));            
+            }
+            if(atom_j_idx < N) {
+                atomicAdd(du_dx + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));            
+            }
+        }   
     }
 
-    atomicAdd(du_dl, du_dl_i + du_dl_j);
+    if(du_dl) {
+        atomicAdd(du_dl, du_dl_i + du_dl_j);        
+    }
+
 
     if(u) {
         atomicAdd(u, energy);        
@@ -357,14 +360,17 @@ void __global__ k_lennard_jones_exclusion_inference(
         du_dl_i += (lj_scale * lj_grad_prefactor) * dxs[3] * dw_i;
         du_dl_j -= (lj_scale * lj_grad_prefactor) * dxs[3] * dw_j;
 
-        for(int d=0; d < 3; d++) {
 
-            atomicAdd(du_dx + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));
-            atomicAdd(du_dx + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
-
+        if(du_dx) { 
+            for(int d=0; d < 3; d++) {
+                atomicAdd(du_dx + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));
+                atomicAdd(du_dx + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
+            }
         }  
 
-        atomicAdd(du_dl, du_dl_i + du_dl_j);
+        if(du_dl) {
+            atomicAdd(du_dl, du_dl_i + du_dl_j);            
+        }
 
         if(u) {
             RealType energy = lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;

@@ -18,8 +18,8 @@ LangevinIntegrator::LangevinIntegrator(
     int N,
     double dt,
     double ca,
-    double *h_cbs,
-    double *h_ccs,
+    const double *h_cbs,
+    const double *h_ccs,
     int seed
 ) : N_(N), dt_(dt), ca_(ca) {
 
