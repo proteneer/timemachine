@@ -1,8 +1,9 @@
 #pragma once
 
 #include <vector>
-#include "potential.hpp"
-#include "dual_params.hpp"
+// #include "potential.hpp"
+#include "bound_potential.hpp"
+#include "observable.hpp"
 
 namespace timemachine {
 
@@ -16,18 +17,12 @@ public:
         double *v_0,
         double *box_0,
         double lambda,
-        std::vector<Potential *> potentials,
-        std::vector<DualParams *> dual_params
+        std::vector<BoundPotential *> bps
     );
 
     ~Context();
 
-    enum ComputeFlags {
-        u = 1 << 0, // 00001 == 1
-        du_dx = 1 << 1, // 00010 == 2
-        du_dp = 1 << 2, // 00100 == 4
-        du_dl = 1 << 3  // 01000 == 8
-    };
+    void step();
 
 private:
 
@@ -55,19 +50,20 @@ private:
 
     void compute(unsigned int flags);
 
+    int step_;
     int N_; // number of particles
-    double *d_x_t_; // coordinates    
-    double *d_v_t_; // velocities   
+
+    double *d_x_t_; // coordinates
+    double *d_v_t_; // velocities
     double *d_box_t_; // box vectors
-    double *d_u_t_;     // u (energy)
+    double *d_u_t_; // u (energy)
+    double lambda_; // (ytz): not a pointer!
 
     unsigned long long *d_du_dx_t_; // du/dx 
 
-    std::vector<Potential *> potentials_;
-    std::vector<DualParams *> dual_params_;
-    // Integrator* integrator_;
-    double lambda_; // (ytz): not a pointer!
-    double *d_du_dl_t_; // du/dlambda, accumulated
+    std::vector<Observable *> observables_;
+    std::vector<BoundPotential *> bps_;
+
 
 };
 

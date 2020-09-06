@@ -37,8 +37,9 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/fixed_point.hpp
   src/wrap_kernels.cpp
   src/potential.cu
-  src/dual_params.cu
+  src/bound_potential.cu
   src/gpu_utils.cu
+  src/observable.cu
   # src/nonbonded.cu
   src/neighborlist.cu
   # src/restraint.cu

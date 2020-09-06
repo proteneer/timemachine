@@ -1,7 +1,17 @@
-#include <vector>
-#include "gradient.hpp"
+// #include <vector>
 
 namespace timemachine {
+
+class Integrator {
+
+    void step_fwd(
+        double *d_x_t,
+        double *d_v_t,
+        double *d_du_dx_t,
+        double *d_box_t_,
+    ) = 0;
+
+};
 
 template<typename RealType>
 void step_forward(
