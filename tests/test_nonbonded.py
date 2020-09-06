@@ -125,7 +125,9 @@ class TestNonbonded(GradientTest):
             lamb_tangent = np.random.rand()
 
             # why are errors in du_dp so large?
+            # error bars on single precision du/dp is pretty weird.
             for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
+            # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
             # for precision, rtol in [(np.float64, 1e-9)]:
 
                 for cutoff in [100.0]:

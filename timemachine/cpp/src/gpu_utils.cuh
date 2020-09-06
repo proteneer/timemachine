@@ -13,6 +13,8 @@ curandStatus_t templateCurandNormal(
     double *outputPtr, size_t n, 
     double mean, double stddev);
 
+
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -31,4 +33,13 @@ inline void curandAssert(curandStatus_t code, const char *file, int line, bool a
       fprintf(stderr,"curand failure, code: %d %s %d\n", code, file, line);
       if (abort) exit(code);
    }
+}
+
+// safe is for use of gpuErrchk
+template<typename T>
+T* gpuErrchkCudaMallocAndCopy(T *host_array, int count) {
+    T* device_array;
+    gpuErrchk(cudaMalloc(&device_array, count*sizeof(*host_array)));
+    gpuErrchk(cudaMemcpy(device_array, host_array, count*sizeof(*host_array), cudaMemcpyHostToDevice));
+    return device_array;
 }

@@ -1,80 +1,74 @@
+#pragma once
+
 #include <vector>
-#include "gradient.hpp"
-#include "stepper.hpp"
-#include "curand.h"
+#include "potential.hpp"
+#include "dual_params.hpp"
 
 namespace timemachine {
 
-class ReversibleContext {
-
-private:
-
-    Stepper *stepper_;
-
-    const std::vector<double> coeff_cas_; // [T]
-    const std::vector<double> step_sizes_; // [T]
-
-    curandGenerator_t  cr_rng_;
-
-    double *d_noise_buffer_;
-
-    double *d_coeff_cbs_; // [N]
-    double *d_coeff_ccs_; // [N]
-
-    double *d_coords_; // [TxNxD]
-
-    double *d_velocities_; // [NxD]
-    unsigned long long *d_forces_; // [NxD], change this to uint128
-
-    double *d_x_t_tangent_; // [NxD]
-    double *d_x_t_adjoint_; // [NxD]
-    double *d_v_t_adjoint_; // [NxD]
-
-    double *d_dE_dx_jvp_primals_; // [NxD]
-    double *d_dE_dx_jvp_tangents_; // [NxD]
-
-    const int N_;
-    const int D = 3;
+class Context {
 
 public:
 
-    ReversibleContext(
-        Stepper *stepper_,
-        const int N,
-        const std::vector<double> &x0,
-        const std::vector<double> &v0,
-        const std::vector<double> &coeff_cas,
-        const std::vector<double> &coeff_cbs,
-        const std::vector<double> &coeff_ccs,
-        const std::vector<double> &dts,
-        unsigned long long seed
+    Context(
+        int N,
+        double *x_0,
+        double *v_0,
+        double *box_0,
+        double lambda,
+        std::vector<Potential *> potentials,
+        std::vector<DualParams *> dual_params
     );
 
-    ~ReversibleContext();
+    ~Context();
 
-    void get_all_coords(double *out_buffer) const;
-    void get_last_coords(double *out_buffer) const;
+    enum ComputeFlags {
+        u = 1 << 0, // 00001 == 1
+        du_dx = 1 << 1, // 00010 == 2
+        du_dp = 1 << 2, // 00100 == 4
+        du_dl = 1 << 3  // 01000 == 8
+    };
 
-    void set_x_t_adjoint(const double *buffer);
-    void get_x_t_adjoint(double *buffer) const;
-    void get_v_t_adjoint(double *buffer) const;
-    void forward_mode();
-    void backward_mode();
+private:
 
-    size_t N() const {
-        return N_;
-    }
+    // compute u, du/dx, du/dp, du/dl as needed
+    // this does *not* clear the buffer
 
-    size_t F() const {
-        return T() + 1;
-    }
+    // void clear_internals(unsigned int flags) {
+    //     if(flags & ComputeFlags::u) {
+    //         gpuErrchk(cudaMemset(x_u_t_, 0, 1*sizeof(*u)));
+    //     }
+    //     if(flags & ComputeFlags::du_dx) {
+    //         gpuErrchk(cudaMemset(d_du_dx_t_, 0, N_*3*sizeof(*d_du_dx_t_)));
+    //     }
+    //     if(flags & ComputeFlags::du_dl) {
+    //         gpuErrchk(cudaMemset(d_du_dl_t_, 0, 1*sizeof(*du_dl_t_)));
+    //     }
 
-    size_t T() const {
-        return step_sizes_.size();
-    }
+    //     if(flags & ComputeFlags::du_dp) {
+    //         for(int i=0; i < d_partial_pots_.size(); i++) {
+    //             d_partial_pots_.clear_du_dp();
+    //             // gpuErrchk(cudaMemset(d_du_dp_t_, 0, P_*sizeof(*d_du_dp_t_)));                
+    //         }
+    //     }
+    // }
+
+    void compute(unsigned int flags);
+
+    int N_; // number of particles
+    double *d_x_t_; // coordinates    
+    double *d_v_t_; // velocities   
+    double *d_box_t_; // box vectors
+    double *d_u_t_;     // u (energy)
+
+    unsigned long long *d_du_dx_t_; // du/dx 
+
+    std::vector<Potential *> potentials_;
+    std::vector<DualParams *> dual_params_;
+    // Integrator* integrator_;
+    double lambda_; // (ytz): not a pointer!
+    double *d_du_dl_t_; // du/dlambda, accumulated
 
 };
-
-
 
 }

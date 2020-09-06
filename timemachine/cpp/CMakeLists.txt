@@ -37,6 +37,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/fixed_point.hpp
   src/wrap_kernels.cpp
   src/potential.cu
+  src/dual_params.cu
   src/gpu_utils.cu
   # src/nonbonded.cu
   src/neighborlist.cu
@@ -48,7 +49,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/lennard_jones.cu
   # src/electrostatics.cu
   # src/stepper.cu
-  # src/context.cu
+  src/context.cu
   # src/gbsa.cu
   # src/centroid_restraint.cu
   src/kernels/k_find_block_bounds.cu
