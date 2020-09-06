@@ -2,6 +2,7 @@
 
 #include <vector>
 // #include "potential.hpp"
+#include "integrator.hpp"
 #include "bound_potential.hpp"
 #include "observable.hpp"
 
@@ -17,7 +18,8 @@ public:
         double *v_0,
         double *box_0,
         double lambda,
-        std::vector<BoundPotential *> bps
+        std::vector<BoundPotential *> bps,
+        Integrator *intg
     );
 
     ~Context();
@@ -61,6 +63,7 @@ private:
 
     unsigned long long *d_du_dx_t_; // du/dx 
 
+    Integrator *intg_;
     std::vector<Observable *> observables_;
     std::vector<BoundPotential *> bps_;
 

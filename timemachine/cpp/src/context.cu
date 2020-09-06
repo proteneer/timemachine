@@ -9,11 +9,13 @@ Context::Context(
     double *v_0,
     double *box_0,
     double lambda,
-    std::vector<BoundPotential *> bps) : 
+    std::vector<BoundPotential *> bps,
+    Integrator* intg) : 
     N_(N),
     bps_(bps),
     lambda_(lambda),
-    step_(0) {
+    step_(0),
+    intg_(intg) {
 
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N*3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N*3);
@@ -35,6 +37,8 @@ Context::~Context() {
 
 void Context::step() {
 
+    // the observables decide on whether or not to act on given
+    // data (cheap pointers in any case)
     for(int i=0; i < observables_.size(); i++) {
         observables_[i]->collect(
             step_,
@@ -44,11 +48,26 @@ void Context::step() {
         );
     }
 
-    // integrator_->step(
-    //     x_t_,
-    //     v_t_,
-    //     d_du_dx_t_
-    // )
+    for(int i=0; i < bps_.size(); i++) {
+        bps_[i]->execute_device(
+            N_,
+            d_x_t_,
+            d_box_t_,
+            lambda_,
+            d_du_dx_t_,
+            nullptr,
+            nullptr,
+            nullptr,
+            static_cast<cudaStream_t>(0) // TBD: parallelize me!
+        );
+    }
+
+    intg_->step_fwd(
+        d_x_t_,
+        d_v_t_,
+        d_du_dx_t_,
+        d_box_t_
+    );
 
 };
 
