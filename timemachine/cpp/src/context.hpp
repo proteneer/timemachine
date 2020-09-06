@@ -14,9 +14,9 @@ public:
 
     Context(
         int N,
-        double *x_0,
-        double *v_0,
-        double *box_0,
+        const double *x_0,
+        const double *v_0,
+        const double *box_0,
         double lambda,
         std::vector<BoundPotential *> bps,
         Integrator *intg
