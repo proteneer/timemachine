@@ -28,6 +28,8 @@ public:
 
     int num_atoms() const;
 
+    void get_du_dx_t(unsigned long long *out_buffer) const;
+
     void get_x_t(double *out_buffer) const;
 
     void get_v_t(double *out_buffer) const;

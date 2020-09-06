@@ -49,6 +49,8 @@ void Context::step() {
         );
     }
 
+    gpuErrchk(cudaMemset(d_du_dx_t_, 0, N_*3*sizeof(*d_du_dx_t_)));
+
     for(int i=0; i < bps_.size(); i++) {
         bps_[i]->execute_device(
             N_,
@@ -70,6 +72,8 @@ void Context::step() {
         d_box_t_
     );
 
+    cudaDeviceSynchronize();
+
 };
 
 
@@ -77,13 +81,16 @@ int Context::num_atoms() const {
     return N_;
 }
 
-void Context::get_x_t(double *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_x_t_, N_*3*sizeof(double), cudaMemcpyDeviceToHost));
+void Context::get_du_dx_t(unsigned long long *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_du_dx_t_, N_*3*sizeof(*out_buffer), cudaMemcpyDeviceToHost));
 }
 
+void Context::get_x_t(double *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_x_t_, N_*3*sizeof(*out_buffer), cudaMemcpyDeviceToHost));
+}
 
 void Context::get_v_t(double *out_buffer) const {
-    gpuErrchk(cudaMemcpy(out_buffer, d_v_t_, N_*3*sizeof(double), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(out_buffer, d_v_t_, N_*3*sizeof(*out_buffer), cudaMemcpyDeviceToHost));
 }
 
 
