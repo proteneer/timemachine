@@ -113,8 +113,9 @@ class TestNonbonded(GradientTest):
             x_tangent = np.random.randn(*coords.shape)
             lamb_tangent = np.random.rand()
 
-            # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-            for precision, rtol in [(np.float64, 1e-9)]:
+            # why are errors in du_dp so large?
+            for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
+            # for precision, rtol in [(np.float64, 1e-9)]:
 
                 for cutoff in [100.0]:
                     # E = 0 # debug use ONLY
