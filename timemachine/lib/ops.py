@@ -2,6 +2,8 @@ import numpy as np
 from timemachine.lib import custom_ops
 
 def Nonbonded(*args, precision):
+    # fix indices
+    assert 0
 
     # exclusion_idxs should be unique
     lj_params = args[1]
@@ -34,7 +36,7 @@ def Nonbonded(*args, precision):
 def Electrostatics(*args, precision):
 
     # exclusion_idxs should be unique
-    exclusion_idxs = args[1]
+    exclusion_idxs = args[0]
     exclusion_set = set()
 
     # print(exclusion_idxs)
@@ -56,7 +58,7 @@ def Electrostatics(*args, precision):
 def LennardJones(*args, precision):
 
     # exclusion_idxs should be unique
-    exclusion_idxs = args[1]
+    exclusion_idxs = args[0]
     exclusion_set = set()
 
     # print(exclusion_idxs)

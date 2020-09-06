@@ -10,19 +10,23 @@ void __global__ k_lennard_jones_inference(
     const double lambda,
     const int *lambda_plane_idxs, // -1 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // -1 or 1, how much we offset from the plane by cutoff
-    const int *lambda_group_idxs, // 0 or 1, how we do the group mixing
+    // const int *lambda_group_idxs, // 0 or 1, how we do the group mixing
     const double *lj_params, // [N,2]
     const double cutoff,
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
-    unsigned long long *grad_coords,
-    double *out_du_dl,
-    double *out_energy) {
+    unsigned long long *du_dx,
+    double *du_dp,
+    double *du_dl,
+    double *u) {
+    // double *out_du_dl,
+    // double *out_energy) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
     }
 
+    // TBD restore me.
     // RealType block_d2ij = 0; 
     // for(int d=0; d < 3; d++) {
     //     RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
@@ -40,12 +44,11 @@ void __global__ k_lennard_jones_inference(
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
     int lambda_plane_i = 0;
     int lambda_offset_i = 0;
-    int lambda_group_i = 0;
+    // int lambda_group_i = 0;
 
     if(atom_i_idx < N) {
         lambda_plane_i = lambda_plane_idxs[atom_i_idx];
         lambda_offset_i = lambda_offset_idxs[atom_i_idx];
-        lambda_group_i = lambda_group_idxs[atom_i_idx];
     }
 
     RealType ci[3];
@@ -61,15 +64,16 @@ void __global__ k_lennard_jones_inference(
     RealType sig_i = atom_i_idx < N ? lj_params[lj_param_idx_sig_i] : 1;
     RealType eps_i = atom_i_idx < N ? lj_params[lj_param_idx_eps_i] : 0;
 
+    RealType g_sigi = 0.0;
+    RealType g_epsi = 0.0;
+
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     int lambda_plane_j = 0;
     int lambda_offset_j = 0;
-    int lambda_group_j = 0;
 
     if(atom_j_idx < N) {
         lambda_plane_j = lambda_plane_idxs[atom_j_idx];
         lambda_offset_j = lambda_offset_idxs[atom_j_idx];
-        lambda_group_j = lambda_group_idxs[atom_j_idx];
     }
 
     RealType cj[3];
@@ -84,6 +88,9 @@ void __global__ k_lennard_jones_inference(
 
     RealType sig_j = atom_j_idx < N ? lj_params[lj_param_idx_sig_j] : 1;
     RealType eps_j = atom_j_idx < N ? lj_params[lj_param_idx_eps_j] : 0;
+
+    RealType g_sigj = 0.0;
+    RealType g_epsj = 0.0;
 
     RealType inv_cutoff = 1/cutoff;
 
@@ -104,16 +111,10 @@ void __global__ k_lennard_jones_inference(
         int dw_i = 0;
         int dw_j = 0;
     
-        if((lambda_group_j & lambda_group_i) > 0) {
-            // 3D
-            dxs[3] = 0;
-        } else {
-            // 4D
-            RealType delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
-            dxs[3] = delta_lambda;
-            dw_i = lambda_offset_i;
-            dw_j = lambda_offset_j;
-        }
+        RealType delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
+        dxs[3] = delta_lambda;
+        dw_i = lambda_offset_i;
+        dw_j = lambda_offset_j;
 
         RealType inv_dij = fast_vec_rnorm<RealType, 4>(dxs);
 
@@ -131,6 +132,7 @@ void __global__ k_lennard_jones_inference(
 
             RealType sig2 = sig_ij*sig_ij;
             RealType sig4 = sig2*sig2;
+            RealType sig5 = sig4*sig_ij;
             RealType sig6 = sig4*sig2;
 
             RealType sig6_inv_d6ij = sig6*inv_d6ij;
@@ -148,44 +150,62 @@ void __global__ k_lennard_jones_inference(
 
             }
 
-            // this technically should be if lambda_idxs[i] == 0 and lamba_idxs[j] == 0
-            // however, they both imply that delta_lambda = 0, so dxs[3] == 0, simplifying the equation
-
-
             du_dl_i -= (lj_grad_prefactor) * dxs[3] * dw_i;
             du_dl_j += (lj_grad_prefactor) * dxs[3] * dw_j;
 
             energy += 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+
+            RealType eps_grad = 2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
+            g_epsi += eps_grad*eps_j;
+            g_epsj += eps_grad*eps_i;
+
+            RealType sig_grad = 12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
+            g_sigi += sig_grad;
+            g_sigj += sig_grad;
         }
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
-        // qj = __shfl_sync(0xffffffff, qj, srcLane);
         sig_j = __shfl_sync(0xffffffff, sig_j, srcLane);
         eps_j = __shfl_sync(0xffffffff, eps_j, srcLane);
+        g_sigj = __shfl_sync(0xffffffff, g_sigj, srcLane);
+        g_epsj = __shfl_sync(0xffffffff, g_epsj, srcLane);
         for(size_t d=0; d < 3; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane); // needs to support real
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
         }
         lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
         lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane);
-        lambda_group_j = __shfl_sync(0xffffffff, lambda_group_j, srcLane);
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
     for(int d=0; d < 3; d++) {
 
         if(atom_i_idx < N) {
-            atomicAdd(grad_coords + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));            
+            atomicAdd(du_dx + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));            
         }
 
         if(atom_j_idx < N) {
-            atomicAdd(grad_coords + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));            
+            atomicAdd(du_dx + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));            
         }
     }
 
-    atomicAdd(out_du_dl, du_dl_i + du_dl_j);
-    atomicAdd(out_energy, energy);
+    atomicAdd(du_dl, du_dl_i + du_dl_j);
+
+    if(u) {
+        atomicAdd(u, energy);        
+    }
+
+    if(atom_i_idx < N && du_dp) {
+        atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
+        atomicAdd(du_dp + lj_param_idx_eps_i, g_epsi);
+    }
+
+    if(atom_j_idx < N && du_dp) {
+        atomicAdd(du_dp + lj_param_idx_sig_j, g_sigj);
+        atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
+    }
+
 
 }
 
@@ -196,14 +216,15 @@ void __global__ k_lennard_jones_exclusion_inference(
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-    const int *lambda_group_idxs, // 0 or 1, how much we offset from the plane by cutoff
+    // const int *lambda_group_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
     const double *lj_scales, // [E] 
     const double *lj_params, // [N,2]
     const double cutoff,
-    unsigned long long *grad_coords,
-    double *out_du_dl,
-    double *out_energy) {
+    unsigned long long *du_dx,
+    double *du_dp,
+    double *du_dl,
+    double *u) {
 
     const int e_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(e_idx >= E) {
@@ -215,7 +236,7 @@ void __global__ k_lennard_jones_exclusion_inference(
 
     int lambda_plane_i = lambda_plane_idxs[atom_i_idx];
     int lambda_offset_i = lambda_offset_idxs[atom_i_idx];
-    int lambda_group_i = lambda_group_idxs[atom_i_idx];
+    // int lambda_group_i = lambda_group_idxs[atom_i_idx];
 
     RealType ci[3];
     double gi[3] = {0};
@@ -230,13 +251,16 @@ void __global__ k_lennard_jones_exclusion_inference(
     RealType sig_i = lj_params[lj_param_idx_sig_i];
     RealType eps_i = lj_params[lj_param_idx_eps_i];
 
+    RealType g_sigi = 0.0;
+    RealType g_epsi = 0.0;
+
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
 
     RealType du_dl_j = 0;
 
     int lambda_plane_j = lambda_plane_idxs[atom_j_idx];
     int lambda_offset_j = lambda_offset_idxs[atom_j_idx];
-    int lambda_group_j = lambda_group_idxs[atom_j_idx];
+    // int lambda_group_j = lambda_group_idxs[atom_j_idx];
 
     RealType cj[3];
     double gj[3] = {0};
@@ -251,6 +275,9 @@ void __global__ k_lennard_jones_exclusion_inference(
     RealType sig_j = lj_params[lj_param_idx_sig_j];
     RealType eps_j = lj_params[lj_param_idx_eps_j];
 
+    RealType g_sigj = 0.0;
+    RealType g_epsj = 0.0;
+
     RealType lj_scale = lj_scales[e_idx];
 
     RealType dxs[4];
@@ -261,16 +288,16 @@ void __global__ k_lennard_jones_exclusion_inference(
     int dw_i = 0;
     int dw_j = 0;
 
-    if((lambda_group_j & lambda_group_i) > 0) {
-        // 3D
-        dxs[3] = 0;
-    } else {
+    // if((lambda_group_j & lambda_group_i) > 0) {
+    //     // 3D
+    //     dxs[3] = 0;
+    // } else {
         // 4D
-        RealType delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
-        dxs[3] = delta_lambda;
-        dw_i = lambda_offset_i;
-        dw_j = lambda_offset_j;
-    }
+    RealType delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
+    dxs[3] = delta_lambda;
+    dw_i = lambda_offset_i;
+    dw_j = lambda_offset_j;
+    // }
 
     RealType inv_dij = fast_vec_rnorm<RealType, 4>(dxs);
     RealType inv_cutoff = 1/cutoff;
@@ -306,14 +333,34 @@ void __global__ k_lennard_jones_exclusion_inference(
 
         for(int d=0; d < 3; d++) {
 
-            atomicAdd(grad_coords + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));
-            atomicAdd(grad_coords + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
+            atomicAdd(du_dx + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));
+            atomicAdd(du_dx + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
 
         }  
 
-        atomicAdd(out_du_dl, du_dl_i + du_dl_j);
-        RealType energy = lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
-        atomicAdd(out_energy, -energy);
+        atomicAdd(du_dl, du_dl_i + du_dl_j);
+
+        if(u) {
+            RealType energy = lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+            atomicAdd(u, -energy);
+        }
+
+        if(du_dp) {
+
+            RealType eps_grad = 4*(sig6_inv_d6ij-1.0)*sig6_inv_d6ij;
+            g_epsi += eps_grad*eps_j/(2*eps_ij);
+            g_epsj += eps_grad*eps_i/(2*eps_ij);
+            RealType sig_grad = 24*eps_ij*(2*sig6_inv_d6ij-1.0)*(sig6_inv_d6ij/sig_ij);
+            g_sigi += sig_grad/2;
+            g_sigj += sig_grad/2;
+
+            atomicAdd(du_dp + lj_param_idx_sig_i, -lj_scale*g_sigi);
+            atomicAdd(du_dp + lj_param_idx_sig_j, -lj_scale*g_sigj);
+
+            atomicAdd(du_dp + lj_param_idx_eps_i, -lj_scale*g_epsi);
+            atomicAdd(du_dp + lj_param_idx_eps_j, -lj_scale*g_epsj);
+        }
+
     }
 
 }

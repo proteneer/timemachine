@@ -50,21 +50,26 @@ def nongroup_electrostatics(
     return simple_energy(conf_4d, charge_params, exclusion_idxs, charge_scales, cutoff)
 
 
-def group_lennard_jones(
+def lennard_jones_v2(
     conf,
-    lamb,
     lj_params,
+    box,
+    lamb,
     exclusion_idxs,
     lj_scales,
     cutoff,
     lambda_plane_idxs,
-    lambda_offset_idxs,
-    lambda_group_idxs):
+    lambda_offset_idxs):
+
+    print(conf)
+    print(lj_params)
+    print(box)
+    print(lamb)
 
     conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
-    lj = lennard_jones(conf_4d, lj_params, cutoff, lambda_group_idxs)
-    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, exclusion_idxs, lj_scales, cutoff, lambda_group_idxs)
+    lj = lennard_jones(conf_4d, lj_params, cutoff)
+    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, exclusion_idxs, lj_scales, cutoff)
 
     return lj - lj_exc
 
@@ -118,12 +123,12 @@ def lennard_jones(conf, lj_params, cutoff, groups=None):
 
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
-    gi = np.expand_dims(groups, axis=0)
-    gj = np.expand_dims(groups, axis=1)
-    gij = np.bitwise_and(gi, gj) > 0
+    # gi = np.expand_dims(groups, axis=0)
+    # gj = np.expand_dims(groups, axis=1)
+    # gij = np.bitwise_and(gi, gj) > 0
 
     # print(gij)
-    dij = distance(ri, rj, box, gij)
+    dij = distance(ri, rj, box)
 
     if cutoff is not None:
         eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
@@ -164,10 +169,10 @@ def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff, 
     ri = conf[src_idxs]
     rj = conf[dst_idxs]
 
-    gi = groups[src_idxs]
-    gj = groups[dst_idxs]
-    gij = np.bitwise_and(gi, gj) > 0
-    dij = distance(ri, rj, box, gij)
+    # gi = groups[src_idxs]
+    # gj = groups[dst_idxs]
+    # gij = np.bitwise_and(gi, gj) > 0
+    dij = distance(ri, rj, box)
 
     sig_params = lj_params[:, 0] 
     sig_i = sig_params[src_idxs]

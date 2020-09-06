@@ -132,7 +132,6 @@ def prepare_lj_system(
     E, # number of exclusions
     lambda_plane_idxs,
     lambda_offset_idxs,
-    lambda_group_idxs,
     p_scale,
     cutoff=100.0,
     precision=np.float64):
@@ -152,15 +151,12 @@ def prepare_lj_system(
     # charge_scales = np.random.rand(E)
     lj_scales = np.random.rand(E)
 
-    custom_nonbonded_ctor = functools.partial(ops.LennardJones,
-        # charge_params,
-        lj_params,
+    test_potential_ctor = functools.partial(ops.LennardJones,
+        # lj_params,
         exclusion_idxs,
-        # charge_scales,
         lj_scales,
         lambda_plane_idxs,
         lambda_offset_idxs,
-        lambda_group_idxs,
         cutoff,
         precision=precision
     )
@@ -174,18 +170,16 @@ def prepare_lj_system(
     #     [0.0, 0.0, 0.0, 2*cutoff],
     # ])
 
-    ref_total_energy = functools.partial(
-        nonbonded.group_lennard_jones,
+    ref_potential = functools.partial(
+        nonbonded.lennard_jones_v2,
         exclusion_idxs=exclusion_idxs,
-        # charge_scales=charge_scales,
         lj_scales=lj_scales,
         cutoff=cutoff,
         lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs,
-        lambda_group_idxs=lambda_group_idxs
+        lambda_offset_idxs=lambda_offset_idxs
     )
 
-    return lj_params, ref_total_energy, custom_nonbonded_ctor
+    return lj_params, ref_potential, test_potential_ctor
 
 
 
