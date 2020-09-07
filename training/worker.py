@@ -71,7 +71,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
         energies = []
         frames = []
 
-        interval = max(1, request.prod_steps//request.n_frames)
+
 
         if request.observe_du_dl_freq > 0:
             du_dl_obs = custom_ops.AvgPartialUPartialLambda(bps, request.observe_du_dl_freq)
@@ -84,14 +84,20 @@ class Worker(service_pb2_grpc.WorkerServicer):
                     du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, request.observe_du_dp_freq)
                     ctxt.add_observable(du_dp_obs)
                     du_dps.append(du_dp_obs)
+        
+
 
         # dynamics
         for step in range(request.prod_steps):
             if step % 100 == 0:
                 u = ctxt.get_u_t()
                 energies.append(u)
-            if step % interval == 0:
-                frames.append(ctxt.get_x_t())
+
+            if request.n_frames > 0:
+                interval = max(1, request.prod_steps//request.n_frames)
+                if step % interval == 0:
+                    frames.append(ctxt.get_x_t())
+
             ctxt.step(lamb)
 
         frames = np.array(frames)
