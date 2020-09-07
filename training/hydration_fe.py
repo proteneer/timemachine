@@ -212,7 +212,8 @@ def setup_system(
 def simulate(
     guest_mol,
     ff_handlers,
-    stubs):
+    stubs,
+    n_frames):
 
     box_width = 3.0
     host_system, host_coords, box, host_pdbfile = water_box.get_water_box(box_width)
@@ -278,8 +279,6 @@ def simulate(
             intg_args
         )
 
-        n_frames = 50
-
         # endpoint lambda
         if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
             observe_du_dl_freq = 5000 # this is analytically zero.
@@ -293,7 +292,7 @@ def simulate(
             lamb=lamb,
             prep_steps=5000,
             # prod_steps=100000,
-            prod_steps=50000,
+            prod_steps=100000,
             observe_du_dl_freq=observe_du_dl_freq,
             observe_du_dp_freq=observe_du_dp_freq,
             precision="single",
@@ -403,9 +402,13 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Absolute Hydration Free Energy Script')
 
-    ligand_sdf = "/home/yutong/Downloads/ligands_40.sdf"
+    parser.add_argument('n_workers', type=int, help='number of workers')
+    parser.add_argument('n_frames', type=int, help='number of frames')
+    parser.add_argument('ligand_sdf', type=str, help='ligand sdf file path')
 
-    suppl = Chem.SDMolSupplier(ligand_sdf, removeHs=False)
+    args = parser.parse_args()
+
+    suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
 
     all_guest_mols = []
 
@@ -419,10 +422,8 @@ if __name__ == "__main__":
 
     stubs = []
 
-    num_workers = 10
-
     address_list = []
-    for idx in range(num_workers):
+    for idx in range(args.n_workers):
         address_list.append("0.0.0.0:"+str(5000+idx))
 
     for address in address_list:
@@ -447,5 +448,6 @@ if __name__ == "__main__":
         simulate(
             guest_mol,
             ff_handlers,
-            stubs
+            stubs,
+            args.n_frames
         )
