@@ -178,16 +178,35 @@ void declare_avg_partial_u_partial_param(py::module &m) {
         std::vector<int> shape = obj.shape();
         py::array_t<double, py::array::c_style> buffer(shape);
 
-        std::cout << "BUFFER SIZE: " << buffer.size() << std::endl;
         obj.avg_du_dp(buffer.mutable_data());
-
-        for(int i=0; i < buffer.size(); i++) {
-            std::cout << i << " " << buffer.data()[i] << std::endl;
-        }
 
         return buffer;
     });
 }
+
+
+void declare_avg_partial_u_partial_lambda(py::module &m) {
+
+    using Class = timemachine::AvgPartialUPartialLambda;
+    std::string pyclass_name = std::string("AvgPartialUPartialLambda");
+    py::class_<Class, timemachine::Observable>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        std::vector<timemachine::BoundPotential *> bps,
+        int freq) {
+        return new timemachine::AvgPartialUPartialLambda(bps, freq);
+    }))
+    .def("avg_du_dl", [](timemachine::AvgPartialUPartialLambda &obj) -> double {
+        double avg_du_dl;
+        obj.avg_du_dl(&avg_du_dl);
+        return avg_du_dl;
+    });
+}
+
 
 void declare_integrator(py::module &m) {
 
@@ -775,6 +794,7 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_observable(m);
     declare_avg_partial_u_partial_param(m);
+    declare_avg_partial_u_partial_lambda(m);
 
     declare_potential(m);
     declare_bound_potential(m);

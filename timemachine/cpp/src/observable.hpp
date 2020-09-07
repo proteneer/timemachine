@@ -53,13 +53,39 @@ public:
     // copy into buffer and return shape of params object.
     void avg_du_dp(double *buffer);
 
-
-
-
 };
 
-// TBD
-// AvgPartialUPartialLambda
 
+
+class AvgPartialUPartialLambda : public Observable {
+
+private:
+
+    double *d_sum_du_dl_;
+    std::vector<BoundPotential *> bps_;
+    int count_;
+    int freq_;
+
+public:
+
+    AvgPartialUPartialLambda(
+        std::vector<BoundPotential *> bps,
+        int freq
+    );
+
+    ~AvgPartialUPartialLambda();
+
+    virtual void observe(
+        int step,
+        int N,
+        double *d_x_t,
+        double *d_box_t,
+        double lambda
+    ) override;
+
+    // copy into buffer and return shape of params object.
+    void avg_du_dl(double *buffer);
+
+};
 
 }
