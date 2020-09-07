@@ -335,9 +335,16 @@ def simulate(
         print("lamb", lamb, "avg_du_dl", du_dl)
 
 
-    lj_du_dp = lj_du_dps[0] - lj_du_dps[1]
+    expected = -150
+
+    predicted = np.trapz(du_dls, lambda_schedule)
+
+    print("dG", predicted)
+    loss = np.abs(predicted - expected)
+    loss_grad = np.sign(predicted - expected)
+
+    lj_du_dp = loss_grad*(lj_du_dps[0] - lj_du_dps[1])
     print("lj_du_dp", lj_du_dp)
-    print("dG", np.trapz(du_dls, lambda_schedule))
 
     for h, vjp_fn in handler_vjp_fns.items():
 
@@ -412,12 +419,17 @@ if __name__ == "__main__":
 
     stubs = []
 
-    worker_address_list = [
-        "0.0.0.0:5000",
-    ]
+    num_workers = 1
+
+    address_list = []
+    for idx in range(num_workers):
+        address_list.append("0.0.0.0:"+str(5000+idx))
+    #     "0.0.0.0:5000",
+    #     "0.0.0.0:5001",
+    # ]
 
 
-    for address in worker_address_list:
+    for address in address_list:
         print("connecting to", address)
         channel = grpc.insecure_channel(address,
             options = [
