@@ -114,9 +114,11 @@ def deserialize_system(system):
 
                 # increment eps by 1e-3 if we have eps==0 to avoid a singularity in parameter derivatives
                 # override default amber types
-                if eps == 0:
-                    print("Warning: overriding eps by 1e-3 to avoid a singularity")
-                    eps += 1e-3
+
+                # this doesn't work for water!
+                # if eps == 0:
+                    # print("Warning: overriding eps by 1e-3 to avoid a singularity")
+                    # eps += 1e-3
 
                 # charge_idx = insert_parameters(charge, 14)
                 # sig_idx = insert_parameters(sig, 10)

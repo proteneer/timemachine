@@ -49,7 +49,6 @@ void HarmonicBond<RealType>::execute_device(
     double *d_u,
     cudaStream_t stream) {
 
-
     int tpb = 32;
     int blocks = (B_+tpb-1)/tpb;
     k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(

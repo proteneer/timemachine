@@ -1,5 +1,6 @@
 #include "context.hpp"
 #include "gpu_utils.cuh"
+#include <iostream>
 
 namespace timemachine {
 
@@ -41,6 +42,7 @@ void Context::step() {
 
     // the observables decide on whether or not to act on given
     // data (cheap pointers in any case)
+
     for(int i=0; i < observables_.size(); i++) {
         observables_[i]->observe(
             step_,
@@ -51,9 +53,11 @@ void Context::step() {
         );
     }
 
+
     gpuErrchk(cudaMemset(d_du_dx_t_, 0, N_*3*sizeof(*d_du_dx_t_)));
 
     for(int i=0; i < bps_.size(); i++) {
+        // std::cout << i << std::endl;
         bps_[i]->execute_device(
             N_,
             d_x_t_,

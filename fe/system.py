@@ -14,9 +14,9 @@ class System():
 
 class Integrator():
 
-    def __init__(self, steps, dt, temperature, friction, masses, lamb, seed):
+    def __init__(self, steps, dt, temperature, friction, masses, seed):
 
-        minimization_steps = 2000
+        # minimization_steps = 2000
 
         ca, cbs, ccs = langevin_coefficients(
             temperature,
@@ -35,5 +35,5 @@ class Integrator():
         self.cas = complete_cas
         self.cbs = -cbs
         self.ccs = ccs
-        self.lambs = np.zeros(steps) + lamb
+        # self.lambs = np.zeros(steps) + lamb
         self.seed = seed
