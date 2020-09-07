@@ -419,7 +419,7 @@ if __name__ == "__main__":
 
     stubs = []
 
-    num_workers = 1
+    num_workers = 10
 
     address_list = []
     for idx in range(num_workers):
