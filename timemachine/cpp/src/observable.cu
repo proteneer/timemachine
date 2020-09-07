@@ -1,48 +1,51 @@
-#include <vector>
-
 #include "observable.hpp"
 #include "gpu_utils.cuh"
+#include <iostream>
+
 
 namespace timemachine {
 
-AvgPartialUPartialTheta::AvgPartialUPartialTheta(
-    std::vector<BoundPotential *> bps
-) : bps_(bps) {
-
-    // create buffer for du/dp derivatives
-    for(int i=0; i < bps_.size(); i++) {
-        int P = bps_[i]->size();
-        double *du_dp;
-        gpuErrchk(cudaMalloc(&du_dp, P*sizeof(*du_dp)));
-        gpuErrchk(cudaMemset(du_dp, 0, P*sizeof(*du_dp)));
-        d_du_dp_.push_back(du_dp);
-    }
-
+AvgPartialUPartialParam::AvgPartialUPartialParam(
+    BoundPotential *bp, int freq) : bp_(bp), count_(0), freq_(freq) {
+    int P = bp_->size();
+    gpuErrchk(cudaMalloc(&d_sum_du_dp_, P*sizeof(*d_sum_du_dp_)));
+    gpuErrchk(cudaMemset(d_sum_du_dp_, 0, P*sizeof(*d_sum_du_dp_)));
 }
 
-void AvgPartialUPartialTheta::collect(
+AvgPartialUPartialParam::~AvgPartialUPartialParam() {
+    gpuErrchk(cudaFree(d_sum_du_dp_));
+}
+
+void AvgPartialUPartialParam::observe(
     int step,
     int N,
     double *d_x_t,
     double *d_box_t,
     double lambda) {
 
-    for(int i=0; i < bps_.size(); i++) {
-
-        bps_[i]->execute_device(
+    if(step % freq_ == 0) {
+        bp_->execute_device(
             N,
             d_x_t,
             d_box_t,
             lambda,
             nullptr,
-            d_du_dp_[i],
+            d_sum_du_dp_,
             nullptr,
             nullptr,
             static_cast<cudaStream_t>(0) // TBD: parallelize me!
         );
-
+        count_ += 1;
     }
 
+}
+
+void AvgPartialUPartialParam::avg_du_dp(double *h_buf) {
+    gpuErrchk(cudaMemcpy(h_buf, d_sum_du_dp_, this->bp_->size()*sizeof(*h_buf), cudaMemcpyDeviceToHost));
+    for(int i=0; i < this->bp_->size(); i++) {
+        std::cout << i << " " << h_buf[i]/count_ << std::endl;
+        h_buf[i] /= count_;
+    }
 }
 
 }

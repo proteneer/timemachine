@@ -1,6 +1,6 @@
 #pragma once
 
-
+#include <vector>
 #include "bound_potential.hpp"
 
 
@@ -10,7 +10,7 @@ class Observable {
 
 public:
 
-    virtual void collect(
+    virtual void observe(
         int step,
         int N,
         double *d_x_t,
@@ -21,28 +21,40 @@ public:
 };
 
 
-// even if we save as frequently as *once every 10 steps* it is still
-// much more efficient to separate out the collectors
-
-// dU/dtheta observables
-class AvgPartialUPartialTheta : public Observable {
+class AvgPartialUPartialParam : public Observable {
 
 private:
 
-    std::vector<double *> d_du_dp_;
-    std::vector<BoundPotential *> bps_;
+    double *d_sum_du_dp_;
+    BoundPotential *bp_;
+    int count_;
+    int freq_;
 
 public:
 
-    AvgPartialUPartialTheta(std::vector<BoundPotential *> bps);
+    AvgPartialUPartialParam(
+        BoundPotential *bp,
+        int freq
+    );
 
-    virtual void collect(
+    ~AvgPartialUPartialParam();
+
+    virtual void observe(
         int step,
         int N,
         double *d_x_t,
         double *d_box_t,
         double lambda
     ) override;
+
+    std::vector<int> shape() const {
+        return this->bp_->shape;
+    }
+    // copy into buffer and return shape of params object.
+    void avg_du_dp(double *buffer);
+
+
+
 
 };
 

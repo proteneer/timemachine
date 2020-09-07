@@ -92,13 +92,9 @@ void declare_context(py::module &m) {
         const py::array_t<double, py::array::c_style> &v0,
         const py::array_t<double, py::array::c_style> &box0,
         double lambda,
+        timemachine::Integrator *intg,
         std::vector<timemachine::BoundPotential *> bps,
-        timemachine::Integrator *intg) {
-        // const py::array_t<double, py::array::c_style> &coeff_cas,
-        // const py::array_t<double, py::array::c_style> &coeff_cbs,
-        // const py::array_t<double, py::array::c_style> &coeff_ccs,
-        // const py::array_t<double, py::array::c_style> &step_sizes,
-        // unsigned long long seed) {
+        std::vector<timemachine::Observable *> obs) {
 
         int N = x0.shape()[0];
         int D = x0.shape()[1];
@@ -111,46 +107,22 @@ void declare_context(py::module &m) {
             throw std::runtime_error("v0 D != x0 D");
         }
 
-        // int T = coeff_cas.shape()[0];
-
-        // if(T != step_sizes.shape()[0]) {
-        //     throw std::runtime_error("coeff_cas T != step_sizes T");
-        // }
-
-        // std::vector<double> x0_vec(x0.data(), x0.data()+x0.size());
-        // std::vector<double> v0_vec(v0.data(), v0.data()+v0.size());
-        // std::vector<double> coeff_cas_vec(coeff_cas.data(), coeff_cas.data()+coeff_cas.size());
-        // std::vector<double> coeff_cbs_vec(coeff_cbs.data(), coeff_cbs.data()+coeff_cbs.size());
-        // std::vector<double> coeff_ccs_vec(coeff_ccs.data(), coeff_ccs.data()+coeff_ccs.size());
-        // std::vector<double> step_sizes_vec(step_sizes.data(), step_sizes.data()+step_sizes.size());
-
         return new timemachine::Context(
             N,
             x0.data(),
             v0.data(),
             box0.data(),
             lambda,
+            intg,
             bps,
-            intg
-            // stepper,
-            // N,
-            // x0_vec,
-            // v0_vec,
-            // coeff_cas_vec,
-            // coeff_cbs_vec,
-            // coeff_ccs_vec,
-            // step_sizes_vec,
-            // seed
+            obs
         );
 
     }))
     .def("step", &timemachine::Context::step)
-    // .def("backward_mode", &timemachine::ReversibleContext::backward_mode)
     .def("get_du_dx_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();
         unsigned int D = 3;
-        // py::array_t<double, py::array::c_style> buffer({N, D});
-
         std::vector<unsigned long long> du_dx(N*D);
         ctxt.get_du_dx_t(&du_dx[0]);
         py::array_t<double, py::array::c_style> py_du_dx({N, D});
@@ -173,39 +145,7 @@ void declare_context(py::module &m) {
         ctxt.get_v_t(buffer.mutable_data());
         return buffer;
     });
-    // .def("get_all_coords", [](timemachine::ReversibleContext &ctxt) -> py::array_t<double, py::array::c_style> {
-    //     unsigned int N = ctxt.N();
-    //     unsigned int F = ctxt.F();
-    //     unsigned int D = 3;
-    //     py::array_t<double, py::array::c_style> buffer({F, N, D});
-    //     ctxt.get_all_coords(buffer.mutable_data());
-    //     return buffer;
-    // })
-    // .def("set_x_t_adjoint", [](timemachine::ReversibleContext &ctxt,
-    //     const py::array_t<double, py::array::c_style> &xt) {
-    //     ctxt.set_x_t_adjoint(xt.data());
-    // })
-    // .def("get_x_t_adjoint", [](timemachine::ReversibleContext &ctxt) -> 
-    //     py::array_t<double, py::array::c_style> {
-    //     unsigned int N = ctxt.N();
-    //     unsigned int D = 3;
-    //     py::array_t<double, py::array::c_style> buffer({N, D});
-    //     ctxt.get_x_t_adjoint(buffer.mutable_data());
-    //     return buffer;
-    // })
-    // .def("get_v_t_adjoint", [](timemachine::ReversibleContext &ctxt) -> 
-    //     py::array_t<double, py::array::c_style> {
-    //     unsigned int N = ctxt.N();
-    //     unsigned int D = 3;
-    //     py::array_t<double, py::array::c_style> buffer({N, D});
-    //     ctxt.get_v_t_adjoint(buffer.mutable_data());
-    //     return buffer;
-    // });
 }
-
-
-
-
 
 void declare_observable(py::module &m) {
 
@@ -219,25 +159,34 @@ void declare_observable(py::module &m) {
     );
 }
 
-void declare_avg_partial_u_partial_theta(py::module &m) {
+void declare_avg_partial_u_partial_param(py::module &m) {
 
-    using Class = timemachine::AvgPartialUPartialTheta;
-    std::string pyclass_name = std::string("AvgPartialUPartialTheta");
+    using Class = timemachine::AvgPartialUPartialParam;
+    std::string pyclass_name = std::string("AvgPartialUPartialParam");
     py::class_<Class, timemachine::Observable>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
         py::dynamic_attr()
     )
-    .def(py::init([](std::vector<timemachine::BoundPotential *> bps) {
+    .def(py::init([](
+        timemachine::BoundPotential *bp,
+        int freq) {
+        return new timemachine::AvgPartialUPartialParam(bp, freq);
+    }))
+    .def("avg_du_dp", [](timemachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
+        std::vector<int> shape = obj.shape();
+        py::array_t<double, py::array::c_style> buffer(shape);
 
-        return new timemachine::AvgPartialUPartialTheta(
-            bps
-        );
+        std::cout << "BUFFER SIZE: " << buffer.size() << std::endl;
+        obj.avg_du_dp(buffer.mutable_data());
 
-    }
-    ));
+        for(int i=0; i < buffer.size(); i++) {
+            std::cout << i << " " << buffer.data()[i] << std::endl;
+        }
 
+        return buffer;
+    });
 }
 
 void declare_integrator(py::module &m) {
@@ -825,7 +774,7 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_langevin_integrator(m);
 
     declare_observable(m);
-    declare_avg_partial_u_partial_theta(m);
+    declare_avg_partial_u_partial_param(m);
 
     declare_potential(m);
     declare_bound_potential(m);
