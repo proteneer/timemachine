@@ -3,34 +3,28 @@
 syntax = "proto3";
 
 service Worker {
-    rpc ForwardMode(ForwardRequest) returns (ForwardReply) {}
-    rpc BackwardMode(BackwardRequest) returns (BackwardReply) {}
-    rpc ResetState(EmptyMessage) returns (EmptyMessage) {}
+    rpc Simulate(SimulateRequest) returns (SimulateReply) {}
+    // rpc BackwardMode(BackwardRequest) returns (BackwardReply) {}
+    // rpc ResetState(EmptyMessage) returns (EmptyMessage) {}
 }
 
 message EmptyMessage {}
 
 // The request message containing the user's name.
-message ForwardRequest {
-    bool inference = 1;
-    bytes system = 2; // pickle object
-    string precision = 3;
-    int32 n_frames = 4;
-    string key = 5;
+message SimulateRequest {
+    bytes system = 1; // pickle object
+    double lamb = 2; // lambda window
+    int32 prep_steps = 3; // num steps for preparation
+    int32 prod_steps = 4; // num steps for production
+    int32 observe_du_dl_freq = 5; // 0 signals non-observance
+    int32 observe_du_dp_freq = 6; // 0 signals non-observance
+    string precision = 7;
+    int32 n_frames = 8;
 }
 
-message ForwardReply {
-    bytes du_dls = 1; // numpy array
-    bytes energies = 2; // numpy array
-    bytes frames = 3;
-}
-
-// The response message containing the greetings
-message BackwardRequest {
-    bytes adjoint_du_dls = 1; // pickle
-    string key = 2;
-}
-
-message BackwardReply {
-    bytes dl_dps = 1; // pickle
+message SimulateReply {
+    bytes avg_du_dls = 1; // numpy array
+    bytes avg_du_dps = 2; // numpy array
+    bytes energies = 3; // numpy array
+    bytes frames = 4;
 }

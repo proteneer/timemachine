@@ -1,5 +1,5 @@
-import matplotlib
-matplotlib.use('Agg')
+# import matplotlib
+# matplotlib.use('Agg')
 # import pickle
 import copy
 import argparse
@@ -36,6 +36,7 @@ import configparser
 import grpc
 
 from training import trainer
+from training import service_pb2
 from training import service_pb2_grpc
 
 from ff.handlers import bonded, nonbonded, openmm_deserializer
@@ -46,6 +47,9 @@ from training import water_box
 from timemachine.integrator import langevin_coefficients
 from timemachine.lib import ops, custom_ops
 
+from matplotlib import pyplot as plt
+
+import pickle
 
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18
@@ -129,6 +133,7 @@ def setup_system(
     conformer = guest_mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
     guest_conf = guest_conf/10 # convert to md_units
+    guest_conf -= np.array([[1.0, 1.0, 1.0]]) # displace to recenter
 
     x0 = np.concatenate([host_conf, guest_conf]) # combined geometry
 
@@ -169,6 +174,25 @@ def setup_system(
 
     return x0, combined_masses, final_gradients
 
+def recenter(conf, box):
+
+    new_coords = []
+
+    periodicBoxSize = box
+
+    for atom in conf:
+        diff = np.array([0., 0., 0.])
+        diff += periodicBoxSize[2]*np.floor(atom[2]/periodicBoxSize[2][2]);
+        diff += periodicBoxSize[1]*np.floor((atom[1]-diff[1])/periodicBoxSize[1][1]);
+        diff += periodicBoxSize[0]*np.floor((atom[0]-diff[0])/periodicBoxSize[0][0]);
+        new_coords.append(atom - diff)
+
+    return np.array(new_coords)
+
+
+from fe import math_utils, system
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Absolute Hydration Free Energy Script')
@@ -190,11 +214,15 @@ if __name__ == "__main__":
 
     ff_handlers = deserialize(ff_raw)
 
-    host_system, host_coords, box = water_box.get_water_box(2.0)
+    box_width = 3.0
+    host_system, host_coords, box, host_pdbfile = water_box.get_water_box(box_width)
 
     # print(box)
     # print(host_coords)
     # assert 0
+
+    # janky
+    combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), guest_mol)
 
     x0, combined_masses, final_gradients = setup_system(
         ff_handlers,
@@ -206,64 +234,160 @@ if __name__ == "__main__":
     v0 = np.zeros_like(x0)
 
     # bind final_gradients
-    bps = []
-    pots = []
 
-    lamb = 0.5
-    for name, args in final_gradients:
-        print("---potential---", name)
-        params = args[-1]
-        op_fn = getattr(ops, name)
-        potential = op_fn(*args[:-1], precision=np.float32)
-        pots.append(potential) # (ytz) needed for binding, else python decides to GC this
-        du_dx, du_dp, du_dl, u = potential.execute(x0, params, box, lamb)
-        # print(du_dx)
-        # print(du_dp, du_dl, u)
-        bp = custom_ops.BoundPotential(potential, params)
-        bps.append(bp)
 
-    print("bps", bps)
-    # for bp in bps:
-        # bp.execute_host()
+    lamb = 0.3
 
-    dt = 1.5e-3
+    # for lamb in [0.3, 0.3, 0.3, 0.3, 0.3, 0.3]:
+    # prepare jobs
 
-    ca, cbs, ccs = langevin_coefficients(
-        temperature=300.0,
-        dt=dt,
-        friction=1.0,
-        masses=combined_masses
-    )
+    stubs = []
 
-    cbs *= -1
+    worker_address_list = [
+        "0.0.0.0:5000",
+    ]
 
-    seed = 2020
 
-    intg = custom_ops.LangevinIntegrator(
-        dt,
-        ca,
-        cbs,
-        ccs,
-        seed
-    )
 
-    obs = []
+    for address in worker_address_list:
+        print("connecting to", address)
+        channel = grpc.insecure_channel(address,
+            options = [
+                ('grpc.max_send_message_length', 500 * 1024 * 1024),
+                ('grpc.max_receive_message_length', 500 * 1024 * 1024)
+            ]
+        )
 
-    ctxt = custom_ops.Context(
-        x0,
-        v0,
-        box,
-        lamb,
-        intg,
-        bps,
-        obs
-    )
+        stub = service_pb2_grpc.WorkerStub(channel)
+        stubs.append(stub)
 
-    for step in range(10000):
-        # print(step)
-        ctxt.step()
+    simulate_futures = []
+    lambda_schedule = np.linspace(0.0, 1.5, 50)
 
-    print("final_coords", ctxt.get_x_t())
+    for lamb_idx, lamb in enumerate(lambda_schedule):
+
+        bps = []
+        pots = []
+
+        for name, args in final_gradients:
+            params = args[-1]
+            op_fn = getattr(ops, name)
+            potential = op_fn(*args[:-1], precision=np.float32)
+            pots.append(potential) # (ytz) needed for binding, else python decides to GC this
+            du_dx, du_dp, du_dl, u = potential.execute(x0, params, box, lamb)
+            bp = custom_ops.BoundPotential(potential, params)
+            bps.append(bp)
+
+        dt = 1.5e-3
+
+        ca, cbs, ccs = langevin_coefficients(
+            temperature=300.0,
+            dt=dt,
+            friction=1.0,
+            masses=combined_masses
+        )
+        cbs *= -1
+
+        seed = np.random.randint(150000)
+
+        intg_args = (dt, ca, cbs, ccs, seed)
+
+        complex_system = system.System(
+            x0,
+            v0,
+            box,
+            final_gradients,
+            intg_args
+        )
+
+        n_frames = 50
+
+        request = service_pb2.SimulateRequest(
+            system=pickle.dumps(complex_system),
+            lamb=lamb,
+            prep_steps=5000,
+            prod_steps=5000,
+            observe_du_dl_freq=10,
+            observe_du_dp_freq=5000,
+            precision="single",
+            n_frames=n_frames,
+        )
+
+        stub = stubs[lamb_idx % len(stubs)]
+
+        # launch asynchronously
+        response_future = stub.Simulate.future(request)
+        simulate_futures.append(response_future)
+
+    for lamb_idx, (lamb, future) in enumerate(zip(lambda_schedule, simulate_futures)):
+        response = future.result()
+        energies = pickle.loads(response.energies)
+
+        if n_frames > 0:
+            frames = pickle.loads(response.frames)
+            combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+
+            out_file = "simulation_"+str(lamb_idx)+".pdb"
+            pdb_writer = PDBWriter(combined_pdb_str, out_file)
+            pdb_writer.write_header(box)
+            for x in frames:
+                x = recenter(x, box)
+                pdb_writer.write(x*10)
+            pdb_writer.close()
+
+        print("lamb", lamb, "avg_du_dl", pickle.loads(response.avg_du_dls))
+
+        # plt.plot(energies)
+        # plt.show()
+
+    # response = simulate_futures.result()
+
+    # print(simulate_futures)
+
+
+        # print("starting u:", ctxt.get_u_t())
+
+
+
+        # # print(combined_pdb_str.getvalue())
+        # # assert 0
+
+        # pdb_writer = PDBWriter(combined_pdb_str, out_file)
+
+        # box = np.eye(3)*box_width
+        # pdb_writer.write_header(box)
+
+        # nrgs = []
+
+        # n_steps = 50000
+
+        # # add observable after insertion/equilibration
+        # du_dl_obs = custom_ops.AvgPartialUPartialLambda(bps, 20)
+        
+        # ctxt.add_observable(du_dl_obs)
+
+
+
+        # for step in range(n_steps):
+        #     # if step % 1000 == 0:
+        #         # u = ctxt.get_u_t()
+        #         # print(step, u)
+        #         # nrgs.append(u)
+        #     if step % 5000 == 0:
+        #         x = ctxt.get_x_t()
+        #         x = recenter(x, box)
+        #         pdb_writer.write(x*10)
+        #         # print(step)
+        #     ctxt.step(lamb)
+
+        # # plt.plot(nrgs)
+        # # plt.show()
+
+
+        # pdb_writer.close()
+
+        # # print("final_coords", ctxt.get_x_t())
+        # print("lamb", lamb, "avg_du_dl", du_dl_obs.avg_du_dl())
 
     # integrator = system.Integrator(
     #     steps=n_steps,

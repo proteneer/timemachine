@@ -9,15 +9,15 @@ Context::Context(
     const double *x_0,
     const double *v_0,
     const double *box_0,
-    double lambda,
+    // double lambda,
     Integrator* intg,
-    std::vector<BoundPotential *> bps,
-    std::vector<Observable *> obs) : 
+    std::vector<BoundPotential *> bps) :
+    // std::vector<Observable *> obs) : 
     N_(N),
     intg_(intg),
     bps_(bps),
-    observables_(obs),
-    lambda_(lambda),
+    // observables_(obs),
+    // lambda_(lambda),
     step_(0) {
 
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N*3);
@@ -37,8 +37,11 @@ Context::~Context() {
     gpuErrchk(cudaFree(d_du_dx_t_));
 };
 
+void Context::add_observable(Observable *obs) {
+    this->observables_.push_back(obs);
+}
 
-void Context::step() {
+void Context::step(double lambda) {
 
     // the observables decide on whether or not to act on given
     // data (cheap pointers in any case)
@@ -49,12 +52,12 @@ void Context::step() {
             N_,
             d_x_t_,
             d_box_t_,
-            lambda_
+            lambda
         );
     }
 
-
     gpuErrchk(cudaMemset(d_du_dx_t_, 0, N_*3*sizeof(*d_du_dx_t_)));
+    gpuErrchk(cudaMemset(d_u_t_, 0, 1*sizeof(*d_du_dx_t_)));
 
     for(int i=0; i < bps_.size(); i++) {
         // std::cout << i << std::endl;
@@ -62,11 +65,11 @@ void Context::step() {
             N_,
             d_x_t_,
             d_box_t_,
-            lambda_,
+            lambda,
             d_du_dx_t_,
             nullptr,
             nullptr,
-            nullptr,
+            d_u_t_,
             static_cast<cudaStream_t>(0) // TBD: parallelize me!
         );
     }
@@ -87,6 +90,12 @@ void Context::step() {
 
 int Context::num_atoms() const {
     return N_;
+}
+
+double Context::get_u_t() const {
+    double u;
+    gpuErrchk(cudaMemcpy(&u, d_u_t_, 1*sizeof(*d_u_t_), cudaMemcpyDeviceToHost));
+    return u;
 }
 
 void Context::get_du_dx_t(unsigned long long *out_buffer) const {

@@ -91,10 +91,9 @@ void declare_context(py::module &m) {
         const py::array_t<double, py::array::c_style> &x0,
         const py::array_t<double, py::array::c_style> &v0,
         const py::array_t<double, py::array::c_style> &box0,
-        double lambda,
         timemachine::Integrator *intg,
-        std::vector<timemachine::BoundPotential *> bps,
-        std::vector<timemachine::Observable *> obs) {
+        std::vector<timemachine::BoundPotential *> bps) {
+        // std::vector<timemachine::Observable *> obs) {
 
         int N = x0.shape()[0];
         int D = x0.shape()[1];
@@ -112,13 +111,13 @@ void declare_context(py::module &m) {
             x0.data(),
             v0.data(),
             box0.data(),
-            lambda,
             intg,
-            bps,
-            obs
+            bps
+            // obs
         );
 
     }))
+    .def("add_observable", &timemachine::Context::add_observable)
     .def("step", &timemachine::Context::step)
     .def("get_du_dx_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();
@@ -144,6 +143,9 @@ void declare_context(py::module &m) {
         py::array_t<double, py::array::c_style> buffer({N, D});
         ctxt.get_v_t(buffer.mutable_data());
         return buffer;
+    })
+    .def("get_u_t", [](timemachine::Context &ctxt) -> double {
+        return ctxt.get_u_t();
     });
 }
 

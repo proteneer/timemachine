@@ -17,17 +17,21 @@ public:
         const double *x_0,
         const double *v_0,
         const double *box_0,
-        double lambda,
+        // double lambda,
         Integrator *intg,
-        std::vector<BoundPotential *> bps,
-        std::vector<Observable *> obs
+        std::vector<BoundPotential *> bps
+        // std::vector<Observable *> obs
     );
 
     ~Context();
 
-    void step();
+    void add_observable(Observable *obs);
+
+    void step(double lambda);
 
     int num_atoms() const;
+
+    double get_u_t() const;
 
     void get_du_dx_t(unsigned long long *out_buffer) const;
 
@@ -46,7 +50,7 @@ private:
     double *d_v_t_; // velocities
     double *d_box_t_; // box vectors
     double *d_u_t_; // u (energy)
-    double lambda_; // (ytz): not a pointer!
+    // double lambda_; // (ytz): not a pointer!
 
     unsigned long long *d_du_dx_t_; // du/dx 
 

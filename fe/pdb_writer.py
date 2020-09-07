@@ -8,13 +8,15 @@ class PDBWriter():
         self.out_filepath = out_filepath
         self.outfile = None
 
-    def write_header(self):
+    def write_header(self, box=None):
         """
         Confusingly this initializes writer as well because 
         """
         outfile = open(self.out_filepath, 'w')
         self.outfile = outfile
         cpdb = app.PDBFile(self.pdb_str)
+        if box is not None:
+            cpdb.topology.setPeriodicBoxVectors(box)
         PDBFile.writeHeader(cpdb.topology, self.outfile)
         self.topology = cpdb.topology
         self.frame_idx = 0
