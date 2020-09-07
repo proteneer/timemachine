@@ -334,15 +334,16 @@ def simulate(
         print("lamb", lamb, "avg_du_dl", du_dl)
 
 
-    expected = -150
+    # expected = -150
 
     predicted = np.trapz(du_dls, lambda_schedule)
 
     print("dG", predicted)
-    loss = np.abs(predicted - expected)
-    loss_grad = np.sign(predicted - expected)
+    # loss = np.abs(predicted - expected)
+    # loss_grad = np.sign(predicted - expected)
 
-    lj_du_dp = loss_grad*(lj_du_dps[0] - lj_du_dps[1])
+    # lj_du_dp = loss_grad*(lj_du_dps[0] - lj_du_dps[1])
+    lj_du_dp = (lj_du_dps[0] - lj_du_dps[1])
     print("lj_du_dp", lj_du_dp)
 
     for h, vjp_fn in handler_vjp_fns.items():
