@@ -40,6 +40,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         bps = []
         pots = []
+        names = []
 
         for name, args in system.potentials:
             params = args[-1]
@@ -49,6 +50,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
             # du_dx, du_dp, du_dl, u = potential.execute(x0, params, box, lamb)
             bp = custom_ops.BoundPotential(potential, params)
             bps.append(bp)
+            names.append(name)
 
         intg = custom_ops.LangevinIntegrator(*system.integrator_args)
 
@@ -75,7 +77,13 @@ class Worker(service_pb2_grpc.WorkerServicer):
             du_dl_obs = custom_ops.AvgPartialUPartialLambda(bps, request.observe_du_dl_freq)
             ctxt.add_observable(du_dl_obs)
 
-        # if request.observe_du_dp:
+        if request.observe_du_dp_freq > 0:
+            du_dps = []
+            for name, bp in zip(names, bps):
+                if name == 'LennardJones':
+                    du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, request.observe_du_dp_freq)
+                    ctxt.add_observable(du_dp_obs)
+                    du_dps.append(du_dp_obs)
 
         # dynamics
         for step in range(request.prod_steps):
@@ -93,9 +101,16 @@ class Worker(service_pb2_grpc.WorkerServicer):
         else:
             avg_du_dls = None
 
+        if request.observe_du_dp_freq > 0:
+            avg_du_dps = []
+            for obs in du_dps:
+                avg_du_dps.append(obs.avg_du_dp())
+        else:
+            avg_du_dps = None
+
         return service_pb2.SimulateReply(
             avg_du_dls=pickle.dumps(avg_du_dls),
-            avg_du_dps=None,
+            avg_du_dps=pickle.dumps(avg_du_dps),
             energies=pickle.dumps(energies),
             frames=pickle.dumps(frames),
         )

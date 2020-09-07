@@ -1,6 +1,7 @@
 # import matplotlib
 # matplotlib.use('Agg')
 # import pickle
+
 import copy
 import argparse
 import time
@@ -19,7 +20,7 @@ from multiprocessing import Process, Pipe
 from jax.config import config as jax_config
 # this always needs to be set
 jax_config.update("jax_enable_x64", True)
-
+import jax
 import jax.numpy as jnp
 
 import rdkit
@@ -53,6 +54,40 @@ import pickle
 
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18
+
+
+def concat_with_vjps(p_a, p_b, vjp_a, vjp_b):
+    """
+    Returns the combined parameters p_c, and a vjp_fn that can take in adjoint with shape
+    of p_c and returns adjoints of primitives of p_a and p_b.
+
+    i.e. 
+       vjp_a            
+    A' -----> A 
+                \ vjp_c
+                 +-----> C
+       vjp_b    /
+    B' -----> B
+
+    """
+    p_c, vjp_c = jax.vjp(jnp.concatenate, [p_a, p_b])
+    adjoints = np.random.randn(*p_c.shape)
+
+    def adjoint_fn(p_c):
+        ad_a, ad_b = vjp_c(p_c)[0]
+        if vjp_a is not None:
+            ad_a = vjp_a(ad_a)
+        else:
+            ad_a = None
+
+        if vjp_b is not None:
+            ad_b = vjp_b(ad_b)
+        else:
+            ad_b = None
+
+        return ad_b[0]
+
+    return p_c, adjoint_fn
 
 def setup_system(
     ff_handlers,
@@ -100,6 +135,8 @@ def setup_system(
     combined_exclusion_idxs = np.concatenate([host_exclusion_idxs, guest_exclusion_idxs])
     combined_lj_exclusion_scales = np.concatenate([host_lj_exclusion_scales, guest_lj_exclusion_scales])
     # combined_charge_exclusion_scales = np.concatenate([host_charge_exclusion_scales, guest_charge_exclusion_scales])
+    
+    handler_vjp_fns = {}
 
     for handle in ff_handlers:
         results = handle.parameterize(guest_mol)
@@ -122,11 +159,22 @@ def setup_system(
             torsion_idxs += num_host_atoms
             final_gradients.append(("PeriodicTorsion", (torsion_idxs, torsion_params)))
         elif isinstance(handle, nonbonded.LennardJonesHandler):
-            guest_lj_params, _ = results
-            combined_lj_params = np.concatenate([host_lj_params, guest_lj_params])
+            guest_lj_params, guest_lj_vjp_fn = results
+            combined_lj_params, handler_vjp_fn = concat_with_vjps(
+                host_lj_params,
+                guest_lj_params,
+                None,
+                guest_lj_vjp_fn
+            )
+
+            # move to outside of if later
+            handler_vjp_fns[handle] = handler_vjp_fn
+            # combined_lj_params = np.concatenate([host_lj_params, guest_lj_params])
         else:
             print("skipping", handle)
             pass
+
+
 
     host_conf = np.array(host_coords)
 
@@ -137,11 +185,6 @@ def setup_system(
 
     x0 = np.concatenate([host_conf, guest_conf]) # combined geometry
 
-    # print("x0", x0)
-    # assert 0
-
-    # v0 = np.zeros_like(x0)
-
     N_C = num_host_atoms + num_guest_atoms
     N_A = num_host_atoms
 
@@ -151,16 +194,9 @@ def setup_system(
     combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
     combined_lambda_offset_idxs[num_host_atoms:] = 1
 
-    # print(combined_lambda_plane_idxs)
-    # print(combined_lambda_offset_idxs)
-
-    # assert 0
-
     final_gradients.append((
         'LennardJones', (
-        # np.asarray(combined_charge_params),
         combined_exclusion_idxs,
-        # combined_charge_exclusion_scales,
         combined_lj_exclusion_scales,
         combined_lambda_plane_idxs,
         combined_lambda_offset_idxs,
@@ -171,48 +207,12 @@ def setup_system(
 
     combined_masses = np.concatenate([host_masses, guest_masses])
 
+    return x0, combined_masses, final_gradients, handler_vjp_fns
 
-    return x0, combined_masses, final_gradients
-
-def recenter(conf, box):
-
-    new_coords = []
-
-    periodicBoxSize = box
-
-    for atom in conf:
-        diff = np.array([0., 0., 0.])
-        diff += periodicBoxSize[2]*np.floor(atom[2]/periodicBoxSize[2][2]);
-        diff += periodicBoxSize[1]*np.floor((atom[1]-diff[1])/periodicBoxSize[1][1]);
-        diff += periodicBoxSize[0]*np.floor((atom[0]-diff[0])/periodicBoxSize[0][0]);
-        new_coords.append(atom - diff)
-
-    return np.array(new_coords)
-
-
-from fe import math_utils, system
-
-
-if __name__ == "__main__":
-
-    parser = argparse.ArgumentParser(description='Absolute Hydration Free Energy Script')
-
-    ligand_sdf = "/home/yutong/Downloads/ligands_40.sdf"
-
-    suppl = Chem.SDMolSupplier(ligand_sdf, removeHs=False)
-
-    all_guest_mols = []
-
-    data = []
-
-    for guest_mol in suppl:
-        break
-
-    forcefield = "ff/params/smirnoff_1_1_0_ccc.py"
-
-    ff_raw = open(forcefield, "r").read()
-
-    ff_handlers = deserialize(ff_raw)
+def simulate(
+    guest_mol,
+    ff_handlers,
+    stubs):
 
     box_width = 3.0
     host_system, host_coords, box, host_pdbfile = water_box.get_water_box(box_width)
@@ -224,7 +224,7 @@ if __name__ == "__main__":
     # janky
     combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), guest_mol)
 
-    x0, combined_masses, final_gradients = setup_system(
+    x0, combined_masses, final_gradients, handler_vjp_fns = setup_system(
         ff_handlers,
         guest_mol,
         host_system,
@@ -233,36 +233,14 @@ if __name__ == "__main__":
 
     v0 = np.zeros_like(x0)
 
-    # bind final_gradients
-
-
-    lamb = 0.3
-
-    # for lamb in [0.3, 0.3, 0.3, 0.3, 0.3, 0.3]:
-    # prepare jobs
-
-    stubs = []
-
-    worker_address_list = [
-        "0.0.0.0:5000",
-    ]
-
-
-
-    for address in worker_address_list:
-        print("connecting to", address)
-        channel = grpc.insecure_channel(address,
-            options = [
-                ('grpc.max_send_message_length', 500 * 1024 * 1024),
-                ('grpc.max_receive_message_length', 500 * 1024 * 1024)
-            ]
-        )
-
-        stub = service_pb2_grpc.WorkerStub(channel)
-        stubs.append(stub)
-
     simulate_futures = []
-    lambda_schedule = np.linspace(0.0, 1.5, 50)
+    lambda_schedule = np.concatenate([
+        np.linspace(0.0, 0.6, 40, endpoint=False),
+        np.linspace(0.6, 1.5, 20, endpoint=False),
+        np.linspace(1.5, 5.5, 20, endpoint=True)
+    ])
+
+    lambda_schedule = np.array([0.0, 0.5, 15.0])
 
     for lamb_idx, lamb in enumerate(lambda_schedule):
 
@@ -302,13 +280,22 @@ if __name__ == "__main__":
 
         n_frames = 50
 
+        # endpoint lambda
+        if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
+            observe_du_dl_freq = 5000 # this is analytically zero.
+            observe_du_dp_freq = 25
+        else:
+            observe_du_dl_freq = 25 # this is analytically zero.
+            observe_du_dp_freq = 0
+
         request = service_pb2.SimulateRequest(
             system=pickle.dumps(complex_system),
             lamb=lamb,
             prep_steps=5000,
+            # prod_steps=100000,
             prod_steps=5000,
-            observe_du_dl_freq=10,
-            observe_du_dp_freq=5000,
+            observe_du_dl_freq=observe_du_dl_freq,
+            observe_du_dp_freq=observe_du_dp_freq,
             precision="single",
             n_frames=n_frames,
         )
@@ -318,6 +305,10 @@ if __name__ == "__main__":
         # launch asynchronously
         response_future = stub.Simulate.future(request)
         simulate_futures.append(response_future)
+
+    lj_du_dps = []
+
+    du_dls = []
 
     for lamb_idx, (lamb, future) in enumerate(zip(lambda_schedule, simulate_futures)):
         response = future.result()
@@ -335,7 +326,130 @@ if __name__ == "__main__":
                 pdb_writer.write(x*10)
             pdb_writer.close()
 
-        print("lamb", lamb, "avg_du_dl", pickle.loads(response.avg_du_dls))
+        du_dl = pickle.loads(response.avg_du_dls)
+        du_dls.append(du_dl)
+
+        if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
+            lj_du_dps.append(pickle.loads(response.avg_du_dps)[0])
+
+        print("lamb", lamb, "avg_du_dl", du_dl)
+
+
+    lj_du_dp = lj_du_dps[0] - lj_du_dps[1]
+    print("lj_du_dp", lj_du_dp)
+    print("dG", np.trapz(du_dls, lambda_schedule))
+
+    for h, vjp_fn in handler_vjp_fns.items():
+
+        # if isinstance(h, nonbonded.SimpleChargeHandler):
+        #     # disable training to SimpleCharges
+        #     assert 0
+        #     h.params -= charge_gradients*self.learning_rates['charge']
+        # elif isinstance(h, nonbonded.AM1CCCHandler):
+        #     charge_gradients = vjp_fn(sum_charge_derivs)
+        #     if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)) or np.any(np.amax(np.abs(charge_gradients)) > 10000.0):
+        #         print("Skipping Fatal Charge Derivatives:", charge_gradients)
+        #     else:
+        #         charge_scale_factor = np.amax(np.abs(charge_gradients))/self.learning_rates['charge']
+        #         h.params -= charge_gradients/charge_scale_factor
+        if isinstance(h, nonbonded.LennardJonesHandler):
+            lj_grads = np.asarray(vjp_fn(lj_du_dp)).copy()
+            print("before", lj_grads)
+            lj_grads[np.isnan(lj_grads)] = 0.0
+            clip = 0.003
+            # clipped grads
+            lj_grads = np.clip(lj_grads, -clip, clip)
+            print("after", lj_grads)
+
+            h.params -= lj_grads
+            # assert 0
+
+            # if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)) or np.any(np.amax(np.abs(lj_gradients)) > 10000.0):
+            #     print("Skipping Fatal LJ Derivatives:", lj_gradients)
+            # else:
+            #     lj_sig_scale = np.amax(np.abs(lj_gradients[:, 0]))/self.learning_rates['lj'][0]
+            #     lj_eps_scale = np.amax(np.abs(lj_gradients[:, 1]))/self.learning_rates['lj'][1]
+            #     lj_scale_factor = np.array([lj_sig_scale, lj_eps_scale])
+            #     h.params -= lj_gradients/lj_scale_factor
+
+
+def recenter(conf, box):
+
+    new_coords = []
+
+    periodicBoxSize = box
+
+    for atom in conf:
+        diff = np.array([0., 0., 0.])
+        diff += periodicBoxSize[2]*np.floor(atom[2]/periodicBoxSize[2][2]);
+        diff += periodicBoxSize[1]*np.floor((atom[1]-diff[1])/periodicBoxSize[1][1]);
+        diff += periodicBoxSize[0]*np.floor((atom[0]-diff[0])/periodicBoxSize[0][0]);
+        new_coords.append(atom - diff)
+
+    return np.array(new_coords)
+
+
+from fe import math_utils, system
+
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description='Absolute Hydration Free Energy Script')
+
+    ligand_sdf = "/home/yutong/Downloads/ligands_40.sdf"
+
+    suppl = Chem.SDMolSupplier(ligand_sdf, removeHs=False)
+
+    all_guest_mols = []
+
+    data = []
+
+    for guest_mol in suppl:
+        break
+
+    forcefield = "ff/params/smirnoff_1_1_0_ccc.py"
+
+
+    stubs = []
+
+    worker_address_list = [
+        "0.0.0.0:5000",
+    ]
+
+
+    for address in worker_address_list:
+        print("connecting to", address)
+        channel = grpc.insecure_channel(address,
+            options = [
+                ('grpc.max_send_message_length', 500 * 1024 * 1024),
+                ('grpc.max_receive_message_length', 500 * 1024 * 1024)
+            ]
+        )
+
+        stub = service_pb2_grpc.WorkerStub(channel)
+        stubs.append(stub)
+
+
+    ff_raw = open(forcefield, "r").read()
+
+    ff_handlers = deserialize(ff_raw)
+
+    for epoch in range(100):
+        print("=====epoch====", epoch)
+        simulate(
+            guest_mol,
+            ff_handlers,
+            stubs
+        )
+    # bind final_gradients
+
+
+    # lamb = 0.3
+
+    # for lamb in [0.3, 0.3, 0.3, 0.3, 0.3, 0.3]:
+    # prepare jobs
+
+
 
         # plt.plot(energies)
         # plt.show()
