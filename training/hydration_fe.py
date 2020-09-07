@@ -402,9 +402,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Absolute Hydration Free Energy Script')
 
-    parser.add_argument('n_workers', type=int, help='number of workers')
-    parser.add_argument('n_frames', type=int, help='number of frames')
-    parser.add_argument('ligand_sdf', type=str, help='ligand sdf file path')
+    parser.add_argument('--n_workers', type=int, help='number of workers')
+    parser.add_argument('--n_frames', type=int, help='number of frames')
+    parser.add_argument('--ligand_sdf', type=str, help='ligand sdf file path')
 
     args = parser.parse_args()
 
