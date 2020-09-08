@@ -23,6 +23,7 @@ class TestNonbonded(GradientTest):
         np.random.seed(4321)
         D = 3
 
+        # test_system = self.get_random_coords(5, D)
         test_system = self.get_water_coords(D, sort=True)
 
         padding = 0.3
@@ -41,7 +42,7 @@ class TestNonbonded(GradientTest):
             for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
 
                 for cutoff in [100.0]:
-                    E = 0 # DEBUG!
+                    # E = 0 # DEBUG!
                     charge_params, ref_potential, test_potential_ctor = prepare_es_system(
                         coords,
                         E,

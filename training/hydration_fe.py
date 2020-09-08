@@ -126,15 +126,15 @@ def setup_system(
 
     guest_exclusion_idxs += num_host_atoms
     guest_lj_exclusion_scales = guest_scales
-    # guest_charge_exclusion_scales = guest_scales
+    guest_charge_exclusion_scales = guest_scales
 
     host_exclusion_idxs = host_exclusions[0]
     host_lj_exclusion_scales = host_exclusions[1]
-    # host_charge_exclusion_scales = host_exclusions[2]
+    host_charge_exclusion_scales = host_exclusions[2]
 
     combined_exclusion_idxs = np.concatenate([host_exclusion_idxs, guest_exclusion_idxs])
     combined_lj_exclusion_scales = np.concatenate([host_lj_exclusion_scales, guest_lj_exclusion_scales])
-    # combined_charge_exclusion_scales = np.concatenate([host_charge_exclusion_scales, guest_charge_exclusion_scales])
+    combined_charge_exclusion_scales = np.concatenate([host_charge_exclusion_scales, guest_charge_exclusion_scales])
     
     handler_vjp_fns = {}
 
@@ -166,15 +166,20 @@ def setup_system(
                 None,
                 guest_lj_vjp_fn
             )
-
             # move to outside of if later
             handler_vjp_fns[handle] = handler_vjp_fn
-            # combined_lj_params = np.concatenate([host_lj_params, guest_lj_params])
+        elif isinstance(handle, nonbonded.AM1CCCHandler):
+            guest_charge_params, guest_charge_vjp_fn = results
+            combined_charge_params, handler_vjp_fn = concat_with_vjps(
+                host_charge_params,
+                guest_charge_params,
+                None,
+                guest_charge_vjp_fn
+            )
+            handler_vjp_fns[handle] = handler_vjp_fn
         else:
             print("skipping", handle)
             pass
-
-
 
     host_conf = np.array(host_coords)
 
@@ -202,6 +207,19 @@ def setup_system(
         combined_lambda_offset_idxs,
         cutoff,
         np.asarray(combined_lj_params),
+        )
+    ))
+
+    beta = 2.0
+    final_gradients.append((
+        'Electrostatics', (
+        combined_exclusion_idxs,
+        combined_charge_exclusion_scales,
+        combined_lambda_plane_idxs,
+        combined_lambda_offset_idxs,
+        beta,
+        cutoff,
+        np.asarray(combined_charge_params),
         )
     ))
 
@@ -306,6 +324,7 @@ def simulate(
         simulate_futures.append(response_future)
 
     lj_du_dps = []
+    es_du_dps = []
 
     du_dls = []
 
@@ -329,7 +348,9 @@ def simulate(
         du_dls.append(du_dl)
 
         if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
-            lj_du_dps.append(pickle.loads(response.avg_du_dps)[0])
+            du_dp_array = pickle.loads(response.avg_du_dps)
+            lj_du_dps.append(du_dp_array[0])
+            es_du_dps.append(du_dp_array[1])
 
         print("lamb", lamb, "avg_du_dl", du_dl)
 
@@ -347,7 +368,11 @@ def simulate(
     lj_du_dp = (lj_du_dps[1] - lj_du_dps[0]) # note the inversion of 1 and 0! 
     lj_du_dp *= loss_grad
 
+    es_du_dp = (es_du_dps[1] - es_du_dps[0]) # note the inversion of 1 and 0! 
+    es_du_dp *= loss_grad
+
     print("lj_du_dp", lj_du_dp)
+    print("es_du_dp", es_du_dp)
 
     for h, vjp_fn in handler_vjp_fns.items():
 

@@ -114,24 +114,27 @@ void Electrostatics<RealType>::execute_device(
     // cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
 
-    // if(E_ > 0) {
-    //     k_electrostatics_exclusion_inference<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
-    //         E_,
-    //         d_coords_primals,
-    //         lambda_primal,
-    //         d_lambda_plane_idxs_,
-    //         d_lambda_offset_idxs_,
-    //         d_exclusion_idxs_,
-    //         d_charge_scales_,
-    //         d_charge_params_,
-    //         cutoff_,
-    //         d_out_coords_primals,
-    //         d_out_lambda_primals,
-    //         d_out_energy_primal
-    //     );
-    //     // cudaDeviceSynchronize();
-    //     gpuErrchk(cudaPeekAtLastError());
-    // }
+    if(E_ > 0) {
+        k_electrostatics_exclusion_inference<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
+            E_,
+            d_x,
+            d_p,
+            d_box,
+            lambda,
+            d_lambda_plane_idxs_,
+            d_lambda_offset_idxs_,
+            d_exclusion_idxs_,
+            d_charge_scales_,
+            beta_,
+            cutoff_,
+            d_du_dx,
+            d_du_dp,
+            d_du_dl,
+            d_u
+        );
+        // cudaDeviceSynchronize();
+        gpuErrchk(cudaPeekAtLastError());
+    }
 }
 
 template class Electrostatics<double>;

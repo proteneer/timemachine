@@ -247,7 +247,7 @@ def simple_energy(conf, box, charge_params, exclusion_idxs, charge_scales, beta,
     qij = np.multiply(qi, qj)
 
     scale_ij = charge_scales
-    eij_exc = scale_ij*qij/dij
+    eij_exc = scale_ij*qij*erfc(beta*dij)/dij
 
     if cutoff is not None:
         # sw = switch_fn(dij, cutoff)

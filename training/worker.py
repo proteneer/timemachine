@@ -80,12 +80,10 @@ class Worker(service_pb2_grpc.WorkerServicer):
         if request.observe_du_dp_freq > 0:
             du_dps = []
             for name, bp in zip(names, bps):
-                if name == 'LennardJones':
+                if name == 'LennardJones' or name == 'Electrostatics':
                     du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, request.observe_du_dp_freq)
                     ctxt.add_observable(du_dp_obs)
                     du_dps.append(du_dp_obs)
-        
-
 
         # dynamics
         for step in range(request.prod_steps):

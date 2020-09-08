@@ -191,16 +191,19 @@ template<typename RealType>
 void __global__ k_electrostatics_exclusion_inference(
     const int E, // number of exclusions
     const double *coords,
+    const double *charge_params,
+    const double *box,
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
     const double *charge_scales, // [E]
-    const double *charge_params, // [N]
+    const double beta,
     const double cutoff,
-    unsigned long long *grad_coords,
-    double *out_du_dl,
-    double *out_energy) {
+    unsigned long long *du_dx,
+    double *du_dp,
+    double *du_dl,
+    double *u) {
 
     const int e_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(e_idx >= E) {
@@ -223,6 +226,7 @@ void __global__ k_electrostatics_exclusion_inference(
     int charge_param_idx_i = atom_i_idx;
 
     RealType qi = charge_params[charge_param_idx_i];
+    RealType g_qi = 0;
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
 
@@ -240,11 +244,16 @@ void __global__ k_electrostatics_exclusion_inference(
 
     int charge_param_idx_j = atom_j_idx;
     RealType qj = charge_params[charge_param_idx_j];
+    RealType g_qj = 0;
     RealType charge_scale = charge_scales[e_idx];
+
+    RealType bx[3] = {box[0*3+0], box[1*3+1], box[2*3+2]};
 
     RealType dxs[4];
     for(int d=0; d < 3; d++) {
-        dxs[d] = ci[d] - cj[d];
+        RealType delta = ci[d] - cj[d];
+        delta -= floor(delta/bx[d]+static_cast<RealType>(0.5))*bx[d];
+        dxs[d] = delta;
     }
 
     RealType delta_lambda = cutoff*(lambda_plane_i - lambda_plane_j) + lambda*(lambda_offset_i - lambda_offset_j);
@@ -252,35 +261,53 @@ void __global__ k_electrostatics_exclusion_inference(
 
     RealType inv_dij = fast_vec_rnorm<RealType, 4>(dxs);
     RealType inv_cutoff = 1/cutoff;
+    RealType dij = 1/inv_dij;
 
     if(inv_dij > inv_cutoff) {
 
         RealType inv_d2ij = inv_dij*inv_dij;
-        RealType inv_d3ij = inv_dij*inv_d2ij;
-        RealType es_grad_prefactor = qi*qj*inv_d3ij;
+        // RealType inv_d3ij = inv_dij*inv_d2ij;
+        // RealType es_grad_prefactor = qi*qj*inv_d3ij;
+        RealType es_grad_prefactor = qi*qj*(-2*beta*exp(-beta*beta*dij*dij)/(sqrt(PI)*dij) - erfc(beta*dij)*inv_d2ij);
 
         #pragma unroll
         for(int d=0; d < 3; d++) {
-            gi[d] += charge_scale*es_grad_prefactor*dxs[d];
-            gj[d] -= charge_scale*es_grad_prefactor*dxs[d];
+            gi[d] -= charge_scale * es_grad_prefactor * (dxs[d]/dij);
+            gj[d] += charge_scale * es_grad_prefactor * (dxs[d]/dij);
         }
 
         int dw_i = lambda_offset_i;
         int dw_j = lambda_offset_j;
 
-        du_dl_i += charge_scale * es_grad_prefactor * dxs[3] * dw_i;
-        du_dl_j -= charge_scale * es_grad_prefactor * dxs[3] * dw_j;
+        du_dl_i -= charge_scale * es_grad_prefactor * (dxs[3]/dij) * dw_i;
+        du_dl_j += charge_scale * es_grad_prefactor * (dxs[3]/dij) * dw_j;
 
-        for(int d=0; d < 3; d++) {
+        if(du_dx) {
+            for(int d=0; d < 3; d++) {
+                atomicAdd(du_dx + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));
+                atomicAdd(du_dx + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
+            }
+        }
 
-            atomicAdd(grad_coords + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));
-            atomicAdd(grad_coords + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));
+        if(du_dp) {
 
-        }  
+            g_qi += charge_scale*qj*inv_dij*erfc(beta*dij);
+            g_qj += charge_scale*qi*inv_dij*erfc(beta*dij);
 
-        atomicAdd(out_du_dl, du_dl_i + du_dl_j);
-        RealType energy = charge_scale*qi*qj*inv_dij;
-        atomicAdd(out_energy, -energy);
+            atomicAdd(du_dp + charge_param_idx_i, -g_qi);
+            atomicAdd(du_dp + charge_param_idx_j, -g_qj);
+
+        }
+
+        if(du_dl) {
+            atomicAdd(du_dl, du_dl_i + du_dl_j);            
+        }
+
+        if(u) {
+            RealType energy = charge_scale*qi*qj*inv_dij*erfc(beta*dij);
+            atomicAdd(u, -energy);            
+        }
+
     }
 
 }
