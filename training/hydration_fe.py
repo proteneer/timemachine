@@ -378,23 +378,24 @@ def simulate(
         #     # disable training to SimpleCharges
         #     assert 0
         #     h.params -= charge_gradients*self.learning_rates['charge']
-        # elif isinstance(h, nonbonded.AM1CCCHandler):
-        #     charge_gradients = vjp_fn(sum_charge_derivs)
-        #     if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)) or np.any(np.amax(np.abs(charge_gradients)) > 10000.0):
-        #         print("Skipping Fatal Charge Derivatives:", charge_gradients)
-        #     else:
-        #         charge_scale_factor = np.amax(np.abs(charge_gradients))/self.learning_rates['charge']
-        #         h.params -= charge_gradients/charge_scale_factor
-        if isinstance(h, nonbonded.LennardJonesHandler):
+        if isinstance(h, nonbonded.AM1CCCHandler):
+            es_grads = np.asarray(vjp_fn(es_du_dp)).copy()
+            es_grads[np.isnan(es_grads)] = 0.0
+            clip = 0.1
+            es_grads = np.clip(es_grads, -clip, clip)
+            print("before", h.params)
+            h.params -= es_grads
+            print("after", h.params)
+        elif isinstance(h, nonbonded.LennardJonesHandler):
             lj_grads = np.asarray(vjp_fn(lj_du_dp)).copy()
-            print("before", lj_grads)
             lj_grads[np.isnan(lj_grads)] = 0.0
             clip = 0.003
-            # clipped grads
             lj_grads = np.clip(lj_grads, -clip, clip)
-            print("after", lj_grads)
-
+            print("before", h.params)
             h.params -= lj_grads
+            print("after", h.params)
+
+
             # assert 0
 
             # if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)) or np.any(np.amax(np.abs(lj_gradients)) > 10000.0):
