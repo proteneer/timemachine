@@ -17,7 +17,6 @@ private:
     double *d_lj_scales_; // [E]
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
-    // int *d_lambda_group_idxs_;
 
     double cutoff_;
     Neighborlist nblist_;
@@ -28,20 +27,14 @@ private:
 public:
 
     LennardJones(
-        // const std::vector<double> &lj_params, // [N, 2]
         const std::vector<int> &exclusion_idxs, // [E,2]
         const std::vector<double> &lj_scales, // [E]
         const std::vector<int> &lambda_plane_idxs, // N
         const std::vector<int> &lambda_offset_idxs, // N
-        // const std::vector<int> &lambda_group_idxs, // N
         double cutoff
     );
 
     ~LennardJones();
-
-    // int num_atoms() const {
-    //     return N_;
-    // }
 
     virtual void execute_device(
         const int N,
@@ -56,18 +49,6 @@ public:
         double *d_u,
         cudaStream_t stream
     ) override;
-
-    // virtual void execute_lambda_jvp_device(
-    //     const int N,
-    //     const double *d_coords_primals,
-    //     const double *d_coords_tangents,
-    //     const double lambda_primal,
-    //     const double lambda_tangent,
-    //     double *d_out_coords_primals,
-    //     double *d_out_coords_tangents,
-    //     cudaStream_t stream
-    // ) override;
-
 
 
 };

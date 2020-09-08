@@ -19,78 +19,59 @@ np.set_printoptions(linewidth=500)
 
 class TestNonbonded(GradientTest):
 
-    # def test_electrostatics(self):
-    #     np.random.seed(4321)
-    #     D = 3
+    def test_electrostatics(self):
+        np.random.seed(4321)
+        D = 3
 
-    #     # test_system = self.get_random_coords(15, D)
-    #     # test_system = self.get_random_coords(43, D)
-    #     test_system = self.get_water_coords(D, sort=True)
+        # test_system = self.get_random_coords(15, D)
+        # test_system = self.get_random_coords(43, D)
+        test_system = self.get_water_coords(D, sort=True)
 
-    #     for x_primal in [test_system]:
+        padding = 0.3
+        diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
+        box = np.eye(3)
+        np.fill_diagonal(box, diag)
 
-    #         N = x_primal.shape[0]
-    #         E = N//5
+        for coords in [test_system]:
 
-    #         lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-    #         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+            N = coords.shape[0]
+            E = N//5
 
-    #         x_tangent = np.random.randn(*x_primal.shape)
-    #         lamb_tangent = np.random.rand()
+            lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+            lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
-    #         for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
+            for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
 
-    #             for cutoff in [100.0]:
-    #                 # E = 0 # DEBUG!
-    #                 charge_params, ref_nb, test_force_ctor = prepare_es_system(
-    #                     x_primal,
-    #                     E,
-    #                     lambda_plane_idxs,
-    #                     lambda_offset_idxs,
-    #                     p_scale=1.0,
-    #                     cutoff=cutoff,
-    #                     precision=precision
-    #                 )
+                for cutoff in [100.0]:
+                    E = 0 # DEBUG!
+                    charge_params, ref_potential, test_potential_ctor = prepare_es_system(
+                        coords,
+                        E,
+                        lambda_plane_idxs,
+                        lambda_offset_idxs,
+                        p_scale=1.0,
+                        cutoff=cutoff,
+                        precision=precision
+                    )
 
-    #                 ref_nb_parameterized = functools.partial(ref_nb,
-    #                     charge_params=charge_params,
-    #                 )
+                    for lamb in [0.0, 0.1, 0.2]:
 
-    #                 for lamb_primal in [0.0, 0.1, 0.2]:
+                        test_potential = test_potential_ctor()
 
-    #                     test_force = test_force_ctor()
+                        print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
-    #                     print("lambda", lamb_primal, "cutoff", cutoff, "precision", precision, "xshape", x_primal.shape)
+                        self.compare_forces(
+                            coords,
+                            charge_params,
+                            box,
+                            lamb,
+                            ref_potential,
+                            test_potential,
+                            precision,
+                            rtol=rtol
+                        )
 
-    #                     self.compare_forces(
-    #                         x_primal,
-    #                         lamb_primal,
-    #                         x_tangent,
-    #                         lamb_tangent,
-    #                         ref_nb_parameterized,
-    #                         test_force,
-    #                         precision,
-    #                         rtol=rtol
-    #                     )
-
-    #                     # work on vjps later
-    #                     # continue
-
-    #                     primals = (x_primal, lamb_primal, charge_params)
-    #                     tangents = (x_tangent, lamb_tangent, np.zeros_like(charge_params))
-
-    #                     grad_fn = jax.grad(ref_nb, argnums=(0, 1, 2))
-    #                     ref_primals, ref_tangents = jax.jvp(grad_fn, primals, tangents)
-
-    #                     ref_du_dcharge_primals = ref_primals[2]
-    #                     test_du_dcharge_primals = test_force.get_du_dcharge_primals()
-    #                     np.testing.assert_almost_equal(ref_du_dcharge_primals, test_du_dcharge_primals, rtol)
-
-    #                     ref_du_dcharge_tangents = ref_tangents[2]
-    #                     test_du_dcharge_tangents = test_force.get_du_dcharge_tangents()
-    #                     np.testing.assert_almost_equal(ref_du_dcharge_tangents, test_du_dcharge_tangents, rtol)
-
-
+    @unittest.skip("d")
     def test_lennard_jones(self):
 
         D = 3
@@ -105,12 +86,6 @@ class TestNonbonded(GradientTest):
         diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
         box = np.eye(3)
         np.fill_diagonal(box, diag)
-        # print(box)
-        # assert 0
-
-        # box = np.eye(3)*100
-        # print()
-        # assert 0
 
         for coords in [test_system]:
 
@@ -120,9 +95,6 @@ class TestNonbonded(GradientTest):
             lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
             lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
             # lambda_group_idxs = np.random.randint(low=0, high=3, size=N, dtype=np.int32)
-
-            x_tangent = np.random.randn(*coords.shape)
-            lamb_tangent = np.random.rand()
 
             # why are errors in du_dp so large?
             # error bars on single precision du/dp is pretty weird.
@@ -158,33 +130,11 @@ class TestNonbonded(GradientTest):
                             lj_params,
                             box,
                             lamb,
-                            # x_tangent,
-                            # lamb_tangent,
                             ref_potential,
                             test_potential,
                             precision,
                             rtol=rtol
                         )
-
-                        # primals = (x_primal, lamb_primal, lj_params)
-                        # tangents = (x_tangent, lamb_tangent, np.zeros_like(lj_params))
-
-                        # grad_fn = jax.grad(ref_nb, argnums=(0, 1, 2))
-                        # ref_primals, ref_tangents = jax.jvp(grad_fn, primals, tangents)
-
-                        # ref_du_dlj_primals = ref_primals[2]
-                        # test_du_dlj_primals = test_potential.get_du_dlj_primals()
-                        # # np.testing.assert_almost_equal(ref_du_dlj_primals, test_du_dlj_primals, rtol)
-                        # np.testing.assert_almost_equal(ref_du_dlj_primals, test_du_dlj_primals, rtol*10)
-
-                        # ref_du_dlj_tangents = ref_tangents[2]
-                        # test_du_dlj_tangents = test_potential.get_du_dlj_tangents()
-
-                        # a = ref_du_dlj_tangents.reshape(-1)
-                        # b = test_du_dlj_tangents.reshape(-1)
-                        # c = np.abs(a-b)/a
-
-                        # np.testing.assert_almost_equal(ref_du_dlj_tangents, test_du_dlj_tangents, rtol*10)
 
 
     # def test_fast_nonbonded(self):

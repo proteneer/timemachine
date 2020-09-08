@@ -12,9 +12,6 @@ void __global__ k_lennard_jones_inference(
     const double lambda,
     const int *lambda_plane_idxs, // -1 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // -1 or 1, how much we offset from the plane by cutoff
-    // const int *lambda_group_idxs, // 0 or 1, how we do the group mixing
-
-
     const double cutoff,
     const double *block_bounds_ctr,
     const double *block_bounds_ext,

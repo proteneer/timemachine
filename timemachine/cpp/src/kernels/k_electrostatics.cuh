@@ -4,37 +4,40 @@
 #define WARPSIZE 32
 
 template <typename RealType>
-void __global__ k_electrostatics_inference(
+void __global__ k_electrostatics(
     const int N,
     const double *coords,
+    const double *charge_params, // [N]
+    const double *box,
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-    const double *charge_params, // [N]
+    const double beta,
     const double cutoff,
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
-    unsigned long long *grad_coords,
-    double *out_du_dl,
-    double *out_energy) {
+    unsigned long long *du_dx,
+    double *du_dp,
+    double *du_dl,
+    double *u) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
     }
 
-    RealType block_d2ij = 0; 
-    for(int d=0; d < 3; d++) {
-        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
-        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
-        RealType block_row_ext = block_bounds_ext[blockIdx.x*3+d];
-        RealType block_col_ext = block_bounds_ext[blockIdx.y*3+d];
-        RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
-        block_d2ij += dx*dx;
-    }
+    // RealType block_d2ij = 0; 
+    // for(int d=0; d < 3; d++) {
+    //     RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
+    //     RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
+    //     RealType block_row_ext = block_bounds_ext[blockIdx.x*3+d];
+    //     RealType block_col_ext = block_bounds_ext[blockIdx.y*3+d];
+    //     RealType dx = max(0.0, fabs(block_row_ctr-block_col_ctr) - (block_row_ext+block_col_ext));
+    //     block_d2ij += dx*dx;
+    // }
 
-    if(block_d2ij > cutoff*cutoff) {
-        return;
-    }
+    // if(block_d2ij > cutoff*cutoff) {
+    //     return;
+    // }
 
     int atom_i_idx = blockIdx.x*32 + threadIdx.x;
     int lambda_plane_i = 0;
@@ -80,22 +83,26 @@ void __global__ k_electrostatics_inference(
     // revert this to RealType
 
     // tbd: deprecate this when we don't need energies any more.
-    double energy = 0; // spit this into three parts? (es, lj close, lj far?)
+    RealType energy = 0; // spit this into three parts? (es, lj close, lj far?)
+
+    RealType bx[3] = {box[0*3+0], box[1*3+1], box[2*3+2]};
 
     // In inference mode, we don't care about gradients with respect to parameters.
     for(int round = 0; round < 32; round++) {
 
         RealType dxs[4];
         for(int d=0; d < 3; d++) {
-            dxs[d] = ci[d] - cj[d];
+            RealType delta = ci[d] - cj[d];
+            delta -= floor(delta/bx[d]+static_cast<RealType>(0.5))*bx[d];
+            dxs[d] = delta;
         }
 
         // we can optimize this later if need be
         RealType delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
-
         dxs[3] = delta_lambda;
 
         RealType inv_dij = fast_vec_rnorm<RealType, 4>(dxs);
+        RealType dij = 1/inv_dij;
 
         if(atom_j_idx < atom_i_idx && inv_dij > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
 
@@ -121,7 +128,7 @@ void __global__ k_electrostatics_inference(
             du_dl_i -= es_grad_prefactor * dxs[3] * dw_i;
             du_dl_j += es_grad_prefactor * dxs[3] * dw_j;
 
-            energy += qi*qj*inv_dij;
+            energy += qi*qj*inv_dij*erfc(beta*dij);
         }
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
@@ -136,19 +143,25 @@ void __global__ k_electrostatics_inference(
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
-    for(int d=0; d < 3; d++) {
-
-        if(atom_i_idx < N) {
-            atomicAdd(grad_coords + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));            
-        }
-
-        if(atom_j_idx < N) {
-            atomicAdd(grad_coords + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));            
-        }
+    if(du_dx) {
+        for(int d=0; d < 3; d++) {
+            if(atom_i_idx < N) {
+                atomicAdd(du_dx + atom_i_idx*3 + d, static_cast<unsigned long long>((long long) (gi[d]*FIXED_EXPONENT)));            
+            }
+            if(atom_j_idx < N) {
+                atomicAdd(du_dx + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));            
+            }
+        }   
     }
 
-    atomicAdd(out_du_dl, du_dl_i + du_dl_j);
-    atomicAdd(out_energy, energy);
+    if(du_dl) {
+        atomicAdd(du_dl, du_dl_i + du_dl_j);        
+    }
+
+    if(u) {
+        atomicAdd(u, energy);        
+    }
+
 
 }
 

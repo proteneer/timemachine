@@ -34,12 +34,14 @@ def nonbonded(
     return lj - lj_exc + es
 
 
-def nongroup_electrostatics(
+def electrostatics_v2(
     conf,
-    lamb,
     charge_params,
+    box,
+    lamb,
     exclusion_idxs,
     charge_scales,
+    beta,
     cutoff,
     lambda_plane_idxs,
     lambda_offset_idxs):
@@ -47,8 +49,10 @@ def nongroup_electrostatics(
     # assert box is None
 
     conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+    box_4d = np.eye(4)*1000
+    box_4d = index_update(box_4d, index[:3, :3], box)
 
-    return simple_energy(conf_4d, charge_params, exclusion_idxs, charge_scales, cutoff)
+    return simple_energy(conf_4d, box_4d, charge_params, exclusion_idxs, charge_scales, beta, cutoff)
 
 
 def lennard_jones_v2(
@@ -62,19 +66,9 @@ def lennard_jones_v2(
     lambda_plane_idxs,
     lambda_offset_idxs):
 
-    # print(conf)
-    # print(lj_params)
-    # print(box)
-    # print(lamb)
-
     conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
     box_4d = np.eye(4)*1000
     box_4d = index_update(box_4d, index[:3, :3], box)
-
-    # print(box)
-    # print(box_4d)
-    # assert 0
 
     lj = lennard_jones(conf_4d, lj_params, box_4d, cutoff)
     lj_exc = lennard_jones_exclusion(conf_4d, lj_params, box_4d, exclusion_idxs, lj_scales, cutoff)
@@ -211,16 +205,13 @@ def lennard_jones_exclusion(conf, lj_params, box, exclusion_idxs, lj_scales, cut
     return np.sum(eij_exc)
 
 
-def simple_energy(conf, charge_params, exclusion_idxs, charge_scales, cutoff):
+def simple_energy(conf, box, charge_params, exclusion_idxs, charge_scales, beta, cutoff):
     """
     Numerically stable implementation of the pairwise term:
     
     eij = qi*qj/dij
 
     """
-
-    box = None
-    # charges = params[param_idxs]
     charges = charge_params
     qi = np.expand_dims(charges, 0) # (1, N)
     qj = np.expand_dims(charges, 1) # (N, 1)
@@ -228,15 +219,15 @@ def simple_energy(conf, charge_params, exclusion_idxs, charge_scales, cutoff):
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
 
-    assert box is None
-
     dij = distance(ri, rj, box)
 
     # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
     keep_mask = 1 - np.eye(conf.shape[0])
     qij = np.where(keep_mask, qij, np.zeros_like(qij))
     dij = np.where(keep_mask, dij, np.zeros_like(dij))
-    eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
+
+    # funny enough lim_{x->0} erfc(x)/x = 0
+    eij = np.where(keep_mask, qij*erfc(beta*dij)/dij, np.zeros_like(dij)) # zero out diagonals
 
     # print(dij)
 

@@ -1,20 +1,15 @@
 #pragma once
 
 #include "neighborlist.hpp"
-#include "gradient.hpp"
+#include "potential.hpp"
 #include <vector>
 
 namespace timemachine {
 
 template<typename RealType>
-class Electrostatics : public Gradient {
+class Electrostatics : public Potential {
 
 private:
-
-    double *d_charge_params_; // [N]
-
-    double *d_du_dcharge_primals_;
-    double *d_du_dcharge_tangents_;
 
     int *d_exclusion_idxs_; // [E,2]
     double *d_charge_scales_; // [E]
@@ -22,6 +17,7 @@ private:
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
 
+    double beta_;
     double cutoff_;
     Neighborlist nblist_;
 
@@ -32,43 +28,29 @@ private:
 public:
 
     Electrostatics(
-        const std::vector<double> &charge_params, // [N]
         const std::vector<int> &exclusion_idxs, // [E,2]
         const std::vector<double> &charge_scales, // [E]
         const std::vector<int> &lambda_plane_idxs, // N
         const std::vector<int> &lambda_offset_idxs, // N
-        double cutoff);
+        double beta, // decay in erfc
+        double cutoff
+    );
 
     ~Electrostatics();
 
-    int num_atoms() const {
-        return N_;
-    }
-
-    void get_du_dcharge_primals(double *buf);
-    void get_du_dcharge_tangents(double *buf);
-
-    virtual void execute_lambda_inference_device(
+    virtual void execute_device(
         const int N,
-        const double *d_coords_primals,
-        const double lambda_primal,
-        unsigned long long *d_out_coords_primals,
-        double *d_out_lambda_primals,
-        double *d_out_energy_primal,
+        const int P,
+        const double *d_x,
+        const double *d_p,
+        const double *d_box,
+        const double lambda,
+        unsigned long long *d_du_dx,
+        double *d_du_dp,
+        double *d_du_dl,
+        double *d_u,
         cudaStream_t stream
     ) override;
-
-    virtual void execute_lambda_jvp_device(
-        const int N,
-        const double *d_coords_primals,
-        const double *d_coords_tangents,
-        const double lambda_primal,
-        const double lambda_tangent,
-        double *d_out_coords_primals,
-        double *d_out_coords_tangents,
-        cudaStream_t stream
-    ) override;
-
 
 
 };

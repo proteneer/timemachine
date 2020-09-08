@@ -203,12 +203,14 @@ def prepare_es_system(
 
     charge_scales = np.random.rand(E)
 
+    beta = np.random.rand()*2
+
     custom_nonbonded_ctor = functools.partial(ops.Electrostatics,
-        charge_params,
         exclusion_idxs,
         charge_scales,
         lambda_plane_idxs,
         lambda_offset_idxs,
+        beta,
         cutoff,
         precision=precision
     )
@@ -222,10 +224,12 @@ def prepare_es_system(
     #     [0.0, 0.0, 0.0, 2*cutoff],
     # ])
 
+
     ref_total_energy = functools.partial(
-        nonbonded.nongroup_electrostatics,
+        nonbonded.electrostatics_v2,
         exclusion_idxs=exclusion_idxs,
         charge_scales=charge_scales,
+        beta=beta,
         cutoff=cutoff,
         lambda_plane_idxs=lambda_plane_idxs,
         lambda_offset_idxs=lambda_offset_idxs
