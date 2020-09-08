@@ -193,58 +193,58 @@ def deserialize_system(system):
                 lj_params,
             ))
 
-        if isinstance(force, mm.GBSAOBCForce):
+        # if isinstance(force, mm.GBSAOBCForce):
 
-            num_atoms = force.getNumParticles()
+        #     num_atoms = force.getNumParticles()
 
-            radius_param_idxs = []
-            scale_param_idxs = []
+        #     radius_param_idxs = []
+        #     scale_param_idxs = []
             
-            solvent_dielectric = force.getSolventDielectric()
-            solute_dielectric = force.getSoluteDielectric()
-            probe_radius = 0.14
-            surface_tension = 28.3919551
-            dielectric_offset = 0.009
+        #     solvent_dielectric = force.getSolventDielectric()
+        #     solute_dielectric = force.getSoluteDielectric()
+        #     probe_radius = 0.14
+        #     surface_tension = 28.3919551
+        #     dielectric_offset = 0.009
 
-            # GBOBC1
-            alpha = 0.8
-            beta = 0.0
-            gamma = 2.909125
+        #     # GBOBC1
+        #     alpha = 0.8
+        #     beta = 0.0
+        #     gamma = 2.909125
 
-            gb_params = []
-            gb_charge_params = []
+        #     gb_params = []
+        #     gb_charge_params = []
 
-            for a_idx in range(num_atoms):
-                charge, radius, scale = force.getParticleParameters(a_idx)
+        #     for a_idx in range(num_atoms):
+        #         charge, radius, scale = force.getParticleParameters(a_idx)
 
-                # this needs to be scaled by sqrt(eps0)
-                charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
-                gb_charge_params.append(charge)
+        #         # this needs to be scaled by sqrt(eps0)
+        #         charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
+        #         gb_charge_params.append(charge)
 
-                radius = value(radius)
-                gb_params.append((radius, scale))
+        #         radius = value(radius)
+        #         gb_params.append((radius, scale))
 
-            gb_params = np.array(gb_params, dtype=np.float64)
+        #     gb_params = np.array(gb_params, dtype=np.float64)
 
-            nrg_fns.append(("GBSA", (
-                gb_params,
-                alpha,                         # alpha
-                beta,                          # beta
-                gamma,                         # gamma
-                dielectric_offset,             # dielectric_offset
-                surface_tension,               # surface_tension
-                solute_dielectric,             # solute_dielectric
-                solvent_dielectric,            # solvent_dieletric
-                probe_radius                   # probe_radius
-            )))
+        #     nrg_fns.append(("GBSA", (
+        #         gb_params,
+        #         alpha,                         # alpha
+        #         beta,                          # beta
+        #         gamma,                         # gamma
+        #         dielectric_offset,             # dielectric_offset
+        #         surface_tension,               # surface_tension
+        #         solute_dielectric,             # solute_dielectric
+        #         solvent_dielectric,            # solvent_dieletric
+        #         probe_radius                   # probe_radius
+        #     )))
 
     # ensure GB charges and NB charges are consistent 
-    if gb_charge_params is not None and nb_charge_params is not None:
-        np.testing.assert_almost_equal(gb_charge_params, nb_charge_params)
+    # if gb_charge_params is not None and nb_charge_params is not None:
+        # np.testing.assert_almost_equal(gb_charge_params, nb_charge_params)
 
-    gb_charge_params = np.array(gb_charge_params)
+    # gb_charge_params = np.array(gb_charge_params)
 
-    nrg_fns.append(('Charges', gb_charge_params))
+    nrg_fns.append(('Charges', nb_charge_params))
 
     charge_exclusion_params = np.array(lj_exclusion_params)
 

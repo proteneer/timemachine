@@ -105,12 +105,10 @@ def setup_system(
     final_gradients = []
 
     for item in host_fns: 
-
         if item[0] == 'LennardJones':
             host_lj_params = item[1]
         elif item[0] == 'Charges':
-            continue
-            # host_charge_params = item[1]
+            host_charge_params = item[1]
         elif item[0] == 'Exclusions':
             host_exclusions = item[1]
         else:
