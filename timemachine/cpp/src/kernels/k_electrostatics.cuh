@@ -3,6 +3,8 @@
 #include "kernel_utils.cuh"
 #define WARPSIZE 32
 
+#define PI 3.141592653589793115997963468544185161
+
 template <typename RealType>
 void __global__ k_electrostatics(
     const int N,
@@ -58,6 +60,7 @@ void __global__ k_electrostatics(
     int charge_param_idx_i = atom_i_idx < N ? atom_i_idx : 0;
 
     RealType qi = atom_i_idx < N ? charge_params[charge_param_idx_i] : 0;
+    RealType g_qi = 0;
 
     int atom_j_idx = blockIdx.y*32 + threadIdx.x;
     int lambda_plane_j = 0;
@@ -78,6 +81,7 @@ void __global__ k_electrostatics(
     int charge_param_idx_j = atom_j_idx < N ? atom_j_idx : 0;
 
     RealType qj = atom_j_idx < N ? charge_params[charge_param_idx_j] : 0;
+    RealType g_qj = 0;
     RealType inv_cutoff = 1/cutoff;
 
     // revert this to RealType
@@ -107,16 +111,17 @@ void __global__ k_electrostatics(
         if(atom_j_idx < atom_i_idx && inv_dij > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
 
             RealType inv_d2ij = inv_dij*inv_dij;
-            RealType inv_d3ij = inv_dij*inv_d2ij;
-            RealType es_grad_prefactor = qi*qj*inv_d3ij;
+            // RealType inv_d3ij = inv_dij*inv_d2ij;
+            RealType es_grad_prefactor = qi*qj*(-2*beta*exp(-beta*beta*dij*dij)/(sqrt(PI)*dij) - erfc(beta*dij)*inv_d2ij);
 
             for(int d=0; d < 3; d++) {
 
-                RealType force_i = es_grad_prefactor *  dxs[d];
-                RealType force_j = es_grad_prefactor *  dxs[d];
+                RealType force_i = es_grad_prefactor * (dxs[d]/dij);
+                RealType force_j = es_grad_prefactor * (dxs[d]/dij);
 
-                gi[d] -= force_i;
-                gj[d] += force_j;
+                // note switch here
+                gi[d] += force_i;
+                gj[d] -= force_j;
 
             }
 
@@ -125,14 +130,19 @@ void __global__ k_electrostatics(
             int dw_i = lambda_offset_i;
             int dw_j = lambda_offset_j;
 
-            du_dl_i -= es_grad_prefactor * dxs[3] * dw_i;
-            du_dl_j += es_grad_prefactor * dxs[3] * dw_j;
+            du_dl_i += es_grad_prefactor * (dxs[3]/dij) * dw_i;
+            du_dl_j -= es_grad_prefactor * (dxs[3]/dij) * dw_j;
 
             energy += qi*qj*inv_dij*erfc(beta*dij);
+
+            g_qi += qj*inv_dij*erfc(beta*dij);
+            g_qj += qi*inv_dij*erfc(beta*dij);
+
         }
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
+        g_qj = __shfl_sync(0xffffffff, g_qj, srcLane);
         qj = __shfl_sync(0xffffffff, qj, srcLane);
         for(size_t d=0; d < 3; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane); // needs to support real
@@ -152,6 +162,18 @@ void __global__ k_electrostatics(
                 atomicAdd(du_dx + atom_j_idx*3 + d, static_cast<unsigned long long>((long long) (gj[d]*FIXED_EXPONENT)));            
             }
         }   
+    }
+
+    if(du_dp) {
+
+        if(atom_i_idx < N) {
+            atomicAdd(du_dp + charge_param_idx_i, g_qi);
+        }
+
+        if(atom_j_idx < N) {
+            atomicAdd(du_dp + charge_param_idx_j, g_qj);
+        }
+
     }
 
     if(du_dl) {

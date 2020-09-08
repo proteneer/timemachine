@@ -23,8 +23,6 @@ class TestNonbonded(GradientTest):
         np.random.seed(4321)
         D = 3
 
-        # test_system = self.get_random_coords(15, D)
-        # test_system = self.get_random_coords(43, D)
         test_system = self.get_water_coords(D, sort=True)
 
         padding = 0.3

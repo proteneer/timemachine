@@ -215,16 +215,6 @@ def prepare_es_system(
         precision=precision
     )
 
-    # disable PBCs
-    # make sure this is big enough!
-    # box = np.array([
-    #     [100.0, 0.0, 0.0, 0.0],
-    #     [0.0, 100.0, 0.0, 0.0],
-    #     [0.0, 0.0, 100.0, 0.0],
-    #     [0.0, 0.0, 0.0, 2*cutoff],
-    # ])
-
-
     ref_total_energy = functools.partial(
         nonbonded.electrostatics_v2,
         exclusion_idxs=exclusion_idxs,
@@ -274,15 +264,6 @@ def prepare_nonbonded_system(
         cutoff,
         precision=precision
     )
-
-    # disable PBCs
-    # make sure this is big enough!
-    # box = np.array([
-    #     [100.0, 0.0, 0.0, 0.0],
-    #     [0.0, 100.0, 0.0, 0.0],
-    #     [0.0, 0.0, 100.0, 0.0],
-    #     [0.0, 0.0, 0.0, 2*cutoff],
-    # ])
 
     ref_total_energy = functools.partial(
         nonbonded.nonbonded,
@@ -550,16 +531,17 @@ class GradientTest(unittest.TestCase):
             np.array(test_du_dx),
             rtol
         )
-        np.testing.assert_allclose(
-            np.array(ref_du_dp),
-            np.array(test_du_dp),
-            rtol
-        )
 
         if ref_du_dl == 0:
             np.testing.assert_almost_equal(ref_du_dl, test_du_dl, 1e-5)
         else:
             np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol)
+
+        np.testing.assert_allclose(
+            np.array(ref_du_dp),
+            np.array(test_du_dp),
+            rtol
+        )
 
         # assert 0
 
