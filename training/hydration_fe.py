@@ -1,5 +1,7 @@
 import matplotlib
 matplotlib.use('Agg')
+from matplotlib import pyplot as plt
+
 import pickle
 
 from jax.config import config as jax_config
@@ -160,12 +162,21 @@ if __name__ == "__main__":
     box_width = 3.0
     host_system, host_coords, box, _ = water_box.prep_system(box_width)
 
-    lambda_schedule = np.concatenate([
-        # np.linspace(0.0, 0.6, 40, endpoint=False),
-        # np.linspace(0.6, 1.5, 20, endpoint=False),
-        # np.linspace(1.5, 5.5, 20, endpoint=True),
-        np.linspace(0.0, 1.5, 4, endpoint=True)
-    ])
+    lambda_schedule = np.array([float(x) for x in general_cfg['lambda_schedule'].split(',')])
+
+    # lambda_schedule = np.concatenate([
+    #     np.linspace(0.0, 0.6, 6, endpoint=False),
+    #     np.linspace(0.6, 1.5, 2, endpoint=False),
+    #     np.linspace(1.5, 5.5, 2, endpoint=True),
+    #     # np.linspace(0.0, 1.5, 4, endpoint=True)
+    # ])
+
+
+
+    # for l in lambda_schedule:
+    #     print("{:.4}".format(l),end=',')
+
+    # assert 0
 
     num_steps = int(general_cfg['n_steps'])
 
@@ -199,7 +210,10 @@ if __name__ == "__main__":
 
             start_time = time.time()
 
-            out_dir = os.path.join(epoch_dir, "mol_"+mol.GetProp("_Name"))
+            # out_dir = os.path.join(epoch_dir, "mol_"+mol.GetProp("_Name"))
+
+            # if not os.path.exists(out_dir):
+                # os.makedirs(out_dir)
 
             potentials, masses, vjp_fns = hydration_setup.combine_potentials(
                 ff_handlers,
@@ -228,16 +242,24 @@ if __name__ == "__main__":
                 np.zeros_like(coords),
                 box,
                 potentials,
-                intg,
+                intg
             )
 
 
-            (pred_dG, pred_err), grad_dG = hydration_model.simulate(
+            (pred_dG, pred_err), grad_dG, du_dls = hydration_model.simulate(
                 sim,
                 num_steps,
                 lambda_schedule,
                 stubs
             )
+
+
+            plt.plot(lambda_schedule, du_dls)
+            plt.ylabel("du_dlambda")
+            plt.xlabel("lambda")
+            plt.savefig(os.path.join(epoch_dir, "ti_mol_"+mol.GetProp("_Name")))
+            plt.clf()
+
 
             loss = np.abs(pred_dG - label_dG)
 
@@ -264,8 +286,6 @@ if __name__ == "__main__":
                             dL_dp = loss_grad*vjp_fn(grad)[0]
                             dL_dp = np.clip(dL_dp, -bounds, bounds)
                             handle.params -= dL_dp
-                        # else:
-                            # print("skipping", type(handle))
 
 
         epoch_params = serialize_handlers(ff_handlers)

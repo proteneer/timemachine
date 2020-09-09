@@ -1,7 +1,9 @@
+import os
 import pickle
 
 from training import service_pb2
 from training import bootstrap
+
 
 import numpy as np
 
@@ -100,20 +102,13 @@ def simulate(
     grad_dG = []
 
     for source_grad, target_grad in zip(lambda_0_du_dqs, lambda_1_du_dqs):
-        # if source_grad is not None:
-        #     assert target_grad is not None
-
-        # if target_grad is not None:
-        #     assert source_grad is not None
-
-        # if source_grad is not None:
         grad_dG.append(target_grad - source_grad)
 
 
     # print("dG pred", pred_dG, "dG pred val and ci", pred_dG_err)
     # print("grad_dG", grad_dG)
 
-    return (pred_dG, pred_dG_err), grad_dG
+    return (pred_dG, pred_dG_err), grad_dG, du_dls
 
     # if not inference:
 
