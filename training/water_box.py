@@ -8,7 +8,7 @@ from simtk.openmm.app import PDBFile, PDBxFile
 
 import io
 
-def get_water_box(box_width):
+def prep_system(box_width):
     # if model not in supported_models:
         # raise Exception("Specified water model '%s' is not in list of supported models: %s" % (model, str(supported_models)))
 

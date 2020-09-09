@@ -28,7 +28,6 @@ class CustomOpWrapper():
 
         """
         p = self.impl()
-        # p is reference collected and tossed out
         return custom_ops.BoundPotential(p, params)
 
 class HarmonicBond(CustomOpWrapper):

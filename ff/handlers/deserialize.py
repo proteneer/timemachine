@@ -4,7 +4,7 @@ import numpy as np
 from ff.handlers import bonded, nonbonded
 from ff.handlers.suffix import _SUFFIX
 
-def deserialize(obj):
+def deserialize_handlers(obj):
     """
     Parameters
     ----------

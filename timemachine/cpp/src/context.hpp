@@ -20,12 +20,11 @@ public:
         // double lambda,
         Integrator *intg,
         std::vector<BoundPotential *> bps
-        // std::vector<Observable *> obs
     );
 
     ~Context();
 
-    void add_observable(Observable *obs);
+    void add_observable(Observable *obs); // tbd: shared_ptr
 
     void step(double lambda);
 

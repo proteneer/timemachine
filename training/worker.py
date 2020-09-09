@@ -15,7 +15,7 @@ import service_pb2_grpc
 
 from threading import Lock
 
-from timemachine.lib import custom_ops, ops
+# from timemachine.lib import custom_ops, potential
 
 class Worker(service_pb2_grpc.WorkerServicer):
 
