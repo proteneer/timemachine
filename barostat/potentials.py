@@ -44,9 +44,7 @@ def lennard_jones(conf, lj_params, volume):
         Whether or not we apply cutoffs to the system. Any interactions
         greater than cutoff is fully discarded.
     
-    """
-    
-    
+    """   
     N = conf.shape[0]
     D = conf.shape[-1]
     box_length = np.sqrt(volume)

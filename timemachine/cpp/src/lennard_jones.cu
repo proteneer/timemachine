@@ -103,8 +103,9 @@ void LennardJones<RealType>::execute_device(
     cudaStream_t stream) {
 
     if(N != N_) {
-        std::cout << N << " " << N_ << std::endl;
-        throw std::runtime_error("N != N_");
+        std::ostringstream err_msg;
+        err_msg << "N != N_ " << N << " " << N_;
+        throw std::runtime_error(err_msg.str());
     }
 
     const int tpb = 32;

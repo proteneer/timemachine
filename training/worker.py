@@ -15,7 +15,7 @@ import service_pb2_grpc
 
 from threading import Lock
 
-# from timemachine.lib import custom_ops, potential
+from timemachine.lib import custom_ops
 
 class Worker(service_pb2_grpc.WorkerServicer):
 
@@ -36,28 +36,21 @@ class Worker(service_pb2_grpc.WorkerServicer):
         else:
             raise Exception("Unknown precision")
 
-        system = pickle.loads(request.system)
+        simulation = pickle.loads(request.simulation)
 
         bps = []
         pots = []
-        names = []
 
-        for name, args in system.potentials:
-            params = args[-1]
-            op_fn = getattr(ops, name)
-            potential = op_fn(*args[:-1], precision=np.float32)
-            pots.append(potential) # (ytz) needed for binding, else python decides to GC this
-            # du_dx, du_dp, du_dl, u = potential.execute(x0, params, box, lamb)
-            bp = custom_ops.BoundPotential(potential, params)
-            bps.append(bp)
-            names.append(name)
+        for potential in simulation.potentials:
+            print(potential)
+            bps.append(potential.bound_impl()) # get the bound implementation
 
-        intg = custom_ops.LangevinIntegrator(*system.integrator_args)
+        intg = simulation.integrator.impl()
 
         ctxt = custom_ops.Context(
-            system.x0,
-            system.v0,
-            system.box,
+            simulation.x,
+            simulation.v,
+            simulation.box,
             intg,
             bps
         )
@@ -71,19 +64,18 @@ class Worker(service_pb2_grpc.WorkerServicer):
         energies = []
         frames = []
 
-
-
         if request.observe_du_dl_freq > 0:
             du_dl_obs = custom_ops.AvgPartialUPartialLambda(bps, request.observe_du_dl_freq)
             ctxt.add_observable(du_dl_obs)
 
         if request.observe_du_dp_freq > 0:
             du_dps = []
-            for name, bp in zip(names, bps):
-                if name == 'LennardJones' or name == 'Electrostatics':
-                    du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, request.observe_du_dp_freq)
-                    ctxt.add_observable(du_dp_obs)
-                    du_dps.append(du_dp_obs)
+            # for name, bp in zip(names, bps):
+            # if name == 'LennardJones' or name == 'Electrostatics':
+            for bp in bps:
+                du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, request.observe_du_dp_freq)
+                ctxt.add_observable(du_dp_obs)
+                du_dps.append(du_dp_obs)
 
         # dynamics
         for step in range(request.prod_steps):

@@ -35,10 +35,11 @@ import configparser
 import grpc
 
 from training import hydration_model, hydration_setup
+from training import simulation
 # # from training import trainer
-from training import service_pb2, service_pb2_grpc
+from training import service_pb2_grpc
 
-# 
+from timemachine.lib import LangevinIntegrator
 
 
 from training import water_box
@@ -117,7 +118,7 @@ if __name__ == "__main__":
 
     general_cfg = config['general']
 
-
+    intg_cfg = config['integrator']
 
     suppl = Chem.SDMolSupplier(general_cfg['ligand_sdf'], removeHs=False)
 
@@ -160,6 +161,13 @@ if __name__ == "__main__":
     box_width = 3.0
     host_system, host_coords, box, _ = water_box.prep_system(box_width)
 
+    lambda_schedule = np.concatenate([
+        # np.linspace(0.0, 0.6, 40, endpoint=False),
+        # np.linspace(0.6, 1.5, 20, endpoint=False),
+        # np.linspace(1.5, 5.5, 20, endpoint=True)
+        np.linspace(0.0, 1.0, 3, endpoint=True)
+    ])
+
     for epoch in range(100):
 
         print("Starting Epoch", epoch, datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
@@ -185,11 +193,41 @@ if __name__ == "__main__":
             print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
             out_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
 
-            hydration_setup.combine_potentials(
+            potentials, masses, vjp_fns = hydration_setup.combine_potentials(
                 ff_handlers,
                 mol,
                 host_system,
                 precision=np.float32
+            )
+
+            coords = hydration_setup.combine_coordinates(
+                host_coords,
+                mol,
+            )
+
+            seed = np.random.randint(0, np.iinfo(np.int32).max)
+
+            intg = LangevinIntegrator(
+                float(intg_cfg['temperature']),
+                float(intg_cfg['dt']),
+                float(intg_cfg['friction']),
+                masses,
+                seed
+            )
+
+            sim = simulation.Simulation(
+                coords,
+                np.zeros_like(coords),
+                box,
+                potentials,
+                intg,
+            )
+
+
+            (pred_dG, pred_dG_err), grad_dG = hydration_model.simulate(
+                sim,
+                lambda_schedule,
+                stubs
             )
 
 

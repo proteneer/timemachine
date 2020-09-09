@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rservice.proto\"\x0e\n\x0c\x45mptyMessage\"\xb4\x01\n\x0fSimulateRequest\x12\x0e\n\x06system\x18\x01 \x01(\x0c\x12\x0c\n\x04lamb\x18\x02 \x01(\x01\x12\x12\n\nprep_steps\x18\x03 \x01(\x05\x12\x12\n\nprod_steps\x18\x04 \x01(\x05\x12\x1a\n\x12observe_du_dl_freq\x18\x05 \x01(\x05\x12\x1a\n\x12observe_du_dp_freq\x18\x06 \x01(\x05\x12\x11\n\tprecision\x18\x07 \x01(\t\x12\x10\n\x08n_frames\x18\x08 \x01(\x05\"Y\n\rSimulateReply\x12\x12\n\navg_du_dls\x18\x01 \x01(\x0c\x12\x12\n\navg_du_dps\x18\x02 \x01(\x0c\x12\x10\n\x08\x65nergies\x18\x03 \x01(\x0c\x12\x0e\n\x06\x66rames\x18\x04 \x01(\x0c\x32\x38\n\x06Worker\x12.\n\x08Simulate\x12\x10.SimulateRequest\x1a\x0e.SimulateReply\"\x00\x62\x06proto3'
+  serialized_pb=b'\n\rservice.proto\"\x0e\n\x0c\x45mptyMessage\"\xb8\x01\n\x0fSimulateRequest\x12\x12\n\nsimulation\x18\x01 \x01(\x0c\x12\x0c\n\x04lamb\x18\x02 \x01(\x01\x12\x12\n\nprep_steps\x18\x03 \x01(\x05\x12\x12\n\nprod_steps\x18\x04 \x01(\x05\x12\x1a\n\x12observe_du_dl_freq\x18\x05 \x01(\x05\x12\x1a\n\x12observe_du_dp_freq\x18\x06 \x01(\x05\x12\x11\n\tprecision\x18\x07 \x01(\t\x12\x10\n\x08n_frames\x18\x08 \x01(\x05\"Y\n\rSimulateReply\x12\x12\n\navg_du_dls\x18\x01 \x01(\x0c\x12\x12\n\navg_du_dps\x18\x02 \x01(\x0c\x12\x10\n\x08\x65nergies\x18\x03 \x01(\x0c\x12\x0e\n\x06\x66rames\x18\x04 \x01(\x0c\x32\x38\n\x06Worker\x12.\n\x08Simulate\x12\x10.SimulateRequest\x1a\x0e.SimulateReply\"\x00\x62\x06proto3'
 )
 
 
@@ -59,7 +59,7 @@ _SIMULATEREQUEST = _descriptor.Descriptor(
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='system', full_name='SimulateRequest.system', index=0,
+      name='simulation', full_name='SimulateRequest.simulation', index=0,
       number=1, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=b"",
       message_type=None, enum_type=None, containing_type=None,
@@ -127,7 +127,7 @@ _SIMULATEREQUEST = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=34,
-  serialized_end=214,
+  serialized_end=218,
 )
 
 
@@ -179,8 +179,8 @@ _SIMULATEREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=216,
-  serialized_end=305,
+  serialized_start=220,
+  serialized_end=309,
 )
 
 DESCRIPTOR.message_types_by_name['EmptyMessage'] = _EMPTYMESSAGE
@@ -218,8 +218,8 @@ _WORKER = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=307,
-  serialized_end=363,
+  serialized_start=311,
+  serialized_end=367,
   methods=[
   _descriptor.MethodDescriptor(
     name='Simulate',

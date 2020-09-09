@@ -2,6 +2,8 @@
 #include <iostream>
 #include <vector>
 #include <complex>
+#include <sstream>
+
 #include "electrostatics.hpp"
 #include "gpu_utils.cuh"
 
@@ -75,7 +77,9 @@ void Electrostatics<RealType>::execute_device(
     cudaStream_t stream) {
 
     if(N != N_) {
-        throw std::runtime_error("N != N_");
+        std::ostringstream err_msg;
+        err_msg << "N != N_ " << N << " " << N_;
+        throw std::runtime_error(err_msg.str());
     }
 
     const int tpb = 32;

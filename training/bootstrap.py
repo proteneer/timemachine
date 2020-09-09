@@ -35,19 +35,6 @@ import functools
 
 #     return np.sum(dGs)
 
-# def estimate(triples, ssc):
-
-#     # Compute the mean
-#     if triples.ndim == 2:
-#         return np.array([integrate(triples) + ssc])
-
-#     # Compute the CI
-#     results = []
-#     for arr in triples:
-#         dG = integrate(arr)
-#         results.append(dG)
-
-#     return np.array(results) + ssc
 
 # tbd: chain bootstrapped estimators
 
@@ -65,20 +52,39 @@ def bs_integrate(tuples):
         lambdas.append(lamb)
         du_dls.append(du_dl)
 
-    perm = np.argsort(lambdas)
     du_dls = np.array(du_dls)
+    lambdas = np.array(lambdas)
+
+    perm = np.argsort(lambdas)
     du_dls = du_dls[perm]
     lambdas = lambdas[perm]
 
-    return np.trapz(avg_du_dls, lambdas)
+    return np.trapz(du_dls, lambdas)
+
+def bs_estimate(tuples):
+
+    # Compute the mean
+    if tuples.ndim == 2:
+        return np.array([bs_integrate(tuples)])
+
+    # Compute the CI
+    results = []
+    for arr in tuples:
+        dG = bs_integrate(arr)
+        results.append(dG)
+
+    return np.array(results)
 
 def ti_ci(du_dls, lambda_schedule):
+    print("??")
+    print(du_dls)
+    print(lambda_schedule)
 
     tuples = []
     for du_dl, lamb in zip(du_dls, lambda_schedule):
         tuples.append((du_dl, lamb))
 
-    return bs.bootstrap(np.array(tuples), stat_func=bs_integrate)
+    return bs.bootstrap(np.array(tuples), stat_func=bs_estimate)
 
 # def ti_ci(all_du_dls, ssc, stage_lambdas, du_dl_cutoff):
 #     """

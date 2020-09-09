@@ -1,3 +1,9 @@
+import pickle
+
+from training import service_pb2
+from training import bootstrap
+
+import numpy as np
 
 # we want this to work for protein ligand systems as well as solvation free energies
 def simulate(
@@ -28,70 +34,11 @@ def simulate(
 
     """
 
-    # # inference,
-    # true_dG,
-    # guest_mol,
-    # host_system,
-    # host_coords,
-    # box,
-    # intg_settings, # dt, temperature, friction
-    # ff_handlers,
-    # stubs,
-    # n_frames,
-    # epoch_dir):
-
-    # box_width = 3.0
-    # host_system, host_coords, box, host_pdbfile = water_box.get_water_box(box_width)
-
-    # combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), guest_mol)
-
-    # x0, combined_masses, final_gradients, handler_vjp_fns = setup_system(
-    #     ff_handlers,
-    #     guest_mol,
-    #     host_system,
-    #     host_coords
-    # )
-
-    # assert len(masses) == coords.shape[0]
-    # assert coords.shape[1] == 3
-
-    # print("Number of atoms:", len(combined_masses))
-
-    # x0 = coords.copy()
-    # v0 = np.zeros_like(x0)
+    n_frames = 0
 
     simulate_futures = []
-    # lambda_schedule = np.concatenate([
-    #     np.linspace(0.0, 0.6, 40, endpoint=False),
-    #     np.linspace(0.6, 1.5, 20, endpoint=False),
-    #     np.linspace(1.5, 5.5, 20, endpoint=True)
-    # ])
-
-    # lambda_schedule = np.array([0.0, 0.5, 15.0])
 
     for lamb_idx, lamb in enumerate(lambda_schedule):
-
-        # dt = 1.5e-3
-
-        # ca, cbs, ccs = langevin_coefficients(
-        #     temperature=intg.temperature,
-        #     dt=intg.dt,
-        #     friction=1.0,
-        #     masses=combined_masses
-        # )
-        # cbs *= -1
-
-        # seed = np.random.randint(150000)
-
-        # intg_args = (dt, ca, cbs, ccs, seed)
-
-        # complex_system = system.System(
-        #     simulation.x,
-        #     simulation.v,
-        #     simulation.box,
-        #     simulation.s,
-        #     intg_args
-        # )
 
         # endpoint lambda
         if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
@@ -102,11 +49,11 @@ def simulate(
             observe_du_dp_freq = 0
 
         request = service_pb2.SimulateRequest(
-            simulation=simulation,
+            simulation=pickle.dumps(simulation),
             lamb=lamb,
             prep_steps=5000,
-            # prod_steps=5000,
-            prod_steps=100000,
+            prod_steps=5000,
+            # prod_steps=100000,
             observe_du_dl_freq=observe_du_dl_freq,
             observe_du_dp_freq=observe_du_dp_freq,
             precision="single",
@@ -118,9 +65,6 @@ def simulate(
         # launch asynchronously
         response_future = stub.Simulate.future(request)
         simulate_futures.append(response_future)
-
-    lj_du_dps = []
-    es_du_dps = []
 
     du_dls = []
 
@@ -148,31 +92,27 @@ def simulate(
         elif lamb_idx == len(lambda_schedule) - 1:
             lambda_1_du_dqs = pickle.loads(response.avg_du_dps)
 
-
-
-        #     # lj_du_dps.append(du_dp_array[0])
-        #     # es_du_dps.append(du_dp_array[1])
-
-        # print("lamb", lamb, "avg_du_dl", du_dl)
-
-
     pred_dG = np.trapz(du_dls, lambda_schedule)
-    pred_dG_err = bootstrap.ti_ci(pred_dG_err)
+    pred_dG_err = bootstrap.ti_ci(du_dls, lambda_schedule)
 
-    print("dG pred", pred_dG, "dG pred val and ci", pred_dG_err, "dG true_dG", true_dG)
     
-    du_dp = []
+    grad_dG = []
 
     for source_grad, target_grad in zip(lambda_0_du_dqs, lambda_1_du_dqs):
-        if source_grad is not None:
-            assert target_grad is not None
+        # if source_grad is not None:
+        #     assert target_grad is not None
 
-        if target_grad is not None:
-            assert source_grad is not None
+        # if target_grad is not None:
+        #     assert source_grad is not None
 
-        du_dp.append(target_grad - source_grad)
+        # if source_grad is not None:
+        grad_dG.append(target_grad - source_grad)
 
-    return (pred_dG, pred_dG_err), du_dp
+
+    # print("dG pred", pred_dG, "dG pred val and ci", pred_dG_err)
+    # print("grad_dG", grad_dG)
+
+    return (pred_dG, pred_dG_err), grad_dG
 
     # if not inference:
 

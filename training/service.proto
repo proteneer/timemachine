@@ -1,4 +1,4 @@
-// compile with:
+// activate venv and compile with:
 // python -m grpc_tools.protoc -I ./ --python_out=. --grpc_python_out=. service.proto
 
 syntax = "proto3";
@@ -13,7 +13,7 @@ message EmptyMessage {}
 
 // The request message containing the user's name.
 message SimulateRequest {
-    bytes system = 1; // pickle object
+    bytes simulation = 1; // pickle object
     double lamb = 2; // lambda window
     int32 prep_steps = 3; // num steps for preparation
     int32 prod_steps = 4; // num steps for production

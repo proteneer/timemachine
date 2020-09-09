@@ -47,7 +47,7 @@ def concat_with_vjps(p_a, p_b, vjp_a, vjp_b):
 
         return ad_b[0]
 
-    return p_c, adjoint_fn
+    return np.asarray(p_c), adjoint_fn
 
 def combine_potentials(
     ff_handlers,
@@ -78,56 +78,77 @@ def combine_potentials(
 
     """
 
-    host_fns, host_masses = openmm_deserializer.deserialize_system(host_system)
+    host_potentials, host_masses = openmm_deserializer.deserialize_system(host_system, precision)
+
+    # ensure that electrostatic and lennard jones terms are singletons
+    host_lj_bp = None
+    host_es_bp = None
+
+    combined_potentials = []
+    for bp in host_potentials:
+        if isinstance(bp, potentials.LennardJones):
+            assert host_lj_bp is None
+            host_lj_bp = bp
+        elif isinstance(bp, potentials.Electrostatics):
+            assert host_es_bp is None
+            host_es_bp = bp
+        else:
+            print("appending host", type(bp))
+            combined_potentials.append(bp)
 
     guest_masses = np.array([a.GetMass() for a in guest_mol.GetAtoms()], dtype=np.float64)
 
     num_guest_atoms = len(guest_masses)
     num_host_atoms = len(host_masses)
 
-    combined_potentials = []
+
     combined_vjp_fns = []
 
-    for item in host_fns: 
-        if item[0] == 'LennardJones':
-            host_lj_params = item[1]
-        elif item[0] == 'Charges':
-            host_charge_params = item[1]
-        elif item[0] == 'Exclusions':
-            host_exclusions = item[1]
-        else:
-            combined_potentials.append((item[0], item[1]))
-            combined_vjp_fns.append(None)
+    # for item in host_potentials: 
+    #     if item[0] == 'LennardJones':
+    #         host_lj_params = item[1]
+    #     elif item[0] == 'Charges':
+    #         host_charge_params = item[1]
+    #     elif item[0] == 'Exclusions':
+    #         host_exclusions = item[1]
+    #     else:
+    #         combined_potentials.append((item[0], item[1]))
+    #         combined_vjp_fns.append(None)
 
-    guest_exclusion_idxs, guest_scales = nonbonded.generate_exclusion_idxs(
+    guest_exclusion_idxs, guest_scale_factors = nonbonded.generate_exclusion_idxs(
         guest_mol,
         scale12=1.0,
         scale13=1.0,
         scale14=0.5
     )
 
-    guest_exclusion_idxs += num_host_atoms
-    guest_lj_exclusion_scales = guest_scales
-    guest_charge_exclusion_scales = guest_scales
+    # guest_exclusion_idxs += num_host_atoms
+    # guest_lj_exclusion_scales = guest_scale_factors
+    # guest_charge_exclusion_scales = guest_scale_factors
 
-    host_exclusion_idxs = host_exclusions[0]
-    host_lj_exclusion_scales = host_exclusions[1]
-    host_charge_exclusion_scales = host_exclusions[2]
+    # host_exclusion_idxs = host_exclusions[0]
+    # host_lj_exclusion_scales = host_exclusions[1]
+    # host_charge_exclusion_scales = host_exclusions[2]
 
-    combined_exclusion_idxs = np.concatenate([host_exclusion_idxs, guest_exclusion_idxs])
-    combined_lj_exclusion_scales = np.concatenate([host_lj_exclusion_scales, guest_lj_exclusion_scales])
-    combined_charge_exclusion_scales = np.concatenate([host_charge_exclusion_scales, guest_charge_exclusion_scales])
+    # combined_exclusion_idxs = np.concatenate([host_exclusion_idxs, guest_exclusion_idxs])
+    # combined_lj_exclusion_scales = np.concatenate([host_lj_exclusion_scales, guest_lj_exclusion_scales])
+    # combined_charge_exclusion_scales = np.concatenate([host_charge_exclusion_scales, guest_charge_exclusion_scales])
 
-    N_C = num_host_atoms + num_guest_atoms
-    N_A = num_host_atoms
+    # N_C = num_host_atoms + num_guest_atoms
+    # N_A = num_host_atoms
 
-    cutoff = 100000.0
+    # cutoff = 100000.0
 
-    combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
-    combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
-    combined_lambda_offset_idxs[num_host_atoms:] = 1
+    # combined_lambda_plane_idxs = np.zeros(N_C, dtype=np.int32)
+    # combined_lambda_offset_idxs = np.zeros(N_C, dtype=np.int32)
+    # combined_lambda_offset_idxs[num_host_atoms:] = 1
 
     combined_masses = np.concatenate([host_masses, guest_masses])
+
+    combined_cutoff = 1000.0
+
+    guest_lambda_plane_idxs = np.zeros(len(guest_masses), dtype=np.int32)
+    guest_lambda_offset_idxs = np.ones(len(guest_masses), dtype=np.int32)
 
     for handle in ff_handlers:
         results = handle.parameterize(guest_mol)
@@ -136,66 +157,75 @@ def combine_potentials(
             bond_idxs, (bond_params, vjp_fn) = results
             bond_idxs += num_host_atoms
             # bind potentials
-            combined_potentials.append(potentials.HarmonicBond(bond_idxs, precision=precision).bind_impl(bond_params))
+            combined_potentials.append(potentials.HarmonicBond(bond_idxs, precision=precision).bind(bond_params))
             combined_vjp_fns.append((handle, vjp_fn))
         elif isinstance(handle, bonded.HarmonicAngleHandler):
             angle_idxs, (angle_params, vjp_fn) = results
             angle_idxs += num_host_atoms
-            combined_potentials.append(potentials.HarmonicAngle(angle_idxs, precision=precision).bind_impl(angle_params))
+            combined_potentials.append(potentials.HarmonicAngle(angle_idxs, precision=precision).bind(angle_params))
             combined_vjp_fns.append((handle, vjp_fn))
         elif isinstance(handle, bonded.ProperTorsionHandler):
             torsion_idxs, (torsion_params, vjp_fn) = results
             torsion_idxs += num_host_atoms
-            combined_potentials.append(potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind_impl(torsion_params))
+            combined_potentials.append(potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind(torsion_params))
             combined_vjp_fns.append((handle, vjp_fn))
         elif isinstance(handle, bonded.ImproperTorsionHandler):
             torsion_idxs, (torsion_params, vjp_fn) = results
             torsion_idxs += num_host_atoms
-            combined_potentials.append(potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind_impl(torsion_params))
+            combined_potentials.append(potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind(torsion_params))
             combined_vjp_fns.append((handle, vjp_fn))
         elif isinstance(handle, nonbonded.LennardJonesHandler):
             guest_lj_params, guest_lj_vjp_fn = results
             combined_lj_params, vjp_fn = concat_with_vjps(
-                host_lj_params,
+                host_lj_bp.params,
                 guest_lj_params,
                 None,
                 guest_lj_vjp_fn
             )
 
-            combined_lj_params = np.asarray(combined_lj_params)
+            combined_exclusion_idxs = np.concatenate([host_lj_bp.get_exclusion_idxs(), guest_exclusion_idxs + num_host_atoms])
+            combined_scales = np.concatenate([host_lj_bp.get_scale_factors(), guest_scale_factors])
+            combined_lambda_plane_idxs = np.concatenate([host_lj_bp.get_lambda_plane_idxs(), guest_lambda_plane_idxs])
+            combined_lambda_offset_idxs = np.concatenate([host_lj_bp.get_lambda_plane_idxs(), guest_lambda_offset_idxs])
 
             combined_potentials.append(potentials.LennardJones(
                 combined_exclusion_idxs,
-                combined_lj_exclusion_scales,
+                combined_scales,
                 combined_lambda_plane_idxs,
                 combined_lambda_offset_idxs,
-                cutoff,
-                precision=precision).bind_impl(combined_lj_params))
+                combined_cutoff,
+                precision=precision).bind(combined_lj_params))
+
 
         elif isinstance(handle, nonbonded.AM1CCCHandler):
+
+
             guest_charge_params, guest_charge_vjp_fn = results
             combined_charge_params, vjp_fn = concat_with_vjps(
-                host_charge_params,
+                host_es_bp.params,
                 guest_charge_params,
                 None,
                 guest_charge_vjp_fn
             )
 
-            combined_charge_params = np.asarray(combined_charge_params)
+            combined_exclusion_idxs = np.concatenate([host_es_bp.get_exclusion_idxs(), guest_exclusion_idxs + num_host_atoms])
+            combined_scales = np.concatenate([host_es_bp.get_scale_factors(), guest_scale_factors])
+            combined_lambda_plane_idxs = np.concatenate([host_es_bp.get_lambda_plane_idxs(), guest_lambda_plane_idxs])
+            combined_lambda_offset_idxs = np.concatenate([host_es_bp.get_lambda_plane_idxs(), guest_lambda_offset_idxs])
+            combined_beta = 2.0
 
-            beta = 2.0
             combined_potentials.append(potentials.Electrostatics(
                 combined_exclusion_idxs,
-                combined_charge_exclusion_scales,
+                combined_scales,
                 combined_lambda_plane_idxs,
                 combined_lambda_offset_idxs,
-                beta,
-                cutoff,
-                precision=precision).bind_impl(combined_charge_params))
+                combined_beta,
+                combined_cutoff,
+                precision=precision).bind(combined_charge_params))
 
             combined_vjp_fns.append((handle, vjp_fn))
         else:
             print("skipping", handle)
             pass
 
-    return combined_potentials, combined_vjp_fns
+    return combined_potentials, combined_masses, combined_vjp_fns
