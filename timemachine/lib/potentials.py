@@ -46,8 +46,6 @@ class CustomOpWrapper():
 
         custom_ctor = getattr(custom_ops, cls_name_base)
 
-        print("custom_ctor", custom_ctor)
-
         return custom_ctor(*self.args)
 
     def bound_impl(self):
