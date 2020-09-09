@@ -2,6 +2,9 @@ import matplotlib
 matplotlib.use('Agg')
 import pickle
 
+from jax.config import config as jax_config
+jax_config.update("jax_enable_x64", True)
+
 # import copy
 import argparse
 import time
@@ -12,19 +15,13 @@ import numpy as np
 import os
 import sys
 
+from ff import handlers
 from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize_handlers
 
-from jax.config import config as jax_config
-# this always needs to be set
-jax_config.update("jax_enable_x64", True)
-# import jax
-# import jax.numpy as jnp
 
-# import rdkit
+
 from rdkit import Chem
-# from rdkit.Chem import AllChem
-# from rdkit.Chem import rdFMCS
 
 from fe import dataset
 
@@ -36,17 +33,12 @@ import grpc
 
 from training import hydration_model, hydration_setup
 from training import simulation
-# # from training import trainer
 from training import service_pb2_grpc
 
 from timemachine.lib import LangevinIntegrator
-
-
 from training import water_box
 
-# from matplotlib import pyplot as plt
 
-# import pickle
 
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18
@@ -102,9 +94,6 @@ def recenter(conf, box):
     return np.array(new_coords)
 
 
-# from fe import math_utils, system
-
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Absolute Hydration Free Energy Script')
@@ -118,6 +107,16 @@ if __name__ == "__main__":
 
     general_cfg = config['general']
 
+
+    # set up learning rates
+    learning_rates = {}
+    for k, v in config['learning_rates'].items():
+        vals = [float(x) for x in v.split(',')]
+        if k == 'am1ccc':
+            learning_rates[handlers.AM1CCCHandler] = np.array(vals)
+        elif k == 'lj':
+            learning_rates[handlers.LennardJonesHandler] = np.array(vals)
+
     intg_cfg = config['integrator']
 
     suppl = Chem.SDMolSupplier(general_cfg['ligand_sdf'], removeHs=False)
@@ -126,9 +125,9 @@ if __name__ == "__main__":
     data = []
 
     for guest_idx, mol in enumerate(suppl):
-        true_dG = -1*float(mol.GetProp(general_cfg['dG']))
-        true_dG_err = -1*float(mol.GetProp(general_cfg['dG_err']))
-        data.append((mol, true_dG, true_dG_err))
+        label_dG = -4.184*float(mol.GetProp(general_cfg['dG']))
+        label_err = 4.184*float(mol.GetProp(general_cfg['dG_err'])) # errs are positive!
+        data.append((mol, label_dG, label_err))
 
     full_dataset = dataset.Dataset(data)
     train_frac = float(general_cfg['train_frac'])
@@ -164,9 +163,11 @@ if __name__ == "__main__":
     lambda_schedule = np.concatenate([
         # np.linspace(0.0, 0.6, 40, endpoint=False),
         # np.linspace(0.6, 1.5, 20, endpoint=False),
-        # np.linspace(1.5, 5.5, 20, endpoint=True)
-        np.linspace(0.0, 1.0, 3, endpoint=True)
+        # np.linspace(1.5, 5.5, 20, endpoint=True),
+        np.linspace(0.0, 1.5, 4, endpoint=True)
     ])
+
+    num_steps = int(general_cfg['n_steps'])
 
     for epoch in range(100):
 
@@ -181,17 +182,24 @@ if __name__ == "__main__":
         with open(os.path.join(epoch_dir, "start_epoch_params.py"), 'w') as fh:
             fh.write(epoch_params)
 
-        # simulate(
-        #     guest_mol,
-        #     ff_handlers,
-        #     stubs,
-        #     general_cfg.n_frames,
-        #     epoch_dir
-        # )
+        all_data = []
+        test_items = [(x, True) for x in test_dataset.data]
+        train_dataset.shuffle()
+        train_items = [(x, False) for x in train_dataset.data]
 
-        for mol, experiment_dG, experiment_error in test_dataset.data:
-            print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
-            out_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
+        all_data.extend(test_items)
+        all_data.extend(train_items)
+
+        for (mol, label_dG, label_err), inference in all_data:
+
+            if inference:
+                prefix = "test"
+            else:
+                prefix = "train"
+
+            start_time = time.time()
+
+            out_dir = os.path.join(epoch_dir, "mol_"+mol.GetProp("_Name"))
 
             potentials, masses, vjp_fns = hydration_setup.combine_potentials(
                 ff_handlers,
@@ -224,27 +232,41 @@ if __name__ == "__main__":
             )
 
 
-            (pred_dG, pred_dG_err), grad_dG = hydration_model.simulate(
+            (pred_dG, pred_err), grad_dG = hydration_model.simulate(
                 sim,
+                num_steps,
                 lambda_schedule,
                 stubs
             )
 
+            loss = np.abs(pred_dG - label_dG)
 
-            assert 0
+            print(prefix, "mol", mol.GetProp("_Name"), "loss {:.2f}".format(loss), "pred_dG {:.2f}".format(pred_dG), "95% CI [{:.2f}, {:.2f}, {:.2f}]".format(pred_err.lower_bound, pred_err.value, pred_err.upper_bound), "label_dG {:.2f}".format(label_dG), "label err {:.2f}".format(label_err), "time {:.2f}".format(time.time() - start_time), "smiles:", Chem.MolToSmiles(mol))
 
-            start_time = time.time()
-            dG, ci, loss = engine.run_mol(mol, inference=True, run_dir=out_dir, experiment_dG=experiment_dG)
-            print(mol.GetProp("_Name"), "test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time, "ci 95% (mean, lower, upper)", ci.value, ci.lower_bound, ci.upper_bound)
+            # update ff parameters
+            if not inference:
 
-        train_dataset.shuffle()
+                loss_grad = np.sign(pred_dG - label_dG)
 
-        for mol, experiment_dG in train_dataset.data:
-            print("train mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
-            mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
-            start_time = time.time()
-            dG, ci, loss = engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
-            print(mol.GetProp("_Name"), "train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time, "ci 95% (mean, lower, upper)", ci.value, ci.lower_bound, ci.upper_bound)
+                assert len(grad_dG) == len(vjp_fns)
+
+                for grad, handle_and_vjp_fn in zip(grad_dG, vjp_fns):
+                    if handle_and_vjp_fn:
+                        handle, vjp_fn = handle_and_vjp_fn
+                        if type(handle) in learning_rates:
+
+                            bounds = learning_rates[type(handle)]
+
+                            # deps_ij/(eps_i*eps_j) is unstable so we skip eps
+                            if isinstance(handle, handlers.LennardJonesHandler):
+                                grad[:, 1] = 0
+
+                            dL_dp = loss_grad*vjp_fn(grad)[0]
+                            dL_dp = np.clip(dL_dp, -bounds, bounds)
+                            handle.params -= dL_dp
+                        # else:
+                            # print("skipping", type(handle))
+
 
         epoch_params = serialize_handlers(ff_handlers)
         with open(os.path.join(epoch_dir, "end_epoch_params.py"), 'w') as fh:

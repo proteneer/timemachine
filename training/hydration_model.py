@@ -8,6 +8,7 @@ import numpy as np
 # we want this to work for protein ligand systems as well as solvation free energies
 def simulate(
     simulation,
+    n_steps,
     lambda_schedule,
     stubs):
     """
@@ -52,7 +53,7 @@ def simulate(
             simulation=pickle.dumps(simulation),
             lamb=lamb,
             prep_steps=5000,
-            prod_steps=5000,
+            prod_steps=n_steps,
             # prod_steps=100000,
             observe_du_dl_freq=observe_du_dl_freq,
             observe_du_dp_freq=observe_du_dp_freq,

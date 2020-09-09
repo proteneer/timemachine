@@ -76,10 +76,6 @@ def bs_estimate(tuples):
     return np.array(results)
 
 def ti_ci(du_dls, lambda_schedule):
-    print("??")
-    print(du_dls)
-    print(lambda_schedule)
-
     tuples = []
     for du_dl, lamb in zip(du_dls, lambda_schedule):
         tuples.append((du_dl, lamb))
