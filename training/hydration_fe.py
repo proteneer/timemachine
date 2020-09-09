@@ -36,7 +36,8 @@ from fe.pdb_writer import PDBWriter
 import configparser
 import grpc
 
-from training import trainer
+from training import model
+# from training import trainer
 from training import service_pb2
 from training import service_pb2_grpc
 
@@ -44,6 +45,7 @@ from ff.handlers import bonded, nonbonded, openmm_deserializer
 
 
 from training import water_box
+from training import bootstrap
 
 from timemachine.integrator import langevin_coefficients
 from timemachine.lib import ops, custom_ops
@@ -113,7 +115,6 @@ def setup_system(
             host_exclusions = item[1]
         else:
             final_gradients.append((item[0], item[1]))
-
 
     guest_exclusion_idxs, guest_scales = nonbonded.generate_exclusion_idxs(
         guest_mol,
@@ -225,188 +226,7 @@ def setup_system(
 
     return x0, combined_masses, final_gradients, handler_vjp_fns
 
-def simulate(
-    guest_mol,
-    ff_handlers,
-    stubs,
-    n_frames):
-
-    box_width = 3.0
-    host_system, host_coords, box, host_pdbfile = water_box.get_water_box(box_width)
-
-    # print(box)
-    # print(host_coords)
-    # assert 0
-
-    # janky
-    combined_pdb = Chem.CombineMols(Chem.MolFromPDBFile(host_pdbfile, removeHs=False), guest_mol)
-
-    x0, combined_masses, final_gradients, handler_vjp_fns = setup_system(
-        ff_handlers,
-        guest_mol,
-        host_system,
-        host_coords
-    )
-
-    v0 = np.zeros_like(x0)
-
-    simulate_futures = []
-    lambda_schedule = np.concatenate([
-        np.linspace(0.0, 0.6, 40, endpoint=False),
-        np.linspace(0.6, 1.5, 20, endpoint=False),
-        np.linspace(1.5, 5.5, 20, endpoint=True)
-    ])
-
-    # lambda_schedule = np.array([0.0, 0.5, 15.0])
-
-    for lamb_idx, lamb in enumerate(lambda_schedule):
-
-        bps = []
-        pots = []
-
-        for name, args in final_gradients:
-            params = args[-1]
-            op_fn = getattr(ops, name)
-            potential = op_fn(*args[:-1], precision=np.float32)
-            pots.append(potential) # (ytz) needed for binding, else python decides to GC this
-            du_dx, du_dp, du_dl, u = potential.execute(x0, params, box, lamb)
-            bp = custom_ops.BoundPotential(potential, params)
-            bps.append(bp)
-
-        dt = 1.5e-3
-
-        ca, cbs, ccs = langevin_coefficients(
-            temperature=300.0,
-            dt=dt,
-            friction=1.0,
-            masses=combined_masses
-        )
-        cbs *= -1
-
-        seed = np.random.randint(150000)
-
-        intg_args = (dt, ca, cbs, ccs, seed)
-
-        complex_system = system.System(
-            x0,
-            v0,
-            box,
-            final_gradients,
-            intg_args
-        )
-
-        # endpoint lambda
-        if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
-            observe_du_dl_freq = 5000 # this is analytically zero.
-            observe_du_dp_freq = 25
-        else:
-            observe_du_dl_freq = 25 # this is analytically zero.
-            observe_du_dp_freq = 0
-
-        request = service_pb2.SimulateRequest(
-            system=pickle.dumps(complex_system),
-            lamb=lamb,
-            prep_steps=5000,
-            # prod_steps=100000,
-            prod_steps=100000,
-            observe_du_dl_freq=observe_du_dl_freq,
-            observe_du_dp_freq=observe_du_dp_freq,
-            precision="single",
-            n_frames=n_frames,
-        )
-
-        stub = stubs[lamb_idx % len(stubs)]
-
-        # launch asynchronously
-        response_future = stub.Simulate.future(request)
-        simulate_futures.append(response_future)
-
-    lj_du_dps = []
-    es_du_dps = []
-
-    du_dls = []
-
-    for lamb_idx, (lamb, future) in enumerate(zip(lambda_schedule, simulate_futures)):
-        response = future.result()
-        energies = pickle.loads(response.energies)
-
-        if n_frames > 0:
-            frames = pickle.loads(response.frames)
-            combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
-
-            out_file = "simulation_"+str(lamb_idx)+".pdb"
-            pdb_writer = PDBWriter(combined_pdb_str, out_file)
-            pdb_writer.write_header(box)
-            for x in frames:
-                x = recenter(x, box)
-                pdb_writer.write(x*10)
-            pdb_writer.close()
-
-        du_dl = pickle.loads(response.avg_du_dls)
-        du_dls.append(du_dl)
-
-        if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
-            du_dp_array = pickle.loads(response.avg_du_dps)
-            lj_du_dps.append(du_dp_array[0])
-            es_du_dps.append(du_dp_array[1])
-
-        print("lamb", lamb, "avg_du_dl", du_dl)
-
-
-    expected = -150
-
-    predicted = np.trapz(du_dls, lambda_schedule)
-
-    print("dG pred", predicted, "dG expected", expected)
-    # lj_du_dp = loss_grad*(lj_du_dps[0] - lj_du_dps[1])
-    
-    # (ytz): note the exchange of 1 with 0
-    loss = np.abs(predicted - expected)
-    loss_grad = np.sign(predicted - expected)
-    lj_du_dp = (lj_du_dps[1] - lj_du_dps[0]) # note the inversion of 1 and 0! 
-    lj_du_dp *= loss_grad
-
-    es_du_dp = (es_du_dps[1] - es_du_dps[0]) # note the inversion of 1 and 0! 
-    es_du_dp *= loss_grad
-
-    print("lj_du_dp", lj_du_dp)
-    print("es_du_dp", es_du_dp)
-
-    for h, vjp_fn in handler_vjp_fns.items():
-
-        # if isinstance(h, nonbonded.SimpleChargeHandler):
-        #     # disable training to SimpleCharges
-        #     assert 0
-        #     h.params -= charge_gradients*self.learning_rates['charge']
-        if isinstance(h, nonbonded.AM1CCCHandler):
-            es_grads = np.asarray(vjp_fn(es_du_dp)).copy()
-            es_grads[np.isnan(es_grads)] = 0.0
-            clip = 0.1
-            es_grads = np.clip(es_grads, -clip, clip)
-            print("before", h.params)
-            h.params -= es_grads
-            print("after", h.params)
-        elif isinstance(h, nonbonded.LennardJonesHandler):
-            lj_grads = np.asarray(vjp_fn(lj_du_dp)).copy()
-            lj_grads[np.isnan(lj_grads)] = 0.0
-            clip = 0.003
-            lj_grads = np.clip(lj_grads, -clip, clip)
-            print("before", h.params)
-            h.params -= lj_grads
-            print("after", h.params)
-
-
-            # assert 0
-
-            # if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)) or np.any(np.amax(np.abs(lj_gradients)) > 10000.0):
-            #     print("Skipping Fatal LJ Derivatives:", lj_gradients)
-            # else:
-            #     lj_sig_scale = np.amax(np.abs(lj_gradients[:, 0]))/self.learning_rates['lj'][0]
-            #     lj_eps_scale = np.amax(np.abs(lj_gradients[:, 1]))/self.learning_rates['lj'][1]
-            #     lj_scale_factor = np.array([lj_sig_scale, lj_eps_scale])
-            #     h.params -= lj_gradients/lj_scale_factor
-
-
+# used during visualization
 def recenter(conf, box):
 
     new_coords = []
@@ -429,32 +249,40 @@ from fe import math_utils, system
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Absolute Hydration Free Energy Script')
+    parser.add_argument('--config_file', type=str, required=True, help='Location of config file.')
 
-    parser.add_argument('--n_workers', type=int, help='number of workers')
-    parser.add_argument('--n_frames', type=int, help='number of frames')
-    parser.add_argument('--ligand_sdf', type=str, help='ligand sdf file path')
+    config = configparser.ConfigParser()
+    config.read(args.config_file)
+    print("Config Settings:")
+    config.write(sys.stdout)
+
+    general_cfg = config['general']
 
     args = parser.parse_args()
 
-    suppl = Chem.SDMolSupplier(args.ligand_sdf, removeHs=False)
+    suppl = Chem.SDMolSupplier(general_cfg['ligand_sdf'], removeHs=False)
 
     all_guest_mols = []
-
     data = []
 
-    for guest_mol in suppl:
-        break
+    for guest_idx, mol in enumerate(suppl):
+        true_dG = -1*float(mol.GetProp(general_cfg['dG']))
+        true_dG_err = -1*float(mol.GetProp(general_cfg['dG_err']))
+        data.append((mol, true_dG, true_dG_err))
 
-    forcefield = "ff/params/smirnoff_1_1_0_ccc.py"
+    full_dataset = dataset.Dataset(data)
+    train_frac = float(general_cfg['train_frac'])
+    train_dataset, test_dataset = full_dataset.split(train_frac)
 
+    forcefield = general_cfg['forcefield']
 
     stubs = []
 
-    address_list = []
-    for idx in range(args.n_workers):
-        address_list.append("0.0.0.0:"+str(5000+idx))
+    worker_address_list = []
+    for address in config['workers']['hosts'].split(','):
+        worker_address_list.append(address)
 
-    for address in address_list:
+    for address in worker_address_list:
         print("connecting to", address)
         channel = grpc.insecure_channel(address,
             options = [
@@ -466,16 +294,47 @@ if __name__ == "__main__":
         stub = service_pb2_grpc.WorkerStub(channel)
         stubs.append(stub)
 
-
     ff_raw = open(forcefield, "r").read()
 
     ff_handlers = deserialize(ff_raw)
 
     for epoch in range(100):
-        print("=====epoch====", epoch)
-        simulate(
-            guest_mol,
-            ff_handlers,
-            stubs,
-            args.n_frames
-        )
+
+        print("Starting Epoch", epoch, datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+
+        epoch_dir = os.path.join(general_cfg.out_dir, "epoch_"+str(epoch))
+
+        if not os.path.exists(epoch_dir):
+            os.makedirs(epoch_dir)
+
+        epoch_params = serialize_handlers(ff_handlers)
+        with open(os.path.join(epoch_dir, "start_epoch_params.py"), 'w') as fh:
+            fh.write(epoch_params)
+
+        # simulate(
+        #     guest_mol,
+        #     ff_handlers,
+        #     stubs,
+        #     general_cfg.n_frames,
+        #     epoch_dir
+        # )
+
+        for mol, experiment_dG in test_dataset.data:
+            print("test mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
+            mol_dir = os.path.join(epoch_dir, "test_mol_"+mol.GetProp("_Name"))
+            start_time = time.time()
+            dG, ci, loss = engine.run_mol(mol, inference=True, run_dir=mol_dir, experiment_dG=experiment_dG)
+            print(mol.GetProp("_Name"), "test loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time, "ci 95% (mean, lower, upper)", ci.value, ci.lower_bound, ci.upper_bound)
+
+        train_dataset.shuffle()
+
+        for mol, experiment_dG in train_dataset.data:
+            print("train mol", mol.GetProp("_Name"), "Smiles:", Chem.MolToSmiles(mol))
+            mol_dir = os.path.join(epoch_dir, "train_mol_"+mol.GetProp("_Name"))
+            start_time = time.time()
+            dG, ci, loss = engine.run_mol(mol, inference=False, run_dir=mol_dir, experiment_dG=experiment_dG)
+            print(mol.GetProp("_Name"), "train loss", loss, "pred_dG", dG, "exp_dG", experiment_dG, "time", time.time() - start_time, "ci 95% (mean, lower, upper)", ci.value, ci.lower_bound, ci.upper_bound)
+
+        epoch_params = serialize_handlers(ff_handlers)
+        with open(os.path.join(epoch_dir, "end_epoch_params.py"), 'w') as fh:
+            fh.write(epoch_params)

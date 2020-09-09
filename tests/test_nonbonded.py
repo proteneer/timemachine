@@ -70,7 +70,6 @@ class TestNonbonded(GradientTest):
                             rtol=rtol
                         )
 
-    @unittest.skip("d")
     def test_lennard_jones(self):
 
         D = 3

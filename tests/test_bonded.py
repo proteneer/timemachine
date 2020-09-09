@@ -175,7 +175,10 @@ class TestBonded(GradientTest):
                 precision=precision
             )
 
-            ref_potential = functools.partial(bonded.harmonic_bond, bond_idxs=bond_idxs)
+            ref_potential = functools.partial(
+                bonded.harmonic_bond,
+                bond_idxs=bond_idxs
+            )
 
             x_tangent = np.random.randn(*x.shape)
             lamb_tangent = np.random.rand()
@@ -187,27 +190,11 @@ class TestBonded(GradientTest):
                 params,
                 box,
                 lamb,
-                # x_tangent,
-                # lamb_tangent,
                 ref_potential,
                 test_potential,
                 precision,
                 rtol
             )
-
-            # primals = (x, lamb, bond_params)
-            # tangents = (x_tangent, lamb_tangent, np.zeros_like(bond_params))
-
-            # ref_primals, ref_tangents = jax.jvp(grad_fn, primals, tangents)
-
-            # ref_du_dp_primals = ref_primals[2]
-            # test_du_dp_primals = custom_bonded.get_du_dp_primals()
-            # np.testing.assert_almost_equal(ref_du_dp_primals, test_du_dp_primals, rtol)
-
-            # ref_du_dp_tangents = ref_tangents[2]
-            # test_du_dp_tangents = custom_bonded.get_du_dp_tangents()
-            # np.testing.assert_almost_equal(ref_du_dp_tangents, test_du_dp_tangents, rtol)
-
 
     def test_harmonic_angle(self):
         np.random.seed(125)
@@ -252,19 +239,6 @@ class TestBonded(GradientTest):
                 precision,
                 rtol
             )
-
-            # primals = (x, lamb, params)
-            # tangents = (x_tangent, lamb_tangent, np.zeros_like(params))
-
-            # ref_primals, ref_tangents = jax.jvp(grad_fn, primals, tangents)
-
-            # ref_du_dp_primals = ref_primals[2]
-            # test_du_dp_primals = custom_angle.get_du_dp_primals()
-            # np.testing.assert_almost_equal(ref_du_dp_primals, test_du_dp_primals, rtol)
-
-            # ref_du_dp_tangents = ref_tangents[2]
-            # test_du_dp_tangents = custom_angle.get_du_dp_tangents()
-            # np.testing.assert_almost_equal(ref_du_dp_tangents, test_du_dp_tangents, rtol)
 
 
     def test_periodic_torsion(self):

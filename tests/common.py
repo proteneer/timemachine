@@ -510,6 +510,9 @@ class GradientTest(unittest.TestCase):
         test_potential,
         precision,
         rtol=None):
+
+        test_potential = test_potential.impl()
+
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
 
