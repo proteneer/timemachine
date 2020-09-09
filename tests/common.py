@@ -141,7 +141,7 @@ def prepare_lj_system(
 
     # charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
     sig_params = np.random.rand(N) / p_scale
-    eps_params = np.random.rand(N)
+    eps_params = np.random.rand(N)*100
     lj_params = np.stack([sig_params, eps_params], axis=1)
 
     atom_idxs = np.arange(N)
@@ -151,8 +151,7 @@ def prepare_lj_system(
     # charge_scales = np.random.rand(E)
     lj_scales = np.random.rand(E)
 
-    test_potential_ctor = functools.partial(potentials.LennardJones,
-        # lj_params,
+    test_potential = potentials.LennardJones(
         exclusion_idxs,
         lj_scales,
         lambda_plane_idxs,
@@ -160,15 +159,6 @@ def prepare_lj_system(
         cutoff,
         precision=precision
     )
-
-    # disable PBCs
-    # make sure this is big enough!
-    # box = np.array([
-    #     [100.0, 0.0, 0.0, 0.0],
-    #     [0.0, 100.0, 0.0, 0.0],
-    #     [0.0, 0.0, 100.0, 0.0],
-    #     [0.0, 0.0, 0.0, 2*cutoff],
-    # ])
 
     ref_potential = functools.partial(
         nonbonded.lennard_jones_v2,
@@ -179,7 +169,7 @@ def prepare_lj_system(
         lambda_offset_idxs=lambda_offset_idxs
     )
 
-    return lj_params, ref_potential, test_potential_ctor
+    return lj_params, ref_potential, test_potential
 
 
 
@@ -205,7 +195,7 @@ def prepare_es_system(
 
     beta = np.random.rand()*2
 
-    custom_nonbonded_ctor = functools.partial(potentials.Electrostatics,
+    test_potential = potentials.Electrostatics(
         exclusion_idxs,
         charge_scales,
         lambda_plane_idxs,
@@ -225,7 +215,7 @@ def prepare_es_system(
         lambda_offset_idxs=lambda_offset_idxs
     )
 
-    return charge_params, ref_total_energy, custom_nonbonded_ctor
+    return charge_params, ref_total_energy, test_potential
 
 
 
@@ -511,7 +501,7 @@ class GradientTest(unittest.TestCase):
         precision,
         rtol=None):
 
-        test_potential = test_potential.impl()
+        test_potential = test_potential.unbound_impl()
 
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
@@ -545,57 +535,4 @@ class GradientTest(unittest.TestCase):
             np.array(test_du_dp),
             rtol
         )
-
-        # assert 0
-
-        # x_tangent = np.random.rand(N, D).astype(np.float64)
-        # params_tangent = np.zeros_like(params)
-        # lamb_tangent = np.random.rand()
-
-
-        # test_x_tangent, test_p_tangent, test_x_primal, test_p_primal = test_potential.execute_lambda_jvp(
-        #     x,
-        #     params,
-        #     lamb,
-        #     x_tangent,
-        #     params_tangent,
-        #     lamb_tangent
-        # )
-
-        # primals = (x, params, lamb)
-        # tangents = (x_tangent, params_tangent, lamb_tangent)
-
-        # _, t = jax.jvp(grad_fn, primals, tangents)
-
-        # ref_p_tangent = t[1]
-
-        # self.assert_equal_vectors(
-        #     t[0],
-        #     test_x_tangent,
-        #     rtol,
-        # )
-
-        # # TBD compare relative to the *norm* of the group of similar derivatives.
-        # # for r_idx, (r, tt) in enumerate(zip(t[1], test_p_tangent)):
-        # #     err = abs((r - tt)/r)
-        # #     if err > 1e-4:
-        # #         print(r_idx, err, r, tt)
-
-        # # print(ref_p_tangent)
-        # # print(test_p_tangent)
-        # # print(np.abs(ref_p_tangent - test_p_tangent))
-
-        # if precision == np.float64:
-            
-        #     print(np.amax(ref_p_tangent - test_p_tangent), np.amin(ref_p_tangent - test_p_tangent))
-
-        #     for a, b in zip(ref_p_tangent, test_p_tangent):
-        #         try:
-        #             np.testing.assert_allclose(a, b, rtol=1e-8)
-        #         except:
-        #             assert 0
-        #     np.testing.assert_allclose(ref_p_tangent, test_p_tangent, rtol=rtol)
-
-        # else:
-        #     self.assert_param_derivs(ref_p_tangent, test_p_tangent)
 

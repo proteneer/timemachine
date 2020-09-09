@@ -3,12 +3,13 @@ import unittest
 
 import numpy as np
 
+from jax.config import config; config.update("jax_enable_x64", True)
 import jax
 import jax.numpy as jnp
-from jax.config import config; config.update("jax_enable_x64", True)
+
 
 from timemachine.lib import custom_ops
-from timemachine.lib import ops
+# from timemachine.lib import potentials
 from timemachine.potentials import bonded, nonbonded
 
 from common import GradientTest
@@ -33,21 +34,19 @@ class TestContext(unittest.TestCase):
 
         x0 = np.random.rand(N,D).astype(dtype=np.float64)*2
 
-        precision = np.float64
- 
         E = 2
 
         lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
-        lj_params, ref_lj_fn, test_lj_ctor = prepare_lj_system(
+        lj_params, ref_lj_fn, test_lj = prepare_lj_system(
             x0,
             E,
             lambda_plane_idxs,
             lambda_offset_idxs,
-            p_scale=10.0,
+            p_scale=3.0,
             cutoff=100.0,
-            precision=precision       
+            precision=np.float64       
         )
 
         # charge_params, ref_es_fn, test_es_ctor = prepare_es_system(
@@ -60,7 +59,7 @@ class TestContext(unittest.TestCase):
         #     precision=precision       
         # )
 
-        test_lj = test_lj_ctor()
+
         # test_es = test_es_ctor()
 
         masses = np.random.rand(N)
@@ -69,12 +68,12 @@ class TestContext(unittest.TestCase):
         N = len(masses)
 
         num_steps = 5
+        # num_steps = 1
         lambda_schedule = np.random.rand(num_steps)
         ca = np.random.rand()
-        cbs = -np.random.rand(len(masses))/10
+        cbs = -np.random.rand(len(masses))/1
         ccs = np.zeros_like(cbs)
 
-        # step_sizes = np.random.rand(num_steps)
         dt = np.random.rand()
         lamb = np.random.rand()
 
@@ -144,9 +143,17 @@ class TestContext(unittest.TestCase):
             1234
         )
 
-        lj_bp = custom_ops.BoundPotential(test_lj, lj_params)
+        lj_bp = test_lj.bind(lj_params).bound_impl()
 
         bps = [lj_bp]
+
+        ctxt = custom_ops.Context(
+            x0,
+            v0,
+            box,
+            intg,
+            bps
+        )
 
         lj_obs = custom_ops.AvgPartialUPartialParam(lj_bp, 1)
         lj_obs_f2 = custom_ops.AvgPartialUPartialParam(lj_bp, 2)
@@ -156,24 +163,17 @@ class TestContext(unittest.TestCase):
 
         obs = [lj_obs, lj_obs_f2, lj_obs_du_dl, lj_obs_f2_du_dl]
 
-        ctxt = custom_ops.Context(
-            x0,
-            v0,
-            box,
-            lamb,
-            intg,
-            bps,
-            obs
-        )
+        for o in obs:
+            ctxt.add_observable(o)
 
         for step in range(num_steps):
-            ctxt.step()
+            ctxt.step(lamb)
             test_x_t = ctxt.get_x_t()
             test_v_t = ctxt.get_v_t()
             test_du_dx_t = ctxt.get_du_dx_t()
 
-            np.testing.assert_almost_equal(test_du_dx_t, ref_all_du_dxs[step], decimal=11)
-            np.testing.assert_almost_equal(test_x_t, ref_all_xs[step], decimal=11)
+            np.testing.assert_allclose(test_du_dx_t, ref_all_du_dxs[step])
+            np.testing.assert_allclose(test_x_t, ref_all_xs[step])
 
 
         ref_avg_du_dps = np.mean(ref_all_du_dps, axis=0)
@@ -187,56 +187,6 @@ class TestContext(unittest.TestCase):
 
         np.testing.assert_allclose(lj_obs_du_dl.avg_du_dl(), ref_avg_du_dls)
         np.testing.assert_allclose(lj_obs_f2_du_dl.avg_du_dl(), ref_avg_du_dls_f2)
-
-        assert 0
-
-        grad_fn = jax.grad(integrate_once_through, argnums=(2, 3))
-
-        ref_dl_dcharge, ref_dl_dlj = grad_fn(
-            x0,
-            v0,
-            charge_params,
-            lj_params
-        )
-
-
-        stepper = custom_ops.AlchemicalStepper_f64(
-            [test_lj, test_es],
-            lambda_schedule
-        )
-
-        seed = 1234
-
-        ctxt = custom_ops.ReversibleContext_f64(
-            stepper,
-            x0,
-            v0,
-            cas,
-            cbs,
-            ccs,
-            step_sizes,
-            seed
-        )
-
-        # run 5 steps forward
-        ctxt.forward_mode()
-        test_du_dls = stepper.get_du_dl()
-        test_loss = sum_loss_fn(test_du_dls)
-        loss_grad_fn = jax.grad(sum_loss_fn, argnums=(0,))
-        du_dl_adjoint = loss_grad_fn(test_du_dls)[0]
-
-        # limit of precision is due to the settings in fixed_point.hpp
-        # np.testing.assert_almost_equal(test_loss, ref_loss, decimal=7)
-        np.testing.assert_allclose(test_loss, ref_loss, rtol=1e-6)
-        stepper.set_du_dl_adjoint(du_dl_adjoint)
-        ctxt.set_x_t_adjoint(np.zeros_like(x0))
-        ctxt.backward_mode()
-
-        test_dl_dlj = test_lj.get_du_dlj_tangents()
-        np.testing.assert_allclose(test_dl_dlj, ref_dl_dlj, rtol=1e-6)
-
-        test_dl_dcharge = test_es.get_du_dcharge_tangents()
-        np.testing.assert_allclose(test_dl_dcharge, ref_dl_dcharge, rtol=1e-6)
 
 if __name__ == "__main__":
     unittest.main()

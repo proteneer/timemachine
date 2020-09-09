@@ -7,7 +7,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
 from ff.handlers.serialize import bin_to_str
-from ff.handlers.deserialize import deserialize
+from ff.handlers.deserialize import deserialize_handlers
 
 
 def test_harmonic_bond():

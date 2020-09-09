@@ -1,11 +1,12 @@
 from jax.config import config; config.update("jax_enable_x64", True)
 
+import pytest
 import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
-from ff.handlers.deserialize import deserialize
+from ff.handlers.deserialize import deserialize_handlers
 
 
 def test_harmonic_bond():
@@ -419,11 +420,11 @@ def test_gbsa_handler():
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0) == True
 
-
+@pytest.mark.skip("too slow")
 def test_am1_differences():
 
     ff_raw = open("ff/params/smirnoff_1_1_0_ccc.py").read()
-    ff_handlers = deserialize(ff_raw)
+    ff_handlers = deserialize_handlers(ff_raw)
     for ccc in ff_handlers:
         if isinstance(ccc, nonbonded.AM1CCCHandler):
             break

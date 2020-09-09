@@ -22,6 +22,9 @@ def simulate(
     simulation: Simulation
         Simulation system
 
+    n_steps: int
+        Number of steps that we run the simulation for.
+
     lambda_schedule: array, np.float64
         The lambda windows we're interested in simulating over.
 
@@ -105,34 +108,4 @@ def simulate(
         grad_dG.append(target_grad - source_grad)
 
 
-    # print("dG pred", pred_dG, "dG pred val and ci", pred_dG_err)
-    # print("grad_dG", grad_dG)
-
     return (pred_dG, pred_dG_err), grad_dG, du_dls
-
-    # if not inference:
-
-    #     # (ytz): note the exchange of 1 with 0
-    #     loss = np.abs(pred_dG - true_dG)
-    #     loss_grad = np.sign(pred_dG - true_dG)
-    #     lj_du_dp = (lj_du_dps[1] - lj_du_dps[0]) # note the inversion of 1 and 0! 
-    #     lj_du_dp *= loss_grad
-
-    #     es_du_dp = (es_du_dps[1] - es_du_dps[0]) # note the inversion of 1 and 0! 
-    #     es_du_dp *= loss_grad
-
-
-    #     for h, vjp_fn in handler_vjp_fns.items():
-
-    #         if isinstance(h, nonbonded.AM1CCCHandler):
-    #             es_grads = np.asarray(vjp_fn(es_du_dp)).copy()
-    #             es_grads[np.isnan(es_grads)] = 0.0
-    #             clip = 0.1
-    #             es_grads = np.clip(es_grads, -clip, clip)
-    #             h.params -= es_grads
-    #         elif isinstance(h, nonbonded.LennardJonesHandler):
-    #             lj_grads = np.asarray(vjp_fn(lj_du_dp)).copy()
-    #             lj_grads[np.isnan(lj_grads)] = 0.0
-    #             clip = 0.003
-    #             lj_grads = np.clip(lj_grads, -clip, clip)
-    #             h.params -= lj_grads

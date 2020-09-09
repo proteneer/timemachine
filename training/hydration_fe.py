@@ -162,6 +162,8 @@ if __name__ == "__main__":
     box_width = 3.0
     host_system, host_coords, box, _ = water_box.prep_system(box_width)
 
+    print("Host Shape", host_coords.shape)
+
     lambda_schedule = np.array([float(x) for x in general_cfg['lambda_schedule'].split(',')])
 
     # lambda_schedule = np.concatenate([
@@ -170,9 +172,6 @@ if __name__ == "__main__":
     #     np.linspace(1.5, 5.5, 2, endpoint=True),
     #     # np.linspace(0.0, 1.5, 4, endpoint=True)
     # ])
-
-
-
     # for l in lambda_schedule:
     #     print("{:.4}".format(l),end=',')
 
@@ -210,8 +209,7 @@ if __name__ == "__main__":
 
             start_time = time.time()
 
-            # out_dir = os.path.join(epoch_dir, "mol_"+mol.GetProp("_Name"))
-
+            # out_dir = os.path.join(epoch_dir, "mol_"+mol.GetProp("_Name"))\
             # if not os.path.exists(out_dir):
                 # os.makedirs(out_dir)
 
@@ -260,7 +258,6 @@ if __name__ == "__main__":
             plt.savefig(os.path.join(epoch_dir, "ti_mol_"+mol.GetProp("_Name")))
             plt.clf()
 
-
             loss = np.abs(pred_dG - label_dG)
 
             print(prefix, "mol", mol.GetProp("_Name"), "loss {:.2f}".format(loss), "pred_dG {:.2f}".format(pred_dG), "95% CI [{:.2f}, {:.2f}, {:.2f}]".format(pred_err.lower_bound, pred_err.value, pred_err.upper_bound), "label_dG {:.2f}".format(label_dG), "label err {:.2f}".format(label_err), "time {:.2f}".format(time.time() - start_time), "smiles:", Chem.MolToSmiles(mol))
@@ -287,7 +284,10 @@ if __name__ == "__main__":
                             dL_dp = np.clip(dL_dp, -bounds, bounds)
                             handle.params -= dL_dp
 
+                epoch_params = serialize_handlers(ff_handlers)
+                with open(os.path.join(epoch_dir, "checkpoint_epoch_params.py"), 'w') as fh:
+                    fh.write(epoch_params)
 
-        epoch_params = serialize_handlers(ff_handlers)
-        with open(os.path.join(epoch_dir, "end_epoch_params.py"), 'w') as fh:
-            fh.write(epoch_params)
+        # epoch_params = serialize_handlers(ff_handlers)
+        # with open(os.path.join(epoch_dir, "end_epoch_params.py"), 'w') as fh:
+        #     fh.write(epoch_params)
