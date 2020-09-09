@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "potential.hpp"
@@ -10,7 +11,8 @@ namespace timemachine {
 struct BoundPotential {
 
     BoundPotential(
-        Potential *potential,
+        // Potential *potential,
+        std::shared_ptr<Potential> potential,
         std::vector<int> shape,
         const double *h_p
     );
@@ -18,10 +20,20 @@ struct BoundPotential {
     ~BoundPotential();
 
     double *d_p;
-    Potential *potential;
+    std::shared_ptr<Potential> potential;
     std::vector<int> shape;
 
     int size() const;
+
+    void execute_host(
+        const int N,
+        const double *h_x,
+        const double *h_box,
+        const double lambda, // lambda
+        unsigned long long *h_du_dx,
+        double *h_du_dl,
+        double *h_u
+    );
 
     void execute_device(
         const int N,

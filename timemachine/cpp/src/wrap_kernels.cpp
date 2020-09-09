@@ -258,7 +258,7 @@ void declare_potential(py::module &m) {
 
     using Class = timemachine::Potential;
     std::string pyclass_name = std::string("Potential");
-    py::class_<Class>(
+    py::class_<Class, std::shared_ptr<Class> >(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -297,10 +297,6 @@ void declare_potential(py::module &m) {
                 py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
             }
 
-            // py::ShapeContainer(params.shape());
-
-            // std::vector<ssize_t> pshape(params.shape()
-
             std::vector<ssize_t> pshape(params.shape(), params.shape()+params.ndim());
 
             py::array_t<double, py::array::c_style> py_du_dp(pshape);
@@ -324,7 +320,7 @@ void declare_bound_potential(py::module &m) {
         py::buffer_protocol(),
         py::dynamic_attr())
     .def(py::init([](
-        timemachine::Potential* potential,
+        std::shared_ptr<timemachine::Potential> potential,
         const py::array_t<double, py::array::c_style> &params
     ) {
 
@@ -336,7 +332,38 @@ void declare_bound_potential(py::module &m) {
             params.data()
         );
     }
-    ));
+    ))
+    .def("size", &timemachine::BoundPotential::size)
+    .def("execute", [](timemachine::BoundPotential &bp,
+        const py::array_t<double, py::array::c_style> &coords,
+        const py::array_t<double, py::array::c_style> &box,
+        double lambda) -> py::tuple  {
+
+            const long unsigned int N = coords.shape()[0];
+            const long unsigned int D = coords.shape()[1];
+
+            std::vector<unsigned long long> du_dx(N*D);
+
+            double du_dl = -9999999999; //debug use, make sure its overwritten
+            double u = 9999999999; //debug use, make sure its overwrriten
+
+            bp.execute_host(
+                N,
+                coords.data(),
+                box.data(),
+                lambda,
+                &du_dx[0],
+                &du_dl,
+                &u
+            );
+
+            py::array_t<double, py::array::c_style> py_du_dx({N, D});
+            for(int i=0; i < du_dx.size(); i++) {
+                py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+            }
+
+            return py::make_tuple(py_du_dx, du_dl, u);
+    });
 
 }
 
@@ -345,7 +372,7 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicBond<RealType>;
     std::string pyclass_name = std::string("HarmonicBond_") + typestr;
-    py::class_<Class, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -368,7 +395,7 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicAngle<RealType>;
     std::string pyclass_name = std::string("HarmonicAngle_") + typestr;
-    py::class_<Class, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -486,7 +513,7 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 
     using Class = timemachine::PeriodicTorsion<RealType>;
     std::string pyclass_name = std::string("PeriodicTorsion_") + typestr;
-    py::class_<Class, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -608,7 +635,7 @@ void declare_electrostatics(py::module &m, const char *typestr) {
 
     using Class = timemachine::Electrostatics<RealType>;
     std::string pyclass_name = std::string("Electrostatics_") + typestr;
-    py::class_<Class, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -652,7 +679,7 @@ void declare_lennard_jones(py::module &m, const char *typestr) {
 
     using Class = timemachine::LennardJones<RealType>;
     std::string pyclass_name = std::string("LennardJones_") + typestr;
-    py::class_<Class, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),

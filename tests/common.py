@@ -6,7 +6,7 @@ import functools
 
 
 from timemachine.potentials import bonded, nonbonded, gbsa
-from timemachine.lib import ops, custom_ops
+from timemachine.lib import potentials, custom_ops
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 
@@ -71,7 +71,7 @@ def prepare_gbsa_system(
     #     dtype=np.int32
     # )
 
-    custom_gb_ctor = functools.partial(ops.GBSA,
+    custom_gb_ctor = functools.partial(potentials.GBSA,
         charge_params,
         gb_params,
         # charge_param_idxs,
@@ -151,7 +151,7 @@ def prepare_lj_system(
     # charge_scales = np.random.rand(E)
     lj_scales = np.random.rand(E)
 
-    test_potential_ctor = functools.partial(ops.LennardJones,
+    test_potential_ctor = functools.partial(potentials.LennardJones,
         # lj_params,
         exclusion_idxs,
         lj_scales,
@@ -205,7 +205,7 @@ def prepare_es_system(
 
     beta = np.random.rand()*2
 
-    custom_nonbonded_ctor = functools.partial(ops.Electrostatics,
+    custom_nonbonded_ctor = functools.partial(potentials.Electrostatics,
         exclusion_idxs,
         charge_scales,
         lambda_plane_idxs,
@@ -253,7 +253,7 @@ def prepare_nonbonded_system(
     charge_scales = np.random.rand(E)
     lj_scales = np.random.rand(E)
 
-    custom_nonbonded_ctor = functools.partial(ops.Nonbonded,
+    custom_nonbonded_ctor = functools.partial(potentials.Nonbonded,
         charge_params,
         lj_params,
         exclusion_idxs,
@@ -297,7 +297,7 @@ def prepare_restraints(
 
     lambda_flags = np.random.randint(0, 2, size=(B,)).astype(np.int32)
 
-    custom_restraint = ops.Restraint(bond_idxs, params, lambda_flags, precision=precision)
+    custom_restraint = potentials.Restraint(bond_idxs, params, lambda_flags, precision=precision)
     restraint_fn = functools.partial(bonded.restraint, box=None, lamb_flags=lambda_flags, bond_idxs=bond_idxs)
 
     return (params, restraint_fn), custom_restraint
@@ -339,13 +339,13 @@ def prepare_bonded_system(
 
 
     print("precision", precision)
-    custom_bonded = ops.HarmonicBond(bond_idxs, bond_params, precision=precision)
+    custom_bonded = potentials.HarmonicBond(bond_idxs, bond_params, precision=precision)
     harmonic_bond_fn = functools.partial(bonded.harmonic_bond, box=None, bond_idxs=bond_idxs)
 
-    # custom_angles = ops.HarmonicAngle(angle_idxs, angle_param_idxs, precision=precision)
+    # custom_angles = potentials.HarmonicAngle(angle_idxs, angle_param_idxs, precision=precision)
     # harmonic_angle_fn = functools.partial(bonded.harmonic_angle, box=None, angle_idxs=angle_idxs, param_idxs=angle_param_idxs)
 
-    # custom_torsions = ops.PeriodicTorsion(torsion_idxs, torsion_param_idxs, precision=precision)
+    # custom_torsions = potentials.PeriodicTorsion(torsion_idxs, torsion_param_idxs, precision=precision)
     # periodic_torsion_fn = functools.partial(bonded.periodic_torsion, box=None, torsion_idxs=torsion_idxs, param_idxs=torsion_param_idxs)
 
     return (bond_params, harmonic_bond_fn), custom_bonded

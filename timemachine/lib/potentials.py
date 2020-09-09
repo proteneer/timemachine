@@ -22,7 +22,13 @@ class CustomOpWrapper():
         return custom_ctor(*self.args)
 
     def bind_impl(self, params):
+        """ 
+
+        Bind the potential to the given set of parameters. 
+
+        """
         p = self.impl()
+        # p is reference collected and tossed out
         return custom_ops.BoundPotential(p, params)
 
 class HarmonicBond(CustomOpWrapper):

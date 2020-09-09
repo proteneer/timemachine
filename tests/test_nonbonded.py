@@ -12,8 +12,7 @@ import functools
 from common import GradientTest
 from common import prepare_nonbonded_system, prepare_lj_system, prepare_es_system
 
-from timemachine.lib import custom_ops
-from timemachine.lib import ops, custom_ops
+from timemachine.lib import potentials
 
 np.set_printoptions(linewidth=500)
 

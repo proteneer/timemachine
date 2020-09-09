@@ -9,7 +9,7 @@ from jax.config import config; config.update("jax_enable_x64", True)
 import functools
 
 from common import GradientTest
-from timemachine.lib import ops
+from timemachine.lib import potentials
 from timemachine.potentials import bonded
 
 
@@ -51,7 +51,7 @@ class TestBonded(GradientTest):
 
     #                     # we need to clear the du_dp buffer each time, so we need
     #                     # to instantiate test_nrg inside here
-    #                     test_nrg = ops.CentroidRestraint(
+    #                     test_nrg = potentials.CentroidRestraint(
     #                         gai,
     #                         gbi,
     #                         masses,
@@ -118,7 +118,7 @@ class TestBonded(GradientTest):
 
     #             # we need to clear the du_dp buffer each time, so we need
     #             # to instantiate test_nrg inside here
-    #             test_nrg = ops.Restraint(
+    #             test_nrg = potentials.Restraint(
     #                 np.array(b_idxs, dtype=np.int32),
     #                 np.array(params, dtype=np.float64),
     #                 np.array(lambda_flags, dtype=np.int32),
@@ -170,7 +170,7 @@ class TestBonded(GradientTest):
         lamb = 0.0
 
         for precision, rtol in [(np.float32, 4e-5), (np.float64, 1e-9)]:
-            test_potential = ops.HarmonicBond(
+            test_potential = potentials.HarmonicBond(
                 bond_idxs,
                 precision=precision
             )
@@ -216,7 +216,7 @@ class TestBonded(GradientTest):
 
         for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
             # print(precision, rtol)
-            test_potential = ops.HarmonicAngle(
+            test_potential = potentials.HarmonicAngle(
                 angle_idxs,
                 precision=precision
             )
@@ -262,7 +262,7 @@ class TestBonded(GradientTest):
 
         for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
 
-            test_potential = ops.PeriodicTorsion(
+            test_potential = potentials.PeriodicTorsion(
                 torsion_idxs,
                 precision=precision
             )
