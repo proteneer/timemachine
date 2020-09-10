@@ -129,8 +129,8 @@ void LennardJones<RealType>::execute_device(
 
     // these can be ran in two streams later on
 
-    int *run_counter;
-    gpuErrchk(cudaMallocManaged(&run_counter, sizeof(int)))
+    // int *run_counter;
+    // gpuErrchk(cudaMallocManaged(&run_counter, sizeof(int)))
 
     k_lennard_jones_inference<RealType><<<dimGrid, tpb, 0, stream>>>(
         N_,
