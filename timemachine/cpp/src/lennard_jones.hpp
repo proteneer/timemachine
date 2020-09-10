@@ -18,6 +18,8 @@ private:
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
 
+    int *d_perm_;
+
     double cutoff_;
     Neighborlist nblist_;
 

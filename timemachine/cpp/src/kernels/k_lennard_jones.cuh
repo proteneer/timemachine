@@ -15,6 +15,7 @@ void __global__ k_lennard_jones_inference(
     const double cutoff,
     const double *block_bounds_ctr,
     const double *block_bounds_ext,
+    const int *perm,
     unsigned long long *du_dx,
     double *du_dp,
     double *du_dl,
@@ -26,7 +27,7 @@ void __global__ k_lennard_jones_inference(
         return;
     }
 
-    // TBD restore me.
+    // TBD restore me later
     // RealType block_d2ij = 0; 
     // for(int d=0; d < 3; d++) {
     //     RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
@@ -41,7 +42,10 @@ void __global__ k_lennard_jones_inference(
     //     return;
     // }
 
-    int atom_i_idx = blockIdx.x*32 + threadIdx.x;
+
+
+    int tid = blockIdx.x*32 + threadIdx.x;
+    int atom_i_idx = tid < N ? perm[tid] : tid;
     int lambda_plane_i = 0;
     int lambda_offset_i = 0;
     // int lambda_group_i = 0;
@@ -64,10 +68,18 @@ void __global__ k_lennard_jones_inference(
     RealType sig_i = atom_i_idx < N ? lj_params[lj_param_idx_sig_i] : 1;
     RealType eps_i = atom_i_idx < N ? lj_params[lj_param_idx_eps_i] : 0;
 
+
+
+    // if(blockIdx.x == 0) {
+        // printf("tid %d eps_i %f \n", tid, eps_i);
+    // }
+
     RealType g_sigi = 0.0;
     RealType g_epsi = 0.0;
 
-    int atom_j_idx = blockIdx.y*32 + threadIdx.x;
+    int tjd = blockIdx.y*32 + threadIdx.x;
+    int atom_j_idx = tjd < N ? perm[tjd] : tjd;
+
     int lambda_plane_j = 0;
     int lambda_offset_j = 0;
 
@@ -88,6 +100,29 @@ void __global__ k_lennard_jones_inference(
 
     RealType sig_j = atom_j_idx < N ? lj_params[lj_param_idx_sig_j] : 1;
     RealType eps_j = atom_j_idx < N ? lj_params[lj_param_idx_eps_j] : 0;
+
+
+    // if(blockIdx.x == 0) {
+        // printf("tjd %d eps_j %f \n", tjd, eps_j);
+    // }
+    // if(blockIdx.x < 3 && blockIdx.y < 3) {
+    //     printf("tid %d eps_i %f \n", tid, eps_i);
+    //     printf("tjd %d eps_j %f \n", tjd, eps_j);
+    // }
+
+
+    if(__all_sync(0xffffffff, eps_i == 0) || __all_sync(0xffffffff, eps_j == 0)) {
+        // skip this block, all epsilons are zero.
+        // if(threadIdx.x == 0) {
+        //     printf("skipped (%d, %d)\n", blockIdx.x, blockIdx.y);
+        // }
+        return;
+    }
+
+    // if(threadIdx.x == 0) {
+    //     atomicAdd(run_counter, 1);
+    // }
+
 
     RealType g_sigj = 0.0;
     RealType g_epsj = 0.0;
@@ -123,7 +158,8 @@ void __global__ k_lennard_jones_inference(
 
         RealType inv_dij = fast_vec_rnorm<RealType, 4>(dxs);
 
-        if(atom_j_idx < atom_i_idx && inv_dij > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
+        // if(atom_j_idx < atom_i_idx && inv_dij > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
+        if(tjd < tid && inv_dij > inv_cutoff && atom_j_idx < N && atom_i_idx < N && eps_i != 0 && eps_j != 0) {
 
             RealType inv_d2ij = inv_dij*inv_dij;
             RealType inv_d3ij = inv_dij*inv_d2ij;
@@ -132,7 +168,7 @@ void __global__ k_lennard_jones_inference(
             RealType inv_d8ij = inv_d4ij*inv_d4ij;
 
             // lennard jones force
-            RealType eps_ij = overloaded_sqrt(eps_i * eps_j);
+            RealType eps_ij = sqrt(eps_i * eps_j);
             RealType sig_ij = (sig_i + sig_j)/2;
 
             RealType sig2 = sig_ij*sig_ij;
@@ -158,6 +194,9 @@ void __global__ k_lennard_jones_inference(
             du_dl_i -= (lj_grad_prefactor) * dxs[3] * dw_i;
             du_dl_j += (lj_grad_prefactor) * dxs[3] * dw_j;
 
+            // RealType tmp_u = 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+            // printf("ixn atom_i %d atom_j %d, u %f\n", atom_i_idx, atom_j_idx, tmp_u);
+
             energy += 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
 
             RealType eps_grad = 2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
@@ -170,7 +209,7 @@ void __global__ k_lennard_jones_inference(
         }
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
-        atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
+        tjd = __shfl_sync(0xffffffff, tjd, srcLane);
         sig_j = __shfl_sync(0xffffffff, sig_j, srcLane);
         eps_j = __shfl_sync(0xffffffff, eps_j, srcLane);
         g_sigj = __shfl_sync(0xffffffff, g_sigj, srcLane);
@@ -226,10 +265,8 @@ void __global__ k_lennard_jones_exclusion_inference(
     const double lambda,
     const int *lambda_plane_idxs, // 0 or 1, which non-interacting plane we're on
     const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-    // const int *lambda_group_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const int *exclusion_idxs, // [E, 2]pair-list of atoms to be excluded
     const double *lj_scales, // [E] 
-
     const double cutoff,
     unsigned long long *du_dx,
     double *du_dp,
@@ -246,7 +283,6 @@ void __global__ k_lennard_jones_exclusion_inference(
 
     int lambda_plane_i = lambda_plane_idxs[atom_i_idx];
     int lambda_offset_i = lambda_offset_idxs[atom_i_idx];
-    // int lambda_group_i = lambda_group_idxs[atom_i_idx];
 
     RealType ci[3];
     RealType gi[3] = {0};
@@ -328,7 +364,7 @@ void __global__ k_lennard_jones_exclusion_inference(
     //         dxs[d] = delta;
     //     }
 
-    if(inv_dij > inv_cutoff) {
+    if(inv_dij > inv_cutoff && eps_i != 0 && eps_j != 0) {
 
         RealType inv_d2ij = inv_dij*inv_dij;
         RealType inv_d3ij = inv_dij*inv_d2ij;

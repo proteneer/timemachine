@@ -121,8 +121,6 @@ def lennard_jones(conf, lj_params, box, cutoff):
 
     eps_ij = np.sqrt(eps_i * eps_j)
 
-    eps_ij_raw = eps_ij
-
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
     # gi = np.expand_dims(groups, axis=0)
@@ -134,11 +132,12 @@ def lennard_jones(conf, lj_params, box, cutoff):
     # print("BOX", box)
     dij = distance(ri, rj, box)
 
-    if cutoff is not None:
-        eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
-
     N = conf.shape[0]
     keep_mask = np.ones((N,N)) - np.eye(N)
+    keep_mask = np.where(eps_ij != 0, keep_mask, 0)
+
+    if cutoff is not None:
+        eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
 
     # (ytz): this avoids a nan in the gradient in both jax and tensorflow
     sig_ij = np.where(keep_mask, sig_ij, np.zeros_like(sig_ij))
@@ -184,6 +183,8 @@ def lennard_jones_exclusion(conf, lj_params, box, exclusion_idxs, lj_scales, cut
     eps_i = eps_params[src_idxs]
     eps_j = eps_params[dst_idxs]
     eps_ij = np.sqrt(eps_i * eps_j)
+    eps_ij = np.where(eps_ij != 0, eps_ij, 0) # (ytz): avoids nans
+
 
     if cutoff is not None:
         eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))

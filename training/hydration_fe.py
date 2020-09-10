@@ -243,14 +243,12 @@ if __name__ == "__main__":
                 intg
             )
 
-
             (pred_dG, pred_err), grad_dG, du_dls = hydration_model.simulate(
                 sim,
                 num_steps,
                 lambda_schedule,
                 stubs
             )
-
 
             plt.plot(lambda_schedule, du_dls)
             plt.ylabel("du_dlambda")
