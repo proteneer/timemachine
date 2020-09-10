@@ -213,79 +213,87 @@ if __name__ == "__main__":
             # if not os.path.exists(out_dir):
                 # os.makedirs(out_dir)
 
-            potentials, masses, vjp_fns = hydration_setup.combine_potentials(
-                ff_handlers,
-                mol,
-                host_system,
-                precision=np.float32
-            )
+            try:
 
-            coords = hydration_setup.combine_coordinates(
-                host_coords,
-                mol,
-            )
+                potentials, masses, vjp_fns = hydration_setup.combine_potentials(
+                    ff_handlers,
+                    mol,
+                    host_system,
+                    precision=np.float32
+                )
 
-            seed = np.random.randint(0, np.iinfo(np.int32).max)
+                coords = hydration_setup.combine_coordinates(
+                    host_coords,
+                    mol,
+                )
 
-            intg = LangevinIntegrator(
-                float(intg_cfg['temperature']),
-                float(intg_cfg['dt']),
-                float(intg_cfg['friction']),
-                masses,
-                seed
-            )
+                seed = np.random.randint(0, np.iinfo(np.int32).max)
 
-            sim = simulation.Simulation(
-                coords,
-                np.zeros_like(coords),
-                box,
-                potentials,
-                intg
-            )
+                intg = LangevinIntegrator(
+                    float(intg_cfg['temperature']),
+                    float(intg_cfg['dt']),
+                    float(intg_cfg['friction']),
+                    masses,
+                    seed
+                )
 
-            (pred_dG, pred_err), grad_dG, du_dls = hydration_model.simulate(
-                sim,
-                num_steps,
-                lambda_schedule,
-                stubs
-            )
+                sim = simulation.Simulation(
+                    coords,
+                    np.zeros_like(coords),
+                    box,
+                    potentials,
+                    intg
+                )
 
-            plt.plot(lambda_schedule, du_dls)
-            plt.ylabel("du_dlambda")
-            plt.xlabel("lambda")
-            plt.savefig(os.path.join(epoch_dir, "ti_mol_"+mol.GetProp("_Name")))
-            plt.clf()
+                (pred_dG, pred_err), grad_dG, du_dls = hydration_model.simulate(
+                    sim,
+                    num_steps,
+                    lambda_schedule,
+                    stubs
+                )
 
-            loss = np.abs(pred_dG - label_dG)
+                plt.plot(lambda_schedule, du_dls)
+                plt.ylabel("du_dlambda")
+                plt.xlabel("lambda")
+                plt.savefig(os.path.join(epoch_dir, "ti_mol_"+mol.GetProp("_Name")))
+                plt.clf()
 
-            # erro CIs are wrong "95% CI [{:.2f}, {:.2f}, {:.2f}]".format(pred_err.lower_bound, pred_err.value, pred_err.upper_bound),
-            print(prefix, "mol", mol.GetProp("_Name"), "loss {:.2f}".format(loss), "pred_dG {:.2f}".format(pred_dG), "label_dG {:.2f}".format(label_dG), "label err {:.2f}".format(label_err), "time {:.2f}".format(time.time() - start_time), "smiles:", Chem.MolToSmiles(mol))
+                loss = np.abs(pred_dG - label_dG)
 
-            # update ff parameters
-            if not inference:
+                # error CIs are wrong "95% CI [{:.2f}, {:.2f}, {:.2f}]".format(pred_err.lower_bound, pred_err.value, pred_err.upper_bound),
+                print(prefix, "mol", mol.GetProp("_Name"), "loss {:.2f}".format(loss), "pred_dG {:.2f}".format(pred_dG), "label_dG {:.2f}".format(label_dG), "label err {:.2f}".format(label_err), "time {:.2f}".format(time.time() - start_time), "smiles:", Chem.MolToSmiles(mol))
 
-                loss_grad = np.sign(pred_dG - label_dG)
+                # update ff parameters
+                if not inference:
 
-                assert len(grad_dG) == len(vjp_fns)
+                    loss_grad = np.sign(pred_dG - label_dG)
 
-                for grad, handle_and_vjp_fn in zip(grad_dG, vjp_fns):
-                    if handle_and_vjp_fn:
-                        handle, vjp_fn = handle_and_vjp_fn
-                        if type(handle) in learning_rates:
+                    assert len(grad_dG) == len(vjp_fns)
 
-                            bounds = learning_rates[type(handle)]
+                    for grad, handle_and_vjp_fn in zip(grad_dG, vjp_fns):
+                        if handle_and_vjp_fn:
+                            handle, vjp_fn = handle_and_vjp_fn
+                            if type(handle) in learning_rates:
 
-                            # deps_ij/(eps_i*eps_j) is unstable so we skip eps
-                            if isinstance(handle, handlers.LennardJonesHandler):
-                                grad[:, 1] = 0
+                                bounds = learning_rates[type(handle)]
 
-                            dL_dp = loss_grad*vjp_fn(grad)[0]
-                            dL_dp = np.clip(dL_dp, -bounds, bounds)
-                            handle.params -= dL_dp
+                                # deps_ij/(eps_i*eps_j) is unstable so we skip eps
+                                if isinstance(handle, handlers.LennardJonesHandler):
+                                    grad[:, 1] = 0
 
-                epoch_params = serialize_handlers(ff_handlers)
-                with open(os.path.join(epoch_dir, "checkpoint_epoch_params.py"), 'w') as fh:
-                    fh.write(epoch_params)
+                                dL_dp = loss_grad*vjp_fn(grad)[0]
+                                dL_dp = np.clip(dL_dp, -bounds, bounds)
+                                handle.params -= dL_dp
+
+                    epoch_params = serialize_handlers(ff_handlers)
+                    with open(os.path.join(epoch_dir, "checkpoint_epoch_params.py"), 'w') as fh:
+                        fh.write(epoch_params)
+
+            except Exception as e:
+                import traceback
+                print("Exception in mol", mol.GetProp("_Name"), Chem.MolToSmiles(mol), e)
+                traceback.print_exc()
+
 
         # epoch_params = serialize_handlers(ff_handlers)
         # with open(os.path.join(epoch_dir, "end_epoch_params.py"), 'w') as fh:
