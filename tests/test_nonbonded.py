@@ -14,6 +14,8 @@ from common import prepare_nonbonded_system, prepare_lj_system, prepare_es_syste
 
 from timemachine.lib import potentials
 
+from training import water_box
+
 np.set_printoptions(linewidth=500)
 
 class TestNonbonded(GradientTest):
@@ -24,9 +26,13 @@ class TestNonbonded(GradientTest):
         D = 3
 
         # test_system = self.get_random_coords(5, D)
-        test_system = self.get_water_coords(D, sort=True)
+        test_system = self.get_water_coords(D, sort=False)
 
-        atom_idxs = np.arange(test_system.shape[0])
+        # _, test_system, box, _ = water_box.prep_system(8.0) # 8 is about 50000 atoms
+        # test_system = test_system/test_system.unit
+
+
+        # atom_idxs = np.arange(test_system.shape[0])
         # random_idxs = np.random.choice(atom_idxs, size=1024, replace=False)
         # test_system = test_system[random_idxs]
 
@@ -46,8 +52,8 @@ class TestNonbonded(GradientTest):
             lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
             # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-            # for precision, rtol in [(np.float64, 1e-9)]:
-            for precision, rtol in [(np.float32, 1e-2)]:
+            for precision, rtol in [(np.float64, 1e-9)]:
+            # for precision, rtol in [(np.float32, 1e-2)]:
 
                 for cutoff in [1.0]:
                     # E = 0 # DEBUG!
@@ -76,73 +82,73 @@ class TestNonbonded(GradientTest):
                             rtol=rtol
                         )
 
-    @unittest.skip("temporary")
-    def test_lennard_jones(self):
+    # @unittest.skip("temporary")
+    # def test_lennard_jones(self):
 
-        D = 3
+    #     D = 3
 
-        np.random.seed(1234)
+    #     np.random.seed(1234)
 
-        # test_system = self.get_random_coords(5, D)
-        # test_system = self.get_random_coords(128, D)
-        # test_system = self.get_random_coords(16, D)
-        test_system = self.get_water_coords(D, sort=True)
+    #     # test_system = self.get_random_coords(5, D)
+    #     # test_system = self.get_random_coords(128, D)
+    #     # test_system = self.get_random_coords(16, D)
+    #     test_system = self.get_water_coords(D, sort=True)
 
-        # padding = 0.3
-        padding = 1000.0
-        diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
-        box = np.eye(3)
-        np.fill_diagonal(box, diag)
+    #     # padding = 0.3
+    #     padding = 1000.0
+    #     diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
+    #     box = np.eye(3)
+    #     np.fill_diagonal(box, diag)
 
-        for coords in [test_system]:
+    #     for coords in [test_system]:
 
-            N = coords.shape[0]
-            E = N//5
+    #         N = coords.shape[0]
+    #         E = N//5
 
-            lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-            lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-            # lambda_group_idxs = np.random.randint(low=0, high=3, size=N, dtype=np.int32)
+    #         lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+    #         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+    #         # lambda_group_idxs = np.random.randint(low=0, high=3, size=N, dtype=np.int32)
 
-            # why are errors in du_dp so large?
-            # error bars on single precision du/dp is pretty weird.
-            # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-            # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-            for precision, rtol in [(np.float64, 1e-9)]:
-            # for precision, rtol in [(np.float32, 1e-3)]:
+    #         # why are errors in du_dp so large?
+    #         # error bars on single precision du/dp is pretty weird.
+    #         # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
+    #         # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
+    #         for precision, rtol in [(np.float64, 1e-9)]:
+    #         # for precision, rtol in [(np.float32, 1e-3)]:
 
-                for cutoff in [100.0]:
-                    # E = 0 # debug use ONLY
-                    lj_params, ref_potential, test_potential = prepare_lj_system(
-                        coords,
-                        E,
-                        lambda_plane_idxs,
-                        lambda_offset_idxs,
-                        p_scale=10.0,
-                        tip3p=True,
-                        cutoff=cutoff,
-                        precision=precision
-                    )
+    #             for cutoff in [100.0]:
+    #                 # E = 0 # debug use ONLY
+    #                 lj_params, ref_potential, test_potential = prepare_lj_system(
+    #                     coords,
+    #                     E,
+    #                     lambda_plane_idxs,
+    #                     lambda_offset_idxs,
+    #                     p_scale=10.0,
+    #                     tip3p=True,
+    #                     cutoff=cutoff,
+    #                     precision=precision
+    #                 )
 
-                    # ref_nb_parameterized = functools.partial(ref_nb,
-                    #     lj_params=lj_params
-                    # )
-                    # non periodic for now - switch to periodic next!
+    #                 # ref_nb_parameterized = functools.partial(ref_nb,
+    #                 #     lj_params=lj_params
+    #                 # )
+    #                 # non periodic for now - switch to periodic next!
 
-                    # for lamb in [0.0, 0.1, 0.2]:
-                    for lamb in [0.0]:
+    #                 # for lamb in [0.0, 0.1, 0.2]:
+    #                 for lamb in [0.0]:
 
-                        print("lambda", lamb, "cutoff", cutoff, "precision", precision)
+    #                     print("lambda", lamb, "cutoff", cutoff, "precision", precision)
 
-                        self.compare_forces(
-                            coords,
-                            lj_params,
-                            box,
-                            lamb,
-                            ref_potential,
-                            test_potential,
-                            precision,
-                            rtol=rtol
-                        )
+    #                     self.compare_forces(
+    #                         coords,
+    #                         lj_params,
+    #                         box,
+    #                         lamb,
+    #                         ref_potential,
+    #                         test_potential,
+    #                         precision,
+    #                         rtol=rtol
+    #                     )
 
 
     # def test_fast_nonbonded(self):

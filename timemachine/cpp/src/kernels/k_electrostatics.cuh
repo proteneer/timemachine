@@ -28,7 +28,6 @@ void __global__ k_electrostatics(
     }
 
     RealType block_d2ij = 0; 
-    // needs to be done periodically
 
     RealType bx[3] = {box[0*3+0], box[1*3+1], box[2*3+2]};
 
@@ -110,6 +109,9 @@ void __global__ k_electrostatics(
 
     // In inference mode, we don't care about gradients with respect to parameters.
 
+    RealType real_lambda = static_cast<RealType>(lambda);
+    RealType real_beta = static_cast<RealType>(beta);
+
     // int has_interaction = 0;
     for(int round = 0; round < 32; round++) {
 
@@ -121,10 +123,11 @@ void __global__ k_electrostatics(
         }
 
         // we can optimize this later if need be
-        RealType delta_lambda = (lambda_offset_i - lambda_offset_j)*lambda;
+        RealType delta_lambda = (lambda_offset_i - lambda_offset_j)*real_lambda;
         dxs[3] = delta_lambda;
 
-        RealType inv_dij = fast_vec_rnorm<RealType, 4>(dxs);
+        // apparently rnorm4d itself is not overloaded correctly like the rest of the math functions
+        RealType inv_dij = real_rnorm4d(dxs[0], dxs[1], dxs[2], dxs[3]);
 
         // if(inv_dij > inv_cutoff) {
         //     if(blockIdx.x == 21 && blockIdx.y == 13) {
@@ -138,10 +141,10 @@ void __global__ k_electrostatics(
             RealType dij = 1/inv_dij;
 
             RealType inv_d2ij = inv_dij*inv_dij;
-            RealType ebd = real_erfc(beta*dij);
+            RealType ebd = erfc(real_beta*dij);
             RealType qij = qi*qj;
 
-            RealType prefactor = qij*(-2*beta*real_exp(-beta*beta*dij*dij)/(real_sqrt(PI)*dij) - ebd*inv_d2ij)*inv_dij;
+            RealType prefactor = qij*(-2*real_beta*exp(-real_beta*real_beta*dij*dij)/(sqrt(static_cast<RealType>(PI))*dij) - ebd*inv_d2ij)*inv_dij;
 
             for(int d=0; d < 3; d++) {
 

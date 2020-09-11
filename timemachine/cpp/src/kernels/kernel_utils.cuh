@@ -44,28 +44,35 @@ inline __device__ int linearize(int i, int j, int d) {
 //   return sqrt(arg);
 // }
 
+__device__ __forceinline__ float real_rnorm4d(const float a, const float b, const float c, const float d) {
+    return rnorm4df(a, b, c, d);
+}
 
-inline __device__ float real_sqrt(const float x) {
+__device__ __forceinline__ double real_rnorm4d(const double a, const double b, const double c, const double d) {
+    return rnorm4d(a, b, c, d);
+}
+
+__device__ __forceinline__ float real_sqrt(const float x) {
     return sqrtf(x);
 }
 
-inline __device__ double real_sqrt(const double x) {
+__device__ __forceinline__ double real_sqrt(const double x) {
     return sqrt(x);
 }
 
-inline __device__ float real_exp(const float x) {
+__device__ __forceinline__ float real_exp(const float x) {
     return expf(x);
 }
 
-inline __device__ double real_exp(const double x) {
+__device__ __forceinline__ double real_exp(const double x) {
     return exp(x);
 }
 
-inline __device__ float real_erfc(const float x) {
+__device__ __forceinline__ float real_erfc(const float x) {
     return erfcf(x);
 }
 
-inline __device__ double real_erfc(const double x) {
+__device__ __forceinline__ double real_erfc(const double x) {
     return erfc(x);
 }
 

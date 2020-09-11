@@ -1,4 +1,4 @@
-
+#include <iostream>
 #include "neighborlist.hpp"
 #include "k_find_block_bounds.cuh"
 #include "gpu_utils.cuh"
@@ -38,7 +38,7 @@ void Neighborlist::compute_block_bounds(
     gpuErrchk(cudaMemsetAsync(d_block_bounds_ctr_, 0, B*D*sizeof(*d_block_bounds_ctr_), stream));
     gpuErrchk(cudaMemsetAsync(d_block_bounds_ext_, 0, B*D*sizeof(*d_block_bounds_ext_), stream));
 
-    k_find_block_bounds<<<1, B, 0, stream>>>(
+    k_find_block_bounds<<<B, tpb, 0, stream>>>(
         N,
         D,
         B,

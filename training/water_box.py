@@ -37,6 +37,7 @@ def prep_system(box_width):
     )
 
     positions = m.getPositions()
+
     positions = unit.Quantity(np.array(positions / positions.unit), positions.unit)
 
 
