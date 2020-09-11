@@ -304,27 +304,6 @@ class GradientTest(unittest.TestCase):
             print("FATAL: max relative error", max_error, truth[max_error_arg], test[max_error_arg])
             assert 0
 
-    # def assert_param_derivs(self, truth, test, rtol, atol=1e-8):
-
-
-    #     assert truth.shape == test.shape
-
-    #     for a, b in zip(truth.reshape(-1), test.reshape(-1)):
-    #         if np.isnan(a) and b == 0:
-    #             continue
-    #         if np.isnan(a) and np.isnan(b):
-    #             continue
-
-    #         # print(np.abs(a - b), (atol + rtol * np.abs(a)))
-    #         print("a, b", a,b)
-    #         assert np.abs(a - b) <= (atol + rtol * np.abs(a))
-        # for ref, test in zip(truth, test):
-        #     if np.abs(ref) < 1:
-        #         np.testing.assert_almost_equal(ref, test, decimal=2)
-        #     else:
-        #         np.testing.assert_allclose(ref, test, rtol=5e-3)
-
-
     def compare_forces(
         self,
         x,

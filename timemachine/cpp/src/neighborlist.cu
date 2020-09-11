@@ -33,7 +33,7 @@ void Neighborlist::compute_block_bounds(
 	cudaStream_t stream) {
 
     int tpb = 32;
-    int B = (N+tpb-1)/tpb;
+    int B = (N+tpb-1)/tpb; // total number of blocks we need to process
 
     gpuErrchk(cudaMemsetAsync(d_block_bounds_ctr_, 0, B*D*sizeof(*d_block_bounds_ctr_), stream));
     gpuErrchk(cudaMemsetAsync(d_block_bounds_ext_, 0, B*D*sizeof(*d_block_bounds_ext_), stream));

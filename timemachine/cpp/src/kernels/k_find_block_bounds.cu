@@ -29,14 +29,13 @@ void __global__ k_find_block_bounds(
             if(tid < N) {
                 int atom_idx = perm[tid];
                 double ci = coords[atom_idx*D + d];
-                // ci -= width*floor(ci/width); // move to home box
+                ci -= width*floor(ci/width); // move to home box
                 ci_min = ci < ci_min ? ci : ci_min;
                 ci_max = ci > ci_max ? ci : ci_max;                
             }
         }
      
         // printf("dim %d tile_idx %d ctr %f ext %f\n", d, tile_idx, (ci_max + ci_min)/2.0, ci_max - ci_min);
-
         block_bounds_ctr[tile_idx*D+d] = (ci_max + ci_min)/2.0;
         block_bounds_ext[tile_idx*D+d] = (ci_max - ci_min)/2.0;
     }

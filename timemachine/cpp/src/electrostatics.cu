@@ -129,9 +129,9 @@ void Electrostatics<RealType>::execute_device(
             double y = coords[i*3+1];
             double z = coords[i*3+2];
 
-            // z -= bz*floor(z/bz);
-            // y -= by*floor(y/by);
-            // x -= bx*floor(x/bx);
+            z -= bz*floor(z/bz);
+            y -= by*floor(y/by);
+            x -= bx*floor(x/bx);
 
             centered_coords[i*3+0] = x;
             centered_coords[i*3+1] = y;
@@ -140,26 +140,27 @@ void Electrostatics<RealType>::execute_device(
         
         // 3. build the hilbert curve
         // if periodic
-        // double minx = 0.0;
-        // double miny = 0.0;
-        // double minz = 0.0;
-        // double maxx = bx;
-        // double maxy = by;
-        // double maxz = bz;
+        double minx = 0.0;
+        double miny = 0.0;
+        double minz = 0.0;
+        double maxx = bx;
+        double maxy = by;
+        double maxz = bz;
 
         // if not periodic
-        double minx = coords[0*3+0], maxx = coords[0*3+0];
-        double miny = coords[0*3+1], maxy = coords[0*3+1];
-        double minz = coords[0*3+2], maxz = coords[0*3+2];
-        for (int i = 1; i < N_; i++) {
-            // const Real4& pos = oldPosq[i];
-            minx = min(minx, coords[i*3+0]);
-            maxx = max(maxx, coords[i*3+0]);
-            miny = min(miny, coords[i*3+1]);
-            maxy = max(maxy, coords[i*3+1]);
-            minz = min(minz, coords[i*3+2]);
-            maxz = max(maxz, coords[i*3+2]);
-        }
+        // double minx = coords[0*3+0], maxx = coords[0*3+0];
+        // double miny = coords[0*3+1], maxy = coords[0*3+1];
+        // double minz = coords[0*3+2], maxz = coords[0*3+2];
+        // for (int i = 1; i < N_; i++) {
+        //     // const Real4& pos = oldPosq[i];
+        //     minx = min(minx, coords[i*3+0]);
+        //     maxx = max(maxx, coords[i*3+0]);
+        //     miny = min(miny, coords[i*3+1]);
+        //     maxy = max(maxy, coords[i*3+1]);
+        //     minz = min(minz, coords[i*3+2]);
+        //     maxz = max(maxz, coords[i*3+2]);
+        // }
+        
         double binWidth = max(max(maxx-minx, maxy-miny), maxz-minz)/255.0;
         double invBinWidth = 1.0/binWidth;
         std::vector<std::pair<int, int> > molBins(N_);

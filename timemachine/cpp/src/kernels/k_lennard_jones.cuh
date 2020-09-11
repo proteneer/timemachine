@@ -132,7 +132,7 @@ void __global__ k_lennard_jones_inference(
         RealType dxs[4];
         for(int d=0; d < 3; d++) {
             RealType delta = ci[d] - cj[d];
-            delta -= floor(delta/bx[d]+static_cast<RealType>(0.5))*bx[d];
+            delta -= bx[d]*floor(delta/bx[d]+static_cast<RealType>(0.5));
             dxs[d] = delta;
         }
 

@@ -42,7 +42,7 @@ class TestNonbonded(GradientTest):
         diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
         box = np.eye(3)
         np.fill_diagonal(box, diag)
-        box = None
+        # box = None
 
         for coords in [test_system]:
 
@@ -66,8 +66,8 @@ class TestNonbonded(GradientTest):
                         precision=precision
                     )
 
-                    # for lamb in [0.0, 0.1, 0.2]:
                     for lamb in [0.0, 0.1, 0.2]:
+                    # for lamb in [0.1]*10:
 
                         print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 

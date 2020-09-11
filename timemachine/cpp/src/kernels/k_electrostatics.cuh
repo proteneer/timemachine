@@ -37,13 +37,9 @@ void __global__ k_electrostatics(
         RealType block_row_ext = block_bounds_ext[blockIdx.x*3+d];
         RealType block_col_ext = block_bounds_ext[blockIdx.y*3+d];
 
-
-        RealType dx = max(0.0, fabs(block_row_ctr - block_col_ctr) - (block_row_ext + block_col_ext));
-
-        // if(blockIdx.x == 21 && blockIdx.y == 13 && threadIdx.x == 0) {
-            // printf("dx %f\n", dx);
-        // }
-        // dx -= floor(dx/bx[d]+static_cast<RealType>(0.5))*bx[d];
+        RealType dx = fabs(block_row_ctr - block_col_ctr);
+        dx -= bx[d]*floor(dx/bx[d]+static_cast<RealType>(0.5));
+        dx = max(static_cast<RealType>(0.0), dx - (block_row_ext + block_col_ext));
         block_d2ij += dx*dx;
     }
 
@@ -53,9 +49,6 @@ void __global__ k_electrostatics(
     // }
 
     if(block_d2ij > cutoff*cutoff) {
-        // if(threadIdx.x == 0) {
-            // printf("tile %d %d is skipped\n", blockIdx.x, blockIdx.y);
-        // }
         return;
     }
 
@@ -118,7 +111,7 @@ void __global__ k_electrostatics(
         RealType dxs[4];
         for(int d=0; d < 3; d++) {
             RealType delta = ci[d] - cj[d];
-            // delta -= floor(delta/bx[d]+static_cast<RealType>(0.5))*bx[d];
+            delta -= bx[d]*floor(delta/bx[d]+static_cast<RealType>(0.5));
             dxs[d] = delta;
         }
 
@@ -281,7 +274,7 @@ void __global__ k_electrostatics_exclusion_inference(
     RealType dxs[4];
     for(int d=0; d < 3; d++) {
         RealType delta = ci[d] - cj[d];
-        // delta -= floor(delta/bx[d]+static_cast<RealType>(0.5))*bx[d];
+        delta -= floor(delta/bx[d]+static_cast<RealType>(0.5))*bx[d];
         dxs[d] = delta;
     }
 
