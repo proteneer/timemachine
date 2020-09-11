@@ -3,6 +3,7 @@
 #include <vector>
 #include <complex>
 #include <sstream>
+#include <numeric>
 #include <algorithm>
 
 #include "hilbert.h"
@@ -107,6 +108,7 @@ void Electrostatics<RealType>::execute_device(
     auto start_sort = std::chrono::high_resolution_clock::now();
 
     // can probably be turned into a float for speed, since the nblist is approximate anyways
+
     if(sort) {
         // tbd switch with asyncversions
         std::vector<double> box(9);
@@ -129,9 +131,10 @@ void Electrostatics<RealType>::execute_device(
             double y = coords[i*3+1];
             double z = coords[i*3+2];
 
-            z -= bz*floor(z/bz);
-            y -= by*floor(y/by);
+            // only if periodic
             x -= bx*floor(x/bx);
+            y -= by*floor(y/by);
+            z -= bz*floor(z/bz);
 
             centered_coords[i*3+0] = x;
             centered_coords[i*3+1] = y;
@@ -140,36 +143,37 @@ void Electrostatics<RealType>::execute_device(
         
         // 3. build the hilbert curve
         // if periodic
-        double minx = 0.0;
-        double miny = 0.0;
-        double minz = 0.0;
-        double maxx = bx;
-        double maxy = by;
-        double maxz = bz;
+        // double minx = 0.0;
+        // double miny = 0.0;
+        // double minz = 0.0;
+        // double maxx = bx;
+        // double maxy = by;
+        // double maxz = bz;
 
-        // if not periodic
-        // double minx = coords[0*3+0], maxx = coords[0*3+0];
-        // double miny = coords[0*3+1], maxy = coords[0*3+1];
-        // double minz = coords[0*3+2], maxz = coords[0*3+2];
-        // for (int i = 1; i < N_; i++) {
-        //     // const Real4& pos = oldPosq[i];
-        //     minx = min(minx, coords[i*3+0]);
-        //     maxx = max(maxx, coords[i*3+0]);
-        //     miny = min(miny, coords[i*3+1]);
-        //     maxy = max(maxy, coords[i*3+1]);
-        //     minz = min(minz, coords[i*3+2]);
-        //     maxz = max(maxz, coords[i*3+2]);
-        // }
-        
+        // always use this to generate the bounding box
+        double minx = centered_coords[0*3+0], maxx = centered_coords[0*3+0];
+        double miny = centered_coords[0*3+1], maxy = centered_coords[0*3+1];
+        double minz = centered_coords[0*3+2], maxz = centered_coords[0*3+2];
+        for (int i = 1; i < N_; i++) {
+            // const Real4& pos = oldPosq[i];
+            minx = min(minx, centered_coords[i*3+0]);
+            maxx = max(maxx, centered_coords[i*3+0]);
+            miny = min(miny, centered_coords[i*3+1]);
+            maxy = max(maxy, centered_coords[i*3+1]);
+            minz = min(minz, centered_coords[i*3+2]);
+            maxz = max(maxz, centered_coords[i*3+2]);
+        }
+
         double binWidth = max(max(maxx-minx, maxy-miny), maxz-minz)/255.0;
         double invBinWidth = 1.0/binWidth;
         std::vector<std::pair<int, int> > molBins(N_);
-        bitmask_t hilbert_coords[3];
+
         for(int i = 0; i < N_; i++) {
             int x = (centered_coords[i*3+0]-minx)*invBinWidth;
             int y = (centered_coords[i*3+1]-miny)*invBinWidth;
             int z = (centered_coords[i*3+2]-minz)*invBinWidth;
 
+            bitmask_t hilbert_coords[3];
             hilbert_coords[0] = x;
             hilbert_coords[1] = y;
             hilbert_coords[2] = z;
@@ -189,7 +193,7 @@ void Electrostatics<RealType>::execute_device(
     auto end_sort = std::chrono::high_resolution_clock::now();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_sort - start_sort).count();
-    std::cout << duration << "us to resort" << std::endl;;
+    std::cout << duration << "us to re-sort" << std::endl;;
 
     // its safe for us to build a neighborlist in a lower dimension.
     nblist_.compute_block_bounds(
@@ -201,18 +205,108 @@ void Electrostatics<RealType>::execute_device(
         stream
     );
 
+    std::vector<double> bb_ctr(B*3);
+    std::vector<double> bb_ext(B*3);
+
+    gpuErrchk(cudaMemcpy(&bb_ctr[0], nblist_.get_block_bounds_ctr(), B*3*sizeof(double), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&bb_ext[0], nblist_.get_block_bounds_ext(), B*3*sizeof(double), cudaMemcpyDeviceToHost));
+
+    std::vector<int> tiles_x;
+    std::vector<int> tiles_y;
+
+    std::vector<double> box(9);
+    gpuErrchk(cudaMemcpy(&box[0], d_box, 9*sizeof(double), cudaMemcpyDeviceToHost));
+
+    double bx[3] = {box[0*3+0], box[1*3+1], box[2*3+2]};
+
+    std::vector<double> bv;
+
+
+    for(int x=0; x < B; x++) {
+
+        double vol = 1;
+
+        for(int d=0; d < 3; d++) {   
+            double block_row_ext = bb_ext[x*3+d];
+            vol *= 2*block_row_ext*2*block_row_ext;
+        }
+        bv.push_back(vol);
+
+    }
+
+    double box_sum = std::accumulate(bv.begin(), bv.end(), 0.0);
+    double box_mean = box_sum / bv.size();
+
+    double box_sq_sum = std::inner_product(bv.begin(), bv.end(), bv.begin(), 0.0);
+    double box_stdev = std::sqrt(box_sq_sum / bv.size() - box_mean * box_mean);
+
+    std::cout << "box mean " << box_mean << " std " << box_stdev << std::endl;
+
+    // throw std::runtime_error("debug");
+
+    // check bounding box deltas
+    for(int x=0; x < B; x++) {
+
+        for(int y=0; y < B; y++) {
+
+            if(y > x) {
+                continue;
+            }
+
+            double block_d2ij = 0;
+ 
+            for(int d=0; d < 3; d++) {
+                double block_row_ctr = bb_ctr[x*3+d];
+                double block_row_ext = bb_ext[x*3+d];
+                double block_col_ctr = bb_ctr[y*3+d];
+                double block_col_ext = bb_ext[y*3+d];
+
+                double dx = block_row_ctr - block_col_ctr;
+                dx -= bx[d]*floor(dx/bx[d]+static_cast<double>(0.5));
+                dx = max(static_cast<double>(0.0), fabs(dx) - (block_row_ext + block_col_ext));
+                block_d2ij += dx*dx;                
+            }
+
+            if(block_d2ij < cutoff_*cutoff_) {
+                tiles_x.push_back(x);
+                tiles_y.push_back(y);
+            } else{
+                // std::cout << "skipping: " << x << " " << y << std::endl;
+            }
+
+        }
+    }
+
+    int *d_tiles_x_ = gpuErrchkCudaMallocAndCopy(&tiles_x[0], tiles_x.size());
+    int *d_tiles_y_ = gpuErrchkCudaMallocAndCopy(&tiles_y[0], tiles_y.size());
+
+
+    std::cout << "num_tiles: " << tiles_x.size() << " out of " << (N_/32)*(N_/32) << std::endl;
+
+
     gpuErrchk(cudaPeekAtLastError());
 
-    // remove me
+    // remove me later
     cudaDeviceSynchronize();
 
-    dim3 dimGrid(B, B, 1); // x, y, z dims
+    // const int TILES = (tiles_x.size()+tpb-1)/tpb;
+    const int TILES = tiles_x.size();
+
+    // dim3 dimGrid(B, B, 1); // x, y, z dims
+    dim3 dimGrid(TILES, 1, 1); // x, y, z dims
     dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
 
     auto start = std::chrono::high_resolution_clock::now();
 
 
     // these can be ran in two streams later on
+    int *total_ixns;
+    gpuErrchk(cudaMallocManaged(&total_ixns, 1*sizeof(int)));
+
+    int *total_empty_tiles;
+    gpuErrchk(cudaMallocManaged(&total_empty_tiles, 1*sizeof(int)));
+
+
     k_electrostatics<RealType><<<dimGrid, tpb, 0, stream>>>(
         N_,
         d_x,
@@ -222,35 +316,45 @@ void Electrostatics<RealType>::execute_device(
         d_lambda_offset_idxs_,
         beta_,
         cutoff_,
-        nblist_.get_block_bounds_ctr(),
-        nblist_.get_block_bounds_ext(),
+        // nblist_.get_block_bounds_ctr(),
+        // nblist_.get_block_bounds_ext(),
+        d_tiles_x_,
+        d_tiles_y_,
         d_perm_,
         d_du_dx,
         d_du_dp,
         d_du_dl,
-        d_u
+        d_u,
+        total_ixns,
+        total_empty_tiles
     );
+
+    cudaDeviceSynchronize();
+
+    std::cout << "total ixns: " << *total_ixns << "/" << TILES*(32*32) << std::endl;
+
+    std::cout << "total empty tiles: " << *total_empty_tiles << "/" << tiles_x.size() << std::endl;
 
     // cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
 
     if(E_ > 0) {
-        k_electrostatics_exclusion_inference<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
-            E_,
-            d_x,
-            d_p,
-            d_box,
-            lambda,
-            d_lambda_offset_idxs_,
-            d_exclusion_idxs_,
-            d_charge_scales_,
-            beta_,
-            cutoff_,
-            d_du_dx,
-            d_du_dp,
-            d_du_dl,
-            d_u
-        );
+        // k_electrostatics_exclusion_inference<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
+        //     E_,
+        //     d_x,
+        //     d_p,
+        //     d_box,
+        //     lambda,
+        //     d_lambda_offset_idxs_,
+        //     d_exclusion_idxs_,
+        //     d_charge_scales_,
+        //     beta_,
+        //     cutoff_,
+        //     d_du_dx,
+        //     d_du_dp,
+        //     d_du_dl,
+        //     d_u
+        // );
         // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
     }

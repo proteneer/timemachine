@@ -328,11 +328,15 @@ class GradientTest(unittest.TestCase):
 
         test_du_dx, test_du_dp, test_du_dl, test_u = test_potential.execute(x, params, box, lamb)
 
+        # return
+
         ref_u = ref_potential(x, params, box, lamb)
         grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
         ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
 
         np.testing.assert_allclose(ref_u, test_u, rtol)
+
+        print(ref_u, test_u, "nrg passed")
 
         self.assert_equal_vectors(
             np.array(ref_du_dx),

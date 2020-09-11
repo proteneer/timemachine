@@ -27,22 +27,22 @@ class TestNonbonded(GradientTest):
 
         # test_system = self.get_random_coords(5, D)
         test_system = self.get_water_coords(D, sort=False)
+        padding = 0.2
+        diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
+        box = np.eye(3)
+        np.fill_diagonal(box, diag)
 
-        # _, test_system, box, _ = water_box.prep_system(8.0) # 8 is about 50000 atoms
+        # _, test_system, box, _ = water_box.prep_system(6.2) # 6.2 is 23k atoms, roughly DHFR
+        # _, test_system, box, _ = water_box.prep_system(8.1) # 6.2 is 23k atoms, roughly DHFR
         # test_system = test_system/test_system.unit
-
 
         # atom_idxs = np.arange(test_system.shape[0])
         # random_idxs = np.random.choice(atom_idxs, size=1024, replace=False)
         # test_system = test_system[random_idxs]
 
-        # print(test_system)
+        print("System shape", test_system.shape)
 
-        padding = 0.3
-        diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
-        box = np.eye(3)
-        np.fill_diagonal(box, diag)
-        # box = None
+        print("box", box)
 
         for coords in [test_system]:
 
@@ -56,7 +56,7 @@ class TestNonbonded(GradientTest):
             # for precision, rtol in [(np.float32, 1e-2)]:
 
                 for cutoff in [1.0]:
-                    # E = 0 # DEBUG!
+                    E = 0 # DEBUG!
                     charge_params, ref_potential, test_potential = prepare_es_system(
                         coords,
                         E,
@@ -67,7 +67,7 @@ class TestNonbonded(GradientTest):
                     )
 
                     for lamb in [0.0, 0.1, 0.2]:
-                    # for lamb in [0.1]*10:
+                    # for lamb in [0.05]*10:
 
                         print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 

@@ -3,6 +3,7 @@
 
 #define WARPSIZE 32
 
+
 void __global__ k_find_block_bounds(
     const int N,
     const int D,

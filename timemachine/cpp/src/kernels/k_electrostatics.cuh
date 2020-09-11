@@ -8,57 +8,63 @@
 template <typename RealType>
 void __global__ k_electrostatics(
     const int N,
-    const double *coords,
-    const double *charge_params, // [N]
-    const double *box,
+    const double * __restrict__ coords,
+    const double * __restrict__ charge_params, // [N]
+    const double * __restrict__ box,
     const double lambda,
-    const int *lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
+    const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
     const double cutoff,
-    const double *block_bounds_ctr,
-    const double *block_bounds_ext,
+    // const double *block_bounds_ctr,
+    // const double *block_bounds_ext,
+    const int * __restrict__ tiles_x,
+    const int * __restrict__ tiles_y,
     const int *perm,
-    unsigned long long *du_dx,
-    double *du_dp,
-    double *du_dl,
-    double *u) {
+    unsigned long long * __restrict__ du_dx,
+    double * __restrict__ du_dp,
+    double * __restrict__ du_dl,
+    double * __restrict__ u,
+    int * __restrict__ total_ixn_count,
+    int * __restrict__ total_empty_tiles) {
 
-    if(blockIdx.y > blockIdx.x) {
-        return;
-    }
-
-    RealType block_d2ij = 0; 
-
-    RealType bx[3] = {box[0*3+0], box[1*3+1], box[2*3+2]};
-
-    for(int d=0; d < 3; d++) {
-        RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
-        RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
-        RealType block_row_ext = block_bounds_ext[blockIdx.x*3+d];
-        RealType block_col_ext = block_bounds_ext[blockIdx.y*3+d];
-
-        RealType dx = fabs(block_row_ctr - block_col_ctr);
-        dx -= bx[d]*floor(dx/bx[d]+static_cast<RealType>(0.5));
-        dx = max(static_cast<RealType>(0.0), dx - (block_row_ext + block_col_ext));
-        block_d2ij += dx*dx;
-    }
-
-    // if(blockIdx.x == 21 && blockIdx.y == 13 && threadIdx.x == 0) {
-    //     printf("Tile X Center %f %f %f Extent %f %f %f\n", block_bounds_ctr[blockIdx.x*3+0], block_bounds_ctr[blockIdx.x*3+1], block_bounds_ctr[blockIdx.x*3+2], block_bounds_ext[blockIdx.x*3+0], block_bounds_ext[blockIdx.x*3+1], block_bounds_ext[blockIdx.x*3+2]);
-    //     printf("Tile Y Center %f %f %f Extent %f %f %f\n", block_bounds_ctr[blockIdx.y*3+0], block_bounds_ctr[blockIdx.y*3+1], block_bounds_ctr[blockIdx.y*3+2], block_bounds_ext[blockIdx.y*3+0], block_bounds_ext[blockIdx.y*3+1], block_bounds_ext[blockIdx.y*3+2]);
+    // if(blockIdx.y > blockIdx.x) {
+        // return;
     // }
 
-    if(block_d2ij > cutoff*cutoff) {
-        return;
-    }
+    int bid = tiles_x[blockIdx.x];
+    int bjd = tiles_y[blockIdx.x];
 
-    int tid = blockIdx.x*32 + threadIdx.x;
+    // if(threadIdx.x == 0) {
+        // printf("CUDA %d %d\n", bid, bjd);
+    // }
+
+    // RealType block_d2ij = 0; 
+
+    RealType bx[3] = {
+        static_cast<RealType>(box[0*3+0]),
+        static_cast<RealType>(box[1*3+1]),
+        static_cast<RealType>(box[2*3+2])
+    };
+
+    // for(int d=0; d < 3; d++) {
+    //     RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
+    //     RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
+    //     RealType block_row_ext = block_bounds_ext[blockIdx.x*3+d];
+    //     RealType block_col_ext = block_bounds_ext[blockIdx.y*3+d];
+
+    //     RealType dx = fabs(block_row_ctr - block_col_ctr);
+    //     dx -= bx[d]*floor(dx/bx[d]+static_cast<RealType>(0.5));
+    //     dx = max(static_cast<RealType>(0.0), dx - (block_row_ext + block_col_ext));
+    //     block_d2ij += dx*dx;
+    // }
+
+    // if(block_d2ij > cutoff*cutoff) {
+    //     return;
+    // }
+
+    int tid = bid*32 + threadIdx.x;
     int atom_i_idx = tid < N ? perm[tid] : tid;
-    int lambda_offset_i = 0;
-
-    if(atom_i_idx < N) {
-        lambda_offset_i = lambda_offset_idxs[atom_i_idx];
-    }
+    int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
 
     RealType ci[3];
     RealType gi[3] = {0};
@@ -73,14 +79,9 @@ void __global__ k_electrostatics(
     RealType g_qi = 0;
 
     // int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    int tjd = blockIdx.y*32 + threadIdx.x;
+    int tjd = bjd*32 + threadIdx.x;
     int atom_j_idx = tjd < N ? perm[tjd] : tjd;
-
-    int lambda_offset_j = 0;
-
-    if(atom_j_idx < N) {
-        lambda_offset_j = lambda_offset_idxs[atom_j_idx];
-    }
+    int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
 
     RealType cj[3];
     RealType gj[3] = {0};
@@ -105,31 +106,28 @@ void __global__ k_electrostatics(
     RealType real_lambda = static_cast<RealType>(lambda);
     RealType real_beta = static_cast<RealType>(beta);
 
-    // int has_interaction = 0;
+    int ixn_count = 0;
     for(int round = 0; round < 32; round++) {
 
         RealType dxs[4];
+        #pragma unroll
         for(int d=0; d < 3; d++) {
             RealType delta = ci[d] - cj[d];
             delta -= bx[d]*floor(delta/bx[d]+static_cast<RealType>(0.5));
             dxs[d] = delta;
         }
 
-        // we can optimize this later if need be
         RealType delta_lambda = (lambda_offset_i - lambda_offset_j)*real_lambda;
         dxs[3] = delta_lambda;
 
         // apparently rnorm4d itself is not overloaded correctly like the rest of the math functions
         RealType inv_dij = real_rnorm4d(dxs[0], dxs[1], dxs[2], dxs[3]);
 
-        // if(inv_dij > inv_cutoff) {
-        //     if(blockIdx.x == 21 && blockIdx.y == 13) {
-        //         printf("FAILED atom_i_idx %d (%f %f %f %f) atom_j_idx %d (%f %f %f %f) dist %f\n", atom_i_idx, ci[0], ci[1], ci[2], wi, atom_j_idx, cj[0], cj[1], cj[2], wj, dij);
-        //     }
-        //     has_interaction += 1;
-        // }
+        //  on-diag           cutoff               bound              bound
+        // some warps will skip this entirely
+        if(inv_dij > inv_cutoff  && tjd < tid && atom_j_idx < N && atom_i_idx < N) {
 
-        if(tjd < tid && inv_dij > inv_cutoff && atom_j_idx < N && atom_i_idx < N) {
+            ixn_count += 1;
 
             RealType dij = 1/inv_dij;
 
@@ -139,6 +137,7 @@ void __global__ k_electrostatics(
 
             RealType prefactor = qij*(-2*real_beta*exp(-real_beta*real_beta*dij*dij)/(sqrt(static_cast<RealType>(PI))*dij) - ebd*inv_d2ij)*inv_dij;
 
+            #pragma unroll
             for(int d=0; d < 3; d++) {
 
                 RealType force = prefactor * dxs[d];
@@ -160,8 +159,8 @@ void __global__ k_electrostatics(
 
         const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
         tjd = __shfl_sync(0xffffffff, tjd, srcLane);
-
         qj = __shfl_sync(0xffffffff, qj, srcLane);
+        #pragma unroll
         for(size_t d=0; d < 3; d++) {
             cj[d] = __shfl_sync(0xffffffff, cj[d], srcLane); // needs to support real
             gj[d] = __shfl_sync(0xffffffff, gj[d], srcLane);
@@ -172,11 +171,14 @@ void __global__ k_electrostatics(
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
-    // bool tile_has_interaction = __any_sync(0xffffffff, has_interaction);
+    // simply have every tile add their contrib
+    atomicAdd(total_ixn_count, ixn_count);
 
-    // if(threadIdx.x == 0 && tile_has_interaction && block_d2ij > cutoff*cutoff) {
-    //     printf("tile %d %d should not have been skipped\n", blockIdx.x, blockIdx.y);
-    // }
+
+    bool tile_is_empty = __all_sync(0xffffffff, ixn_count == 0);
+    if(threadIdx.x == 0) {
+        atomicAdd(total_empty_tiles, tile_is_empty);        
+    }
 
     if(du_dx) {
         for(int d=0; d < 3; d++) {
