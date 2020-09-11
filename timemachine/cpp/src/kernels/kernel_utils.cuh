@@ -36,22 +36,39 @@ inline __device__ int linearize(int i, int j, int d) {
     return d*(d-1)/2 - (d-i) * (d-i-1)/2 +j;
 }
 
-inline __device__ float gpuSqrt(float arg) {
-  return sqrtf(arg);
-}
+// inline __device__ float gpuSqrt(float arg) {
+//   return sqrtf(arg);
+// }
 
-inline __device__ double gpuSqrt(double arg) {
-  return sqrt(arg);
-}
+// inline __device__ double gpuSqrt(double arg) {
+//   return sqrt(arg);
+// }
 
 
-inline __device__ float overloaded_sqrt(const float x) {
+inline __device__ float real_sqrt(const float x) {
     return sqrtf(x);
 }
 
-inline __device__ double overloaded_sqrt(const double x) {
+inline __device__ double real_sqrt(const double x) {
     return sqrt(x);
 }
+
+inline __device__ float real_exp(const float x) {
+    return expf(x);
+}
+
+inline __device__ double real_exp(const double x) {
+    return exp(x);
+}
+
+inline __device__ float real_erfc(const float x) {
+    return erfcf(x);
+}
+
+inline __device__ double real_erfc(const double x) {
+    return erfc(x);
+}
+
 
 template<typename RealType, int D>
 inline __device__ RealType fast_vec_rnorm(const RealType v[D]);

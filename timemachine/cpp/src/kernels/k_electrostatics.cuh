@@ -138,22 +138,22 @@ void __global__ k_electrostatics(
             RealType dij = 1/inv_dij;
 
             RealType inv_d2ij = inv_dij*inv_dij;
-            RealType ebd = erfc(beta*dij);
+            RealType ebd = real_erfc(beta*dij);
             RealType qij = qi*qj;
 
-            RealType es_grad_prefactor = qij*(-2*beta*exp(-beta*beta*dij*dij)/(sqrt(PI)*dij) - ebd*inv_d2ij)*inv_dij;
+            RealType prefactor = qij*(-2*beta*real_exp(-beta*beta*dij*dij)/(real_sqrt(PI)*dij) - ebd*inv_d2ij)*inv_dij;
 
             for(int d=0; d < 3; d++) {
 
-                RealType force = es_grad_prefactor * dxs[d];
+                RealType force = prefactor * dxs[d];
                 // note switch here
                 gi[d] += force;
                 gj[d] -= force;
 
             }
 
-            du_dl_i += es_grad_prefactor * dxs[3] * lambda_offset_i;
-            du_dl_j -= es_grad_prefactor * dxs[3] * lambda_offset_j;
+            du_dl_i += prefactor * dxs[3] * lambda_offset_i;
+            du_dl_j -= prefactor * dxs[3] * lambda_offset_j;
 
             energy += qij*inv_dij*ebd;
 
@@ -292,8 +292,6 @@ void __global__ k_electrostatics_exclusion_inference(
     if(inv_dij > inv_cutoff) {
 
         RealType inv_d2ij = inv_dij*inv_dij;
-        // RealType inv_d3ij = inv_dij*inv_d2ij;
-        // RealType es_grad_prefactor = qi*qj*inv_d3ij;
         RealType es_grad_prefactor = qi*qj*(-2*beta*exp(-beta*beta*dij*dij)/(sqrt(PI)*dij) - erfc(beta*dij)*inv_d2ij);
 
         #pragma unroll
@@ -302,11 +300,8 @@ void __global__ k_electrostatics_exclusion_inference(
             gj[d] += charge_scale * es_grad_prefactor * (dxs[d]/dij);
         }
 
-        int dw_i = lambda_offset_i;
-        int dw_j = lambda_offset_j;
-
-        du_dl_i -= charge_scale * es_grad_prefactor * (dxs[3]/dij) * dw_i;
-        du_dl_j += charge_scale * es_grad_prefactor * (dxs[3]/dij) * dw_j;
+        du_dl_i -= charge_scale * es_grad_prefactor * (dxs[3]/dij) * lambda_offset_i;
+        du_dl_j += charge_scale * es_grad_prefactor * (dxs[3]/dij) * lambda_offset_j;
 
         if(du_dx) {
             for(int d=0; d < 3; d++) {

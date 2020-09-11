@@ -46,8 +46,8 @@ class TestNonbonded(GradientTest):
             lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
             # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-            for precision, rtol in [(np.float64, 1e-9)]:
-            # for precision, rtol in [(np.float32, 1e-2)]:
+            # for precision, rtol in [(np.float64, 1e-9)]:
+            for precision, rtol in [(np.float32, 1e-2)]:
 
                 for cutoff in [1.0]:
                     # E = 0 # DEBUG!
