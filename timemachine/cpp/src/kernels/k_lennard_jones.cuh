@@ -20,8 +20,6 @@ void __global__ k_lennard_jones_inference(
     double *du_dp,
     double *du_dl,
     double *u) {
-    // double *out_du_dl,
-    // double *out_energy) {
 
     if(blockIdx.y > blockIdx.x) {
         return;
@@ -100,15 +98,6 @@ void __global__ k_lennard_jones_inference(
 
     RealType sig_j = atom_j_idx < N ? lj_params[lj_param_idx_sig_j] : 1;
     RealType eps_j = atom_j_idx < N ? lj_params[lj_param_idx_eps_j] : 0;
-
-
-    // if(blockIdx.x == 0) {
-        // printf("tjd %d eps_j %f \n", tjd, eps_j);
-    // }
-    // if(blockIdx.x < 3 && blockIdx.y < 3) {
-    //     printf("tid %d eps_i %f \n", tid, eps_i);
-    //     printf("tjd %d eps_j %f \n", tjd, eps_j);
-    // }
 
 
     if(__all_sync(0xffffffff, eps_i == 0) || __all_sync(0xffffffff, eps_j == 0)) {

@@ -28,6 +28,8 @@ void Neighborlist::compute_block_bounds(
 	int N,
 	int D,
 	const double *coords,
+    const double *box,
+    const int *perm,
 	cudaStream_t stream) {
 
     int tpb = 32;
@@ -41,6 +43,8 @@ void Neighborlist::compute_block_bounds(
         D,
         B,
         coords,
+        box,
+        perm,
         d_block_bounds_ctr_,
         d_block_bounds_ext_
     );	

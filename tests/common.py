@@ -78,10 +78,9 @@ def prepare_lj_system(
 def prepare_es_system(
     x,
     E, # number of exclusions
-    lambda_plane_idxs,
     lambda_offset_idxs,
     p_scale,
-    cutoff=100.0,
+    cutoff,
     precision=np.float64):
 
     N = x.shape[0]
@@ -95,12 +94,13 @@ def prepare_es_system(
 
     charge_scales = np.random.rand(E)
 
-    beta = np.random.rand()*2
+    # beta = np.random.rand()*2
+
+    beta = 2.0
 
     test_potential = potentials.Electrostatics(
         exclusion_idxs,
         charge_scales,
-        lambda_plane_idxs,
         lambda_offset_idxs,
         beta,
         cutoff,
@@ -113,7 +113,6 @@ def prepare_es_system(
         charge_scales=charge_scales,
         beta=beta,
         cutoff=cutoff,
-        lambda_plane_idxs=lambda_plane_idxs,
         lambda_offset_idxs=lambda_offset_idxs
     )
 
@@ -348,10 +347,11 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
+        test_du_dx, test_du_dp, test_du_dl, test_u = test_potential.execute(x, params, box, lamb)
+
         ref_u = ref_potential(x, params, box, lamb)
         grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
         ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
-        test_du_dx, test_du_dp, test_du_dl, test_u = test_potential.execute(x, params, box, lamb)
 
         np.testing.assert_allclose(ref_u, test_u, rtol)
 
@@ -366,9 +366,7 @@ class GradientTest(unittest.TestCase):
         else:
             np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol)
 
-        # np.where(ref_du_dp, np.insnan(ref_du_dp))
-
-        np.testing.assert_allclose(ref_du_dp, test_du_dp)
+        np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol)
         # for a in ref_du_dp:
             # if np.any(a):
         # self.assert_param_derivs(

@@ -117,8 +117,15 @@ void LennardJones<RealType>::execute_device(
         gpuErrchk(cudaMemcpy(d_perm_, &perm[0], N*sizeof(*d_perm_), cudaMemcpyHostToDevice));
     }
 
-    // its safe for us to build a neighborlist in a lower dimension.
-    nblist_.compute_block_bounds(N_, D, d_x, stream);
+    // is this correct?
+    // nblist_.compute_block_bounds(
+    //     N_,
+    //     D,
+    //     d_x,
+    //     d_box,
+    //     nullptr,
+    //     stream
+    // );
 
     gpuErrchk(cudaPeekAtLastError());
 

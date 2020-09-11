@@ -14,8 +14,9 @@ private:
     int *d_exclusion_idxs_; // [E,2]
     double *d_charge_scales_; // [E]
 
-    int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
+
+    int *d_perm_;
 
     double beta_;
     double cutoff_;
@@ -30,7 +31,6 @@ public:
     Electrostatics(
         const std::vector<int> &exclusion_idxs, // [E,2]
         const std::vector<double> &charge_scales, // [E]
-        const std::vector<int> &lambda_plane_idxs, // N
         const std::vector<int> &lambda_offset_idxs, // N
         double beta, // decay in erfc
         double cutoff

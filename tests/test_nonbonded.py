@@ -18,7 +18,7 @@ np.set_printoptions(linewidth=500)
 
 class TestNonbonded(GradientTest):
 
-    @unittest.skip("temporary")
+
     def test_electrostatics(self):
         np.random.seed(4321)
         D = 3
@@ -26,35 +26,41 @@ class TestNonbonded(GradientTest):
         # test_system = self.get_random_coords(5, D)
         test_system = self.get_water_coords(D, sort=True)
 
+        atom_idxs = np.arange(test_system.shape[0])
+        # random_idxs = np.random.choice(atom_idxs, size=1024, replace=False)
+        # test_system = test_system[random_idxs]
+
+        # print(test_system)
+
         padding = 0.3
         diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
         box = np.eye(3)
         np.fill_diagonal(box, diag)
+        box = None
 
         for coords in [test_system]:
 
             N = coords.shape[0]
             E = N//5
 
-            lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
             lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
             # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-            # for precision, rtol in [(np.float64, 1e-9)]:
-            for precision, rtol in [(np.float32, 1e-3)]:
+            for precision, rtol in [(np.float64, 1e-9)]:
+            # for precision, rtol in [(np.float32, 1e-2)]:
 
-                for cutoff in [100.0]:
+                for cutoff in [1.0]:
                     # E = 0 # DEBUG!
                     charge_params, ref_potential, test_potential = prepare_es_system(
                         coords,
                         E,
-                        lambda_plane_idxs,
                         lambda_offset_idxs,
                         p_scale=1.0,
                         cutoff=cutoff,
                         precision=precision
                     )
 
+                    # for lamb in [0.0, 0.1, 0.2]:
                     for lamb in [0.0, 0.1, 0.2]:
 
                         print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
@@ -70,6 +76,7 @@ class TestNonbonded(GradientTest):
                             rtol=rtol
                         )
 
+    @unittest.skip("temporary")
     def test_lennard_jones(self):
 
         D = 3
@@ -81,7 +88,8 @@ class TestNonbonded(GradientTest):
         # test_system = self.get_random_coords(16, D)
         test_system = self.get_water_coords(D, sort=True)
 
-        padding = 0.3
+        # padding = 0.3
+        padding = 1000.0
         diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
         box = np.eye(3)
         np.fill_diagonal(box, diag)

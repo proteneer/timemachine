@@ -23,6 +23,8 @@ public:
         int N,
         int D,
         const double *coords,
+        const double *box,
+        const int *perm,
         cudaStream_t stream
     );
 

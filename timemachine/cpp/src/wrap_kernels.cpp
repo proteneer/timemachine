@@ -644,7 +644,6 @@ void declare_electrostatics(py::module &m, const char *typestr) {
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
         const py::array_t<double, py::array::c_style> &charge_scale_i,  // 
-        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
         double beta,
         double cutoff) {
@@ -655,16 +654,12 @@ void declare_electrostatics(py::module &m, const char *typestr) {
         std::vector<double> charge_scales(charge_scale_i.size());
         std::memcpy(charge_scales.data(), charge_scale_i.data(), charge_scale_i.size()*sizeof(double));
 
-        std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
-        std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
-
         std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
         std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
 
         return new timemachine::Electrostatics<RealType>(
             exclusion_idxs,
             charge_scales,
-            lambda_plane_idxs,
             lambda_offset_idxs,
             beta,
             cutoff
