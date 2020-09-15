@@ -169,6 +169,7 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
 
     std::vector<std::vector<int> > ixn_list;
 
+    int dist_calcs = 0;
 
     double bx = h_box[0*3+0];
     double by = h_box[1*3+1];
@@ -205,7 +206,7 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
             dz = max(0.0, fabs(dz) - box_ext_z);
 
             double box_dist = sqrt(dx*dx + dy*dy + dz*dz);
-
+            dist_calcs += 1;
 
             int row_start = rbidx*32;
             int row_end = min((rbidx+1)*32, N);
@@ -231,6 +232,7 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
                 dz -= bz*floor(dz/bz+0.5);
 
                 double atom_dist = sqrt(dx*dx + dy*dy + dz*dz);
+                dist_calcs += 1;
 
                 if(atom_dist < cutoff) {
                     keep = true;
@@ -247,6 +249,8 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
         ixn_list.push_back(interacting_idxs);
 
     }
+
+    std::cout << "distance calcs: " << dist_calcs << "/" << N*N << " ratio: " << dist_calcs/(N*N) << std::endl;
 
     return ixn_list;
 
