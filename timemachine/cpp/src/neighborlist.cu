@@ -114,18 +114,37 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
    
     */
 
-    if(!is_pow_2(N)) {
-        throw std::runtime_error("N is not a power of 2.");
-    }
+    // std::cout << log2_int(31) << std::endl;
+    // std::cout << log2_int(32) << std::endl;
+    // std::cout << log2_int(33) << std::endl;
+
+    // throw std::runtime_error("N is not a power of 2.");
+
+    // if(!is_pow_2(N)) {
+    //     throw std::runtime_error("N is not a power of 2.");
+    // }
 
     int row_block_size = N;
     int col_block_size = N;
 
-    int num_rounds = log2_int(N);
+    // int debug = 0;
+
+    // std::cout << "debug " << debug++ << std::endl;
+
+    //
+    // 2^0 = 1
+    // 2^1 = 2
+    // 2^2 = 4
+    // 2^3 = 8
+    // 2^4 = 16     
+    // 2^5 = 32    num_rounds == 6
+    int num_rounds = log2_int(N) + 1;
+    num_rounds = max(num_rounds, 6); // need at least 6 rounds
 
     std::vector<std::vector<double> > all_block_ctrs;
     std::vector<std::vector<double> > all_block_exts;
 
+    // compute block bounds t
     for(int round=0; round < num_rounds; round++)  {
         int block_size = pow_int(2, round);
         int num_blocks = (N + block_size - 1)/block_size;
@@ -159,31 +178,37 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
     double by = h_box[1*3+1];
     double bz = h_box[2*3+2];
 
+    // std::cout << bound_idx_32 << std::endl;
+    // std::cout << num_blocks_of_32 << std::endl;
+    // std::cout << all_block_ctrs.size() << std::endl;
+    // std::cout << all_block_exts.size() << std::endl;
+
+    // std::cout << "debug " << debug++ << std::endl;
+
     for(int rbidx=0; rbidx < num_blocks_of_32; rbidx++) {
+
+        // std::cout << "debug " << debug++ << std::endl;
 
         double box_ctr_x = all_block_ctrs[bound_idx_32][rbidx*3+0];
         double box_ctr_y = all_block_ctrs[bound_idx_32][rbidx*3+1];
         double box_ctr_z = all_block_ctrs[bound_idx_32][rbidx*3+2];
 
+        // std::cout << "debug " << debug++ << std::endl;
+
         double box_ext_x = all_block_exts[bound_idx_32][rbidx*3+0];
         double box_ext_y = all_block_exts[bound_idx_32][rbidx*3+1];
         double box_ext_z = all_block_exts[bound_idx_32][rbidx*3+2];
 
+
+        // std::cout << "debug " << debug++ << std::endl;
         std::vector<int> interacting_idxs;
 
         for(int j=0; j < N; j++) {
-
-                    // ci -= width*floor(ci/width); // move to home box
 
             double jx = h_coords[j*3+0];
             double jy = h_coords[j*3+1];
             double jz = h_coords[j*3+2];
 
-            // jx -= bx*floor(jx/bx);
-            // jy -= by*floor(jy/by);
-            // jz -= bz*floor(jz/bz);
-
-            // compare distance of particle to bounding box
             double dx = box_ctr_x - jx;
             double dy = box_ctr_y - jy;
             double dz = box_ctr_z - jz;
@@ -203,19 +228,9 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
             int row_end = min((rbidx+1)*32, N);
 
             if(box_dist > cutoff) {
-                // if(rbidx == 7 and j==808) {
-                //     std::cout << "box ctr" << box_ctr_x << " " << box_ctr_y << " " << box_ctr_z << std::endl;
-                //     std::cout << "box ext" << box_ext_x << " " << box_ext_y << " " << box_ext_z << std::endl;
-                //     std::cout << "i coords" <<  h_coords[row_start*3+0] << " " <<  h_coords[row_start*3+1] << " " <<  h_coords[row_start*3+2] << std::endl;
-                //     std::cout << "j coords" << jx << " " << jy << " " << jz << std::endl;
-                //     std::cout << "skipping " << j << " due to box_dist cutoff, deltas " << dx << " " << dy << " " << dz << std::endl;                    
-                // }
                 continue;
             }
 
-            // check each individual row atom 
-
-            
             bool keep = false;
             
             for(int i=row_start; i < row_end; i++) {
@@ -233,10 +248,6 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
                 dz -= bz*floor(dz/bz+0.5);
 
                 double atom_dist = sqrt(dx*dx + dy*dy + dz*dz);
-
-                // if(rbidx == 7 && j==808) {
-                //     std::cout << " BAD DIJ " << atom_dist << std::endl;
-                // }
 
                 if(atom_dist < cutoff) {
                     keep = true;

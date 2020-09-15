@@ -55,8 +55,8 @@ def hilbert_sort(conf, D):
 def test_neighborlist():
 
     # for N in [1024]:
-    for N in [1024]:
-
+    # for N in [24, 64, 38, 512, 519, 1025]:
+    for N in [32, 64, 128, 512, 33, 28, 51, 129]:
         np.random.seed(1234)
 
         D = 3
@@ -73,8 +73,6 @@ def test_neighborlist():
         box = np.eye(3) * box_diag
 
         num_blocks_of_32 = (N + 32 - 1)//32
-        # build a reference neighborlist in groups of 32
-
         col_coords = np.expand_dims(coords, axis=0)
 
         cutoff = 0.2
