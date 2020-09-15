@@ -54,8 +54,6 @@ def hilbert_sort(conf, D):
 
 def test_neighborlist():
 
-    # for N in [1024]:
-    # for N in [24, 64, 38, 512, 519, 1025]:
     for N in [32, 64, 128, 512, 33, 28, 51, 129]:
         np.random.seed(1234)
 

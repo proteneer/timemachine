@@ -127,10 +127,6 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
     int row_block_size = N;
     int col_block_size = N;
 
-    // int debug = 0;
-
-    // std::cout << "debug " << debug++ << std::endl;
-
     //
     // 2^0 = 1
     // 2^1 = 2
@@ -178,29 +174,16 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
     double by = h_box[1*3+1];
     double bz = h_box[2*3+2];
 
-    // std::cout << bound_idx_32 << std::endl;
-    // std::cout << num_blocks_of_32 << std::endl;
-    // std::cout << all_block_ctrs.size() << std::endl;
-    // std::cout << all_block_exts.size() << std::endl;
-
-    // std::cout << "debug " << debug++ << std::endl;
-
     for(int rbidx=0; rbidx < num_blocks_of_32; rbidx++) {
-
-        // std::cout << "debug " << debug++ << std::endl;
 
         double box_ctr_x = all_block_ctrs[bound_idx_32][rbidx*3+0];
         double box_ctr_y = all_block_ctrs[bound_idx_32][rbidx*3+1];
         double box_ctr_z = all_block_ctrs[bound_idx_32][rbidx*3+2];
 
-        // std::cout << "debug " << debug++ << std::endl;
-
         double box_ext_x = all_block_exts[bound_idx_32][rbidx*3+0];
         double box_ext_y = all_block_exts[bound_idx_32][rbidx*3+1];
         double box_ext_z = all_block_exts[bound_idx_32][rbidx*3+2];
 
-
-        // std::cout << "debug " << debug++ << std::endl;
         std::vector<int> interacting_idxs;
 
         for(int j=0; j < N; j++) {
@@ -267,12 +250,6 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
 
     return ixn_list;
 
-    // for(int row=0; row < num_rows; row++) {
-    //     for(int col=0; col < num_cols; col++) {
-
-    //     }
-    // }
-    // 
 }
 
 void Neighborlist::compute_block_bounds(
