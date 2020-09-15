@@ -25,24 +25,25 @@ class TestNonbonded(GradientTest):
         np.random.seed(4321)
         D = 3
 
-        # test_system = self.get_random_coords(5, D)
+        # test_system = self.get_random_coords(64, D)
         test_system = self.get_water_coords(D, sort=False)
+        test_system = test_system[:256]
         padding = 0.2
         diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
         box = np.eye(3)
         np.fill_diagonal(box, diag)
 
-        # _, test_system, box, _ = water_box.prep_system(6.2) # 6.2 is 23k atoms, roughly DHFR
         # _, test_system, box, _ = water_box.prep_system(8.1) # 6.2 is 23k atoms, roughly DHFR
+        # _, test_system, box, _ = water_box.prep_system(6.2) # 6.2 is 23k atoms, roughly DHFR
         # test_system = test_system/test_system.unit
 
         # atom_idxs = np.arange(test_system.shape[0])
         # random_idxs = np.random.choice(atom_idxs, size=1024, replace=False)
         # test_system = test_system[random_idxs]
 
-        print("System shape", test_system.shape)
+        # print("System shape", test_system.shape)
 
-        print("box", box)
+        # print("box", box)
 
         for coords in [test_system]:
 
@@ -52,10 +53,10 @@ class TestNonbonded(GradientTest):
             lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
             # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-            for precision, rtol in [(np.float64, 1e-9)]:
-            # for precision, rtol in [(np.float32, 1e-2)]:
+            # for precision, rtol in [(np.float64, 1e-9)]:
+            for precision, rtol in [(np.float32, 1e-2)]:
 
-                for cutoff in [1.0]:
+                for cutoff in [0.9]:
                     E = 0 # DEBUG!
                     charge_params, ref_potential, test_potential = prepare_es_system(
                         coords,
@@ -66,8 +67,8 @@ class TestNonbonded(GradientTest):
                         precision=precision
                     )
 
-                    for lamb in [0.0, 0.1, 0.2]:
-                    # for lamb in [0.05]*10:
+                    # for lamb in [0.0, 0.1, 0.2]:
+                    for lamb in [0.05]:
 
                         print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 

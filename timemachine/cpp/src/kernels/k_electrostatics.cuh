@@ -8,6 +8,7 @@
 template <typename RealType>
 void __global__ k_electrostatics(
     const int N,
+    const int T,
     const double * __restrict__ coords,
     const double * __restrict__ charge_params, // [N]
     const double * __restrict__ box,
@@ -31,13 +32,6 @@ void __global__ k_electrostatics(
         // return;
     // }
 
-    int bid = tiles_x[blockIdx.x];
-    int bjd = tiles_y[blockIdx.x];
-
-    // if(threadIdx.x == 0) {
-        // printf("CUDA %d %d\n", bid, bjd);
-    // }
-
     // RealType block_d2ij = 0; 
 
     RealType bx[3] = {
@@ -46,15 +40,16 @@ void __global__ k_electrostatics(
         static_cast<RealType>(box[2*3+2])
     };
 
+
     // for(int d=0; d < 3; d++) {
     //     RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
     //     RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
     //     RealType block_row_ext = block_bounds_ext[blockIdx.x*3+d];
     //     RealType block_col_ext = block_bounds_ext[blockIdx.y*3+d];
 
-    //     RealType dx = fabs(block_row_ctr - block_col_ctr);
+    //     RealType dx = block_row_ctr - block_col_ctr;
     //     dx -= bx[d]*floor(dx/bx[d]+static_cast<RealType>(0.5));
-    //     dx = max(static_cast<RealType>(0.0), dx - (block_row_ext + block_col_ext));
+    //     dx = max(static_cast<RealType>(0.0), fabs(dx) - (block_row_ext + block_col_ext));
     //     block_d2ij += dx*dx;
     // }
 
@@ -62,8 +57,21 @@ void __global__ k_electrostatics(
     //     return;
     // }
 
-    int tid = bid*32 + threadIdx.x;
-    int atom_i_idx = tid < N ? perm[tid] : tid;
+
+    int gid = blockIdx.x*blockDim.x + threadIdx.x; // threadblock idx
+    int tid = gid / 32; // which tile we're processing
+
+    if(tid >= T) {
+        return;
+    }
+
+    int bid = tiles_x[tid];
+    int bjd = tiles_y[tid];
+
+    int oid = bid*32+threadIdx.x%32; // original row index
+
+    // int tid = bid*32 + threadIdx.x;
+    int atom_i_idx = oid < N ? perm[oid] : oid;
     int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
 
     RealType ci[3];
@@ -78,10 +86,13 @@ void __global__ k_electrostatics(
     RealType qi = atom_i_idx < N ? charge_params[charge_param_idx_i] : 0;
     RealType g_qi = 0;
 
-    // int atom_j_idx = blockIdx.y*32 + threadIdx.x;
-    int tjd = bjd*32 + threadIdx.x;
-    int atom_j_idx = tjd < N ? perm[tjd] : tjd;
+    int ojd = bjd*32 + threadIdx.x%32;
+    int atom_j_idx = ojd < N ? perm[ojd] : ojd;
     int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
+
+    // printf("thread %d processing bijd (%d %d) oid ojd (%d %d) \n", gid, tid, bid, bjd, oid, ojd);
+
+    // printf("thread %d processing oijd %d %d atom_ij_idx %d %d\n", threadIdx.x, oid, ojd, atom_i_idx, atom_j_idx);
 
     RealType cj[3];
     RealType gj[3] = {0};
@@ -96,9 +107,6 @@ void __global__ k_electrostatics(
     RealType g_qj = 0;
     RealType inv_cutoff = 1/cutoff;
 
-    // revert this to RealType
-
-    // tbd: deprecate this when we don't need energies any more.
     RealType energy = 0;
 
     // In inference mode, we don't care about gradients with respect to parameters.
@@ -123,9 +131,8 @@ void __global__ k_electrostatics(
         // apparently rnorm4d itself is not overloaded correctly like the rest of the math functions
         RealType inv_dij = real_rnorm4d(dxs[0], dxs[1], dxs[2], dxs[3]);
 
-        //  on-diag           cutoff               bound              bound
         // some warps will skip this entirely
-        if(inv_dij > inv_cutoff  && tjd < tid && atom_j_idx < N && atom_i_idx < N) {
+        if(inv_dij > inv_cutoff  && ojd < oid && atom_j_idx < N && atom_i_idx < N) {
 
             ixn_count += 1;
 
@@ -157,8 +164,9 @@ void __global__ k_electrostatics(
 
         }
 
-        const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
-        tjd = __shfl_sync(0xffffffff, tjd, srcLane);
+        const int srcLane = (threadIdx.x/WARPSIZE)*WARPSIZE + (threadIdx.x+1)%WARPSIZE;
+        // const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
+        ojd = __shfl_sync(0xffffffff, ojd, srcLane);
         qj = __shfl_sync(0xffffffff, qj, srcLane);
         #pragma unroll
         for(size_t d=0; d < 3; d++) {

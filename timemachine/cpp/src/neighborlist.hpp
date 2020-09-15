@@ -19,6 +19,22 @@ public:
 
     ~Neighborlist();
 
+    // non-periodic neighborlist
+    void build_nblist_cpu(
+        int N,
+        int D,
+        const double *h_coords,
+        const double *h_box);
+
+    void compute_block_bounds_cpu(
+    const int N,
+    const int D,
+    const int block_size,
+    const double *h_coords,
+    const double *h_box,
+    double *bb_ctrs,
+    double *bb_exts);
+
     void compute_block_bounds(
         int N,
         int D,

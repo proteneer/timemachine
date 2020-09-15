@@ -19,6 +19,7 @@
 #include "fixed_point.hpp"
 #include "integrator.hpp"
 #include "observable.hpp"
+#include "neighborlist.hpp"
 
 
 #include <iostream>
@@ -76,6 +77,52 @@ namespace py = pybind11;
 //         stepper.set_du_dl_adjoint(adjoints.size(), adjoints.data());
 //     });
 // }
+
+void declare_neighborlist(py::module &m) {
+
+    using Class = timemachine::Neighborlist;
+    std::string pyclass_name = std::string("Neighborlist");
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](int N, int D) {
+        return new timemachine::Neighborlist(
+            N,
+            D
+        );
+
+    }))
+    .def("compute_block_bounds", [](
+        timemachine::Neighborlist &nblist,
+        const py::array_t<double, py::array::c_style> &coords,
+        const py::array_t<double, py::array::c_style> &box,
+        int block_size) -> py::tuple {
+
+        int N = coords.shape()[0];
+        int D = coords.shape()[1];
+        int B = (N + block_size - 1)/block_size;
+
+        py::array_t<double, py::array::c_style> py_bb_ctrs({B, D});
+        py::array_t<double, py::array::c_style> py_bb_exts({B, D});
+
+        nblist.compute_block_bounds_cpu(
+            N,
+            D,
+            block_size,
+            coords.data(),
+            box.data(),
+            py_bb_ctrs.mutable_data(),
+            py_bb_exts.mutable_data()
+        );
+
+        return py::make_tuple(py_bb_ctrs, py_bb_exts);
+
+    });
+
+}
 
 void declare_context(py::module &m) {
 
@@ -805,6 +852,7 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_potential(m);
     declare_bound_potential(m);
 
+    declare_neighborlist(m);
 
     // declare_centroid_restraint<double>(m, "f64");
     // declare_centroid_restraint<float>(m, "f32");
