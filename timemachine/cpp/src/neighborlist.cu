@@ -84,11 +84,12 @@ void Neighborlist::compute_block_bounds_cpu(
 
 }
 
-void Neighborlist::build_nblist_cpu(
+std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
     int N,
     int D,
     const double *h_coords,
-    const double *h_box) {
+    const double *h_box,
+    const double cutoff) {
     /*
     Reference neighborlist algorithm:
     Given N atoms, we subdivide into blocks of size 2^B log_2(N) times.
@@ -122,10 +123,15 @@ void Neighborlist::build_nblist_cpu(
 
     int num_rounds = log2_int(N);
 
+    std::vector<std::vector<double> > all_block_ctrs;
+    std::vector<std::vector<double> > all_block_exts;
+
     for(int round=0; round < num_rounds; round++)  {
         int block_size = pow_int(2, round);
-        std::vector<double> bb_ctrs((N/block_size)*3);
-        std::vector<double> bb_exts((N/block_size)*3);
+        int num_blocks = (N + block_size - 1)/block_size;
+
+        std::vector<double> bb_ctrs(num_blocks*3);
+        std::vector<double> bb_exts(num_blocks*3);
         this->compute_block_bounds_cpu(
             N,
             D,
@@ -136,7 +142,119 @@ void Neighborlist::build_nblist_cpu(
             &bb_exts[0]
         );
 
+        all_block_ctrs.push_back(bb_ctrs);
+        all_block_exts.push_back(bb_exts);
+
     }
+
+    const int num_blocks_of_32 = (N + 32 - 1) / 32;
+
+    const int bound_idx_32 = log2_int(32);
+    // implement OpenMM's bbox approach
+
+    std::vector<std::vector<int> > ixn_list;
+
+
+    double bx = h_box[0*3+0];
+    double by = h_box[1*3+1];
+    double bz = h_box[2*3+2];
+
+    for(int rbidx=0; rbidx < num_blocks_of_32; rbidx++) {
+
+        double box_ctr_x = all_block_ctrs[bound_idx_32][rbidx*3+0];
+        double box_ctr_y = all_block_ctrs[bound_idx_32][rbidx*3+1];
+        double box_ctr_z = all_block_ctrs[bound_idx_32][rbidx*3+2];
+
+        double box_ext_x = all_block_exts[bound_idx_32][rbidx*3+0];
+        double box_ext_y = all_block_exts[bound_idx_32][rbidx*3+1];
+        double box_ext_z = all_block_exts[bound_idx_32][rbidx*3+2];
+
+        std::vector<int> interacting_idxs;
+
+        for(int j=0; j < N; j++) {
+
+                    // ci -= width*floor(ci/width); // move to home box
+
+            double jx = h_coords[j*3+0];
+            double jy = h_coords[j*3+1];
+            double jz = h_coords[j*3+2];
+
+            // jx -= bx*floor(jx/bx);
+            // jy -= by*floor(jy/by);
+            // jz -= bz*floor(jz/bz);
+
+            // compare distance of particle to bounding box
+            double dx = box_ctr_x - jx;
+            double dy = box_ctr_y - jy;
+            double dz = box_ctr_z - jz;
+
+            dx -= bx*floor(dx/bx+0.5);
+            dy -= by*floor(dy/by+0.5);
+            dz -= bz*floor(dz/bz+0.5);
+
+            dx = max(0.0, fabs(dx) - box_ext_x);
+            dy = max(0.0, fabs(dy) - box_ext_y);
+            dz = max(0.0, fabs(dz) - box_ext_z);
+
+            double box_dist = sqrt(dx*dx + dy*dy + dz*dz);
+
+
+            int row_start = rbidx*32;
+            int row_end = min((rbidx+1)*32, N);
+
+            if(box_dist > cutoff) {
+                // if(rbidx == 7 and j==808) {
+                //     std::cout << "box ctr" << box_ctr_x << " " << box_ctr_y << " " << box_ctr_z << std::endl;
+                //     std::cout << "box ext" << box_ext_x << " " << box_ext_y << " " << box_ext_z << std::endl;
+                //     std::cout << "i coords" <<  h_coords[row_start*3+0] << " " <<  h_coords[row_start*3+1] << " " <<  h_coords[row_start*3+2] << std::endl;
+                //     std::cout << "j coords" << jx << " " << jy << " " << jz << std::endl;
+                //     std::cout << "skipping " << j << " due to box_dist cutoff, deltas " << dx << " " << dy << " " << dz << std::endl;                    
+                // }
+                continue;
+            }
+
+            // check each individual row atom 
+
+            
+            bool keep = false;
+            
+            for(int i=row_start; i < row_end; i++) {
+
+                double ix = h_coords[i*3+0];
+                double iy = h_coords[i*3+1];
+                double iz = h_coords[i*3+2];
+
+                double dx = ix - jx;
+                double dy = iy - jy;
+                double dz = iz - jz;
+
+                dx -= bx*floor(dx/bx+0.5);
+                dy -= by*floor(dy/by+0.5);
+                dz -= bz*floor(dz/bz+0.5);
+
+                double atom_dist = sqrt(dx*dx + dy*dy + dz*dz);
+
+                // if(rbidx == 7 && j==808) {
+                //     std::cout << " BAD DIJ " << atom_dist << std::endl;
+                // }
+
+                if(atom_dist < cutoff) {
+                    keep = true;
+                    break;
+                }
+            }
+
+            if(keep) {
+                interacting_idxs.push_back(j);
+            }
+
+        }
+
+        ixn_list.push_back(interacting_idxs);
+
+    }
+
+    return ixn_list;
 
     // for(int row=0; row < num_rows; row++) {
     //     for(int col=0; col < num_cols; col++) {

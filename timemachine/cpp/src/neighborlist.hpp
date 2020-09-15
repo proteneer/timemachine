@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 namespace timemachine {
 
 
@@ -20,11 +22,12 @@ public:
     ~Neighborlist();
 
     // non-periodic neighborlist
-    void build_nblist_cpu(
+    std::vector<std::vector<int> > build_nblist_cpu(
         int N,
         int D,
         const double *h_coords,
-        const double *h_box);
+        const double *h_box,
+        const double cutoff);
 
     void compute_block_bounds_cpu(
     const int N,

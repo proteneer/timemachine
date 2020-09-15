@@ -120,7 +120,36 @@ void declare_neighborlist(py::module &m) {
 
         return py::make_tuple(py_bb_ctrs, py_bb_exts);
 
+    })
+    .def("build_nblist", [](
+        timemachine::Neighborlist &nblist,
+        const py::array_t<double, py::array::c_style> &coords,
+        const py::array_t<double, py::array::c_style> &box,
+        const double cutoff) -> std::vector<std::vector<int> > {
+
+        int N = coords.shape()[0];
+        int D = coords.shape()[1];
+
+        std::vector<std::vector<int> > ixn_list = nblist.build_nblist_cpu(
+            N,
+            D,
+            // block_size,
+            coords.data(),
+            box.data(),
+            cutoff
+            // py_bb_ctrs.mutable_data(),
+            // py_bb_exts.mutable_data()
+        );
+
+
+        return ixn_list;
+
+        // return pybind11::cast<pybind11::none>(Py_None);
+
+        // return py::make_tuple(py_bb_ctrs, py_bb_exts);
+
     });
+
 
 }
 
