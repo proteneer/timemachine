@@ -187,64 +187,102 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
 
         std::vector<int> interacting_idxs;
 
-        for(int j=0; j < N; j++) {
+        for(int bj=0; bj < num_blocks_of_32; bj++) {
+            int j_start = bj*32;
+            int j_end = min((bj+1)*32, N);
 
-            double jx = h_coords[j*3+0];
-            double jy = h_coords[j*3+1];
-            double jz = h_coords[j*3+2];
+            double bj_ctr_x = all_block_ctrs[bound_idx_32][bj*3+0];
+            double bj_ctr_y = all_block_ctrs[bound_idx_32][bj*3+1];
+            double bj_ctr_z = all_block_ctrs[bound_idx_32][bj*3+2];
 
-            double dx = box_ctr_x - jx;
-            double dy = box_ctr_y - jy;
-            double dz = box_ctr_z - jz;
+            double bj_ext_x = all_block_exts[bound_idx_32][bj*3+0];
+            double bj_ext_y = all_block_exts[bound_idx_32][bj*3+1];
+            double bj_ext_z = all_block_exts[bound_idx_32][bj*3+2];
+
+            double dx = box_ctr_x - bj_ctr_x;
+            double dy = box_ctr_y - bj_ctr_y;
+            double dz = box_ctr_z - bj_ctr_z;
 
             dx -= bx*floor(dx/bx+0.5);
             dy -= by*floor(dy/by+0.5);
             dz -= bz*floor(dz/bz+0.5);
 
-            dx = max(0.0, fabs(dx) - box_ext_x);
-            dy = max(0.0, fabs(dy) - box_ext_y);
-            dz = max(0.0, fabs(dz) - box_ext_z);
+            dx = max(0.0, fabs(dx) - box_ext_x - bj_ext_x);
+            dy = max(0.0, fabs(dy) - box_ext_y - bj_ext_y);
+            dz = max(0.0, fabs(dz) - box_ext_z - bj_ext_z);
 
-            double box_dist = sqrt(dx*dx + dy*dy + dz*dz);
-            dist_calcs += 1;
+            double box_box_dist = sqrt(dx*dx + dy*dy + dz*dz);
 
-            int row_start = rbidx*32;
-            int row_end = min((rbidx+1)*32, N);
-
-            if(box_dist > cutoff) {
+            if(box_box_dist > cutoff) {
                 continue;
             }
 
-            bool keep = false;
-            
-            for(int i=row_start; i < row_end; i++) {
+            dist_calcs += 1;
 
-                double ix = h_coords[i*3+0];
-                double iy = h_coords[i*3+1];
-                double iz = h_coords[i*3+2];
+            for(int j=j_start; j < j_end; j++) {
 
-                double dx = ix - jx;
-                double dy = iy - jy;
-                double dz = iz - jz;
+                double jx = h_coords[j*3+0];
+                double jy = h_coords[j*3+1];
+                double jz = h_coords[j*3+2];
+
+                double dx = box_ctr_x - jx;
+                double dy = box_ctr_y - jy;
+                double dz = box_ctr_z - jz;
 
                 dx -= bx*floor(dx/bx+0.5);
                 dy -= by*floor(dy/by+0.5);
                 dz -= bz*floor(dz/bz+0.5);
 
-                double atom_dist = sqrt(dx*dx + dy*dy + dz*dz);
+                dx = max(0.0, fabs(dx) - box_ext_x);
+                dy = max(0.0, fabs(dy) - box_ext_y);
+                dz = max(0.0, fabs(dz) - box_ext_z);
+
+                double box_dist = sqrt(dx*dx + dy*dy + dz*dz);
                 dist_calcs += 1;
 
-                if(atom_dist < cutoff) {
-                    keep = true;
-                    break;
-                }
-            }
+                int row_start = rbidx*32;
+                int row_end = min((rbidx+1)*32, N);
 
-            if(keep) {
-                interacting_idxs.push_back(j);
+                if(box_dist > cutoff) {
+                    continue;
+                }
+
+                bool keep = false;
+                
+                for(int i=row_start; i < row_end; i++) {
+
+                    double ix = h_coords[i*3+0];
+                    double iy = h_coords[i*3+1];
+                    double iz = h_coords[i*3+2];
+
+                    double dx = ix - jx;
+                    double dy = iy - jy;
+                    double dz = iz - jz;
+
+                    dx -= bx*floor(dx/bx+0.5);
+                    dy -= by*floor(dy/by+0.5);
+                    dz -= bz*floor(dz/bz+0.5);
+
+                    double atom_dist = sqrt(dx*dx + dy*dy + dz*dz);
+                    dist_calcs += 1;
+
+                    if(atom_dist < cutoff) {
+                        keep = true;
+                        break;
+                    }
+                }
+
+                if(keep) {
+                    interacting_idxs.push_back(j);
+                }
+
             }
 
         }
+
+        // for(int j=0; j < N; j++) {
+
+        // }
 
         ixn_list.push_back(interacting_idxs);
 

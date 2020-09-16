@@ -3,6 +3,8 @@ from timemachine.lib import custom_ops
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 
+from training import water_box
+
 def test_block_bounds():
 
     for N in [128, 156, 298]:
@@ -54,51 +56,59 @@ def hilbert_sort(conf, D):
 
 def test_neighborlist():
 
-    for N in [32, 64, 128, 512, 33, 28, 51, 129]:
-        np.random.seed(1234)
+    # for N in [32, 64, 128, 512, 33, 28, 51, 129]:
 
-        D = 3
+    _, coords, box, _ = water_box.prep_system(8.0) # 6.2 is 23k atoms, roughly DHFR
+    coords = coords[:32768]
+    coords = coords/coords.unit
+    box_diag = np.diag(box)
 
-        coords = np.random.rand(N, D)
+    N = coords.shape[0]
 
-        sort = True
-        if sort:
-            perm = hilbert_sort(coords, D)
-            coords = coords[perm]
+    np.random.seed(1234)
+
+    D = 3
+
+    # coords = np.random.rand(N, D)
+
+    sort = True
+    if sort:
+        perm = hilbert_sort(coords+np.argmin(coords), D)
+        coords = coords[perm]
 
 
-        box_diag = (np.random.rand(3) + 1)
-        box = np.eye(3) * box_diag
+    # box_diag = (np.random.rand(3) + 1)
+    # box = np.eye(3) * box_diag
 
-        num_blocks_of_32 = (N + 32 - 1)//32
-        col_coords = np.expand_dims(coords, axis=0)
+    num_blocks_of_32 = (N + 32 - 1)//32
+    col_coords = np.expand_dims(coords, axis=0)
 
-        cutoff = 0.2
+    cutoff = 0.2
 
-        ref_ixn_list = []
+    ref_ixn_list = []
 
-        for rbidx in range(num_blocks_of_32):
-            row_start = rbidx*32
-            row_end = min((rbidx+1)*32, N)
-            row_coords = coords[row_start:row_end]
-            row_coords = np.expand_dims(row_coords, axis=1)
+    for rbidx in range(num_blocks_of_32):
+        row_start = rbidx*32
+        row_end = min((rbidx+1)*32, N)
+        row_coords = coords[row_start:row_end]
+        row_coords = np.expand_dims(row_coords, axis=1)
 
-            deltas = row_coords - col_coords
-            deltas -= box_diag*np.floor(deltas/box_diag+0.5)
+        deltas = row_coords - col_coords
+        deltas -= box_diag*np.floor(deltas/box_diag+0.5)
 
-            # block size x N, tbd make periodic
-            dij = np.linalg.norm(deltas, axis=-1) 
-            idxs = np.argwhere(np.any(dij < cutoff, axis=0))
-            ref_ixn_list.append(idxs.reshape(-1).tolist())
+        # block size x N, tbd make periodic
+        dij = np.linalg.norm(deltas, axis=-1) 
+        idxs = np.argwhere(np.any(dij < cutoff, axis=0))
+        ref_ixn_list.append(idxs.reshape(-1).tolist())
 
-        nblist = custom_ops.Neighborlist(N, D)
-        test_ixn_list = nblist.build_nblist(coords, box, cutoff)
+    nblist = custom_ops.Neighborlist(N, D)
+    test_ixn_list = nblist.build_nblist(coords, box, cutoff)
 
-        assert len(ref_ixn_list) == len(test_ixn_list)
+    assert len(ref_ixn_list) == len(test_ixn_list)
 
-        for bidx, (a, b) in enumerate(zip(ref_ixn_list, test_ixn_list)):
-            np.testing.assert_equal(a, b)
+    for bidx, (a, b) in enumerate(zip(ref_ixn_list, test_ixn_list)):
+        np.testing.assert_equal(a, b)
 
-        np.testing.assert_equal(ref_ixn_list, test_ixn_list)
+    np.testing.assert_equal(ref_ixn_list, test_ixn_list)
 
-        # output is a group of 32 
+    # output is a group of 32 
