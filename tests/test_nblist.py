@@ -5,41 +5,43 @@ from hilbertcurve.hilbertcurve import HilbertCurve
 
 from training import water_box
 
-def test_block_bounds():
+import time
 
-    for N in [128, 156, 298]:
-        for block_size in [1, 2, 4, 8, 16, 32, 64, 3, 5, 39]:
+# def test_block_bounds():
 
-            D = 3
+#     for N in [128, 156, 298]:
+#         for block_size in [1, 2, 4, 8, 16, 32, 64, 3, 5, 39]:
 
-            coords = np.random.randn(N, D)
-            box_diag = (np.random.rand(3) + 1)
-            box = np.eye(3) * box_diag
-            num_blocks = (N + block_size - 1)//block_size
+#             D = 3
+
+#             coords = np.random.randn(N, D)
+#             box_diag = (np.random.rand(3) + 1)
+#             box = np.eye(3) * box_diag
+#             num_blocks = (N + block_size - 1)//block_size
             
-            ref_ctrs = []
-            ref_exts = []
+#             ref_ctrs = []
+#             ref_exts = []
 
-            for bidx in range(num_blocks):
-                start_idx = bidx*block_size
-                end_idx = min((bidx+1)*block_size, N)
-                block_coords = coords[start_idx:end_idx]
-                block_coords -= box_diag*np.floor(block_coords//box_diag)
+#             for bidx in range(num_blocks):
+#                 start_idx = bidx*block_size
+#                 end_idx = min((bidx+1)*block_size, N)
+#                 block_coords = coords[start_idx:end_idx]
+#                 block_coords -= box_diag*np.floor(block_coords//box_diag)
 
-                c_max = np.amax(block_coords, axis=0)       
-                c_min = np.amin(block_coords, axis=0)
+#                 c_max = np.amax(block_coords, axis=0)       
+#                 c_min = np.amin(block_coords, axis=0)
 
-                ref_ctrs.append((c_max + c_min)/2)
-                ref_exts.append((c_max - c_min)/2)
+#                 ref_ctrs.append((c_max + c_min)/2)
+#                 ref_exts.append((c_max - c_min)/2)
 
-            ref_ctrs = np.array(ref_ctrs)
-            ref_exts = np.array(ref_exts)
+#             ref_ctrs = np.array(ref_ctrs)
+#             ref_exts = np.array(ref_exts)
 
-            nblist = custom_ops.Neighborlist_f64(N, D)
-            test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, block_size)
+#             nblist = custom_ops.Neighborlist_f64(N, D)
+#             test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, block_size)
 
-            np.testing.assert_almost_equal(ref_ctrs, test_ctrs)
-            np.testing.assert_almost_equal(ref_exts, test_exts)
+#             np.testing.assert_almost_equal(ref_ctrs, test_ctrs)
+#             np.testing.assert_almost_equal(ref_exts, test_exts)
 
 
 def hilbert_sort(conf, D):
@@ -67,12 +69,12 @@ def test_neighborlist():
 
     # _, coords, box, _ = water_box.prep_system(8.0) # 6.2 is 23k atoms, roughly DHFR
     # print(coords.shape)
-    # coords = coords[:50432]
+    # coords = coords[:50442]
     # coords = coords[:128]
     # coords = coords/coords.unit
 
     coords = get_water_coords(3, sort=False)
-    coords = coords[:130]
+    coords = coords[:253]
     padding = 0.1
     diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
     box = np.eye(3)
@@ -100,11 +102,14 @@ def test_neighborlist():
     num_blocks_of_32 = (N + 32 - 1)//32
     col_coords = np.expand_dims(coords, axis=0)
 
-    cutoff = 1.0
+    cutoff = 0.9
 
     nblist = custom_ops.Neighborlist_f32(N, D)
     test_ixn_list = nblist.build_nblist_mpu(coords, box, cutoff)
 
+    # time.sleep(5)
+
+    # assert 1
     # return
 
     ref_ixn_list = []

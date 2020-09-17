@@ -99,7 +99,7 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
     
     int num_blocks = (N + 32 - 1)/32;
 
-    std::cout << "A" << std::endl;
+    // std::cout << "A" << std::endl;
 
     std::vector<double> bb_ctrs(num_blocks*3);
     std::vector<double> bb_exts(num_blocks*3);
@@ -113,12 +113,12 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
         &bb_exts[0]
     );
 
-    std::cout << "B" << std::endl;
+    // std::cout << "B" << std::endl;
 
     d_block_bounds_ctr_ = gpuErrchkCudaMallocAndCopy(&bb_ctrs[0], bb_ctrs.size());
     d_block_bounds_ext_ = gpuErrchkCudaMallocAndCopy(&bb_exts[0], bb_exts.size());
 
-    std::cout << "C" << std::endl;
+    // std::cout << "C" << std::endl;
 
     unsigned int *dh_ixn_count;
     gpuErrchk(cudaMallocManaged(&dh_ixn_count, 1*sizeof(*dh_ixn_count)));
@@ -132,8 +132,9 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
 
     int tpb = 32;
     const int B = (N + 32 - 1)/32;
+    // const int COL_BATCHES = 4;
 
-    std::cout << "D: " << B << " " << tpb << std::endl;
+    // dim3 dimGrid(B, COL_BATCHES);
 
     find_blocks_with_interactions<RealType><<<B, tpb>>>(
         N,

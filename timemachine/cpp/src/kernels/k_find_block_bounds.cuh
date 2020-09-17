@@ -79,6 +79,9 @@ void __global__ find_blocks_with_interactions(
 
     RealType cutoff_squared = static_cast<RealType>(cutoff)*static_cast<RealType>(cutoff);
 
+    // int col_block_start = max(row_block_idx, blockIdx.y);
+    // int col_block_end = blockIdx.y+1
+
     for (int col_block_base = row_block_idx; col_block_base < NUM_BLOCKS; col_block_base += 32) {
 
         int col_block_idx = col_block_base+indexInWarp;
@@ -116,6 +119,16 @@ void __global__ find_blocks_with_interactions(
 
         // Loop over the col blocks we identified as potentially containing neighbors.
         while (includeBlockFlags != 0) {
+
+
+            // (ytz): CUDA ffs returns an inclusive [0,32] such that:
+            // ffs(0) == 0
+            // ffs(2^0=1) == 1
+            // ffs(2^1=2) == 2
+            // ffs(2^2=4) == 3
+            // ffs(2^3=8) == 4
+            // ffs(2^31) == 32
+
             int offset = __ffs(includeBlockFlags)-1;
 
             includeBlockFlags &= includeBlockFlags-1;
@@ -162,19 +175,15 @@ void __global__ find_blocks_with_interactions(
             //   0  0 0 0 0 0 0
             //   0  0 0 0 0 0 0
 
-            // we can probably optimize this later
-            if (atom_j_idx < N && atomFlags != 0) {
+            while(atomFlags) {
 
-                RealType pos_j_x = atom_j_idx < N ? coords[atom_j_idx*3 + 0] : 0;
-                RealType pos_j_y = atom_j_idx < N ? coords[atom_j_idx*3 + 1] : 0;
-                RealType pos_j_z = atom_j_idx < N ? coords[atom_j_idx*3 + 2] : 0;
+                    RealType pos_j_x = atom_j_idx < N ? coords[atom_j_idx*3 + 0] : 0;
+                    RealType pos_j_y = atom_j_idx < N ? coords[atom_j_idx*3 + 1] : 0;
+                    RealType pos_j_z = atom_j_idx < N ? coords[atom_j_idx*3 + 2] : 0;
 
+                    int row_atom = __ffs(atomFlags)-1;
+                    atomFlags &= atomFlags-1;
 
-                unsigned first = __ffs(atomFlags)-1;
-                unsigned last = 32-__clz(atomFlags);
-
-                // this can be optimized!
-                for (int row_atom = first; row_atom < last; row_atom++) {
                     RealType atom_atom_dx = pos_i_buffer[row_atom*3 + 0] - pos_j_x;
                     RealType atom_atom_dy = pos_i_buffer[row_atom*3 + 1] - pos_j_y;
                     RealType atom_atom_dz = pos_i_buffer[row_atom*3 + 2] - pos_j_z;
@@ -184,7 +193,7 @@ void __global__ find_blocks_with_interactions(
                     atom_atom_dz -= bz*floor(atom_atom_dz/bz + static_cast<RealType>(0.5));
 
                     interacts |= (atom_atom_dx*atom_atom_dx + atom_atom_dy*atom_atom_dy + atom_atom_dz*atom_atom_dz < cutoff_squared ? 1<<row_atom : 0);
-                }
+
             }
             
             // Add any interacting atoms to the buffer.
