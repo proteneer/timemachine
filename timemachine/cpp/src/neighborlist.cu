@@ -123,11 +123,12 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
     unsigned int *dh_ixn_count;
     gpuErrchk(cudaMallocManaged(&dh_ixn_count, 1*sizeof(*dh_ixn_count)));
     *dh_ixn_count = 0;
-    unsigned long long MAX_BUFFER = N*N;
+    unsigned long long MAX_TILE_BUFFER = (N/32)*(N/32);
+    unsigned long long MAX_ATOM_BUFFER = (N/32)*10000;
     int *dh_ixn_tiles;
-    gpuErrchk(cudaMallocManaged(&dh_ixn_tiles, MAX_BUFFER*sizeof(*dh_ixn_tiles)));
+    gpuErrchk(cudaMallocManaged(&dh_ixn_tiles, MAX_TILE_BUFFER*sizeof(*dh_ixn_tiles)));
     unsigned int *dh_ixn_atoms;
-    gpuErrchk(cudaMallocManaged(&dh_ixn_atoms, MAX_BUFFER*sizeof(*dh_ixn_atoms)));
+    gpuErrchk(cudaMallocManaged(&dh_ixn_atoms, MAX_ATOM_BUFFER*sizeof(*dh_ixn_atoms)));
 
     int tpb = 32;
     const int B = (N + 32 - 1)/32;

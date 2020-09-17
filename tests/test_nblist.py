@@ -65,20 +65,18 @@ def test_neighborlist():
 
     # for N in [32, 64, 128, 512, 33, 28, 51, 129]:
 
-    _, coords, box, _ = water_box.prep_system(8.0) # 6.2 is 23k atoms, roughly DHFR
-    # coords = coords[:32768]
-    coords = coords[:32768]
-    coords = coords/coords.unit
+    # _, coords, box, _ = water_box.prep_system(8.0) # 6.2 is 23k atoms, roughly DHFR
+    # print(coords.shape)
+    # coords = coords[:50432]
+    # coords = coords[:128]
+    # coords = coords/coords.unit
 
-    # coords = get_water_coords(3, sort=False)
-    # coords = coords[:2048]
-    # padding = 0.2
-    # diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
-    # box = np.eye(3)
-    # np.fill_diagonal(box, diag)
-
-
-
+    coords = get_water_coords(3, sort=False)
+    coords = coords[:2048]
+    padding = 0.1
+    diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
+    box = np.eye(3)
+    np.fill_diagonal(box, diag)
 
     box_diag = np.diag(box)
 
@@ -102,7 +100,12 @@ def test_neighborlist():
     num_blocks_of_32 = (N + 32 - 1)//32
     col_coords = np.expand_dims(coords, axis=0)
 
-    cutoff = 0.2
+    cutoff = 1.0
+
+    nblist = custom_ops.Neighborlist_f32(N, D)
+    test_ixn_list = nblist.build_nblist_mpu(coords, box, cutoff)
+
+    # return
 
     ref_ixn_list = []
 
@@ -121,8 +124,6 @@ def test_neighborlist():
         idxs = np.argwhere(np.any(dij < cutoff, axis=0))
         ref_ixn_list.append(idxs.reshape(-1).tolist())
 
-    nblist = custom_ops.Neighborlist_f64(N, D)
-    test_ixn_list = nblist.build_nblist_mpu(coords, box, cutoff)
 
     assert len(ref_ixn_list) == len(test_ixn_list)
 

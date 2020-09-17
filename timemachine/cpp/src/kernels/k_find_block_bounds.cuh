@@ -207,6 +207,7 @@ void __global__ find_blocks_with_interactions(
                 interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
                 ixn_j_buffer[threadIdx.x] = ixn_j_buffer[32+threadIdx.x];
+                ixn_j_buffer[32+threadIdx.x] = N; // reset old values
                 neighborsInBuffer -= 32;
             }
         } // loop over row atoms
@@ -218,7 +219,7 @@ void __global__ find_blocks_with_interactions(
             sync_start[0] = atomicAdd(interactionCount, tilesToStore);
         }
         interactingTiles[sync_start[0]] = row_block_idx;
-        // overflow atoms are >= N
+        // overflow atoms are >= N (this final flush is bad)
         interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
     }
 }
