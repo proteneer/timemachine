@@ -22,6 +22,9 @@ public:
 
     ~Neighborlist();
 
+    // tbd get_hilbert_coords(), get coordinates that are hilbert ordered
+    // (note that nonbonded terms also need to sort using the same permutation)
+
     // non-periodic neighborlist
     std::vector<std::vector<int> > build_nblist_cpu(
         int N,
@@ -46,12 +49,15 @@ public:
     double *bb_ctrs,
     double *bb_exts);
 
+
+private:
+
     void compute_block_bounds(
         int N,
         int D,
         const double *coords,
         const double *box,
-        const int *perm,
+        // const int *perm,
         cudaStream_t stream
     );
 

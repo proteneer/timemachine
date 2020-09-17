@@ -209,20 +209,20 @@ void Electrostatics<RealType>::execute_device(
     std::cout << duration << "us to re-sort" << std::endl;;
 
     // its safe for us to build a neighborlist in a lower dimension.
-    nblist_.compute_block_bounds(
-        N_,
-        D,
-        d_x,
-        d_box,
-        d_perm_,
-        stream
-    );
+    // nblist_.compute_block_bounds(
+    //     N_,
+    //     D,
+    //     d_x,
+    //     d_box,
+    //     // d_perm_,
+    //     stream
+    // );
 
     std::vector<double> bb_ctr(B*3);
     std::vector<double> bb_ext(B*3);
 
-    gpuErrchk(cudaMemcpy(&bb_ctr[0], nblist_.get_block_bounds_ctr(), B*3*sizeof(double), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(&bb_ext[0], nblist_.get_block_bounds_ext(), B*3*sizeof(double), cudaMemcpyDeviceToHost));
+    // gpuErrchk(cudaMemcpy(&bb_ctr[0], nblist_.get_block_bounds_ctr(), B*3*sizeof(double), cudaMemcpyDeviceToHost));
+    // gpuErrchk(cudaMemcpy(&bb_ext[0], nblist_.get_block_bounds_ext(), B*3*sizeof(double), cudaMemcpyDeviceToHost));
 
     std::vector<int> tiles_x;
     std::vector<int> tiles_y;

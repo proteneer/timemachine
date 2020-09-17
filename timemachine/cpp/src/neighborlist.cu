@@ -95,30 +95,16 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
     const double cutoff) {
 
     double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*D*sizeof(double));
-    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, D*D*sizeof(double));
-    
+    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, D*D*sizeof(double));    
     int num_blocks = (N + 32 - 1)/32;
 
-    // std::cout << "A" << std::endl;
-
-    std::vector<double> bb_ctrs(num_blocks*3);
-    std::vector<double> bb_exts(num_blocks*3);
-    this->compute_block_bounds_cpu(
+    this->compute_block_bounds(
         N,
         D,
-        32,
-        h_coords,
-        h_box,
-        &bb_ctrs[0],
-        &bb_exts[0]
+        d_coords,
+        d_box,
+        static_cast<cudaStream_t>(0)
     );
-
-    // std::cout << "B" << std::endl;
-
-    d_block_bounds_ctr_ = gpuErrchkCudaMallocAndCopy(&bb_ctrs[0], bb_ctrs.size());
-    d_block_bounds_ext_ = gpuErrchkCudaMallocAndCopy(&bb_exts[0], bb_exts.size());
-
-    // std::cout << "C" << std::endl;
 
     unsigned int *dh_ixn_count;
     gpuErrchk(cudaMallocManaged(&dh_ixn_count, 1*sizeof(*dh_ixn_count)));
@@ -132,9 +118,6 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
 
     int tpb = 32;
     const int B = (N + 32 - 1)/32;
-    // const int COL_BATCHES = 4;
-
-    // dim3 dimGrid(B, COL_BATCHES);
 
     find_blocks_with_interactions<RealType><<<B, tpb>>>(
         N,
@@ -154,28 +137,15 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
 
     std::vector<std::vector<int> > ixn_list(B, std::vector<int>());
 
-    // for(int i=0; i < 3; i++) {
-    //     std::cout << "TILE: " << dh_ixn_tiles[i] << std::endl;
-    // }
-
-    // for(int i=0; i < 96; i++) {
-    //     std::cout << "?" << i << " " << dh_ixn_atoms[i] << std::endl;
-    // }
-
     for(int i=0; i < *dh_ixn_count; i++) {
         int tile_idx = dh_ixn_tiles[i];
-        // TBD OVERFLOW
-        // std::cout << "TILE_IDX: " << tile_idx << " ATOMS: ";
         for(int j=0; j < 32; j++) {
             int atom_j_idx = dh_ixn_atoms[i*32+j];
             if(atom_j_idx < N) {
                 ixn_list[tile_idx].push_back(atom_j_idx);
-                // std::cout << atom_j_idx << " ";
             }
         }
-        // std::cout << std::endl;
     }
-    // std::cout << "dh_ixn_count: " << *dh_ixn_count << std::endl;
 
     return ixn_list;
 
@@ -396,9 +366,9 @@ template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds(
 	int N,
 	int D,
-	const double *coords,
-    const double *box,
-    const int *perm,
+	const double *d_coords,
+    const double *d_box,
+    // const int *d_perm,
 	cudaStream_t stream) {
 
     int tpb = 32;
@@ -411,9 +381,9 @@ void Neighborlist<RealType>::compute_block_bounds(
         N,
         D,
         B,
-        coords,
-        box,
-        perm,
+        d_coords,
+        d_box,
+        // perm,
         d_block_bounds_ctr_,
         d_block_bounds_ext_
     );	

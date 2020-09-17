@@ -17,7 +17,7 @@ void __global__ k_find_block_bounds(
     const int T,
     const double *coords,
     const double *box,
-    const int *perm,
+    // const int *perm,
     double *block_bounds_ctr,
     double *block_bounds_ext);
 
@@ -164,15 +164,15 @@ void __global__ find_blocks_with_interactions(
             //       threadIdx
             //      0 1 2 3 4 5
             //   0  0 0 0 0 0 0 
-            // f 1  0 1 0 1 1 0 j = first
-            //   0  0 0 0 0 0 0
-            //   0  0 0 0 0 0 0 
-            //   0  0 0 0 0 0 0
-            //   1  1 0 0 0 1 1
-            //   0  0 0 0 0 0 0
-            //   1  0 1 0 0 1 0
-            // l 1  1 1 0 0 0 1 j = last
-            //   0  0 0 0 0 0 0
+            // a 1  0 1 0 1 1 0  row_atom
+            // t 0  0 0 0 0 0 0
+            // o 0  0 0 0 0 0 0 
+            // m 0  0 0 0 0 0 0
+            // f 1  1 0 0 0 1 1  row_atom
+            // l 0  0 0 0 0 0 0
+            // a 1  0 1 0 0 1 0  row_atom
+            // g 1  1 1 0 0 0 1  row_atom
+            // s 0  0 0 0 0 0 0
             //   0  0 0 0 0 0 0
 
             while(atomFlags) {
@@ -228,7 +228,6 @@ void __global__ find_blocks_with_interactions(
             sync_start[0] = atomicAdd(interactionCount, tilesToStore);
         }
         interactingTiles[sync_start[0]] = row_block_idx;
-        // overflow atoms are >= N (this final flush is bad)
         interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
     }
 }
