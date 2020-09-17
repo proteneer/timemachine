@@ -72,7 +72,7 @@ def test_neighborlist():
     # coords = coords/coords.unit
 
     coords = get_water_coords(3, sort=False)
-    coords = coords[:2048]
+    coords = coords[:130]
     padding = 0.1
     diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
     box = np.eye(3)
