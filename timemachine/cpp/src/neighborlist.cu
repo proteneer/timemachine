@@ -7,7 +7,8 @@
 
 namespace timemachine {
 
-Neighborlist::Neighborlist(
+template<typename RealType>
+Neighborlist<RealType>::Neighborlist(
 	int N,
 	int D) {
 
@@ -19,7 +20,8 @@ Neighborlist::Neighborlist(
 
 }
 
-Neighborlist::~Neighborlist() {
+template<typename RealType>
+Neighborlist<RealType>::~Neighborlist() {
 
     gpuErrchk(cudaFree(d_block_bounds_ctr_));
     gpuErrchk(cudaFree(d_block_bounds_ext_));
@@ -46,8 +48,8 @@ int pow_int(int x, int p) {
   else return x * tmp * tmp;
 }
 
-
-void Neighborlist::compute_block_bounds_cpu(
+template<typename RealType>
+void Neighborlist<RealType>::compute_block_bounds_cpu(
     const int N,
     const int D,
     const int block_size,
@@ -84,7 +86,101 @@ void Neighborlist::compute_block_bounds_cpu(
 
 }
 
-std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
+template<typename RealType>
+std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
+    int N,
+    int D,
+    const double *h_coords,
+    const double *h_box,
+    const double cutoff) {
+
+    double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*D*sizeof(double));
+    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, D*D*sizeof(double));
+    
+    int num_blocks = (N + 32 - 1)/32;
+
+    std::cout << "A" << std::endl;
+
+    std::vector<double> bb_ctrs(num_blocks*3);
+    std::vector<double> bb_exts(num_blocks*3);
+    this->compute_block_bounds_cpu(
+        N,
+        D,
+        32,
+        h_coords,
+        h_box,
+        &bb_ctrs[0],
+        &bb_exts[0]
+    );
+
+    std::cout << "B" << std::endl;
+
+    d_block_bounds_ctr_ = gpuErrchkCudaMallocAndCopy(&bb_ctrs[0], bb_ctrs.size());
+    d_block_bounds_ext_ = gpuErrchkCudaMallocAndCopy(&bb_exts[0], bb_exts.size());
+
+    std::cout << "C" << std::endl;
+
+    unsigned int *dh_ixn_count;
+    gpuErrchk(cudaMallocManaged(&dh_ixn_count, 1*sizeof(*dh_ixn_count)));
+    *dh_ixn_count = 0;
+    unsigned long long MAX_BUFFER = N*N;
+    int *dh_ixn_tiles;
+    gpuErrchk(cudaMallocManaged(&dh_ixn_tiles, MAX_BUFFER*sizeof(*dh_ixn_tiles)));
+    unsigned int *dh_ixn_atoms;
+    gpuErrchk(cudaMallocManaged(&dh_ixn_atoms, MAX_BUFFER*sizeof(*dh_ixn_atoms)));
+
+    int tpb = 32;
+    const int B = (N + 32 - 1)/32;
+
+    std::cout << "D: " << B << " " << tpb << std::endl;
+
+    find_blocks_with_interactions<RealType><<<B, tpb>>>(
+        N,
+        d_block_bounds_ctr_,
+        d_block_bounds_ext_,
+        d_coords,
+        d_box,
+        dh_ixn_count,
+        dh_ixn_tiles,
+        dh_ixn_atoms,
+        cutoff
+    );
+
+    cudaDeviceSynchronize();
+
+    gpuErrchk(cudaPeekAtLastError());
+
+    std::vector<std::vector<int> > ixn_list(B, std::vector<int>());
+
+    // for(int i=0; i < 3; i++) {
+    //     std::cout << "TILE: " << dh_ixn_tiles[i] << std::endl;
+    // }
+
+    // for(int i=0; i < 96; i++) {
+    //     std::cout << "?" << i << " " << dh_ixn_atoms[i] << std::endl;
+    // }
+
+    for(int i=0; i < *dh_ixn_count; i++) {
+        int tile_idx = dh_ixn_tiles[i];
+        // TBD OVERFLOW
+        // std::cout << "TILE_IDX: " << tile_idx << " ATOMS: ";
+        for(int j=0; j < 32; j++) {
+            int atom_j_idx = dh_ixn_atoms[i*32+j];
+            if(atom_j_idx < N) {
+                ixn_list[tile_idx].push_back(atom_j_idx);
+                // std::cout << atom_j_idx << " ";
+            }
+        }
+        // std::cout << std::endl;
+    }
+    // std::cout << "dh_ixn_count: " << *dh_ixn_count << std::endl;
+
+    return ixn_list;
+
+}
+
+template<typename RealType>
+std::vector<std::vector<int> >  Neighborlist<RealType>::build_nblist_cpu(
     int N,
     int D,
     const double *h_coords,
@@ -294,7 +390,8 @@ std::vector<std::vector<int> >  Neighborlist::build_nblist_cpu(
 
 }
 
-void Neighborlist::compute_block_bounds(
+template <typename RealType>
+void Neighborlist<RealType>::compute_block_bounds(
 	int N,
 	int D,
 	const double *coords,
@@ -322,6 +419,10 @@ void Neighborlist::compute_block_bounds(
     gpuErrchk(cudaPeekAtLastError());
 
 };
+
+
+template class Neighborlist<double>;
+template class Neighborlist<float>;
 
 
 }

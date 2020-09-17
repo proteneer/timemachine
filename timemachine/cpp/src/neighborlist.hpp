@@ -5,6 +5,7 @@
 namespace timemachine {
 
 
+template<typename RealType>
 class Neighborlist {
 
 private:
@@ -23,6 +24,13 @@ public:
 
     // non-periodic neighborlist
     std::vector<std::vector<int> > build_nblist_cpu(
+        int N,
+        int D,
+        const double *h_coords,
+        const double *h_box,
+        const double cutoff);
+
+    std::vector<std::vector<int> > build_nblist_mpu(
         int N,
         int D,
         const double *h_coords,

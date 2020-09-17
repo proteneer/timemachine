@@ -21,7 +21,7 @@ private:
     int *d_perm_;
 
     double cutoff_;
-    Neighborlist nblist_;
+    Neighborlist<RealType> nblist_;
 
     const int E_;
     const int N_;

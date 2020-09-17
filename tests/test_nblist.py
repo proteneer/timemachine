@@ -35,7 +35,7 @@ def test_block_bounds():
             ref_ctrs = np.array(ref_ctrs)
             ref_exts = np.array(ref_exts)
 
-            nblist = custom_ops.Neighborlist(N, D)
+            nblist = custom_ops.Neighborlist_f64(N, D)
             test_ctrs, test_exts = nblist.compute_block_bounds(coords, box, block_size)
 
             np.testing.assert_almost_equal(ref_ctrs, test_ctrs)
@@ -54,13 +54,32 @@ def hilbert_sort(conf, D):
     return perm
 
 
+def get_water_coords(D, sort=False):
+    x = np.load("tests/data/water.npy").astype(np.float32).astype(np.float64)
+    x = x[:, :D]
+
+    return x
+
+
 def test_neighborlist():
 
     # for N in [32, 64, 128, 512, 33, 28, 51, 129]:
 
     _, coords, box, _ = water_box.prep_system(8.0) # 6.2 is 23k atoms, roughly DHFR
+    # coords = coords[:32768]
     coords = coords[:32768]
     coords = coords/coords.unit
+
+    # coords = get_water_coords(3, sort=False)
+    # coords = coords[:2048]
+    # padding = 0.2
+    # diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
+    # box = np.eye(3)
+    # np.fill_diagonal(box, diag)
+
+
+
+
     box_diag = np.diag(box)
 
     N = coords.shape[0]
@@ -98,15 +117,20 @@ def test_neighborlist():
 
         # block size x N, tbd make periodic
         dij = np.linalg.norm(deltas, axis=-1) 
+        dij[:, :row_start] = cutoff # slight hack to discard duplicates
         idxs = np.argwhere(np.any(dij < cutoff, axis=0))
         ref_ixn_list.append(idxs.reshape(-1).tolist())
 
-    nblist = custom_ops.Neighborlist(N, D)
-    test_ixn_list = nblist.build_nblist(coords, box, cutoff)
+    nblist = custom_ops.Neighborlist_f64(N, D)
+    test_ixn_list = nblist.build_nblist_mpu(coords, box, cutoff)
 
     assert len(ref_ixn_list) == len(test_ixn_list)
 
     for bidx, (a, b) in enumerate(zip(ref_ixn_list, test_ixn_list)):
+        if a != b:
+            print("TESTING bidx", bidx)
+            print(a)
+            print(b)
         np.testing.assert_equal(a, b)
 
     np.testing.assert_equal(ref_ixn_list, test_ixn_list)

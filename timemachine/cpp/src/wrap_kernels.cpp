@@ -78,10 +78,11 @@ namespace py = pybind11;
 //     });
 // }
 
-void declare_neighborlist(py::module &m) {
+template <typename RealType>
+void declare_neighborlist(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Neighborlist;
-    std::string pyclass_name = std::string("Neighborlist");
+    using Class = timemachine::Neighborlist<RealType>;
+    std::string pyclass_name = std::string("Neighborlist_") + typestr;
     py::class_<Class>(
         m,
         pyclass_name.c_str(),
@@ -89,14 +90,14 @@ void declare_neighborlist(py::module &m) {
         py::dynamic_attr()
     )
     .def(py::init([](int N, int D) {
-        return new timemachine::Neighborlist(
+        return new timemachine::Neighborlist<RealType>(
             N,
             D
         );
 
     }))
     .def("compute_block_bounds", [](
-        timemachine::Neighborlist &nblist,
+        timemachine::Neighborlist<RealType> &nblist,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &box,
         int block_size) -> py::tuple {
@@ -122,7 +123,7 @@ void declare_neighborlist(py::module &m) {
 
     })
     .def("build_nblist", [](
-        timemachine::Neighborlist &nblist,
+        timemachine::Neighborlist<RealType> &nblist,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &box,
         const double cutoff) -> std::vector<std::vector<int> > {
@@ -133,21 +134,29 @@ void declare_neighborlist(py::module &m) {
         std::vector<std::vector<int> > ixn_list = nblist.build_nblist_cpu(
             N,
             D,
-            // block_size,
             coords.data(),
             box.data(),
             cutoff
-            // py_bb_ctrs.mutable_data(),
-            // py_bb_exts.mutable_data()
         );
-
-
         return ixn_list;
+    })
+    .def("build_nblist_mpu", [](
+        timemachine::Neighborlist<RealType> &nblist,
+        const py::array_t<double, py::array::c_style> &coords,
+        const py::array_t<double, py::array::c_style> &box,
+        const double cutoff) -> std::vector<std::vector<int> > {
 
-        // return pybind11::cast<pybind11::none>(Py_None);
+        int N = coords.shape()[0];
+        int D = coords.shape()[1];
 
-        // return py::make_tuple(py_bb_ctrs, py_bb_exts);
-
+        std::vector<std::vector<int> > ixn_list = nblist.build_nblist_mpu(
+            N,
+            D,
+            coords.data(),
+            box.data(),
+            cutoff
+        );
+        return ixn_list;
     });
 
 
@@ -881,7 +890,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_potential(m);
     declare_bound_potential(m);
 
-    declare_neighborlist(m);
+    declare_neighborlist<double>(m, "f64");
+    declare_neighborlist<float>(m, "f32");
 
     // declare_centroid_restraint<double>(m, "f64");
     // declare_centroid_restraint<float>(m, "f32");
