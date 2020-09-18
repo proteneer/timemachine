@@ -89,58 +89,36 @@ void declare_neighborlist(py::module &m, const char *typestr) {
         py::buffer_protocol(),
         py::dynamic_attr()
     )
-    .def(py::init([](int N, int D) {
-        return new timemachine::Neighborlist<RealType>(
-            N,
-            D
-        );
-
+    .def(py::init([](int N) {
+        return new timemachine::Neighborlist<RealType>(N);
     }))
-    .def("compute_block_bounds", [](
-        timemachine::Neighborlist<RealType> &nblist,
-        const py::array_t<double, py::array::c_style> &coords,
-        const py::array_t<double, py::array::c_style> &box,
-        int block_size) -> py::tuple {
+    // .def("compute_block_bounds", [](
+    //     timemachine::Neighborlist<RealType> &nblist,
+    //     const py::array_t<double, py::array::c_style> &coords,
+    //     const py::array_t<double, py::array::c_style> &box,
+    //     int block_size) -> py::tuple {
 
-        int N = coords.shape()[0];
-        int D = coords.shape()[1];
-        int B = (N + block_size - 1)/block_size;
+    //     int N = coords.shape()[0];
+    //     int D = coords.shape()[1];
+    //     int B = (N + block_size - 1)/block_size;
 
-        py::array_t<double, py::array::c_style> py_bb_ctrs({B, D});
-        py::array_t<double, py::array::c_style> py_bb_exts({B, D});
+    //     py::array_t<double, py::array::c_style> py_bb_ctrs({B, D});
+    //     py::array_t<double, py::array::c_style> py_bb_exts({B, D});
 
-        nblist.compute_block_bounds_cpu(
-            N,
-            D,
-            block_size,
-            coords.data(),
-            box.data(),
-            py_bb_ctrs.mutable_data(),
-            py_bb_exts.mutable_data()
-        );
+    //     nblist.compute_block_bounds_cpu(
+    //         N,
+    //         D,
+    //         block_size,
+    //         coords.data(),
+    //         box.data(),
+    //         py_bb_ctrs.mutable_data(),
+    //         py_bb_exts.mutable_data()
+    //     );
 
-        return py::make_tuple(py_bb_ctrs, py_bb_exts);
+    //     return py::make_tuple(py_bb_ctrs, py_bb_exts);
 
-    })
-    .def("build_nblist", [](
-        timemachine::Neighborlist<RealType> &nblist,
-        const py::array_t<double, py::array::c_style> &coords,
-        const py::array_t<double, py::array::c_style> &box,
-        const double cutoff) -> std::vector<std::vector<int> > {
-
-        int N = coords.shape()[0];
-        int D = coords.shape()[1];
-
-        std::vector<std::vector<int> > ixn_list = nblist.build_nblist_cpu(
-            N,
-            D,
-            coords.data(),
-            box.data(),
-            cutoff
-        );
-        return ixn_list;
-    })
-    .def("build_nblist_mpu", [](
+    // })
+    .def("get_nblist_cpu", [](
         timemachine::Neighborlist<RealType> &nblist,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &box,
@@ -149,15 +127,34 @@ void declare_neighborlist(py::module &m, const char *typestr) {
         int N = coords.shape()[0];
         int D = coords.shape()[1];
 
-        std::vector<std::vector<int> > ixn_list = nblist.build_nblist_mpu(
+        std::vector<std::vector<int> > ixn_list = nblist.get_nblist_cpu(
             N,
-            D,
             coords.data(),
             box.data(),
             cutoff
         );
+
         return ixn_list;
+
     });
+    // .def("build_nblist_mpu", [](
+    //     timemachine::Neighborlist<RealType> &nblist,
+    //     const py::array_t<double, py::array::c_style> &coords,
+    //     const py::array_t<double, py::array::c_style> &box,
+    //     const double cutoff) -> std::vector<std::vector<int> > {
+
+    //     int N = coords.shape()[0];
+    //     int D = coords.shape()[1];
+
+    //     std::vector<std::vector<int> > ixn_list = nblist.build_nblist_mpu(
+    //         N,
+    //         D,
+    //         coords.data(),
+    //         box.data(),
+    //         cutoff
+    //     );
+    //     return ixn_list;
+    // });
 
 
 }

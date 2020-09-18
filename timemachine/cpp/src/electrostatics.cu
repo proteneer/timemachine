@@ -26,7 +26,7 @@ Electrostatics<RealType>::Electrostatics(
     beta_(beta),
     cutoff_(cutoff),
     E_(exclusion_idxs.size()/2),
-    nblist_(lambda_offset_idxs.size(), 3),
+    nblist_(lambda_offset_idxs.size()),
     d_perm_(nullptr) {
 
     if(lambda_offset_idxs.size() != N_) {

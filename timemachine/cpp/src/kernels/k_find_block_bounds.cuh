@@ -77,7 +77,7 @@ void __global__ compact_trim_atoms(
         interactingTiles[sync_start[0]] = row_block_idx;
 
         // if(blockIdx.x == 1) {
-        //     printf("trim store %d with %d\n", sync_start[0]*32 + threadIdx.x, ixn_j_buffer[threadIdx.x]);            
+            // printf("trim store %d with %d\n", sync_start[0]*32 + threadIdx.x, ixn_j_buffer[threadIdx.x]);            
         // }
 
         interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
@@ -91,8 +91,7 @@ void __global__ find_blocks_with_interactions(
     int N,
     const double *bb_ctr,
     const double *bb_ext,
-    // const double* __restrict__ coords,
-    const float* __restrict__ coords,
+    const double* __restrict__ coords, //TBD make float32 version
     const double* __restrict__ box,
     unsigned int* __restrict__ interactionCount,
     int* __restrict__ interactingTiles,

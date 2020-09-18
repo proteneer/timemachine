@@ -26,7 +26,7 @@ LennardJones<RealType>::LennardJones(
 ) :  N_(lambda_plane_idxs.size()),
     cutoff_(cutoff),
     E_(exclusion_idxs.size()/2),
-    nblist_(lambda_plane_idxs.size(), 3),
+    nblist_(lambda_plane_idxs.size()),
     d_perm_(nullptr) {
 
     if(lambda_plane_idxs.size() != N_) {
