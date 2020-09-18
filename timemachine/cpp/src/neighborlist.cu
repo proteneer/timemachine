@@ -96,7 +96,6 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
 
     double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*D*sizeof(double));
     double *d_box = gpuErrchkCudaMallocAndCopy(h_box, D*D*sizeof(double));    
-    int num_blocks = (N + 32 - 1)/32;
 
     this->compute_block_bounds(
         N,
@@ -117,9 +116,19 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
     gpuErrchk(cudaMallocManaged(&dh_ixn_atoms, MAX_ATOM_BUFFER*sizeof(*dh_ixn_atoms)));
 
     int tpb = 32;
-    const int B = (N + 32 - 1)/32;
+    const int B = (N+32-1)/32;
+    const int Y = (B+32-1)/32;
 
-    find_blocks_with_interactions<RealType><<<B, tpb>>>(
+    unsigned int *dh_trim_atoms;
+
+    gpuErrchk(cudaMallocManaged(&dh_trim_atoms, B*Y*32*sizeof(*dh_trim_atoms)));
+
+    // std::cout << "Grid sizes: " << B << " " << (B+32-1)/32 << std::endl;
+    dim3 dimGrid(B, Y, 1); // block x, y, z dims
+
+
+    // (ytz): TBD shared memory, stream
+    find_blocks_with_interactions<RealType><<<dimGrid, tpb>>>(
         N,
         d_block_bounds_ctr_,
         d_block_bounds_ext_,
@@ -128,24 +137,53 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
         dh_ixn_count,
         dh_ixn_tiles,
         dh_ixn_atoms,
+        dh_trim_atoms,
         cutoff
     );
 
     cudaDeviceSynchronize();
 
+
+
+    // (ytz): TBD shared memory, stream
+    compact_trim_atoms<<<B, tpb>>>(
+        N,
+        Y,
+        dh_trim_atoms,
+        dh_ixn_count,
+        dh_ixn_tiles,
+        dh_ixn_atoms
+    );
     gpuErrchk(cudaPeekAtLastError());
+
+
+    cudaDeviceSynchronize();
 
     std::vector<std::vector<int> > ixn_list(B, std::vector<int>());
 
+    // std::cout << "DHIXN_COUNT: " << *dh_ixn_count << std::endl;
+
     for(int i=0; i < *dh_ixn_count; i++) {
         int tile_idx = dh_ixn_tiles[i];
+        // std::cout << "tile_idx: " << tile_idx << std::endl;
         for(int j=0; j < 32; j++) {
             int atom_j_idx = dh_ixn_atoms[i*32+j];
             if(atom_j_idx < N) {
+                // std::cout << "push_back: " << atom_j_idx << " " << std::endl;
                 ixn_list[tile_idx].push_back(atom_j_idx);
             }
         }
     }
+
+    // for(int i=0; i < B; i++) {
+    //     for(int j=0; j < Y*32; j++) {
+    //         int ixn_atom = dh_trim_atoms[i*Y*32+j];
+    //         if(ixn_atom < N) {
+    //             // std::cout << "adding into " << i << " with " << ixn_atom << std::endl;
+    //             ixn_list[i].push_back(ixn_atom);                
+    //         }
+    //     }
+    // }
 
     return ixn_list;
 
