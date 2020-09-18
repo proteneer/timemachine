@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <cstdio>
 #include "curand.h"
 
@@ -39,7 +40,10 @@ inline void curandAssert(curandStatus_t code, const char *file, int line, bool a
 template<typename T>
 T* gpuErrchkCudaMallocAndCopy(const T *host_array, int count) {
     T* device_array;
+    std::cout << "foo" << std::endl;
     gpuErrchk(cudaMalloc(&device_array, count*sizeof(*host_array)));
+    std::cout << "bar" << std::endl;
     gpuErrchk(cudaMemcpy(device_array, host_array, count*sizeof(*host_array), cudaMemcpyHostToDevice));
+    std::cout << "zar" << std::endl;
     return device_array;
 }

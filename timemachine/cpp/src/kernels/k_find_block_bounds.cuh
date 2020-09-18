@@ -1,5 +1,7 @@
 #pragma once
 
+// wow double precision coords really suck and slow to load!
+
 void __global__ k_find_block_bounds(
     const int N,
     const int D,
@@ -50,9 +52,13 @@ void __global__ compact_trim_atoms(
         if(neighborsInBuffer > 32) {
             int tilesToStore = 1;
             if(indexInWarp == 0) {
+
                 sync_start[0] = atomicAdd(interactionCount, tilesToStore);
+                // printf("TRIM FLUSH ADDING NEW TILE SS %d\n", sync_start[0]);
             }
-            interactingTiles[sync_start[0]] = row_block_idx;
+
+            // printf("FLUSH ASSIGNING %d to %d\n", sync_start[0], row_block_idx);
+            interactingTiles[sync_start[0]] = row_block_idx; // IS THIS CORRECT? CONTESTED
             interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
             ixn_j_buffer[threadIdx.x] = ixn_j_buffer[32+threadIdx.x];
@@ -65,7 +71,9 @@ void __global__ compact_trim_atoms(
         int tilesToStore = 1;
         if(indexInWarp == 0) {
             sync_start[0] = atomicAdd(interactionCount, tilesToStore);
+            // printf("TRIM FLUSH ADDING NEW TILE SS %d\n", sync_start[0]);
         }
+        // printf("FINAL ASSIGNING %d to %d\n", sync_start[0], row_block_idx);
         interactingTiles[sync_start[0]] = row_block_idx;
 
         // if(blockIdx.x == 1) {
@@ -223,11 +231,12 @@ void __global__ find_blocks_with_interactions(
         // s 0  0 0 0 0 0 0
         //   0  0 0 0 0 0 0
 
-        while(atomFlags) {
 
-            RealType pos_j_x = atom_j_idx < N ? coords[atom_j_idx*3 + 0] : 0;
-            RealType pos_j_y = atom_j_idx < N ? coords[atom_j_idx*3 + 1] : 0;
-            RealType pos_j_z = atom_j_idx < N ? coords[atom_j_idx*3 + 2] : 0;
+        RealType pos_j_x = atom_j_idx < N ? coords[atom_j_idx*3 + 0] : 0;
+        RealType pos_j_y = atom_j_idx < N ? coords[atom_j_idx*3 + 1] : 0;
+        RealType pos_j_z = atom_j_idx < N ? coords[atom_j_idx*3 + 2] : 0;
+
+        while(atomFlags) {
 
             int row_atom = __ffs(atomFlags)-1;
             atomFlags &= atomFlags-1;

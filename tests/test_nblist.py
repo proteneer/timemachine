@@ -81,12 +81,14 @@ def test_neighborlist():
 
 
         _, coords, box, _ = water_box.prep_system(8.0) # 6.2 is 23k atoms, roughly DHFR
+
+        print(coords[-1])
         # print(coords.shape)
         coords = coords[:50442]
         coords = coords/coords.unit
 
-        N = coords.shape[0]
 
+        N = coords.shape[0]
         np.random.seed(1234)
 
         D = 3
@@ -106,7 +108,9 @@ def test_neighborlist():
         col_coords = np.expand_dims(coords, axis=0)
 
         cutoff = 1.0
-        cutoff = 0.2
+
+        # for r in range(2):
+        #     print(r)
 
         nblist = custom_ops.Neighborlist_f32(N, D)
         test_ixn_list = nblist.build_nblist_mpu(coords, box, cutoff)
@@ -136,7 +140,7 @@ def test_neighborlist():
         assert len(ref_ixn_list) == len(test_ixn_list)
 
         for bidx, (a, b) in enumerate(zip(ref_ixn_list, test_ixn_list)):
-            if a != b:
+            if sorted(a) != sorted(b):
                 print("TESTING bidx", bidx)
                 print(sorted(a))
                 print(sorted(b))

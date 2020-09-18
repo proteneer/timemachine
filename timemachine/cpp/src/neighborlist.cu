@@ -5,6 +5,9 @@
 #include "k_find_block_bounds.cuh"
 #include "gpu_utils.cuh"
 
+#include "cudaProfiler.h"
+#include "cuda_profiler_api.h"
+
 namespace timemachine {
 
 template<typename RealType>
@@ -105,28 +108,43 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
         static_cast<cudaStream_t>(0)
     );
 
-    unsigned int *dh_ixn_count;
-    gpuErrchk(cudaMallocManaged(&dh_ixn_count, 1*sizeof(*dh_ixn_count)));
-    *dh_ixn_count = 0;
-    unsigned long long MAX_TILE_BUFFER = (N/32)*(N/32);
-    unsigned long long MAX_ATOM_BUFFER = (N/32)*10000;
-    int *dh_ixn_tiles;
-    gpuErrchk(cudaMallocManaged(&dh_ixn_tiles, MAX_TILE_BUFFER*sizeof(*dh_ixn_tiles)));
-    unsigned int *dh_ixn_atoms;
-    gpuErrchk(cudaMallocManaged(&dh_ixn_atoms, MAX_ATOM_BUFFER*sizeof(*dh_ixn_atoms)));
+    unsigned int *d_ixn_count;
+    gpuErrchk(cudaMalloc(&d_ixn_count, 1*sizeof(*d_ixn_count)));
+    gpuErrchk(cudaMemset(d_ixn_count, 0, 1*sizeof(*d_ixn_count)));
+    // *d_ixn_count = 0;
+    const int B = (N+32-1)/32;
+    unsigned long long MAX_TILE_BUFFER = B*B;
+    unsigned long long MAX_ATOM_BUFFER = B*10000;
+    int *d_ixn_tiles;
+    gpuErrchk(cudaMalloc(&d_ixn_tiles, MAX_TILE_BUFFER*sizeof(*d_ixn_tiles)));
+    unsigned int *d_ixn_atoms;
+    gpuErrchk(cudaMalloc(&d_ixn_atoms, MAX_ATOM_BUFFER*sizeof(*d_ixn_atoms)));
 
     int tpb = 32;
-    const int B = (N+32-1)/32;
+
     const int Y = (B+32-1)/32;
 
-    unsigned int *dh_trim_atoms;
+    unsigned int *d_trim_atoms;
 
-    gpuErrchk(cudaMallocManaged(&dh_trim_atoms, B*Y*32*sizeof(*dh_trim_atoms)));
+    gpuErrchk(cudaMalloc(&d_trim_atoms, B*Y*32*sizeof(*d_trim_atoms)));
 
     // std::cout << "Grid sizes: " << B << " " << (B+32-1)/32 << std::endl;
     dim3 dimGrid(B, Y, 1); // block x, y, z dims
 
 
+    std::vector<float> h_coords_f32(N*D);
+    for(int i=0; i < N*D; i++) {
+        h_coords_f32[i] = h_coords[i];
+    }
+
+    std::cout << "A" << std::endl;
+
+    // float *d_coords_f32 = gpuErrchkCudaMallocAndCopy(&h_coords_f32[0], N*D);
+
+
+    std::cout << "B" << std::endl;
+
+    // cudaProfilerStart();
     // (ytz): TBD shared memory, stream
     find_blocks_with_interactions<RealType><<<dimGrid, tpb>>>(
         N,
@@ -134,46 +152,81 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
         d_block_bounds_ext_,
         d_coords,
         d_box,
-        dh_ixn_count,
-        dh_ixn_tiles,
-        dh_ixn_atoms,
-        dh_trim_atoms,
+        d_ixn_count,
+        d_ixn_tiles,
+        d_ixn_atoms,
+        d_trim_atoms,
         cutoff
     );
 
+    std::cout << "C" << std::endl;
+
     cudaDeviceSynchronize();
 
+    // cudaProfilerStop();
 
+    std::cout << "D" << std::endl;
 
     // (ytz): TBD shared memory, stream
     compact_trim_atoms<<<B, tpb>>>(
         N,
         Y,
-        dh_trim_atoms,
-        dh_ixn_count,
-        dh_ixn_tiles,
-        dh_ixn_atoms
+        d_trim_atoms,
+        d_ixn_count,
+        d_ixn_tiles,
+        d_ixn_atoms
     );
     gpuErrchk(cudaPeekAtLastError());
 
 
     cudaDeviceSynchronize();
 
+    // std::cout << "A" << std::endl;
+
+
+    unsigned int h_ixn_count;
+    gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count, 1*sizeof(*d_ixn_count), cudaMemcpyDeviceToHost));
+
+    // std::cout << "B" << std::endl;
+
+    std::vector<int> h_ixn_tiles(MAX_TILE_BUFFER);
+    std::vector<unsigned int> h_ixn_atoms(MAX_ATOM_BUFFER);
+
+    gpuErrchk(cudaMemcpy(&h_ixn_tiles[0], d_ixn_tiles, MAX_TILE_BUFFER*sizeof(int), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(&h_ixn_atoms[0], d_ixn_atoms, MAX_ATOM_BUFFER*sizeof(unsigned int), cudaMemcpyDeviceToHost));
+
+    // unsigned long long MAX_TILE_BUFFER = (N/32)*(N/32);
+    // unsigned long long MAX_ATOM_BUFFER = (N/32)*10000;
+    // int *h_ixn_tiles;
+    // gpuErrchk(cudaMalloc(&d_ixn_tiles, MAX_TILE_BUFFER*sizeof(*d_ixn_tiles)));
+    // unsigned int *h_ixn_atoms;
+    // gpuErrchk(cudaMalloc(&d_ixn_atoms, MAX_ATOM_BUFFER*sizeof(*d_ixn_atoms)));
+
+    // for(int i=0; i < h_ixn_tiles.size(); i++) {
+        // std::cout << i << " " << h_ixn_tiles << std::endl;
+    // }
+
     std::vector<std::vector<int> > ixn_list(B, std::vector<int>());
 
-    // std::cout << "DHIXN_COUNT: " << *dh_ixn_count << std::endl;
+    // std::cout << "IXN COUNT:" << h_ixn_count << std::endl;
+    // std::cout << "SIZE OF IXN_LIST: " << ixn_list.size() << std::endl;
 
-    for(int i=0; i < *dh_ixn_count; i++) {
-        int tile_idx = dh_ixn_tiles[i];
+    for(int i=0; i < h_ixn_count; i++) {
+        int tile_idx = h_ixn_tiles[i];
         // std::cout << "tile_idx: " << tile_idx << std::endl;
+        // std::cout << "i: " << i << " tile_idx: " << tile_idx << std::endl;
         for(int j=0; j < 32; j++) {
-            int atom_j_idx = dh_ixn_atoms[i*32+j];
+            // std::cout << "j: " << j << std::endl;
+            int atom_j_idx = h_ixn_atoms[i*32+j];
+            // std::cout << "atom_j_idx: " << atom_j_idx << std::endl;
             if(atom_j_idx < N) {
                 // std::cout << "push_back: " << atom_j_idx << " " << std::endl;
                 ixn_list[tile_idx].push_back(atom_j_idx);
             }
         }
     }
+
+    // std::cout << "E" << std::endl;
 
     // for(int i=0; i < B; i++) {
     //     for(int j=0; j < Y*32; j++) {
@@ -184,6 +237,16 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
     //         }
     //     }
     // }
+
+
+
+    gpuErrchk(cudaFree(d_coords));
+    // gpuErrchk(cudaFree(d_coords_f32));
+    gpuErrchk(cudaFree(d_box));
+    gpuErrchk(cudaFree(d_ixn_count));
+    gpuErrchk(cudaFree(d_ixn_tiles));
+    gpuErrchk(cudaFree(d_ixn_atoms));
+    gpuErrchk(cudaFree(d_trim_atoms));
 
     return ixn_list;
 
