@@ -109,11 +109,12 @@ def test_neighborlist():
 
         cutoff = 1.0
 
-        # for r in range(2):
+        for r in range(10):
+
+            nblist = custom_ops.Neighborlist_f32(N, D)
+            test_ixn_list = nblist.build_nblist_mpu(coords, box, cutoff)
         #     print(r)
 
-        nblist = custom_ops.Neighborlist_f32(N, D)
-        test_ixn_list = nblist.build_nblist_mpu(coords, box, cutoff)
 
         assert 1
         return

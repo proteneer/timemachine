@@ -5,9 +5,6 @@
 #include "k_find_block_bounds.cuh"
 #include "gpu_utils.cuh"
 
-#include "cudaProfiler.h"
-#include "cuda_profiler_api.h"
-
 namespace timemachine {
 
 template<typename RealType>
@@ -137,20 +134,13 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
         h_coords_f32[i] = h_coords[i];
     }
 
-    std::cout << "A" << std::endl;
-
-    // float *d_coords_f32 = gpuErrchkCudaMallocAndCopy(&h_coords_f32[0], N*D);
-
-
-    std::cout << "B" << std::endl;
-
-    // cudaProfilerStart();
+    float *d_coords_f32 = gpuErrchkCudaMallocAndCopy(&h_coords_f32[0], N*D);
     // (ytz): TBD shared memory, stream
     find_blocks_with_interactions<RealType><<<dimGrid, tpb>>>(
         N,
         d_block_bounds_ctr_,
         d_block_bounds_ext_,
-        d_coords,
+        d_coords_f32,
         d_box,
         d_ixn_count,
         d_ixn_tiles,
@@ -159,14 +149,7 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
         cutoff
     );
 
-    std::cout << "C" << std::endl;
-
     cudaDeviceSynchronize();
-
-    // cudaProfilerStop();
-
-    std::cout << "D" << std::endl;
-
     // (ytz): TBD shared memory, stream
     compact_trim_atoms<<<B, tpb>>>(
         N,
@@ -177,17 +160,10 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
         d_ixn_atoms
     );
     gpuErrchk(cudaPeekAtLastError());
-
-
     cudaDeviceSynchronize();
-
-    // std::cout << "A" << std::endl;
-
 
     unsigned int h_ixn_count;
     gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count, 1*sizeof(*d_ixn_count), cudaMemcpyDeviceToHost));
-
-    // std::cout << "B" << std::endl;
 
     std::vector<int> h_ixn_tiles(MAX_TILE_BUFFER);
     std::vector<unsigned int> h_ixn_atoms(MAX_ATOM_BUFFER);
@@ -241,7 +217,7 @@ std::vector<std::vector<int> > Neighborlist<RealType>::build_nblist_mpu(
 
 
     gpuErrchk(cudaFree(d_coords));
-    // gpuErrchk(cudaFree(d_coords_f32));
+    gpuErrchk(cudaFree(d_coords_f32));
     gpuErrchk(cudaFree(d_box));
     gpuErrchk(cudaFree(d_ixn_count));
     gpuErrchk(cudaFree(d_ixn_tiles));

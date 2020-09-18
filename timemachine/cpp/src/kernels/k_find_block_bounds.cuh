@@ -91,7 +91,8 @@ void __global__ find_blocks_with_interactions(
     int N,
     const double *bb_ctr,
     const double *bb_ext,
-    const double* __restrict__ coords,
+    // const double* __restrict__ coords,
+    const float* __restrict__ coords,
     const double* __restrict__ box,
     unsigned int* __restrict__ interactionCount,
     int* __restrict__ interactingTiles,
@@ -141,6 +142,11 @@ void __global__ find_blocks_with_interactions(
     RealType by = box[1*3+1];
     RealType bz = box[2*3+2];
 
+
+    RealType inv_bx = 1/bx;
+    RealType inv_by = 1/by;
+    RealType inv_bz = 1/bz;
+
     RealType cutoff_squared = static_cast<RealType>(cutoff)*static_cast<RealType>(cutoff);
 
     int col_block_base = blockIdx.y*32;
@@ -162,9 +168,9 @@ void __global__ find_blocks_with_interactions(
         RealType box_box_dy = row_bb_ctr_y - col_bb_ctr_y;
         RealType box_box_dz = row_bb_ctr_z - col_bb_ctr_z;
 
-        box_box_dx -= bx*floor(box_box_dx/bx + static_cast<RealType>(0.5));
-        box_box_dy -= by*floor(box_box_dy/by + static_cast<RealType>(0.5));
-        box_box_dz -= bz*floor(box_box_dz/bz + static_cast<RealType>(0.5));
+        box_box_dx -= bx*nearbyint(box_box_dx*inv_bx);
+        box_box_dy -= by*nearbyint(box_box_dy*inv_by);
+        box_box_dz -= bz*nearbyint(box_box_dz*inv_bz);
 
         box_box_dx = max(static_cast<RealType>(0.0), fabs(box_box_dx) - row_bb_ext_x - col_bb_ext_x);
         box_box_dy = max(static_cast<RealType>(0.0), fabs(box_box_dy) - row_bb_ext_y - col_bb_ext_y);
@@ -245,9 +251,9 @@ void __global__ find_blocks_with_interactions(
             RealType atom_atom_dy = pos_i_buffer[row_atom*3 + 1] - pos_j_y;
             RealType atom_atom_dz = pos_i_buffer[row_atom*3 + 2] - pos_j_z;
 
-            atom_atom_dx -= bx*floor(atom_atom_dx/bx + static_cast<RealType>(0.5));
-            atom_atom_dy -= by*floor(atom_atom_dy/by + static_cast<RealType>(0.5));
-            atom_atom_dz -= bz*floor(atom_atom_dz/bz + static_cast<RealType>(0.5));
+            atom_atom_dx -= bx*nearbyint(atom_atom_dx*inv_bx);
+            atom_atom_dy -= by*nearbyint(atom_atom_dy*inv_by);
+            atom_atom_dz -= bz*nearbyint(atom_atom_dz*inv_bz);
 
             interacts |= (atom_atom_dx*atom_atom_dx + atom_atom_dy*atom_atom_dy + atom_atom_dz*atom_atom_dz < cutoff_squared ? 1<<row_atom : 0);
 
