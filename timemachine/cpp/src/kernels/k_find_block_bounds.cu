@@ -9,7 +9,6 @@ void __global__ k_find_block_bounds(
     const int T,
     const double *coords,
     const double *box,
-    // const int *perm,
     double *block_bounds_ctr,
     double *block_bounds_ext) {
 
@@ -36,7 +35,6 @@ void __global__ k_find_block_bounds(
             }
         }
      
-        // printf("dim %d tile_idx %d ctr %f ext %f\n", d, tile_idx, (ci_max + ci_min)/2.0, ci_max - ci_min);
         block_bounds_ctr[tile_idx*D+d] = (ci_max + ci_min)/2.0;
         block_bounds_ext[tile_idx*D+d] = (ci_max - ci_min)/2.0;
     }

@@ -32,14 +32,14 @@ public:
     // (note that nonbonded terms also need to sort using the same permutation)
 
     // non-periodic neighborlist
-    std::vector<std::vector<int> > get_nblist_cpu(
+    std::vector<std::vector<int> > get_nblist_host(
         int N,
         const double *h_coords,
         const double *h_box,
         const double cutoff
     );
 
-    void build_nblist_gpu(
+    void build_nblist_device(
         int N,
         const double *d_coords,
         const double *d_box,
@@ -54,14 +54,16 @@ public:
     //     const double *h_box,
     //     const double cutoff);
 
-    // void compute_block_bounds_cpu(
-    // const int N,
-    // const int D,
-    // const int block_size,
-    // const double *h_coords,
-    // const double *h_box,
-    // double *bb_ctrs,
-    // double *bb_exts);
+
+    void compute_block_bounds_host(
+        const int N,
+        const int D,
+        const int block_size,
+        const double *h_coords,
+        const double *h_box,
+        double *h_bb_ctrs,
+        double *h_bb_exts
+    );
 
 
 private:
@@ -74,12 +76,11 @@ private:
         return (this->B()+32-1)/32;
     }
 
-    void compute_block_bounds(
+    void compute_block_bounds_device(
         int N,
         int D,
         const double *coords,
         const double *box,
-        // const int *perm,
         cudaStream_t stream
     );
 

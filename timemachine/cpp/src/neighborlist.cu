@@ -14,8 +14,6 @@ Neighborlist<RealType>::Neighborlist(
     const int B = this->B(); //(N+32-1)/32;
     const int Y = this->Y(); //(B+32-1)/32;
 
-    std::cout << B << " " << Y << " " << N << std::endl;
-
     unsigned long long MAX_TILE_BUFFER = B*B;
     unsigned long long MAX_ATOM_BUFFER = B*B*32;
 
@@ -65,46 +63,61 @@ int pow_int(int x, int p) {
   else return x * tmp * tmp;
 }
 
-// template<typename RealType>
-// void Neighborlist<RealType>::compute_block_bounds_cpu(
-//     const int N,
-//     const int D,
-//     const int block_size,
-//     const double *h_coords,
-//     const double *h_box,
-//     double *bb_ctrs,
-//     double *bb_exts) {
+template<typename RealType>
+void Neighborlist<RealType>::compute_block_bounds_host(
+    const int N,
+    const int D,
+    const int block_size,
+    const double *h_coords,
+    const double *h_box,
+    double *h_bb_ctrs,
+    double *h_bb_exts) {
+
+    double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*3*sizeof(double));
+    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));  
    
+    this->compute_block_bounds_device(
+        N,
+        D,
+        d_coords,
+        d_box,
+        static_cast<cudaStream_t>(0)
+    );
 
-//     int num_blocks = (N + block_size - 1)/block_size;
+    cudaDeviceSynchronize();
 
-//     for(int block_idx = 0; block_idx < num_blocks; block_idx++) {
-//         for(int d=0; d < D; d++) {
-//             double width = h_box[d*3+d];
-//             double ci_min =  9999999;
-//             double ci_max = -9999999;
-//             for(int i=0; i < block_size; i++) {
-//                 int tid = block_idx*block_size + i;
-//                 if(tid < N) {
-//                     // int atom_idx = perm[tid];
-//                     int atom_idx = tid;
-//                     double ci = h_coords[atom_idx*D + d];
-//                     ci -= width*floor(ci/width); // move to home box
-//                     ci_min = ci < ci_min ? ci : ci_min;
-//                     ci_max = ci > ci_max ? ci : ci_max;
-//                 }
-//             }
-         
-//             // printf("dim %d block_idx %d ctr %f ext %f\n", d, block_idx, (ci_max + ci_min)/2.0, ci_max - ci_min);
-//             bb_ctrs[block_idx*D+d] = (ci_max + ci_min)/2.0;
-//             bb_exts[block_idx*D+d] = (ci_max - ci_min)/2.0;
-//         }
-//     }
+    gpuErrchk(cudaMemcpy(h_bb_ctrs, d_block_bounds_ctr_, this->B()*3*sizeof(*d_block_bounds_ctr_), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(h_bb_exts, d_block_bounds_ext_, this->B()*3*sizeof(*d_block_bounds_ext_), cudaMemcpyDeviceToHost));
 
-// }
+
+
+    // int num_blocks = (N + block_size - 1)/block_size;
+
+    // for(int block_idx = 0; block_idx < num_blocks; block_idx++) {
+    //     for(int d=0; d < D; d++) {
+    //         double width = h_box[d*3+d];
+    //         double ci_min =  9999999;
+    //         double ci_max = -9999999;
+    //         for(int i=0; i < block_size; i++) {
+    //             int tid = block_idx*block_size + i;
+    //             if(tid < N) {
+    //                 int atom_idx = tid;
+    //                 double ci = h_coords[atom_idx*D + d];
+    //                 ci -= width*floor(ci/width); // move to home box
+    //                 ci_min = ci < ci_min ? ci : ci_min;
+    //                 ci_max = ci > ci_max ? ci : ci_max;
+    //             }
+    //         }
+
+    //         bb_ctrs[block_idx*D+d] = (ci_max + ci_min)/2.0;
+    //         bb_exts[block_idx*D+d] = (ci_max - ci_min)/2.0;
+    //     }
+    // }
+
+}
 
 template<typename RealType>
-std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_cpu(
+std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_host(
     int N,
     const double *h_coords,
     const double *h_box,
@@ -113,7 +126,7 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_cpu(
     double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*3*sizeof(double));
     double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));    
 
-    this->build_nblist_gpu(
+    this->build_nblist_device(
         N,
         d_coords,
         d_box,
@@ -158,7 +171,7 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_cpu(
 
 // std::vector<std::vector<int> > 
 template<typename RealType>
-void Neighborlist<RealType>::build_nblist_gpu(
+void Neighborlist<RealType>::build_nblist_device(
     int N,
     const double *d_coords,
     const double *d_box,
@@ -169,7 +182,7 @@ void Neighborlist<RealType>::build_nblist_gpu(
     gpuErrchk(cudaMemsetAsync(d_ixn_count_, 0, 1*sizeof(*d_ixn_count_), stream));
 
     const int D = 3;
-    this->compute_block_bounds(
+    this->compute_block_bounds_device(
         N,
         D,
         d_coords,
@@ -212,7 +225,7 @@ void Neighborlist<RealType>::build_nblist_gpu(
 }
 
 // template<typename RealType>
-// std::vector<std::vector<int> >  Neighborlist<RealType>::build_nblist_cpu(
+// std::vector<std::vector<int> >  Neighborlist<RealType>::build_nblist_host(
 //     int N,
 //     int D,
 //     const double *h_coords,
@@ -275,7 +288,7 @@ void Neighborlist<RealType>::build_nblist_gpu(
 
 //         std::vector<double> bb_ctrs(num_blocks*3);
 //         std::vector<double> bb_exts(num_blocks*3);
-//         this->compute_block_bounds_cpu(
+//         this->compute_block_bounds_host(
 //             N,
 //             D,
 //             block_size,
@@ -423,7 +436,7 @@ void Neighborlist<RealType>::build_nblist_gpu(
 // }
 
 template <typename RealType>
-void Neighborlist<RealType>::compute_block_bounds(
+void Neighborlist<RealType>::compute_block_bounds_device(
 	int N,
 	int D,
 	const double *d_coords,
