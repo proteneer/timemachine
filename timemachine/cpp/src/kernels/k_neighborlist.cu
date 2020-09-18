@@ -26,7 +26,6 @@ void __global__ k_find_block_bounds(
         for(int i=0; i < WARPSIZE; i++) {
             int tid = tile_idx*WARPSIZE + i;
             if(tid < N) {
-                // int atom_idx = perm[tid];
                 int atom_idx = tid;
                 double ci = coords[atom_idx*D + d];
                 ci -= width*floor(ci/width); // move to home box
@@ -34,7 +33,7 @@ void __global__ k_find_block_bounds(
                 ci_max = ci > ci_max ? ci : ci_max;
             }
         }
-     
+
         block_bounds_ctr[tile_idx*D+d] = (ci_max + ci_min)/2.0;
         block_bounds_ext[tile_idx*D+d] = (ci_max - ci_min)/2.0;
     }

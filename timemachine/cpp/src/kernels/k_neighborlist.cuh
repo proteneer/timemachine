@@ -11,7 +11,7 @@ void __global__ k_find_block_bounds(
     double *block_bounds_ctr,
     double *block_bounds_ext);
 
-void __global__ compact_trim_atoms(
+void __global__ k_compact_trim_atoms(
     int N,
     int Y,
     unsigned int* __restrict__ trim_atoms,
@@ -26,7 +26,6 @@ void __global__ compact_trim_atoms(
     const int indexInWarp = threadIdx.x%32;
     const int warpMask = (1<<indexInWarp)-1;
     const int row_block_idx = blockIdx.x;
-    // const int Y = gridDim.y;
 
     __shared__ volatile int sync_start[1];
     int neighborsInBuffer = 0;
@@ -34,10 +33,6 @@ void __global__ compact_trim_atoms(
     for(int trim_block_idx=0; trim_block_idx < Y; trim_block_idx++) {
 
         int atom_j_idx = trim_atoms[row_block_idx*Y*32 + trim_block_idx*32 + threadIdx.x];
-        // if(blockIdx.x == 0) {
-            // printf("processing trim_block %d atom j %d\n", trim_block_idx, atom_j_idx);
-        // }
-
         bool interacts = atom_j_idx < N;
 
         int includeAtomFlags = __ballot_sync(0xffffffff, interacts);
@@ -52,12 +47,9 @@ void __global__ compact_trim_atoms(
         if(neighborsInBuffer > 32) {
             int tilesToStore = 1;
             if(indexInWarp == 0) {
-
                 sync_start[0] = atomicAdd(interactionCount, tilesToStore);
-                // printf("TRIM FLUSH ADDING NEW TILE SS %d\n", sync_start[0]);
             }
 
-            // printf("FLUSH ASSIGNING %d to %d\n", sync_start[0], row_block_idx);
             interactingTiles[sync_start[0]] = row_block_idx; // IS THIS CORRECT? CONTESTED
             interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
@@ -71,15 +63,8 @@ void __global__ compact_trim_atoms(
         int tilesToStore = 1;
         if(indexInWarp == 0) {
             sync_start[0] = atomicAdd(interactionCount, tilesToStore);
-            // printf("TRIM FLUSH ADDING NEW TILE SS %d\n", sync_start[0]);
         }
-        // printf("FINAL ASSIGNING %d to %d\n", sync_start[0], row_block_idx);
         interactingTiles[sync_start[0]] = row_block_idx;
-
-        // if(blockIdx.x == 1) {
-            // printf("trim store %d with %d\n", sync_start[0]*32 + threadIdx.x, ixn_j_buffer[threadIdx.x]);            
-        // }
-
         interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
     }
 
@@ -87,7 +72,7 @@ void __global__ compact_trim_atoms(
 
 
 template<typename RealType>
-void __global__ find_blocks_with_interactions(
+void __global__ k_find_blocks_with_ixns(
     int N,
     const double *bb_ctr,
     const double *bb_ext,
@@ -282,16 +267,6 @@ void __global__ find_blocks_with_interactions(
         }
     }
     
-    // tbd save trimmings to its own buffer
-    // if(neighborsInBuffer > 0) {
-    //     int tilesToStore = 1;
-    //     if(indexInWarp == 0) {
-    //         sync_start[0] = atomicAdd(interactionCount, tilesToStore);
-    //     }
-    //     interactingTiles[sync_start[0]] = row_block_idx;
-    //     interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
-    // }
-
     // store trim
     int Y = gridDim.y;
     trim_atoms[blockIdx.x*Y*32+blockIdx.y*32+threadIdx.x] = ixn_j_buffer[threadIdx.x];
