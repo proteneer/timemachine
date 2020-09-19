@@ -10,7 +10,7 @@ class Neighborlist {
 
 private:
 
-    int N_;
+    const int N_;
 
     double *d_block_bounds_ctr_;
     double *d_block_bounds_ext_;
@@ -22,16 +22,14 @@ private:
 
 public:
 
+    // N - number of atoms
     Neighborlist(
         int N
     );
 
     ~Neighborlist();
 
-    // tbd get_hilbert_coords(), get coordinates that are hilbert ordered
-    // (note that nonbonded terms also need to sort using the same permutation)
 
-    // non-periodic neighborlist
     std::vector<std::vector<int> > get_nblist_host(
         int N,
         const double *h_coords,
@@ -46,14 +44,6 @@ public:
         const double cutoff,
         cudaStream_t stream
     );
-
-    // std::vector<std::vector<int> > build_nblist_mpu(
-    //     int N,
-    //     int D,
-    //     const double *h_coords,
-    //     const double *h_box,
-    //     const double cutoff);
-
 
     void compute_block_bounds_host(
         const int N,

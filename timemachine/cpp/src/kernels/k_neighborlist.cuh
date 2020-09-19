@@ -1,7 +1,5 @@
 #pragma once
 
-// wow double precision coords really suck and slow to load!
-
 void __global__ k_find_block_bounds(
     const int N,
     const int D,
@@ -71,6 +69,23 @@ void __global__ k_compact_trim_atoms(
 }
 
 
+/*
+
+This is a simplified algorithm of find_interacting_blocks.cu from OpenMM.
+This is launched with a threadblock size of 32, (i.e. one warp).
+
+Each block proceeds as follows:
+
+1. Loads its own row block (32 atoms).
+2. Compare the row block against 32 other column blocks via bounding box tests.
+3. Determine which blocks potentially interact using warp-level programming.
+4. Loop over each interacting block j, and see which row block atoms may interact with j's bbox.
+5. For atoms that interact, do a fine-grained comparison of each row block again against each col block atom.
+6. Store the column atoms that interact into shared memory
+7. Store the leftover trim into its own buffer.
+
+*/
+
 template<typename RealType>
 void __global__ k_find_blocks_with_ixns(
     int N,
@@ -78,12 +93,10 @@ void __global__ k_find_blocks_with_ixns(
     const double *bb_ext,
     const double* __restrict__ coords, //TBD make float32 version
     const double* __restrict__ box,
-    unsigned int* __restrict__ interactionCount,
-    int* __restrict__ interactingTiles,
-    unsigned int* __restrict__ interactingAtoms,
-    unsigned int* __restrict__ trim_atoms,
-    // real4* __restrict__ oldPositions,
-    // const int* __restrict__ rebuildNeighborList) {
+    unsigned int* __restrict__ interactionCount, // number of tiles that have interactions
+    int* __restrict__ interactingTiles, // the row block idx of the tile that is interacting
+    unsigned int* __restrict__ interactingAtoms, // the col block of the atoms that are interacting
+    unsigned int* __restrict__ trim_atoms, // the left-over trims that will later be compacted
     double cutoff) {
 
     const int indexInWarp = threadIdx.x%32;
@@ -195,9 +208,9 @@ void __global__ k_find_blocks_with_ixns(
         RealType atom_box_dy = pos_i_buffer[threadIdx.x*3 + 1] - col_bb_ctr_y;
         RealType atom_box_dz = pos_i_buffer[threadIdx.x*3 + 2] - col_bb_ctr_z;
 
-        atom_box_dx -= bx*floor(atom_box_dx/bx + static_cast<RealType>(0.5));
-        atom_box_dy -= by*floor(atom_box_dy/by + static_cast<RealType>(0.5));
-        atom_box_dz -= bz*floor(atom_box_dz/bz + static_cast<RealType>(0.5));
+        atom_box_dx -= bx*nearbyint(atom_box_dx*inv_bx);
+        atom_box_dy -= by*nearbyint(atom_box_dy*inv_by);
+        atom_box_dz -= bz*nearbyint(atom_box_dz*inv_bz);
 
         atom_box_dx = max(static_cast<RealType>(0.0), fabs(atom_box_dx) - col_bb_ext_x);
         atom_box_dy = max(static_cast<RealType>(0.0), fabs(atom_box_dy) - col_bb_ext_y);
@@ -220,7 +233,6 @@ void __global__ k_find_blocks_with_ixns(
         // g 1  1 1 0 0 0 1  row_atom
         // s 0  0 0 0 0 0 0
         //   0  0 0 0 0 0 0
-
 
         RealType pos_j_x = atom_j_idx < N ? coords[atom_j_idx*3 + 0] : 0;
         RealType pos_j_y = atom_j_idx < N ? coords[atom_j_idx*3 + 1] : 0;

@@ -1,3 +1,4 @@
+#include <cassert>
 #include <vector>
 #include <iostream>
 
@@ -73,6 +74,9 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     double *h_bb_ctrs,
     double *h_bb_exts) {
 
+    assert(N == N_);
+    assert(D == 3);
+
     double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*3*sizeof(double));
     double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));  
    
@@ -97,6 +101,8 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_host(
     const double *h_coords,
     const double *h_box,
     const double cutoff) {
+
+    assert(N==N_);
 
     double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*3*sizeof(double));
     double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));    
@@ -150,6 +156,8 @@ void Neighborlist<RealType>::build_nblist_device(
     const double *d_box,
     const double cutoff,
     cudaStream_t stream) {
+
+    assert(N == N_);
 
     // reset the interaction count
     gpuErrchk(cudaMemsetAsync(d_ixn_count_, 0, 1*sizeof(*d_ixn_count_), stream));
@@ -206,6 +214,9 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     const double *d_box,
     // const int *d_perm,
 	cudaStream_t stream) {
+
+    assert(N == N_);
+    assert(D == 3);
 
     int tpb = 32;
     int B = (N+tpb-1)/tpb; // total number of blocks we need to process

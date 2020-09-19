@@ -69,74 +69,81 @@ def test_neighborlist():
 
     for size in [35, 64, 129, 1025, 1259, 2029]:
 
-        print("testing size:", size)
-        coords = get_water_coords(3, sort=False)
-        coords = coords[:size]
-        padding = 0.1
-        diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
-        box = np.eye(3)
-        np.fill_diagonal(box, diag)
 
-        # for benchmarking purposes
-        # _, coords, box, _ = water_box.prep_system(8.0) # 6.2 is 23k atoms, roughly DHFR
-
-        # print(coords[-1])
-        # # print(coords.shape)
-        # coords = coords[:23000]
-        # coords = coords/coords.unit
+        nblist = custom_ops.Neighborlist_f64(size)
+        water_coords = get_water_coords(3, sort=False)
 
 
-        N = coords.shape[0]
-        np.random.seed(1234)
-        D = 3
+        for _ in range(2):
 
-        sort = True
-        if sort:
-            perm = hilbert_sort(coords+np.argmin(coords), D)
-            coords = coords[perm]
+            print("testing size:", size)
 
-        num_blocks_of_32 = (N + 32 - 1)//32
-        col_coords = np.expand_dims(coords, axis=0)
+            atom_idxs = np.random.choice(np.arange(size), size, replace=False)
+            coords = water_coords[atom_idxs]
+            padding = 0.1
+            diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
+            box = np.eye(3)
+            np.fill_diagonal(box, diag)
 
-        cutoff = 1.0
+            # for benchmarking purposes
+            # _, coords, box, _ = water_box.prep_system(8.0) # 6.2 is 23k atoms, roughly DHFR
 
-        # for r in range(10):
-        nblist = custom_ops.Neighborlist_f64(N)
-        test_ixn_list = nblist.get_nblist(coords, box, cutoff)
-
-
-        # assert 1
-        # return
-
-        ref_ixn_list = []
-
-        box_diag = np.diag(box)
-        for rbidx in range(num_blocks_of_32):
-            row_start = rbidx*32
-            row_end = min((rbidx+1)*32, N)
-            row_coords = coords[row_start:row_end]
-            row_coords = np.expand_dims(row_coords, axis=1)
-
-            deltas = row_coords - col_coords
-            deltas -= box_diag*np.floor(deltas/box_diag+0.5)
-
-            # block size x N, tbd make periodic
-            dij = np.linalg.norm(deltas, axis=-1) 
-            dij[:, :row_start] = cutoff # slight hack to discard duplicates
-            idxs = np.argwhere(np.any(dij < cutoff, axis=0))
-            ref_ixn_list.append(idxs.reshape(-1).tolist())
+            # print(coords[-1])
+            # # print(coords.shape)
+            # coords = coords[:23000]
+            # coords = coords/coords.unit
 
 
-        assert len(ref_ixn_list) == len(test_ixn_list)
+            N = coords.shape[0]
+            np.random.seed(1234)
+            D = 3
 
-        for bidx, (a, b) in enumerate(zip(ref_ixn_list, test_ixn_list)):
-            if sorted(a) != sorted(b):
-                print("TESTING bidx", bidx)
-                print(sorted(a))
-                print(sorted(b))
-            # print(a, b)
-            np.testing.assert_equal(sorted(a), sorted(b))
+            sort = True
+            if sort:
+                perm = hilbert_sort(coords+np.argmin(coords), D)
+                coords = coords[perm]
 
-        # np.testing.assert_equal(ref_ixn_list, test_ixn_list)
+            num_blocks_of_32 = (N + 32 - 1)//32
+            col_coords = np.expand_dims(coords, axis=0)
 
-        # output is a group of 32 
+            cutoff = 1.0
+
+            # for r in range(10):
+            test_ixn_list = nblist.get_nblist(coords, box, cutoff)
+
+
+            # assert 1
+            # return
+
+            ref_ixn_list = []
+
+            box_diag = np.diag(box)
+            for rbidx in range(num_blocks_of_32):
+                row_start = rbidx*32
+                row_end = min((rbidx+1)*32, N)
+                row_coords = coords[row_start:row_end]
+                row_coords = np.expand_dims(row_coords, axis=1)
+
+                deltas = row_coords - col_coords
+                deltas -= box_diag*np.floor(deltas/box_diag+0.5)
+
+                # block size x N, tbd make periodic
+                dij = np.linalg.norm(deltas, axis=-1) 
+                dij[:, :row_start] = cutoff # slight hack to discard duplicates
+                idxs = np.argwhere(np.any(dij < cutoff, axis=0))
+                ref_ixn_list.append(idxs.reshape(-1).tolist())
+
+
+            assert len(ref_ixn_list) == len(test_ixn_list)
+
+            for bidx, (a, b) in enumerate(zip(ref_ixn_list, test_ixn_list)):
+                if sorted(a) != sorted(b):
+                    print("TESTING bidx", bidx)
+                    print(sorted(a))
+                    print(sorted(b))
+                # print(a, b)
+                np.testing.assert_equal(sorted(a), sorted(b))
+
+            # np.testing.assert_equal(ref_ixn_list, test_ixn_list)
+
+            # output is a group of 32 
