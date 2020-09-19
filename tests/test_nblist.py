@@ -54,7 +54,6 @@ def hilbert_sort(conf, D):
         dist = hc.distance_from_coordinates(xyz)
         dists.append(dist)
     perm = np.argsort(dists)
-    # np.random.shuffle(perm)
     return perm
 
 

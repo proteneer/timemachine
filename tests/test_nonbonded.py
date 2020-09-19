@@ -16,7 +16,21 @@ from timemachine.lib import potentials
 
 from training import water_box
 
+from hilbertcurve.hilbertcurve import HilbertCurve
+
 np.set_printoptions(linewidth=500)
+
+
+def hilbert_sort(conf, D):
+    hc = HilbertCurve(64, D)
+    int_confs = (conf*1000).astype(np.int64)
+    dists = []
+    for xyz in int_confs.tolist():
+        dist = hc.distance_from_coordinates(xyz)
+        dists.append(dist)
+    perm = np.argsort(dists)
+    return perm
+
 
 class TestNonbonded(GradientTest):
 
@@ -25,9 +39,9 @@ class TestNonbonded(GradientTest):
         np.random.seed(4321)
         D = 3
 
-        # test_system = self.get_random_coords(64, D)
+        test_system = self.get_random_coords(64, D)
         test_system = self.get_water_coords(D, sort=False)
-        test_system = test_system[:64]
+        test_system = test_system[:2048]
         padding = 0.2
         diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
         box = np.eye(3)
@@ -36,6 +50,8 @@ class TestNonbonded(GradientTest):
         # _, test_system, box, _ = water_box.prep_system(8.1) # 6.2 is 23k atoms, roughly DHFR
         # _, test_system, box, _ = water_box.prep_system(6.2) # 6.2 is 23k atoms, roughly DHFR
         # test_system = test_system/test_system.unit
+
+        # print("BOX:", box)
 
         # atom_idxs = np.arange(test_system.shape[0])
         # random_idxs = np.random.choice(atom_idxs, size=1024, replace=False)
@@ -46,6 +62,13 @@ class TestNonbonded(GradientTest):
         # print("box", box)
 
         for coords in [test_system]:
+
+            sort = True
+            if sort:
+                perm = hilbert_sort(coords+np.argmin(coords), D)
+                coords = coords[perm]
+
+            print(coords.shape)
 
             N = coords.shape[0]
             E = N//5
@@ -68,7 +91,7 @@ class TestNonbonded(GradientTest):
                     )
 
                     # for lamb in [0.0, 0.1, 0.2]:
-                    for lamb in [0.05]:
+                    for lamb in [0.05]*10:
 
                         print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
