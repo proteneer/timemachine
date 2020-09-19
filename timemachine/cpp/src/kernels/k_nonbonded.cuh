@@ -5,6 +5,20 @@
 
 #define PI 3.141592653589793115997963468544185161
 
+template<typename RealType>
+void __global__ k_reduce_buffer(
+    int N,
+    RealType *d_buffer,
+    RealType *d_sum) {
+
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+
+    RealType elem = idx < N ? d_buffer[idx] : 0;
+
+    atomicAdd(d_sum, elem);
+
+};
+
 template <typename RealType>
 void __global__ k_nonbonded(
     const int N,
@@ -20,8 +34,8 @@ void __global__ k_nonbonded(
     const unsigned int * __restrict__ ixn_atoms,
     unsigned long long * __restrict__ du_dx,
     double * __restrict__ du_dp,
-    double * __restrict__ du_dl,
-    double * __restrict__ u) {
+    double * __restrict__ du_dl_buffer,
+    double * __restrict__ u_buffer) {
 
     RealType box_x = box[0*3+0];
     RealType box_y = box[1*3+1];
@@ -73,6 +87,7 @@ void __global__ k_nonbonded(
     RealType real_lambda = static_cast<RealType>(lambda);
     RealType real_beta = static_cast<RealType>(beta);
 
+    const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
     // #pragma unroll
     for(int round = 0; round < 32; round++) {
 
@@ -117,7 +132,6 @@ void __global__ k_nonbonded(
 
         }
 
-        const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane); // we can pre-compute this probably
         qj = __shfl_sync(0xffffffff, qj, srcLane);
         cj_x = __shfl_sync(0xffffffff, cj_x, srcLane); // needs to support real
@@ -131,6 +145,7 @@ void __global__ k_nonbonded(
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
+    // these reduction buffers are really tricky
     if(du_dx) {
         if(atom_i_idx < N) {
             atomicAdd(du_dx + atom_i_idx*3 + 0, static_cast<unsigned long long>((long long) (gi_x*FIXED_EXPONENT)));
@@ -156,12 +171,13 @@ void __global__ k_nonbonded(
 
     }
 
-    if(du_dl) {
-        atomicAdd(du_dl, du_dl_i + du_dl_j);        
+    // these are buffered and then reduced to avoid massive conflicts
+    if(du_dl_buffer) {
+        atomicAdd(du_dl_buffer + atom_i_idx, du_dl_i + du_dl_j);
     }
 
-    if(u) {
-        atomicAdd(u, energy);        
+    if(u_buffer) {
+        atomicAdd(u_buffer + atom_i_idx, energy);        
     }
 
 

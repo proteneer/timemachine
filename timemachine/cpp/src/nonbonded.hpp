@@ -23,6 +23,10 @@ private:
     const int E_;
     const int N_;
 
+    // reduction buffer
+    double *d_du_dl_buffer_;
+    double *d_u_buffer_;
+
 
 public:
 

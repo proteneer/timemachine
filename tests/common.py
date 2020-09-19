@@ -364,7 +364,8 @@ class GradientTest(unittest.TestCase):
         ref_potential,
         test_potential,
         precision,
-        rtol=None):
+        rtol=None,
+        benchmark=False):
 
         test_potential = test_potential.unbound_impl()
 
@@ -379,7 +380,8 @@ class GradientTest(unittest.TestCase):
 
         test_du_dx, test_du_dp, test_du_dl, test_u = test_potential.execute(x, params, box, lamb)
 
-        # return
+        if benchmark:
+            return
 
         ref_u = ref_potential(x, params, box, lamb)
         grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
