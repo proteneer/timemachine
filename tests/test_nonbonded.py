@@ -27,7 +27,7 @@ class TestNonbonded(GradientTest):
 
         # test_system = self.get_random_coords(64, D)
         test_system = self.get_water_coords(D, sort=False)
-        test_system = test_system[:256]
+        test_system = test_system[:64]
         padding = 0.2
         diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
         box = np.eye(3)
@@ -53,10 +53,10 @@ class TestNonbonded(GradientTest):
             lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
             # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-            # for precision, rtol in [(np.float64, 1e-9)]:
-            for precision, rtol in [(np.float32, 1e-2)]:
+            for precision, rtol in [(np.float64, 1e-9)]:
+            # for precision, rtol in [(np.float32, 1e-2)]:
 
-                for cutoff in [0.9]:
+                for cutoff in [1.0]:
                     E = 0 # DEBUG!
                     charge_params, ref_potential, test_potential = prepare_es_system(
                         coords,

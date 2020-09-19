@@ -96,6 +96,9 @@ class NonbondedCustomOpWrapper(CustomOpWrapper):
     def get_cutoff(self):
         return self.args[-1]
 
+class Nonbonded(NonbondedCustomOpWrapper):
+    pass
+
 class LennardJones(NonbondedCustomOpWrapper):
     pass
 

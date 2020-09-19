@@ -75,6 +75,50 @@ def prepare_lj_system(
 
 
 
+# def prepare_es_system(
+#     x,
+#     E, # number of exclusions
+#     lambda_offset_idxs,
+#     p_scale,
+#     cutoff,
+#     precision=np.float64):
+
+#     N = x.shape[0]
+#     D = x.shape[1]
+
+#     charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
+
+#     atom_idxs = np.arange(N)
+#     exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
+#     exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
+
+#     charge_scales = np.random.rand(E)
+
+#     # beta = np.random.rand()*2
+
+#     beta = 2.0
+
+#     test_potential = potentials.Electrostatics(
+#         exclusion_idxs,
+#         charge_scales,
+#         lambda_offset_idxs,
+#         beta,
+#         cutoff,
+#         precision=precision
+#     )
+
+#     ref_total_energy = functools.partial(
+#         nonbonded.electrostatics_v2,
+#         exclusion_idxs=exclusion_idxs,
+#         charge_scales=charge_scales,
+#         beta=beta,
+#         cutoff=cutoff,
+#         lambda_offset_idxs=lambda_offset_idxs
+#     )
+
+#     return charge_params, ref_total_energy, test_potential
+
+
 def prepare_es_system(
     x,
     E, # number of exclusions
@@ -86,21 +130,28 @@ def prepare_es_system(
     N = x.shape[0]
     D = x.shape[1]
 
-    charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
+    # charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
+    params = (np.random.rand(N*3).astype(np.float64) - 0.5)*np.sqrt(138.935456)
+    params = params.reshape(N, 3)
 
     atom_idxs = np.arange(N)
     exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
     exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
 
-    charge_scales = np.random.rand(E)
+    scales = np.stack([
+        np.random.rand(E),
+        np.random.rand(E)
+    ], axis=1)
 
+    # charge_scales = np.random.rand(E)
+    # lj_scales = np.random.rand(E)
     # beta = np.random.rand()*2
 
     beta = 2.0
 
-    test_potential = potentials.Electrostatics(
+    test_potential = potentials.Nonbonded(
         exclusion_idxs,
-        charge_scales,
+        scales,
         lambda_offset_idxs,
         beta,
         cutoff,
@@ -108,15 +159,15 @@ def prepare_es_system(
     )
 
     ref_total_energy = functools.partial(
-        nonbonded.electrostatics_v2,
+        nonbonded.nonbonded_v2,
         exclusion_idxs=exclusion_idxs,
-        charge_scales=charge_scales,
+        scales=scales,
         beta=beta,
         cutoff=cutoff,
         lambda_offset_idxs=lambda_offset_idxs
     )
 
-    return charge_params, ref_total_energy, test_potential
+    return params, ref_total_energy, test_potential
 
 
 
@@ -328,7 +379,7 @@ class GradientTest(unittest.TestCase):
 
         test_du_dx, test_du_dp, test_du_dl, test_u = test_potential.execute(x, params, box, lamb)
 
-        return
+        # return
 
         ref_u = ref_potential(x, params, box, lamb)
         grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))

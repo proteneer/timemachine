@@ -29,7 +29,6 @@ public:
 
     ~Neighborlist();
 
-
     std::vector<std::vector<int> > get_nblist_host(
         int N,
         const double *h_coords,
@@ -55,6 +54,17 @@ public:
         double *h_bb_exts
     );
 
+    unsigned int* get_ixn_atoms() {
+        return d_ixn_atoms_;
+    }
+
+    int* get_ixn_tiles() {
+        return d_ixn_tiles_;
+    }
+
+    unsigned int* get_ixn_count() {
+        return d_ixn_count_;
+    }
 
 private:
 
@@ -74,13 +84,7 @@ private:
         cudaStream_t stream
     );
 
-    double* get_block_bounds_ctr() {
-        return d_block_bounds_ctr_;
-    }
 
-    double* get_block_bounds_ext() {
-        return d_block_bounds_ext_;
-    }
 
 };
 
