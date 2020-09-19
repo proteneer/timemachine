@@ -15,7 +15,8 @@ else(BUILD_TEST)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point_prod.hpp ${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point.hpp COPYONLY)
 endif(BUILD_TEST)
 
-string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo")
+# -rdc=true), as well as linking in of the device cudart libraries (-lcudadevrt
+string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo -rdc=true")
 message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -61,7 +62,7 @@ include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 include_directories(src/kernels)
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 11)
-target_link_libraries(${LIBRARY_NAME} -lcurand -lcudart)
+target_link_libraries(${LIBRARY_NAME} -lcurand -lcudart -lcudadevrt)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION "lib")

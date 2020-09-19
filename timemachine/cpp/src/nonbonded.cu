@@ -23,6 +23,8 @@ Nonbonded<RealType>::Nonbonded(
     nblist_(lambda_offset_idxs.size()),
     beta_(beta) {
 
+
+
     if(lambda_offset_idxs.size() != N_) {
         throw std::runtime_error("lambda offset idxs need to have size N");
     }
@@ -42,6 +44,8 @@ Nonbonded<RealType>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_scales_, E_*2*sizeof(*d_scales_)));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], E_*sizeof(*d_scales_), cudaMemcpyHostToDevice));
+    
+    gpuErrchk(cudaMallocHost(&p_ixn_count_, 1*sizeof(*p_ixn_count_)));
 
 };
 
@@ -54,6 +58,8 @@ Nonbonded<RealType>::~Nonbonded() {
 
     gpuErrchk(cudaFree(d_du_dl_buffer_));
     gpuErrchk(cudaFree(d_u_buffer_));
+
+    gpuErrchk(cudaFreeHost(p_ixn_count_));
 
 };
 
@@ -86,24 +92,9 @@ void Nonbonded<RealType>::execute_device(
         stream
     );
 
-    unsigned int *d_ixn_count = nblist_.get_ixn_count();
-    unsigned int h_ixn_count;
-    gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count, 1*sizeof(*d_ixn_count), cudaMemcpyDeviceToHost));
-
-    std::cout << "h_ixn_count: " << h_ixn_count << std::endl;
-
-    // std::vector<double> h_coords_f64(N*3);
-    // gpuErrchk(cudaMemcpy(&h_coords_f64[0], d_x, N*3*sizeof(double), cudaMemcpyDeviceToHost));
-    // std::vector<float> h_coords_f32(h_coords_f64.begin(), h_coords_f64.end());
-
-    // float *d_coords_f32 = gpuErrchkCudaMallocAndCopy(&h_coords_f32[0], N*3);
-
-    // std::vector<double> h_params_f64(N*3);
-    // gpuErrchk(cudaMemcpy(&h_params_f64[0], d_p, N*3*sizeof(double), cudaMemcpyDeviceToHost));
-    // std::vector<float> h_params_f32(h_params_f64.begin(), h_params_f64.end());
-    // float *d_params_f32 = gpuErrchkCudaMallocAndCopy(&h_params_f32[0], N*3);
-
-    dim3 dimGrid(h_ixn_count, 1, 1); // block x, y, z dims
+    gpuErrchk(cudaMemcpyAsync(p_ixn_count_, nblist_.get_ixn_count(), 1*sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
+    // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
+    gpuErrchk(cudaStreamSynchronize(stream));
 
     if(d_du_dl) {
         gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N*sizeof(*d_du_dl_buffer_), stream));        
@@ -112,8 +103,7 @@ void Nonbonded<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N*sizeof(*d_du_dl_buffer_), stream));        
     }
 
-
-    k_nonbonded<RealType><<<dimGrid, 32, 0, stream>>>(
+    k_nonbonded<RealType><<<p_ixn_count_[0], 32, 0, stream>>>(
         N,
         d_x,
         d_p,
@@ -135,7 +125,7 @@ void Nonbonded<RealType>::execute_device(
 
     const int B = (N+32-1)/32;
 
-    // these are called periodically so we use a slow implementation to reduce them.
+    // these are called periodically so we use a slow implementation to reduce
 
     if(d_du_dl) {
         k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_du_dl_buffer_, d_du_dl);

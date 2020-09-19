@@ -29,13 +29,14 @@ void __global__ k_nonbonded(
     const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
     const double cutoff,
-    // const unsigned int * __restrict__ ixn_count,
     const int * __restrict__ ixn_tiles,
     const unsigned int * __restrict__ ixn_atoms,
     unsigned long long * __restrict__ du_dx,
     double * __restrict__ du_dp,
     double * __restrict__ du_dl_buffer,
     double * __restrict__ u_buffer) {
+
+    int tile_idx = blockIdx.x;
 
     RealType box_x = box[0*3+0];
     RealType box_y = box[1*3+1];
@@ -44,8 +45,6 @@ void __global__ k_nonbonded(
     RealType inv_box_x = 1/box_x;
     RealType inv_box_y = 1/box_y;
     RealType inv_box_z = 1/box_z;
-
-    int tile_idx = blockIdx.x;
 
     int row_block_idx = ixn_tiles[tile_idx];
 
@@ -183,3 +182,40 @@ void __global__ k_nonbonded(
 
 }
 
+// template <typename RealType>
+// void __global__ k_dynamic_nonbonded(
+//     const unsigned int * __restrict__ ixn_count,
+//     const int N,
+//     const double * __restrict__ coords,
+//     const double * __restrict__ params, // [N]
+//     const double * __restrict__ box,
+//     const double lambda,
+//     const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
+//     const double beta,
+//     const double cutoff,
+//     const int * __restrict__ ixn_tiles,
+//     const unsigned int * __restrict__ ixn_atoms,
+//     unsigned long long * __restrict__ du_dx,
+//     double * __restrict__ du_dp,
+//     double * __restrict__ du_dl_buffer,
+//     double * __restrict__ u_buffer) {
+//     if(threadIdx.x == 0) {
+//         k_nonbonded<RealType><<<ixn_count[0], 32>>>(
+//             N,
+//             coords,
+//             params, // [N]
+//             box,
+//             lambda,
+//             lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
+//             beta,
+//             cutoff,
+//             ixn_tiles,
+//             ixn_atoms,
+//             du_dx,
+//             du_dp,
+//             du_dl_buffer,
+//             u_buffer
+//         );
+//     }
+
+// }
