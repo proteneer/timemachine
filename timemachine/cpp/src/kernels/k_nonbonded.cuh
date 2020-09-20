@@ -60,9 +60,16 @@ void __global__ k_nonbonded(
     RealType du_dl_i = 0;
 
     int charge_param_idx_i = atom_i_idx*3 + 0;
+    int lj_param_idx_sig_i = atom_i_idx*3 + 1;
+    int lj_param_idx_eps_i = atom_i_idx*3 + 2;
 
     RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
+    RealType sig_i = atom_i_idx < N ? params[lj_param_idx_sig_i] : 0;
+    RealType eps_i = atom_i_idx < N ? params[lj_param_idx_eps_i] : 0;
+
     RealType g_qi = 0;
+    RealType g_sigi = 0;
+    RealType g_epsi = 0;
 
     int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
     int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
@@ -76,9 +83,17 @@ void __global__ k_nonbonded(
     RealType du_dl_j = 0;
 
     int charge_param_idx_j = atom_j_idx*3 + 0;
+    int lj_param_idx_sig_j = atom_j_idx*3 + 1;
+    int lj_param_idx_eps_j = atom_j_idx*3 + 2;
 
     RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
+    RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 0;
+    RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
+
     RealType g_qj = 0;
+    RealType g_sigj = 0;
+    RealType g_epsj = 0;
+
     RealType cutoff_squared = cutoff*cutoff;
 
     RealType energy = 0;
@@ -102,8 +117,10 @@ void __global__ k_nonbonded(
 
         RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
 
+        // remember the eps_i != 0
         if(d2ij < cutoff_squared  && atom_j_idx > atom_i_idx && atom_j_idx < N && atom_i_idx < N) {
 
+            // electrostatics
             RealType dij = sqrt(d2ij);
             RealType inv_dij = 1/dij;
 
@@ -111,28 +128,65 @@ void __global__ k_nonbonded(
             RealType ebd = erfc(real_beta*dij);
             RealType qij = qi*qj;
 
-            RealType prefactor = qij*(-2*real_beta*exp(-real_beta*real_beta*dij*dij)/(sqrt(static_cast<RealType>(PI))*dij) - ebd*inv_d2ij)*inv_dij;
+            RealType es_prefactor = qij*(-2*real_beta*exp(-real_beta*real_beta*dij*dij)/(sqrt(static_cast<RealType>(PI))*dij) - ebd*inv_d2ij)*inv_dij;
 
-            gi_x += prefactor*delta_x;
-            gi_y += prefactor*delta_y;
-            gi_z += prefactor*delta_z;
+            // lennard jones
+            // RealType inv_d2ij = inv_dij*inv_dij;
+            RealType inv_d3ij = inv_dij*inv_d2ij;
+            RealType inv_d4ij = inv_d2ij*inv_d2ij;
+            RealType inv_d6ij = inv_d4ij*inv_d2ij;
+            RealType inv_d8ij = inv_d4ij*inv_d4ij;
 
-            gj_x -= prefactor*delta_x;
-            gj_y -= prefactor*delta_y;
-            gj_z -= prefactor*delta_z;
+            // lennard jones force
+            RealType eps_ij = sqrt(eps_i * eps_j);
+            RealType sig_ij = (sig_i + sig_j)/2;
 
-            du_dl_i += prefactor * delta_w * lambda_offset_i;
-            du_dl_j -= prefactor * delta_w * lambda_offset_j;
+            RealType sig2 = sig_ij*sig_ij;
+            RealType sig4 = sig2*sig2;
+            RealType sig5 = sig4*sig_ij;
+            RealType sig6 = sig4*sig2;
 
-            energy += qij*inv_dij*ebd;
+            RealType sig6_inv_d6ij = sig6*inv_d6ij;
+            RealType sig6_inv_d8ij = sig6*inv_d8ij;
+
+            RealType lj_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
+
+            // accumulate
+            gi_x += (es_prefactor-lj_prefactor)*delta_x;
+            gi_y += (es_prefactor-lj_prefactor)*delta_y;
+            gi_z += (es_prefactor-lj_prefactor)*delta_z;
+
+            gj_x -= (es_prefactor-lj_prefactor)*delta_x;
+            gj_y -= (es_prefactor-lj_prefactor)*delta_y;
+            gj_z -= (es_prefactor-lj_prefactor)*delta_z;
+
+            du_dl_i += (es_prefactor-lj_prefactor)*delta_w*lambda_offset_i;
+            du_dl_j -= (es_prefactor-lj_prefactor)*delta_w*lambda_offset_j;
+
+            energy += qij*inv_dij*ebd + 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
 
             g_qi += qj*inv_dij*ebd;
             g_qj += qi*inv_dij*ebd;
+
+            // the derivative is undefined if epsilons are zero.
+            if(eps_i != 0 && eps_j != 0) {
+
+                RealType eps_grad = 2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
+                g_epsi += eps_grad*eps_j;
+                g_epsj += eps_grad*eps_i;
+
+                RealType sig_grad = 12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
+                g_sigi += sig_grad;
+                g_sigj += sig_grad;
+
+            }
 
         }
 
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane); // we can pre-compute this probably
         qj = __shfl_sync(0xffffffff, qj, srcLane);
+        eps_j = __shfl_sync(0xffffffff, eps_j, srcLane);
+        sig_j = __shfl_sync(0xffffffff, sig_j, srcLane);
         cj_x = __shfl_sync(0xffffffff, cj_x, srcLane); // needs to support real
         cj_y = __shfl_sync(0xffffffff, cj_y, srcLane); // needs to support real
         cj_z = __shfl_sync(0xffffffff, cj_z, srcLane); // needs to support real
@@ -140,6 +194,8 @@ void __global__ k_nonbonded(
         gj_y = __shfl_sync(0xffffffff, gj_y, srcLane);
         gj_z = __shfl_sync(0xffffffff, gj_z, srcLane);
         g_qj = __shfl_sync(0xffffffff, g_qj, srcLane);
+        g_sigj = __shfl_sync(0xffffffff, g_sigj, srcLane);
+        g_epsj = __shfl_sync(0xffffffff, g_epsj, srcLane);
         lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane); // this also can be optimized away
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
@@ -162,10 +218,14 @@ void __global__ k_nonbonded(
 
         if(atom_i_idx < N) {
             atomicAdd(du_dp + charge_param_idx_i, g_qi);
+            atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
+            atomicAdd(du_dp + lj_param_idx_eps_i, g_epsi);
         }
 
         if(atom_j_idx < N) {
             atomicAdd(du_dp + charge_param_idx_j, g_qj);
+            atomicAdd(du_dp + lj_param_idx_sig_j, g_sigj);
+            atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
         }
 
     }
@@ -272,9 +332,6 @@ void __global__ k_nonbonded_exclusions(
 
         RealType dij = sqrt(d2ij);
         RealType inv_dij = 1/dij;
-
-        // RealType dij = sqrt(d2ij);
-        // RealType inv_dij = 1/dij;
 
         RealType inv_d2ij = inv_dij*inv_dij;
         RealType ebd = erfc(real_beta*dij);

@@ -82,10 +82,16 @@ def nonbonded_v2(
         box_4d = None
 
     charge_params = params[:, 0]
+    lj_params = params[:, 1:]
+
     charge_scales = scales[:, 0]
+    lj_scales = scales[:, 1]
 
-    return simple_energy(conf_4d, box_4d, charge_params, exclusion_idxs, charge_scales, beta, cutoff)
+    lj = lennard_jones(conf_4d, lj_params, box_4d, cutoff)
+    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, box_4d, exclusion_idxs, lj_scales, cutoff)
+    es = simple_energy(conf_4d, box_4d, charge_params, exclusion_idxs, charge_scales, beta, cutoff)
 
+    return lj - lj_exc + es
 
 def lennard_jones_v2(
     conf,
@@ -181,11 +187,17 @@ def lennard_jones(conf, lj_params, box, cutoff):
 
     eij = 4*eps_ij*(sig6-1.0)*sig6
 
+
     # if cutoff is not None:
         # sw = switch_fn(dij, cutoff)
         # eij = eij*sw
 
     eij = np.where(keep_mask, eij, np.zeros_like(eij))
+
+    # print("eps_ij", eps_ij)
+    # print("sig_ij", sig_ij)
+
+
     return np.sum(eij/2)
 
 

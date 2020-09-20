@@ -10,7 +10,7 @@ import jax.numpy as jnp
 import functools
 
 from common import GradientTest
-from common import prepare_nonbonded_system, prepare_lj_system, prepare_es_system
+from common import prepare_nonbonded_system, prepare_lj_system, prepare_nb_system
 
 from timemachine.lib import potentials
 
@@ -35,18 +35,19 @@ def hilbert_sort(conf, D):
 class TestNonbonded(GradientTest):
 
 
-    def test_electrostatics(self):
-
-
+    # def test_electrostatics(self):
+    def test_nonbonded(self):
 
         np.random.seed(4321)
         D = 3
 
         benchmark = True
 
-        for size in [32, 230, 1051]:
+        for size in [32]:
+        # for size in [32, 230, 1051]:
 
             if not benchmark:
+                water_coords = self.get_water_coords(D, sort=False)
                 test_system = water_coords[:size]
                 padding = 0.2
                 diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
@@ -72,12 +73,12 @@ class TestNonbonded(GradientTest):
                 lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
                 # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-                for precision, rtol in [(np.float64, 1e-9)]:
-                # for precision, rtol in [(np.float32, 1e-2)]:
+                # for precision, rtol in [(np.float64, 1e-9)]:
+                for precision, rtol in [(np.float32, 1e-2)]:
 
                     for cutoff in [1.0]:
-                        # E = 0 # DEBUG!
-                        charge_params, ref_potential, test_potential = prepare_es_system(
+                        E = 0 # DEBUG!
+                        charge_params, ref_potential, test_potential = prepare_nb_system(
                             coords,
                             E,
                             lambda_offset_idxs,

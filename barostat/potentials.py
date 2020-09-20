@@ -70,4 +70,5 @@ def lennard_jones(conf, lj_params, volume):
     eij = 4*eps_ij*(sig6-1.0)*sig6
 
     eij = np.where(keep_mask, eij, np.zeros_like(eij))
+
     return np.sum(eij/2)

@@ -130,7 +130,6 @@ void Electrostatics<RealType>::execute_device(
 
     throw std::runtime_error("break");
 
-
     if(sort) {
         double bx = box[0*3+0];
         double by = box[1*3+1];

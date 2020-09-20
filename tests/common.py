@@ -119,7 +119,7 @@ def prepare_lj_system(
 #     return charge_params, ref_total_energy, test_potential
 
 
-def prepare_es_system(
+def prepare_nb_system(
     x,
     E, # number of exclusions
     lambda_offset_idxs,
@@ -131,8 +131,22 @@ def prepare_es_system(
     D = x.shape[1]
 
     # charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
-    params = (np.random.rand(N*3).astype(np.float64) - 0.5)*np.sqrt(138.935456)
-    params = params.reshape(N, 3)
+    params = np.stack([
+        np.zeros_like((np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)),
+        np.random.rand(N).astype(np.float64)/10.0,
+        np.random.rand(N).astype(np.float64)
+    ], axis=1)
+
+    # print(params)
+
+    # print(params.shape)
+
+    # assert 0
+
+    # params = (np.random.rand(N*3).astype(np.float64) - 0.5)*np.sqrt(138.935456)
+    # params = params.reshape(N, 3)
+    # params[:, 1] /= 10.0 # scale down sigmas to prevent explosion
+
 
     atom_idxs = np.arange(N)
     exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
