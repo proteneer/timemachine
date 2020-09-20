@@ -131,7 +131,6 @@ void __global__ k_nonbonded(
             RealType es_prefactor = qij*(-2*real_beta*exp(-real_beta*real_beta*dij*dij)/(sqrt(static_cast<RealType>(PI))*dij) - ebd*inv_d2ij)*inv_dij;
 
             // lennard jones
-            // RealType inv_d2ij = inv_dij*inv_dij;
             RealType inv_d3ij = inv_dij*inv_d2ij;
             RealType inv_d4ij = inv_d2ij*inv_d2ij;
             RealType inv_d6ij = inv_d4ij*inv_d2ij;
@@ -280,9 +279,16 @@ void __global__ k_nonbonded_exclusions(
     RealType du_dl_i = 0;
 
     int charge_param_idx_i = atom_i_idx*3 + 0;
+    int lj_param_idx_sig_i = atom_i_idx*3 + 1;
+    int lj_param_idx_eps_i = atom_i_idx*3 + 2;
 
     RealType qi = params[charge_param_idx_i];
+    RealType sig_i = params[lj_param_idx_sig_i];
+    RealType eps_i = params[lj_param_idx_eps_i];
+
     RealType g_qi = 0;
+    RealType g_sigi = 0;
+    RealType g_epsi = 0;
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
     int lambda_offset_j = lambda_offset_idxs[atom_j_idx];
@@ -296,8 +302,16 @@ void __global__ k_nonbonded_exclusions(
     RealType du_dl_j = 0;
 
     int charge_param_idx_j = atom_j_idx*3+0;
+    int lj_param_idx_sig_j = atom_j_idx*3 + 1;
+    int lj_param_idx_eps_j = atom_j_idx*3 + 2;
+
     RealType qj = params[charge_param_idx_j];
+    RealType sig_j = params[lj_param_idx_sig_j];
+    RealType eps_j = params[lj_param_idx_eps_j];
+
     RealType g_qj = 0;
+    RealType g_sigj = 0;
+    RealType g_epsj = 0;
 
     RealType real_lambda = static_cast<RealType>(lambda);
     RealType real_beta = static_cast<RealType>(beta);
@@ -337,23 +351,55 @@ void __global__ k_nonbonded_exclusions(
         RealType ebd = erfc(real_beta*dij);
         RealType qij = qi*qj;
 
-        RealType prefactor = charge_scale*qij*(-2*real_beta*exp(-real_beta*real_beta*dij*dij)/(sqrt(static_cast<RealType>(PI))*dij) - ebd*inv_d2ij)*inv_dij;
+        RealType es_prefactor = charge_scale*qij*(-2*real_beta*exp(-real_beta*real_beta*dij*dij)/(sqrt(static_cast<RealType>(PI))*dij) - ebd*inv_d2ij)*inv_dij;
 
-        gi_x -= prefactor*delta_x;
-        gi_y -= prefactor*delta_y;
-        gi_z -= prefactor*delta_z;
+        // lennard jones
+        RealType inv_d3ij = inv_dij*inv_d2ij;
+        RealType inv_d4ij = inv_d2ij*inv_d2ij;
+        RealType inv_d6ij = inv_d4ij*inv_d2ij;
+        RealType inv_d8ij = inv_d4ij*inv_d4ij;
 
-        gj_x += prefactor*delta_x;
-        gj_y += prefactor*delta_y;
-        gj_z += prefactor*delta_z;
+        // lennard jones force
+        RealType eps_ij = sqrt(eps_i * eps_j);
+        RealType sig_ij = (sig_i + sig_j)/2;
 
-        du_dl_i -= prefactor * delta_w * lambda_offset_i;
-        du_dl_j += prefactor * delta_w * lambda_offset_j;
+        RealType sig2 = sig_ij*sig_ij;
+        RealType sig4 = sig2*sig2;
+        RealType sig5 = sig4*sig_ij;
+        RealType sig6 = sig4*sig2;
 
-        energy -= charge_scale*qij*inv_dij*ebd;
+        RealType sig6_inv_d6ij = sig6*inv_d6ij;
+        RealType sig6_inv_d8ij = sig6*inv_d8ij;
+
+        RealType lj_prefactor = lj_scale*24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
+
+        gi_x -= (es_prefactor-lj_prefactor)*delta_x;
+        gi_y -= (es_prefactor-lj_prefactor)*delta_y;
+        gi_z -= (es_prefactor-lj_prefactor)*delta_z;
+
+        gj_x += (es_prefactor-lj_prefactor)*delta_x;
+        gj_y += (es_prefactor-lj_prefactor)*delta_y;
+        gj_z += (es_prefactor-lj_prefactor)*delta_z;
+
+        du_dl_i -= (es_prefactor-lj_prefactor)*delta_w*lambda_offset_i;
+        du_dl_j += (es_prefactor-lj_prefactor)*delta_w*lambda_offset_j;
+
+        energy -= charge_scale*qij*inv_dij*ebd + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
 
         g_qi -= charge_scale*qj*inv_dij*ebd;
         g_qj -= charge_scale*qi*inv_dij*ebd;
+
+        if(eps_i != 0 && eps_j != 0) {
+
+            RealType eps_grad = lj_scale*2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
+            g_epsi -= eps_grad*eps_j;
+            g_epsj -= eps_grad*eps_i;
+
+            RealType sig_grad = lj_scale*12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
+            g_sigi -= sig_grad;
+            g_sigj -= sig_grad;
+
+        }
 
         // these reduction buffers are really tricky
         if(du_dx) {
@@ -369,6 +415,12 @@ void __global__ k_nonbonded_exclusions(
         if(du_dp) {
             atomicAdd(du_dp + charge_param_idx_i, g_qi);
             atomicAdd(du_dp + charge_param_idx_j, g_qj);
+
+            atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
+            atomicAdd(du_dp + lj_param_idx_eps_i, g_epsi);
+
+            atomicAdd(du_dp + lj_param_idx_sig_j, g_sigj);
+            atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
         }
 
         if(du_dl_buffer) {

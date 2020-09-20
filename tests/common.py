@@ -132,7 +132,7 @@ def prepare_nb_system(
 
     # charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
     params = np.stack([
-        np.zeros_like((np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)),
+        (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456),
         np.random.rand(N).astype(np.float64)/10.0,
         np.random.rand(N).astype(np.float64)
     ], axis=1)

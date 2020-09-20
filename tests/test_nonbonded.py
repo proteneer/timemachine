@@ -41,10 +41,10 @@ class TestNonbonded(GradientTest):
         np.random.seed(4321)
         D = 3
 
-        benchmark = True
+        benchmark = False
 
-        for size in [32]:
-        # for size in [32, 230, 1051]:
+        # for size in [32]:
+        for size in [32, 230, 1051]:
 
             if not benchmark:
                 water_coords = self.get_water_coords(D, sort=False)
@@ -65,19 +65,19 @@ class TestNonbonded(GradientTest):
                     perm = hilbert_sort(coords+np.argmin(coords), D)
                     coords = coords[perm]
 
-                print(coords.shape)
-
                 N = coords.shape[0]
                 E = N//5
+
+                print(coords.shape, E)
 
                 lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
                 # for precision, rtol in [(np.float64, 1e-9), (np.float32, 5e-5)]:
-                # for precision, rtol in [(np.float64, 1e-9)]:
-                for precision, rtol in [(np.float32, 1e-2)]:
+                for precision, rtol in [(np.float64, 1e-9)]:
+                # for precision, rtol in [(np.float32, 1e-2)]:
 
                     for cutoff in [1.0]:
-                        E = 0 # DEBUG!
+                        # E = 0 # DEBUG!
                         charge_params, ref_potential, test_potential = prepare_nb_system(
                             coords,
                             E,
@@ -88,7 +88,7 @@ class TestNonbonded(GradientTest):
                         )
 
                         # for lamb in [0.0, 0.1, 0.2]:
-                        for lamb in [0.0]:
+                        for lamb in [0.02]:
 
                             print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 

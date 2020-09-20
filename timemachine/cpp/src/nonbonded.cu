@@ -132,7 +132,6 @@ void Nonbonded<RealType>::execute_device(
         const int tpb = 32;
         dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
 
-
         k_nonbonded_exclusions<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
             E_,
             d_x,
