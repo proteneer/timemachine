@@ -36,34 +36,26 @@ class TestNonbonded(GradientTest):
 
 
     def test_electrostatics(self):
+
+
+
         np.random.seed(4321)
         D = 3
 
-        # test_system = self.get_random_coords(64, D)
-        water_coords = self.get_water_coords(D, sort=False)
+        benchmark = True
 
         for size in [32, 230, 1051]:
-            test_system = water_coords[:size]
-            padding = 0.2
-            diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
-            box = np.eye(3)
-            np.fill_diagonal(box, diag)
 
-            # _, test_system, box, _ = water_box.prep_system(8.1) # 6.2 is 23k atoms, roughly DHFR
-            # _, test_system, box, _ = water_box.prep_system(6.2) # 6.2 is 23k atoms, roughly DHFR
-            # test_system = test_system/test_system.unit
-
-            # print("BOX:", box)
-
-            # atom_idxs = np.arange(test_system.shape[0])
-            # random_idxs = np.random.choice(atom_idxs, size=1024, replace=False)
-            # test_system = test_system[random_idxs]
-
-            # print("System shape", test_system.shape)
-
-            # print("box", box)
-
-            benchmark = False
+            if not benchmark:
+                test_system = water_coords[:size]
+                padding = 0.2
+                diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
+                box = np.eye(3)
+                np.fill_diagonal(box, diag)
+            else:
+                # _, test_system, box, _ = water_box.prep_system(8.1) # 6.2 is 23k atoms, roughly DHFR
+                _, test_system, box, _ = water_box.prep_system(6.2) # 6.2 is 23k atoms, roughly DHFR
+                test_system = test_system/test_system.unit
 
             for coords in [test_system]:
 
@@ -84,7 +76,7 @@ class TestNonbonded(GradientTest):
                 # for precision, rtol in [(np.float32, 1e-2)]:
 
                     for cutoff in [1.0]:
-                        E = 0 # DEBUG!
+                        # E = 0 # DEBUG!
                         charge_params, ref_potential, test_potential = prepare_es_system(
                             coords,
                             E,
@@ -95,7 +87,7 @@ class TestNonbonded(GradientTest):
                         )
 
                         # for lamb in [0.0, 0.1, 0.2]:
-                        for lamb in [0.05, 0.5, 1.0]:
+                        for lamb in [0.0]:
 
                             print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 

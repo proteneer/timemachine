@@ -11,7 +11,6 @@ class Nonbonded : public Potential {
 
 private:
 
-
     int *d_exclusion_idxs_; // [E,2]
     double *d_scales_; // [E, 2]
     int *d_lambda_offset_idxs_;

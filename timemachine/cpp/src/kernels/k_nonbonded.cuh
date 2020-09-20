@@ -172,50 +172,156 @@ void __global__ k_nonbonded(
 
     // these are buffered and then reduced to avoid massive conflicts
     if(du_dl_buffer) {
-        atomicAdd(du_dl_buffer + atom_i_idx, du_dl_i + du_dl_j);
+        if(atom_i_idx < N) {
+            atomicAdd(du_dl_buffer + atom_i_idx, du_dl_i + du_dl_j);
+        }
     }
 
     if(u_buffer) {
-        atomicAdd(u_buffer + atom_i_idx, energy);        
+        if(atom_i_idx < N) {
+            atomicAdd(u_buffer + atom_i_idx, energy);
+        }
     }
-
 
 }
 
-// template <typename RealType>
-// void __global__ k_dynamic_nonbonded(
-//     const unsigned int * __restrict__ ixn_count,
-//     const int N,
-//     const double * __restrict__ coords,
-//     const double * __restrict__ params, // [N]
-//     const double * __restrict__ box,
-//     const double lambda,
-//     const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-//     const double beta,
-//     const double cutoff,
-//     const int * __restrict__ ixn_tiles,
-//     const unsigned int * __restrict__ ixn_atoms,
-//     unsigned long long * __restrict__ du_dx,
-//     double * __restrict__ du_dp,
-//     double * __restrict__ du_dl_buffer,
-//     double * __restrict__ u_buffer) {
-//     if(threadIdx.x == 0) {
-//         k_nonbonded<RealType><<<ixn_count[0], 32>>>(
-//             N,
-//             coords,
-//             params, // [N]
-//             box,
-//             lambda,
-//             lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-//             beta,
-//             cutoff,
-//             ixn_tiles,
-//             ixn_atoms,
-//             du_dx,
-//             du_dp,
-//             du_dl_buffer,
-//             u_buffer
-//         );
-//     }
 
-// }
+template<typename RealType>
+void __global__ k_nonbonded_exclusions(
+    const int E, // number of exclusions
+    const double *coords,
+    const double *params,
+    const double *box,
+    const double lambda,
+    const int *lambda_offset_idxs, // 0 or 1, if we alolw this atom to be decoupled
+    const int *exclusion_idxs, // [E, 2] pair-list of atoms to be excluded
+    const double *scales, // [E]
+    const double beta,
+    const double cutoff,
+    unsigned long long *du_dx,
+    double *du_dp,
+    double *du_dl_buffer,
+    double *u_buffer) {
+
+    const int e_idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if(e_idx >= E) {
+        return;
+    }
+
+    int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
+    int lambda_offset_i = lambda_offset_idxs[atom_i_idx];
+
+    RealType ci_x = coords[atom_i_idx*3+0];
+    RealType ci_y = coords[atom_i_idx*3+1];
+    RealType ci_z = coords[atom_i_idx*3+2];
+    RealType gi_x = 0;
+    RealType gi_y = 0;
+    RealType gi_z = 0;
+    RealType du_dl_i = 0;
+
+    int charge_param_idx_i = atom_i_idx*3 + 0;
+
+    RealType qi = params[charge_param_idx_i];
+    RealType g_qi = 0;
+
+    int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
+    int lambda_offset_j = lambda_offset_idxs[atom_j_idx];
+
+    RealType cj_x = coords[atom_j_idx*3+0];
+    RealType cj_y = coords[atom_j_idx*3+1];
+    RealType cj_z = coords[atom_j_idx*3+2];
+    RealType gj_x = 0;
+    RealType gj_y = 0;
+    RealType gj_z = 0;
+    RealType du_dl_j = 0;
+
+    int charge_param_idx_j = atom_j_idx*3+0;
+    RealType qj = params[charge_param_idx_j];
+    RealType g_qj = 0;
+
+    RealType real_lambda = static_cast<RealType>(lambda);
+    RealType real_beta = static_cast<RealType>(beta);
+    RealType cutoff_squared = cutoff*cutoff;
+
+    RealType charge_scale = scales[e_idx*2 + 0];
+    RealType lj_scale = scales[e_idx*2 + 1];
+
+    RealType box_x = box[0*3+0];
+    RealType box_y = box[1*3+1];
+    RealType box_z = box[2*3+2];
+
+    RealType inv_box_x = 1/box_x;
+    RealType inv_box_y = 1/box_y;
+    RealType inv_box_z = 1/box_z;
+
+    RealType delta_x = ci_x - cj_x;
+    RealType delta_y = ci_y - cj_y;
+    RealType delta_z = ci_z - cj_z;
+
+    delta_x -= box_x*nearbyint(delta_x*inv_box_x);
+    delta_y -= box_y*nearbyint(delta_y*inv_box_y);
+    delta_z -= box_z*nearbyint(delta_z*inv_box_z);
+
+    RealType delta_w = (lambda_offset_i - lambda_offset_j)*real_lambda;
+
+    RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
+
+    RealType energy = 0;
+
+    if(d2ij < cutoff_squared) {
+
+        RealType dij = sqrt(d2ij);
+        RealType inv_dij = 1/dij;
+
+        // RealType dij = sqrt(d2ij);
+        // RealType inv_dij = 1/dij;
+
+        RealType inv_d2ij = inv_dij*inv_dij;
+        RealType ebd = erfc(real_beta*dij);
+        RealType qij = qi*qj;
+
+        RealType prefactor = charge_scale*qij*(-2*real_beta*exp(-real_beta*real_beta*dij*dij)/(sqrt(static_cast<RealType>(PI))*dij) - ebd*inv_d2ij)*inv_dij;
+
+        gi_x -= prefactor*delta_x;
+        gi_y -= prefactor*delta_y;
+        gi_z -= prefactor*delta_z;
+
+        gj_x += prefactor*delta_x;
+        gj_y += prefactor*delta_y;
+        gj_z += prefactor*delta_z;
+
+        du_dl_i -= prefactor * delta_w * lambda_offset_i;
+        du_dl_j += prefactor * delta_w * lambda_offset_j;
+
+        energy -= charge_scale*qij*inv_dij*ebd;
+
+        g_qi -= charge_scale*qj*inv_dij*ebd;
+        g_qj -= charge_scale*qi*inv_dij*ebd;
+
+        // these reduction buffers are really tricky
+        if(du_dx) {
+            atomicAdd(du_dx + atom_i_idx*3 + 0, static_cast<unsigned long long>((long long) (gi_x*FIXED_EXPONENT)));
+            atomicAdd(du_dx + atom_i_idx*3 + 1, static_cast<unsigned long long>((long long) (gi_y*FIXED_EXPONENT)));
+            atomicAdd(du_dx + atom_i_idx*3 + 2, static_cast<unsigned long long>((long long) (gi_z*FIXED_EXPONENT)));
+
+            atomicAdd(du_dx + atom_j_idx*3 + 0, static_cast<unsigned long long>((long long) (gj_x*FIXED_EXPONENT)));
+            atomicAdd(du_dx + atom_j_idx*3 + 1, static_cast<unsigned long long>((long long) (gj_y*FIXED_EXPONENT)));
+            atomicAdd(du_dx + atom_j_idx*3 + 2, static_cast<unsigned long long>((long long) (gj_z*FIXED_EXPONENT)));
+        }
+
+        if(du_dp) {
+            atomicAdd(du_dp + charge_param_idx_i, g_qi);
+            atomicAdd(du_dp + charge_param_idx_j, g_qj);
+        }
+
+        if(du_dl_buffer) {
+            atomicAdd(du_dl_buffer + atom_i_idx, du_dl_i + du_dl_j);
+        }
+
+        if(u_buffer) {
+            atomicAdd(u_buffer + atom_i_idx, energy);
+        }
+
+    }
+
+}

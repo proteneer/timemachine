@@ -43,7 +43,7 @@ Nonbonded<RealType>::Nonbonded(
     gpuErrchk(cudaMemcpy(d_exclusion_idxs_, &exclusion_idxs[0], E_*2*sizeof(*d_exclusion_idxs_), cudaMemcpyHostToDevice));
 
     gpuErrchk(cudaMalloc(&d_scales_, E_*2*sizeof(*d_scales_)));
-    gpuErrchk(cudaMemcpy(d_scales_, &scales[0], E_*sizeof(*d_scales_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_scales_, &scales[0], E_*2*sizeof(*d_scales_), cudaMemcpyHostToDevice));
     
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1*sizeof(*p_ixn_count_)));
 
@@ -127,41 +127,42 @@ void Nonbonded<RealType>::execute_device(
 
     // these are called periodically so we use a slow implementation to reduce
 
+    if(E_ > 0) {
+
+        const int tpb = 32;
+        dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
+
+
+        k_nonbonded_exclusions<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
+            E_,
+            d_x,
+            d_p,
+            d_box,
+            lambda,
+            d_lambda_offset_idxs_,
+            d_exclusion_idxs_,
+            d_scales_,
+            beta_,
+            cutoff_,
+            d_du_dx,
+            d_du_dp,
+            d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
+            d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
+        );
+        // cudaDeviceSynchronize();
+        gpuErrchk(cudaPeekAtLastError());
+    }
+
     if(d_du_dl) {
         k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_du_dl_buffer_, d_du_dl);
         gpuErrchk(cudaPeekAtLastError());
     }
-
 
     if(d_u) {
         k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_u_buffer_, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
     
-
-    // if(E_ > 0) {
-    //     // dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
-
-    //     k_nonbonded_exclusion_inference<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
-    //         E_,
-    //         d_coords_primals,
-    //         // d_params_primals,
-    //         lambda_primal,
-    //         d_lambda_plane_idxs_,
-    //         d_lambda_offset_idxs_,
-    //         d_exclusion_idxs_,
-    //         d_charge_scales_,
-    //         d_lj_scales_,
-    //         d_charge_params_,
-    //         d_lj_params_,
-    //         cutoff_,
-    //         d_out_coords_primals,
-    //         d_out_lambda_primals,
-    //         d_out_energy_primal
-    //     );
-    //     // cudaDeviceSynchronize();
-    //     gpuErrchk(cudaPeekAtLastError());
-    // }
 }
 
 template class Nonbonded<double>;
