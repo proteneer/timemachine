@@ -5,6 +5,56 @@
 
 #define PI 3.141592653589793115997963468544185161
 
+template <typename RealType>
+void __global__ k_permute(
+    const int N,
+    const int * __restrict__ perm,
+    const RealType * __restrict__ array,
+    RealType * __restrict__ sorted_array) {
+
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int stride = blockDim.y;
+    int stride_idx = blockIdx.y;
+
+
+
+    if(idx >= N) {
+        return;
+    }
+
+    printf("idx %d N %d\n", idx, N);
+
+    int p = idx*stride + stride_idx;
+
+    printf("idx %d perm %d\n", idx, perm[p]);
+
+    // printf("setting %d %f\n", p, array[perm[p]]);
+
+    sorted_array[p] = array[perm[p]];
+
+}
+
+template <typename RealType>
+void __global__ k_inv_permute(
+    const int N,
+    const int * __restrict__ perm,
+    const RealType * __restrict__ sorted_array,
+    RealType * __restrict__ array) {
+
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int stride = blockDim.y;
+    int stride_idx = blockIdx.y;
+
+    if(idx >= N) {
+        return;
+    }
+
+    int p = idx*stride + stride_idx;
+
+    array[perm[p]] = sorted_array[p];
+
+}
+
 template<typename RealType>
 void __global__ k_reduce_buffer(
     int N,

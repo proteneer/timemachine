@@ -2,8 +2,11 @@
 #include <chrono>
 #include <iostream>
 #include <vector>
+#include <algorithm>
 #include <complex>
+#include <cstdlib>
 #include "nonbonded.hpp"
+#include "hilbert.h"
 #include "gpu_utils.cuh"
 
 #include "k_nonbonded.cuh"
@@ -21,7 +24,8 @@ Nonbonded<RealType>::Nonbonded(
     cutoff_(cutoff),
     E_(exclusion_idxs.size()/2),
     nblist_(lambda_offset_idxs.size()),
-    beta_(beta) {
+    beta_(beta),
+    sort_counter_(0) {
 
 
 
@@ -38,6 +42,12 @@ Nonbonded<RealType>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_du_dl_buffer_, N_*sizeof(*d_du_dl_buffer_)));
     gpuErrchk(cudaMalloc(&d_u_buffer_, N_*sizeof(*d_u_buffer_)));
+    gpuErrchk(cudaMalloc(&d_perm_, N_*sizeof(*d_perm_)));
+
+    gpuErrchk(cudaMalloc(&d_sorted_x_, N_*3*sizeof(*d_sorted_x_)));
+    gpuErrchk(cudaMalloc(&d_sorted_p_, N_*3*sizeof(*d_sorted_p_)));
+    gpuErrchk(cudaMalloc(&d_sorted_du_dx_, N_*3*sizeof(*d_sorted_du_dx_)));
+    gpuErrchk(cudaMalloc(&d_sorted_du_dp_, N_*3*sizeof(*d_sorted_du_dp_)));
 
     gpuErrchk(cudaMalloc(&d_exclusion_idxs_, E_*2*sizeof(*d_exclusion_idxs_)));
     gpuErrchk(cudaMemcpy(d_exclusion_idxs_, &exclusion_idxs[0], E_*2*sizeof(*d_exclusion_idxs_), cudaMemcpyHostToDevice));
@@ -46,8 +56,78 @@ Nonbonded<RealType>::Nonbonded(
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], E_*2*sizeof(*d_scales_), cudaMemcpyHostToDevice));
     
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1*sizeof(*p_ixn_count_)));
+    gpuErrchk(cudaMallocHost(&p_coords_, N_*3*sizeof(*p_coords_)));
+    gpuErrchk(cudaMallocHost(&p_perm_, N_*sizeof(*p_perm_)));
+    gpuErrchk(cudaMallocHost(&p_box_, 3*3*sizeof(*p_box_)));
 
 };
+
+template <typename RealType>
+void Nonbonded<RealType>::hilbert_sort(cudaStream_t stream) {
+
+    double bx = p_box_[0*3+0];
+    double by = p_box_[1*3+1];
+    double bz = p_box_[2*3+2];
+
+    // 2. apply periodic centering
+    for(int i=0; i < N_; i++) {
+
+        double x = p_coords_[i*3+0];
+        double y = p_coords_[i*3+1];
+        double z = p_coords_[i*3+2];
+
+        x -= bx*floor(x/bx);
+        y -= by*floor(y/by);
+        z -= bz*floor(z/bz);
+
+        p_coords_[i*3+0] = x;
+        p_coords_[i*3+1] = y;
+        p_coords_[i*3+2] = z;
+    }
+    
+    // 3. build the hilbert curve
+    // if periodic
+    double minx = 0.0;
+    double miny = 0.0;
+    double minz = 0.0;
+    double maxx = bx;
+    double maxy = by;
+    double maxz = bz;
+
+    double binWidth = max(max(maxx-minx, maxy-miny), maxz-minz)/255.0;
+    double invBinWidth = 1.0/binWidth;
+    std::vector<std::pair<int, int> > molBins(N_);
+
+    for(int i = 0; i < N_; i++) {
+        int x = (p_coords_[i*3+0]-minx)*invBinWidth;
+        int y = (p_coords_[i*3+1]-miny)*invBinWidth;
+        int z = (p_coords_[i*3+2]-minz)*invBinWidth;
+
+        bitmask_t hilbert_coords[3];
+        hilbert_coords[0] = x;
+        hilbert_coords[1] = y;
+        hilbert_coords[2] = z;
+        int bin = (int) hilbert_c2i(3, 8, hilbert_coords);
+
+        molBins[i] = std::pair<int, int>(bin, i);
+    }
+
+    std::sort(molBins.begin(), molBins.end());
+
+    // 4. generate a new ordering
+    for(int i=0; i < N_; i++) {
+        std::cout << "SORT: " << i << " " <<  molBins[i].second << std::endl;
+        p_perm_[i] = molBins[i].second;
+    }
+
+    gpuErrchk(cudaMemcpyAsync(
+        d_perm_,
+        p_perm_,
+        N_*sizeof(*d_perm_),
+        cudaMemcpyHostToDevice,
+        stream));
+
+}
 
 template <typename RealType>
 Nonbonded<RealType>::~Nonbonded() {
@@ -58,8 +138,17 @@ Nonbonded<RealType>::~Nonbonded() {
 
     gpuErrchk(cudaFree(d_du_dl_buffer_));
     gpuErrchk(cudaFree(d_u_buffer_));
+    gpuErrchk(cudaFree(d_perm_)); // nullptr if we never built nblist
+    
+    gpuErrchk(cudaFree(d_sorted_x_));
+    gpuErrchk(cudaFree(d_sorted_p_));
+    gpuErrchk(cudaFree(d_sorted_du_dx_));
+    gpuErrchk(cudaFree(d_sorted_du_dp_));
 
     gpuErrchk(cudaFreeHost(p_ixn_count_));
+    gpuErrchk(cudaFreeHost(p_coords_));
+    gpuErrchk(cudaFreeHost(p_box_));
+    gpuErrchk(cudaFreeHost(p_perm_));
 
 };
 
@@ -84,9 +173,38 @@ void Nonbonded<RealType>::execute_device(
         throw std::runtime_error("N != N_");
     }
 
+    int sort_freq = 100; 
+
+    // sort atoms based on hilbert curve
+    if(sort_counter_ % sort_freq == 0) {
+        std::cout << "???" << std::endl;
+        // copy data into pinnned buffers
+        gpuErrchk(cudaMemcpyAsync(p_coords_, d_x, N*3*sizeof(*d_x), cudaMemcpyDeviceToHost))
+        gpuErrchk(cudaMemcpyAsync(p_box_, d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToHost))
+        gpuErrchk(cudaStreamSynchronize(stream));
+        this->hilbert_sort(stream);
+    }
+
+    sort_counter_ += 1;
+
+    // sort coords, parameters
+
+    const int B = (N+32-1)/32;
+    const int tpb = 32;
+
+    dim3 dimGrid(B, 3, 1);
+
+    // coords are N,3
+    k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+    gpuErrchk(cudaPeekAtLastError());
+
+    // params are N,3
+    k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
+    gpuErrchk(cudaPeekAtLastError());
+
     nblist_.build_nblist_device(
         N,
-        d_x,
+        d_sorted_x_,
         d_box,
         cutoff_,
         stream
@@ -105,8 +223,8 @@ void Nonbonded<RealType>::execute_device(
 
     k_nonbonded<RealType><<<p_ixn_count_[0], 32, 0, stream>>>(
         N,
-        d_x,
-        d_p,
+        d_sorted_x_,
+        d_sorted_p_,
         d_box,
         lambda,
         d_lambda_offset_idxs_,
@@ -123,10 +241,7 @@ void Nonbonded<RealType>::execute_device(
     // cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
 
-    const int B = (N+32-1)/32;
-
     // these are called periodically so we use a slow implementation to reduce
-
     if(E_ > 0) {
 
         const int tpb = 32;
@@ -134,8 +249,8 @@ void Nonbonded<RealType>::execute_device(
 
         k_nonbonded_exclusions<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
             E_,
-            d_x,
-            d_p,
+            d_sorted_x_,
+            d_sorted_p_,
             d_box,
             lambda,
             d_lambda_offset_idxs_,
@@ -143,12 +258,11 @@ void Nonbonded<RealType>::execute_device(
             d_scales_,
             beta_,
             cutoff_,
-            d_du_dx,
-            d_du_dp,
+            d_sorted_du_dx_,
+            d_sorted_du_dp_,
             d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
             d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
         );
-        // cudaDeviceSynchronize();
         gpuErrchk(cudaPeekAtLastError());
     }
 
@@ -161,6 +275,14 @@ void Nonbonded<RealType>::execute_device(
         k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_u_buffer_, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
+
+    // coords are N,3
+    k_inv_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
+    gpuErrchk(cudaPeekAtLastError());
+
+    // params are N,3
+    k_inv_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp);
+    gpuErrchk(cudaPeekAtLastError());
     
 }
 

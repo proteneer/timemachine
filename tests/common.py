@@ -24,7 +24,6 @@ def prepare_lj_system(
     N = x.shape[0]
     D = x.shape[1]
 
-    # charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
     sig_params = np.random.rand(N) / p_scale
     eps_params = np.random.rand(N)
     lj_params = np.stack([sig_params, eps_params], axis=1)
@@ -41,16 +40,10 @@ def prepare_lj_system(
         tip_params = np.where(mask, eps_params, 0)
         lj_params[:, 1] = tip_params
 
-    # for p in lj_params:
-    #     print(p)
-
-    # assert 0
-
     atom_idxs = np.arange(N)
     exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
     exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
 
-    # charge_scales = np.random.rand(E)
     lj_scales = np.random.rand(E)
 
     test_potential = potentials.LennardJones(

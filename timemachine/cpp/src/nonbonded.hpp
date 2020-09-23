@@ -27,6 +27,20 @@ private:
     double *d_du_dl_buffer_;
     double *d_u_buffer_;
 
+    int *d_perm_; // hilbert curve permutation
+
+    double *p_coords_; // pinned coordinate for hilbert curve
+    double *p_box_; // pinned coordinate for hilbert curve
+    int *p_perm_; // pinned coordinate for hilbert curve
+
+    double *d_sorted_x_; //
+    double *d_sorted_p_; //
+    unsigned long long *d_sorted_du_dx_; //
+    double *d_sorted_du_dp_; //
+
+    unsigned long long sort_counter_;
+
+    void hilbert_sort(cudaStream_t stream);
 
 public:
 
