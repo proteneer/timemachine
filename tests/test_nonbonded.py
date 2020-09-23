@@ -52,7 +52,7 @@ class TestNonbonded(GradientTest):
                 box = np.eye(3)
                 np.fill_diagonal(box, diag)
             else:
-                # _, test_system, box, _ = water_box.prep_system(8.1) # 6.2 is 23k atoms, roughly DHFR
+                # _, test_system, box, _ = water_box.prep_system(8.1) # 8.1 is 50k atoms, roughly DHFR
                 _, test_system, box, _ = water_box.prep_system(6.2) # 6.2 is 23k atoms, roughly DHFR
                 test_system = test_system/test_system.unit
 

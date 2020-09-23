@@ -418,11 +418,4 @@ class GradientTest(unittest.TestCase):
 
         # du/dp can be hard to make numerically stable sometimes
         np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol*10)
-        # for a in ref_du_dp:
-            # if np.any(a):
-        # self.assert_param_derivs(
-        #     np.array(ref_du_dp),
-        #     np.array(test_du_dp),
-        #     rtol
-        # )
 
