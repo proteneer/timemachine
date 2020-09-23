@@ -130,23 +130,11 @@ def prepare_nb_system(
     N = x.shape[0]
     D = x.shape[1]
 
-    # charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
     params = np.stack([
-        (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456),
-        np.random.rand(N).astype(np.float64)/10.0,
-        np.random.rand(N).astype(np.float64)
+        (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456), # q
+        np.random.rand(N).astype(np.float64)/10.0, # sig
+        np.random.rand(N).astype(np.float64) # eps
     ], axis=1)
-
-    # print(params)
-
-    # print(params.shape)
-
-    # assert 0
-
-    # params = (np.random.rand(N*3).astype(np.float64) - 0.5)*np.sqrt(138.935456)
-    # params = params.reshape(N, 3)
-    # params[:, 1] /= 10.0 # scale down sigmas to prevent explosion
-
 
     atom_idxs = np.arange(N)
     exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
@@ -156,10 +144,6 @@ def prepare_nb_system(
         np.random.rand(E),
         np.random.rand(E)
     ], axis=1)
-
-    # charge_scales = np.random.rand(E)
-    # lj_scales = np.random.rand(E)
-    # beta = np.random.rand()*2
 
     beta = 2.0
 
