@@ -13,7 +13,7 @@ void __global__ k_permute(
     RealType * __restrict__ sorted_array) {
 
     int idx = blockIdx.x*blockDim.x + threadIdx.x;
-    int stride = blockDim.y;
+    int stride = gridDim.y;
     int stride_idx = blockIdx.y;
 
 
@@ -22,15 +22,14 @@ void __global__ k_permute(
         return;
     }
 
-    printf("idx %d N %d\n", idx, N);
+    // printf("idx %d N %d\n", idx, N);
 
-    int p = idx*stride + stride_idx;
+	// int p = perm[idx]*stride + stride_idx# ;
 
-    printf("idx %d perm %d\n", idx, perm[p]);
+    if(blockIdx.y==0)
+    printf("setting %d with %d stride_idx %d address %d value %f\n", idx, perm[idx], stride_idx, idx*stride+stride_idx, array[perm[idx]*stride+stride_idx]);
 
-    // printf("setting %d %f\n", p, array[perm[p]]);
-
-    sorted_array[p] = array[perm[p]];
+    sorted_array[idx*stride+stride_idx] = array[perm[idx]*stride+stride_idx];
 
 }
 
@@ -42,16 +41,14 @@ void __global__ k_inv_permute(
     RealType * __restrict__ array) {
 
     int idx = blockIdx.x*blockDim.x + threadIdx.x;
-    int stride = blockDim.y;
+    int stride = gridDim.y;
     int stride_idx = blockIdx.y;
 
     if(idx >= N) {
         return;
     }
 
-    int p = idx*stride + stride_idx;
-
-    array[perm[p]] = sorted_array[p];
+    array[perm[idx]*stride+stride_idx] = sorted_array[idx*stride+stride_idx];
 
 }
 
@@ -140,6 +137,9 @@ void __global__ k_nonbonded(
     RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 0;
     RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
 
+
+    printf("%d %f %f %f (%f %f %f)\n", atom_i_idx, sig_i, eps_i, qi, ci_x, ci_y, ci_z);
+
     RealType g_qj = 0;
     RealType g_sigj = 0;
     RealType g_epsj = 0;
@@ -172,6 +172,7 @@ void __global__ k_nonbonded(
 
             // electrostatics
             RealType dij = sqrt(d2ij);
+	    printf("dij %d %d %f\n", atom_i_idx, atom_j_idx, dij); 
             RealType inv_dij = 1/dij;
 
             RealType inv_d2ij = inv_dij*inv_dij;

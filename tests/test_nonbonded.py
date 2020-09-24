@@ -81,7 +81,7 @@ class TestNonbonded(GradientTest):
                             precision=precision
                         )
 
-                        for lamb in [0.0, 0.1, 0.2]:
+                        for lamb in [0.1, 0.2]:
 
                             print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 

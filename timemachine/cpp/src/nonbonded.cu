@@ -44,6 +44,7 @@ Nonbonded<RealType>::Nonbonded(
     gpuErrchk(cudaMalloc(&d_u_buffer_, N_*sizeof(*d_u_buffer_)));
     gpuErrchk(cudaMalloc(&d_perm_, N_*sizeof(*d_perm_)));
 
+    gpuErrchk(cudaMalloc(&d_sorted_lambda_offset_idxs_, N_*sizeof(*d_sorted_lambda_offset_idxs_)));
     gpuErrchk(cudaMalloc(&d_sorted_x_, N_*3*sizeof(*d_sorted_x_)));
     gpuErrchk(cudaMalloc(&d_sorted_p_, N_*3*sizeof(*d_sorted_p_)));
     gpuErrchk(cudaMalloc(&d_sorted_du_dx_, N_*3*sizeof(*d_sorted_du_dx_)));
@@ -116,7 +117,7 @@ void Nonbonded<RealType>::hilbert_sort(cudaStream_t stream) {
 
     // 4. generate a new ordering
     for(int i=0; i < N_; i++) {
-        std::cout << "SORT: " << i << " " <<  molBins[i].second << std::endl;
+	// std::cout << "SORT: " << i << " " <<  molBins[i].second << std::endl;
         p_perm_[i] = molBins[i].second;
     }
 
@@ -144,6 +145,7 @@ Nonbonded<RealType>::~Nonbonded() {
     gpuErrchk(cudaFree(d_sorted_p_));
     gpuErrchk(cudaFree(d_sorted_du_dx_));
     gpuErrchk(cudaFree(d_sorted_du_dp_));
+    gpuErrchk(cudaFree(d_sorted_lambda_offset_idxs_));
 
     gpuErrchk(cudaFreeHost(p_ixn_count_));
     gpuErrchk(cudaFreeHost(p_coords_));
@@ -175,6 +177,8 @@ void Nonbonded<RealType>::execute_device(
 
     int sort_freq = 100; 
 
+    const int B = (N+32-1)/32;
+    const int tpb = 32;
     // sort atoms based on hilbert curve
     if(sort_counter_ % sort_freq == 0) {
         std::cout << "???" << std::endl;
@@ -183,14 +187,21 @@ void Nonbonded<RealType>::execute_device(
         gpuErrchk(cudaMemcpyAsync(p_box_, d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToHost))
         gpuErrchk(cudaStreamSynchronize(stream));
         this->hilbert_sort(stream);
+
+	dim3 dimGrid(B, 3, 1);
+        // params are N,3
+        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
+        gpuErrchk(cudaPeekAtLastError());
+    
+        // lambda_idxs are N,1
+        k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_lambda_offset_idxs_, d_sorted_lambda_offset_idxs_);
+        gpuErrchk(cudaPeekAtLastError());
     }
 
     sort_counter_ += 1;
 
     // sort coords, parameters
 
-    const int B = (N+32-1)/32;
-    const int tpb = 32;
 
     dim3 dimGrid(B, 3, 1);
 
@@ -198,9 +209,6 @@ void Nonbonded<RealType>::execute_device(
     k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
     gpuErrchk(cudaPeekAtLastError());
 
-    // params are N,3
-    k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
-    gpuErrchk(cudaPeekAtLastError());
 
     nblist_.build_nblist_device(
         N,
@@ -227,13 +235,13 @@ void Nonbonded<RealType>::execute_device(
         d_sorted_p_,
         d_box,
         lambda,
-        d_lambda_offset_idxs_,
+        d_sorted_lambda_offset_idxs_,
         beta_,
         cutoff_,
         nblist_.get_ixn_tiles(),
         nblist_.get_ixn_atoms(),
-        d_du_dx,
-        d_du_dp,
+        d_sorted_du_dx_,
+        d_sorted_du_dp_,
         d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
         d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
     );
@@ -241,7 +249,16 @@ void Nonbonded<RealType>::execute_device(
     // cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
 
-    // these are called periodically so we use a slow implementation to reduce
+    // copy over tiled ixns
+    // coords are N,3
+    k_inv_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
+    gpuErrchk(cudaPeekAtLastError());
+
+    // params are N,3
+    k_inv_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp);
+    gpuErrchk(cudaPeekAtLastError());
+
+    // exclusions use the non-sorted version
     if(E_ > 0) {
 
         const int tpb = 32;
@@ -249,17 +266,17 @@ void Nonbonded<RealType>::execute_device(
 
         k_nonbonded_exclusions<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
             E_,
-            d_sorted_x_,
-            d_sorted_p_,
+            d_x,
+            d_p,
             d_box,
             lambda,
             d_lambda_offset_idxs_,
-            d_exclusion_idxs_,
-            d_scales_,
+            d_exclusion_idxs_, // FIX EXCLUSIONS
+            d_scales_, // FIX SCALES
             beta_,
             cutoff_,
-            d_sorted_du_dx_,
-            d_sorted_du_dp_,
+            d_du_dx,
+            d_du_dp,
             d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
             d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
         );
@@ -275,14 +292,6 @@ void Nonbonded<RealType>::execute_device(
         k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_u_buffer_, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
-
-    // coords are N,3
-    k_inv_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
-    gpuErrchk(cudaPeekAtLastError());
-
-    // params are N,3
-    k_inv_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp);
-    gpuErrchk(cudaPeekAtLastError());
     
 }
 

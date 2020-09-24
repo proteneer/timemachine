@@ -33,6 +33,7 @@ private:
     double *p_box_; // pinned coordinate for hilbert curve
     int *p_perm_; // pinned coordinate for hilbert curve
 
+    int *d_sorted_lambda_offset_idxs_;
     double *d_sorted_x_; //
     double *d_sorted_p_; //
     unsigned long long *d_sorted_du_dx_; //
