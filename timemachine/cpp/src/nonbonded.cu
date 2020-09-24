@@ -119,6 +119,7 @@ void Nonbonded<RealType>::hilbert_sort(cudaStream_t stream) {
     for(int i=0; i < N_; i++) {
 	// std::cout << "SORT: " << i << " " <<  molBins[i].second << std::endl;
         p_perm_[i] = molBins[i].second;
+        // p_perm_[i] = i;
     }
 
     gpuErrchk(cudaMemcpyAsync(
@@ -175,13 +176,13 @@ void Nonbonded<RealType>::execute_device(
         throw std::runtime_error("N != N_");
     }
 
-    int sort_freq = 100; 
+    int sort_freq = 1; 
 
     const int B = (N+32-1)/32;
     const int tpb = 32;
     // sort atoms based on hilbert curve
     if(sort_counter_ % sort_freq == 0) {
-        std::cout << "???" << std::endl;
+        std::cout << "sorting" << std::endl;
         // copy data into pinnned buffers
         gpuErrchk(cudaMemcpyAsync(p_coords_, d_x, N*3*sizeof(*d_x), cudaMemcpyDeviceToHost))
         gpuErrchk(cudaMemcpyAsync(p_box_, d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToHost))
@@ -201,8 +202,6 @@ void Nonbonded<RealType>::execute_device(
     sort_counter_ += 1;
 
     // sort coords, parameters
-
-
     dim3 dimGrid(B, 3, 1);
 
     // coords are N,3
@@ -222,6 +221,14 @@ void Nonbonded<RealType>::execute_device(
     // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
     gpuErrchk(cudaStreamSynchronize(stream));
 
+    // reset buffers and sorted accumulators
+    if(d_du_dx) {
+	gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N*3*sizeof(*d_sorted_du_dx_)))
+    }
+    if(d_du_dp) {
+	gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N*3*sizeof(*d_sorted_du_dp_)))
+    }
+
     if(d_du_dl) {
         gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N*sizeof(*d_du_dl_buffer_), stream));        
     }
@@ -240,8 +247,8 @@ void Nonbonded<RealType>::execute_device(
         cutoff_,
         nblist_.get_ixn_tiles(),
         nblist_.get_ixn_atoms(),
-        d_sorted_du_dx_,
-        d_sorted_du_dp_,
+        d_du_dx ? d_sorted_du_dx_ : nullptr,
+        d_du_dp ? d_sorted_du_dp_ : nullptr,
         d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
         d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
     );
@@ -251,12 +258,17 @@ void Nonbonded<RealType>::execute_device(
 
     // copy over tiled ixns
     // coords are N,3
-    k_inv_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
-    gpuErrchk(cudaPeekAtLastError());
+    if(d_du_dx) {
+        k_inv_permute_accum<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
+        gpuErrchk(cudaPeekAtLastError());
+    }
 
     // params are N,3
-    k_inv_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp);
-    gpuErrchk(cudaPeekAtLastError());
+    // this needs to be an accumlated permute
+    if(d_du_dp) {
+        k_inv_permute_accum<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp);
+        gpuErrchk(cudaPeekAtLastError());
+    }
 
     // exclusions use the non-sorted version
     if(E_ > 0) {

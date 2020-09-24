@@ -26,15 +26,15 @@ void __global__ k_permute(
 
 	// int p = perm[idx]*stride + stride_idx# ;
 
-    if(blockIdx.y==0)
-    printf("setting %d with %d stride_idx %d address %d value %f\n", idx, perm[idx], stride_idx, idx*stride+stride_idx, array[perm[idx]*stride+stride_idx]);
+    // if(blockIdx.y==0)
+    // printf("setting %d with %d stride_idx %d address %d value %f\n", idx, perm[idx], stride_idx, idx*stride+stride_idx, array[perm[idx]*stride+stride_idx]);
 
     sorted_array[idx*stride+stride_idx] = array[perm[idx]*stride+stride_idx];
 
 }
 
 template <typename RealType>
-void __global__ k_inv_permute(
+void __global__ k_inv_permute_accum(
     const int N,
     const int * __restrict__ perm,
     const RealType * __restrict__ sorted_array,
@@ -48,7 +48,7 @@ void __global__ k_inv_permute(
         return;
     }
 
-    array[perm[idx]*stride+stride_idx] = sorted_array[idx*stride+stride_idx];
+    array[perm[idx]*stride+stride_idx] += sorted_array[idx*stride+stride_idx];
 
 }
 
@@ -138,7 +138,7 @@ void __global__ k_nonbonded(
     RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
 
 
-    printf("%d %f %f %f (%f %f %f)\n", atom_i_idx, sig_i, eps_i, qi, ci_x, ci_y, ci_z);
+    // printf("%d %f %f %f (%f %f %f)\n", atom_i_idx, sig_i, eps_i, qi, ci_x, ci_y, ci_z);
 
     RealType g_qj = 0;
     RealType g_sigj = 0;
@@ -172,7 +172,7 @@ void __global__ k_nonbonded(
 
             // electrostatics
             RealType dij = sqrt(d2ij);
-	    printf("dij %d %d %f\n", atom_i_idx, atom_j_idx, dij); 
+	    // printf("dij %d %d %f\n", atom_i_idx, atom_j_idx, dij); 
             RealType inv_dij = 1/dij;
 
             RealType inv_d2ij = inv_dij*inv_dij;

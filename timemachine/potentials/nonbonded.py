@@ -169,7 +169,7 @@ def lennard_jones(conf, lj_params, box, cutoff):
 
     # print("BOX", box)
     dij = distance(ri, rj, box)
-    print("DIJ", dij)
+    # print("DIJ", dij)
 
     N = conf.shape[0]
     keep_mask = np.ones((N,N)) - np.eye(N)

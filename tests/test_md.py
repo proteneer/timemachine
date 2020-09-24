@@ -139,6 +139,7 @@ class TestContext(unittest.TestCase):
             ctxt.add_observable(o)
 
         for step in range(num_steps):
+            print("comparing step", step)
             ctxt.step(lamb)
             test_x_t = ctxt.get_x_t()
             test_v_t = ctxt.get_v_t()
