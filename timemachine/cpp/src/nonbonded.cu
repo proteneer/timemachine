@@ -176,7 +176,7 @@ void Nonbonded<RealType>::execute_device(
         throw std::runtime_error("N != N_");
     }
 
-    int sort_freq = 1; 
+    int sort_freq = 100; 
 
     const int B = (N+32-1)/32;
     const int tpb = 32;
