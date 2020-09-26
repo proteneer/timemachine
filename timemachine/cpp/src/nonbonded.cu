@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <complex>
 #include <cstdlib>
+#include <cub/cub.cuh>
+
 #include "nonbonded.hpp"
 #include "hilbert.h"
 #include "gpu_utils.cuh"

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 project(timemachine LANGUAGES CXX CUDA)
 
@@ -33,6 +33,9 @@ endif()
 
 add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
 
+
+
+
 # NO_EXTRAS is needed since cuda doesn't use flto
 pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/fixed_point.hpp
@@ -60,8 +63,9 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
 
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 include_directories(src/kernels)
+include_directories(/home/yutong/Code/timemachine/cub/cub-1.10.0)
 
-set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 11)
+set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 14)
 target_link_libraries(${LIBRARY_NAME} -lcurand -lcudart -lcudadevrt)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
