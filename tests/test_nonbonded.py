@@ -43,7 +43,7 @@ class TestNonbonded(GradientTest):
         benchmark = False
 
         for size in [32, 230, 1051]:
-        # for size in [0]: use when benchark = False
+        # for size in [32]:
 
             if not benchmark:
                 water_coords = self.get_water_coords(D, sort=False)
@@ -70,6 +70,7 @@ class TestNonbonded(GradientTest):
                 lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
                 for precision, rtol in [(np.float64, 1e-9), (np.float32, 1e-4)]:
+                # for precision, rtol in [(np.float32, 1e-4)]:
 
                     for cutoff in [1.0]:
                         # E = 0 # DEBUG!
@@ -82,7 +83,8 @@ class TestNonbonded(GradientTest):
                             precision=precision
                         )
 
-                        for lamb in [0.1, 0.2]:
+                        for lamb in [0.0, 0.1, 0.2]:
+                        # for lamb in [0.0]:
 
                             print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 

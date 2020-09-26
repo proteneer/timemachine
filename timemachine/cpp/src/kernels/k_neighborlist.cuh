@@ -101,7 +101,7 @@ void __global__ k_find_blocks_with_ixns(
 
     const int indexInWarp = threadIdx.x%32;
     const int warpMask = (1<<indexInWarp)-1;
-    __shared__ RealType pos_i_buffer[32*3];
+
     __shared__ int ixn_j_buffer[64]; // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
 
     // initialize
@@ -128,10 +128,6 @@ void __global__ k_find_blocks_with_ixns(
     RealType pos_i_x = atom_i_idx < N ? coords[atom_i_idx*3 + 0] : 0;
     RealType pos_i_y = atom_i_idx < N ? coords[atom_i_idx*3 + 1] : 0;
     RealType pos_i_z = atom_i_idx < N ? coords[atom_i_idx*3 + 2] : 0;
-
-    pos_i_buffer[threadIdx.x*3 + 0] = pos_i_x;
-    pos_i_buffer[threadIdx.x*3 + 1] = pos_i_y;
-    pos_i_buffer[threadIdx.x*3 + 2] = pos_i_z;
 
     const int NUM_BLOCKS = (N+32-1)/32;
 
@@ -204,9 +200,9 @@ void __global__ k_find_blocks_with_ixns(
         RealType col_bb_ext_y = bb_ext[col_block*3+1];
         RealType col_bb_ext_z = bb_ext[col_block*3+2];
 
-        RealType atom_box_dx = pos_i_buffer[threadIdx.x*3 + 0] - col_bb_ctr_x;
-        RealType atom_box_dy = pos_i_buffer[threadIdx.x*3 + 1] - col_bb_ctr_y;
-        RealType atom_box_dz = pos_i_buffer[threadIdx.x*3 + 2] - col_bb_ctr_z;
+        RealType atom_box_dx = __shfl_sync(0xffffffff, pos_i_x, threadIdx.x) - col_bb_ctr_x;
+        RealType atom_box_dy = __shfl_sync(0xffffffff, pos_i_y, threadIdx.x) - col_bb_ctr_y;
+        RealType atom_box_dz = __shfl_sync(0xffffffff, pos_i_z, threadIdx.x) - col_bb_ctr_z;
 
         atom_box_dx -= bx*nearbyint(atom_box_dx*inv_bx);
         atom_box_dy -= by*nearbyint(atom_box_dy*inv_by);
@@ -243,9 +239,9 @@ void __global__ k_find_blocks_with_ixns(
             int row_atom = __ffs(atomFlags)-1;
             atomFlags &= atomFlags-1;
 
-            RealType atom_atom_dx = pos_i_buffer[row_atom*3 + 0] - pos_j_x;
-            RealType atom_atom_dy = pos_i_buffer[row_atom*3 + 1] - pos_j_y;
-            RealType atom_atom_dz = pos_i_buffer[row_atom*3 + 2] - pos_j_z;
+            RealType atom_atom_dx = __shfl_sync(0xffffffff, pos_i_x, row_atom) - pos_j_x;
+            RealType atom_atom_dy = __shfl_sync(0xffffffff, pos_i_y, row_atom) - pos_j_y;
+            RealType atom_atom_dz = __shfl_sync(0xffffffff, pos_i_z, row_atom) - pos_j_z;
 
             atom_atom_dx -= bx*nearbyint(atom_atom_dx*inv_bx);
             atom_atom_dy -= by*nearbyint(atom_atom_dy*inv_by);

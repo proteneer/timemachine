@@ -173,6 +173,19 @@ void Nonbonded<RealType>::execute_device(
         double *d_u,
         cudaStream_t stream) {
 
+    // (ytz) the nonbonded algorithm proceeds as follows:
+
+    // 0. (done in constructor), construct a hilbert curve mapping each of the 256x256x256 cells into an index.
+    // 1. look up which cell each particle belongs to, and its linear index along the hilbert curve.
+    // 2. use radix pair sort keyed on the hilbert index with values equal to the atomic index
+    // 3. resulting sorted values is the permutation array.
+    // 4. permute coords, params, lambda_offsets
+    // 5. compute the neighborlist into tiles
+    // 6. compute the nonbonded interactions using the neighborlist
+    // 7. inverse permute the forces, du/dps into the original index.
+    // 8. u and du/dl is buffered into a per-particle array, and then reduced.
+    // 9. note that du/dl is not an exact per-particle du/dl - it is only used for reduction purposes.
+
     assert(N == N_);
     assert(P == N_*3);
 
@@ -243,7 +256,6 @@ void Nonbonded<RealType>::execute_device(
     // cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
 
-    // copy over tiled ixns
     // coords are N,3
     if(d_du_dx) {
         k_inv_permute_accum<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
@@ -270,8 +282,8 @@ void Nonbonded<RealType>::execute_device(
             d_box,
             lambda,
             d_lambda_offset_idxs_,
-            d_exclusion_idxs_, // FIX EXCLUSIONS
-            d_scales_, // FIX SCALES
+            d_exclusion_idxs_,
+            d_scales_,
             beta_,
             cutoff_,
             d_du_dx,
