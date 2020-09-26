@@ -128,8 +128,6 @@ def prepare_nb_system(
         np.random.rand(N).astype(np.float64)/10.0, # sig
         np.random.rand(N).astype(np.float64) # eps
     ], axis=1)
-    
-    print("PARAMS", params)
 
     atom_idxs = np.arange(N)
     exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)

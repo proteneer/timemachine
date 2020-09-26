@@ -27,11 +27,7 @@ private:
     double *d_du_dl_buffer_;
     double *d_u_buffer_;
 
-    int *d_perm_; // hilbert curve permutation
-
-    double *p_coords_; // pinned coordinate for hilbert curve
-    double *p_box_; // pinned coordinate for hilbert curve
-    int *p_perm_; // pinned coordinate for hilbert curve
+    unsigned int *d_perm_; // hilbert curve permutation
 
     int *d_sorted_lambda_offset_idxs_;
     double *d_sorted_x_; //
@@ -39,9 +35,18 @@ private:
     unsigned long long *d_sorted_du_dx_; //
     double *d_sorted_du_dp_; //
 
-    unsigned long long sort_counter_;
+    unsigned int *d_bin_to_idx_;
+    unsigned int *d_sort_keys_in_;
+    unsigned int *d_sort_keys_out_;
+    unsigned int *d_sort_vals_in_;
+    unsigned int *d_sort_storage_;
+    size_t d_sort_storage_bytes_;
 
-    void hilbert_sort(cudaStream_t stream);
+    void hilbert_sort(
+        const double *d_x,
+        const double *d_box,
+        cudaStream_t stream
+    );
 
 public:
 

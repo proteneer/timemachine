@@ -43,6 +43,7 @@ class TestNonbonded(GradientTest):
         benchmark = False
 
         for size in [32, 230, 1051]:
+        # for size in [0]: use when benchark = False
 
             if not benchmark:
                 water_coords = self.get_water_coords(D, sort=False)
