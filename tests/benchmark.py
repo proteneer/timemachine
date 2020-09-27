@@ -12,10 +12,14 @@ from simtk.openmm import app
 from timemachine.lib import custom_ops
 from timemachine.lib import LangevinIntegrator
 
+from fe.pdb_writer import PDBWriter
+
 def benchmark_dhfr():
 
 
-    host_pdb = app.PDBFile('tests/data/5dfr_solv_equil.pdb')
+
+    pdb_path = 'tests/data/5dfr_solv_equil.pdb'
+    host_pdb = app.PDBFile(pdb_path)
     protein_ff = app.ForceField('amber99sbildn.xml', 'tip3p.xml')
     host_system = protein_ff.createSystem(
         host_pdb.topology,
@@ -71,11 +75,18 @@ def benchmark_dhfr():
     lamb = 0.0
 
     start = time.time()
-    num_steps = 30000
+    num_steps = 200000
+
+    writer = PDBWriter(open(pdb_path), "dhfr.pdb")
+
+    writer.write_header()
     for step in range(num_steps):
         ctxt.step(lamb)
-        # if step % 100 == 0:
-            # print(step, ctxt.get_u_t())
+        if step % 5000 == 0:
+            coords = ctxt.get_x_t()
+            writer.write(coords*10)
+
+    writer.close()
 
     delta = time.time()-start
 

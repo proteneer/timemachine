@@ -90,9 +90,7 @@ if __name__ == "__main__":
     combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
     out_file = "pose_dock.pdb"
 
-
     pdb_writer = PDBWriter(combined_pdb_str, out_file)
-
 
     # pdb_writer.write_header()
 
