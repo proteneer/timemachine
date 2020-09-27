@@ -16,8 +16,6 @@ from fe.pdb_writer import PDBWriter
 
 def benchmark_dhfr():
 
-
-
     pdb_path = 'tests/data/5dfr_solv_equil.pdb'
     host_pdb = app.PDBFile(pdb_path)
     protein_ff = app.ForceField('amber99sbildn.xml', 'tip3p.xml')
@@ -64,6 +62,7 @@ def benchmark_dhfr():
     x0 = host_conf
     v0 = np.zeros_like(host_conf)
 
+
     ctxt = custom_ops.Context(
         x0,
         v0,
@@ -72,10 +71,17 @@ def benchmark_dhfr():
         bps
     )
 
+    # initialize observables
+    obs = []
+    for bp in bps:
+        du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, 100)
+        ctxt.add_observable(du_dp_obs)
+        obs.append(du_dp_obs)
+
     lamb = 0.0
 
     start = time.time()
-    num_steps = 200000
+    num_steps = 50000
 
     writer = PDBWriter(open(pdb_path), "dhfr.pdb")
 
@@ -99,9 +105,12 @@ def benchmark_dhfr():
     ns_per_day = ps_per_day*1e-3
 
     print("ns/day", ns_per_day)
-        # print("coords", ctxt.get_x_t())
 
-    # print(host_conf)
+    # bond angle torsions nonbonded
+    for potential, du_dp_obs in zip(host_fns, obs):
+        dp = du_dp_obs.avg_du_dp()
+        print(potential, dp.shape)
+        print(dp)
 
 if __name__ == "__main__":
     benchmark_dhfr()
