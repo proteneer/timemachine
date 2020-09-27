@@ -28,11 +28,11 @@ Context::Context(
     gpuErrchk(cudaMalloc(&d_du_dx_t_, N*3*sizeof(*d_du_dx_t_)));
     gpuErrchk(cudaMalloc(&d_u_t_, 1*sizeof(*d_u_t_)));
 
-    for(int i=0; i < bps.size(); i++) {
-        cudaStream_t stream;
-        gpuErrchk(cudaStreamCreate(&stream));
-        streams_.push_back(stream);
-    }
+    // for(int i=0; i < bps.size(); i++) {
+    //     cudaStream_t stream;
+    //     gpuErrchk(cudaStreamCreate(&stream));
+    //     streams_.push_back(stream);
+    // }
 
 
 };
@@ -44,9 +44,9 @@ Context::~Context() {
     gpuErrchk(cudaFree(d_u_t_));
     gpuErrchk(cudaFree(d_du_dx_t_));
 
-    for(int i=0; i < streams_.size(); i++) {
-        gpuErrchk(cudaStreamDestroy(streams_[i]));
-    }
+    // for(int i=0; i < streams_.size(); i++) {
+    //     gpuErrchk(cudaStreamDestroy(streams_[i]));
+    // }
 };
 
 void Context::add_observable(Observable *obs) {

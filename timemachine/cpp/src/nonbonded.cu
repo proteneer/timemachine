@@ -198,6 +198,7 @@ void Nonbonded<RealType>::execute_device(
     const int B = (N+32-1)/32;
     const int tpb = 32;
 
+    // randomly re-hilbert sort
     this->hilbert_sort(d_x, d_box, stream);
 
 	dim3 dimGrid(B, 3, 1);
@@ -211,9 +212,8 @@ void Nonbonded<RealType>::execute_device(
     k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
     gpuErrchk(cudaPeekAtLastError());
 
-
-    cudaDeviceSynchronize();
-    auto start = std::chrono::high_resolution_clock::now();
+    // cudaDeviceSynchronize();
+    // auto start = std::chrono::high_resolution_clock::now();
 
     nblist_.build_nblist_device(
         N,
@@ -259,12 +259,12 @@ void Nonbonded<RealType>::execute_device(
         d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
     );
 
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 
-    auto end = std::chrono::high_resolution_clock::now();
+    // auto end = std::chrono::high_resolution_clock::now();
 
-    std::chrono::duration<double> elapsed = end - start;
-    std::cout << "NB Forces time: " << elapsed.count() << "ms\n";
+    // std::chrono::duration<double> elapsed = end - start;
+    // std::cout << "NB Forces time: " << elapsed.count() << "ms\n";
 
     // cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
