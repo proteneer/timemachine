@@ -210,7 +210,7 @@ void __global__ k_nonbonded(
 
             // electrostatics
             RealType dij = sqrt(d2ij);
-	    // printf("dij %d %d %f\n", atom_i_idx, atom_j_idx, dij); 
+
             RealType inv_dij = 1/dij;
 
             RealType inv_d2ij = inv_dij*inv_dij;

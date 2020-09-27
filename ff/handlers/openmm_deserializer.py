@@ -15,7 +15,8 @@ def value(quantity):
 
 def deserialize_system(
     system,
-    precision):
+    precision,
+    cutoff):
     """
     Deserialize an OpenMM XML file
 
@@ -35,8 +36,6 @@ def deserialize_system(
 
     masses = []
 
-
-
     for p in range(system.getNumParticles()):
         masses.append(value(system.getParticleMass(p)))
 
@@ -45,9 +44,6 @@ def deserialize_system(
     # this should not be a dict since we may have more than one instance of a given
     # force.
     bps = []
-
-    nb_charge_params = None
-    gb_charge_params = None
 
     for force in system.getForces():
 
@@ -132,6 +128,7 @@ def deserialize_system(
                 lj_params.append((sig, eps))
 
             charge_params = np.array(charge_params, dtype=np.float64)
+            # charge_params = np.zeros_like(charge_params)
 
             # print("Protein net charge:", np.sum(np.array(global_params)[charge_param_idxs]))
             lj_params = np.array(lj_params, dtype=np.float64)
@@ -186,32 +183,32 @@ def deserialize_system(
 
             exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
 
-            lambda_plane_idxs = np.zeros(N, dtype=np.int32)
             lambda_offset_idxs = np.zeros(N, dtype=np.int32)
 
-            cutoff = 1000.0
+            # cutoff = 1000.0
 
-            bps.append(potentials.LennardJones(
-                exclusion_idxs, 
+            nb_params = np.concatenate([
+                np.expand_dims(charge_params, axis=1),
+                lj_params
+            ], axis=1)
+
+            beta = 2.0 # erfc correction
+
+            # use the same scale factors for electrostatics and lj
+            scale_factors = np.stack([
                 scale_factors,
-                lambda_plane_idxs,
-                lambda_offset_idxs,
-                cutoff,
-                precision=precision).bind(lj_params))
-
-            beta = 2.0
+                scale_factors
+            ], axis=1)
 
 
-            bps.append(potentials.Electrostatics(
+            bps.append(potentials.Nonbonded(
                 exclusion_idxs,
                 scale_factors,
-                lambda_plane_idxs,
                 lambda_offset_idxs,
                 beta,
                 cutoff,
-                precision=precision).bind(charge_params))
-
-            # es_scale_factors = np.array(scale_factors)
+                precision=precision).bind(nb_params)
+            )
 
             # nrg_fns.append(('Exclusions', (exclusion_idxs, scale_factors, es_scale_factors)))
 

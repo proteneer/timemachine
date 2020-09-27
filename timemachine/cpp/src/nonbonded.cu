@@ -186,8 +186,10 @@ void Nonbonded<RealType>::execute_device(
     // 8. u and du/dl is buffered into a per-particle array, and then reduced.
     // 9. note that du/dl is not an exact per-particle du/dl - it is only used for reduction purposes.
 
-    assert(N == N_);
-    assert(P == N_*3);
+    // assert(N == N_);
+    // assert(P == N_*3);
+
+
 
     if(N != N_) {
         throw std::runtime_error("N != N_");
@@ -210,6 +212,9 @@ void Nonbonded<RealType>::execute_device(
     gpuErrchk(cudaPeekAtLastError());
 
 
+    cudaDeviceSynchronize();
+    auto start = std::chrono::high_resolution_clock::now();
+
     nblist_.build_nblist_device(
         N,
         d_sorted_x_,
@@ -220,14 +225,12 @@ void Nonbonded<RealType>::execute_device(
 
     gpuErrchk(cudaMemcpyAsync(p_ixn_count_, nblist_.get_ixn_count(), 1*sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
     // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
-    gpuErrchk(cudaStreamSynchronize(stream));
-
     // reset buffers and sorted accumulators
     if(d_du_dx) {
-	   gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N*3*sizeof(*d_sorted_du_dx_)))
+	   gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N*3*sizeof(*d_sorted_du_dx_), stream))
     }
     if(d_du_dp) {
-	   gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N*3*sizeof(*d_sorted_du_dp_)))
+	   gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N*3*sizeof(*d_sorted_du_dp_), stream))
     }
     if(d_du_dl) {
         gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N*sizeof(*d_du_dl_buffer_), stream));        
@@ -235,6 +238,9 @@ void Nonbonded<RealType>::execute_device(
     if(d_u) {
         gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N*sizeof(*d_du_dl_buffer_), stream));        
     }
+
+    gpuErrchk(cudaStreamSynchronize(stream));
+
 
     k_nonbonded<RealType><<<p_ixn_count_[0], 32, 0, stream>>>(
         N,
@@ -252,6 +258,13 @@ void Nonbonded<RealType>::execute_device(
         d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
         d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
     );
+
+    cudaDeviceSynchronize();
+
+    auto end = std::chrono::high_resolution_clock::now();
+
+    std::chrono::duration<double> elapsed = end - start;
+    std::cout << "NB Forces time: " << elapsed.count() << "ms\n";
 
     // cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
@@ -303,6 +316,8 @@ void Nonbonded<RealType>::execute_device(
         k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_u_buffer_, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
+
+
     
 }
 

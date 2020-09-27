@@ -53,6 +53,8 @@ private:
 
     unsigned long long *d_du_dx_t_; // du/dx 
 
+    std::vector<cudaStream_t> streams_;
+
     Integrator *intg_;
     std::vector<Observable *> observables_;
     std::vector<BoundPotential *> bps_;
