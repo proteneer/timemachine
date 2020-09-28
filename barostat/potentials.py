@@ -1,6 +1,7 @@
 import jax.numpy as np
 
 def delta_r(ri, rj, box=None):
+
     diff = ri - rj # this can be either N,N,3 or B,3
     dims = ri.shape[-1]
 
@@ -43,9 +44,7 @@ def lennard_jones(conf, lj_params, volume):
         Whether or not we apply cutoffs to the system. Any interactions
         greater than cutoff is fully discarded.
     
-    """
-    
-    
+    """   
     N = conf.shape[0]
     D = conf.shape[-1]
     box_length = np.sqrt(volume)
@@ -71,4 +70,5 @@ def lennard_jones(conf, lj_params, volume):
     eij = 4*eps_ij*(sig6-1.0)*sig6
 
     eij = np.where(keep_mask, eij, np.zeros_like(eij))
+
     return np.sum(eij/2)

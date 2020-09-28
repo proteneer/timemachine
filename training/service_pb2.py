@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\rservice.proto\"\x0e\n\x0c\x45mptyMessage\"e\n\x0e\x46orwardRequest\x12\x11\n\tinference\x18\x01 \x01(\x08\x12\x0e\n\x06system\x18\x02 \x01(\x0c\x12\x11\n\tprecision\x18\x03 \x01(\t\x12\x10\n\x08n_frames\x18\x04 \x01(\x05\x12\x0b\n\x03key\x18\x05 \x01(\t\"@\n\x0c\x46orwardReply\x12\x0e\n\x06\x64u_dls\x18\x01 \x01(\x0c\x12\x10\n\x08\x65nergies\x18\x02 \x01(\x0c\x12\x0e\n\x06\x66rames\x18\x03 \x01(\x0c\"6\n\x0f\x42\x61\x63kwardRequest\x12\x16\n\x0e\x61\x64joint_du_dls\x18\x01 \x01(\x0c\x12\x0b\n\x03key\x18\x02 \x01(\t\"\x1f\n\rBackwardReply\x12\x0e\n\x06\x64l_dps\x18\x01 \x01(\x0c\x32\x9b\x01\n\x06Worker\x12/\n\x0b\x46orwardMode\x12\x0f.ForwardRequest\x1a\r.ForwardReply\"\x00\x12\x32\n\x0c\x42\x61\x63kwardMode\x12\x10.BackwardRequest\x1a\x0e.BackwardReply\"\x00\x12,\n\nResetState\x12\r.EmptyMessage\x1a\r.EmptyMessage\"\x00\x62\x06proto3'
+  serialized_pb=b'\n\rservice.proto\"\x0e\n\x0c\x45mptyMessage\"\xb8\x01\n\x0fSimulateRequest\x12\x12\n\nsimulation\x18\x01 \x01(\x0c\x12\x0c\n\x04lamb\x18\x02 \x01(\x01\x12\x12\n\nprep_steps\x18\x03 \x01(\x05\x12\x12\n\nprod_steps\x18\x04 \x01(\x05\x12\x1a\n\x12observe_du_dl_freq\x18\x05 \x01(\x05\x12\x1a\n\x12observe_du_dp_freq\x18\x06 \x01(\x05\x12\x11\n\tprecision\x18\x07 \x01(\t\x12\x10\n\x08n_frames\x18\x08 \x01(\x05\"Y\n\rSimulateReply\x12\x12\n\navg_du_dls\x18\x01 \x01(\x0c\x12\x12\n\navg_du_dps\x18\x02 \x01(\x0c\x12\x10\n\x08\x65nergies\x18\x03 \x01(\x0c\x12\x0e\n\x06\x66rames\x18\x04 \x01(\x0c\x32\x38\n\x06Worker\x12.\n\x08Simulate\x12\x10.SimulateRequest\x1a\x0e.SimulateReply\"\x00\x62\x06proto3'
 )
 
 
@@ -50,46 +50,67 @@ _EMPTYMESSAGE = _descriptor.Descriptor(
 )
 
 
-_FORWARDREQUEST = _descriptor.Descriptor(
-  name='ForwardRequest',
-  full_name='ForwardRequest',
+_SIMULATEREQUEST = _descriptor.Descriptor(
+  name='SimulateRequest',
+  full_name='SimulateRequest',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='inference', full_name='ForwardRequest.inference', index=0,
-      number=1, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='system', full_name='ForwardRequest.system', index=1,
-      number=2, type=12, cpp_type=9, label=1,
+      name='simulation', full_name='SimulateRequest.simulation', index=0,
+      number=1, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=b"",
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='precision', full_name='ForwardRequest.precision', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
+      name='lamb', full_name='SimulateRequest.lamb', index=1,
+      number=2, type=1, cpp_type=5, label=1,
+      has_default_value=False, default_value=float(0),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='n_frames', full_name='ForwardRequest.n_frames', index=3,
+      name='prep_steps', full_name='SimulateRequest.prep_steps', index=2,
+      number=3, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='prod_steps', full_name='SimulateRequest.prod_steps', index=3,
       number=4, type=5, cpp_type=1, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='key', full_name='ForwardRequest.key', index=4,
-      number=5, type=9, cpp_type=9, label=1,
+      name='observe_du_dl_freq', full_name='SimulateRequest.observe_du_dl_freq', index=4,
+      number=5, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='observe_du_dp_freq', full_name='SimulateRequest.observe_du_dp_freq', index=5,
+      number=6, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='precision', full_name='SimulateRequest.precision', index=6,
+      number=7, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='n_frames', full_name='SimulateRequest.n_frames', index=7,
+      number=8, type=5, cpp_type=1, label=1,
+      has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
@@ -105,107 +126,43 @@ _FORWARDREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=33,
-  serialized_end=134,
+  serialized_start=34,
+  serialized_end=218,
 )
 
 
-_FORWARDREPLY = _descriptor.Descriptor(
-  name='ForwardReply',
-  full_name='ForwardReply',
+_SIMULATEREPLY = _descriptor.Descriptor(
+  name='SimulateReply',
+  full_name='SimulateReply',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='du_dls', full_name='ForwardReply.du_dls', index=0,
+      name='avg_du_dls', full_name='SimulateReply.avg_du_dls', index=0,
       number=1, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=b"",
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='energies', full_name='ForwardReply.energies', index=1,
+      name='avg_du_dps', full_name='SimulateReply.avg_du_dps', index=1,
       number=2, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=b"",
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='frames', full_name='ForwardReply.frames', index=2,
+      name='energies', full_name='SimulateReply.energies', index=2,
       number=3, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=b"",
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=136,
-  serialized_end=200,
-)
-
-
-_BACKWARDREQUEST = _descriptor.Descriptor(
-  name='BackwardRequest',
-  full_name='BackwardRequest',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
     _descriptor.FieldDescriptor(
-      name='adjoint_du_dls', full_name='BackwardRequest.adjoint_du_dls', index=0,
-      number=1, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"",
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='key', full_name='BackwardRequest.key', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=202,
-  serialized_end=256,
-)
-
-
-_BACKWARDREPLY = _descriptor.Descriptor(
-  name='BackwardReply',
-  full_name='BackwardReply',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='dl_dps', full_name='BackwardReply.dl_dps', index=0,
-      number=1, type=12, cpp_type=9, label=1,
+      name='frames', full_name='SimulateReply.frames', index=3,
+      number=4, type=12, cpp_type=9, label=1,
       has_default_value=False, default_value=b"",
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -222,15 +179,13 @@ _BACKWARDREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=258,
-  serialized_end=289,
+  serialized_start=220,
+  serialized_end=309,
 )
 
 DESCRIPTOR.message_types_by_name['EmptyMessage'] = _EMPTYMESSAGE
-DESCRIPTOR.message_types_by_name['ForwardRequest'] = _FORWARDREQUEST
-DESCRIPTOR.message_types_by_name['ForwardReply'] = _FORWARDREPLY
-DESCRIPTOR.message_types_by_name['BackwardRequest'] = _BACKWARDREQUEST
-DESCRIPTOR.message_types_by_name['BackwardReply'] = _BACKWARDREPLY
+DESCRIPTOR.message_types_by_name['SimulateRequest'] = _SIMULATEREQUEST
+DESCRIPTOR.message_types_by_name['SimulateReply'] = _SIMULATEREPLY
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 EmptyMessage = _reflection.GeneratedProtocolMessageType('EmptyMessage', (_message.Message,), {
@@ -240,33 +195,19 @@ EmptyMessage = _reflection.GeneratedProtocolMessageType('EmptyMessage', (_messag
   })
 _sym_db.RegisterMessage(EmptyMessage)
 
-ForwardRequest = _reflection.GeneratedProtocolMessageType('ForwardRequest', (_message.Message,), {
-  'DESCRIPTOR' : _FORWARDREQUEST,
+SimulateRequest = _reflection.GeneratedProtocolMessageType('SimulateRequest', (_message.Message,), {
+  'DESCRIPTOR' : _SIMULATEREQUEST,
   '__module__' : 'service_pb2'
-  # @@protoc_insertion_point(class_scope:ForwardRequest)
+  # @@protoc_insertion_point(class_scope:SimulateRequest)
   })
-_sym_db.RegisterMessage(ForwardRequest)
+_sym_db.RegisterMessage(SimulateRequest)
 
-ForwardReply = _reflection.GeneratedProtocolMessageType('ForwardReply', (_message.Message,), {
-  'DESCRIPTOR' : _FORWARDREPLY,
+SimulateReply = _reflection.GeneratedProtocolMessageType('SimulateReply', (_message.Message,), {
+  'DESCRIPTOR' : _SIMULATEREPLY,
   '__module__' : 'service_pb2'
-  # @@protoc_insertion_point(class_scope:ForwardReply)
+  # @@protoc_insertion_point(class_scope:SimulateReply)
   })
-_sym_db.RegisterMessage(ForwardReply)
-
-BackwardRequest = _reflection.GeneratedProtocolMessageType('BackwardRequest', (_message.Message,), {
-  'DESCRIPTOR' : _BACKWARDREQUEST,
-  '__module__' : 'service_pb2'
-  # @@protoc_insertion_point(class_scope:BackwardRequest)
-  })
-_sym_db.RegisterMessage(BackwardRequest)
-
-BackwardReply = _reflection.GeneratedProtocolMessageType('BackwardReply', (_message.Message,), {
-  'DESCRIPTOR' : _BACKWARDREPLY,
-  '__module__' : 'service_pb2'
-  # @@protoc_insertion_point(class_scope:BackwardReply)
-  })
-_sym_db.RegisterMessage(BackwardReply)
+_sym_db.RegisterMessage(SimulateReply)
 
 
 
@@ -277,36 +218,16 @@ _WORKER = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=292,
-  serialized_end=447,
+  serialized_start=311,
+  serialized_end=367,
   methods=[
   _descriptor.MethodDescriptor(
-    name='ForwardMode',
-    full_name='Worker.ForwardMode',
+    name='Simulate',
+    full_name='Worker.Simulate',
     index=0,
     containing_service=None,
-    input_type=_FORWARDREQUEST,
-    output_type=_FORWARDREPLY,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='BackwardMode',
-    full_name='Worker.BackwardMode',
-    index=1,
-    containing_service=None,
-    input_type=_BACKWARDREQUEST,
-    output_type=_BACKWARDREPLY,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='ResetState',
-    full_name='Worker.ResetState',
-    index=2,
-    containing_service=None,
-    input_type=_EMPTYMESSAGE,
-    output_type=_EMPTYMESSAGE,
+    input_type=_SIMULATEREQUEST,
+    output_type=_SIMULATEREPLY,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
   ),

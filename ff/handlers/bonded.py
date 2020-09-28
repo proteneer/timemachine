@@ -102,6 +102,9 @@ class ProperTorsionHandler():
 
     def parameterize(self, mol):
         torsion_idxs, param_idxs = generate_vd_idxs(mol, self.smirks)
+
+        assert len(torsion_idxs) == len(param_idxs)
+
         scatter_idxs = []
         n_smirks = len(self.counts) # number of patterns
 
@@ -112,7 +115,7 @@ class ProperTorsionHandler():
             scatter_idxs.extend((range(start, end)))
             repeats.append(self.counts[p_idx])
 
-        scatter_idxs = np.array(scatter_idxs).flatten()
+        scatter_idxs = np.array(scatter_idxs, dtype=np.int32).flatten()
         param_fn = functools.partial(parameterize_ligand, param_idxs=scatter_idxs)
         sys_params, vjp_fn = jax.vjp(param_fn, self.params)
 

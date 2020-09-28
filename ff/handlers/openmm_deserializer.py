@@ -8,11 +8,15 @@ from simtk.openmm.app import forcefield as ff
 from simtk import unit
 
 from timemachine import constants
+from timemachine.lib import potentials
 
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
-def deserialize_system(system):
+def deserialize_system(
+    system,
+    precision,
+    cutoff):
     """
     Deserialize an OpenMM XML file
 
@@ -23,7 +27,7 @@ def deserialize_system(system):
 
     Returns
     -------
-    list of energy functions, masses
+    list of lib.Potential, masses
 
     Note: We add a small epsilon (1e-3) to all zero eps values to prevent
     a singularity from occuring in the lennard jones derivatives
@@ -35,12 +39,11 @@ def deserialize_system(system):
     for p in range(system.getNumParticles()):
         masses.append(value(system.getParticleMass(p)))
 
+    N = len(masses)
+
     # this should not be a dict since we may have more than one instance of a given
     # force.
-    nrg_fns = []
-
-    nb_charge_params = None
-    gb_charge_params = None
+    bps = []
 
     for force in system.getForces():
 
@@ -58,7 +61,7 @@ def deserialize_system(system):
 
             bond_idxs = np.array(bond_idxs, dtype=np.int32)
             bond_params = np.array(bond_params, dtype=np.float64)
-            nrg_fns.append(("HarmonicBond", (bond_idxs, bond_params)))
+            bps.append(potentials.HarmonicBond(bond_idxs, precision=precision).bind(bond_params))
 
         if isinstance(force, mm.HarmonicAngleForce):
 
@@ -77,7 +80,7 @@ def deserialize_system(system):
             angle_idxs = np.array(angle_idxs, dtype=np.int32)
             angle_params = np.array(angle_params, dtype=np.float64)
 
-            nrg_fns.append(("HarmonicAngle", (angle_idxs, angle_params)))
+            bps.append(potentials.HarmonicAngle(angle_idxs, precision=precision).bind(angle_params))
 
         if isinstance(force, mm.PeriodicTorsionForce):
 
@@ -95,13 +98,13 @@ def deserialize_system(system):
 
             torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
             torsion_params = np.array(torsion_params, dtype=np.float64)
-            nrg_fns.append(("PeriodicTorsion", (torsion_idxs, torsion_params)))
+            bps.append(potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind(torsion_params))
 
         if isinstance(force, mm.NonbondedForce):
 
             num_atoms = force.getNumParticles()
 
-            nb_charge_params = []
+            charge_params = []
             lj_params = []
 
             for a_idx in range(num_atoms):
@@ -114,19 +117,17 @@ def deserialize_system(system):
 
                 # increment eps by 1e-3 if we have eps==0 to avoid a singularity in parameter derivatives
                 # override default amber types
-                if eps == 0:
-                    print("Warning: overriding eps by 1e-3 to avoid a singularity")
-                    eps += 1e-3
 
-                # charge_idx = insert_parameters(charge, 14)
-                # sig_idx = insert_parameters(sig, 10)
-                # eps_idx = insert_parameters(eps, 11)
+                # this doesn't work for water!
+                # if eps == 0:
+                    # print("Warning: overriding eps by 1e-3 to avoid a singularity")
+                    # eps += 1e-3
 
-                # nb_charge_params.append(charge_idx)
-                nb_charge_params.append(charge)
+                # charge_params.append(charge_idx)
+                charge_params.append(charge)
                 lj_params.append((sig, eps))
 
-            nb_charge_params = np.array(nb_charge_params, dtype=np.float64)
+            charge_params = np.array(charge_params, dtype=np.float64)
 
             # print("Protein net charge:", np.sum(np.array(global_params)[charge_param_idxs]))
             lj_params = np.array(lj_params, dtype=np.float64)
@@ -138,8 +139,8 @@ def deserialize_system(system):
             # 1-4, remove half of the interaction
             # scale_half = insert_parameters(0.5, 21)
 
-            nb_exclusion_idxs = []
-            lj_exclusion_params = []
+            exclusion_idxs = []
+            scale_factors = []
 
             all_sig = lj_params[:, 0]
             all_eps = lj_params[:, 1]
@@ -160,7 +161,7 @@ def deserialize_system(system):
                 expected_sig = (src_sig + dst_sig)/2
                 expected_eps = np.sqrt(src_eps*dst_eps)
 
-                nb_exclusion_idxs.append([src, dst])
+                exclusion_idxs.append([src, dst])
 
                 # sanity check this (expected_eps can be zero), redo this thing
 
@@ -173,79 +174,41 @@ def deserialize_system(system):
                 else:
                     lj_scale_factor = 1 - new_eps/expected_eps
 
-                lj_exclusion_params.append(lj_scale_factor)
+                scale_factors.append(lj_scale_factor)
 
                 # tbd fix charge_scale_factors using new_cp
                 if new_eps != 0:
                     np.testing.assert_almost_equal(expected_sig, new_sig)
-                #     np.testing.assert_almost_equal(new_eps/expected_eps, 0.5)
 
-                #     exclusion_params.append(scale_idx_half)
-                # else:
-                #     exclusion_params.append(scale_idx_full)
+            exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
 
-            nb_exclusion_idxs = np.array(nb_exclusion_idxs, dtype=np.int32)
-            # exclusion_param_idxs = np.array(exclusion_param_idxs, dtype=np.int32)
+            lambda_offset_idxs = np.zeros(N, dtype=np.int32)
 
-            nrg_fns.append(("LennardJones", 
-                lj_params,
-            ))
+            # cutoff = 1000.0
 
-        if isinstance(force, mm.GBSAOBCForce):
+            nb_params = np.concatenate([
+                np.expand_dims(charge_params, axis=1),
+                lj_params
+            ], axis=1)
 
-            num_atoms = force.getNumParticles()
+            beta = 2.0 # erfc correction
 
-            radius_param_idxs = []
-            scale_param_idxs = []
-            
-            solvent_dielectric = force.getSolventDielectric()
-            solute_dielectric = force.getSoluteDielectric()
-            probe_radius = 0.14
-            surface_tension = 28.3919551
-            dielectric_offset = 0.009
+            # use the same scale factors for electrostatics and lj
+            scale_factors = np.stack([
+                scale_factors,
+                scale_factors
+            ], axis=1)
 
-            # GBOBC1
-            alpha = 0.8
-            beta = 0.0
-            gamma = 2.909125
 
-            gb_params = []
-            gb_charge_params = []
+            bps.append(potentials.Nonbonded(
+                exclusion_idxs,
+                scale_factors,
+                lambda_offset_idxs,
+                beta,
+                cutoff,
+                precision=precision).bind(nb_params)
+            )
 
-            for a_idx in range(num_atoms):
-                charge, radius, scale = force.getParticleParameters(a_idx)
+            # nrg_fns.append(('Exclusions', (exclusion_idxs, scale_factors, es_scale_factors)))
 
-                # this needs to be scaled by sqrt(eps0)
-                charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
-                gb_charge_params.append(charge)
-
-                radius = value(radius)
-                gb_params.append((radius, scale))
-
-            gb_params = np.array(gb_params, dtype=np.float64)
-
-            nrg_fns.append(("GBSA", (
-                gb_params,
-                alpha,                         # alpha
-                beta,                          # beta
-                gamma,                         # gamma
-                dielectric_offset,             # dielectric_offset
-                surface_tension,               # surface_tension
-                solute_dielectric,             # solute_dielectric
-                solvent_dielectric,            # solvent_dieletric
-                probe_radius                   # probe_radius
-            )))
-
-    # ensure GB charges and NB charges are consistent 
-    if gb_charge_params is not None and nb_charge_params is not None:
-        np.testing.assert_almost_equal(gb_charge_params, nb_charge_params)
-
-    gb_charge_params = np.array(gb_charge_params)
-
-    nrg_fns.append(('Charges', gb_charge_params))
-
-    charge_exclusion_params = np.array(lj_exclusion_params)
-
-    nrg_fns.append(('Exclusions', (nb_exclusion_idxs, lj_exclusion_params, charge_exclusion_params)))
-
-    return nrg_fns, masses
+    return bps, masses

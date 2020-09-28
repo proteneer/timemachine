@@ -15,22 +15,11 @@ import service_pb2_grpc
 
 from threading import Lock
 
-from timemachine.lib import custom_ops, ops
+from timemachine.lib import custom_ops
 
 class Worker(service_pb2_grpc.WorkerServicer):
 
-    def __init__(self):
-        self.states = {}
-        self.mutex = Lock()
-
-    def ResetState(self, request, context):
-        with self.mutex:
-            self.states.clear()
-
-        reply = service_pb2.EmptyMessage()
-        return reply
-
-    def ForwardMode(self, request, context):
+    def Simulate(self, request, context):
 
         if request.precision == 'single':
             precision = np.float32
@@ -39,122 +28,78 @@ class Worker(service_pb2_grpc.WorkerServicer):
         else:
             raise Exception("Unknown precision")
 
-        system = pickle.loads(request.system)
+        simulation = pickle.loads(request.simulation)
 
-        gradients = []
-        force_names = []
+        bps = []
+        pots = []
 
-        for grad_name, grad_args in system.gradients:
-            force_names.append(grad_name)
-            op_fn = getattr(ops, grad_name)
-            grad = op_fn(*grad_args, precision=precision)
-            gradients.append(grad)
+        for potential in simulation.potentials:
+            bps.append(potential.bound_impl()) # get the bound implementation
 
-        integrator = system.integrator
+        intg = simulation.integrator.impl()
 
-        stepper = custom_ops.AlchemicalStepper_f64(
-            gradients,
-            integrator.lambs
+        ctxt = custom_ops.Context(
+            simulation.x,
+            simulation.v,
+            simulation.box,
+            intg,
+            bps
         )
 
-        ctxt = custom_ops.ReversibleContext_f64(
-            stepper,
-            system.x0,
-            system.v0,
-            integrator.cas,
-            integrator.cbs,
-            integrator.ccs,
-            integrator.dts,
-            integrator.seed
-        )
+        lamb = request.lamb
 
-        start = time.time()
+        for step, minimize_lamb in enumerate(np.linspace(1.0, lamb, request.prep_steps)):
+            ctxt.step(minimize_lamb)
 
-        # ensure only one GPU can be running at given time.
-        total_size = 0 
+        energies = []
+        frames = []
 
-        with self.mutex:
+        if request.observe_du_dl_freq > 0:
+            du_dl_obs = custom_ops.AvgPartialUPartialLambda(bps, request.observe_du_dl_freq)
+            ctxt.add_observable(du_dl_obs)
 
-            ctxt.forward_mode()
-            full_du_dls = stepper.get_du_dl() # [FxT]
-            stripped_du_dls = []
-            energies = stepper.get_energies()
+        if request.observe_du_dp_freq > 0:
+            du_dps = []
+            # for name, bp in zip(names, bps):
+            # if name == 'LennardJones' or name == 'Electrostatics':
+            for bp in bps:
+                du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, request.observe_du_dp_freq)
+                ctxt.add_observable(du_dp_obs)
+                du_dps.append(du_dp_obs)
 
-            for force_du_dls in full_du_dls:
-                # zero out 
-                if np.all(force_du_dls) == 0:
-                    stripped_du_dls.append(None)
-                else:
-                    stripped_du_dls.append(force_du_dls)
-                    total_size += len(force_du_dls)
-
-            keep_idxs = []
+        # dynamics
+        for step in range(request.prod_steps):
+            if step % 100 == 0:
+                u = ctxt.get_u_t()
+                energies.append(u)
 
             if request.n_frames > 0:
-                xs = ctxt.get_all_coords()
-                interval = max(1, xs.shape[0]//request.n_frames)
-                for frame_idx in range(xs.shape[0]):
-                    if frame_idx % interval == 0:
-                        keep_idxs.append(frame_idx)
-                frames = xs[keep_idxs]
-            else:
-                frames = np.zeros((0, *system.x0.shape), dtype=system.x0.dtype)
+                interval = max(1, request.prod_steps//request.n_frames)
+                if step % interval == 0:
+                    frames.append(ctxt.get_x_t())
 
+            ctxt.step(lamb)
 
-            # store and set state for backwards mode use.
-            if request.inference is False:
-                self.states[request.key] = (ctxt, gradients, force_names, stepper, system)
+        frames = np.array(frames)
 
-            return service_pb2.ForwardReply(
-                du_dls=pickle.dumps(stripped_du_dls), # tbd strip zeros
-                energies=pickle.dumps(energies),
-                frames=pickle.dumps(frames),
-            )
+        if request.observe_du_dl_freq > 0:
+            avg_du_dls = du_dl_obs.avg_du_dl()
+        else:
+            avg_du_dls = None
 
-    def BackwardMode(self, request, context):
+        if request.observe_du_dp_freq > 0:
+            avg_du_dps = []
+            for obs in du_dps:
+                avg_du_dps.append(obs.avg_du_dp())
+        else:
+            avg_du_dps = None
 
-        ctxt, gradients, force_names, stepper, system = self.states[request.key]
-
-        adjoint_du_dls = pickle.loads(request.adjoint_du_dls)
-
-        stepper.set_du_dl_adjoint(adjoint_du_dls)
-        ctxt.set_x_t_adjoint(np.zeros_like(system.x0))
-
-        with self.mutex:
-
-            ctxt.backward_mode()
-
-            # note that we have multiple HarmonicBonds/Angles/Torsions that correspond to different parameters
-            dl_dps = []
-            for f_name, g in zip(force_names, gradients):
-                if f_name == 'HarmonicBond':
-                    # dl_dps.append(g.get_du_dp_tangents())
-                    dl_dps.append(None)
-                elif f_name == 'HarmonicAngle':
-                    # dl_dps.append(g.get_du_dp_tangents())
-                    dl_dps.append(None)
-                elif f_name == 'PeriodicTorsion':
-                    # dl_dps.append(g.get_du_dp_tangents())
-                    dl_dps.append(None)
-                elif f_name == 'Nonbonded':
-                    dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dlj_tangents()))
-                elif f_name == 'LennardJones':
-                    # dl_dps.append(g.get_du_dlj_tangents())
-                    dl_dps.append(None)
-                elif f_name == 'Electrostatics':
-                    # dl_dps.append(g.get_du_dcharge_tangents())
-                    dl_dps.append(None)
-                elif f_name == 'GBSA':
-                    dl_dps.append((g.get_du_dcharge_tangents(), g.get_du_dgb_tangents()))
-                elif f_name == 'CentroidRestraint':
-                    dl_dps.append(None)
-                else:
-                    print("f_name")
-                    raise Exception("Unknown Gradient")
-
-            del self.states[request.key]
-
-            return service_pb2.BackwardReply(dl_dps=pickle.dumps(dl_dps))
+        return service_pb2.SimulateReply(
+            avg_du_dls=pickle.dumps(avg_du_dls),
+            avg_du_dps=pickle.dumps(avg_du_dps),
+            energies=pickle.dumps(energies),
+            frames=pickle.dumps(frames),
+        )
 
 
 def serve(args):

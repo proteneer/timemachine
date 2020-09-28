@@ -1,6 +1,7 @@
 import numpy as onp
 import jax.numpy as np
 from jax.scipy.special import erf, erfc
+from jax.ops import index_update, index
 
 from timemachine.constants import ONE_4PI_EPS0
 from timemachine.potentials.jax_utils import delta_r, distance, lambda_to_w, convert_to_4d
@@ -33,43 +34,87 @@ def nonbonded(
     return lj - lj_exc + es
 
 
-def nongroup_electrostatics(
+def electrostatics_v2(
     conf,
-    lamb,
     charge_params,
+    box,
+    lamb,
     exclusion_idxs,
     charge_scales,
+    beta,
     cutoff,
-    lambda_plane_idxs,
     lambda_offset_idxs):
 
     # assert box is None
 
-    conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+    conf_4d = convert_to_4d(conf, lamb, lambda_offset_idxs)
 
-    return simple_energy(conf_4d, charge_params, exclusion_idxs, charge_scales, cutoff)
+    # print(conf_4d)
+    if box is not None:
+        box_4d = np.eye(4)*1000
+        box_4d = index_update(box_4d, index[:3, :3], box)
+    else:
+        box_4d = None
+
+    return simple_energy(conf_4d, box_4d, charge_params, exclusion_idxs, charge_scales, beta, cutoff)
 
 
-def group_lennard_jones(
+def nonbonded_v2(
     conf,
+    params,
+    box,
     lamb,
+    exclusion_idxs,
+    scales,
+    beta,
+    cutoff,
+    lambda_offset_idxs):
+
+    # assert box is None
+
+    conf_4d = convert_to_4d(conf, lamb, lambda_offset_idxs)
+
+    # print(conf_4d)
+    if box is not None:
+        box_4d = np.eye(4)*1000
+        box_4d = index_update(box_4d, index[:3, :3], box)
+    else:
+        box_4d = None
+
+    charge_params = params[:, 0]
+    lj_params = params[:, 1:]
+
+    charge_scales = scales[:, 0]
+    lj_scales = scales[:, 1]
+
+    lj = lennard_jones(conf_4d, lj_params, box_4d, cutoff)
+    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, box_4d, exclusion_idxs, lj_scales, cutoff)
+    es = simple_energy(conf_4d, box_4d, charge_params, exclusion_idxs, charge_scales, beta, cutoff)
+
+    return lj - lj_exc + es
+
+def lennard_jones_v2(
+    conf,
     lj_params,
+    box,
+    lamb,
     exclusion_idxs,
     lj_scales,
     cutoff,
     lambda_plane_idxs,
-    lambda_offset_idxs,
-    lambda_group_idxs):
+    lambda_offset_idxs):
 
     conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+    box_4d = np.eye(4)*1000
+    box_4d = index_update(box_4d, index[:3, :3], box)
 
-    lj = lennard_jones(conf_4d, lj_params, cutoff, lambda_group_idxs)
-    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, exclusion_idxs, lj_scales, cutoff, lambda_group_idxs)
+    lj = lennard_jones(conf_4d, lj_params, box_4d, cutoff)
+    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, box_4d, exclusion_idxs, lj_scales, cutoff)
 
     return lj - lj_exc
 
 
-def lennard_jones(conf, lj_params, cutoff, groups=None):
+def lennard_jones(conf, lj_params, box, cutoff):
     """
     Implements a non-periodic LJ612 potential using the Lorentz−Berthelot combining
     rules, where sig_ij = (sig_i + sig_j)/2 and eps_ij = sqrt(eps_i * eps_j).
@@ -98,8 +143,8 @@ def lennard_jones(conf, lj_params, cutoff, groups=None):
         greater than cutoff is fully discarded.
     
     """
-    box = None
-    assert box is None
+    # box = None
+    # assert box is None
 
     sig = lj_params[:, 0]
     eps = lj_params[:, 1]
@@ -114,22 +159,24 @@ def lennard_jones(conf, lj_params, cutoff, groups=None):
 
     eps_ij = np.sqrt(eps_i * eps_j)
 
-    eps_ij_raw = eps_ij
-
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
-    gi = np.expand_dims(groups, axis=0)
-    gj = np.expand_dims(groups, axis=1)
-    gij = np.bitwise_and(gi, gj) > 0
+    # gi = np.expand_dims(groups, axis=0)
+    # gj = np.expand_dims(groups, axis=1)
+    # gij = np.bitwise_and(gi, gj) > 0
 
     # print(gij)
-    dij = distance(ri, rj, box, gij)
 
-    if cutoff is not None:
-        eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
+    # print("BOX", box)
+    dij = distance(ri, rj, box)
+    # print("DIJ", dij)
 
     N = conf.shape[0]
     keep_mask = np.ones((N,N)) - np.eye(N)
+    keep_mask = np.where(eps_ij != 0, keep_mask, 0)
+
+    if cutoff is not None:
+        eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
 
     # (ytz): this avoids a nan in the gradient in both jax and tensorflow
     sig_ij = np.where(keep_mask, sig_ij, np.zeros_like(sig_ij))
@@ -141,19 +188,25 @@ def lennard_jones(conf, lj_params, cutoff, groups=None):
 
     eij = 4*eps_ij*(sig6-1.0)*sig6
 
+
     # if cutoff is not None:
         # sw = switch_fn(dij, cutoff)
         # eij = eij*sw
 
     eij = np.where(keep_mask, eij, np.zeros_like(eij))
+
+    # print("eps_ij", eps_ij)
+    # print("sig_ij", sig_ij)
+
+
     return np.sum(eij/2)
 
 
 # now we compute the exclusions
-def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff, groups=None):
+def lennard_jones_exclusion(conf, lj_params, box, exclusion_idxs, lj_scales, cutoff, groups=None):
 
-    box = None
-    assert box is None
+    # box = None
+    # assert box is None
 
     assert exclusion_idxs.shape[1] == 2
     # assert exclusion_idxs.shape[0] == conf.shape[0]
@@ -164,10 +217,7 @@ def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff, 
     ri = conf[src_idxs]
     rj = conf[dst_idxs]
 
-    gi = groups[src_idxs]
-    gj = groups[dst_idxs]
-    gij = np.bitwise_and(gi, gj) > 0
-    dij = distance(ri, rj, box, gij)
+    dij = distance(ri, rj, box)
 
     sig_params = lj_params[:, 0] 
     sig_i = sig_params[src_idxs]
@@ -178,6 +228,8 @@ def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff, 
     eps_i = eps_params[src_idxs]
     eps_j = eps_params[dst_idxs]
     eps_ij = np.sqrt(eps_i * eps_j)
+    eps_ij = np.where(eps_ij != 0, eps_ij, 0) # (ytz): avoids nans
+
 
     if cutoff is not None:
         eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
@@ -199,16 +251,13 @@ def lennard_jones_exclusion(conf, lj_params, exclusion_idxs, lj_scales, cutoff, 
     return np.sum(eij_exc)
 
 
-def simple_energy(conf, charge_params, exclusion_idxs, charge_scales, cutoff):
+def simple_energy(conf, box, charge_params, exclusion_idxs, charge_scales, beta, cutoff):
     """
     Numerically stable implementation of the pairwise term:
     
     eij = qi*qj/dij
 
     """
-
-    box = None
-    # charges = params[param_idxs]
     charges = charge_params
     qi = np.expand_dims(charges, 0) # (1, N)
     qj = np.expand_dims(charges, 1) # (N, 1)
@@ -216,15 +265,15 @@ def simple_energy(conf, charge_params, exclusion_idxs, charge_scales, cutoff):
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
 
-    assert box is None
-
     dij = distance(ri, rj, box)
 
     # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
     keep_mask = 1 - np.eye(conf.shape[0])
     qij = np.where(keep_mask, qij, np.zeros_like(qij))
     dij = np.where(keep_mask, dij, np.zeros_like(dij))
-    eij = np.where(keep_mask, qij/dij, np.zeros_like(dij)) # zero out diagonals
+
+    # funny enough lim_{x->0} erfc(x)/x = 0
+    eij = np.where(keep_mask, qij*erfc(beta*dij)/dij, np.zeros_like(dij)) # zero out diagonals
 
     # print(dij)
 
@@ -244,7 +293,7 @@ def simple_energy(conf, charge_params, exclusion_idxs, charge_scales, cutoff):
     qij = np.multiply(qi, qj)
 
     scale_ij = charge_scales
-    eij_exc = scale_ij*qij/dij
+    eij_exc = scale_ij*qij*erfc(beta*dij)/dij
 
     if cutoff is not None:
         # sw = switch_fn(dij, cutoff)

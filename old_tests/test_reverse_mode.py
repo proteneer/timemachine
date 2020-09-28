@@ -8,7 +8,6 @@ import jax.numpy as jnp
 from jax.config import config; config.update("jax_enable_x64", True)
 
 from timemachine.lib import custom_ops
-from timemachine.lib import ops
 from timemachine.potentials import bonded, nonbonded
 
 from common import GradientTest
@@ -16,6 +15,7 @@ from common import prepare_lj_system, prepare_es_system
 
 class TestContext(unittest.TestCase):
 
+    @unittest.skip("deprecated")
     def test_reverse_mode_lambda(self):
         """
         This test ensures that we can reverse-mode differentiate

@@ -1,80 +1,65 @@
+#pragma once
+
 #include <vector>
-#include "gradient.hpp"
-#include "stepper.hpp"
-#include "curand.h"
+// #include "potential.hpp"
+#include "integrator.hpp"
+#include "bound_potential.hpp"
+#include "observable.hpp"
 
 namespace timemachine {
 
-class ReversibleContext {
-
-private:
-
-    Stepper *stepper_;
-
-    const std::vector<double> coeff_cas_; // [T]
-    const std::vector<double> step_sizes_; // [T]
-
-    curandGenerator_t  cr_rng_;
-
-    double *d_noise_buffer_;
-
-    double *d_coeff_cbs_; // [N]
-    double *d_coeff_ccs_; // [N]
-
-    double *d_coords_; // [TxNxD]
-
-    double *d_velocities_; // [NxD]
-    unsigned long long *d_forces_; // [NxD], change this to uint128
-
-    double *d_x_t_tangent_; // [NxD]
-    double *d_x_t_adjoint_; // [NxD]
-    double *d_v_t_adjoint_; // [NxD]
-
-    double *d_dE_dx_jvp_primals_; // [NxD]
-    double *d_dE_dx_jvp_tangents_; // [NxD]
-
-    const int N_;
-    const int D = 3;
+class Context {
 
 public:
 
-    ReversibleContext(
-        Stepper *stepper_,
-        const int N,
-        const std::vector<double> &x0,
-        const std::vector<double> &v0,
-        const std::vector<double> &coeff_cas,
-        const std::vector<double> &coeff_cbs,
-        const std::vector<double> &coeff_ccs,
-        const std::vector<double> &dts,
-        unsigned long long seed
+    Context(
+        int N,
+        const double *x_0,
+        const double *v_0,
+        const double *box_0,
+        // double lambda,
+        Integrator *intg,
+        std::vector<BoundPotential *> bps
     );
 
-    ~ReversibleContext();
+    ~Context();
 
-    void get_all_coords(double *out_buffer) const;
-    void get_last_coords(double *out_buffer) const;
+    void add_observable(Observable *obs); // tbd: shared_ptr
 
-    void set_x_t_adjoint(const double *buffer);
-    void get_x_t_adjoint(double *buffer) const;
-    void get_v_t_adjoint(double *buffer) const;
-    void forward_mode();
-    void backward_mode();
+    void step(double lambda);
 
-    size_t N() const {
-        return N_;
-    }
+    int num_atoms() const;
 
-    size_t F() const {
-        return T() + 1;
-    }
+    double get_u_t() const;
 
-    size_t T() const {
-        return step_sizes_.size();
-    }
+    void get_du_dx_t(unsigned long long *out_buffer) const;
+
+    void get_x_t(double *out_buffer) const;
+
+    void get_v_t(double *out_buffer) const;
+
+private:
+
+    void compute(unsigned int flags);
+
+    int step_;
+    int N_; // number of particles
+
+    double *d_x_t_; // coordinates
+    double *d_v_t_; // velocities
+    double *d_box_t_; // box vectors
+    double *d_u_t_; // u (energy)
+    // double lambda_; // (ytz): not a pointer!
+
+    unsigned long long *d_du_dx_t_; // du/dx 
+
+    // std::vector<cudaStream_t> streams_;
+
+    Integrator *intg_;
+    std::vector<Observable *> observables_;
+    std::vector<BoundPotential *> bps_;
+
 
 };
-
-
 
 }

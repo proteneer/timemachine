@@ -65,7 +65,7 @@ def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     return energy
 
 # lamb is *not used* it is used in the alchemical stuffl ater
-def harmonic_bond(conf, lamb, params, box, bond_idxs):
+def harmonic_bond(conf, params, box, lamb, bond_idxs):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -85,9 +85,6 @@ def harmonic_bond(conf, lamb, params, box, bond_idxs):
     bond_idxs: [num_bonds, 2] np.array
         each element (src, dst) is a unique bond in the conformation
 
-    param_idxs: [num_bonds, 2] np.array
-        each element (k_idx, r_idx) maps into params for bond constants and ideal lengths
-
     """
     assert params.shape == bond_idxs.shape
 
@@ -101,11 +98,12 @@ def harmonic_bond(conf, lamb, params, box, bond_idxs):
     return energy
 
 
-def harmonic_angle(conf, lamb, params, box, angle_idxs, cos_angles=True):
+def harmonic_angle(conf, params, box, lamb, angle_idxs, cos_angles=True):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
     This implements a harmonic angle potential: V(t) = k*(t - t0)^2 or V(t) = k*(cos(t)-cos(t0))^2
+    depending on if cos_angles=True
 
     Parameters:
     -----------
@@ -122,14 +120,12 @@ def harmonic_angle(conf, lamb, params, box, angle_idxs, cos_angles=True):
         each element (a, b, c) is a unique angle in the conformation. atom b is defined
         to be the middle atom.
 
-    param_idxs: shape [num_angles, 2] np.array
-        each element (k_idx, t_idx) maps into params for angle constants and ideal angles
-
     cos_angles: True (default)
         if True, then this instead implements V(t) = k*(cos(t)-cos(t0))^2. This is far more
         numerically stable when the angle is pi.
 
     """
+
     ci = conf[angle_idxs[:, 0]]
     cj = conf[angle_idxs[:, 1]]
     ck = conf[angle_idxs[:, 2]]
@@ -145,7 +141,7 @@ def harmonic_angle(conf, lamb, params, box, angle_idxs, cos_angles=True):
 
     tb = top/bot
 
-    # (ytz): we used the squared version so that we make this energy being strictly positive
+    # (ytz): we use the squared version so that the energy is strictly positive
     if cos_angles:
         energies = kas/2*np.power(tb - np.cos(a0s), 2)
     else:
@@ -205,7 +201,7 @@ def signed_torsion_angle(ci, cj, ck, cl):
     return np.arctan2(y, x)
 
 
-def periodic_torsion(conf, lamb, params, box, torsion_idxs):
+def periodic_torsion(conf, params, box, lamb, torsion_idxs):
     """
     Compute the periodic torsional energy.
 

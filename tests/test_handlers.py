@@ -1,11 +1,12 @@
 from jax.config import config; config.update("jax_enable_x64", True)
 
+import pytest
 import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
-from ff.handlers.deserialize import deserialize
+from ff.handlers.deserialize import deserialize_handlers
 
 
 def test_harmonic_bond():
@@ -419,16 +420,23 @@ def test_gbsa_handler():
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0) == True
 
-
 def test_am1_differences():
 
     ff_raw = open("ff/params/smirnoff_1_1_0_ccc.py").read()
-    ff_handlers = deserialize(ff_raw)
+    ff_handlers = deserialize_handlers(ff_raw)
     for ccc in ff_handlers:
         if isinstance(ccc, nonbonded.AM1CCCHandler):
             break
 
     suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
+    smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
+    smi = "Clc1c(Cl)c(Cl)c(-c2c(Cl)c(Cl)c(Cl)c(Cl)c2Cl)c(Cl)c1Cl"
+    mol = Chem.MolFromSmiles(smi)
+    mol = Chem.AddHs(mol)
+    mol.SetProp("_Name", "Debug")
+    assert AllChem.EmbedMolecule(mol) == 0
+
+    suppl = [mol]
     am1 = nonbonded.AM1Handler([], [], None)
     bcc = nonbonded.AM1BCCHandler([], [], None)
 
