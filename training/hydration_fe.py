@@ -127,17 +127,6 @@ if __name__ == "__main__":
 
     lambda_schedule = np.array([float(x) for x in general_cfg['lambda_schedule'].split(',')])
 
-    # lambda_schedule = np.concatenate([
-    #     np.linspace(0.0, 0.6, 6, endpoint=False),
-    #     np.linspace(0.6, 1.5, 2, endpoint=False),
-    #     np.linspace(1.5, 5.5, 2, endpoint=True),
-    #     # np.linspace(0.0, 1.5, 4, endpoint=True)
-    # ])
-    # for l in lambda_schedule:
-    #     print("{:.4}".format(l),end=',')
-
-    # assert 0
-
     num_steps = int(general_cfg['n_steps'])
 
     for epoch in range(100):
@@ -154,8 +143,7 @@ if __name__ == "__main__":
             fh.write(epoch_params)
 
         all_data = []
-        # test_items = [(x, True) for x in test_dataset.data]
-        test_items = [(x, False) for x in test_dataset.data]
+        test_items = [(x, True) for x in test_dataset.data]
         train_dataset.shuffle()
         train_items = [(x, False) for x in train_dataset.data]
 
