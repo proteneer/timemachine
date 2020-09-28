@@ -128,7 +128,7 @@ if __name__ == "__main__":
             fh.write(epoch_params)
 
         all_data = []
-        test_items = [(x, False) for x in test_dataset.data]
+        test_items = [(x, True) for x in test_dataset.data]
         train_dataset.shuffle()
         train_items = [(x, False) for x in train_dataset.data]
 
