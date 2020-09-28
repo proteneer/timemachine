@@ -128,7 +128,6 @@ def deserialize_system(
                 lj_params.append((sig, eps))
 
             charge_params = np.array(charge_params, dtype=np.float64)
-            # charge_params = np.zeros_like(charge_params)
 
             # print("Protein net charge:", np.sum(np.array(global_params)[charge_param_idxs]))
             lj_params = np.array(lj_params, dtype=np.float64)

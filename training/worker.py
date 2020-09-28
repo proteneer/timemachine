@@ -48,7 +48,6 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         lamb = request.lamb
 
-        # minimize
         for step, minimize_lamb in enumerate(np.linspace(1.0, lamb, request.prep_steps)):
             ctxt.step(minimize_lamb)
 

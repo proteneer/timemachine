@@ -87,11 +87,11 @@ class NonbondedCustomOpWrapper(CustomOpWrapper):
     def get_scale_factors(self):
         return self.args[1]
 
-    def get_lambda_plane_idxs(self):
-        return self.args[2]
+    # def get_lambda_plane_idxs(self):
+    #     return self.args[2]
 
     def get_lambda_offset_idxs(self):
-        return self.args[3]
+        return self.args[2]
 
     def get_cutoff(self):
         return self.args[-1]

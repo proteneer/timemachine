@@ -123,13 +123,14 @@ if __name__ == "__main__":
 
     suppl = Chem.SDMolSupplier(general_cfg['ligand_sdf'], removeHs=False)
 
-    all_guest_mols = []
     data = []
 
     for guest_idx, mol in enumerate(suppl):
         label_dG = -4.184*float(mol.GetProp(general_cfg['dG']))
         label_err = 4.184*float(mol.GetProp(general_cfg['dG_err'])) # errs are positive!
         data.append((mol, label_dG, label_err))
+
+    data = data[:10]
 
     full_dataset = dataset.Dataset(data)
     train_frac = float(general_cfg['train_frac'])
@@ -158,6 +159,10 @@ if __name__ == "__main__":
     ff_raw = open(forcefield, "r").read()
 
     ff_handlers = deserialize_handlers(ff_raw)
+
+    # print("FF_HANDLERS", ff_handlers)
+
+    # assert 0
 
     box_width = 3.0
     host_system, host_coords, box, _ = water_box.prep_system(box_width)
