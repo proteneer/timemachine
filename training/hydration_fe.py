@@ -40,45 +40,6 @@ from training import service_pb2_grpc
 from timemachine.lib import LangevinIntegrator
 from training import water_box
 
-
-
-def convert_uIC50_to_kJ_per_mole(amount_in_uM):
-    return 0.593*np.log(amount_in_uM*1e-6)*4.18
-
-
-def concat_with_vjps(p_a, p_b, vjp_a, vjp_b):
-    """
-    Returns the combined parameters p_c, and a vjp_fn that can take in adjoint with shape
-    of p_c and returns adjoints of primitives of p_a and p_b.
-
-    i.e. 
-       vjp_a            
-    A' -----> A 
-                \ vjp_c
-                 +-----> C
-       vjp_b    /
-    B' -----> B
-
-    """
-    p_c, vjp_c = jax.vjp(jnp.concatenate, [p_a, p_b])
-    adjoints = np.random.randn(*p_c.shape)
-
-    def adjoint_fn(p_c):
-        ad_a, ad_b = vjp_c(p_c)[0]
-        if vjp_a is not None:
-            ad_a = vjp_a(ad_a)
-        else:
-            ad_a = None
-
-        if vjp_b is not None:
-            ad_b = vjp_b(ad_b)
-        else:
-            ad_b = None
-
-        return ad_b[0]
-
-    return p_c, adjoint_fn
-
 # used during visualization
 def recenter(conf, box):
 
@@ -109,7 +70,6 @@ if __name__ == "__main__":
 
     general_cfg = config['general']
 
-
     # set up learning rates
     learning_rates = {}
     for k, v in config['learning_rates'].items():
@@ -126,7 +86,7 @@ if __name__ == "__main__":
     data = []
 
     for guest_idx, mol in enumerate(suppl):
-        label_dG = -4.184*float(mol.GetProp(general_cfg['dG']))
+        label_dG = -4.184*float(mol.GetProp(general_cfg['dG'])) # in kcal/mol
         label_err = 4.184*float(mol.GetProp(general_cfg['dG_err'])) # errs are positive!
         data.append((mol, label_dG, label_err))
 
@@ -159,10 +119,6 @@ if __name__ == "__main__":
     ff_raw = open(forcefield, "r").read()
 
     ff_handlers = deserialize_handlers(ff_raw)
-
-    # print("FF_HANDLERS", ff_handlers)
-
-    # assert 0
 
     box_width = 3.0
     host_system, host_coords, box, _ = water_box.prep_system(box_width)
@@ -198,7 +154,8 @@ if __name__ == "__main__":
             fh.write(epoch_params)
 
         all_data = []
-        test_items = [(x, True) for x in test_dataset.data]
+        # test_items = [(x, True) for x in test_dataset.data]
+        test_items = [(x, False) for x in test_dataset.data]
         train_dataset.shuffle()
         train_items = [(x, False) for x in train_dataset.data]
 
@@ -275,13 +232,10 @@ if __name__ == "__main__":
 
                     assert len(grad_dG) == len(vjp_fns)
 
-                    for grad, handle_and_vjp_fn in zip(grad_dG, vjp_fns):
-                        if handle_and_vjp_fn:
-                            handle, vjp_fn = handle_and_vjp_fn
+                    for grad, handle_and_vjp_fns in zip(grad_dG, vjp_fns):
+                        for handle, vjp_fn in handle_and_vjp_fns:
                             if type(handle) in learning_rates:
-
                                 bounds = learning_rates[type(handle)]
-
                                 # deps_ij/(eps_i*eps_j) is unstable so we skip eps
                                 if isinstance(handle, handlers.LennardJonesHandler):
                                     grad[:, 1] = 0
