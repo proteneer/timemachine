@@ -5,11 +5,8 @@ A high-performance differentiable molecular dynamics and optimization engine. Co
 ## Features
 
 1. Optimized for performance on modern NVIDIA GPUs.
-2. Analytical first order derivatives of the potential with respect to the coordinates and the forcefield parameters.
-3. Analytical second order hessian vector products and mixed vector products of the above at a 2.5x cost.
-4. Implements adjoint equations of motion via rematerialization, enabling one to differentiate objective functions with respect to an arbitrary number of forcefield parameters in a *single* backwards pass.
-5. Supports 3 and 4 dimensional coordinates, enabling geometric decoupling for alchemical methods and docking-like protocols.
-6. Mixed forcefield support, with AMBER for protein and OFF for small molecules.
+2. Analytical first order derivatives of the potential with respect to the coordinates, forcefield parameters, and alchemical lambda via 4D decoupling
+3. Integrated forcefield support, allowing one to compute derivatives of equilibrium thermodynamic observables.
 
 ## Functional Forms
 
@@ -18,13 +15,12 @@ We currently support the following functional forms. Parameters that can be opti
 1. HarmonicBond (force constant, bond length)
 2. HarmonicAngle (force constant, ideal angle)
 3. PeriodicTorsion (force constant, phase, periodicity)
-4. LennardJones 612 (sigma, epsilon)
-5. Non-periodic electrostatics (charge)
-6. GBSA (charge, atomic radii, atomic scale factors)
+4. PBC LennardJones 612 (sigma, epsilon)
+5. PBC reaction field electrostatics (charge)
 
 ## Running Tests
 
-Note: when running tests, it's important we set the fixed point to a sufficient level of precision via BUILD_TEST=ON. This is done with CMake flags using instructions below. When running actual simulations, it's important to set BUILD_TEST=OFF.
+Note: when running tests, it's important we set the fixed point to a sufficient level of precision via BUILD_TEST=ON. This is done with CMake flags using instructions below. When running actual simulations, it's important to set BUILD_TEST=OFF since it will cause overflows.
 
 ```
 pip install -r requirements.txt

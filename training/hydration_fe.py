@@ -2,18 +2,13 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
-import pickle
-
 from jax.config import config as jax_config
 jax_config.update("jax_enable_x64", True)
 
-# import copy
 import argparse
 import time
 import datetime
 import numpy as np
-# from io import StringIO
-# import itertools
 import os
 import sys
 
@@ -21,18 +16,12 @@ from ff import handlers
 from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize_handlers
 
-
-
 from rdkit import Chem
-
-from fe import dataset
-
-# from fe import loss, bar
-# from fe.pdb_writer import PDBWriter
 
 import configparser
 import grpc
 
+from training import dataset
 from training import hydration_model, hydration_setup
 from training import simulation
 from training import service_pb2_grpc
@@ -40,7 +29,7 @@ from training import service_pb2_grpc
 from timemachine.lib import LangevinIntegrator
 from training import water_box
 
-# used during visualization
+# used during visualization to bring everything back to home box
 def recenter(conf, box):
 
     new_coords = []
@@ -90,8 +79,6 @@ if __name__ == "__main__":
         label_err = 4.184*float(mol.GetProp(general_cfg['dG_err'])) # errs are positive!
         data.append((mol, label_dG, label_err))
 
-    data = data[:10]
-
     full_dataset = dataset.Dataset(data)
     train_frac = float(general_cfg['train_frac'])
     train_dataset, test_dataset = full_dataset.split(train_frac)
@@ -123,8 +110,6 @@ if __name__ == "__main__":
     box_width = 3.0
     host_system, host_coords, box, _ = water_box.prep_system(box_width)
 
-    print("Host Shape", host_coords.shape)
-
     lambda_schedule = np.array([float(x) for x in general_cfg['lambda_schedule'].split(',')])
 
     num_steps = int(general_cfg['n_steps'])
@@ -143,14 +128,14 @@ if __name__ == "__main__":
             fh.write(epoch_params)
 
         all_data = []
-        test_items = [(x, True) for x in test_dataset.data]
+        test_items = [(x, False) for x in test_dataset.data]
         train_dataset.shuffle()
         train_items = [(x, False) for x in train_dataset.data]
 
         all_data.extend(test_items)
         all_data.extend(train_items)
 
-        for (mol, label_dG, label_err), inference in all_data:
+        for idx, ((mol, label_dG, label_err), inference) in enumerate(all_data):
 
             if inference:
                 prefix = "test"
@@ -174,7 +159,7 @@ if __name__ == "__main__":
 
                 coords = hydration_setup.combine_coordinates(
                     host_coords,
-                    mol,
+                    mol
                 )
 
                 seed = np.random.randint(0, np.iinfo(np.int32).max)
@@ -217,12 +202,12 @@ if __name__ == "__main__":
                 if not inference:
 
                     loss_grad = np.sign(pred_dG - label_dG)
-
                     assert len(grad_dG) == len(vjp_fns)
 
                     for grad, handle_and_vjp_fns in zip(grad_dG, vjp_fns):
                         for handle, vjp_fn in handle_and_vjp_fns:
                             if type(handle) in learning_rates:
+
                                 bounds = learning_rates[type(handle)]
                                 # deps_ij/(eps_i*eps_j) is unstable so we skip eps
                                 if isinstance(handle, handlers.LennardJonesHandler):
@@ -233,7 +218,8 @@ if __name__ == "__main__":
                                 handle.params -= dL_dp
 
                     epoch_params = serialize_handlers(ff_handlers)
-                    with open(os.path.join(epoch_dir, "checkpoint_epoch_params.py"), 'w') as fh:
+
+                    with open(os.path.join(epoch_dir, "checkpoint_params_idx_"+str(idx)+"_mol_"+mol.GetProp("_Name")+".py"), 'w') as fh:
                         fh.write(epoch_params)
 
             except Exception as e:
