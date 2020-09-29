@@ -33,7 +33,7 @@ def simulate(
 
     Returns
     -------
-    (dG, dG_err), dG_grad
+    (dG, dG_err), dG_grad, du_dls
         dG grad is with respect to system parameters Q, not forcefield parameters P.
         It correspond to the vjps of each potential function that backprops into
         the forcefield handler directly.
@@ -59,7 +59,6 @@ def simulate(
             lamb=lamb,
             prep_steps=5000,
             prod_steps=n_steps,
-            # prod_steps=100000,
             observe_du_dl_freq=observe_du_dl_freq,
             observe_du_dp_freq=observe_du_dp_freq,
             precision="single",
@@ -78,6 +77,7 @@ def simulate(
         response = future.result()
         energies = pickle.loads(response.energies)
 
+        # enable this later when we need simulation frames
         # if n_frames > 0:
         #     frames = pickle.loads(response.frames)
         #     # combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
