@@ -4,9 +4,16 @@ A high-performance differentiable molecular dynamics and optimization engine. Co
 
 ## Features
 
-1. Optimized for performance on modern NVIDIA GPUs.
-2. Analytical first order derivatives of the potential with respect to the coordinates, forcefield parameters, and alchemical lambda via 4D decoupling
-3. Integrated forcefield support, allowing one to compute derivatives of equilibrium thermodynamic observables.
+1. Supports 4D decoupling of nonbonded terms.
+2. Analytical first order derivatives of the potential with respect to the coordinates, forcefield parameters, and lambda
+3. vjp support for backpropping system derivatives into forcefield derivatives.
+
+## Deficiencies
+
+1. NVT only
+2. No constraints (HMR is needed to increase step size)
+3. Explicit solvent is supported by reaction field, not PME
+4. Slower than most MD packages
 
 ## Functional Forms
 
@@ -20,7 +27,7 @@ We currently support the following functional forms. Parameters that can be opti
 
 ## Running Tests
 
-Note: when running tests, it's important we set the fixed point to a sufficient level of precision via BUILD_TEST=ON. This is done with CMake flags using instructions below. When running actual simulations, it's important to set BUILD_TEST=OFF since it will cause overflows.
+When running tests, it's important we set the fixed point to a sufficient level of precision via BUILD_TEST=ON. This is done with CMake flags using instructions below. Important: When running actual simulations, it's important to set BUILD_TEST=OFF else overflows will occur.
 
 ```
 pip install -r requirements.txt
@@ -33,7 +40,7 @@ cd ../../
 pytest -xsv tests/
 ```
 
-# Free Energy Theory
+# Free Energy Methods
 
 ## Theory
 
