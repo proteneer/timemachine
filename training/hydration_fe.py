@@ -59,6 +59,17 @@ if __name__ == "__main__":
 
     general_cfg = config['general']
 
+
+    # basic gist of workflow:
+    # 1. configure learning rates for the optimizer
+    # 2. load freesolv dataset from SDF file
+    # 3. split dataset into train/test
+    # 4. connect to workers
+    # 5. deserialize off smirnoff parameters
+    # 6. prepare water box
+    # 7. for each epoch, first run on test set then shuffled training set
+    # 8. save parameters after each molecule
+
     # set up learning rates
     learning_rates = {}
     for k, v in config['learning_rates'].items():
@@ -148,6 +159,7 @@ if __name__ == "__main__":
             # if not os.path.exists(out_dir):
                 # os.makedirs(out_dir)
 
+            # safety guard
             try:
 
                 potentials, masses, vjp_fns = hydration_setup.combine_potentials(
@@ -195,6 +207,7 @@ if __name__ == "__main__":
 
                 loss = np.abs(pred_dG - label_dG)
 
+                # (ytz) bootstrap CI on TI is super janky
                 # error CIs are wrong "95% CI [{:.2f}, {:.2f}, {:.2f}]".format(pred_err.lower_bound, pred_err.value, pred_err.upper_bound),
                 print(prefix, "mol", mol.GetProp("_Name"), "loss {:.2f}".format(loss), "pred_dG {:.2f}".format(pred_dG), "label_dG {:.2f}".format(label_dG), "label err {:.2f}".format(label_err), "time {:.2f}".format(time.time() - start_time), "smiles:", Chem.MolToSmiles(mol))
 
@@ -219,6 +232,7 @@ if __name__ == "__main__":
 
                     epoch_params = serialize_handlers(ff_handlers)
 
+                    # write parameters after each traning molecule
                     with open(os.path.join(epoch_dir, "checkpoint_params_idx_"+str(idx)+"_mol_"+mol.GetProp("_Name")+".py"), 'w') as fh:
                         fh.write(epoch_params)
 
