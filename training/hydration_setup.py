@@ -5,6 +5,7 @@ import numpy as np
 from ff.handlers import bonded, nonbonded, openmm_deserializer
 from timemachine.lib import potentials
 
+
 def combine_coordinates(
     host_coords,
     guest_mol):
@@ -111,6 +112,9 @@ def combine_potentials(
     host_system,
     precision):
     """
+    This function is responsible for figuring out how to take two separate hamiltonians
+    and combining them into one sensible alchemical system.
+
     Parameters
     ----------
 
@@ -121,16 +125,16 @@ def combine_potentials(
         RDKit molecule
 
     host_system: openmm.System
-        Protein system
+        Host system to be deserialized
 
     precision: np.float32 or np.float64
         Numerical precision of the functional form
 
-    Returns:
-    --------
+    Returns
+    -------
     tuple
-        Returns a list of lib.potentials objects and a list of their corresponding vjp_fns
-        back into the forcefield
+        Returns a list of lib.potentials objects, combined masses, and a list of
+        their corresponding vjp_fns back into the forcefield
 
     """
 
@@ -214,6 +218,7 @@ def combine_potentials(
     )
 
     # allow the ligand to be alchemically decoupled
+    # a value of one indicates that we allow the atom to be adjusted by the lambda value
     guest_lambda_offset_idxs = np.ones(len(guest_masses), dtype=np.int32) 
 
     # use same scale factors until we modify 1-4s for electrostatics
@@ -225,7 +230,6 @@ def combine_potentials(
     combined_beta = 2.0
 
     combined_cutoff = 1.0 # nonbonded cutoff
-
 
     combined_potentials.append(potentials.Nonbonded(
         combined_exclusion_idxs,
