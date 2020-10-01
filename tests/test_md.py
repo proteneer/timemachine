@@ -84,7 +84,10 @@ class TestContext(unittest.TestCase):
             all_du_dps = []
             all_xs = []
             all_du_dxs = []
+            all_us = []
             for step in range(num_steps):
+                u = ref_nrg_fn(x_t, params, box, lamb)
+                all_us.append(u)
                 du_dl = dU_dl_fn(x_t, params, box, lamb)[0]
                 all_du_dls.append(du_dl)
                 du_dp = dU_dp_fn(x_t, params, box, lamb)[0]
@@ -96,12 +99,12 @@ class TestContext(unittest.TestCase):
                 all_xs.append(x_t)
                 # note that we do not calculate the du_dl of the last frame.
 
-            return all_xs, all_du_dxs, all_du_dps, all_du_dls
+            return all_xs, all_du_dxs, all_du_dps, all_du_dls, all_us
 
         box = np.eye(3)*1.5
 
         # when we have multiple parameters, we need to set this up correctly
-        ref_all_xs, ref_all_du_dxs, ref_all_du_dps, ref_all_du_dls = integrate_once_through(
+        ref_all_xs, ref_all_du_dxs, ref_all_du_dps, ref_all_du_dls, ref_all_us = integrate_once_through(
             x0,
             v0,
             box,
@@ -144,22 +147,26 @@ class TestContext(unittest.TestCase):
             test_x_t = ctxt.get_x_t()
             test_v_t = ctxt.get_v_t()
             test_du_dx_t = ctxt.get_du_dx_t()
+            test_u_t = ctxt.get_u_t()
 
+            np.testing.assert_allclose(test_u_t, ref_all_us[step])
             np.testing.assert_allclose(test_du_dx_t, ref_all_du_dxs[step])
             np.testing.assert_allclose(test_x_t, ref_all_xs[step])
-
-
-        ref_avg_du_dps = np.mean(ref_all_du_dps, axis=0)
-        ref_avg_du_dps_f2 = np.mean(ref_all_du_dps[::2], axis=0)
-
-        np.testing.assert_allclose(test_obs.avg_du_dp(), ref_avg_du_dps)
-        np.testing.assert_allclose(test_obs_f2.avg_du_dp(), ref_avg_du_dps_f2)
 
         ref_avg_du_dls = np.mean(ref_all_du_dls, axis=0)
         ref_avg_du_dls_f2 = np.mean(ref_all_du_dls[::2], axis=0)
 
         np.testing.assert_allclose(test_obs_du_dl.avg_du_dl(), ref_avg_du_dls)
         np.testing.assert_allclose(test_obs_f2_du_dl.avg_du_dl(), ref_avg_du_dls_f2)
+
+        ref_avg_du_dps = np.mean(ref_all_du_dps, axis=0)
+        ref_avg_du_dps_f2 = np.mean(ref_all_du_dps[::2], axis=0)
+
+        np.testing.assert_allclose(test_obs.avg_du_dp()[:, 0], ref_avg_du_dps[:, 0])
+        np.testing.assert_allclose(test_obs.avg_du_dp()[:, 1], ref_avg_du_dps[:, 1])
+        np.testing.assert_allclose(test_obs.avg_du_dp()[:, 2], ref_avg_du_dps[:, 2])
+
+
 
 if __name__ == "__main__":
     unittest.main()

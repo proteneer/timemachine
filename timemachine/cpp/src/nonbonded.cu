@@ -243,7 +243,7 @@ void Nonbonded<RealType>::execute_device(
     }
     if(d_du_dl) {
         gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N*sizeof(*d_du_dl_buffer_), stream));
-        gpuErrchk(cudaMemsetAsync(d_du_dl_reduce_sum_, 0, 1*sizeof(*d_du_dl_reduce_sum_), stream));
+        gpuErrchk(cudaMemsetAsync(d_du_dl_reduce_sum_, 0, 1*sizeof(*d_du_dl_reduce_sum_), stream)); 
     }
     if(d_u) {
         gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N*sizeof(*d_u_buffer_), stream));
@@ -319,24 +319,24 @@ void Nonbonded<RealType>::execute_device(
     }
 
     if(d_du_dp) {
-        k_cast_ull_to_real<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+        k_add_ull_to_real<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    // we must accumulate in fixed point to get the cancellation of nans
-    // otherwise if we convert prematurely floating points become messed u
+    // (ytz): we must accumulate in fixed point to get the cancellation of nans
+    // otherwise if we convert prematurely floating points become messed up
 
     if(d_du_dl) {
         k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_du_dl_buffer_, d_du_dl_reduce_sum_);
         gpuErrchk(cudaPeekAtLastError());
-        k_final_copy<<<1, 32, 0, stream>>>(d_du_dl_reduce_sum_, d_du_dl);
+        k_final_add<<<1, 32, 0, stream>>>(d_du_dl_reduce_sum_, d_du_dl);
         gpuErrchk(cudaPeekAtLastError());
     }
 
     if(d_u) {
         k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_u_buffer_, d_u_reduce_sum_);
         gpuErrchk(cudaPeekAtLastError());
-        k_final_copy<<<1, 32, 0, stream>>>(d_u_reduce_sum_, d_u);
+        k_final_add<<<1, 32, 0, stream>>>(d_u_reduce_sum_, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
     

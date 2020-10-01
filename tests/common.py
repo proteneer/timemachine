@@ -67,7 +67,6 @@ def prepare_lj_system(
     return lj_params, ref_potential, test_potential
 
 
-
 # def prepare_es_system(
 #     x,
 #     E, # number of exclusions
@@ -110,6 +109,88 @@ def prepare_lj_system(
 #     )
 
 #     return charge_params, ref_total_energy, test_potential
+
+
+def prepare_water_system(
+    x,
+    lambda_offset_idxs,
+    p_scale,
+    cutoff,
+    precision=np.float64):
+
+    N = x.shape[0]
+    D = x.shape[1]
+
+    assert N % 3 == 0
+
+    params = np.stack([
+        (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456), # q
+        np.random.rand(N).astype(np.float64)/5.0, # sig
+        np.random.rand(N).astype(np.float64) # eps
+    ], axis=1)
+
+    atom_idxs = np.arange(N)
+
+    # exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
+    # exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
+
+    # scales = np.stack([
+            # np.random.rand(E),
+            # np.random.rand(E)
+    # ], axis=1)
+
+
+    scales = []
+    exclusion_idxs = []
+    for i in range(N//3):
+        O_idx = i*3+0
+        H1_idx = i*3+1
+        H2_idx = i*3+2
+        exclusion_idxs.append([O_idx, H1_idx]) # 1-2
+        exclusion_idxs.append([O_idx, H2_idx]) # 1-2
+        exclusion_idxs.append([H1_idx, H2_idx]) # 1-3
+
+        scales.append([1.0, 1.0])
+        scales.append([1.0, 1.0])
+        scales.append([np.random.rand(), np.random.rand()])
+
+    scales = np.array(scales, dtype=np.int32)
+    exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
+    E = len(exclusion_idxs)
+    # scales = np.ones((E, 2), dtype=np.float64)
+
+    beta = 2.0
+
+    test_potential = potentials.Nonbonded(
+        exclusion_idxs,
+        scales,
+        lambda_offset_idxs,
+        beta,
+        cutoff,
+        precision=precision
+    )
+
+    charge_rescale_mask = np.ones((N, N))
+    for (i,j), exc in zip(exclusion_idxs, scales[:, 0]):
+        charge_rescale_mask[i][j] = 1 - exc
+        charge_rescale_mask[j][i] = 1 - exc
+
+    lj_rescale_mask = np.ones((N, N))
+    for (i,j), exc in zip(exclusion_idxs, scales[:, 1]):
+        lj_rescale_mask[i][j] = 1 - exc
+        lj_rescale_mask[j][i] = 1 - exc
+
+    ref_total_energy = functools.partial(
+        nonbonded.nonbonded_v3,
+        charge_rescale_mask=charge_rescale_mask,
+        lj_rescale_mask=lj_rescale_mask,
+        scales=scales,
+        beta=beta,
+        cutoff=cutoff,
+        lambda_offset_idxs=lambda_offset_idxs
+    )
+
+    return params, ref_total_energy, test_potential
 
 
 def prepare_nb_system(
@@ -390,9 +471,10 @@ class GradientTest(unittest.TestCase):
         grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
         ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
 
-        # print(ref_du_dx, test_du_dx)
-
         np.testing.assert_allclose(ref_u, test_u, rtol)
+
+        # print(ref_du_dx)
+        np.testing.assert_allclose(ref_du_dx, test_du_dx, rtol)
 
         self.assert_equal_vectors(
             np.array(ref_du_dx),
@@ -406,7 +488,18 @@ class GradientTest(unittest.TestCase):
             np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol)
 
         # du/dp can be hard to make numerically stable sometimes
-        # np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol*10)
+        # print(np.amax(np.abs(ref_du_dp[:, 1])))
+        # print(np.amin(np.abs(ref_du_dp[:, 1])))
+
+        # print(ref_du_dp[:, 0])
+        # print(test_du_dp[:, 0])
+
+        # np.testing.assert_allclose(ref_du_dp[:, 0], test_du_dp[:, 0], rtol*40)
+        # np.testing.assert_allclose(ref_du_dp[:, 2], test_du_dp[:, 2], rtol*40)
+        # np.testing.assert_allclose(ref_du_dp[:, 1], test_du_dp[:, 1], rtol*40)
+
+
+        np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol*100)
         # we don't need more precision than this for derivatives
-        np.testing.assert_almost_equal(ref_du_dp, test_du_dp, 1e-5)
+        # np.testing.assert_almost_equal(ref_du_dp, test_du_dp, 1e-5)
 

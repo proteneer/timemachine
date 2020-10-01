@@ -5,7 +5,24 @@
 
 #define PI 3.141592653589793115997963468544185161
 
-template<typename RealType> 
+// we need to use a different level of precision for parameter derivatives
+#define FIXED_EXPONENT_DU_DCHARGE 0x1000000000
+#define FIXED_EXPONENT_DU_DSIG    0x2000000000
+#define FIXED_EXPONENT_DU_DEPS    0x4000000000 // this is just getting silly
+
+template<typename RealType, unsigned long long EXPONENT>
+unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED_DU_DP(RealType v) {
+    return static_cast<unsigned long long>((long long)(v*EXPONENT));
+}
+
+template<typename RealType, unsigned long long EXPONENT>
+RealType __device__ __forceinline__ FIXED_TO_FLOAT_DU_DP(unsigned long long v) {
+    return static_cast<RealType>(static_cast<long long>(v))/EXPONENT;
+}
+
+// forces energies du/dl use the same
+
+template<typename RealType>
 unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED(RealType v) {
     return static_cast<unsigned long long>((long long)(v*FIXED_EXPONENT));
 }
@@ -50,7 +67,7 @@ void __global__ k_coords_to_kv(
     unsigned int bin_z = z/binWidth;
 
     keys[atom_idx] = bin_to_idx[bin_x*256*256+bin_y*256+bin_z];
-    // keys[atom_idx] = atom_idx; debug use!
+    // keys[atom_idx] = atom_idx;
     vals[atom_idx] = atom_idx;
 
 }
@@ -114,7 +131,7 @@ void __global__ k_inv_permute_assign(
 }
 
 template <typename RealType>
-void __global__ k_cast_ull_to_real(
+void __global__ k_add_ull_to_real(
     const int N,
     const unsigned long long * __restrict__ ull_array,
     RealType * __restrict__ real_array) {
@@ -127,7 +144,16 @@ void __global__ k_cast_ull_to_real(
         return;
     }
 
-    real_array[idx*stride+stride_idx] = FIXED_TO_FLOAT<RealType>(ull_array[idx*stride+stride_idx]);
+    // handle charges, sigmas, epsilons with different exponents
+    if(stride_idx == 0) {
+        real_array[idx*stride+stride_idx] += FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(ull_array[idx*stride+stride_idx]);
+    } else if(stride_idx == 1) {
+        real_array[idx*stride+stride_idx] += FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(ull_array[idx*stride+stride_idx]);
+    } else if(stride_idx == 2) {
+        real_array[idx*stride+stride_idx] += FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(ull_array[idx*stride+stride_idx]);
+    }
+
+
 
 }
 
@@ -158,12 +184,12 @@ void __global__ k_reduce_ull_buffer(
 
 };
 
-void __global__ k_final_copy(
+void __global__ k_final_add(
     const unsigned long long *ull_array,
     double *double_array) {
 
     if(threadIdx.x == 0) {
-        double_array[0] = FIXED_TO_FLOAT<double>(ull_array[0]);
+        double_array[0] += FIXED_TO_FLOAT<double>(ull_array[0]);
     }
 
 }
@@ -315,24 +341,18 @@ void __global__ k_nonbonded(
 
             RealType u = qij*inv_dij*ebd + 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
 
-
-            // printf("ADDING %f\n", u);
-
             energy += FLOAT_TO_FIXED(qij*inv_dij*ebd + 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij);
-
-            g_qi += FLOAT_TO_FIXED(qj*inv_dij*ebd);
-            g_qj += FLOAT_TO_FIXED(qi*inv_dij*ebd);
+            g_qi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(qj*inv_dij*ebd);
+            g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(qi*inv_dij*ebd);
 
             // the derivative is undefined if epsilons are zero.
             if(eps_i != 0 && eps_j != 0) {
-
-                RealType eps_grad = 2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
-                g_epsi += FLOAT_TO_FIXED(eps_grad*eps_j);
-                g_epsj += FLOAT_TO_FIXED(eps_grad*eps_i);
-
                 RealType sig_grad = 12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
-                g_sigi += FLOAT_TO_FIXED(sig_grad);
-                g_sigj += FLOAT_TO_FIXED(sig_grad);
+                g_sigi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
+                g_sigj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
+                RealType eps_grad = 2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
+                g_epsi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_j);
+                g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_i);
 
             }
 
@@ -372,13 +392,22 @@ void __global__ k_nonbonded(
     if(du_dp) {
 
         if(atom_i_idx < N) {
-            atomicAdd(du_dp + charge_param_idx_i, g_qi);
+            
+
+
+
+            unsigned long long old = atomicAdd(du_dp + charge_param_idx_i, g_qi);
+
+            // printf("NB ADDR %d OLDI %llu, ADDED %llu\n", charge_param_idx_i, old, g_qi);
+
             atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
             atomicAdd(du_dp + lj_param_idx_eps_i, g_epsi);
         }
 
         if(atom_j_idx < N) {
-            atomicAdd(du_dp + charge_param_idx_j, g_qj);
+            unsigned long long old = atomicAdd(du_dp + charge_param_idx_j, g_qj);
+
+            // printf("NB ADDR %d OLDJ %llu, ADDED %llu\n", charge_param_idx_j, old, g_qj);
             atomicAdd(du_dp + lj_param_idx_sig_j, g_sigj);
             atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
         }
@@ -549,18 +578,21 @@ void __global__ k_nonbonded_exclusions(
         // energy is size extensive so this may not be a good idea
         energy -= FLOAT_TO_FIXED(charge_scale*qij*inv_dij*ebd + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij);
 
-        g_qi -= FLOAT_TO_FIXED(charge_scale*qj*inv_dij*ebd);
-        g_qj -= FLOAT_TO_FIXED(charge_scale*qi*inv_dij*ebd);
+        g_qi -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qj*inv_dij*ebd);
+        g_qj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qi*inv_dij*ebd);
 
         if(eps_i != 0 && eps_j != 0) {
 
             RealType eps_grad = lj_scale*2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
-            g_epsi -= FLOAT_TO_FIXED(eps_grad*eps_j);
-            g_epsj -= FLOAT_TO_FIXED(eps_grad*eps_i);
 
+            // printf("REMOVING: %d %d %llu\n", atom_i_idx, atom_j_idx, FLOAT_TO_FIXED(12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1)));
             RealType sig_grad = lj_scale*12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
-            g_sigi -= FLOAT_TO_FIXED(sig_grad);
-            g_sigj -= FLOAT_TO_FIXED(sig_grad);
+            g_sigi -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
+            g_sigj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
+
+            g_epsi -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_j);
+            g_epsj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_i);
+
 
         }
 
@@ -575,8 +607,13 @@ void __global__ k_nonbonded_exclusions(
         }
 
         if(du_dp) {
-            atomicAdd(du_dp + charge_param_idx_i, g_qi);
-            atomicAdd(du_dp + charge_param_idx_j, g_qj);
+            unsigned long long oldi = atomicAdd(du_dp + charge_param_idx_i, g_qi);
+
+            // printf("ADDR %d OLDI %llu, ADDED %llu\n", charge_param_idx_i, oldi, g_qi);
+
+            unsigned long long oldj = atomicAdd(du_dp + charge_param_idx_j, g_qj);
+
+            // printf("ADDR %d OLDJ %llu, ADDED %llu\n", charge_param_idx_j, oldj, g_qi);
 
             atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
             atomicAdd(du_dp + lj_param_idx_eps_i, g_epsi);
