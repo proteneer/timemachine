@@ -5,6 +5,18 @@
 
 #define PI 3.141592653589793115997963468544185161
 
+template<typename RealType> 
+unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED(RealType v) {
+    return static_cast<unsigned long long>((long long)(v*FIXED_EXPONENT));
+}
+
+template<typename RealType>
+RealType __device__ __forceinline__ FIXED_TO_FLOAT(unsigned long long v) {
+    return static_cast<RealType>(static_cast<long long>(v))/FIXED_EXPONENT;
+}
+
+// #define FIXED_TO_FLOAT(v) static_cast<double>(static_cast<long long>(v))/FIXED_EXPONENT
+
 // generate kv values from coordinates to be radix sorted 
 void __global__ k_coords_to_kv(
     const int N,
@@ -40,6 +52,7 @@ void __global__ k_coords_to_kv(
     unsigned int bin_z = z/binWidth;
 
     keys[atom_idx] = bin_to_idx[bin_x*256*256+bin_y*256+bin_z];
+    // keys[atom_idx] = atom_idx;
     vals[atom_idx] = atom_idx;
 
 }
@@ -59,13 +72,6 @@ void __global__ k_permute(
     if(idx >= N) {
         return;
     }
-
-    // printf("idx %d N %d\n", idx, N);
-
-	// int p = perm[idx]*stride + stride_idx# ;
-
-    // if(blockIdx.y==0)
-    // printf("setting %d with %d stride_idx %d address %d value %f\n", idx, perm[idx], stride_idx, idx*stride+stride_idx, array[perm[idx]*stride+stride_idx]);
 
     sorted_array[idx*stride+stride_idx] = array[perm[idx]*stride+stride_idx];
 
@@ -90,6 +96,43 @@ void __global__ k_inv_permute_accum(
 
 }
 
+template <typename RealType>
+void __global__ k_inv_permute_assign(
+    const int N,
+    const unsigned int * __restrict__ perm,
+    const RealType * __restrict__ sorted_array,
+    RealType * __restrict__ array) {
+
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int stride = gridDim.y;
+    int stride_idx = blockIdx.y;
+
+    if(idx >= N) {
+        return;
+    }
+
+    array[perm[idx]*stride+stride_idx] = sorted_array[idx*stride+stride_idx];
+
+}
+
+template <typename RealType>
+void __global__ k_cast_ull_to_real(
+    const int N,
+    const unsigned long long * __restrict__ ull_array,
+    RealType * __restrict__ real_array) {
+
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int stride = gridDim.y;
+    int stride_idx = blockIdx.y;
+
+    if(idx >= N) {
+        return;
+    }
+
+    real_array[idx*stride+stride_idx] = FIXED_TO_FLOAT<RealType>(ull_array[idx*stride+stride_idx]);
+
+}
+
 template<typename RealType>
 void __global__ k_reduce_buffer(
     int N,
@@ -104,6 +147,35 @@ void __global__ k_reduce_buffer(
 
 };
 
+template<typename RealType>
+void __global__ k_reduce_ull_buffer(
+    int N,
+    unsigned long long *d_buffer,
+    RealType *d_sum) {
+
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    RealType elem = idx < N ? FIXED_TO_FLOAT<RealType>(d_buffer[idx]) : 0;
+
+    // if(idx < N) {
+        // printf("reduce ull elem %llu\n", d_buffer[idx]);      
+        // printf("!!! reduce %d float elem %f\n", idx, static_cast<RealType>(static_cast<long long>(d_buffer[idx]))/static_cast<double>(FIXED_EXPONENT));
+    // }
+
+    atomicAdd(d_sum, elem);
+
+};
+
+void __global__ k_final_copy(
+    const unsigned long long *ull_array,
+    double *double_array) {
+
+    if(threadIdx.x == 0) {
+        double_array[0] = FIXED_TO_FLOAT<double>(ull_array[0]);
+    }
+
+}
+
+
 template <typename RealType>
 void __global__ k_nonbonded(
     const int N,
@@ -117,9 +189,9 @@ void __global__ k_nonbonded(
     const int * __restrict__ ixn_tiles,
     const unsigned int * __restrict__ ixn_atoms,
     unsigned long long * __restrict__ du_dx,
-    double * __restrict__ du_dp,
-    double * __restrict__ du_dl_buffer,
-    double * __restrict__ u_buffer) {
+    unsigned long long * __restrict__ du_dp,
+    unsigned long long * __restrict__ du_dl_buffer,
+    unsigned long long * __restrict__ u_buffer) {
 
     int tile_idx = blockIdx.x;
 
@@ -139,10 +211,11 @@ void __global__ k_nonbonded(
     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx*3+0] : 0;
     RealType ci_y = atom_i_idx < N ? coords[atom_i_idx*3+1] : 0;
     RealType ci_z = atom_i_idx < N ? coords[atom_i_idx*3+2] : 0;
-    RealType gi_x = 0;
-    RealType gi_y = 0;
-    RealType gi_z = 0;
-    RealType du_dl_i = 0;
+
+    unsigned long long gi_x = 0;
+    unsigned long long gi_y = 0;
+    unsigned long long gi_z = 0;
+    unsigned long long du_dl_i = 0;
 
     int charge_param_idx_i = atom_i_idx*3 + 0;
     int lj_param_idx_sig_i = atom_i_idx*3 + 1;
@@ -152,9 +225,9 @@ void __global__ k_nonbonded(
     RealType sig_i = atom_i_idx < N ? params[lj_param_idx_sig_i] : 0;
     RealType eps_i = atom_i_idx < N ? params[lj_param_idx_eps_i] : 0;
 
-    RealType g_qi = 0;
-    RealType g_sigi = 0;
-    RealType g_epsi = 0;
+    unsigned long long g_qi = 0;
+    unsigned long long g_sigi = 0;
+    unsigned long long g_epsi = 0;
 
     int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
     int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
@@ -162,10 +235,10 @@ void __global__ k_nonbonded(
     RealType cj_x = atom_j_idx < N ? coords[atom_j_idx*3+0] : 0;
     RealType cj_y = atom_j_idx < N ? coords[atom_j_idx*3+1] : 0;
     RealType cj_z = atom_j_idx < N ? coords[atom_j_idx*3+2] : 0;
-    RealType gj_x = 0;
-    RealType gj_y = 0;
-    RealType gj_z = 0;
-    RealType du_dl_j = 0;
+    unsigned long long gj_x = 0;
+    unsigned long long gj_y = 0;
+    unsigned long long gj_z = 0;
+    unsigned long long du_dl_j = 0;
 
     int charge_param_idx_j = atom_j_idx*3 + 0;
     int lj_param_idx_sig_j = atom_j_idx*3 + 1;
@@ -175,16 +248,13 @@ void __global__ k_nonbonded(
     RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 0;
     RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
 
-
-    // printf("%d %f %f %f (%f %f %f)\n", atom_i_idx, sig_i, eps_i, qi, ci_x, ci_y, ci_z);
-
-    RealType g_qj = 0;
-    RealType g_sigj = 0;
-    RealType g_epsj = 0;
+    unsigned long long g_qj = 0;
+    unsigned long long g_sigj = 0;
+    unsigned long long g_epsj = 0;
 
     RealType cutoff_squared = cutoff*cutoff;
 
-    RealType energy = 0;
+    unsigned long long energy = 0;
 
     RealType real_lambda = static_cast<RealType>(lambda);
     RealType real_beta = static_cast<RealType>(beta);
@@ -239,33 +309,37 @@ void __global__ k_nonbonded(
 
             RealType lj_prefactor = 24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
 
-            // accumulate
-            gi_x += (es_prefactor-lj_prefactor)*delta_x;
-            gi_y += (es_prefactor-lj_prefactor)*delta_y;
-            gi_z += (es_prefactor-lj_prefactor)*delta_z;
+            gi_x += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_x);
+            gi_y += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_y);
+            gi_z += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_z);
 
-            gj_x -= (es_prefactor-lj_prefactor)*delta_x;
-            gj_y -= (es_prefactor-lj_prefactor)*delta_y;
-            gj_z -= (es_prefactor-lj_prefactor)*delta_z;
+            gj_x -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_x);
+            gj_y -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_y);
+            gj_z -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_z);
 
-            du_dl_i += (es_prefactor-lj_prefactor)*delta_w*lambda_offset_i;
-            du_dl_j -= (es_prefactor-lj_prefactor)*delta_w*lambda_offset_j;
+            du_dl_i += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_i);
+            du_dl_j -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_j);
 
-            energy += qij*inv_dij*ebd + 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+            RealType u = qij*inv_dij*ebd + 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
 
-            g_qi += qj*inv_dij*ebd;
-            g_qj += qi*inv_dij*ebd;
+
+            // printf("ADDING %f\n", u);
+
+            energy += FLOAT_TO_FIXED(qij*inv_dij*ebd + 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij);
+
+            g_qi += FLOAT_TO_FIXED(qj*inv_dij*ebd);
+            g_qj += FLOAT_TO_FIXED(qi*inv_dij*ebd);
 
             // the derivative is undefined if epsilons are zero.
             if(eps_i != 0 && eps_j != 0) {
 
                 RealType eps_grad = 2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
-                g_epsi += eps_grad*eps_j;
-                g_epsj += eps_grad*eps_i;
+                g_epsi += FLOAT_TO_FIXED(eps_grad*eps_j);
+                g_epsj += FLOAT_TO_FIXED(eps_grad*eps_i);
 
                 RealType sig_grad = 12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
-                g_sigi += sig_grad;
-                g_sigj += sig_grad;
+                g_sigi += FLOAT_TO_FIXED(sig_grad);
+                g_sigj += FLOAT_TO_FIXED(sig_grad);
 
             }
 
@@ -291,14 +365,14 @@ void __global__ k_nonbonded(
     // these reduction buffers are really tricky
     if(du_dx) {
         if(atom_i_idx < N) {
-            atomicAdd(du_dx + atom_i_idx*3 + 0, static_cast<unsigned long long>((long long) (gi_x*FIXED_EXPONENT)));
-            atomicAdd(du_dx + atom_i_idx*3 + 1, static_cast<unsigned long long>((long long) (gi_y*FIXED_EXPONENT)));
-            atomicAdd(du_dx + atom_i_idx*3 + 2, static_cast<unsigned long long>((long long) (gi_z*FIXED_EXPONENT)));
+            atomicAdd(du_dx + atom_i_idx*3 + 0, gi_x);
+            atomicAdd(du_dx + atom_i_idx*3 + 1, gi_y);
+            atomicAdd(du_dx + atom_i_idx*3 + 2, gi_z);
         }
         if(atom_j_idx < N) {
-            atomicAdd(du_dx + atom_j_idx*3 + 0, static_cast<unsigned long long>((long long) (gj_x*FIXED_EXPONENT)));
-            atomicAdd(du_dx + atom_j_idx*3 + 1, static_cast<unsigned long long>((long long) (gj_y*FIXED_EXPONENT)));
-            atomicAdd(du_dx + atom_j_idx*3 + 2, static_cast<unsigned long long>((long long) (gj_z*FIXED_EXPONENT)));
+            atomicAdd(du_dx + atom_j_idx*3 + 0, gj_x);
+            atomicAdd(du_dx + atom_j_idx*3 + 1, gj_y);
+            atomicAdd(du_dx + atom_j_idx*3 + 2, gj_z);
         }
     }
 
@@ -347,9 +421,9 @@ void __global__ k_nonbonded_exclusions(
     const double beta,
     const double cutoff,
     unsigned long long *du_dx,
-    double *du_dp,
-    double *du_dl_buffer,
-    double *u_buffer) {
+    unsigned long long *du_dp,
+    unsigned long long *du_dl_buffer,
+    unsigned long long *u_buffer) {
 
     const int e_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(e_idx >= E) {
@@ -362,10 +436,10 @@ void __global__ k_nonbonded_exclusions(
     RealType ci_x = coords[atom_i_idx*3+0];
     RealType ci_y = coords[atom_i_idx*3+1];
     RealType ci_z = coords[atom_i_idx*3+2];
-    RealType gi_x = 0;
-    RealType gi_y = 0;
-    RealType gi_z = 0;
-    RealType du_dl_i = 0;
+    unsigned long long gi_x = 0;
+    unsigned long long gi_y = 0;
+    unsigned long long gi_z = 0;
+    unsigned long long du_dl_i = 0;
 
     int charge_param_idx_i = atom_i_idx*3 + 0;
     int lj_param_idx_sig_i = atom_i_idx*3 + 1;
@@ -375,9 +449,9 @@ void __global__ k_nonbonded_exclusions(
     RealType sig_i = params[lj_param_idx_sig_i];
     RealType eps_i = params[lj_param_idx_eps_i];
 
-    RealType g_qi = 0;
-    RealType g_sigi = 0;
-    RealType g_epsi = 0;
+    unsigned long long g_qi = 0;
+    unsigned long long g_sigi = 0;
+    unsigned long long g_epsi = 0;
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
     int lambda_offset_j = lambda_offset_idxs[atom_j_idx];
@@ -385,10 +459,10 @@ void __global__ k_nonbonded_exclusions(
     RealType cj_x = coords[atom_j_idx*3+0];
     RealType cj_y = coords[atom_j_idx*3+1];
     RealType cj_z = coords[atom_j_idx*3+2];
-    RealType gj_x = 0;
-    RealType gj_y = 0;
-    RealType gj_z = 0;
-    RealType du_dl_j = 0;
+    unsigned long long gj_x = 0;
+    unsigned long long gj_y = 0;
+    unsigned long long gj_z = 0;
+    unsigned long long du_dl_j = 0;
 
     int charge_param_idx_j = atom_j_idx*3+0;
     int lj_param_idx_sig_j = atom_j_idx*3 + 1;
@@ -398,9 +472,9 @@ void __global__ k_nonbonded_exclusions(
     RealType sig_j = params[lj_param_idx_sig_j];
     RealType eps_j = params[lj_param_idx_eps_j];
 
-    RealType g_qj = 0;
-    RealType g_sigj = 0;
-    RealType g_epsj = 0;
+    unsigned long long g_qj = 0;
+    unsigned long long g_sigj = 0;
+    unsigned long long g_epsj = 0;
 
     RealType real_lambda = static_cast<RealType>(lambda);
     RealType real_beta = static_cast<RealType>(beta);
@@ -429,7 +503,7 @@ void __global__ k_nonbonded_exclusions(
 
     RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
 
-    RealType energy = 0;
+    unsigned long long energy = 0;
 
     if(d2ij < cutoff_squared) {
 
@@ -462,43 +536,48 @@ void __global__ k_nonbonded_exclusions(
 
         RealType lj_prefactor = lj_scale*24*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*2 - 1);
 
-        gi_x -= (es_prefactor-lj_prefactor)*delta_x;
-        gi_y -= (es_prefactor-lj_prefactor)*delta_y;
-        gi_z -= (es_prefactor-lj_prefactor)*delta_z;
+        gi_x -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_x);
+        gi_y -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_y);
+        gi_z -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_z);
 
-        gj_x += (es_prefactor-lj_prefactor)*delta_x;
-        gj_y += (es_prefactor-lj_prefactor)*delta_y;
-        gj_z += (es_prefactor-lj_prefactor)*delta_z;
+        gj_x += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_x);
+        gj_y += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_y);
+        gj_z += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_z);
 
-        du_dl_i -= (es_prefactor-lj_prefactor)*delta_w*lambda_offset_i;
-        du_dl_j += (es_prefactor-lj_prefactor)*delta_w*lambda_offset_j;
+        du_dl_i -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_i);
+        du_dl_j += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_j);
 
-        energy -= charge_scale*qij*inv_dij*ebd + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+        // energy is size extensive so this may not be a good idea
 
-        g_qi -= charge_scale*qj*inv_dij*ebd;
-        g_qj -= charge_scale*qi*inv_dij*ebd;
+        // printf("SUBTRACTING %f\n", charge_scale*qij*inv_dij*ebd + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij);
+
+        energy -= FLOAT_TO_FIXED(charge_scale*qij*inv_dij*ebd + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij);
+
+        g_qi -= FLOAT_TO_FIXED(charge_scale*qj*inv_dij*ebd);
+        g_qj -= FLOAT_TO_FIXED(charge_scale*qi*inv_dij*ebd);
 
         if(eps_i != 0 && eps_j != 0) {
 
             RealType eps_grad = lj_scale*2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
-            g_epsi -= eps_grad*eps_j;
-            g_epsj -= eps_grad*eps_i;
+            g_epsi -= FLOAT_TO_FIXED(eps_grad*eps_j);
+            g_epsj -= FLOAT_TO_FIXED(eps_grad*eps_i);
 
             RealType sig_grad = lj_scale*12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
-            g_sigi -= sig_grad;
-            g_sigj -= sig_grad;
+            g_sigi -= FLOAT_TO_FIXED(sig_grad);
+            g_sigj -= FLOAT_TO_FIXED(sig_grad);
 
         }
 
         // these reduction buffers are really tricky
         if(du_dx) {
-            atomicAdd(du_dx + atom_i_idx*3 + 0, static_cast<unsigned long long>((long long) (gi_x*FIXED_EXPONENT)));
-            atomicAdd(du_dx + atom_i_idx*3 + 1, static_cast<unsigned long long>((long long) (gi_y*FIXED_EXPONENT)));
-            atomicAdd(du_dx + atom_i_idx*3 + 2, static_cast<unsigned long long>((long long) (gi_z*FIXED_EXPONENT)));
+            // printf("exc dx %f\n", gi_x);
+            atomicAdd(du_dx + atom_i_idx*3 + 0, gi_x);
+            atomicAdd(du_dx + atom_i_idx*3 + 1, gi_y);
+            atomicAdd(du_dx + atom_i_idx*3 + 2, gi_z);
 
-            atomicAdd(du_dx + atom_j_idx*3 + 0, static_cast<unsigned long long>((long long) (gj_x*FIXED_EXPONENT)));
-            atomicAdd(du_dx + atom_j_idx*3 + 1, static_cast<unsigned long long>((long long) (gj_y*FIXED_EXPONENT)));
-            atomicAdd(du_dx + atom_j_idx*3 + 2, static_cast<unsigned long long>((long long) (gj_z*FIXED_EXPONENT)));
+            atomicAdd(du_dx + atom_j_idx*3 + 0, gj_x);
+            atomicAdd(du_dx + atom_j_idx*3 + 1, gj_y);
+            atomicAdd(du_dx + atom_j_idx*3 + 2, gj_z);
         }
 
         if(du_dp) {

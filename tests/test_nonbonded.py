@@ -42,12 +42,13 @@ class TestNonbonded(GradientTest):
 
         benchmark = False
 
+        # for size in [32, 230, 1051]:
         for size in [32, 230, 1051]:
-        # for size in [32]:
 
             if not benchmark:
                 water_coords = self.get_water_coords(D, sort=False)
                 test_system = water_coords[:size]
+                test_system[1] = test_system[0]+1e-5 # very delta epsilon to trigger a singularity
                 padding = 0.2
                 diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
                 box = np.eye(3)
@@ -59,13 +60,8 @@ class TestNonbonded(GradientTest):
 
             for coords in [test_system]:
 
-                sort = True
-                if sort:
-                    perm = hilbert_sort(coords+np.argmin(coords), D)
-                    coords = coords[perm]
-
                 N = coords.shape[0]
-                E = N//5
+                # E = N//5
 
                 lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
@@ -73,7 +69,7 @@ class TestNonbonded(GradientTest):
                 # for precision, rtol in [(np.float32, 1e-4)]:
 
                     for cutoff in [1.0]:
-                        # E = 0 # DEBUG!
+                        E = 1 # DEBUG!
                         charge_params, ref_potential, test_potential = prepare_nb_system(
                             coords,
                             E,
@@ -99,6 +95,7 @@ class TestNonbonded(GradientTest):
                                 rtol=rtol,
                                 benchmark=benchmark
                             )
+
 
 if __name__ == "__main__":
     unittest.main()
