@@ -80,8 +80,7 @@ class TestNonbonded(GradientTest):
 
         cutoff = 1.0
 
-        # for precision, rtol in [(np.float64, 1e-9), (np.float32, 1e-4)]:
-        for precision, rtol in [(np.float64, 1e-9)]:
+        for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
             test_u = potentials.Nonbonded(
                 exclusion_idxs,
@@ -127,7 +126,6 @@ class TestNonbonded(GradientTest):
                 lamb,
                 ref_u,
                 test_u,
-                precision,
                 rtol=rtol,
                 benchmark=False
             )
@@ -161,8 +159,7 @@ class TestNonbonded(GradientTest):
 
                 lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
-                for precision, rtol in [(np.float64, 1e-9), (np.float32, 1e-4)]:
-                # for precision, rtol in [(np.float32, 1e-4)]:
+                for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
                     for cutoff in [1.0]:
                         # E = 0 # DEBUG!
@@ -185,7 +182,6 @@ class TestNonbonded(GradientTest):
                                 lamb,
                                 ref_potential,
                                 test_potential,
-                                precision,
                                 rtol=rtol,
                                 benchmark=benchmark
                             )

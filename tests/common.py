@@ -437,7 +437,6 @@ class GradientTest(unittest.TestCase):
         lamb,
         ref_potential,
         test_potential,
-        precision,
         rtol=None,
         benchmark=False):
 
@@ -462,32 +461,8 @@ class GradientTest(unittest.TestCase):
         ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
 
         np.testing.assert_allclose(ref_u, test_u, rtol)
-        # np.testing.assert_allclose(ref_du_dx, test_du_dx, rtol)
 
-        if precision == np.float64:
-            self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), 1e-8)
-        else:
-            self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), 1e-4)
+        self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
 
-        if ref_du_dl == 0:
-            np.testing.assert_almost_equal(ref_du_dl, test_du_dl, 1e-5)
-        else:
-            np.testing.assert_allclose(ref_du_dl, test_du_dl, rtol)
-
-
-        if precision == np.float64:
-             np.testing.assert_almost_equal(ref_du_dp, test_du_dp, 1e-8)
-            # np.testing.assert_almost_equal(ref_du_dp[:, 0], test_du_dp[:, 0], 1e-8)
-            # np.testing.assert_almost_equal(ref_du_dp[:, 1], test_du_dp[:, 1], 1e-8)
-            # np.testing.assert_almost_equal(ref_du_dp[:, 2], test_du_dp[:, 2], 1e-8)
-        else:
-            np.testing.assert_almost_equal(ref_du_dp, test_du_dp, 1e-5)
-            # np.testing.assert_almost_equal(ref_du_dp[:, 0], test_du_dp[:, 0], 1e-5)
-            # np.testing.assert_almost_equal(ref_du_dp[:, 1], test_du_dp[:, 1], 1e-5)
-            # np.testing.assert_almost_equal(ref_du_dp[:, 2], test_du_dp[:, 2], 1e-5)
-
-
-        # np.testing.assert_allclose(ref_du_dp, test_du_dp, rtol*100)
-        # we don't need more precision than this for derivatives
-        # np.testing.assert_almost_equal(ref_du_dp, test_du_dp, 1e-5)
-
+        np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
+        np.testing.assert_almost_equal(ref_du_dp, test_du_dp, rtol)
