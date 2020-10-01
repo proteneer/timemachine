@@ -24,8 +24,14 @@ private:
     const int N_;
 
     // reduction buffer
-    double *d_du_dl_buffer_;
-    double *d_u_buffer_;
+    unsigned long long *d_sorted_du_dl_buffer_;
+    unsigned long long *d_sorted_u_buffer_;
+
+    unsigned long long *d_du_dl_buffer_;
+    unsigned long long *d_u_buffer_;
+
+    unsigned long long *d_du_dl_reduce_sum_;
+    unsigned long long *d_u_reduce_sum_;
 
     unsigned int *d_perm_; // hilbert curve permutation
 
@@ -33,7 +39,8 @@ private:
     double *d_sorted_x_; //
     double *d_sorted_p_; //
     unsigned long long *d_sorted_du_dx_; //
-    double *d_sorted_du_dp_; //
+    unsigned long long *d_sorted_du_dp_; //
+    unsigned long long *d_du_dp_buffer_; //
 
     unsigned int *d_bin_to_idx_;
     unsigned int *d_sort_keys_in_;

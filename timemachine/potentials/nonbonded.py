@@ -113,6 +113,84 @@ def lennard_jones_v2(
 
     return lj - lj_exc
 
+def nonbonded_v3(
+    conf,
+    params,
+    box,
+    lamb,
+    charge_rescale_mask,
+    lj_rescale_mask,
+    scales,
+    beta,
+    cutoff,
+    lambda_offset_idxs):
+    
+    N = conf.shape[0]
+
+    conf = convert_to_4d(conf, lamb, lambda_offset_idxs)
+
+    # make 4th dimension of box large enough so its roughly aperiodic
+    if box is not None:
+        box_4d = np.eye(4)*1000
+        box_4d = index_update(box_4d, index[:3, :3], box)
+    else:
+        box_4d = None
+
+    box = box_4d
+
+    charges = params[:, 0]
+    sig = params[:, 1]
+    eps = params[:, 2]
+
+    sig_i = np.expand_dims(sig, 0)
+    sig_j = np.expand_dims(sig, 1)
+    sig_ij = (sig_i + sig_j)/2
+    sig_ij_raw = sig_ij
+
+    eps_i = np.expand_dims(eps, 0)
+    eps_j = np.expand_dims(eps, 1)
+
+    eps_ij = np.sqrt(eps_i * eps_j)
+
+    ri = np.expand_dims(conf, 0)
+    rj = np.expand_dims(conf, 1)
+    dij = distance(ri, rj, box)
+
+    N = conf.shape[0]
+    keep_mask = np.ones((N,N)) - np.eye(N)
+    keep_mask = np.where(eps_ij != 0, keep_mask, 0)
+
+    if cutoff is not None:
+        eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
+
+    # (ytz): this avoids a nan in the gradient in both jax and tensorflow
+    sig_ij = np.where(keep_mask, sig_ij, np.zeros_like(sig_ij))
+    eps_ij = np.where(keep_mask, eps_ij, np.zeros_like(eps_ij))
+
+    sig2 = sig_ij/dij
+    sig2 *= sig2
+    sig6 = sig2*sig2*sig2
+
+    eij_lj = 4*eps_ij*(sig6-1.0)*sig6
+    eij_lj = np.where(keep_mask, eij_lj, np.zeros_like(eij_lj))
+
+    qi = np.expand_dims(charges, 0) # (1, N)
+    qj = np.expand_dims(charges, 1) # (N, 1)
+    qij = np.multiply(qi, qj)
+
+    # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
+    keep_mask = 1 - np.eye(conf.shape[0])
+    qij = np.where(keep_mask, qij, np.zeros_like(qij))
+    dij = np.where(keep_mask, dij, np.zeros_like(dij))
+
+    # funny enough lim_{x->0} erfc(x)/x = 0
+    eij_charge = np.where(keep_mask, qij*erfc(beta*dij)/dij, np.zeros_like(dij)) # zero out diagonals
+    if cutoff is not None:
+        eij_charge = np.where(dij > cutoff, np.zeros_like(eij_charge), eij_charge)
+
+    eij_total = (eij_lj*lj_rescale_mask + eij_charge*charge_rescale_mask)
+
+    return np.sum(eij_total/2)
 
 def lennard_jones(conf, lj_params, box, cutoff):
     """
