@@ -74,6 +74,8 @@ class NonbondedCustomOpWrapper(CustomOpWrapper):
         exclusion_set = set()
 
         for src, dst in exclusion_idxs:
+            # (ytz): this is very important to get proper
+            # cancellation in fixed point land
             src, dst = sorted((src, dst))
             exclusion_set.add((src, dst))
 

@@ -12,6 +12,7 @@ import functools
 from common import GradientTest
 from common import prepare_nonbonded_system, prepare_lj_system, prepare_nb_system
 
+from timemachine.potentials import bonded, nonbonded, gbsa
 from timemachine.lib import potentials
 
 from training import water_box
@@ -34,6 +35,103 @@ def hilbert_sort(conf, D):
 
 class TestNonbonded(GradientTest):
 
+    def test_exclusion(self):
+
+        # This test verifies behavior when two particles are arbitrarily
+        # close but are marked as excluded to ensure proper cancellation
+        # of exclusions occur in the fixed point math.
+
+        np.random.seed(2020)
+
+        water_coords = self.get_water_coords(3, sort=False)
+        test_system = water_coords[:128]
+
+        padding = 0.2
+        diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
+        box = np.eye(3)
+        np.fill_diagonal(box, diag)
+
+        N = test_system.shape[0]
+
+        EA = 20
+
+        atom_idxs = np.arange(test_system.shape[0])
+
+        # pick a set of atoms that will be mutually excluded from each other.
+        # we will need to set their exclusions manually
+        exclusion_atoms = np.random.choice(atom_idxs, size=(EA), replace=False)
+        exclusion_idxs = []
+
+        for idx, i in enumerate(exclusion_atoms):
+            for jdx, j in enumerate(exclusion_atoms):
+                if jdx > idx:
+                    exclusion_idxs.append((i,j))
+
+        E = len(exclusion_idxs)
+
+        exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
+        scales = np.ones((E, 2), dtype=np.float64)
+
+        for idx in exclusion_atoms:
+            test_system[idx] = np.zeros(3) + np.random.rand()/1000+2
+
+        beta = 2.0
+
+        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+
+        cutoff = 1.0
+
+        for precision, rtol in [(np.float64, 1e-9), (np.float32, 1e-4)]:
+
+            test_u = potentials.Nonbonded(
+                exclusion_idxs,
+                scales,
+                lambda_offset_idxs,
+                beta,
+                cutoff,
+                precision=precision
+            )
+
+            charge_rescale_mask = np.ones((N, N))
+            for (i,j), exc in zip(exclusion_idxs, scales[:, 0]):
+                charge_rescale_mask[i][j] = 1 - exc
+                charge_rescale_mask[j][i] = 1 - exc
+
+            lj_rescale_mask = np.ones((N, N))
+            for (i,j), exc in zip(exclusion_idxs, scales[:, 1]):
+                lj_rescale_mask[i][j] = 1 - exc
+                lj_rescale_mask[j][i] = 1 - exc
+
+            ref_u = functools.partial(
+                nonbonded.nonbonded_v3,
+                charge_rescale_mask=charge_rescale_mask,
+                lj_rescale_mask=lj_rescale_mask,
+                scales=scales,
+                beta=beta,
+                cutoff=cutoff,
+                lambda_offset_idxs=lambda_offset_idxs
+            )
+
+            lamb = 0.0
+
+            params = np.stack([
+                (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456), # q
+                np.random.rand(N).astype(np.float64)/10.0, # sig
+                np.random.rand(N).astype(np.float64) # eps
+            ], axis=1)
+
+
+            self.compare_forces(
+                test_system,
+                params,
+                box,
+                lamb,
+                ref_u,
+                test_u,
+                precision,
+                rtol=rtol,
+                benchmark=False
+            )
 
     def test_nonbonded(self):
 
@@ -48,7 +146,6 @@ class TestNonbonded(GradientTest):
             if not benchmark:
                 water_coords = self.get_water_coords(D, sort=False)
                 test_system = water_coords[:size]
-                test_system[1] = test_system[0]+1e-5 # very delta epsilon to trigger a singularity
                 padding = 0.2
                 diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
                 box = np.eye(3)
@@ -61,7 +158,7 @@ class TestNonbonded(GradientTest):
             for coords in [test_system]:
 
                 N = coords.shape[0]
-                # E = N//5
+                E = N//5
 
                 lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
@@ -69,7 +166,7 @@ class TestNonbonded(GradientTest):
                 # for precision, rtol in [(np.float32, 1e-4)]:
 
                     for cutoff in [1.0]:
-                        E = 1 # DEBUG!
+                        # E = 0 # DEBUG!
                         charge_params, ref_potential, test_potential = prepare_nb_system(
                             coords,
                             E,

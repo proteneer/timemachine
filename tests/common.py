@@ -131,18 +131,13 @@ def prepare_nb_system(
 
     atom_idxs = np.arange(N)
 
-    if E == 1:
-        exclusion_idxs = np.array([[0, 1]], dtype=np.int32)
-    # exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
-    # exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
+    exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
+    exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
 
-
-        scales = np.array([[1, 1]], dtype=np.int32)
-
-        # scales = np.stack([
-        #     np.random.rand(E),
-        #     np.random.rand(E)
-        # ], axis=1)
+    scales = np.stack([
+            np.random.rand(E),
+            np.random.rand(E)
+    ], axis=1)
 
     beta = 2.0
 

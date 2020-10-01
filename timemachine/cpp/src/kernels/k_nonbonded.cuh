@@ -15,8 +15,6 @@ RealType __device__ __forceinline__ FIXED_TO_FLOAT(unsigned long long v) {
     return static_cast<RealType>(static_cast<long long>(v))/FIXED_EXPONENT;
 }
 
-// #define FIXED_TO_FLOAT(v) static_cast<double>(static_cast<long long>(v))/FIXED_EXPONENT
-
 // generate kv values from coordinates to be radix sorted 
 void __global__ k_coords_to_kv(
     const int N,
@@ -52,7 +50,7 @@ void __global__ k_coords_to_kv(
     unsigned int bin_z = z/binWidth;
 
     keys[atom_idx] = bin_to_idx[bin_x*256*256+bin_y*256+bin_z];
-    // keys[atom_idx] = atom_idx;
+    // keys[atom_idx] = atom_idx; debug use!
     vals[atom_idx] = atom_idx;
 
 }
@@ -155,11 +153,6 @@ void __global__ k_reduce_ull_buffer(
 
     int idx = blockIdx.x*blockDim.x + threadIdx.x;
     RealType elem = idx < N ? FIXED_TO_FLOAT<RealType>(d_buffer[idx]) : 0;
-
-    // if(idx < N) {
-        // printf("reduce ull elem %llu\n", d_buffer[idx]);      
-        // printf("!!! reduce %d float elem %f\n", idx, static_cast<RealType>(static_cast<long long>(d_buffer[idx]))/static_cast<double>(FIXED_EXPONENT));
-    // }
 
     atomicAdd(d_sum, elem);
 
@@ -425,6 +418,12 @@ void __global__ k_nonbonded_exclusions(
     unsigned long long *du_dl_buffer,
     unsigned long long *u_buffer) {
 
+    // (ytz): oddly enough the order of atom_i and atom_j
+    // seem to not matter. I think this is because distance calculations
+    // are bitwise identical both both dij(i, j) and dij(j, i)
+    // but otherwise we need the calculation done for exclusions to perfectly mirror
+    // that of the nonbonded kernel itself. The association order needs to be identical
+
     const int e_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(e_idx >= E) {
         return;
@@ -548,9 +547,6 @@ void __global__ k_nonbonded_exclusions(
         du_dl_j += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_j);
 
         // energy is size extensive so this may not be a good idea
-
-        // printf("SUBTRACTING %f\n", charge_scale*qij*inv_dij*ebd + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij);
-
         energy -= FLOAT_TO_FIXED(charge_scale*qij*inv_dij*ebd + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij);
 
         g_qi -= FLOAT_TO_FIXED(charge_scale*qj*inv_dij*ebd);
@@ -568,9 +564,7 @@ void __global__ k_nonbonded_exclusions(
 
         }
 
-        // these reduction buffers are really tricky
         if(du_dx) {
-            // printf("exc dx %f\n", gi_x);
             atomicAdd(du_dx + atom_i_idx*3 + 0, gi_x);
             atomicAdd(du_dx + atom_i_idx*3 + 1, gi_y);
             atomicAdd(du_dx + atom_i_idx*3 + 2, gi_z);
