@@ -20,8 +20,6 @@ RealType __device__ __forceinline__ FIXED_TO_FLOAT_DU_DP(unsigned long long v) {
     return static_cast<RealType>(static_cast<long long>(v))/EXPONENT;
 }
 
-// forces energies du/dl use the same
-
 template<typename RealType>
 unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED(RealType v) {
     return static_cast<unsigned long long>((long long)(v*FIXED_EXPONENT));
@@ -152,7 +150,6 @@ void __global__ k_add_ull_to_real(
     } else if(stride_idx == 2) {
         real_array[idx*stride+stride_idx] += FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(ull_array[idx*stride+stride_idx]);
     }
-
 
 
 }
