@@ -65,6 +65,7 @@ void __global__ k_coords_to_kv(
     unsigned int bin_z = z/binWidth;
 
     keys[atom_idx] = bin_to_idx[bin_x*256*256+bin_y*256+bin_z];
+    // uncomment below if you want to perserve the atom ordering
     // keys[atom_idx] = atom_idx;
     vals[atom_idx] = atom_idx;
 
@@ -389,22 +390,13 @@ void __global__ k_nonbonded(
     if(du_dp) {
 
         if(atom_i_idx < N) {
-            
-
-
-
-            unsigned long long old = atomicAdd(du_dp + charge_param_idx_i, g_qi);
-
-            // printf("NB ADDR %d OLDI %llu, ADDED %llu\n", charge_param_idx_i, old, g_qi);
-
+            atomicAdd(du_dp + charge_param_idx_i, g_qi);
             atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
             atomicAdd(du_dp + lj_param_idx_eps_i, g_epsi);
         }
 
         if(atom_j_idx < N) {
-            unsigned long long old = atomicAdd(du_dp + charge_param_idx_j, g_qj);
-
-            // printf("NB ADDR %d OLDJ %llu, ADDED %llu\n", charge_param_idx_j, old, g_qj);
+            atomicAdd(du_dp + charge_param_idx_j, g_qj);
             atomicAdd(du_dp + lj_param_idx_sig_j, g_sigj);
             atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
         }
@@ -446,9 +438,10 @@ void __global__ k_nonbonded_exclusions(
 
     // (ytz): oddly enough the order of atom_i and atom_j
     // seem to not matter. I think this is because distance calculations
-    // are bitwise identical both both dij(i, j) and dij(j, i)
-    // but otherwise we need the calculation done for exclusions to perfectly mirror
-    // that of the nonbonded kernel itself. The association order needs to be identical
+    // are bitwise identical in both dij(i, j) and dij(j, i) . However we
+    // do need the calculation done for exclusions to perfectly mirror
+    // that of the nonbonded kernel itself. Remember that floating points
+    // commute but are not associative.
 
     const int e_idx = blockIdx.x*blockDim.x + threadIdx.x;
     if(e_idx >= E) {
@@ -581,15 +574,12 @@ void __global__ k_nonbonded_exclusions(
         if(eps_i != 0 && eps_j != 0) {
 
             RealType eps_grad = lj_scale*2*sig6_inv_d6ij*(sig6_inv_d6ij-1)/eps_ij;
-
-            // printf("REMOVING: %d %d %llu\n", atom_i_idx, atom_j_idx, FLOAT_TO_FIXED(12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1)));
             RealType sig_grad = lj_scale*12*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
             g_sigi -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
             g_sigj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
 
             g_epsi -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_j);
             g_epsj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_i);
-
 
         }
 
@@ -604,13 +594,8 @@ void __global__ k_nonbonded_exclusions(
         }
 
         if(du_dp) {
-            unsigned long long oldi = atomicAdd(du_dp + charge_param_idx_i, g_qi);
-
-            // printf("ADDR %d OLDI %llu, ADDED %llu\n", charge_param_idx_i, oldi, g_qi);
-
-            unsigned long long oldj = atomicAdd(du_dp + charge_param_idx_j, g_qj);
-
-            // printf("ADDR %d OLDJ %llu, ADDED %llu\n", charge_param_idx_j, oldj, g_qi);
+            atomicAdd(du_dp + charge_param_idx_i, g_qi);
+            atomicAdd(du_dp + charge_param_idx_j, g_qj);
 
             atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
             atomicAdd(du_dp + lj_param_idx_eps_i, g_epsi);

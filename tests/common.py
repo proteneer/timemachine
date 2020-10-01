@@ -206,8 +206,8 @@ def prepare_nb_system(
     exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
 
     scales = np.stack([
-            np.random.rand(E),
-            np.random.rand(E)
+        np.random.rand(E),
+        np.random.rand(E)
     ], axis=1)
 
     beta = 2.0

@@ -118,7 +118,6 @@ def nonbonded_v3(
     params,
     box,
     lamb,
-    # exclusion_idxs,
     charge_rescale_mask,
     lj_rescale_mask,
     scales,
@@ -127,8 +126,6 @@ def nonbonded_v3(
     lambda_offset_idxs):
     
     N = conf.shape[0]
-    # build exclusion mask
-
 
     conf = convert_to_4d(conf, lamb, lambda_offset_idxs)
 
