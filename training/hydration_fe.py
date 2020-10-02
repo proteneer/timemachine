@@ -222,12 +222,9 @@ if __name__ == "__main__":
                             if type(handle) in learning_rates:
 
                                 bounds = learning_rates[type(handle)]
-                                # deps_ij/(eps_i*eps_j) is unstable so we skip eps
-                                if isinstance(handle, handlers.LennardJonesHandler):
-                                    grad[:, 1] = 0
-
                                 dL_dp = loss_grad*vjp_fn(grad)[0]
                                 dL_dp = np.clip(dL_dp, -bounds, bounds)
+
                                 handle.params -= dL_dp
 
                     epoch_params = serialize_handlers(ff_handlers)
