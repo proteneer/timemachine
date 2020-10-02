@@ -437,7 +437,7 @@ class GradientTest(unittest.TestCase):
         lamb,
         ref_potential,
         test_potential,
-        rtol=None,
+        rtol,
         benchmark=False):
 
         test_potential = test_potential.unbound_impl()
@@ -463,6 +463,8 @@ class GradientTest(unittest.TestCase):
         np.testing.assert_allclose(ref_u, test_u, rtol)
 
         self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
+
+        print("????", ref_du_dl, test_du_dl)
 
         np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
         np.testing.assert_almost_equal(ref_du_dp, test_du_dp, rtol)

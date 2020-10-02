@@ -126,8 +126,7 @@ class TestNonbonded(GradientTest):
                 lamb,
                 ref_u,
                 test_u,
-                rtol=rtol,
-                benchmark=False
+                rtol
             )
 
     def test_nonbonded(self):
@@ -182,7 +181,7 @@ class TestNonbonded(GradientTest):
                                 lamb,
                                 ref_potential,
                                 test_potential,
-                                rtol=rtol,
+                                rtol,
                                 benchmark=benchmark
                             )
 

@@ -64,6 +64,9 @@ class HarmonicAngle(CustomOpWrapper):
 class PeriodicTorsion(CustomOpWrapper):
     pass
 
+class CentroidRestraint(CustomOpWrapper):
+    pass
+
 
 class NonbondedCustomOpWrapper(CustomOpWrapper):
 
