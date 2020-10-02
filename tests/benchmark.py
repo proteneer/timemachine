@@ -14,6 +14,22 @@ from timemachine.lib import LangevinIntegrator
 
 from fe.pdb_writer import PDBWriter
 
+def recenter(conf, box):
+
+    new_coords = []
+
+    periodicBoxSize = box
+
+    for atom in conf:
+        diff = np.array([0., 0., 0.])
+        diff += periodicBoxSize[2]*np.floor(atom[2]/periodicBoxSize[2][2]);
+        diff += periodicBoxSize[1]*np.floor((atom[1]-diff[1])/periodicBoxSize[1][1]);
+        diff += periodicBoxSize[0]*np.floor((atom[0]-diff[0])/periodicBoxSize[0][0]);
+        new_coords.append(atom - diff)
+
+    return np.array(new_coords)
+
+
 def benchmark_dhfr():
 
     pdb_path = 'tests/data/5dfr_solv_equil.pdb'
@@ -89,7 +105,7 @@ def benchmark_dhfr():
     for step in range(num_steps):
         ctxt.step(lamb)
         if step % 5000 == 0:
-            coords = ctxt.get_x_t()
+            coords = recenter(ctxt.get_x_t(), box)
             writer.write(coords*10)
 
     writer.close()
