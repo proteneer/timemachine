@@ -437,7 +437,7 @@ class GradientTest(unittest.TestCase):
         lamb,
         ref_potential,
         test_potential,
-        rtol=None,
+        rtol,
         benchmark=False):
 
         test_potential = test_potential.unbound_impl()

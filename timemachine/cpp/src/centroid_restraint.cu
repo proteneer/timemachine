@@ -14,16 +14,12 @@ CentroidRestraint<RealType>::CentroidRestraint(
     const std::vector<int> &group_b_idxs,
     const std::vector<double> &masses,
     const double kb,
-    const double b0,
-    const int lambda_flag,
-    const int lambda_offset
+    const double b0
 ) : N_(masses.size()),
     N_A_(group_a_idxs.size()),
     N_B_(group_b_idxs.size()),
     kb_(kb),
-    b0_(b0),
-    lambda_flag_(lambda_flag),
-    lambda_offset_(lambda_offset) {
+    b0_(b0) {
 
     for(int i=0; i < group_a_idxs.size(); i++) {
         if(group_a_idxs[i] >= N_ || group_a_idxs[i] < 0) {
@@ -57,23 +53,24 @@ CentroidRestraint<RealType>::~CentroidRestraint() {
 
 
 template <typename RealType>
-void CentroidRestraint<RealType>::execute_lambda_inference_device(
-    const int N,
-    const double *d_coords_primals,
-    const double lambda_primal,
-    unsigned long long *d_out_coords_primals, // du/dx
-    double *d_out_lambda_primals, // du/dl
-    double *d_out_energy_primal, // U
-    cudaStream_t stream) {
+void CentroidRestraint<RealType>::execute_device(
+        const int N,
+        const int P,
+        const double *d_x,
+        const double *d_p,
+        const double *d_box,
+        const double lambda,
+        unsigned long long *d_du_dx,
+        double *d_du_dp,
+        double *d_du_dl,
+        double *d_u,
+        cudaStream_t stream) {
 
     int tpb = 32;
 
-    k_centroid_restraint_inference<RealType><<<1, tpb, 0, stream>>>(
+    k_centroid_restraint<RealType><<<1, tpb, 0, stream>>>(
         N_,
-        d_coords_primals,
-        lambda_primal,
-        lambda_flag_,
-        lambda_offset_,
+        d_x,
         d_group_a_idxs_,
         d_group_b_idxs_,
         N_A_,
@@ -81,56 +78,14 @@ void CentroidRestraint<RealType>::execute_lambda_inference_device(
         d_masses_,
         kb_,
         b0_,
-        d_out_coords_primals,
-        d_out_lambda_primals,
-        d_out_energy_primal
+        d_du_dx,
+        d_u
     );
     gpuErrchk(cudaPeekAtLastError());
 
     // auto finish = std::chrono::high_resolution_clock::now();
     // std::chrono::duration<double> elapsed = finish - start;
     // std::cout << "CentroidRestraint Elapsed time: " << elapsed.count() << " s\n";
-
-};
-
-template <typename RealType>
-void CentroidRestraint<RealType>::execute_lambda_jvp_device(
-    const int N,
-    const double *d_coords_primals,
-    const double *d_coords_tangents,
-    const double lambda_primal,
-    const double lambda_tangent,
-    double *d_out_coords_primals,
-    double *d_out_coords_tangents,
-    cudaStream_t stream) {
-
-    int tpb = 32;
-
-    k_centroid_restraint_jvp<RealType><<<1, tpb, 0, stream>>>(
-        N_,
-        d_coords_primals,
-        d_coords_tangents,
-        lambda_primal,
-        lambda_tangent,
-        lambda_flag_,
-        lambda_offset_,
-        d_group_a_idxs_,
-        d_group_b_idxs_,
-        N_A_,
-        N_B_,
-        d_masses_,
-        kb_,
-        b0_,
-        d_out_coords_primals,
-        d_out_coords_tangents
-    );
-
-    // // cudaDeviceSynchronize();
-    gpuErrchk(cudaPeekAtLastError());
-
-    // // auto finish = std::chrono::high_resolution_clock::now();
-    // // std::chrono::duration<double> elapsed = finish - start;
-    // // std::cout << "CentroidRestraint Elapsed time: " << elapsed.count() << " s\n";
 
 };
 
