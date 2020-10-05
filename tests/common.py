@@ -464,7 +464,5 @@ class GradientTest(unittest.TestCase):
 
         self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
 
-        print("????", ref_du_dl, test_du_dl)
-
         np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
         np.testing.assert_almost_equal(ref_du_dp, test_du_dp, rtol)
