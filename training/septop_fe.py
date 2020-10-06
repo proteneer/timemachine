@@ -22,7 +22,7 @@ import configparser
 import grpc
 
 from training import dataset
-from training import hydration_model, septop_setup
+from training import septop_model, septop_setup
 from training import simulation
 from training import service_pb2_grpc
 
@@ -129,6 +129,8 @@ if __name__ == "__main__":
     box_width = 3.0
     host_system, host_coords, box, _ = water_box.prep_system(box_width)
 
+    num_host_atoms = host_coords.shape[0]
+
     lambda_schedule = np.array([float(x) for x in general_cfg['lambda_schedule'].split(',')])
 
     num_steps = int(general_cfg['n_steps'])
@@ -162,10 +164,6 @@ if __name__ == "__main__":
                 prefix = "train"
 
             start_time = time.time()
-
-            # out_dir = os.path.join(epoch_dir, "mol_"+mol.GetProp("_Name"))\
-            # if not os.path.exists(out_dir):
-                # os.makedirs(out_dir)
 
             # safety guard
             # try:
@@ -204,8 +202,9 @@ if __name__ == "__main__":
                 intg
             )
 
-            (pred_dG, pred_err), grad_dG, du_dls = hydration_model.simulate(
+            (pred_dG, pred_err), grad_dG, du_dls = septop_model.simulate(
                 sim,
+                num_host_atoms,
                 num_steps,
                 lambda_schedule,
                 stubs

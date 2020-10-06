@@ -44,8 +44,8 @@ class Worker(service_pb2_grpc.WorkerServicer):
             if isinstance(potential, timemachine.lib.potentials.Nonbonded):
                 min_potential = copy.deepcopy(potential)
                 loi = min_potential.get_lambda_offset_idxs()
-                loi[:2661] = 0
-                loi[2661:] = 1
+                loi[:request.num_host_atoms] = 0
+                loi[request.num_host_atoms:] = 1
                 min_bps.append(min_potential.bound_impl())
             else:
                 min_bps.append(potential.bound_impl())
@@ -106,6 +106,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
                 interval = max(1, request.prod_steps//request.n_frames)
                 if step % interval == 0:
                     frames.append(ctxt.get_x_t())
+
 
             ctxt.step(lamb)
 

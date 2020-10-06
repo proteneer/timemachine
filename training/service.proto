@@ -21,6 +21,7 @@ message SimulateRequest {
     int32 observe_du_dp_freq = 6; // 0 signals non-observance
     string precision = 7;
     int32 n_frames = 8;
+    int32 num_host_atoms = 9;
 }
 
 message SimulateReply {
