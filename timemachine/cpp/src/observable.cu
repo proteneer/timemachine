@@ -83,7 +83,7 @@ void AvgPartialUPartialLambda::observe(
         count_ += 1;
     }
 
-    if(step % 500 == 0) {
+    if(step % 5000 == 0) {
         double h_buf;
         gpuErrchk(cudaMemcpy(&h_buf, d_sum_du_dl_, 1*sizeof(h_buf), cudaMemcpyDeviceToHost));            
         std::cout << "STEP 0 DEBUG" <<  step << " " << h_buf/count_ << std::endl;
