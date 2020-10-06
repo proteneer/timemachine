@@ -79,7 +79,13 @@ void AvgPartialUPartialLambda::observe(
                 static_cast<cudaStream_t>(0) // TBD: parallelize me!
             );
         }
+
+        // double h_buf;
+        // gpuErrchk(cudaMemcpy(&h_buf, d_sum_du_dl_, 1*sizeof(h_buf), cudaMemcpyDeviceToHost));
+
         count_ += 1;
+
+        // std::cout << step << " " << h_buf/count_ << std::endl;
     }
 
 }

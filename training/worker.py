@@ -72,7 +72,13 @@ class Worker(service_pb2_grpc.WorkerServicer):
         energies = []
         frames = []
 
+
+
+        simulation.integrator.seed = np.random.randint(0, np.iinfo(np.int32).max)
         intg = simulation.integrator.impl()
+
+        # print(min_ctxt.get_x_t())
+        # print(simulation.integrator.seed)
 
         ctxt = custom_ops.Context(
             min_ctxt.get_x_t(),
@@ -96,6 +102,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
                 du_dps.append(du_dp_obs)
 
         # dynamics
+
         for step in range(request.prod_steps):
             if step % 100 == 0:
                 u = ctxt.get_u_t()
@@ -106,13 +113,15 @@ class Worker(service_pb2_grpc.WorkerServicer):
                 if step % interval == 0:
                     frames.append(ctxt.get_x_t())
 
-
             ctxt.step(lamb)
+
+        # print("final geom", ctxt.get_x_t())
 
         frames = np.array(frames)
 
         if request.observe_du_dl_freq > 0:
             avg_du_dls = du_dl_obs.avg_du_dl()
+            print("LAMB", lamb, "AVG DU_DLS", avg_du_dls)
         else:
             avg_du_dls = None
 

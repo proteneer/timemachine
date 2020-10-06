@@ -1,5 +1,6 @@
 import os
 import pickle
+import time
 
 from io import StringIO
 
@@ -70,12 +71,12 @@ def simulate(
     for lamb_idx, lamb in enumerate(lambda_schedule):
 
         # endpoint lambda
-        if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
-            observe_du_dl_freq = 5000 # this is analytically zero.
-            observe_du_dp_freq = 25
-        else:
-            observe_du_dl_freq = 25 # this is analytically zero.
-            observe_du_dp_freq = 0
+        # if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
+            # observe_du_dl_freq = 5000 # this is analytically zero.
+            # observe_du_dp_freq = 25
+        # else:
+        observe_du_dl_freq = 25 # this is analytically zero.
+        observe_du_dp_freq = 25
 
         request = service_pb2.SimulateRequest(
             simulation=pickle.dumps(simulation),
@@ -92,14 +93,16 @@ def simulate(
         stub = stubs[lamb_idx % len(stubs)]
 
         # launch asynchronously
+        print("enqueing", lamb)
         response_future = stub.Simulate.future(request)
         simulate_futures.append(response_future)
+        time.sleep(1)
 
     du_dls = []
 
     for lamb_idx, (lamb, future) in enumerate(zip(lambda_schedule, simulate_futures)):
         response = future.result()
-        # print("finishing up lambda", lamb)
+
         energies = pickle.loads(response.energies)
 
         # enable this later when we need simulation frames
@@ -116,6 +119,7 @@ def simulate(
             pdb_writer.close()
 
         du_dl = pickle.loads(response.avg_du_dls)
+        print("finishing up lambda", lamb, "du_dl", du_dl)
         du_dls.append(du_dl)
 
         if lamb_idx == 0:
