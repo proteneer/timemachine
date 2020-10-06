@@ -211,7 +211,7 @@ if __name__ == "__main__":
             plt.plot(lambda_schedule, du_dls)
             plt.ylabel("du_dlambda")
             plt.xlabel("lambda")
-            plt.savefig(os.path.join(epoch_dir, "ti_mol_"+mol.GetProp("_Name")))
+            plt.savefig(os.path.join(epoch_dir, "ti_mol_"+mol_a.GetProp("_Name")+"_"+mol_b.GetProp("_Name")))
             plt.clf()
 
             loss = np.abs(pred_dG - label_dG)
