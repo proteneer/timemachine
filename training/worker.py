@@ -35,6 +35,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
         simulation = pickle.loads(request.simulation)
 
         simulation.integrator.seed = 1234
+        simulation.integrator.ccs = np.zeros_like(simulation.integrator.ccs)
 
         bps = []
         pots = []
