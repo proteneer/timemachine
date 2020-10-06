@@ -60,7 +60,7 @@ def simulate(
 
     """
 
-    # n_frames = 0
+    n_frames = 10
 
     simulate_futures = []
 
@@ -82,7 +82,7 @@ def simulate(
             observe_du_dl_freq=observe_du_dl_freq,
             observe_du_dp_freq=observe_du_dp_freq,
             precision="single",
-            n_frames=10,
+            n_frames=n_frames,
             num_host_atoms=num_host_atoms
         )
 
