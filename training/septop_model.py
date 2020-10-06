@@ -7,13 +7,32 @@ from training import bootstrap
 
 import numpy as np
 
+
+
+def recenter(conf, box):
+
+    new_coords = []
+
+    periodicBoxSize = box
+
+    for atom in conf:
+        diff = np.array([0., 0., 0.])
+        diff += periodicBoxSize[2]*np.floor(atom[2]/periodicBoxSize[2][2]);
+        diff += periodicBoxSize[1]*np.floor((atom[1]-diff[1])/periodicBoxSize[1][1]);
+        diff += periodicBoxSize[0]*np.floor((atom[0]-diff[0])/periodicBoxSize[0][0]);
+        new_coords.append(atom - diff)
+
+    return np.array(new_coords)
+
+
 # we want this to work for protein ligand systems as well as solvation free energies
 def simulate(
     simulation,
     num_host_atoms,
     n_steps,
     lambda_schedule,
-    stubs):
+    stubs,
+    combined_pdb):
     """
     Compute the hydration free energy of a simulation system.
 
@@ -41,7 +60,7 @@ def simulate(
 
     """
 
-    n_frames = 0
+    # n_frames = 0
 
     simulate_futures = []
 
@@ -63,7 +82,7 @@ def simulate(
             observe_du_dl_freq=observe_du_dl_freq,
             observe_du_dp_freq=observe_du_dp_freq,
             precision="single",
-            n_frames=n_frames,
+            n_frames=10,
             num_host_atoms=num_host_atoms
         )
 
@@ -81,17 +100,17 @@ def simulate(
         energies = pickle.loads(response.energies)
 
         # enable this later when we need simulation frames
-        # if n_frames > 0:
-        #     frames = pickle.loads(response.frames)
-        #     # combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
+        if n_frames > 0:
+            frames = pickle.loads(response.frames)
+            combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
 
-        #     out_file = os.path.join(epoch_dir, "simulation_"+str(lamb_idx)+".pdb")
-        #     pdb_writer = PDBWriter(combined_pdb_str, out_file)
-        #     pdb_writer.write_header(box)
-        #     for x in frames:
-        #         x = recenter(x, box)
-        #         pdb_writer.write(x*10)
-        #     pdb_writer.close()
+            out_file = "deubg_simulation_"+str(lamb_idx)+".pdb"
+            pdb_writer = PDBWriter(combined_pdb_str, out_file)
+            pdb_writer.write_header(simulation.box)
+            for x in frames:
+                x = recenter(x, simulation.box)
+                pdb_writer.write(x*10)
+            pdb_writer.close()
 
         du_dl = pickle.loads(response.avg_du_dls)
         du_dls.append(du_dl)

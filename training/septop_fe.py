@@ -132,13 +132,14 @@ if __name__ == "__main__":
     ff_handlers = deserialize_handlers(ff_raw)
 
     box_width = 3.0
-    host_system, host_coords, box, _ = water_box.prep_system(box_width)
+    host_system, host_coords, box, pdb_fname = water_box.prep_system(box_width)
 
     num_host_atoms = host_coords.shape[0]
 
     lambda_schedule = np.array([float(x) for x in general_cfg['lambda_schedule'].split(',')])
 
     num_steps = int(general_cfg['n_steps'])
+
 
     for epoch in range(100):
 
@@ -205,18 +206,24 @@ if __name__ == "__main__":
                 intg
             )
 
+            combined_pdb = Chem.CombineMols(Chem.CombineMols(
+                Chem.MolFromPDBFile(pdb_fname, removeHs=False),
+                mol_a
+            ), mol_b)
+
             (pred_dG, pred_err), grad_dG, du_dls = septop_model.simulate(
                 sim,
                 num_host_atoms,
                 num_steps,
                 lambda_schedule,
-                stubs
+                stubs,
+                combined_pdb
             )
 
             plt.plot(lambda_schedule, du_dls)
             plt.ylabel("du_dlambda")
             plt.xlabel("lambda")
-            plt.savefig(os.path.join(epoch_dir, "ti_mol_"+mol_a.GetProp("_Name")+"_"+mol_b.GetProp("_Name")))
+            plt.savefig(os.path.join(epoch_dir, "ti_pair_"+str(idx)+"_"+mol_a.GetProp("_Name")+"_"+mol_b.GetProp("_Name")))
             plt.clf()
 
             loss = np.abs(pred_dG - label_dG)
