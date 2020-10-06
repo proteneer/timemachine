@@ -59,7 +59,6 @@ if __name__ == "__main__":
 
     general_cfg = config['general']
 
-
     # basic gist of workflow:
     # 1. configure learning rates for the optimizer
     # 2. load freesolv dataset from SDF file
@@ -92,11 +91,17 @@ if __name__ == "__main__":
 
     pair_data = []
 
-    for i in data:
+    # for i in data:
         # for j in data:
-        pair_data.append((i, i))
+            # pair_data.append((i, j))
+    pair_data.append((data[0], data[0]))
+    pair_data.append((data[0], data[0]))
+    pair_data.append((data[0], data[0]))
+    pair_data.append((data[0], data[0]))
+    pair_data.append((data[0], data[0]))
+    pair_data.append((data[0], data[0]))
 
-    pair_data = pair_data[:2]
+    # pair_data = pair_data[:2]
 
     full_dataset = dataset.Dataset(pair_data)
     train_frac = float(general_cfg['train_frac'])
