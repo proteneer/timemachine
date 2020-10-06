@@ -188,6 +188,9 @@ if __name__ == "__main__":
                 mol_b
             )
 
+            print("COORDS HOST", coords[:num_host_atoms])
+            print("COORDS LIGANDS", coords[num_host_atoms:])
+
             seed = np.random.randint(0, np.iinfo(np.int32).max)
 
             intg = LangevinIntegrator(
