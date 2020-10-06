@@ -1,5 +1,6 @@
 import argparse
 
+import sys
 import numpy as np
 import time
 import os
@@ -7,7 +8,7 @@ import os
 import logging
 import pickle
 from concurrent import futures
-
+import copy
 import grpc
 
 import service_pb2
@@ -15,7 +16,10 @@ import service_pb2_grpc
 
 from threading import Lock
 
+import timemachine.lib
+
 from timemachine.lib import custom_ops
+from timemachine.lib import potentials
 
 class Worker(service_pb2_grpc.WorkerServicer):
 
@@ -33,26 +37,51 @@ class Worker(service_pb2_grpc.WorkerServicer):
         bps = []
         pots = []
 
+        min_bps = []
+
         for potential in simulation.potentials:
+
+            if isinstance(potential, timemachine.lib.potentials.Nonbonded):
+                min_potential = copy.deepcopy(potential)
+                loi = min_potential.get_lambda_offset_idxs()
+                loi[:2661] = 0
+                loi[2661:] = 1
+                min_bps.append(min_potential.bound_impl())
+            else:
+                min_bps.append(potential.bound_impl())
+
             bps.append(potential.bound_impl()) # get the bound implementation
+
+        intg = simulation.integrator.impl()
+        lamb = request.lamb
+
+        min_ctxt = custom_ops.Context(
+            simulation.x,
+            simulation.v,
+            simulation.box,
+            intg,
+            min_bps
+        )
+
+        # minimization may use a different set of lambda indicies
+        # for step, minimize_lamb in enumerate(np.linspace(1.0, lamb, request.prep_steps)):
+        # should we minimiize to zero or to lambda? for sep top
+        for step, minimize_lamb in enumerate(np.linspace(1.0, 0, request.prep_steps)):
+            min_ctxt.step(minimize_lamb)
+
+        energies = []
+        frames = []
 
         intg = simulation.integrator.impl()
 
         ctxt = custom_ops.Context(
-            simulation.x,
+            # simulation.x,
+            min_ctxt.get_x_t(),
             simulation.v,
             simulation.box,
             intg,
             bps
         )
-
-        lamb = request.lamb
-
-        for step, minimize_lamb in enumerate(np.linspace(1.0, lamb, request.prep_steps)):
-            ctxt.step(minimize_lamb)
-
-        energies = []
-        frames = []
 
         if request.observe_du_dl_freq > 0:
             du_dl_obs = custom_ops.AvgPartialUPartialLambda(bps, request.observe_du_dl_freq)

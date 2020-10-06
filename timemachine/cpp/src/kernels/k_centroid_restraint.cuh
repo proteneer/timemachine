@@ -16,7 +16,7 @@ void __global__ k_centroid_restraint(
     const double *masses, // ignore masses for now
     const double kb,
     const double b0,
-    unsigned long long *grad_coords,
+    unsigned long long *du_dx,
     double *energy) {
 
     // (ytz): ultra shitty inefficient algorithm, optimize later
@@ -58,23 +58,31 @@ void __global__ k_centroid_restraint(
 
     double nrg = kb*(dij-b0)*(dij-b0);
 
-    atomicAdd(energy, nrg);
+    if(energy) {
+        atomicAdd(energy, nrg);        
+    }
+
 
     double du_ddij = 2*kb*(dij-b0);
 
     // grads
-    for(int d=0; d < 3; d++) {
-        double ddij_dxi = (group_a_ctr[d] - group_b_ctr[d])/dij;
+    if(du_dx) {
+        for(int d=0; d < 3; d++) {
 
-        for(int i=0; i < N_A; i++) {
-            double mass_i = masses[group_a_idxs[i]];
-            double dx = du_ddij*ddij_dxi*(mass_i/mass_a_sums[d]);
-            atomicAdd(grad_coords + group_a_idxs[i]*3 + d, static_cast<unsigned long long>((long long) (dx*FIXED_EXPONENT)));
-        }
-        for(int i=0; i < N_B; i++) {
-            double mass_i = masses[group_b_idxs[i]];
-            double dx = -du_ddij*ddij_dxi*(mass_i/mass_b_sums[d]);
-            atomicAdd(grad_coords + group_b_idxs[i]*3 + d, static_cast<unsigned long long>((long long) (dx*FIXED_EXPONENT)));
+            // lim gx/dij as dij -> 0 is 1.
+            double gx = (group_a_ctr[d] - group_b_ctr[d]);
+            double ddij_dxi = (gx == 0 && dij == 0) ? 1 : gx/dij;
+
+            for(int i=0; i < N_A; i++) {
+                double mass_i = masses[group_a_idxs[i]];
+                double dx = du_ddij*ddij_dxi*(mass_i/mass_a_sums[d]);
+                atomicAdd(du_dx + group_a_idxs[i]*3 + d, static_cast<unsigned long long>((long long) (dx*FIXED_EXPONENT)));
+            }
+            for(int i=0; i < N_B; i++) {
+                double mass_i = masses[group_b_idxs[i]];
+                double dx = -du_ddij*ddij_dxi*(mass_i/mass_b_sums[d]);
+                atomicAdd(du_dx + group_b_idxs[i]*3 + d, static_cast<unsigned long long>((long long) (dx*FIXED_EXPONENT)));
+            }
         }
     }
 
