@@ -67,6 +67,10 @@ class Worker(service_pb2_grpc.WorkerServicer):
             min_bps
         )
 
+
+        for p in min_bps:
+            print(p, p.execute(simulation.x, simulation.box, 1.0))
+
         print("starting_geometry", min_ctxt.get_x_t())
 
         # minimization may use a different set of lambda indicies
