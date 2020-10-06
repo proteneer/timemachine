@@ -68,8 +68,12 @@ class Worker(service_pb2_grpc.WorkerServicer):
         )
 
 
-        for p in min_bps:
-            print(p, p.execute(simulation.x, simulation.box, 1.0))
+        for op, p in zip(simulation.potentials, min_bps):
+            if isinstance(op, timemachine.lib.potentials.Nonbonded):
+                print(op.params)
+                force, du_dl, u = p.execute(simulation.x, simulation.box, 1.0)
+                print("host forces", force[:request.num_host_atoms])
+                print("ligand forces", force[request.num_host_atoms:])
 
         print("starting_geometry", min_ctxt.get_x_t())
 
