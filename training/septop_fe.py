@@ -85,16 +85,16 @@ if __name__ == "__main__":
 
     data = []
 
-    for guest_idx, mol in enumerate(suppl):
-        label_dG = -4.184*float(mol.GetProp(general_cfg['dG'])) # in kcal/mol
-        label_err = 4.184*float(mol.GetProp(general_cfg['dG_err'])) # errs are positive!
-        data.append((mol, label_dG, label_err))
+    for guest_idx, tmp_mol in enumerate(suppl):
+        label_dG = -4.184*float(tmp_mol.GetProp(general_cfg['dG'])) # in kcal/tmp_mol
+        label_err = 4.184*float(tmp_mol.GetProp(general_cfg['dG_err'])) # errs are positive!
+        data.append((tmp_mol, label_dG, label_err))
 
     pair_data = []
 
     for i in data:
-        for j in data:
-            pair_data.append((i, j))
+        # for j in data:
+        pair_data.append((i, i))
 
     pair_data = pair_data[:2]
 
@@ -150,8 +150,8 @@ if __name__ == "__main__":
 
         all_data = []
         test_items = [(x, True) for x in test_dataset.data]
-        train_dataset.shuffle()
-        train_items = [(x, False) for x in train_dataset.data]
+        # train_dataset.shuffle()
+        train_items = [(x, True) for x in train_dataset.data]
 
         all_data.extend(test_items)
         all_data.extend(train_items)
@@ -181,8 +181,6 @@ if __name__ == "__main__":
                 mol_a,
                 mol_b
             )
-
-            # assert 0
 
             seed = np.random.randint(0, np.iinfo(np.int32).max)
 
@@ -218,38 +216,38 @@ if __name__ == "__main__":
 
             loss = np.abs(pred_dG - label_dG)
 
-            # (ytz) bootstrap CI on TI is super janky
-            # error CIs are wrong "95% CI [{:.2f}, {:.2f}, {:.2f}]".format(pred_err.lower_bound, pred_err.value, pred_err.upper_bound),
-            print(prefix, "mol", mol.GetProp("_Name"), "loss {:.2f}".format(loss), "pred_dG {:.2f}".format(pred_dG), "label_dG {:.2f}".format(label_dG), "label err {:.2f}".format(label_err), "time {:.2f}".format(time.time() - start_time), "smiles:", Chem.MolToSmiles(mol))
+        #     # (ytz) bootstrap CI on TI is super janky
+        #     # error CIs are wrong "95% CI [{:.2f}, {:.2f}, {:.2f}]".format(pred_err.lower_bound, pred_err.value, pred_err.upper_bound),
+        #     print(prefix, "mol", mol.GetProp("_Name"), "loss {:.2f}".format(loss), "pred_dG {:.2f}".format(pred_dG), "label_dG {:.2f}".format(label_dG), "label err {:.2f}".format(label_err), "time {:.2f}".format(time.time() - start_time), "smiles:", Chem.MolToSmiles(mol))
 
-            # update ff parameters
-            if not inference:
+        #     # update ff parameters
+        #     if not inference:
 
-                loss_grad = np.sign(pred_dG - label_dG)
-                assert len(grad_dG) == len(vjp_fns)
+        #         loss_grad = np.sign(pred_dG - label_dG)
+        #         assert len(grad_dG) == len(vjp_fns)
 
-                for grad, handle_and_vjp_fns in zip(grad_dG, vjp_fns):
-                    for handle, vjp_fn in handle_and_vjp_fns:
-                        if type(handle) in learning_rates:
+        #         for grad, handle_and_vjp_fns in zip(grad_dG, vjp_fns):
+        #             for handle, vjp_fn in handle_and_vjp_fns:
+        #                 if type(handle) in learning_rates:
 
-                            bounds = learning_rates[type(handle)]
-                            dL_dp = loss_grad*vjp_fn(grad)[0]
-                            dL_dp = np.clip(dL_dp, -bounds, bounds)
+        #                     bounds = learning_rates[type(handle)]
+        #                     dL_dp = loss_grad*vjp_fn(grad)[0]
+        #                     dL_dp = np.clip(dL_dp, -bounds, bounds)
 
-                            handle.params -= dL_dp
+        #                     handle.params -= dL_dp
 
-                epoch_params = serialize_handlers(ff_handlers)
+        #         epoch_params = serialize_handlers(ff_handlers)
 
-                # write parameters after each traning molecule
-                with open(os.path.join(epoch_dir, "checkpoint_params_idx_"+str(idx)+"_mol_"+mol.GetProp("_Name")+".py"), 'w') as fh:
-                    fh.write(epoch_params)
+        #         # write parameters after each traning molecule
+        #         with open(os.path.join(epoch_dir, "checkpoint_params_idx_"+str(idx)+"_mol_"+mol.GetProp("_Name")+".py"), 'w') as fh:
+        #             fh.write(epoch_params)
 
-            # except Exception as e:
-            #     import traceback
-            #     print("Exception in mol", mol.GetProp("_Name"), Chem.MolToSmiles(mol), e)
-            #     traceback.print_exc()
+        #     # except Exception as e:
+        #     #     import traceback
+        #     #     print("Exception in mol", mol.GetProp("_Name"), Chem.MolToSmiles(mol), e)
+        #     #     traceback.print_exc()
 
 
-        # epoch_params = serialize_handlers(ff_handlers)
-        # with open(os.path.join(epoch_dir, "end_epoch_params.py"), 'w') as fh:
-        #     fh.write(epoch_params)
+        # # epoch_params = serialize_handlers(ff_handlers)
+        # # with open(os.path.join(epoch_dir, "end_epoch_params.py"), 'w') as fh:
+        # #     fh.write(epoch_params)
