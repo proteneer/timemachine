@@ -76,10 +76,8 @@ def simulate(
     du_dls = []
 
     for lamb_idx, (lamb, future) in enumerate(zip(lambda_schedule, simulate_futures)):
-
-
         response = future.result()
-        print("finishing up lambda", lamb)
+        # print("finishing up lambda", lamb)
         energies = pickle.loads(response.energies)
 
         # enable this later when we need simulation frames

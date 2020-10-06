@@ -188,8 +188,6 @@ def combine_potentials(
 
     num_host_atoms = len(host_masses)
 
-    print(num_host_atoms)
-
     combined_masses = np.concatenate([host_masses, guest_a_masses, guest_b_masses])
 
     # guest_charge_handles = []
@@ -354,9 +352,9 @@ def combine_potentials(
     combined_vjp_fns.append([])
 
 
-    print(len(combined_potentials), len(combined_vjp_fns))
+    # print(len(combined_potentials), len(combined_vjp_fns))
 
-    for idx, p in enumerate(combined_potentials):
-        print(idx, p)
+    # for idx, p in enumerate(combined_potentials):
+        # print(idx, p)
 
     return combined_potentials, combined_masses, combined_vjp_fns

@@ -76,7 +76,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         ctxt = custom_ops.Context(
             min_ctxt.get_x_t(),
-            simulation.v, # maybe use min_ctxt.get_v_t()
+            simulation.v, # maybe use min_ctxt.get_v_t()?
             simulation.box,
             intg,
             bps
