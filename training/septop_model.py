@@ -1,6 +1,8 @@
 import os
 import pickle
 
+from io import StringIO
+
 from training import service_pb2
 from training import bootstrap
 
