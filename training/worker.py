@@ -34,6 +34,8 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
         simulation = pickle.loads(request.simulation)
 
+        simulation.integrator.seed = 1234
+
         bps = []
         pots = []
 
@@ -63,6 +65,8 @@ class Worker(service_pb2_grpc.WorkerServicer):
             min_bps
         )
 
+        print("starting_geometry", min_ctxt.get_x_t())
+
         # minimization may use a different set of lambda indicies
         # for step, minimize_lamb in enumerate(np.linspace(1.0, lamb, request.prep_steps)):
         # should we minimiize to zero or to lambda? for sep top
@@ -72,9 +76,10 @@ class Worker(service_pb2_grpc.WorkerServicer):
         energies = []
         frames = []
 
+        # simulation.integrator.seed = np.random.randint(0, np.iinfo(np.int32).max)
 
+        print("minimized_geometry", min_ctxt.get_x_t())
 
-        simulation.integrator.seed = np.random.randint(0, np.iinfo(np.int32).max)
         intg = simulation.integrator.impl()
 
         # print(min_ctxt.get_x_t())
