@@ -328,8 +328,7 @@ def combine_potentials(
         precision=precision).bind(combined_nb_params))
 
     # add CoM restraints
-    # kb = 100.0
-    kb = 0.0
+    kb = 100.0
     b0 = 0.0 # keep the CoMs as close to zero as possible
 
     NT = len(combined_masses)

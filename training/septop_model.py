@@ -107,7 +107,7 @@ def simulate(
             frames = pickle.loads(response.frames)
             combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
 
-            out_file = "deubg_simulation_"+str(lamb_idx)+".pdb"
+            out_file = "debug_simulation_"+str(lamb_idx)+".pdb"
             pdb_writer = PDBWriter(combined_pdb_str, out_file)
             pdb_writer.write_header(simulation.box)
             for x in frames:
