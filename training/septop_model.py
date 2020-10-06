@@ -5,7 +5,7 @@ from io import StringIO
 
 from training import service_pb2
 from training import bootstrap
-
+from rdkit import Chem
 
 import numpy as np
 
