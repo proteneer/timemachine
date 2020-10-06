@@ -6,6 +6,7 @@ from io import StringIO
 from training import service_pb2
 from training import bootstrap
 from rdkit import Chem
+from fe.pdb_writer import PDBWriter
 
 import numpy as np
 
