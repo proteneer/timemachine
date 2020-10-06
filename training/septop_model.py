@@ -93,7 +93,7 @@ def simulate(
         stub = stubs[lamb_idx % len(stubs)]
 
         # launch asynchronously
-        print("enqueing", lamb)
+        # print("enqueing", lamb)
         response_future = stub.Simulate.future(request)
         simulate_futures.append(response_future)
         time.sleep(1)
