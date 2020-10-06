@@ -80,15 +80,18 @@ void AvgPartialUPartialLambda::observe(
             );
         }
 
-        // double h_buf;
-        // gpuErrchk(cudaMemcpy(&h_buf, d_sum_du_dl_, 1*sizeof(h_buf), cudaMemcpyDeviceToHost));
-
         count_ += 1;
+    }
 
-        // std::cout << step << " " << h_buf/count_ << std::endl;
+    if(step % 500 == 0) {
+        double h_buf;
+        gpuErrchk(cudaMemcpy(&h_buf, d_sum_du_dl_, 1*sizeof(h_buf), cudaMemcpyDeviceToHost));            
+        std::cout << "STEP 0 DEBUG" <<  step << " " << h_buf/count_ << std::endl;
     }
 
 }
+
+
 
 void AvgPartialUPartialLambda::avg_du_dl(double *h_buf) {
     gpuErrchk(cudaMemcpy(h_buf, d_sum_du_dl_, 1*sizeof(*h_buf), cudaMemcpyDeviceToHost));
