@@ -233,7 +233,7 @@ if __name__ == "__main__":
 
             loss = np.abs(pred_dG - label_dG)
 
-            print("pred_dG", pred_dG, mol_a.GetProp("_Name"), mol_a.GetProp("_Name"))
+            print("pred_dG", pred_dG, mol_a.GetProp("_Name"), mol_b.GetProp("_Name"), label_a_dG-label_b_dG)
 
         #     # (ytz) bootstrap CI on TI is super janky
         #     # error CIs are wrong "95% CI [{:.2f}, {:.2f}, {:.2f}]".format(pred_err.lower_bound, pred_err.value, pred_err.upper_bound),
