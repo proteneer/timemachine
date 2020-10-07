@@ -22,8 +22,7 @@ from timemachine.lib import custom_ops
 #             self.params
 #         )
 
-
-
+BoundPotential = custom_ops.BoundPotential
 
 class CustomOpWrapper():
 
@@ -54,6 +53,31 @@ class CustomOpWrapper():
 
         return custom_ops.BoundPotential(self.unbound_impl(), self.params)
 
+class LambdaPotential():
+
+    def __init__(self, u_fn, N, P):
+        self.u_fn = u_fn
+        self.N = N
+        self.P = P
+        self.params = None
+
+    def bind(self, params):
+        self.params = params
+        return self
+
+    def unbound_impl(self):
+
+        return custom_ops.LambdaPotential(
+            self.u_fn.unbound_impl(),
+            self.N,
+            self.P
+        )
+
+    def bound_impl(self):
+        if self.params is None:
+            raise ValueError("This op has not been bound to parameters.")
+
+        return custom_ops.BoundPotential(self.unbound_impl(), self.params)
 
 class HarmonicBond(CustomOpWrapper):
     pass

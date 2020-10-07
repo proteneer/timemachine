@@ -405,7 +405,6 @@ class GradientTest(unittest.TestCase):
 
         return x
 
-
     def assert_equal_vectors(self, truth, test, rtol):
         """
         OpenMM convention - errors are compared against norm of force vectors

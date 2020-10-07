@@ -61,6 +61,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/electrostatics.cu
   # src/stepper.cu
   src/context.cu
+  src/lambda_potential.cu
   # src/gbsa.cu
   src/centroid_restraint.cu
   src/kernels/k_neighborlist.cu

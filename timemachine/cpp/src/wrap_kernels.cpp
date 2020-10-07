@@ -8,6 +8,7 @@
 #include "bound_potential.hpp"
 #include "harmonic_bond.hpp"
 #include "harmonic_angle.hpp"
+#include "lambda_potential.hpp"
 // #include "restraint.hpp"
 #include "centroid_restraint.hpp"
 #include "periodic_torsion.hpp"
@@ -629,6 +630,31 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 
 }
 
+void declare_lambda_potential(py::module &m) {
+
+    using Class = timemachine::LambdaPotential;
+    std::string pyclass_name = std::string("LambdaPotential");
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        std::shared_ptr<timemachine::Potential> potential,
+        int N,
+        int P) {
+
+        return new timemachine::LambdaPotential(
+            potential,
+            N,
+            P
+        );
+
+    }
+    ));
+
+}
 
 template <typename RealType>
 void declare_nonbonded(py::module &m, const char *typestr) {
@@ -844,6 +870,7 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_potential(m);
     declare_bound_potential(m);
+    declare_lambda_potential(m);
 
     declare_neighborlist<double>(m, "f64");
     declare_neighborlist<float>(m, "f32");
