@@ -13,6 +13,9 @@ def lambda_potential(conf, params, box, lamb, u_fn):
     """
     This would be more useful if we could also do (1-lamb)
     """
+
+    # lamb appears twice as the potential itself may be a function
+    # of lambda (eg. if we use softcores)
     return lamb * u_fn(conf, params, box, lamb)
 
 

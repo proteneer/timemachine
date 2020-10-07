@@ -56,6 +56,23 @@ class CustomOpWrapper():
 class LambdaPotential():
 
     def __init__(self, u_fn, N, P):
+        """
+        Implements a scaled lambda potential where u_fn is transformed according to:
+
+        lambda*u_fn(lambda)
+
+        Parameters
+        ----------
+        u_fn: potential energy function/class
+            one of the potentials in this file.
+
+        N: int
+            number of atoms in the system
+
+        P: int
+            number of parameters used by u_fn
+
+        """
         self.u_fn = u_fn
         self.N = N
         self.P = P
