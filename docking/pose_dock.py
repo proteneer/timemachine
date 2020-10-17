@@ -25,7 +25,7 @@ def pose_dock(
     outdir,
     n_steps,
     lowering_steps,
-    start_percent,
+    start_lambda,
     random_rotation=False,
     constant_atoms=[],
 ):
@@ -37,11 +37,13 @@ def pose_dock(
     guests_sdfile: path to input sdf with guests to pose/dock
     host_pdbfile: path to host pdb file to dock into
     outdir: where to write output (will be created if it does not already exist)
-    n_steps: how many total steps of simulation to do (recommended: 20000)
-    lowering_steps: how many steps to lower the guest over (recommended: 10000)
-    start_percent: how visible the guest should start out (recommended: 0.75)
+    n_steps: how many total steps of simulation to do (recommended: <= 20000)
+    lowering_steps: how many steps to lower the guest over (recommended: <= 10000)
+        (should be <= n_steps)
+    start_lambda: what lambda value the guest should start out at (recommended: 0.25)
     random_rotation: whether to apply a random rotation to each guest before beginning the simulation
     constant_atoms: atom numbers from the host_pdbfile to hold mostly fixed across the simulation
+        (1-indexed, like PDB files)
 
     Output
     ------
@@ -49,8 +51,10 @@ def pose_dock(
     A pdb file every 1000 steps (outdir/<guest_name>_<step>.pdb)
     stdout every 1000 steps noting the step number, lambda value, and energy
     """
-    if not os.path.exists(args.outdir):
-        os.makedirs(args.outdir)
+    assert lowering_steps <= n_steps
+
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
 
     suppl = Chem.SDMolSupplier(guests_sdfile, removeHs=False)
     for guest_mol in suppl:
@@ -77,8 +81,10 @@ def pose_dock(
         )
 
         bps, masses = dock_setup.combine_potentials(
-            guest_ff_handlers, guest_mol, host_system, np.float32, constant_atoms
+            guest_ff_handlers, guest_mol, host_system, np.float32
         )
+        for atom_num in constant_atoms:
+            masses[atom_num - 1] += 50000
 
         host_conf = []
         for x, y, z in host_file.positions:
@@ -114,14 +120,12 @@ def pose_dock(
 
         new_lambda_schedule = np.concatenate(
             [
-                np.linspace(1.0 - args.start_percent, 0.0, lowering_steps),
+                np.linspace(start_lambda, 0.0, lowering_steps),
                 np.zeros(n_steps - lowering_steps),
             ]
         )
 
-        for step, lamb in enumerate(
-            new_lambda_schedule
-        ):
+        for step, lamb in enumerate(new_lambda_schedule):
             ctxt.step(lamb)
             if step % 1000 == 0:
                 print("step", step, "lamb", lamb, "nrg", ctxt.get_u_t())
@@ -143,18 +147,25 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
         description="Poses guests into a host by running short simulations in which the guests phase in over time",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--guests_sdfile", default="tests/data/ligands_40.sdf", help="guests to pose"
     )
     parser.add_argument(
-        "--host_pdbfile", default="tests/data/hif2a_nowater_min.pdb", help="host to dock into"
+        "--host_pdbfile",
+        default="tests/data/hif2a_nowater_min.pdb",
+        help="host to dock into",
     )
     parser.add_argument(
         "--outdir", default="pose_dock_outdir", help="where to write output"
     )
-    parser.add_argument("--nsteps", type=int, default=20000, help="simulation length (1 step = 1.5 femtoseconds")
+    parser.add_argument(
+        "--nsteps",
+        type=int,
+        default=20000,
+        help="simulation length (1 step = 1.5 femtoseconds",
+    )
     parser.add_argument(
         "--lowering_steps",
         type=int,
@@ -162,10 +173,10 @@ if __name__ == "__main__":
         help="how many steps to take while phasing in the guest",
     )
     parser.add_argument(
-        "--start_percent",
+        "--start_lambda",
         type=float,
-        default=0.75,
-        help="percent visibility of the guest to start with",
+        default=0.25,
+        help="lambda value to start the guest at",
     )
     parser.add_argument(
         "--random_rotation",
@@ -192,7 +203,7 @@ if __name__ == "__main__":
         args.outdir,
         args.nsteps,
         args.lowering_steps,
-        args.start_percent,
+        args.start_lambda,
         random_rotation=args.random_rotation,
         constant_atoms=constant_atoms,
     )

@@ -14,9 +14,7 @@ def combine_parameters(guest_q, guest_lj, host_qlj):
     return np.concatenate([host_qlj, guest_qlj])
 
 
-def combine_potentials(
-    guest_ff_handlers, guest_mol, host_system, precision, constant_atoms=[]
-):
+def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
     """
     This function is responsible for figuring out how to take two separate hamiltonians
     and combining them into one sensible alchemical system.
@@ -47,9 +45,6 @@ def combine_potentials(
     host_potentials, host_masses = openmm_deserializer.deserialize_system(
         host_system, precision, cutoff=1.0
     )
-    for atom_num in constant_atoms:
-        host_masses[atom_num - 1] += 50000
-
     host_nb_bp = None
 
     combined_potentials = []
