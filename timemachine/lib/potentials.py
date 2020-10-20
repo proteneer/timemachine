@@ -55,11 +55,11 @@ class CustomOpWrapper():
 
 class LambdaPotential():
 
-    def __init__(self, u_fn, N, P):
+    def __init__(self, u_fn, N, P, sign):
         """
         Implements a scaled lambda potential where u_fn is transformed according to:
 
-        lambda*u_fn(lambda)
+        sign*lambda*u_fn(lambda)
 
         Parameters
         ----------
@@ -72,10 +72,14 @@ class LambdaPotential():
         P: int
             number of parameters used by u_fn
 
+        sign: int
+            which direction we compute the offset
+
         """
         self.u_fn = u_fn
         self.N = N
         self.P = P
+        self.sign = sign
         self.params = None
 
     def bind(self, params):
@@ -87,7 +91,8 @@ class LambdaPotential():
         return custom_ops.LambdaPotential(
             self.u_fn.unbound_impl(),
             self.N,
-            self.P
+            self.P,
+            self.sign
         )
 
     def bound_impl(self):

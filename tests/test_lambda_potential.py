@@ -9,14 +9,14 @@ from timemachine.lib import potentials
 from common import prepare_water_system
 
 
-def lambda_potential(conf, params, box, lamb, u_fn):
+def lambda_potential(conf, params, box, lamb, sign, u_fn):
     """
     This would be more useful if we could also do (1-lamb)
     """
 
     # lamb appears twice as the potential itself may be a function
     # of lambda (eg. if we use softcores)
-    return lamb * u_fn(conf, params, box, lamb)
+    return sign * lamb * u_fn(conf, params, box, lamb)
 
 
 class TestLambdaPotential(GradientTest):
@@ -40,32 +40,36 @@ class TestLambdaPotential(GradientTest):
 
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
-        for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+        for sign in [2, 1, -1, 3]:
 
-                # E = 0 # DEBUG!
-                charge_params, ref_potential, test_potential = prepare_water_system(
-                    coords,
-                    lambda_offset_idxs,
-                    p_scale=1.0,
-                    cutoff=cutoff,
-                    precision=precision
-                )
+            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
-                lamb = 0.2
+                    # E = 0 # DEBUG!
+                    charge_params, ref_potential, test_potential = prepare_water_system(
+                        coords,
+                        lambda_offset_idxs,
+                        p_scale=1.0,
+                        cutoff=cutoff,
+                        precision=precision
+                    )
 
-                print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
+                    lamb = 0.2
 
-                ref_potential = functools.partial(lambda_potential, u_fn=ref_potential)
-                test_potential = potentials.LambdaPotential(
-                    test_potential,
-                    N,charge_params.size)
+                    print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
-                self.compare_forces(
-                    coords,
-                    charge_params,
-                    box,
-                    lamb,
-                    ref_potential,
-                    test_potential,
-                    rtol
-                )
+                    ref_potential = functools.partial(lambda_potential, sign=sign, u_fn=ref_potential)
+                    test_potential = potentials.LambdaPotential(
+                        test_potential,
+                        N,charge_params.size,
+                        sign
+                    )
+
+                    self.compare_forces(
+                        coords,
+                        charge_params,
+                        box,
+                        lamb,
+                        ref_potential,
+                        test_potential,
+                        rtol
+                    )
