@@ -18,12 +18,15 @@ private:
     double *d_du_dl_buffer_;
     double *d_u_buffer_;
 
+    int sign_;
+
 public: 
 
     LambdaPotential(
         std::shared_ptr<Potential> u,
         int N,
-        int P
+        int P,
+        int sign
     );
 
     ~LambdaPotential();

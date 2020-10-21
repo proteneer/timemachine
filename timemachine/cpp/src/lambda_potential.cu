@@ -50,10 +50,11 @@ __global__ void k_reduce_add_du_dl(
     double *du_dl,
     double *u_buf,
     double *du_dl_buf,
+    int sign,
     double lambda) {
 
     if(threadIdx.x == 0) {
-        atomicAdd(du_dl, u_buf[0] + lambda*du_dl_buf[0]);
+        atomicAdd(du_dl, (u_buf[0] + lambda*du_dl_buf[0])*sign);
     }
 
 }
@@ -62,8 +63,8 @@ __global__ void k_reduce_add_du_dl(
 LambdaPotential::LambdaPotential(
     std::shared_ptr<Potential> u,
     int N,
-    int P
-) : u_(u) {
+    int P,
+    int sign) : u_(u), sign_(sign) {
 
     gpuErrchk(cudaMalloc(&d_du_dx_buffer_, N*3*sizeof(*d_du_dx_buffer_)));
     gpuErrchk(cudaMalloc(&d_du_dp_buffer_, P*sizeof(*d_du_dp_buffer_)));
@@ -133,20 +134,20 @@ void LambdaPotential::execute_device(
     if(d_du_dx) {
         int count = N*3;
         int blocks = (count + tpb - 1)/tpb;
-        k_reduce_add_force_buffer<<<blocks, tpb, 0, stream>>>(count, d_du_dx, d_du_dx_buffer_, lambda);
+        k_reduce_add_force_buffer<<<blocks, tpb, 0, stream>>>(count, d_du_dx, d_du_dx_buffer_, sign_*lambda);
     }
 
     if(d_du_dp) {
         int blocks = (P + tpb - 1)/tpb;
-        k_reduce_add_buffer<<<blocks, tpb, 0, stream>>>(P, d_du_dp, d_du_dp_buffer_, lambda);
+        k_reduce_add_buffer<<<blocks, tpb, 0, stream>>>(P, d_du_dp, d_du_dp_buffer_, sign_*lambda);
     }
 
     if(d_du_dl) {
-        k_reduce_add_du_dl<<<1, tpb, 0, stream>>>(d_du_dl, d_u_buffer_, d_du_dl_buffer_, lambda);
+        k_reduce_add_du_dl<<<1, tpb, 0, stream>>>(d_du_dl, d_u_buffer_, d_du_dl_buffer_, sign_, lambda);
     }
 
     if(d_u) {
-        k_reduce_add_buffer<<<1, tpb, 0, stream>>>(1, d_u, d_u_buffer_, lambda);
+        k_reduce_add_buffer<<<1, tpb, 0, stream>>>(1, d_u, d_u_buffer_, sign_*lambda);
     }
 
 }
