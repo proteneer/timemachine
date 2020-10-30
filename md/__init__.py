@@ -1,0 +1,1 @@
+from md.recipe import Recipe
