@@ -59,8 +59,7 @@ class TestLambdaPotential(GradientTest):
                                 lambda_plane_idxs,
                                 lambda_offset_idxs,
                                 p_scale=1.0,
-                                cutoff=cutoff,
-                                precision=precision
+                                cutoff=cutoff
                             )
 
                             print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
@@ -85,5 +84,6 @@ class TestLambdaPotential(GradientTest):
                                 lamb,
                                 ref_potential,
                                 test_potential,
-                                rtol
+                                rtol,
+                                precision=precision
                             )

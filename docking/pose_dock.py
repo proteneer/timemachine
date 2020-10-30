@@ -81,7 +81,7 @@ def pose_dock(
         )
 
         bps, masses = dock_setup.combine_potentials(
-            guest_ff_handlers, guest_mol, host_system, np.float32
+            guest_ff_handlers, guest_mol, host_system
         )
         for atom_num in constant_atoms:
             masses[atom_num - 1] += 50000
@@ -112,8 +112,9 @@ def pose_dock(
         v0 = np.zeros_like(x0)
 
         impls = []
+        precision = np.float32
         for b in bps:
-            p_impl = b.bound_impl()
+            p_impl = b.bound_impl(precision)
             impls.append(p_impl)
 
         ctxt = custom_ops.Context(x0, v0, box, intg, impls)

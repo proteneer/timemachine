@@ -15,7 +15,6 @@ def value(quantity):
 
 def deserialize_system(
     system,
-    precision,
     cutoff):
     """
     Deserialize an OpenMM XML file
@@ -61,7 +60,7 @@ def deserialize_system(
 
             bond_idxs = np.array(bond_idxs, dtype=np.int32)
             bond_params = np.array(bond_params, dtype=np.float64)
-            bps.append(potentials.HarmonicBond(bond_idxs, precision=precision).bind(bond_params))
+            bps.append(potentials.HarmonicBond(bond_idxs).bind(bond_params))
 
         if isinstance(force, mm.HarmonicAngleForce):
 
@@ -80,7 +79,7 @@ def deserialize_system(
             angle_idxs = np.array(angle_idxs, dtype=np.int32)
             angle_params = np.array(angle_params, dtype=np.float64)
 
-            bps.append(potentials.HarmonicAngle(angle_idxs, precision=precision).bind(angle_params))
+            bps.append(potentials.HarmonicAngle(angle_idxs).bind(angle_params))
 
         if isinstance(force, mm.PeriodicTorsionForce):
 
@@ -98,7 +97,7 @@ def deserialize_system(
 
             torsion_idxs = np.array(torsion_idxs, dtype=np.int32)
             torsion_params = np.array(torsion_params, dtype=np.float64)
-            bps.append(potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind(torsion_params))
+            bps.append(potentials.PeriodicTorsion(torsion_idxs).bind(torsion_params))
 
         if isinstance(force, mm.NonbondedForce):
 
@@ -207,8 +206,7 @@ def deserialize_system(
                 lambda_plane_idxs,
                 lambda_offset_idxs,
                 beta,
-                cutoff,
-                precision=precision).bind(nb_params)
+                cutoff).bind(nb_params)
             )
 
             # nrg_fns.append(('Exclusions', (exclusion_idxs, scale_factors, es_scale_factors)))

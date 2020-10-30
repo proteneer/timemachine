@@ -116,8 +116,7 @@ def prepare_water_system(
     lambda_plane_idxs,
     lambda_offset_idxs,
     p_scale,
-    cutoff,
-    precision=np.float64):
+    cutoff):
 
     N = x.shape[0]
     D = x.shape[1]
@@ -158,8 +157,7 @@ def prepare_water_system(
         lambda_plane_idxs,
         lambda_offset_idxs,
         beta,
-        cutoff,
-        precision=precision
+        cutoff
     )
 
     charge_rescale_mask = np.ones((N, N))
@@ -192,8 +190,7 @@ def prepare_nb_system(
     lambda_plane_idxs,
     lambda_offset_idxs,
     p_scale,
-    cutoff,
-    precision=np.float64):
+    cutoff):
 
     N = x.shape[0]
     D = x.shape[1]
@@ -222,8 +219,7 @@ def prepare_nb_system(
         lambda_plane_idxs,
         lambda_offset_idxs,
         beta,
-        cutoff,
-        precision=precision
+        cutoff
     )
 
     charge_rescale_mask = np.ones((N, N))
@@ -443,9 +439,10 @@ class GradientTest(unittest.TestCase):
         ref_potential,
         test_potential,
         rtol,
+        precision,
         benchmark=False):
 
-        test_potential = test_potential.unbound_impl()
+        test_potential = test_potential.unbound_impl(precision)
 
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)

@@ -89,8 +89,7 @@ class TestNonbonded(GradientTest):
                 lambda_plane_idxs,
                 lambda_offset_idxs,
                 beta,
-                cutoff,
-                precision=precision
+                cutoff
             )
 
             charge_rescale_mask = np.ones((N, N))
@@ -129,7 +128,8 @@ class TestNonbonded(GradientTest):
                 lamb,
                 ref_u,
                 test_u,
-                rtol
+                rtol,
+                precision=precision
             )
 
     def test_nonbonded(self):
@@ -171,8 +171,7 @@ class TestNonbonded(GradientTest):
                             lambda_plane_idxs,
                             lambda_offset_idxs,
                             p_scale=1.0,
-                            cutoff=cutoff,
-                            precision=precision
+                            cutoff=cutoff
                         )
 
                         for lamb in [0.0, 0.1, 0.2]:
@@ -187,6 +186,7 @@ class TestNonbonded(GradientTest):
                                 ref_potential,
                                 test_potential,
                                 rtol,
+                                precision=precision,
                                 benchmark=benchmark
                             )
 
