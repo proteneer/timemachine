@@ -189,6 +189,7 @@ def prepare_water_system(
 def prepare_nb_system(
     x,
     E, # number of exclusions
+    lambda_plane_idxs,
     lambda_offset_idxs,
     p_scale,
     cutoff,
@@ -218,6 +219,7 @@ def prepare_nb_system(
     test_potential = potentials.Nonbonded(
         exclusion_idxs,
         scales,
+        lambda_plane_idxs,
         lambda_offset_idxs,
         beta,
         cutoff,
@@ -241,6 +243,7 @@ def prepare_nb_system(
         scales=scales,
         beta=beta,
         cutoff=cutoff,
+        lambda_plane_idxs=lambda_plane_idxs,
         lambda_offset_idxs=lambda_offset_idxs
     )
 

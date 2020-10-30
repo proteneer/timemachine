@@ -36,11 +36,13 @@ class TestContext(unittest.TestCase):
 
         E = 2
 
+        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
         params, ref_nrg_fn, test_nrg = prepare_nb_system(
             x0,
             E,
+            lambda_plane_idxs,
             lambda_offset_idxs,
             p_scale=3.0,
             # cutoff=0.5,
@@ -164,8 +166,8 @@ class TestContext(unittest.TestCase):
         # the fixed point accumulator makes it hard to converge some of these
         # if the derivative is super small - in which case they probably don't matter
         # anyways
-        np.testing.assert_allclose(test_obs.avg_du_dp()[:, 0], ref_avg_du_dps[:, 0], 1e-6)
-        np.testing.assert_allclose(test_obs.avg_du_dp()[:, 1], ref_avg_du_dps[:, 1], 1e-6)
+        np.testing.assert_allclose(test_obs.avg_du_dp()[:, 0], ref_avg_du_dps[:, 0], 1.5e-6)
+        np.testing.assert_allclose(test_obs.avg_du_dp()[:, 1], ref_avg_du_dps[:, 1], 1.5e-6)
         np.testing.assert_allclose(test_obs.avg_du_dp()[:, 2], ref_avg_du_dps[:, 2], 5e-5)
 
 
