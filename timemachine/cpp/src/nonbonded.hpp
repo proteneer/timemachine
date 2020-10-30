@@ -13,6 +13,7 @@ private:
 
     int *d_exclusion_idxs_; // [E,2]
     double *d_scales_; // [E, 2]
+    int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
     int *p_ixn_count_; // pinned memory
 
@@ -35,6 +36,7 @@ private:
 
     unsigned int *d_perm_; // hilbert curve permutation
 
+    int *d_sorted_lambda_plane_idxs_;
     int *d_sorted_lambda_offset_idxs_;
     double *d_sorted_x_; //
     double *d_sorted_p_; //
@@ -60,6 +62,7 @@ public:
     Nonbonded(
         const std::vector<int> &exclusion_idxs, // [E,2]
         const std::vector<double> &scales, // [E, 2]
+        const std::vector<int> &lambda_plane_idxs, // N
         const std::vector<int> &lambda_offset_idxs, // N
         double beta,
         double cutoff

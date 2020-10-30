@@ -131,10 +131,15 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
 
     # allow the ligand to be alchemically decoupled
     # a value of one indicates that we allow the atom to be adjusted by the lambda value
+    guest_lambda_plane_idxs = np.zeros(len(guest_masses), dtype=np.int32)
     guest_lambda_offset_idxs = np.ones(len(guest_masses), dtype=np.int32)
 
     # use same scale factors until we modify 1-4s for electrostatics
     guest_scale_factors = np.stack([guest_scale_factors, guest_scale_factors], axis=1)
+
+    combined_lambda_plane_idxs = np.concatenate(
+        [host_nb_bp.get_lambda_plane_idxs(), guest_lambda_plane_idxs]
+    )
 
     combined_lambda_offset_idxs = np.concatenate(
         [host_nb_bp.get_lambda_offset_idxs(), guest_lambda_offset_idxs]
@@ -164,6 +169,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
         potentials.Nonbonded(
             combined_exclusion_idxs,
             combined_scales,
+            combined_lambda_plane_idxs,
             combined_lambda_offset_idxs,
             combined_beta,
             combined_cutoff,

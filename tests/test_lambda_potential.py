@@ -38,6 +38,7 @@ class TestLambdaPotential(GradientTest):
 
         N = coords.shape[0]
 
+        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
         for sign in [2, 1, -1, 3]:
@@ -47,6 +48,7 @@ class TestLambdaPotential(GradientTest):
                     # E = 0 # DEBUG!
                     charge_params, ref_potential, test_potential = prepare_water_system(
                         coords,
+                        lambda_plane_idxs,
                         lambda_offset_idxs,
                         p_scale=1.0,
                         cutoff=cutoff,

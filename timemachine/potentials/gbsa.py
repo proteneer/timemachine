@@ -3,7 +3,7 @@
 
 import jax.numpy as np
 from jax import grad, jit
-from timemachine.potentials.jax_utils import delta_r, distance, lambda_to_w, convert_to_4d
+from timemachine.potentials.jax_utils import delta_r, distance, convert_to_4d
 
 def step(x):
     # return (x > 0)
