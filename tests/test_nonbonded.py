@@ -76,6 +76,7 @@ class TestNonbonded(GradientTest):
 
         beta = 2.0
 
+        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
         cutoff = 1.0
@@ -85,6 +86,7 @@ class TestNonbonded(GradientTest):
             test_u = potentials.Nonbonded(
                 exclusion_idxs,
                 scales,
+                lambda_plane_idxs,
                 lambda_offset_idxs,
                 beta,
                 cutoff,
@@ -108,6 +110,7 @@ class TestNonbonded(GradientTest):
                 scales=scales,
                 beta=beta,
                 cutoff=cutoff,
+                lambda_plane_idxs=lambda_plane_idxs,
                 lambda_offset_idxs=lambda_offset_idxs
             )
 
@@ -156,6 +159,7 @@ class TestNonbonded(GradientTest):
 
                 N = coords.shape[0]
 
+                lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
                 lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
                 for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
@@ -164,6 +168,7 @@ class TestNonbonded(GradientTest):
                         # E = 0 # DEBUG!
                         charge_params, ref_potential, test_potential = prepare_water_system(
                             coords,
+                            lambda_plane_idxs,
                             lambda_offset_idxs,
                             p_scale=1.0,
                             cutoff=cutoff,

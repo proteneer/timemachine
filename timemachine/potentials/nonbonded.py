@@ -4,7 +4,9 @@ from jax.scipy.special import erf, erfc
 from jax.ops import index_update, index
 
 from timemachine.constants import ONE_4PI_EPS0
-from timemachine.potentials.jax_utils import delta_r, distance, lambda_to_w, convert_to_4d
+from timemachine.potentials.jax_utils import delta_r, distance, convert_to_4d
+
+
 
 
 def switch_fn(dij, cutoff):
@@ -123,11 +125,12 @@ def nonbonded_v3(
     scales,
     beta,
     cutoff,
+    lambda_plane_idxs,
     lambda_offset_idxs):
     
     N = conf.shape[0]
 
-    conf = convert_to_4d(conf, lamb, lambda_offset_idxs)
+    conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
     # make 4th dimension of box large enough so its roughly aperiodic
     if box is not None:

@@ -200,6 +200,7 @@ void __global__ k_nonbonded(
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
     const double lambda,
+    const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
     const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
     const double cutoff,
@@ -224,6 +225,7 @@ void __global__ k_nonbonded(
 
     int atom_i_idx = row_block_idx*32 + threadIdx.x;
     int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
+    int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
 
     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx*3+0] : 0;
     RealType ci_y = atom_i_idx < N ? coords[atom_i_idx*3+1] : 0;
@@ -248,6 +250,7 @@ void __global__ k_nonbonded(
 
     int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
     int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
+    int lambda_plane_j = atom_j_idx < N ? lambda_plane_idxs[atom_j_idx] : 0;
 
     RealType cj_x = atom_j_idx < N ? coords[atom_j_idx*3+0] : 0;
     RealType cj_y = atom_j_idx < N ? coords[atom_j_idx*3+1] : 0;
@@ -288,7 +291,7 @@ void __global__ k_nonbonded(
         delta_y -= box_y*nearbyint(delta_y*inv_box_y);
         delta_z -= box_z*nearbyint(delta_z*inv_box_z);
 
-        RealType delta_w = (lambda_offset_i - lambda_offset_j)*real_lambda;
+        RealType delta_w = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda;
 
         RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
 
@@ -370,6 +373,7 @@ void __global__ k_nonbonded(
         g_sigj = __shfl_sync(0xffffffff, g_sigj, srcLane);
         g_epsj = __shfl_sync(0xffffffff, g_epsj, srcLane);
         lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane); // this also can be optimized away
+        lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
         du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
     }
 
@@ -426,6 +430,7 @@ void __global__ k_nonbonded_exclusions(
     const double *params,
     const double *box,
     const double lambda,
+    const int *lambda_plane_idxs, // 0 or 1, shift
     const int *lambda_offset_idxs, // 0 or 1, if we alolw this atom to be decoupled
     const int *exclusion_idxs, // [E, 2] pair-list of atoms to be excluded
     const double *scales, // [E]
@@ -450,6 +455,7 @@ void __global__ k_nonbonded_exclusions(
 
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
     int lambda_offset_i = lambda_offset_idxs[atom_i_idx];
+    int lambda_plane_i = lambda_plane_idxs[atom_i_idx];
 
     RealType ci_x = coords[atom_i_idx*3+0];
     RealType ci_y = coords[atom_i_idx*3+1];
@@ -473,6 +479,7 @@ void __global__ k_nonbonded_exclusions(
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
     int lambda_offset_j = lambda_offset_idxs[atom_j_idx];
+    int lambda_plane_j = lambda_plane_idxs[atom_j_idx];
 
     RealType cj_x = coords[atom_j_idx*3+0];
     RealType cj_y = coords[atom_j_idx*3+1];
@@ -517,7 +524,7 @@ void __global__ k_nonbonded_exclusions(
     delta_y -= box_y*nearbyint(delta_y*inv_box_y);
     delta_z -= box_z*nearbyint(delta_z*inv_box_z);
 
-    RealType delta_w = (lambda_offset_i - lambda_offset_j)*real_lambda;
+    RealType delta_w = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda;
 
     RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
 

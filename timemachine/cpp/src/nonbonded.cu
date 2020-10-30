@@ -19,6 +19,7 @@ template <typename RealType>
 Nonbonded<RealType>::Nonbonded(
     const std::vector<int> &exclusion_idxs, // [E,2]
     const std::vector<double> &scales, // [E, 2]
+    const std::vector<int> &lambda_plane_idxs, // [N]
     const std::vector<int> &lambda_offset_idxs, // [N]
     double beta,
     double cutoff
@@ -34,9 +35,16 @@ Nonbonded<RealType>::Nonbonded(
         throw std::runtime_error("lambda offset idxs need to have size N");
     }
 
+    if(lambda_offset_idxs.size() != lambda_plane_idxs.size()) {
+        throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
+    }
+
     if(scales.size()/2 != E_) {
         throw std::runtime_error("bad scales size!");
     }
+
+    gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_*sizeof(*d_lambda_plane_idxs_)));
+    gpuErrchk(cudaMemcpy(d_lambda_plane_idxs_, &lambda_plane_idxs[0], N_*sizeof(*d_lambda_plane_idxs_), cudaMemcpyHostToDevice));
 
     gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_, N_*sizeof(*d_lambda_offset_idxs_)));
     gpuErrchk(cudaMemcpy(d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_*sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
@@ -49,6 +57,7 @@ Nonbonded<RealType>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_perm_, N_*sizeof(*d_perm_)));
 
+    gpuErrchk(cudaMalloc(&d_sorted_lambda_plane_idxs_, N_*sizeof(*d_sorted_lambda_plane_idxs_)));
     gpuErrchk(cudaMalloc(&d_sorted_lambda_offset_idxs_, N_*sizeof(*d_sorted_lambda_offset_idxs_)));
     gpuErrchk(cudaMalloc(&d_sorted_x_, N_*3*sizeof(*d_sorted_x_)));
     gpuErrchk(cudaMalloc(&d_sorted_p_, N_*3*sizeof(*d_sorted_p_)));
@@ -112,6 +121,7 @@ Nonbonded<RealType>::~Nonbonded() {
 
     gpuErrchk(cudaFree(d_exclusion_idxs_));
     gpuErrchk(cudaFree(d_scales_));
+    gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
 
     gpuErrchk(cudaFree(d_du_dl_reduce_sum_));
@@ -127,6 +137,7 @@ Nonbonded<RealType>::~Nonbonded() {
     gpuErrchk(cudaFree(d_sorted_p_));
     gpuErrchk(cudaFree(d_sorted_du_dx_));
     gpuErrchk(cudaFree(d_sorted_du_dp_));
+    gpuErrchk(cudaFree(d_sorted_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_sorted_lambda_offset_idxs_));
 
     gpuErrchk(cudaFree(d_sort_keys_in_));
@@ -198,8 +209,6 @@ void Nonbonded<RealType>::execute_device(
     // assert(N == N_);
     // assert(P == N_*3);
 
-
-
     if(N != N_) {
         throw std::runtime_error("N != N_");
     }
@@ -215,7 +224,9 @@ void Nonbonded<RealType>::execute_device(
     k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
     gpuErrchk(cudaPeekAtLastError());
 
+    k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_lambda_plane_idxs_, d_sorted_lambda_plane_idxs_);
     k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_lambda_offset_idxs_, d_sorted_lambda_offset_idxs_);
+
     gpuErrchk(cudaPeekAtLastError());
 
     k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
@@ -259,6 +270,7 @@ void Nonbonded<RealType>::execute_device(
         d_sorted_p_,
         d_box,
         lambda,
+        d_sorted_lambda_plane_idxs_,
         d_sorted_lambda_offset_idxs_,
         beta_,
         cutoff_,
@@ -305,6 +317,7 @@ void Nonbonded<RealType>::execute_device(
             d_p,
             d_box,
             lambda,
+            d_lambda_plane_idxs_,
             d_lambda_offset_idxs_,
             d_exclusion_idxs_,
             d_scales_,

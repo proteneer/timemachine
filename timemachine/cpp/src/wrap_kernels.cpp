@@ -672,6 +672,7 @@ void declare_nonbonded(py::module &m, const char *typestr) {
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
         const py::array_t<double, py::array::c_style> &scales_i,  // [E, 2]
+        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i, //
         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i, //
         double beta,
         double cutoff) {
@@ -682,12 +683,16 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         std::vector<double> scales(scales_i.size());
         std::memcpy(scales.data(), scales_i.data(), scales_i.size()*sizeof(double));
 
+        std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
+        std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
+
         std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
         std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
 
         return new timemachine::Nonbonded<RealType>(
             exclusion_idxs,
             scales,
+            lambda_plane_idxs,
             lambda_offset_idxs,
             beta,
             cutoff

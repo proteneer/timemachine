@@ -182,6 +182,7 @@ def deserialize_system(
 
             exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
 
+            lambda_plane_idxs = np.zeros(N, dtype=np.int32)
             lambda_offset_idxs = np.zeros(N, dtype=np.int32)
 
             # cutoff = 1000.0
@@ -203,6 +204,7 @@ def deserialize_system(
             bps.append(potentials.Nonbonded(
                 exclusion_idxs,
                 scale_factors,
+                lambda_plane_idxs,
                 lambda_offset_idxs,
                 beta,
                 cutoff,
