@@ -51,8 +51,7 @@ class TestBonded(GradientTest):
                 gbi,
                 masses,
                 kb,
-                b0,
-                precision=precision
+                b0
             )
 
             params = np.array([], dtype=np.float64)
@@ -65,7 +64,8 @@ class TestBonded(GradientTest):
                 lamb,
                 ref_nrg,
                 test_nrg,
-                rtol
+                rtol,
+                precision=precision
             )
 
 
@@ -88,11 +88,7 @@ class TestBonded(GradientTest):
         lamb = 0.0
 
         for precision, rtol in [(np.float32, 4e-5), (np.float64, 1e-9)]:
-            test_potential = potentials.HarmonicBond(
-                bond_idxs,
-                precision=precision
-            )
-
+            test_potential = potentials.HarmonicBond(bond_idxs)
             ref_potential = functools.partial(
                 bonded.harmonic_bond,
                 bond_idxs=bond_idxs
@@ -110,7 +106,8 @@ class TestBonded(GradientTest):
                 lamb,
                 ref_potential,
                 test_potential,
-                rtol
+                rtol,
+                precision=precision
             )
 
     def test_harmonic_angle(self):
@@ -133,11 +130,7 @@ class TestBonded(GradientTest):
 
         for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
             # print(precision, rtol)
-            test_potential = potentials.HarmonicAngle(
-                angle_idxs,
-                precision=precision
-            )
-
+            test_potential = potentials.HarmonicAngle(angle_idxs)
             ref_potential = functools.partial(bonded.harmonic_angle, angle_idxs=angle_idxs)
 
 
@@ -153,7 +146,8 @@ class TestBonded(GradientTest):
                 lamb,
                 ref_potential,
                 test_potential,
-                rtol
+                rtol,
+                precision=precision
             )
 
 
@@ -178,10 +172,7 @@ class TestBonded(GradientTest):
 
         for precision, rtol in [(np.float32, 2e-5), (np.float64, 1e-9)]:
 
-            test_potential = potentials.PeriodicTorsion(
-                torsion_idxs,
-                precision=precision
-            )
+            test_potential = potentials.PeriodicTorsion(torsion_idxs)
 
             # test the parameter derivatives for correctness.
             ref_potential = functools.partial(bonded.periodic_torsion, torsion_idxs=torsion_idxs)
@@ -195,5 +186,6 @@ class TestBonded(GradientTest):
                 lamb,
                 ref_potential,
                 test_potential,
-                rtol
+                rtol,
+                precision=precision
             )

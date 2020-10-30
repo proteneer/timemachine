@@ -14,7 +14,7 @@ def combine_parameters(guest_q, guest_lj, host_qlj):
     return np.concatenate([host_qlj, guest_qlj])
 
 
-def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
+def combine_potentials(guest_ff_handlers, guest_mol, host_system):
     """
     This function is responsible for figuring out how to take two separate hamiltonians
     and combining them into one sensible alchemical system.
@@ -31,9 +31,6 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
     host_system: openmm.System
         Host system to be deserialized
 
-    precision: np.float32 or np.float64
-        Numerical precision of the functional form
-
     Returns
     -------
     tuple
@@ -43,7 +40,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
     """
 
     host_potentials, host_masses = openmm_deserializer.deserialize_system(
-        host_system, precision, cutoff=1.0
+        host_system, cutoff=1.0
     )
     host_nb_bp = None
 
@@ -72,7 +69,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
             bond_idxs, (bond_params, vjp_fn) = results
             bond_idxs += num_host_atoms
             combined_potentials.append(
-                potentials.HarmonicBond(bond_idxs, precision=precision).bind(
+                potentials.HarmonicBond(bond_idxs).bind(
                     bond_params
                 )
             )
@@ -81,7 +78,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
             angle_idxs, (angle_params, vjp_fn) = results
             angle_idxs += num_host_atoms
             combined_potentials.append(
-                potentials.HarmonicAngle(angle_idxs, precision=precision).bind(
+                potentials.HarmonicAngle(angle_idxs).bind(
                     angle_params
                 )
             )
@@ -90,7 +87,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
             torsion_idxs, (torsion_params, vjp_fn) = results
             torsion_idxs += num_host_atoms
             combined_potentials.append(
-                potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind(
+                potentials.PeriodicTorsion(torsion_idxs).bind(
                     torsion_params
                 )
             )
@@ -99,7 +96,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
             torsion_idxs, (torsion_params, vjp_fn) = results
             torsion_idxs += num_host_atoms
             combined_potentials.append(
-                potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind(
+                potentials.PeriodicTorsion(torsion_idxs).bind(
                     torsion_params
                 )
             )
@@ -172,8 +169,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system, precision):
             combined_lambda_plane_idxs,
             combined_lambda_offset_idxs,
             combined_beta,
-            combined_cutoff,
-            precision=precision,
+            combined_cutoff
         ).bind(combined_nb_params)
     )
 

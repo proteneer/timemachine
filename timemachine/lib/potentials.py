@@ -26,9 +26,8 @@ BoundPotential = custom_ops.BoundPotential
 
 class CustomOpWrapper():
 
-    def __init__(self, *args, precision):
+    def __init__(self, *args):
         self.args = args
-        self.precision = precision
         self.params = None
 
     def bind(self, params):
@@ -36,9 +35,9 @@ class CustomOpWrapper():
         # return self is to allow chaining
         return self
 
-    def unbound_impl(self):
+    def unbound_impl(self, precision):
         cls_name_base = type(self).__name__
-        if self.precision == np.float64:
+        if precision == np.float64:
             cls_name_base += "_f64"
         else:
             cls_name_base += "_f32"
@@ -47,61 +46,19 @@ class CustomOpWrapper():
 
         return custom_ctor(*self.args)
 
-    def bound_impl(self):
+    def bound_impl(self, precision):
         if self.params is None:
             raise ValueError("This op has not been bound to parameters.")
 
-        return custom_ops.BoundPotential(self.unbound_impl(), self.params)
+        return custom_ops.BoundPotential(self.unbound_impl(precision), self.params)
 
-class LambdaPotential():
+class LambdaPotential(CustomOpWrapper):
 
-    def __init__(self, u_fn, N, P, multiplier, offset):
-        """
-        Implements a scaled lambda potential where u_fn is transformed according to:
-
-        (multiplier*lambda + offset)*u_fn(lambda)
-
-        Parameters
-        ----------
-        u_fn: potential energy function/class
-            one of the potentials in this file.
-
-        N: int
-            number of atoms in the system
-
-        P: int
-            number of parameters used by u_fn
-
-        sign: mul
-            which direction we compute the offset
-
-        """
-        self.u_fn = u_fn
-        self.N = N
-        self.P = P
-        self.multiplier = multiplier
-        self.offset = offset
-        self.params = None
-
-    def bind(self, params):
-        self.params = params
-        return self
-
-    def unbound_impl(self):
-
+    def unbound_impl(self, precision):
         return custom_ops.LambdaPotential(
-            self.u_fn.unbound_impl(),
-            self.N,
-            self.P,
-            self.multiplier,
-            self.offset
+            self.args[0].unbound_impl(precision),
+            *self.args[1:]
         )
-
-    def bound_impl(self):
-        if self.params is None:
-            raise ValueError("This op has not been bound to parameters.")
-
-        return custom_ops.BoundPotential(self.unbound_impl(), self.params)
 
 class HarmonicBond(CustomOpWrapper):
     pass
@@ -118,7 +75,7 @@ class CentroidRestraint(CustomOpWrapper):
 
 class NonbondedCustomOpWrapper(CustomOpWrapper):
 
-    def __init__(self, *args, precision):
+    def __init__(self, *args):
 
         # exclusion_idxs should be unique
         exclusion_idxs = args[0]
@@ -130,7 +87,7 @@ class NonbondedCustomOpWrapper(CustomOpWrapper):
 
         assert len(exclusion_set) == exclusion_idxs.shape[0]
 
-        super(NonbondedCustomOpWrapper, self).__init__(*args, precision=precision)
+        super(NonbondedCustomOpWrapper, self).__init__(*args)
 
     def get_exclusion_idxs(self):
         return self.args[0]
