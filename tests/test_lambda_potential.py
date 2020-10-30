@@ -9,14 +9,21 @@ from timemachine.lib import potentials
 from common import prepare_water_system
 
 
-def lambda_potential(conf, params, box, lamb, sign, u_fn):
+def lambda_potential(conf, params, box, lamb, multiplier, offset, u_fn):
     """
-    This would be more useful if we could also do (1-lamb)
+    Implements:
+
+    (multiplier*lamb + offset)*u_fn(lamb)
+
+    For example, to implement (1-lambda)*U_0(lambda) + lambda*U_1(lambda),
+    The left hand side is (multiplier = 1, offset = 0),
+    The right hand side is (multiplier = -1, offset = 1)
+
     """
 
     # lamb appears twice as the potential itself may be a function
     # of lambda (eg. if we use softcores)
-    return sign * lamb * u_fn(conf, params, box, lamb)
+    return (multiplier*lamb + offset)*u_fn(conf, params, box, lamb)
 
 
 class TestLambdaPotential(GradientTest):
@@ -41,37 +48,42 @@ class TestLambdaPotential(GradientTest):
         lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
-        for sign in [2, 1, -1, 3]:
+        for multiplier in [-2.2, 0.0, 0.3]:
+            for offset in [0.0, 0.2, -2.3]:
+                for lamb in [0.0, 0.2, 1.5]:
+                    for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
-            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+                            # E = 0 # DEBUG!
+                            charge_params, ref_potential, test_potential = prepare_water_system(
+                                coords,
+                                lambda_plane_idxs,
+                                lambda_offset_idxs,
+                                p_scale=1.0,
+                                cutoff=cutoff,
+                                precision=precision
+                            )
 
-                    # E = 0 # DEBUG!
-                    charge_params, ref_potential, test_potential = prepare_water_system(
-                        coords,
-                        lambda_plane_idxs,
-                        lambda_offset_idxs,
-                        p_scale=1.0,
-                        cutoff=cutoff,
-                        precision=precision
-                    )
+                            print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
-                    lamb = 0.2
+                            ref_potential = functools.partial(
+                                lambda_potential,
+                                multiplier=multiplier,
+                                offset=offset,
+                                u_fn=ref_potential)
 
-                    print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
+                            test_potential = potentials.LambdaPotential(
+                                test_potential,
+                                N,charge_params.size,
+                                multiplier,
+                                offset,
+                            )
 
-                    ref_potential = functools.partial(lambda_potential, sign=sign, u_fn=ref_potential)
-                    test_potential = potentials.LambdaPotential(
-                        test_potential,
-                        N,charge_params.size,
-                        sign
-                    )
-
-                    self.compare_forces(
-                        coords,
-                        charge_params,
-                        box,
-                        lamb,
-                        ref_potential,
-                        test_potential,
-                        rtol
-                    )
+                            self.compare_forces(
+                                coords,
+                                charge_params,
+                                box,
+                                lamb,
+                                ref_potential,
+                                test_potential,
+                                rtol
+                            )

@@ -18,7 +18,8 @@ private:
     double *d_du_dl_buffer_;
     double *d_u_buffer_;
 
-    int sign_;
+    double multiplier_;
+    double offset_;
 
 public: 
 
@@ -26,7 +27,8 @@ public:
         std::shared_ptr<Potential> u,
         int N,
         int P,
-        int sign
+        double multiplier,
+        double offset
     );
 
     ~LambdaPotential();
