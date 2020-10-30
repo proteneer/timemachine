@@ -644,13 +644,15 @@ void declare_lambda_potential(py::module &m) {
         std::shared_ptr<timemachine::Potential> potential,
         int N,
         int P,
-        int sign) {
+        double multiplier,
+        double offset) {
 
         return new timemachine::LambdaPotential(
             potential,
             N,
             P,
-            sign
+            multiplier,
+            offset
         );
 
     }
