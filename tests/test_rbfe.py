@@ -4,12 +4,15 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.lib import potentials
+from timemachine.lib import potentials, custom_ops
+from timemachine.lib import LangevinIntegrator
 
+from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
 
 from fe import rbfe
 from md import Recipe
+from md import builders
 
 def test_stage_0():
 
@@ -23,7 +26,7 @@ def test_stage_0():
     r_benzene = Recipe.from_rdkit(benzene, ff_handlers)
     r_phenol = Recipe.from_rdkit(phenol, ff_handlers)
 
-    combined_recipe = r_benzene.combine(r_phenol)
+    r_combined = r_benzene.combine(r_phenol)
 
     core_pairs = np.array([
         [0,1],
@@ -38,13 +41,13 @@ def test_stage_0():
 
     com_k = 10.0
     core_k = 200.0
-    rbfe.stage_0(combined_recipe, b_idxs, core_pairs, com_k, core_k)
+    rbfe.stage_0(r_combined, b_idxs, core_pairs, com_k, core_k)
 
     centroid_count = 0
     core_count = 0
     nb_count = 0
 
-    for bp in combined_recipe.bound_potentials:
+    for bp in r_combined.bound_potentials:
         if isinstance(bp, potentials.LambdaPotential):
             u_fn = bp.get_u_fn()
             if isinstance(u_fn, potentials.CentroidRestraint):
@@ -77,7 +80,6 @@ def test_stage_0():
             np.testing.assert_array_equal(test_offset_idxs, np.zeros_like(test_offset_idxs))
 
         # test C++ side of things
-        print(bp)
         bp.bound_impl(precision=np.float32)
 
     assert nb_count == 1
@@ -96,7 +98,7 @@ def test_stage_1():
     r_benzene = Recipe.from_rdkit(benzene, ff_handlers)
     r_phenol = Recipe.from_rdkit(phenol, ff_handlers)
 
-    combined_recipe = r_benzene.combine(r_phenol)
+    r_combined = r_benzene.combine(r_phenol)
 
     core_pairs = np.array([
         [0,1],
@@ -112,11 +114,11 @@ def test_stage_1():
 
     com_k = 10.0
     core_k = 200.0
-    rbfe.stage_1(combined_recipe, a_idxs, b_idxs, core_pairs, core_k)
+    rbfe.stage_1(r_combined, a_idxs, b_idxs, core_pairs, core_k)
 
     core_count = 0
     nb_count = 0
-    for bp in combined_recipe.bound_potentials:
+    for bp in r_combined.bound_potentials:
         if isinstance(bp, potentials.LambdaPotential):
             assert 0
         elif isinstance(bp, potentials.CentroidRestraint):
@@ -160,3 +162,94 @@ def test_stage_1():
 
     assert nb_count == 1
     assert core_count == 1
+
+def get_romol_conf(mol):
+    conformer = mol.GetConformer(0)
+    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+    guest_conf = guest_conf/10 # from angstroms to nm
+    return np.array(guest_conf, dtype=np.float64)
+
+def test_water_system_stage_0():
+
+    benzene = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1")) # a
+    phenol = Chem.AddHs(Chem.MolFromSmiles("Oc1ccccc1")) # b
+
+    AllChem.EmbedMolecule(benzene)
+    AllChem.EmbedMolecule(phenol)
+
+    ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
+    r_benzene = Recipe.from_rdkit(benzene, ff_handlers)
+    r_phenol = Recipe.from_rdkit(phenol, ff_handlers)
+
+    r_combined = r_benzene.combine(r_phenol)
+
+    core_pairs = np.array([
+        [0,1],
+        [1,2],
+        [2,3],
+        [3,4],
+        [4,5]
+    ], dtype=np.int32)
+    core_pairs[:, 1] += benzene.GetNumAtoms()
+
+    b_idxs = np.arange(phenol.GetNumAtoms()) + benzene.GetNumAtoms()
+
+    com_k = 10.0
+    core_k = 200.0
+    rbfe.stage_0(r_combined, b_idxs, core_pairs, com_k, core_k)
+
+    system, host_coords, box, topology = builders.build_water_system(5.0)
+
+    r_host = Recipe.from_openmm(system)
+    r_final = r_host.combine(r_combined)
+
+    # minimize coordinates of host + ligand A
+    ha_coords = np.concatenate([
+        host_coords,
+        get_romol_conf(benzene)
+    ])
+
+    ha_coords = rbfe.minimize(r_host, r_benzene, ha_coords, box)
+
+    x0 = np.concatenate([
+        ha_coords,
+        get_romol_conf(phenol)
+    ])
+
+    # production run at various values of lambda
+    for lamb in [0.0, 0.15, 1.0]:
+        print("production run with lamb", lamb)
+        u_impls = []
+        for bp in r_final.bound_potentials:
+            u_impls.append(bp.bound_impl(precision=np.float32))
+
+        seed = np.random.randint(np.iinfo(np.int32).max)
+
+        masses = np.concatenate([r_host.masses, r_benzene.masses, r_phenol.masses])
+
+        intg = LangevinIntegrator(
+            300.0,
+            1.5e-3,
+            1.0,
+            masses,
+            seed
+        ).impl()
+
+        v0 = np.zeros_like(x0)
+
+        ctxt = custom_ops.Context(
+            x0,
+            v0,
+            box,
+            intg,
+            u_impls
+        )
+
+        for lamb in range(10000):
+            ctxt.step(lamb)
+
+        print(ctxt.get_x_t())
+
+        assert np.any(np.abs(ctxt.get_x_t()) > 100) == False
+        assert np.any(np.isnan(ctxt.get_x_t())) == False
+        assert np.any(np.isinf(ctxt.get_x_t())) == False

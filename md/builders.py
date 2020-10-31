@@ -8,7 +8,6 @@ def strip_units(coords):
 
 def build_protein_system(host_pdbfile):
 
-    # host_pdbfile = general_cfg['protein_pdb']
     host_ff = app.ForceField('amber99sbildn.xml', 'tip3p.xml')
     host_pdb = app.PDBFile(host_pdbfile)
 

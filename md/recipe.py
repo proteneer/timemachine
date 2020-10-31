@@ -13,7 +13,26 @@ from rdkit import Chem
 class Recipe():
 
     def __init__(self, masses, bound_potentials, vjp_fns):
+        """
+        Recipes detail how to create a simulation system. They are similar to OpenMM's System
+        class. Recipes can be converted from either rdkit ROMols or OpenMM System objects. Note
+        that due to the use of vjp_fns and their closures, recipes are not easily serializable.
+        You should only serialize the masses and bound_potentials.
 
+
+        Parameters
+        ----------
+
+        masses: np.ndarray float64 [N]
+            masses of each particle
+
+        bound_potentials: [lib.potentials]
+            list of potential energies that have been bound to parameteters
+
+        vjp_fns: [pullback fns]
+            vector jacobian product functions into the forcefield handler parameters
+
+        """
         assert len(bound_potentials) == len(vjp_fns)
 
         self.masses = masses
@@ -133,16 +152,23 @@ class Recipe():
 
         return cls(masses, bound_potentials, vjp_fns)
 
-    # def combine(self, other, nb_lambda_offset, nb_lambda_plane, nb_exclude_other):
     def combine(self, other):
         """
         Combine two recipes together. self will keep its original indexing,
-        while other will be incremented.
+        while other will be incremented. This method automatically increments
+        indices in the potential functions accordingly. For nonbonded terms, the recipe
+        does a straight forward concatenation of the lambda idxs.
 
+        Parameters
+        ----------
         other: Recipe
+            the right hand side recipe to combine with
 
-        # nb_exclude_other: boolean
-            # Whether we want the two systems to be excluded.
+    
+        Returns
+        -------
+        Recipe
+            combined recipe
 
         """
         self_num_atoms = len(self.masses)
@@ -152,6 +178,7 @@ class Recipe():
 
         for bp, vps in zip(self.bound_potentials, self.vjp_fns):
             if isinstance(bp, potentials.Nonbonded):
+                # save these parameters for the merge part.
                 self_nb_params = bp.params
                 self_nb_exclusions = bp.get_exclusion_idxs()
                 self_nb_scale_factors = bp.get_scale_factors()
@@ -211,7 +238,7 @@ class Recipe():
 
                 for other_handle, other_vjp_fn in other_vjp_fns:
                     # (ytz): careful, closure rules can really screw with you
-                    # if you define a function inside a loop
+                    # especially if you define a function inside a loop
                     other_chain = functools.partial(chain_latter, vjp_fn=other_vjp_fn)
                     assert other_handle.params.shape == other_chain(dummy)[0].shape
                     total_vjp_fns.append((other_handle, other_chain))

@@ -4,24 +4,6 @@ from timemachine.lib import custom_ops
 # (ytz): classes in this class wrap custom_ops but have the added benefit
 # of being pickleable.
 
-# see test_binding.py for example usage
-
-
-# class BoundPotentialWrapper():
-    
-#     def __init__(self, wrapped_custom_op, params):
-#         self.wrapped_custom_op = wrapped_custom_op
-#         self.params = params
-
-#     def get_op(self):
-#         return self.wrapped_custom_op
-
-#     def impl(self):
-#         return custom_ops.BoundPotential(
-#             self.wrapped_custom_op.impl(),
-#             self.params
-#         )
-
 BoundPotential = custom_ops.BoundPotential
 
 class CustomOpWrapper():
