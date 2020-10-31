@@ -247,8 +247,8 @@ class Recipe():
                 combined_scale_factors = np.concatenate([self_nb_scale_factors, obp.get_scale_factors()])
                 combined_lambda_offset_idxs = np.concatenate([self_nb_lambda_offset_idxs, obp.get_lambda_offset_idxs()])
 
-                print("other lambda_offset_idxs", obp.get_lambda_offset_idxs())
-                print("other lambda_plane_idxs", obp.get_lambda_plane_idxs())
+                # print("other lambda_offset_idxs", obp.get_lambda_offset_idxs())
+                # print("other lambda_plane_idxs", obp.get_lambda_plane_idxs())
                 combined_lambda_plane_idxs = np.concatenate([self_nb_lambda_plane_idxs, obp.get_lambda_plane_idxs()])
 
                 # (ytz): leave this in for now

@@ -111,8 +111,6 @@ def create_core_restraints(core_pairs, core_k):
         assert (j, i) not in bond_idxs
         bond_idxs.append((i, j))
 
-        print("adding core_restraints with parameters", core_k, 0)
-
         bond_params.append((core_k, 0))
 
     bond_idxs = np.array(bond_idxs, dtype=np.int32)
@@ -189,6 +187,7 @@ def stage_1(recipe, a_idxs, b_idxs, core_pairs, core_k):
     core_restraints = create_core_restraints(core_pairs, core_k)
 
     recipe.bound_potentials.append(core_restraints)
+    recipe.vjp_fns.append([])
 
     add_nonbonded_exclusions(recipe, a_idxs, b_idxs)
     set_nonbonded_lambda_idxs(recipe, b_idxs, 0, 1)
