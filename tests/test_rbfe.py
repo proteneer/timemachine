@@ -204,7 +204,6 @@ def test_water_system_stage_0():
 
     system, host_coords, box, topology = builders.build_water_system(5.0)
 
-
     writer = pdb_writer.PDBWriter([topology, benzene, phenol], 'debug.pdb')
 
     r_host = Recipe.from_openmm(system)
@@ -218,12 +217,7 @@ def test_water_system_stage_0():
 
     ha_coords = rbfe.minimize(r_host, r_benzene, ha_coords, box)
 
-    x0 = np.concatenate([
-        ha_coords,
-        get_romol_conf(phenol)
-    ])
-
-    writer.write_frame(x0*10)
+    # writer.write_frame(x0*10)
 
     # production run at various values of lambda
     avg_du_dls = []
@@ -246,6 +240,11 @@ def test_water_system_stage_0():
             seed
         ).impl()
 
+        x0 = np.concatenate([
+            ha_coords,
+            get_romol_conf(phenol)
+        ])
+
         v0 = np.zeros_like(x0)
 
         ctxt = custom_ops.Context(
@@ -257,27 +256,26 @@ def test_water_system_stage_0():
         )
 
         # equilibration
-        for step in range(10000):
+        for step in range(15000):
             ctxt.step(lamb)
 
         writer.write_frame(ctxt.get_x_t()*10)
         writer.close()
 
-        du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 25)
+        du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 10)
         ctxt.add_observable(du_dl_obs)
 
         # add observable for <du/dl>
         for step in range(30000):
             ctxt.step(lamb)
 
+        print(du_dl_obs.avg_du_dl())
+
         avg_du_dls.append(du_dl_obs.avg_du_dl())
 
         assert np.any(np.abs(ctxt.get_x_t()) > 100) == False
         assert np.any(np.isnan(ctxt.get_x_t())) == False
         assert np.any(np.isinf(ctxt.get_x_t())) == False
-
-    # should be monotonically decreasing
-    print(avg_du_dls)
 
     assert np.all(np.diff(avg_du_dls) < 0)
     assert avg_du_dls[0] > avg_du_dls[1]
