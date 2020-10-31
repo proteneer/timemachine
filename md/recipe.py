@@ -176,6 +176,9 @@ class Recipe():
         combined_bound_potentials = []
         combined_vjp_fns = []
 
+        assert len(self.bound_potentials) == len(self.vjp_fns)
+        assert len(other.bound_potentials) == len(other.vjp_fns)
+
         for bp, vps in zip(self.bound_potentials, self.vjp_fns):
             if isinstance(bp, potentials.Nonbonded):
                 # save these parameters for the merge part.
@@ -191,26 +194,49 @@ class Recipe():
                 combined_bound_potentials.append(bp)
                 combined_vjp_fns.append(vps)
 
-        for obp, other_vjp_fns in zip(other.bound_potentials, other.vjp_fns):
-            # deepcopy to prevent modifying original copy
-            obp = copy.deepcopy(obp)
-            if isinstance(obp, potentials.HarmonicBond):
+
+        for full_obp, other_vjp_fns in zip(other.bound_potentials, other.vjp_fns):
+            # always deepcopy to prevent modifying original copy
+            full_obp = copy.deepcopy(full_obp)
+
+            # if this is a lambda potential we replace only the .u_fn part
+            if isinstance(full_obp, potentials.LambdaPotential):
+                full_obp.set_N(full_obp.get_N() + self_num_atoms)
+                obp = full_obp.get_u_fn()
+            else:
+                obp = full_obp
+
+            if isinstance(obp, potentials.HarmonicBond) or isinstance(obp, potentials.CoreRestraint):
                 idxs = obp.get_bond_idxs()
                 idxs += self_num_atoms # modify inplace
-                combined_bound_potentials.append(obp)
-                combined_vjp_fns.append(other_vjp_fns)
+                # combined_bound_potentials.append(obp)
+                # combined_vjp_fns.append(other_vjp_fns)
             elif isinstance(obp, potentials.HarmonicAngle):
                 idxs = obp.get_angle_idxs()
                 idxs += self_num_atoms # modify inplace
-                combined_bound_potentials.append(obp)
-                combined_vjp_fns.append(other_vjp_fns)
+                # combined_bound_potentials.append(obp)
+                # combined_vjp_fns.append(other_vjp_fns)
             elif isinstance(obp, potentials.PeriodicTorsion):
                 idxs = obp.get_torsion_idxs()
                 idxs += self_num_atoms # modify inplace
-                combined_bound_potentials.append(obp)
-                combined_vjp_fns.append(other_vjp_fns)
+                # combined_bound_potentials.append(obp)
+                # combined_vjp_fns.append(other_vjp_fns)
             elif isinstance(obp, potentials.CentroidRestraint):
-                assert 0
+                a_idxs = obp.get_a_idxs()
+                a_idxs += self_num_atoms # modify inplace
+                b_idxs = obp.get_b_idxs()
+                b_idxs += self_num_atoms # modify inplace
+                # adjust masses
+                obp.set_masses(np.concatenate([np.zeros(self_num_atoms), obp.get_masses()]))
+                # combined_bound_potentials.append(obp)
+                # combined_vjp_fns.append(other_vjp_fns)
+            elif isinstance(obp, potentials.CoreRestraint):
+                a_idxs = obp.get_bond_idxs()
+                a_idxs += self_num_atoms # modify inplace
+                b_idxs = obp.get_b_idxs()
+                b_idxs += self_num_atoms # modify inplace
+                # combined_bound_potentials.append(obp)
+                # combined_vjp_fns.append(other_vjp_fns)
             elif isinstance(obp, potentials.Nonbonded):
                 assert self_nb_cutoff == obp.get_cutoff()
 
@@ -248,18 +274,42 @@ class Recipe():
                     assert self_handle.params.shape == self_chain(dummy)[0].shape
                     total_vjp_fns.append((self_handle, self_chain))
 
-                combined_bound_potentials.append(potentials.Nonbonded(
+                obp = potentials.Nonbonded(
                     combined_exclusion_idxs,
                     combined_scale_factors,
                     combined_lambda_plane_idxs,
                     combined_lambda_offset_idxs,
                     self_nb_beta,
                     self_nb_cutoff).bind(combined_nb_params)
-                )
-                combined_vjp_fns.append(total_vjp_fns)
+
+                other_vjp_fns = total_vjp_fns
+
+                # combined_bound_potentials.append(potentials.Nonbonded(
+                #     combined_exclusion_idxs,
+                #     combined_scale_factors,
+                #     combined_lambda_plane_idxs,
+                #     combined_lambda_offset_idxs,
+                #     self_nb_beta,
+                #     self_nb_cutoff).bind(combined_nb_params)
+                # )
+                # combined_vjp_fns.append(total_vjp_fns)
             else:
                 raise Exception("Unknown functional form")
 
+
+            if isinstance(full_obp, potentials.LambdaPotential):
+
+                # if isinstance(full_obp.get_u_fn(), potentials.CentroidRestraint):
+                    # print(full_obp.get_u_fn().get_a_idxs())
+                    # print(len(full_obp.get_u_fn().get_masses()))
+
+                    # assert 0
+
+                combined_bound_potentials.append(full_obp)
+                combined_vjp_fns.append(other_vjp_fns)
+            else:
+                combined_bound_potentials.append(obp)
+                combined_vjp_fns.append(other_vjp_fns)
 
         assert len(combined_bound_potentials) == len(combined_vjp_fns)
 

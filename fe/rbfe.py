@@ -147,6 +147,9 @@ def stage_0(recipe, b_idxs, core_pairs, centroid_k, core_k):
     recipe.bound_potentials.append(lhs)
     recipe.bound_potentials.append(rhs)
 
+    recipe.vjp_fns.append([])
+    recipe.vjp_fns.append([])
+
     set_nonbonded_lambda_idxs(recipe, b_idxs, 1, 0)
 
 def stage_1(recipe, a_idxs, b_idxs, core_pairs, core_k):

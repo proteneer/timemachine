@@ -43,6 +43,12 @@ class LambdaPotential(CustomOpWrapper):
     def get_u_fn(self):
         return self.args[0]
 
+    def set_N(self, N):
+        self.args[1] = N
+
+    def get_N(self):
+        return self.args[1]
+
     def get_multiplier(self):
         return self.args[3]
 
@@ -99,6 +105,12 @@ class CentroidRestraint(CustomOpWrapper):
 
     def get_b_idxs(self):
         return self.args[1]
+
+    def get_masses(self):
+        return self.args[2]
+
+    def set_masses(self, masses):
+        self.args[2] = masses
 
 
 class NonbondedCustomOpWrapper(CustomOpWrapper):

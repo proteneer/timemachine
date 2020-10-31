@@ -217,10 +217,12 @@ def test_water_system_stage_0():
     ])
 
     # production run at various values of lambda
-    for lamb in [0.0, 0.15, 1.0]:
+    avg_du_dls = []
+    for lamb in [0.0, 0.5, 1.0]:
         print("production run with lamb", lamb)
         u_impls = []
         for bp in r_final.bound_potentials:
+            # print(bp)
             u_impls.append(bp.bound_impl(precision=np.float32))
 
         seed = np.random.randint(np.iinfo(np.int32).max)
@@ -245,11 +247,23 @@ def test_water_system_stage_0():
             u_impls
         )
 
+        # equilibration
         for lamb in range(10000):
             ctxt.step(lamb)
 
-        print(ctxt.get_x_t())
+        du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 25)
+        ctxt.add_observable(du_dl_obs)
+
+        # add observable for <du/dl>
+        for lamb in range(10000):
+            ctxt.step(lamb)
+
+        avg_du_dls.append(du_dl_obs.avg_du_dl())
 
         assert np.any(np.abs(ctxt.get_x_t()) > 100) == False
         assert np.any(np.isnan(ctxt.get_x_t())) == False
         assert np.any(np.isinf(ctxt.get_x_t())) == False
+
+    # should be monotonically decreasing
+    assert avg_du_dls[0] > avg_du_dls[1]
+    assert avg_du_dls[1] > avg_du_dls[2]
