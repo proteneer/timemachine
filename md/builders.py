@@ -58,4 +58,6 @@ def build_water_system(box_width):
     positions = m.getPositions()
     positions = unit.Quantity(np.array(positions / positions.unit), positions.unit)
 
+    assert m.getTopology().getNumAtoms() == positions.shape[0]
+
     return system, positions, np.eye(3)*box_width, m.getTopology()

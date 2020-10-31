@@ -230,11 +230,11 @@ class Recipe():
                 obp.set_masses(np.concatenate([np.zeros(self_num_atoms), obp.get_masses()]))
                 # combined_bound_potentials.append(obp)
                 # combined_vjp_fns.append(other_vjp_fns)
-            elif isinstance(obp, potentials.CoreRestraint):
-                a_idxs = obp.get_bond_idxs()
-                a_idxs += self_num_atoms # modify inplace
-                b_idxs = obp.get_b_idxs()
-                b_idxs += self_num_atoms # modify inplace
+            # elif isinstance(obp, potentials.CoreRestraint):
+            #     a_idxs = obp.get_bond_idxs()
+            #     a_idxs += self_num_atoms # modify inplace
+            #     b_idxs = obp.get_b_idxs()
+            #     b_idxs += self_num_atoms # modify inplace
                 # combined_bound_potentials.append(obp)
                 # combined_vjp_fns.append(other_vjp_fns)
             elif isinstance(obp, potentials.Nonbonded):
@@ -246,6 +246,9 @@ class Recipe():
                 combined_exclusion_idxs = np.concatenate([self_nb_exclusions, obp.get_exclusion_idxs() + self_num_atoms])
                 combined_scale_factors = np.concatenate([self_nb_scale_factors, obp.get_scale_factors()])
                 combined_lambda_offset_idxs = np.concatenate([self_nb_lambda_offset_idxs, obp.get_lambda_offset_idxs()])
+
+                print("other lambda_offset_idxs", obp.get_lambda_offset_idxs())
+                print("other lambda_plane_idxs", obp.get_lambda_plane_idxs())
                 combined_lambda_plane_idxs = np.concatenate([self_nb_lambda_plane_idxs, obp.get_lambda_plane_idxs()])
 
                 # (ytz): leave this in for now
@@ -299,9 +302,17 @@ class Recipe():
 
             if isinstance(full_obp, potentials.LambdaPotential):
 
-                # if isinstance(full_obp.get_u_fn(), potentials.CentroidRestraint):
-                    # print(full_obp.get_u_fn().get_a_idxs())
-                    # print(len(full_obp.get_u_fn().get_masses()))
+                if isinstance(full_obp.get_u_fn(), potentials.CentroidRestraint):
+                    print("CentroidRestraints A", full_obp.get_u_fn().get_a_idxs())
+                    print("CentroidRestraints B", full_obp.get_u_fn().get_b_idxs())
+                    print(len(full_obp.get_u_fn().get_masses()))
+                elif isinstance(full_obp.get_u_fn(), potentials.CoreRestraint):
+                    print("CoreRestraints", full_obp.get_u_fn().get_bond_idxs())
+
+
+    # print("CoreRestraints", core_restraints.get_bond_idxs())
+    # print("CentroidRestraints A", centroid_restraints.get_a_idxs())
+    # print("CentroidRestraints B", centroid_restraints.get_b_idxs())
 
                     # assert 0
 

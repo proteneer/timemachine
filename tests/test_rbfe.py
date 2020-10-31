@@ -169,6 +169,8 @@ def get_romol_conf(mol):
     guest_conf = guest_conf/10 # from angstroms to nm
     return np.array(guest_conf, dtype=np.float64)
 
+from fe import pdb_writer
+
 def test_water_system_stage_0():
 
     benzene = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1")) # a
@@ -181,7 +183,9 @@ def test_water_system_stage_0():
     r_benzene = Recipe.from_rdkit(benzene, ff_handlers)
     r_phenol = Recipe.from_rdkit(phenol, ff_handlers)
 
+    print("combinining benzene with phenol")
     r_combined = r_benzene.combine(r_phenol)
+
 
     core_pairs = np.array([
         [0,1],
@@ -194,11 +198,14 @@ def test_water_system_stage_0():
 
     b_idxs = np.arange(phenol.GetNumAtoms()) + benzene.GetNumAtoms()
 
-    com_k = 10.0
+    com_k = 100.0
     core_k = 200.0
     rbfe.stage_0(r_combined, b_idxs, core_pairs, com_k, core_k)
 
     system, host_coords, box, topology = builders.build_water_system(5.0)
+
+
+    writer = pdb_writer.PDBWriter([topology, benzene, phenol], 'debug.pdb')
 
     r_host = Recipe.from_openmm(system)
     r_final = r_host.combine(r_combined)
@@ -215,6 +222,8 @@ def test_water_system_stage_0():
         ha_coords,
         get_romol_conf(phenol)
     ])
+
+    writer.write_frame(x0*10)
 
     # production run at various values of lambda
     avg_du_dls = []
@@ -248,14 +257,17 @@ def test_water_system_stage_0():
         )
 
         # equilibration
-        for lamb in range(10000):
+        for step in range(10000):
             ctxt.step(lamb)
+
+        writer.write_frame(ctxt.get_x_t()*10)
+        writer.close()
 
         du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 25)
         ctxt.add_observable(du_dl_obs)
 
         # add observable for <du/dl>
-        for lamb in range(10000):
+        for step in range(30000):
             ctxt.step(lamb)
 
         avg_du_dls.append(du_dl_obs.avg_du_dl())
@@ -265,5 +277,8 @@ def test_water_system_stage_0():
         assert np.any(np.isinf(ctxt.get_x_t())) == False
 
     # should be monotonically decreasing
+    print(avg_du_dls)
+
+    assert np.all(np.diff(avg_du_dls) < 0)
     assert avg_du_dls[0] > avg_du_dls[1]
     assert avg_du_dls[1] > avg_du_dls[2]
