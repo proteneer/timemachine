@@ -212,7 +212,7 @@ def main(args):
                 box,
                 lamb_idx % args.num_gpus))
 
-        avg_du_dls = pool.map(run, run_args)
+        avg_du_dls = pool.map(run, run_args, chunksize=1)
 
         print("epoch", epoch, "dG", np.trapz(avg_du_dls, lambda_schedule))
 
