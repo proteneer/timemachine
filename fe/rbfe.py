@@ -54,9 +54,6 @@ def set_nonbonded_lambda_idxs(recipe, atom_idxs, plane, offset):
             offset_idxs = bp.get_lambda_offset_idxs()
             offset_idxs[atom_idxs] = offset
 
-            # print("INNER LOI", bp.get_lambda_offset_idxs())
-            # print("INNER LPI", bp.get_lambda_plane_idxs())
-
 def create_centroid_restraints(core_pairs, com_k, masses):
     """
     Create a centroid restraint between core atoms
@@ -144,7 +141,6 @@ def stage_0(recipe, b_idxs, core_pairs, centroid_k, core_k):
 
     core_restraints = create_core_restraints(core_pairs, core_k)
     centroid_restraints = create_centroid_restraints(core_pairs, centroid_k, recipe.masses)
-    # assert 0
 
     lhs = potentials.LambdaPotential(core_restraints, N, len(core_restraints.params), 1.0, 0.0) # multplier, offset
     rhs = potentials.LambdaPotential(centroid_restraints, N, len(centroid_restraints.params), -1.0, 1.0)

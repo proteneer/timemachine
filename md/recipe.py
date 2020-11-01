@@ -22,7 +22,6 @@ class Recipe():
 
         Parameters
         ----------
-
         masses: np.ndarray float64 [N]
             masses of each particle
 
@@ -164,7 +163,6 @@ class Recipe():
         other: Recipe
             the right hand side recipe to combine with
 
-    
         Returns
         -------
         Recipe
@@ -209,18 +207,12 @@ class Recipe():
             if isinstance(obp, potentials.HarmonicBond) or isinstance(obp, potentials.CoreRestraint):
                 idxs = obp.get_bond_idxs()
                 idxs += self_num_atoms # modify inplace
-                # combined_bound_potentials.append(obp)
-                # combined_vjp_fns.append(other_vjp_fns)
             elif isinstance(obp, potentials.HarmonicAngle):
                 idxs = obp.get_angle_idxs()
                 idxs += self_num_atoms # modify inplace
-                # combined_bound_potentials.append(obp)
-                # combined_vjp_fns.append(other_vjp_fns)
             elif isinstance(obp, potentials.PeriodicTorsion):
                 idxs = obp.get_torsion_idxs()
                 idxs += self_num_atoms # modify inplace
-                # combined_bound_potentials.append(obp)
-                # combined_vjp_fns.append(other_vjp_fns)
             elif isinstance(obp, potentials.CentroidRestraint):
                 a_idxs = obp.get_a_idxs()
                 a_idxs += self_num_atoms # modify inplace
@@ -228,15 +220,6 @@ class Recipe():
                 b_idxs += self_num_atoms # modify inplace
                 # adjust masses
                 obp.set_masses(np.concatenate([np.zeros(self_num_atoms), obp.get_masses()]))
-                # combined_bound_potentials.append(obp)
-                # combined_vjp_fns.append(other_vjp_fns)
-            # elif isinstance(obp, potentials.CoreRestraint):
-            #     a_idxs = obp.get_bond_idxs()
-            #     a_idxs += self_num_atoms # modify inplace
-            #     b_idxs = obp.get_b_idxs()
-            #     b_idxs += self_num_atoms # modify inplace
-                # combined_bound_potentials.append(obp)
-                # combined_vjp_fns.append(other_vjp_fns)
             elif isinstance(obp, potentials.Nonbonded):
                 assert self_nb_cutoff == obp.get_cutoff()
 
@@ -246,9 +229,6 @@ class Recipe():
                 combined_exclusion_idxs = np.concatenate([self_nb_exclusions, obp.get_exclusion_idxs() + self_num_atoms])
                 combined_scale_factors = np.concatenate([self_nb_scale_factors, obp.get_scale_factors()])
                 combined_lambda_offset_idxs = np.concatenate([self_nb_lambda_offset_idxs, obp.get_lambda_offset_idxs()])
-
-                # print("other lambda_offset_idxs", obp.get_lambda_offset_idxs())
-                # print("other lambda_plane_idxs", obp.get_lambda_plane_idxs())
                 combined_lambda_plane_idxs = np.concatenate([self_nb_lambda_plane_idxs, obp.get_lambda_plane_idxs()])
 
                 # (ytz): leave this in for now
@@ -287,35 +267,10 @@ class Recipe():
 
                 other_vjp_fns = total_vjp_fns
 
-                # combined_bound_potentials.append(potentials.Nonbonded(
-                #     combined_exclusion_idxs,
-                #     combined_scale_factors,
-                #     combined_lambda_plane_idxs,
-                #     combined_lambda_offset_idxs,
-                #     self_nb_beta,
-                #     self_nb_cutoff).bind(combined_nb_params)
-                # )
-                # combined_vjp_fns.append(total_vjp_fns)
             else:
                 raise Exception("Unknown functional form")
 
-
             if isinstance(full_obp, potentials.LambdaPotential):
-
-                if isinstance(full_obp.get_u_fn(), potentials.CentroidRestraint):
-                    print("CentroidRestraints A", full_obp.get_u_fn().get_a_idxs())
-                    print("CentroidRestraints B", full_obp.get_u_fn().get_b_idxs())
-                    print(len(full_obp.get_u_fn().get_masses()))
-                elif isinstance(full_obp.get_u_fn(), potentials.CoreRestraint):
-                    print("CoreRestraints", full_obp.get_u_fn().get_bond_idxs())
-
-
-    # print("CoreRestraints", core_restraints.get_bond_idxs())
-    # print("CentroidRestraints A", centroid_restraints.get_a_idxs())
-    # print("CentroidRestraints B", centroid_restraints.get_b_idxs())
-
-                    # assert 0
-
                 combined_bound_potentials.append(full_obp)
                 combined_vjp_fns.append(other_vjp_fns)
             else:
