@@ -29,7 +29,7 @@ def get_romol_conf(mol):
 def run(args):
 
     lamb, intg, bound_potentials, masses, x0, box, gpu_idx = args
-    print("running on", gpu_idx)
+    # print("running on", gpu_idx)
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
     u_impls = []
     for bp in bound_potentials:
