@@ -40,7 +40,7 @@ def minimize(r_host, r_ligand, x0, box):
     host_atom_idxs = np.arange(len(r_host.masses))
     ligand_atom_idxs = np.arange(len(r_ligand.masses)) + len(r_host.masses)
 
-    set_nonbonded_lambda_idxs(r_combined, ligand_atom_idxs, 0, 1)
+    rbfe.set_nonbonded_lambda_idxs(r_combined, ligand_atom_idxs, 0, 1)
 
     u_impls = []
     for bp in r_combined.bound_potentials:

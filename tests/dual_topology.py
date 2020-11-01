@@ -35,6 +35,8 @@ def run(args):
     for bp in bound_potentials:
         u_impls.append(bp.bound_impl(precision=np.float32))
 
+    # important that we reseed here.
+    seed = np.random.randint(np.iinfo(np.int32).max)
     intg_impl = intg.impl()
 
     v0 = np.zeros_like(x0)
@@ -175,6 +177,9 @@ def main(args):
     ha_coords = pool.map(minimize, [(r_minimize.bound_potentials, r_minimize.masses, ha_coords, box)], chunksize=1)
     # this is a list
     ha_coords = ha_coords[0]
+    pool.close()
+
+    pool = Pool(args.num_gpus)
 
     x0 = np.concatenate([
         ha_coords,
