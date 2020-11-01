@@ -210,6 +210,7 @@ void Nonbonded<RealType>::execute_device(
     // assert(P == N_*3);
 
     if(N != N_) {
+        std::cout << N << " " << N_ << std::endl;
         throw std::runtime_error("N != N_");
     }
 
