@@ -10,9 +10,18 @@ from timemachine.lib import LangevinIntegrator
 from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
 
+
+from fe import pdb_writer # tbd: migrate to md/ folder
 from fe import rbfe
 from md import Recipe
 from md import builders
+
+def get_romol_conf(mol):
+    conformer = mol.GetConformer(0)
+    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+    guest_conf = guest_conf/10 # from angstroms to nm
+    return np.array(guest_conf, dtype=np.float64)
+
 
 def test_stage_0():
 
@@ -163,13 +172,6 @@ def test_stage_1():
     assert nb_count == 1
     assert core_count == 1
 
-def get_romol_conf(mol):
-    conformer = mol.GetConformer(0)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    guest_conf = guest_conf/10 # from angstroms to nm
-    return np.array(guest_conf, dtype=np.float64)
-
-from fe import pdb_writer
 
 def test_water_system_stage_0():
 
