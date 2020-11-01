@@ -171,7 +171,7 @@ def main(args):
     # must not be initialized in the master thread due to lack of
     # fork safety
     r_minimize = minimize_setup(r_host, r_benzene)
-    ha_coords = pool.map(minimize, [(r_minimize.bound_potentials, r_minimize.masses, ha_coords, box)])
+    ha_coords = pool.map(minimize, [(r_minimize.bound_potentials, r_minimize.masses, ha_coords, box)], chunksize=1)
     # this is a list
     ha_coords = ha_coords[0]
 
