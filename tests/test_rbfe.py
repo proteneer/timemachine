@@ -16,6 +16,67 @@ from fe import rbfe
 from md import Recipe
 from md import builders
 
+def minimize(r_host, r_ligand, x0, box):
+    """
+    Minimize a system via 4d insertion.
+
+    Parameters
+    ----------
+    r_host: Recipe
+        host recipe
+
+    r_ligand: Recipe
+        ligand recipe
+
+    x0: np.ndarray float64 [N,3]
+        initial geometry
+
+    box: np.ndarray float64 [3,3]
+        periodic box
+
+    """
+    r_combined = r_host.combine(r_ligand)
+
+    host_atom_idxs = np.arange(len(r_host.masses))
+    ligand_atom_idxs = np.arange(len(r_ligand.masses)) + len(r_host.masses)
+
+    set_nonbonded_lambda_idxs(r_combined, ligand_atom_idxs, 0, 1)
+
+    u_impls = []
+    for bp in r_combined.bound_potentials:
+        u_impls.append(bp.bound_impl(precision=np.float32))
+
+    seed = np.random.randint(np.iinfo(np.int32).max)
+
+    masses = np.concatenate([r_host.masses, r_ligand.masses])
+
+    intg = LangevinIntegrator(
+        300.0,
+        1.5e-3,
+        1.0,
+        masses,
+        seed
+    ).impl()
+
+    v0 = np.zeros_like(x0)
+
+    ctxt = custom_ops.Context(
+        x0,
+        v0,
+        box,
+        intg,
+        u_impls
+    )
+
+    steps = 500
+
+    lambda_schedule = np.linspace(0.35, 0.0, 500)
+    for lamb in lambda_schedule:
+        ctxt.step(lamb)
+
+    return ctxt.get_x_t()
+
+
 def get_romol_conf(mol):
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
@@ -217,7 +278,7 @@ def test_water_system_stage_0():
         get_romol_conf(benzene)
     ])
 
-    ha_coords = rbfe.minimize(r_host, r_benzene, ha_coords, box)
+    ha_coords = minimize(r_host, r_benzene, ha_coords, box)
 
     # writer.write_frame(x0*10)
 
@@ -329,7 +390,7 @@ def test_water_system_stage_1():
         get_romol_conf(benzene)
     ])
 
-    ha_coords = rbfe.minimize(r_host, r_benzene, ha_coords, box)
+    ha_coords = minimize(r_host, r_benzene, ha_coords, box)
 
     # assert 0
     # production run at various values of lambda
