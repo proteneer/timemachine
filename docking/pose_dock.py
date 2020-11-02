@@ -119,6 +119,12 @@ def pose_dock(
 
         ctxt = custom_ops.Context(x0, v0, box, intg, impls)
 
+        # collect a du_dl calculation once every other step
+        subsample_freq = 2
+        du_dl_obs = custom_ops.FullPartialUPartialLambda(impls, subsample_freq)
+
+        ctxt.add_observable(du_dl_obs)
+
         new_lambda_schedule = np.concatenate(
             [
                 np.linspace(start_lambda, 0.0, lowering_steps),
@@ -128,18 +134,20 @@ def pose_dock(
 
         for step, lamb in enumerate(new_lambda_schedule):
             ctxt.step(lamb)
-            if step % 1000 == 0:
+            if step % 100 == 0:
                 print("step", step, "lamb", lamb, "nrg", ctxt.get_u_t())
-                combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
                 pdb_writer = PDBWriter(
-                    combined_pdb_str,
+                    [host_mol, guest_mol],
                     os.path.join(
                         outdir, f"{guest_name}_{str(step).zfill(len(str(n_steps)))}.pdb"
                     ),
                 )
-                pdb_writer.write_header()
-                pdb_writer.write(ctxt.get_x_t() * 10)
+                pdb_writer.write_frame(ctxt.get_x_t() * 10)
                 pdb_writer.close()
+
+        work = np.trapz(du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq])
+
+        print("work", work)
 
 
 if __name__ == "__main__":
@@ -164,19 +172,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--nsteps",
         type=int,
-        default=20000,
+        default=1000,
         help="simulation length (1 step = 1.5 femtoseconds",
     )
     parser.add_argument(
         "--lowering_steps",
         type=int,
-        default=10000,
+        default=500,
         help="how many steps to take while phasing in the guest",
     )
     parser.add_argument(
         "--start_lambda",
         type=float,
-        default=0.25,
+        default=1.1,
         help="lambda value to start the guest at",
     )
     parser.add_argument(
