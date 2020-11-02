@@ -135,8 +135,9 @@ class TestContext(unittest.TestCase):
 
         test_obs_du_dl = custom_ops.AvgPartialUPartialLambda(bps, 1)
         test_obs_f2_du_dl = custom_ops.AvgPartialUPartialLambda(bps, 2)
+        test_obs_f3_du_dl = custom_ops.FullPartialUPartialLambda(bps, 2)
 
-        obs = [test_obs, test_obs_f2, test_obs_du_dl, test_obs_f2_du_dl]
+        obs = [test_obs, test_obs_f2, test_obs_du_dl, test_obs_f2_du_dl, test_obs_f3_du_dl]
 
         for o in obs:
             ctxt.add_observable(o)
@@ -158,6 +159,10 @@ class TestContext(unittest.TestCase):
 
         np.testing.assert_allclose(test_obs_du_dl.avg_du_dl(), ref_avg_du_dls)
         np.testing.assert_allclose(test_obs_f2_du_dl.avg_du_dl(), ref_avg_du_dls_f2)
+
+        full_du_dls = test_obs_f3_du_dl.full_du_dl()
+        assert len(full_du_dls) == np.ceil(num_steps/2)
+        np.testing.assert_allclose(np.mean(full_du_dls), ref_avg_du_dls_f2)
 
         ref_avg_du_dps = np.mean(ref_all_du_dps, axis=0)
         ref_avg_du_dps_f2 = np.mean(ref_all_du_dps[::2], axis=0)
