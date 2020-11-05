@@ -1,57 +1,61 @@
 import os
 import numpy as np
 
-from rdkit import Chem
-import simtk.openmm
 from simtk.openmm import app
 from simtk.openmm.app import PDBFile
-from fe.pdb_writer import PDBWriter
+from rdkit import Chem
+from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
+from rdkit.Geometry import Point3D
 
+from fe.utils import to_md_units
 from docking import dock_setup
 from ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import LangevinIntegrator
 from timemachine.lib import custom_ops
-from io import StringIO
-
-from fe import system
-from fe.utils import to_md_units
-
-from matplotlib import pyplot as plt
 
 
 def pose_dock(
     guests_sdfile,
     host_pdbfile,
-    outdir,
+    transition_type,
     n_steps,
-    lowering_steps,
-    start_lambda,
+    transition_steps,
+    max_lambda,
+    outdir,
     random_rotation=False,
     constant_atoms=[],
+    skip_errors=False,
 ):
-    """Poses guests into a host by running short simulations in which the guests phase in over time
+    """Run short simulations in which the guests phase in or out over time
 
     Parameters
     ----------
 
     guests_sdfile: path to input sdf with guests to pose/dock
     host_pdbfile: path to host pdb file to dock into
-    outdir: where to write output (will be created if it does not already exist)
-    n_steps: how many total steps of simulation to do (recommended: <= 20000)
-    lowering_steps: how many steps to lower the guest over (recommended: <= 10000)
+    transition_type: "insertion" or "deletion"
+    n_steps: how many total steps of simulation to do (recommended: <= 1000)
+    transition_steps: how many steps to insert/delete the guest over (recommended: <= 500)
         (should be <= n_steps)
-    start_lambda: what lambda value the guest should start out at (recommended: 0.25)
-    random_rotation: whether to apply a random rotation to each guest before beginning the simulation
+    max_lambda: lambda value the guest should insert from or delete to
+        (recommended: 1.1) (must be >1 for work calculation to be applicable)
+    outdir: where to write output (will be created if it does not already exist)
+    random_rotation: whether to apply a random rotation to each guest before inserting
     constant_atoms: atom numbers from the host_pdbfile to hold mostly fixed across the simulation
         (1-indexed, like PDB files)
+    skip_errors: if True, will report errors to stdout and continue on to the next guest.
+        If False, will halt upon errors.
 
     Output
     ------
 
-    A pdb file every 1000 steps (outdir/<guest_name>_<step>.pdb)
-    stdout every 1000 steps noting the step number, lambda value, and energy
+    A pdb file every 100 steps (outdir/<guest_name>_<step>.pdb)
+    stdout every 100 steps noting the step number, lambda value, and energy
     """
-    assert lowering_steps <= n_steps
+    assert transition_steps <= n_steps
+    assert transition_type in ("insertion", "deletion")
+    if random_rotation:
+        assert transition_type == "insertion"
 
     if not os.path.exists(outdir):
         os.makedirs(outdir)
@@ -60,7 +64,7 @@ def pose_dock(
     for guest_mol in suppl:
         guest_name = guest_mol.GetProp("_Name")
         host_mol = Chem.MolFromPDBFile(host_pdbfile, removeHs=False)
-        combined_pdb = Chem.CombineMols(host_mol, guest_mol)
+        # combined_pdb = Chem.CombineMols(host_mol, guest_mol)
 
         guest_ff_handlers = deserialize_handlers(
             open(
@@ -80,9 +84,19 @@ def pose_dock(
             rigidWater=False,
         )
 
-        bps, masses = dock_setup.combine_potentials(
-            guest_ff_handlers, guest_mol, host_system
-        )
+        if skip_errors:
+            try:
+                bps, masses = dock_setup.combine_potentials(
+                    guest_ff_handlers, guest_mol, host_system
+                )
+            except Exception as err:
+                print(err)
+                continue
+        else:
+            bps, masses = dock_setup.combine_potentials(
+                guest_ff_handlers, guest_mol, host_system
+            )
+
         for atom_num in constant_atoms:
             masses[atom_num - 1] += 50000
 
@@ -125,29 +139,62 @@ def pose_dock(
 
         ctxt.add_observable(du_dl_obs)
 
-        new_lambda_schedule = np.concatenate(
-            [
-                np.linspace(start_lambda, 0.0, lowering_steps),
-                np.zeros(n_steps - lowering_steps),
-            ]
-        )
+        if transition_type == "insertion":
+            new_lambda_schedule = np.concatenate(
+                [
+                    np.linspace(max_lambda, 0.0, transition_steps),
+                    np.zeros(n_steps - transition_steps),
+                ]
+            )
+        elif transition_type == "deletion":
+            new_lambda_schedule = np.concatenate(
+                [
+                    np.linspace(0.0, max_lambda, transition_steps),
+                    np.ones(n_steps - transition_steps) * max_lambda,
+                ]
+            )
 
         for step, lamb in enumerate(new_lambda_schedule):
             ctxt.step(lamb)
-            if step % 100 == 0:
-                print("step", step, "lamb", lamb, "nrg", ctxt.get_u_t())
-                pdb_writer = PDBWriter(
-                    [host_mol, guest_mol],
-                    os.path.join(
-                        outdir, f"{guest_name}_{str(step).zfill(len(str(n_steps)))}.pdb"
-                    ),
+            if step % 100 == 0 or step == len(new_lambda_schedule) - 1:
+                print(
+                    f"guest_name: {guest_name}\t"
+                    f"step: {str(step).zfill(len(str(n_steps)))}\t"
+                    f"lambda: {lamb:.2f}\t"
+                    f"energy: {ctxt.get_u_t():.2f}"
                 )
-                pdb_writer.write_frame(ctxt.get_x_t() * 10)
-                pdb_writer.close()
+                host_coords = ctxt.get_x_t()[: len(host_conf)] * 10
+                guest_coords = ctxt.get_x_t()[len(host_conf) :] * 10
+                host_frame = host_mol.GetConformer()
+                for i in range(host_mol.GetNumAtoms()):
+                    x, y, z = host_coords[i]
+                    host_frame.SetAtomPosition(i, Point3D(x, y, z))
+                conf_id = host_mol.AddConformer(host_frame)
+                writer = PDBWriter(
+                    os.path.join(
+                        outdir,
+                        f"{guest_name}_{str(step).zfill(len(str(n_steps)))}_host.pdb",
+                    )
+                )
+                writer.write(host_mol, conf_id)
+                writer.close()
+
+                guest_frame = guest_mol.GetConformer()
+                for i in range(guest_mol.GetNumAtoms()):
+                    x, y, z = guest_coords[i]
+                    guest_frame.SetAtomPosition(i, Point3D(x, y, z))
+                conf_id = guest_mol.AddConformer(guest_frame)
+                writer = SDWriter(
+                    os.path.join(
+                        outdir,
+                        f"{guest_name}_{str(step).zfill(len(str(n_steps)))}_guest.sdf",
+                    )
+                )
+                writer.write(guest_mol, conf_id)
+                writer.close()
 
         work = np.trapz(du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq])
-
-        print("work", work)
+        print(f"guest_name: {guest_name}\twork: {work:.2f}")
 
 
 if __name__ == "__main__":
@@ -159,60 +206,78 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--guests_sdfile", default="tests/data/ligands_40.sdf", help="guests to pose"
+        "-s",
+        "--guests_sdfile",
+        default="tests/data/ligands_40.sdf",
+        help="guests to pose",
     )
     parser.add_argument(
+        "-p",
         "--host_pdbfile",
         default="tests/data/hif2a_nowater_min.pdb",
         help="host to dock into",
     )
     parser.add_argument(
-        "--outdir", default="pose_dock_outdir", help="where to write output"
+        "-c",
+        "--constant_atoms_file",
+        help="file containing comma-separated atom numbers to hold ~fixed",
+    )
+    parser.add_argument(
+        "-t",
+        "--transition_type",
+        help="'insertion' or 'deletion'",
+        default="insertion",
     )
     parser.add_argument(
         "--nsteps",
         type=int,
         default=1000,
-        help="simulation length (1 step = 1.5 femtoseconds",
+        help="simulation length (1 step = 1.5 femtoseconds)",
     )
     parser.add_argument(
         "--lowering_steps",
         type=int,
         default=500,
-        help="how many steps to take while phasing in the guest",
+        help="how many steps to take while phasing in or out the guest",
     )
     parser.add_argument(
-        "--start_lambda",
+        "--max_lambda",
         type=float,
         default=1.1,
-        help="lambda value to start the guest at",
+        help="lambda value the guest should insert from or delete to (must be >1 for the work calculation to be applicable)",
     )
     parser.add_argument(
         "--random_rotation",
         action="store_true",
-        help="apply a random rotation to each guest before docking",
+        help="apply a random rotation to each guest before inserting",
     )
     parser.add_argument(
-        "--constant_atoms_file",
-        help="file containing comma-separated atom numbers to hold ~fixed",
+        "--skip_errors",
+        action="store_true",
+        help="Report errors to stdout and continue on to the next guest. Otherwise, will halt upon errors.",
+    )
+    parser.add_argument(
+        "--outdir", default="pose_dock_outdir", help="where to write output"
     )
     args = parser.parse_args()
 
-    constant_atoms = []
+    constant_atoms_list = []
 
     if args.constant_atoms_file:
         with open(args.constant_atoms_file, "r") as rfile:
             for line in rfile.readlines():
                 atoms = [int(x.strip()) for x in line.strip().split(",")]
-                constant_atoms += atoms
+                constant_atoms_list += atoms
 
     pose_dock(
         args.guests_sdfile,
         args.host_pdbfile,
-        args.outdir,
+        args.transition_type,
         args.nsteps,
-        args.lowering_steps,
-        args.start_lambda,
+        args.transition_steps,
+        args.max_lambda,
+        args.outdir,
         random_rotation=args.random_rotation,
-        constant_atoms=constant_atoms,
+        constant_atoms=constant_atoms_list,
+        skip_errors=args.skip_errors,
     )
