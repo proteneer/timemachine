@@ -21,6 +21,7 @@
 #include "integrator.hpp"
 #include "observable.hpp"
 #include "neighborlist.hpp"
+#include "shape.hpp"
 
 
 #include <iostream>
@@ -453,6 +454,45 @@ void declare_bound_potential(py::module &m) {
     });
 
 }
+
+template <typename RealType>
+void declare_shape(py::module &m, const char *typestr) {
+
+    using Class = timemachine::Shape<RealType>;
+    std::string pyclass_name = std::string("Shape_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const int N,
+        const py::array_t<int, py::array::c_style> &a_idxs,
+        const py::array_t<int, py::array::c_style> &b_idxs,
+        const py::array_t<double, py::array::c_style> &alphas,
+        const py::array_t<double, py::array::c_style> &weights,
+        double k) {
+
+            std::vector<int> vec_a_idxs(a_idxs.data(), a_idxs.data()+a_idxs.size());
+            std::vector<int> vec_b_idxs(b_idxs.data(), b_idxs.data()+b_idxs.size());
+            std::vector<double> vec_alphas(alphas.data(), alphas.data()+alphas.size());
+            std::vector<double> vec_weights(weights.data(), weights.data()+weights.size());
+
+            return new timemachine::Shape<RealType>(
+                N,
+                vec_a_idxs,
+                vec_b_idxs,
+                vec_alphas,
+                vec_weights,
+                k
+            );
+
+        }
+    ));
+
+}
+
 
 template <typename RealType>
 void declare_harmonic_bond(py::module &m, const char *typestr) {
@@ -889,6 +929,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     // declare_restraint<double>(m, "f64");
     // declare_restraint<float>(m, "f32");
+
+    declare_shape<double>(m, "f64");
+    declare_shape<float>(m, "f32");
 
     declare_harmonic_bond<double>(m, "f64");
     declare_harmonic_bond<float>(m, "f32");

@@ -28,7 +28,7 @@ def get_romol_conf(mol):
 
 def run(args):
 
-    lamb, intg, bound_potentials, masses, x0, box, gpu_idx = args
+    lamb, intg, bound_potentials, masses, x0, box, gpu_idx, stage = args
     # print("running on", gpu_idx)
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
     u_impls = []
@@ -36,7 +36,7 @@ def run(args):
         u_impls.append(bp.bound_impl(precision=np.float32))
 
     # important that we reseed here.
-    seed = np.random.randint(np.iinfo(np.int32).max)
+    intg.seed = np.random.randint(np.iinfo(np.int32).max)
     intg_impl = intg.impl()
 
     v0 = np.zeros_like(x0)
@@ -49,20 +49,25 @@ def run(args):
         u_impls
     )
 
-    # secondary minimization
-
-    for l in np.linspace(0.35, lamb, 500):
-        ctxt.step(l)
+    # secondary minimization needed only for stage 1
+    if stage == 1:
+        for l in np.linspace(0.35, lamb, 500):
+            ctxt.step(l)
 
     # equilibration
     for step in range(20000):
+    # for step in range(1000):
         ctxt.step(lamb)
+
+
+    # print(ctxt.get_x_t())
 
     du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 10)
     ctxt.add_observable(du_dl_obs)
 
     # add observable for <du/dl>
     for step in range(50000):
+    # for step in range(5000):
         ctxt.step(lamb)
 
     print(lamb, du_dl_obs.avg_du_dl())
@@ -127,10 +132,13 @@ def minimize_setup(r_host, r_ligand):
 
     return r_combined
 
-def main(args):
+def main(args, stage):
 
-    benzene = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1")) # a
-    phenol = Chem.AddHs(Chem.MolFromSmiles("Oc1ccccc1")) # b
+    # benzene = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1")) # a
+    # phenol = Chem.AddHs(Chem.MolFromSmiles("Oc1ccccc1")) # b
+                                            #01234567890
+    benzene = Chem.AddHs(Chem.MolFromSmiles("C1=CC=C2C=CC=CC2=C1")) # a
+    phenol =  Chem.AddHs(Chem.MolFromSmiles("C1=CC=C2C=CC=CC2=C1")) # b
 
     AllChem.EmbedMolecule(benzene)
     AllChem.EmbedMolecule(phenol)
@@ -141,20 +149,39 @@ def main(args):
 
     r_combined = r_benzene.combine(r_phenol)
     core_pairs = np.array([
-        [0,1],
-        [1,2],
-        [2,3],
-        [3,4],
-        [4,5]
+        [0,0],
+        [1,1],
+        [2,2],
+        [3,3],
+        [4,4],
+        [5,5],
+        [6,6],
+        [7,7],
+        [8,8],
+        [9,9],
+        # [10,10]
     ], dtype=np.int32)
     core_pairs[:, 1] += benzene.GetNumAtoms()
 
     a_idxs = np.arange(benzene.GetNumAtoms())
     b_idxs = np.arange(phenol.GetNumAtoms()) + benzene.GetNumAtoms()
 
-    core_k = 200.0
 
-    rbfe.stage_1(r_combined, a_idxs, b_idxs, core_pairs, core_k)
+    core_k = 20.0
+
+    if stage == 0:
+        centroid_k = 200.0
+        rbfe.stage_0(r_combined, b_idxs, core_pairs, centroid_k, core_k)
+        # lambda_schedule = np.linspace(0.0, 1.0, 2)
+        # lambda_schedule = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+        lambda_schedule = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+    elif stage == 1:
+        rbfe.stage_1(r_combined, a_idxs, b_idxs, core_pairs, core_k)
+        lambda_schedule = np.linspace(0.0, 1.2, 60)
+    else:
+        assert 0
+
+
 
     system, host_coords, box, topology = builders.build_water_system(4.0)
 
@@ -199,12 +226,8 @@ def main(args):
     )
 
     # production run at various values of lambda
-
-
     for epoch in range(10):
         avg_du_dls = []
-        lambda_schedule = np.linspace(0, 1.1, 60)
-        # lambda_schedule = np.linspace(0, 1.1, 3)
 
         run_args = []
         for lamb_idx, lamb in enumerate(lambda_schedule):
@@ -215,11 +238,12 @@ def main(args):
                 r_final.masses,
                 x0,
                 box,
-                lamb_idx % args.num_gpus))
+                lamb_idx % args.num_gpus,
+                stage))
 
         avg_du_dls = pool.map(run, run_args, chunksize=1)
 
-        print("epoch", epoch, "dG", np.trapz(avg_du_dls, lambda_schedule))
+        print("stage", stage, "epoch", epoch, "dG", np.trapz(avg_du_dls, lambda_schedule))
 
 if __name__ == "__main__":
 
@@ -236,4 +260,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args)
+    main(args, 0)

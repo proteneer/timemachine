@@ -68,6 +68,17 @@ class LambdaPotential(CustomOpWrapper):
             u_params
         )
 
+class Shape(CustomOpWrapper):
+
+    def get_N(self):
+        return self.args[0]
+
+    def get_a_idxs(self):
+        return self.args[1]
+
+    def get_b_idxs(self):
+        return self.args[2]
+
 
 class HarmonicBond(CustomOpWrapper):
 
