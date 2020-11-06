@@ -82,8 +82,6 @@ def run(args):
             # frames.append(ctxt.get_x_t())
         ctxt.step(lamb)
 
-    print(lamb, du_dl_obs.avg_du_dl())
-
     assert np.any(np.abs(ctxt.get_x_t()) > 100) == False
     assert np.any(np.isnan(ctxt.get_x_t())) == False
     assert np.any(np.isinf(ctxt.get_x_t())) == False
@@ -195,7 +193,7 @@ def main(args, stage):
     if stage == 0:
         centroid_k = 200.0
         rbfe.stage_0(r_combined, a_idxs, b_idxs, offset_idxs, centroid_k, shape_k)
-        lambda_schedule = np.linspace(0.0, 1.0, 10)
+        lambda_schedule = np.linspace(0.0, 1.0, 20)
         # lambda_schedule = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
         # lambda_schedule = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
         # lambda_schedule = np.array([1.0, 1.0, 1.0])
@@ -270,10 +268,13 @@ def main(args, stage):
         writer = pdb_writer.PDBWriter([topology, benzene, phenol], "frames.pdb")
         for dl, frames in results:
             avg_du_dls.append(dl)
-
             for frame in frames:
                 writer.write_frame(frame*10)
             writer.close()
+
+        for lamb, dl in zip(lambda_schedule, avg_du_dls):
+            print("lamb", lamb, "du_dl", dl)
+
 
         print("stage", stage, "epoch", epoch, "dG", np.trapz(avg_du_dls, lambda_schedule))
 
