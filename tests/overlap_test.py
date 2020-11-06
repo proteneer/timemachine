@@ -116,7 +116,7 @@ def get_heavy_atom_idxs(mol):
     return np.array(idxs, dtype=np.int32)
 
 
-def test_convergence(args):
+def convergence(args):
     epoch, lamb = args
 
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
@@ -327,15 +327,13 @@ if __name__ == "__main__":
     lambda_schedule = np.linspace(0, 1.0, 24)
     # lambda_schedule = np.linspace(0.2, 0.6, 24)
 
-    # test_convergence((0, 1.0))
-
     print("cpu count:", os.cpu_count())
 
     for epoch in range(100):
         args = []
         for lamb in lambda_schedule:
             args.append((epoch, lamb))
-        avg_du_dls = pool.map(test_convergence, args)
+        avg_du_dls = pool.map(convergence, args)
         avg_du_dls = np.asarray(avg_du_dls)
 
         for lamb, ddl in zip(lambda_schedule, avg_du_dls):
