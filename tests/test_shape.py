@@ -42,51 +42,51 @@ def get_heavy_atom_idxs(mol):
 
 class TestShape(GradientTest):
 
-    # def test_volume_range(self):
-    #     # test that volume ranges are 0 <= x <= 1
-    #     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    def test_volume_range(self):
+        # test that volume ranges are 0 <= x <= 1
+        suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
 
-    #     prefactor = 2.7 # unitless
-    #     lamb = (4*np.pi)/(3*prefactor) # unitless
-    #     kappa = np.pi/(np.power(lamb, 2/3)) # unitless
-    #     sigma = 1.6 # angstroms or nm
-    #     alpha = kappa/(sigma*sigma)
+        prefactor = 2.7 # unitless
+        lamb = (4*np.pi)/(3*prefactor) # unitless
+        kappa = np.pi/(np.power(lamb, 2/3)) # unitless
+        sigma = 1.6 # angstroms or nm
+        alpha = kappa/(sigma*sigma)
 
-    #     for ligand_a in suppl:
+        for ligand_a in suppl:
 
-    #         coords_a = get_conf(ligand_a, idx=0)*10
-    #         params_a = np.stack([
-    #             np.zeros(ligand_a.GetNumAtoms())+alpha,
-    #             np.zeros(ligand_a.GetNumAtoms())+prefactor,
-    #         ], axis=1)
+            coords_a = get_conf(ligand_a, idx=0)*10
+            params_a = np.stack([
+                np.zeros(ligand_a.GetNumAtoms())+alpha,
+                np.zeros(ligand_a.GetNumAtoms())+prefactor,
+            ], axis=1)
 
-    #         v = shape.normalized_overlap(
-    #             coords_a,
-    #             params_a,
-    #             coords_a,
-    #             params_a
-    #         )
+            v = shape.normalized_overlap(
+                coords_a,
+                params_a,
+                coords_a,
+                params_a
+            )
 
-    #         assert v == 1.0
+            assert v == 1.0
 
-    #         for ligand_b in suppl:
+            for ligand_b in suppl:
 
-    #             coords_b = get_conf(ligand_b, idx=0)*10
-    #             coords = np.concatenate([coords_a, coords_b])
-    #             params_b = np.stack([
-    #                 np.zeros(ligand_b.GetNumAtoms())+alpha,
-    #                 np.zeros(ligand_b.GetNumAtoms())+prefactor,
-    #             ], axis=1)
+                coords_b = get_conf(ligand_b, idx=0)*10
+                coords = np.concatenate([coords_a, coords_b])
+                params_b = np.stack([
+                    np.zeros(ligand_b.GetNumAtoms())+alpha,
+                    np.zeros(ligand_b.GetNumAtoms())+prefactor,
+                ], axis=1)
 
-    #             v = shape.normalized_overlap(
-    #                 coords_a,
-    #                 params_a,
-    #                 coords_b,
-    #                 params_b
-    #             )
+                v = shape.normalized_overlap(
+                    coords_a,
+                    params_a,
+                    coords_b,
+                    params_b
+                )
 
-    #             assert v <= 1
-    #             assert v >= 0.5
+                assert v <= 1
+                assert v >= 0.5
 
     def test_custom_op(self):
         suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
