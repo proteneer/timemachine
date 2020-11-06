@@ -230,51 +230,36 @@ def convergence(args):
     prefactor = 2.7 # unitless
     shape_lamb = (4*np.pi)/(3*prefactor) # unitless
     kappa = np.pi/(np.power(shape_lamb, 2/3)) # unitless
-    # sigma = 0.16
     sigma = 0.15
     alpha = kappa/(sigma*sigma)
 
-    shape_params = np.stack([
-        np.zeros(combined_mol.GetNumAtoms())+alpha,
-        np.zeros(combined_mol.GetNumAtoms())+prefactor,
-    ], axis=1)
+    alphas = np.zeros(combined_mol.GetNumAtoms())+alpha
+    weights = np.zeros(combined_mol.GetNumAtoms())+prefactor
 
-    overlap_fn = functools.partial(
-        shape.overlap,
-        params=shape_params,
-        a_idxs=a_idxs,
-        b_idxs=b_idxs
-    )
-
-    # print("overlap:", overlap_fn(coords)) # this is greater than one
-
-    overlap_fn = jax.jit(overlap_fn)
-
-    shape_restraint_fn = functools.partial(shape.inverse_overlap,
+    shape_restraint_fn = functools.partial(shape.harmonic_overlap,
         box=None,
         lamb=None,
-        params=shape_params,
-        a_idxs=a_idxs,
-        b_idxs=b_idxs
-    )
-
-    pmi_restraint_fn = functools.partial(pmi_restraints,
         params=None,
-        box=None,
-        lamb=None,
         a_idxs=a_idxs,
         b_idxs=b_idxs,
-        masses=combined_masses,
-        angle_force=50,
-        com_force=50
+        alphas=alphas,
+        weights=weights,
+        k=200.0
     )
 
-    def restraint_fn(conf, lamb):
+    # pmi_restraint_fn = functools.partial(pmi_restraints,
+    #     params=None,
+    #     box=None,
+    #     lamb=None,
+    #     a_idxs=a_idxs,
+    #     b_idxs=b_idxs,
+    #     masses=combined_masses,
+    #     angle_force=50,
+    #     com_force=50
+    # )
 
-        # return (1-lamb)*com_restraint_fn(conf) + lamb*pmi_restraint_fn(conf)
-        # return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+    def restraint_fn(conf, lamb):
         return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
-        # return com_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
 
     nrg_fns.append(restraint_fn)
 
@@ -284,8 +269,12 @@ def convergence(args):
             s.append(u(conf, lamb=lamb))
         return np.sum(s)
 
+
     grad_fn = jax.grad(nrg_fn, argnums=(0,1))
     grad_fn = jax.jit(grad_fn)
+
+    du_dx_fn = jax.grad(nrg_fn, argnums=(0))
+    du_dx_fn = jax.jit(du_dx_fn)
 
     x_t = coords
     v_t = np.zeros_like(x_t)
@@ -309,8 +298,12 @@ def convergence(args):
         #     w.write(mol)
         #     w.flush()
 
-        du_dx, du_dl = grad_fn(x_t, lamb)
-        du_dls.append(du_dl)
+        if step % 5 == 0:
+            du_dx, du_dl = grad_fn(x_t, lamb)
+            du_dls.append(du_dl)
+        else:
+            du_dx = du_dx_fn(x_t, lamb)[0]
+
 
         v_t = ca*v_t + cb*du_dx + cc*onp.random.normal(size=x_t.shape)
         x_t = x_t + v_t*dt
