@@ -17,7 +17,6 @@ import numpy as onp
 
 from scipy.stats import special_ortho_group
 from ff.handlers.deserialize import deserialize_handlers
-import scipy.spatial.transform
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
