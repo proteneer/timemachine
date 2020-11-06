@@ -109,7 +109,7 @@ def create_shape_restraints(a_idxs, b_idxs, shape_k, N):
     lamb = (4*np.pi)/(3*prefactor) # unitless
     kappa = np.pi/(np.power(lamb, 2/3)) # unitless
     # sigma = 1.6 # angstroms or nm
-    sigma = 0.16 # nm
+    sigma = 0.15 # nm
     alpha = kappa/(sigma*sigma)
 
     alphas = np.zeros(N, dtype=np.float64)+alpha

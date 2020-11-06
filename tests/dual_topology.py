@@ -191,7 +191,7 @@ def main(args, stage):
     shape_k = 200.0
 
     if stage == 0:
-        centroid_k = 200.0
+        centroid_k = 50.0
         rbfe.stage_0(r_combined, a_idxs, b_idxs, offset_idxs, centroid_k, shape_k)
         lambda_schedule = np.linspace(0.0, 1.0, 20)
         # lambda_schedule = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
