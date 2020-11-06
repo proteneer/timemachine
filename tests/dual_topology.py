@@ -35,6 +35,7 @@ def get_romol_conf(mol):
     guest_conf = guest_conf/10 # from angstroms to nm
     return np.array(guest_conf, dtype=np.float64)
 
+
 def run(args):
 
     lamb, intg, bound_potentials, masses, x0, box, gpu_idx, stage = args
@@ -66,7 +67,7 @@ def run(args):
             ctxt.step(l)
 
     # equilibration
-    for step in range(20000):
+    for step in range(10000):
         ctxt.step(lamb)
 
 
@@ -74,10 +75,11 @@ def run(args):
     assert np.any(np.isnan(ctxt.get_x_t())) == False
     assert np.any(np.isinf(ctxt.get_x_t())) == False
 
-    du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 10)
+    # du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 10)
+    du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 5)
     ctxt.add_observable(du_dl_obs)
 
-    for step in range(50000):
+    for step in range(90000):
         # if step % 500 == 0:
             # frames.append(ctxt.get_x_t())
         ctxt.step(lamb)
