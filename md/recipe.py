@@ -177,6 +177,7 @@ class Recipe():
         assert len(self.bound_potentials) == len(self.vjp_fns)
         assert len(other.bound_potentials) == len(other.vjp_fns)
 
+        # we're not guaranteed to always have shape parameters
         for bp, vps in zip(self.bound_potentials, self.vjp_fns):
             if isinstance(bp, potentials.Nonbonded):
                 # save these parameters for the merge part.
@@ -220,9 +221,16 @@ class Recipe():
                 b_idxs += self_num_atoms # modify inplace
                 # adjust masses
                 obp.set_masses(np.concatenate([np.zeros(self_num_atoms), obp.get_masses()]))
+            elif isinstance(obp, potentials.Shape):
+                obp.set_N(obp.get_N() + self_num_atoms)
+                a_idxs = obp.get_a_idxs()
+                a_idxs += self_num_atoms # modify inplace
+                b_idxs = obp.get_b_idxs()
+                b_idxs += self_num_atoms # modify inplace
+                obp.set_alphas(np.concatenate([np.zeros(self_num_atoms), obp.get_alphas()]))
+                obp.set_weights(np.concatenate([np.zeros(self_num_atoms), obp.get_weights()]))
             elif isinstance(obp, potentials.Nonbonded):
                 assert self_nb_cutoff == obp.get_cutoff()
-
                 assert self_nb_beta == obp.get_beta()
 
                 combined_nb_params, combined_vjp_fn = jax.vjp(jnp.concatenate, [self_nb_params, obp.params])

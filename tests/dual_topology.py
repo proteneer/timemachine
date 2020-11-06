@@ -20,6 +20,15 @@ from md import builders
 
 from multiprocessing import Pool
 
+
+def get_heavy_atom_idxs(mol):
+    idxs = []
+    for a_idx, a in enumerate(mol.GetAtoms()):
+        if a.GetAtomicNum() > 1:
+            idxs.append(a_idx)
+    return np.array(idxs, dtype=np.int32)
+
+
 def get_romol_conf(mol):
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
@@ -49,6 +58,8 @@ def run(args):
         u_impls
     )
 
+    frames = [x0]
+
     # secondary minimization needed only for stage 1
     if stage == 1:
         for l in np.linspace(0.35, lamb, 500):
@@ -56,18 +67,19 @@ def run(args):
 
     # equilibration
     for step in range(20000):
-    # for step in range(1000):
         ctxt.step(lamb)
 
 
-    # print(ctxt.get_x_t())
+    assert np.any(np.abs(ctxt.get_x_t()) > 100) == False
+    assert np.any(np.isnan(ctxt.get_x_t())) == False
+    assert np.any(np.isinf(ctxt.get_x_t())) == False
 
     du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 10)
     ctxt.add_observable(du_dl_obs)
 
-    # add observable for <du/dl>
     for step in range(50000):
-    # for step in range(5000):
+        # if step % 500 == 0:
+            # frames.append(ctxt.get_x_t())
         ctxt.step(lamb)
 
     print(lamb, du_dl_obs.avg_du_dl())
@@ -76,7 +88,7 @@ def run(args):
     assert np.any(np.isnan(ctxt.get_x_t())) == False
     assert np.any(np.isinf(ctxt.get_x_t())) == False
 
-    return du_dl_obs.avg_du_dl()
+    return du_dl_obs.avg_du_dl(), frames
 
 def minimize(args):
 
@@ -137,51 +149,62 @@ def main(args, stage):
     # benzene = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1")) # a
     # phenol = Chem.AddHs(Chem.MolFromSmiles("Oc1ccccc1")) # b
                                             #01234567890
-    benzene = Chem.AddHs(Chem.MolFromSmiles("C1=CC=C2C=CC=CC2=C1")) # a
-    phenol =  Chem.AddHs(Chem.MolFromSmiles("C1=CC=C2C=CC=CC2=C1")) # b
 
-    AllChem.EmbedMolecule(benzene)
-    AllChem.EmbedMolecule(phenol)
+    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    mols = [x for x in suppl]
+    benzene = mols[0]
+    phenol = mols[1]
+
+
+
+    # benzene = Chem.AddHs(Chem.MolFromSmiles("C1=CC=C2C=CC=CC2=C1")) # a
+    # phenol =  Chem.AddHs(Chem.MolFromSmiles("C1=CC=C2C=CC=CC2=C1")) # b
+    # AllChem.EmbedMolecule(benzene)
+    # AllChem.EmbedMolecule(phenol)
 
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
     r_benzene = Recipe.from_rdkit(benzene, ff_handlers)
     r_phenol = Recipe.from_rdkit(phenol, ff_handlers)
 
     r_combined = r_benzene.combine(r_phenol)
-    core_pairs = np.array([
-        [0,0],
-        [1,1],
-        [2,2],
-        [3,3],
-        [4,4],
-        [5,5],
-        [6,6],
-        [7,7],
-        [8,8],
-        [9,9],
-        # [10,10]
-    ], dtype=np.int32)
-    core_pairs[:, 1] += benzene.GetNumAtoms()
+    # core_pairs = np.array([
+    #     [0,0],
+    #     [1,1],
+    #     [2,2],
+    #     [3,3],
+    #     [4,4],
+    #     [5,5],
+    #     [6,6],
+    #     [7,7],
+    #     [8,8],
+    #     [9,9],
+    #     # [10,10]
+    # ], dtype=np.int32)
+    # core_pairs[:, 1] += benzene.GetNumAtoms()
 
-    a_idxs = np.arange(benzene.GetNumAtoms())
-    b_idxs = np.arange(phenol.GetNumAtoms()) + benzene.GetNumAtoms()
+    # a_idxs = np.arange(benzene.GetNumAtoms(), dtype=np.int32)
+    # b_idxs = np.arange(phenol.GetNumAtoms(), dtype=np.int32) + benzene.GetNumAtoms()
+    a_idxs = get_heavy_atom_idxs(benzene)
+    b_idxs = get_heavy_atom_idxs(phenol)
+    b_idxs += benzene.GetNumAtoms()
 
+    offset_idxs = np.arange(0, phenol.GetNumAtoms()) + benzene.GetNumAtoms()
 
-    core_k = 20.0
+    shape_k = 200.0
 
     if stage == 0:
         centroid_k = 200.0
-        rbfe.stage_0(r_combined, b_idxs, core_pairs, centroid_k, core_k)
-        # lambda_schedule = np.linspace(0.0, 1.0, 2)
+        rbfe.stage_0(r_combined, a_idxs, b_idxs, offset_idxs, centroid_k, shape_k)
+        lambda_schedule = np.linspace(0.0, 1.0, 10)
         # lambda_schedule = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
-        lambda_schedule = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+        # lambda_schedule = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
+        # lambda_schedule = np.array([1.0, 1.0, 1.0])
+        # lambda_schedule = np.array([1.0])
     elif stage == 1:
         rbfe.stage_1(r_combined, a_idxs, b_idxs, core_pairs, core_k)
         lambda_schedule = np.linspace(0.0, 1.2, 60)
     else:
         assert 0
-
-
 
     system, host_coords, box, topology = builders.build_water_system(4.0)
 
@@ -241,7 +264,16 @@ def main(args, stage):
                 lamb_idx % args.num_gpus,
                 stage))
 
-        avg_du_dls = pool.map(run, run_args, chunksize=1)
+        results = pool.map(run, run_args, chunksize=1)
+
+        avg_du_dls = []
+        writer = pdb_writer.PDBWriter([topology, benzene, phenol], "frames.pdb")
+        for dl, frames in results:
+            avg_du_dls.append(dl)
+
+            for frame in frames:
+                writer.write_frame(frame*10)
+            writer.close()
 
         print("stage", stage, "epoch", epoch, "dG", np.trapz(avg_du_dls, lambda_schedule))
 

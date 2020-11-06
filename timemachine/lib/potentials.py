@@ -73,11 +73,26 @@ class Shape(CustomOpWrapper):
     def get_N(self):
         return self.args[0]
 
+    def set_N(self, x):
+        self.args[0] = x
+
     def get_a_idxs(self):
         return self.args[1]
 
     def get_b_idxs(self):
         return self.args[2]
+
+    def get_alphas(self):
+        return self.args[3]
+
+    def set_alphas(self, x):
+        self.args[3] = x
+
+    def get_weights(self):
+        return self.args[4]
+
+    def set_weights(self, x):
+        self.args[4] = x
 
 
 class HarmonicBond(CustomOpWrapper):

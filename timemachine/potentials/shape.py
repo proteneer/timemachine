@@ -91,14 +91,26 @@ def harmonic_overlap(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k
     conf: np.array [N, 3]
         Conformation of the system
 
-    params: np.array [N, 2]
-        Shape parameters of the system
+    params: None
+        unused - dummy parameter
+
+    box: None
+        unused - dummy parameter
+
+    lamb: None
+        unused - dummy parameter
 
     a_idxs: np.array [A]
-        Molecule A's indices into the conformation
+        molecule A's indices into the conformation
 
     b_idxs: np.array [B]
-        Molecule B's indices into the conformation
+        molecule B's indices into the conformation
+
+    alphas: np.array float64 [N]
+        factor inside exponential
+
+    weights: np.array float64 [N]
+        factor outside exponential
 
     """
 
