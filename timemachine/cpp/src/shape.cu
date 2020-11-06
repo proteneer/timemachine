@@ -40,13 +40,10 @@ void __global__ k_reduce_dvol_dx_buffers(
         double dg = dg_dx_buffer[idx*3+dim];
         double dh = dh_dx_buffer[idx*3+dim];
 
-        // quotient rule hehe
+        // (ytz): quotient rule
         double v = (2*f)/(g+h);
-
         double prefactor = 2*k*(v-1);
         double val = prefactor*2*((df*(g+h) - f*(dg+dh))/((g+h)*(g+h)));
-
-        // printf("idx %d ij %f ii %f jj %f\n", idx*3+dim, df_dx_buffer[idx*3+dim], dg_dx_buffer[idx*3+dim], dh_dx_buffer[idx*3+dim]);
         atomicAdd(du_dx + idx*3 + dim, static_cast<unsigned long long>((long long)(val*FIXED_EXPONENT)));
     }
 
@@ -65,17 +62,9 @@ void __global__ k_reduce_vol_buffer(
     } 
 
     if(u) {
-        // printf("test triple %f %f %f\n", f_buf[0], g_buf[0], h_buf[0]);
         double v = 2*f_buf[0]/(g_buf[0] + h_buf[0]);
-        // atomicAdd(u, v);
         atomicAdd(u, k*(v-1)*(v-1));
     }
-
-    // if(u) {
-        // printf("test triple %f %f %f\n", f_buf[0], g_buf[0], h_buf[0]);
-        // double v = 2*f_buf[0]/(g_buf[0] + h_buf[0]);
-        // atomicAdd(u, f_buf[0] + g_buf[0] + h_buf[0]);
-    // }
 
 }
 
@@ -109,8 +98,6 @@ void __global__ k_compute_volume(
     RealType dxi = 0;
     RealType dyi = 0;
     RealType dzi = 0;
-
-    // printf("atom %d ai %f pi %f\n", i_idx, ai, pi);
 
     double sum = 0;
 

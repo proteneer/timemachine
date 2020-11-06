@@ -1,12 +1,8 @@
 import jax.numpy as np
 
-from timemachine.potentials.jax_utils import distance
-
 def squared_distance(ci, cj):
     diff = ci - cj
     return np.sum(diff*diff, axis=-1)
-    # print(diff.shape)
-    # return np.dot(diff, diff)
 
 
 def volume(conf_a, params_a, conf_b, params_b):
@@ -37,8 +33,6 @@ def volume(conf_a, params_a, conf_b, params_b):
 
     d2ij = squared_distance(ci, cj)
 
-    # print(d2ij[0])
-
     ai = np.expand_dims(params_a[:, 0], axis=1)
     aj = np.expand_dims(params_b[:, 0], axis=0)
 
@@ -49,6 +43,7 @@ def volume(conf_a, params_a, conf_b, params_b):
     vij = pi*pj*kij*np.power(np.pi/(ai+aj), 3/2)
 
     return np.sum(vij)
+
 
 def normalized_overlap(conf_a, params_a, conf_b, params_b):
     """
@@ -82,11 +77,9 @@ def normalized_overlap(conf_a, params_a, conf_b, params_b):
     vii = volume(conf_a, params_a, conf_a, params_a)
     vjj = volume(conf_b, params_b, conf_b, params_b)
 
-    print("ref triple", vij, vii, vjj)
-
-    # return vij + vii + vjj
-    # try tanimoto etc. later as well
+    # (ytz): try tanimoto etc. later as well
     return 2*vij/(vii+vjj)
+
 
 def harmonic_overlap(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k):
     """
@@ -118,5 +111,4 @@ def harmonic_overlap(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k
     params_b = params_c[b_idxs]
 
     V = normalized_overlap(conf_a, params_a, conf_b, params_b)
-    # return V
     return k*(V-1)**2

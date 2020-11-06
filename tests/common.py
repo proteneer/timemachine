@@ -463,6 +463,7 @@ class GradientTest(unittest.TestCase):
         ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
 
         np.testing.assert_allclose(ref_u, test_u, rtol)
+
         self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
 
         np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
