@@ -249,7 +249,7 @@ def main(args, stage):
     )
 
     # production run at various values of lambda
-    for epoch in range(10):
+    for epoch in range(100):
         avg_du_dls = []
 
         run_args = []

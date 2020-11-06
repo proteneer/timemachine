@@ -302,8 +302,10 @@ def convergence(args):
             du_dx, du_dl = grad_fn(x_t, lamb)
             du_dls.append(du_dl)
         else:
-            du_dx = du_dx_fn(x_t, lamb)[0]
+            du_dx = du_dx_fn(x_t, lamb)
+            # print(du_dx)
 
+            # assert 0
 
         v_t = ca*v_t + cb*du_dx + cc*onp.random.normal(size=x_t.shape)
         x_t = x_t + v_t*dt
