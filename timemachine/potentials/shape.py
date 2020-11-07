@@ -124,3 +124,36 @@ def harmonic_overlap(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k
 
     V = normalized_overlap(conf_a, params_a, conf_b, params_b)
     return k*(V-1)**2
+
+
+from timemachine.potentials.jax_utils import convert_to_4d
+
+def harmonic_4d_overlap(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k):
+
+    S = len(a_idxs) + len(b_idxs)
+
+    lambda_plane_idxs = np.zeros(S, dtype=np.int32)
+    lambda_offset_idxs = np.concatenate([
+        np.zeros(len(a_idxs), dtype=np.int32),
+        np.ones(len(b_idxs), dtype=np.int32)
+    ])
+    cutoff = 100.0
+
+
+
+    conf_a = conf[a_idxs]
+    conf_b = conf[b_idxs]
+
+    conf_a = convert_to_4d(conf_a, lamb, np.zeros(len(a_idxs)), np.zeros(len(a_idxs)), cutoff)
+    conf_b = convert_to_4d(conf_b, lamb, np.zeros(len(b_idxs)), np.ones(len(b_idxs)), cutoff)
+
+    params_c = np.stack([alphas, weights], axis=1)
+
+    params_a = params_c[a_idxs]
+    params_b = params_c[b_idxs]
+
+    V = normalized_overlap(conf_a, params_a, conf_b, params_b)
+    # return k*(1/V)
+    # return k*(V-1)**2
+    # return -k*V**2
+    return -k*V

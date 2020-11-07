@@ -189,8 +189,9 @@ def stage_0(recipe, a_idxs, b_idxs, offset_idxs, centroid_k, shape_k):
     unity_masses = np.ones_like(recipe.masses) # equal weighting
     centroid_restraints = create_centroid_restraints(a_idxs, b_idxs, centroid_k, unity_masses)
 
-    lhs = potentials.LambdaPotential(shape_restraints, N, len(shape_restraints.params), 1.0, 0.0) # multplier, offset
-    rhs = potentials.LambdaPotential(centroid_restraints, N, len(centroid_restraints.params), -1.0, 1.0)
+    # lhs = potentials.LambdaPotential(centroid_restraints, N, len(centroid_restraints.params), -1.0, 1.0)
+    lhs = centroid_restraints
+    rhs = potentials.LambdaPotential(shape_restraints, N, len(shape_restraints.params), 1.0, 0.0) # multplier, offset
 
     recipe.bound_potentials.append(lhs)
     recipe.bound_potentials.append(rhs)

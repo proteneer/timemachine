@@ -39,7 +39,6 @@ def get_romol_conf(mol):
 def run(args):
 
     lamb, intg, bound_potentials, masses, x0, box, gpu_idx, stage = args
-    # print("running on", gpu_idx)
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
     u_impls = []
     for bp in bound_potentials:
@@ -69,7 +68,6 @@ def run(args):
     # equilibration
     for step in range(10000):
         ctxt.step(lamb)
-
 
     assert np.any(np.abs(ctxt.get_x_t()) > 100) == False
     assert np.any(np.isnan(ctxt.get_x_t())) == False
@@ -128,67 +126,30 @@ def minimize(args):
 
 def minimize_setup(r_host, r_ligand):
     r_combined = r_host.combine(r_ligand)
-
-    print(len(r_combined.masses))
-
-    # assert 0
     host_atom_idxs = np.arange(len(r_host.masses))
     ligand_atom_idxs = np.arange(len(r_ligand.masses)) + len(r_host.masses)
     rbfe.set_nonbonded_lambda_idxs(r_combined, ligand_atom_idxs, 0, 1)
-
-    # for bp in r_combined.bound_potentials:
-        # if isinstance(bp, potentials.Nonbonded):
-            # print(len(bp.get_lambda_offset_idxs()))
-            # print(len(bp.get_lambda_plane_idxs()))
-            # assert 0
 
     return r_combined
 
 def main(args, stage):
 
-    # benzene = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1")) # a
-    # phenol = Chem.AddHs(Chem.MolFromSmiles("Oc1ccccc1")) # b
-                                            #01234567890
-
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
     mols = [x for x in suppl]
-    benzene = mols[0]
-    phenol = mols[1]
-
-
-
-    # benzene = Chem.AddHs(Chem.MolFromSmiles("C1=CC=C2C=CC=CC2=C1")) # a
-    # phenol =  Chem.AddHs(Chem.MolFromSmiles("C1=CC=C2C=CC=CC2=C1")) # b
-    # AllChem.EmbedMolecule(benzene)
-    # AllChem.EmbedMolecule(phenol)
+    ligand_a = mols[0]
+    ligand_b = mols[1]
 
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
-    r_benzene = Recipe.from_rdkit(benzene, ff_handlers)
-    r_phenol = Recipe.from_rdkit(phenol, ff_handlers)
+    r_ligand_a = Recipe.from_rdkit(ligand_a, ff_handlers)
+    r_ligand_b = Recipe.from_rdkit(ligand_b, ff_handlers)
 
-    r_combined = r_benzene.combine(r_phenol)
-    # core_pairs = np.array([
-    #     [0,0],
-    #     [1,1],
-    #     [2,2],
-    #     [3,3],
-    #     [4,4],
-    #     [5,5],
-    #     [6,6],
-    #     [7,7],
-    #     [8,8],
-    #     [9,9],
-    #     # [10,10]
-    # ], dtype=np.int32)
-    # core_pairs[:, 1] += benzene.GetNumAtoms()
+    r_combined = r_ligand_a.combine(r_ligand_b)
+   
+    a_idxs = get_heavy_atom_idxs(ligand_a)
+    b_idxs = get_heavy_atom_idxs(ligand_b)
+    b_idxs += ligand_a.GetNumAtoms()
 
-    # a_idxs = np.arange(benzene.GetNumAtoms(), dtype=np.int32)
-    # b_idxs = np.arange(phenol.GetNumAtoms(), dtype=np.int32) + benzene.GetNumAtoms()
-    a_idxs = get_heavy_atom_idxs(benzene)
-    b_idxs = get_heavy_atom_idxs(phenol)
-    b_idxs += benzene.GetNumAtoms()
-
-    offset_idxs = np.arange(0, phenol.GetNumAtoms()) + benzene.GetNumAtoms()
+    offset_idxs = np.arange(0, ligand_b.GetNumAtoms()) + ligand_a.GetNumAtoms()
 
     shape_k = 200.0
 
@@ -196,10 +157,7 @@ def main(args, stage):
         centroid_k = 50.0
         rbfe.stage_0(r_combined, a_idxs, b_idxs, offset_idxs, centroid_k, shape_k)
         lambda_schedule = np.linspace(0.0, 1.0, 20)
-        # lambda_schedule = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
-        # lambda_schedule = np.array([0.0, 0.0, 0.0, 0.0, 0.0])
         # lambda_schedule = np.array([1.0, 1.0, 1.0])
-        # lambda_schedule = np.array([1.0])
     elif stage == 1:
         rbfe.stage_1(r_combined, a_idxs, b_idxs, core_pairs, core_k)
         lambda_schedule = np.linspace(0.0, 1.2, 60)
@@ -214,18 +172,17 @@ def main(args, stage):
     # minimize coordinates of host + ligand A
     ha_coords = np.concatenate([
         host_coords,
-        get_romol_conf(benzene)
+        get_romol_conf(ligand_a)
     ])
-
 
     pool = Pool(args.num_gpus)
 
     # we need to run this in a subprocess since the cuda runtime
     # must not be initialized in the master thread due to lack of
     # fork safety
-    r_minimize = minimize_setup(r_host, r_benzene)
+    r_minimize = minimize_setup(r_host, r_ligand_a)
     ha_coords = pool.map(minimize, [(r_minimize.bound_potentials, r_minimize.masses, ha_coords, box)], chunksize=1)
-    # this is a list
+    # this is a list of size 1
     ha_coords = ha_coords[0]
     pool.close()
 
@@ -233,10 +190,10 @@ def main(args, stage):
 
     x0 = np.concatenate([
         ha_coords,
-        get_romol_conf(phenol)
+        get_romol_conf(ligand_b)
     ])
 
-    masses = np.concatenate([r_host.masses, r_benzene.masses, r_phenol.masses])
+    masses = np.concatenate([r_host.masses, r_ligand_a.masses, r_ligand_b.masses])
 
     seed = np.random.randint(np.iinfo(np.int32).max)
 
@@ -267,7 +224,7 @@ def main(args, stage):
         results = pool.map(run, run_args, chunksize=1)
 
         avg_du_dls = []
-        writer = pdb_writer.PDBWriter([topology, benzene, phenol], "frames.pdb")
+        writer = pdb_writer.PDBWriter([topology, ligand_a, ligand_b], "frames.pdb")
         for dl, frames in results:
             avg_du_dls.append(dl)
             for frame in frames:

@@ -48,42 +48,6 @@ def inertia_tensor(conf, masses):
 
     return com, tensor
 
-
-def pmi_restraints(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_force, com_force):
-
-    a_com, a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
-    b_com, b_tensor = inertia_tensor(conf[b_idxs], masses[b_idxs])
-
-    # don't want to deal with backprop of eigenvalues if we don't have to
-    a_eval, a_evec = np.linalg.eigh(a_tensor) # already sorted
-    b_eval, b_evec = np.linalg.eigh(b_tensor) # already sorted
-
-    loss = []
-    for d in range(3):
-        x = a_evec[d]
-        y = b_evec[d]
-
-        # arccos is always defined between 1 and -1
-        # returns a value between 0 and pi
-        # a_pos = np.arccos(np.sum(x*y)/np.linalg.norm(x)*np.linalg.norm(y))
-        # a_neg = np.arccos(np.sum(-x*y)/np.linalg.norm(-x)*np.linalg.norm(y))
-        a_pos = np.arccos(np.sum(x*y)) # norm is always 1
-        a_neg = np.arccos(np.sum(-x*y)) # norm is always 1
-        a = np.amin([a_pos, a_neg])
-        loss.append(angle_force*a*a)
-
-        # want to greatest force at theta=90 (or dot product of 0)
-
-        # a_pos = np.arccos(np.sum(x*y)/np.linalg.norm(x)*np.linalg.norm(y))
-        # loss.append(angle_force*a_pos*a_pos)
-
-        # a = np.sum(x*y)/np.linalg.norm(x)*np.linalg.norm(y)
-        # loss = np.sqrt(1-a*a)*100
-
-    loss = np.array(loss)
-
-    return np.sum(loss) + np.linalg.norm(b_com - a_com)*com_force
-
 def recenter(conf):
     return conf - np.mean(conf, axis=0)
 
@@ -236,9 +200,10 @@ def convergence(args):
     alphas = np.zeros(combined_mol.GetNumAtoms())+alpha
     weights = np.zeros(combined_mol.GetNumAtoms())+prefactor
 
-    shape_restraint_fn = functools.partial(shape.harmonic_overlap,
+    shape_restraint_fn = functools.partial(
+        # shape.harmonic_4d_overlap,
+        shape.harmonic_overlap,
         box=None,
-        lamb=None,
         params=None,
         a_idxs=a_idxs,
         b_idxs=b_idxs,
@@ -247,19 +212,14 @@ def convergence(args):
         k=200.0
     )
 
-    # pmi_restraint_fn = functools.partial(pmi_restraints,
-    #     params=None,
-    #     box=None,
-    #     lamb=None,
-    #     a_idxs=a_idxs,
-    #     b_idxs=b_idxs,
-    #     masses=combined_masses,
-    #     angle_force=50,
-    #     com_force=50
-    # )
-
     def restraint_fn(conf, lamb):
-        return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+        # return com_restraint_fn(conf) + shape_restraint_fn(conf, lamb=lamb)
+
+        # return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_fn(conf, lamb=None)
+
+        # not turning off the CoM restraint works better
+        return com_restraint_fn(conf) + lamb*shape_restraint_fn(conf, lamb=None)
+        # return lamb*shape_restraint_fn(conf)
 
     nrg_fns.append(restraint_fn)
 
@@ -289,11 +249,15 @@ def convergence(args):
 
     du_dls = []
 
+    # onp.random.seed()
+    # re-seed
+    onp.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
+
     for step in range(100000):
 
         # if step % 200 == 0:
         #     u = nrg_fn(x_t, lamb)
-        #     print("step", step, "nrg", onp.asarray(u), "avg_du_dl",  onp.mean(du_dls), "overlap", overlap_fn(x_t))
+        #     print("step", step, "nrg", onp.asarray(u), "avg_du_dl",  onp.mean(du_dls))
         #     mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
         #     w.write(mol)
         #     w.flush()
@@ -303,9 +267,6 @@ def convergence(args):
             du_dls.append(du_dl)
         else:
             du_dx = du_dx_fn(x_t, lamb)
-            # print(du_dx)
-
-            # assert 0
 
         v_t = ca*v_t + cb*du_dx + cc*onp.random.normal(size=x_t.shape)
         x_t = x_t + v_t*dt
@@ -319,6 +280,8 @@ if __name__ == "__main__":
 
     # lambda_schedule = np.linspace(0, 1.0, os.cpu_count())
     lambda_schedule = np.linspace(0, 1.0, 24)
+    # lambda_schedule = np.array([1e-4, 5e-4, 1e-3, 5e-3, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.15,0.175, 0.2, 0.225, 0.25, 0.275, 0.3, 0.35, 0.4, 0.5])
+    # lambda_schedule = np.array([0.0, 00.5])
     # lambda_schedule = np.linspace(0.2, 0.6, 24)
 
     print("cpu count:", os.cpu_count())
