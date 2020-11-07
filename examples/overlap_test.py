@@ -172,7 +172,7 @@ def convergence(args):
         #         )
         #     )
 
-    masses_a = onp.array([a.GetMass() for a in ligand_a.GetAtoms()])
+    masses_a = onp.array([a.GetMass() for a in ligand_a.GetAtoms()])*100
     masses_b = onp.array([a.GetMass() for a in ligand_b.GetAtoms()])
 
     # super_masses = np.ones_like(np.concatenate([masses_a, masses_b]))
@@ -253,9 +253,11 @@ def convergence(args):
     # re-seed
     onp.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
 
+
+    # for step in range(100000):
     for step in range(100000):
 
-        # if step % 200 == 0:
+        # if step % 1000 == 0:
         #     u = nrg_fn(x_t, lamb)
         #     print("step", step, "nrg", onp.asarray(u), "avg_du_dl",  onp.mean(du_dls))
         #     mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
@@ -281,7 +283,7 @@ if __name__ == "__main__":
     # lambda_schedule = np.linspace(0, 1.0, os.cpu_count())
     lambda_schedule = np.linspace(0, 1.0, 24)
     # lambda_schedule = np.array([1e-4, 5e-4, 1e-3, 5e-3, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.15,0.175, 0.2, 0.225, 0.25, 0.275, 0.3, 0.35, 0.4, 0.5])
-    # lambda_schedule = np.array([0.0, 00.5])
+    # lambda_schedule = np.array([1.0])
     # lambda_schedule = np.linspace(0.2, 0.6, 24)
 
     print("cpu count:", os.cpu_count())

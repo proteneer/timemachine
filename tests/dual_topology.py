@@ -45,6 +45,8 @@ def run(args):
         u_impls.append(bp.bound_impl(precision=np.float32))
 
     # important that we reseed here.
+
+    np.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
     intg.seed = np.random.randint(np.iinfo(np.int32).max)
     intg_impl = intg.impl()
 
