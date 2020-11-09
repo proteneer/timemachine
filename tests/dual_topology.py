@@ -88,6 +88,8 @@ def run(args):
     assert np.any(np.isnan(ctxt.get_x_t())) == False
     assert np.any(np.isinf(ctxt.get_x_t())) == False
 
+    print("lamb", lamb, "du_dl", du_dl_obs.avg_du_dl())
+
     return du_dl_obs.avg_du_dl(), frames
 
 def minimize(args):
@@ -151,18 +153,20 @@ def main(args, stage):
     b_idxs = get_heavy_atom_idxs(ligand_b)
     b_idxs += ligand_a.GetNumAtoms()
 
+    a_full_idxs = np.arange(0, ligand_a.GetNumAtoms())
     offset_idxs = np.arange(0, ligand_b.GetNumAtoms()) + ligand_a.GetNumAtoms()
 
     shape_k = 200.0
+    centroid_k = 50.0
 
     if stage == 0:
-        centroid_k = 50.0
         rbfe.stage_0(r_combined, a_idxs, b_idxs, offset_idxs, centroid_k, shape_k)
         lambda_schedule = np.linspace(0.0, 1.0, 20)
         # lambda_schedule = np.array([1.0, 1.0, 1.0])
     elif stage == 1:
-        rbfe.stage_1(r_combined, a_idxs, b_idxs, core_pairs, core_k)
+        rbfe.stage_1(r_combined, a_idxs, b_idxs, a_full_idxs, offset_idxs, centroid_k, shape_k)
         lambda_schedule = np.linspace(0.0, 1.2, 60)
+        # lambda_schedule = np.array([0.2, 0.2, 0.2, 0.2, 0.2])
     else:
         assert 0
 
@@ -254,4 +258,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args, 0)
+    main(args, 1)

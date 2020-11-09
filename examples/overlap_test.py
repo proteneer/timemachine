@@ -26,6 +26,43 @@ from timemachine.potentials import bonded, shape
 from timemachine.integrator import langevin_coefficients
 
 
+
+def pmi_restraints(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_force, com_force):
+
+    a_com, a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
+    b_com, b_tensor = inertia_tensor(conf[b_idxs], masses[b_idxs])
+
+    a_eval, a_evec = np.linalg.eigh(a_tensor) # already sorted
+    b_eval, b_evec = np.linalg.eigh(b_tensor) # already sorted
+
+    loss = []
+    for d in range(3):
+        x = a_evec[d]
+        y = b_evec[d]
+
+
+        # huafeng's loss fn (doesn't seem to align properly)
+        # delta = 1-np.sum(x*y)
+        # loss.append(delta*delta)
+
+
+        # (ytz): one of the issues is that sometimes we get an eigenvector
+        # that flips in direction nearly instaneously, however, it is still
+        # roughly aligned. So we need to still align correctly
+
+        # yutong's loss fn
+        a_pos = np.arccos(np.sum(x*y)) # norm is always 1
+        a_neg = np.arccos(np.sum(-x*y)) # norm is always 1
+        a = np.amin([a_pos, a_neg])
+        loss.append(a*a)
+
+    loss = np.array(loss)
+
+    return angle_force*np.sum(loss) + com_force*np.linalg.norm(b_com - a_com)
+
+def recenter(conf):
+    return conf - np.mean(conf, axis=0)
+
 def inertia_tensor(conf, masses):
     com = np.average(conf, axis=0, weights=masses)
     conf = conf - com
@@ -47,9 +84,6 @@ def inertia_tensor(conf, masses):
     ])
 
     return com, tensor
-
-def recenter(conf):
-    return conf - np.mean(conf, axis=0)
 
 def get_conf(romol, idx):
     conformer = romol.GetConformer(idx)
@@ -110,14 +144,14 @@ def convergence(args):
 
     coords = np.concatenate([coords_a, coords_b])
 
-    # a_idxs = np.arange(0, ligand_a.GetNumAtoms()) # change to heavy atoms
-    # b_idxs = np.arange(0, ligand_b.GetNumAtoms()) # change to heavy atoms
     a_idxs = get_heavy_atom_idxs(ligand_a)
     b_idxs = get_heavy_atom_idxs(ligand_b)
-    # print(a_idxs)
-    # print(b_idxs)
-    b_idxs += ligand_a.GetNumAtoms()
 
+    a_full_idxs = np.arange(0, ligand_a.GetNumAtoms())
+    b_full_idxs = np.arange(0, ligand_b.GetNumAtoms())
+
+    b_idxs += ligand_a.GetNumAtoms()
+    b_full_idxs += ligand_a.GetNumAtoms()
 
     nrg_fns = []
 
@@ -134,7 +168,6 @@ def convergence(args):
                 functools.partial(bonded.harmonic_bond,
                     params=bond_params,
                     box=None,
-                    # lamb=None,
                     bond_idxs=bond_idxs
                 )
             )
@@ -144,7 +177,6 @@ def convergence(args):
                 functools.partial(bonded.harmonic_angle,
                     params=angle_params,
                     box=None,
-                    # lamb=None,
                     angle_idxs=angle_idxs
                 )
             )
@@ -172,24 +204,32 @@ def convergence(args):
         #         )
         #     )
 
-    masses_a = onp.array([a.GetMass() for a in ligand_a.GetAtoms()])*100
+    masses_a = onp.array([a.GetMass() for a in ligand_a.GetAtoms()]) * 10000
     masses_b = onp.array([a.GetMass() for a in ligand_b.GetAtoms()])
 
-    # super_masses = np.ones_like(np.concatenate([masses_a, masses_b]))
-    # super_masses = np.concatenate([masses, masses])
     combined_masses = np.concatenate([masses_a, masses_b])
 
-    com_restraint_fn = functools.partial(bonded.centroid_restraint,
+    # com_restraint_fn = functools.partial(bonded.centroid_restraint,
+    #     params=None,
+    #     box=None,
+    #     lamb=None,
+    #     # masses=combined_masses, # try making this ones-like
+    #     masses=np.ones_like(combined_masses),
+    #     group_a_idxs=a_idxs,
+    #     group_b_idxs=b_idxs,
+    #     kb=50.0,
+    #     b0=0.0)
+
+    pmi_restraint_fn = functools.partial(pmi_restraints,
         params=None,
         box=None,
         lamb=None,
-        # masses=combined_masses, # try making this ones-like
         masses=np.ones_like(combined_masses),
-        group_a_idxs=a_idxs,
-        group_b_idxs=b_idxs,
-        kb=50.0,
-        b0=0.0)
-
+        a_idxs=a_full_idxs,
+        b_idxs=b_full_idxs,
+        angle_force=200.0,
+        com_force=100.0
+    )
 
     prefactor = 2.7 # unitless
     shape_lamb = (4*np.pi)/(3*prefactor) # unitless
@@ -201,9 +241,9 @@ def convergence(args):
     weights = np.zeros(combined_mol.GetNumAtoms())+prefactor
 
     shape_restraint_fn = functools.partial(
-        # shape.harmonic_4d_overlap,
         shape.harmonic_overlap,
         box=None,
+        lamb=None,
         params=None,
         a_idxs=a_idxs,
         b_idxs=b_idxs,
@@ -212,13 +252,28 @@ def convergence(args):
         k=200.0
     )
 
+    # shape_restraint_4d_fn = functools.partial(
+    #     shape.harmonic_4d_overlap,
+    #     box=None,
+    #     params=None,
+    #     a_idxs=a_idxs,
+    #     b_idxs=b_idxs,
+    #     alphas=alphas,
+    #     weights=weights,
+    #     k=200.0
+    # )
+
     def restraint_fn(conf, lamb):
         # return com_restraint_fn(conf) + shape_restraint_fn(conf, lamb=lamb)
 
-        # return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_fn(conf, lamb=None)
+        # return (1-lamb)*pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+        return pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+
+        # return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_4d_fn(conf, lamb=None)
+        # return com_restraint_fn(conf) + shape_restraint_4d_fn(conf, lamb=lamb)
 
         # not turning off the CoM restraint works better
-        return com_restraint_fn(conf) + lamb*shape_restraint_fn(conf, lamb=None)
+        # return com_restraint_fn(conf) + lamb*shape_restraint_fn(conf, lamb=None)
         # return lamb*shape_restraint_fn(conf)
 
     nrg_fns.append(restraint_fn)
@@ -228,8 +283,7 @@ def convergence(args):
         for u in nrg_fns:
             s.append(u(conf, lamb=lamb))
         return np.sum(s)
-
-
+ 
     grad_fn = jax.grad(nrg_fn, argnums=(0,1))
     grad_fn = jax.jit(grad_fn)
 
@@ -283,7 +337,7 @@ if __name__ == "__main__":
     # lambda_schedule = np.linspace(0, 1.0, os.cpu_count())
     lambda_schedule = np.linspace(0, 1.0, 24)
     # lambda_schedule = np.array([1e-4, 5e-4, 1e-3, 5e-3, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.15,0.175, 0.2, 0.225, 0.25, 0.275, 0.3, 0.35, 0.4, 0.5])
-    # lambda_schedule = np.array([1.0])
+    # lambda_schedule = np.array([0.0])
     # lambda_schedule = np.linspace(0.2, 0.6, 24)
 
     print("cpu count:", os.cpu_count())

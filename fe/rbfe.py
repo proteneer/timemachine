@@ -109,7 +109,7 @@ def create_shape_restraints(a_idxs, b_idxs, shape_k, N):
     lamb = (4*np.pi)/(3*prefactor) # unitless
     kappa = np.pi/(np.power(lamb, 2/3)) # unitless
     # sigma = 1.6 # angstroms or nm
-    sigma = 0.15 # nm
+    sigma = 0.10 # nm
     alpha = kappa/(sigma*sigma)
 
     alphas = np.zeros(N, dtype=np.float64)+alpha
@@ -201,7 +201,7 @@ def stage_0(recipe, a_idxs, b_idxs, offset_idxs, centroid_k, shape_k):
 
     set_nonbonded_lambda_idxs(recipe, offset_idxs, 1, 0)
 
-def stage_1(recipe, a_idxs, b_idxs, core_pairs, core_k):
+def stage_1(recipe, a_idxs, b_idxs, a_full_idxs, b_full_idxs, centroid_k, shape_k):
     """
     Modify a recipe for stage 1 decoupling. A vanilla core restraint is added. The nonbonded
     plane idxs are all zero, and offset idxs are modified for b_idxs. In addition, a fully dense
@@ -226,15 +226,27 @@ def stage_1(recipe, a_idxs, b_idxs, core_pairs, core_k):
 
     """
 
-    assert 0
+    # assert 0
 
     N = len(recipe.masses)
 
-    core_restraints = create_core_restraints(core_pairs, core_k)
+    shape_restraints = create_shape_restraints(a_idxs, b_idxs, shape_k, N)
+    unity_masses = np.ones_like(recipe.masses) # equal weighting
+    centroid_restraints = create_centroid_restraints(a_idxs, b_idxs, centroid_k, unity_masses)
 
-    recipe.bound_potentials.append(core_restraints)
+    lhs = centroid_restraints
+    rhs = shape_restraints
+
+    # core_restraints = create_core_restraints(core_pairs, core_k)
+    # recipe.bound_potentials.append(core_restraints)
+    # recipe.vjp_fns.append([])
+
+    recipe.bound_potentials.append(lhs)
+    recipe.bound_potentials.append(rhs)
+
+    recipe.vjp_fns.append([])
     recipe.vjp_fns.append([])
 
-    add_nonbonded_exclusions(recipe, a_idxs, b_idxs)
-    set_nonbonded_lambda_idxs(recipe, b_idxs, 0, 1)
+    add_nonbonded_exclusions(recipe, a_full_idxs, b_full_idxs)
+    set_nonbonded_lambda_idxs(recipe, b_full_idxs, 0, 1)
 
