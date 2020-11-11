@@ -1,4 +1,7 @@
 # eigenvalue problem solvers
+# ported from Numerical diagonalization of 3x3 matrcies (sic), v1.1
+# https://www.mpi-hd.mpg.de/personalhomes/globes/3x3/index.html
+
 import numpy as np
 
 DBL_EPSILON = 2.2204460492503131e-16
@@ -30,21 +33,15 @@ def dsyevc3(A):
     w[0]  = w[1] + c;
     w[1] -= s;
 
-
-
     return np.sort(w);
-    # return w;
 
 
 def dsyevv3(input_tensor):
 
   A = np.asarray(input_tensor).copy()
-
-  # # Calculate eigenvalues
   w = dsyevc3(A);
   Q = np.zeros((3, 3)) # column eigenvectors
 
-#ifndef EVALS_ONLY
   wmax = np.fabs(w[0])
   if np.fabs(w[1]) > wmax:
     wmax = np.fabs(w[1])
@@ -80,6 +77,7 @@ def dsyevv3(input_tensor):
     Q[1][0] = 1.0;
     Q[2][0] = 0.0;
   elif norm < np.square(64.0 * DBL_EPSILON) * error: # If angle between A[0] and A[1] is too small, don't use
+    # (ytz): don't handle this
     assert 0
     t = np.square(A[0][1]);       # cross product, but calculate v ~ (1, -A0/A1, 0)
     f = -A[0][0] / A[0][1];
@@ -96,7 +94,6 @@ def dsyevv3(input_tensor):
     Q[2][0] = 0.0;
   else:                      # This is the standard branch
     norm = np.sqrt(1.0 / norm);
-    # for (j=0; j < 3; j++)
     for j in range(3):
       Q[j][0] = Q[j][0] * norm;
 
@@ -150,6 +147,8 @@ def dsyevv3(input_tensor):
   Q[1][2] = Q[2][0]*Q[0][1] - Q[0][0]*Q[2][1];
   Q[2][2] = Q[0][0]*Q[1][1] - Q[1][0]*Q[0][1];
 
+  # (ytz): sanity check that Ax=lx
+  # eigenvectors are column vectors of Q per "standard" convention
   for d in range(3):
     np.testing.assert_almost_equal(
       np.matmul(input_tensor, Q[:, d]),
