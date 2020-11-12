@@ -181,6 +181,57 @@ def inertia_tensor(conf, masses):
 
     return com, tensor
 
+
+def pmi_restraints_new(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_force, com_force):
+
+    a_com, a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
+    b_com, b_tensor = inertia_tensor(conf[b_idxs], masses[b_idxs])
+
+    a_eval, a_evec = np.linalg.eigh(a_tensor) # already sorted
+    b_eval, b_evec = np.linalg.eigh(b_tensor) # already sorted
+
+    # convert from column to row eigenvectors
+    a_rvec = np.transpose(a_evec)
+    b_rvec = np.transpose(b_evec)
+
+    # determine sign of the eigen vectors for the first object
+    # this does not affect derivatives as the sign eigenvectors are invariant
+    # up to a rotational flip
+    a_rvec_min = []
+    for a, b in zip(a_rvec, b_rvec):
+        dpos = np.dot(a, b)
+        dneg = np.dot(-a, b)
+        svec = np.where(dpos > dneg, a, -a)
+        a_rvec_min.append(svec)
+
+    a_evec = np.transpose(np.array(a_rvec_min))
+
+    r = np.matmul(np.transpose(a_evec), b_evec)
+    I = np.eye(3)
+
+    loss = []
+    for v, e in zip(r, I):
+        delta = v*e
+        loss.append(1 - delta*delta)
+        # a_pos = np.sum(v*e) # norm is always 1
+        # a = np.amin([a_pos, a_neg])
+        # loss.append(a*a)
+
+    # loss = []
+    # for v, e in zip(r, I):
+    #     a_pos = np.arccos(np.sum(v*e)) # norm is always 1
+    #     a_neg = np.arccos(np.sum(-v*e)) # norm is always 1
+    #     a = np.amin([a_pos, a_neg])
+    #     loss.append(a*a)
+
+    # assert 0
+    # loss = []
+    # for d in range(3):
+    #     x = a_evec[d]
+    #     y = b_evec[d]
+
+
+
 def inertial_restraint(conf, params, box, lamb, a_idxs, b_idxs, masses, k):
 
     a_com, a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
@@ -189,23 +240,32 @@ def inertial_restraint(conf, params, box, lamb, a_idxs, b_idxs, masses, k):
     a_eval, a_evec = np.linalg.eigh(a_tensor) # already sorted
     b_eval, b_evec = np.linalg.eigh(b_tensor) # already sorted
 
+    # convert from column to row eigenvectors
+    a_rvec = np.transpose(a_evec)
+    b_rvec = np.transpose(b_evec)
+
+    # determine sign of the eigen vectors for the first object
+    # this does not affect derivatives as the sign eigenvectors are invariant
+    # up to a rotational flip
+    a_rvec_min = []
+    for a, b in zip(a_rvec, b_rvec):
+        dpos = np.dot(a, b)
+        dneg = np.dot(-a, b)
+        svec = np.where(dpos > dneg, a, -a)
+        a_rvec_min.append(svec)
+
+    a_evec = np.transpose(np.array(a_rvec_min))
+
     r = np.matmul(np.transpose(a_evec), b_evec)
-
-    print("ref rotation matrix", r)
-
     I = np.eye(3)
 
     loss = []
     for v, e in zip(r, I):
-        a_pos = np.arccos(np.sum(v*e)) # norm is always 1
-        a_neg = np.arccos(np.sum(-v*e)) # norm is always 1
-        a = np.amin([a_pos, a_neg])
-        print(a)
-        loss.append(a*a)
+        delta = 1-v*e
+        loss.append(delta*delta)
 
-    u = k*np.sum(loss)
+    u = np.sum(loss)*k
 
-    print("REF", u)
     return u
 
 def pmi_u(r):
