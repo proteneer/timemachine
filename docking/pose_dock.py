@@ -26,7 +26,7 @@ def pose_dock(
     constant_atoms=[],
     skip_errors=False,
 ):
-    """Run short simulations in which the guests phase in or out over time
+    """Runs short simulations in which the guests phase in or out over time
 
     Parameters
     ----------
@@ -36,7 +36,7 @@ def pose_dock(
     transition_type: "insertion" or "deletion"
     n_steps: how many total steps of simulation to do (recommended: <= 1000)
     transition_steps: how many steps to insert/delete the guest over (recommended: <= 500)
-        (should be <= n_steps)
+        (must be <= n_steps)
     max_lambda: lambda value the guest should insert from or delete to
         (recommended: 1.1) (must be >1 for work calculation to be applicable)
     outdir: where to write output (will be created if it does not already exist)
@@ -51,6 +51,12 @@ def pose_dock(
 
     A pdb file every 100 steps (outdir/<guest_name>_<step>.pdb)
     stdout every 100 steps noting the step number, lambda value, and energy
+    stdout for each guest noting the work of transition
+
+    Note
+    ----
+    If the energy becomes positive, the simulation for that guest will stop and the work will not be
+    calculated.
     """
     assert transition_steps <= n_steps
     assert transition_type in ("insertion", "deletion")
@@ -64,7 +70,6 @@ def pose_dock(
     for guest_mol in suppl:
         guest_name = guest_mol.GetProp("_Name")
         host_mol = Chem.MolFromPDBFile(host_pdbfile, removeHs=False)
-        # combined_pdb = Chem.CombineMols(host_mol, guest_mol)
 
         guest_ff_handlers = deserialize_handlers(
             open(
@@ -90,6 +95,7 @@ def pose_dock(
                     guest_ff_handlers, guest_mol, host_system
                 )
             except Exception as err:
+                print(f"Error: There was a problem setting up {guest_name}")
                 print(err)
                 continue
         else:
@@ -125,6 +131,7 @@ def pose_dock(
         box = np.eye(3) * 100
         v0 = np.zeros_like(x0)
 
+
         impls = []
         precision = np.float32
         for b in bps:
@@ -154,6 +161,7 @@ def pose_dock(
                 ]
             )
 
+        calc_work = True
         for step, lamb in enumerate(new_lambda_schedule):
             ctxt.step(lamb)
             if step % 100 == 0 or step == len(new_lambda_schedule) - 1:
@@ -163,8 +171,12 @@ def pose_dock(
                     f"lambda: {lamb:.2f}\t"
                     f"energy: {ctxt.get_u_t():.2f}"
                 )
+                if ctxt.get_u_t() > 0:
+                    print(f"Error: energy too high for {guest_name}")
+                    calc_work = False
+                    break
+
                 host_coords = ctxt.get_x_t()[: len(host_conf)] * 10
-                guest_coords = ctxt.get_x_t()[len(host_conf) :] * 10
                 host_frame = host_mol.GetConformer()
                 for i in range(host_mol.GetNumAtoms()):
                     x, y, z = host_coords[i]
@@ -179,6 +191,7 @@ def pose_dock(
                 writer.write(host_mol, conf_id)
                 writer.close()
 
+                guest_coords = ctxt.get_x_t()[len(host_conf) :] * 10
                 guest_frame = guest_mol.GetConformer()
                 for i in range(guest_mol.GetNumAtoms()):
                     x, y, z = guest_coords[i]
@@ -193,8 +206,9 @@ def pose_dock(
                 writer.write(guest_mol, conf_id)
                 writer.close()
 
-        work = np.trapz(du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq])
-        print(f"guest_name: {guest_name}\twork: {work:.2f}")
+        if calc_work:
+            work = np.trapz(du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq])
+            print(f"guest_name: {guest_name}\twork: {work:.2f}")
 
 
 if __name__ == "__main__":
@@ -235,7 +249,7 @@ if __name__ == "__main__":
         help="simulation length (1 step = 1.5 femtoseconds)",
     )
     parser.add_argument(
-        "--lowering_steps",
+        "--transition_steps",
         type=int,
         default=500,
         help="how many steps to take while phasing in or out the guest",
@@ -257,9 +271,13 @@ if __name__ == "__main__":
         help="Report errors to stdout and continue on to the next guest. Otherwise, will halt upon errors.",
     )
     parser.add_argument(
-        "--outdir", default="pose_dock_outdir", help="where to write output"
+        "-o",
+        "--outdir",
+        default="pose_dock_outdir",
+        help="where to write output"
     )
     args = parser.parse_args()
+    print(args)
 
     constant_atoms_list = []
 
