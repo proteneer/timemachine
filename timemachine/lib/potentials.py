@@ -109,6 +109,20 @@ class PeriodicTorsion(CustomOpWrapper):
     def get_torsion_idxs(self):
         return self.args[0]
 
+class InertialRestraint(CustomOpWrapper):
+
+    def get_a_idxs(self):
+        return self.args[0]
+
+    def get_b_idxs(self):
+        return self.args[1]
+
+    def get_masses(self):
+        return self.args[2]
+
+    def set_masses(self, masses):
+        self.args[2] = masses
+
 class CentroidRestraint(CustomOpWrapper):
 
     def get_a_idxs(self):
