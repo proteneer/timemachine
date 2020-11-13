@@ -207,7 +207,6 @@ def grad_inertia_tensor(conf, masses, tensor_grad):
 
     [[dxx, dxy, dxz], [dxy, dyy, dyz], [dxz, dyz, dzz]] = tensor_grad # 
 
-
     # dys = dxx*2*ys
     # dzs = dxx*2*zs
     # xx = np.average(ys*ys + zs*zs, weights=masses)
@@ -240,23 +239,12 @@ def grad_inertia_tensor(conf, masses, tensor_grad):
     # dl/dx = dl/da * (w/mass_sum)
 
     mass_sum = np.sum(masses)
+
     dxs = (dyy*2*xs + dzz*2*xs + -dxy*2*ys + -dxz*2*zs)*(masses/mass_sum)
     dys = (dzz*2*ys + dxx*2*ys + -dxy*2*xs + -dyz*2*zs)*(masses/mass_sum)
     dzs = (dxx*2*zs + dyy*2*zs + -dxz*2*xs + -dyz*2*ys)*(masses/mass_sum)
 
-    # print(dxs.shape)
-
-    # assert 0
-
-    # print("dxs", dxs)
-    # print("dys", dys)
-    # print("dzs", dzs)
-
     dconf = np.stack([dxs, dys, dzs], axis=-1)
-
-    # print(dconf.shape)
-
-    # assert 0
 
     return dconf
 
@@ -264,6 +252,33 @@ def grad_inertia_tensor(conf, masses, tensor_grad):
 
 
 def inertial_restraint(conf, params, box, lamb, a_idxs, b_idxs, masses, k):
+
+
+    a_conf = conf[a_idxs]
+    b_conf = conf[b_idxs]
+
+    a_masses = masses[a_idxs]
+    b_masses = masses[b_idxs]
+
+    a_com_conf = a_conf - np.average(a_conf, axis=0, weights=a_masses)
+    b_com_conf = b_conf - np.average(b_conf, axis=0, weights=b_masses)
+
+    a_tensor = inertia_tensor(a_com_conf, a_masses)
+    b_tensor = inertia_tensor(b_com_conf, b_masses)
+
+    a_eval, a_evec = np.linalg.eigh(a_tensor)
+    b_eval, b_evec = np.linalg.eigh(b_tensor)
+
+    # eigenvalues are needed for derivatives
+    # a_eval, a_evec = dsyevv3(a_tensor)
+    # b_eval, b_evec = dsyevv3(b_tensor)
+
+    loss = []
+    for a, b in zip(a_evec.T, b_evec.T):
+        delta = 1 - np.abs(np.dot(a, b))
+        loss.append(delta*delta)
+
+    return np.sum(loss)*k
 
     a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
     b_tensor = inertia_tensor(conf[b_idxs], masses[b_idxs])
@@ -295,7 +310,7 @@ def inertial_restraint(conf, params, box, lamb, a_idxs, b_idxs, masses, k):
 
     loss = []
     for v, e in zip(r, I):
-        delta = 1 - np.dot(v,e)
+        delta = 1 - np.abs(np.dot(v,e))
         loss.append(delta*delta)
 
     u = np.sum(loss)*k
@@ -330,7 +345,8 @@ def pmi_u(r):
 
 
 # ported over from autodiff
-def grad_eigh(w, v, wg, vg):
+# def grad_eigh(w, v, wg, vg):
+def grad_eigh(w, v, vg):
     """Gradient for eigenvalues and vectors of a symmetric matrix.
 
     Parameters
@@ -348,21 +364,26 @@ def grad_eigh(w, v, wg, vg):
     # wg, vg = g          # Gradient w.r.t. eigenvalues, eigenvectors.
     w_repeated = np.repeat(w[..., np.newaxis], N, axis=-1)
     # Eigenvalue part
-    vjp_temp = np.dot(vc * wg[..., np.newaxis, :], v.T) 
+    # vjp_temp = np.dot(vc * wg[..., np.newaxis, :], v.T) 
 
     # Add eigenvector part only if non-zero backward signal is present.
     # This can avoid NaN results for degenerate cases if the function depends
     # on the eigenvalues only.
+
+    # print(w_repeated)
     if np.any(vg):
         off_diag = np.ones((N, N)) - np.eye(N)
         F = off_diag / (w_repeated.T - w_repeated + np.eye(N))
-        vjp_temp += np.dot(np.dot(vc, F * np.dot(v.T, vg)), v.T)
+        # (this used to be += but we never do derivatives w.r.t. eigenvalues)
+        vjp_temp = np.dot(np.dot(vc, F * np.dot(v.T, vg)), v.T)
     else:
         assert 0
 
     off_diag_mask = (onp.ones((3,3)) - onp.eye(3))/2
 
-    return vjp_temp*np.eye(vjp_temp.shape[-1]) + (vjp_temp + vjp_temp.T)*off_diag_mask
+    final = vjp_temp*np.eye(vjp_temp.shape[-1]) + (vjp_temp + vjp_temp.T)*off_diag_mask
+
+    return final
     # return vjp_temp*np.eye(vjp_temp.shape[-1]) + (vjp_temp + vjp_temp.T) * tri
 
 
@@ -404,6 +425,63 @@ def simplified_u(
     # return np.sum(a*a)
 
 
+def analytic_restraint_force(conf, params, box, lamb, a_idxs, b_idxs, masses, k):
+
+    a_conf = conf[a_idxs]
+    b_conf = conf[b_idxs]
+
+    a_masses = masses[a_idxs]
+    b_masses = masses[b_idxs]
+
+    a_com_conf = a_conf - np.average(a_conf, axis=0, weights=a_masses)
+    b_com_conf = b_conf - np.average(b_conf, axis=0, weights=b_masses)
+
+    a_tensor = inertia_tensor(a_com_conf, a_masses)
+    b_tensor = inertia_tensor(b_com_conf, b_masses)
+
+    # a_eval, a_evec = np.linalg.eigh(a_tensor)
+    # b_eval, b_evec = np.linalg.eigh(b_tensor)
+
+    # eigenvalues are needed for derivatives
+    a_eval, a_evec = dsyevv3(a_tensor)
+    b_eval, b_evec = dsyevv3(b_tensor)
+
+    loss = []
+    for a, b in zip(a_evec.T, b_evec.T):
+        delta = 1 - np.abs(np.dot(a, b))
+        loss.append(delta*delta)
+
+    dl_daevec_T = []
+    dl_dbevec_T = []
+    for a, b in zip(a_evec.T, b_evec.T):
+        delta = 1 - np.abs(np.dot(a, b))
+        prefactor = -np.sign(np.dot(a, b))*2*delta*k
+        dl_daevec_T.append(prefactor*b)
+        dl_dbevec_T.append(prefactor*a)
+
+
+    dl_daevec = np.transpose(np.array(dl_daevec_T))
+    dl_dbevec = np.transpose(np.array(dl_dbevec_T))
+
+    dl_datensor = grad_eigh(a_eval, a_evec, np.array(dl_daevec))
+    dl_dbtensor = grad_eigh(b_eval, b_evec, np.array(dl_dbevec))
+
+    dl_da_com_conf = grad_inertia_tensor(a_com_conf, a_masses, dl_datensor)
+    dl_db_com_conf = grad_inertia_tensor(b_com_conf, b_masses, dl_dbtensor)
+
+    du_dx = onp.zeros_like(conf)
+
+    du_dx[a_idxs] += dl_da_com_conf
+    du_dx[b_idxs] += dl_db_com_conf
+
+    print("ref du_dx", du_dx)
+    # conservative forces are not affected by center of mass changes.
+    # the vjp w.r.t. to the center of mass yields zeros since sum dx=0, dy=0 and dz=0
+    # return dl_da_com_conf, dl_db_com_conf
+    return du_dx
+
+
+
 def test_force(
     a_conf,
     b_conf,
@@ -439,8 +517,8 @@ def test_force(
     dl_daevec = np.transpose(np.array(dl_daevec_T))
     dl_dbevec = np.transpose(np.array(dl_dbevec_T))
 
-    dl_datensor = grad_eigh(a_eval, a_evec, np.zeros_like(a_eval), np.array(dl_daevec))
-    dl_dbtensor = grad_eigh(b_eval, b_evec, np.zeros_like(b_eval), np.array(dl_dbevec))
+    dl_datensor = grad_eigh(a_eval, a_evec, np.array(dl_daevec))
+    dl_dbtensor = grad_eigh(b_eval, b_evec, np.array(dl_dbevec))
 
     dl_da_com_conf = grad_inertia_tensor(a_com_conf, a_masses, dl_datensor)
     dl_db_com_conf = grad_inertia_tensor(b_com_conf, b_masses, dl_dbtensor)
@@ -505,8 +583,10 @@ def test_force(
     dr_daevec = np.matmul(b_evec, dr.T)
     dr_dbevec = np.matmul(a_evec, dr.T)
 
-    dl_datensor = grad_eigh(a_eval, a_evec, np.zeros_like(a_eval), dr_daevec)
-    dl_dbtensor = grad_eigh(b_eval, b_evec, np.zeros_like(b_eval), dr_dbevec)
+    dl_datensor = grad_eigh(a_eval, a_evec, dr_daevec)
+    dl_dbtensor = grad_eigh(b_eval, b_evec, dr_dbevec)
+
+
 
     return dl_datensor, dl_dbtensor
 
@@ -581,4 +661,4 @@ def test0():
 
 
 # test0()
-test1()
+# test1()
