@@ -26,6 +26,91 @@ from timemachine.potentials import bonded, shape
 from timemachine.integrator import langevin_coefficients
 
 
+
+# def pmi_restraints_old(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_force, com_force):
+
+#     a_com, a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
+#     b_com, b_tensor = inertia_tensor(conf[b_idxs], masses[b_idxs])
+
+#     a_eval, a_evec = np.linalg.eigh(a_tensor) # already sorted
+#     b_eval, b_evec = np.linalg.eigh(b_tensor) # already sorted
+
+#     loss = []
+#     for d in range(3):
+#         x = a_evec[d]
+#         y = b_evec[d]
+
+
+#         # huafeng's loss fn (doesn't seem to align properly)
+#         # delta = 1-np.sum(x*y)
+#         # loss.append(delta*delta)
+
+
+#         # (ytz): one of the issues is that sometimes we get an eigenvector
+#         # that flips in direction nearly instaneously, however, it is still
+#         # roughly aligned. So we need to still align correctly
+
+#         # another attempt
+#         # x = 
+
+#         # yutong's loss fn
+#         a_pos = np.arccos(np.sum(x*y)) # norm is always 1
+#         a_neg = np.arccos(np.sum(-x*y)) # norm is always 1
+#         a = np.amin([a_pos, a_neg])
+#         loss.append(a*a)
+
+#     loss = np.array(loss)
+
+#     return angle_force*np.sum(loss) + com_force*np.linalg.norm(b_com - a_com)
+
+def pmi_restraints_new(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_force, com_force):
+
+    a_com, a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
+    b_com, b_tensor = inertia_tensor(conf[b_idxs], masses[b_idxs])
+
+    a_eval, a_evec = np.linalg.eigh(a_tensor) # already sorted
+    b_eval, b_evec = np.linalg.eigh(b_tensor) # already sorted
+
+    # convert from column to row eigenvectors
+    a_rvec = np.transpose(a_evec)
+    b_rvec = np.transpose(b_evec)
+
+    loss = []
+    for a, b in zip(a_rvec, b_rvec):
+        delta = 1 - np.abs(np.dot(a, b))
+        loss.append(delta*delta)
+
+    return angle_force*np.sum(loss) + com_force*np.linalg.norm(b_com - a_com)
+
+
+
+    # determine sign of the eigen vectors for the first object
+    # this does not affect derivatives as the sign eigenvectors are invariant
+    # up to a rotational flip
+    # a_rvec_min = []
+    # for a, b in zip(a_rvec, b_rvec):
+    #     dpos = np.dot(a, b)
+    #     dneg = np.dot(-a, b)
+    #     svec = np.where(dpos > dneg, a, -a)
+    #     a_rvec_min.append(svec)
+
+    # a_evec = np.transpose(np.array(a_rvec_min))
+
+    # r = np.matmul(np.transpose(a_evec), b_evec)
+    # I = np.eye(3)
+
+    # loss = []
+    # for v, e in zip(r, I):
+    #     delta = 1 - np.sum(v*e) # remember to sum to get the dot!
+    #     loss.append(delta*delta)
+
+    # loss = np.array(loss)
+
+    # return angle_force*np.sum(loss) + com_force*np.linalg.norm(b_com - a_com)
+
+def recenter(conf):
+    return conf - np.mean(conf, axis=0)
+
 def inertia_tensor(conf, masses):
     com = np.average(conf, axis=0, weights=masses)
     conf = conf - com
@@ -47,45 +132,6 @@ def inertia_tensor(conf, masses):
     ])
 
     return com, tensor
-
-
-def pmi_restraints(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_force, com_force):
-
-    a_com, a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
-    b_com, b_tensor = inertia_tensor(conf[b_idxs], masses[b_idxs])
-
-    # don't want to deal with backprop of eigenvalues if we don't have to
-    a_eval, a_evec = np.linalg.eigh(a_tensor) # already sorted
-    b_eval, b_evec = np.linalg.eigh(b_tensor) # already sorted
-
-    loss = []
-    for d in range(3):
-        x = a_evec[d]
-        y = b_evec[d]
-
-        # arccos is always defined between 1 and -1
-        # returns a value between 0 and pi
-        # a_pos = np.arccos(np.sum(x*y)/np.linalg.norm(x)*np.linalg.norm(y))
-        # a_neg = np.arccos(np.sum(-x*y)/np.linalg.norm(-x)*np.linalg.norm(y))
-        a_pos = np.arccos(np.sum(x*y)) # norm is always 1
-        a_neg = np.arccos(np.sum(-x*y)) # norm is always 1
-        a = np.amin([a_pos, a_neg])
-        loss.append(angle_force*a*a)
-
-        # want to greatest force at theta=90 (or dot product of 0)
-
-        # a_pos = np.arccos(np.sum(x*y)/np.linalg.norm(x)*np.linalg.norm(y))
-        # loss.append(angle_force*a_pos*a_pos)
-
-        # a = np.sum(x*y)/np.linalg.norm(x)*np.linalg.norm(y)
-        # loss = np.sqrt(1-a*a)*100
-
-    loss = np.array(loss)
-
-    return np.sum(loss) + np.linalg.norm(b_com - a_com)*com_force
-
-def recenter(conf):
-    return conf - np.mean(conf, axis=0)
 
 def get_conf(romol, idx):
     conformer = romol.GetConformer(idx)
@@ -116,7 +162,7 @@ def get_heavy_atom_idxs(mol):
 
 
 def convergence(args):
-    epoch, lamb = args
+    epoch, lamb, lamb_idx = args
 
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
 
@@ -146,14 +192,14 @@ def convergence(args):
 
     coords = np.concatenate([coords_a, coords_b])
 
-    # a_idxs = np.arange(0, ligand_a.GetNumAtoms()) # change to heavy atoms
-    # b_idxs = np.arange(0, ligand_b.GetNumAtoms()) # change to heavy atoms
     a_idxs = get_heavy_atom_idxs(ligand_a)
     b_idxs = get_heavy_atom_idxs(ligand_b)
-    # print(a_idxs)
-    # print(b_idxs)
-    b_idxs += ligand_a.GetNumAtoms()
 
+    a_full_idxs = np.arange(0, ligand_a.GetNumAtoms())
+    b_full_idxs = np.arange(0, ligand_b.GetNumAtoms())
+
+    b_idxs += ligand_a.GetNumAtoms()
+    b_full_idxs += ligand_a.GetNumAtoms()
 
     nrg_fns = []
 
@@ -170,7 +216,6 @@ def convergence(args):
                 functools.partial(bonded.harmonic_bond,
                     params=bond_params,
                     box=None,
-                    # lamb=None,
                     bond_idxs=bond_idxs
                 )
             )
@@ -180,7 +225,6 @@ def convergence(args):
                 functools.partial(bonded.harmonic_angle,
                     params=angle_params,
                     box=None,
-                    # lamb=None,
                     angle_idxs=angle_idxs
                 )
             )
@@ -208,73 +252,81 @@ def convergence(args):
         #         )
         #     )
 
-    masses_a = onp.array([a.GetMass() for a in ligand_a.GetAtoms()])
+    masses_a = onp.array([a.GetMass() for a in ligand_a.GetAtoms()]) * 10000
     masses_b = onp.array([a.GetMass() for a in ligand_b.GetAtoms()])
 
-    # super_masses = np.ones_like(np.concatenate([masses_a, masses_b]))
-    # super_masses = np.concatenate([masses, masses])
     combined_masses = np.concatenate([masses_a, masses_b])
 
-    com_restraint_fn = functools.partial(bonded.centroid_restraint,
+    # com_restraint_fn = functools.partial(bonded.centroid_restraint,
+    #     params=None,
+    #     box=None,
+    #     lamb=None,
+    #     # masses=combined_masses, # try making this ones-like
+    #     masses=np.ones_like(combined_masses),
+    #     group_a_idxs=a_idxs,
+    #     group_b_idxs=b_idxs,
+    #     kb=50.0,
+    #     b0=0.0)
+
+    pmi_restraint_fn = functools.partial(pmi_restraints_new,
         params=None,
         box=None,
         lamb=None,
-        # masses=combined_masses, # try making this ones-like
-        masses=np.ones_like(combined_masses),
-        group_a_idxs=a_idxs,
-        group_b_idxs=b_idxs,
-        kb=50.0,
-        b0=0.0)
-
+        # masses=np.ones_like(combined_masses),
+        masses=combined_masses,
+        # a_idxs=a_full_idxs,
+        # b_idxs=b_full_idxs,
+        a_idxs=a_idxs,
+        b_idxs=b_idxs,
+        angle_force=100.0,
+        com_force=100.0
+    )
 
     prefactor = 2.7 # unitless
     shape_lamb = (4*np.pi)/(3*prefactor) # unitless
     kappa = np.pi/(np.power(shape_lamb, 2/3)) # unitless
-    # sigma = 0.16
-    sigma = 0.15
+    sigma = 0.15 # 1 angstrom std, 95% coverage by 2 angstroms
     alpha = kappa/(sigma*sigma)
 
-    shape_params = np.stack([
-        np.zeros(combined_mol.GetNumAtoms())+alpha,
-        np.zeros(combined_mol.GetNumAtoms())+prefactor,
-    ], axis=1)
+    alphas = np.zeros(combined_mol.GetNumAtoms())+alpha
+    weights = np.zeros(combined_mol.GetNumAtoms())+prefactor
 
-    overlap_fn = functools.partial(
-        shape.overlap,
-        params=shape_params,
-        a_idxs=a_idxs,
-        b_idxs=b_idxs
-    )
-
-    # print("overlap:", overlap_fn(coords)) # this is greater than one
-
-    overlap_fn = jax.jit(overlap_fn)
-
-    shape_restraint_fn = functools.partial(shape.inverse_overlap,
+    shape_restraint_fn = functools.partial(
+        shape.harmonic_overlap,
         box=None,
         lamb=None,
-        params=shape_params,
-        a_idxs=a_idxs,
-        b_idxs=b_idxs
-    )
-
-    pmi_restraint_fn = functools.partial(pmi_restraints,
         params=None,
-        box=None,
-        lamb=None,
         a_idxs=a_idxs,
         b_idxs=b_idxs,
-        masses=combined_masses,
-        angle_force=50,
-        com_force=50
+        alphas=alphas,
+        weights=weights,
+        k=150.0
     )
 
-    def restraint_fn(conf, lamb):
+    # shape_restraint_4d_fn = functools.partial(
+    #     shape.harmonic_4d_overlap,
+    #     box=None,
+    #     params=None,
+    #     a_idxs=a_idxs,
+    #     b_idxs=b_idxs,
+    #     alphas=alphas,
+    #     weights=weights,
+    #     k=200.0
+    # )
 
-        # return (1-lamb)*com_restraint_fn(conf) + lamb*pmi_restraint_fn(conf)
-        # return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
-        return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
-        # return com_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+    def restraint_fn(conf, lamb):
+        # return com_restraint_fn(conf) + shape_restraint_fn(conf, lamb=lamb)
+
+        # return (1-lamb)*pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+        return pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+        # return (1-lamb)*pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+
+        # return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_4d_fn(conf, lamb=None)
+        # return com_restraint_fn(conf) + shape_restraint_4d_fn(conf, lamb=lamb)
+
+        # not turning off the CoM restraint works better
+        # return com_restraint_fn(conf) + lamb*shape_restraint_fn(conf, lamb=None)
+        # return lamb*shape_restraint_fn(conf)
 
     nrg_fns.append(restraint_fn)
 
@@ -283,34 +335,44 @@ def convergence(args):
         for u in nrg_fns:
             s.append(u(conf, lamb=lamb))
         return np.sum(s)
-
+ 
     grad_fn = jax.grad(nrg_fn, argnums=(0,1))
     grad_fn = jax.jit(grad_fn)
+
+    du_dx_fn = jax.grad(nrg_fn, argnums=(0))
+    du_dx_fn = jax.jit(du_dx_fn)
 
     x_t = coords
     v_t = np.zeros_like(x_t)
 
-    w = Chem.SDWriter('frames_heavy_'+str(epoch)+'.sdf')
+    w = Chem.SDWriter('frames_heavy_'+str(epoch)+'_'+str(lamb_idx)+'.sdf')
 
     dt = 1.5e-3
-    # print(combined_masses.shape)
     ca, cb, cc = langevin_coefficients(300.0, dt, 1.0, combined_masses)
     cb = -1*onp.expand_dims(cb, axis=-1)
     cc = onp.expand_dims(cc, axis=-1)
 
     du_dls = []
 
+    # re-seed since forking 
+    onp.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
+
+
+    # for step in range(100000):
     for step in range(100000):
 
-        # if step % 200 == 0:
+        # if step % 1000 == 0:
         #     u = nrg_fn(x_t, lamb)
-        #     print("step", step, "nrg", onp.asarray(u), "avg_du_dl",  onp.mean(du_dls), "overlap", overlap_fn(x_t))
+        #     print("step", step, "nrg", onp.asarray(u), "avg_du_dl",  onp.mean(du_dls))
         #     mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
         #     w.write(mol)
         #     w.flush()
 
-        du_dx, du_dl = grad_fn(x_t, lamb)
-        du_dls.append(du_dl)
+        if step % 5 == 0 and step > 10000:
+            du_dx, du_dl = grad_fn(x_t, lamb)
+            du_dls.append(du_dl)
+        else:
+            du_dx = du_dx_fn(x_t, lamb)
 
         v_t = ca*v_t + cb*du_dx + cc*onp.random.normal(size=x_t.shape)
         x_t = x_t + v_t*dt
@@ -324,14 +386,18 @@ if __name__ == "__main__":
 
     # lambda_schedule = np.linspace(0, 1.0, os.cpu_count())
     lambda_schedule = np.linspace(0, 1.0, 24)
+    # lambda_schedule = np.array([0.0])
+    # lambda_schedule = [0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81]
+    # lambda_schedule = np.array([1e-4, 5e-4, 1e-3, 5e-3, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.15,0.175, 0.2, 0.225, 0.25, 0.275, 0.3, 0.35, 0.4, 0.5])
+    # lambda_schedule = np.array([0.0])
     # lambda_schedule = np.linspace(0.2, 0.6, 24)
 
     print("cpu count:", os.cpu_count())
 
     for epoch in range(100):
         args = []
-        for lamb in lambda_schedule:
-            args.append((epoch, lamb))
+        for l_idx, lamb in enumerate(lambda_schedule):
+            args.append((epoch, lamb, l_idx))
         avg_du_dls = pool.map(convergence, args)
         avg_du_dls = np.asarray(avg_du_dls)
 
