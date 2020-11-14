@@ -182,21 +182,15 @@ void grad_inertia_tensor(
         mass_sum += masses[idxs[i]];
     }
 
-    // std::cout << "mass sum: " << mass_sum << std::endl;
-
     for(int i=0; i < N; i++) {
         int a_idx = idxs[i];
         double mass = masses[a_idx];
         double xs = conf[a_idx*3+0] - centroid[0];
-
-        // std::cout << "xs: "<< xs << std::endl;
         double ys = conf[a_idx*3+1] - centroid[1];
         double zs = conf[a_idx*3+2] - centroid[2];
         conf_adjoint[a_idx*3+0] += (dyy*2*xs + dzz*2*xs + -dxy*2*ys + -dxz*2*zs)*(mass/mass_sum);
         conf_adjoint[a_idx*3+1] += (dzz*2*ys + dxx*2*ys + -dxy*2*xs + -dyz*2*zs)*(mass/mass_sum);
         conf_adjoint[a_idx*3+2] += (dxx*2*zs + dyy*2*zs + -dxz*2*xs + -dyz*2*ys)*(mass/mass_sum);
-
-        // std::cout << a_idx*3+0 << " : " << (dyy*2*xs + dzz*2*xs + -dxy*2*ys + -dxz*2*zs)*(mass/mass_sum) << std::endl;
     }
 
 
@@ -267,12 +261,9 @@ void grad_eigh(
         }
     }
 
-    // double final[3][3] = {0};
-
     for(int i=0; i < 3; i++) {
         for(int j=0; j < 3; j++) {
             if(i == j) {
-                // do nothing
                 a_adjoint[i][j] = vjp_temp[i][j];
             } else {
                 a_adjoint[i][j] = (vjp_temp[i][j] + vjp_temp[j][i])/2;
@@ -314,6 +305,10 @@ void InertialRestraint<RealType>::execute_device(
     std::vector<double> a_tensor(3*3);
     std::vector<double> b_tensor(3*3);
 
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+
     // com's are computed in place
     inertia_tensor(N_A_, &h_a_idxs[0], &h_masses[0], &h_x_in[0], &a_tensor[0]);
     inertia_tensor(N_B_, &h_b_idxs[0], &h_masses[0], &h_x_in[0], &b_tensor[0]);
@@ -329,8 +324,6 @@ void InertialRestraint<RealType>::execute_device(
     double b_v[3][3]; // eigenvectors
 
     dsyevv3(b_array, b_v, b_w);
-
-
 
     // this is equivalent to:
     // R' = matmul(A^T, B)
@@ -356,8 +349,6 @@ void InertialRestraint<RealType>::execute_device(
         }
     }
 
-    // print_matrix(dl_da_v, "TEST DL_DA_V");
-
     double dl_da_tensor[3][3];
     double dl_db_tensor[3][3];
 
@@ -369,13 +360,6 @@ void InertialRestraint<RealType>::execute_device(
     grad_inertia_tensor(N_A_, &h_a_idxs[0], &h_masses[0], &h_x_in[0], dl_da_tensor, &h_conf_adjoint[0]);
     grad_inertia_tensor(N_B_, &h_b_idxs[0], &h_masses[0], &h_x_in[0], dl_db_tensor, &h_conf_adjoint[0]);
 
-    // for(int i=0; i < N; i++) {
-    //     for(int d=0; d < 3; d++) {
-    //         std::cout << h_conf_adjoint[i*3+d] << " ";
-    //     }
-    //     std::cout << std::endl;
-    // }
-
     double *d_du_dx_buf;
     gpuErrchk(cudaMalloc(&d_du_dx_buf, N*3*sizeof(*d_du_dx_buf)))
     gpuErrchk(cudaMemcpy(d_du_dx_buf, &h_conf_adjoint[0], N*3*sizeof(*d_du_dx_buf), cudaMemcpyHostToDevice));
@@ -384,9 +368,6 @@ void InertialRestraint<RealType>::execute_device(
         k_atomic_add<<<1, 1, 0, stream>>>(d_u, loss*k_);        
         gpuErrchk(cudaPeekAtLastError());
     }
-
-
-
 
     const int B = (N+32-1)/32;
     dim3 dimGrid(B, 3, 1);
@@ -399,47 +380,11 @@ void InertialRestraint<RealType>::execute_device(
 
     gpuErrchk(cudaFree(d_du_dx_buf));
 
-    // // compare eigenvectors
-    // for(int j=0; j < 3; j++) {
-    //     double dot_prod = 0;
-    //     for(int i=0; i < 3; i++) {
-    //         dot_prod += a_v[i][j] * b_v[i][j];
-    //     }
-    //     dot_prod = abs(dot_prod);
-    //     double delta = 1 - dot_prod;
-    // }
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    std::cout << duration << "us" << std::endl;;
 
-    // compute gradients
-
-    // std::cout << "bevals" << std::endl;
-    // std::cout << b_w[0] << " " << b_w[1] << " " << b_w[2] << std::endl;
-
-    // std::cout << "bevecs" << std::endl;
-    // for(int i=0; i < 3; i++) {
-    //     for(int j=0; j < 3; j++) {
-    //         std::cout << b_v[i][j] << " ";
-    //     }
-    //     std::cout << std::endl;
-    // }
-
-    // k_centroid_restraint<RealType><<<1, tpb, 0, stream>>>(
-    //     N_,
-    //     d_x,
-    //     d_group_a_idxs_,
-    //     d_group_b_idxs_,
-    //     N_A_,
-    //     N_B_,
-    //     d_masses_,
-    //     kb_,
-    //     b0_,
-    //     d_du_dx,
-    //     d_u
-    // );
     gpuErrchk(cudaPeekAtLastError());
-
-    // auto finish = std::chrono::high_resolution_clock::now();
-    // std::chrono::duration<double> elapsed = finish - start;
-    // std::cout << "InertialRestraint Elapsed time: " << elapsed.count() << " s\n";
 
 };
 
