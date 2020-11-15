@@ -10,6 +10,7 @@
 #include "harmonic_angle.hpp"
 #include "lambda_potential.hpp"
 // #include "restraint.hpp"
+#include "inertial_restraint.hpp"
 #include "centroid_restraint.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
@@ -632,6 +633,42 @@ void declare_centroid_restraint(py::module &m, const char *typestr) {
 
 
 template <typename RealType>
+void declare_inertial_restraint(py::module &m, const char *typestr) {
+
+    using Class = timemachine::InertialRestraint<RealType>;
+    std::string pyclass_name = std::string("InertialRestraint_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &group_a_idxs,
+        const py::array_t<int, py::array::c_style> &group_b_idxs,
+        const py::array_t<double, py::array::c_style> &masses,
+        double k
+    ) {
+        std::vector<int> vec_group_a_idxs(group_a_idxs.size());
+        std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
+        std::vector<int> vec_group_b_idxs(group_b_idxs.size());
+        std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
+        std::vector<double> vec_masses(masses.size());
+        std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
+
+        return new timemachine::InertialRestraint<RealType>(
+            vec_group_a_idxs,
+            vec_group_b_idxs,
+            vec_masses,
+            k
+        );
+
+    }));
+
+}
+
+
+template <typename RealType>
 void declare_periodic_torsion(py::module &m, const char *typestr) {
 
     using Class = timemachine::PeriodicTorsion<RealType>;
@@ -926,6 +963,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_centroid_restraint<double>(m, "f64");
     declare_centroid_restraint<float>(m, "f32");
+
+    declare_inertial_restraint<double>(m, "f64");
+    declare_inertial_restraint<float>(m, "f32");
 
     // declare_restraint<double>(m, "f64");
     // declare_restraint<float>(m, "f32");
