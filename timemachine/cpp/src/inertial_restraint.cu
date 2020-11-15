@@ -5,7 +5,6 @@
 #include <set>
 #include "inertial_restraint.hpp"
 #include "gpu_utils.cuh"
-// #include "k_centroid_restraint.cuh"
 #include "solver.hpp"
 #include "../fixed_point.hpp"
 
@@ -377,8 +376,8 @@ void InertialRestraint<RealType>::execute_device(
     // see reference python code for more information
     double loss = 0;
 
-    double dl_da_v[3][3]; // derivatives
-    double dl_db_v[3][3]; // derivatives
+    double dl_da_v[3][3]; // derivatives of loss wrt. a's eigenvectors
+    double dl_db_v[3][3]; // derivatives of loss wrt. b's eigenvectors
 
     for(int j=0; j < 3; j++) {
         double dot_prod = 0;
@@ -435,7 +434,6 @@ void InertialRestraint<RealType>::execute_device(
     cudaDeviceSynchronize();
     // auto end = std::chrono::high_resolution_clock::now();
     // std::cout << "total: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "us" << std::endl;;
-
     gpuErrchk(cudaPeekAtLastError());
 
 };

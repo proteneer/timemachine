@@ -418,23 +418,13 @@ def test_force(
  
 def test1():
     # test hand written backprop
-
     onp.random.seed(2020)
-
     grad_fn = jax.jacobian(simplified_u, argnums=(0,1))
 
     for _ in range(10):
         N = 50
         x_a = onp.random.rand(N,3)
         x_b = onp.random.rand(N,3)
-
-        # do com outside
-
-        a_tensor = inertia_tensor(x_a, onp.ones(N, dtype=np.float64))
-        b_tensor = inertia_tensor(x_b, onp.ones(N, dtype=np.float64))
-
-        a_eval, a_evec = np.linalg.eigh(a_tensor)
-        b_eval, b_evec = np.linalg.eigh(b_tensor)
 
         a_masses = onp.random.rand(N)
         b_masses = onp.random.rand(N)
@@ -477,4 +467,3 @@ def test0():
 
         onp.testing.assert_almost_equal(onp_res[0], evp_res[0])
         onp.testing.assert_almost_equal(onp.abs(onp_res[1]), onp.abs(evp_res[1]))
-
