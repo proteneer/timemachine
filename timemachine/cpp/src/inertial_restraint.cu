@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <set>
 #include "inertial_restraint.hpp"
 #include "gpu_utils.cuh"
 // #include "k_centroid_restraint.cuh"
@@ -15,40 +16,53 @@ InertialRestraint<RealType>::InertialRestraint(
     const std::vector<int> &group_a_idxs,
     const std::vector<int> &group_b_idxs,
     const std::vector<double> &masses,
-    const double k
-) : N_(masses.size()),
+    const double k) : N_(masses.size()),
     N_A_(group_a_idxs.size()),
     N_B_(group_b_idxs.size()),
-    k_(k) {
+    k_(k),
+    h_a_idxs_(group_a_idxs),
+    h_b_idxs_(group_b_idxs),
+    h_masses_(masses),
+    h_x_buffer_(N_*3),
+    h_conf_adjoint_(N_*3, 0) {
 
     for(int i=0; i < group_a_idxs.size(); i++) {
         if(group_a_idxs[i] >= N_ || group_a_idxs[i] < 0) {
             throw std::runtime_error("Invalid group_a_idx!");
         }
+        h_c_idxs_.push_back(group_a_idxs[i]);
     }
 
     for(int i=0; i < group_b_idxs.size(); i++) {
         if(group_b_idxs[i] >= N_ || group_b_idxs[i] < 0) {
             throw std::runtime_error("Invalid group_a_idx!");
         }
+        h_c_idxs_.push_back(group_b_idxs[i]);
     }
 
-    gpuErrchk(cudaMalloc(&d_masses_, N_*sizeof(*d_masses_)));
-    gpuErrchk(cudaMemcpy(d_masses_, &masses[0], N_*sizeof(*d_masses_), cudaMemcpyHostToDevice));
+    // (ytz): take care of special corner case when a_idxs and b_idxs
+    // are not disjoint
+    std::set<int> c_set(h_c_idxs_.begin(), h_c_idxs_.end());
+    h_c_idxs_.clear();
+    for(auto idx : c_set) {
+        h_c_idxs_.push_back(idx);
+    }
 
-    gpuErrchk(cudaMalloc(&d_group_a_idxs_, N_A_*sizeof(*d_group_a_idxs_)));
-    gpuErrchk(cudaMemcpy(d_group_a_idxs_, &group_a_idxs[0], N_A_*sizeof(*d_group_a_idxs_), cudaMemcpyHostToDevice));
+    N_C_ = h_c_idxs_.size();
 
-    gpuErrchk(cudaMalloc(&d_group_b_idxs_, N_B_*sizeof(*d_group_b_idxs_)));
-    gpuErrchk(cudaMemcpy(d_group_b_idxs_, &group_b_idxs[0], N_B_*sizeof(*d_group_b_idxs_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMalloc(&d_c_idxs_, N_C_*sizeof(*d_c_idxs_)));
+    gpuErrchk(cudaMemcpy(d_c_idxs_, &h_c_idxs_[0], N_C_*sizeof(*d_c_idxs_), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMallocHost(&h_x_memcpy_buf_pinned_, N_C_*3*sizeof(*h_x_memcpy_buf_pinned_)));
+    gpuErrchk(cudaMalloc(&d_x_memcpy_buf_, N_C_*3*sizeof(*d_x_memcpy_buf_)));
 
 };
 
 template <typename RealType>
 InertialRestraint<RealType>::~InertialRestraint() {
-    gpuErrchk(cudaFree(d_masses_));
-    gpuErrchk(cudaFree(d_group_a_idxs_));
-    gpuErrchk(cudaFree(d_group_b_idxs_));
+    gpuErrchk(cudaFree(d_c_idxs_));
+    gpuErrchk(cudaFree(d_x_memcpy_buf_));
+    gpuErrchk(cudaFreeHost(h_x_memcpy_buf_pinned_));
 };
 
 // center of mass inertia tensor
@@ -114,19 +128,42 @@ __global__ void k_atomic_add(double *addr, double var) {
     atomicAdd(addr, var);
 }
 
-__global__ void k_accumulate_fixed(const int N, const double *val, unsigned long long *addr) {
+__global__ void k_gather_x(
+    const double *src,
+    const int C,
+    const int *c_idxs,
+    double *dst) {
 
-    const int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
+    const int tid = blockIdx.x*blockDim.x + threadIdx.x;
 
-    if(atom_idx >= N) {
+    if(tid >= C) {
         return;
     }
 
     const int dim = blockIdx.y;
 
-    atomicAdd(addr + atom_idx*3 + dim, static_cast<unsigned long long>((long long) (val[atom_idx*3 + dim]*FIXED_EXPONENT)));
+    // printf("setting %d to ")
+
+    dst[tid*3+dim] = src[c_idxs[tid]*3+dim];
 
 }
+
+__global__ void k_accumulate_scatter(
+    const int C,
+    const int *c_idxs,
+    const double *src,
+    unsigned long long *dst) {
+    const int tid = blockIdx.x*blockDim.x + threadIdx.x;
+    if(tid >= C) {
+        return;
+    }
+    const int dim = blockIdx.y;
+    // atomicAdd(addr + tid*3 + dim, static_cast<unsigned long long>((long long) (val[tid*3 + dim]*FIXED_EXPONENT)));
+    atomicAdd(dst + c_idxs[tid]*3 + dim, static_cast<unsigned long long>((long long) (src[tid*3 + dim]*FIXED_EXPONENT)));
+
+}
+
+
 
 template <typename T> int sgn(T val) {
     return (T(0) < val) - (val < T(0));
@@ -289,27 +326,29 @@ void InertialRestraint<RealType>::execute_device(
 
     int tpb = 32;
 
-    std::vector<double> h_x_in(N*3);
-    gpuErrchk(cudaMemcpy(&h_x_in[0], d_x, N*3*sizeof(*d_x), cudaMemcpyDeviceToHost));
+    // cudaDeviceSynchronize();
+    // auto start = std::chrono::high_resolution_clock::now();
 
-    std::vector<double> h_masses(N);
-    gpuErrchk(cudaMemcpy(&h_masses[0], d_masses_, N*sizeof(*d_masses_), cudaMemcpyDeviceToHost));
+    dim3 dimGather((N_C_+tpb-1)/tpb, 3, 1);
 
-    std::vector<int> h_a_idxs(N);
-    gpuErrchk(cudaMemcpy(&h_a_idxs[0], d_group_a_idxs_, N_A_*sizeof(*d_group_a_idxs_), cudaMemcpyDeviceToHost));
+    k_gather_x<<<dimGather, tpb>>>(d_x, N_C_, d_c_idxs_, d_x_memcpy_buf_);
+    gpuErrchk(cudaPeekAtLastError());
+    gpuErrchk(cudaMemcpy(h_x_memcpy_buf_pinned_, d_x_memcpy_buf_, N_C_*3*sizeof(*d_x_memcpy_buf_), cudaMemcpyDeviceToHost));    
 
-    std::vector<int> h_b_idxs(N);
-    gpuErrchk(cudaMemcpy(&h_b_idxs[0], d_group_b_idxs_, N_B_*sizeof(*d_group_b_idxs_), cudaMemcpyDeviceToHost));
+    std::vector<double> &h_x_in = h_x_buffer_;
+    for(int i=0; i < h_c_idxs_.size(); i++) {
+        for(int d=0; d < 3; d++) {
+            h_x_in[h_c_idxs_[i]*3+d] = h_x_memcpy_buf_pinned_[i*3+d];
+        }
+    }
 
+    const std::vector<double> &h_masses = h_masses_;
+    const std::vector<int> &h_a_idxs = h_a_idxs_;
+    const std::vector<int> &h_b_idxs = h_b_idxs_;
 
     std::vector<double> a_tensor(3*3);
     std::vector<double> b_tensor(3*3);
 
-
-    auto start = std::chrono::high_resolution_clock::now();
-
-
-    // com's are computed in place
     inertia_tensor(N_A_, &h_a_idxs[0], &h_masses[0], &h_x_in[0], &a_tensor[0]);
     inertia_tensor(N_B_, &h_b_idxs[0], &h_masses[0], &h_x_in[0], &b_tensor[0]);
 
@@ -327,7 +366,7 @@ void InertialRestraint<RealType>::execute_device(
 
     // this is equivalent to:
     // R' = matmul(A^T, B)
-    // sum_i (1 - dot(R'[i]e[i]))^2 where e is the identity matrix (the standard basis)
+    // sum_i (1 - dot(R'[i], e[i]))^2 where e is the identity matrix (the standard basis)
     // see reference python code for more information
     double loss = 0;
 
@@ -355,34 +394,40 @@ void InertialRestraint<RealType>::execute_device(
     grad_eigh(a_w, a_v, dl_da_v, dl_da_tensor);
     grad_eigh(b_w, b_v, dl_db_v, dl_db_tensor);
 
-    std::vector<double> h_conf_adjoint(N*3, 0);
+    grad_inertia_tensor(N_A_, &h_a_idxs[0], &h_masses[0], &h_x_in[0], dl_da_tensor, &h_conf_adjoint_[0]);
+    grad_inertia_tensor(N_B_, &h_b_idxs[0], &h_masses[0], &h_x_in[0], dl_db_tensor, &h_conf_adjoint_[0]);
 
-    grad_inertia_tensor(N_A_, &h_a_idxs[0], &h_masses[0], &h_x_in[0], dl_da_tensor, &h_conf_adjoint[0]);
-    grad_inertia_tensor(N_B_, &h_b_idxs[0], &h_masses[0], &h_x_in[0], dl_db_tensor, &h_conf_adjoint[0]);
+    for(int i=0; i < h_c_idxs_.size(); i++) {
+        for(int d=0; d < 3; d++) {
+            h_x_memcpy_buf_pinned_[i*3+d] = h_conf_adjoint_[h_c_idxs_[i]*3+d];
+        }
+    }
 
-    double *d_du_dx_buf;
-    gpuErrchk(cudaMalloc(&d_du_dx_buf, N*3*sizeof(*d_du_dx_buf)))
-    gpuErrchk(cudaMemcpy(d_du_dx_buf, &h_conf_adjoint[0], N*3*sizeof(*d_du_dx_buf), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(d_x_memcpy_buf_, h_x_memcpy_buf_pinned_, N_C_*3*sizeof(*d_x_memcpy_buf_), cudaMemcpyHostToDevice));
 
     if(d_u) {
-        k_atomic_add<<<1, 1, 0, stream>>>(d_u, loss*k_);        
+        k_atomic_add<<<1, 1, 0>>>(d_u, loss*k_);        
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    const int B = (N+32-1)/32;
+    const int B = (N+tpb-1)/tpb;
     dim3 dimGrid(B, 3, 1);
 
     gpuErrchk(cudaPeekAtLastError());
 
     if(d_du_dx) {
-        k_accumulate_fixed<<<dimGrid, tpb, 0, stream>>>(N, d_du_dx_buf, d_du_dx);        
+        k_accumulate_scatter<<<dimGrid, tpb, 0>>>(
+            N_C_,
+            d_c_idxs_,
+            d_x_memcpy_buf_,
+            d_du_dx
+        );
+        gpuErrchk(cudaPeekAtLastError());
     }
 
-    gpuErrchk(cudaFree(d_du_dx_buf));
-
-    auto end = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    std::cout << duration << "us" << std::endl;;
+    cudaDeviceSynchronize();
+    // auto end = std::chrono::high_resolution_clock::now();
+    // std::cout << "total: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "us" << std::endl;;
 
     gpuErrchk(cudaPeekAtLastError());
 

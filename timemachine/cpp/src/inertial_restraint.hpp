@@ -10,13 +10,24 @@ class InertialRestraint : public Potential {
 
 private:
 
-    int *d_group_a_idxs_;
-    int *d_group_b_idxs_;
-    double *d_masses_;
-
     int N_;
     int N_A_;
     int N_B_;
+    int N_C_;
+
+    const std::vector<int> h_a_idxs_;
+    const std::vector<int> h_b_idxs_;
+    const std::vector<double> h_masses_;
+
+    std::vector<double> h_conf_adjoint_;
+
+    std::vector<int> h_c_idxs_;
+    int *d_c_idxs_;
+
+    std::vector<double> h_x_buffer_; // Nx3
+
+    double *h_x_memcpy_buf_pinned_;
+    double *d_x_memcpy_buf_; // [(N_A+N_B)x3]
 
     double k_; // force constant
 

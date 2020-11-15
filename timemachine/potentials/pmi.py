@@ -254,6 +254,9 @@ def grad_inertia_tensor(conf, masses, tensor_grad):
 def inertial_restraint(conf, params, box, lamb, a_idxs, b_idxs, masses, k):
 
 
+    # assert len(set(a_idxs).intersection(set(b_idxs))) == 0
+
+
     a_conf = conf[a_idxs]
     b_conf = conf[b_idxs]
 
@@ -648,7 +651,6 @@ def test0():
 
         jnp_res = np.linalg.eigh(a_tensor)
         evp_res = evp.dsyevv3(a_tensor)
-
 
         np.set_printoptions(formatter={'float': lambda x: "{0:0.16f}".format(x)})
 
