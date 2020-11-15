@@ -26,43 +26,6 @@ from timemachine.potentials import bonded, shape
 from timemachine.integrator import langevin_coefficients
 
 
-
-# def pmi_restraints_old(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_force, com_force):
-
-#     a_com, a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
-#     b_com, b_tensor = inertia_tensor(conf[b_idxs], masses[b_idxs])
-
-#     a_eval, a_evec = np.linalg.eigh(a_tensor) # already sorted
-#     b_eval, b_evec = np.linalg.eigh(b_tensor) # already sorted
-
-#     loss = []
-#     for d in range(3):
-#         x = a_evec[d]
-#         y = b_evec[d]
-
-
-#         # huafeng's loss fn (doesn't seem to align properly)
-#         # delta = 1-np.sum(x*y)
-#         # loss.append(delta*delta)
-
-
-#         # (ytz): one of the issues is that sometimes we get an eigenvector
-#         # that flips in direction nearly instaneously, however, it is still
-#         # roughly aligned. So we need to still align correctly
-
-#         # another attempt
-#         # x = 
-
-#         # yutong's loss fn
-#         a_pos = np.arccos(np.sum(x*y)) # norm is always 1
-#         a_neg = np.arccos(np.sum(-x*y)) # norm is always 1
-#         a = np.amin([a_pos, a_neg])
-#         loss.append(a*a)
-
-#     loss = np.array(loss)
-
-#     return angle_force*np.sum(loss) + com_force*np.linalg.norm(b_com - a_com)
-
 def pmi_restraints_new(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_force, com_force):
 
     a_com, a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
@@ -82,31 +45,6 @@ def pmi_restraints_new(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_fo
 
     return angle_force*np.sum(loss) + com_force*np.linalg.norm(b_com - a_com)
 
-
-
-    # determine sign of the eigen vectors for the first object
-    # this does not affect derivatives as the sign eigenvectors are invariant
-    # up to a rotational flip
-    # a_rvec_min = []
-    # for a, b in zip(a_rvec, b_rvec):
-    #     dpos = np.dot(a, b)
-    #     dneg = np.dot(-a, b)
-    #     svec = np.where(dpos > dneg, a, -a)
-    #     a_rvec_min.append(svec)
-
-    # a_evec = np.transpose(np.array(a_rvec_min))
-
-    # r = np.matmul(np.transpose(a_evec), b_evec)
-    # I = np.eye(3)
-
-    # loss = []
-    # for v, e in zip(r, I):
-    #     delta = 1 - np.sum(v*e) # remember to sum to get the dot!
-    #     loss.append(delta*delta)
-
-    # loss = np.array(loss)
-
-    # return angle_force*np.sum(loss) + com_force*np.linalg.norm(b_com - a_com)
 
 def recenter(conf):
     return conf - np.mean(conf, axis=0)
@@ -315,18 +253,10 @@ def convergence(args):
     # )
 
     def restraint_fn(conf, lamb):
-        # return com_restraint_fn(conf) + shape_restraint_fn(conf, lamb=lamb)
 
-        # return (1-lamb)*pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
         return pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
         # return (1-lamb)*pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
 
-        # return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_4d_fn(conf, lamb=None)
-        # return com_restraint_fn(conf) + shape_restraint_4d_fn(conf, lamb=lamb)
-
-        # not turning off the CoM restraint works better
-        # return com_restraint_fn(conf) + lamb*shape_restraint_fn(conf, lamb=None)
-        # return lamb*shape_restraint_fn(conf)
 
     nrg_fns.append(restraint_fn)
 

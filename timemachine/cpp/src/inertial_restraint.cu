@@ -142,8 +142,6 @@ __global__ void k_gather_x(
 
     const int dim = blockIdx.y;
 
-    // printf("setting %d to ")
-
     dst[tid*3+dim] = src[c_idxs[tid]*3+dim];
 
 }
@@ -158,17 +156,14 @@ __global__ void k_accumulate_scatter(
         return;
     }
     const int dim = blockIdx.y;
-    // atomicAdd(addr + tid*3 + dim, static_cast<unsigned long long>((long long) (val[tid*3 + dim]*FIXED_EXPONENT)));
     atomicAdd(dst + c_idxs[tid]*3 + dim, static_cast<unsigned long long>((long long) (src[tid*3 + dim]*FIXED_EXPONENT)));
 
 }
 
 
-
 template <typename T> int sgn(T val) {
     return (T(0) < val) - (val < T(0));
 }
-
 
 
 void print_matrix(double x[3][3], std::string name) {
@@ -325,6 +320,18 @@ void InertialRestraint<RealType>::execute_device(
     cudaStream_t stream) {
 
     int tpb = 32;
+
+    // (ytz): This function proceeds as follows:
+    // 0. (GPU) Gather a subset of the coordinates that will be used
+    // 1. (GPU->CPU) Copy only coordinates for atoms in c_idxs
+    // 2. (CPU) Scatter gathered coordinates 
+    // 3. (CPU) Compute the 3x3 inertia tensor (real and symmetric) for each set of indices..
+    // 4. (CPU) Solve for the eigenvalues and eigenvector analytically. Sorted in ascending order.
+    // 5. (CPU) Compute the energy function function using the paired column eigenvectors.
+    // 6. (CPU) Backpropagate the derivative into a single [Nx3] array.
+    // 7. (CPU) Gather the forces
+    // 8. (CPU->GPU) Copy only the forces for atoms in c_idxs
+    // 9. (GPU) Update forces and energy
 
     // cudaDeviceSynchronize();
     // auto start = std::chrono::high_resolution_clock::now();

@@ -1,8 +1,6 @@
-# eigenvalue problem solvers
+# (ytz): eigenvalue problem solvers come from
 # ported from Numerical diagonalization of 3x3 matrcies (sic), v1.1
 # https://www.mpi-hd.mpg.de/personalhomes/globes/3x3/index.html
-
-from jax.config import config; config.update("jax_enable_x64", True)
 import jax
 import numpy as onp
 import jax.numpy as np
@@ -37,7 +35,6 @@ def dsyevc3(A):
     w[1] -= s;
 
     return onp.sort(w);
-
 
 def dsyevv3(input_tensor):
 
@@ -165,8 +162,6 @@ def recenter(conf):
     return conf - np.mean(conf, axis=0)
 
 def inertia_tensor(conf, masses):
-    # com = np.average(conf, axis=0, weights=masses)
-    # conf = conf - com
     xs = conf[:, 0]
     ys = conf[:, 1]
     zs = conf[:, 2]
@@ -182,14 +177,9 @@ def inertia_tensor(conf, masses):
         [xz, yz, zz]
     ])
 
-    # return com, tensor
     return tensor
 
-
 def grad_inertia_tensor(conf, masses, tensor_grad):
-    # com = np.average(conf, axis=0, weights=masses)
-    # conf = conf - com
-# def grad_inertia_tensor(xs, ys, zs, masses, tensor_grad):
     xs = conf[:, 0]
     ys = conf[:, 1]
     zs = conf[:, 2]
@@ -207,36 +197,7 @@ def grad_inertia_tensor(conf, masses, tensor_grad):
 
     [[dxx, dxy, dxz], [dxy, dyy, dyz], [dxz, dyz, dzz]] = tensor_grad # 
 
-    # dys = dxx*2*ys
-    # dzs = dxx*2*zs
-    # xx = np.average(ys*ys + zs*zs, weights=masses)
-    
-    # dxs = dyy*2*xs
-    # dzs = dyy*2*zs
-    # yy = np.average(xs*xs + zs*zs, weights=masses)
-
-    # dxs = dzz*2*xs
-    # dys = dzz*2*ys
-    # zz = np.average(xs*xs + ys*ys, weights=masses)
-
-    # dxs = -dxy*2*ys
-    # dys = -dxy*2*xs
-    # xy = np.average(-xs*ys, weights=masses)
-
-    # dxs = -dxz*2*zs
-    # dzs = -dxz*2*xs
-    # xz = np.average(-xs*zs, weights=masses)
-
-    # dys = -dyz*2*zs
-    # dzs = -dyz*2*ys
-    # yz = np.average(-ys*zs, weights=masses)
-
     N = conf.shape[0]
-
-    # a = dot(x, w)/sum(w)
-    # dl/dx = dl/da . da/dx
-    # dl/da is given, da/dx = w/sum(w)
-    # dl/dx = dl/da * (w/mass_sum)
 
     mass_sum = np.sum(masses)
 
@@ -248,14 +209,7 @@ def grad_inertia_tensor(conf, masses, tensor_grad):
 
     return dconf
 
-    # return dxs, dys, dzs
-
-
 def inertial_restraint(conf, params, box, lamb, a_idxs, b_idxs, masses, k):
-
-
-    # assert len(set(a_idxs).intersection(set(b_idxs))) == 0
-
 
     a_conf = conf[a_idxs]
     b_conf = conf[b_idxs]
@@ -277,48 +231,13 @@ def inertial_restraint(conf, params, box, lamb, a_idxs, b_idxs, masses, k):
     # b_eval, b_evec = dsyevv3(b_tensor)
 
     loss = []
+    # (ytz): .T is because the eigenvectors are stored in columns
     for a, b in zip(a_evec.T, b_evec.T):
         delta = 1 - np.abs(np.dot(a, b))
         loss.append(delta*delta)
 
     return np.sum(loss)*k
 
-    a_tensor = inertia_tensor(conf[a_idxs], masses[a_idxs])
-    b_tensor = inertia_tensor(conf[b_idxs], masses[b_idxs])
-
-    a_eval, a_evec = np.linalg.eigh(a_tensor) # already sorted
-    b_eval, b_evec = np.linalg.eigh(b_tensor) # already sorted
-
-    # convert from column to row eigenvectors
-    a_rvec = np.transpose(a_evec)
-    b_rvec = np.transpose(b_evec)
-
-    # determine sign of the eigen vectors for the first object
-    # this does not affect derivatives as the sign eigenvectors are invariant
-    # up to a rotational flip
-    a_rvec_min = []
-    for a, b in zip(a_rvec, b_rvec):
-        dpos = np.dot(a, b)
-        dneg = np.dot(-a, b)
-        svec = np.where(dpos > dneg, a, -a)
-        a_rvec_min.append(svec)
-
-    # this is equivalent to just dotting the two vectors against each other
-    # since 
-
-    a_evec = np.transpose(np.array(a_rvec_min))
-    r = np.matmul(np.transpose(a_evec), b_evec)
-
-    I = np.eye(3)
-
-    loss = []
-    for v, e in zip(r, I):
-        delta = 1 - np.abs(np.dot(v,e))
-        loss.append(delta*delta)
-
-    u = np.sum(loss)*k
-
-    return u
 
 def pmi_u(r):
     I = np.eye(3)
@@ -332,23 +251,8 @@ def pmi_u(r):
 
     return np.sum(loss)
 
-# def simplified_u(r):
-#     I = np.eye(3)
-#     pos = np.sum(r*I, axis=-1)
-#     neg = np.sum(-r*I, axis=-1)
-#     acos_pos = np.arccos(pos)
-#     acos_neg = np.arccos(neg)
-#     # [a,b,c]
-#     # [d,e,f]
-#     # -------
-#     # [min(a,d), min(b,e), min(c,f)]
-#     a = np.amin([acos_pos, acos_neg], axis=0)
-#     return np.sum(a*a)
-
-
-
-# ported over from autodiff
-# def grad_eigh(w, v, wg, vg):
+# (ytz): ported over from autograd. We never use the eigenvalues so wg is removed.
+# https://github.com/HIPS/autograd/blob/c6f630a5ec18bd30f1485bc0dbbccb8664c77510/autograd/numpy/linalg.py#L115-L150
 def grad_eigh(w, v, vg):
     """Gradient for eigenvalues and vectors of a symmetric matrix.
 
@@ -358,22 +262,19 @@ def grad_eigh(w, v, vg):
 
     v: eigenvectors
 
-    wg: adjoint eigenvalues
-
     vg: adjoint eigenvectors
     """
     vc = v # real 
     N = 3
     # wg, vg = g          # Gradient w.r.t. eigenvalues, eigenvectors.
     w_repeated = np.repeat(w[..., np.newaxis], N, axis=-1)
-    # Eigenvalue part
+    # Eigenvalue part (disabled)
     # vjp_temp = np.dot(vc * wg[..., np.newaxis, :], v.T) 
 
     # Add eigenvector part only if non-zero backward signal is present.
     # This can avoid NaN results for degenerate cases if the function depends
     # on the eigenvalues only.
 
-    # print(w_repeated)
     if np.any(vg):
         off_diag = np.ones((N, N)) - np.eye(N)
         F = off_diag / (w_repeated.T - w_repeated + np.eye(N))
@@ -387,7 +288,6 @@ def grad_eigh(w, v, vg):
     final = vjp_temp*np.eye(vjp_temp.shape[-1]) + (vjp_temp + vjp_temp.T)*off_diag_mask
 
     return final
-    # return vjp_temp*np.eye(vjp_temp.shape[-1]) + (vjp_temp + vjp_temp.T) * tri
 
 
 def simplified_u(
@@ -406,26 +306,11 @@ def simplified_u(
     b_eval, b_evec = np.linalg.eigh(b_tensor)
 
     loss = []
-    # we need to compare against transposes
     for a, b in zip(a_evec.T, b_evec.T):
         delta = 1 - np.abs(np.dot(a, b))
         loss.append(delta*delta)
 
     return np.sum(loss)
-
-    # r = np.matmul(np.transpose(a_evec), b_evec)
-    # I = np.eye(3)
-    # rI = r*I # 3x3 -> 3x3
-    # pos = np.sum(rI, axis=-1)
-    # neg = np.sum(-rI, axis=-1)
-    # acos_pos = np.arccos(pos)
-    # acos_neg = np.arccos(neg)
-    # # [a,b,c]
-    # # [d,e,f]
-    # # -------
-    # # [min(a,d), min(b,e), min(c,f)]
-    # a = np.amin([acos_pos, acos_neg], axis=0)
-    # return np.sum(a*a)
 
 
 def analytic_restraint_force(conf, params, box, lamb, a_idxs, b_idxs, masses, k):
@@ -483,8 +368,7 @@ def analytic_restraint_force(conf, params, box, lamb, a_idxs, b_idxs, masses, k)
     # return dl_da_com_conf, dl_db_com_conf
     return du_dx
 
-
-
+# (ytz): handwritten backpropagation to assist in C++ implementation.
 def test_force(
     a_conf,
     b_conf,
@@ -531,70 +415,9 @@ def test_force(
     return dl_da_com_conf, dl_db_com_conf
 
 
-    
-
-
-    # return np.sum(loss)
-
-
-    # old
-
-    r = np.matmul(np.transpose(a_evec), b_evec)
-    I = np.eye(3)
-    rI = r*I # 3x3 -> 3x3
-    pos = np.sum(rI, axis=-1) # 3x3 -> 3
-    neg = -np.sum(rI, axis=-1) # 3x3 -> 3
-    acos_pos = np.arccos(pos) # 3 -> 3
-    acos_neg = np.arccos(neg) # 3 -> 3
-    a = np.amin([acos_pos, acos_neg], axis=0) # 2x3 -> 3
-    a2 = a*a # 3->3
-    l = np.sum(a2) # 3->1
-
-    # derivatives, start backprop
-    dl_da2 = np.ones(3) # 1 x 3
-    da2_da = 2*a*np.eye(3) # 3 x 3
-    da_darg = np.stack([
-        np.eye(3)*(acos_pos < acos_neg),
-        np.eye(3)*(acos_neg < acos_pos)
-    ])
-
-    darg_dpn = np.stack([
-        np.eye(3)*(-1/np.sqrt(1-pos*pos)),
-        np.eye(3)*(-1/np.sqrt(1-neg*neg))
-    ])
-
-    dl_darg = np.matmul(np.matmul(dl_da2, da2_da), da_darg)
-    dpos = dl_darg[0]*(-1/np.sqrt(1-pos*pos))
-    dneg = dl_darg[1]*(-1/np.sqrt(1-neg*neg))
-    dneg = -dneg
-
-    dpn_dr = np.array([
-        [[1,1,1],
-         [0,0,0],
-         [0,0,0]],
-        [[0,0,0],
-         [1,1,1],
-         [0,0,0]],
-        [[0,0,0],
-         [0,0,0],
-         [1,1,1]],
-    ])
-
-    # element wise
-    dr = (np.matmul(dpos, dpn_dr) + np.matmul(dneg, dpn_dr)) * np.eye(3)
-
-    dr_daevec = np.matmul(b_evec, dr.T)
-    dr_dbevec = np.matmul(a_evec, dr.T)
-
-    dl_datensor = grad_eigh(a_eval, a_evec, dr_daevec)
-    dl_dbtensor = grad_eigh(b_eval, b_evec, dr_dbevec)
-
-
-
-    return dl_datensor, dl_dbtensor
-
  
 def test1():
+    # test hand written backprop
 
     onp.random.seed(2020)
 
@@ -613,12 +436,6 @@ def test1():
         a_eval, a_evec = np.linalg.eigh(a_tensor)
         b_eval, b_evec = np.linalg.eigh(b_tensor)
 
-        # rf = onp.asarray(grad_fn(a_evec, b_evec))
-        # tf = onp.asarray(test_force(a_evec, b_evec))
-
-        # rf = onp.asarray(grad_fn(a_tensor, b_tensor))
-        # tf = onp.asarray(test_force(a_tensor, b_tensor))
-
         a_masses = onp.random.rand(N)
         b_masses = onp.random.rand(N)
 
@@ -630,6 +447,7 @@ def test1():
 
 
 def test0():
+    # test np.linalg.eigh against analytical eigensolver.
 
     onp.random.seed(2020)
 
@@ -660,7 +478,3 @@ def test0():
         onp.testing.assert_almost_equal(onp_res[0], evp_res[0])
         onp.testing.assert_almost_equal(onp.abs(onp_res[1]), onp.abs(evp_res[1]))
 
-
-
-# test0()
-# test1()
