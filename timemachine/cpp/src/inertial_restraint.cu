@@ -400,6 +400,12 @@ void InertialRestraint<RealType>::execute_device(
     grad_eigh(a_w, a_v, dl_da_v, dl_da_tensor);
     grad_eigh(b_w, b_v, dl_db_v, dl_db_tensor);
 
+    for(int i=0; i < h_c_idxs_.size(); i++) {
+        for(int d=0; d < 3; d++) {
+            h_conf_adjoint_[h_c_idxs_[i]*3+d] = 0;
+        }
+    }
+
     grad_inertia_tensor(N_A_, &h_a_idxs[0], &h_masses[0], &h_x_in[0], dl_da_tensor, &h_conf_adjoint_[0]);
     grad_inertia_tensor(N_B_, &h_b_idxs[0], &h_masses[0], &h_x_in[0], dl_db_tensor, &h_conf_adjoint_[0]);
 
