@@ -468,3 +468,12 @@ class GradientTest(unittest.TestCase):
 
         np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
         np.testing.assert_almost_equal(ref_du_dp, test_du_dp, rtol)
+
+        # we should obtain the same result after calling the function twice.
+        # this checks to make sure that buffers etc are being cleaned properly in GPU code.
+        test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_potential.execute(x, params, box, lamb)
+
+        np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
+        np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
+        np.testing.assert_array_equal(test_du_dl, test_du_dl_2)
+        np.testing.assert_array_equal(test_u, test_u_2)
