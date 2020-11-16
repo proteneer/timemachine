@@ -23,7 +23,7 @@ InertialRestraint<RealType>::InertialRestraint(
     h_b_idxs_(group_b_idxs),
     h_masses_(masses),
     h_x_buffer_(N_*3),
-    h_conf_adjoint_(N_*3, 0) {
+    h_conf_adjoint_(N_*3) {
 
     for(int i=0; i < group_a_idxs.size(); i++) {
         if(group_a_idxs[i] >= N_ || group_a_idxs[i] < 0) {
