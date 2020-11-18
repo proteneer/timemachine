@@ -36,7 +36,7 @@ mkdir build
 cd build
 cmake -DBUILD_TEST=ON -DCUDA_ARCH=sm_70 ../
 make -j4 install
-cd ../../
+cd ../../../
 pytest -xsv tests/
 ```
 
