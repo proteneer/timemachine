@@ -20,18 +20,25 @@ def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
-    This implements a harmonic angle potential: V(t) = k*(b - b0)^2
+    This implements a harmonic bond potential:
+        V(conf; lamb) = \sum_bond kbs[bond] term[bond]^2
+
+        where term[bond] = 1 - exp(-a0s[bond]*(dij[bond] - b0s[bond]))
+        and where
+            dij[bond] = distance[bond] + f_lambda^2
+            and where
+                f_lambda = lamb * lamb_flags
 
     Parameters:
     -----------
     conf: shape [num_atoms, 3] np.array
         atomic coordinates
 
-    params: shape [num_params,] np.array
-        unique parameters
-
     lamb: float
         lambda value for 4d decoupling
+
+    params: shape [num_params,] np.array
+        unique parameters
 
     lamb_flags: np.array
         equivalent to offset_idxs, adjusts how much we offset by
@@ -42,9 +49,9 @@ def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     bond_idxs: [num_bonds, 2] np.array
         each element (src, dst) is a unique bond in the conformation
 
-    param_idxs: [num_bonds, 2] np.array
-        each element (k_idx, r_idx) maps into params for bond constants and ideal lengths
-
+    Notes:
+    ------
+    * box argument is unused
     """
     f_lambda = lamb*lamb_flags
 
@@ -62,12 +69,13 @@ def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
 
     return energy
 
-# lamb is *not used* it is used in the alchemical stuffl ater
+# lamb is *not used* it is used in the alchemical stuff after
 def harmonic_bond(conf, params, box, lamb, bond_idxs):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
-    This implements a harmonic angle potential: V(t) = k*(b - b0)^2
+    This implements a harmonic bond potential:
+        V(conf) = \sum_bond kbs[bond] * (distance[bond] - r0s[bond])^2
 
     Parameters:
     -----------
@@ -80,8 +88,14 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs):
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
 
+    lamb: float
+
     bond_idxs: [num_bonds, 2] np.array
         each element (src, dst) is a unique bond in the conformation
+
+    Notes:
+    ------
+    * lamb argument is unused
 
     """
     assert params.shape == bond_idxs.shape
@@ -98,10 +112,15 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs):
 
 def harmonic_angle(conf, params, box, lamb, angle_idxs, cos_angles=True):
     """
-    Compute the harmonic bond energy given a collection of molecules.
+    Compute the harmonic angle energy given a collection of molecules.
 
-    This implements a harmonic angle potential: V(t) = k*(t - t0)^2 or V(t) = k*(cos(t)-cos(t0))^2
-    depending on if cos_angles=True
+    This implements a harmonic angle potential:
+        V(t) = k*(t - t0)^2
+            if cos_angles=False
+        or
+        V(t) = k*(cos(t)-cos(t0))^2
+            if cos_angles=True
+
 
     Parameters:
     -----------
@@ -114,6 +133,8 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, cos_angles=True):
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
 
+    lamb: float
+
     angle_idxs: shape [num_angles, 3] np.array
         each element (a, b, c) is a unique angle in the conformation. atom b is defined
         to be the middle atom.
@@ -122,6 +143,9 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, cos_angles=True):
         if True, then this instead implements V(t) = k*(cos(t)-cos(t0))^2. This is far more
         numerically stable when the angle is pi.
 
+    Notes:
+    ------
+    * lamb argument unused
     """
 
     ci = conf[angle_idxs[:, 0]]
@@ -172,7 +196,6 @@ def signed_torsion_angle(ci, cj, ck, cl):
     -------
     shape [num_torsions,] np.array
         array of torsion angles.
-
     """
 
     # Taken from the wikipedia arctan2 implementation:
@@ -180,7 +203,7 @@ def signed_torsion_angle(ci, cj, ck, cl):
 
     # We use an identical but numerically stable arctan2
     # implementation as opposed to the OpenMM energy function to
-    # avoid asingularity when the angle is zero.
+    # avoid a singularity when the angle is zero.
 
     rij = delta_r(cj, ci)
     rkj = delta_r(cj, ck)
@@ -214,12 +237,19 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs):
     box: shape [3, 3] np.array
         periodic boundary vectors, if not None
 
+    lamb: float
+
     torsion_idxs: shape [num_torsions, 4] np.array
         indices denoting the four atoms that define a torsion
 
     param_idxs: shape [num_torsions, 3] np.array
         indices into the params array denoting the force constant, phase, and period
-    
+
+    Notes:
+    ------
+    * box argument unused
+    * lamb argument unused
+    * if conf has more than 3 dimensions, this function only depends on the first 3
     """
 
     conf = conf[:, :3] # this is defined only in 3d
