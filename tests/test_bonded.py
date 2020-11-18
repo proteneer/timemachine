@@ -1,7 +1,3 @@
-import functools
-import unittest
-import scipy.linalg
-
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -22,8 +18,6 @@ class TestBonded(GradientTest):
         for precision, rtol in [(np.float64, 1e-9), (np.float32, 2e-5)]:
 
             x_primal = self.get_random_coords(N, 3)
-            x_tangent = np.random.randn(*x_primal.shape)
-            lamb_tangent = np.random.rand()
 
             gai = np.random.randint(0, N, 4, dtype=np.int32)
             gbi = np.random.randint(0, N, 3, dtype=np.int32)
@@ -94,9 +88,6 @@ class TestBonded(GradientTest):
                 bond_idxs=bond_idxs
             )
 
-            x_tangent = np.random.randn(*x.shape)
-            lamb_tangent = np.random.rand()
-
             box = np.eye(3)*100
 
             self.compare_forces(
@@ -132,10 +123,6 @@ class TestBonded(GradientTest):
             # print(precision, rtol)
             test_potential = potentials.HarmonicAngle(angle_idxs)
             ref_potential = functools.partial(bonded.harmonic_angle, angle_idxs=angle_idxs)
-
-
-            x_tangent = np.random.randn(*x.shape)
-            lamb_tangent = np.random.rand()
 
             box = np.eye(3)*100
 
