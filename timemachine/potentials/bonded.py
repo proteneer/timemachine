@@ -212,10 +212,6 @@ def signed_torsion_angle(ci, cj, ck, cl):
     n1 = np.cross(rij, rkj)
     n2 = np.cross(rkj, rkl)
 
-    lhs = np.linalg.norm(n1, axis=-1)
-    rhs = np.linalg.norm(n2, axis=-1)
-    bot = lhs * rhs
-
     y = np.sum(np.multiply(np.cross(n1, n2), rkj/np.linalg.norm(rkj, axis=-1, keepdims=True)), axis=-1)
     x = np.sum(np.multiply(n1, n2), -1)
 
