@@ -55,8 +55,8 @@ def pose_dock(
 
     Note
     ----
-    If the energy becomes positive, the simulation for that guest will stop and the work will not be
-    calculated.
+    If any norm of force per atom exceeds 10000 kJ/(mol*nm), the simulation for that
+    guest will stop and the work will not be calculated.
     """
     assert transition_steps <= n_steps
     assert transition_type in ("insertion", "deletion")
@@ -131,7 +131,6 @@ def pose_dock(
         box = np.eye(3) * 100
         v0 = np.zeros_like(x0)
 
-
         impls = []
         precision = np.float32
         for b in bps:
@@ -171,8 +170,10 @@ def pose_dock(
                     f"lambda: {lamb:.2f}\t"
                     f"energy: {ctxt.get_u_t():.2f}"
                 )
-                if ctxt.get_u_t() > 0:
-                    print(f"Error: energy too high for {guest_name}")
+                forces = ctxt.get_du_dx_t()
+                norm_forces = np.linalg.norm(forces, axis=-1)
+                if any(x > 10000 for x in norm_forces):
+                    print("Error: at least one force is too large to continue")
                     calc_work = False
                     break
 
@@ -206,8 +207,17 @@ def pose_dock(
                 writer.write(guest_mol, conf_id)
                 writer.close()
 
+        if (
+            abs(du_dl_obs.full_du_dl()[0] - 0) > 0.001
+            or abs(du_dl_obs.full_du_dl()[-1] - 0) > 0.001
+        ):
+            print("Error: du_dl endpoints are not ~0")
+            calc_work = False
+
         if calc_work:
-            work = np.trapz(du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq])
+            work = np.trapz(
+                du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq]
+            )
             print(f"guest_name: {guest_name}\twork: {work:.2f}")
 
 
@@ -271,10 +281,7 @@ if __name__ == "__main__":
         help="Report errors to stdout and continue on to the next guest. Otherwise, will halt upon errors.",
     )
     parser.add_argument(
-        "-o",
-        "--outdir",
-        default="pose_dock_outdir",
-        help="where to write output"
+        "-o", "--outdir", default="pose_dock_outdir", help="where to write output"
     )
     args = parser.parse_args()
     print(args)
