@@ -17,12 +17,9 @@ relative_tolerance_at_precision = {
 
 class TestBonded(GradientTest):
 
-    def test_centroid_restraint(self, n_particles=10, n_A=4, n_B=3):
+    def test_centroid_restraint(self, n_particles=10, n_A=4, n_B=3, kb=5.4, b0=2.3):
         """Randomly define subsets A and B of a larger collection of particles,
         generate a centroid restraint between A and B, and then validate the resulting CentroidRestraint force"""
-
-        kb = 5.4  # TODO: is this constant important?
-        b0 = 2.3  # TODO: is this constant important?
         box = np.eye(3) * 100
 
         for precision, rtol in relative_tolerance_at_precision.items():
