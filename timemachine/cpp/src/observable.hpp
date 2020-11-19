@@ -51,7 +51,7 @@ public:
         return this->bp_->shape;
     }
     // copy into buffer and return shape of params object.
-    void avg_du_dp(double *buffer);
+    void avg_du_dp(double *buffer) const;
 
 };
 
@@ -84,7 +84,44 @@ public:
     ) override;
 
     // copy into buffer and return shape of params object.
-    void avg_du_dl(double *buffer);
+    void avg_du_dl(double *buffer) const;
+
+};
+
+
+class FullPartialUPartialLambda : public Observable {
+
+private:
+
+    double *d_full_du_dl_;
+    std::vector<BoundPotential *> bps_;
+    int count_; // current counter
+    int size_; // buffer size
+    int freq_; // how often we write 
+
+public:
+
+    FullPartialUPartialLambda(
+        std::vector<BoundPotential *> bps,
+        int freq
+    );
+
+    ~FullPartialUPartialLambda();
+
+    virtual void observe(
+        int step,
+        int N,
+        double *d_x_t,
+        double *d_box_t,
+        double lambda
+    ) override;
+
+    int count() const {
+        return count_;
+    }
+
+    // copy into buffer and return shape of params object.
+    void full_du_dl(double *buffer) const;
 
 };
 

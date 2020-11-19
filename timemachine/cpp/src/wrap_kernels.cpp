@@ -299,6 +299,30 @@ void declare_avg_partial_u_partial_lambda(py::module &m) {
 }
 
 
+void declare_full_partial_u_partial_lambda(py::module &m) {
+
+    using Class = timemachine::FullPartialUPartialLambda;
+    std::string pyclass_name = std::string("FullPartialUPartialLambda");
+    py::class_<Class, timemachine::Observable>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        std::vector<timemachine::BoundPotential *> bps,
+        int freq) {
+        return new timemachine::FullPartialUPartialLambda(bps, freq);
+    }))
+    .def("full_du_dl", [](timemachine::FullPartialUPartialLambda &obj) -> py::array_t<double, py::array::c_style> {
+        int count = obj.count();
+        py::array_t<double, py::array::c_style> py_full_du_dl({count});
+        obj.full_du_dl(py_full_du_dl.mutable_data());
+        return py_full_du_dl;
+    });
+}
+
+
 void declare_integrator(py::module &m) {
 
     using Class = timemachine::Integrator;
@@ -953,6 +977,7 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_observable(m);
     declare_avg_partial_u_partial_param(m);
     declare_avg_partial_u_partial_lambda(m);
+    declare_full_partial_u_partial_lambda(m);
 
     declare_potential(m);
     declare_bound_potential(m);
