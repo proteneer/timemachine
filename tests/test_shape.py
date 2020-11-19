@@ -1,4 +1,5 @@
 from jax.config import config
+
 config.update("jax_enable_x64", True)
 from jax import numpy as np
 
@@ -12,14 +13,17 @@ from timemachine.lib import potentials
 
 from common import GradientTest
 
+
 def recenter(conf):
     return conf - np.mean(conf, axis=0)
+
 
 def get_conf(romol, idx):
     conformer = romol.GetConformer(idx)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
     guest_conf /= 10
     return recenter(guest_conf)
+
 
 def make_conformer(mol, conf_a, conf_b):
     mol.RemoveAllConformers()
@@ -35,12 +39,12 @@ def make_conformer(mol, conf_a, conf_b):
 
 
 def get_heavy_atom_idxs(mol):
-
     idxs = []
     for a_idx, a in enumerate(mol.GetAtoms()):
         if a.GetAtomicNum() > 1:
             idxs.append(a_idx)
     return np.array(idxs, dtype=np.int32)
+
 
 class TestShape(GradientTest):
 
@@ -48,18 +52,18 @@ class TestShape(GradientTest):
         # test that volume ranges are 0 <= x <= 1
         suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
 
-        prefactor = 2.7 # unitless
-        lamb = (4*np.pi)/(3*prefactor) # unitless
-        kappa = np.pi/(np.power(lamb, 2/3)) # unitless
-        sigma = 1.6 # angstroms or nm
-        alpha = kappa/(sigma*sigma)
+        prefactor = 2.7  # unitless
+        lamb = (4 * np.pi) / (3 * prefactor)  # unitless
+        kappa = np.pi / (np.power(lamb, 2 / 3))  # unitless
+        sigma = 1.6  # angstroms or nm
+        alpha = kappa / (sigma * sigma)
 
         for ligand_a in suppl:
 
-            coords_a = get_conf(ligand_a, idx=0)*10
+            coords_a = get_conf(ligand_a, idx=0) * 10
             params_a = np.stack([
-                np.zeros(ligand_a.GetNumAtoms())+alpha,
-                np.zeros(ligand_a.GetNumAtoms())+prefactor,
+                np.zeros(ligand_a.GetNumAtoms()) + alpha,
+                np.zeros(ligand_a.GetNumAtoms()) + prefactor,
             ], axis=1)
 
             v = shape.normalized_overlap(
@@ -72,12 +76,11 @@ class TestShape(GradientTest):
             assert v == 1.0
 
             for ligand_b in suppl:
-
-                coords_b = get_conf(ligand_b, idx=0)*10
+                coords_b = get_conf(ligand_b, idx=0) * 10
                 coords = np.concatenate([coords_a, coords_b])
                 params_b = np.stack([
-                    np.zeros(ligand_b.GetNumAtoms())+alpha,
-                    np.zeros(ligand_b.GetNumAtoms())+prefactor,
+                    np.zeros(ligand_b.GetNumAtoms()) + alpha,
+                    np.zeros(ligand_b.GetNumAtoms()) + prefactor,
                 ], axis=1)
 
                 v = shape.normalized_overlap(
@@ -93,26 +96,26 @@ class TestShape(GradientTest):
     def test_custom_op(self):
         suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
 
-        prefactor = 2.7 # unitless
-        lamb = (4*np.pi)/(3*prefactor) # unitless
-        kappa = np.pi/(np.power(lamb, 2/3)) # unitless
-        sigma = 1.6 # angstroms or nm
-        alpha = kappa/(sigma*sigma)
+        prefactor = 2.7  # unitless
+        lamb = (4 * np.pi) / (3 * prefactor)  # unitless
+        kappa = np.pi / (np.power(lamb, 2 / 3))  # unitless
+        sigma = 1.6  # angstroms or nm
+        alpha = kappa / (sigma * sigma)
 
         for ligand_a in suppl:
 
-            coords_a = get_conf(ligand_a, idx=0)*10
+            coords_a = get_conf(ligand_a, idx=0) * 10
 
-            a_alphas = np.random.rand(ligand_a.GetNumAtoms())/10+alpha
-            a_weights = np.random.rand(ligand_a.GetNumAtoms())/10+prefactor
+            a_alphas = np.random.rand(ligand_a.GetNumAtoms()) / 10 + alpha
+            a_weights = np.random.rand(ligand_a.GetNumAtoms()) / 10 + prefactor
             a_idxs = get_heavy_atom_idxs(ligand_a)
 
             for j_idx, ligand_b in enumerate(suppl):
 
-                b_alphas = np.random.rand(ligand_b.GetNumAtoms())/10+alpha
-                b_weights = np.random.rand(ligand_b.GetNumAtoms())/10+prefactor
+                b_alphas = np.random.rand(ligand_b.GetNumAtoms()) / 10 + alpha
+                b_weights = np.random.rand(ligand_b.GetNumAtoms()) / 10 + prefactor
 
-                coords_b = get_conf(ligand_b, idx=0)*10
+                coords_b = get_conf(ligand_b, idx=0) * 10
                 coords = np.concatenate([coords_a, coords_b])
                 b_idxs = get_heavy_atom_idxs(ligand_b)
                 b_idxs += ligand_a.GetNumAtoms()
@@ -123,12 +126,12 @@ class TestShape(GradientTest):
                 k = 195.0
 
                 ref_u = functools.partial(shape.harmonic_overlap,
-                    alphas=c_alphas,
-                    weights=c_weights,
-                    a_idxs=a_idxs,
-                    b_idxs=b_idxs,
-                    k=k
-                )
+                                          alphas=c_alphas,
+                                          weights=c_weights,
+                                          a_idxs=a_idxs,
+                                          b_idxs=b_idxs,
+                                          k=k
+                                          )
 
                 test_u = potentials.Shape(
                     coords.shape[0],
@@ -144,7 +147,7 @@ class TestShape(GradientTest):
                     self.compare_forces(
                         x=coords,
                         params=np.array([]),
-                        box=np.eye(3)*1000,
+                        box=np.eye(3) * 1000,
                         lamb=0.0,
                         ref_potential=ref_u,
                         test_potential=test_u,
