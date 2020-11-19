@@ -31,7 +31,7 @@ def get_conf(romol: ROMol, idx: int) -> np.ndarray:
 
 def make_conformer(mol: Chem.Mol, conf_a: np.ndarray, conf_b: np.ndarray) -> Chem.Mol:
     """Remove all of mol's conformers, make a new mol containing two copies of mol,
-    assign positions two these copies using conf_a and conf_b, respectively, assumed in nanometers"""
+    assign positions to each copy using conf_a and conf_b, respectively, assumed in nanometers"""
     mol.RemoveAllConformers()
     mol = Chem.CombineMols(mol, mol)
     cc = Chem.Conformer(mol.GetNumAtoms())
