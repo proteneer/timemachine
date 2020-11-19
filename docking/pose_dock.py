@@ -172,7 +172,7 @@ def pose_dock(
                 )
                 forces = ctxt.get_du_dx_t()
                 norm_forces = np.linalg.norm(forces, axis=-1)
-                if any(x > 10000 for x in norm_forces):
+                if np.any(norm_forces > 10000):
                     print("Error: at least one force is too large to continue")
                     calc_work = False
                     break
@@ -208,8 +208,8 @@ def pose_dock(
                 writer.close()
 
         if (
-            abs(du_dl_obs.full_du_dl()[0] - 0) > 0.001
-            or abs(du_dl_obs.full_du_dl()[-1] - 0) > 0.001
+            abs(du_dl_obs.full_du_dl()[0]) > 0.001
+            or abs(du_dl_obs.full_du_dl()[-1]) > 0.001
         ):
             print("Error: du_dl endpoints are not ~0")
             calc_work = False
