@@ -13,15 +13,13 @@ from timemachine.lib import potentials
 
 from common import GradientTest
 
-ROMol = Chem.Mol  # TODO: What should the type annotation of ROMol be exactly?
 
-
-def recenter(conf: np.ndarray) -> np.ndarray:
+def recenter(conf):
     """Return copy of conf with mean coordinates subtracted"""
     return conf - np.mean(conf, axis=0)
 
 
-def get_conf(romol: ROMol, idx: int) -> np.ndarray:
+def get_conf(romol, idx):
     """Get the idx'th conformer of romol, in nanometers"""
     conformer = romol.GetConformer(idx)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
@@ -29,7 +27,7 @@ def get_conf(romol: ROMol, idx: int) -> np.ndarray:
     return recenter(guest_conf)
 
 
-def make_conformer(mol: Chem.Mol, conf_a: np.ndarray, conf_b: np.ndarray) -> Chem.Mol:
+def make_conformer(mol, conf_a, conf_b):
     """Remove all of mol's conformers, make a new mol containing two copies of mol,
     assign positions to each copy using conf_a and conf_b, respectively, assumed in nanometers"""
     mol.RemoveAllConformers()
@@ -44,7 +42,7 @@ def make_conformer(mol: Chem.Mol, conf_a: np.ndarray, conf_b: np.ndarray) -> Che
     return mol
 
 
-def get_heavy_atom_idxs(mol: Chem.Mol) -> np.ndarray:
+def get_heavy_atom_idxs(mol):
     """Return integer array of indices of non-hydrogen's"""
     idxs = []
     for a_idx, a in enumerate(mol.GetAtoms()):
@@ -55,7 +53,7 @@ def get_heavy_atom_idxs(mol: Chem.Mol) -> np.ndarray:
 
 class TestShape(GradientTest):
 
-    def test_volume_range(self) -> None:
+    def test_volume_range(self):
         """Assert that:
         * normalized overlap for identical configurations = 1
         * normalized overlap for similar configurations is between 0.5 and 1.0
@@ -103,7 +101,7 @@ class TestShape(GradientTest):
                 assert v <= 1
                 assert v >= 0.5
 
-    def test_custom_op(self) -> None:
+    def test_custom_op(self):
         """Construct a Shape potential and validate it using compare_forces"""
         suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
 
