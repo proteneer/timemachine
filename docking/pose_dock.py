@@ -220,9 +220,18 @@ def pose_dock(
             )
             print(f"guest_name: {guest_name}\twork: {work:.2f}")
 
-        work = np.trapz(du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq])
+        if (
+            abs(du_dl_obs.full_du_dl()[0]) > 0.001
+            or abs(du_dl_obs.full_du_dl()[-1]) > 0.001
+        ):
+            print("Error: du_dl endpoints are not ~0")
+            calc_work = False
 
-        print("work", work)
+        if calc_work:
+            work = np.trapz(
+                du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq]
+            )
+            print(f"guest_name: {guest_name}\twork: {work:.2f}")
 
 
 if __name__ == "__main__":
