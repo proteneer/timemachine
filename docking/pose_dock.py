@@ -220,6 +220,10 @@ def pose_dock(
             )
             print(f"guest_name: {guest_name}\twork: {work:.2f}")
 
+        work = np.trapz(du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq])
+
+        print("work", work)
+
 
 if __name__ == "__main__":
 
