@@ -13,24 +13,30 @@ from timemachine.lib import potentials
 
 from common import GradientTest
 
+ROMol = Chem.Mol  # TODO: What should the type annotation of ROMol be exactly?
 
-def recenter(conf):
+
+def recenter(conf: np.ndarray) -> np.ndarray:
+    """Return copy of conf with mean coordinates subtracted"""
     return conf - np.mean(conf, axis=0)
 
 
-def get_conf(romol, idx):
+def get_conf(romol: ROMol, idx: int) -> np.ndarray:
+    """Get the idx'th conformer of romol, in nanometers"""
     conformer = romol.GetConformer(idx)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    guest_conf /= 10
+    guest_conf /= 10  # TODO: label this unit conversion?
     return recenter(guest_conf)
 
 
-def make_conformer(mol, conf_a, conf_b):
+def make_conformer(mol: Chem.Mol, conf_a: np.ndarray, conf_b: np.ndarray) -> Chem.Mol:
+    """Remove all of mol's conformers, make a new mol containing two copies of mol,
+    assign positions two these copies using conf_a and conf_b, respectively, assumed in nanometers"""
     mol.RemoveAllConformers()
     mol = Chem.CombineMols(mol, mol)
     cc = Chem.Conformer(mol.GetNumAtoms())
     conf = np.concatenate([conf_a, conf_b])
-    conf *= 10
+    conf *= 10  # TODO: label this unit conversion?
     for idx, pos in enumerate(onp.asarray(conf)):
         cc.SetAtomPosition(idx, (float(pos[0]), float(pos[1]), float(pos[2])))
     mol.AddConformer(cc)
@@ -38,7 +44,8 @@ def make_conformer(mol, conf_a, conf_b):
     return mol
 
 
-def get_heavy_atom_idxs(mol):
+def get_heavy_atom_idxs(mol: Chem.Mol) -> np.ndarray:
+    """Return integer array of indices of non-hydrogen's"""
     idxs = []
     for a_idx, a in enumerate(mol.GetAtoms()):
         if a.GetAtomicNum() > 1:
@@ -48,14 +55,18 @@ def get_heavy_atom_idxs(mol):
 
 class TestShape(GradientTest):
 
-    def test_volume_range(self):
-        # test that volume ranges are 0 <= x <= 1
+    def test_volume_range(self) -> None:
+        """Assert that:
+        * normalized overlap for identical configurations = 1
+        * normalized overlap for similar configurations is between 0.5 and 1.0
+        """
+
         suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
 
         prefactor = 2.7  # unitless
         lamb = (4 * np.pi) / (3 * prefactor)  # unitless
         kappa = np.pi / (np.power(lamb, 2 / 3))  # unitless
-        sigma = 1.6  # angstroms or nm
+        sigma = 1.6  # angstroms or nm # TODO: check unit?
         alpha = kappa / (sigma * sigma)
 
         for ligand_a in suppl:
@@ -77,7 +88,6 @@ class TestShape(GradientTest):
 
             for ligand_b in suppl:
                 coords_b = get_conf(ligand_b, idx=0) * 10
-                coords = np.concatenate([coords_a, coords_b])
                 params_b = np.stack([
                     np.zeros(ligand_b.GetNumAtoms()) + alpha,
                     np.zeros(ligand_b.GetNumAtoms()) + prefactor,
@@ -93,14 +103,16 @@ class TestShape(GradientTest):
                 assert v <= 1
                 assert v >= 0.5
 
-    def test_custom_op(self):
+    def test_custom_op(self) -> None:
+        """Construct a Shape potential and validate it using compare_forces"""
         suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
 
         prefactor = 2.7  # unitless
         lamb = (4 * np.pi) / (3 * prefactor)  # unitless
         kappa = np.pi / (np.power(lamb, 2 / 3))  # unitless
-        sigma = 1.6  # angstroms or nm
+        sigma = 1.6  # angstroms or nm # TODO: check unit?
         alpha = kappa / (sigma * sigma)
+        # TODO: extract the preceding setup block and share between test_custom_op and test_volume_range?
 
         for ligand_a in suppl:
 
