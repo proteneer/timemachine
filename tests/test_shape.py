@@ -1,12 +1,12 @@
 from jax.config import config
 
 config.update("jax_enable_x64", True)
-from jax import numpy as np
+from jax import numpy as jnp
 
 from rdkit import Chem
 
 import functools
-import numpy as onp
+import numpy as np
 
 from timemachine.potentials import shape
 from timemachine.lib import potentials
@@ -37,7 +37,7 @@ def make_conformer(mol: Chem.Mol, conf_a: np.ndarray, conf_b: np.ndarray) -> Che
     cc = Chem.Conformer(mol.GetNumAtoms())
     conf = np.concatenate([conf_a, conf_b])
     conf *= 10  # TODO: label this unit conversion?
-    for idx, pos in enumerate(onp.asarray(conf)):
+    for idx, pos in enumerate(np.asarray(conf)):
         cc.SetAtomPosition(idx, (float(pos[0]), float(pos[1]), float(pos[2])))
     mol.AddConformer(cc)
 
