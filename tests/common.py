@@ -3,7 +3,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import functools
-
+from timemachine.constants import ONE_4PI_EPS0
 
 from timemachine.potentials import bonded, nonbonded, gbsa
 from timemachine.lib import potentials, custom_ops
@@ -196,7 +196,7 @@ def prepare_nb_system(
     D = x.shape[1]
 
     params = np.stack([
-        (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456), # q
+        (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(ONE_4PI_EPS0), # q
         np.random.rand(N).astype(np.float64)/10.0, # sig
         np.random.rand(N).astype(np.float64) # eps
     ], axis=1)
