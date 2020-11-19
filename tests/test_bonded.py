@@ -9,11 +9,6 @@ from common import GradientTest
 from timemachine.lib import potentials
 from timemachine.potentials import bonded
 
-relative_tolerance_at_precision = {
-    np.float32: 2e-5,
-    np.float64: 1e-9
-}
-
 
 class TestBonded(GradientTest):
 
@@ -21,6 +16,9 @@ class TestBonded(GradientTest):
         """Randomly define subsets A and B of a larger collection of particles,
         generate a centroid restraint between A and B, and then validate the resulting CentroidRestraint force"""
         box = np.eye(3) * 100
+
+        # specific to centroid restraint force
+        relative_tolerance_at_precision = {np.float32: 2e-5, np.float64: 1e-9}
 
         for precision, rtol in relative_tolerance_at_precision.items():
             x_primal = self.get_random_coords(n_particles, 3)
@@ -80,6 +78,9 @@ class TestBonded(GradientTest):
         lamb = 0.0
         box = np.eye(3) * 100
 
+        # specific to harmonic bond force
+        relative_tolerance_at_precision = {np.float32: 2e-5, np.float64: 1e-9}
+
         for precision, rtol in relative_tolerance_at_precision.items():
             test_potential = potentials.HarmonicBond(bond_idxs)
             ref_potential = functools.partial(
@@ -114,6 +115,9 @@ class TestBonded(GradientTest):
         lamb = 0.0
         box = np.eye(3) * 100
 
+        # specific to harmonic angle force
+        relative_tolerance_at_precision = {np.float32: 2e-5, np.float64: 1e-9}
+
         for precision, rtol in relative_tolerance_at_precision.items():
             test_potential = potentials.HarmonicAngle(angle_idxs)
             ref_potential = functools.partial(bonded.harmonic_angle, angle_idxs=angle_idxs)
@@ -145,6 +149,9 @@ class TestBonded(GradientTest):
 
         lamb = 0.0
         box = np.eye(3) * 100
+
+        # specific to periodic torsion force
+        relative_tolerance_at_precision = {np.float32: 2e-5, np.float64: 1e-9}
 
         for precision, rtol in relative_tolerance_at_precision.items():
             test_potential = potentials.PeriodicTorsion(torsion_idxs)
