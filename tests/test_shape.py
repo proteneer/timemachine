@@ -1,9 +1,11 @@
-from jax.config import config; config.update("jax_enable_x64", True)
+from jax.config import config
+config.update("jax_enable_x64", True)
+from jax import numpy as np
 
 from rdkit import Chem
 
 import functools
-import numpy as np
+import numpy as onp
 
 from timemachine.potentials import shape
 from timemachine.lib import potentials
