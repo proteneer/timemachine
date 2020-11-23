@@ -32,7 +32,6 @@ system, host_coords, box, topology = builders.build_water_system(4.0)
 
 
 writer = pdb_writer.PDBWriter([topology, romol], "debug.pdb")
-# box[np.diag_indices(3)] += 10
 
 combined_conf = np.concatenate([host_coords, ligand_coords])
 
@@ -70,10 +69,8 @@ for final_lamb in np.linspace(0, 1.2, 8):
     for bp in combined_recipe.bound_potentials:
         fn = bp.bound_impl(precision=np.float32)
         du_dx, du_dl, u = fn.execute(x0, box, 100.0)
-        # print(bp, du_dx)
         max_norm_water = np.amax(np.linalg.norm(du_dx[:num_host_atoms], axis=0))
         max_norm_ligand = np.amax(np.linalg.norm(du_dx[num_host_atoms:], axis=0))
-        # print(bp, max_norm_water, max_norm_ligand)
         u_impls.append(fn)
 
     ctxt = custom_ops.Context(
@@ -100,7 +97,3 @@ for final_lamb in np.linspace(0, 1.2, 8):
     du_dl = du_dl_obs.avg_du_dl()
 
     print(final_lamb, du_dl)
-
-
-# for _ in range(10000):
-    # ctxt.step(1.0)
