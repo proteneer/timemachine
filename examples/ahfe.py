@@ -1,4 +1,4 @@
-# hydration free energy
+# absolute hydration free energy
 
 import numpy as np
 
@@ -127,7 +127,7 @@ for final_lamb in np.linspace(0, 1.2, 8):
         ctxt.step(lamb)
 
     # note: these 5000 steps are "equilibration", before we attach a reporter /
-    #   "observable" to the context and start running "production
+    #   "observable" to the context and start running "production"
     for _ in range(5000):
         ctxt.step(final_lamb)
 
