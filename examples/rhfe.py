@@ -8,13 +8,9 @@ from fe import pdb_writer
 from md import Recipe
 from md import builders
 
-import asciiplotlib
-
-from timemachine.lib import potentials
 from timemachine.lib import potentials, custom_ops
 from timemachine.lib import LangevinIntegrator
 
-# from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
 
 # 1. build water box
@@ -24,8 +20,7 @@ from ff.handlers.deserialize import deserialize_handlers
 def get_romol_conf(mol):
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    guest_conf = guest_conf/10 # from angstroms to nm
-    return np.array(guest_conf, dtype=np.float64)
+    return guest_conf / 10  # from angstroms to nm
 
 romol_a = Chem.AddHs(Chem.MolFromSmiles("CC(=O)OC1=CC=CC=C1C(=O)O"))
 romol_b = Chem.AddHs(Chem.MolFromSmiles("CC(=O)OC1=CC=CC=C1C(=O)F"))
