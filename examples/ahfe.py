@@ -21,8 +21,7 @@ def get_romol_conf(mol):
     """Coordinates of mol's 0th conformer, in nanometers"""
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    guest_conf = guest_conf/10 # from angstroms to nm
-    return np.array(guest_conf, dtype=np.float64)
+    return guest_conf/10 # from angstroms to nm
 
 # construct an RDKit molecule of aspirin
 # note: not using OpenFF Molecule because want to avoid the dependency (YTZ?)
