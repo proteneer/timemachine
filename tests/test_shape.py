@@ -50,9 +50,26 @@ def get_heavy_atom_idxs(mol):
             idxs.append(a_idx)
     return np.array(idxs, dtype=np.int32)
 
-
 class TestShape(GradientTest):
 
+
+    def test_rigid_shape(self):
+
+        suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+        prefactor = 2.7  # unitless
+        lamb = (4 * np.pi) / (3 * prefactor)  # unitless
+        kappa = np.pi / (np.power(lamb, 2 / 3))  # unitless
+        sigma = 1.6  # angstroms or nm # TODO: check unit?
+        alpha = kappa / (sigma * sigma)
+
+        mols = []
+        for a in suppl:
+            mols.append(a)
+
+        print(mols[0], mols[1])
+
+
+    @unittest.skip("debug")
     def test_volume_range(self):
         """Assert that:
         * normalized overlap for identical configurations = 1
@@ -101,6 +118,7 @@ class TestShape(GradientTest):
                 assert v <= 1
                 assert v >= 0.5
 
+    @unittest.skip("debug1")
     def test_custom_op(self):
         """Construct a Shape potential and validate it using compare_forces"""
         suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)

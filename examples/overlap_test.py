@@ -7,12 +7,11 @@ from rdkit.Chem import AllChem
 
 import multiprocessing
 
-
+from scipy.spatial.transform import Rotation
 import jax
 import jax.numpy.linalg as linalg
 import jax.numpy as np
 import functools
-import jax.numpy as np
 import numpy as onp
 
 from scipy.stats import special_ortho_group
@@ -22,7 +21,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from ff import handlers
-from timemachine.potentials import bonded, shape
+from timemachine.potentials import bonded, shape, rigid_shape
 from timemachine.integrator import langevin_coefficients
 
 
@@ -96,7 +95,7 @@ def get_heavy_atom_idxs(mol):
     for a_idx, a in enumerate(mol.GetAtoms()):
         if a.GetAtomicNum() > 1:
             idxs.append(a_idx)
-    return np.array(idxs, dtype=np.int32)
+    return onp.array(idxs, dtype=np.int32)
 
 
 def convergence(args):
@@ -124,6 +123,10 @@ def convergence(args):
     coords_a = get_conf(ligand_a, idx=0)
     coords_b = get_conf(ligand_b, idx=0)
     # coords_b = np.matmul(coords_b, special_ortho_group.rvs(3))
+    qi = Rotation.from_euler('z',25,degrees=True).as_quat() # needs to be transposed
+    qi = np.array([qi[3], qi[0], qi[1], qi[2]])
+    coords_b = rigid_shape.rotate(coords_b, qi)
+
 
     coords_a = recenter(coords_a)
     coords_b = recenter(coords_b)
@@ -148,6 +151,7 @@ def convergence(args):
     combined_mol = Chem.CombineMols(ligand_a, ligand_b)
 
     for handler in ff_handlers:
+        # pass
         if isinstance(handler, handlers.HarmonicBondHandler):
             bond_idxs, (bond_params, _) = handler.parameterize(combined_mol)
             nrg_fns.append(
@@ -195,16 +199,16 @@ def convergence(args):
 
     combined_masses = np.concatenate([masses_a, masses_b])
 
-    # com_restraint_fn = functools.partial(bonded.centroid_restraint,
-    #     params=None,
-    #     box=None,
-    #     lamb=None,
-    #     # masses=combined_masses, # try making this ones-like
-    #     masses=np.ones_like(combined_masses),
-    #     group_a_idxs=a_idxs,
-    #     group_b_idxs=b_idxs,
-    #     kb=50.0,
-    #     b0=0.0)
+    com_restraint_fn = functools.partial(bonded.centroid_restraint,
+        params=None,
+        box=None,
+        lamb=None,
+        # masses=combined_masses, # try making this ones-like
+        masses=np.ones_like(combined_masses),
+        group_a_idxs=a_idxs,
+        group_b_idxs=b_idxs,
+        kb=50.0,
+        b0=0.0)
 
     pmi_restraint_fn = functools.partial(pmi_restraints_new,
         params=None,
@@ -241,29 +245,36 @@ def convergence(args):
         k=150.0
     )
 
-    # shape_restraint_4d_fn = functools.partial(
-    #     shape.harmonic_4d_overlap,
-    #     box=None,
-    #     params=None,
-    #     a_idxs=a_idxs,
-    #     b_idxs=b_idxs,
-    #     alphas=alphas,
-    #     weights=weights,
-    #     k=200.0
-    # )
+    rigid_restraint_fn = functools.partial(
+        rigid_shape.rigid_energy,
+        box=None,
+        lamb=None,
+        params=None,
+        a_idxs=a_idxs,
+        b_idxs=b_idxs,
+        alphas=alphas,
+        weights=weights,
+        k=150.0
+    )
 
-    def restraint_fn(conf, lamb):
+    # def restraint_fn(conf, lamb):
 
-        return pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+        # return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+        # return rigid_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+        # return rigid_restraint_fn(conf)
         # return (1-lamb)*pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
 
+    # grad_fn = jax.jit(jax.grad(rigid_restraint_fn))
+    # print(rigid_restraint_fn(x_t))
+    # print("forces", grad_fn(x_t))
 
-    nrg_fns.append(restraint_fn)
+    # nrg_fns.append(restraint_fn)
 
     def nrg_fn(conf, lamb):
         s = []
         for u in nrg_fns:
             s.append(u(conf, lamb=lamb))
+        s = np.array(s)
         return np.sum(s)
  
     grad_fn = jax.grad(nrg_fn, argnums=(0,1))
@@ -271,6 +282,8 @@ def convergence(args):
 
     du_dx_fn = jax.grad(nrg_fn, argnums=(0))
     du_dx_fn = jax.jit(du_dx_fn)
+
+    u_fn = jax.jit(nrg_fn)
 
     x_t = coords
     v_t = np.zeros_like(x_t)
@@ -287,22 +300,26 @@ def convergence(args):
     # re-seed since forking 
     onp.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
 
+    # this cannot be jit'd right now
+    rigid_grad_fn = jax.grad(rigid_restraint_fn)
 
-    # for step in range(100000):
+    def combined_u_fn(x_t, lamb):
+        return rigid_restraint_fn(x_t) + u_fn(x_t, lamb)
+
+    def combined_grad_fn(x_t, lamb):
+
+        return rigid_grad_fn(x_t) + grad_fn(x_t, lamb)[0]
+
     for step in range(100000):
 
-        # if step % 1000 == 0:
-        #     u = nrg_fn(x_t, lamb)
-        #     print("step", step, "nrg", onp.asarray(u), "avg_du_dl",  onp.mean(du_dls))
-        #     mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
-        #     w.write(mol)
-        #     w.flush()
+        if step % 100 == 0:
+            u = combined_u_fn(x_t, lamb)
+            print(step, u)
+            mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
+            w.write(mol)
+            w.flush()
 
-        if step % 5 == 0 and step > 10000:
-            du_dx, du_dl = grad_fn(x_t, lamb)
-            du_dls.append(du_dl)
-        else:
-            du_dx = du_dx_fn(x_t, lamb)
+        du_dx = combined_grad_fn(x_t, lamb)
 
         v_t = ca*v_t + cb*du_dx + cc*onp.random.normal(size=x_t.shape)
         x_t = x_t + v_t*dt
@@ -315,8 +332,8 @@ if __name__ == "__main__":
     pool = multiprocessing.Pool() # defaults to # of cpus
 
     # lambda_schedule = np.linspace(0, 1.0, os.cpu_count())
-    lambda_schedule = np.linspace(0, 1.0, 24)
-    # lambda_schedule = np.array([0.0])
+    # lambda_schedule = np.linspace(0, 1.0, 24)
+    lambda_schedule = np.array([0.0])
     # lambda_schedule = [0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81]
     # lambda_schedule = np.array([1e-4, 5e-4, 1e-3, 5e-3, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.15,0.175, 0.2, 0.225, 0.25, 0.275, 0.3, 0.35, 0.4, 0.5])
     # lambda_schedule = np.array([0.0])
@@ -328,6 +345,8 @@ if __name__ == "__main__":
         args = []
         for l_idx, lamb in enumerate(lambda_schedule):
             args.append((epoch, lamb, l_idx))
+
+        convergence(args[0])
         avg_du_dls = pool.map(convergence, args)
         avg_du_dls = np.asarray(avg_du_dls)
 

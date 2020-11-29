@@ -55,7 +55,8 @@ def normalized_overlap(conf_a, params_a, conf_b, params_b):
            int dr rho_A^2 + rho_B^2
 
     Guaranteeing that 0 <= S_AB <= 1. An alternative would be
-    something like the Tanimoto. 
+    something like the Tanimoto. If we only wanted to maximize the overlap
+    we do not need to compute the normalization ratios.
 
     Parameters
     ----------
