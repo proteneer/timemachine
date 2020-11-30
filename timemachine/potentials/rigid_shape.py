@@ -143,6 +143,40 @@ def rotated_normalized_overlap_polar(rpt, x_a, x_b, params_a, params_b):
         params_b
     )
 
+def rotate_euler(x, abc):
+    a,b,c = abc
+    Rx = np.array([
+        [1,         0,          0],
+        [0, np.cos(a), -np.sin(a)],
+        [0, np.sin(a),  np.cos(a)]
+    ])
+    Ry = np.array([
+        [ np.cos(b), 0, np.sin(b)],
+        [ 0        , 1,         0],
+        [-np.sin(b), 0, np.cos(b)]
+    ])
+    Rz = np.array([
+        [np.cos(c), -np.sin(c), 0],
+        [np.sin(c),  np.cos(c), 0],
+        [        0,          0, 1]
+    ])
+    R = Rx @ Ry @ Rz
+    return x@R
+
+def rotated_normalized_overlap_euler(abc, x_a, x_b, params_a, params_b):
+    """
+    Leading quaternion parameterized from p via:
+    x, y, z = p
+    q = (1-sqrt(x^2+y^2+z^2), x, y, z)
+    """
+    x_r = rotate_euler(x_b, abc)
+    return -shape.volume(
+        x_a,
+        params_a,
+        x_r,
+        params_b
+    )
+
 
 def rotated_normalized_overlap_q(q, x_a, x_b, params_a, params_b):
     x_r = rotate(x_b, q)
@@ -154,14 +188,14 @@ def rotated_normalized_overlap_q(q, x_a, x_b, params_a, params_b):
     )
 
 # first order
-jit_u_fn = jax.jit(rotated_normalized_overlap_xyz)
-jit_du_dq_fn = jax.jit(jax.grad(rotated_normalized_overlap_xyz, argnums=(0,)))
+jit_u_fn = jax.jit(rotated_normalized_overlap_euler)
+jit_du_dq_fn = jax.jit(jax.grad(rotated_normalized_overlap_euler, argnums=(0,)))
 
 # second order
-jit_d2u_dq2_fn = jax.jit(jax.hessian(rotated_normalized_overlap_xyz, argnums=(0,)))
+jit_d2u_dq2_fn = jax.jit(jax.hessian(rotated_normalized_overlap_euler, argnums=(0,)))
 # first reverse mode differentiate w.r.t. x, then fwd differentiate w.r.t. q as it's more efficient
-jit_d2u_dxadq_fn = jax.jit(jax.jacfwd(jax.grad(rotated_normalized_overlap_xyz, argnums=(1,)), argnums=(0,)))
-jit_d2u_dxbdq_fn = jax.jit(jax.jacfwd(jax.grad(rotated_normalized_overlap_xyz, argnums=(2,)), argnums=(0,)))
+jit_d2u_dxadq_fn = jax.jit(jax.jacfwd(jax.grad(rotated_normalized_overlap_euler, argnums=(1,)), argnums=(0,)))
+jit_d2u_dxbdq_fn = jax.jit(jax.jacfwd(jax.grad(rotated_normalized_overlap_euler, argnums=(2,)), argnums=(0,)))
 
 def bfgs_minimize(x_a, x_b, params_a, params_b):
     """
@@ -201,146 +235,24 @@ def bfgs_minimize(x_a, x_b, params_a, params_b):
 
     pi = np.array([0.0, 0.0, 0.0]) # x y z = 0, w is implicitly set to 1
 
-    for count in range(1000):
+    res = scipy.optimize.minimize(
+        v_and_grad_fn,
+        pi,
+        method='BFGS',
+        jac=True,
+        options={'disp': False, 'gtol':1e-8}
+    )
 
-        if np.any(pi):
-            q = pi/np.linalg.norm(pi)
-            xyz_min = -np.abs(q)
-            xyz_max = np.abs(q)
-            xyz_bounds = np.stack([xyz_min, xyz_max], axis=1)
-        else:
-            # initial round
-            delta = np.sqrt(1/3)
-            xyz_bounds = np.array([(-delta, delta), (-delta, delta), (-delta, delta)])
+    if np.linalg.norm(grad_fn(res.x)) >= 1e-6:
+        print("FAILED:", res.x, grad_fn(res.x))
 
-        res = scipy.optimize.minimize(
-            v_and_grad_fn,
-            pi,
-            bounds=xyz_bounds,
-            method='L-BFGS-B',
-            jac=True,
-            options={'disp': False, 'ftol':1e-32, 'gtol':0}
-        )
-
-        pi = res.x
-
-        if np.linalg.norm(grad_fn(res.x)) < 1e-6:
-            break
-
-    if np.linalg.norm(grad_fn(pi)) >= 1e-6:
-        print("FAILED:", pi, grad_fn(pi))
-
-    return pi
-
-    # Everything below is kept for only pedagogical reasons.
-
-    # 1) Constrained SLSQP
-    # def unit_norm(v):
-    #     return np.linalg.norm(v) - 1
-
-    # unit_norm_grad = jax.grad(unit_norm, argnums=(0,))
-
-    # def g_fn(v):
-    #     return unit_norm_grad(v)[0]
-
-    # cons = [{'type':'eq', 'fun': unit_norm, 'jac': g_fn}]
-    # qi = np.array([1.0, 0.0, 0.0, 0.0])
-    # res = scipy.optimize.minimize(
-    #     v_and_grad_fn,
-    #     qi,
-    #     jac=True,
-    #     constraints=cons,
-    #     method='SLSQP',
-    #     # method='trust-constr',
-    #     options={'xtol': 1e-16}
-    # )
-
-    # print(res)
-
-    # assert np.linalg.norm(grad_fn(res.x)) < 1e-5
-    # return res.x
+    return res.x
 
 
-    # assert 0
-
-    # return res.x
-
-    # 2) Unconstrained BFGS
-    # pi = np.array([0.0, 0.0, 0.0]) # x y z = 0, w is implicitly set to 1
-    # lr = 1e-4
-    # iterations = 100
-    # for step in range(iterations):
-    #     u = jit_u_fn(pi, x_a, x_b, params_a, params_b)
-    #     du_dp = jit_du_dq_fn(pi, x_a, x_b, params_a, params_b)[0]
-    #     qi =  q_from_p(pi)
-    #     print("u", u, "norm du_dp", np.linalg.norm(du_dp), "du_dp", du_dp, "pi", pi, "norm", np.linalg.norm(qi), "qi", qi)
-    #     pi = pi - lr*du_dp
-
-    # assert 0
-
-    # tol = 1e-8
-    # res = scipy.optimize.minimize(
-    #     v_and_grad_fn,
-    #     pi,
-    #     method='BFGS',
-    #     jac=True,
-    #     options={'disp': True, 'gtol':tol}
-    # )
-
-    # return res.x
-
-    # Newton CG
-    # pi = np.array([0.0, 0.0, 0.0]) # x y z = 0, w is implicitly set to 1
-
-
-    # res = scipy.optimize.minimize(
-    #     v_and_grad_fn,
-    #     pi,
-    #     method='Newton-CG',
-    #     # method='trust-exact',
-    #     jac=True,
-    #     hess=sanitize_hess,
-    #     options={'xtol':1e-8}
-    # )
-
-    # print(res)
-    # print(res.x)
-    # print(np.linalg.norm(grad_fn(res.x)))
-
-    # assert np.linalg.norm(grad_fn(res.x)) < 1e-5
-    # return res.x
-
-    # assert 0
-
-    # BFGS
-    # pi = np.array([0.0, 0.0, 0.0]) # x y z = 0, w is implicitly set to 1
-    # delta = np.sqrt(1/3)
-    # xyz_bounds = np.array([(-delta, delta), (-delta, delta), (-delta, delta)])
-
-    # res = scipy.optimize.minimize(
-    #     v_and_grad_fn,
-    #     pi, bounds=xyz_bounds,
-    #     method='L-BFGS-B',
-    #     jac=True,
-    #     options={'disp': False, 'ftol':1e-32, 'gtol':0}
-    # )
 
 @jax.custom_vjp
 def q_opt(x_a, x_b, params_a, params_b):
     return bfgs_minimize(x_a, x_b, params_a, params_b)
-
-    # (ytz): old, non-converging method
-    # # this doesn't work becuase we haven't converged g_q
-    # iterations = 100
-    # lr = 3e-5
-    # def carry_fn(v, x):
-    #     du_dp = grad_fn(v)[0]
-    #     v = v - lr*du_dp
-    #     return v, None
-
-    # pi, _ = jax.lax.scan(carry_fn, pi, None, length=iterations)
-
-    # return pi
 
 def q_opt_fwd(x_a, x_b, params_a, params_b):
     po = bfgs_minimize(x_a, x_b, params_a, params_b)
@@ -376,10 +288,12 @@ q_opt.defvjp(q_opt_fwd, q_opt_bwd)
 
 def q_loss(x_a, x_b, params_a, params_b):
     p_final = q_opt(x_a, x_b, params_a, params_b)
-    q_final = q_from_p(p_final)
-    q_ref = np.array([1,0,0,0], dtype=np.float64)
-    angle = np.arccos(2*np.dot(q_final, q_ref)**2 - 1)
-    return 100*angle
+
+    # tbd periodic distance if necessary
+    # period = 2*np.pi
+    # diff -= box[d]*np.floor(np.expand_dims(diff[...,d], axis=-1)/box[d][d]+0.5)
+    return 100*np.dot(p_final, p_final)
+
 
 
 def rigid_energy(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k):

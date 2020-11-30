@@ -317,7 +317,7 @@ def convergence(args):
 
     for step in range(100000):
 
-        if step % 500 == 0:
+        if step % 100 == 0:
             u = combined_u_fn(x_t, lamb)
             print("lambda", lamb, "step", step, "u", u, "avg du_dl", np.mean(onp.array(du_dls)))
             mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
@@ -355,7 +355,10 @@ if __name__ == "__main__":
         for l_idx, lamb in enumerate(lambda_schedule):
             args.append((epoch, lamb, l_idx))
 
-        # convergence(args[0])
+        convergence(args[0])
+
+        assert 0
+
         avg_du_dls = pool.map(convergence, args)
         avg_du_dls = np.asarray(avg_du_dls)
 

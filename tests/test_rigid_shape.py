@@ -79,10 +79,10 @@ def test_vjp():
         np.zeros(ligand_b.GetNumAtoms()) + prefactor,
     ], axis=1)
 
-    coords_a = coords_a[get_heavy_atom_idxs(ligand_a)]
-    params_a = params_a[get_heavy_atom_idxs(ligand_a)]
-    coords_b = coords_b[get_heavy_atom_idxs(ligand_b)]
-    params_b = params_b[get_heavy_atom_idxs(ligand_b)]
+    # coords_a = coords_a[get_heavy_atom_idxs(ligand_a)]
+    # params_a = params_a[get_heavy_atom_idxs(ligand_a)]
+    # coords_b = coords_b[get_heavy_atom_idxs(ligand_b)]
+    # params_b = params_b[get_heavy_atom_idxs(ligand_b)]
 
     coords_a = coords_a - np.mean(coords_a, axis=0)
     coords_b = coords_b - np.mean(coords_b, axis=0)
@@ -98,6 +98,8 @@ def test_vjp():
         # print(seed)
         # qi = Rotation.random(random_state=seed).as_quat()
         qi = Rotation.from_euler('zyx', [(np.random.rand()-0.5)*90, (np.random.rand()-0.5)*90, (np.random.rand()-0.5)*90], degrees=True).as_quat()
+
+        # switch to our convention for position of real component
         qi = np.array([qi[3], qi[0], qi[1], qi[2]])
         # print(qi)
         coords_r = rigid_shape.rotate(coords_b, qi)
@@ -105,10 +107,14 @@ def test_vjp():
         # conf = make_conformer(c_mol, coords_a, coords_r)
         # writer.write(conf)
 
-        po = rigid_shape.q_opt(coords_a, coords_r, params_a, params_b)
-        q_final = rigid_shape.q_from_p(po)
+        # po = rigid_shape.q_opt(coords_a, coords_r, params_a, params_b)
+        # q_final = rigid_shape.q_from_p(po)
+        # conf = make_conformer(c_mol, coords_a, rigid_shape.rotate(coords_r, q_final))
 
-        conf = make_conformer(c_mol, coords_a, rigid_shape.rotate(coords_r, q_final))
+        rot = rigid_shape.q_opt(coords_a, coords_r, params_a, params_b)
+        # q_final = rigid_shape.q_from_p(po)
+        conf = make_conformer(c_mol, coords_a, rigid_shape.rotate_euler(coords_r, rot))
+
         writer.write(conf)
 
     writer.close()
@@ -118,6 +124,7 @@ def test_vjp():
     # print(dq_dxa, dq_dxb)
 
     # print(po)
+
 
 # def test_minimize():
 
