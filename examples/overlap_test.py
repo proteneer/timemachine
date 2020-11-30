@@ -300,31 +300,40 @@ def convergence(args):
     # re-seed since forking 
     onp.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
 
-    # this cannot be jit'd right now
-    rigid_grad_fn = jax.grad(rigid_restraint_fn)
+    rigid_restraint_fn = rigid_restraint_fn # does nothing, kept here for clarity
+    rigid_restraint_grad_fn = jax.grad(rigid_restraint_fn)
+
+    shape_restraint_fn = jax.jit(shape_restraint_fn)
+    shape_restraint_grad_fn = jax.jit(jax.grad(shape_restraint_fn))
 
     def combined_u_fn(x_t, lamb):
-        return rigid_restraint_fn(x_t) + u_fn(x_t, lamb)
+        return (1-lamb)*rigid_restraint_fn(x_t) + lamb*shape_restraint_fn(x_t) + u_fn(x_t, lamb)
 
-    def combined_grad_fn(x_t, lamb):
+    def combined_du_dx_fn(x_t, lamb):
+        return (1-lamb)*rigid_restraint_grad_fn(x_t) + lamb*shape_restraint_grad_fn(x_t) + grad_fn(x_t, lamb)[0]
 
-        return rigid_grad_fn(x_t) + grad_fn(x_t, lamb)[0]
+    def combined_du_dl_fn(x_t, lamb):
+        return shape_restraint_grad_fn(x_t) - rigid_restraint_fn(x_t)
 
     for step in range(100000):
 
-        if step % 100 == 0:
+        if step % 500 == 0:
             u = combined_u_fn(x_t, lamb)
-            print(step, u)
+            print("lambda", lamb, "step", step, "u", u, "avg du_dl", np.mean(onp.array(du_dls)))
             mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
             w.write(mol)
             w.flush()
 
-        du_dx = combined_grad_fn(x_t, lamb)
+        if step % 10 == 0 and step > 10000:
+            du_dl = combined_du_dl_fn(x_t, lamb)
+            du_dls.append(du_dl)
+
+        du_dx = combined_du_dx_fn(x_t, lamb)
 
         v_t = ca*v_t + cb*du_dx + cc*onp.random.normal(size=x_t.shape)
         x_t = x_t + v_t*dt
 
-    return np.mean(onp.mean(du_dls))
+    return onp.mean(du_dls)
 
 
 if __name__ == "__main__":
@@ -332,8 +341,8 @@ if __name__ == "__main__":
     pool = multiprocessing.Pool() # defaults to # of cpus
 
     # lambda_schedule = np.linspace(0, 1.0, os.cpu_count())
-    # lambda_schedule = np.linspace(0, 1.0, 24)
-    lambda_schedule = np.array([0.0])
+    lambda_schedule = np.linspace(0, 1.0, 24)
+    # lambda_schedule = np.array([0.0])
     # lambda_schedule = [0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81]
     # lambda_schedule = np.array([1e-4, 5e-4, 1e-3, 5e-3, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.15,0.175, 0.2, 0.225, 0.25, 0.275, 0.3, 0.35, 0.4, 0.5])
     # lambda_schedule = np.array([0.0])
@@ -346,7 +355,7 @@ if __name__ == "__main__":
         for l_idx, lamb in enumerate(lambda_schedule):
             args.append((epoch, lamb, l_idx))
 
-        convergence(args[0])
+        # convergence(args[0])
         avg_du_dls = pool.map(convergence, args)
         avg_du_dls = np.asarray(avg_du_dls)
 
