@@ -115,17 +115,18 @@ def convergence(args):
 
     # ligand_a = Chem.AddHs(Chem.MolFromSmiles("CCCC1=NN(C2=C1N=C(NC2=O)C3=C(C=CC(=C3)S(=O)(=O)N4CCN(CC4)C)OCC)C"))
     # ligand_b = Chem.AddHs(Chem.MolFromSmiles("CCCC1=NN(C2=C1N=C(NC2=O)C3=C(C=CC(=C3)S(=O)(=O)N4CCN(CC4)C)OCC)C"))
-    # ligand_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1CC"))
-    # ligand_b = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1CC"))
+    # ligand_a = Chem.AddHs(Chem.MolFromSmiles("C12C3C4C1C5C2C3C45"))
+    # ligand_b = Chem.AddHs(Chem.MolFromSmiles("C12C3C4C1C5C2C3C45"))
     # AllChem.EmbedMolecule(ligand_a, randomSeed=2020)
-    # AllChem.EmbedMolecule(ligand_b, randomSeed=2020)
+    # AllChem.EmbedMolecule(ligand_b, randomSeed=2021)
 
     coords_a = get_conf(ligand_a, idx=0)
     coords_b = get_conf(ligand_b, idx=0)
+    # onp.random.seed(1269857)
     # coords_b = np.matmul(coords_b, special_ortho_group.rvs(3))
-    qi = Rotation.from_euler('z',25,degrees=True).as_quat() # needs to be transposed
-    qi = np.array([qi[3], qi[0], qi[1], qi[2]])
-    coords_b = rigid_shape.rotate(coords_b, qi)
+# -    qi = Rotation.from_euler('z',25,degrees=True).as_quat() # needs to be transposed
+# -    qi = np.array([qi[3], qi[0], qi[1], qi[2]])
+# -    coords_b = rigid_shape.rotate(coords_b, qi)
 
 
     coords_a = recenter(coords_a)
@@ -257,10 +258,15 @@ def convergence(args):
         k=150.0
     )
 
-    # def restraint_fn(conf, lamb):
+
+    # rigid_restraint_fn(coords)
+
+    # assert 0
+
+    def restraint_fn(conf, lamb):
 
         # return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
-        # return rigid_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+        return (1-lamb)*rigid_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
         # return rigid_restraint_fn(conf)
         # return (1-lamb)*pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
 
@@ -268,7 +274,7 @@ def convergence(args):
     # print(rigid_restraint_fn(x_t))
     # print("forces", grad_fn(x_t))
 
-    # nrg_fns.append(restraint_fn)
+    nrg_fns.append(restraint_fn)
 
     def nrg_fn(conf, lamb):
         s = []
@@ -277,11 +283,16 @@ def convergence(args):
         s = np.array(s)
         return np.sum(s)
  
+    u_fn = jax.jit(nrg_fn)
+
     grad_fn = jax.grad(nrg_fn, argnums=(0,1))
     grad_fn = jax.jit(grad_fn)
 
     du_dx_fn = jax.grad(nrg_fn, argnums=(0))
     du_dx_fn = jax.jit(du_dx_fn)
+
+    du_dl_fn = jax.grad(nrg_fn, argnums=(1))
+    du_dl_fn = jax.jit(du_dl_fn)
 
     u_fn = jax.jit(nrg_fn)
 
@@ -298,7 +309,11 @@ def convergence(args):
     du_dls = []
 
     # re-seed since forking 
-    onp.random.seed(int.from_bytes(os.urandom(4), byteorder='little'))
+    # onp.random.seed()
+    seed = int.from_bytes(os.urandom(4), byteorder='little')
+    # seed = 2855480909
+    onp.random.seed(seed)
+    # print("LAMBDA", lamb, "SEED:", seed)
 
     rigid_restraint_fn = rigid_restraint_fn # does nothing, kept here for clarity
     rigid_restraint_grad_fn = jax.grad(rigid_restraint_fn)
@@ -306,32 +321,50 @@ def convergence(args):
     shape_restraint_fn = jax.jit(shape_restraint_fn)
     shape_restraint_grad_fn = jax.jit(jax.grad(shape_restraint_fn))
 
-    def combined_u_fn(x_t, lamb):
-        return (1-lamb)*rigid_restraint_fn(x_t) + lamb*shape_restraint_fn(x_t) + u_fn(x_t, lamb)
+    # def combined_u_fn(x_t, lamb):
+    #     return (1-lamb)*rigid_restraint_fn(x_t) + lamb*shape_restraint_fn(x_t) + u_fn(x_t, lamb)
 
-    def combined_du_dx_fn(x_t, lamb):
-        return (1-lamb)*rigid_restraint_grad_fn(x_t) + lamb*shape_restraint_grad_fn(x_t) + grad_fn(x_t, lamb)[0]
+    # def combined_du_dx_fn(x_t, lamb):
+    #     return (1-lamb)*rigid_restraint_grad_fn(x_t) + lamb*shape_restraint_grad_fn(x_t) + grad_fn(x_t, lamb)[0]
 
-    def combined_du_dl_fn(x_t, lamb):
-        return shape_restraint_grad_fn(x_t) - rigid_restraint_fn(x_t)
+    # def combined_du_dl_fn(x_t, lamb):
+    #     return shape_restraint_grad_fn(x_t) - rigid_restraint_fn(x_t)
 
+
+    print("start md")
     for step in range(100000):
-
-        if step % 100 == 0:
-            u = combined_u_fn(x_t, lamb)
+        # print("step", step)
+        if step % 1000 == 0:
+            u = u_fn(x_t, lamb)
             print("lambda", lamb, "step", step, "u", u, "avg du_dl", np.mean(onp.array(du_dls)))
             mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
             w.write(mol)
             w.flush()
 
         if step % 10 == 0 and step > 10000:
-            du_dl = combined_du_dl_fn(x_t, lamb)
+        # if step % 10 == 0:
+            du_dl = du_dl_fn(x_t, lamb)
+            # print(du_dl)
             du_dls.append(du_dl)
 
-        du_dx = combined_du_dx_fn(x_t, lamb)
+        du_dx = du_dx_fn(x_t, lamb)
 
         v_t = ca*v_t + cb*du_dx + cc*onp.random.normal(size=x_t.shape)
         x_t = x_t + v_t*dt
+
+    # np.savez("debug.txt", xs=xs)
+
+    # assert 0
+
+    # xs = np.load("debug.txt.npz")["xs"]
+
+    # rigid_grad_fn = jax.grad(rigid_restraint_fn)
+    # for idx, x in enumerate(xs[196:197]):
+    # for idx in range(0, 199):
+        # print("idx", idx)
+        # print("U", rigid_restraint_fn(xs[idx]))
+    # rigid_grad_fn(xs[-1])
+    # assert 0
 
     return onp.mean(du_dls)
 
@@ -355,13 +388,12 @@ if __name__ == "__main__":
         for l_idx, lamb in enumerate(lambda_schedule):
             args.append((epoch, lamb, l_idx))
 
-        convergence(args[0])
-
-        assert 0
+        # convergence(args[0])
+        # assert 0
 
         avg_du_dls = pool.map(convergence, args)
         avg_du_dls = np.asarray(avg_du_dls)
 
         for lamb, ddl in zip(lambda_schedule, avg_du_dls):
-            print("lambda", lamb, "du_dl",  ddl)
+            print("final lambda", lamb, "du_dl",  ddl)
         print(epoch, "epoch", "deltaG", onp.trapz(avg_du_dls,lambda_schedule))

@@ -9,6 +9,7 @@ import numpy as np
 import time
 
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 def recenter(conf):
     """Return copy of conf with mean coordinates subtracted"""
@@ -64,8 +65,12 @@ def test_vjp():
         mols.append(mol)
 
     ligand_a = mols[0]
-    ligand_b = mols[1]
+    ligand_b = mols[2]
 
+    ligand_a = Chem.AddHs(Chem.MolFromSmiles("C12C3C4C1C5C2C3C45"))
+    ligand_b = Chem.AddHs(Chem.MolFromSmiles("C12C3C4C1C5C2C3C45"))
+    AllChem.EmbedMolecule(ligand_a, randomSeed=2020)
+    AllChem.EmbedMolecule(ligand_b, randomSeed=2021)
 
     coords_a = get_conf(ligand_a, idx=0)
     params_a = np.stack([
@@ -96,8 +101,8 @@ def test_vjp():
     for seed in range(100):
         # seed = 361
         # print(seed)
-        # qi = Rotation.random(random_state=seed).as_quat()
-        qi = Rotation.from_euler('zyx', [(np.random.rand()-0.5)*90, (np.random.rand()-0.5)*90, (np.random.rand()-0.5)*90], degrees=True).as_quat()
+        qi = Rotation.random(random_state=seed).as_quat()
+        # qi = Rotation.from_euler('zyx', [(np.random.rand()-0.5)*90, (np.random.rand()-0.5)*90, (np.random.rand()-0.5)*90], degrees=True).as_quat()
 
         # switch to our convention for position of real component
         qi = np.array([qi[3], qi[0], qi[1], qi[2]])
@@ -112,8 +117,12 @@ def test_vjp():
         # conf = make_conformer(c_mol, coords_a, rigid_shape.rotate(coords_r, q_final))
 
         rot = rigid_shape.q_opt(coords_a, coords_r, params_a, params_b)
+        print("done", rot)
+        # assert 0
+        # print(rot, converged)
         # q_final = rigid_shape.q_from_p(po)
         conf = make_conformer(c_mol, coords_a, rigid_shape.rotate_euler(coords_r, rot))
+
 
         writer.write(conf)
 
