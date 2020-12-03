@@ -11,10 +11,13 @@ from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
 
 from fe.utils import to_md_units
-from docking import dock_setup
+from fe import topology
 from ff.handlers.deserialize import deserialize_handlers
+from ff.handlers import openmm_deserializer
+from ff import Forcefield
 from timemachine.lib import LangevinIntegrator
 from timemachine.lib import custom_ops
+from timemachine.lib import potentials
 
 
 def pose_dock(
@@ -27,7 +30,6 @@ def pose_dock(
     outdir,
     random_rotation=False,
     constant_atoms=[],
-    skip_errors=False,
 ):
     """Runs short simulations in which the guests phase in or out over time
 
@@ -46,8 +48,6 @@ def pose_dock(
     random_rotation: whether to apply a random rotation to each guest before inserting
     constant_atoms: atom numbers from the host_pdbfile to hold mostly fixed across the simulation
         (1-indexed, like PDB files)
-    skip_errors: if True, will report errors to stdout and continue on to the next guest.
-        If False, will halt upon errors.
 
     Output
     ------
@@ -84,6 +84,17 @@ def pose_dock(
         host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
     host_conf = np.array(host_conf)
 
+    final_potentials = []
+    host_potentials, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+    host_nb_bp = None
+    for bp in host_potentials:
+        if isinstance(bp, potentials.Nonbonded):
+            # (ytz): hack to ensure we only have one nonbonded term
+            assert host_nb_bp is None
+            host_nb_bp = bp
+        else:
+            final_potentials.append(bp)
+
     padding = 0.1
     box_lengths = np.amax(host_conf, axis=0) - np.amin(host_conf, axis=0)
     box_lengths = box_lengths+padding
@@ -102,20 +113,29 @@ def pose_dock(
                 )
             ).read()
         )
+        ff = Forcefield(guest_ff_handlers)
+        guest_base_topology = topology.BaseTopology(guest_mol, ff)
 
-        if skip_errors:
-            try:
-                bps, masses = dock_setup.combine_potentials(
-                    guest_ff_handlers, guest_mol, host_system
-                )
-            except Exception as err:
-                print(f"Error: There was a problem setting up {guest_name}")
-                print(err)
-                continue
-        else:
-            bps, masses = dock_setup.combine_potentials(
-                guest_ff_handlers, guest_mol, host_system
-            )
+        # combine
+        hgt = topology.HostGuestTopology(host_nb_bp, guest_base_topology)
+        # setup the parameter handlers for the ligand
+        bonded_tuples = [
+            [hgt.parameterize_harmonic_bond, ff.hb_handle],
+            [hgt.parameterize_harmonic_angle, ff.ha_handle],
+            [hgt.parameterize_proper_torsion, ff.pt_handle],
+            [hgt.parameterize_improper_torsion, ff.it_handle]
+        ]
+        these_potentials = list(final_potentials)
+        # instantiate the vjps while parameterizing (forward pass)
+        for fn, handle in bonded_tuples:
+            params, potential = fn(handle.params)
+            these_potentials.append(potential.bind(params))
+        nb_params, nb_potential = hgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+        these_potentials.append(nb_potential.bind(nb_params))
+        bps = these_potentials
+
+        guest_masses = [a.GetMass() for a in guest_mol.GetAtoms()]
+        masses = np.concatenate([host_masses, guest_masses])
 
         for atom_num in constant_atoms:
             masses[atom_num - 1] += 50000
@@ -170,13 +190,20 @@ def pose_dock(
         for step, lamb in enumerate(new_lambda_schedule):
             ctxt.step(lamb)
             if step % 100 == 0:
+                l_energies = []
+                l_forces = []
+                for impl in impls:
+                    du_dx, du_dl, u = impl.execute(ctxt.get_x_t(), box, lamb)
+                    l_energies.append(u)
+                    l_forces.append(du_dx)
+                energy = sum(l_energies)
+                forces = np.sum(l_forces, axis=0)
                 print(
                     f"guest_name: {guest_name}\t"
                     f"step: {str(step).zfill(len(str(n_steps)))}\t"
                     f"lambda: {lamb:.2f}\t"
-                    f"energy: {ctxt._get_u_t_minus_1():.2f}"
+                    f"energy: {energy:.2f}"
                 )
-                forces = ctxt._get_du_dx_t_minus_1()
                 norm_forces = np.linalg.norm(forces, axis=-1)
                 if np.any(norm_forces > 10000):
                     print("Error: at least one force is too large to continue")
@@ -293,14 +320,6 @@ if __name__ == "__main__":
         help="apply a random rotation to each guest before inserting",
     )
     parser.add_argument(
-        "--skip_errors",
-        action="store_true",
-        help=(
-            "Report errors to stdout and continue on to the next guest. "
-            "Otherwise, will halt upon errors."
-        ),
-    )
-    parser.add_argument(
         "-o", "--outdir", default="pose_dock_outdir", help="where to write output"
     )
     args = parser.parse_args()
@@ -324,5 +343,4 @@ if __name__ == "__main__":
         args.outdir,
         random_rotation=args.random_rotation,
         constant_atoms=constant_atoms_list,
-        skip_errors=args.skip_errors,
     )

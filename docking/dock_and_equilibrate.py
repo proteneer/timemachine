@@ -9,10 +9,12 @@ from rdkit import Chem
 from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
 
-from md import builders, Recipe
-from fe import pdb_writer
-from timemachine.lib import potentials, custom_ops, LangevinIntegrator
+from md import builders
+from fe import pdb_writer, topology
+from ff import Forcefield
+from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
+from timemachine.lib import potentials, custom_ops, LangevinIntegrator
 
 
 MAX_NORM_FORCE = 20000
@@ -26,8 +28,7 @@ def dock_and_equilibrate(
     eq_steps,
     outdir,
     fewer_outfiles=False,
-    constant_atoms=[],
-    skip_errors=False,
+    constant_atoms=[]
 ):
     """Solvates a host, inserts guest(s) into solvated host, equilibrates
 
@@ -45,8 +46,6 @@ def dock_and_equilibrate(
     fewer_outfiles: if True, will only write frames for the equilibration, not insertion
     constant_atoms: atom numbers from the host_pdbfile to hold mostly fixed across the simulation
         (1-indexed, like PDB files)
-    skip_errors: if True, will report errors to stdout and continue on to the next guest.
-        If False, will halt upon errors.
 
     Output
     ------
@@ -101,7 +100,16 @@ def dock_and_equilibrate(
     writer.close()
     solvated_host_mol = Chem.MolFromPDBFile(solvated_host_pdb, removeHs=False)
     os.remove(solvated_host_pdb)
-    host_recipe = Recipe.from_openmm(solvated_host_system)
+    final_host_potentials = []
+    host_potentials, host_masses = openmm_deserializer.deserialize_system(solvated_host_system, cutoff=1.2)
+    host_nb_bp = None
+    for bp in host_potentials:
+        if isinstance(bp, potentials.Nonbonded):
+            # (ytz): hack to ensure we only have one nonbonded term
+            assert host_nb_bp is None
+            host_nb_bp = bp
+        else:
+            final_host_potentials.append(bp)
 
     # Run the procedure
     print("Getting guests...")
@@ -121,38 +129,42 @@ def dock_and_equilibrate(
                 )
             ).read()
         )
-        try:
-            guest_recipe = Recipe.from_rdkit(guest_mol, guest_ff_handlers)
-        except TypeError as e:
-            if skip_errors:
-                print(e)
-                continue
-            else:
-                raise e
+        ff = Forcefield(guest_ff_handlers)
+        guest_base_top = topology.BaseTopology(guest_mol, ff)
 
-        # let guest be affected by lambda
-        for bp in guest_recipe.bound_potentials:
-            if isinstance(bp, potentials.Nonbonded):
-                array = bp.get_lambda_offset_idxs()
-                array[:] = 1
+        # combine host & guest
+        hgt = topology.HostGuestTopology(host_nb_bp, guest_base_top)
+        # setup the parameter handlers for the ligand
+        bonded_tuples = [
+            [hgt.parameterize_harmonic_bond, ff.hb_handle],
+            [hgt.parameterize_harmonic_angle, ff.ha_handle],
+            [hgt.parameterize_proper_torsion, ff.pt_handle],
+            [hgt.parameterize_improper_torsion, ff.it_handle]
+        ]
+        combined_bps = list(final_host_potentials)
+        # instantiate the vjps while parameterizing (forward pass)
+        for fn, handle in bonded_tuples:
+            params, potential = fn(handle.params)
+            combined_bps.append(potential.bind(params))
+        nb_params, nb_potential = hgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+        combined_bps.append(nb_potential.bind(nb_params))
+        guest_masses = [a.GetMass() for a in guest_mol.GetAtoms()]
+        combined_masses = np.concatenate([host_masses, guest_masses])
 
-        host_guest_coords = np.concatenate([solvated_host_coords, orig_guest_coords])
-        host_guest_recipe = host_recipe.combine(guest_recipe)
-        x0 = host_guest_coords
+        x0 = np.concatenate([solvated_host_coords, orig_guest_coords])
         v0 = np.zeros_like(x0)
         print(
             f"SYSTEM", f"guest_name: {guest_name}", f"num_atoms: {len(x0)}",
         )
 
-        masses = host_guest_recipe.masses
         for atom_num in constant_atoms:
-            masses[atom_num - 1] += 50000
+            combined_masses[atom_num - 1] += 50000
 
         seed = 2020
-        intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, masses, seed).impl()
+        intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
         u_impls = []
-        for bp in host_guest_recipe.bound_potentials:
+        for bp in combined_bps:
             bp_impl = bp.bound_impl(precision=np.float32)
             u_impls.append(bp_impl)
 
@@ -171,13 +183,7 @@ def dock_and_equilibrate(
         for step, lamb in enumerate(insertion_lambda_schedule):
             ctxt.step(lamb)
             if step % 100 == 0:
-                print(
-                    f"INSERTION\t"
-                    f"guest_name: {guest_name}\t"
-                    f"step: {str(step).zfill(len(str(insertion_steps)))}\t"
-                    f"lambda: {lamb:.2f}\t"
-                    f"energy: {ctxt.get_u_t():.2f}"
-                )
+                report_step(ctxt, step, lamb, combined_bps, host_box, u_impls, guest_name, insertion_steps, "INSERTION")
                 if not fewer_outfiles:
                     host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
                     guest_coords = ctxt.get_x_t()[len(solvated_host_coords) :] * 10
@@ -191,9 +197,9 @@ def dock_and_equilibrate(
                         str(step).zfill(len(str(insertion_steps))),
                         f"ins",
                     )
-            if too_much_force(ctxt, host_guest_recipe, host_box, u_impls, lamb):
-                calc_work = False
-                break
+                if too_much_force(ctxt, combined_bps, host_box, u_impls, lamb):
+                    calc_work = False
+                    break
 
         if (
             abs(du_dl_obs.full_du_dl()[0]) > 0.001
@@ -212,13 +218,7 @@ def dock_and_equilibrate(
         for step in range(eq_steps):
             ctxt.step(0.00)
             if step % 1000 == 0:
-                print(
-                    f"EQUILIBRATION\t"
-                    f"guest_name: {guest_name}\t"
-                    f"step: {str(step).zfill(len(str(eq_steps)))}\t"
-                    f"lambda: 0.00\t"
-                    f"energy: {ctxt.get_u_t():.2f}"
-                )
+                report_step(ctxt, step, 0.00, combined_bps, host_box, u_impls, guest_name, eq_steps, 'EQUILIBRATION')
                 host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
                 guest_coords = ctxt.get_x_t()[len(solvated_host_coords) :] * 10
                 write_frame(
@@ -231,27 +231,50 @@ def dock_and_equilibrate(
                     str(step).zfill(len(str(eq_steps))),
                     f"eq",
                 )
-            if too_much_force(ctxt, host_guest_recipe, host_box, u_impls, 0.0):
-                break
+                if too_much_force(ctxt, combined_bps, host_box, u_impls, 0.0):
+                    break
 
         end_time = time.time()
         print(f"{guest_name} took {(end_time - start_time):.2f} seconds")
 
 
-def too_much_force(ctxt, recipe, box, u_impls, lamb):
-    forces = ctxt.get_du_dx_t()
+def report_step(ctxt, step, lamb, bps, box, u_impls, guest_name, n_steps, stage):
+    l_energies = []
+    names = []
+    for name, impl in zip(bps, u_impls):
+        _, _, u = impl.execute(ctxt.get_x_t(), box, lamb)
+        l_energies.append(u)
+        names.append(name)
+        energy = sum(l_energies)
+
+    print(
+        f"{stage}\t"
+        f"guest_name: {guest_name}\t"
+        f"step: {str(step).zfill(len(str(n_steps)))}\t"
+        f"lambda: {lamb:.2f}\t"
+        f"energy: {energy:.2f}"
+    )
+
+
+def too_much_force(ctxt, bps, box, u_impls, lamb):
+    l_forces = []
+    names = []
+    for name, impl in zip(bps, u_impls):
+        du_dx, _, _ = impl.execute(ctxt.get_x_t(), box, lamb)
+        l_forces.append(du_dx)
+        names.append(name)
+    forces = np.sum(l_forces, axis=0)
     norm_forces = np.linalg.norm(forces, axis=-1)
     if np.any(norm_forces > MAX_NORM_FORCE):
         print("Error: at least one force is too large to continue")
         print("max norm force", np.amax(norm_forces))
-        for bp, u in zip(recipe.bound_potentials, u_impls):
-            du_dx, _, _ = u.execute(ctxt.get_x_t(), box, lamb)
+        for name, force in zip(names, l_forces):
             print(
-                bp,
+                name,
                 "atom",
-                np.argmax(np.linalg.norm(du_dx, axis=-1)),
+                np.argmax(np.linalg.norm(force, axis=-1)),
                 "max norm force",
-                np.amax(np.linalg.norm(du_dx, axis=-1)),
+                np.amax(np.linalg.norm(force, axis=-1)),
             )
         return True
     return False
@@ -339,14 +362,6 @@ def main():
     parser.add_argument(
         "--fewer_outfiles", action="store_true", help="write fewer output pdb/sdf files"
     )
-    parser.add_argument(
-        "--skip_errors",
-        action="store_true",
-        help=(
-            "Report errors to stdout and continue on to the next guest. "
-            "Otherwise, will halt upon errors."
-        ),
-    )
     args = parser.parse_args()
 
     constant_atoms_list = []
@@ -365,7 +380,6 @@ def main():
         args.outdir,
         args.fewer_outfiles,
         constant_atoms_list,
-        args.skip_errors,
     )
 
 

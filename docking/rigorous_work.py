@@ -11,10 +11,12 @@ from rdkit import Chem
 from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
 
-from md import builders, Recipe
-from fe import pdb_writer
-from timemachine.lib import potentials, custom_ops, LangevinIntegrator
+from md import builders
+from fe import pdb_writer, topology
+from ff import Forcefield
+from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
+from timemachine.lib import potentials, custom_ops, LangevinIntegrator
 
 
 INSERTION_MAX_LAMBDA = 0.5
@@ -26,7 +28,9 @@ EQ2_STEPS = 10001
 MAX_NORM_FORCE = 20000
 
 
-def calculate_rigorous_work(host_pdbfile, guests_sdfile, outdir, fewer_outfiles=False, no_outfiles=False):
+def calculate_rigorous_work(
+    host_pdbfile, guests_sdfile, outdir, fewer_outfiles=False, no_outfiles=False
+):
     """
     """
 
@@ -52,7 +56,6 @@ def calculate_rigorous_work(host_pdbfile, guests_sdfile, outdir, fewer_outfiles=
     # Prepare host
     # TODO: handle extra (non-transitioning) guests?
     print("Solvating host...")
-    # TODO: return topology from builders.build_protein_system
     (
         solvated_host_system,
         solvated_host_coords,
@@ -73,7 +76,17 @@ def calculate_rigorous_work(host_pdbfile, guests_sdfile, outdir, fewer_outfiles=
     solvated_host_mol = Chem.MolFromPDBFile(solvated_host_pdb, removeHs=False)
     if no_outfiles:
         os.remove(solvated_host_pdb)
-    host_recipe = Recipe.from_openmm(solvated_host_system)
+    final_host_potentials = []
+    host_potentials, host_masses = openmm_deserializer.deserialize_system(solvated_host_system, cutoff=1.2)
+    host_nb_bp = None
+    for bp in host_potentials:
+        if isinstance(bp, potentials.Nonbonded):
+            # (ytz): hack to ensure we only have one nonbonded term
+            assert host_nb_bp is None
+            host_nb_bp = bp
+        else:
+            final_host_potentials.append(bp)
+
 
     # Prepare water box
     print("Generating water box...")
@@ -99,7 +112,17 @@ def calculate_rigorous_work(host_pdbfile, guests_sdfile, outdir, fewer_outfiles=
     water_mol = Chem.MolFromPDBFile(water_pdb, removeHs=False)
     if no_outfiles:
         os.remove(water_pdb)
-    water_recipe = Recipe.from_openmm(water_system)
+
+    final_water_potentials = []
+    water_potentials, water_masses = openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
+    water_nb_bp = None
+    for bp in water_potentials:
+        if isinstance(bp, potentials.Nonbonded):
+            # (ytz): hack to ensure we only have one nonbonded term
+            assert water_nb_bp is None
+            water_nb_bp = bp
+        else:
+            final_water_potentials.append(bp)
 
     # Run the procedure
     print("Getting guests...")
@@ -119,19 +142,33 @@ def calculate_rigorous_work(host_pdbfile, guests_sdfile, outdir, fewer_outfiles=
                 )
             ).read()
         )
-        guest_recipe = Recipe.from_rdkit(guest_mol, guest_ff_handlers)
+        ff = Forcefield(guest_ff_handlers)
+        guest_base_top = topology.BaseTopology(guest_mol, ff)
 
-        # let guest be affected by lambda
-        for bp in guest_recipe.bound_potentials:
-            if isinstance(bp, potentials.Nonbonded):
-                array = bp.get_lambda_offset_idxs()
-                array[:] = 1
+        # combine host & guest
+        hgt = topology.HostGuestTopology(host_nb_bp, guest_base_top)
+        # setup the parameter handlers for the ligand
+        bonded_tuples = [
+            [hgt.parameterize_harmonic_bond, ff.hb_handle],
+            [hgt.parameterize_harmonic_angle, ff.ha_handle],
+            [hgt.parameterize_proper_torsion, ff.pt_handle],
+            [hgt.parameterize_improper_torsion, ff.it_handle]
+        ]
+        combined_bps = list(final_host_potentials)
+        # instantiate the vjps while parameterizing (forward pass)
+        for fn, handle in bonded_tuples:
+            params, potential = fn(handle.params)
+            combined_bps.append(potential.bind(params))
+        nb_params, nb_potential = hgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+        combined_bps.append(nb_potential.bind(nb_params))
+        guest_masses = [a.GetMass() for a in guest_mol.GetAtoms()]
+        combined_masses = np.concatenate([host_masses, guest_masses])
 
         run_leg(
             solvated_host_coords,
             orig_guest_coords,
-            host_recipe,
-            guest_recipe,
+            combined_bps,
+            combined_masses,
             host_box,
             guest_name,
             "host",
@@ -139,19 +176,37 @@ def calculate_rigorous_work(host_pdbfile, guests_sdfile, outdir, fewer_outfiles=
             guest_mol,
             outdir,
             fewer_outfiles,
-            no_outfiles
+            no_outfiles,
         )
         end_time = time.time()
         print(
             f"{guest_name} host leg time:", "%.2f" % (end_time - start_time), "seconds"
         )
 
+        # combine water & guest
+        wgt = topology.HostGuestTopology(water_nb_bp, guest_base_top)
+        # setup the parameter handlers for the ligand
+        bonded_tuples = [
+            [wgt.parameterize_harmonic_bond, ff.hb_handle],
+            [wgt.parameterize_harmonic_angle, ff.ha_handle],
+            [wgt.parameterize_proper_torsion, ff.pt_handle],
+            [wgt.parameterize_improper_torsion, ff.it_handle]
+        ]
+        combined_bps = list(final_water_potentials)
+        # instantiate the vjps while parameterizing (forward pass)
+        for fn, handle in bonded_tuples:
+            params, potential = fn(handle.params)
+            combined_bps.append(potential.bind(params))
+        nb_params, nb_potential = wgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+        combined_bps.append(nb_potential.bind(nb_params))
+        guest_masses = [a.GetMass() for a in guest_mol.GetAtoms()]
+        combined_masses = np.concatenate([water_masses, guest_masses])
         start_time = time.time()
         run_leg(
             orig_water_coords,
             orig_guest_coords,
-            water_recipe,
-            guest_recipe,
+            combined_bps,
+            combined_masses,
             water_box,
             guest_name,
             "water",
@@ -159,7 +214,7 @@ def calculate_rigorous_work(host_pdbfile, guests_sdfile, outdir, fewer_outfiles=
             guest_mol,
             outdir,
             fewer_outfiles,
-            no_outfiles
+            no_outfiles,
         )
         end_time = time.time()
         print(
@@ -170,8 +225,8 @@ def calculate_rigorous_work(host_pdbfile, guests_sdfile, outdir, fewer_outfiles=
 def run_leg(
     orig_host_coords,
     orig_guest_coords,
-    host_recipe,
-    guest_recipe,
+    combined_bps,
+    combined_masses,
     host_box,
     guest_name,
     leg_type,
@@ -179,12 +234,9 @@ def run_leg(
     guest_mol,
     outdir,
     fewer_outfiles=False,
-    no_outfiles=False
+    no_outfiles=False,
 ):
-    host_guest_coords = np.concatenate([orig_host_coords, orig_guest_coords])
-    host_guest_recipe = host_recipe.combine(guest_recipe)
-
-    x0 = host_guest_coords
+    x0 = np.concatenate([orig_host_coords, orig_guest_coords])
     v0 = np.zeros_like(x0)
     print(
         f"{leg_type.upper()}_SYSTEM",
@@ -193,10 +245,10 @@ def run_leg(
     )
 
     seed = 2020
-    intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, host_guest_recipe.masses, seed).impl()
+    intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
     u_impls = []
-    for bp in host_guest_recipe.bound_potentials:
+    for bp in combined_bps:
         bp_impl = bp.bound_impl(precision=np.float32)
         u_impls.append(bp_impl)
 
@@ -209,12 +261,16 @@ def run_leg(
     for step, lamb in enumerate(insertion_lambda_schedule):
         ctxt.step(lamb)
         if step % 100 == 0:
-            print(
-                f"{leg_type.upper()}_INSERTION\t"
-                f"guest_name: {guest_name}\t"
-                f"step: {str(step).zfill(len(str(TRANSITION_STEPS)))}\t"
-                f"lambda: {lamb:.2f}\t"
-                f"energy: {ctxt.get_u_t():.2f}"
+            report_step(
+                ctxt,
+                step,
+                lamb,
+                combined_bps,
+                host_box,
+                u_impls,
+                guest_name,
+                TRANSITION_STEPS,
+                f"{leg_type.upper()}_INSERTION",
             )
             if not fewer_outfiles and not no_outfiles:
                 host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
@@ -229,19 +285,23 @@ def run_leg(
                     str(step).zfill(len(str(TRANSITION_STEPS))),
                     f"{leg_type}-ins",
                 )
-        if too_much_force(ctxt, host_guest_recipe, host_box, u_impls, lamb):
-            return
+            if too_much_force(ctxt, combined_bps, host_box, u_impls, lamb):
+                return
 
     # equilibrate
     for step in range(EQ1_STEPS):
         ctxt.step(MIN_LAMBDA)
         if step % 100 == 0:
-            print(
-                f"{leg_type.upper()}_EQUILIBRATION_1\t"
-                f"guest_name: {guest_name}\t"
-                f"step: {str(step).zfill(len(str(EQ1_STEPS)))}\t"
-                f"lambda: {MIN_LAMBDA:.2f}\t"
-                f"energy: {ctxt.get_u_t():.2f}"
+            report_step(
+                ctxt,
+                step,
+                MIN_LAMBDA,
+                combined_bps,
+                host_box,
+                u_impls,
+                guest_name,
+                EQ1_STEPS,
+                f"{leg_type.upper()}_EQUILIBRATION_1",
             )
             if step % 1000 == 0:
                 if not fewer_outfiles and not no_outfiles:
@@ -257,22 +317,26 @@ def run_leg(
                         str(step).zfill(len(str(EQ1_STEPS))),
                         f"{leg_type}-eq1",
                     )
-        if too_much_force(ctxt, host_guest_recipe, host_box, u_impls, MIN_LAMBDA):
-            return
+            if too_much_force(ctxt, combined_bps, host_box, u_impls, MIN_LAMBDA):
+                return
 
     # equilibrate more & shoot off deletion jobs
     for step in range(EQ2_STEPS):
         ctxt.step(MIN_LAMBDA)
         if step % 100 == 0:
-            print(
-                f"{leg_type.upper()}_EQUILIBRATION_2\t"
-                f"guest_name: {guest_name}\t"
-                f"step: {str(step).zfill(len(str(EQ2_STEPS)))}\t"
-                f"lambda: {MIN_LAMBDA:.2f}\t"
-                f"energy: {ctxt.get_u_t():.2f}"
+            report_step(
+                ctxt,
+                step,
+                MIN_LAMBDA,
+                combined_bps,
+                host_box,
+                u_impls,
+                guest_name,
+                EQ2_STEPS,
+                f"{leg_type.upper()}_EQUILIBRATION_2",
             )
-        if too_much_force(ctxt, host_guest_recipe, host_box, u_impls, MIN_LAMBDA):
-            return
+            if too_much_force(ctxt, combined_bps, host_box, u_impls, MIN_LAMBDA):
+                return
 
         if step % 1000 == 0:
             # TODO: if guest has undocked, stop simulation
@@ -293,19 +357,20 @@ def run_leg(
             do_deletion(
                 ctxt.get_x_t(),
                 ctxt.get_v_t(),
-                host_guest_recipe,
+                combined_bps,
+                combined_masses,
                 host_box,
                 guest_name,
                 leg_type,
             )
 
 
-def do_deletion(x0, v0, combined_recipe, box, guest_name, leg_type):
+def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type):
     seed = 2020
-    intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_recipe.masses, seed).impl()
+    intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
     u_impls = []
-    for bp in combined_recipe.bound_potentials:
+    for bp in combined_bps:
         bp_impl = bp.bound_impl(precision=np.float32)
         u_impls.append(bp_impl)
 
@@ -321,15 +386,19 @@ def do_deletion(x0, v0, combined_recipe, box, guest_name, leg_type):
     for step, lamb in enumerate(deletion_lambda_schedule):
         ctxt.step(lamb)
         if step % 100 == 0:
-            print(
-                f"{leg_type.upper()}_DELETION\t"
-                f"guest_name: {guest_name}\t"
-                f"step: {str(step).zfill(len(str(TRANSITION_STEPS)))}\t"
-                f"lambda: {lamb:.2f}\t"
-                f"energy: {ctxt.get_u_t():.2f}"
+            report_step(
+                ctxt,
+                step,
+                lamb,
+                combined_bps,
+                box,
+                u_impls,
+                guest_name,
+                TRANSITION_STEPS,
+                f"{leg_type.upper()}_DELETION",
             )
-        if too_much_force(ctxt, combined_recipe, box, u_impls, lamb):
-            return
+            if too_much_force(ctxt, combined_bps, box, u_impls, lamb):
+                return
 
     calc_work = True
     if (
@@ -346,20 +415,43 @@ def do_deletion(x0, v0, combined_recipe, box, guest_name, leg_type):
         print(f"guest_name: {guest_name}\t{leg_type}_work: {work:.2f}")
 
 
-def too_much_force(ctxt, recipe, box, u_impls, lamb):
-    forces = ctxt.get_du_dx_t()
+def report_step(ctxt, step, lamb, bps, box, u_impls, guest_name, n_steps, stage):
+    l_energies = []
+    names = []
+    for name, impl in zip(bps, u_impls):
+        _, _, u = impl.execute(ctxt.get_x_t(), box, lamb)
+        l_energies.append(u)
+        names.append(name)
+        energy = sum(l_energies)
+
+    print(
+        f"{stage}\t"
+        f"guest_name: {guest_name}\t"
+        f"step: {str(step).zfill(len(str(n_steps)))}\t"
+        f"lambda: {lamb:.2f}\t"
+        f"energy: {energy:.2f}"
+    )
+
+
+def too_much_force(ctxt, bps, box, u_impls, lamb):
+    l_forces = []
+    names = []
+    for name, impl in zip(bps, u_impls):
+        du_dx, _, _ = impl.execute(ctxt.get_x_t(), box, lamb)
+        l_forces.append(du_dx)
+        names.append(name)
+    forces = np.sum(l_forces, axis=0)
     norm_forces = np.linalg.norm(forces, axis=-1)
     if np.any(norm_forces > MAX_NORM_FORCE):
         print("Error: at least one force is too large to continue")
         print("max norm force", np.amax(norm_forces))
-        for bp, u in zip(recipe.bound_potentials, u_impls):
-            du_dx, _, _ = u.execute(ctxt.get_x_t(), box, lamb)
+        for name, force in zip(names, l_forces):
             print(
-                bp,
+                name,
                 "atom",
-                np.argmax(np.linalg.norm(du_dx, axis=-1)),
+                np.argmax(np.linalg.norm(force, axis=-1)),
                 "max norm force",
-                np.amax(np.linalg.norm(du_dx, axis=-1)),
+                np.amax(np.linalg.norm(force, axis=-1)),
             )
         return True
     return False
@@ -418,11 +510,21 @@ def main():
     parser.add_argument(
         "-o", "--outdir", default="rigorous_work_outdir", help="where to write output"
     )
-    parser.add_argument("--fewer_outfiles", action="store_true", help="write fewer output pdb/sdf files")
-    parser.add_argument("--no_outfiles", action="store_true", help="write no output pdb/sdf files")
+    parser.add_argument(
+        "--fewer_outfiles", action="store_true", help="write fewer output pdb/sdf files"
+    )
+    parser.add_argument(
+        "--no_outfiles", action="store_true", help="write no output pdb/sdf files"
+    )
     args = parser.parse_args()
 
-    calculate_rigorous_work(args.host_pdbfile, args.guests_sdfile, args.outdir, args.fewer_outfiles, args.no_outfiles)
+    calculate_rigorous_work(
+        args.host_pdbfile,
+        args.guests_sdfile,
+        args.outdir,
+        args.fewer_outfiles,
+        args.no_outfiles,
+    )
 
 
 if __name__ == "__main__":
