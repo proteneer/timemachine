@@ -334,7 +334,7 @@ def convergence(args):
     print("start md")
     for step in range(100000):
         # print("step", step)
-        if step % 1000 == 0:
+        if step % 10000 == 0:
             u = u_fn(x_t, lamb)
             print("lambda", lamb, "step", step, "u", u, "avg du_dl", np.mean(onp.array(du_dls)))
             mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
@@ -371,7 +371,7 @@ def convergence(args):
 
 if __name__ == "__main__":
 
-    pool = multiprocessing.Pool() # defaults to # of cpus
+
 
     # lambda_schedule = np.linspace(0, 1.0, os.cpu_count())
     lambda_schedule = np.linspace(0, 1.0, 24)
@@ -388,11 +388,15 @@ if __name__ == "__main__":
         for l_idx, lamb in enumerate(lambda_schedule):
             args.append((epoch, lamb, l_idx))
 
-        # convergence(args[0])
-        # assert 0
+        convergence(args[-1])
+        assert 0
+
+        pool = multiprocessing.Pool() # defaults to # of cpus
 
         avg_du_dls = pool.map(convergence, args)
         avg_du_dls = np.asarray(avg_du_dls)
+
+        pool.close()
 
         for lamb, ddl in zip(lambda_schedule, avg_du_dls):
             print("final lambda", lamb, "du_dl",  ddl)

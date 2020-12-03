@@ -80,33 +80,10 @@ def q_from_p(p):
     q = np.array([w, p[0], p[1], p[2]])
     return q
 
-
-# original
-# def rotated_normalized_overlap_3(p, x_a, x_b, params_a, params_b):
-#     """
-#     Leading quaternion parameterized from p via:
-#     x, y, z = p
-#     q = (1-sqrt(x^2+y^2+z^2), x, y, z)
-#     """
-#     w = np.sqrt(1-np.dot(p, p))
-#     q = np.array([w, p[0], p[1], p[2]])
-#     x_r = rotate(x_b, q)
-#     return -shape.volume(
-#         x_a,
-#         params_a,
-#         x_r,
-#         params_b
-#     )
-
-
-def rotated_normalized_overlap_xyz(p, x_a, x_b, params_a, params_b):
+def rotated_normalized_overlap_q(q, x_a, x_b, params_a, params_b):
     """
-    Leading quaternion parameterized from p via:
-    x, y, z = p
-    q = (1-sqrt(x^2+y^2+z^2), x, y, z)
+    Explicit quaternion parameterization
     """
-    w = np.sqrt(1-np.dot(p, p))
-    q = np.array([w, p[0], p[1], p[2]])
     x_r = rotate(x_b, q)
     return -shape.volume(
         x_a,
@@ -115,28 +92,10 @@ def rotated_normalized_overlap_xyz(p, x_a, x_b, params_a, params_b):
         params_b
     )
 
-def polar_to_cartesian(rpt):
-    r, phi, theta = rpt
-    x = r*np.sin(theta)*np.cos(phi)
-    y = r*np.sin(theta)*np.sin(phi)
-    z = r*np.cos(theta)
-    return np.array([x,y,z])
-
-def cartesian_to_polar(xyz):
-    x, y, z = xyz
-    r = np.sqrt(x*x+y*y+z*z)
-    phi = np.arctan(y/x)
-    theta = np.arccos(z/r)
-    return np.array([r,phi,theta])
-
-
-def rotated_normalized_overlap_polar(rpt, x_a, x_b, params_a, params_b):
+def rotated_normalized_overlap_xyz(p, x_a, x_b, params_a, params_b):
     """
-    Leading quaternion parameterized from p via:
-    x, y, z = p
-    q = (1-sqrt(x^2+y^2+z^2), x, y, z)
+    Implicit parameterization of quaternions
     """
-    p = polar_to_cartesian(rpt)
     w = np.sqrt(1-np.dot(p, p))
     q = np.array([w, p[0], p[1], p[2]])
     x_r = rotate(x_b, q)
@@ -169,9 +128,7 @@ def rotate_euler(x, abc):
 
 def rotated_normalized_overlap_euler(abc, x_a, x_b, params_a, params_b):
     """
-    Leading quaternion parameterized from p via:
-    x, y, z = p
-    q = (1-sqrt(x^2+y^2+z^2), x, y, z)
+    Euler angle parameterization
     """
     x_r = rotate_euler(x_b, abc)
     return -shape.volume(
@@ -202,6 +159,9 @@ def expm(xyz):
 
 
 def rotated_normalized_overlap_expm(xyz, x_a, x_b, params_a, params_b):
+    """
+    Exponential map parameterization.
+    """
     q = expm(xyz)
     x_r = rotate(x_b, q)
     return -shape.volume(
@@ -213,15 +173,6 @@ def rotated_normalized_overlap_expm(xyz, x_a, x_b, params_a, params_b):
 
 
 
-def rotated_normalized_overlap_q(q, x_a, x_b, params_a, params_b):
-    x_r = rotate(x_b, q)
-    return -shape.volume(
-        x_a,
-        params_a,
-        x_r,
-        params_b
-    )
-
 # first order
 jit_u_fn = jax.jit(rotated_normalized_overlap_euler)
 jit_du_dq_fn = jax.jit(jax.grad(rotated_normalized_overlap_euler, argnums=(0,)))
@@ -232,7 +183,7 @@ jit_d2u_dq2_fn = jax.jit(jax.hessian(rotated_normalized_overlap_euler, argnums=(
 jit_d2u_dxadq_fn = jax.jit(jax.jacfwd(jax.grad(rotated_normalized_overlap_euler, argnums=(1,)), argnums=(0,)))
 jit_d2u_dxbdq_fn = jax.jit(jax.jacfwd(jax.grad(rotated_normalized_overlap_euler, argnums=(2,)), argnums=(0,)))
 
-@jax.jit
+# tbd rename me
 def bfgs_minimize(x_a, x_b, params_a, params_b):
     """
     Minimize the quaternion such that u_fn is a minima and grad_fn has a zero norm. Note that the returned
@@ -257,40 +208,80 @@ def bfgs_minimize(x_a, x_b, params_a, params_b):
 
     pi = np.array([0.0, 0.0, 0.0]) # x y z = 0, w is implicitly set to 1
 
-    # trust region
-    # alpha = 0.05
-    # we actually set a max limit on the trust region based on distance from sphere
+    # def body_fun_cauchy(v):
+    #     x, count = v
 
-    # determine max radius based on pos later.
-    # cur_radii = 0.1
-    # 
-    # for _ in range(50):
+    #     tr = 0.1
 
-    #     H = sanitize_hess(pi) # hessian
-    #     J = sanitize_grad(pi) # jacobian
-    #     U = u_fn(pi)
-
-    #     if np.linalg.norm(J) < 1e-8:
-    #         break
-
+    #     H = sanitize_hess(x) # hessian
+    #     J = sanitize_grad(x) # jacobian
+    #     U = u_fn(x)
     #     J_norm = np.linalg.norm(J)
 
     #     K = J.T @ H @ J
 
-    #     if K <= 0:
-    #         t = 1
-    #     else:
-    #         t = min(J_norm**3/(0.1*K), 1)
+    #     # t = jax.lax.cond(K <= 0, lambda _: 1.0, lambda _: np.minimum(J_norm**3/(tr*K), 1.0), None)
+    #     t = np.where(K <= 0, 1.0, np.minimum(J_norm**3/(tr*K), 1.0))
 
-    #     pk = -t*(cur_radii/J_norm)*J
+    #     print("t", t, "K <= 0", K <= 0, "H is PD?", np.all(np.linalg.eigh(H)[0]) > 0)
 
-    #     pi = pi + pk
+    #     pk = -t*(tr/J_norm)*J
+
+    #     x = x + pk
+    #     return (x, count+1)
+
+    def get_boundaries_intersections(z, d, trust_radius):
+        """
+        Solve the scalar quadratic equation ||z + t d|| == trust_radius.
+        This is like a line-sphere intersection.
+        Return the two values of t, sorted from low to high.
+        """
+        a = np.dot(d, d)
+        b = 2 * np.dot(z, d)
+        c = np.dot(z, z) - trust_radius**2
+        sqrt_discriminant = np.sqrt(b*b - 4*a*c)
+
+        # The following calculation is mathematically
+        # equivalent to:
+        # ta = (-b - sqrt_discriminant) / (2*a)
+        # tb = (-b + sqrt_discriminant) / (2*a)
+        # but produce smaller round off errors.
+        # Look at Matrix Computation p.97
+        # for a better justification.
+        aux = b + np.copysign(sqrt_discriminant, b)
+        ta = -aux / (2*a)
+        tb = -2*c / aux
+
+        return np.maximum(ta, tb)
+        # return np.sort([ta, tb])
 
 
-    def body_fun(x):
+    # def solve_subproblem_cauchy_like(x, tr):
+    #     """
+    #     Standard cauchy solver except we fast escape to a newton point if its within TR.
+    #     """
+    #     H = sanitize_hess(x) # hessian
+    #     J = sanitize_grad(x) # jacobian
+    #     U = u_fn(x)
+    #     J_norm = np.linalg.norm(J)
 
-        cur_radii = 0.1
+    #     K = J.T @ H @ J
 
+    #     t = np.where(K <= 0, 1.0, np.minimum(J_norm**3/(tr*K), 1.0))
+
+    #     if np.all(np.linalg.eigh(H)[0] > 0):
+
+    #         cho_f = jax.scipy.linalg.cho_factor(H)
+    #         newton_point = -jax.scipy.linalg.cho_solve(cho_f, J)
+
+    #         if np.linalg.norm(newton_point) < tr:
+    #             return newton_point
+
+    #     pk = -t*(tr/J_norm)*J
+
+    #     return pk
+
+    def jittable_solve_subproblem_cauchy_like(x, tr):
         H = sanitize_hess(x) # hessian
         J = sanitize_grad(x) # jacobian
         U = u_fn(x)
@@ -298,424 +289,103 @@ def bfgs_minimize(x_a, x_b, params_a, params_b):
 
         K = J.T @ H @ J
 
-        t = jax.lax.cond(K <= 0, lambda _: 1.0, lambda _: np.minimum(J_norm**3/(0.1*K), 1.0), None)
+        t = np.where(K <= 0, 1.0, np.minimum(J_norm**3/(tr*K), 1.0))
 
-        pk = -t*(cur_radii/J_norm)*J
+        pd = np.all(np.linalg.eigh(H)[0] > 0)
+        newton_point = -np.linalg.inv(H) @ J
 
-        x = x + pk
-        return x
+        predicate = np.logical_and(pd, np.linalg.norm(newton_point) < tr)
 
-    def cond_fun(x):
-        return np.linalg.norm(sanitize_grad(x)) > 1e-8
+        pk = -t*(tr/J_norm)*J
 
-    return jax.lax.while_loop(cond_fun, body_fun, pi)
+        return jax.lax.cond(predicate, lambda _: newton_point, lambda _: pk, None) # return pk
 
 
-    print("\njax cauchy", "radii", np.linalg.norm(pi), "xyz", pi, "|doverlap/dangles|", np.linalg.norm(grad_fn(pi)))
+    # def solve_subproblem_dogleg(x, tr):
 
-    pi = np.array([0.0, 0.0, 0.0]) 
+    #     H = sanitize_hess(x) # hessian
+    #     J = sanitize_grad(x) # jacobian
 
-    res = scipy.optimize.minimize(
-        v_and_grad_fn,
-        pi,
-        method='trust-ncg',
-        jac=True,
-        hess=sanitize_hess,
-        options={'disp': False, 'gtol':1e-8}
-    )
-    print("Scipy: trust-ncg expm", "radii", np.linalg.norm(res.x), "xyz", res.x, "|doverlap/dangles|", np.linalg.norm(grad_fn(res.x)))
+    #     U = u_fn(x)
+    #     J_norm = np.linalg.norm(J)
 
-    # res = scipy.optimize.minimize(
-    #     v_and_grad_fn,
-    #     pi,
-    #     method='trust-exact',
-    #     jac=True,
-    #     hess=sanitize_hess,
-    #     options={'disp': False, 'gtol':1e-8}
-    # )
-    # print("Scipy: trust-exact expm", "radii", np.linalg.norm(res.x), "xyz", res.x, "|doverlap/dangles|", np.linalg.norm(grad_fn(res.x)))
+    #     # always project down to a positive definite cone
+    #     ew, ev = np.linalg.eigh(H)
 
 
-    # works
-    res = scipy.optimize.minimize(
-        v_and_grad_fn,
-        pi,
-        method='BFGS',
-        jac=True,
-        options={'disp': False, 'gtol':1e-8}
-    )
+    #     # H_pd = ev @ np.eye(3)*np.abs(ew) @ ev.T
 
-    print("Scipy: BFGS expm", "radii", np.linalg.norm(res.x), "xyz", res.x,  "|doverlap/dxyz|", np.linalg.norm(grad_fn(res.x)))
-    return res.x
+    #     ew = np.where(ew < 0, 0.0001, ew) # make this pd, psd is insufficient
+    #     H_pd = ev @ np.eye(3)*ew @ ev.T
 
+    #     # compute Newton point 
+    #     cho_f = scipy.linalg.cho_factor(H_pd)
+    #     newton_point = -scipy.linalg.cho_solve(cho_f, J)
 
+    #     K = J.T @ H @ J
+    #     cauchy_point = -(np.dot(J, J) / K) * J
 
-    for _ in range(100):
+    #     if np.linalg.norm(newton_point) < tr:
+    #         print("A")
+    #         return newton_point, False
 
-        for r in np.linspace(0.24, 0.5, 100):
-            for theta in np.linspace(0, 2*np.pi, 20):
-                for phi in np.linspace(0, 2*np.pi, 20):
-                    pk = np.array([
-                        np.sin(theta)*np.cos(phi),
-                        np.sin(theta)*np.sin(phi),
-                        np.cos(theta)
-                    ])
-                    h = hess_fn(pi - r*pk)[0][0]
-                    w, v = np.linalg.eigh(h)
-                    if np.all(w > 0):
-                        print("FOUND PD hessian", r, theta, phi, w)
+    #     # If the Cauchy point is outside the trust region,
+    #     # then return the point where the path intersects the boundary.
+    #     cauchy_point_norm = scipy.linalg.norm(cauchy_point)
+    #     if cauchy_point_norm >= tr:
+    #         print("B")
+    #         p_boundary = cauchy_point * (tr / cauchy_point_norm)
+    #         return p_boundary, True
 
-                        # newton cg time!
+    #     tb = get_boundaries_intersections(
+    #         cauchy_point,
+    #         newton_point - cauchy_point,
+    #         tr
+    #     )
 
-                        x = pi - r*pk
+    #     p_boundary = cauchy_point + tb * (newton_point - cauchy_point)
+    #     print("C")
+    #     return p_boundary, True
 
-                        for _ in range(20):
-                            hh = hess_fn(x)[0][0]
-                            jj = grad_fn(x)[0]
-                            pk = np.linalg.inv(hh)@jj
+    subsolver = jittable_solve_subproblem_cauchy_like
 
-                            qa = np.dot(pk, pk)
-                            qb = -2*np.dot(pk, x)
-                            qc = np.dot(x, x) - 1
+    def body_fun(v):
+        x, count = v
 
-                            max_dt = (-qb + np.sqrt(qb**2 - 4*qa*qc))/(2*qa)
+        tr = 0.1
+        p = subsolver(x, tr)
 
-                            # find nearest minima
-                            for alpha in np.linspace(-max_dt, max_dt, 100):
-                                print("test with alpha", alpha, u_fn(x - alpha*pk), "w", np.linalg.eigh(sanitize_hess(x - alpha*pk))[0])
+        x = x + p
+        return x, count+1
 
-                            assert 0
-                            # print("max_dt", max_dt)
 
-                            # alpha, fc, gc, new_fval, old_fval, new_slope = scipy.optimize.line_search(u_fn, sanitize_grad, x, -pk, amax=max_dt-1e-8)
+    def cond_fun(v):
+        x, count = v
+        return np.logical_and(np.linalg.norm(sanitize_grad(x)) > 1e-8, count < 100000)
 
-                            # print("fc, gc", fc, gc)
+    res, count = jax.lax.while_loop(cond_fun, body_fun, (pi, 0))
 
-                            # x = x - alpha*pk
-                            # print("minimizing, x:", x, "jac", jj, "pk", np.linalg.inv(hh)@jj, "w", np.linalg.eigh(hh)[0])
-                        # print(x, linalg.norm)
+    # debug version
+    # v = (pi, 0)
+    # while cond_fun(v):
+        # v = body_fun(v)
+    # res, count = v
 
-                        break
-
-        assert 0
-
-    # def body_fn(val):
-
-    #     x, count = val
-    #     H = hess_fn(x)[0][0]
-    #     J = grad_fn(x)[0]
-
-    #     w, v = np.linalg.eigh(H)
-    #     w = np.where(np.abs(w) <= 0.1, 0.1*np.sign(w), w)
-    #     H_pd = v @ np.eye(3)*w @ v.T 
-    #     pk = np.linalg.inv(H_pd) @ J
-
-    #     qa = np.dot(pk, pk)
-    #     qb = -2*np.dot(pk, x)
-    #     qc = np.dot(x, x) - 1
-
-    #     max_dt = (-qb + np.sqrt(qb**2 - 4*qa*qc))/(2*qa)
-    #     dt = np.clip(max_dt-0.1, 0, 1)
-
-    #     # max_dt = np.amax(np.array([max_dt_plus, max_dt_minus]))
-
-    #     # stay away from the boundary
-    #     # dt = np.amin(np.array([max_dt-0.1, 1.0]))
-    #     x = x - dt*pk
-
-    #     return (x, count+1)
-
-    # def cond_fn(val):
-    #     x, count = val
-    #     return count < 100
-    #     return np.linalg.norm(grad_fn(x)) > 1e-6
-
-    # count = 0
-    # x = pi
-
-        # A = np.array([
-        #     [0,    J[0],    J[1],    J[2]   ],
-        #     [J[0], H[0][0], H[0][1], H[0][2]],
-        #     [J[1], H[1][0], H[1][1], H[1][2]],
-        #     [J[2], H[2][0], H[2][1], H[2][2]]
-        # ]) # augmented Hessian
-
-        # w, v = np.linalg.eigh(A)
-        # vt = v[:, 0]
-        # qk = vt[1:]/vt[0]
-
-        # pi = pi + 0.5*qk
-    # def body_fn(x):
-
-    #     H = hess_fn(x)[0][0]
-    #     J = grad_fn(x)[0]
-
-    #     # print(x, J, u_fn(x))
-    #     w, v = np.linalg.eigh(H)
-    #     w = np.abs(w)
-    #     H_pd = v @ np.eye(3)*w @ v.T 
-    #     pk = np.linalg.inv(H_pd) @ J
-    #     x = x - 0.5*pk
-    #     x = x - (2*np.pi)*np.floor(x/(2*np.pi)) # shove between 0 and 2pi
-    #     return x
-
-    # def cond_fn(x):
-    #     return np.linalg.norm(grad_fn(x)) > 1e-6
-
-    res = jax.lax.while_loop(cond_fn, body_fn, pi)
-
-    print("JAX: homebrew quaternions", res, "|doverlap/dxyz|", np.linalg.norm(grad_fn(res)), "count", count)
-
-    return res
-
-def foo():
-        # assert 0
-
-    assert 0
-
-    # def body_fun(v):
-    #     H = sanitize_hess(v)
-    #     # H_off = np.sum(np.where(np.eye(3), 0, np.abs(H)), axis=0)
-    #     # H_on = np.diag(H)
-    #     # delta = H_off - H_on
-    #     # eps = 1.0
-    #     # delta = np.where(delta > -eps, delta+eps, 0)
-    #     # H = H + np.eye(3)*delta
-    #     # J = sanitize_grad(v)
-    #     # v = v - np.linalg.inv(H) @ J
-    #     # return v
-
-
-    #     w,v = np.linalg.eigh(H)
-    #     np.where(w < 0, 0, w)
-    #     print(w)
-
-    #     assert 0
-
-    # def cond_fun(v):
-    #     return np.linalg.norm(grad_fn(v)) > 1e-6
-
-    # pi = jax.lax.while_loop(cond_fun, body_fun, pi)
-    # return pi
-    # x = pi
-
-    # for _ in range(100):
-    #     H = sanitize_hess(x)
-    #     w, v = np.linalg.eigh(H)
-    #     w = np.where(w < 0, 0, w)
-    #     H_psd = v @ np.eye(3)*w @ v.T
-    #     J = sanitize_grad(x)
-    #     x = x - np.linalg.inv(H) @ J
-    #     x = x - (2*np.pi)*np.floor(x/(2*np.pi)) # shove between 0 and 2pi
-
-    # def body_fun(x):
-    #     H = sanitize_hess(x)
-    #     # w, v = np.linalg.eigh(H)
-    #     # w = np.where(w < 0, 0, w)
-    #     # H_psd = v @ np.eye(3)*w @ v.T
-    #     J = sanitize_grad(x)
-    #     x = x - np.linalg.inv(H) @ J
-    #     x = x - (2*np.pi)*np.floor(x/(2*np.pi)) # shove between 0 and 2pi
-    #     return x
-
-    # def cond_fun(v):
-    #     return np.linalg.norm(grad_fn(v)) > 1e-6
-
-    # pi = jax.lax.while_loop(cond_fun, body_fun, pi)
-
-    # return pi
-
-    # print("Full Newton euler angles", x, "|doverlap/dangles|", np.linalg.norm(sanitize_grad(x)))
-    # return pi
-    # # # assert 0
-    # pi = np.array([0.0, 0.0, 0.0]) # x y z = 0, w is implicitly set to 1
-
-    # # assert 0
-
-
-
-    # # res = ncg.minimize(
-    # #     u_fn,
-    # #     pi,
-    # #     jac=sanitize_grad,
-    # #     hess=sanitize_hess
-    # # )
-
-    # # print("JAX Newton-CG euler angles", res, "|doverlap/dangles|", np.linalg.norm(grad_fn(res)))
-
-    # # assert 0
-
-
-
-    # res = trust_region._minimize_trustregion_exact(
-    #     u_fn,
-    #     pi,
-    #     jac=sanitize_grad,
-    #     hess=sanitize_hess
-    # )
-    # print("\n")
-
-    # print("JAX: trust-exact euler angles", res, "|doverlap/dangles|", np.linalg.norm(grad_fn(res)))
-
-    # # assert 0
-
-    # res = scipy.optimize.minimize(
-    #     v_and_grad_fn,
-    #     pi,
-    #     method='trust-exact',
-    #     jac=True,
-    #     hess=sanitize_hess,
-    #     options={'disp': False, 'gtol':1e-8}
-    # )
-    # print("Scipy: trust-exact euler angles", res.x, "|doverlap/dangles|", np.linalg.norm(grad_fn(res.x)))
-    # # assert 0
-
-    jax_trust_ncg = functools.partial(trust_region._minimize_trust_ncg, fun=u_fn, jac=sanitize_grad, hess=sanitize_hess)
-    jax_trust_ncg = jax.jit(jax_trust_ncg)
-
-    res = jax_trust_ncg(x0=pi)
-
-    print(res)
-
-    assert 0
-
-
-    res = trust_region._minimize_trust_ncg(
-        u_fn,
-        pi,
-        jac=sanitize_grad,
-        hess=sanitize_hess
-    )
-
-    print("JAX: trust-ncg euler angles", res, "|doverlap/dangles|", np.linalg.norm(grad_fn(res)))
-
-    # assert 0
-
-    res = scipy.optimize.minimize(
-        v_and_grad_fn,
-        pi,
-        method='trust-ncg',
-        jac=True,
-        hess=sanitize_hess,
-        options={'disp': False, 'gtol':1e-8}
-    )
-    print("Scipy: trust-ncg euler angles", res.x, "|doverlap/dangles|", np.linalg.norm(grad_fn(res.x)))
-    # assert 0
-
-
-
-
-    return res.x
-
-
-    # works
-    res = scipy.optimize.minimize(
-        v_and_grad_fn,
-        pi,
-        method='Newton-CG',
-        jac=True,
-        hess=sanitize_hess,
-        options={'disp': False}
-    )
-    print("Newton-CG euler angles", res.x, "|doverlap/dangles|", np.linalg.norm(grad_fn(res.x)))
-    # return res.x
-
-    # works
-    res = scipy.optimize.minimize(
-        v_and_grad_fn,
-        pi,
-        method='BFGS',
-        jac=True,
-        options={'disp': False, 'gtol':1e-8}
-    )
-
-    print("Scipy-BFGS euler angles", res.x, "|doverlap/dangles|", np.linalg.norm(grad_fn(res.x)))
-    return res.x
-
-
-    res = tfp.optimizer.bfgs_minimize(
-        initial_position=pi,
-        value_and_gradients_function=v_and_grad_fn
-    )
-
-    print("TFP BFGS euler angles", res.position, "|doverlap/dangles|", np.linalg.norm(grad_fn(res.position)))
-
-    return res.position
-    assert 0
-    return res.position
-
-    for count in range(50):
-        fx, gx = v_and_grad_fn(pi)
-        hx = sanitize_hess(pi)
-        pk = np.matmul(np.linalg.inv(hx), gx)
-
-        # qa = np.dot(pk, pk)
-        # qb = -2*np.dot(pk, pi)
-        # qc = np.dot(pi, pi) - 1
-
-        # this can be solved analytically
-        # roots = np.real(np.roots(np.array([qa, qb, qc]))) # assert imag part being zero
-        # max_dt = np.amax(roots) # complement is just -max_root+2 (2 is diameter of sphere)
-
-        # for dt in np.linspace(0, max_dt, 100):
-        #     tpi = pi - dt*pk
-        #     print(dt, u_fn(tpi))
-
-        # alpha, fc, gc, new_fval, old_fval, new_slope = scipy.optimize.line_search(u_fn, grad_fn, pi, pk, amax=max_dt-1e-8)
-
-        # print("alpha bounded", alpha)
-
-        dt, fc, gc, new_fval, old_fval, new_slope = scipy.optimize.line_search(u_fn, grad_fn, pi, pk)
-
-        print("DT", dt)
-
-        # print("alpha unbounded", alpha)
-
-        # assert 0
-        # # print("DT", dt)
-
-        # # assert 0
-
-        print(pi, gx)
-
-        # dt = 1
-        pi = pi - dt*pk
-
-
-        # print("pi", pi, "gx", gx)
-
-
-        # assert max_dt > 0
-
-        # # print("max", u_fn(pi - max_dt*pk)) # maybe will nan depending on machine precision
-        # # print("max minus eps", u_fn(pi - (max_dt - 1e-4)*pk)) # should not nan
-        # # print("max plus eps", u_fn(pi - (max_dt + 1e-4)*pk)) # should nan 
-
-        # # assert 0
-
-        # for dt in np.linspace(0, max_dt, 100):
-        #     tpi = pi - dt*pk
-        #     print(dt, u_fn(tpi))
-
-        # assert 0
-
-
-    # if np.linalg.norm(grad_fn(pi)) >= 1e-6:
-    print("FAILED:", pi, grad_fn(pi))
-
-    return pi
+    return res, count
 
 @jax.custom_vjp
 def q_opt(x_a, x_b, params_a, params_b):
-    return bfgs_minimize(x_a, x_b, params_a, params_b)
+    return bfgs_minimize(x_a, x_b, params_a, params_b)[0]
 
 def q_opt_fwd(x_a, x_b, params_a, params_b):
-    po = bfgs_minimize(x_a, x_b, params_a, params_b)
-    return bfgs_minimize(x_a, x_b, params_a, params_b), (po, x_a, x_b, params_a, params_b)
+    po, count = bfgs_minimize(x_a, x_b, params_a, params_b)
+    return po, (po, x_a, x_b, params_a, params_b)
 
 def q_opt_bwd(res, dl_dq):
     # (ytz): the reverse mode derivative basically uses an analytical form
     # of the implicit function theorem in explicit form.
+
+    # this requires q_opt to have a zero gradient at the objective function.
 
     # This can probably be made more efficient as the hessian vector product combined
     # with the mixed partial derivatives is computed in a rather inefficient way that
@@ -750,9 +420,11 @@ def q_loss(x_a, x_b, params_a, params_b):
     # results are between -pi and pi
     # p_final = np.min
     # p_final is between 0 and 2pi, so measure the circular distance
-    p_final = p_final - (2*np.pi)*np.floor(p_final/(2*np.pi))
-    p_final = np.where(p_final > (2*np.pi - p_final), (2*np.pi - p_final), p_final)
-    # print("p_final", p_final)
+    # p_final = p_final - (2*np.pi)*np.floor(p_final/(2*np.pi))
+    # p_final = np.where(p_final > (2*np.pi - p_final), (2*np.pi - p_final), p_final)
+
+    box = 2*np.pi
+    p_final = p_final - box*np.floor(p_final/box + 0.5)
 
     return 100*np.dot(p_final, p_final)
 

@@ -98,6 +98,8 @@ def test_vjp():
 
     writer = Chem.SDWriter('quat.sdf')
 
+    trip_counts = []
+
     for seed in range(100):
         # seed = 361
         # print(seed)
@@ -116,8 +118,9 @@ def test_vjp():
         # q_final = rigid_shape.q_from_p(po)
         # conf = make_conformer(c_mol, coords_a, rigid_shape.rotate(coords_r, q_final))
 
-        rot = rigid_shape.q_opt(coords_a, coords_r, params_a, params_b)
-        print("done", rot)
+        rot, count = rigid_shape.bfgs_minimize(coords_a, coords_r, params_a, params_b)
+        trip_counts.append(count)
+        print("done", rot, "count", count)
         # assert 0
         # print(rot, converged)
         # q_final = rigid_shape.q_from_p(po)
@@ -125,6 +128,8 @@ def test_vjp():
 
 
         writer.write(conf)
+
+    print("mean", np.mean(trip_counts), "std", np.std(trip_counts), "max", np.amax(trip_counts), "min", np.amin(trip_counts))
 
     writer.close()
 
