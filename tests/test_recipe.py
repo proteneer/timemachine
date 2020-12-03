@@ -22,7 +22,7 @@ from md import builders
 
 # def test_recipe_from_openmm():
 #     fname = 'tests/data/hif2a_nowater_min.pdb'
-#     openmm_system, _, _, _, _ = builders.build_protein_system(fname)
+#     openmm_system, _, _, _, _, _ = builders.build_protein_system(fname)
 #     md.Recipe.from_openmm(openmm_system, np.float32)
 
 
@@ -33,7 +33,7 @@ def test_combine_recipe():
     ligand_recipe = md.Recipe.from_rdkit(aspirin, ff_handlers)
     fname = 'tests/data/hif2a_nowater_min.pdb'
     pdb = open(fname, 'r').read()
-    openmm_system, openmm_conf, _, _, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
+    openmm_system, openmm_conf, _, _, _, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
     protein_recipe = md.Recipe.from_openmm(openmm_system)
 
     # for exclude in [True, False]:

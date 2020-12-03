@@ -1,7 +1,5 @@
 import numpy as np
 
-from simtk.openmm import app
-
 from ff.handlers import bonded, nonbonded, openmm_deserializer
 
 from timemachine.lib import potentials
