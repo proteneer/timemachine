@@ -71,6 +71,15 @@ water_recipe = Recipe.from_openmm(system)
 #   within the sub-recipe described by `other`
 combined_recipe = water_recipe.combine(ligand_recipe)
 
+
+# 2000 = |P|,  40000*3 = |Q|
+# parameterize param_fn: R^P -> R^Q
+# jacobian(): Q x P
+# U(param_fn(ff), R^(3N))
+# dU/dP = dU/dQ.dQ/dP
+
+# assert 0
+
 # note: lambda goes from 0 to +infinity, where we approximate +infinity with
 #   any number of nanometers sufficiently large that the ligand has almost no
 #   interaction with the rest of the system (in this case, 1.2 nm will do)
@@ -131,14 +140,52 @@ for final_lamb in np.linspace(0, 1.2, 8):
     for _ in range(5000):
         ctxt.step(final_lamb)
 
+    print(ctxt.get_x_t())
+
     # TODO: what was the second argument -- reporting interval in steps?
     du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 5)
 
     ctxt.add_observable(du_dl_obs)
 
-    for _ in range(100000):
+    du_dps = []
+    for ui in u_impls:
+        du_dp_obs = custom_ops.AvgPartialUPartialParam(ui, 5)
+        ctxt.add_observable(du_dp_obs)
+        du_dps.append(du_dp_obs)
+
+    # for _ in range(100000):
+    for _ in range(50000):
         ctxt.step(final_lamb)
+
+    print(ctxt.get_x_t())
+
+
+    # for bp in combined_recipe.bound_potentials:
+    #     uimpl = bp.unbound_impl(precision=np.float32)
+    #     du_dx, du_dp, du_dl, u = uimpl.execute(ctxt.get_x_t(), bp.params, box, final_lamb)
+    #     print("u", u)
+    #     print("du_dl", du_dl)
+    #     print("du_dx", du_dx)
+    #     print("du_dp", du_dp)
+
+    # assert 0
 
     du_dl = du_dl_obs.avg_du_dl()
 
+    print(combined_recipe.vjp_fns)
+    # for bp, parameter_and_vjp_fn in zip(combined_recipe.bound_potentials, combined_recipe.vjp_fns):
+        # dU_dQ = np.random.rand(*bp.params.shape)
+    for du_dp_obs, parameter_and_vjp_fn in zip(du_dps, combined_recipe.vjp_fns):
+        dU_dQ = du_dp_obs.avg_du_dp()
+        # print(dU_dQ)
+        for handle, vjp in parameter_and_vjp_fn:
+            print(handle)
+            for s, v in zip(handle.smirks, vjp(dU_dQ)[0]):
+                if np.any(v != 0):
+                    print(s, v)
+            handle.params -= 0.001*vjp(dU_dQ)[0]
+
+
     print(final_lamb, du_dl)
+
+    assert 0
