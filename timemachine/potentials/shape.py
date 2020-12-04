@@ -113,3 +113,36 @@ def harmonic_overlap(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k
 
     V = normalized_overlap(conf_a, params_a, conf_b, params_b)
     return k*(V-1)**2
+
+
+def inverse_overlap(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k):
+    """
+    Compute the shape potential. The derivative of this function
+    w.r.t. conf generates a non-rigid force.
+
+    Parameters
+    ----------
+    conf: np.array [N, 3]
+        Conformation of the system
+
+    params: np.array [N, 2]
+        Shape parameters of the system
+
+    a_idxs: np.array [A]
+        Molecule A's indices into the conformation
+
+    b_idxs: np.array [B]
+        Molecule B's indices into the conformation
+
+    """
+
+    conf_a = conf[a_idxs]
+    conf_b = conf[b_idxs]
+
+    params_c = np.stack([alphas, weights], axis=1)
+
+    params_a = params_c[a_idxs]
+    params_b = params_c[b_idxs]
+
+    V = normalized_overlap(conf_a, params_a, conf_b, params_b)
+    return k/V

@@ -211,24 +211,10 @@ def convergence(args):
         kb=50.0,
         b0=0.0)
 
-    pmi_restraint_fn = functools.partial(pmi_restraints_new,
-        params=None,
-        box=None,
-        lamb=None,
-        # masses=np.ones_like(combined_masses),
-        masses=combined_masses,
-        # a_idxs=a_full_idxs,
-        # b_idxs=b_full_idxs,
-        a_idxs=a_idxs,
-        b_idxs=b_idxs,
-        angle_force=100.0,
-        com_force=100.0
-    )
-
     prefactor = 2.7 # unitless
     shape_lamb = (4*np.pi)/(3*prefactor) # unitless
     kappa = np.pi/(np.power(shape_lamb, 2/3)) # unitless
-    sigma = 0.15 # 1 angstrom std, 95% coverage by 2 angstroms
+    sigma = 0.1 # 1 angstrom std, 95% coverage by 2 angstroms # this may need to be tightened
     alpha = kappa/(sigma*sigma)
 
     alphas = np.zeros(combined_mol.GetNumAtoms())+alpha
@@ -267,6 +253,7 @@ def convergence(args):
 
         # return (1-lamb)*com_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
         return (1-lamb)*rigid_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
+        # return rigid_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
         # return rigid_restraint_fn(conf)
         # return (1-lamb)*pmi_restraint_fn(conf) + lamb*shape_restraint_fn(conf)
 
@@ -334,17 +321,15 @@ def convergence(args):
     print("start md")
     for step in range(100000):
         # print("step", step)
-        if step % 10000 == 0:
+        if step % 5000 == 0:
             u = u_fn(x_t, lamb)
-            print("lambda", lamb, "step", step, "u", u, "avg du_dl", np.mean(onp.array(du_dls)))
+            print(lamb_idx, "lambda", lamb, "step", step, "u", u, "avg du_dl", np.mean(onp.array(du_dls)))
             mol = make_conformer(combined_mol, x_t[:ligand_a.GetNumAtoms()], x_t[ligand_a.GetNumAtoms():])
             w.write(mol)
             w.flush()
 
         if step % 10 == 0 and step > 10000:
-        # if step % 10 == 0:
             du_dl = du_dl_fn(x_t, lamb)
-            # print(du_dl)
             du_dls.append(du_dl)
 
         du_dx = du_dx_fn(x_t, lamb)
@@ -352,29 +337,17 @@ def convergence(args):
         v_t = ca*v_t + cb*du_dx + cc*onp.random.normal(size=x_t.shape)
         x_t = x_t + v_t*dt
 
-    # np.savez("debug.txt", xs=xs)
-
-    # assert 0
-
-    # xs = np.load("debug.txt.npz")["xs"]
-
-    # rigid_grad_fn = jax.grad(rigid_restraint_fn)
-    # for idx, x in enumerate(xs[196:197]):
-    # for idx in range(0, 199):
-        # print("idx", idx)
-        # print("U", rigid_restraint_fn(xs[idx]))
-    # rigid_grad_fn(xs[-1])
-    # assert 0
-
     return onp.mean(du_dls)
 
 
 if __name__ == "__main__":
 
 
+    pool = multiprocessing.Pool() # defaults to # of cpus
 
     # lambda_schedule = np.linspace(0, 1.0, os.cpu_count())
-    lambda_schedule = np.linspace(0, 1.0, 24)
+    # lambda_schedule = np.linspace(0, 1.0, 24)
+    lambda_schedule = np.linspace(0.0, 1.0, 24)
     # lambda_schedule = np.array([0.0])
     # lambda_schedule = [0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81, 0.81]
     # lambda_schedule = np.array([1e-4, 5e-4, 1e-3, 5e-3, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.11, 0.12, 0.13, 0.15,0.175, 0.2, 0.225, 0.25, 0.275, 0.3, 0.35, 0.4, 0.5])
@@ -388,16 +361,20 @@ if __name__ == "__main__":
         for l_idx, lamb in enumerate(lambda_schedule):
             args.append((epoch, lamb, l_idx))
 
-        convergence(args[-1])
-        assert 0
-
-        pool = multiprocessing.Pool() # defaults to # of cpus
+        # convergence(args[-1])
+        # assert 0
 
         avg_du_dls = pool.map(convergence, args)
         avg_du_dls = np.asarray(avg_du_dls)
 
-        pool.close()
 
         for lamb, ddl in zip(lambda_schedule, avg_du_dls):
             print("final lambda", lamb, "du_dl",  ddl)
         print(epoch, "epoch", "deltaG", onp.trapz(avg_du_dls,lambda_schedule))
+
+
+        # assert 0
+
+
+
+    pool.close()
