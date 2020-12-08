@@ -1,13 +1,15 @@
 import jax.numpy as np
 
-
-# def lambda_to_w(lamb, plane_idxs, offset_idxs, cutoff):
-#     d4 = cutoff*plane_idxs + offset_idxs*lamb
-#     # d4 = offset_idxs*lamb
-#     return d4
-
 def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
-    # d4 = lambda_to_w(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+
+    # (ytz): this initializes the 4th dimension to a fixed plane adjust by an offset
+    # followed by a scaling by cutoff.
+
+    # lambda_plane_idxs are typically 0 or 1 and allows us to turn off an interaction
+    # independent of the lambda value.
+
+    # lambda_offset_idxs are typically 0 and 1, and allows us to adjust the w coordinate
+    # in a lambda-dependent way.
     d4 = cutoff*(lambda_plane_idxs + lambda_offset_idxs*lamb)
     d4 = np.expand_dims(d4, axis=-1)
     x4 = np.concatenate((x3, d4), axis=1)
