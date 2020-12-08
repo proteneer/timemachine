@@ -46,7 +46,7 @@ class TestContext(unittest.TestCase):
             lambda_offset_idxs,
             p_scale=3.0,
             # cutoff=0.5,
-            cutoff=100.0
+            cutoff=1.5
         )
 
         masses = np.random.rand(N)

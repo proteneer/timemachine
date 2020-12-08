@@ -572,8 +572,8 @@ void __global__ k_nonbonded_exclusions(
         gj_y += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_y);
         gj_z += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_z);
 
-        du_dl_i -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_i);
-        du_dl_j += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_j);
+        du_dl_i -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_i*cutoff);
+        du_dl_j += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_j*cutoff);
 
         // energy is size extensive so this may not be a good idea
         energy -= FLOAT_TO_FIXED(charge_scale*qij*inv_dij*ebd + lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij);
