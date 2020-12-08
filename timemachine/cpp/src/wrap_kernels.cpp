@@ -9,6 +9,7 @@
 #include "harmonic_bond.hpp"
 #include "harmonic_angle.hpp"
 #include "lambda_potential.hpp"
+#include "interpolated_potential.hpp"
 // #include "restraint.hpp"
 #include "inertial_restraint.hpp"
 #include "centroid_restraint.hpp"
@@ -761,6 +762,33 @@ void declare_lambda_potential(py::module &m) {
 
 }
 
+
+void declare_interpolated_potential(py::module &m) {
+
+    using Class = timemachine::InterpolatedPotential;
+    std::string pyclass_name = std::string("InterpolatedPotential");
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        std::shared_ptr<timemachine::Potential> potential,
+        int N,
+        int P) {
+
+        return new timemachine::InterpolatedPotential(
+            potential,
+            N,
+            P
+        );
+
+    }
+    ));
+
+}
+
 template <typename RealType>
 void declare_nonbonded(py::module &m, const char *typestr) {
 
@@ -982,6 +1010,7 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_potential(m);
     declare_bound_potential(m);
     declare_lambda_potential(m);
+    declare_interpolated_potential(m);
 
     declare_neighborlist<double>(m, "f64");
     declare_neighborlist<float>(m, "f32");
