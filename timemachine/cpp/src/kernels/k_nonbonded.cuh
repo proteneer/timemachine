@@ -291,7 +291,7 @@ void __global__ k_nonbonded(
         delta_y -= box_y*nearbyint(delta_y*inv_box_y);
         delta_z -= box_z*nearbyint(delta_z*inv_box_z);
 
-        RealType delta_w = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda;
+        RealType delta_w = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*cutoff;
 
         RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
 
@@ -339,8 +339,8 @@ void __global__ k_nonbonded(
             gj_y -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_y);
             gj_z -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_z);
 
-            du_dl_i += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_i);
-            du_dl_j -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_j);
+            du_dl_i += FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_i*cutoff);
+            du_dl_j -= FLOAT_TO_FIXED((es_prefactor-lj_prefactor)*delta_w*lambda_offset_j*cutoff);
 
             RealType u = qij*inv_dij*ebd + 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
 
@@ -526,7 +526,7 @@ void __global__ k_nonbonded_exclusions(
     delta_y -= box_y*nearbyint(delta_y*inv_box_y);
     delta_z -= box_z*nearbyint(delta_z*inv_box_z);
 
-    RealType delta_w = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda;
+    RealType delta_w = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*cutoff;
 
     RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
 

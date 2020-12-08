@@ -8,7 +8,7 @@ import jax.numpy as np
 
 def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
     # d4 = lambda_to_w(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-    d4 = cutoff*lambda_plane_idxs + lambda_offset_idxs*lamb
+    d4 = cutoff*(lambda_plane_idxs + lambda_offset_idxs*lamb)
     d4 = np.expand_dims(d4, axis=-1)
     x4 = np.concatenate((x3, d4), axis=1)
     return x4
