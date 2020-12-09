@@ -1,4 +1,5 @@
 from jax.config import config; config.update("jax_enable_x64", True)
+import jax
 
 import pytest
 import numpy as np
@@ -7,6 +8,8 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
 from ff.handlers.deserialize import deserialize_handlers
+
+import functools
 
 
 def test_harmonic_bond():
@@ -110,13 +113,18 @@ def test_harmonic_bond():
 
     mol = Chem.MolFromSmiles("C1CNCOC1F")
 
-    bond_idxs, (bond_params, bond_vjp_fn) = hbh.parameterize(mol)
+    bond_params, bond_idxs = hbh.parameterize(mol)
 
     assert bond_idxs.shape == (mol.GetNumBonds(), 2)
     assert bond_params.shape == (mol.GetNumBonds(), 2)
 
 
     bonded_param_adjoints = np.random.randn(*bond_params.shape)
+
+    bond_params_new, bond_vjp_fn, bond_idxs_new = jax.vjp(functools.partial(hbh.partial_parameterize, mol=mol), hbh.params, has_aux=True)
+
+    np.testing.assert_array_equal(bond_params_new, bond_params)
+    np.testing.assert_array_equal(bond_idxs_new, bond_idxs)
 
     # test that we can use the adjoints
     ff_adjoints = bond_vjp_fn(bonded_param_adjoints)[0]
@@ -141,14 +149,19 @@ def test_proper_torsion():
     params = [x[1] for x in patterns]
     props = None
 
-    hbh = bonded.ProperTorsionHandler(smirks, params, props)
+    pth = bonded.ProperTorsionHandler(smirks, params, props)
 
     mol = Chem.MolFromSmiles("FC(Br)=C(Br)F")
 
-    torsion_idxs, (torsion_params, torsion_vjp_fn) = hbh.parameterize(mol)
+    torsion_params, torsion_idxs = pth.parameterize(mol)
 
     assert torsion_idxs.shape == (8, 4)
     assert torsion_params.shape == (8, 3)
+
+    torsion_params_new, torsion_vjp_fn, torsion_idxs_new = jax.vjp(functools.partial(pth.partial_parameterize, mol=mol), pth.params, has_aux=True)
+
+    np.testing.assert_array_equal(torsion_params_new, torsion_params)
+    np.testing.assert_array_equal(torsion_idxs_new, torsion_idxs)
 
     torsion_param_adjoints = np.random.randn(*torsion_params.shape)
 
@@ -178,21 +191,28 @@ def test_improper_torsion():
     mol = Chem.MolFromSmiles("CNC(C)=O") # peptide
     mol = Chem.AddHs(mol)
 
-    torsion_idxs, (params, vjp_fn) = imp_handler.parameterize(mol)
+    torsion_params, torsion_idxs = imp_handler.parameterize(mol)
 
     assert torsion_idxs.shape[0] == 6 # we expect two sets of impropers, each with 3 components.
     assert torsion_idxs.shape[1] == 4
 
-    assert params.shape[0] == 6
-    assert params.shape[1] == 3
+    assert torsion_params.shape[0] == 6
+    assert torsion_params.shape[1] == 3
 
-    param_adjoints = np.random.randn(*params.shape)
+
+    torsion_params_new, torsion_vjp_fn, torsion_idxs_new = jax.vjp(functools.partial(imp_handler.partial_parameterize, mol=mol), imp_handler.params, has_aux=True)
+
+    np.testing.assert_array_equal(torsion_params_new, torsion_params)
+    np.testing.assert_array_equal(torsion_idxs_new, torsion_idxs)
+
+
+    param_adjoints = np.random.randn(*torsion_params.shape)
 
     # # test that we can use the adjoints
-    ff_adjoints = vjp_fn(param_adjoints)[0]
+    ff_adjoints = torsion_vjp_fn(param_adjoints)[0]
 
     # # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
-    mask = np.argwhere(params > 90)
+    mask = np.argwhere(torsion_params > 90)
     assert np.all(ff_adjoints[mask] == 0.0) == True
 
 def test_exclusions():
@@ -241,13 +261,15 @@ def test_am1_bcc():
     am1h = nonbonded.AM1BCCHandler(smirks, params, props)
     mol = Chem.AddHs(Chem.MolFromSmiles("C1CNCOC1F"))
     AllChem.EmbedMolecule(mol)
-    charges, vjp_fn = am1h.parameterize(mol)
+    charges = am1h.parameterize(mol)
 
     assert len(charges) == mol.GetNumAtoms()
 
-    charges_adjoints = np.random.randn(*charges.shape)
+    new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, mol=mol))
 
-    assert vjp_fn(charges_adjoints) == None
+    # charges_adjoints = np.random.randn(*charges.shape)
+
+    # assert vjp_fn(charges_adjoints) == None
 
 def test_am1_ccc():
     
@@ -272,7 +294,7 @@ def test_am1_ccc():
     am1h = nonbonded.AM1CCCHandler(smirks, params, props)
     mol = Chem.AddHs(Chem.MolFromSmiles("O=C(C)Oc1ccccc1C(=O)O"))
     AllChem.EmbedMolecule(mol)
-    es_params, es_vjp_fn = am1h.parameterize(mol)
+    es_params = am1h.parameterize(mol)
 
     # TBD update with AM1 Symmetrize=True
     ligand_params = np.array([-6.10948,  7.08286, -1.13097, -4.3096,  2.03822, -1.72492,
@@ -282,6 +304,10 @@ def test_am1_ccc():
     
     np.testing.assert_almost_equal(es_params, ligand_params, decimal=5)
  
+    new_es_params, es_vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, mol=mol), params)
+
+    np.testing.assert_array_equal(es_params, new_es_params)
+
     es_params_adjoints = np.random.randn(*es_params.shape)
 
     adjoints = es_vjp_fn(es_params_adjoints)[0]
@@ -292,17 +318,15 @@ def test_am1_ccc():
 
     import time
     start = time.time()
-    es_params_from_cache, _ = am1h.parameterize(mol)
+    es_params_from_cache = am1h.parameterize(mol)
     end = time.time()
 
     # second pass should be very fast
     assert end-start < 1.0
 
     # should be *exactly* identical since we're loading from cache
-    np.testing.assert_equal(es_params_from_cache, es_params)
+    np.testing.assert_array_equal(es_params_from_cache, es_params)
 
-
-    
 def test_simple_charge_handler():
 
     patterns = [
@@ -351,7 +375,7 @@ def test_simple_charge_handler():
 
     mol = Chem.MolFromSmiles("C1CNCOC1F")
 
-    es_params, es_vjp_fn = sch.parameterize(mol)
+    es_params = sch.parameterize(mol)
 
     ligand_params = np.array([
         0.1, # C
@@ -367,6 +391,9 @@ def test_simple_charge_handler():
 
     es_params_adjoints = np.random.randn(*es_params.shape)
 
+    new_es_params, es_vjp_fn = jax.vjp(functools.partial(sch.partial_parameterize, mol=mol), params)
+
+    np.testing.assert_array_equal(new_es_params, es_params)
     # test that we can use the adjoints
     adjoints = es_vjp_fn(es_params_adjoints)[0]
 
@@ -374,6 +401,7 @@ def test_simple_charge_handler():
     mask = np.argwhere(params > 90)
     assert np.all(adjoints[mask] == 0.0) == True
 
+@pytest.mark.skip("gbsa is deprecated")
 def test_gbsa_handler():
 
     patterns = [
@@ -442,9 +470,9 @@ def test_am1_differences():
 
     for mol in suppl:
 
-        am1_params, vjp_fn = am1.parameterize(mol)
-        ccc_params, vjp_fn = ccc.parameterize(mol)
-        bcc_params, vjp_fn = bcc.parameterize(mol)
+        am1_params = am1.parameterize(mol)
+        ccc_params = ccc.parameterize(mol)
+        bcc_params = bcc.parameterize(mol)
 
         if np.sum(np.abs(ccc_params - bcc_params)) > 0.1:
         
@@ -511,8 +539,7 @@ def test_lennard_jones_handler():
 
     mol = Chem.MolFromSmiles("C1CNCOC1F")
 
-    lj_params, lj_vjp_fn = ljh.parameterize(mol)
-
+    lj_params = ljh.parameterize(mol)
 
     ligand_params = np.array([
         [0.1, 0.2**2], # C
@@ -527,6 +554,10 @@ def test_lennard_jones_handler():
     np.testing.assert_almost_equal(lj_params, ligand_params)
 
     lj_params_adjoints = np.random.randn(*lj_params.shape)
+
+    new_lj_params, lj_vjp_fn = jax.vjp(functools.partial(ljh.partial_parameterize, mol=mol), params)
+
+    np.testing.assert_array_equal(new_lj_params, lj_params)
 
     # test that we can use the adjoints
     adjoints = lj_vjp_fn(lj_params_adjoints)[0]

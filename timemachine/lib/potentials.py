@@ -102,6 +102,9 @@ class HarmonicBond(CustomOpWrapper):
     def get_bond_idxs(self):
         return self.args[0]
 
+    def set_bond_idxs(self, new_idxs):
+        self.args[0] = new_idxs
+
 # this is an alias to make type checking easier
 class CoreRestraint(HarmonicBond):
 
@@ -121,10 +124,16 @@ class HarmonicAngle(CustomOpWrapper):
     def get_angle_idxs(self):
         return self.args[0]
 
+    def set_angle_idxs(self, new_idxs):
+        self.args[0] = new_idxs
+
 class PeriodicTorsion(CustomOpWrapper):
 
     def get_torsion_idxs(self):
         return self.args[0]
+
+    def set_torsion_idxs(self, new_idxs):
+        self.args[0] = new_idxs
 
 class InertialRestraint(CustomOpWrapper):
 

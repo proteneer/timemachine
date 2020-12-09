@@ -105,12 +105,6 @@ def generate_nonbonded_idxs(mol, smirks):
 def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
-def apply_bcc(params, bond_idxs, bond_idx_params, am1_charges):
-    deltas = params[bond_idx_params]
-    incremented = ops.index_add(am1_charges, bond_idxs[:, 0], deltas)
-    decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)    
-    return decremented 
-
 class NonbondedHandler(SerializableMixIn):
 
     def __init__(self, smirks, params, props):
@@ -131,7 +125,14 @@ class NonbondedHandler(SerializableMixIn):
         self.params = np.array(params, dtype=np.float64)
         self.props = props
 
+    def partial_parameterize(self, params, mol):
+        return self.static_parameterize(params, self.smirks, mol)
+
     def parameterize(self, mol):
+        return self.static_parameterize(self.params, self.smirks, mol)
+
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
         """
         Carry out parameterization of given molecule, with an option to attach additional parameters
         via concateation. Typically aux_params are protein charges etc.
@@ -142,16 +143,16 @@ class NonbondedHandler(SerializableMixIn):
             rdkit molecule, should have hydrogens pre-added
 
         """
-        param_idxs = generate_nonbonded_idxs(mol, self.smirks)
-        param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
-        return jax.vjp(param_fn, self.params)
+        param_idxs = generate_nonbonded_idxs(mol, smirks)
+        return params[param_idxs]
 
 class SimpleChargeHandler(NonbondedHandler):
     pass
 
 class LennardJonesHandler(NonbondedHandler):
 
-    def parameterize(self, mol):
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
         """
         Parameters
         ----------
@@ -165,16 +166,11 @@ class LennardJonesHandler(NonbondedHandler):
             (parameters of shape [N,2], vjp_fn)
 
         """
-        param_idxs = generate_nonbonded_idxs(mol, self.smirks)
-
-        def param_fn(p):
-            params = p[param_idxs]
-            sigmas = params[:, 0]
-            epsilons = jnp.power(params[:, 1], 2) # resolves a super annoying singularity
-            return jnp.stack([sigmas, epsilons], axis=1)
-
-        return jax.vjp(param_fn, self.params)
-
+        param_idxs = generate_nonbonded_idxs(mol, smirks)
+        params = params[param_idxs]
+        sigmas = params[:, 0]
+        epsilons = jnp.power(params[:, 1], 2) # resolves a super annoying singularity
+        return jnp.stack([sigmas, epsilons], axis=1)
 
 class GBSAHandler(NonbondedHandler):
     pass
@@ -186,11 +182,15 @@ class AM1Handler(SerializableMixIn):
         assert len(smirks) == 0
         assert len(params) == 0
         assert props is None
-        self.smirks = []
-        self.params = []
-        self.props = None
+
+    def partial_parameterize(self, mol):
+        return self.static_parameterize(self.smirks, mol)
 
     def parameterize(self, mol):
+        return self.static_parameterize(mol)
+
+    @staticmethod
+    def static_parameterize(mol):
         """
         Parameters
         ----------
@@ -221,10 +221,8 @@ class AM1Handler(SerializableMixIn):
             q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
             charges.append(q)
 
-        def vjp_fn(*args, **kwargs):
-            return None 
+        return np.array(charges, dtype=np.float64)
 
-        return np.array(charges, dtype=np.float64), vjp_fn
 
 class AM1BCCHandler(SerializableMixIn):
 
@@ -236,7 +234,14 @@ class AM1BCCHandler(SerializableMixIn):
         self.params = []
         self.props = None
 
+    def partial_parameterize(self, mol):
+        return self.static_parameterize(mol)
+
     def parameterize(self, mol):
+        return self.static_parameterize(mol)
+
+    @staticmethod
+    def static_parameterize(mol):
         """
         Parameters
         ----------
@@ -267,10 +272,8 @@ class AM1BCCHandler(SerializableMixIn):
             q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
             charges.append(q)
 
-        def vjp_fn(*args, **kwargs):
-            return None 
+        return np.array(charges)
 
-        return np.array(charges, dtype=np.float64), vjp_fn
 
 class AM1CCCHandler(SerializableMixIn):
 
@@ -292,7 +295,14 @@ class AM1CCCHandler(SerializableMixIn):
         self.params = np.array(params, dtype=np.float64)
         self.props = props
 
+    def partial_parameterize(self, params, mol):
+        return self.static_parameterize(params, self.smirks, mol)
+
     def parameterize(self, mol):
+        return self.static_parameterize(self.params, self.smirks, mol)
+
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
         """
         Parameters
         ----------
@@ -335,9 +345,9 @@ class AM1CCCHandler(SerializableMixIn):
         bond_idxs = []
         bond_idx_params = []
 
-        for index in range(len(self.smirks)):
-            smirk = self.smirks[index]  
-            param = self.params[index]
+        for index in range(len(smirks)):
+            smirk = smirks[index]  
+            param = params[index]
 
             substructure_search = oechem.OESubSearch(smirk)
             substructure_search.SetMaxMatches(0)
@@ -371,13 +381,11 @@ class AM1CCCHandler(SerializableMixIn):
                 bond_idxs.append(forward_matched_bond)
                 bond_idx_params.append(index)
         
-        bcc_fn = functools.partial(
-            apply_bcc,
-            bond_idxs = np.array(bond_idxs),
-            bond_idx_params = np.array(bond_idx_params, dtype=np.int32),
-            am1_charges = np.array(am1_charges)
-        )
 
-        charges, vjp_fn = jax.vjp(bcc_fn, self.params)
+        am1_charges = np.array(am1_charges)
+        bond_idxs = np.array(bond_idxs)
 
-        return np.array(charges, dtype=np.float64), vjp_fn
+        deltas = params[bond_idx_params]
+        incremented = ops.index_add(am1_charges, bond_idxs[:, 0], deltas)
+        decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)    
+        return decremented 
