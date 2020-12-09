@@ -64,6 +64,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   # src/stepper.cu
   src/context.cu
   src/lambda_potential.cu
+  src/interpolated_potential.cu
   # src/gbsa.cu
   src/centroid_restraint.cu
   src/inertial_restraint.cu

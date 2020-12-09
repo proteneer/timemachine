@@ -35,6 +35,23 @@ class CustomOpWrapper():
 
         return custom_ops.BoundPotential(self.unbound_impl(precision), self.params)
 
+
+class InterpolatedPotential(CustomOpWrapper):
+
+    def unbound_impl(self, precision):
+        return custom_ops.InterpolatedPotential(
+            self.args[0].unbound_impl(precision),
+            *self.args[1:]
+        )
+
+    def bound_impl(self, precision):
+        u_params = self.get_u_fn().params
+        return custom_ops.BoundPotential(
+            self.unbound_impl(precision),
+            u_params
+        )
+
+
 class LambdaPotential(CustomOpWrapper):
 
     def bind(self, params):

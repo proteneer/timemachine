@@ -138,19 +138,23 @@ void LambdaPotential::execute_device(
         int count = N*3;
         int blocks = (count + tpb - 1)/tpb;
         k_reduce_add_force_buffer<<<blocks, tpb, 0, stream>>>(count, d_du_dx, d_du_dx_buffer_, multiplier_*lambda + offset_);
+        gpuErrchk(cudaPeekAtLastError());
     }
 
     if(d_du_dp) {
         int blocks = (P + tpb - 1)/tpb;
         k_reduce_add_buffer<<<blocks, tpb, 0, stream>>>(P, d_du_dp, d_du_dp_buffer_, multiplier_*lambda + offset_);
+        gpuErrchk(cudaPeekAtLastError());
     }
 
     if(d_du_dl) {
         k_reduce_add_du_dl<<<1, tpb, 0, stream>>>(d_du_dl, d_u_buffer_, d_du_dl_buffer_, multiplier_, offset_, lambda);
+        gpuErrchk(cudaPeekAtLastError());
     }
 
     if(d_u) {
         k_reduce_add_buffer<<<1, tpb, 0, stream>>>(1, d_u, d_u_buffer_, multiplier_*lambda + offset_);
+        gpuErrchk(cudaPeekAtLastError());
     }
 
 }
