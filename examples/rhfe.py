@@ -6,7 +6,6 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from fe import pdb_writer
 from fe import topology
-from md import recipe
 from md import builders
 from md import minimizer
 
