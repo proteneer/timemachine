@@ -190,7 +190,6 @@ for lamb_idx, final_lamb in enumerate(np.linspace(1, 0, 8)):
     for _ in range(20000):
         if step % 500 == 0:
             writer.write_frame(ctxt.get_x_t()*10)
-        print("FINAL LAMB", final_lamb)
         ctxt.step(final_lamb)
 
     writer.close()
