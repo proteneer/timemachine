@@ -1,4 +1,4 @@
-# absolute hydration free energy
+# relative hydration free energy
 
 import numpy as np
 
