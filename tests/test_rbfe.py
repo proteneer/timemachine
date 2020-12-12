@@ -83,7 +83,6 @@ def get_romol_conf(mol):
     guest_conf = guest_conf/10 # from angstroms to nm
     return np.array(guest_conf, dtype=np.float64)
 
-
 def test_stage_0():
 
     benzene = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1"))

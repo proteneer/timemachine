@@ -66,7 +66,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system):
     for handle in guest_ff_handlers:
         results = handle.parameterize(guest_mol)
         if isinstance(handle, bonded.HarmonicBondHandler):
-            bond_idxs, (bond_params, vjp_fn) = results
+            bond_params, bond_idxs = results
             bond_idxs += num_host_atoms
             combined_potentials.append(
                 potentials.HarmonicBond(bond_idxs).bind(
@@ -75,7 +75,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system):
             )
 
         elif isinstance(handle, bonded.HarmonicAngleHandler):
-            angle_idxs, (angle_params, vjp_fn) = results
+            angle_params, angle_idxs = results
             angle_idxs += num_host_atoms
             combined_potentials.append(
                 potentials.HarmonicAngle(angle_idxs).bind(
@@ -84,7 +84,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system):
             )
 
         elif isinstance(handle, bonded.ProperTorsionHandler):
-            torsion_idxs, (torsion_params, vjp_fn) = results
+            torsion_params, torsion_idxs = results
             torsion_idxs += num_host_atoms
             combined_potentials.append(
                 potentials.PeriodicTorsion(torsion_idxs).bind(
@@ -93,7 +93,7 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system):
             )
 
         elif isinstance(handle, bonded.ImproperTorsionHandler):
-            torsion_idxs, (torsion_params, vjp_fn) = results
+            torsion_params, torsion_idxs = results
             torsion_idxs += num_host_atoms
             combined_potentials.append(
                 potentials.PeriodicTorsion(torsion_idxs).bind(
@@ -103,10 +103,10 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system):
 
         elif isinstance(handle, nonbonded.AM1CCCHandler):
             charge_handle = handle
-            guest_charge_params, guest_charge_vjp_fn = results
+            guest_charge_params = results
 
         elif isinstance(handle, nonbonded.LennardJonesHandler):
-            guest_lj_params, guest_lj_vjp_fn = results
+            guest_lj_params = results
             lj_handle = handle
 
         else:
@@ -145,22 +145,12 @@ def combine_potentials(guest_ff_handlers, guest_mol, host_system):
         [host_nb_bp.get_exclusion_idxs(), guest_exclusion_idxs + num_host_atoms]
     )
 
-    # print("EXCLUSIONS", host_nb_bp.get_exclusion_idxs())
-    # assert 0
     combined_scales = np.concatenate(
         [host_nb_bp.get_scale_factors(), guest_scale_factors]
     )
-
     combined_beta = 2.0
-
     combined_cutoff = 1.0  # nonbonded cutoff
-
     combined_nb_params = np.asarray(combined_nb_params).copy()
-
-    # print(combined_nb_params[1758:])
-    # combined_nb_params[:, 0] = 0.0
-
-    # print(combined_nb_params)
 
     combined_potentials.append(
         potentials.Nonbonded(

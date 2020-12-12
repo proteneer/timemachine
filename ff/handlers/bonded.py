@@ -40,7 +40,19 @@ class ReversibleBondHandler(SerializableMixIn):
         self.props = props
         assert len(self.smirks) == len(self.params)
 
+    def lookup_smirks(self, query):
+        for s_idx, s in enumerate(self.smirks):
+            if s == query:
+                return self.params[s_idx]
+
+    def partial_parameterize(self, params, mol):
+        return self.static_parameterize(params, self.smirks, mol)
+
     def parameterize(self, mol):
+        return self.static_parameterize(self.params, self.smirks, mol)
+
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
         """
         Parameterize given molecule
 
@@ -56,11 +68,8 @@ class ReversibleBondHandler(SerializableMixIn):
 
         """
 
-        bond_idxs, param_idxs = generate_vd_idxs(mol, self.smirks)
-        param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
-        sys_params, vjp_fn = jax.vjp(param_fn, self.params)
-
-        return np.array(bond_idxs, dtype=np.int32), (np.array(sys_params, dtype=np.float64), vjp_fn)
+        bond_idxs, param_idxs = generate_vd_idxs(mol, smirks)
+        return params[param_idxs], bond_idxs
 
 # we need to subclass to get the names backout
 class HarmonicBondHandler(ReversibleBondHandler):
@@ -95,31 +104,36 @@ class ProperTorsionHandler():
                 self.params.append(term)
         
         self.counts = np.array(self.counts, dtype=np.int32)
-        # prefix sum of size + 1
-        self.pfxsum = np.concatenate([[0], np.cumsum(self.counts)]) 
+ 
         self.params = np.array(self.params, dtype=np.float64)
         self.props = props
 
     def parameterize(self, mol):
-        torsion_idxs, param_idxs = generate_vd_idxs(mol, self.smirks)
+        return self.static_parameterize(self.params, self.smirks, self.counts, mol)
+
+    def partial_parameterize(self, params, mol):
+        return self.static_parameterize(params, self.smirks, self.counts, mol)
+
+
+    @staticmethod
+    def static_parameterize(params, smirks, counts, mol):
+        torsion_idxs, param_idxs = generate_vd_idxs(mol, smirks)
 
         assert len(torsion_idxs) == len(param_idxs)
 
         scatter_idxs = []
-        n_smirks = len(self.counts) # number of patterns
-
+        n_smirks = len(counts) # number of patterns
         repeats = []
+
+        # prefix sum of size + 1
+        pfxsum = np.concatenate([[0], np.cumsum(counts)]) 
         for p_idx in param_idxs:
-            start = self.pfxsum[p_idx]
-            end = self.pfxsum[p_idx+1]
+            start = pfxsum[p_idx]
+            end = pfxsum[p_idx+1]
             scatter_idxs.extend((range(start, end)))
-            repeats.append(self.counts[p_idx])
+            repeats.append(counts[p_idx])
 
-        scatter_idxs = np.array(scatter_idxs, dtype=np.int32).flatten()
-        param_fn = functools.partial(parameterize_ligand, param_idxs=scatter_idxs)
-        sys_params, vjp_fn = jax.vjp(param_fn, self.params)
-
-        return np.repeat(torsion_idxs, repeats, axis=0).astype(np.int32), (np.array(sys_params, dtype=np.float64), vjp_fn)
+        return params[scatter_idxs], np.repeat(torsion_idxs, repeats, axis=0).astype(np.int32)
 
     def serialize(self):
         list_params = []
@@ -150,7 +164,15 @@ class ImproperTorsionHandler(SerializableMixIn):
         assert self.params.shape[1] == 3
         assert len(self.smirks) == len(self.params)
 
+    def partial_parameterize(self, params, mol):
+        return self.static_parameterize(params, self.smirks, mol)
+
     def parameterize(self, mol):
+        return self.static_parameterize(self.params, self.smirks, mol)
+
+
+    @staticmethod
+    def static_parameterize(params, smirks, mol):
 
         # improper torsions do not use a valence dict as
         # we cannot sort based on b_idxs[0] and b_idxs[-1]
@@ -167,7 +189,7 @@ class ImproperTorsionHandler(SerializableMixIn):
             nbs = sorted(nbs)
             return nbs[0], ctr, nbs[1], nbs[2]
 
-        for p_idx, patt in enumerate(self.smirks):
+        for p_idx, patt in enumerate(smirks):
             matches = match_smirks(mol, patt)
 
             for m in matches:
@@ -184,8 +206,4 @@ class ImproperTorsionHandler(SerializableMixIn):
                 improper_idxs.append((center, p[0], p[1], p[2]))
                 param_idxs.append(p_idx)
 
-
-        param_fn = functools.partial(parameterize_ligand, param_idxs=param_idxs)
-        sys_params, vjp_fn = jax.vjp(param_fn, self.params)
-
-        return np.array(improper_idxs, dtype=np.int32), (np.array(sys_params, dtype=np.float64), vjp_fn)
+        return params[param_idxs], np.array(improper_idxs, dtype=np.int32)
