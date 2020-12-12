@@ -87,7 +87,7 @@ for bp in host_bps:
         final_vjp_and_handles.append(None)
 
 gdt = topology.DualTopology(romol_a, romol_b, ff)
-hgt = topology.HostGuestTopology(gdt, host_p, num_host_atoms)
+hgt = topology.HostGuestTopology(host_p, gdt)
 
 # setup the parameter handlers for the ligand
 tuples = [

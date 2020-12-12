@@ -16,6 +16,27 @@ def get_romol_conf(mol):
 
 
 def minimize_4d(romol, host_system, host_coords, ff, box):
+    """
+    Insert romol into a ligand via 4D decoupling under a Langevin thermostat.
+
+    Parameters
+    ----------
+    romol: ROMol
+        Ligand to be inserted. It must be embedded.
+
+    host_system: openmm.System
+        OpenMM System representing the host
+
+    host_coords: np.ndarray
+        N x 3 coordinates of the host. units of nanometers.
+
+    ff: ff.Forcefield
+        Wrapper class around a list of handlers
+
+    box: np.ndarray [3,3]
+        Box matrix for periodic boundary conditions. units of nanometers.
+
+    """
 
     host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
@@ -33,7 +54,7 @@ def minimize_4d(romol, host_system, host_coords, ff, box):
             final_potentials.append(bp)
 
     gbt = topology.BaseTopology(romol, ff)
-    hgt = topology.HostGuestTopology(gbt, host_p, num_host_atoms)
+    hgt = topology.HostGuestTopology(host_p, gbt)
 
     # setup the parameter handlers for the ligand
     tuples = [

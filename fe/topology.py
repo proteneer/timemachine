@@ -1,4 +1,5 @@
 import numpy as np
+import jax
 import jax.numpy as jnp
 
 from timemachine.lib import potentials
@@ -12,25 +13,22 @@ _CUTOFF = 1.2
 
 class HostGuestTopology():
 
-    def __init__(self, guest_topology, host_p, num_host_atoms):
+    def __init__(self, host_p, guest_topology):
         """
         Utility tool for combining host with a guest, in that order.
 
         Parameters
         ----------
-        guest_topology:
-            Guest's Topology {Base, Dual, Single}Topology.
-
         host_p:
             Nonbonded potential for the host.
 
-        num_host_atoms:
-            Number of atoms in the host.
-    
+        guest_topology:
+            Guest's Topology {Base, Dual, Single}Topology.
+
         """
         self.guest_topology = guest_topology
         self.host_p = host_p
-        self.num_host_atoms = num_host_atoms
+        self.num_host_atoms = len(self.host_p.get_lambda_plane_idxs())
 
     def parameterize_harmonic_bond(self, ff_params):
         params, potential = self.guest_topology.parameterize_harmonic_bond(ff_params)
@@ -269,37 +267,25 @@ class DualTopology():
 
         return params, nb
 
-    def parameterize_harmonic_bond(self, ff_params):
+    def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
         offset = self.mol_a.GetNumAtoms()
-        params_a, idxs_a = self.ff.hb_handle.partial_parameterize(ff_params, self.mol_a)
-        params_b, idxs_b = self.ff.hb_handle.partial_parameterize(ff_params, self.mol_b)
+        params_a, idxs_a = bonded_handle.partial_parameterize(ff_params, self.mol_a)
+        params_b, idxs_b = bonded_handle.partial_parameterize(ff_params, self.mol_b)
         params_c = jnp.concatenate([params_a, params_b])
         idxs_c = jnp.concatenate([idxs_a, idxs_b + offset])
-        return params_c, potentials.HarmonicBond(idxs_c)
+        return params_c, potential(idxs_c)
+
+    def parameterize_harmonic_bond(self, ff_params):
+        return self._parameterize_bonded_term(ff_params, self.ff.hb_handle, potentials.HarmonicBond)
 
 
     def parameterize_harmonic_angle(self, ff_params):
-        offset = self.mol_a.GetNumAtoms()
-        params_a, idxs_a = self.ff.ha_handle.partial_parameterize(ff_params, self.mol_a)
-        params_b, idxs_b = self.ff.ha_handle.partial_parameterize(ff_params, self.mol_b)
-        params_c = jnp.concatenate([params_a, params_b])
-        idxs_c = jnp.concatenate([idxs_a, idxs_b + offset])
-        return params_c, potentials.HarmonicAngle(idxs_c)
+        return self._parameterize_bonded_term(ff_params, self.ff.ha_handle, potentials.HarmonicAngle)
 
 
     def parameterize_proper_torsion(self, ff_params):
-        offset = self.mol_a.GetNumAtoms()
-        params_a, idxs_a = self.ff.pt_handle.partial_parameterize(ff_params, self.mol_a)
-        params_b, idxs_b = self.ff.pt_handle.partial_parameterize(ff_params, self.mol_b)
-        params_c = jnp.concatenate([params_a, params_b])
-        idxs_c = jnp.concatenate([idxs_a, idxs_b + offset])
-        return params_c, potentials.PeriodicTorsion(idxs_c)
+        return self._parameterize_bonded_term(ff_params, self.ff.pt_handle, potentials.PeriodicTorsion)
+
 
     def parameterize_improper_torsion(self, ff_params):
-        offset = self.mol_a.GetNumAtoms()
-        params_a, idxs_a = self.ff.it_handle.partial_parameterize(ff_params, self.mol_a)
-        params_b, idxs_b = self.ff.it_handle.partial_parameterize(ff_params, self.mol_b)
-        params_c = jnp.concatenate([params_a, params_b])
-        idxs_c = jnp.concatenate([idxs_a, idxs_b + offset])
-        return params_c, potentials.PeriodicTorsion(idxs_c)
-
+        return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)

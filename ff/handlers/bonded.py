@@ -40,6 +40,11 @@ class ReversibleBondHandler(SerializableMixIn):
         self.props = props
         assert len(self.smirks) == len(self.params)
 
+    def lookup_smirks(self, query):
+        for s_idx, s in enumerate(self.smirks):
+            if s == query:
+                return self.params[s_idx]
+
     def partial_parameterize(self, params, mol):
         return self.static_parameterize(params, self.smirks, mol)
 
