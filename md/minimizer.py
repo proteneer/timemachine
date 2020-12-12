@@ -17,7 +17,7 @@ def get_romol_conf(mol):
 
 def minimize_4d(romol, host_system, host_coords, ff, box):
     """
-    Insert romol into a ligand via 4D decoupling under a Langevin thermostat.
+    Insert romol into a host system via 4D decoupling under a Langevin thermostat.
 
     Parameters
     ----------
