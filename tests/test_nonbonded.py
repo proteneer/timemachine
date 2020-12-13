@@ -159,8 +159,8 @@ class TestNonbonded(GradientTest):
 
                 N = coords.shape[0]
 
-                lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-                lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+                lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+                lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
                 for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 

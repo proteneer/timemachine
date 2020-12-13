@@ -38,17 +38,25 @@ class CustomOpWrapper():
 
 class InterpolatedPotential(CustomOpWrapper):
 
+
+    # jank inheritance, args[0] is the u_fn
+    def __getattr__(self, attr):
+        return getattr(self.args[0], attr)
+
+    def u_fn(self):
+        return self.args[0]
+
     def unbound_impl(self, precision):
         return custom_ops.InterpolatedPotential(
-            self.args[0].unbound_impl(precision),
-            *self.args[1:]
+            self.u_fn().unbound_impl(precision),
+            self.args[1],
+            self.args[2]
         )
 
     def bound_impl(self, precision):
-        u_params = self.get_u_fn().params
         return custom_ops.BoundPotential(
             self.unbound_impl(precision),
-            u_params
+             self.params
         )
 
 

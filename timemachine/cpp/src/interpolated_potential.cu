@@ -171,6 +171,7 @@ void InterpolatedPotential::execute_device(
 
     if(d_du_dl) {
 
+        // why is this zero for nonbonded terms? clearly charges are different!
         k_reduce_du_dl<<<B, tpb, 0, stream>>>(lambda, P_base, d_du_dp_buffer_, d_p, d_p + P_base, d_du_dl_buffer_);
         gpuErrchk(cudaPeekAtLastError());
 

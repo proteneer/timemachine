@@ -30,6 +30,9 @@ class HostGuestTopology():
         self.host_p = host_p
         self.num_host_atoms = len(self.host_p.get_lambda_plane_idxs())
 
+    def get_num_atoms(self):
+        return self.num_host_atoms + self.guest_topology.get_num_atoms()
+
     def parameterize_harmonic_bond(self, ff_params):
         params, potential = self.guest_topology.parameterize_harmonic_bond(ff_params)
         potential.set_bond_idxs(potential.get_bond_idxs() + self.num_host_atoms)
@@ -61,31 +64,44 @@ class HostGuestTopology():
         assert guest_p.get_beta() == self.host_p.get_beta()
         assert guest_p.get_cutoff() == self.host_p.get_cutoff()
 
-        if guest_qlj.shape[0] == num_guest_atoms:
-            # no parameter interpolation
-            hg_nb_params = jnp.concatenate([self.host_p.params, guest_qlj])
-        elif guest_qlj.shape[0] == num_guest_atoms*2:
-            # with parameter interpolation
-            hg_nb_params_src = jnp.concatenate([self.host_p.params, guest_qlj[:num_guest_atoms]])
-            hg_nb_params_dst = jnp.concatenate([self.host_p.params, guest_qlj[num_guest_atoms:]])
-            hg_nb_params = jnp.concatenate([hg_nb_params_src, hg_nb_params_dst])
-        else:
-            # you dun' goofed and consequences will never be the same
-            assert 0
-
         hg_exclusion_idxs = np.concatenate([self.host_p.get_exclusion_idxs(), guest_p.get_exclusion_idxs() + self.num_host_atoms])
         hg_scale_factors = np.concatenate([self.host_p.get_scale_factors(), guest_p.get_scale_factors()])
         hg_lambda_offset_idxs = np.concatenate([self.host_p.get_lambda_offset_idxs(), guest_p.get_lambda_offset_idxs()])
         hg_lambda_plane_idxs = np.concatenate([self.host_p.get_lambda_plane_idxs(), guest_p.get_lambda_plane_idxs()])
 
-        return hg_nb_params, potentials.Nonbonded(
-            hg_exclusion_idxs,
-            hg_scale_factors,
-            hg_lambda_plane_idxs,
-            hg_lambda_offset_idxs,
-            guest_p.get_beta(),
-            guest_p.get_cutoff()
-        )
+        if guest_qlj.shape[0] == num_guest_atoms:
+            # no parameter interpolation
+            hg_nb_params = jnp.concatenate([self.host_p.params, guest_qlj])
+
+            return hg_nb_params, potentials.Nonbonded(
+                hg_exclusion_idxs,
+                hg_scale_factors,
+                hg_lambda_plane_idxs,
+                hg_lambda_offset_idxs,
+                guest_p.get_beta(),
+                guest_p.get_cutoff()
+            )
+
+        elif guest_qlj.shape[0] == num_guest_atoms*2:
+            # with parameter interpolation
+            hg_nb_params_src = jnp.concatenate([self.host_p.params, guest_qlj[:num_guest_atoms]])
+            hg_nb_params_dst = jnp.concatenate([self.host_p.params, guest_qlj[num_guest_atoms:]])
+            hg_nb_params = jnp.concatenate([hg_nb_params_src, hg_nb_params_dst])
+
+            nb = potentials.Nonbonded(
+                hg_exclusion_idxs,
+                hg_scale_factors,
+                hg_lambda_plane_idxs,
+                hg_lambda_offset_idxs,
+                guest_p.get_beta(),
+                guest_p.get_cutoff()
+            )
+
+            return hg_nb_params, potentials.InterpolatedPotential(nb, self.get_num_atoms(), hg_nb_params.size)
+
+        else:
+            # you dun' goofed and consequences will never be the same
+            assert 0
 
 
 class BaseTopology():
@@ -304,6 +320,7 @@ class SingleTopology():
         # map into idxs in the combined molecule
         self.a_to_c = np.arange(mol_a.GetNumAtoms(), dtype=np.int32) # identity
         self.b_to_c = np.zeros(mol_b.GetNumAtoms(), dtype=np.int32) - 1
+
         self.NC = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
 
         # mark membership:
@@ -323,9 +340,14 @@ class SingleTopology():
                 self.c_flags[iota] = 2
                 iota += 1
 
-        # # test for uniqueness
-        assert len(set(core[:, 0])) == len(core[:, 0])
-        assert len(set(core[:, 1])) == len(core[:, 1])
+        # test for uniqueness
+        # (ytz): fix me for np arrays
+
+        # print(core[:, 0])
+        # print(tuple(core[:, 0]))
+
+        # assert len(set(tuple(core[:, 0]))) == len(core[:, 0])
+        # assert len(set(tuple(core[:, 1]))) == len(core[:, 1])
 
     def get_num_atoms(self):
         return self.NC
@@ -409,6 +431,16 @@ class SingleTopology():
             exclusion_idxs_b
         )
 
+        # scale_factors are interpolated, but we don't support interpolation of scale
+        # factors. So we assert that they are in fact identical at the endpoints
+
+        scale_src = combined_scale_factors[:len(combined_scale_factors)//2]
+        scale_dst = combined_scale_factors[len(combined_scale_factors)//2:]
+
+        np.testing.assert_array_equal(scale_src, scale_dst)
+
+        combined_scale_factors = scale_src
+
         # (ytz): we don't need exclusions between R_A and R_B will never see each other
         # under this decoupling scheme. They will always be at cutoff apart from each other.
 
@@ -443,7 +475,7 @@ class SingleTopology():
             cutoff
         ) 
 
-        return qlj_params, nb
+        return qlj_params, potentials.InterpolatedPotential(nb, self.get_num_atoms(), qlj_params.size)
 
     def _parameterize_partial(self,
         params_a,
@@ -523,4 +555,4 @@ class SingleTopology():
             idxs_b
         )
 
-        return params_c, potentials.InterpolatedPotential(potential(idxs_c))
+        return params_c, potentials.InterpolatedPotential(potential(idxs_c), self.get_num_atoms(), params_c.size)

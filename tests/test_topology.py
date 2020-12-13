@@ -304,6 +304,8 @@ class TestLigandSet(unittest.TestCase):
         mcs_params = rdFMCS.MCSParameters()
         mcs_params.AtomTyper = CompareDist()
 
+        print(dir(mcs_params))
+
         for mol_a in all_mols:
             for mol_b in all_mols:
 
