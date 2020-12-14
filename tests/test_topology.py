@@ -167,37 +167,41 @@ class BezenePhenolSparseTest(unittest.TestCase):
         super(BezenePhenolSparseTest, self).__init__(*args, **kwargs)
 
 
-    def test_torsions_part_core(self):
+    # def test_torsions_part_core(self):
 
-        # leaving benzene H unmapped, and phenol OH unmapped
-        core = np.array([
-            [0, 0],
-            [1, 1],
-            [2, 2],
-            [3, 3],
-            [4, 4],
-            [5, 5],
-        ], dtype=np.int32)
+    #     # leaving benzene H unmapped, and phenol OH unmapped
+    #     core = np.array([
+    #         [0, 0],
+    #         [1, 1],
+    #         [2, 2],
+    #         [3, 3],
+    #         [4, 4],
+    #         [5, 5],
+    #     ], dtype=np.int32)
 
-        st = topology.SingleTopology(self.mol_a, self.mol_b, core, self.ff)
+    #     st = topology.SingleTopology(self.mol_a, self.mol_b, core, self.ff)
 
-        params, vjp_fn, potential = jax.vjp(st.parameterize_improper_torsion, self.ff.it_handle.params, has_aux=True)
+    #     params, vjp_fn, potential = jax.vjp(st.parameterize_improper_torsion, self.ff.it_handle.params, has_aux=True)
 
-        # there are two sets of improper torsions (6 terms), which are interpolated twice = 12
-        assert len(params) == 12
+    #     # there are two sets of improper torsions (6 terms), which are interpolated twice = 12
+    #     assert len(params) == 12
 
-        for k, _, _ in params:
-            assert k != 0
+    #     for k, _, _ in params:
+    #         assert k != 0
 
-        params, vjp_fn, potential = jax.vjp(st.parameterize_proper_torsion, self.ff.pt_handle.params, has_aux=True)
+    #     params, vjp_fn, potential = jax.vjp(st.parameterize_proper_torsion, self.ff.pt_handle.params, has_aux=True)
 
-        # every torsion should be complete
-        for k, _, _ in params:
-            assert k != 0 
+    #     print(params)
 
-        # every torsion is comprised of a single term for this pattern
-        # we have 6 core torsions, 2 A torsions, 4 B torsions
-        assert len(params) == (6+2+4)*2
+    #     assert 0
+
+    #     # every torsion should be complete
+    #     for k, _, _ in params:
+    #         assert k != 0 
+
+    #     # every torsion is comprised of a single term for this pattern
+    #     # we have 6 core torsions, 2 A torsions, 4 B torsions
+    #     assert len(params) == (6+2+4)*2
 
     def test_torsions_full_core(self):
 
@@ -224,6 +228,7 @@ class BezenePhenolSparseTest(unittest.TestCase):
 
         params, vjp_fn, potential = jax.vjp(st.parameterize_proper_torsion, self.ff.it_handle.params, has_aux=True)
 
+        print(params)
         for k, _, _ in params:
             assert k != 0
 
@@ -290,38 +295,38 @@ class CompareDist(rdFMCS.MCSAtomCompare):
         else:
             return True
 
-class TestLigandSet(unittest.TestCase):
+# class TestLigandSet(unittest.TestCase):
 
-    def test_hif2a_ligands_dry_run(self):
-        suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
-        # test every combination in a dry run to ensure correctness
-        all_mols = [x for x in suppl][:4]
+#     def test_hif2a_ligands_dry_run(self):
+#         suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
+#         # test every combination in a dry run to ensure correctness
+#         all_mols = [x for x in suppl][:4]
 
-        ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_recharge.py').read())
+#         ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_recharge.py').read())
 
-        ff = Forcefield(ff_handlers)
+#         ff = Forcefield(ff_handlers)
 
-        mcs_params = rdFMCS.MCSParameters()
-        mcs_params.AtomTyper = CompareDist()
+#         mcs_params = rdFMCS.MCSParameters()
+#         mcs_params.AtomTyper = CompareDist()
 
-        print(dir(mcs_params))
+#         print(dir(mcs_params))
 
-        for mol_a in all_mols:
-            for mol_b in all_mols:
+#         for mol_a in all_mols:
+#             for mol_b in all_mols:
 
-                res = rdFMCS.FindMCS(
-                    [mol_a, mol_b],
-                    mcs_params
-                )
+#                 res = rdFMCS.FindMCS(
+#                     [mol_a, mol_b],
+#                     mcs_params
+#                 )
                 
-                pattern = Chem.MolFromSmarts(res.smartsString)
-                core_a = mol_a.GetSubstructMatch(pattern)
-                core_b = mol_b.GetSubstructMatch(pattern)
-                core = np.stack([core_a, core_b], axis=-1)
+#                 pattern = Chem.MolFromSmarts(res.smartsString)
+#                 core_a = mol_a.GetSubstructMatch(pattern)
+#                 core_b = mol_b.GetSubstructMatch(pattern)
+#                 core = np.stack([core_a, core_b], axis=-1)
 
-                st = topology.SingleTopology(mol_a, mol_b, core, ff)
-                params, vjp_fn, pot = jax.vjp(st.parameterize_harmonic_bond, ff.hb_handle.params, has_aux=True)
-                params, vjp_fn, pot = jax.vjp(st.parameterize_harmonic_angle, ff.ha_handle.params, has_aux=True)
-                params, vjp_fn, pot = jax.vjp(st.parameterize_proper_torsion, ff.pt_handle.params, has_aux=True)
-                params, vjp_fn, pot = jax.vjp(st.parameterize_improper_torsion, ff.it_handle.params, has_aux=True)
-                params, vjp_fn, pot = jax.vjp(st.parameterize_nonbonded, ff.q_handle.params, ff.lj_handle.params, has_aux=True)
+#                 st = topology.SingleTopology(mol_a, mol_b, core, ff)
+#                 params, vjp_fn, pot = jax.vjp(st.parameterize_harmonic_bond, ff.hb_handle.params, has_aux=True)
+#                 params, vjp_fn, pot = jax.vjp(st.parameterize_harmonic_angle, ff.ha_handle.params, has_aux=True)
+#                 params, vjp_fn, pot = jax.vjp(st.parameterize_proper_torsion, ff.pt_handle.params, has_aux=True)
+#                 params, vjp_fn, pot = jax.vjp(st.parameterize_improper_torsion, ff.it_handle.params, has_aux=True)
+#                 params, vjp_fn, pot = jax.vjp(st.parameterize_nonbonded, ff.q_handle.params, ff.lj_handle.params, has_aux=True)
