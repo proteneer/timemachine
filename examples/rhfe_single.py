@@ -42,8 +42,8 @@ def run(args):
     # suppl = Chem.SDMolSupplier('tests/data/benzene_flourinated.sdf', removeHs=False)
     all_mols = [x for x in suppl]
 
-    romol_a = all_mols[0]
-    romol_b = all_mols[1]
+    romol_a = all_mols[1]
+    romol_b = all_mols[4]
 
     ligand_masses_a = [a.GetMass() for a in romol_a.GetAtoms()]
     ligand_masses_b = [a.GetMass() for a in romol_b.GetAtoms()]
@@ -73,9 +73,9 @@ def run(args):
 
     # for RHFE we need to insert the reference ligand first, before inserting the
     # decoupling ligand
-    print("start minimization")
+    # print("start minimization")
     minimized_host_coords = minimizer.minimize_host_4d(romol_a, system, host_coords, ff, box)
-    print("end minimization")
+    # print("end minimization")
 
     num_host_atoms = host_coords.shape[0]
 
@@ -107,31 +107,36 @@ def run(args):
     # this requires a new RDKit build with the following patch applied:
     # https://github.com/rdkit/rdkit/pull/3638        
     core = None
-    core = np.array([[ 4,  1],
-       [ 5,  2],
-       [ 6,  3],
-       [ 7,  4],
-       [ 8,  5],
-       [ 9,  6],
-       [10,  7],
-       [11,  8],
-       [12,  9],
-       [13, 10],
-       [15, 11],
-       [16, 12],
-       [18, 14],
-       [34, 31],
-       [17, 13],
-       [23, 23],
-       [33, 30],
-       [14, 29],
-       [32, 28],
-       [31, 27],
-       [30, 26],
-       [19, 15],
-       [20, 16],
-       [21, 17],
-       [26, 18]])
+    core = np.array([[ 0,  0],
+       [ 2,  2],
+       [ 1,  1],
+       [ 6,  6],
+       [ 5,  5],
+       [ 4,  4],
+       [ 3,  3],
+       [15, 16],
+       [16, 17],
+       [17, 18],
+       [18, 19],
+       [19, 20],
+       [20, 21],
+       [32, 30],
+       [26, 25],
+       [27, 26],
+       [ 7,  7],
+       [ 8,  8],
+       [ 9,  9],
+       [10, 10],
+       [29, 11],
+       [11, 12],
+       [12, 13],
+       [14, 15],
+       [31, 29],
+       [13, 14],
+       [23, 24],
+       [30, 28],
+       [28, 27],
+       [21, 22]])
 
     if core is None:
 
@@ -272,7 +277,7 @@ def run(args):
             writer.write_frame(unjank_x(ctxt.get_x_t())*10)
         ctxt.step(final_lamb)
 
-    print("equilibrium energy", ctxt.get_u_t())
+    # print("equilibrium energy", ctxt.get_u_t())
 
     bonded_du_dl_obs = custom_ops.AvgPartialUPartialLambda(bonded_impls, 5)
     nonbonded_du_dl_obs = custom_ops.AvgPartialUPartialLambda(nonbonded_impls, 5)
@@ -292,7 +297,7 @@ def run(args):
             writer.write_frame(unjank_x(ctxt.get_x_t())*10)
         ctxt.step(final_lamb)
 
-    print("final_nrg", ctxt.get_u_t())
+    # print("final_nrg", ctxt.get_u_t())
 
     writer.close()
 
