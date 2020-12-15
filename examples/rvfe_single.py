@@ -70,24 +70,29 @@ core = np.stack([
 ], axis=1)
 
 # core = core[:-1] # remove the H-F mapping, become 4D
-core = np.concatenate([core[:7], core[8:]])
+# core = np.concatenate([core[:7], core[8:]])
 
 gdt = topology.SingleTopology(romol_a, romol_b, core, ff)
 
 # setup the parameter handlers for the ligand
-tuples = [
-    [gdt.parameterize_harmonic_bond, [ff.hb_handle]],
-    [gdt.parameterize_harmonic_angle, [ff.ha_handle]],
-    [gdt.parameterize_proper_torsion, [ff.pt_handle]],
-    [gdt.parameterize_improper_torsion, [ff.it_handle]],
-    [gdt.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]],
+bonded_tuples = [
+    [gdt.parameterize_harmonic_bond, ff.hb_handle],
+    [gdt.parameterize_harmonic_angle, ff.ha_handle],
+    [gdt.parameterize_proper_torsion, ff.pt_handle],
+    [gdt.parameterize_improper_torsion, ff.it_handle]
 ]
 
 # instantiate the vjps while parameterizing (forward pass)
-for fn, handles in tuples:
-    params, vjp_fn, potential = jax.vjp(fn, *[h.params for h in handles], has_aux=True)
-    final_potentials.append(potential.bind(params))
-    final_vjp_and_handles.append((vjp_fn, handles))
+for fn, handle in bonded_tuples:
+    (src_params, dst_params, uni_params), vjp_fn, (src_potential, dst_potential, uni_potential) = jax.vjp(fn, handle.params, has_aux=True)
+    final_potentials.append([src_potential.bind(src_params), dst_potential.bind(dst_params), uni_potential.bind(uni_params)])
+    final_vjp_and_handles.append((vjp_fn, handle))
+
+
+nb_params, vjp_fn, nb_potential = jax.vjp(gdt.parameterize_nonbonded, ff.q_handle.params, ff.lj_handle.params, has_aux=True)
+final_potentials.append([nb_potential.bind(nb_params)])
+final_vjp_and_handles.append([vjp_fn])
+
 
 # note: lambda goes from 0 to 1, 0 being fully-interacting and 1.0 being fully interacting.
 for lamb_idx, final_lamb in enumerate(np.linspace(0, 1, 64)):
@@ -117,9 +122,17 @@ for lamb_idx, final_lamb in enumerate(np.linspace(0, 1, 64)):
     v0 = np.zeros_like(x0)
 
     u_impls = []
+    bonded_impls = []
+    nonbonded_impls = []
 
-    for bp in final_potentials:
-        u_impls.append(bp.bound_impl(np.float32))
+    for bps in final_potentials:
+        for bp in bps:
+            impl = bp.bound_impl(np.float32)
+            if isinstance(bp, potentials.InterpolatedPotential):
+                nonbonded_impls.append(impl)
+            elif isinstance(bp, potentials.LambdaPotential):
+                bonded_impls.append(impl)
+            u_impls.append(impl)
 
     box = np.eye(3) * 100.0
 
@@ -151,26 +164,27 @@ for lamb_idx, final_lamb in enumerate(np.linspace(0, 1, 64)):
         if step % 500 == 0:
             writer.write_frame(unjank_x(ctxt.get_x_t())*10)
         ctxt.step(lamb)
-        # print(step, ctxt.get_u_t())
 
-    # print("insertion energy", ctxt.get_u_t())
+    print("insertion energy", ctxt.get_u_t())
 
     for step in range(5000):
         if step % 500 == 0:
             writer.write_frame(unjank_x(ctxt.get_x_t())*10)
         ctxt.step(final_lamb)
 
-    # print("equilibrium energy", ctxt.get_u_t())
+    print("equilibrium energy", ctxt.get_u_t())
 
-    du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 5)
+    bonded_du_dl_obs = custom_ops.AvgPartialUPartialLambda(bonded_impls, 5)
+    nonbonded_du_dl_obs = custom_ops.AvgPartialUPartialLambda(nonbonded_impls, 5)
+
+    ctxt.add_observable(bonded_du_dl_obs)
+    ctxt.add_observable(nonbonded_du_dl_obs)
 
     du_dps = []
     for ui in u_impls:
         du_dp_obs = custom_ops.AvgPartialUPartialParam(ui, 5)
         ctxt.add_observable(du_dp_obs)
         du_dps.append(du_dp_obs)
-
-    ctxt.add_observable(du_dl_obs)
 
     for _ in range(20000):
         if step % 500 == 0:
@@ -179,6 +193,6 @@ for lamb_idx, final_lamb in enumerate(np.linspace(0, 1, 64)):
 
     writer.close()
 
-    du_dl = du_dl_obs.avg_du_dl()
+    # du_dl = du_dl_obs.avg_du_dl()
 
-    print("lambda", final_lamb, "du_dl", du_dl)
+    print("lambda", final_lamb, "bonded du_dl", bonded_du_dl_obs.avg_du_dl(), "nonbonded du_dl", nonbonded_du_dl_obs.avg_du_dl())

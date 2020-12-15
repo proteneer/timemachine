@@ -51,17 +51,19 @@ void HarmonicBond<RealType>::execute_device(
 
     int tpb = 32;
     int blocks = (B_+tpb-1)/tpb;
-    k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(
-        B_,
-        d_x,
-        d_p,
-        d_bond_idxs_,
-        d_du_dx,
-        d_du_dp,
-        d_u
-    );
-    gpuErrchk(cudaPeekAtLastError());
 
+    if(B_ > 0) { 
+        k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(
+            B_,
+            d_x,
+            d_p,
+            d_bond_idxs_,
+            d_du_dx,
+            d_du_dp,
+            d_u
+        );
+        gpuErrchk(cudaPeekAtLastError());
+    }
 };
 
 template class HarmonicBond<double>;

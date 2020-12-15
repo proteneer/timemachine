@@ -36,25 +36,34 @@ class HostGuestTopology():
     def get_num_atoms(self):
         return self.num_host_atoms + self.guest_topology.get_num_atoms()
 
+    def _parameterize_bonded_term(self, ff_params, handle_fn):
+        params, potential = handle_fn(ff_params)
+        if len(params) == 3:
+            src_params, dst_params, uni_params = params
+            src_potential, dst_potential, uni_potential = potential
+            src_potential.set_idxs(src_potential.get_idxs() + self.num_host_atoms)
+            dst_potential.set_idxs(dst_potential.get_idxs() + self.num_host_atoms)
+            uni_potential.set_idxs(uni_potential.get_idxs() + self.num_host_atoms)
+            src_potential.set_N(src_potential.get_N() + self.num_host_atoms)
+            dst_potential.set_N(dst_potential.get_N() + self.num_host_atoms)
+            uni_potential.set_N(uni_potential.get_N() + self.num_host_atoms)
+
+            return [src_params, dst_params, uni_params], [src_potential, dst_potential, uni_potential]
+        else:
+            potential.set_idxs(potential.get_idxs() + self.num_host_atoms)
+            return params, potential
+
     def parameterize_harmonic_bond(self, ff_params):
-        params, potential = self.guest_topology.parameterize_harmonic_bond(ff_params)
-        potential.set_bond_idxs(potential.get_bond_idxs() + self.num_host_atoms)
-        return params, potential
+        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_harmonic_bond)
 
     def parameterize_harmonic_angle(self, ff_params):
-        params, potential = self.guest_topology.parameterize_harmonic_angle(ff_params)
-        potential.set_angle_idxs(potential.get_angle_idxs() + self.num_host_atoms)
-        return params, potential
+        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_harmonic_angle)
 
     def parameterize_proper_torsion(self, ff_params):
-        params, potential = self.guest_topology.parameterize_proper_torsion(ff_params)
-        potential.set_torsion_idxs(potential.get_torsion_idxs() + self.num_host_atoms)
-        return params, potential
+        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_proper_torsion)
 
     def parameterize_improper_torsion(self, ff_params):
-        params, potential = self.guest_topology.parameterize_improper_torsion(ff_params)
-        potential.set_torsion_idxs(potential.get_torsion_idxs() + self.num_host_atoms)
-        return params, potential
+        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_improper_torsion)
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         # this needs to take care of the case when there's parameter interpolation.
@@ -183,7 +192,6 @@ class BaseTopology():
     def parameterize_improper_torsion(self, ff_params):
         params, idxs = self.ff.it_handle.partial_parameterize(ff_params, self.mol)
         return params, potentials.PeriodicTorsion(idxs)
-
 
 
 class DualTopology():
@@ -319,6 +327,9 @@ class SingleTopology():
         self.mol_a = mol_a
         self.mol_b = mol_b
         self.ff = ff
+        self.core = core
+
+        assert core.shape[1] == 2
 
         # map into idxs in the combined molecule
         self.a_to_c = np.arange(mol_a.GetNumAtoms(), dtype=np.int32) # identity
@@ -424,25 +435,36 @@ class SingleTopology():
             scale14=_SCALE_14
         )
 
+        # use the same scale factors of LJ & charges for now
         scale_factors_a = np.stack([scale_factors_a, scale_factors_a], axis=1)
         scale_factors_b = np.stack([scale_factors_b, scale_factors_b], axis=1)
 
-        combined_scale_factors, combined_exclusion_idxs = self._parameterize_partial(
-            scale_factors_a,
-            scale_factors_b,
-            exclusion_idxs_a,
-            exclusion_idxs_b
-        )
 
-        # scale_factors are interpolated, but we don't support interpolation of scale
-        # factors. So we assert that they are in fact identical at the endpoints
+        combined_exclusion_dict = dict()
 
-        scale_src = combined_scale_factors[:len(combined_scale_factors)//2]
-        scale_dst = combined_scale_factors[len(combined_scale_factors)//2:]
+        for ij, scale in zip(exclusion_idxs_a, scale_factors_a):
+            ij = tuple(sorted(self.a_to_c[ij]))
+            if ij in combined_exclusion_dict:
+                np.testing.assert_array_equal(combined_exclusion_dict[ij], scale)
+            else:
+                combined_exclusion_dict[ij] = scale
 
-        np.testing.assert_array_equal(scale_src, scale_dst)
+        for ij, scale in zip(exclusion_idxs_b, scale_factors_b):
+            ij = tuple(sorted(self.b_to_c[ij]))
+            if ij in combined_exclusion_dict:
+                np.testing.assert_array_equal(combined_exclusion_dict[ij], scale)
+            else:
+                combined_exclusion_dict[ij] = scale
 
-        combined_scale_factors = scale_src
+        combined_exclusion_idxs = []
+        combined_scale_factors = []
+
+        for e, s in combined_exclusion_dict.items():
+            combined_exclusion_idxs.append(e)
+            combined_scale_factors.append(s)
+
+        combined_exclusion_idxs = np.array(combined_exclusion_idxs)
+        combined_scale_factors = np.array(combined_scale_factors)
 
         # (ytz): we don't need exclusions between R_A and R_B will never see each other
         # under this decoupling scheme. They will always be at cutoff apart from each other.
@@ -480,236 +502,73 @@ class SingleTopology():
 
         return qlj_params, potentials.InterpolatedPotential(nb, self.get_num_atoms(), qlj_params.size)
 
-    @staticmethod
-    def _assert_unique_idxs(idxs):
-        seen = set()
-        for atoms in idxs:
-            if atoms[0] > atoms[-1]:
-                atoms = atoms[::-1]
-            atoms = tuple(atoms)
-            assert atoms not in seen
-            seen.add(atoms)
+    def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
+        params_a, idxs_a = bonded_handle.partial_parameterize(ff_params, self.mol_a)
+        params_b, idxs_b = bonded_handle.partial_parameterize(ff_params, self.mol_b)
 
-    def _parameterize_partial(self,
-        params_a,
-        params_b,
-        idxs_a,
-        idxs_b):
+        core_params_a = []
+        core_params_b = []
+        unique_params_r = [] # always on
 
+        core_idxs_a = []
+        core_idxs_b = []
+        unique_idxs_r = [] # always on
 
-        offset = self.mol_a.GetNumAtoms()
-        bonds_and_params_c = {}
-
-        self._assert_unique_idxs(idxs_a)
-        self._assert_unique_idxs(idxs_b)
-
-        # (ytz): rule for how we combine bonded term is as follows
-        # if a bonded term in A is comprised of only core atoms, then
-        #   it will either be interpolated to zero or to that of the matching term in B (if it exists)
-        # otherwise
-        #   it will be kept at full strength and not decoupled
-        for atoms_a, params_a in zip(idxs_a, params_a):
-            if atoms_a[0] > atoms_a[-1]:
-                atoms_a = atoms_a[::-1]
-            key = tuple(atoms_a)
-            if np.all(self.c_flags[atoms_a] == 0):
-
-                # this relies on the semantic that the leading element is the force constant
-                # for proper torsions every term need to goto zero.
-                # tbd we can change this to ops.index[..., 0] so that the "leading zero"
-                # gets set to zero.
-                # [k, p, p] => [0, p, p] everything but proper torsions
-                # [[k, p, p], [k, p, p], [k, p, p]] => [[0, p, p], [0, p, p],[0, p, p]] # proper torsions
-
-                other = jax.ops.index_update(params_a, jax.ops.index[..., 0], 0)
+        for p, old_atoms in zip(params_a, idxs_a):
+            new_atoms = self.a_to_c[old_atoms]
+            if np.all(self.c_flags[new_atoms] == 0):
+                core_params_a.append(p)
+                core_idxs_a.append(new_atoms)
             else:
-                other = params_a
+                unique_params_r.append(p)
+                unique_idxs_r.append(new_atoms)
 
-            bonds_and_params_c[key] = [params_a, other]
-
-        for atoms_b, params_b in zip(idxs_b, params_b):
-            # transform b_idxs into c_idxs
-            atoms_b = [self.b_to_c[b] for b in atoms_b]
-            if atoms_b[0] > atoms_b[-1]:
-                atoms_b = atoms_b[::-1]
-            key = tuple(atoms_b)
-
-            if np.all(self.c_flags[atoms_b] == 0):
-                other = jax.ops.index_update(params_b, jax.ops.index[..., 0], 0)
+        for p, old_atoms in zip(params_b, idxs_b):
+            new_atoms = self.b_to_c[old_atoms]
+            if np.all(self.c_flags[new_atoms] == 0):
+                core_params_b.append(p)
+                core_idxs_b.append(new_atoms)
             else:
-                other = params_b
+                unique_params_r.append(p)
+                unique_idxs_r.append(new_atoms)
 
-            if key in bonds_and_params_c:
-                bonds_and_params_c[key][1] = params_b
-            else:
-                bonds_and_params_c[key] = [other, params_b]
+        core_params_a = jnp.array(core_params_a)
+        core_params_b = jnp.array(core_params_b)
+        unique_params_r = jnp.array(unique_params_r) # always on
 
-        idxs_c = []
-        params_c_src = []
-        params_c_dst = []
+        core_idxs_a = np.array(core_idxs_a, dtype=np.int32)
+        core_idxs_b = np.array(core_idxs_b, dtype=np.int32)
 
-        for k, v in bonds_and_params_c.items():
-            idxs_c.append(k)
-            params_c_src.append(v[0])
-            params_c_dst.append(v[1])
+        # for i, p in zip(core_idxs_a, core_params_a):
+            # print(i, repr(p))
 
-        params_c = jnp.concatenate([jnp.array(params_c_src), jnp.array(params_c_dst)])
+        # for i, p in zip(core_idxs_b, core_params_b):
+            # print(i, p)
+        # print(core_idxs_a)
+        # print(core_idxs_b)
 
-        return params_c, np.array(idxs_c, dtype=np.int32)
+        # assert 0
+
+        unique_idxs_r = np.array(unique_idxs_r, dtype=np.int32) # always on
+
+        u_fn_a = potentials.LambdaPotential(potential(core_idxs_a), self.get_num_atoms(), core_params_a.size, -1.0, 1.0)
+        u_fn_b = potentials.LambdaPotential(potential(core_idxs_b), self.get_num_atoms(), core_params_b.size,  1.0, 0.0)
+        u_fn_r = potentials.LambdaPotential(potential(unique_idxs_r), self.get_num_atoms(), unique_params_r.size,  0.0, 1.0)
+
+        return [core_params_a, core_params_b, unique_params_r], [u_fn_a, u_fn_b, u_fn_r]
 
     def parameterize_harmonic_bond(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.hb_handle, potentials.HarmonicBond)
 
+
     def parameterize_harmonic_angle(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.ha_handle, potentials.HarmonicAngle)
 
-    @staticmethod
-    def _flatten_torsions(torsion_params):
-        """
-        Slot a set of torsion params into a flat array.
-
-        Parameters
-        ----------
-        torsion_params: np.ndarray Tx3
-            Array of torsions with (k,phi,period)
-
-        """
-        # 6 possible periods, 4 possible phases
-        params = np.zeros((_MAX_PERIOD, _MAX_PHASE), dtype=np.float64)
-
-        for k, phase, period in torsion_params:
-            # (ytz): this removes differentiability of the phase and period.
-            phase_inc = jnp.pi/2
-            phase_slot = jnp.lax.round(phase/phase_inc)
-            assert jnp.abs(phase/phase_inc - phase_slot) < 1e-12
-
-            # (ytz): note the extra minus one offset
-            # periods are in the inclusive [1,6] range
-            period_slot = jnp.lax.round(period) - 1
-            assert jnp.abs((period - 1) - period_slot) < 1e-12
-
-            params[jnp.int64(period_slot), jnp.int64(phase_slot)] = k
-
-        return params.reshape(24)
-
-    @staticmethod
-    def _split_torsions(params):
-        """
-        Opposite of flatten torsions. Takes a flattened array and restores them.
-        """
-
-        params = np.reshape(params, (_MAX_PERIOD, _MAX_PHASE))
-        dup_params = []
-
-        for period_slot in range(_MAX_PERIOD):
-            period = jnp.float64(period_slot + 1)
-            for phase_slot in range(_MAX_PHASE):
-                phase = phase_slot*(jnp.pi/2)
-                k = params[period_slot, phase_slot]
-                dup_params.append([k, phase, period])
-
-        return dup_params
-
-    @staticmethod
-    def _deduplicate_torsions(idxs, params):
-        idx_to_params = dict()
-
-        for atoms, p in zip(idxs, params):
-            atoms = tuple(atoms)
-            if atoms not in dict():
-                idx_to_params[atoms] = [p]
-            else:
-                idx_to_params[atoms].append(p)
-
-        unique_idxs = []
-        unique_params = []
-
-        for atoms, p in idx_to_params.items():
-            unique_idxs.append(atoms)
-            unique_params.append(SingleTopology._flatten_torsions(p))
-
-        return jnp.array(unique_idxs, dtype=jnp.int32), jnp.array(unique_params)
-
-    @staticmethod
-    def _duplicate_torsions(idxs, params):
-
-        repeated_idxs = []
-        repeated_params = []
-
-        for t, p in zip(idxs, params):
-            for pp in SingleTopology._split_torsions(p):
-                repeated_idxs.append(t)
-                repeated_params.append(pp)
-
-        return jnp.array(repeated_idxs, dtype=np.int32), jnp.array(repeated_params)
 
     def parameterize_proper_torsion(self, ff_params):
-        # (ytz): torsion need special handling as they contain duplicated idxs.
-        # per discussion with jfass it was determined that the best, first-order
-        # course of action is to only allow interpolation of parameters. This is
-        # because for most of the openforcefield proper torsion parameters, periods
-        # span from the integer range [1,6] (inclusive), and the phases span from
-        # [0, 2pi) in increments of pi/2
+        return self._parameterize_bonded_term(ff_params, self.ff.pt_handle, potentials.PeriodicTorsion)
 
-        params_a, idxs_a = self.ff.pt_handle.partial_parameterize(ff_params, self.mol_a)
-        params_b, idxs_b = self.ff.pt_handle.partial_parameterize(ff_params, self.mol_b)
-
-        idxs_a, params_a = self._deduplicate_torsions(idxs_a, params_a)
-        idxs_b, params_b = self._deduplicate_torsions(idxs_b, params_b)
-
-        params_c, idxs_c = self._parameterize_partial(
-            params_a,
-            params_b,
-            idxs_a,
-            idxs_b
-        )
-
-        print("before dup", len(params_c)) # 20
-
-
-        idxs_c, params_c = self._duplicate_torsions(idxs_c, params_c)
-
-        # for 
-
-        print("???", len(params_c))
-
-        params_src = params_c[:len(params_c)//2]
-        params_dst = params_c[len(params_c)//2:]
-
-        # strip interpolations that go from 0 to 0
-        final_idxs = []
-        final_params_src = []
-        final_params_dst = []
-        for atoms, p_src, p_dst in zip(idxs_c, params_src, params_dst):
-            if p_src[0] != 0 and p_dst[0] != 0:
-                final_idxs.append(atoms)
-                final_params_src.append(p_src)
-                final_params_dst.append(p_dst)
-
-        final_params_src = jnp.array(final_params_src)
-        final_params_dst = jnp.array(final_params_dst)
-
-        print(len(final_params_src), len(final_params_dst))
-
-        final_params = jnp.concatenate([final_params_src, final_params_dst])
-
-        print(len(final_params))
-
-        return final_params, potentials.InterpolatedPotential(potentials.PeriodicTorsion(final_idxs), self.get_num_atoms(), final_params.size)
 
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
 
-    def _parameterize_bonded_term(self, ff_params, handle, potential):
-
-        params_a, idxs_a = handle.partial_parameterize(ff_params, self.mol_a)
-        params_b, idxs_b = handle.partial_parameterize(ff_params, self.mol_b)
-
-        params_c, idxs_c = self._parameterize_partial(
-            params_a,
-            params_b,
-            idxs_a,
-            idxs_b
-        )
-
-        return params_c, potentials.InterpolatedPotential(potential(idxs_c), self.get_num_atoms(), params_c.size)
