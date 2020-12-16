@@ -11,9 +11,6 @@ _SCALE_14 = 0.5
 _BETA = 2.0
 _CUTOFF = 1.2
 
-_MAX_PERIOD = 6
-_MAX_PHASE = 4
-
 class HostGuestTopology():
 
     def __init__(self, host_p, guest_topology):
@@ -222,7 +219,7 @@ class DualTopology():
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         q_params_a = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_a)
-        q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b) # HARD TYPO
+        q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b)
         lj_params_a = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_a)
         lj_params_b = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_b)
 
@@ -322,7 +319,24 @@ class SingleTopology():
 
     def __init__(self, mol_a, mol_b, core, ff):
         """
-        SingleTopology combines two molecules through a common core.
+        SingleTopology combines two molecules through a common core. The combined mol has
+        atom indices laid out such that mol_a is identically mapped to the combined mol indices.
+        The atoms in the mol_b's R-group is then glued on to resulting molecule.
+
+        Parameters
+        ----------
+        mol_a: ROMol
+            First ligand
+
+        mol_b: ROMol
+            Second ligand
+
+        core: np.array (C, 2)
+            Atom mapping from mol_a to to mol_b
+
+        ff: ff.Forcefield
+            Forcefield to be used for parameterization.
+
         """
         self.mol_a = mol_a
         self.mol_b = mol_b
@@ -354,14 +368,9 @@ class SingleTopology():
                 self.c_flags[iota] = 2
                 iota += 1
 
-        # test for uniqueness
-        # (ytz): fix me for np arrays
-
-        # print(core[:, 0])
-        # print(tuple(core[:, 0]))
-
-        # assert len(set(tuple(core[:, 0]))) == len(core[:, 0])
-        # assert len(set(tuple(core[:, 1]))) == len(core[:, 1])
+        # test for uniqueness in core idxs for each mol
+        assert len(set(tuple(core[:, 0]))) == len(core[:, 0])
+        assert len(set(tuple(core[:, 1]))) == len(core[:, 1])
 
     def get_num_atoms(self):
         return self.NC
@@ -404,6 +413,10 @@ class SingleTopology():
 
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
+        # Nonbonded potentials combine through parameter interpolation, not energy interpolation.
+        # They may or may not operate through 4D decoupling depending on the atom mapping. If an atom is
+        # unique, it is kept at full strength and not switched off.
+
         q_params_a = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_a)
         q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b) # HARD TYPO
         lj_params_a = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_a)
@@ -435,10 +448,11 @@ class SingleTopology():
             scale14=_SCALE_14
         )
 
-        # use the same scale factors of LJ & charges for now
+        # (ytz): use the same scale factors of LJ & charges for now
+        # this isn't quite correct as the LJ/Coluomb may be different in 
+        # different forcefields.
         scale_factors_a = np.stack([scale_factors_a, scale_factors_a], axis=1)
         scale_factors_b = np.stack([scale_factors_b, scale_factors_b], axis=1)
-
 
         combined_exclusion_dict = dict()
 
@@ -503,16 +517,24 @@ class SingleTopology():
         return qlj_params, potentials.InterpolatedPotential(nb, self.get_num_atoms(), qlj_params.size)
 
     def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
+        # Bonded terms are defined as follows:
+        # If a bonded term is comprised exclusively of atoms in the core region, then
+        # its energy its interpolated from the on-state to off-state.
+        # Otherwise (i.e. it has one atom that is not in the core region), the bond term
+        # is defined as unique, and is on at all times.
+        # This means that the end state will contain dummy atoms that is not the true end-state,
+        # but contains an analytical correction (through Boresch) that can be cancelled out.
+
         params_a, idxs_a = bonded_handle.partial_parameterize(ff_params, self.mol_a)
         params_b, idxs_b = bonded_handle.partial_parameterize(ff_params, self.mol_b)
 
         core_params_a = []
         core_params_b = []
-        unique_params_r = [] # always on
+        unique_params_r = []
 
         core_idxs_a = []
         core_idxs_b = []
-        unique_idxs_r = [] # always on
+        unique_idxs_r = []
 
         for p, old_atoms in zip(params_a, idxs_a):
             new_atoms = self.a_to_c[old_atoms]
@@ -539,16 +561,6 @@ class SingleTopology():
         core_idxs_a = np.array(core_idxs_a, dtype=np.int32)
         core_idxs_b = np.array(core_idxs_b, dtype=np.int32)
 
-        # for i, p in zip(core_idxs_a, core_params_a):
-            # print(i, repr(p))
-
-        # for i, p in zip(core_idxs_b, core_params_b):
-            # print(i, p)
-        # print(core_idxs_a)
-        # print(core_idxs_b)
-
-        # assert 0
-
         unique_idxs_r = np.array(unique_idxs_r, dtype=np.int32) # always on
 
         u_fn_a = potentials.LambdaPotential(potential(core_idxs_a), self.get_num_atoms(), core_params_a.size, -1.0, 1.0)
@@ -556,6 +568,7 @@ class SingleTopology():
         u_fn_r = potentials.LambdaPotential(potential(unique_idxs_r), self.get_num_atoms(), unique_params_r.size,  0.0, 1.0)
 
         return [core_params_a, core_params_b, unique_params_r], [u_fn_a, u_fn_b, u_fn_r]
+
 
     def parameterize_harmonic_bond(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.hb_handle, potentials.HarmonicBond)

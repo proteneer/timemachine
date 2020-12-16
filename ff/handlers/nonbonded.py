@@ -388,7 +388,4 @@ class AM1CCCHandler(SerializableMixIn):
         deltas = params[bond_idx_params]
         incremented = ops.index_add(am1_charges, bond_idxs[:, 0], deltas)
         decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)
-
-        # print("Warning, zero-ing out charges.")
-
         return decremented

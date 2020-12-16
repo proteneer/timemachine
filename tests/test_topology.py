@@ -42,7 +42,6 @@ class BezenePhenolSparseTest(unittest.TestCase):
 
     def test_bonded(self):
         # other bonded terms use an identical protocol, so we assume they're correct if the harmonic bond tests pass.
-
         # leaving benzene H unmapped, and phenol OH unmapped
         core = np.array([
             [0, 0],
@@ -158,9 +157,6 @@ class TestLigandSet(unittest.TestCase):
         ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_recharge.py').read())
 
         ff = Forcefield(ff_handlers)
-
-        # mcs_params = rdFMCS.MCSParameters()
-        # mcs_params.AtomTyper = CompareDist()
 
         for mol_a in all_mols:
             for mol_b in all_mols:

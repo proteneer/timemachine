@@ -40,7 +40,7 @@ def minimize_host_4d(romol, host_system, host_coords, ff, box):
     Returns
     -------
     np.ndarray
-        This returns new host_coords.
+        This returns minimized host_coords.
 
     """
 
@@ -106,7 +106,5 @@ def minimize_host_4d(romol, host_system, host_coords, ff, box):
 
     for lamb in np.linspace(1.0, 0, 1000):
         ctxt.step(lamb)
-
-    print("minimized to", ctxt.get_u_t())
 
     return ctxt.get_x_t()[:num_host_atoms]

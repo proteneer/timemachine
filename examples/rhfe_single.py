@@ -79,7 +79,7 @@ if __name__ == "__main__":
     multiprocessing.set_start_method('spawn') # CUDA runtime is not forkable
     pool = multiprocessing.Pool(cmd_args.num_gpus)
 
-    suppl = Chem.SDMolSupplier('tests/data/benzene_flourinated.sdf', removeHs=False)
+    suppl = Chem.SDMolSupplier('tests/data/benzene_fluorinated.sdf', removeHs=False)
     all_mols = [x for x in suppl]
 
     mol_a = all_mols[0]

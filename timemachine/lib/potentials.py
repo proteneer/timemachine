@@ -39,7 +39,11 @@ class CustomOpWrapper():
 class InterpolatedPotential(CustomOpWrapper):
 
 
-    # jank inheritance, args[0] is the u_fn
+    def bind(self, params):
+        assert self.get_u_fn().params is None
+        self.params = params
+
+    # pass through so we can use the underlying methods
     def __getattr__(self, attr):
         return getattr(self.args[0], attr)
 
@@ -62,9 +66,11 @@ class InterpolatedPotential(CustomOpWrapper):
 
 class LambdaPotential(CustomOpWrapper):
 
-    # def bind(self, params):
-        # raise ValueError("LambdaPotential cannot bind parameters")
+    def bind(self, params):
+        assert self.get_u_fn().params is None
+        self.params = params
 
+    # pass through so we can use the underlying methods
     def __getattr__(self, attr):
         return getattr(self.args[0], attr)
 
