@@ -91,7 +91,10 @@ if __name__ == "__main__":
     print("Minimizing the host structure to remove clashes.")
     minimized_solvent_coords = minimizer.minimize_host_4d(mol_a, solvent_system, solvent_coords, ff, solvent_box)
 
-    absolute_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_absolute_windows)
+    absolute_lambda_schedule = np.concatenate([
+        np.linspace(0.0, 0.333, cmd_args.num_absolute_windows - cmd_args.num_absolute_windows//3, endpoint=False),
+        np.linspace(0.333, 1.0, cmd_args.num_absolute_windows//3),
+    ])
 
     for idx, mol in enumerate([mol_a, mol_b]):
 
@@ -105,7 +108,7 @@ if __name__ == "__main__":
         results = pool.map(functools.partial(wrap_method, fn=afe.host_edge), absolute_args, chunksize=1)
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(absolute_lambda_schedule, results):
-            print("final absolute lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
+            print("final absolute", idx ,"lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
 
         dG_vacuum = np.trapz([x[0]+x[1] for x in results], absolute_lambda_schedule)
         print("mol", idx, "dG absolute:", dG_vacuum)
