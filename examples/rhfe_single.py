@@ -113,9 +113,9 @@ if __name__ == "__main__":
         results = pool.map(functools.partial(wrap_method, fn=afe.host_edge), absolute_args, chunksize=1)
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(absolute_lambda_schedule, results):
-            print("final absolute", idx ,"lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
+            print("final absolute", idx, "lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
 
-        dG = np.trapz([x[0]+x[1] for x in results], absolute_lambda_schedule)
+        dG = np.trapz([x[0][0]+x[1][0] for x in results], absolute_lambda_schedule)
         print("mol", idx, "dG absolute:", dG)
         abs_dGs.append(dG)
 
@@ -149,9 +149,9 @@ if __name__ == "__main__":
         results = pool.map(functools.partial(wrap_method, fn=rfe.vacuum_edge), vacuum_args, chunksize=1)
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(vacuum_lambda_schedule, results):
-            print("final vacuum lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
+            print("final vacuum lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
 
-        dG_vacuum = np.trapz([x[0]+x[1] for x in results], vacuum_lambda_schedule)
+        dG_vacuum = np.trapz([x[0][0]+x[1][0] for x in results], vacuum_lambda_schedule)
         print("dG vacuum:", dG_vacuum)
 
         # solvent leg
@@ -163,9 +163,9 @@ if __name__ == "__main__":
         results = pool.map(functools.partial(wrap_method, fn=rfe.host_edge), solvent_args, chunksize=1)
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(solvent_lambda_schedule, results):
-            print("final solvent lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
+            print("final solvent lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
 
-        dG_solvent = np.trapz([x[0]+x[1] for x in results], solvent_lambda_schedule)
+        dG_solvent = np.trapz([x[0][0]+x[1][0] for x in results], solvent_lambda_schedule)
         print("dG solvent:", dG_solvent)
 
         print("Core map", core_idx, "Difference", dG_solvent - dG_vacuum)
