@@ -10,14 +10,11 @@ from timemachine.lib import LangevinIntegrator
 
 from ff.handlers import openmm_deserializer
 
-
-
 def get_romol_conf(mol):
     """Coordinates of mol's 0th conformer, in nanometers"""
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
     return guest_conf/10 # from angstroms to nm
-import os
 
 # this class is serializable.
 class RelativeFreeEnergy():
@@ -201,51 +198,3 @@ class RelativeFreeEnergy():
             equil_steps,
             prod_steps
         )
-
-        # x0 = combined_coords
-        # v0 = np.zeros_like(x0)
-
-        # u_impls = []
-        # bonded_impls = []
-        # nonbonded_impls = []
-
-        # for bps in final_potentials:
-        #     for bp in bps:
-        #         impl = bp.bound_impl(np.float32)
-        #         if isinstance(bp, potentials.InterpolatedPotential):
-        #             nonbonded_impls.append(impl)
-        #         elif isinstance(bp, potentials.LambdaPotential):
-        #             bonded_impls.append(impl)
-        #         u_impls.append(impl)
-
-        # # context components: positions, velocities, box, integrator, energy fxns
-        # ctxt = custom_ops.Context(
-        #     x0,
-        #     v0,
-        #     box,
-        #     intg,
-        #     u_impls
-        # )
-
-        # for step in range(equil_steps):
-        #     ctxt.step(lamb)
-
-        # bonded_du_dl_obs = custom_ops.AvgPartialUPartialLambda(bonded_impls, 5)
-        # nonbonded_du_dl_obs = custom_ops.AvgPartialUPartialLambda(nonbonded_impls, 5)
-
-        # ctxt.add_observable(bonded_du_dl_obs)
-        # ctxt.add_observable(nonbonded_du_dl_obs)
-
-        # du_dps = []
-        # for ui in u_impls:
-        #     du_dp_obs = custom_ops.AvgPartialUPartialParam(ui, 5)
-        #     ctxt.add_observable(du_dp_obs)
-        #     du_dps.append(du_dp_obs)
-
-        # for _ in range(prod_steps):
-        #     ctxt.step(lamb)
-
-        # print("host", bonded_du_dl_obs.avg_du_dl(), nonbonded_du_dl_obs.avg_du_dl())
-
-        # return bonded_du_dl_obs.avg_du_dl(), nonbonded_du_dl_obs.avg_du_dl()
-        # assert 0

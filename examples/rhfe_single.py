@@ -16,9 +16,10 @@ import functools
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
-from multiprocessing import Pool
 
-from fe import relative
+import multiprocessing
+
+from fe import free_energy
 
 
 def wrap_method(args, fn):
@@ -29,7 +30,7 @@ def wrap_method(args, fn):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
-        description="Relative Hydration Free Energy Testing",
+        description="Relative Hydration Free Energy Consistency Testing",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -63,9 +64,16 @@ if __name__ == "__main__":
         help="number of production lambda windows"
     )
 
+    parser.add_argument(
+        "--num_absolute_windows",
+        type=int,
+        help="number of absolute lambda windows"
+    )
+
     cmd_args = parser.parse_args()
 
-    p = Pool(cmd_args.num_gpus)
+    multiprocessing.set_start_method('spawn') # CUDA runtime is not forkable
+    pool = multiprocessing.Pool(cmd_args.num_gpus)
 
     suppl = Chem.SDMolSupplier('tests/data/benzene_flourinated.sdf', removeHs=False)
     all_mols = [x for x in suppl]
@@ -75,6 +83,34 @@ if __name__ == "__main__":
 
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
     ff = Forcefield(ff_handlers)
+
+    # the water system first.
+    solvent_system, solvent_coords, solvent_box, omm_topology = builders.build_water_system(4.0)
+    solvent_box += np.eye(3)*0.1 # BFGS this later
+
+    print("Minimizing the host structure to remove clashes.")
+    minimized_solvent_coords = minimizer.minimize_host_4d(mol_a, solvent_system, solvent_coords, ff, solvent_box)
+
+    absolute_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_absolute_windows)
+
+    for idx, mol in enumerate([mol_a, mol_b]):
+
+        afe = free_energy.AbsoluteFreeEnergy(mol, ff)
+        absolute_args = []
+
+        for lambda_idx, lamb in enumerate(absolute_lambda_schedule):
+            gpu_idx = lambda_idx % cmd_args.num_gpus
+            absolute_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
+
+        results = pool.map(functools.partial(wrap_method, fn=afe.host_edge), absolute_args)
+
+        for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(absolute_lambda_schedule, results):
+            print("final absolute lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
+
+        dG_vacuum = np.trapz([x[0]+x[1] for x in results], absolute_lambda_schedule)
+        print("mol", idx, "dG absolute:", dG_vacuum)
+
+    # relative free energy, compare two differen core approaches
 
     core_full = np.stack([
         np.arange(mol_a.GetNumAtoms()),
@@ -86,9 +122,14 @@ if __name__ == "__main__":
         np.arange(mol_b.GetNumAtoms() - 1)
     ], axis=1)
 
+    # test relative free energy:
+
+    # full mapping
+    # partial mapping
+
     for core in [core_full, core_part]:
 
-        rfe = relative.RelativeFreeEnergy(mol_a, mol_b, core, ff)
+        rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
 
         vacuum_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_vacuum_windows)
         solvent_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_solvent_windows)
@@ -99,32 +140,24 @@ if __name__ == "__main__":
             gpu_idx = lambda_idx % cmd_args.num_gpus
             vacuum_args.append((gpu_idx, lamb, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
 
-            # functools.partial(wrap_method, fn=rfe.vacuum_edge)((gpu_idx, lamb, 10000, 20000))
-
-        results = p.map(functools.partial(wrap_method, fn=rfe.vacuum_edge), vacuum_args)
+        results = pool.map(functools.partial(wrap_method, fn=rfe.vacuum_edge), vacuum_args)
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(vacuum_lambda_schedule, results):
-            print("final vacuum lambda", lamb, "bonded", bonded_du_dl, nonbonded_du_dl)
+            print("final vacuum lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
 
         dG_vacuum = np.trapz([x[0]+x[1] for x in results], vacuum_lambda_schedule)
         print("dG vacuum:", dG_vacuum)
-
-        # solvent leg
-        # build the water system first.
-        solvent_system, solvent_coords, solvent_box, omm_topology = builders.build_water_system(4.0)
-        solvent_box += np.eye(3)*0.1
-
-        minimized_solvent_coords = minimizer.minimize_host_4d(mol_a, solvent_system, solvent_coords, ff, solvent_box)
 
         solvent_args = []
         for lambda_idx, lamb in enumerate(solvent_lambda_schedule):
             gpu_idx = lambda_idx % cmd_args.num_gpus
             solvent_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
         
-        results = p.map(functools.partial(wrap_method, fn=rfe.host_edge), solvent_args)
+        results = pool.map(functools.partial(wrap_method, fn=rfe.host_edge), solvent_args)
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(solvent_lambda_schedule, results):
-            print("final solvent lambda", lamb, "bonded", bonded_du_dl, nonbonded_du_dl)
+            print("final solvent lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
 
-        dG_solvent = np.trapz([x[0]+x[1] for x in results], vacuum_lambda_schedule)
+        dG_solvent = np.trapz([x[0]+x[1] for x in results], solvent_lambda_schedule)
         print("dG solvent:", dG_solvent)
+
