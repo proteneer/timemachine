@@ -96,6 +96,8 @@ if __name__ == "__main__":
         np.linspace(0.333, 1.0, cmd_args.num_absolute_windows//3),
     ])
 
+    abs_dGs = []
+
     for idx, mol in enumerate([mol_a, mol_b]):
 
         afe = free_energy.AbsoluteFreeEnergy(mol, ff)
@@ -110,10 +112,13 @@ if __name__ == "__main__":
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(absolute_lambda_schedule, results):
             print("final absolute", idx ,"lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
 
-        dG_vacuum = np.trapz([x[0]+x[1] for x in results], absolute_lambda_schedule)
-        print("mol", idx, "dG absolute:", dG_vacuum)
+        dG = np.trapz([x[0]+x[1] for x in results], absolute_lambda_schedule)
+        print("mol", idx, "dG absolute:", dG)
+        abs_dGs.append(dG)
 
-    # relative free energy, compare two differen core approaches
+    print("Absolute Difference", abs_dGs[0] - abs_dGs[1])
+
+    # relative free energy, compare two different core approaches
 
     core_full = np.stack([
         np.arange(mol_a.GetNumAtoms()),
@@ -130,7 +135,9 @@ if __name__ == "__main__":
     # full mapping
     # partial mapping
 
-    for core in [core_full, core_part]:
+
+
+    for core_idx, core in enumerate([core_full, core_part]):
 
         rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
 
@@ -163,4 +170,6 @@ if __name__ == "__main__":
 
         dG_solvent = np.trapz([x[0]+x[1] for x in results], solvent_lambda_schedule)
         print("dG solvent:", dG_solvent)
+
+        print("Core", core_idx, "Difference", dG_solvent - dG_vacuum)
 
