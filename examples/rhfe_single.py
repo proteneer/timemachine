@@ -51,6 +51,18 @@ if __name__ == "__main__":
         help="number of solvent lambda windows"
     )
 
+    parser.add_argument(
+        "--num_equil_steps",
+        type=int,
+        help="number of equilibration lambda windows"
+    )
+
+    parser.add_argument(
+        "--num_prod_steps",
+        type=int,
+        help="number of production lambda windows"
+    )
+
     cmd_args = parser.parse_args()
 
     p = Pool(cmd_args.num_gpus)
@@ -78,7 +90,7 @@ if __name__ == "__main__":
     vacuum_args = []
     for lambda_idx, lamb in enumerate(vacuum_lambda_schedule):
         gpu_idx = lambda_idx % cmd_args.num_gpus
-        vacuum_args.append((gpu_idx, lamb, 10000, 20000))
+        vacuum_args.append((gpu_idx, lamb, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
 
         # functools.partial(wrap_method, fn=rfe.vacuum_edge)((gpu_idx, lamb, 10000, 20000))
 
@@ -100,7 +112,7 @@ if __name__ == "__main__":
     solvent_args = []
     for lambda_idx, lamb in enumerate(solvent_lambda_schedule):
         gpu_idx = lambda_idx % cmd_args.num_gpus
-        solvent_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, 10000, 20000))
+        solvent_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
     
     results = p.map(functools.partial(wrap_method, fn=rfe.host_edge), solvent_args)
 
