@@ -147,32 +147,93 @@ class BezenePhenolSparseTest(unittest.TestCase):
         np.testing.assert_array_equal(qlj_b[6:], qlj_c[7:]) # OH
 
 
-class TestLigandSet(unittest.TestCase):
+class TestFactorizability(unittest.TestCase):
 
-    def test_hif2a_ligands_dry_run(self):
+    def test_bad_factor(self):
+        # test a bad mapping that results in a non-cancellable endpoint
         suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
-        # test every combination in a dry run to ensure correctness
-        all_mols = [x for x in suppl][:4]
+        all_mols = [x for x in suppl]
+        mol_a = all_mols[0]
+        mol_b = all_mols[1]
 
         ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_recharge.py').read())
-
         ff = Forcefield(ff_handlers)
 
-        for mol_a in all_mols:
-            for mol_b in all_mols:
+        core = np.array([[ 4,  1],
+            [ 5,  2],
+            [ 6,  3],
+            [ 7,  4],
+            [ 8,  5],
+            [ 9,  6],
+            [10,  7],
+            [11,  8],
+            [12,  9],
+            [13, 10],
+            [15, 11],
+            [16, 12],
+            [18, 14],
+            [34, 31],
+            [17, 13],
+            [23, 23],
+            [33, 30],
+            [32, 28],
+            [31, 27],
+            [30, 26],
+            [19, 15],
+            [20, 16],
+            [21, 17]]
+        )
 
-                res = rdFMCS.FindMCS(
-                    [mol_a, mol_b],
-                )
-                
-                pattern = Chem.MolFromSmarts(res.smartsString)
-                core_a = mol_a.GetSubstructMatch(pattern)
-                core_b = mol_b.GetSubstructMatch(pattern)
-                core = np.stack([core_a, core_b], axis=-1)
+        with self.assertRaises(topology.AtomMappingError):
+            st = topology.SingleTopology(mol_a, mol_b, core, ff)
 
-                st = topology.SingleTopology(mol_a, mol_b, core, ff)
-                _ = jax.vjp(st.parameterize_harmonic_bond, ff.hb_handle.params, has_aux=True)
-                _ = jax.vjp(st.parameterize_harmonic_angle, ff.ha_handle.params, has_aux=True)
-                _ = jax.vjp(st.parameterize_proper_torsion, ff.pt_handle.params, has_aux=True)
-                _ = jax.vjp(st.parameterize_improper_torsion, ff.it_handle.params, has_aux=True)
-                _ = jax.vjp(st.parameterize_nonbonded, ff.q_handle.params, ff.lj_handle.params, has_aux=True)
+    def test_good_factor(self):
+        # test a good mapping
+        suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
+        all_mols = [x for x in suppl]
+        mol_a = all_mols[1]
+        mol_b = all_mols[4]
+
+        ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_recharge.py').read())
+        ff = Forcefield(ff_handlers)
+
+        core = np.array([[ 0,  0],
+           [ 2,  2],
+           [ 1,  1],
+           [ 6,  6],
+           [ 5,  5],
+           [ 4,  4],
+           [ 3,  3],
+           [15, 16],
+           [16, 17],
+           [17, 18],
+           [18, 19],
+           [19, 20],
+           [20, 21],
+           [32, 30],
+           [26, 25],
+           [27, 26],
+           [ 7,  7],
+           [ 8,  8],
+           [ 9,  9],
+           [10, 10],
+           [29, 11],
+           [11, 12],
+           [12, 13],
+           [14, 15],
+           [31, 29],
+           [13, 14],
+           [23, 24],
+           [30, 28],
+           [28, 27],
+           [21, 22]]
+        )
+
+        st = topology.SingleTopology(mol_a, mol_b, core, ff)
+
+        # test that the vjps work
+        _ = jax.vjp(st.parameterize_harmonic_bond, ff.hb_handle.params, has_aux=True)
+        _ = jax.vjp(st.parameterize_harmonic_angle, ff.ha_handle.params, has_aux=True)
+        _ = jax.vjp(st.parameterize_proper_torsion, ff.pt_handle.params, has_aux=True)
+        _ = jax.vjp(st.parameterize_improper_torsion, ff.it_handle.params, has_aux=True)
+        _ = jax.vjp(st.parameterize_nonbonded, ff.q_handle.params, ff.lj_handle.params, has_aux=True)

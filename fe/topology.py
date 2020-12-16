@@ -11,6 +11,10 @@ _SCALE_14 = 0.5
 _BETA = 2.0
 _CUTOFF = 1.2
 
+
+class AtomMappingError(Exception):
+    pass
+
 class HostGuestTopology():
 
     def __init__(self, host_p, guest_topology):
@@ -371,6 +375,61 @@ class SingleTopology():
         # test for uniqueness in core idxs for each mol
         assert len(set(tuple(core[:, 0]))) == len(core[:, 0])
         assert len(set(tuple(core[:, 1]))) == len(core[:, 1])
+
+        self.assert_factorizability()
+
+    def assert_factorizability(self):
+        """
+        Number of atoms in the combined mol
+
+        """
+        # Test that R-groups can be properly factorized out in the proposed
+        # mapping. The requirement is that R-groups must be branched from exactly
+        # a single atom on the core.
+
+        # first convert to a dense graph
+        N = self.get_num_atoms()
+        dense_graph = np.zeros((N, N), dtype=np.int32)
+
+        for bond in self.mol_a.GetBonds():
+            i, j = self.a_to_c[bond.GetBeginAtomIdx()], self.a_to_c[bond.GetEndAtomIdx()]
+            dense_graph[i, j] = 1 
+            dense_graph[j, i] = 1 
+
+        for bond in self.mol_b.GetBonds():
+            i, j = self.b_to_c[bond.GetBeginAtomIdx()], self.b_to_c[bond.GetEndAtomIdx()]
+            dense_graph[i, j] = 1 
+            dense_graph[j, i] = 1 
+
+        # sparsify to simplify and speed up traversal code
+        sparse_graph = []
+        for row in dense_graph:
+            nbs = []
+            for col_idx, col in enumerate(row):
+                if col == 1:
+                    nbs.append(col_idx)
+            sparse_graph.append(nbs)
+
+        def visit(i, visited):
+            if i in visited:
+                return
+            else:
+                visited.add(i)
+                if self.c_flags[i] != 0:
+                    for nb in sparse_graph[i]:
+                        visit(nb, visited)
+                else:
+                    return
+
+        for c_idx, group in enumerate(self.c_flags):
+            # 0 core, 1 R_A, 2: R_B
+            if group != 0:
+                seen = set()
+                visit(c_idx, seen)
+                # (ytz): exactly one of seen should belong to core
+                if np.sum(np.array([self.c_flags[x] for x in seen]) == 0) != 1:
+                    raise AtomMappingError("Atom Mapping Error, the resulting map is non-factorizable")
+
 
     def get_num_atoms(self):
         return self.NC
