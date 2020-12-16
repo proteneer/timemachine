@@ -76,48 +76,55 @@ if __name__ == "__main__":
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
     ff = Forcefield(ff_handlers)
 
-    core = np.stack([
+    core_full = np.stack([
         np.arange(mol_a.GetNumAtoms()),
         np.arange(mol_b.GetNumAtoms())
     ], axis=1)
 
-    rfe = relative.RelativeFreeEnergy(mol_a, mol_b, core, ff)
+    core_part = np.stack([
+        np.arange(mol_a.GetNumAtoms() - 1),
+        np.arange(mol_b.GetNumAtoms() - 1)
+    ], axis=1)
 
-    vacuum_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_vacuum_windows)
-    solvent_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_solvent_windows)
+    for core in [core_full, core_part]:
 
-    # vacuum leg
-    vacuum_args = []
-    for lambda_idx, lamb in enumerate(vacuum_lambda_schedule):
-        gpu_idx = lambda_idx % cmd_args.num_gpus
-        vacuum_args.append((gpu_idx, lamb, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
+        rfe = relative.RelativeFreeEnergy(mol_a, mol_b, core, ff)
 
-        # functools.partial(wrap_method, fn=rfe.vacuum_edge)((gpu_idx, lamb, 10000, 20000))
+        vacuum_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_vacuum_windows)
+        solvent_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_solvent_windows)
 
-    results = p.map(functools.partial(wrap_method, fn=rfe.vacuum_edge), vacuum_args)
+        # vacuum leg
+        vacuum_args = []
+        for lambda_idx, lamb in enumerate(vacuum_lambda_schedule):
+            gpu_idx = lambda_idx % cmd_args.num_gpus
+            vacuum_args.append((gpu_idx, lamb, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
 
-    for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(vacuum_lambda_schedule, results):
-        print("final vacuum lambda", lamb, "bonded", bonded_du_dl, nonbonded_du_dl)
+            # functools.partial(wrap_method, fn=rfe.vacuum_edge)((gpu_idx, lamb, 10000, 20000))
 
-    dG_vacuum = np.trapz([x[0]+x[1] for x in results], vacuum_lambda_schedule)
-    print("dG vacuum:", dG_vacuum)
+        results = p.map(functools.partial(wrap_method, fn=rfe.vacuum_edge), vacuum_args)
 
-    # solvent leg
-    # build the water system first.
-    solvent_system, solvent_coords, solvent_box, omm_topology = builders.build_water_system(4.0)
-    solvent_box += np.eye(3)*0.1
+        for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(vacuum_lambda_schedule, results):
+            print("final vacuum lambda", lamb, "bonded", bonded_du_dl, nonbonded_du_dl)
 
-    minimized_solvent_coords = minimizer.minimize_host_4d(mol_a, solvent_system, solvent_coords, ff, solvent_box)
+        dG_vacuum = np.trapz([x[0]+x[1] for x in results], vacuum_lambda_schedule)
+        print("dG vacuum:", dG_vacuum)
 
-    solvent_args = []
-    for lambda_idx, lamb in enumerate(solvent_lambda_schedule):
-        gpu_idx = lambda_idx % cmd_args.num_gpus
-        solvent_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
-    
-    results = p.map(functools.partial(wrap_method, fn=rfe.host_edge), solvent_args)
+        # solvent leg
+        # build the water system first.
+        solvent_system, solvent_coords, solvent_box, omm_topology = builders.build_water_system(4.0)
+        solvent_box += np.eye(3)*0.1
 
-    for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(solvent_lambda_schedule, results):
-        print("final solvent lambda", lamb, "bonded", bonded_du_dl, nonbonded_du_dl)
+        minimized_solvent_coords = minimizer.minimize_host_4d(mol_a, solvent_system, solvent_coords, ff, solvent_box)
 
-    dG_solvent = np.trapz([x[0]+x[1] for x in results], vacuum_lambda_schedule)
-    print("dG solvent:", dG_solvent)
+        solvent_args = []
+        for lambda_idx, lamb in enumerate(solvent_lambda_schedule):
+            gpu_idx = lambda_idx % cmd_args.num_gpus
+            solvent_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
+        
+        results = p.map(functools.partial(wrap_method, fn=rfe.host_edge), solvent_args)
+
+        for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(solvent_lambda_schedule, results):
+            print("final solvent lambda", lamb, "bonded", bonded_du_dl, nonbonded_du_dl)
+
+        dG_solvent = np.trapz([x[0]+x[1] for x in results], vacuum_lambda_schedule)
+        print("dG solvent:", dG_solvent)
