@@ -136,7 +136,7 @@ def test_stage_0():
                 np.testing.assert_equal(bp.get_multiplier(), 1.0)
                 np.testing.assert_equal(bp.get_offset(), 0.0)
 
-                np.testing.assert_equal(u_fn.get_bond_idxs(), core_pairs)
+                np.testing.assert_equal(u_fn.get_idxs(), core_pairs)
 
         elif isinstance(bp, potentials.Nonbonded):
             nb_count += 1
@@ -194,7 +194,7 @@ def test_stage_1():
             assert 0
         elif isinstance(bp, potentials.CoreRestraint):
             core_count += 1
-            np.testing.assert_equal(bp.get_bond_idxs(), core_pairs)
+            np.testing.assert_equal(bp.get_idxs(), core_pairs)
         elif isinstance(bp, potentials.Nonbonded):
 
             nb_count += 1
