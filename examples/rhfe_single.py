@@ -1,4 +1,9 @@
-# relative hydration free energy with a single topology protocol.
+# This script computes the relative hydration free energy with a single topology protocol.
+# It checks to make sure the estimated dG is in agreement between the following three methods:
+# 1) Two seperate absolute free energy calculations
+# 2) Relative free energy with full atom-mapping
+# 3) Relative free energy with partial atom-mapping (4D-decoupling)
+
 import os
 import argparse
 import numpy as np
@@ -15,7 +20,6 @@ import functools
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
-
 
 import multiprocessing
 
@@ -130,13 +134,6 @@ if __name__ == "__main__":
         np.arange(mol_b.GetNumAtoms() - 1)
     ], axis=1)
 
-    # test relative free energy:
-
-    # full mapping
-    # partial mapping
-
-
-
     for core_idx, core in enumerate([core_full, core_part]):
 
         rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
@@ -158,6 +155,7 @@ if __name__ == "__main__":
         dG_vacuum = np.trapz([x[0]+x[1] for x in results], vacuum_lambda_schedule)
         print("dG vacuum:", dG_vacuum)
 
+        # solvent leg
         solvent_args = []
         for lambda_idx, lamb in enumerate(solvent_lambda_schedule):
             gpu_idx = lambda_idx % cmd_args.num_gpus
@@ -171,5 +169,5 @@ if __name__ == "__main__":
         dG_solvent = np.trapz([x[0]+x[1] for x in results], solvent_lambda_schedule)
         print("dG solvent:", dG_solvent)
 
-        print("Core", core_idx, "Difference", dG_solvent - dG_vacuum)
+        print("Core map", core_idx, "Difference", dG_solvent - dG_vacuum)
 

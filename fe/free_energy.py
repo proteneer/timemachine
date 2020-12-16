@@ -77,6 +77,7 @@ class BaseFreeEnergy():
         ctxt.add_observable(nonbonded_du_dl_obs)
 
         # du_dps = []
+        # deal with derivatives and training later
         # for ui in u_impls:
         #     du_dp_obs = custom_ops.AvgPartialUPartialParam(ui, 5)
         #     ctxt.add_observable(du_dp_obs)
@@ -93,12 +94,56 @@ class BaseFreeEnergy():
 class AbsoluteFreeEnergy(BaseFreeEnergy):
 
     def __init__(self, mol, ff):
+        """
+        Compute the absolute free energy of a molecule via 4D decoupling.
+
+        Parameters
+        ----------
+        mol: rdkit mol
+            Ligand to be decoupled
+
+        ff: ff.Forcefield
+            Ligand forcefield
+
+        """
         self.mol = mol
         self.ff = ff
         self.top = topology.BaseTopology(mol, ff)
 
     # this can be used for both the solvent leg and the complex leg
     def host_edge(self, lamb, host_system, host_coords, box, equil_steps=10000, prod_steps=100000):
+        """
+        Run equilibrium decoupling simulation at a given value of lambda in a host environment.
+
+        Parameters
+        ----------
+        lamb: float [0, 1]
+            0 is the fully interacting system, and 1 is the non-interacting system
+
+        host_system: openmm.System
+            OpenMM System object to be deserialized. The host can be simply a box of water, or a fully
+            solvated protein
+
+        host_coords: np.array of shape [..., 3]
+            Host coordinates, in nanometers. It should be properly minimized and not have clashes
+            with the ligand coordinates.
+
+        box: np.array [3,3]
+            Periodic boundary conditions, in nanometers.
+
+        equil_steps: float
+            Number of steps to run equilibration. Statistics are not gathered.
+
+        prod_steps: float
+            Number of steps to run production. Statistics are gathered.
+
+
+        Returns
+        -------
+        float, float
+            Returns a pair of average du_dl values for bonded and nonbonded terms.
+
+        """
 
         ligand_masses = [a.GetMass() for a in self.mol.GetAtoms()]
         ligand_coords = get_romol_conf(self.mol)
@@ -225,7 +270,26 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         return bonded_du_dl_obs.avg_du_dl(), nonbonded_du_dl_obs.avg_du_dl()        
 
     def vacuum_edge(self, lamb, equil_steps=10000, prod_steps=100000):
+        """
+        Run a vacuum decoupling simulation at a given value of lambda.
 
+        Parameters
+        ----------
+        lamb: float [0, 1]
+            0 is the fully interacting system, and 1 is the non-interacting system
+
+        equil_steps: float
+            Number of steps to run equilibration. Statistics are not gathered.
+
+        prod_steps: float
+            Number of steps to run production. Statistics are gathered.
+
+        Returns
+        -------
+        float, float
+            Returns a pair of average du_dl values for bonded and nonbonded terms.
+
+        """
         final_potentials = []
         final_vjp_and_handles = []
 
@@ -270,8 +334,38 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             prod_steps
         )
 
-    # this can be used for both the solvent leg and the complex leg
     def host_edge(self, lamb, host_system, host_coords, box, equil_steps=10000, prod_steps=100000):
+        """
+        Run equilibrium decoupling simulation at a given value of lambda in a host environment.
+
+        Parameters
+        ----------
+        lamb: float [0, 1]
+            0 is the fully interacting system, and 1 is the non-interacting system
+
+        host_system: openmm.System
+            OpenMM System object to be deserialized. The host can be simply a box of water, or a fully
+            solvated protein
+
+        host_coords: np.array of shape [..., 3]
+            Host coordinates, in nanometers. It should be properly minimized and not have clashes
+            with the ligand coordinates.
+
+        box: np.array [3,3]
+            Periodic boundary conditions, in nanometers.
+
+        equil_steps: float
+            Number of steps to run equilibration. Statistics are not gathered.
+
+        prod_steps: float
+            Number of steps to run production. Statistics are gathered.
+
+        Returns
+        -------
+        float, float
+            Returns a pair of average du_dl values for bonded and nonbonded terms.
+
+        """
 
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
         ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
@@ -295,7 +389,6 @@ class RelativeFreeEnergy(BaseFreeEnergy):
                 final_potentials.append([bp])
                 final_vjp_and_handles.append(None)
 
-        # gdt = topology.SingleTopology(self.mol_a, self.mol_b, core, ff)
         hgt = topology.HostGuestTopology(host_p, self.top)
 
         # setup the parameter handlers for the ligand
@@ -317,8 +410,6 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         final_vjp_and_handles.append([vjp_fn])
 
         combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
-
-        # intg = self._get_integrator(combined_masses)
 
         src_conf, dst_conf = self.top.interpolate_params(ligand_coords_a, ligand_coords_b)
         combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
