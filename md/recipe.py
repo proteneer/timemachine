@@ -173,13 +173,13 @@ class Recipe():
                 obp = full_obp
 
             if isinstance(obp, potentials.HarmonicBond) or isinstance(obp, potentials.CoreRestraint):
-                idxs = obp.get_bond_idxs()
+                idxs = obp.get_idxs()
                 idxs += self_num_atoms # modify inplace
             elif isinstance(obp, potentials.HarmonicAngle):
-                idxs = obp.get_angle_idxs()
+                idxs = obp.get_idxs()
                 idxs += self_num_atoms # modify inplace
             elif isinstance(obp, potentials.PeriodicTorsion):
-                idxs = obp.get_torsion_idxs()
+                idxs = obp.get_idxs()
                 idxs += self_num_atoms # modify inplace
             elif isinstance(obp, potentials.CentroidRestraint):
                 a_idxs = obp.get_a_idxs()
