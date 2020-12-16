@@ -102,7 +102,7 @@ if __name__ == "__main__":
             gpu_idx = lambda_idx % cmd_args.num_gpus
             absolute_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
 
-        results = pool.map(functools.partial(wrap_method, fn=afe.host_edge), absolute_args)
+        results = pool.map(functools.partial(wrap_method, fn=afe.host_edge), absolute_args, chunksize=1)
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(absolute_lambda_schedule, results):
             print("final absolute lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
@@ -140,7 +140,7 @@ if __name__ == "__main__":
             gpu_idx = lambda_idx % cmd_args.num_gpus
             vacuum_args.append((gpu_idx, lamb, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
 
-        results = pool.map(functools.partial(wrap_method, fn=rfe.vacuum_edge), vacuum_args)
+        results = pool.map(functools.partial(wrap_method, fn=rfe.vacuum_edge), vacuum_args, chunksize=1)
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(vacuum_lambda_schedule, results):
             print("final vacuum lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
@@ -153,7 +153,7 @@ if __name__ == "__main__":
             gpu_idx = lambda_idx % cmd_args.num_gpus
             solvent_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
         
-        results = pool.map(functools.partial(wrap_method, fn=rfe.host_edge), solvent_args)
+        results = pool.map(functools.partial(wrap_method, fn=rfe.host_edge), solvent_args, chunksize=1)
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(solvent_lambda_schedule, results):
             print("final solvent lambda", lamb, "bonded:", bonded_du_dl, "nonbonded:", nonbonded_du_dl)
