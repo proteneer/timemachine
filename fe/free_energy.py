@@ -69,8 +69,8 @@ class BaseFreeEnergy():
         for step in range(equil_steps):
             ctxt.step(lamb)
 
-        bonded_du_dl_obs = custom_ops.AvgPartialUPartialLambda(bonded_impls, 5)
-        nonbonded_du_dl_obs = custom_ops.AvgPartialUPartialLambda(nonbonded_impls, 5)
+        bonded_du_dl_obs = custom_ops.FullPartialUPartialLambda(bonded_impls, 5)
+        nonbonded_du_dl_obs = custom_ops.FullPartialUPartialLambda(nonbonded_impls, 5)
 
         # add observable
         ctxt.add_observable(bonded_du_dl_obs)
@@ -86,8 +86,13 @@ class BaseFreeEnergy():
         for _ in range(prod_steps):
             ctxt.step(lamb)
 
+        bonded_full_du_dls = bonded_du_dl_obs.full_du_dl()
+        nonbonded_full_du_dls = nonbonded_du_dl_obs.full_du_dl()
 
-        return bonded_du_dl_obs.avg_du_dl(), nonbonded_du_dl_obs.avg_du_dl()        
+        bonded_mean, bonded_std = np.mean(bonded_full_du_dls), np.std(bonded_full_du_dls)
+        nonbonded_mean, nonbonded_std = np.mean(nonbonded_full_du_dls), np.std(nonbonded_full_du_dls)
+
+        return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std)
 
 
 # this class is serializable.
