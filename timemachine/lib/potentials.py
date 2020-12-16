@@ -42,6 +42,8 @@ class InterpolatedPotential(CustomOpWrapper):
     def bind(self, params):
         assert self.get_u_fn().params is None
         self.params = params
+        return self
+
 
     # pass through so we can use the underlying methods
     def __getattr__(self, attr):
@@ -69,6 +71,7 @@ class LambdaPotential(CustomOpWrapper):
     def bind(self, params):
         assert self.get_u_fn().params is None
         self.params = params
+        return self
 
     # pass through so we can use the underlying methods
     def __getattr__(self, attr):

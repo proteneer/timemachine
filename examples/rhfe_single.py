@@ -94,32 +94,32 @@ if __name__ == "__main__":
     print("Minimizing the host structure to remove clashes.")
     minimized_solvent_coords = minimizer.minimize_host_4d(mol_a, solvent_system, solvent_coords, ff, solvent_box)
 
-    absolute_lambda_schedule = np.concatenate([
-        np.linspace(0.0, 0.333, cmd_args.num_absolute_windows - cmd_args.num_absolute_windows//3, endpoint=False),
-        np.linspace(0.333, 1.0, cmd_args.num_absolute_windows//3),
-    ])
+    # absolute_lambda_schedule = np.concatenate([
+    #     np.linspace(0.0, 0.333, cmd_args.num_absolute_windows - cmd_args.num_absolute_windows//3, endpoint=False),
+    #     np.linspace(0.333, 1.0, cmd_args.num_absolute_windows//3),
+    # ])
 
-    abs_dGs = []
+    # abs_dGs = []
 
-    for idx, mol in enumerate([mol_a, mol_b]):
+    # for idx, mol in enumerate([mol_a, mol_b]):
 
-        afe = free_energy.AbsoluteFreeEnergy(mol, ff)
-        absolute_args = []
+    #     afe = free_energy.AbsoluteFreeEnergy(mol, ff)
+    #     absolute_args = []
 
-        for lambda_idx, lamb in enumerate(absolute_lambda_schedule):
-            gpu_idx = lambda_idx % cmd_args.num_gpus
-            absolute_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
+    #     for lambda_idx, lamb in enumerate(absolute_lambda_schedule):
+    #         gpu_idx = lambda_idx % cmd_args.num_gpus
+    #         absolute_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
 
-        results = pool.map(functools.partial(wrap_method, fn=afe.host_edge), absolute_args, chunksize=1)
+    #     results = pool.map(functools.partial(wrap_method, fn=afe.host_edge), absolute_args, chunksize=1)
 
-        for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(absolute_lambda_schedule, results):
-            print("final absolute", idx, "lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
+    #     for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(absolute_lambda_schedule, results):
+    #         print("final absolute", idx, "lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
 
-        dG = np.trapz([x[0][0]+x[1][0] for x in results], absolute_lambda_schedule)
-        print("mol", idx, "dG absolute:", dG)
-        abs_dGs.append(dG)
+    #     dG = np.trapz([x[0][0]+x[1][0] for x in results], absolute_lambda_schedule)
+    #     print("mol", idx, "dG absolute:", dG)
+    #     abs_dGs.append(dG)
 
-    print("Absolute Difference", abs_dGs[0] - abs_dGs[1])
+    # print("Absolute Difference", abs_dGs[0] - abs_dGs[1])
 
     # relative free energy, compare two different core approaches
 
