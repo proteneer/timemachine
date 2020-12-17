@@ -126,9 +126,9 @@ if __name__ == "__main__":
     assert cmd_args.num_complex_windows % 100 == 0
     assert cmd_args.num_solvent_windows % 100 == 0
 
-    for label, host_system, host_coords, host_box, host_lambda_schedule, host_windows in [
-        ("complex", complex_system, complex_coords, complex_box, complex_lambda_schedule, cmd_args.num_complex_windows),
-        ("solvent", solvent_system, solvent_coords, solvent_box, solvent_lambda_schedule, cmd_args.num_solvent_windows)]:
+    for label, host_system, host_coords, host_box, host_windows in [
+        ("complex", complex_system, complex_coords, complex_box, cmd_args.num_complex_windows),
+        ("solvent", solvent_system, solvent_coords, solvent_box, cmd_args.num_solvent_windows)]:
 
         lambda_schedule = np.concatenate([
             np.linspace(0.0,  0.25, .35*host_windows, endpoint=False),
@@ -145,15 +145,15 @@ if __name__ == "__main__":
 
         # solvent leg
         host_args = []
-        for lambda_idx, lamb in enumerate(host_lambda_schedule):
+        for lambda_idx, lamb in enumerate(lambda_schedule):
             gpu_idx = lambda_idx % cmd_args.num_gpus
             host_args.append((gpu_idx, lamb, host_system, minimized_host_coords, host_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
         
         results = pool.map(functools.partial(wrap_method, fn=rfe.host_edge), host_args, chunksize=1)
 
-        for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(host_lambda_schedule, results):
+        for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(lambda_schedule, results):
             print("final", label, "lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
 
-        dG_host = np.trapz([x[0][0]+x[1][0] for x in results], host_lambda_schedule)
+        dG_host = np.trapz([x[0][0]+x[1][0] for x in results], lambda_schedule)
         print("dG:", dG_host)
 
