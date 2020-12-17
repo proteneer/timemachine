@@ -62,14 +62,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_equil_steps",
         type=int,
-        help="number of equilibration lambda windows",
+        help="number of equilibration steps for each lambda window",
         required=True
     )
 
     parser.add_argument(
         "--num_prod_steps",
         type=int,
-        help="number of production lambda windows",
+        help="number of production steps for each lambda window",
         required=True
     )
 

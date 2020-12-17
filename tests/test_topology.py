@@ -22,7 +22,7 @@ def get_romol_conf(mol):
     return guest_conf/10 # from angstroms to nm
 
 
-class BezenePhenolSparseTest(unittest.TestCase):
+class BenzenePhenolSparseTest(unittest.TestCase):
 
     def setUp(self, *args, **kwargs):
 
@@ -37,7 +37,7 @@ class BezenePhenolSparseTest(unittest.TestCase):
 
         self.ff = Forcefield(ff_handlers)
 
-        super(BezenePhenolSparseTest, self).__init__(*args, **kwargs)
+        super(BenzenePhenolSparseTest, self).__init__(*args, **kwargs)
 
 
     def test_bonded(self):

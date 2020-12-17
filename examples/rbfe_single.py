@@ -22,6 +22,9 @@ import multiprocessing
 from fe import free_energy
 
 
+def convert_uIC50_to_kJ_per_mole(amount_in_uM):
+    return 0.593*np.log(amount_in_uM*1e-6)*4.18
+
 def wrap_method(args, fn):
     gpu_idx = args[0]
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
@@ -30,7 +33,7 @@ def wrap_method(args, fn):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
-        description="Relative Hydration Free Energy Consistency Testing",
+        description="Relative Binding Free Energy Testing",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -58,14 +61,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_equil_steps",
         type=int,
-        help="number of equilibration lambda windows",
+        help="number of equilibration steps for each lambda window",
         required=True
     )
 
     parser.add_argument(
         "--num_prod_steps",
         type=int,
-        help="number of production lambda windows",
+        help="number of production steps for each lambda window",
         required=True
     )
 
@@ -79,6 +82,11 @@ if __name__ == "__main__":
     all_mols = [x for x in suppl]
     mol_a = all_mols[1]
     mol_b = all_mols[4]
+
+    print("reference dGs", convert_uIC50_to_kJ_per_mole(float(mol_a.GetProp("IC50[uM](SPA)"))))
+    print("reference dGs", convert_uIC50_to_kJ_per_mole(float(mol_b.GetProp("IC50[uM](SPA)"))))
+
+    assert 0
 
     core = np.array([[ 0,  0],
        [ 2,  2],
@@ -114,14 +122,13 @@ if __name__ == "__main__":
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
     ff = Forcefield(ff_handlers)
 
-    # the water system first.
+    # build the protein system.
     complex_system, complex_coords, _, _, complex_box = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
     complex_box += np.eye(3)*0.1 # BFGS this later
 
-    # the water system first.
+    # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
     solvent_box += np.eye(3)*0.1 # BFGS this later
-
 
     for label, host_system, host_coords, host_box, num_host_windows in [
         ("complex", complex_system, complex_coords, complex_box, cmd_args.num_complex_windows),
@@ -131,6 +138,9 @@ if __name__ == "__main__":
         B = int(.30*num_host_windows)
         C = num_host_windows - A - B
 
+        # Emprically, we see the largest variance in std <du/dl> near the endpoints in the nonbonded
+        # terms. Bonded terms are roughly linear. So we add more lambda windows at the endpoint to
+        # help improve convergence.
         lambda_schedule = np.concatenate([
             np.linspace(0.0,  0.25, A, endpoint=False),
             np.linspace(0.25, 0.75, B, endpoint=False),
