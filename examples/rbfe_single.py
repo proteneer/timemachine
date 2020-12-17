@@ -122,13 +122,19 @@ if __name__ == "__main__":
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
     solvent_box += np.eye(3)*0.1 # BFGS this later
 
+    # make the symmetric splitting code easier
+    assert cmg_args.num_complex_windows % 100 == 0
+    assert cmg_args.num_solvent_windows % 100 == 0
 
-    complex_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_complex_windows)
-    solvent_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_solvent_windows)
+    for label, host_system, host_coords, host_box, host_lambda_schedule, host_windows in [
+        ("complex", complex_system, complex_coords, complex_box, complex_lambda_schedule, cmd_args.num_complex_windows),
+        ("solvent", solvent_system, solvent_coords, solvent_box, solvent_lambda_schedule, cmd_args.num_solvent_windows)]:
 
-    for host_system, host_coords, host_box, host_lambda_schedule in [
-        (complex_system, complex_coords, complex_box, complex_lambda_schedule),
-        (solvent_system, solvent_coords, solvent_box, solvent_lambda_schedule)]:
+        lambda_schedule = np.concatenate([
+            np.linspace(0.0,  0.25, .35*host_windows, endpoint=False),
+            np.linspace(0.25, 0.75, .30*host_windows, endpoint=False),
+            np.linspace(0.75, 1.0,  .35*host_windows, endpoint=False)
+        ])
 
         print("Minimizing the host structure to remove clashes.")
         minimized_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, ff, host_box)
@@ -144,7 +150,7 @@ if __name__ == "__main__":
         results = pool.map(functools.partial(wrap_method, fn=rfe.host_edge), host_args, chunksize=1)
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(host_lambda_schedule, results):
-            print("final host lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
+            print("final", label, "lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
 
         dG_host = np.trapz([x[0][0]+x[1][0] for x in results], host_lambda_schedule)
         print("dG:", dG_host)
