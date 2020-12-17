@@ -38,24 +38,44 @@ class CustomOpWrapper():
 
 class InterpolatedPotential(CustomOpWrapper):
 
+
+    def bind(self, params):
+        assert self.get_u_fn().params is None
+        self.params = params
+        return self
+
+
+    # pass through so we can use the underlying methods
+    def __getattr__(self, attr):
+        return getattr(self.args[0], attr)
+
+    def get_u_fn(self):
+        return self.args[0]
+
     def unbound_impl(self, precision):
         return custom_ops.InterpolatedPotential(
-            self.args[0].unbound_impl(precision),
-            *self.args[1:]
+            self.get_u_fn().unbound_impl(precision),
+            self.args[1],
+            self.args[2]
         )
 
     def bound_impl(self, precision):
-        u_params = self.get_u_fn().params
         return custom_ops.BoundPotential(
             self.unbound_impl(precision),
-            u_params
+            self.params
         )
 
 
 class LambdaPotential(CustomOpWrapper):
 
     def bind(self, params):
-        raise ValueError("LambdaPotential cannot bind parameters")
+        assert self.get_u_fn().params is None
+        self.params = params
+        return self
+
+    # pass through so we can use the underlying methods
+    def __getattr__(self, attr):
+        return getattr(self.args[0], attr)
 
     def get_u_fn(self):
         return self.args[0]
@@ -82,7 +102,7 @@ class LambdaPotential(CustomOpWrapper):
         u_params = self.get_u_fn().params
         return custom_ops.BoundPotential(
             self.unbound_impl(precision),
-            u_params
+            self.params
         )
 
 class Shape(CustomOpWrapper):
@@ -99,10 +119,10 @@ class Shape(CustomOpWrapper):
 
 class HarmonicBond(CustomOpWrapper):
 
-    def get_bond_idxs(self):
+    def get_idxs(self):
         return self.args[0]
 
-    def set_bond_idxs(self, new_idxs):
+    def set_idxs(self, new_idxs):
         self.args[0] = new_idxs
 
 # this is an alias to make type checking easier
@@ -121,18 +141,18 @@ class CoreRestraint(HarmonicBond):
 
 class HarmonicAngle(CustomOpWrapper):
 
-    def get_angle_idxs(self):
+    def get_idxs(self):
         return self.args[0]
 
-    def set_angle_idxs(self, new_idxs):
+    def set_idxs(self, new_idxs):
         self.args[0] = new_idxs
 
 class PeriodicTorsion(CustomOpWrapper):
 
-    def get_torsion_idxs(self):
+    def get_idxs(self):
         return self.args[0]
 
-    def set_torsion_idxs(self, new_idxs):
+    def set_idxs(self, new_idxs):
         self.args[0] = new_idxs
 
 class InertialRestraint(CustomOpWrapper):

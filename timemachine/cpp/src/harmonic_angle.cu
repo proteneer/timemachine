@@ -84,17 +84,19 @@ void HarmonicAngle<RealType>::execute_device(
 
     auto start = std::chrono::high_resolution_clock::now();
 
-    k_harmonic_angle_inference<RealType, 3><<<blocks, tpb, 0, stream>>>(
-        A_,
-        d_x,
-        d_p,
-        d_angle_idxs_,
-        d_du_dx,
-        d_du_dp,
-        d_u
-    );
+    if(A_ > 0) {
+        k_harmonic_angle_inference<RealType, 3><<<blocks, tpb, 0, stream>>>(
+            A_,
+            d_x,
+            d_p,
+            d_angle_idxs_,
+            d_du_dx,
+            d_du_dp,
+            d_u
+        );
+        gpuErrchk(cudaPeekAtLastError());
+    }
 
-    gpuErrchk(cudaPeekAtLastError());
 
 }
 

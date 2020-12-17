@@ -15,9 +15,10 @@ def get_romol_conf(mol):
     return guest_conf/10 # from angstroms to nm
 
 
-def minimize_4d(romol, host_system, host_coords, ff, box):
+def minimize_host_4d(romol, host_system, host_coords, ff, box):
     """
     Insert romol into a host system via 4D decoupling under a Langevin thermostat.
+    The ligand coordinates are fixed during this, and only host_coordinates are minimized.
 
     Parameters
     ----------
@@ -36,11 +37,17 @@ def minimize_4d(romol, host_system, host_coords, ff, box):
     box: np.ndarray [3,3]
         Box matrix for periodic boundary conditions. units of nanometers.
 
+    Returns
+    -------
+    np.ndarray
+        This returns minimized host_coords.
+
     """
 
     host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
-    ligand_masses = [a.GetMass() for a in romol.GetAtoms()]
+    # keep the ligand rigid
+    ligand_masses = [a.GetMass()*100000 for a in romol.GetAtoms()]
     combined_masses = np.concatenate([host_masses, ligand_masses])
     ligand_coords = get_romol_conf(romol)
     combined_coords = np.concatenate([host_coords, ligand_coords])
@@ -100,4 +107,4 @@ def minimize_4d(romol, host_system, host_coords, ff, box):
     for lamb in np.linspace(1.0, 0, 1000):
         ctxt.step(lamb)
 
-    return ctxt.get_x_t()
+    return ctxt.get_x_t()[:num_host_atoms]

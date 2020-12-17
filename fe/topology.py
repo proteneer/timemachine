@@ -11,6 +11,10 @@ _SCALE_14 = 0.5
 _BETA = 2.0
 _CUTOFF = 1.2
 
+
+class AtomMappingError(Exception):
+    pass
+
 class HostGuestTopology():
 
     def __init__(self, host_p, guest_topology):
@@ -30,25 +34,37 @@ class HostGuestTopology():
         self.host_p = host_p
         self.num_host_atoms = len(self.host_p.get_lambda_plane_idxs())
 
+    def get_num_atoms(self):
+        return self.num_host_atoms + self.guest_topology.get_num_atoms()
+
+    def _parameterize_bonded_term(self, ff_params, handle_fn):
+        params, potential = handle_fn(ff_params)
+        if len(params) == 3:
+            src_params, dst_params, uni_params = params
+            src_potential, dst_potential, uni_potential = potential
+            src_potential.set_idxs(src_potential.get_idxs() + self.num_host_atoms)
+            dst_potential.set_idxs(dst_potential.get_idxs() + self.num_host_atoms)
+            uni_potential.set_idxs(uni_potential.get_idxs() + self.num_host_atoms)
+            src_potential.set_N(src_potential.get_N() + self.num_host_atoms)
+            dst_potential.set_N(dst_potential.get_N() + self.num_host_atoms)
+            uni_potential.set_N(uni_potential.get_N() + self.num_host_atoms)
+
+            return [src_params, dst_params, uni_params], [src_potential, dst_potential, uni_potential]
+        else:
+            potential.set_idxs(potential.get_idxs() + self.num_host_atoms)
+            return params, potential
+
     def parameterize_harmonic_bond(self, ff_params):
-        params, potential = self.guest_topology.parameterize_harmonic_bond(ff_params)
-        potential.set_bond_idxs(potential.get_bond_idxs() + self.num_host_atoms)
-        return params, potential
+        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_harmonic_bond)
 
     def parameterize_harmonic_angle(self, ff_params):
-        params, potential = self.guest_topology.parameterize_harmonic_angle(ff_params)
-        potential.set_angle_idxs(potential.get_angle_idxs() + self.num_host_atoms)
-        return params, potential
+        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_harmonic_angle)
 
     def parameterize_proper_torsion(self, ff_params):
-        params, potential = self.guest_topology.parameterize_proper_torsion(ff_params)
-        potential.set_torsion_idxs(potential.get_torsion_idxs() + self.num_host_atoms)
-        return params, potential
+        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_proper_torsion)
 
     def parameterize_improper_torsion(self, ff_params):
-        params, potential = self.guest_topology.parameterize_improper_torsion(ff_params)
-        potential.set_torsion_idxs(potential.get_torsion_idxs() + self.num_host_atoms)
-        return params, potential
+        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_improper_torsion)
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         # this needs to take care of the case when there's parameter interpolation.
@@ -61,31 +77,44 @@ class HostGuestTopology():
         assert guest_p.get_beta() == self.host_p.get_beta()
         assert guest_p.get_cutoff() == self.host_p.get_cutoff()
 
-        if guest_qlj.shape[0] == num_guest_atoms:
-            # no parameter interpolation
-            hg_nb_params = jnp.concatenate([self.host_p.params, guest_qlj])
-        elif guest_qlj.shape[0] == num_guest_atoms*2:
-            # with parameter interpolation
-            hg_nb_params_src = jnp.concatenate([self.host_p.params, guest_qlj[:num_guest_atoms]])
-            hg_nb_params_dst = jnp.concatenate([self.host_p.params, guest_qlj[num_guest_atoms:]])
-            hg_nb_params = jnp.concatenate([hg_nb_params_src, hg_nb_params_dst])
-        else:
-            # you dun' goofed and consequences will never be the same
-            assert 0
-
         hg_exclusion_idxs = np.concatenate([self.host_p.get_exclusion_idxs(), guest_p.get_exclusion_idxs() + self.num_host_atoms])
         hg_scale_factors = np.concatenate([self.host_p.get_scale_factors(), guest_p.get_scale_factors()])
         hg_lambda_offset_idxs = np.concatenate([self.host_p.get_lambda_offset_idxs(), guest_p.get_lambda_offset_idxs()])
         hg_lambda_plane_idxs = np.concatenate([self.host_p.get_lambda_plane_idxs(), guest_p.get_lambda_plane_idxs()])
 
-        return hg_nb_params, potentials.Nonbonded(
-            hg_exclusion_idxs,
-            hg_scale_factors,
-            hg_lambda_plane_idxs,
-            hg_lambda_offset_idxs,
-            guest_p.get_beta(),
-            guest_p.get_cutoff()
-        )
+        if guest_qlj.shape[0] == num_guest_atoms:
+            # no parameter interpolation
+            hg_nb_params = jnp.concatenate([self.host_p.params, guest_qlj])
+
+            return hg_nb_params, potentials.Nonbonded(
+                hg_exclusion_idxs,
+                hg_scale_factors,
+                hg_lambda_plane_idxs,
+                hg_lambda_offset_idxs,
+                guest_p.get_beta(),
+                guest_p.get_cutoff()
+            )
+
+        elif guest_qlj.shape[0] == num_guest_atoms*2:
+            # with parameter interpolation
+            hg_nb_params_src = jnp.concatenate([self.host_p.params, guest_qlj[:num_guest_atoms]])
+            hg_nb_params_dst = jnp.concatenate([self.host_p.params, guest_qlj[num_guest_atoms:]])
+            hg_nb_params = jnp.concatenate([hg_nb_params_src, hg_nb_params_dst])
+
+            nb = potentials.Nonbonded(
+                hg_exclusion_idxs,
+                hg_scale_factors,
+                hg_lambda_plane_idxs,
+                hg_lambda_offset_idxs,
+                guest_p.get_beta(),
+                guest_p.get_cutoff()
+            )
+
+            return hg_nb_params, potentials.InterpolatedPotential(nb, self.get_num_atoms(), hg_nb_params.size)
+
+        else:
+            # you dun' goofed and consequences will never be the same
+            assert 0
 
 
 class BaseTopology():
@@ -166,7 +195,6 @@ class BaseTopology():
         return params, potentials.PeriodicTorsion(idxs)
 
 
-
 class DualTopology():
 
     def __init__(self, mol_a, mol_b, forcefield):
@@ -195,7 +223,7 @@ class DualTopology():
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         q_params_a = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_a)
-        q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b) # HARD TYPO
+        q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b)
         lj_params_a = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_a)
         lj_params_b = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_b)
 
@@ -289,3 +317,330 @@ class DualTopology():
 
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
+
+
+class SingleTopology():
+
+    def __init__(self, mol_a, mol_b, core, ff):
+        """
+        SingleTopology combines two molecules through a common core. The combined mol has
+        atom indices laid out such that mol_a is identically mapped to the combined mol indices.
+        The atoms in the mol_b's R-group is then glued on to resulting molecule.
+
+        Parameters
+        ----------
+        mol_a: ROMol
+            First ligand
+
+        mol_b: ROMol
+            Second ligand
+
+        core: np.array (C, 2)
+            Atom mapping from mol_a to to mol_b
+
+        ff: ff.Forcefield
+            Forcefield to be used for parameterization.
+
+        """
+        self.mol_a = mol_a
+        self.mol_b = mol_b
+        self.ff = ff
+        self.core = core
+
+        assert core.shape[1] == 2
+
+        # map into idxs in the combined molecule
+        self.a_to_c = np.arange(mol_a.GetNumAtoms(), dtype=np.int32) # identity
+        self.b_to_c = np.zeros(mol_b.GetNumAtoms(), dtype=np.int32) - 1
+
+        self.NC = mol_a.GetNumAtoms() + mol_b.GetNumAtoms() - len(core)
+
+        # mark membership:
+        # 0: Core
+        # 1: R_A (default)
+        # 2: R_B
+        self.c_flags = np.ones(self.get_num_atoms(), dtype=np.int32)
+
+        for a, b in core:
+            self.c_flags[a] = 0
+            self.b_to_c[b] = a
+
+        iota = self.mol_a.GetNumAtoms()
+        for b_idx, c_idx in enumerate(self.b_to_c):
+            if c_idx == -1:
+                self.b_to_c[b_idx] = iota
+                self.c_flags[iota] = 2
+                iota += 1
+
+        # test for uniqueness in core idxs for each mol
+        assert len(set(tuple(core[:, 0]))) == len(core[:, 0])
+        assert len(set(tuple(core[:, 1]))) == len(core[:, 1])
+
+        self.assert_factorizability()
+
+    def assert_factorizability(self):
+        """
+        Number of atoms in the combined mol
+
+        """
+        # Test that R-groups can be properly factorized out in the proposed
+        # mapping. The requirement is that R-groups must be branched from exactly
+        # a single atom on the core.
+
+        # first convert to a dense graph
+        N = self.get_num_atoms()
+        dense_graph = np.zeros((N, N), dtype=np.int32)
+
+        for bond in self.mol_a.GetBonds():
+            i, j = self.a_to_c[bond.GetBeginAtomIdx()], self.a_to_c[bond.GetEndAtomIdx()]
+            dense_graph[i, j] = 1 
+            dense_graph[j, i] = 1 
+
+        for bond in self.mol_b.GetBonds():
+            i, j = self.b_to_c[bond.GetBeginAtomIdx()], self.b_to_c[bond.GetEndAtomIdx()]
+            dense_graph[i, j] = 1 
+            dense_graph[j, i] = 1 
+
+        # sparsify to simplify and speed up traversal code
+        sparse_graph = []
+        for row in dense_graph:
+            nbs = []
+            for col_idx, col in enumerate(row):
+                if col == 1:
+                    nbs.append(col_idx)
+            sparse_graph.append(nbs)
+
+        def visit(i, visited):
+            if i in visited:
+                return
+            else:
+                visited.add(i)
+                if self.c_flags[i] != 0:
+                    for nb in sparse_graph[i]:
+                        visit(nb, visited)
+                else:
+                    return
+
+        for c_idx, group in enumerate(self.c_flags):
+            # 0 core, 1 R_A, 2: R_B
+            if group != 0:
+                seen = set()
+                visit(c_idx, seen)
+                # (ytz): exactly one of seen should belong to core
+                if np.sum(np.array([self.c_flags[x] for x in seen]) == 0) != 1:
+                    raise AtomMappingError("Atom Mapping Error, the resulting map is non-factorizable")
+
+
+    def get_num_atoms(self):
+        return self.NC
+
+    def interpolate_params(self, params_a, params_b):
+        """
+        Interpolate two sets of per-particle parameters.
+
+        This can be used to interpolate nonbonded parameters,
+        coordinates, etc.
+
+        Parameters
+        ----------
+        params_a: np.ndarray, shape [N_A, ...]
+            Parameters for the mol_a
+
+        params_b: np.ndarray, shape [N_B, ...]
+            Parameters for the mol_b
+
+        Returns
+        -------
+        tuple: (src, dst)
+            Two np.ndarrays each of shape [N_C, ...]
+
+        """
+
+        src_params = [None]*self.get_num_atoms()
+        dst_params = [None]*self.get_num_atoms()
+
+        for a_idx, c_idx in enumerate(self.a_to_c):
+            src_params[c_idx] = params_a[a_idx]
+            dst_params[c_idx] = params_a[a_idx]
+
+        for b_idx, c_idx in enumerate(self.b_to_c):
+            dst_params[c_idx] = params_b[b_idx]
+            if src_params[c_idx] is None:
+                src_params[c_idx] = params_b[b_idx]
+
+        return jnp.array(src_params), jnp.array(dst_params)
+
+
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
+        # Nonbonded potentials combine through parameter interpolation, not energy interpolation.
+        # They may or may not operate through 4D decoupling depending on the atom mapping. If an atom is
+        # unique, it is kept at full strength and not switched off.
+
+        q_params_a = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_a)
+        q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b) # HARD TYPO
+        lj_params_a = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_a)
+        lj_params_b = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_b)
+
+        qlj_params_a = jnp.concatenate([
+            jnp.reshape(q_params_a, (-1, 1)),
+            jnp.reshape(lj_params_a, (-1, 2))
+        ], axis=1)
+        qlj_params_b = jnp.concatenate([
+            jnp.reshape(q_params_b, (-1, 1)),
+            jnp.reshape(lj_params_b, (-1, 2))
+        ], axis=1)
+
+        qlj_params_src, qlj_params_dst = self.interpolate_params(qlj_params_a, qlj_params_b)
+        qlj_params = jnp.concatenate([qlj_params_src, qlj_params_dst])
+
+        exclusion_idxs_a, scale_factors_a = nonbonded.generate_exclusion_idxs(
+            self.mol_a,
+            scale12=_SCALE_12,
+            scale13=_SCALE_13,
+            scale14=_SCALE_14
+        )
+
+        exclusion_idxs_b, scale_factors_b = nonbonded.generate_exclusion_idxs(
+            self.mol_b,
+            scale12=_SCALE_12,
+            scale13=_SCALE_13,
+            scale14=_SCALE_14
+        )
+
+        # (ytz): use the same scale factors of LJ & charges for now
+        # this isn't quite correct as the LJ/Coluomb may be different in 
+        # different forcefields.
+        scale_factors_a = np.stack([scale_factors_a, scale_factors_a], axis=1)
+        scale_factors_b = np.stack([scale_factors_b, scale_factors_b], axis=1)
+
+        combined_exclusion_dict = dict()
+
+        for ij, scale in zip(exclusion_idxs_a, scale_factors_a):
+            ij = tuple(sorted(self.a_to_c[ij]))
+            if ij in combined_exclusion_dict:
+                np.testing.assert_array_equal(combined_exclusion_dict[ij], scale)
+            else:
+                combined_exclusion_dict[ij] = scale
+
+        for ij, scale in zip(exclusion_idxs_b, scale_factors_b):
+            ij = tuple(sorted(self.b_to_c[ij]))
+            if ij in combined_exclusion_dict:
+                np.testing.assert_array_equal(combined_exclusion_dict[ij], scale)
+            else:
+                combined_exclusion_dict[ij] = scale
+
+        combined_exclusion_idxs = []
+        combined_scale_factors = []
+
+        for e, s in combined_exclusion_dict.items():
+            combined_exclusion_idxs.append(e)
+            combined_scale_factors.append(s)
+
+        combined_exclusion_idxs = np.array(combined_exclusion_idxs)
+        combined_scale_factors = np.array(combined_scale_factors)
+
+        # (ytz): we don't need exclusions between R_A and R_B will never see each other
+        # under this decoupling scheme. They will always be at cutoff apart from each other.
+
+        # plane_idxs: RA = Core = 0, RB = -1
+        # offset_idxs: Core = 0, RA = RB = +1 
+        combined_lambda_plane_idxs = np.zeros(self.get_num_atoms(), dtype=np.int32)
+        combined_lambda_offset_idxs = np.zeros(self.get_num_atoms(), dtype=np.int32)
+
+        for atom, group in enumerate(self.c_flags):
+            if group == 0:
+                # core atom
+                combined_lambda_plane_idxs[atom] = 0
+                combined_lambda_offset_idxs[atom] = 0
+            elif group == 1:
+                combined_lambda_plane_idxs[atom] = 0
+                combined_lambda_offset_idxs[atom] = 1
+            elif group == 2:
+                combined_lambda_plane_idxs[atom] = -1
+                combined_lambda_offset_idxs[atom] = 1
+            else:
+                assert 0
+
+        beta = _BETA
+        cutoff = _CUTOFF # solve for this analytically later
+
+        nb = potentials.Nonbonded(
+            combined_exclusion_idxs,
+            combined_scale_factors,
+            combined_lambda_plane_idxs,
+            combined_lambda_offset_idxs,
+            beta,
+            cutoff
+        ) 
+
+        return qlj_params, potentials.InterpolatedPotential(nb, self.get_num_atoms(), qlj_params.size)
+
+    def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
+        # Bonded terms are defined as follows:
+        # If a bonded term is comprised exclusively of atoms in the core region, then
+        # its energy its interpolated from the on-state to off-state.
+        # Otherwise (i.e. it has one atom that is not in the core region), the bond term
+        # is defined as unique, and is on at all times.
+        # This means that the end state will contain dummy atoms that is not the true end-state,
+        # but contains an analytical correction (through Boresch) that can be cancelled out.
+
+        params_a, idxs_a = bonded_handle.partial_parameterize(ff_params, self.mol_a)
+        params_b, idxs_b = bonded_handle.partial_parameterize(ff_params, self.mol_b)
+
+        core_params_a = []
+        core_params_b = []
+        unique_params_r = []
+
+        core_idxs_a = []
+        core_idxs_b = []
+        unique_idxs_r = []
+
+        for p, old_atoms in zip(params_a, idxs_a):
+            new_atoms = self.a_to_c[old_atoms]
+            if np.all(self.c_flags[new_atoms] == 0):
+                core_params_a.append(p)
+                core_idxs_a.append(new_atoms)
+            else:
+                unique_params_r.append(p)
+                unique_idxs_r.append(new_atoms)
+
+        for p, old_atoms in zip(params_b, idxs_b):
+            new_atoms = self.b_to_c[old_atoms]
+            if np.all(self.c_flags[new_atoms] == 0):
+                core_params_b.append(p)
+                core_idxs_b.append(new_atoms)
+            else:
+                unique_params_r.append(p)
+                unique_idxs_r.append(new_atoms)
+
+        core_params_a = jnp.array(core_params_a)
+        core_params_b = jnp.array(core_params_b)
+        unique_params_r = jnp.array(unique_params_r) # always on
+
+        core_idxs_a = np.array(core_idxs_a, dtype=np.int32)
+        core_idxs_b = np.array(core_idxs_b, dtype=np.int32)
+
+        unique_idxs_r = np.array(unique_idxs_r, dtype=np.int32) # always on
+
+        u_fn_a = potentials.LambdaPotential(potential(core_idxs_a), self.get_num_atoms(), core_params_a.size, -1.0, 1.0)
+        u_fn_b = potentials.LambdaPotential(potential(core_idxs_b), self.get_num_atoms(), core_params_b.size,  1.0, 0.0)
+        u_fn_r = potentials.LambdaPotential(potential(unique_idxs_r), self.get_num_atoms(), unique_params_r.size,  0.0, 1.0)
+
+        return [core_params_a, core_params_b, unique_params_r], [u_fn_a, u_fn_b, u_fn_r]
+
+
+    def parameterize_harmonic_bond(self, ff_params):
+        return self._parameterize_bonded_term(ff_params, self.ff.hb_handle, potentials.HarmonicBond)
+
+
+    def parameterize_harmonic_angle(self, ff_params):
+        return self._parameterize_bonded_term(ff_params, self.ff.ha_handle, potentials.HarmonicAngle)
+
+
+    def parameterize_proper_torsion(self, ff_params):
+        return self._parameterize_bonded_term(ff_params, self.ff.pt_handle, potentials.PeriodicTorsion)
+
+
+    def parameterize_improper_torsion(self, ff_params):
+        return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
+

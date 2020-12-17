@@ -387,5 +387,5 @@ class AM1CCCHandler(SerializableMixIn):
 
         deltas = params[bond_idx_params]
         incremented = ops.index_add(am1_charges, bond_idxs[:, 0], deltas)
-        decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)    
-        return decremented 
+        decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)
+        return decremented
