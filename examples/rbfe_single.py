@@ -122,21 +122,22 @@ if __name__ == "__main__":
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
     solvent_box += np.eye(3)*0.1 # BFGS this later
 
-    # make the symmetric splitting code easier
-    assert cmd_args.num_complex_windows % 100 == 0
-    assert cmd_args.num_solvent_windows % 100 == 0
 
-    for label, host_system, host_coords, host_box, host_windows in [
+    for label, host_system, host_coords, host_box, num_host_windows in [
         ("complex", complex_system, complex_coords, complex_box, cmd_args.num_complex_windows),
         ("solvent", solvent_system, solvent_coords, solvent_box, cmd_args.num_solvent_windows)]:
 
+        A = int(.35*num_host_windows)
+        B = int(.30*num_host_windows)
+        C = num_host_windows - A - B
+
         lambda_schedule = np.concatenate([
-            np.linspace(0.0,  0.25, .35*host_windows, endpoint=False),
-            np.linspace(0.25, 0.75, .30*host_windows, endpoint=False),
-            np.linspace(0.75, 1.0,  .35*host_windows, endpoint=True)
+            np.linspace(0.0,  0.25, A, endpoint=False),
+            np.linspace(0.25, 0.75, B, endpoint=False),
+            np.linspace(0.75, 1.0,  C, endpoint=True)
         ])
 
-        assert len(lambda_schedule) == host_windows
+        assert len(lambda_schedule) == num_host_windows
 
         print("Minimizing the host structure to remove clashes.")
         minimized_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, ff, host_box)
