@@ -133,8 +133,10 @@ if __name__ == "__main__":
         lambda_schedule = np.concatenate([
             np.linspace(0.0,  0.25, .35*host_windows, endpoint=False),
             np.linspace(0.25, 0.75, .30*host_windows, endpoint=False),
-            np.linspace(0.75, 1.0,  .35*host_windows, endpoint=False)
+            np.linspace(0.75, 1.0,  .35*host_windows, endpoint=True)
         ])
+
+        assert len(lambda_schedule) == host_windows
 
         print("Minimizing the host structure to remove clashes.")
         minimized_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, ff, host_box)
