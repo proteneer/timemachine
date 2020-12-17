@@ -123,8 +123,8 @@ if __name__ == "__main__":
     solvent_box += np.eye(3)*0.1 # BFGS this later
 
     # make the symmetric splitting code easier
-    assert cmg_args.num_complex_windows % 100 == 0
-    assert cmg_args.num_solvent_windows % 100 == 0
+    assert cmd_args.num_complex_windows % 100 == 0
+    assert cmd_args.num_solvent_windows % 100 == 0
 
     for label, host_system, host_coords, host_box, host_lambda_schedule, host_windows in [
         ("complex", complex_system, complex_coords, complex_box, complex_lambda_schedule, cmd_args.num_complex_windows),
