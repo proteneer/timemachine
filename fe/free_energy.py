@@ -37,11 +37,17 @@ class BaseFreeEnergy():
     # this will be eventually gRPC'd out to a worker
     @staticmethod
     def _simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps):
-        u_impls = []
+        all_impls = []
         bonded_impls = []
         nonbonded_impls = []
 
+        # set up observables for du_dps here as well.
+
+        du_dp_obs = []
+
         for bps in final_potentials:
+            obs_list = []
+
             for bp in bps:
                 impl = bp.bound_impl(np.float32)
 
@@ -53,7 +59,10 @@ class BaseFreeEnergy():
                 else:
                     bonded_impls.append(impl)
 
-                u_impls.append(impl)
+                all_impls.append(impl)
+                obs_list.append(custom_ops.AvgPartialUPartialParam(impl, 5))
+
+            du_dp_obs.append(obs_list)
 
         intg_impl = integrator.impl()
         # context components: positions, velocities, box, integrator, energy fxns
@@ -62,7 +71,7 @@ class BaseFreeEnergy():
             v0,
             box,
             intg_impl,
-            u_impls
+            all_impls
         )
 
         # equilibration
@@ -76,12 +85,9 @@ class BaseFreeEnergy():
         ctxt.add_observable(bonded_du_dl_obs)
         ctxt.add_observable(nonbonded_du_dl_obs)
 
-        # du_dps = []
-        # deal with derivatives and training later
-        # for ui in u_impls:
-        #     du_dp_obs = custom_ops.AvgPartialUPartialParam(ui, 5)
-        #     ctxt.add_observable(du_dp_obs)
-        #     du_dps.append(du_dp_obs)
+        for obs_list in du_dp_obs:
+            for obs in obs_list:
+                ctxt.add_observable(obs)
 
         for _ in range(prod_steps):
             ctxt.step(lamb)
@@ -92,7 +98,16 @@ class BaseFreeEnergy():
         bonded_mean, bonded_std = np.mean(bonded_full_du_dls), np.std(bonded_full_du_dls)
         nonbonded_mean, nonbonded_std = np.mean(nonbonded_full_du_dls), np.std(nonbonded_full_du_dls)
 
-        return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std)
+        # keep the structure of grads the same as that of final_potentials so we can properly
+        # form their vjps.
+        grads = []
+        for obs_list in du_dp_obs:
+            grad_list = []
+            for obs in obs_list:
+                grad_list.append(obs.avg_du_dp())
+            grads.append(grad_list)
+
+        return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std), grads
 
 
 # this class is serializable.
@@ -226,61 +241,6 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             seed
         )
 
-    # this will be eventually gRPC'd out to a worker
-    @staticmethod
-    def _simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps):
-        u_impls = []
-        bonded_impls = []
-        nonbonded_impls = []
-
-        for bps in final_potentials:
-            for bp in bps:
-                impl = bp.bound_impl(np.float32)
-                if isinstance(bp, potentials.InterpolatedPotential):
-                    nonbonded_impls.append(impl)
-                elif isinstance(bp, potentials.LambdaPotential):
-                    bonded_impls.append(impl)
-                u_impls.append(impl)
-
-        intg_impl = integrator.impl()
-        # context components: positions, velocities, box, integrator, energy fxns
-        ctxt = custom_ops.Context(
-            x0,
-            v0,
-            box,
-            intg_impl,
-            u_impls
-        )
-
-        # equilibration
-        for step in range(equil_steps):
-            ctxt.step(lamb)
-
-        bonded_du_dl_obs = custom_ops.FullPartialUPartialLambda(bonded_impls, 5)
-        nonbonded_du_dl_obs = custom_ops.FullPartialUPartialLambda(nonbonded_impls, 5)
-
-        # add observable
-        ctxt.add_observable(bonded_du_dl_obs)
-        ctxt.add_observable(nonbonded_du_dl_obs)
-
-        # du_dps = []
-        # for ui in u_impls:
-        #     du_dp_obs = custom_ops.AvgPartialUPartialParam(ui, 5)
-        #     ctxt.add_observable(du_dp_obs)
-        #     du_dps.append(du_dp_obs)
-
-        for _ in range(prod_steps):
-            ctxt.step(lamb)
-
-        bonded_full_du_dls = bonded_du_dl_obs.full_du_dl()
-        nonbonded_full_du_dls = nonbonded_du_dl_obs.full_du_dl()
-
-        bonded_mean, bonded_std = np.mean(bonded_full_du_dls), np.std(bonded_full_du_dls)
-        nonbonded_mean, nonbonded_std = np.mean(nonbonded_full_du_dls), np.std(nonbonded_full_du_dls)
-
-        return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std)
-    
-
     def vacuum_edge(self, lamb, equil_steps=10000, prod_steps=100000):
         """
         Run a vacuum decoupling simulation at a given value of lambda.
@@ -399,6 +359,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
                 host_p = bp
             else:
                 final_potentials.append([bp])
+                # (ytz): no protein ff support for now, so we skip their vjps
                 final_vjp_and_handles.append(None)
 
         hgt = topology.HostGuestTopology(host_p, self.top)
@@ -419,14 +380,15 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
         final_potentials.append([nb_potential.bind(nb_params)])
-        final_vjp_and_handles.append([vjp_fn])
+        final_vjp_and_handles.append([vjp_fn, (self.ff.q_handle, self.ff.lj_handle)]) # (ytz): note the handlers are a tuple, this is checked later
 
         combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
 
         src_conf, dst_conf = self.top.interpolate_params(ligand_coords_a, ligand_coords_b)
         combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
 
-        return self._simulate(
+        # (ytz): us is short form for mean and std dev.
+        bonded_us, nonbonded_us, grads = self._simulate(
             lamb,
             box,
             combined_coords,
@@ -436,3 +398,28 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             equil_steps,
             prod_steps
         )
+
+
+        grads_and_handles = []
+
+        for du_dqs, vjps_and_handles in zip(grads, final_vjp_and_handles):
+            if vjps_and_handles is not None:
+                vjp_fn = vjps_and_handles[0]
+                handles = vjps_and_handles[1]
+
+                # we need to get the shapes correct (eg. nonbonded vjp emits an ndarray, not a list.)
+
+                # (ytz): so far nonbonded grads is the only term that map back out to two 
+                # vjp handlers (charge and lj). the vjp also expects an nd.array, not a list. So we kill
+                # two birds with one stone here, but this is quite brittle and should be refactored later on.
+                if type(handles) == tuple:
+                    # handle nonbonded terms
+                    du_dps = vjp_fn(du_dqs[0])
+                    for du_dp, handler in zip(du_dps, handles):
+                        grads_and_handles.append((du_dp, type(handler)))
+                else:
+                    du_dp = vjp_fn(du_dqs)
+                    # bonded terms return a list, so we need to flatten it here
+                    grads_and_handles.append((du_dp[0], type(handles)))
+
+        return bonded_us, nonbonded_us, grads_and_handles
