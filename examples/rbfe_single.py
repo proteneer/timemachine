@@ -90,10 +90,11 @@ def run_epoch(ff, mol_a, mol_b, core):
             assert handle_type_lhs == handle_type_rhs # ffs are forked so the return handler isn't same object as that of ff
             grad = grad_lhs - grad_rhs
 
+            # (ytz): note the sign flips, definition of free energy is
             if handle_type_lhs not in combined_handle_and_grads:
-                combined_handle_and_grads[handle_type_lhs] = grad
+                combined_handle_and_grads[handle_type_lhs] = -grad
             else:
-                combined_handle_and_grads[handle_type_lhs] -= grad
+                combined_handle_and_grads[handle_type_lhs] += grad
 
         print(stage, "pred_dG:", dG_host)
 
