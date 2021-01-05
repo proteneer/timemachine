@@ -88,13 +88,11 @@ def run_epoch(ff, mol_a, mol_b, core):
         # use gradient information from the endpoints
         for (grad_lhs, handle_type_lhs), (grad_rhs, handle_type_rhs) in zip(ghs[0], ghs[-1]):
             assert handle_type_lhs == handle_type_rhs # ffs are forked so the return handler isn't same object as that of ff
-            grad = grad_lhs - grad_rhs
-
-            # (ytz): note the sign flips, definition of free energy is
+            grad = grad_rhs - grad_lhs
             if handle_type_lhs not in combined_handle_and_grads:
-                combined_handle_and_grads[handle_type_lhs] = -grad
+                combined_handle_and_grads[handle_type_lhs] = grad
             else:
-                combined_handle_and_grads[handle_type_lhs] += grad
+                combined_handle_and_grads[handle_type_lhs] -= grad
 
         print(stage, "pred_dG:", dG_host)
 
