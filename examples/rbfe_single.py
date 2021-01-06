@@ -101,7 +101,7 @@ def run_epoch(ff, mol_a, mol_b, core):
 
         pred = dG_host
 
-        label = -1.0
+        label = -2.0
 
         loss = np.abs(pred - label)
 
@@ -111,8 +111,8 @@ def run_epoch(ff, mol_a, mol_b, core):
 
         # (ytz): these should be made configurable later on.
         lrs = {
-            nonbonded.AM1CCCHandler: 0.004,
-            nonbonded.LennardJonesHandler: np.array([1e-5,1e-4])
+            nonbonded.AM1CCCHandler: 0.1,
+            nonbonded.LennardJonesHandler: np.array([0.003,0])
         }
 
         # update gradients in place.
