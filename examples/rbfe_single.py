@@ -15,6 +15,7 @@ from md import minimizer
 import functools
 
 from ff import Forcefield
+from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers import nonbonded
 
@@ -86,7 +87,6 @@ def run_epoch(ff, mol_a, mol_b, core):
 
         # use gradient information from the endpoints
         for (grad_lhs, handle_type_lhs), (grad_rhs, handle_type_rhs) in zip(ghs[0], ghs[-1]):
-            print(handle_type_lhs)
             assert handle_type_lhs == handle_type_rhs # ffs are forked so the return handler isn't same object as that of ff
             grad = grad_rhs - grad_lhs
             # complex - solvent
@@ -234,6 +234,12 @@ if __name__ == "__main__":
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
     forcefield = Forcefield(ff_handlers)
 
-    for _ in range(100):
+    for epoch in range(100):
 
         run_epoch(forcefield, mol_a, mol_b, core)
+
+        epoch_params = serialize_handlers(ff_handlers)
+
+        # write ff parameters after each epoch
+        with open("checkpoint_"+str(epoch)+".py", 'w') as fh:
+            fh.write(epoch_params)
