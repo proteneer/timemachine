@@ -106,7 +106,7 @@ def run_epoch(ff, mol_a, mol_b, core):
     dl_dpred = np.sign(pred - label)
 
     # (ytz): these should be made configurable later on.
-    lrs = {
+    gradient_clip_thresholds = {
         nonbonded.AM1CCCHandler: 0.05,
         nonbonded.LennardJonesHandler: np.array([0.001,0])
     }
@@ -115,8 +115,8 @@ def run_epoch(ff, mol_a, mol_b, core):
     # for handle_type, grad in combined_handle_and_grads.items():
 
     for handle_type, grad in combined_handle_and_grads.items():
-        if handle_type in lrs:
-            bounds = lrs[handle_type]
+        if handle_type in gradient_clip_thresholds:
+            bounds = gradient_clip_thresholds[handle_type]
             dl_dp = dl_dpred*grad # chain rule
             # lots of room to improve here.
             dl_dp = np.clip(dl_dp, -bounds, bounds) # clip gradients so they're well behaved

@@ -44,7 +44,7 @@ pytest -xsv tests/
 
 ## Theory
 
-The free energy difference of transforming B into A is defined as the ratio of two partition functions:
+The free energy difference of transforming B into A is defined as the log ratio of two partition functions:
 
 <img width="187" alt="Screen Shot 2020-09-29 at 10 25 29 AM" src="https://user-images.githubusercontent.com/2280724/94571588-28c29200-023e-11eb-970a-0c03fdbcf275.png">
 
