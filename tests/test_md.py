@@ -147,8 +147,8 @@ class TestContext(unittest.TestCase):
             ctxt.step(lamb)
             test_x_t = ctxt.get_x_t()
             test_v_t = ctxt.get_v_t()
-            test_du_dx_t = ctxt.get_du_dx_t()
-            test_u_t = ctxt.get_u_t()
+            test_du_dx_t = ctxt._get_du_dx_t_minus_1()
+            test_u_t = ctxt._get_u_t_minus_1()
 
             np.testing.assert_allclose(test_u_t, ref_all_us[step])
             np.testing.assert_allclose(test_du_dx_t, ref_all_du_dxs[step])
