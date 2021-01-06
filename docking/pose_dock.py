@@ -168,7 +168,7 @@ def pose_dock(
                     f"guest_name: {guest_name}\t"
                     f"step: {str(step).zfill(len(str(n_steps)))}\t"
                     f"lambda: {lamb:.2f}\t"
-                    f"energy: {ctxt.get_u_t():.2f}"
+                    f"energy: {ctxt._get_u_t_minus_1():.2f}"
                 )
                 forces = ctxt.get_du_dx_t()
                 norm_forces = np.linalg.norm(forces, axis=-1)
