@@ -119,13 +119,13 @@ int Context::num_atoms() const {
     return N_;
 }
 
-double Context::get_u_t() const {
+double Context::get_u_t_minus_1() const {
     double u;
     gpuErrchk(cudaMemcpy(&u, d_u_t_, 1*sizeof(*d_u_t_), cudaMemcpyDeviceToHost));
     return u;
 }
 
-void Context::get_du_dx_t(unsigned long long *out_buffer) const {
+void Context::get_du_dx_t_minus_1(unsigned long long *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_du_dx_t_, N_*3*sizeof(*out_buffer), cudaMemcpyDeviceToHost));
 }
 

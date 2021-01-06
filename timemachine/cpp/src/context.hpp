@@ -30,9 +30,9 @@ public:
 
     int num_atoms() const;
 
-    double get_u_t() const;
+    double get_u_t_minus_1() const;
 
-    void get_du_dx_t(unsigned long long *out_buffer) const;
+    void get_du_dx_t_minus_1(unsigned long long *out_buffer) const;
 
     void get_x_t(double *out_buffer) const;
 

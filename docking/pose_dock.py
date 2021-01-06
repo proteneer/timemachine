@@ -168,9 +168,9 @@ def pose_dock(
                     f"guest_name: {guest_name}\t"
                     f"step: {str(step).zfill(len(str(n_steps)))}\t"
                     f"lambda: {lamb:.2f}\t"
-                    f"energy: {ctxt.get_u_t():.2f}"
+                    f"energy: {ctxt._get_u_t_minus_1():.2f}"
                 )
-                forces = ctxt.get_du_dx_t()
+                forces = ctxt._get_du_dx_t_minus_1()
                 norm_forces = np.linalg.norm(forces, axis=-1)
                 if np.any(norm_forces > 10000):
                     print("Error: at least one force is too large to continue")

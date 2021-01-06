@@ -70,7 +70,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
         # dynamics
         for step in range(request.prod_steps):
             if step % 100 == 0:
-                u = ctxt.get_u_t()
+                u = ctxt._get_u_t_minus_1()
                 energies.append(u)
 
             if request.n_frames > 0:
