@@ -14,7 +14,7 @@
 
 #### Relative binding free energy
 
-* `rbfe_single.py` runs single-topology calculations for a single pair of ligands for the HIF2A benchmark system
+* `rbfe_single.py` runs single-topology calculations for a single pair of ligands for the HIF2A benchmark system, and adjusts the charges and Lennard-Jones sigma parameters to improve fit to reference values
 
 #### Testing overlap
 
