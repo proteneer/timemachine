@@ -111,8 +111,8 @@ def run_epoch(ff, mol_a, mol_b, core):
 
         # (ytz): these should be made configurable later on.
         lrs = {
-            nonbonded.AM1CCCHandler: 0.07,
-            nonbonded.LennardJonesHandler: np.array([0.003,0])
+            nonbonded.AM1CCCHandler: 0.05,
+            nonbonded.LennardJonesHandler: np.array([0.001,0])
         }
 
         # update gradients in place.
