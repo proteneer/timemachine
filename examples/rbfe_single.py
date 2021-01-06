@@ -40,11 +40,11 @@ def run_epoch(ff, mol_a, mol_b, core):
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
     solvent_box += np.eye(3)*0.1 # BFGS this later
 
-    # combined_handle_and_grads = {}
+    combined_handle_and_grads = {}
     stage_dGs = []
 
     for stage, host_system, host_coords, host_box, num_host_windows in [
-        # ("complex", complex_system, complex_coords, complex_box, cmd_args.num_complex_windows),
+        ("complex", complex_system, complex_coords, complex_box, cmd_args.num_complex_windows),
         ("solvent", solvent_system, solvent_coords, solvent_box, cmd_args.num_solvent_windows)]:
 
         A = int(.35*num_host_windows)
@@ -82,67 +82,87 @@ def run_epoch(ff, mol_a, mol_b, core):
             print("final", stage, "lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
 
         dG_host = np.trapz([x[0][0]+x[1][0] for x in results], lambda_schedule)
-        # stage_dGs.append(dG_host)
+        stage_dGs.append(dG_host)
 
         # use gradient information from the endpoints
-        # for (grad_lhs, handle_type_lhs), (grad_rhs, handle_type_rhs) in zip(ghs[0], ghs[-1]):
-        #     print(handle_type_lhs)
-        #     assert handle_type_lhs == handle_type_rhs # ffs are forked so the return handler isn't same object as that of ff
-        #     grad = grad_rhs - grad_lhs
-            # complex - solvent
-            # if handle_type_lhs not in combined_handle_and_grads:
-                # combined_handle_and_grads[handle_type_lhs] = grad
-            # else:
-                # combined_handle_and_grads[handle_type_lhs] -= grad
-
-        print(stage, "pred_dG:", dG_host)
-
-        # pred = stage_dGs[0] - stage_dGs[1]
-
-        pred = dG_host
-
-        label = -4.0
-
-        loss = np.abs(pred - label)
-
-        print("loss", loss, "pred", pred, "label", label)
-
-        dl_dpred = np.sign(pred - label)
-
-        # (ytz): these should be made configurable later on.
-        lrs = {
-            nonbonded.AM1CCCHandler: 0.05,
-            nonbonded.LennardJonesHandler: np.array([0.001,0])
-        }
-
-        # update gradients in place.
-        # for handle_type, grad in combined_handle_and_grads.items():
-
         for (grad_lhs, handle_type_lhs), (grad_rhs, handle_type_rhs) in zip(ghs[0], ghs[-1]):
             print(handle_type_lhs)
             assert handle_type_lhs == handle_type_rhs # ffs are forked so the return handler isn't same object as that of ff
             grad = grad_rhs - grad_lhs
-            handle_type = handle_type_lhs
-            if handle_type in lrs:
-                bounds = lrs[handle_type]
-                dl_dp = dl_dpred*grad # chain rule
-                # lots of room to improve here.
-                dl_dp = np.clip(dl_dp, -bounds, bounds) # clip gradients so they're well behaved
+            # complex - solvent
+            if handle_type_lhs not in combined_handle_and_grads:
+                combined_handle_and_grads[handle_type_lhs] = grad
+            else:
+                combined_handle_and_grads[handle_type_lhs] -= grad
 
-                if handle_type == nonbonded.AM1CCCHandler:
-                    # sanity check as we have other charge methods that exist
-                    assert handle_type == type(ff.q_handle)
-                    ff.q_handle.params -= dl_dp
+        print(stage, "pred_dG:", dG_host)
 
-                    # useful for debugging to dump out the grads
-                    for smirks, dp in zip(ff.q_handle.smirks, dl_dp):
-                        if np.any(dp) > 0:
-                            print(smirks, dp)
+    pred = stage_dGs[0] - stage_dGs[1]
 
-                elif handle_type == nonbonded.LennardJonesHandler:
-                    # sanity check again, even though we don't have other lj methods currently
-                    assert handle_type == type(ff.lj_handle)
-                    ff.lj_handle.params -= dl_dp
+    loss = np.abs(pred - label)
+
+    print("loss", loss, "pred", pred, "label", label)
+
+    dl_dpred = np.sign(pred - label)
+
+    # (ytz): these should be made configurable later on.
+    lrs = {
+        nonbonded.AM1CCCHandler: 0.05,
+        nonbonded.LennardJonesHandler: np.array([0.001,0])
+    }
+
+    # update gradients in place.
+    # for handle_type, grad in combined_handle_and_grads.items():
+
+    for handle_type, grad in combined_handle_and_grads.items():
+        if handle_type in lrs:
+            bounds = lrs[handle_type]
+            dl_dp = dl_dpred*grad # chain rule
+            # lots of room to improve here.
+            dl_dp = np.clip(dl_dp, -bounds, bounds) # clip gradients so they're well behaved
+
+
+            if handle_type == nonbonded.AM1CCCHandler:
+                # sanity check as we have other charge methods that exist
+                assert handle_type == type(ff.q_handle)
+                ff.q_handle.params -= dl_dp
+
+                # useful for debugging to dump out the grads
+                # for smirks, dp in zip(ff.q_handle.smirks, dl_dp):
+                    # if np.any(dp) > 0:
+                        # print(smirks, dp)
+
+            elif handle_type == nonbonded.LennardJonesHandler:
+                # sanity check again, even though we don't have other lj methods currently
+                assert handle_type == type(ff.lj_handle)
+                ff.lj_handle.params -= dl_dp
+
+
+    # for (grad_lhs, handle_type_lhs), (grad_rhs, handle_type_rhs) in zip(ghs[0], ghs[-1]):
+    #     print(handle_type_lhs)
+    #     assert handle_type_lhs == handle_type_rhs # ffs are forked so the return handler isn't same object as that of ff
+    #     grad = grad_rhs - grad_lhs
+    #     handle_type = handle_type_lhs
+    #     if handle_type in lrs:
+    #         bounds = lrs[handle_type]
+    #         dl_dp = dl_dpred*grad # chain rule
+    #         # lots of room to improve here.
+    #         dl_dp = np.clip(dl_dp, -bounds, bounds) # clip gradients so they're well behaved
+
+    #         if handle_type == nonbonded.AM1CCCHandler:
+    #             # sanity check as we have other charge methods that exist
+    #             assert handle_type == type(ff.q_handle)
+    #             ff.q_handle.params -= dl_dp
+
+    #             # useful for debugging to dump out the grads
+    #             # for smirks, dp in zip(ff.q_handle.smirks, dl_dp):
+    #                 # if np.any(dp) > 0:
+    #                     # print(smirks, dp)
+
+    #         elif handle_type == nonbonded.LennardJonesHandler:
+    #             # sanity check again, even though we don't have other lj methods currently
+    #             assert handle_type == type(ff.lj_handle)
+    #             ff.lj_handle.params -= dl_dp
 
     # pred = stage_dGs[0] - stage_dGs[1]
 
@@ -154,8 +174,8 @@ def run_epoch(ff, mol_a, mol_b, core):
 
     # # (ytz): these should be made configurable later on.
     # lrs = {
-    #     nonbonded.AM1CCCHandler: 0.004,
-    #     nonbonded.LennardJonesHandler: np.array([1e-5,1e-4])
+    #     nonbonded.AM1CCCHandler: 0.05,
+    #     nonbonded.LennardJonesHandler: np.array([0.001,0])
     # }
 
     # # update gradients in place.
