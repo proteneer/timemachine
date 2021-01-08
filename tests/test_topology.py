@@ -125,9 +125,6 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         np.testing.assert_array_equal(x_b[6:], x_avg[7:]) # OH
 
         res = st.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
-        # print(res)
-
-        # assert 0
 
         params, vjp_fn, pot_c = jax.vjp(
             st.parameterize_nonbonded,
@@ -266,7 +263,6 @@ class TestFactorizability(unittest.TestCase):
 
         with self.assertRaises(topology.AtomMappingError):
             st = topology.SingleTopology(mol_a, mol_b, core, ff)
-
 
     def test_good_factor(self):
         # test a good mapping
