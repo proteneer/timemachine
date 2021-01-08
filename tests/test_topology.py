@@ -124,9 +124,14 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         np.testing.assert_array_equal(x_a[6], x_avg[6]) # H
         np.testing.assert_array_equal(x_b[6:], x_avg[7:]) # OH
 
+        res = st.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
+        # print(res)
+
+        # assert 0
+
         params, vjp_fn, pot_c = jax.vjp(
             st.parameterize_nonbonded,
-            self.ff.q_handle.params, 
+            self.ff.q_handle.params,
             self.ff.lj_handle.params,
             has_aux=True
         )
@@ -134,7 +139,8 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         vjp_fn(np.random.rand(*params.shape))
 
         assert params.shape == (2*st.get_num_atoms(), 3) # qlj
-        
+
+        # test interpolation of parameters
         bt_a = topology.BaseTopology(self.mol_a, self.ff)
         qlj_a, pot_a = bt_a.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
         bt_b = topology.BaseTopology(self.mol_b, self.ff)
@@ -142,9 +148,83 @@ class BenzenePhenolSparseTest(unittest.TestCase):
 
         qlj_c = np.mean([params[:len(params)//2], params[len(params)//2:]], axis=0)
 
-        np.testing.assert_array_equal((qlj_a[:6] + qlj_b[:6])/2, qlj_c[:6])
-        np.testing.assert_array_equal(qlj_a[6], qlj_c[6]) # H
-        np.testing.assert_array_equal(qlj_b[6:], qlj_c[7:]) # OH
+        params_src = params[:len(params)//2]
+        params_dst = params[len(params)//2:]
+
+        # core testing
+        np.testing.assert_array_equal(qlj_a[:6], params_src[:6])
+        np.testing.assert_array_equal(qlj_b[:6], params_dst[:6])
+
+
+        # test r-group in A
+        np.testing.assert_array_equal(qlj_a[6], params_src[6])
+        np.testing.assert_array_equal(np.array([0, qlj_a[6][1], 0]), params_dst[6])
+
+        # test r-group in B
+        np.testing.assert_array_equal(qlj_b[6:], params_dst[7:])
+        np.testing.assert_array_equal(np.array([
+            [0, qlj_b[6][1], 0],
+            [0, qlj_b[7][1], 0]]), params_src[7:]
+        )
+
+
+    def test_nonbonded_optimal_map(self):
+
+        # map benzene H to phenol O, leaving a daggling phenol H
+        core = np.array([
+            [0, 0],
+            [1, 1],
+            [2, 2],
+            [3, 3],
+            [4, 4],
+            [5, 5],
+            [6, 6]
+        ], dtype=np.int32)
+
+        st = topology.SingleTopology(self.mol_a, self.mol_b, core, self.ff)
+        x_a = get_romol_conf(self.mol_a)
+        x_b = get_romol_conf(self.mol_b)
+
+        # test interpolation of coordinates.
+        x_src, x_dst = st.interpolate_params(x_a, x_b)
+        x_avg = np.mean([x_src, x_dst], axis=0)
+
+        assert x_avg.shape == (st.get_num_atoms(), 3)
+
+        np.testing.assert_array_equal((x_a[:7] + x_b[:7])/2, x_avg[:7]) # core parts
+        np.testing.assert_array_equal(x_b[-1], x_avg[7]) # dangling H
+
+        params, vjp_fn, pot_c = jax.vjp(
+            st.parameterize_nonbonded,
+            self.ff.q_handle.params,
+            self.ff.lj_handle.params,
+            has_aux=True
+        )
+
+        vjp_fn(np.random.rand(*params.shape))
+
+        assert params.shape == (2*st.get_num_atoms(), 3) # qlj
+
+        # test interpolation of parameters
+        bt_a = topology.BaseTopology(self.mol_a, self.ff)
+        qlj_a, pot_a = bt_a.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
+        bt_b = topology.BaseTopology(self.mol_b, self.ff)
+        qlj_b, pot_b = bt_b.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
+
+        qlj_c = np.mean([params[:len(params)//2], params[len(params)//2:]], axis=0)
+
+        params_src = params[:len(params)//2]
+        params_dst = params[len(params)//2:]
+
+        # core testing
+        np.testing.assert_array_equal(qlj_a[:7], params_src[:7])
+        np.testing.assert_array_equal(qlj_b[:7], params_dst[:7])
+
+        # r-group atoms in A are all part of the core. so no testing is needed.
+
+        # test r-group in B
+        np.testing.assert_array_equal(qlj_b[7], params_dst[8])
+        np.testing.assert_array_equal(np.array([0, qlj_b[7][1], 0]), params_src[8])
 
 
 class TestFactorizability(unittest.TestCase):
@@ -186,6 +266,7 @@ class TestFactorizability(unittest.TestCase):
 
         with self.assertRaises(topology.AtomMappingError):
             st = topology.SingleTopology(mol_a, mol_b, core, ff)
+
 
     def test_good_factor(self):
         # test a good mapping
