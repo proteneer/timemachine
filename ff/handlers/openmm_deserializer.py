@@ -191,6 +191,10 @@ def deserialize_system(
                 lj_params
             ], axis=1)
 
+            # optimizations
+            nb_params[:, 1] = nb_params[:, 1]/2
+            nb_params[:, 2] = np.sqrt(nb_params[:, 2])
+
             beta = 2.0 # erfc correction
 
             # use the same scale factors for electrostatics and lj

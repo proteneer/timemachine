@@ -15,7 +15,6 @@ else(BUILD_TEST)
     configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point_prod.hpp ${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point.hpp COPYONLY)
 endif(BUILD_TEST)
 
-# -rdc=true), as well as linking in of the device cudart libraries (-lcudadevrt
 string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo -rdc=true")
 message(${CMAKE_CUDA_FLAGS})
 

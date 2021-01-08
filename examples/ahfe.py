@@ -151,14 +151,14 @@ for final_lamb in np.linspace(0, 1, 8):
         ctxt.step(lamb)
 
 
-    print("insertion energy", ctxt._get_u_t_minus_1())
+    # print("insertion energy", ctxt._get_u_t_minus_1())
 
     # note: these 5000 steps are "equilibration", before we attach a reporter /
     #   "observable" to the context and start running "production"
     for _ in range(5000):
         ctxt.step(final_lamb)
 
-    print("equilibrium energy", ctxt._get_u_t_minus_1())
+    # print("equilibrium energy", ctxt._get_u_t_minus_1())
 
     # TODO: what was the second argument -- reporting interval in steps?
     du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 5)
@@ -174,7 +174,7 @@ for final_lamb in np.linspace(0, 1, 8):
     for _ in range(10000):
         ctxt.step(final_lamb)
 
-    print("final energy", ctxt._get_u_t_minus_1())
+    # print("final energy", ctxt._get_u_t_minus_1())
 
     # print vector jacobian products back into the forcefield derivative
     for du_dp_obs, vjp_and_handles in zip(du_dps, final_vjp_and_handles):

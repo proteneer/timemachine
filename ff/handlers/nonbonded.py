@@ -169,8 +169,10 @@ class LennardJonesHandler(NonbondedHandler):
         param_idxs = generate_nonbonded_idxs(mol, smirks)
         params = params[param_idxs]
         sigmas = params[:, 0]
-        epsilons = jnp.power(params[:, 1], 2) # resolves a super annoying singularity
-        return jnp.stack([sigmas, epsilons], axis=1)
+        epsilons = params[:, 1]
+        # the raw parameters already in sqrt form.
+        # sigmas need to be divided by two
+        return jnp.stack([sigmas/2, epsilons], axis=1)
 
 class GBSAHandler(NonbondedHandler):
     pass

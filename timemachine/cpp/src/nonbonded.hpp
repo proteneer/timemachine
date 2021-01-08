@@ -51,6 +51,8 @@ private:
     unsigned int *d_sort_storage_;
     size_t d_sort_storage_bytes_;
 
+    bool compute_4d_;
+
     void hilbert_sort(
         const double *d_x,
         const double *d_box,

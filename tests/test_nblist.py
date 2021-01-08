@@ -107,12 +107,15 @@ def test_neighborlist():
 
             cutoff = 1.0
 
-            # for r in range(10):
             test_ixn_list = nblist.get_nblist(coords, box, cutoff)
 
+            # for each tile, print list of interacting atoms
+            # print(len(test_ixn_list))
 
-            # assert 1
-            # return
+            # compute the sparsity of the tile
+
+
+            # assert 0
 
             ref_ixn_list = []
 

@@ -53,37 +53,38 @@ class TestLambdaPotential(GradientTest):
                 for lamb in [0.0, 0.2, 1.5]:
                     for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
-                            # E = 0 # DEBUG!
-                            charge_params, ref_potential, test_potential = prepare_water_system(
-                                coords,
-                                lambda_plane_idxs,
-                                lambda_offset_idxs,
-                                p_scale=1.0,
-                                cutoff=cutoff
-                            )
+                        # E = 0 # DEBUG!
+                        params, ref_potential, test_potential = prepare_water_system(
+                            coords,
+                            lambda_plane_idxs,
+                            lambda_offset_idxs,
+                            p_scale=1.0,
+                            cutoff=cutoff
+                        )
 
-                            print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
+                        print("multiplier", multiplier, "lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape ,"offset",offset)
 
-                            ref_potential = functools.partial(
-                                lambda_potential,
-                                multiplier=multiplier,
-                                offset=offset,
-                                u_fn=ref_potential)
+                        ref_potential = functools.partial(
+                            lambda_potential,
+                            multiplier=multiplier,
+                            offset=offset,
+                            u_fn=ref_potential)
 
-                            test_potential = potentials.LambdaPotential(
-                                test_potential,
-                                N,charge_params.size,
-                                multiplier,
-                                offset,
-                            )
+                        test_potential = potentials.LambdaPotential(
+                            test_potential,
+                            N,
+                            params.size,
+                            multiplier,
+                            offset,
+                        )
 
-                            self.compare_forces(
-                                coords,
-                                charge_params,
-                                box,
-                                lamb,
-                                ref_potential,
-                                test_potential,
-                                rtol,
-                                precision=precision
-                            )
+                        self.compare_forces(
+                            coords,
+                            params,
+                            box,
+                            lamb,
+                            ref_potential,
+                            test_potential,
+                            rtol,
+                            precision=precision
+                        )
