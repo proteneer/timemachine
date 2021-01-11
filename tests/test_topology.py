@@ -143,10 +143,15 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         bt_b = topology.BaseTopology(self.mol_b, self.ff)
         qlj_b, pot_b = bt_b.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
 
-        qlj_c = np.mean([params[:len(params)//2], params[len(params)//2:]], axis=0)
+        n_base_params = len(params//2) # params is actually interpolated, so its 2x number of base params
 
-        params_src = params[:len(params)//2]
-        params_dst = params[len(params)//2:]
+        qlj_c = np.mean([
+            params[:n_base_params],
+            params[n_base_params:]],
+        axis=0)
+
+        params_src = params[:n_base_params]
+        params_dst = params[n_base_params:]
 
         # core testing
         np.testing.assert_array_equal(qlj_a[:6], params_src[:6])
@@ -166,8 +171,10 @@ class BenzenePhenolSparseTest(unittest.TestCase):
 
 
     def test_nonbonded_optimal_map(self):
+        """Similar test as test_nonbonbed, ie. assert that coordinates and nonbonded parameters
+        can be averaged in benzene -> phenol transformation. However, use the maximal mapping possible."""
 
-        # map benzene H to phenol O, leaving a daggling phenol H
+        # map benzene H to phenol O, leaving a dangling phenol H
         core = np.array([
             [0, 0],
             [1, 1],
@@ -208,10 +215,12 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         bt_b = topology.BaseTopology(self.mol_b, self.ff)
         qlj_b, pot_b = bt_b.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
 
-        qlj_c = np.mean([params[:len(params)//2], params[len(params)//2:]], axis=0)
+        n_base_params = len(params//2) # params is actually interpolated, so its 2x number of base params
 
-        params_src = params[:len(params)//2]
-        params_dst = params[len(params)//2:]
+        qlj_c = np.mean([params[:n_base_params], params[n_base_params:]], axis=0)
+
+        params_src = params[:n_base_params]
+        params_dst = params[n_base_params:]
 
         # core testing
         np.testing.assert_array_equal(qlj_a[:7], params_src[:7])
