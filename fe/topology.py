@@ -438,8 +438,7 @@ class SingleTopology():
         """
         Interpolate two sets of per-particle parameters.
 
-        This can be used to interpolate nonbonded parameters,
-        coordinates, etc.
+        This can be used to interpolate masses, coordinates, etc.
 
         Parameters
         ----------
@@ -470,6 +469,54 @@ class SingleTopology():
 
         return jnp.array(src_params), jnp.array(dst_params)
 
+    def interpolate_nonbonded_params(self, params_a, params_b):
+        """
+        Special interpolation method for nonbonded parameters. For R-group atoms,
+        their charges and vdw eps parameters are scaled to zero. Vdw sigma
+        remains unchanged. This method is needed in order to ensure that R-groups
+        that branch from multiple distinct attachment points are fully non-interacting
+        to allow for factorization of the partition function. In order words, this function
+        implements essentially the non-softcore part of parameter interpolation.
+
+        Parameters
+        ----------
+        params_a: np.ndarray, shape [N_A, 3]
+            Nonbonded parameters for the mol_a
+
+        params_b: np.ndarray, shape [N_B, 3]
+            Nonbonded parameters for the mol_b
+
+        Returns
+        -------
+        tuple: (src, dst)
+            Two np.ndarrays each of shape [N_C, ...]
+
+        """
+
+        src_params = [None]*self.get_num_atoms()
+        dst_params = [None]*self.get_num_atoms()
+
+        # src -> dst is turning off the parameter
+        for a_idx, c_idx in enumerate(self.a_to_c):
+            params = params_a[a_idx]
+            src_params[c_idx] = params
+            if self.c_flags[c_idx] != 0:
+                assert self.c_flags[c_idx] == 1
+                dst_params[c_idx] = jnp.array([0, params[1], 0]) # q, sig, eps
+
+        # b is initially decoupled
+        for b_idx, c_idx in enumerate(self.b_to_c):
+            params = params_b[b_idx]
+            dst_params[c_idx] = params
+            # this will already be processed when looping over a
+            if self.c_flags[c_idx] == 0:
+                assert src_params[c_idx] is not None
+            else:
+                assert self.c_flags[c_idx] == 2
+                src_params[c_idx] = jnp.array([0, params[1], 0]) # q, sig, eps
+
+        return jnp.array(src_params), jnp.array(dst_params)
+
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         # Nonbonded potentials combine through parameter interpolation, not energy interpolation.
@@ -490,7 +537,7 @@ class SingleTopology():
             jnp.reshape(lj_params_b, (-1, 2))
         ], axis=1)
 
-        qlj_params_src, qlj_params_dst = self.interpolate_params(qlj_params_a, qlj_params_b)
+        qlj_params_src, qlj_params_dst = self.interpolate_nonbonded_params(qlj_params_a, qlj_params_b)
         qlj_params = jnp.concatenate([qlj_params_src, qlj_params_dst])
 
         exclusion_idxs_a, scale_factors_a = nonbonded.generate_exclusion_idxs(
