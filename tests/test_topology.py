@@ -143,7 +143,7 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         bt_b = topology.BaseTopology(self.mol_b, self.ff)
         qlj_b, pot_b = bt_b.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
 
-        n_base_params = len(params//2) # params is actually interpolated, so its 2x number of base params
+        n_base_params = len(params)//2 # params is actually interpolated, so its 2x number of base params
 
         qlj_c = np.mean([
             params[:n_base_params],
@@ -215,7 +215,7 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         bt_b = topology.BaseTopology(self.mol_b, self.ff)
         qlj_b, pot_b = bt_b.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
 
-        n_base_params = len(params//2) # params is actually interpolated, so its 2x number of base params
+        n_base_params = len(params)//2 # params is actually interpolated, so its 2x number of base params
 
         qlj_c = np.mean([params[:n_base_params], params[n_base_params:]], axis=0)
 
