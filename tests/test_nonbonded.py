@@ -1,3 +1,8 @@
+# (ytz): check test and run benchmark with pytest:
+# pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_dhfr && nvprof pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_benchmark
+
+import copy
+
 import functools
 import unittest
 import scipy.linalg
@@ -10,7 +15,7 @@ import jax.numpy as jnp
 import functools
 
 from common import GradientTest
-from common import prepare_nb_system, prepare_water_system
+from common import prepare_nb_system, prepare_water_system, prepare_reference_nonbonded
 
 from timemachine.potentials import bonded, nonbonded, gbsa
 from timemachine.lib import potentials
@@ -18,6 +23,10 @@ from timemachine.lib import potentials
 from training import water_box
 
 from hilbertcurve.hilbertcurve import HilbertCurve
+from fe.utils import to_md_units
+
+from ff.handlers import openmm_deserializer
+from simtk.openmm import app
 
 np.set_printoptions(linewidth=500)
 
@@ -131,6 +140,167 @@ class TestNonbonded(GradientTest):
                 rtol,
                 precision=precision
             )
+
+
+    def test_dhfr(self):
+
+        pdb_path = 'tests/data/5dfr_solv_equil.pdb'
+        host_pdb = app.PDBFile(pdb_path)
+        protein_ff = app.ForceField('amber99sbildn.xml', 'tip3p.xml')
+
+        host_system = protein_ff.createSystem(
+                host_pdb.topology,
+                nonbondedMethod=app.NoCutoff,
+                constraints=None,
+                rigidWater=False
+            )
+
+        host_coords = host_pdb.positions
+        box = host_pdb.topology.getPeriodicBoxVectors()
+        box = np.asarray(box/box.unit)
+
+        host_fns, host_masses = openmm_deserializer.deserialize_system(
+            host_system,
+            cutoff=1.0
+        )
+
+        for f in host_fns:
+            if isinstance(f, potentials.Nonbonded):
+                nonbonded_fn = f
+
+        host_conf = []
+        for x,y,z in host_coords:
+            host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+        host_conf = np.array(host_conf)
+
+        beta = 2.0
+        cutoff = 1.1
+        lamb = 0.1
+
+        max_N = host_conf.shape[0]
+
+        for N in [33, 65, 231, 1050, 4080]:
+
+            print("N", N)
+
+            test_conf = host_conf[:N]
+
+           # process exclusions
+            test_exclusions = []
+            test_scales = []
+            for (i, j), (sa, sb) in zip(nonbonded_fn.get_exclusion_idxs(), nonbonded_fn.get_scale_factors()):
+                if i < N and j < N:
+                    test_exclusions.append((i,j))
+                    test_scales.append((sa, sb))
+            test_exclusions = np.array(test_exclusions, dtype=np.int32)
+            test_scales = np.array(test_scales, dtype=np.float64)
+            test_params = nonbonded_fn.params[:N, :]
+
+            test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+            test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+
+            test_nonbonded_fn = potentials.Nonbonded(
+                test_exclusions,
+                test_scales,
+                test_lambda_plane_idxs,
+                test_lambda_offset_idxs,
+                beta,
+                cutoff
+            )
+
+            ref_nonbonded_fn = prepare_reference_nonbonded(
+                test_params,
+                test_exclusions,
+                test_scales,
+                test_lambda_plane_idxs,
+                test_lambda_offset_idxs,
+                beta,
+                cutoff
+            )
+
+            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+
+                self.compare_forces(
+                    test_conf,
+                    test_params,
+                    box,
+                    lamb,
+                    ref_nonbonded_fn,
+                    test_nonbonded_fn,
+                    rtol,
+                    precision=precision
+                )
+
+    # @unittest.skip("slow")
+    def test_benchmark(self):
+
+        pdb_path = 'tests/data/5dfr_solv_equil.pdb'
+        host_pdb = app.PDBFile(pdb_path)
+        protein_ff = app.ForceField('amber99sbildn.xml', 'tip3p.xml')
+
+        host_system = protein_ff.createSystem(
+                host_pdb.topology,
+                nonbondedMethod=app.NoCutoff,
+                constraints=None,
+                rigidWater=False
+            )
+
+        host_coords = host_pdb.positions
+        box = host_pdb.topology.getPeriodicBoxVectors()
+        box = np.asarray(box/box.unit)
+
+        host_fns, host_masses = openmm_deserializer.deserialize_system(
+            host_system,
+            cutoff=1.0
+        )
+
+        for f in host_fns:
+            if isinstance(f, potentials.Nonbonded):
+                nonbonded_fn = f
+
+        host_conf = []
+        for x,y,z in host_coords:
+            host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+        host_conf = np.array(host_conf)
+
+        beta = 2.0
+        cutoff = 1.1
+        lamb = 0.0
+
+        N = host_conf.shape[0]
+
+        test_conf = host_conf[:N]
+
+       # process exclusions
+        test_exclusions = []
+        test_scales = []
+        for (i, j), (sa, sb) in zip(nonbonded_fn.get_exclusion_idxs(), nonbonded_fn.get_scale_factors()):
+            if i < N and j < N:
+                test_exclusions.append((i,j))
+                test_scales.append((sa, sb))
+        test_exclusions = np.array(test_exclusions, dtype=np.int32)
+        test_scales = np.array(test_scales, dtype=np.float64)
+        test_params = nonbonded_fn.params[:N, :]
+
+        test_lambda_plane_idxs = np.zeros(N, dtype=np.int32)
+        test_lambda_offset_idxs = np.zeros(N, dtype=np.int32)
+
+        test_nonbonded_fn = potentials.Nonbonded(
+            test_exclusions,
+            test_scales,
+            test_lambda_plane_idxs,
+            test_lambda_offset_idxs,
+            beta,
+            cutoff
+        )
+
+        precision = np.float32
+
+        impl = test_nonbonded_fn.unbound_impl(precision)
+
+        for _ in range(100):
+
+            impl.execute_du_dx(test_conf, test_params, box, lamb)
 
     def test_nonbonded(self):
 

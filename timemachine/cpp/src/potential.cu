@@ -77,6 +77,60 @@ void Potential::execute_host(
 
 };
 
+
+
+void Potential::execute_host_du_dx(
+    const int N,
+    const int P,
+    const double *h_x, // [N,3]
+    const double *h_p, // [P,]
+    const double *h_box, // [3, 3]
+    const double lambda, // [1]
+    unsigned long long *h_du_dx) {
+
+    double *d_x;
+    double *d_p;
+    double *d_box;
+
+    const int D = 3;
+
+    gpuErrchk(cudaMalloc(&d_x, N*D*sizeof(double)));
+    gpuErrchk(cudaMemcpy(d_x, h_x, N*D*sizeof(double), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMalloc(&d_p, P*sizeof(double)));
+    gpuErrchk(cudaMemcpy(d_p, h_p, P*sizeof(double), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMalloc(&d_box, D*D*sizeof(double)));
+    gpuErrchk(cudaMemcpy(d_box, h_box, D*D*sizeof(double), cudaMemcpyHostToDevice));
+
+    unsigned long long *d_du_dx; // du/dx
+
+    // very important that these are initialized to zero since the kernels themselves just accumulate
+    gpuErrchk(cudaMalloc(&d_du_dx, N*D*sizeof(unsigned long long)));
+    gpuErrchk(cudaMemset(d_du_dx, 0, N*D*sizeof(unsigned long long)));
+
+    this->execute_device(
+        N,
+        P,
+        d_x, 
+        d_p,
+        d_box,
+        lambda,
+        d_du_dx,
+        nullptr,
+        nullptr,
+        nullptr,
+        static_cast<cudaStream_t>(0)
+    );
+
+    gpuErrchk(cudaMemcpy(h_du_dx, d_du_dx, N*D*sizeof(*h_du_dx), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaFree(d_du_dx));
+    gpuErrchk(cudaFree(d_x));
+    gpuErrchk(cudaFree(d_p));
+    gpuErrchk(cudaFree(d_box));
+
+};
+
 // void Gradient::execute_lambda_jvp_host(
 //     const int N,
 //     const double *h_in_coords_primals,

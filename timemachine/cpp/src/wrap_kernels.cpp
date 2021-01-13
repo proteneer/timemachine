@@ -236,13 +236,13 @@ void declare_context(py::module &m) {
             py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
         }
         return py_du_dx;
-    })
-    .def("_get_u_t_minus_1", [](timemachine::Context &ctxt) -> double {
-        PyErr_WarnEx(PyExc_DeprecationWarning, 
-            "_get_u_t_minus_1() should only be used for testing. It will be removed in a future release.", 
-            1);
-        return ctxt.get_u_t_minus_1();
     });
+    // .def("_get_u_t_minus_1", [](timemachine::Context &ctxt) -> double {
+        // PyErr_WarnEx(PyExc_DeprecationWarning, 
+            // "_get_u_t_minus_1() should only be used for testing. It will be removed in a future release.", 
+            // 1);
+        // return ctxt.get_u_t_minus_1();
+    // });
 }
 
 void declare_observable(py::module &m) {
@@ -425,6 +425,35 @@ void declare_potential(py::module &m) {
             }
 
             return py::make_tuple(py_du_dx, py_du_dp, du_dl, u);
+    })
+    .def("execute_du_dx", [](timemachine::Potential &pot,
+        const py::array_t<double, py::array::c_style> &coords,
+        const py::array_t<double, py::array::c_style> &params,
+        const py::array_t<double, py::array::c_style> &box,
+        double lambda) -> py::array_t<double, py::array::c_style> {
+
+            const long unsigned int N = coords.shape()[0];
+            const long unsigned int D = coords.shape()[1];
+            const long unsigned int P = params.size();
+
+            std::vector<unsigned long long> du_dx(N*D);
+
+            pot.execute_host_du_dx(
+                N,
+                P,
+                coords.data(),
+                params.data(),
+                box.data(),
+                lambda,
+                &du_dx[0]
+            );
+
+            py::array_t<double, py::array::c_style> py_du_dx({N, D});
+            for(int i=0; i < du_dx.size(); i++) {
+                py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+            }
+
+            return py_du_dx;
     });
 
 }

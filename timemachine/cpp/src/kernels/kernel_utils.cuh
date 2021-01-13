@@ -68,15 +68,6 @@ __device__ __forceinline__ double real_exp(const double x) {
     return exp(x);
 }
 
-__device__ __forceinline__ float real_erfc(const float x) {
-    return erfcf(x);
-}
-
-__device__ __forceinline__ double real_erfc(const double x) {
-    return erfc(x);
-}
-
-
 template<typename RealType, int D>
 inline __device__ RealType fast_vec_rnorm(const RealType v[D]);
 

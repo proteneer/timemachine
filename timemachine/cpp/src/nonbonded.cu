@@ -29,7 +29,20 @@ Nonbonded<RealType>::Nonbonded(
     nblist_(lambda_offset_idxs.size()),
     beta_(beta),
     d_sort_storage_(nullptr),
-    d_sort_storage_bytes_(0) {
+    d_sort_storage_bytes_(0),
+    compute_4d_(false) {
+
+    for(auto x : lambda_plane_idxs) {
+        if(x != 0) {
+            compute_4d_ = true;
+        }
+    }
+
+    for(auto x : lambda_offset_idxs) {
+        if(x != 0) {
+            compute_4d_ = true;
+        }
+    }
 
     if(lambda_offset_idxs.size() != N_) {
         throw std::runtime_error("lambda offset idxs need to have size N");
@@ -245,6 +258,8 @@ void Nonbonded<RealType>::execute_device(
     );
 
     gpuErrchk(cudaMemcpyAsync(p_ixn_count_, nblist_.get_ixn_count(), 1*sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
+
+
     // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
     // reset buffers and sorted accumulators
     if(d_du_dx) {
@@ -264,24 +279,67 @@ void Nonbonded<RealType>::execute_device(
 
     gpuErrchk(cudaStreamSynchronize(stream));
 
+    // std::cout << "get_ixn_count(): " << *p_ixn_count_ << std::endl;
 
-    k_nonbonded<RealType><<<p_ixn_count_[0], 32, 0, stream>>>(
-        N,
-        d_sorted_x_,
-        d_sorted_p_,
-        d_box,
-        lambda,
-        d_sorted_lambda_plane_idxs_,
-        d_sorted_lambda_offset_idxs_,
-        beta_,
-        cutoff_,
-        nblist_.get_ixn_tiles(),
-        nblist_.get_ixn_atoms(),
-        d_du_dx ? d_sorted_du_dx_ : nullptr,
-        d_du_dp ? d_sorted_du_dp_ : nullptr,
-        d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
-        d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
-    );
+    if(d_du_dx && !d_du_dp && !d_du_dl && !d_u) {
+
+        // split tiles into 3D and 4D
+
+        // std::cout << "force only du_dx" << std::endl;
+        // templatized, so we need to generate specializations at compile time. Eventually
+        // this whole kernel will be replaced by a JIT'd version
+        if(compute_4d_) {
+            k_nonbonded_du_dx<RealType, true><<<p_ixn_count_[0], 32, 0, stream>>>(
+                N,
+                d_sorted_x_,
+                d_sorted_p_,
+                d_box,
+                lambda,
+                d_sorted_lambda_plane_idxs_,
+                d_sorted_lambda_offset_idxs_,
+                beta_,
+                cutoff_,
+                nblist_.get_ixn_tiles(),
+                nblist_.get_ixn_atoms(),
+                d_du_dx ? d_sorted_du_dx_ : nullptr
+            );
+        } else {
+            k_nonbonded_du_dx<RealType, false><<<p_ixn_count_[0], 32, 0, stream>>>(
+                N,
+                d_sorted_x_,
+                d_sorted_p_,
+                d_box,
+                lambda,
+                d_sorted_lambda_plane_idxs_,
+                d_sorted_lambda_offset_idxs_,
+                beta_,
+                cutoff_,
+                nblist_.get_ixn_tiles(),
+                nblist_.get_ixn_atoms(),
+                d_du_dx ? d_sorted_du_dx_ : nullptr
+            );
+        }
+
+
+    } else {
+        k_nonbonded<RealType><<<p_ixn_count_[0], 32, 0, stream>>>(
+            N,
+            d_sorted_x_,
+            d_sorted_p_,
+            d_box,
+            lambda,
+            d_sorted_lambda_plane_idxs_,
+            d_sorted_lambda_offset_idxs_,
+            beta_,
+            cutoff_,
+            nblist_.get_ixn_tiles(),
+            nblist_.get_ixn_atoms(),
+            d_du_dx ? d_sorted_du_dx_ : nullptr,
+            d_du_dp ? d_sorted_du_dp_ : nullptr,
+            d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
+            d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
+        );
+    }
 
     // cudaDeviceSynchronize();
 

@@ -30,8 +30,6 @@ public:
 
     int num_atoms() const;
 
-    double get_u_t_minus_1() const;
-
     void get_du_dx_t_minus_1(unsigned long long *out_buffer) const;
 
     void get_x_t(double *out_buffer) const;
@@ -48,7 +46,7 @@ private:
     double *d_x_t_; // coordinates
     double *d_v_t_; // velocities
     double *d_box_t_; // box vectors
-    double *d_u_t_; // u (energy)
+    // double *d_u_t_; // u (energy)
     // double lambda_; // (ytz): not a pointer!
 
     unsigned long long *d_du_dx_t_; // du/dx 

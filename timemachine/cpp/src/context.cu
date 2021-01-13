@@ -17,8 +17,6 @@ Context::Context(
     N_(N),
     intg_(intg),
     bps_(bps),
-    // observables_(obs),
-    // lambda_(lambda),
     step_(0) {
 
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N*3);
@@ -26,7 +24,7 @@ Context::Context(
     d_box_t_ = gpuErrchkCudaMallocAndCopy(box_0, 3*3);
 
     gpuErrchk(cudaMalloc(&d_du_dx_t_, N*3*sizeof(*d_du_dx_t_)));
-    gpuErrchk(cudaMalloc(&d_u_t_, 1*sizeof(*d_u_t_)));
+    // gpuErrchk(cudaMalloc(&d_u_t_, 1*sizeof(*d_u_t_)));
 
     // for(int i=0; i < bps.size(); i++) {
     //     cudaStream_t stream;
@@ -41,7 +39,6 @@ Context::~Context() {
     gpuErrchk(cudaFree(d_x_t_));
     gpuErrchk(cudaFree(d_v_t_));
     gpuErrchk(cudaFree(d_box_t_));
-    gpuErrchk(cudaFree(d_u_t_));
     gpuErrchk(cudaFree(d_du_dx_t_));
 
     // for(int i=0; i < streams_.size(); i++) {
@@ -69,22 +66,20 @@ void Context::step(double lambda) {
     }
 
     gpuErrchk(cudaMemset(d_du_dx_t_, 0, N_*3*sizeof(*d_du_dx_t_)));
-    gpuErrchk(cudaMemset(d_u_t_, 0, 1*sizeof(*d_du_dx_t_)));
 
     auto start = std::chrono::high_resolution_clock::now();
 
     for(int i=0; i < bps_.size(); i++) {
-        // std::cout << i << std::endl;
 
         bps_[i]->execute_device(
             N_,
             d_x_t_,
             d_box_t_,
             lambda,
-            d_du_dx_t_,
+            d_du_dx_t_, // we only need the forces
             nullptr,
             nullptr,
-            d_u_t_, // energies aren't really needed tbh
+            nullptr,
             static_cast<cudaStream_t>(0) // TBD: parallelize me!
             // streams_[i]
         );
@@ -117,12 +112,6 @@ void Context::step(double lambda) {
 
 int Context::num_atoms() const {
     return N_;
-}
-
-double Context::get_u_t_minus_1() const {
-    double u;
-    gpuErrchk(cudaMemcpy(&u, d_u_t_, 1*sizeof(*d_u_t_), cudaMemcpyDeviceToHost));
-    return u;
 }
 
 void Context::get_du_dx_t_minus_1(unsigned long long *out_buffer) const {
