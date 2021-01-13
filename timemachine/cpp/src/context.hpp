@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-// #include "potential.hpp"
 #include "integrator.hpp"
 #include "bound_potential.hpp"
 #include "observable.hpp"
@@ -17,7 +16,6 @@ public:
         const double *x_0,
         const double *v_0,
         const double *box_0,
-        // double lambda,
         Integrator *intg,
         std::vector<BoundPotential *> bps
     );
@@ -27,6 +25,8 @@ public:
     void add_observable(Observable *obs); // tbd: shared_ptr
 
     void step(double lambda);
+
+    void multiple_steps(std::vector<double> lambda_schedule);
 
     int num_atoms() const;
 
@@ -38,7 +38,7 @@ public:
 
 private:
 
-    void compute(unsigned int flags);
+    void _step(double lambda);
 
     int step_;
     int N_; // number of particles
@@ -46,17 +46,12 @@ private:
     double *d_x_t_; // coordinates
     double *d_v_t_; // velocities
     double *d_box_t_; // box vectors
-    // double *d_u_t_; // u (energy)
-    // double lambda_; // (ytz): not a pointer!
 
     unsigned long long *d_du_dx_t_; // du/dx 
-
-    // std::vector<cudaStream_t> streams_;
 
     Integrator *intg_;
     std::vector<Observable *> observables_;
     std::vector<BoundPotential *> bps_;
-
 
 };
 

@@ -212,7 +212,6 @@ void Neighborlist<RealType>::compute_block_bounds_device(
 	int D,
 	const double *d_coords,
     const double *d_box,
-    // const int *d_perm,
 	cudaStream_t stream) {
 
     assert(N == N_);
