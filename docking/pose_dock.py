@@ -1,8 +1,11 @@
 import os
+import time
+
 import numpy as np
 
 from simtk.openmm import app
 from simtk.openmm.app import PDBFile
+
 from rdkit import Chem
 from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
@@ -49,9 +52,10 @@ def pose_dock(
     Output
     ------
 
-    A pdb file every 100 steps (outdir/<guest_name>_<step>.pdb)
+    A pdb & sdf file every 100 steps (outdir/<guest_name>_<step>.pdb)
     stdout every 100 steps noting the step number, lambda value, and energy
     stdout for each guest noting the work of transition
+    stdout for each guest noting how long it took to run
 
     Note
     ----
@@ -66,11 +70,29 @@ def pose_dock(
     if not os.path.exists(outdir):
         os.makedirs(outdir)
 
+    host_mol = Chem.MolFromPDBFile(host_pdbfile, removeHs=False)
+    amber_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
+    host_file = PDBFile(host_pdbfile)
+    host_system = amber_ff.createSystem(
+        host_file.topology,
+        nonbondedMethod=app.NoCutoff,
+        constraints=None,
+        rigidWater=False,
+    )
+    host_conf = []
+    for x, y, z in host_file.positions:
+        host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
+    host_conf = np.array(host_conf)
+
+    padding = 0.1
+    box_lengths = np.amax(host_conf, axis=0) - np.amin(host_conf, axis=0)
+    box_lengths = box_lengths+padding
+    box = np.eye(3, dtype=np.float64)*box_lengths
+
     suppl = Chem.SDMolSupplier(guests_sdfile, removeHs=False)
     for guest_mol in suppl:
+        start_time = time.time()
         guest_name = guest_mol.GetProp("_Name")
-        host_mol = Chem.MolFromPDBFile(host_pdbfile, removeHs=False)
-
         guest_ff_handlers = deserialize_handlers(
             open(
                 os.path.join(
@@ -79,14 +101,6 @@ def pose_dock(
                     "ff/params/smirnoff_1_1_0_ccc.py",
                 )
             ).read()
-        )
-        amber_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
-        host_file = PDBFile(host_pdbfile)
-        host_system = amber_ff.createSystem(
-            host_file.topology,
-            nonbondedMethod=app.NoCutoff,
-            constraints=None,
-            rigidWater=False,
         )
 
         if skip_errors:
@@ -106,10 +120,6 @@ def pose_dock(
         for atom_num in constant_atoms:
             masses[atom_num - 1] += 50000
 
-        host_conf = []
-        for x, y, z in host_file.positions:
-            host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
-        host_conf = np.array(host_conf)
         conformer = guest_mol.GetConformer(0)
         mol_conf = np.array(conformer.GetPositions(), dtype=np.float64)
         mol_conf = mol_conf / 10  # convert to md_units
@@ -128,9 +138,6 @@ def pose_dock(
         seed = 2020
         intg = LangevinIntegrator(300, 1.5e-3, 1.0, masses, seed).impl()
 
-        box = np.eye(3) * 100
-        v0 = np.zeros_like(x0)
-
         impls = []
         precision = np.float32
         for b in bps:
@@ -142,7 +149,6 @@ def pose_dock(
         # collect a du_dl calculation once every other step
         subsample_freq = 2
         du_dl_obs = custom_ops.FullPartialUPartialLambda(impls, subsample_freq)
-
         ctxt.add_observable(du_dl_obs)
 
         if transition_type == "insertion":
@@ -163,7 +169,7 @@ def pose_dock(
         calc_work = True
         for step, lamb in enumerate(new_lambda_schedule):
             ctxt.step(lamb)
-            if step % 100 == 0 or step == len(new_lambda_schedule) - 1:
+            if step % 100 == 0:
                 print(
                     f"guest_name: {guest_name}\t"
                     f"step: {str(step).zfill(len(str(n_steps)))}\t"
@@ -183,14 +189,18 @@ def pose_dock(
                     x, y, z = host_coords[i]
                     host_frame.SetAtomPosition(i, Point3D(x, y, z))
                 conf_id = host_mol.AddConformer(host_frame)
+                if not os.path.exists(os.path.join(outdir, guest_name)):
+                    os.mkdir(os.path.join(outdir, guest_name))
                 writer = PDBWriter(
                     os.path.join(
                         outdir,
+                        guest_name,
                         f"{guest_name}_{str(step).zfill(len(str(n_steps)))}_host.pdb",
                     )
                 )
                 writer.write(host_mol, conf_id)
                 writer.close()
+                host_mol.RemoveConformer(conf_id)
 
                 guest_coords = ctxt.get_x_t()[len(host_conf) :] * 10
                 guest_frame = guest_mol.GetConformer()
@@ -201,11 +211,13 @@ def pose_dock(
                 writer = SDWriter(
                     os.path.join(
                         outdir,
+                        guest_name,
                         f"{guest_name}_{str(step).zfill(len(str(n_steps)))}_guest.sdf",
                     )
                 )
                 writer.write(guest_mol, conf_id)
                 writer.close()
+                guest_mol.RemoveConformer(conf_id)
 
         if (
             abs(du_dl_obs.full_du_dl()[0]) > 0.001
@@ -219,19 +231,8 @@ def pose_dock(
                 du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq]
             )
             print(f"guest_name: {guest_name}\twork: {work:.2f}")
-
-        if (
-            abs(du_dl_obs.full_du_dl()[0]) > 0.001
-            or abs(du_dl_obs.full_du_dl()[-1]) > 0.001
-        ):
-            print("Error: du_dl endpoints are not ~0")
-            calc_work = False
-
-        if calc_work:
-            work = np.trapz(
-                du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq]
-            )
-            print(f"guest_name: {guest_name}\twork: {work:.2f}")
+        end_time = time.time()
+        print(f"{guest_name} took {(end_time - start_time):.2f} seconds")
 
 
 if __name__ == "__main__":
@@ -268,7 +269,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--nsteps",
         type=int,
-        default=1000,
+        default=1001,
         help="simulation length (1 step = 1.5 femtoseconds)",
     )
     parser.add_argument(
@@ -281,7 +282,10 @@ if __name__ == "__main__":
         "--max_lambda",
         type=float,
         default=1.1,
-        help="lambda value the guest should insert from or delete to (must be >1 for the work calculation to be applicable)",
+        help=(
+            "lambda value the guest should insert from or delete to "
+            "(must be >1 for the work calculation to be applicable)"
+        ),
     )
     parser.add_argument(
         "--random_rotation",
@@ -291,7 +295,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--skip_errors",
         action="store_true",
-        help="Report errors to stdout and continue on to the next guest. Otherwise, will halt upon errors.",
+        help=(
+            "Report errors to stdout and continue on to the next guest. "
+            "Otherwise, will halt upon errors."
+        ),
     )
     parser.add_argument(
         "-o", "--outdir", default="pose_dock_outdir", help="where to write output"
