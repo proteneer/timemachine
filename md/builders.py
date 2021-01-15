@@ -35,7 +35,7 @@ def build_protein_system(host_pdbfile):
         rigidWater=False
     )
 
-    return solvated_host_system, solvated_host_coords, nwa, nha, box
+    return solvated_host_system, solvated_host_coords, nwa, nha, box, modeller.topology
 
 def build_water_system(box_width):
     ff = app.ForceField('tip3p.xml')
@@ -60,4 +60,5 @@ def build_water_system(box_width):
 
     assert m.getTopology().getNumAtoms() == positions.shape[0]
 
+    # TODO: minimize the water box (BFGS or scipy.optimize)
     return system, positions, np.eye(3)*box_width, m.getTopology()
