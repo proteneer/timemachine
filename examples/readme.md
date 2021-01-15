@@ -20,6 +20,6 @@
 
 `overlap_test.py` tests two restraint types, one based on principal moments of inertia and one based on a measure of shape overlap.
 
-#### Coming soon
+#### Measuring performance
 
-Differentiating a free energy calculation with respect to force field parameters
+`estimator_variance.py` measures run-to-run variability as a function of number of MD steps performed per run
