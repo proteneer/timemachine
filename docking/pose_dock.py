@@ -62,8 +62,8 @@ def pose_dock(
 
     Note
     ----
-    If any norm of force per atom exceeds 10000 kJ/(mol*nm), the simulation for that
-    guest will stop and the work will not be calculated.
+    If any norm of force per atom exceeds 20000 kJ/(mol*nm) [MAX_NORM_FORCE defined in docking/report.py],
+    the simulation for that guest will stop and the work will not be calculated.
     """
     assert transition_steps <= n_steps
     assert transition_type in ("insertion", "deletion")
