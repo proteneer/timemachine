@@ -16,8 +16,7 @@ from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import potentials, custom_ops, LangevinIntegrator
 
-
-MAX_NORM_FORCE = 20000
+import report
 
 
 def dock_and_equilibrate(
@@ -38,8 +37,8 @@ def dock_and_equilibrate(
     host_pdbfile: path to host pdb file to dock into
     guests_sdfile: path to input sdf with guests to pose/dock
     max_lambda: lambda value the guest should insert from or delete to
-        (recommended: 1.1 for work calulation, 0.25 to stay close to original pose)
-        (must be >1 for work calculation to be applicable)
+        (recommended: 1.0 for work calulation, 0.25 to stay close to original pose)
+        (must be =1 for work calculation to be applicable)
     insertion_steps: how many steps to insert the guest over (recommended: 501)
     eq_steps: how many steps of equilibration to do after insertion (recommended: 15001)
     outdir: where to write output (will be created if it does not already exist)
@@ -73,7 +72,6 @@ def dock_and_equilibrate(
     MAX_LAMBDA = {max_lambda}
     INSERTION_STEPS = {insertion_steps}
     EQ_STEPS = {eq_steps}
-    MAX_NORM_FORCE = {MAX_NORM_FORCE}
     """
     )
 
@@ -160,7 +158,7 @@ def dock_and_equilibrate(
         for atom_num in constant_atoms:
             combined_masses[atom_num - 1] += 50000
 
-        seed = 2020
+        seed = 2021
         intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
         u_impls = []
@@ -183,24 +181,26 @@ def dock_and_equilibrate(
         for step, lamb in enumerate(insertion_lambda_schedule):
             ctxt.step(lamb)
             if step % 100 == 0:
-                report_step(ctxt, step, lamb, combined_bps, host_box, u_impls, guest_name, insertion_steps, "INSERTION")
+                report.report_step(ctxt, step, lamb, host_box, combined_bps, u_impls, guest_name, insertion_steps, "INSERTION")
                 if not fewer_outfiles:
                     host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
                     guest_coords = ctxt.get_x_t()[len(solvated_host_coords) :] * 10
-                    write_frame(
+                    report.write_frame(
                         host_coords,
                         solvated_host_mol,
                         guest_coords,
                         guest_mol,
-                        outdir,
                         guest_name,
+                        outdir,
                         str(step).zfill(len(str(insertion_steps))),
                         f"ins",
                     )
-                if too_much_force(ctxt, combined_bps, host_box, u_impls, lamb):
+            if step in (0, int(insertion_steps/2), insertion_steps-1):
+                if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
                     calc_work = False
                     break
 
+        # Note: this condition only applies for ABFE, not RBFE
         if (
             abs(du_dl_obs.full_du_dl()[0]) > 0.001
             or abs(du_dl_obs.full_du_dl()[-1]) > 0.001
@@ -218,98 +218,25 @@ def dock_and_equilibrate(
         for step in range(eq_steps):
             ctxt.step(0.00)
             if step % 1000 == 0:
-                report_step(ctxt, step, 0.00, combined_bps, host_box, u_impls, guest_name, eq_steps, 'EQUILIBRATION')
+                report.report_step(ctxt, step, 0.00, host_box, combined_bps, u_impls, guest_name, eq_steps, 'EQUILIBRATION')
                 host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
                 guest_coords = ctxt.get_x_t()[len(solvated_host_coords) :] * 10
-                write_frame(
+                report.write_frame(
                     host_coords,
                     solvated_host_mol,
                     guest_coords,
                     guest_mol,
-                    outdir,
                     guest_name,
+                    outdir,
                     str(step).zfill(len(str(eq_steps))),
                     f"eq",
                 )
-                if too_much_force(ctxt, combined_bps, host_box, u_impls, 0.0):
+            if step in (0, int(eq_steps/2), eq_steps-1):
+                if report.too_much_force(ctxt, 0.00, host_box, combined_bps, u_impls):
                     break
 
         end_time = time.time()
         print(f"{guest_name} took {(end_time - start_time):.2f} seconds")
-
-
-def report_step(ctxt, step, lamb, bps, box, u_impls, guest_name, n_steps, stage):
-    l_energies = []
-    names = []
-    for name, impl in zip(bps, u_impls):
-        _, _, u = impl.execute(ctxt.get_x_t(), box, lamb)
-        l_energies.append(u)
-        names.append(name)
-        energy = sum(l_energies)
-
-    print(
-        f"{stage}\t"
-        f"guest_name: {guest_name}\t"
-        f"step: {str(step).zfill(len(str(n_steps)))}\t"
-        f"lambda: {lamb:.2f}\t"
-        f"energy: {energy:.2f}"
-    )
-
-
-def too_much_force(ctxt, bps, box, u_impls, lamb):
-    l_forces = []
-    names = []
-    for name, impl in zip(bps, u_impls):
-        du_dx, _, _ = impl.execute(ctxt.get_x_t(), box, lamb)
-        l_forces.append(du_dx)
-        names.append(name)
-    forces = np.sum(l_forces, axis=0)
-    norm_forces = np.linalg.norm(forces, axis=-1)
-    if np.any(norm_forces > MAX_NORM_FORCE):
-        print("Error: at least one force is too large to continue")
-        print("max norm force", np.amax(norm_forces))
-        for name, force in zip(names, l_forces):
-            print(
-                name,
-                "atom",
-                np.argmax(np.linalg.norm(force, axis=-1)),
-                "max norm force",
-                np.amax(np.linalg.norm(force, axis=-1)),
-            )
-        return True
-    return False
-
-
-def write_frame(
-    host_coords, host_mol, guest_coords, guest_mol, outdir, guest_name, step, sim_info
-):
-    if not os.path.exists(os.path.join(outdir, guest_name)):
-        os.mkdir(os.path.join(outdir, guest_name))
-
-    host_frame = host_mol.GetConformer()
-    for i in range(host_mol.GetNumAtoms()):
-        x, y, z = host_coords[i]
-        host_frame.SetAtomPosition(i, Point3D(x, y, z))
-    conf_id = host_mol.AddConformer(host_frame)
-    writer = PDBWriter(
-        os.path.join(outdir, guest_name, f"{guest_name}_{sim_info}_{step}_host.pdb",)
-    )
-    writer.write(host_mol, conf_id)
-    writer.close()
-    host_mol.RemoveConformer(conf_id)
-
-    guest_frame = guest_mol.GetConformer()
-    for i in range(guest_mol.GetNumAtoms()):
-        x, y, z = guest_coords[i]
-        guest_frame.SetAtomPosition(i, Point3D(x, y, z))
-    conf_id = guest_mol.AddConformer(guest_frame)
-    guest_mol.SetProp("_Name", f"{guest_name}_{sim_info}_{step}_guest")
-    writer = SDWriter(
-        os.path.join(outdir, guest_name, f"{guest_name}_{sim_info}_{step}_guest.sdf",)
-    )
-    writer.write(guest_mol, conf_id)
-    writer.close()
-    guest_mol.RemoveConformer(conf_id)
 
 
 def main():
@@ -341,7 +268,7 @@ def main():
         default=0.25,
         help=(
             "lambda value the guest should insert from or delete to "
-            "(must be >1 for the work calculation to be applicable)"
+            "(must be =1 for the work calculation to be applicable)"
         ),
     )
     parser.add_argument(

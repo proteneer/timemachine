@@ -19,6 +19,8 @@ from timemachine.lib import LangevinIntegrator
 from timemachine.lib import custom_ops
 from timemachine.lib import potentials
 
+import report
+
 
 def pose_dock(
     guests_sdfile,
@@ -43,7 +45,8 @@ def pose_dock(
     transition_steps: how many steps to insert/delete the guest over (recommended: <= 500)
         (must be <= n_steps)
     max_lambda: lambda value the guest should insert from or delete to
-        (recommended: 1.1) (must be >1 for work calculation to be applicable)
+        (recommended: 1.0 for work calulation, 0.25 to stay close to original pose)
+        (must be =1 for work calculation to be applicable)
     outdir: where to write output (will be created if it does not already exist)
     random_rotation: whether to apply a random rotation to each guest before inserting
     constant_atoms: atom numbers from the host_pdbfile to hold mostly fixed across the simulation
@@ -95,6 +98,8 @@ def pose_dock(
         else:
             final_potentials.append(bp)
 
+    # TODO (ytz): we should really fix this later on. This padding was done to
+    # address the particles that are too close to the boundary.
     padding = 0.1
     box_lengths = np.amax(host_conf, axis=0) - np.amin(host_conf, axis=0)
     box_lengths = box_lengths+padding
@@ -155,7 +160,7 @@ def pose_dock(
         x0 = np.concatenate([host_conf, mol_conf])  # combined geometry
         v0 = np.zeros_like(x0)
 
-        seed = 2020
+        seed = 2021
         intg = LangevinIntegrator(300, 1.5e-3, 1.0, masses, seed).impl()
 
         impls = []
@@ -190,62 +195,16 @@ def pose_dock(
         for step, lamb in enumerate(new_lambda_schedule):
             ctxt.step(lamb)
             if step % 100 == 0:
-                l_energies = []
-                l_forces = []
-                for impl in impls:
-                    du_dx, du_dl, u = impl.execute(ctxt.get_x_t(), box, lamb)
-                    l_energies.append(u)
-                    l_forces.append(du_dx)
-                energy = sum(l_energies)
-                forces = np.sum(l_forces, axis=0)
-                print(
-                    f"guest_name: {guest_name}\t"
-                    f"step: {str(step).zfill(len(str(n_steps)))}\t"
-                    f"lambda: {lamb:.2f}\t"
-                    f"energy: {energy:.2f}"
-                )
-                norm_forces = np.linalg.norm(forces, axis=-1)
-                if np.any(norm_forces > 10000):
-                    print("Error: at least one force is too large to continue")
+                report.report_step(ctxt, step, lamb, box, bps, impls, guest_name, n_steps, 'pose_dock')
+                host_coords = ctxt.get_x_t()[: len(host_conf)] * 10
+                guest_coords = ctxt.get_x_t()[len(host_conf) :] * 10
+                report.write_frame(host_coords, host_mol, guest_coords, guest_mol, guest_name, outdir, step, 'pd')
+            if step in (0, int(n_steps/2), n_steps-1):
+                if report.too_much_force(ctxt, lamb, box, bps, impls):
                     calc_work = False
                     break
 
-                host_coords = ctxt.get_x_t()[: len(host_conf)] * 10
-                host_frame = host_mol.GetConformer()
-                for i in range(host_mol.GetNumAtoms()):
-                    x, y, z = host_coords[i]
-                    host_frame.SetAtomPosition(i, Point3D(x, y, z))
-                conf_id = host_mol.AddConformer(host_frame)
-                if not os.path.exists(os.path.join(outdir, guest_name)):
-                    os.mkdir(os.path.join(outdir, guest_name))
-                writer = PDBWriter(
-                    os.path.join(
-                        outdir,
-                        guest_name,
-                        f"{guest_name}_{str(step).zfill(len(str(n_steps)))}_host.pdb",
-                    )
-                )
-                writer.write(host_mol, conf_id)
-                writer.close()
-                host_mol.RemoveConformer(conf_id)
-
-                guest_coords = ctxt.get_x_t()[len(host_conf) :] * 10
-                guest_frame = guest_mol.GetConformer()
-                for i in range(guest_mol.GetNumAtoms()):
-                    x, y, z = guest_coords[i]
-                    guest_frame.SetAtomPosition(i, Point3D(x, y, z))
-                conf_id = guest_mol.AddConformer(guest_frame)
-                writer = SDWriter(
-                    os.path.join(
-                        outdir,
-                        guest_name,
-                        f"{guest_name}_{str(step).zfill(len(str(n_steps)))}_guest.sdf",
-                    )
-                )
-                writer.write(guest_mol, conf_id)
-                writer.close()
-                guest_mol.RemoveConformer(conf_id)
-
+        # Note: this condition only applies for ABFE, not RBFE
         if (
             abs(du_dl_obs.full_du_dl()[0]) > 0.001
             or abs(du_dl_obs.full_du_dl()[-1]) > 0.001
@@ -308,10 +267,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max_lambda",
         type=float,
-        default=1.1,
+        default=1.0,
         help=(
             "lambda value the guest should insert from or delete to "
-            "(must be >1 for the work calculation to be applicable)"
+            "(must be =1 for the work calculation to be applicable)"
         ),
     )
     parser.add_argument(

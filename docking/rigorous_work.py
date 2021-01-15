@@ -18,14 +18,14 @@ from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import potentials, custom_ops, LangevinIntegrator
 
+import report
 
 INSERTION_MAX_LAMBDA = 0.5
-DELETION_MAX_LAMBDA = 1.1
+DELETION_MAX_LAMBDA = 1.0
 MIN_LAMBDA = 0.0
 TRANSITION_STEPS = 501
 EQ1_STEPS = 5001
 EQ2_STEPS = 10001
-MAX_NORM_FORCE = 20000
 
 
 def calculate_rigorous_work(
@@ -49,7 +49,6 @@ def calculate_rigorous_work(
     TRANSITION_STEPS = {TRANSITION_STEPS}
     EQ1_STEPS = {EQ1_STEPS}
     EQ2_STEPS = {EQ2_STEPS}
-    MAX_NORM_FORCE = {MAX_NORM_FORCE}
     """
     )
 
@@ -244,7 +243,7 @@ def run_leg(
         f"num_atoms: {len(x0)}",
     )
 
-    seed = 2020
+    seed = 2021
     intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
     u_impls = []
@@ -261,12 +260,12 @@ def run_leg(
     for step, lamb in enumerate(insertion_lambda_schedule):
         ctxt.step(lamb)
         if step % 100 == 0:
-            report_step(
+            report.report_step(
                 ctxt,
                 step,
                 lamb,
-                combined_bps,
                 host_box,
+                combined_bps,
                 u_impls,
                 guest_name,
                 TRANSITION_STEPS,
@@ -275,84 +274,84 @@ def run_leg(
             if not fewer_outfiles and not no_outfiles:
                 host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
                 guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
-                write_frame(
+                report.write_frame(
                     host_coords,
                     host_mol,
                     guest_coords,
                     guest_mol,
-                    outdir,
                     guest_name,
+                    outdir,
                     str(step).zfill(len(str(TRANSITION_STEPS))),
                     f"{leg_type}-ins",
                 )
-            if too_much_force(ctxt, combined_bps, host_box, u_impls, lamb):
+        if step in (0, int(TRANSITION_STEPS/2), TRANSITION_STEPS-1):
+            if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
                 return
 
     # equilibrate
     for step in range(EQ1_STEPS):
         ctxt.step(MIN_LAMBDA)
-        if step % 100 == 0:
-            report_step(
+        if step % 1000 == 0:
+            report.report_step(
                 ctxt,
                 step,
                 MIN_LAMBDA,
-                combined_bps,
                 host_box,
+                combined_bps,
                 u_impls,
                 guest_name,
                 EQ1_STEPS,
                 f"{leg_type.upper()}_EQUILIBRATION_1",
             )
-            if step % 1000 == 0:
-                if not fewer_outfiles and not no_outfiles:
-                    host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
-                    guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
-                    write_frame(
-                        host_coords,
-                        host_mol,
-                        guest_coords,
-                        guest_mol,
-                        outdir,
-                        guest_name,
-                        str(step).zfill(len(str(EQ1_STEPS))),
-                        f"{leg_type}-eq1",
-                    )
-            if too_much_force(ctxt, combined_bps, host_box, u_impls, MIN_LAMBDA):
+            if not fewer_outfiles and not no_outfiles:
+                host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
+                guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
+                report.write_frame(
+                    host_coords,
+                    host_mol,
+                    guest_coords,
+                    guest_mol,
+                    guest_name,
+                    outdir,
+                    str(step).zfill(len(str(EQ1_STEPS))),
+                    f"{leg_type}-eq1",
+                )
+        if step in (0, int(EQ1_STEPS/2), EQ1_STEPS-1):
+            if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
                 return
 
     # equilibrate more & shoot off deletion jobs
     for step in range(EQ2_STEPS):
         ctxt.step(MIN_LAMBDA)
-        if step % 100 == 0:
-            report_step(
+        if step % 1000 == 0:
+            report.report_step(
                 ctxt,
                 step,
                 MIN_LAMBDA,
-                combined_bps,
                 host_box,
+                combined_bps,
                 u_impls,
                 guest_name,
                 EQ2_STEPS,
                 f"{leg_type.upper()}_EQUILIBRATION_2",
             )
-            if too_much_force(ctxt, combined_bps, host_box, u_impls, MIN_LAMBDA):
-                return
 
-        if step % 1000 == 0:
             # TODO: if guest has undocked, stop simulation
             if not no_outfiles:
                 host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
                 guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
-                write_frame(
+                report.write_frame(
                     host_coords,
                     host_mol,
                     guest_coords,
                     guest_mol,
-                    outdir,
                     guest_name,
+                    outdir,
                     str(step).zfill(len(str(EQ2_STEPS))),
                     f"{leg_type}-eq2",
                 )
+            if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
+                return
 
             do_deletion(
                 ctxt.get_x_t(),
@@ -366,7 +365,7 @@ def run_leg(
 
 
 def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type):
-    seed = 2020
+    seed = 2021
     intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
     u_impls = []
@@ -383,24 +382,29 @@ def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type
     deletion_lambda_schedule = np.linspace(
         MIN_LAMBDA, DELETION_MAX_LAMBDA, TRANSITION_STEPS
     )
+
+    calc_work = True
+
     for step, lamb in enumerate(deletion_lambda_schedule):
         ctxt.step(lamb)
         if step % 100 == 0:
-            report_step(
+            report.report_step(
                 ctxt,
                 step,
                 lamb,
-                combined_bps,
                 box,
+                combined_bps,
                 u_impls,
                 guest_name,
                 TRANSITION_STEPS,
                 f"{leg_type.upper()}_DELETION",
             )
-            if too_much_force(ctxt, combined_bps, box, u_impls, lamb):
+        if step in (0, int(TRANSITION_STEPS/2), TRANSITION_STEPS-1):
+            if report.too_much_force(ctxt, lamb, box, combined_bps, u_impls):
+                calc_work = False
                 return
 
-    calc_work = True
+    # Note: this condition only applies for ABFE, not RBFE
     if (
         abs(du_dl_obs.full_du_dl()[0]) > 0.001
         or abs(du_dl_obs.full_du_dl()[-1]) > 0.001
@@ -413,80 +417,6 @@ def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type
             du_dl_obs.full_du_dl(), deletion_lambda_schedule[::subsample_freq]
         )
         print(f"guest_name: {guest_name}\t{leg_type}_work: {work:.2f}")
-
-
-def report_step(ctxt, step, lamb, bps, box, u_impls, guest_name, n_steps, stage):
-    l_energies = []
-    names = []
-    for name, impl in zip(bps, u_impls):
-        _, _, u = impl.execute(ctxt.get_x_t(), box, lamb)
-        l_energies.append(u)
-        names.append(name)
-        energy = sum(l_energies)
-
-    print(
-        f"{stage}\t"
-        f"guest_name: {guest_name}\t"
-        f"step: {str(step).zfill(len(str(n_steps)))}\t"
-        f"lambda: {lamb:.2f}\t"
-        f"energy: {energy:.2f}"
-    )
-
-
-def too_much_force(ctxt, bps, box, u_impls, lamb):
-    l_forces = []
-    names = []
-    for name, impl in zip(bps, u_impls):
-        du_dx, _, _ = impl.execute(ctxt.get_x_t(), box, lamb)
-        l_forces.append(du_dx)
-        names.append(name)
-    forces = np.sum(l_forces, axis=0)
-    norm_forces = np.linalg.norm(forces, axis=-1)
-    if np.any(norm_forces > MAX_NORM_FORCE):
-        print("Error: at least one force is too large to continue")
-        print("max norm force", np.amax(norm_forces))
-        for name, force in zip(names, l_forces):
-            print(
-                name,
-                "atom",
-                np.argmax(np.linalg.norm(force, axis=-1)),
-                "max norm force",
-                np.amax(np.linalg.norm(force, axis=-1)),
-            )
-        return True
-    return False
-
-
-def write_frame(
-    host_coords, host_mol, guest_coords, guest_mol, outdir, guest_name, step, sim_info
-):
-    if not os.path.exists(os.path.join(outdir, guest_name)):
-        os.mkdir(os.path.join(outdir, guest_name))
-
-    host_frame = host_mol.GetConformer()
-    for i in range(host_mol.GetNumAtoms()):
-        x, y, z = host_coords[i]
-        host_frame.SetAtomPosition(i, Point3D(x, y, z))
-    conf_id = host_mol.AddConformer(host_frame)
-    writer = PDBWriter(
-        os.path.join(outdir, guest_name, f"{guest_name}_{sim_info}_{step}_host.pdb",)
-    )
-    writer.write(host_mol, conf_id)
-    writer.close()
-    host_mol.RemoveConformer(conf_id)
-
-    guest_frame = guest_mol.GetConformer()
-    for i in range(guest_mol.GetNumAtoms()):
-        x, y, z = guest_coords[i]
-        guest_frame.SetAtomPosition(i, Point3D(x, y, z))
-    conf_id = guest_mol.AddConformer(guest_frame)
-    guest_mol.SetProp("_Name", f"{guest_name}_{sim_info}_{step}_guest")
-    writer = SDWriter(
-        os.path.join(outdir, guest_name, f"{guest_name}_{sim_info}_{step}_guest.sdf",)
-    )
-    writer.write(guest_mol, conf_id)
-    writer.close()
-    guest_mol.RemoveConformer(conf_id)
 
 
 def main():
