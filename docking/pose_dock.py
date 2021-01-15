@@ -190,6 +190,8 @@ def pose_dock(
                     np.ones(n_steps - transition_steps) * max_lambda,
                 ]
             )
+        else:
+            raise (RuntimeError('invalid `transition_type` (must be one of ["insertion", "deletion"])'))
 
         calc_work = True
         for step, lamb in enumerate(new_lambda_schedule):
