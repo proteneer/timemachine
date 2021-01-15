@@ -57,7 +57,7 @@ def dock_and_equilibrate(
 
     Note
     ----
-    If any norm of force per atom exceeds 20000 kJ/(mol*nm [MAX_NORM_FORCE defined in docking/report.py],
+    If any norm of force per atom exceeds 20000 kJ/(mol*nm) [MAX_NORM_FORCE defined in docking/report.py],
     the simulation for that guest will stop and the work will not be calculated.
     """
 
