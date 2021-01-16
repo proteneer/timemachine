@@ -95,7 +95,6 @@ void LangevinIntegrator::step_fwd(
         dt_
     );
 
-    cudaDeviceSynchronize();
     gpuErrchk(cudaPeekAtLastError());
 
 }

@@ -56,7 +56,6 @@ void PeriodicTorsion<RealType>::execute_device(
 
     const int D = 3;
 
-
     if(blocks > 0) {
         k_periodic_torsion<RealType, D><<<blocks, tpb, 0, stream>>>(
             T_,
@@ -67,15 +66,8 @@ void PeriodicTorsion<RealType>::execute_device(
             d_du_dp,
             d_u
         );        
-
-
         gpuErrchk(cudaPeekAtLastError());
-
     }
-
-    // (remove me)
-    cudaDeviceSynchronize();
-
 
 };
 

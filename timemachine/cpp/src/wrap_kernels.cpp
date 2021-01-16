@@ -18,7 +18,6 @@
 #include "lennard_jones.hpp"
 #include "electrostatics.hpp"
 // #include "gbsa.hpp"
-// #include "gradient.hpp"
 #include "fixed_point.hpp"
 #include "integrator.hpp"
 #include "observable.hpp"
@@ -30,57 +29,6 @@
 
 namespace py = pybind11;
 
-
-// void declare_stepper(py::module &m, const char *typestr) {
-
-//     using Class = timemachine::Stepper;
-//     std::string pyclass_name = std::string("Stepper_") + typestr;
-//     py::class_<Class>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     );
-
-// }
-
-// void declare_alchemical_stepper(py::module &m, const char *typestr) {
-
-//     using Class = timemachine::AlchemicalStepper;
-//     std::string pyclass_name = std::string("AlchemicalStepper_") + typestr;
-//     py::class_<Class, timemachine::Stepper >(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const std::vector<timemachine::Gradient*> system,
-//         const std::vector<double> &lambda_schedule
-//     ) {
-//         return new timemachine::AlchemicalStepper(
-//             system,
-//             lambda_schedule
-//         );
-//     }))
-//     .def("get_du_dl", [](timemachine::AlchemicalStepper &stepper) -> py::array_t<double, py::array::c_style> {
-//         const unsigned long long T = stepper.get_T();
-//         const unsigned long long F = stepper.get_F();
-//         py::array_t<double, py::array::c_style> buffer({F, T});
-//         stepper.get_du_dl(buffer.mutable_data());
-//         return buffer;
-//     })
-//     .def("get_energies", [](timemachine::AlchemicalStepper &stepper) -> py::array_t<double, py::array::c_style> {
-//         const unsigned long long T = stepper.get_T();
-//         py::array_t<double, py::array::c_style> buffer({T});
-//         stepper.get_energies(buffer.mutable_data());
-//         return buffer;
-//     })
-//     .def("set_du_dl_adjoint", [](timemachine::AlchemicalStepper &stepper,
-//         const py::array_t<double, py::array::c_style> &adjoints) {
-//         stepper.set_du_dl_adjoint(adjoints.size(), adjoints.data());
-//     });
-// }
 
 template <typename RealType>
 void declare_neighborlist(py::module &m, const char *typestr) {
@@ -145,24 +93,6 @@ void declare_neighborlist(py::module &m, const char *typestr) {
         return ixn_list;
 
     });
-    // .def("build_nblist_mpu", [](
-    //     timemachine::Neighborlist<RealType> &nblist,
-    //     const py::array_t<double, py::array::c_style> &coords,
-    //     const py::array_t<double, py::array::c_style> &box,
-    //     const double cutoff) -> std::vector<std::vector<int> > {
-
-    //     int N = coords.shape()[0];
-    //     int D = coords.shape()[1];
-
-    //     std::vector<std::vector<int> > ixn_list = nblist.build_nblist_mpu(
-    //         N,
-    //         D,
-    //         coords.data(),
-    //         box.data(),
-    //         cutoff
-    //     );
-    //     return ixn_list;
-    // });
 
 
 }
@@ -209,6 +139,7 @@ void declare_context(py::module &m) {
     }))
     .def("add_observable", &timemachine::Context::add_observable)
     .def("step", &timemachine::Context::step)
+    .def("multiple_steps", &timemachine::Context::multiple_steps)
     .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();
         unsigned int D = 3;
@@ -237,12 +168,7 @@ void declare_context(py::module &m) {
         }
         return py_du_dx;
     });
-    // .def("_get_u_t_minus_1", [](timemachine::Context &ctxt) -> double {
-        // PyErr_WarnEx(PyExc_DeprecationWarning, 
-            // "_get_u_t_minus_1() should only be used for testing. It will be removed in a future release.", 
-            // 1);
-        // return ctxt.get_u_t_minus_1();
-    // });
+
 }
 
 void declare_observable(py::module &m) {
@@ -739,31 +665,14 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
         py::buffer_protocol(),
         py::dynamic_attr()
     )
-    .def(py::init([](
-        const py::array_t<int, py::array::c_style> &torsion_idxs
-        // const py::array_t<double, py::array::c_style> &params
-    ){
+    .def(py::init([](const py::array_t<int, py::array::c_style> &torsion_idxs) {
         std::vector<int> vec_torsion_idxs(torsion_idxs.size());
         std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size()*sizeof(int));
-        // std::vector<double> vec_params(params.size());
-        // std::memcpy(vec_params.data(), params.data(), vec_params.size()*sizeof(double));
         return new timemachine::PeriodicTorsion<RealType>(
             vec_torsion_idxs
         );
     }
     ));
-    // .def("get_du_dp_primals", [](timemachine::PeriodicTorsion<RealType> &grad) -> py::array_t<double, py::array::c_style> {
-    //     const int T = grad.num_torsions();
-    //     py::array_t<double, py::array::c_style> buffer({T, 3});
-    //     grad.get_du_dp_primals(buffer.mutable_data());
-    //     return buffer;
-    // })
-    // .def("get_du_dp_tangents", [](timemachine::PeriodicTorsion<RealType> &grad) -> py::array_t<double, py::array::c_style> {
-    //     const int T = grad.num_torsions();
-    //     py::array_t<double, py::array::c_style> buffer({T, 3});
-    //     grad.get_du_dp_tangents(buffer.mutable_data());
-    //     return buffer;
-    // });
 
 }
 
@@ -835,6 +744,8 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         py::buffer_protocol(),
         py::dynamic_attr()
     )
+    .def("set_nblist_padding", &timemachine::Nonbonded<RealType>::set_nblist_padding)
+    .def("disable_hilbert_sort", &timemachine::Nonbonded<RealType>::disable_hilbert_sort)
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
         const py::array_t<double, py::array::c_style> &scales_i,  // [E, 2]
@@ -867,89 +778,6 @@ void declare_nonbonded(py::module &m, const char *typestr) {
     ));
 
 }
-
-
-template <typename RealType>
-void declare_electrostatics(py::module &m, const char *typestr) {
-
-    using Class = timemachine::Electrostatics<RealType>;
-    std::string pyclass_name = std::string("Electrostatics_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
-        const py::array_t<double, py::array::c_style> &charge_scale_i,  // 
-        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
-        double beta,
-        double cutoff) {
-
-        std::vector<int> exclusion_idxs(exclusion_i.size());
-        std::memcpy(exclusion_idxs.data(), exclusion_i.data(), exclusion_i.size()*sizeof(int));
-
-        std::vector<double> charge_scales(charge_scale_i.size());
-        std::memcpy(charge_scales.data(), charge_scale_i.data(), charge_scale_i.size()*sizeof(double));
-
-        std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
-        std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
-
-        return new timemachine::Electrostatics<RealType>(
-            exclusion_idxs,
-            charge_scales,
-            lambda_offset_idxs,
-            beta,
-            cutoff
-        );
-    }
-    ));
-}
-
-
-template <typename RealType>
-void declare_lennard_jones(py::module &m, const char *typestr) {
-
-    using Class = timemachine::LennardJones<RealType>;
-    std::string pyclass_name = std::string("LennardJones_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
-        const py::array_t<double, py::array::c_style> &lj_scale_i,  // 
-        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
-        const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i,  //
-        double cutoff) {
-
-        std::vector<int> exclusion_idxs(exclusion_i.size());
-        std::memcpy(exclusion_idxs.data(), exclusion_i.data(), exclusion_i.size()*sizeof(int));
-
-        std::vector<double> lj_scales(lj_scale_i.size());
-        std::memcpy(lj_scales.data(), lj_scale_i.data(), lj_scale_i.size()*sizeof(double));
-
-        std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
-        std::memcpy(lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size()*sizeof(int));
-
-        std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
-        std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
-
-        return new timemachine::LennardJones<RealType>(
-            exclusion_idxs,
-            lj_scales,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
-            cutoff
-        );
-    }
-    ));
-}
-
-
 
 // template <typename RealType>
 // void declare_gbsa(py::module &m, const char *typestr) {
@@ -1068,12 +896,6 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_harmonic_angle<double>(m, "f64");
     declare_harmonic_angle<float>(m, "f32");
 
-    declare_lennard_jones<double>(m, "f64");
-    declare_lennard_jones<float>(m, "f32");
-
-    declare_electrostatics<double>(m, "f64");
-    declare_electrostatics<float>(m, "f32");
-
     declare_periodic_torsion<double>(m, "f64");
     declare_periodic_torsion<float>(m, "f32");
 
@@ -1083,9 +905,6 @@ PYBIND11_MODULE(custom_ops, m) {
     // declare_gbsa<double>(m, "f64");
     // declare_gbsa<float>(m, "f32");
 
-    // declare_stepper(m, "f64");
-    // declare_alchemical_stepper(m, "f64");
-    // declare_reversible_context(m, "f64");
     declare_context(m);
 
 }

@@ -92,26 +92,26 @@ def benchmark_dhfr():
     lamb = 0.0
 
     start = time.time()
-    # num_steps = 50000
-    num_steps = 50000
-    # num_steps = 10
 
     writer = PDBWriter([host_pdb.topology], "dhfr.pdb")
 
-    for step in range(num_steps):
-        ctxt.step(lamb)
-        if step % 1000 == 0:
+    num_batches = 100
+    steps_per_batch = 1000
 
-            delta = time.time()-start
-            steps_per_second = step/delta
-            seconds_per_day = 86400
-            steps_per_day = steps_per_second*seconds_per_day
-            ps_per_day = dt*steps_per_day
-            ns_per_day = ps_per_day*1e-3
+    for batch in range(num_batches):
+        lambda_schedule = np.ones(steps_per_batch)*lamb
+        ctxt.multiple_steps(lambda_schedule)
 
-            print(step, "ns/day", ns_per_day)
-            # coords = recenter(ctxt.get_x_t(), box)
-            # writer.write_frame(coords*10)
+        delta = time.time()-start
+        steps_per_second = (batch+1)*steps_per_batch/delta
+        seconds_per_day = 86400
+        steps_per_day = steps_per_second*seconds_per_day
+        ps_per_day = dt*steps_per_day
+        ns_per_day = ps_per_day*1e-3
+
+        print((batch+1)*steps_per_batch, "steps @ ", ns_per_day, " ns/day")
+        # coords = recenter(ctxt.get_x_t(), box)
+        # writer.write_frame(coords*10)
 
     print("total time", time.time() - start)
 
