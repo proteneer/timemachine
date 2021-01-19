@@ -95,13 +95,15 @@ def benchmark_dhfr():
 
     num_batches = 100
     steps_per_batch = 1000
-    start = time.time()
+    seconds_per_day = 86400
+    batch_times = []
 
     lambda_schedule = np.ones(steps_per_batch)*lamb
 
-    seconds_per_day = 86400
+    # run once before timer starts
+    ctxt.multiple_steps(lambda_schedule)
 
-    batch_times = []
+    start = time.time()
 
     for batch in range(num_batches):
 
