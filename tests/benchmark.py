@@ -101,6 +101,8 @@ def benchmark_dhfr():
 
     seconds_per_day = 86400
 
+    batch_times = []
+
     for batch in range(num_batches):
 
         # time the current batch
@@ -109,9 +111,12 @@ def benchmark_dhfr():
         batch_end = time.time()
 
         delta = batch_end - batch_start
-        steps_per_second = steps_per_batch / delta
 
+        batch_times.append(delta)
+
+        steps_per_second = steps_per_batch / np.mean(batch_times)
         steps_per_day = steps_per_second*seconds_per_day
+
         ps_per_day = dt*steps_per_day
         ns_per_day = ps_per_day*1e-3
 
