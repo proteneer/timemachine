@@ -50,9 +50,6 @@ def deserialize_handlers(obj):
             else:
                 params.append(elems[1:])
 
-        #params = np.array(params, dtype=np.float64)
-        #params = np.squeeze(params) # remove single dimension entries, eg. charge params
-
         props = v.get('props')
 
         handlers.append(ctor(smirks, params, props))
