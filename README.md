@@ -4,7 +4,7 @@ A high-performance differentiable molecular dynamics, docking and optimization e
 
 ## Features
 
-1. Supports 4D decoupling of nonbonded terms.
+1. Nonbonded softcore potentials are implemented via 4D decoupling.
 2. Analytical first order derivatives of the potential with respect to the coordinates, forcefield parameters, and lambda
 3. vjp support for backpropping system derivatives into forcefield derivatives.
 
