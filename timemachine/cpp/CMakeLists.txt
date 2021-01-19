@@ -7,13 +7,6 @@ find_package(PythonInterp 3.6 REQUIRED)
 find_package(PythonLibs 3.6 REQUIRED)
 
 set(CUDA_ARCH sm_70 CACHE STRING "Specific CUDA architecture we're targetting.")
-set(BUILD_TEST OFF CACHE STRING "Whether or not we're building for tests.")
-
-if(BUILD_TEST)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point_test.hpp ${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point.hpp COPYONLY)
-else(BUILD_TEST)
-    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point_prod.hpp ${CMAKE_CURRENT_SOURCE_DIR}/src/fixed_point.hpp COPYONLY)
-endif(BUILD_TEST)
 
 string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo -rdc=true")
 message(${CMAKE_CUDA_FLAGS})
