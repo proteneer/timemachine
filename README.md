@@ -57,7 +57,7 @@ When we have experimental measurements, the loss function and its derivative is 
 
 <img width="293" alt="Screen Shot 2020-09-29 at 10 25 41 AM" src="https://user-images.githubusercontent.com/2280724/94571590-28c29200-023e-11eb-8948-c8acb44eaa1a.png">
 
-## Relative Binding Free Energy Training (RBFE)
+## Relative Binding Free Energy (RBFE) Training
 
 An example source code of how one can train the RBFE via TI is available at:
 
