@@ -31,6 +31,13 @@ from md import minimizer
 
 from time import time
 
+from pathlib import Path
+
+root = Path(__file__).parent.parent
+path_to_ligand = str(root.joinpath('tests/data/ligands_40.sdf'))
+path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
+path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
+
 def wrap_method(args, fn):
     """set an OS environment variable using args[0], apply fn to args[1:]"""
     gpu_idx = args[0]
@@ -78,7 +85,7 @@ def estimate_dG(transformation: RelativeTransformation,
                 ):
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box = builders.build_protein_system(
-        'tests/data/hif2a_nowater_min.pdb')
+        path_to_protein)
     complex_box += np.eye(3) * 0.1  # BFGS this later
 
     # build the water system.
@@ -137,9 +144,6 @@ if __name__ == "__main__":
     pool = multiprocessing.Pool(num_gpus)
 
     # TODO: move this test system constructor into a test fixture sort of thing
-    from pathlib import Path
-    root = Path(__file__).parent.parent
-    path_to_ligand = str(root.joinpath('tests/data/ligands_40.sdf'))
 
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
     all_mols = [x for x in suppl]
@@ -177,7 +181,9 @@ if __name__ == "__main__":
                      [28, 27],
                      [21, 22]]
                     )
-    ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
+    with open(path_to_ff) as f:
+        ff_handlers = deserialize_handlers(f.read())
+
     forcefield = Forcefield(ff_handlers)
 
     transformation = RelativeTransformation(forcefield, mol_a, mol_b, core)
