@@ -1,4 +1,4 @@
-# Adapted from 
+# Adapted from https://github.com/proteneer/timemachine/blob/8f4c6d009ff27e070c19ff16901082197c54494d/examples/rbfe_single.py
 
 # without computing gradient (just computing dG_estimate), with default lambda protocol,
 # what is the bias and variance of dG_estimate as a function of computational effort?
@@ -137,7 +137,11 @@ if __name__ == "__main__":
     pool = multiprocessing.Pool(num_gpus)
 
     # TODO: move this test system constructor into a test fixture sort of thing
-    suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
+    from pathlib import Path
+    root = Path(__file__).parent.parent
+    path_to_ligand = str(root.joinpath('tests/data/ligands_40.sdf'))
+
+    suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
     all_mols = [x for x in suppl]
     mol_a = all_mols[1]
     mol_b = all_mols[4]
