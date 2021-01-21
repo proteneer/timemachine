@@ -1,128 +1,130 @@
-import argparse
+# import argparse
 
-import numpy as np
-import time
-import os
+# import numpy as np
+# import time
+# import os
 
-import logging
-import pickle
-from concurrent import futures
+# import logging
+# import pickle
+# from concurrent import futures
 
-import grpc
+# from training import service_pb2
 
-import service_pb2
-import service_pb2_grpc
+# import grpc
 
-from threading import Lock
+# import service_pb2
+# import service_pb2_grpc
 
-from timemachine.lib import custom_ops
+# from threading import Lock
 
-class Worker(service_pb2_grpc.WorkerServicer):
+# from timemachine.lib import custom_ops
 
-    def Simulate(self, request, context):
+# class Worker(service_pb2_grpc.WorkerServicer):
 
-        if request.precision == 'single':
-            precision = np.float32
-        elif request.precision == 'double':
-            precision = np.float64
-        else:
-            raise Exception("Unknown precision")
+#     def Simulate(self, request, context):
 
-        simulation = pickle.loads(request.simulation)
+#         if request.precision == 'single':
+#             precision = np.float32
+#         elif request.precision == 'double':
+#             precision = np.float64
+#         else:
+#             raise Exception("Unknown precision")
 
-        bps = []
-        pots = []
+#         simulation = pickle.loads(request.simulation)
 
-        for potential in simulation.potentials:
-            bps.append(potential.bound_impl()) # get the bound implementation
+#         bps = []
+#         pots = []
 
-        intg = simulation.integrator.impl()
+#         for potential in simulation.potentials:
+#             bps.append(potential.bound_impl()) # get the bound implementation
 
-        ctxt = custom_ops.Context(
-            simulation.x,
-            simulation.v,
-            simulation.box,
-            intg,
-            bps
-        )
+#         intg = simulation.integrator.impl()
 
-        lamb = request.lamb
+#         ctxt = custom_ops.Context(
+#             simulation.x,
+#             simulation.v,
+#             simulation.box,
+#             intg,
+#             bps
+#         )
 
-        for step, minimize_lamb in enumerate(np.linspace(1.0, lamb, request.prep_steps)):
-            ctxt.step(minimize_lamb)
+#         lamb = request.lamb
 
-        energies = []
-        frames = []
+#         for step, minimize_lamb in enumerate(np.linspace(1.0, lamb, request.prep_steps)):
+#             ctxt.step(minimize_lamb)
 
-        if request.observe_du_dl_freq > 0:
-            du_dl_obs = custom_ops.AvgPartialUPartialLambda(bps, request.observe_du_dl_freq)
-            ctxt.add_observable(du_dl_obs)
+#         energies = []
+#         frames = []
 
-        if request.observe_du_dp_freq > 0:
-            du_dps = []
-            # for name, bp in zip(names, bps):
-            # if name == 'LennardJones' or name == 'Electrostatics':
-            for bp in bps:
-                du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, request.observe_du_dp_freq)
-                ctxt.add_observable(du_dp_obs)
-                du_dps.append(du_dp_obs)
+#         if request.observe_du_dl_freq > 0:
+#             du_dl_obs = custom_ops.AvgPartialUPartialLambda(bps, request.observe_du_dl_freq)
+#             ctxt.add_observable(du_dl_obs)
 
-        # dynamics
-        for step in range(request.prod_steps):
-            if step % 100 == 0:
-                u = ctxt._get_u_t_minus_1()
-                energies.append(u)
+#         if request.observe_du_dp_freq > 0:
+#             du_dps = []
+#             # for name, bp in zip(names, bps):
+#             # if name == 'LennardJones' or name == 'Electrostatics':
+#             for bp in bps:
+#                 du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, request.observe_du_dp_freq)
+#                 ctxt.add_observable(du_dp_obs)
+#                 du_dps.append(du_dp_obs)
 
-            if request.n_frames > 0:
-                interval = max(1, request.prod_steps//request.n_frames)
-                if step % interval == 0:
-                    frames.append(ctxt.get_x_t())
+#         # dynamics
+#         for step in range(request.prod_steps):
+#             if step % 100 == 0:
+#                 u = ctxt._get_u_t_minus_1()
+#                 energies.append(u)
 
-            ctxt.step(lamb)
+#             if request.n_frames > 0:
+#                 interval = max(1, request.prod_steps//request.n_frames)
+#                 if step % interval == 0:
+#                     frames.append(ctxt.get_x_t())
 
-        frames = np.array(frames)
+#             ctxt.step(lamb)
 
-        if request.observe_du_dl_freq > 0:
-            avg_du_dls = du_dl_obs.avg_du_dl()
-        else:
-            avg_du_dls = None
+#         frames = np.array(frames)
 
-        if request.observe_du_dp_freq > 0:
-            avg_du_dps = []
-            for obs in du_dps:
-                avg_du_dps.append(obs.avg_du_dp())
-        else:
-            avg_du_dps = None
+#         if request.observe_du_dl_freq > 0:
+#             avg_du_dls = du_dl_obs.avg_du_dl()
+#         else:
+#             avg_du_dls = None
 
-        return service_pb2.SimulateReply(
-            avg_du_dls=pickle.dumps(avg_du_dls),
-            avg_du_dps=pickle.dumps(avg_du_dps),
-            energies=pickle.dumps(energies),
-            frames=pickle.dumps(frames),
-        )
+#         if request.observe_du_dp_freq > 0:
+#             avg_du_dps = []
+#             for obs in du_dps:
+#                 avg_du_dps.append(obs.avg_du_dp())
+#         else:
+#             avg_du_dps = None
+
+#         return service_pb2.SimulateReply(
+#             avg_du_dls=pickle.dumps(avg_du_dls),
+#             avg_du_dps=pickle.dumps(avg_du_dps),
+#             energies=pickle.dumps(energies),
+#             frames=pickle.dumps(frames),
+#         )
 
 
-def serve(args):
+# def serve(args):
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1),
-        options = [
-            ('grpc.max_send_message_length', 50 * 1024 * 1024),
-            ('grpc.max_receive_message_length', 50 * 1024 * 1024)
-        ]
-    )
-    service_pb2_grpc.add_WorkerServicer_to_server(Worker(), server)
-    server.add_insecure_port('[::]:'+str(args.port))
-    server.start()
-    server.wait_for_termination()
+#     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1),
+#         options = [
+#             ('grpc.max_send_message_length', 50 * 1024 * 1024),
+#             ('grpc.max_receive_message_length', 50 * 1024 * 1024)
+#         ]
+#     )
+#     service_pb2_grpc.add_WorkerServicer_to_server(Worker(), server)
+#     server.add_insecure_port('[::]:'+str(args.port))
+#     server.start()
+#     server.wait_for_termination()
 
-if __name__ == '__main__':
+# if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Worker Server')
-    parser.add_argument('--gpu_idx', type=int, required=True, help='Location of all output files')
-    parser.add_argument('--port', type=int, required=True, help='Either single or double precision. Double is 8x slower.')
-    args = parser.parse_args()
+#     parser = argparse.ArgumentParser(description='Worker Server')
+#     parser.add_argument('--gpu_idx', type=int, required=True, help='Location of all output files')
+#     parser.add_argument('--port', type=int, required=True, help='Either single or double precision. Double is 8x slower.')
+#     args = parser.parse_args()
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_idx)
+#     os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_idx)
 
-    logging.basicConfig()
-    serve(args)
+#     logging.basicConfig()
+#     serve(args)

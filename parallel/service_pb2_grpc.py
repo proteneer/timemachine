@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-import service_pb2 as service__pb2
+from parallel import service_pb2 as parallel_dot_service__pb2
 
 
 class WorkerStub(object):
@@ -14,17 +14,17 @@ class WorkerStub(object):
         Args:
             channel: A grpc.Channel.
         """
-        self.Simulate = channel.unary_unary(
-                '/Worker/Simulate',
-                request_serializer=service__pb2.SimulateRequest.SerializeToString,
-                response_deserializer=service__pb2.SimulateReply.FromString,
+        self.Submit = channel.unary_unary(
+                '/Worker/Submit',
+                request_serializer=parallel_dot_service__pb2.PickleData.SerializeToString,
+                response_deserializer=parallel_dot_service__pb2.PickleData.FromString,
                 )
 
 
 class WorkerServicer(object):
     """Missing associated documentation comment in .proto file."""
 
-    def Simulate(self, request, context):
+    def Submit(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -33,10 +33,10 @@ class WorkerServicer(object):
 
 def add_WorkerServicer_to_server(servicer, server):
     rpc_method_handlers = {
-            'Simulate': grpc.unary_unary_rpc_method_handler(
-                    servicer.Simulate,
-                    request_deserializer=service__pb2.SimulateRequest.FromString,
-                    response_serializer=service__pb2.SimulateReply.SerializeToString,
+            'Submit': grpc.unary_unary_rpc_method_handler(
+                    servicer.Submit,
+                    request_deserializer=parallel_dot_service__pb2.PickleData.FromString,
+                    response_serializer=parallel_dot_service__pb2.PickleData.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -49,7 +49,7 @@ class Worker(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
-    def Simulate(request,
+    def Submit(request,
             target,
             options=(),
             channel_credentials=None,
@@ -58,8 +58,8 @@ class Worker(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/Worker/Simulate',
-            service__pb2.SimulateRequest.SerializeToString,
-            service__pb2.SimulateReply.FromString,
+        return grpc.experimental.unary_unary(request, target, '/Worker/Submit',
+            parallel_dot_service__pb2.PickleData.SerializeToString,
+            parallel_dot_service__pb2.PickleData.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)
