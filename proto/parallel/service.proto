@@ -1,0 +1,31 @@
+// (ytz) activate venv and compile with
+// python3 -m grpc_tools.protoc -I proto/ --python_out=. --grpc_python_out=. proto/parallel/service.proto
+// this specific folder setup is required for import paths in generated _pb files to be correct.
+
+syntax = "proto3";
+
+service Worker {
+    rpc Submit(PickleData) returns (PickleData) {}
+    // rpc BackwardMode(BackwardRequest) returns (BackwardReply) {}
+    // rpc ResetState(EmptyMessage) returns (EmptyMessage) {}
+}
+
+message PickleData {
+    bytes binary = 1;
+}
+
+// The request message containing the user's name.
+message SimulateRequest {
+
+    bytes potentials = 1;
+    double lamb = 2;
+    bytes x0 = 3;
+    bytes v0 = 4;
+    bytes box = 5;
+    int32 equil_steps = 6;
+    int32 prod_steps = 7;
+}
+
+message SimulateReply {
+    bytes data = 1;
+}
