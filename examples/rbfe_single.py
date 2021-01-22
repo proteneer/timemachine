@@ -29,7 +29,7 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM):
 
 def run_epoch(client, ff, mol_a, mol_b, core):
     # build the protein system.
-    complex_system, complex_coords, _, _, complex_box = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
+    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
     complex_box += np.eye(3)*0.1 # BFGS this later
 
     # build the water system.
