@@ -21,7 +21,7 @@ from ff.handlers import nonbonded
 from parallel.client import CUDAPoolClient
 
 from fe import free_energy
-
+import multiprocessing
 
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18
@@ -190,6 +190,7 @@ if __name__ == "__main__":
 
 
     cmd_args = parser.parse_args()
+    multiprocessing.set_start_method('spawn')  # CUDA runtime is not forkable
 
     client = CUDAPoolClient(max_workers=cmd_args.num_gpus)
 
