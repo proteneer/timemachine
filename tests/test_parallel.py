@@ -45,7 +45,6 @@ class TestCUDAPoolClient(unittest.TestCase):
         self.cli = client.CUDAPoolClient(max_workers)
 
     def test_submit(self):
-        arr = np.linspace(0, 1.0, 10)
 
         futures = []
         for _ in range(10):
