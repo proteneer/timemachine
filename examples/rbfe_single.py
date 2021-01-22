@@ -66,8 +66,7 @@ def run_epoch(client, ff, mol_a, mol_b, core):
         # solvent leg
         host_args = []
         for lambda_idx, lamb in enumerate(lambda_schedule):
-            gpu_idx = lambda_idx % cmd_args.num_gpus
-            host_args.append((gpu_idx, lamb, host_system, minimized_host_coords, host_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
+            host_args.append((lamb, host_system, minimized_host_coords, host_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
 
         futures = []
         for arg in host_args:
