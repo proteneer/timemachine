@@ -27,6 +27,12 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18
 
 
+def wrap_method(args, fxn):
+    # TODO: is there a more functools-y approach to make
+    #   a function accept tuple instead of positional arguments?
+    return fxn(*args)
+
+
 def run_epoch(client, ff, mol_a, mol_b, core):
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
@@ -70,8 +76,9 @@ def run_epoch(client, ff, mol_a, mol_b, core):
 
         futures = []
         for arg in host_args:
-            fut = client.submit(rfe.host_edge, arg)
-            futures.append(fut)
+            do_work = functools.partial(wrap_method, fxn=rfe.host_edge)
+            future = client.submit(do_work, arg)
+            futures.append(future)
 
         results = []
         for fut in futures:
