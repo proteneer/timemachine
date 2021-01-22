@@ -42,11 +42,12 @@ class AbstractClient():
 
         futures = []
         for arg in args:
-            fut = client.submit(fn, *args)
+            fut = client.submit(task_fn, arg)
             futures.append(fut)
-
+            
+        res = []
         for fut in futures:
-            res = fut.result()
+            res.append(fut.result())
 
         """
         raise NotImplementedError()
