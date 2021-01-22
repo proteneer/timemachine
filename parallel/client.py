@@ -21,7 +21,7 @@ class AbstractClient():
     def submit(self, task_fn, *args):
         """
         Submit is an asynchronous method that will launch task_fn whose 
-        results will be collected a later point in time. The input task_fn
+        results will be collected at a later point in time. The input task_fn
         and its arguments should be picklable. See Python documentation for
         pickle rules.
 
@@ -112,10 +112,11 @@ class CUDAPoolClient(ProcessPoolClient):
         return future
 
 class BinaryFutureWrapper():
-    """
-    Utility class to help unwrap pickle'd Future objects.
-    """
+
     def __init__(self, future):
+        """
+        Utility class to help unwrap pickle'd Future objects.
+        """
         self._future = future
 
     def result(self):

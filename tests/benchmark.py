@@ -2,8 +2,6 @@
 import time
 import numpy as np
 
-from training import water_box
-
 from fe.utils import to_md_units
 from ff.handlers import bonded, nonbonded, openmm_deserializer
 
