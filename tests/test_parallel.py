@@ -11,6 +11,10 @@ import os
 import grpc
 import concurrent
 
+import multiprocessing
+
+multiprocessing.set_start_method('spawn')
+
 def square(a):
     return a*a
 
