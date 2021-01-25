@@ -71,11 +71,8 @@ class ProcessPoolClient(AbstractClient):
             Number of workers to launch via the ProcessPoolExecutor
 
         """
-        if multiprocessing.get_start_method() != 'spawn':
-            message = "Jax and CUDA are not fork-safe! Please call `multiprocessing.set_start_method('spawn')` and try again"
-            raise (RuntimeError(message))
-
-        self.executor = futures.ProcessPoolExecutor(max_workers=max_workers)
+        ctxt = multiprocessing.get_context('spawn')
+        self.executor = futures.ProcessPoolExecutor(max_workers=max_workers, mp_context=ctxt)
         self.max_workers = max_workers
         self._idx = 0
 
