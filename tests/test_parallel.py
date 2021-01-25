@@ -42,7 +42,8 @@ class TestProcessPool(unittest.TestCase):
         np.testing.assert_array_equal(test_res, arr*arr)
 
     def test_jax(self):
-        # Test that jax code can be launched via multiprocessing
+        # (ytz): test that jax code can be launched via multiprocessing
+        # if we didn't set get_context('spawn') earlier then this will hang.
         x = jnp.array([50., 2.0])
         fut = self.cli.submit(jax_fn, x)
         np.testing.assert_almost_equal(fut.result(), np.sqrt(x))
