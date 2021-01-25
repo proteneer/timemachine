@@ -11,6 +11,11 @@ import os
 import grpc
 import concurrent
 
+import jax.numpy as jnp
+
+
+def jax_fn(x):
+    return jnp.sqrt(x)
 
 def square(a):
     return a*a
@@ -35,6 +40,12 @@ class TestProcessPool(unittest.TestCase):
             test_res.append(f.result())
 
         np.testing.assert_array_equal(test_res, arr*arr)
+
+    def test_jax(self):
+        # Test that jax code can be launched via multiprocessing
+        x = jnp.array([50., 2.0])
+        fut = self.cli.submit(jax_fn, x)
+        np.testing.assert_almost_equal(fut.result(), np.sqrt(x))
 
 def environ_check():
     return os.environ['CUDA_VISIBLE_DEVICES']

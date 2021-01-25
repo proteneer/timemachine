@@ -73,13 +73,7 @@ class ProcessPoolClient(AbstractClient):
 
         """
         ctxt = multiprocessing.get_context('spawn')
-
-        # (ytz): TODO remove this once we drop support for 3.6 and move to 3.8
-        if sys.version_info[0] == 3 and sys.version_info[1] == 6:
-            from parallel import jank_executor
-            self.executor = jank_executor.ProcessPoolExecutor(max_workers=max_workers, mp_context=ctxt)
-        else:
-            self.executor = futures.ProcessPoolExecutor(max_workers=max_workers, mp_context=ctxt)
+        self.executor = futures.ProcessPoolExecutor(max_workers=max_workers, mp_context=ctxt)
         self.max_workers = max_workers
         self._idx = 0
 
