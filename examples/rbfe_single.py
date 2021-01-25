@@ -70,14 +70,11 @@ def run_epoch(client, ff, mol_a, mol_b, core):
         rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
 
         # solvent leg
-        host_args = []
-        for lambda_idx, lamb in enumerate(lambda_schedule):
-            host_args.append((lamb, host_system, minimized_host_coords, host_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
-
         # one GPU job per lambda window
         do_work = functools.partial(wrap_method, fxn=rfe.host_edge)
         futures = []
-        for arg in host_args:
+        for lambda_idx, lamb in enumerate(lambda_schedule):
+            arg = (lamb, host_system, minimized_host_coords, host_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps)
             futures.append(client.submit(do_work, arg))
 
         results = []
