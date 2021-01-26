@@ -21,8 +21,6 @@ from timemachine.potentials import bonded, nonbonded, gbsa
 from timemachine.lib import potentials
 from md import builders
 
-from training import water_box
-
 from hilbertcurve.hilbertcurve import HilbertCurve
 from fe.utils import to_md_units
 
@@ -417,58 +415,43 @@ class TestNonbonded(GradientTest):
         np.random.seed(4321)
         D = 3
 
-        benchmark = False
-
-        # test numerical accuracy on a box of water
-
         for size in [33, 231, 1050]:
 
-            if not benchmark:
-                water_coords = self.get_water_coords(D, sort=False)
-                test_system = water_coords[:size]
-                padding = 0.2
-                diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
-                box = np.eye(3)
-                np.fill_diagonal(box, diag)
-            else:
-                # _, test_system, box, _ = water_box.prep_system(8.1) # 8.1 is 50k atoms, roughly DHFR
-                _, test_system, box, _ = water_box.prep_system(6.2) # 6.2 is 23k atoms, roughly DHFR
-                test_system = test_system/test_system.unit
+            _, coords, box, _ = builders.build_water_system(6.2)
+            coords = coords/coords.unit
+            coords = coords[:size]
 
-            for coords in [test_system]:
+            N = coords.shape[0]
 
-                N = coords.shape[0]
+            lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+            lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-                lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-                lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
-                for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+                for cutoff in [1.0]:
+                    # E = 0 # DEBUG!
+                    charge_params, ref_potential, test_potential = prepare_water_system(
+                        coords,
+                        lambda_plane_idxs,
+                        lambda_offset_idxs,
+                        p_scale=1.0,
+                        cutoff=cutoff
+                    )
 
-                    for cutoff in [1.0]:
-                        # E = 0 # DEBUG!
-                        charge_params, ref_potential, test_potential = prepare_water_system(
+                    for lamb in [0.0, 0.1, 0.2]:
+
+                        print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
+
+                        self.compare_forces(
                             coords,
-                            lambda_plane_idxs,
-                            lambda_offset_idxs,
-                            p_scale=1.0,
-                            cutoff=cutoff
+                            charge_params,
+                            box,
+                            lamb,
+                            ref_potential,
+                            test_potential,
+                            rtol,
+                            precision=precision
                         )
-
-                        for lamb in [0.0, 0.1, 0.2]:
-
-                            print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
-
-                            self.compare_forces(
-                                coords,
-                                charge_params,
-                                box,
-                                lamb,
-                                ref_potential,
-                                test_potential,
-                                rtol,
-                                precision=precision,
-                                benchmark=benchmark
-                            )
 
 
 if __name__ == "__main__":
