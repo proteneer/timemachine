@@ -220,6 +220,25 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 class RelativeFreeEnergy(BaseFreeEnergy):
 
     def __init__(self, mol_a, mol_b, core, ff):
+        """Relative free energy calculation using single-topology
+
+        Parameters
+        ----------
+        mol_a: ROMol
+            First ligand
+
+        mol_b: ROMol
+            Second ligand
+
+        core: np.array (C, 2)
+            Atom mapping from mol_a to to mol_b
+
+        ff: ff.Forcefield
+            Forcefield to be used for parameterization.
+        """
+        # TODO (JF) : consider refactoring so that this accepts a topology.SingleTopology argument,
+        #   rather than accepting a parameter collection that immediately becomes a topology.SingleTopology object
+
         self.mol_a = mol_a
         self.mol_b = mol_b
         self.core = core
