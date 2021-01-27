@@ -180,11 +180,21 @@ others = list(mols_with_core_1)
 others.pop(hub_index)
 
 from fe.free_energy import RelativeFreeEnergy
+from fe.topology import AtomMappingError
+
+def get_mol_id(mol):
+    return mol.GetPropsAsDict()['ID']
 
 transformations = []
 for spoke in others:
     core = get_core(hub, spoke, mcs_map(hub, spoke).queryMol)
-    transformations.append(RelativeFreeEnergy(hub, spoke, core, ff_handlers))
+    try:
+        rfe = RelativeFreeEnergy(hub, spoke, core, ff_handlers)
+        transformations.append(rfe)
+    except AtomMappingError as e:
+        print(f'atom mapping error in transformation {get_mol_id(hub)} -> {get_mol_id(spoke)}!')
+        print(core)
+        print(e)
 
 # serialize
 from pickle import dump
