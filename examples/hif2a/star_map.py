@@ -183,7 +183,7 @@ from fe.free_energy import RelativeFreeEnergy
 
 transformations = []
 for spoke in others:
-    core = get_core(hub, spoke, mcs_map(hub, spoke))
+    core = get_core(hub, spoke, mcs_map(hub, spoke).queryMol)
     transformations.append(RelativeFreeEnergy(hub, spoke, core, ff_handlers))
 
 # serialize
