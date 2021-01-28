@@ -10,11 +10,13 @@ import matplotlib.pyplot as plt
 root = Path(__file__).parent.parent.parent
 
 # 0. Get force field
+from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
 path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
 with open(path_to_ff) as f:
     ff_handlers = deserialize_handlers(f.read())
+forcefield = Forcefield(ff_handlers)
 
 # 1. Get ligands
 # TODO: possibly Git submodule to fep-benchmark inside datasets/, rather than copying fep-benchmark into datasets
@@ -191,7 +193,7 @@ transformations = []
 for spoke in others:
     core = get_core(hub, spoke, mcs_map(hub, spoke).queryMol)
     try:
-        rfe = RelativeFreeEnergy(hub, spoke, core, ff_handlers)
+        rfe = RelativeFreeEnergy(hub, spoke, core, forcefield)
         transformations.append(rfe)
     except AtomMappingError as e:
         print(f'atom mapping error in transformation {get_mol_id(hub)} -> {get_mol_id(spoke)}!')
