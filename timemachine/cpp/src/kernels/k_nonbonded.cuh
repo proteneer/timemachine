@@ -83,7 +83,7 @@ void __global__ k_check_rebuild_box(
 
     const int idx = blockIdx.x*blockDim.x + threadIdx.x;
 
-    if(idx > 9) {
+    if(idx >= 9) {
         return;
     }
 
