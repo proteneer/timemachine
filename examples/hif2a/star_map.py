@@ -185,7 +185,7 @@ from fe.free_energy import RelativeFreeEnergy
 from fe.topology import AtomMappingError
 
 def get_mol_id(mol):
-    return mol.GetPropsAsDict()['ID']
+    return mol.GetProp('ID')
 
 # note: 9 of 31 transformations fail the factorizability assertion here:
 # https://github.com/proteneer/timemachine/blob/2eb956f9f8ce62287cc531188d1d1481832c5e96/fe/topology.py#L381-L431
