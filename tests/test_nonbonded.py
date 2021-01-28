@@ -1,3 +1,8 @@
+# (ytz): check test and run benchmark with pytest:
+# pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_dhfr && nvprof pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_benchmark
+
+import copy
+
 import functools
 import unittest
 import scipy.linalg
@@ -10,14 +15,17 @@ import jax.numpy as jnp
 import functools
 
 from common import GradientTest
-from common import prepare_nb_system, prepare_water_system
+from common import prepare_nb_system, prepare_water_system, prepare_reference_nonbonded
 
 from timemachine.potentials import bonded, nonbonded, gbsa
 from timemachine.lib import potentials
-
-from training import water_box
+from md import builders
 
 from hilbertcurve.hilbertcurve import HilbertCurve
+from fe.utils import to_md_units
+
+from ff.handlers import openmm_deserializer
+from simtk.openmm import app
 
 np.set_printoptions(linewidth=500)
 
@@ -31,6 +39,276 @@ def hilbert_sort(conf, D):
         dists.append(dist)
     perm = np.argsort(dists)
     return perm
+
+class TestNonbondedDHFR(GradientTest):
+
+    def setUp(self):
+        # This test checks hilbert curve re-ordering gives identical results
+        pdb_path = 'tests/data/5dfr_solv_equil.pdb'
+        host_pdb = app.PDBFile(pdb_path)
+        protein_ff = app.ForceField('amber99sbildn.xml', 'tip3p.xml')
+
+        host_system = protein_ff.createSystem(
+            host_pdb.topology,
+            nonbondedMethod=app.NoCutoff,
+            constraints=None,
+            rigidWater=False
+        )
+
+        host_coords = host_pdb.positions
+        box = host_pdb.topology.getPeriodicBoxVectors()
+        self.box = np.asarray(box/box.unit)
+
+        host_fns, host_masses = openmm_deserializer.deserialize_system(
+            host_system,
+            cutoff=1.0
+        )
+
+        for f in host_fns:
+            if isinstance(f, potentials.Nonbonded):
+                self.nonbonded_fn = f
+
+        host_conf = []
+        for x,y,z in host_coords:
+            host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+        self.host_conf = np.array(host_conf)
+
+        self.beta = 2.0
+        self.cutoff = 1.1
+        self.lamb = 0.1
+
+    def test_nblist_hilbert(self):
+        """
+        This test makes sure that hilbert ordering has no impact on numerical results. The
+        computed forces, energies, etc. should be bitwise identical.
+        """
+
+        np.random.seed(2021)
+
+        N = self.host_conf.shape[0]
+
+        ref_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
+        ref_nonbonded_impl.disable_hilbert_sort()
+
+        test_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
+
+        padding = 0.1
+        deltas = np.random.rand(N,3)-0.5 # [-0.5, +0.5]
+        divisor = 0.5*(2*np.sqrt(3))/padding
+        # if deltas are kept under +- p/(2*sqrt(3)) then no rebuild gets triggered
+        deltas = deltas/divisor # exactly within bounds, and should not trigger a rebuild
+
+        for d in deltas:
+            assert np.linalg.norm(d) < padding/2
+
+        xs = [self.host_conf, self.host_conf + deltas]
+
+        np.set_printoptions(precision=16)
+        # under pure fixed point accumulation the results should be identical.
+        for x_idx, x in enumerate(xs):
+
+            ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
+            test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
+
+            np.testing.assert_array_equal(ref_du_dx, test_du_dx)
+            np.testing.assert_array_equal(ref_du_dp, test_du_dp)
+            np.testing.assert_array_equal(ref_du_dl, test_du_dl)
+            np.testing.assert_array_equal(ref_u, test_u)
+
+            ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+            test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+
+            for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
+                if np.linalg.norm(a-b) != 0:
+                    print(idx, a, b)
+                    assert 0
+                np.testing.assert_array_equal(a, b)
+
+            np.testing.assert_array_equal(ref_du_dx, test_du_dx)
+
+    def test_nblist_rebuild(self):
+        """
+        This test makes sure that periodically rebuilding the neighborlist no impact on numerical results. The
+        computed forces, energies, etc. should be bitwise identical.
+        """
+
+        N = self.host_conf.shape[0]
+
+        np.random.seed(2021)
+
+        ref_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
+        ref_nonbonded_impl.set_nblist_padding(0.0) # rebuild with every call
+
+        padding = 0.1
+
+        test_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
+        test_nonbonded_impl.set_nblist_padding(padding) # rebuild only when deltas have moved more than padding/2 angstroms
+
+        deltas = np.random.rand(N,3)-0.5 # [-0.5, +0.5]
+        divisor = 0.5*(2*np.sqrt(3))/padding
+        # if deltas are kept under +- p/(2*sqrt(3)) then no rebuild gets triggered
+        deltas = deltas/divisor # exactly within bounds, and should not trigger a rebuild
+
+        for d in deltas:
+            assert np.linalg.norm(d) < padding/2
+
+        xs = [self.host_conf, self.host_conf + deltas]
+
+        # under pure fixed point accumulation the results should be identical.
+        for x_idx, x in enumerate(xs):
+            ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
+            test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
+
+            np.testing.assert_array_equal(ref_du_dx, test_du_dx)
+            np.testing.assert_array_equal(ref_du_dp, test_du_dp)
+            np.testing.assert_array_equal(ref_du_dl, test_du_dl)
+            np.testing.assert_array_equal(ref_u, test_u)
+
+            ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+            test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+
+            for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
+                if np.linalg.norm(a-b) != 0:
+                    print(idx, a, b)
+                    print(a)
+                    print(b)
+                    assert 0
+                np.testing.assert_array_equal(a, b)
+
+            np.testing.assert_array_equal(ref_du_dx, test_du_dx)
+
+    def test_correctness(self):
+        """
+        Test against the reference jax platform for correctness.
+        """
+        max_N = self.host_conf.shape[0]
+
+        # we can't go bigger than this due to memory limitations in the the reference platform.
+        for N in [33, 65, 231, 1050, 4080]:
+
+            test_conf = self.host_conf[:N]
+
+            # strip out parts of the system
+            test_exclusions = []
+            test_scales = []
+            for (i, j), (sa, sb) in zip(self.nonbonded_fn.get_exclusion_idxs(), self.nonbonded_fn.get_scale_factors()):
+                if i < N and j < N:
+                    test_exclusions.append((i,j))
+                    test_scales.append((sa, sb))
+            test_exclusions = np.array(test_exclusions, dtype=np.int32)
+            test_scales = np.array(test_scales, dtype=np.float64)
+            test_params = self.nonbonded_fn.params[:N, :]
+
+            test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+            test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+
+            test_nonbonded_fn = potentials.Nonbonded(
+                test_exclusions,
+                test_scales,
+                test_lambda_plane_idxs,
+                test_lambda_offset_idxs,
+                self.beta,
+                self.cutoff
+            )
+
+            ref_nonbonded_fn = prepare_reference_nonbonded(
+                test_params,
+                test_exclusions,
+                test_scales,
+                test_lambda_plane_idxs,
+                test_lambda_offset_idxs,
+                self.beta,
+                self.cutoff
+            )
+
+            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+
+                self.compare_forces(
+                    test_conf,
+                    test_params,
+                    self.box,
+                    self.lamb,
+                    ref_nonbonded_fn,
+                    test_nonbonded_fn,
+                    rtol,
+                    precision=precision
+                )
+
+
+    @unittest.skip("benchmark-only")
+    def test_benchmark(self):
+        """
+        This is mainly for benchmarking nonbonded computations on the initial state. 
+        """
+
+        N = self.host_conf.shape[0]
+
+        host_conf = self.host_conf[:N]
+
+        precision = np.float32
+
+        impl = self.nonbonded_fn.unbound_impl(np.float32)
+
+        for _ in range(100):
+
+            impl.execute_du_dx(host_conf, self.nonbonded_fn.params, self.box, self.lamb)
+
+class TestNonbondedWater(GradientTest):
+
+    def test_nblist_box_resize(self):
+        # test that running the coordinates under two different boxes produces correct results
+        # since we should be rebuilding the nblist when the box sizes change.
+
+        host_system, host_coords, box, _ = builders.build_water_system(2.0)
+
+        host_fns, host_masses = openmm_deserializer.deserialize_system(
+            host_system,
+            cutoff=1.0
+        )
+
+        for f in host_fns:
+            if isinstance(f, potentials.Nonbonded):
+                test_nonbonded_fn = f
+
+        host_conf = []
+        for x,y,z in host_coords:
+            host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+        host_conf = np.array(host_conf)
+
+        lamb = 0.1
+
+        N = host_conf.shape[0]
+
+        ref_nonbonded_fn = prepare_reference_nonbonded(
+            test_nonbonded_fn.params,
+            test_nonbonded_fn.get_exclusion_idxs(),
+            test_nonbonded_fn.get_scale_factors(),
+            test_nonbonded_fn.get_lambda_plane_idxs(),
+            test_nonbonded_fn.get_lambda_offset_idxs(),
+            test_nonbonded_fn.get_beta(),
+            test_nonbonded_fn.get_cutoff()
+        )
+
+        big_box = box + np.eye(3)*1000
+
+        # print(big_box, small_box)
+        # (ytz): note the ordering should be from large box to small box. though in the current code
+        # the rebuild is triggered as long as the box *changes*.
+        for test_box in [big_box, box]:
+
+            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+
+                self.compare_forces(
+                    host_conf,
+                    test_nonbonded_fn.params,
+                    test_box,
+                    lamb,
+                    ref_nonbonded_fn,
+                    test_nonbonded_fn,
+                    rtol,
+                    precision=precision
+                )
+
 
 
 class TestNonbonded(GradientTest):
@@ -137,58 +415,43 @@ class TestNonbonded(GradientTest):
         np.random.seed(4321)
         D = 3
 
-        benchmark = False
-
-        # test numerical accuracy on a box of water
-
         for size in [33, 231, 1050]:
 
-            if not benchmark:
-                water_coords = self.get_water_coords(D, sort=False)
-                test_system = water_coords[:size]
-                padding = 0.2
-                diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
-                box = np.eye(3)
-                np.fill_diagonal(box, diag)
-            else:
-                # _, test_system, box, _ = water_box.prep_system(8.1) # 8.1 is 50k atoms, roughly DHFR
-                _, test_system, box, _ = water_box.prep_system(6.2) # 6.2 is 23k atoms, roughly DHFR
-                test_system = test_system/test_system.unit
+            _, coords, box, _ = builders.build_water_system(6.2)
+            coords = coords/coords.unit
+            coords = coords[:size]
 
-            for coords in [test_system]:
+            N = coords.shape[0]
 
-                N = coords.shape[0]
+            lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+            lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-                lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-                lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
-                for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+                for cutoff in [1.0]:
+                    # E = 0 # DEBUG!
+                    charge_params, ref_potential, test_potential = prepare_water_system(
+                        coords,
+                        lambda_plane_idxs,
+                        lambda_offset_idxs,
+                        p_scale=1.0,
+                        cutoff=cutoff
+                    )
 
-                    for cutoff in [1.0]:
-                        # E = 0 # DEBUG!
-                        charge_params, ref_potential, test_potential = prepare_water_system(
+                    for lamb in [0.0, 0.1, 0.2]:
+
+                        print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
+
+                        self.compare_forces(
                             coords,
-                            lambda_plane_idxs,
-                            lambda_offset_idxs,
-                            p_scale=1.0,
-                            cutoff=cutoff
+                            charge_params,
+                            box,
+                            lamb,
+                            ref_potential,
+                            test_potential,
+                            rtol,
+                            precision=precision
                         )
-
-                        for lamb in [0.0, 0.1, 0.2]:
-
-                            print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
-
-                            self.compare_forces(
-                                coords,
-                                charge_params,
-                                box,
-                                lamb,
-                                ref_potential,
-                                test_potential,
-                                rtol,
-                                precision=precision,
-                                benchmark=benchmark
-                            )
 
 
 if __name__ == "__main__":

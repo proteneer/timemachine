@@ -3,8 +3,6 @@ from timemachine.lib import custom_ops
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 
-from training import water_box
-
 import time
 
 def test_block_bounds():
@@ -68,10 +66,8 @@ def test_neighborlist():
 
     for size in [35, 64, 129, 1025, 1259, 2029]:
 
-
         nblist = custom_ops.Neighborlist_f64(size)
         water_coords = get_water_coords(3, sort=False)
-
 
         for _ in range(2):
 
@@ -83,15 +79,6 @@ def test_neighborlist():
             diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
             box = np.eye(3)
             np.fill_diagonal(box, diag)
-
-            # for benchmarking purposes
-            # _, coords, box, _ = water_box.prep_system(8.0) # 6.2 is 23k atoms, roughly DHFR
-
-            # print(coords[-1])
-            # # print(coords.shape)
-            # coords = coords[:23000]
-            # coords = coords/coords.unit
-
 
             N = coords.shape[0]
             np.random.seed(1234)
@@ -107,13 +94,11 @@ def test_neighborlist():
 
             cutoff = 1.0
 
-            # for r in range(10):
             test_ixn_list = nblist.get_nblist(coords, box, cutoff)
 
+            # for each tile, print list of interacting atoms
 
-            # assert 1
-            # return
-
+            # compute the sparsity of the tile
             ref_ixn_list = []
 
             box_diag = np.diag(box)

@@ -110,6 +110,41 @@ def prepare_lj_system(
 
 #     return charge_params, ref_total_energy, test_potential
 
+def prepare_reference_nonbonded(
+    params,
+    exclusion_idxs,
+    scales,
+    lambda_plane_idxs,
+    lambda_offset_idxs,
+    beta,
+    cutoff):
+
+    N = params.shape[0]
+
+    # process masks for exclusions properly
+    charge_rescale_mask = np.ones((N, N))
+    for (i,j), exc in zip(exclusion_idxs, scales[:, 0]):
+        charge_rescale_mask[i][j] = 1 - exc
+        charge_rescale_mask[j][i] = 1 - exc
+
+    lj_rescale_mask = np.ones((N, N))
+    for (i,j), exc in zip(exclusion_idxs, scales[:, 1]):
+        lj_rescale_mask[i][j] = 1 - exc
+        lj_rescale_mask[j][i] = 1 - exc
+
+    ref_total_energy = functools.partial(
+        nonbonded.nonbonded_v3,
+        charge_rescale_mask=charge_rescale_mask,
+        lj_rescale_mask=lj_rescale_mask,
+        scales=scales,
+        beta=beta,
+        cutoff=cutoff,
+        lambda_plane_idxs=lambda_plane_idxs,
+        lambda_offset_idxs=lambda_offset_idxs
+    )
+
+    return ref_total_energy
+
 
 def prepare_water_system(
     x,
@@ -128,6 +163,9 @@ def prepare_water_system(
         np.random.rand(N).astype(np.float64)/5.0, # sig
         np.random.rand(N).astype(np.float64) # eps
     ], axis=1)
+
+    params[:, 1] = params[:, 1]/2
+    params[:, 2] = np.sqrt(params[:, 2])
 
     atom_idxs = np.arange(N)
 
@@ -453,9 +491,13 @@ class GradientTest(unittest.TestCase):
         assert x.dtype == np.float64
         assert params.dtype == np.float64
 
+        # test force-only version
+        test_du_dx_only = test_potential.execute_du_dx(x, params, box, lamb)
+
         test_du_dx, test_du_dp, test_du_dl, test_u = test_potential.execute(x, params, box, lamb)
 
-        if benchmark:
+        if benchmark or x.shape[0] > 10000:
+            print("WARNING: Skipping assertions")
             return
 
         ref_u = ref_potential(x, params, box, lamb)
@@ -464,10 +506,20 @@ class GradientTest(unittest.TestCase):
 
         np.testing.assert_allclose(ref_u, test_u, rtol)
 
+        self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx_only), rtol)
         self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
 
         np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
+
+        if ref_du_dp.shape[0] > 0:
+            # print("REF")
+            for xx, yy  in zip(ref_du_dp, test_du_dp):
+                if np.linalg.norm(xx-yy) > 0.1:
+                    print(xx,yy)
+
         np.testing.assert_almost_equal(ref_du_dp, test_du_dp, rtol)
+
+        # print(ref_du_dp, test_du_dp)
 
         # we should obtain the same result after calling the function twice.
         # this checks to make sure that buffers etc are being cleaned properly in GPU code.
@@ -477,3 +529,7 @@ class GradientTest(unittest.TestCase):
         np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
         np.testing.assert_array_equal(test_du_dl, test_du_dl_2)
         np.testing.assert_array_equal(test_u, test_u_2)
+
+        test_du_dx_only_2 = test_potential.execute_du_dx(x, params, box, lamb)
+
+        np.testing.assert_array_equal(test_du_dx, test_du_dx_only_2)

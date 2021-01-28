@@ -27,7 +27,7 @@ from training import simulation
 from training import service_pb2_grpc
 
 from timemachine.lib import LangevinIntegrator
-from training import water_box
+from md import builders
 
 # used during visualization to bring everything back to home box
 def recenter(conf, box):
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     ff_handlers = deserialize_handlers(ff_raw)
 
     box_width = 3.0
-    host_system, host_coords, box, _ = water_box.prep_system(box_width)
+    host_system, host_coords, box, _ = builders.build_water_system(box_width)
 
     lambda_schedule = np.array([float(x) for x in general_cfg['lambda_schedule'].split(',')])
 

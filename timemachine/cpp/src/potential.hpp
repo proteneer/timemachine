@@ -24,6 +24,16 @@ public:
         double *h_u
     );
 
+    void execute_host_du_dx(
+        const int N,
+        const int P,
+        const double *h_x,
+        const double *h_p,
+        const double *h_box,
+        const double lambda, // lambda
+        unsigned long long *h_du_dx
+    );
+
     virtual void execute_device(
         const int N,
         const int P,

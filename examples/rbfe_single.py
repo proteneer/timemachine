@@ -18,23 +18,24 @@ from ff import Forcefield
 from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers import nonbonded
-
-import multiprocessing
+from parallel.client import CUDAPoolClient
 
 from fe import free_energy
-
+import multiprocessing
 
 def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     return 0.593*np.log(amount_in_uM*1e-6)*4.18
 
-def wrap_method(args, fn):
-    gpu_idx = args[0]
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
-    return fn(*args[1:])
 
-def run_epoch(ff, mol_a, mol_b, core):
+def wrap_method(args, fxn):
+    # TODO: is there a more functools-y approach to make
+    #   a function accept tuple instead of positional arguments?
+    return fxn(*args)
+
+
+def run_epoch(client, ff, mol_a, mol_b, core):
     # build the protein system.
-    complex_system, complex_coords, _, _, complex_box = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
+    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
     complex_box += np.eye(3)*0.1 # BFGS this later
 
     # build the water system.
@@ -69,12 +70,16 @@ def run_epoch(ff, mol_a, mol_b, core):
         rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
 
         # solvent leg
-        host_args = []
+        # one GPU job per lambda window
+        do_work = functools.partial(wrap_method, fxn=rfe.host_edge)
+        futures = []
         for lambda_idx, lamb in enumerate(lambda_schedule):
-            gpu_idx = lambda_idx % cmd_args.num_gpus
-            host_args.append((gpu_idx, lamb, host_system, minimized_host_coords, host_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
-        
-        results = pool.map(functools.partial(wrap_method, fn=rfe.host_edge), host_args, chunksize=1)
+            arg = (lamb, host_system, minimized_host_coords, host_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps)
+            futures.append(client.submit(do_work, arg))
+
+        results = []
+        for fut in futures:
+            results.append(fut.result())
 
         ghs = []
 
@@ -182,9 +187,9 @@ if __name__ == "__main__":
 
 
     cmd_args = parser.parse_args()
+    multiprocessing.set_start_method('spawn')  # CUDA runtime is not forkable
 
-    multiprocessing.set_start_method('spawn') # CUDA runtime is not forkable
-    pool = multiprocessing.Pool(cmd_args.num_gpus)
+    client = CUDAPoolClient(max_workers=cmd_args.num_gpus)
 
     suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
     all_mols = [x for x in suppl]
@@ -236,7 +241,7 @@ if __name__ == "__main__":
 
     for epoch in range(100):
 
-        run_epoch(forcefield, mol_a, mol_b, core)
+        run_epoch(client, forcefield, mol_a, mol_b, core)
 
         epoch_params = serialize_handlers(ff_handlers)
 

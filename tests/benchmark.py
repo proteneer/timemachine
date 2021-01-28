@@ -2,8 +2,6 @@
 import time
 import numpy as np
 
-from training import water_box
-
 from fe.utils import to_md_units
 from ff.handlers import bonded, nonbonded, openmm_deserializer
 
@@ -45,12 +43,8 @@ def benchmark_dhfr():
     box = host_pdb.topology.getPeriodicBoxVectors()
     box = np.asarray(box/box.unit)
 
-    # box_width = 3.0
-    # host_system, host_coords, box, _ = water_box.prep_system(box_width)
-
     host_fns, host_masses = openmm_deserializer.deserialize_system(
         host_system,
-        precision=np.float32,
         cutoff=1.0
     )
 
@@ -73,11 +67,10 @@ def benchmark_dhfr():
     bps = []
 
     for potential in host_fns:
-        bps.append(potential.bound_impl()) # get the bound implementation
+        bps.append(potential.bound_impl(precision=np.float32)) # get the bound implementation
 
     x0 = host_conf
     v0 = np.zeros_like(host_conf)
-
 
     ctxt = custom_ops.Context(
         x0,
@@ -96,31 +89,47 @@ def benchmark_dhfr():
 
     lamb = 0.0
 
+    writer = PDBWriter([host_pdb.topology], "dhfr.pdb")
+
+    num_batches = 100
+    steps_per_batch = 1000
+    seconds_per_day = 86400
+    batch_times = []
+
+    lambda_schedule = np.ones(steps_per_batch)*lamb
+
+    # run once before timer starts
+    ctxt.multiple_steps(lambda_schedule)
+
     start = time.time()
-    num_steps = 50000
 
-    writer = PDBWriter(open(pdb_path), "dhfr.pdb")
+    for batch in range(num_batches):
 
-    writer.write_header()
-    for step in range(num_steps):
-        ctxt.step(lamb)
-        if step % 5000 == 0:
-            coords = recenter(ctxt.get_x_t(), box)
-            writer.write(coords*10)
+        # time the current batch
+        batch_start = time.time()
+        ctxt.multiple_steps(lambda_schedule)
+        batch_end = time.time()
+
+        delta = batch_end - batch_start
+
+        batch_times.append(delta)
+
+        steps_per_second = steps_per_batch / np.mean(batch_times)
+        steps_per_day = steps_per_second*seconds_per_day
+
+        ps_per_day = dt*steps_per_day
+        ns_per_day = ps_per_day*1e-3
+
+        print(f'steps per second: {steps_per_second:.3f}')
+        print(f'ns per day: {ns_per_day:.3f}')
+
+        # coords = recenter(ctxt.get_x_t(), box)
+        # writer.write_frame(coords*10)
+
+    print(f"total time to run {steps_per_batch * num_batches} steps: {(time.time() - start):.3f} s")
 
     writer.close()
 
-    delta = time.time()-start
-
-    print("Delta", delta)
-
-    steps_per_second = num_steps/delta
-    seconds_per_day = 86400
-    steps_per_day = steps_per_second*seconds_per_day
-    ps_per_day = dt*steps_per_day
-    ns_per_day = ps_per_day*1e-3
-
-    print("ns/day", ns_per_day)
 
     # bond angle torsions nonbonded
     for potential, du_dp_obs in zip(host_fns, obs):

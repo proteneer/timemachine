@@ -24,6 +24,12 @@ private:
     const int E_;
     const int N_;
 
+    double nblist_padding_;
+    double *d_nblist_x_; // coords which were used to compute the nblist
+    double *d_nblist_box_; // box which was used to rebuild the nblist
+    int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
+    int *p_rebuild_nblist_; // pinned
+
     // reduction buffer
     unsigned long long *d_sorted_du_dl_buffer_;
     unsigned long long *d_sorted_u_buffer_;
@@ -51,6 +57,9 @@ private:
     unsigned int *d_sort_storage_;
     size_t d_sort_storage_bytes_;
 
+    bool compute_4d_;
+    bool disable_hilbert_;
+
     void hilbert_sort(
         const double *d_x,
         const double *d_box,
@@ -58,6 +67,10 @@ private:
     );
 
 public:
+
+    // these are marked public but really only intended for testing.
+    void set_nblist_padding(double val);
+    void disable_hilbert_sort();
 
     Nonbonded(
         const std::vector<int> &exclusion_idxs, // [E,2]

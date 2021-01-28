@@ -147,13 +147,13 @@ def nonbonded_v3(
 
     sig_i = np.expand_dims(sig, 0)
     sig_j = np.expand_dims(sig, 1)
-    sig_ij = (sig_i + sig_j)/2
+    sig_ij = sig_i + sig_j
     sig_ij_raw = sig_ij
 
     eps_i = np.expand_dims(eps, 0)
     eps_j = np.expand_dims(eps, 1)
 
-    eps_ij = np.sqrt(eps_i * eps_j)
+    eps_ij = eps_i * eps_j
 
     ri = np.expand_dims(conf, 0)
     rj = np.expand_dims(conf, 1)
