@@ -40,20 +40,8 @@ class HostGuestTopology():
     # tbd: just merge the hamiltonians here
     def _parameterize_bonded_term(self, ff_params, handle_fn):
         params, potential = handle_fn(ff_params)
-        if len(params) == 3:
-            src_params, dst_params, uni_params = params
-            src_potential, dst_potential, uni_potential = potential
-            src_potential.set_idxs(src_potential.get_idxs() + self.num_host_atoms)
-            dst_potential.set_idxs(dst_potential.get_idxs() + self.num_host_atoms)
-            uni_potential.set_idxs(uni_potential.get_idxs() + self.num_host_atoms)
-            src_potential.set_N(src_potential.get_N() + self.num_host_atoms)
-            dst_potential.set_N(dst_potential.get_N() + self.num_host_atoms)
-            uni_potential.set_N(uni_potential.get_N() + self.num_host_atoms)
-
-            return [src_params, dst_params, uni_params], [src_potential, dst_potential, uni_potential]
-        else:
-            potential.set_idxs(potential.get_idxs() + self.num_host_atoms)
-            return params, potential
+        potential.set_idxs(potential.get_idxs() + self.num_host_atoms)
+        return params, potential
 
     def parameterize_harmonic_bond(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_harmonic_bond)
@@ -623,6 +611,14 @@ class SingleTopology():
 
         return qlj_params, potentials.InterpolatedPotential(nb, self.get_num_atoms(), qlj_params.size)
 
+    @staticmethod
+    def _concatenate(arrs):
+        non_empty = []
+        for arr in arrs:
+            if len(arr) != 0:
+                non_empty.append(jnp.array(arr))
+        return jnp.concatenate(non_empty)
+
     def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
         # Bonded terms are defined as follows:
         # If a bonded term is comprised exclusively of atoms in the core region, then
@@ -666,11 +662,12 @@ class SingleTopology():
 
         # (ytz): extra reshape() is needed to be able to convert an empty [] array
         # into a (0, P) shape so concatenation doesn't fail.
-        core_params_a = jnp.array(core_params_a).reshape((-1, P))
-        core_params_b = jnp.array(core_params_b).reshape((-1, P))
-        unique_params_r = jnp.array(unique_params_r).reshape((-1, P)) # always on
+        # core_params_a = jnp.array(core_params_a)
+        # core_params_b = jnp.array(core_params_b)
+        # unique_params_r = jnp.array(unique_params_r) # always on
 
-        combined_params = jnp.concatenate([
+        # combined_params = jnp.concatenate([
+        combined_params = self._concatenate([
             core_params_a,
             core_params_b,
             unique_params_r
@@ -687,7 +684,7 @@ class SingleTopology():
 
         assert len(core_idxs_a) == len(core_idxs_b)
 
-        print([-1]*len(core_idxs_a) + [1]*len(core_idxs_b) + [0]*len(unique_idxs_r))
+        # print([-1]*len(core_idxs_a) + [1]*len(core_idxs_b) + [0]*len(unique_idxs_r))
 
         lamb_mult = np.array([-1]*len(core_idxs_a) + [1]*len(core_idxs_b) + [0]*len(unique_idxs_r), dtype=np.int32)
         lamb_offset = np.array([1]*len(core_idxs_a) + [0]*len(core_idxs_b) + [1]*len(unique_idxs_r), dtype=np.int32)

@@ -45,24 +45,25 @@ class BaseFreeEnergy():
 
         du_dp_obs = []
 
-        for bps in final_potentials:
+        for bp in final_potentials:
             obs_list = []
 
-            for bp in bps:
-                impl = bp.bound_impl(np.float32)
+            # for bp in bps:
+            impl = bp.bound_impl(np.float32)
 
-                if isinstance(bp, potentials.InterpolatedPotential) or isinstance(bp, potentials.LambdaPotential):
-                    bp = bp.get_u_fn()
+            if isinstance(bp, potentials.InterpolatedPotential) or isinstance(bp, potentials.LambdaPotential):
+                bp = bp.get_u_fn()
 
-                if isinstance(bp, potentials.Nonbonded):
-                    nonbonded_impls.append(impl)
-                else:
-                    bonded_impls.append(impl)
+            if isinstance(bp, potentials.Nonbonded):
+                nonbonded_impls.append(impl)
+            else:
+                bonded_impls.append(impl)
 
-                all_impls.append(impl)
-                obs_list.append(custom_ops.AvgPartialUPartialParam(impl, 5))
+            all_impls.append(impl)
+            du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 5))
 
-            du_dp_obs.append(obs_list)
+            # obs_list.append(custom_ops.AvgPartialUPartialParam(impl, 5))
+            # du_dp_obs.append(obs_list)
 
         intg_impl = integrator.impl()
         # context components: positions, velocities, box, integrator, energy fxns
@@ -85,9 +86,9 @@ class BaseFreeEnergy():
         ctxt.add_observable(bonded_du_dl_obs)
         ctxt.add_observable(nonbonded_du_dl_obs)
 
-        for obs_list in du_dp_obs:
-            for obs in obs_list:
-                ctxt.add_observable(obs)
+        for obs in du_dp_obs:
+            # for obs in obs_list:
+            ctxt.add_observable(obs)
 
         for _ in range(prod_steps):
             ctxt.step(lamb)
@@ -102,10 +103,10 @@ class BaseFreeEnergy():
         # form their vjps.
         grads = []
         for obs_list in du_dp_obs:
-            grad_list = []
-            for obs in obs_list:
-                grad_list.append(obs.avg_du_dp())
-            grads.append(grad_list)
+            # grad_list = []
+            # for obs in obs_list:
+                # grad_list.append()
+            grads.append(obs.avg_du_dp())
 
         return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std), grads
 
@@ -358,7 +359,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             if isinstance(bp, potentials.Nonbonded):
                 host_p = bp
             else:
-                final_potentials.append([bp])
+                final_potentials.append(bp)
                 # (ytz): no protein ff support for now, so we skip their vjps
                 final_vjp_and_handles.append(None)
 
@@ -374,13 +375,19 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         # instantiate the vjps while parameterizing (forward pass)
         for fn, handle in bonded_tuples:
-            (src_params, dst_params, uni_params), vjp_fn, (src_potential, dst_potential, uni_potential) = jax.vjp(fn, handle.params, has_aux=True)
-            final_potentials.append([src_potential.bind(src_params), dst_potential.bind(dst_params), uni_potential.bind(uni_params)])
+            guest_params, vjp_fn, guest_potential = jax.vjp(fn, handle.params, has_aux=True)
+            final_potentials.append(guest_potential.bind(guest_params))
+
+            # print(vjp_fn(np.random.rand))
+
+
             final_vjp_and_handles.append((vjp_fn, handle))
 
+        # assert 0
+
         nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
-        final_potentials.append([nb_potential.bind(nb_params)])
-        final_vjp_and_handles.append([vjp_fn, (self.ff.q_handle, self.ff.lj_handle)]) # (ytz): note the handlers are a tuple, this is checked later
+        final_potentials.append(nb_potential.bind(nb_params))
+        final_vjp_and_handles.append((vjp_fn, (self.ff.q_handle, self.ff.lj_handle))) # (ytz): note the handlers are a tuple, this is checked later
 
         combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
 
@@ -414,10 +421,12 @@ class RelativeFreeEnergy(BaseFreeEnergy):
                 # two birds with one stone here, but this is quite brittle and should be refactored later on.
                 if type(handles) == tuple:
                     # handle nonbonded terms
-                    du_dps = vjp_fn(du_dqs[0])
+                    # du_dps = vjp_fn(du_dqs[0])
+                    du_dps = vjp_fn(du_dqs)
                     for du_dp, handler in zip(du_dps, handles):
                         grads_and_handles.append((du_dp, type(handler)))
                 else:
+                    print("DEBUG", du_dqs, handles)
                     du_dp = vjp_fn(du_dqs)
                     # bonded terms return a list, so we need to flatten it here
                     grads_and_handles.append((du_dp[0], type(handles)))

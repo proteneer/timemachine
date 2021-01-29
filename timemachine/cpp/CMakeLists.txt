@@ -8,7 +8,7 @@ find_package(PythonLibs 3.6 REQUIRED)
 
 set(CUDA_ARCH sm_70 CACHE STRING "Specific CUDA architecture we're targetting.")
 
-string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo -rdc=true")
+string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo")
 message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
