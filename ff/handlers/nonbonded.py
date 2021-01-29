@@ -386,6 +386,7 @@ class AM1CCCHandler(SerializableMixIn):
 
         am1_charges = np.array(am1_charges)
         bond_idxs = np.array(bond_idxs)
+        bond_idx_params = np.array(bond_idx_params)
 
         deltas = params[bond_idx_params]
         incremented = ops.index_add(am1_charges, bond_idxs[:, 0], deltas)

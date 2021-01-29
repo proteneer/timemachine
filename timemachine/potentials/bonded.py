@@ -68,7 +68,7 @@ def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     return energy
 
 # lamb is *not used* it is used in the alchemical stuff after
-def harmonic_bond(conf, params, box, lamb, bond_idxs):
+def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offset=None):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -97,18 +97,22 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs):
 
     """
     assert params.shape == bond_idxs.shape
+    if lamb_mult is None:
+        lamb_mult = np.zeros(bond_idxs.shape[0])
+    if lamb_offset is None:
+        lamb_offset = np.ones(bond_idxs.shape[0])
 
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
     dij = np.linalg.norm(ci-cj, axis=-1)
     kbs = params[:, 0]
     r0s = params[:, 1]
-
-    energy = np.sum(kbs/2 * np.power(dij - r0s, 2.0))
+    prefactor = (lamb_offset + lamb_mult * lamb)
+    energy = np.sum(prefactor * kbs/2 * np.power(dij - r0s, 2.0))
     return energy
 
 
-def harmonic_angle(conf, params, box, lamb, angle_idxs, cos_angles=True):
+def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_offset=None, cos_angles=True):
     """
     Compute the harmonic angle energy given a collection of molecules.
 
@@ -145,6 +149,10 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, cos_angles=True):
     ------
     * lamb argument unused
     """
+    if lamb_mult is None:
+        lamb_mult = np.zeros(angle_idxs.shape[0])
+    if lamb_offset is None:
+        lamb_offset = np.ones(angle_idxs.shape[0])
 
     ci = conf[angle_idxs[:, 0]]
     cj = conf[angle_idxs[:, 1]]
@@ -161,12 +169,13 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, cos_angles=True):
 
     tb = top/bot
 
+    prefactor = (lamb_offset + lamb_mult * lamb)
     # (ytz): we use the squared version so that the energy is strictly positive
     if cos_angles:
-        energies = kas/2*np.power(tb - np.cos(a0s), 2)
+        energies = prefactor*kas/2*np.power(tb - np.cos(a0s), 2)
     else:
         angle = np.arccos(tb)
-        energies = kas/2*np.power(angle - a0s, 2)
+        energies = prefactor*kas/2*np.power(angle - a0s, 2)
 
     return np.sum(energies, -1)  # reduce over all angles
 
@@ -216,7 +225,7 @@ def signed_torsion_angle(ci, cj, ck, cl):
     return np.arctan2(y, x)
 
 
-def periodic_torsion(conf, params, box, lamb, torsion_idxs):
+def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb_offset=None):
     """
     Compute the periodic torsional energy.
 
@@ -245,6 +254,10 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs):
     * lamb argument unused
     * if conf has more than 3 dimensions, this function only depends on the first 3
     """
+    if lamb_mult is None:
+        lamb_mult = np.zeros(torsion_idxs.shape[0])
+    if lamb_offset is None:
+        lamb_offset = np.ones(torsion_idxs.shape[0])
 
     conf = conf[:, :3] # this is defined only in 3d
 
@@ -258,5 +271,7 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs):
     period = params[:, 2]
     angle = signed_torsion_angle(ci, cj, ck, cl)
 
+    prefactor = (lamb_offset + lamb_mult * lamb)
+
     nrg = ks*(1+np.cos(period * angle - phase))
-    return np.sum(nrg, axis=-1)
+    return np.sum(prefactor*nrg, axis=-1)

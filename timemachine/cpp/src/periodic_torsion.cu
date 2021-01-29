@@ -10,11 +10,22 @@ namespace timemachine {
 
 template <typename RealType>
 PeriodicTorsion<RealType>::PeriodicTorsion(
-    const std::vector<int> &torsion_idxs // [A, 4]
+    const std::vector<int> &torsion_idxs, // [A, 4]
+    const std::vector<int> &lambda_mult,
+    const std::vector<int> &lambda_offset
 ) : T_(torsion_idxs.size()/4) {
 
     if(torsion_idxs.size() % 4 != 0) {
         throw std::runtime_error("torsion_idxs.size() must be exactly 4*k");
+    }
+
+
+    if(lambda_mult.size() > 0 && lambda_mult.size() != T_) {
+        throw std::runtime_error("bad lambda_mult size()");
+    }
+
+    if(lambda_offset.size() > 0 && lambda_offset.size() != T_) {
+        throw std::runtime_error("bad lambda_offset size()");
     }
 
     for(int a=0; a < T_; a++) {
@@ -30,11 +41,29 @@ PeriodicTorsion<RealType>::PeriodicTorsion(
     gpuErrchk(cudaMalloc(&d_torsion_idxs_, T_*4*sizeof(*d_torsion_idxs_)));
     gpuErrchk(cudaMemcpy(d_torsion_idxs_, &torsion_idxs[0], T_*4*sizeof(*d_torsion_idxs_), cudaMemcpyHostToDevice));
 
+    gpuErrchk(cudaMalloc(&d_lambda_mult_, T_*sizeof(*d_lambda_mult_)));
+    gpuErrchk(cudaMalloc(&d_lambda_offset_, T_*sizeof(*d_lambda_offset_)));
+
+    if(lambda_mult.size() > 0) {
+        gpuErrchk(cudaMemcpy(d_lambda_mult_, &lambda_mult[0], T_*sizeof(*d_lambda_mult_), cudaMemcpyHostToDevice));
+    } else {
+        initializeArray(T_, d_lambda_mult_, 0);
+    }
+
+    if(lambda_offset.size() > 0) {
+        gpuErrchk(cudaMemcpy(d_lambda_offset_, &lambda_offset[0], T_*sizeof(*d_lambda_offset_), cudaMemcpyHostToDevice));
+    } else {
+        // can't memset this
+        initializeArray(T_, d_lambda_offset_, 1);
+    }
+
 };
 
 template <typename RealType>
 PeriodicTorsion<RealType>::~PeriodicTorsion() {
     gpuErrchk(cudaFree(d_torsion_idxs_));
+    gpuErrchk(cudaFree(d_lambda_mult_));
+    gpuErrchk(cudaFree(d_lambda_offset_));
 };
 
 template <typename RealType>
@@ -61,46 +90,19 @@ void PeriodicTorsion<RealType>::execute_device(
             T_,
             d_x,
             d_p,
+            lambda,
+            d_lambda_mult_,
+            d_lambda_offset_,
             d_torsion_idxs_,
             d_du_dx,
             d_du_dp,
+            d_du_dl,
             d_u
         );        
         gpuErrchk(cudaPeekAtLastError());
     }
 
 };
-
-// template <typename RealType>
-// void PeriodicTorsion<RealType>::execute_lambda_jvp_device(
-//     const int N,
-//     const double *d_coords_primals,
-//     const double *d_coords_tangents,
-//     const double lambda_primal, // unused
-//     const double lambda_tangent, // unused
-//     double *d_out_coords_primals,
-//     double *d_out_coords_tangents,
-//     cudaStream_t stream) {
-
-//     int tpb = 32;
-//     int blocks = (T_+tpb-1)/tpb;
-//     const int D = 3;
-//     k_periodic_torsion_jvp<RealType, D><<<blocks, tpb, 0, stream>>>(
-//         T_,
-//         d_coords_primals,
-//         d_coords_tangents,
-//         d_params_,
-//         d_torsion_idxs_,
-//         d_out_coords_primals,
-//         d_out_coords_tangents,
-//         d_du_dp_primals_,
-//         d_du_dp_tangents_
-//     );
-
-//     cudaDeviceSynchronize();
-//     gpuErrchk(cudaPeekAtLastError());
-
-// };
 
 template class PeriodicTorsion<double>;
 template class PeriodicTorsion<float>;

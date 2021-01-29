@@ -137,7 +137,7 @@ class GRPCClient(AbstractClient):
         self.stubs = stubs
         self._idx = 0
 
-    def submit(self, task_fn, args):
+    def submit(self, task_fn, *args):
         """
         See abstract class for documentation.
         """

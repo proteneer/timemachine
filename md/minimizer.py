@@ -53,24 +53,18 @@ def minimize_host_4d(romol, host_system, host_coords, ff, box):
     combined_coords = np.concatenate([host_coords, ligand_coords])
     num_host_atoms = host_coords.shape[0]
 
-    final_potentials = []
-    for bp in host_bps:
-        if isinstance(bp, potentials.Nonbonded):
-            host_p = bp
-        else:
-            final_potentials.append(bp)
-
     gbt = topology.BaseTopology(romol, ff)
-    hgt = topology.HostGuestTopology(host_p, gbt)
+    hgt = topology.HostGuestTopology(host_bps, gbt)
 
     # setup the parameter handlers for the ligand
     tuples = [
         [hgt.parameterize_harmonic_bond, [ff.hb_handle]],
         [hgt.parameterize_harmonic_angle, [ff.ha_handle]],
-        [hgt.parameterize_proper_torsion, [ff.pt_handle]],
-        [hgt.parameterize_improper_torsion, [ff.it_handle]],
+        [hgt.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]],
         [hgt.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]],
     ]
+
+    final_potentials = []
 
     for fn, handles in tuples:
         params, potential = fn(*[h.params for h in handles])

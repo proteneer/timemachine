@@ -493,14 +493,27 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
         py::dynamic_attr()
     )
     .def(py::init([](
-        const py::array_t<int, py::array::c_style> &bond_idxs
+        const py::array_t<int, py::array::c_style> &bond_idxs,
+        std::optional<py::array_t<int, py::array::c_style> > lamb_mult,
+        std::optional<py::array_t<int, py::array::c_style> > lamb_offset
     ){
         std::vector<int> vec_bond_idxs(bond_idxs.data(), bond_idxs.data()+bond_idxs.size());
+        std::vector<int> vec_lamb_mult;
+        std::vector<int> vec_lamb_offset;
+        if(lamb_mult.has_value()) {
+            vec_lamb_mult.assign(lamb_mult.value().data(), lamb_mult.value().data()+lamb_mult.value().size());
+        }
+        if(lamb_offset.has_value()) {
+            vec_lamb_offset.assign(lamb_offset.value().data(), lamb_offset.value().data()+lamb_offset.value().size());
+        }
         return new timemachine::HarmonicBond<RealType>(
-            vec_bond_idxs
+            vec_bond_idxs,
+            vec_lamb_mult,
+            vec_lamb_offset
         );
-    }
-    ));
+    }),
+    py::arg("bond_idxs"), py::arg("lamb_mult") = py::none(), py::arg("lamb_offset") = py::none()
+    );
 
 }
 
@@ -516,19 +529,28 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
         py::dynamic_attr()
     )
     .def(py::init([](
-        const py::array_t<int, py::array::c_style> &angle_idxs
-        // const py::array_t<double, py::array::c_style> &params_i
+        const py::array_t<int, py::array::c_style> &angle_idxs,
+        std::optional<py::array_t<int, py::array::c_style> > lamb_mult,
+        std::optional<py::array_t<int, py::array::c_style> > lamb_offset
     ){
         std::vector<int> vec_angle_idxs(angle_idxs.size());
         std::memcpy(vec_angle_idxs.data(), angle_idxs.data(), vec_angle_idxs.size()*sizeof(int));
-        // std::vector<double> params(params_i.size());
-        // std::memcpy(params.data(), params_i.data(), params.size()*sizeof(double));
-
+        std::vector<int> vec_lamb_mult;
+        std::vector<int> vec_lamb_offset;
+        if(lamb_mult.has_value()) {
+            vec_lamb_mult.assign(lamb_mult.value().data(), lamb_mult.value().data()+lamb_mult.value().size());
+        }
+        if(lamb_offset.has_value()) {
+            vec_lamb_offset.assign(lamb_offset.value().data(), lamb_offset.value().data()+lamb_offset.value().size());
+        }
         return new timemachine::HarmonicAngle<RealType>(
-            vec_angle_idxs
+            vec_angle_idxs,
+            vec_lamb_mult,
+            vec_lamb_offset
         );
-    }
-    ));
+    }),
+    py::arg("angle_idxs"), py::arg("lamb_mult") = py::none(), py::arg("lamb_offset") = py::none()
+    );
 
 }
 
@@ -665,14 +687,28 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
         py::buffer_protocol(),
         py::dynamic_attr()
     )
-    .def(py::init([](const py::array_t<int, py::array::c_style> &torsion_idxs) {
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &torsion_idxs,
+        std::optional<py::array_t<int, py::array::c_style> > lamb_mult,
+        std::optional<py::array_t<int, py::array::c_style> > lamb_offset) {
         std::vector<int> vec_torsion_idxs(torsion_idxs.size());
         std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size()*sizeof(int));
+        std::vector<int> vec_lamb_mult;
+        std::vector<int> vec_lamb_offset;
+        if(lamb_mult.has_value()) {
+            vec_lamb_mult.assign(lamb_mult.value().data(), lamb_mult.value().data()+lamb_mult.value().size());
+        }
+        if(lamb_offset.has_value()) {
+            vec_lamb_offset.assign(lamb_offset.value().data(), lamb_offset.value().data()+lamb_offset.value().size());
+        }      
         return new timemachine::PeriodicTorsion<RealType>(
-            vec_torsion_idxs
+            vec_torsion_idxs,
+            vec_lamb_mult,
+            vec_lamb_offset
         );
-    }
-    ));
+    }),
+    py::arg("angle_idxs"), py::arg("lamb_mult") = py::none(), py::arg("lamb_offset") = py::none()
+    );
 
 }
 

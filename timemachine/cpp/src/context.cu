@@ -80,6 +80,8 @@ void Context::_step(double lambda) {
 
     for(int i=0; i < bps_.size(); i++) {
 
+        // std::cout << i << std::endl;
+
         bps_[i]->execute_device(
             N_,
             d_x_t_,
