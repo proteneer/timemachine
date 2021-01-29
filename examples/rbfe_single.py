@@ -83,11 +83,27 @@ def run_epoch(client, ff, mol_a, mol_b, core):
 
         ghs = []
 
-        for lamb, (bonded_du_dl, nonbonded_du_dl, grads_and_handles) in zip(lambda_schedule, results):
-            ghs.append(grads_and_handles)
-            print("final", stage, "lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
+        for (lamb, result) in zip(lambda_schedule, results):
 
-        dG_host = np.trapz([x[0][0]+x[1][0] for x in results], lambda_schedule)
+            # unpack result tuple
+            bonded_du_dl, nonbonded_du_dl, grads_and_handles = result
+
+            ghs.append(grads_and_handles)
+
+            # TODO: replace print with logger
+            print("final", stage, "lambda", lamb, "bonded:", np.mean(bonded_du_dl), np.std(bonded_du_dl), "nonbonded:",
+                  np.mean(nonbonded_du_dl), np.std(nonbonded_du_dl))
+
+        def _mean_du_dlambda(result):
+            """summarize result of rfe.host_edge into mean du/dl
+
+            TODO: refactor where this analysis step occurs
+            """
+            bonded_du_dl, nonbonded_du_dl, _ = result
+            return np.mean(bonded_du_dl + nonbonded_du_dl)
+
+        dG_host = np.trapz([_mean_du_dlambda(x) for x in results], lambda_schedule)
+
         stage_dGs.append(dG_host)
 
         # use gradient information from the endpoints

@@ -121,7 +121,15 @@ def estimate_dG(transformation: RelativeTransformation,
 
         results = pool.map(partial(wrap_method, fn=rfe.host_edge), host_args, chunksize=1)
 
-        dG_host = np.trapz([x[0][0] + x[1][0] for x in results], lambda_schedule)
+        def _mean_du_dlambda(result):
+            """summarize result of rfe.host_edge into mean du/dl
+
+            TODO: refactor where this analysis step occurs
+            """
+            bonded_du_dl, nonbonded_du_dl, _ = result
+            return np.mean(bonded_du_dl + nonbonded_du_dl)
+
+        dG_host = np.trapz([_mean_du_dlambda(x) for x in results], lambda_schedule)
         stage_dGs.append(dG_host)
 
     pred = stage_dGs[0] - stage_dGs[1]

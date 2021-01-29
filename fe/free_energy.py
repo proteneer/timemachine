@@ -37,6 +37,17 @@ class BaseFreeEnergy():
     # this will be eventually gRPC'd out to a worker
     @staticmethod
     def _simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps):
+        """
+
+        Returns
+        -------
+        bonded_full_du_dls
+            Time-series of du/dlambda (for bonded terms only)
+        nonbonded_full_du_dls
+            Time-series of du/dlambda (for nonbonded terms only)
+        grads
+             averaged du/dparameters
+        """
         all_impls = []
         bonded_impls = []
         nonbonded_impls = []
@@ -95,9 +106,6 @@ class BaseFreeEnergy():
         bonded_full_du_dls = bonded_du_dl_obs.full_du_dl()
         nonbonded_full_du_dls = nonbonded_du_dl_obs.full_du_dl()
 
-        bonded_mean, bonded_std = np.mean(bonded_full_du_dls), np.std(bonded_full_du_dls)
-        nonbonded_mean, nonbonded_std = np.mean(nonbonded_full_du_dls), np.std(nonbonded_full_du_dls)
-
         # keep the structure of grads the same as that of final_potentials so we can properly
         # form their vjps.
         grads = []
@@ -107,8 +115,12 @@ class BaseFreeEnergy():
                 grad_list.append(obs.avg_du_dp())
             grads.append(grad_list)
 
-        return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std), grads
+        return bonded_full_du_dls, nonbonded_full_du_dls, grads
 
+
+def _mean_and_stddev(full_du_dls):
+    """summarize a time-series of du/dl's to its mean and standard deviation"""
+    return np.mean(full_du_dls), np.std(full_du_dls)
 
 # this class is serializable.
 class AbsoluteFreeEnergy(BaseFreeEnergy):
@@ -204,7 +216,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         combined_masses = np.concatenate([host_masses, ligand_masses])
         combined_coords = np.concatenate([host_coords, ligand_coords])
 
-        return self._simulate(
+        bonded, nonbonded, grads = self._simulate(
             lamb,
             box,
             combined_coords,
@@ -214,6 +226,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             equil_steps,
             prod_steps
         )
+        return _mean_and_stddev(bonded), _mean_and_stddev(nonbonded), grads
 
 
 # this class is serializable.
@@ -277,9 +290,8 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         Returns
         -------
-        float, float
-            Returns a pair of average du_dl values for bonded and nonbonded terms.
-
+        bonded_du_dl, nonbonded_du_dl, grads_and_handles
+            Time-series of du/dlambda (decomposed into bonded and nonbonded), and grads_and_handles for du/dparameters
         """
         final_potentials = []
         final_vjp_and_handles = []
@@ -314,7 +326,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         box = np.eye(3) * 100.0
 
-        return self._simulate(
+        bonded, nonbonded, grads = self._simulate(
             lamb,
             box,
             combined_coords,
@@ -324,6 +336,9 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             equil_steps,
             prod_steps
         )
+
+        return _mean_and_stddev(bonded), _mean_and_stddev(nonbonded), grads
+
 
     def host_edge(self, lamb, host_system, host_coords, box, equil_steps=10000, prod_steps=100000):
         """
@@ -353,9 +368,12 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         Returns
         -------
-        float, float
-            Returns a pair of average du_dl values for bonded and nonbonded terms.
+        bonded_du_dl, nonbonded_du_dl, grads_and_handles
+            Time-series of du/dlambda (decomposed into bonded and nonbonded), and grads_and_handles for du/dparameters
 
+
+        TODO: later analysis : extract equilibration time, mean, stddev, other things from time-series
+        TODO: reduce duplication between vacuum_edge and host_edge
         """
 
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
@@ -406,8 +424,8 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         src_conf, dst_conf = self.top.interpolate_params(ligand_coords_a, ligand_coords_b)
         combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
 
-        # (ytz): us is short form for mean and std dev.
-        bonded_us, nonbonded_us, grads = self._simulate(
+
+        bonded_du_dl, nonbonded_du_dl, grads = self._simulate(
             lamb,
             box,
             combined_coords,
@@ -441,4 +459,4 @@ class RelativeFreeEnergy(BaseFreeEnergy):
                     # bonded terms return a list, so we need to flatten it here
                     grads_and_handles.append((du_dp[0], type(handles)))
 
-        return bonded_us, nonbonded_us, grads_and_handles
+        return bonded_du_dl, nonbonded_du_dl, grads_and_handles

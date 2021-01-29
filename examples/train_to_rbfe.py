@@ -81,7 +81,7 @@ def run_epoch(ff, mol_a, mol_b, core):
         results = pool.map(functools.partial(wrap_method, fn=rfe.host_edge), host_args, chunksize=1)
 
         ghs = []
-
+        # TODO: update this to reflect new return type of rfe.host_edge
         for lamb, (bonded_du_dl, nonbonded_du_dl, grads_and_handles) in zip(lambda_schedule, results):
             ghs.append(grads_and_handles)
             print("final", stage, "lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:",
