@@ -190,6 +190,7 @@ def get_mol_id(mol):
 # note: 9 of 31 transformations fail the factorizability assertion here:
 # https://github.com/proteneer/timemachine/blob/2eb956f9f8ce62287cc531188d1d1481832c5e96/fe/topology.py#L381-L431
 transformations = []
+error_mols = []
 for spoke in others:
     core = get_core(hub, spoke, mcs_map(hub, spoke).queryMol)
     try:
@@ -197,11 +198,14 @@ for spoke in others:
         transformations.append(rfe)
     except AtomMappingError as e:
         print(f'atom mapping error in transformation {get_mol_id(hub)} -> {get_mol_id(spoke)}!')
-        print(core)
         print(e)
+        error_mols.append(spoke)
+print(f'total # of molecules that encountered atom mapping errors: {len(error_mols)}')
+# TODO: save error_mols somewhere for later inspection
 
 # serialize
 from pickle import dump
 
+# TODO: save in current examples/hif2a directory, rather than working directory
 with open('relative_transformations.pkl', 'wb') as f:
     dump(transformations, f)
