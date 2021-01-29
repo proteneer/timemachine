@@ -10,17 +10,22 @@ namespace timemachine {
 
 template <typename RealType>
 HarmonicAngle<RealType>::HarmonicAngle(
-    const std::vector<int> &angle_idxs // [A, 3]
-    // const std::vector<double> &params // [A, 2]
+    const std::vector<int> &angle_idxs, // [A, 3]
+    const std::vector<int> &lambda_mult,
+    const std::vector<int> &lambda_offset
 ) : A_(angle_idxs.size()/3) {
 
     if(angle_idxs.size() % 3 != 0) {
         throw std::runtime_error("angle_idxs.size() must be exactly 3*A");
     }
 
-    // if(params.size() % 2 != 0) {
-    //     throw std::runtime_error("params.size() must be exactly 2*A");
-    // }
+    if(lambda_mult.size() > 0 && lambda_mult.size() != A_) {
+        throw std::runtime_error("bad lambda_mult size()");
+    }
+
+    if(lambda_offset.size() > 0 && lambda_offset.size() != A_) {
+        throw std::runtime_error("bad lambda_offset size()");
+    }
 
     for(int a=0; a < A_; a++) {
         auto i = angle_idxs[a*3+0];
@@ -34,36 +39,30 @@ HarmonicAngle<RealType>::HarmonicAngle(
     gpuErrchk(cudaMalloc(&d_angle_idxs_, A_*3*sizeof(*d_angle_idxs_)));
     gpuErrchk(cudaMemcpy(d_angle_idxs_, &angle_idxs[0], A_*3*sizeof(*d_angle_idxs_), cudaMemcpyHostToDevice));
 
-    // gpuErrchk(cudaMalloc(&d_params_, A_*2*sizeof(*d_params_)));
-    // gpuErrchk(cudaMemcpy(d_params_, &params[0], A_*2*sizeof(*d_params_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMalloc(&d_lambda_mult_, A_*sizeof(*d_lambda_mult_)));
+    gpuErrchk(cudaMalloc(&d_lambda_offset_, A_*sizeof(*d_lambda_offset_)));
 
-    // gpuErrchk(cudaMalloc(&d_du_dp_primals_, A_*2*sizeof(*d_du_dp_primals_)));
-    // gpuErrchk(cudaMemset(d_du_dp_primals_, 0, A_*2*sizeof(*d_du_dp_primals_)));
+    if(lambda_mult.size() > 0) {
+        gpuErrchk(cudaMemcpy(d_lambda_mult_, &lambda_mult[0], A_*sizeof(*d_lambda_mult_), cudaMemcpyHostToDevice));
+    } else {
+        initializeArray(A_, d_lambda_mult_, 0);
+    }
 
-    // gpuErrchk(cudaMalloc(&d_du_dp_tangents_, A_*2*sizeof(*d_du_dp_tangents_)));
-    // gpuErrchk(cudaMemset(d_du_dp_tangents_, 0, A_*2*sizeof(*d_du_dp_tangents_)));
+    if(lambda_offset.size() > 0) {
+        gpuErrchk(cudaMemcpy(d_lambda_offset_, &lambda_offset[0], A_*sizeof(*d_lambda_offset_), cudaMemcpyHostToDevice));
+    } else {
+        // can't memset this
+        initializeArray(A_, d_lambda_offset_, 1);
+    }
 
 };
 
 template <typename RealType>
 HarmonicAngle<RealType>::~HarmonicAngle() {
     gpuErrchk(cudaFree(d_angle_idxs_));
-
-    // gpuErrchk(cudaFree(d_params_));
-    // gpuErrchk(cudaFree(d_du_dp_primals_));
-    // gpuErrchk(cudaFree(d_du_dp_tangents_));
+    gpuErrchk(cudaFree(d_lambda_mult_));
+    gpuErrchk(cudaFree(d_lambda_offset_));
 };
-
-
-// template <typename RealType>
-// void HarmonicAngle<RealType>::get_du_dp_primals(double *buf) {
-//     gpuErrchk(cudaMemcpy(buf, d_du_dp_primals_, A_*2*sizeof(*d_params_), cudaMemcpyDeviceToHost));
-// }
-
-// template <typename RealType>
-// void HarmonicAngle<RealType>::get_du_dp_tangents(double *buf) {
-//     gpuErrchk(cudaMemcpy(buf, d_du_dp_tangents_, A_*2*sizeof(*d_params_), cudaMemcpyDeviceToHost));
-// }
 
 template <typename RealType>
 void HarmonicAngle<RealType>::execute_device(
@@ -89,9 +88,13 @@ void HarmonicAngle<RealType>::execute_device(
             A_,
             d_x,
             d_p,
+            lambda,
+            d_lambda_mult_,
+            d_lambda_offset_,
             d_angle_idxs_,
             d_du_dx,
             d_du_dp,
+            d_du_dl,
             d_u
         );
         gpuErrchk(cudaPeekAtLastError());

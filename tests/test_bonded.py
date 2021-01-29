@@ -101,6 +101,7 @@ class TestBonded(GradientTest):
 
         lamb_mult = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
         lamb_offset = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
+        lamb = 0.5
 
         for precision, rtol in relative_tolerance_at_precision.items():
             test_potential = potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset)
