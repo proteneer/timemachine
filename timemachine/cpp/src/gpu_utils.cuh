@@ -44,3 +44,24 @@ T* gpuErrchkCudaMallocAndCopy(const T *host_array, int count) {
     gpuErrchk(cudaMemcpy(device_array, host_array, count*sizeof(*host_array), cudaMemcpyHostToDevice));
     return device_array;
 }
+
+template<typename T>
+void __global__ k_initialize_array(int count, T *array, T val) {
+    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if(idx >= count) {
+        return;
+    }
+
+    array[idx] = val;
+}
+
+template<typename T>
+void initializeArray(int count, T *array, T val) {
+
+    int tpb = 32;
+    int B = (count+tpb-1)/tpb; // total number of blocks we need to process
+
+    k_initialize_array<<<B, tpb, 0>>>(count, array, val);
+    gpuErrchk(cudaPeekAtLastError());
+
+}

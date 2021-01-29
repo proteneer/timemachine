@@ -99,6 +99,30 @@ class TestBonded(GradientTest):
                 precision=precision
             )
 
+        lamb_mult = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
+        lamb_offset = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
+
+        for precision, rtol in relative_tolerance_at_precision.items():
+            test_potential = potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset)
+            ref_potential = functools.partial(
+                bonded.harmonic_bond,
+                bond_idxs=bond_idxs,
+                lamb_mult=lamb_mult,
+                lamb_offset=lamb_offset
+            )
+
+            self.compare_forces(
+                x,
+                params,
+                box,
+                lamb,
+                ref_potential,
+                test_potential,
+                rtol,
+                precision=precision
+            )
+
+
     def test_harmonic_angle(self, n_particles=64, n_angles=25, dim=3):
         """Randomly connect triples of particles, then validate the resulting HarmonicAngle force"""
         np.random.seed(125)

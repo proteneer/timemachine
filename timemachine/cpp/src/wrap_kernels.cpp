@@ -493,14 +493,27 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
         py::dynamic_attr()
     )
     .def(py::init([](
-        const py::array_t<int, py::array::c_style> &bond_idxs
+        const py::array_t<int, py::array::c_style> &bond_idxs,
+        std::optional<py::array_t<int, py::array::c_style> > lamb_mult,
+        std::optional<py::array_t<int, py::array::c_style> > lamb_offset
     ){
         std::vector<int> vec_bond_idxs(bond_idxs.data(), bond_idxs.data()+bond_idxs.size());
+        std::vector<int> vec_lamb_mult;
+        std::vector<int> vec_lamb_offset;
+        if(lamb_mult.has_value()) {
+            vec_lamb_mult.assign(lamb_mult.value().data(), lamb_mult.value().data()+lamb_mult.value().size());
+        }
+        if(lamb_offset.has_value()) {
+            vec_lamb_offset.assign(lamb_offset.value().data(), lamb_offset.value().data()+lamb_offset.value().size());
+        }
         return new timemachine::HarmonicBond<RealType>(
-            vec_bond_idxs
+            vec_bond_idxs,
+            vec_lamb_mult,
+            vec_lamb_offset
         );
-    }
-    ));
+    }),
+    py::arg("bond_idxs"), py::arg("lamb_mult") = py::none(), py::arg("lamb_offset") = py::none()
+    );
 
 }
 

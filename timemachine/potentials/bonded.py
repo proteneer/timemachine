@@ -70,7 +70,7 @@ def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     return energy
 
 # lamb is *not used* it is used in the alchemical stuff after
-def harmonic_bond(conf, params, box, lamb, bond_idxs):
+def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offset=None):
     """
     Compute the harmonic bond energy given a collection of molecules.
 
@@ -99,14 +99,18 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs):
 
     """
     assert params.shape == bond_idxs.shape
+    if lamb_mult is None:
+        lamb_mult = np.zeros(bond_idxs.shape[0])
+    if lamb_offset is None:
+        lamb_offset = np.ones(bond_idxs.shape[0])
 
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
     dij = distance(ci, cj, box)
     kbs = params[:, 0]
     r0s = params[:, 1]
-
-    energy = np.sum(kbs/2 * np.power(dij - r0s, 2.0))
+    prefactor = (lamb_offset + lamb_offset * lamb)
+    energy = np.sum(prefactor * kbs/2 * np.power(dij - r0s, 2.0))
     return energy
 
 
