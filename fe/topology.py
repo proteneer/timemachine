@@ -37,6 +37,7 @@ class HostGuestTopology():
     def get_num_atoms(self):
         return self.num_host_atoms + self.guest_topology.get_num_atoms()
 
+    # tbd: just merge the hamiltonians here
     def _parameterize_bonded_term(self, ff_params, handle_fn):
         params, potential = handle_fn(ff_params)
         if len(params) == 3:
@@ -660,20 +661,39 @@ class SingleTopology():
                 unique_params_r.append(p)
                 unique_idxs_r.append(new_atoms)
 
-        core_params_a = jnp.array(core_params_a)
-        core_params_b = jnp.array(core_params_b)
-        unique_params_r = jnp.array(unique_params_r) # always on
+        # number of parameters per term (2 for bonds, 2 for angles, 3 for torsions)
+        P = params_a.shape[-1]
 
-        core_idxs_a = np.array(core_idxs_a, dtype=np.int32)
-        core_idxs_b = np.array(core_idxs_b, dtype=np.int32)
+        # (ytz): extra reshape() is needed to be able to convert an empty [] array
+        # into a (0, P) shape so concatenation doesn't fail.
+        core_params_a = jnp.array(core_params_a).reshape((-1, P))
+        core_params_b = jnp.array(core_params_b).reshape((-1, P))
+        unique_params_r = jnp.array(unique_params_r).reshape((-1, P)) # always on
 
-        unique_idxs_r = np.array(unique_idxs_r, dtype=np.int32) # always on
+        combined_params = jnp.concatenate([
+            core_params_a,
+            core_params_b,
+            unique_params_r
+        ])
 
-        u_fn_a = potentials.LambdaPotential(potential(core_idxs_a), self.get_num_atoms(), core_params_a.size, -1.0, 1.0)
-        u_fn_b = potentials.LambdaPotential(potential(core_idxs_b), self.get_num_atoms(), core_params_b.size,  1.0, 0.0)
-        u_fn_r = potentials.LambdaPotential(potential(unique_idxs_r), self.get_num_atoms(), unique_params_r.size,  0.0, 1.0)
+        # number of atoms involved in the bonded term
+        K = idxs_a.shape[-1]
 
-        return [core_params_a, core_params_b, unique_params_r], [u_fn_a, u_fn_b, u_fn_r]
+        core_idxs_a = np.array(core_idxs_a, dtype=np.int32).reshape((-1, K))
+        core_idxs_b = np.array(core_idxs_b, dtype=np.int32).reshape((-1, K))
+        unique_idxs_r = np.array(unique_idxs_r, dtype=np.int32).reshape((-1, K)) # always on
+
+        combined_idxs = np.concatenate([core_idxs_a, core_idxs_b, unique_idxs_r])
+
+        assert len(core_idxs_a) == len(core_idxs_b)
+
+        print([-1]*len(core_idxs_a) + [1]*len(core_idxs_b) + [0]*len(unique_idxs_r))
+
+        lamb_mult = np.array([-1]*len(core_idxs_a) + [1]*len(core_idxs_b) + [0]*len(unique_idxs_r), dtype=np.int32)
+        lamb_offset = np.array([1]*len(core_idxs_a) + [0]*len(core_idxs_b) + [1]*len(unique_idxs_r), dtype=np.int32)
+
+        u_fn = potential(combined_idxs, lamb_mult, lamb_offset)
+        return combined_params, u_fn
 
 
     def parameterize_harmonic_bond(self, ff_params):

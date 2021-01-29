@@ -54,25 +54,34 @@ class BenzenePhenolSparseTest(unittest.TestCase):
 
         st = topology.SingleTopology(self.mol_a, self.mol_b, core, self.ff)
 
-        (params_src, params_dst, params_uni), vjp_fn, (potential_src, potential_dst, potential_uni) = jax.vjp(st.parameterize_harmonic_bond, self.ff.hb_handle.params, has_aux=True)
+        combined_params, vjp_fn, combined_potential = jax.vjp(st.parameterize_harmonic_bond, self.ff.hb_handle.params, has_aux=True)
 
         # test that vjp_fn works
-        vjp_fn([np.random.rand(*params_src.shape), np.random.rand(*params_dst.shape), np.random.rand(*params_uni.shape)])
+        vjp_fn(np.random.rand(*combined_params.shape))
 
-        assert len(potential_src.get_idxs() == 6)
-        assert len(potential_dst.get_idxs() == 6)
-        assert len(potential_uni.get_idxs() == 3)
+        # we expect 15 bonds in total, of which 6 are duplicated.
+        assert len(combined_potential.get_idxs() == 15)
+
+        combined_idxs = combined_potential.get_idxs()
+        src_idxs = set([tuple(x) for x in combined_potential.get_idxs()[:6]])
+        dst_idxs = set([tuple(x) for x in combined_potential.get_idxs()[6:12]])
+
+        np.testing.assert_equal(src_idxs, dst_idxs)
 
         cc = self.ff.hb_handle.lookup_smirks("[#6X3:1]:[#6X3:2]")
         cH = self.ff.hb_handle.lookup_smirks("[#6X3:1]-[#1:2]")
         cO = self.ff.hb_handle.lookup_smirks("[#6X3:1]-[#8X2H1:2]")
         OH = self.ff.hb_handle.lookup_smirks("[#8:1]-[#1:2]")
 
+        params_src = combined_params[:6]
+        params_dst = combined_params[6:12]
+        params_uni = combined_params[12:]
+
         np.testing.assert_array_equal(params_src, [cc, cc, cc, cc, cc, cc])
         np.testing.assert_array_equal(params_dst, [cc, cc, cc, cc, cc, cc])
         np.testing.assert_array_equal(params_uni, [cH, cO, OH])
 
-
+        # map H to O
         core = np.array([
             [0, 0],
             [1, 1],
@@ -85,18 +94,24 @@ class BenzenePhenolSparseTest(unittest.TestCase):
 
         st = topology.SingleTopology(self.mol_a, self.mol_b, core, self.ff)
 
-        (params_src, params_dst, params_uni), vjp_fn, (potential_src, potential_dst, potential_uni) = jax.vjp(st.parameterize_harmonic_bond, self.ff.hb_handle.params, has_aux=True)
+        combined_params, vjp_fn, combined_potential = jax.vjp(st.parameterize_harmonic_bond, self.ff.hb_handle.params, has_aux=True)
 
-        assert len(potential_src.get_idxs() == 7)
-        assert len(potential_dst.get_idxs() == 7)
-        assert len(potential_uni.get_idxs() == 1)
+        assert len(combined_potential.get_idxs() == 15)
+
+        combined_idxs = combined_potential.get_idxs()
+        src_idxs = set([tuple(x) for x in combined_potential.get_idxs()[:7]])
+        dst_idxs = set([tuple(x) for x in combined_potential.get_idxs()[7:14]])
+
+        params_src = combined_params[:7]
+        params_dst = combined_params[7:14]
+        params_uni = combined_params[14:]
 
         np.testing.assert_array_equal(params_src, [cc, cc, cc, cc, cc, cc, cH])
         np.testing.assert_array_equal(params_dst, [cc, cc, cc, cc, cc, cc, cO])
         np.testing.assert_array_equal(params_uni, [OH])
 
         # test that vjp_fn works
-        vjp_fn([np.random.rand(*params_src.shape), np.random.rand(*params_dst.shape), np.random.rand(*params_uni.shape)])
+        vjp_fn(np.random.rand(*combined_params.shape))
 
     def test_nonbonded(self):
 
