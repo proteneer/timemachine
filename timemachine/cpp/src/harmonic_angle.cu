@@ -104,48 +104,6 @@ void HarmonicAngle<RealType>::execute_device(
 }
 
 
-
-// template <typename RealType>
-// void HarmonicAngle<RealType>::execute_lambda_jvp_device(
-//     const int N,
-//     const double *d_coords_primals,
-//     const double *d_coords_tangents,
-//     const double lambda_primal, // unused
-//     const double lambda_tangent, // unused
-//     double *d_out_coords_primals,
-//     double *d_out_coords_tangents,
-//     cudaStream_t stream) {
-
-//     int tpb = 32;
-//     int blocks = (A_+tpb-1)/tpb;
-
-//     k_harmonic_angle_jvp<RealType, 3><<<blocks, tpb,  0, stream>>>(
-//         A_,
-//         d_coords_primals,
-//         d_coords_tangents,
-//         d_params_,
-//         d_angle_idxs_,
-//         d_out_coords_primals,
-//         d_out_coords_tangents,
-//         d_du_dp_primals_,
-//         d_du_dp_tangents_
-//     );
-
-//     gpuErrchk(cudaPeekAtLastError());
-
-//     //     gpuErrchk(cudaPeekAtLastError());
-
-//     //     // cudaDeviceSynchronize();
-//     //     // auto finish = std::chrono::high_resolution_clock::now();
-//     //     // std::chrono::duration<double> elapsed = finish - start;
-//     //     // std::cout << "HarmonicAngle JVP Elapsed time: " << elapsed.count() << " s\n";
-
-
-//     // }
-
-
-// };
-
 template class HarmonicAngle<double>;
 template class HarmonicAngle<float>;
 

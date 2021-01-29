@@ -227,7 +227,7 @@ def signed_torsion_angle(ci, cj, ck, cl):
     return np.arctan2(y, x)
 
 
-def periodic_torsion(conf, params, box, lamb, torsion_idxs):
+def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb_offset=None):
     """
     Compute the periodic torsional energy.
 
@@ -256,6 +256,10 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs):
     * lamb argument unused
     * if conf has more than 3 dimensions, this function only depends on the first 3
     """
+    if lamb_mult is None:
+        lamb_mult = np.zeros(torsion_idxs.shape[0])
+    if lamb_offset is None:
+        lamb_offset = np.ones(torsion_idxs.shape[0])
 
     conf = conf[:, :3] # this is defined only in 3d
 
@@ -269,5 +273,7 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs):
     period = params[:, 2]
     angle = signed_torsion_angle(ci, cj, ck, cl)
 
+    prefactor = (lamb_offset + lamb_mult * lamb)
+
     nrg = ks*(1+np.cos(period * angle - phase))
-    return np.sum(nrg, axis=-1)
+    return np.sum(prefactor*nrg, axis=-1)

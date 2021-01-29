@@ -687,14 +687,28 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
         py::buffer_protocol(),
         py::dynamic_attr()
     )
-    .def(py::init([](const py::array_t<int, py::array::c_style> &torsion_idxs) {
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &torsion_idxs,
+        std::optional<py::array_t<int, py::array::c_style> > lamb_mult,
+        std::optional<py::array_t<int, py::array::c_style> > lamb_offset) {
         std::vector<int> vec_torsion_idxs(torsion_idxs.size());
         std::memcpy(vec_torsion_idxs.data(), torsion_idxs.data(), vec_torsion_idxs.size()*sizeof(int));
+        std::vector<int> vec_lamb_mult;
+        std::vector<int> vec_lamb_offset;
+        if(lamb_mult.has_value()) {
+            vec_lamb_mult.assign(lamb_mult.value().data(), lamb_mult.value().data()+lamb_mult.value().size());
+        }
+        if(lamb_offset.has_value()) {
+            vec_lamb_offset.assign(lamb_offset.value().data(), lamb_offset.value().data()+lamb_offset.value().size());
+        }      
         return new timemachine::PeriodicTorsion<RealType>(
-            vec_torsion_idxs
+            vec_torsion_idxs,
+            vec_lamb_mult,
+            vec_lamb_offset
         );
-    }
-    ));
+    }),
+    py::arg("angle_idxs"), py::arg("lamb_mult") = py::none(), py::arg("lamb_offset") = py::none()
+    );
 
 }
 

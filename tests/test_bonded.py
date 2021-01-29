@@ -206,9 +206,30 @@ class TestBonded(GradientTest):
 
         for precision, rtol in relative_tolerance_at_precision.items():
             test_potential = potentials.PeriodicTorsion(torsion_idxs)
-
-            # test the parameter derivatives for correctness.
             ref_potential = functools.partial(bonded.periodic_torsion, torsion_idxs=torsion_idxs)
+
+            self.compare_forces(
+                x,
+                params,
+                box,
+                lamb,
+                ref_potential,
+                test_potential,
+                rtol,
+                precision=precision
+            )
+
+        lamb_mult = np.random.randint(-5, 5, size=n_torsions, dtype=np.int32)
+        lamb_offset = np.random.randint(-5, 5, size=n_torsions, dtype=np.int32)
+        lamb = 0.35
+
+        for precision, rtol in relative_tolerance_at_precision.items():
+            test_potential = potentials.PeriodicTorsion(torsion_idxs, lamb_mult, lamb_offset)
+            ref_potential = functools.partial(
+                bonded.periodic_torsion,
+                torsion_idxs=torsion_idxs,
+                lamb_mult=lamb_mult,
+                lamb_offset=lamb_offset)
 
             self.compare_forces(
                 x,
