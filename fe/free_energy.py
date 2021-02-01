@@ -232,7 +232,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 # this class is serializable.
 class RelativeFreeEnergy(BaseFreeEnergy):
 
-    def __init__(self, mol_a, mol_b, core, ff):
+    def __init__(self, mol_a, mol_b, core, ff, label=None):
         """Relative free energy calculation using single-topology
 
         Parameters
@@ -248,6 +248,10 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         ff: ff.Forcefield
             Forcefield to be used for parameterization.
+
+        label: None or float
+            Experimental label (later assumed in kJ/mol)
+            TODO: make this a bit more structured, include other experimental information if available
         """
         # TODO (JF) : consider refactoring so that this accepts a topology.SingleTopology argument,
         #   rather than accepting a parameter collection that immediately becomes a topology.SingleTopology object
@@ -257,6 +261,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         self.core = core
         self.ff = ff
         self.top = topology.SingleTopology(mol_a, mol_b, core, ff)
+        self.label = label
 
     def _get_integrator(self, combined_masses):
         """

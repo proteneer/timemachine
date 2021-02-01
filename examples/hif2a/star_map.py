@@ -193,6 +193,30 @@ from fe.topology import AtomMappingError
 def get_mol_id(mol):
     return mol.GetProp('ID')
 
+
+def convert_uIC50_to_kJ_per_mole(amount_in_uM):
+    """
+    TODO: move this into a utility module
+    TODO: more sig figs
+    """
+    return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
+
+
+# TODO: add this as an attribute to rfe?
+def _compute_label(mol_a, mol_b):
+    """ Compute labeled ddg (in kJ/mol) from the experimental IC50 s """
+
+    prop_name = "IC50[uM](SPA)"
+    try:
+        label_dG_a = convert_uIC50_to_kJ_per_mole(float(mol_a.GetProp(prop_name)))
+        label_dG_b = convert_uIC50_to_kJ_per_mole(float(mol_b.GetProp(prop_name)))
+    except KeyError as e:
+        raise (RuntimeError(f"Couldn't access IC50 label for either mol A or mol B, looking at {prop_name}"))
+
+    label = label_dG_b - label_dG_a
+
+    return label
+
 # note: 9 of 31 transformations fail the factorizability assertion here:
 # https://github.com/proteneer/timemachine/blob/2eb956f9f8ce62287cc531188d1d1481832c5e96/fe/topology.py#L381-L431
 transformations = []
@@ -200,7 +224,7 @@ error_mols = []
 for spoke in others:
     core = get_core(hub, spoke, mcs_map(hub, spoke).queryMol)
     try:
-        rfe = RelativeFreeEnergy(hub, spoke, core, forcefield)
+        rfe = RelativeFreeEnergy(hub, spoke, core, forcefield, label=_compute_label(hub, spoke))
         transformations.append(rfe)
     except AtomMappingError as e:
         print(f'atom mapping error in transformation {get_mol_id(hub)} -> {get_mol_id(spoke)}!')
