@@ -259,7 +259,7 @@ void Nonbonded<RealType>::execute_device(
 
     if(N != N_) {
         std::cout << N << " " << N_ << std::endl;
-        throw std::runtime_error("N != N_");
+        throw std::runtime_error("Nonbonded::execute_device() N != N_");
     }
 
     const int B = (N+32-1)/32;

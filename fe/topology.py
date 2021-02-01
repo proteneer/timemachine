@@ -15,45 +15,149 @@ _CUTOFF = 1.2
 class AtomMappingError(Exception):
     pass
 
+class UnsupportedPotential(Exception):
+    pass
+
 class HostGuestTopology():
 
-    def __init__(self, host_p, guest_topology):
+    def __init__(self, 
+        host_potentials,
+        # host_harmonic_bond,
+        # host_harmonic_angle,
+        # host_periodic_torsion,
+        # host_nonbonded,
+        guest_topology):
         """
-        Utility tool for combining host with a guest, in that order.
+        Utility tool for combining host with a guest, in that order. host_potentials must be comprised
+        exclusively of supported potentials
 
         Parameters
         ----------
-        host_p:
-            Nonbonded potential for the host.
+        host_potentials:
+            Bound potentials for the host.
 
         guest_topology:
             Guest's Topology {Base, Dual, Single}Topology.
 
         """
         self.guest_topology = guest_topology
-        self.host_p = host_p
-        self.num_host_atoms = len(self.host_p.get_lambda_plane_idxs())
+
+        self.host_nonbonded = None
+        self.host_harmonic_bond = None
+        self.host_harmonic_angle = None
+        self.host_periodic_torsion = None
+
+        # (ytz): extra assertions inside are to ensure we don't have duplicate terms
+        for bp in host_potentials:
+            if isinstance(bp, potentials.HarmonicBond):
+                assert self.host_harmonic_bond is None
+                self.host_harmonic_bond = bp
+            elif isinstance(bp, potentials.HarmonicAngle):
+                assert self.host_harmonic_angle is None
+                self.host_harmonic_angle = bp
+            elif isinstance(bp, potentials.PeriodicTorsion):
+                assert self.host_periodic_torsion is None
+                self.host_periodic_torsion = bp
+            elif isinstance(bp, potentials.Nonbonded):
+                assert self.host_nonbonded is None
+                self.host_nonbonded = bp
+            else:
+                raise UnsupportedPotential("Unsupported host potential")
+                print("Warning: HostGuestTopology() Ignoring Host Potential")
+
+        self.num_host_atoms = len(self.host_nonbonded.get_lambda_plane_idxs())
 
     def get_num_atoms(self):
         return self.num_host_atoms + self.guest_topology.get_num_atoms()
 
     # tbd: just merge the hamiltonians here
-    def _parameterize_bonded_term(self, ff_params, handle_fn):
-        params, potential = handle_fn(ff_params)
-        potential.set_idxs(potential.get_idxs() + self.num_host_atoms)
-        return params, potential
+    def _parameterize_bonded_term(self, guest_params, guest_potential, host_potential):
+
+        # (ytz): corner case exists if the guest_potential is None
+
+        # guest_params, guest_potential = handle_fn(ff_params)
+
+        assert type(host_potential) == type(guest_potential)
+
+        guest_idxs = guest_potential.get_idxs() + self.num_host_atoms
+
+        guest_lambda_mult = guest_potential.get_lambda_mult()
+        guest_lambda_offset = guest_potential.get_lambda_offset()
+
+        if guest_lambda_mult is None:
+            guest_lambda_mult = np.zeros(len(guest_params))
+        if guest_lambda_offset is None:
+            guest_lambda_offset = np.ones(len(guest_params))
+
+        # print(guest_lambda_mult)
+        # print(guest_lambda_offset)
+
+        if host_potential is not None:
+            # the host is always on.
+            host_params = host_potential.params
+            host_idxs = host_potential.get_idxs()
+            host_lambda_mult = jnp.zeros(len(host_idxs), dtype=np.int32)
+            host_lambda_offset = jnp.ones(len(host_idxs), dtype=np.int32)
+        else:
+            host_params = []
+            host_idxs = []
+            host_lambda_mult = []
+            host_lambda_offset = []
+
+        combined_params = jnp.concatenate([host_params, guest_params])
+        combined_idxs = jnp.concatenate([host_idxs, guest_idxs])
+        combined_lambda_mult = np.concatenate([host_lambda_mult, guest_lambda_mult]).astype(np.int32)
+        combined_lambda_offset = np.concatenate([host_lambda_offset, guest_lambda_offset]).astype(np.int32)
+
+        ctor = type(host_potential)
+
+        return combined_params, ctor(combined_idxs, combined_lambda_mult, combined_lambda_offset)
+        # return params, potential
+
+    # def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
+        # offset = self.mol_a.GetNumAtoms()
+        # params_a, idxs_a = bonded_handle.partial_parameterize(ff_params, self.mol_a)
+        # params_b, idxs_b = bonded_handle.partial_parameterize(ff_params, self.mol_b)
+        # params_c = jnp.concatenate([params_a, params_b])
+        # idxs_c = jnp.concatenate([idxs_a, idxs_b + offset])
+        # return params_c, potential(idxs_c)
+
+    # def parameterize_harmonic_bond(self, ff_params):
+    #     return self._parameterize_bonded_term(ff_params, self.ff.hb_handle, potentials.HarmonicBond)
+
+
+    # def parameterize_harmonic_angle(self, ff_params):
+    #     return self._parameterize_bonded_term(ff_params, self.ff.ha_handle, potentials.HarmonicAngle)
+
+
+    # def parameterize_proper_torsion(self, ff_params):
+    #     return self._parameterize_bonded_term(ff_params, self.ff.pt_handle, potentials.PeriodicTorsion)
+
+
+    # def parameterize_improper_torsion(self, ff_params):
+    #     return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
+
 
     def parameterize_harmonic_bond(self, ff_params):
-        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_harmonic_bond)
+        guest_params, guest_potential = self.guest_topology.parameterize_harmonic_bond(ff_params)
+        return self._parameterize_bonded_term(guest_params, guest_potential, self.host_harmonic_bond)
 
     def parameterize_harmonic_angle(self, ff_params):
-        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_harmonic_angle)
+        guest_params, guest_potential = self.guest_topology.parameterize_harmonic_angle(ff_params)
+        return self._parameterize_bonded_term(guest_params, guest_potential, self.host_harmonic_angle)
 
-    def parameterize_proper_torsion(self, ff_params):
-        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_proper_torsion)
+    # def parameterize_proper_torsion(self, ff_params):
+        # return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_proper_torsion)
 
-    def parameterize_improper_torsion(self, ff_params):
-        return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_improper_torsion)
+    # def parameterize_improper_torsion(self, ff_params):
+        # return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_improper_torsion)
+
+    def parameterize_periodic_torsion(self, proper_params, improper_params):
+        guest_params, guest_potential = self.guest_topology.parameterize_periodic_torsion(proper_params, improper_params)
+        return self._parameterize_bonded_term(guest_params, guest_potential, self.host_periodic_torsion)
+        # guest_params, guest_potential = self.guest_topology.parameterize_proper_torsion(proper_params, improper_params)
+        # self._parameterize_bonded_term(params,)
+        # return self._parameterize_bonded_term(ff_params, self.guest_topology.parameterize_periodic_torsion)
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
         # this needs to take care of the case when there's parameter interpolation.
@@ -63,17 +167,22 @@ class HostGuestTopology():
         # see if we're doing parameter interpolation
         assert guest_qlj.shape[1] == 3
 
-        assert guest_p.get_beta() == self.host_p.get_beta()
-        assert guest_p.get_cutoff() == self.host_p.get_cutoff()
+        assert guest_p.get_beta() == self.host_nonbonded.get_beta()
+        assert guest_p.get_cutoff() == self.host_nonbonded.get_cutoff()
 
-        hg_exclusion_idxs = np.concatenate([self.host_p.get_exclusion_idxs(), guest_p.get_exclusion_idxs() + self.num_host_atoms])
-        hg_scale_factors = np.concatenate([self.host_p.get_scale_factors(), guest_p.get_scale_factors()])
-        hg_lambda_offset_idxs = np.concatenate([self.host_p.get_lambda_offset_idxs(), guest_p.get_lambda_offset_idxs()])
-        hg_lambda_plane_idxs = np.concatenate([self.host_p.get_lambda_plane_idxs(), guest_p.get_lambda_plane_idxs()])
+        hg_exclusion_idxs = np.concatenate([self.host_nonbonded.get_exclusion_idxs(), guest_p.get_exclusion_idxs() + self.num_host_atoms])
+        hg_scale_factors = np.concatenate([self.host_nonbonded.get_scale_factors(), guest_p.get_scale_factors()])
+        hg_lambda_offset_idxs = np.concatenate([self.host_nonbonded.get_lambda_offset_idxs(), guest_p.get_lambda_offset_idxs()])
+        hg_lambda_plane_idxs = np.concatenate([self.host_nonbonded.get_lambda_plane_idxs(), guest_p.get_lambda_plane_idxs()])
 
         if guest_qlj.shape[0] == num_guest_atoms:
             # no parameter interpolation
-            hg_nb_params = jnp.concatenate([self.host_p.params, guest_qlj])
+            hg_nb_params = jnp.concatenate([self.host_nonbonded.params, guest_qlj])
+
+            print("!!!")
+            print(hg_lambda_plane_idxs)
+            print(hg_lambda_offset_idxs[:self.num_host_atoms])
+            print(hg_lambda_offset_idxs[self.num_host_atoms:])
 
             return hg_nb_params, potentials.Nonbonded(
                 hg_exclusion_idxs,
@@ -86,8 +195,8 @@ class HostGuestTopology():
 
         elif guest_qlj.shape[0] == num_guest_atoms*2:
             # with parameter interpolation
-            hg_nb_params_src = jnp.concatenate([self.host_p.params, guest_qlj[:num_guest_atoms]])
-            hg_nb_params_dst = jnp.concatenate([self.host_p.params, guest_qlj[num_guest_atoms:]])
+            hg_nb_params_src = jnp.concatenate([self.host_nonbonded.params, guest_qlj[:num_guest_atoms]])
+            hg_nb_params_dst = jnp.concatenate([self.host_nonbonded.params, guest_qlj[num_guest_atoms:]])
             hg_nb_params = jnp.concatenate([hg_nb_params_src, hg_nb_params_dst])
 
             nb = potentials.Nonbonded(
@@ -173,15 +282,24 @@ class BaseTopology():
         params, idxs = self.ff.ha_handle.partial_parameterize(ff_params, self.mol)
         return params, potentials.HarmonicAngle(idxs)
 
-
     def parameterize_proper_torsion(self, ff_params):
         params, idxs = self.ff.pt_handle.partial_parameterize(ff_params, self.mol)
         return params, potentials.PeriodicTorsion(idxs)
 
-
     def parameterize_improper_torsion(self, ff_params):
         params, idxs = self.ff.it_handle.partial_parameterize(ff_params, self.mol)
         return params, potentials.PeriodicTorsion(idxs)
+
+    def parameterize_periodic_torsion(self, proper_params, improper_params):
+        """
+        Parameterize all periodic torsions in the system.
+        """
+        proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
+        improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
+        combined_params = jnp.concatenate([proper_params, improper_params])
+        combined_idxs = jnp.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
+        combined_potential = potentials.PeriodicTorsion(combined_idxs)
+        return combined_params, combined_potential
 
 
 class DualTopology():
@@ -704,7 +822,19 @@ class SingleTopology():
     def parameterize_proper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.pt_handle, potentials.PeriodicTorsion)
 
-
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
+
+    def parameterize_periodic_torsion(self, proper_params, improper_params):
+        """
+        Parameterize all periodic torsions in the system.
+        """
+        proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
+        improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
+        combined_params = jnp.concatenate([proper_params, improper_params])
+        combined_idxs = jnp.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
+        combined_lambda_mult = jnp.concatenate([proper_potential.get_lambda_mult(), improper_potential.get_lambda_mult()])
+        combined_lambda_offset = jnp.concatenate([proper_potential.get_lambda_offset(), improper_potential.get_lambda_offset()])
+        combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
+        return combined_params, combined_potential
 

@@ -102,10 +102,11 @@ class BaseFreeEnergy():
         # keep the structure of grads the same as that of final_potentials so we can properly
         # form their vjps.
         grads = []
-        for obs_list in du_dp_obs:
+        for obs in du_dp_obs:
             # grad_list = []
             # for obs in obs_list:
                 # grad_list.append()
+            # print(obs.avg_du_dp().shape)
             grads.append(obs.avg_du_dp())
 
         return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std), grads
@@ -291,7 +292,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         combined_masses = np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)
 
-        src_conf, dst_conf = self.top.interpolate_params(ligand_coords_a, ligand_coords_b)
+        # src_conf, dst_conf = self.top.interpolate_params(ligand_coords_a, ligand_coords_b)
         combined_coords = np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)
 
         box = np.eye(3) * 100.0
@@ -377,13 +378,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         for fn, handle in bonded_tuples:
             guest_params, vjp_fn, guest_potential = jax.vjp(fn, handle.params, has_aux=True)
             final_potentials.append(guest_potential.bind(guest_params))
-
-            # print(vjp_fn(np.random.rand))
-
-
             final_vjp_and_handles.append((vjp_fn, handle))
-
-        # assert 0
 
         nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
         final_potentials.append(nb_potential.bind(nb_params))
@@ -409,24 +404,21 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         grads_and_handles = []
 
+        assert len(grads) == len(final_vjp_and_handles)
+
         for du_dqs, vjps_and_handles in zip(grads, final_vjp_and_handles):
+
             if vjps_and_handles is not None:
                 vjp_fn = vjps_and_handles[0]
                 handles = vjps_and_handles[1]
 
-                # we need to get the shapes correct (eg. nonbonded vjp emits an ndarray, not a list.)
-
                 # (ytz): so far nonbonded grads is the only term that map back out to two 
-                # vjp handlers (charge and lj). the vjp also expects an nd.array, not a list. So we kill
-                # two birds with one stone here, but this is quite brittle and should be refactored later on.
+                # vjp handlers (charge and lj).
                 if type(handles) == tuple:
-                    # handle nonbonded terms
-                    # du_dps = vjp_fn(du_dqs[0])
                     du_dps = vjp_fn(du_dqs)
                     for du_dp, handler in zip(du_dps, handles):
                         grads_and_handles.append((du_dp, type(handler)))
                 else:
-                    print("DEBUG", du_dqs, handles)
                     du_dp = vjp_fn(du_dqs)
                     # bonded terms return a list, so we need to flatten it here
                     grads_and_handles.append((du_dp[0], type(handles)))
