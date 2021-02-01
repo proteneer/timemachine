@@ -297,7 +297,19 @@ class ParameterUpdate:
 
     # TODO: def __str__
 
-    # TODO: def save
+    def save(self, name='parameter_update.npz'):
+        """save numpy arrays to path/to/results/{name}.npz"""
+        parameter_update_path = path_to_results.joinpath(name)
+        print(f'saving parameter updates to {parameter_update_path}')
+        np.savez(
+            file=parameter_update_path,
+            before=self.before,
+            after=self.after,
+            gradient=self.gradient,
+            update=self.update,
+        )
+
+
 
 def _update_in_place(pred, grads, label,
                      handle_types_to_update=[nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]):
@@ -358,12 +370,6 @@ def _update_in_place(pred, grads, label,
 
     return parameter_updates
 
-def _save_parameter_updates(parameter_updates, name=''):
-    for handle_type in parameter_updates:
-        pass
-        # TODO: finish writing this
-
-
 def _save_forcefield(filename):
     # TODO: update path
 
@@ -412,10 +418,14 @@ if __name__ == "__main__":
 
         # update forcefield parameters in-place, hopefully to match an experimental label
         parameter_updates = _update_in_place(pred, grads, label=rfe.label, handle_types_to_update=forces_to_refit)
-        _save_parameter_updates(parameter_updates, name=f'step={step}')
         # Note: for certain kinds of method-validation tests, these labels could also be synthetic
 
-        # save updated forcefield parameters after every gradient step
+        # save updated forcefield files after every gradient step
         step_params = serialize_handlers(ff_handlers)
         # TODO: consider if there's a more modular way to keep track of ff updates
         _save_forcefield(f"forcefield_checkpoint_{step}.py")
+
+        # also save information about this step's parameter gradient and parameter update
+        for handle_type in forces_to_refit:
+            fname = f'parameter update (handle_type={handle_type.__name__}, step={step}).npz'
+            parameter_updates[handle_type].save(fname)
