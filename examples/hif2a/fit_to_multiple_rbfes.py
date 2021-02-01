@@ -261,8 +261,8 @@ def predict_dG_and_grad(rfe: RelativeFreeEnergy, conf: Configuration, client: Ab
 
 # TODO: define more flexible update rules here, rather than update parameters
 step_sizes = {
-    nonbonded.AM1CCCHandler: 1e-2,
-    nonbonded.LennardJonesHandler: 1e-2,
+    nonbonded.AM1CCCHandler: 1e-3,
+    nonbonded.LennardJonesHandler: 1e-3,
     # ...
 }
 
@@ -319,7 +319,7 @@ def _update_in_place(pred, grads, label,
         dl_dp = dl_dpred * grads[handle_type]  # chain rule
 
         update = _clipped_update(dl_dp, step_sizes[handle_type], gradient_clip_thresholds[handle_type])
-        print(f'incrementing the {handle_type} parameters by {update}')
+        print(f'incrementing the {handle_type.__class__.__name__} parameters by {update}')
 
         # TODO: define a dict mapping from handle_type to forcefield.q_handle.params or something...
         if handle_type == nonbonded.AM1CCCHandler:
