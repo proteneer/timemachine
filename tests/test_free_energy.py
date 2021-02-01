@@ -33,7 +33,6 @@ class TestHostGuest(unittest.TestCase):
         solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
         solvent_box += np.eye(3)*0.1 # BFGS this later
 
-
         for host_system, host_coords, host_box in [
             (complex_system, complex_coords, complex_box),
             (solvent_system, solvent_coords, solvent_box)]:
@@ -78,59 +77,58 @@ class TestHostGuest(unittest.TestCase):
 
             rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
 
-            final_potentials, final_vjp_and_handles, combined_masses, combined_coords = rfe.prepare_host_edge(
-                host_system,
-                host_coords
-            )
+            fns  = [rfe.prepare_vacuum_edge, rfe.prepare_host_edge]
+            args = [tuple(), (host_system, host_coords)]
 
-            seed = 2021
+            for fn, arg in zip(fns, args):
 
-            intg = LangevinIntegrator(
-                300.0,
-                1.5e-3,
-                1.0,
-                combined_masses,
-                seed
-            ).impl()
+                final_potentials, final_vjp_and_handles, combined_masses, combined_coords = fn(*arg)
 
-            x0 = combined_coords
-            v0 = np.zeros_like(x0)
+                seed = 2021
 
-            bound_potentials = [bp.bound_impl(np.float32) for bp in final_potentials]
+                intg = LangevinIntegrator(
+                    300.0,
+                    1.5e-3,
+                    1.0,
+                    combined_masses,
+                    seed
+                ).impl()
 
-            ctxt = custom_ops.Context(
-                x0,
-                v0,
-                host_box,
-                intg,
-                bound_potentials
-            )
+                x0 = combined_coords
+                v0 = np.zeros_like(x0)
 
-            lamb = 0.5
-            lambda_schedule = np.ones(10000)*lamb
+                bound_potentials = [bp.bound_impl(np.float32) for bp in final_potentials]
 
-            ctxt.multiple_steps(lambda_schedule)
+                ctxt = custom_ops.Context(
+                    x0,
+                    v0,
+                    host_box,
+                    intg,
+                    bound_potentials
+                )
 
-            assert np.all(np.abs(ctxt.get_x_t() < 50))
-            assert np.all(np.abs(ctxt._get_du_dx_t_minus_1() < 10000))
+                lamb = 0.5
+                lambda_schedule = np.ones(10000)*lamb
 
-            # test the all-inclusive method
+                ctxt.multiple_steps(lambda_schedule)
 
-            bonded_us, nonbonded_us, grads_and_handles = rfe.host_edge(
-                lamb,
-                host_system,
-                host_coords,
-                host_box,
-                equil_steps=5000,
-                prod_steps=5000
-            )
+                assert np.all(np.abs(ctxt.get_x_t() < 50))
+                assert np.all(np.abs(ctxt._get_du_dx_t_minus_1() < 10000))
 
-            # check that means and standard deviations are well defined
-            assert np.abs(bonded_us[0]) < 500.0
-            assert np.abs(bonded_us[1]) < 500.0
 
-            assert np.abs(nonbonded_us[0]) < 1000.0
-            assert np.abs(nonbonded_us[1]) < 1000.0
+            # test the all-inclusive methods
+            fns  = [rfe.vacuum_edge, rfe.host_edge]
+            args = [(lamb, 5000, 5000), (lamb, host_system, host_coords, host_box, 5000, 5000)]
 
-            for g, h in grads_and_handles:
-                assert np.all(np.abs(g) < 10000)
+            for fn, arg in zip(fns, args):
+                bonded_us, nonbonded_us, grads_and_handles = fn(*arg)
+
+                # check that means and standard deviations are well defined
+                assert np.abs(bonded_us[0]) < 500.0
+                assert np.abs(bonded_us[1]) < 500.0
+
+                assert np.abs(nonbonded_us[0]) < 1000.0
+                assert np.abs(nonbonded_us[1]) < 1000.0
+
+                for g, h in grads_and_handles:
+                    assert np.all(np.abs(g) < 10000)

@@ -196,7 +196,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         # instantiate the vjps while parameterizing (forward pass)
         for fn, handle in bonded_tuples:
             params, vjp_fn, potential = jax.vjp(fn, handle.params, has_aux=True)
-            final_potentials.append([potential.bindV(params)])
+            final_potentials.append([potential.bind(params)])
             final_vjp_and_handles.append((vjp_fn, handle))
 
         nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
@@ -243,6 +243,47 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             seed
         )
 
+
+    def prepare_vacuum_edge(self):
+        """
+        Prepares the vacuum system.
+
+        Returns
+        -------
+        4 tuple
+            bound_potentials, vjp_fns_and_handles, combined_masses, combined_coords
+
+        """
+        final_potentials = []
+        final_vjp_and_handles = []
+
+        ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
+        ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
+
+        ligand_coords_a = get_romol_conf(self.mol_a)
+        ligand_coords_b = get_romol_conf(self.mol_b)
+
+        ff_tuples = [
+            [self.top.parameterize_harmonic_bond, (self.ff.hb_handle,)],
+            [self.top.parameterize_harmonic_angle, (self.ff.ha_handle,)],
+            [self.top.parameterize_periodic_torsion, (self.ff.pt_handle, self.ff.it_handle)],
+            [self.top.parameterize_nonbonded, (self.ff.q_handle, self.ff.lj_handle)]
+        ]
+
+        final_potentials = []
+        final_vjp_and_handles = []
+
+        for fn, handles in ff_tuples:
+            combined_params, vjp_fn, combined_potential = jax.vjp(fn, *[handle.params for handle in handles], has_aux=True)
+            final_potentials.append(combined_potential.bind(combined_params))
+            final_vjp_and_handles.append((vjp_fn, handles))
+
+        combined_masses = np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)
+        combined_coords = np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)
+
+        return final_potentials, final_vjp_and_handles, combined_masses, combined_coords
+
+
     def vacuum_edge(self, lamb, equil_steps=10000, prod_steps=100000):
         """
         Run a vacuum decoupling simulation at a given value of lambda.
@@ -264,40 +305,11 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             Returns a pair of average du_dl values for bonded and nonbonded terms.
 
         """
-        final_potentials = []
-        final_vjp_and_handles = []
-
-        ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
-        ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
-
-        ligand_coords_a = get_romol_conf(self.mol_a)
-        ligand_coords_b = get_romol_conf(self.mol_b)
-
-        bonded_tuples = [
-            [self.top.parameterize_harmonic_bond, self.ff.hb_handle],
-            [self.top.parameterize_harmonic_angle, self.ff.ha_handle],
-            [self.top.parameterize_proper_torsion, self.ff.pt_handle],
-            [self.top.parameterize_improper_torsion, self.ff.it_handle]
-        ]
-
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            (src_params, dst_params, uni_params), vjp_fn, (src_potential, dst_potential, uni_potential) = jax.vjp(fn, handle.params, has_aux=True)
-            final_potentials.append([src_potential.bind(src_params), dst_potential.bind(dst_params), uni_potential.bind(uni_params)])
-            final_vjp_and_handles.append((vjp_fn, handle))
-
-        nb_params, vjp_fn, nb_potential = jax.vjp(self.top.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
-        final_potentials.append([nb_potential.bind(nb_params)])
-        final_vjp_and_handles.append([vjp_fn])
-
-        combined_masses = np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)
-
-        # src_conf, dst_conf = self.top.interpolate_params(ligand_coords_a, ligand_coords_b)
-        combined_coords = np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)
+        final_potentials, final_vjp_and_handles, combined_masses, combined_coords = self.prepare_vacuum_edge()
 
         box = np.eye(3) * 100.0
 
-        return self._simulate(
+        bonded_us, nonbonded_us, grads = self._simulate(
             lamb,
             box,
             combined_coords,
@@ -307,6 +319,8 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             equil_steps,
             prod_steps
         )
+
+        return bonded_us, nonbonded_us, self.process_grads(grads, final_vjp_and_handles)
 
     def prepare_host_edge(self, host_system, host_coords):
         """
@@ -411,13 +425,20 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         )
 
 
+        return bonded_us, nonbonded_us, self.process_grads(grads, final_vjp_and_handles)
+
+    @staticmethod
+    def process_grads(grads, final_vjp_and_handles):
+        """
+        Backpropagate system parameter derivatives into forcefield parameter derivatives.
+        """
+
         grads_and_handles = []
 
         assert len(grads) == len(final_vjp_and_handles)
 
         for du_dqs, vjps_and_handles in zip(grads, final_vjp_and_handles):
 
-            # if vjps_and_handles is not None:
             vjp_fn = vjps_and_handles[0]
             handles = vjps_and_handles[1]
 
@@ -431,4 +452,4 @@ class RelativeFreeEnergy(BaseFreeEnergy):
                 # bonded terms return a list, so we need to flatten it here
                 grads_and_handles.append((du_dp[0], type(handles)))
 
-        return bonded_us, nonbonded_us, grads_and_handles
+        return grads_and_handles
