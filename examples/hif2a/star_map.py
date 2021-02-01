@@ -27,7 +27,7 @@ path_to_ligands = str(root.joinpath('datasets/fep-benchmark/hif2a/ligands.sdf'))
 path_to_results = Path(__file__).parent
 path_to_transformations = str(path_to_results.joinpath('relative_transformations.pkl'))
 
-supplier = Chem.SDMolSupplier(path_to_ligands)
+supplier = Chem.SDMolSupplier(path_to_ligands, removeHs=False)
 mols = []
 for mol in supplier:
     mols.append(mol)
