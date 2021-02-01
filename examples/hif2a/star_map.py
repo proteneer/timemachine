@@ -23,6 +23,10 @@ forcefield = Forcefield(ff_handlers)
 
 path_to_ligands = str(root.joinpath('datasets/fep-benchmark/hif2a/ligands.sdf'))
 
+# locations relative to example folder
+path_to_results = Path(__file__).parent
+path_to_transformations = str(path_to_results.joinpath('relative_transformations.pkl'))
+
 supplier = Chem.SDMolSupplier(path_to_ligands)
 mols = []
 for mol in supplier:
@@ -171,6 +175,7 @@ def get_core(mol_a, mol_b, query):
 
     TODO: move this into a utility module or the free energy module
     """
+    mol_a.Get
     inds_a = mol_a.GetSubstructMatch(query)
     inds_b = mol_b.GetSubstructMatch(query)
     core = np.array([inds_a, inds_b]).T
@@ -206,6 +211,5 @@ print(f'total # of molecules that encountered atom mapping errors: {len(error_mo
 # serialize
 from pickle import dump
 
-# TODO: save in current examples/hif2a directory, rather than working directory
-with open('relative_transformations.pkl', 'wb') as f:
+with open(path_to_transformations, 'wb') as f:
     dump(transformations, f)
