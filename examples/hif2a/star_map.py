@@ -175,7 +175,8 @@ def get_core(mol_a, mol_b, query):
 
     TODO: move this into a utility module or the free energy module
     """
-    mol_a.Get
+
+    # TODO: GetSubstructMatch --> GetSubstructMatches
     inds_a = mol_a.GetSubstructMatch(query)
     inds_b = mol_b.GetSubstructMatch(query)
     core = np.array([inds_a, inds_b]).T
