@@ -17,19 +17,14 @@ from timemachine.lib import LangevinIntegrator, custom_ops
 class TestHostGuest(unittest.TestCase):
 
     def test_host_guest_single_topology(self):
-        # test that we can properly build a single topology host guest system and that we can run a few steps in a stable
-        # way
+        # test that we can properly build a single topology host guest system and
+        # that we can run a few steps in a stable way. This tests runs both the complex
+        # and the solvent stages.
 
         suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
         all_mols = [x for x in suppl]
         mol_a = all_mols[1]
         mol_b = all_mols[4]
-
-        # host_system, host_coords, _, _, host_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
-
-        # host_box += np.eye(3)*0.1 # BFGS this later
-
-        # host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
         complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
         complex_box += np.eye(3)*0.1 # BFGS this later
@@ -111,22 +106,31 @@ class TestHostGuest(unittest.TestCase):
                 bound_potentials
             )
 
-            num_batches = 100
-            steps_per_batch = 1000
-            seconds_per_day = 86400
-            batch_times = []
-
             lamb = 0.5
-
             lambda_schedule = np.ones(10000)*lamb
-
-
 
             ctxt.multiple_steps(lambda_schedule)
 
-            print(ctxt.get_x_t())
-
             assert np.all(np.abs(ctxt.get_x_t() < 50))
-
-
             assert np.all(np.abs(ctxt._get_du_dx_t_minus_1() < 10000))
+
+            # test the all-inclusive method
+
+            bonded_us, nonbonded_us, grads_and_handles = rfe.host_edge(
+                lamb,
+                host_system,
+                host_coords,
+                host_box,
+                equil_steps=5000,
+                prod_steps=5000
+            )
+
+            # check that means and standard deviations are well defined
+            assert np.abs(bonded_us[0]) < 500.0
+            assert np.abs(bonded_us[1]) < 500.0
+
+            assert np.abs(nonbonded_us[0]) < 1000.0
+            assert np.abs(nonbonded_us[1]) < 1000.0
+
+            for g, h in grads_and_handles:
+                assert np.all(np.abs(g) < 10000)

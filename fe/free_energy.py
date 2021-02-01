@@ -349,20 +349,10 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         final_potentials = []
         final_vjp_and_handles = []
 
-        # instantiate the vjps while parameterizing (forward pass)
-        # for fn, handle in bonded_tuples:
-            # guest_params, vjp_fn, guest_potential = jax.vjp(fn, handle.params, has_aux=True)
-            # final_potentials.append(guest_potential.bind(guest_params))
-            # final_vjp_and_handles.append((vjp_fn, handle))
-
         for fn, handles in ff_tuples:
             combined_params, vjp_fn, combined_potential = jax.vjp(fn, *[handle.params for handle in handles], has_aux=True)
             final_potentials.append(combined_potential.bind(combined_params))
             final_vjp_and_handles.append((vjp_fn, handles))
-
-        # nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
-        # final_potentials.append(nb_potential.bind(nb_params))
-        # final_vjp_and_handles.append((vjp_fn, (self.ff.q_handle, self.ff.lj_handle))) # (ytz): note the handlers are a tuple, this is checked later
 
         combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
         combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
@@ -404,53 +394,9 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         """
 
-        ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
-        ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
-
-        # extract the 0th conformer
-        ligand_coords_a = get_romol_conf(self.mol_a)
-        ligand_coords_b = get_romol_conf(self.mol_b)
-
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-        num_host_atoms = host_coords.shape[0]
-
-        final_potentials = []
-        final_vjp_and_handles = []
-
-        # keep the bonded terms in the host the same.
-        # but we keep the nonbonded term for a subsequent modification
-        for bp in host_bps:
-            if isinstance(bp, potentials.Nonbonded):
-                host_p = bp
-            else:
-                final_potentials.append(bp)
-                # (ytz): no protein ff support for now, so we skip their vjps
-                final_vjp_and_handles.append(None)
-
-        hgt = topology.HostGuestTopology(host_p, self.top)
-
-        # setup the parameter handlers for the ligand
-        bonded_tuples = [
-            [hgt.parameterize_harmonic_bond, self.ff.hb_handle],
-            [hgt.parameterize_harmonic_angle, self.ff.ha_handle],
-            [hgt.parameterize_proper_torsion, self.ff.pt_handle],
-            [hgt.parameterize_improper_torsion, self.ff.it_handle]
-        ]
-
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            guest_params, vjp_fn, guest_potential = jax.vjp(fn, handle.params, has_aux=True)
-            final_potentials.append(guest_potential.bind(guest_params))
-            final_vjp_and_handles.append((vjp_fn, handle))
-
-        nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
-        final_potentials.append(nb_potential.bind(nb_params))
-        final_vjp_and_handles.append((vjp_fn, (self.ff.q_handle, self.ff.lj_handle))) # (ytz): note the handlers are a tuple, this is checked later
-
-        combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
-
-        src_conf, dst_conf = self.top.interpolate_params(ligand_coords_a, ligand_coords_b)
-        combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
+        final_potentials, final_vjp_and_handles, combined_masses, combined_coords = self.prepare_host_edge(
+            host_system, host_coords
+        )
 
         # (ytz): us is short form for mean and std dev.
         bonded_us, nonbonded_us, grads = self._simulate(
@@ -471,19 +417,18 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         for du_dqs, vjps_and_handles in zip(grads, final_vjp_and_handles):
 
-            if vjps_and_handles is not None:
-                vjp_fn = vjps_and_handles[0]
-                handles = vjps_and_handles[1]
+            # if vjps_and_handles is not None:
+            vjp_fn = vjps_and_handles[0]
+            handles = vjps_and_handles[1]
 
-                # (ytz): so far nonbonded grads is the only term that map back out to two 
-                # vjp handlers (charge and lj).
-                if type(handles) == tuple:
-                    du_dps = vjp_fn(du_dqs)
-                    for du_dp, handler in zip(du_dps, handles):
-                        grads_and_handles.append((du_dp, type(handler)))
-                else:
-                    du_dp = vjp_fn(du_dqs)
-                    # bonded terms return a list, so we need to flatten it here
-                    grads_and_handles.append((du_dp[0], type(handles)))
+            # (ytz): nonbonded and torsion handlers map back out to multiple handlers.
+            if type(handles) == tuple:
+                du_dps = vjp_fn(du_dqs)
+                for du_dp, handler in zip(du_dps, handles):
+                    grads_and_handles.append((du_dp, type(handler)))
+            else:
+                du_dp = vjp_fn(du_dqs)
+                # bonded terms return a list, so we need to flatten it here
+                grads_and_handles.append((du_dp[0], type(handles)))
 
         return bonded_us, nonbonded_us, grads_and_handles

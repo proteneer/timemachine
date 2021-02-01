@@ -336,6 +336,5 @@ class TestFactorizability(unittest.TestCase):
         # test that the vjps work
         _ = jax.vjp(st.parameterize_harmonic_bond, ff.hb_handle.params, has_aux=True)
         _ = jax.vjp(st.parameterize_harmonic_angle, ff.ha_handle.params, has_aux=True)
-        _ = jax.vjp(st.parameterize_proper_torsion, ff.pt_handle.params, has_aux=True)
-        _ = jax.vjp(st.parameterize_improper_torsion, ff.it_handle.params, has_aux=True)
+        _ = jax.vjp(st.parameterize_periodic_torsion, ff.pt_handle.params, ff.it_handle.params, has_aux=True)
         _ = jax.vjp(st.parameterize_nonbonded, ff.q_handle.params, ff.lj_handle.params, has_aux=True)
