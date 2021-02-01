@@ -342,12 +342,12 @@ def _compute_label(rfe: RelativeFreeEnergy):
     """ Compute labeled ddg (in kJ/mol) from the experimental IC50 s """
 
     prop_name = "IC50[uM](SPA)"
+    print('mol A properties: ', rfe.mol_a.GetPropsAsDict().keys())
+    print('mol B properties: ', rfe.mol_b.GetPropsAsDict().keys())
     try:
         label_dG_a = convert_uIC50_to_kJ_per_mole(float(rfe.mol_a.GetProp(prop_name)))
         label_dG_b = convert_uIC50_to_kJ_per_mole(float(rfe.mol_b.GetProp(prop_name)))
     except KeyError as e:
-        print('mol A properties: ', rfe.mol_a.GetPropsAsDict().keys())
-        print('mol B properties: ', rfe.mol_b.GetPropsAsDict().keys())
         raise(RuntimeError(f"Couldn't access IC50 label for either mol A or mol B, looking at {prop_name}"))
 
     label = label_dG_b - label_dG_a
