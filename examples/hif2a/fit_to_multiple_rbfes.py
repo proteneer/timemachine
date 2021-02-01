@@ -370,5 +370,6 @@ if __name__ == "__main__":
         # Note: for certain kinds of method-validation tests, these labels could also be synthetic
 
         # save updated forcefield parameters after every gradient step
-        step_params = serialize_handlers(forcefield.lj_handle)
+        step_params = serialize_handlers(ff_handlers)
+        # TODO: consider if there's a more modular way to keep track of ff updates
         _save_forcefield(f"forcefield_checkpoint_{step}.py")
