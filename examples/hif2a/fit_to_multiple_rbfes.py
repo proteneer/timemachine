@@ -2,13 +2,6 @@
 
 import numpy as np
 
-# make sure this will play nice with multi-GPU setup
-import multiprocessing
-
-multiprocessing.set_start_method('spawn')
-
-from time import time
-
 import functools
 
 # forcefield handlers
