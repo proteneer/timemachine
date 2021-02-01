@@ -222,6 +222,8 @@ def predict_dG_and_grad(rfe: RelativeFreeEnergy, conf: Configuration, client: Ab
         lambda_schedule = construct_lambda_schedule(num_host_windows)
 
         print("Minimizing the host structure to remove clashes...")
+        num_atoms_in_A = rfe.mol_a.GetNumAtoms()
+        print('number of atoms in A', num_atoms_in_A)
         minimized_host_coords = minimizer.minimize_host_4d(rfe.mol_a, host_system, host_coords, rfe.ff, host_box)
 
         # one GPU job per lambda window
