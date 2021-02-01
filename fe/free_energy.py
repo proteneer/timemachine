@@ -19,6 +19,33 @@ def get_romol_conf(mol):
 class BaseFreeEnergy():
 
     @staticmethod
+    def _process_grads(grads, final_vjp_and_handles):
+        """
+        Backpropagate system parameter derivatives into forcefield parameter derivatives.
+        """
+
+        grads_and_handles = []
+
+        assert len(grads) == len(final_vjp_and_handles)
+
+        for du_dqs, vjps_and_handles in zip(grads, final_vjp_and_handles):
+
+            vjp_fn = vjps_and_handles[0]
+            handles = vjps_and_handles[1]
+
+            # (ytz): nonbonded and torsion handlers map back out to multiple handlers.
+            if type(handles) == tuple:
+                du_dps = vjp_fn(du_dqs)
+                for du_dp, handler in zip(du_dps, handles):
+                    grads_and_handles.append((du_dp, type(handler)))
+            else:
+                du_dp = vjp_fn(du_dqs)
+                # bonded terms return a list, so we need to flatten it here
+                grads_and_handles.append((du_dp[0], type(handles)))
+
+        return grads_and_handles
+
+    @staticmethod
     def _get_integrator(combined_masses):
         """
         Get a integrator. The resulting impl must be bound to a python handle
@@ -123,6 +150,87 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.ff = ff
         self.top = topology.BaseTopology(mol, ff)
 
+
+    def prepare_host_edge(self, host_system, host_coords):
+        """
+        Prepares the host-edge system
+
+        Parameters
+        ----------
+        host_system: openmm.System
+            openmm System object to be deserialized
+
+        host_coords: np.array
+            Nx3 array of atomic coordinates
+
+        Returns
+        -------
+        4 tuple
+            bound_potentials, vjp_fns_and_handles, combined_masses, combined_coords
+
+        """
+
+        # ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
+        # ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
+
+        # # extract the 0th conformer
+        # ligand_coords_a = get_romol_conf(self.mol_a)
+        # ligand_coords_b = get_romol_conf(self.mol_b)
+
+        # host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+        # num_host_atoms = host_coords.shape[0]
+
+        # hgt = topology.HostGuestTopology(host_bps, self.top)
+
+        # ff_tuples = [
+        #     [hgt.parameterize_harmonic_bond, (self.ff.hb_handle,)],
+        #     [hgt.parameterize_harmonic_angle, (self.ff.ha_handle,)],
+        #     [hgt.parameterize_periodic_torsion, (self.ff.pt_handle, self.ff.it_handle)],
+        #     [hgt.parameterize_nonbonded, (self.ff.q_handle, self.ff.lj_handle)]
+        # ]
+
+        # final_potentials = []
+        # final_vjp_and_handles = []
+
+        # for fn, handles in ff_tuples:
+        #     combined_params, vjp_fn, combined_potential = jax.vjp(fn, *[handle.params for handle in handles], has_aux=True)
+        #     final_potentials.append(combined_potential.bind(combined_params))
+        #     final_vjp_and_handles.append((vjp_fn, handles))
+
+        # combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
+        # combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
+
+        # return final_potentials, final_vjp_and_handles, combined_masses, combined_coords
+
+
+        ligand_masses = [a.GetMass() for a in self.mol.GetAtoms()]
+        ligand_coords = get_romol_conf(self.mol)
+
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+        num_host_atoms = host_coords.shape[0]
+
+        hgt = topology.HostGuestTopology(host_bps, self.top)
+
+        ff_tuples = [
+            [hgt.parameterize_harmonic_bond, (self.ff.hb_handle,)],
+            [hgt.parameterize_harmonic_angle, (self.ff.ha_handle,)],
+            [hgt.parameterize_periodic_torsion, (self.ff.pt_handle, self.ff.it_handle)],
+            [hgt.parameterize_nonbonded, (self.ff.q_handle, self.ff.lj_handle)]
+        ]
+
+        final_potentials = []
+        final_vjp_and_handles = []
+
+        for fn, handles in ff_tuples:
+            combined_params, vjp_fn, combined_potential = jax.vjp(fn, *[handle.params for handle in handles], has_aux=True)
+            final_potentials.append(combined_potential.bind(combined_params))
+            final_vjp_and_handles.append((vjp_fn, handles))
+
+        combined_masses = np.concatenate([host_masses, ligand_masses])
+        combined_coords = np.concatenate([host_coords, ligand_coords])
+
+        return final_potentials, final_vjp_and_handles, combined_masses, combined_coords
+
     # this can be used for both the solvent leg and the complex leg
     def host_edge(self, lamb, host_system, host_coords, box, equil_steps=10000, prod_steps=100000):
         """
@@ -157,47 +265,9 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             Returns a pair of average du_dl values for bonded and nonbonded terms.
 
         """
-
-        ligand_masses = [a.GetMass() for a in self.mol.GetAtoms()]
-        ligand_coords = get_romol_conf(self.mol)
-
-        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-        num_host_atoms = host_coords.shape[0]
-
-        final_potentials = []
-        final_vjp_and_handles = []
-
-        for bp in host_bps:
-            if isinstance(bp, potentials.Nonbonded):
-                host_p = bp
-            else:
-                final_potentials.append([bp])
-                final_vjp_and_handles.append(None)
-
-        hgt = topology.HostGuestTopology(host_p, self.top)
-
-        # setup the parameter handlers for the ligand
-        bonded_tuples = [
-            [hgt.parameterize_harmonic_bond, self.ff.hb_handle],
-            [hgt.parameterize_harmonic_angle, self.ff.ha_handle],
-            [hgt.parameterize_proper_torsion, self.ff.pt_handle],
-            [hgt.parameterize_improper_torsion, self.ff.it_handle]
-        ]
-
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            params, vjp_fn, potential = jax.vjp(fn, handle.params, has_aux=True)
-            final_potentials.append([potential.bind(params)])
-            final_vjp_and_handles.append((vjp_fn, handle))
-
-        nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
-        final_potentials.append([nb_potential.bind(nb_params)])
-        final_vjp_and_handles.append([vjp_fn])
-
-        combined_masses = np.concatenate([host_masses, ligand_masses])
-        combined_coords = np.concatenate([host_coords, ligand_coords])
-
-        return self._simulate(
+        final_potentials, final_vjp_and_handles, combined_masses, combined_coords = self.prepare_host_edge(host_system, host_coords)
+    
+        bonded_us, nonbonded_us, grads = self._simulate(
             lamb,
             box,
             combined_coords,
@@ -207,6 +277,8 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             equil_steps,
             prod_steps
         )
+
+        return bonded_us, nonbonded_us, self._process_grads(grads, final_vjp_and_handles)
 
 
 # this class is serializable.
@@ -233,7 +305,6 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             combined_masses,
             seed
         )
-
 
     def prepare_vacuum_edge(self):
         """
@@ -311,7 +382,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             prod_steps
         )
 
-        return bonded_us, nonbonded_us, self.process_grads(grads, final_vjp_and_handles)
+        return bonded_us, nonbonded_us, self._process_grads(grads, final_vjp_and_handles)
 
     def prepare_host_edge(self, host_system, host_coords):
         """
@@ -416,31 +487,4 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         )
 
 
-        return bonded_us, nonbonded_us, self.process_grads(grads, final_vjp_and_handles)
-
-    @staticmethod
-    def process_grads(grads, final_vjp_and_handles):
-        """
-        Backpropagate system parameter derivatives into forcefield parameter derivatives.
-        """
-
-        grads_and_handles = []
-
-        assert len(grads) == len(final_vjp_and_handles)
-
-        for du_dqs, vjps_and_handles in zip(grads, final_vjp_and_handles):
-
-            vjp_fn = vjps_and_handles[0]
-            handles = vjps_and_handles[1]
-
-            # (ytz): nonbonded and torsion handlers map back out to multiple handlers.
-            if type(handles) == tuple:
-                du_dps = vjp_fn(du_dqs)
-                for du_dp, handler in zip(du_dps, handles):
-                    grads_and_handles.append((du_dp, type(handler)))
-            else:
-                du_dp = vjp_fn(du_dqs)
-                # bonded terms return a list, so we need to flatten it here
-                grads_and_handles.append((du_dp[0], type(handles)))
-
-        return grads_and_handles
+        return bonded_us, nonbonded_us, self._process_grads(grads, final_vjp_and_handles)
