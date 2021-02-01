@@ -288,6 +288,17 @@ def _clipped_update(gradient, step_size, clip_threshold):
     return - np.clip(step_size * gradient, -clip_threshold, clip_threshold)
 
 
+class ParameterUpdate:
+    def __init__(self, before, after, gradient, update):
+        self.before = before
+        self.after = after
+        self.gradient = gradient
+        self.update = update
+
+    # TODO: def __str__
+
+    # TODO: def save
+
 def _update_in_place(pred, grads, label,
                      handle_types_to_update=[nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]):
     """
@@ -313,25 +324,44 @@ def _update_in_place(pred, grads, label,
     dl_dpred = np.sign(pred - label)
 
     # compute updates
+    parameter_updates = dict()
+
     for handle_type in handle_types_to_update:
         # TODO: move this out of update function to help with saving and logging, and eventually move the chain-rule
         #  step out of manually written function
         dl_dp = dl_dpred * grads[handle_type]  # chain rule
+        # TODO: save dl_dp, update, and params to disk
 
         update = _clipped_update(dl_dp, step_sizes[handle_type], gradient_clip_thresholds[handle_type])
-        print(f'incrementing the {handle_type.__class__.__name__} parameters by {update}')
+        print(f'incrementing the {handle_type.__name__} parameters by {update}')
 
         # TODO: define a dict mapping from handle_type to forcefield.q_handle.params or something...
         if handle_type == nonbonded.AM1CCCHandler:
-            print("before: ", forcefield.q_handle.params)
+            before = np.array(forcefield.q_handle.params) # make a copy
             forcefield.q_handle.params += update
-            print("after: ", forcefield.q_handle.params)
+            after = np.array(forcefield.q_handle.params) # make a copy
         elif handle_type == nonbonded.LennardJonesHandler:
-            print("before: ", forcefield.lj_handle.params)
+            before = np.array(forcefield.lj_handle.params)  # make a copy
             forcefield.lj_handle.params += update
-            print("after: ", forcefield.lj_handle.params)
+            after = np.array(forcefield.lj_handle.params)  # make a copy
         else:
             raise (RuntimeError("Attempting to update an unsupported ff handle type"))
+
+        parameter_updates[handle_type] = ParameterUpdate(before, after, dl_dp, update)
+
+        # not sure if I want to print these...
+        #print("before: ", before)
+        #print("after: ", after)
+
+    # TODO: also save dl_dp for the other parameter types we're not necessarily updating, for later analysis
+    #   (would be easier with syntax like forcefield[handle_type])
+
+    return parameter_updates
+
+def _save_parameter_updates(parameter_updates, name=''):
+    for handle_type in parameter_updates:
+        pass
+        # TODO: finish writing this
 
 
 def _save_forcefield(filename):
@@ -381,7 +411,8 @@ if __name__ == "__main__":
         #   * matrix of U(x; lambda) for all x, lambda
 
         # update forcefield parameters in-place, hopefully to match an experimental label
-        _update_in_place(pred, grads, label=rfe.label, handle_types_to_update=forces_to_refit)
+        parameter_updates = _update_in_place(pred, grads, label=rfe.label, handle_types_to_update=forces_to_refit)
+        _save_parameter_updates(parameter_updates, name=f'step={step}')
         # Note: for certain kinds of method-validation tests, these labels could also be synthetic
 
         # save updated forcefield parameters after every gradient step
