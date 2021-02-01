@@ -346,8 +346,8 @@ def _compute_label(rfe: RelativeFreeEnergy):
         label_dG_a = convert_uIC50_to_kJ_per_mole(float(rfe.mol_a.GetProp(prop_name)))
         label_dG_b = convert_uIC50_to_kJ_per_mole(float(rfe.mol_b.GetProp(prop_name)))
     except KeyError as e:
-        print('mol A properties: ', rfe.mol_a.GetPropsAsDict())
-        print('mol B properties: ', rfe.mol_b.GetPropsAsDict())
+        print('mol A properties: ', rfe.mol_a.GetPropsAsDict().keys())
+        print('mol B properties: ', rfe.mol_b.GetPropsAsDict().keys())
         raise(RuntimeError(f"Couldn't access IC50 label for either mol A or mol B, looking at {prop_name}"))
 
     label = label_dG_b - label_dG_a
@@ -374,7 +374,13 @@ if __name__ == "__main__":
     with open(path_to_transformations, 'rb') as f:
         relative_transformations: List[RelativeFreeEnergy] = load(f)
 
-    # TODO: loop over relative_transformations, validate that each of these has an IC50 label where we expect
+    # validate that there is an IC50 label associated with rfe.mol_a and rfe.mol_b for each rfe
+    for i, rfe in enumerate(relative_transformations):
+        try:
+            _compute_label(rfe)
+        except RuntimeError as e:
+            print(f'problem encountered on relative_transformations[{i}]!')
+            print(e)
 
     # update the forcefield parameters for a few steps, each step informed by a single free energy calculation
     for step in range(num_parameter_updates):
