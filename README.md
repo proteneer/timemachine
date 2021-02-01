@@ -26,7 +26,7 @@ We currently support the following functional forms. Parameters that can be opti
 
 ## Running Tests
 
-When running tests, it's important we set the fixed point to a sufficient level of precision via BUILD_TEST=ON. This is done with CMake flags using instructions below. Important: When running actual simulations, it's important to set BUILD_TEST=OFF else overflows will occur.
+Note: we currently only support and test on python 3.7, use other versions at your own peril.
 
 ```
 pip install -r requirements.txt
