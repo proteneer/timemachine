@@ -319,12 +319,17 @@ def _update_in_place(pred, grads, label,
         dl_dp = dl_dpred * grads[handle_type]  # chain rule
 
         update = _clipped_update(dl_dp, step_sizes[handle_type], gradient_clip_thresholds[handle_type])
+        print(f'incrementing the {handle_type} parameters by {update}')
 
         # TODO: define a dict mapping from handle_type to forcefield.q_handle.params or something...
         if handle_type == nonbonded.AM1CCCHandler:
+            print("before: ", forcefield.q_handle.params)
             forcefield.q_handle.params += update
+            print("after: ", forcefield.q_handle.params)
         elif handle_type == nonbonded.LennardJonesHandler:
+            print("before: ", forcefield.lj_handle.params)
             forcefield.lj_handle.params += update
+            print("after: ", forcefield.lj_handle.params)
         else:
             raise (RuntimeError("Attempting to update an unsupported ff handle type"))
 
