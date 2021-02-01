@@ -201,7 +201,7 @@ def predict_dG_and_grad(rfe: RelativeFreeEnergy, conf: Configuration, client: Ab
     """
 
     # build the complex system
-    complex_system, complex_coords, _, _, complex_box = builders.build_protein_system(
+    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
         path_to_protein)
     # TODO: optimize box
     complex_box += np.eye(3) * 0.1  # BFGS this later
