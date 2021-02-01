@@ -250,7 +250,7 @@ class BaseTopology():
         proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
         improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
         combined_params = jnp.concatenate([proper_params, improper_params])
-        combined_idxs = jnp.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
+        combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
         combined_potential = potentials.PeriodicTorsion(combined_idxs)
         return combined_params, combined_potential
 
@@ -360,7 +360,7 @@ class DualTopology():
         params_a, idxs_a = bonded_handle.partial_parameterize(ff_params, self.mol_a)
         params_b, idxs_b = bonded_handle.partial_parameterize(ff_params, self.mol_b)
         params_c = jnp.concatenate([params_a, params_b])
-        idxs_c = jnp.concatenate([idxs_a, idxs_b + offset])
+        idxs_c = np.concatenate([idxs_a, idxs_b + offset])
         return params_c, potential(idxs_c)
 
     def parameterize_harmonic_bond(self, ff_params):
@@ -776,9 +776,9 @@ class SingleTopology():
         proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
         improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
         combined_params = jnp.concatenate([proper_params, improper_params])
-        combined_idxs = jnp.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
-        combined_lambda_mult = jnp.concatenate([proper_potential.get_lambda_mult(), improper_potential.get_lambda_mult()])
-        combined_lambda_offset = jnp.concatenate([proper_potential.get_lambda_offset(), improper_potential.get_lambda_offset()])
+        combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
+        combined_lambda_mult = np.concatenate([proper_potential.get_lambda_mult(), improper_potential.get_lambda_mult()])
+        combined_lambda_offset = np.concatenate([proper_potential.get_lambda_offset(), improper_potential.get_lambda_offset()])
         combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
         return combined_params, combined_potential
 

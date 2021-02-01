@@ -22,6 +22,22 @@ class BaseFreeEnergy():
     def _process_grads(grads, final_vjp_and_handles):
         """
         Backpropagate system parameter derivatives into forcefield parameter derivatives.
+
+        Parameters
+        ----------
+        grads: list of np array
+            System derivatives in the same order as final_vjp_and_handles
+
+        final_vjp_and_handles: list of 2-tuples
+            Each 2-tuple is a (vjp_fn, handlers)
+
+
+        Returns
+        -------
+        list of 2-tuples
+            Each 2-tuple is a (np.array, class) where class indicates
+            the type of the handler.
+
         """
 
         grads_and_handles = []
@@ -169,40 +185,6 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
             bound_potentials, vjp_fns_and_handles, combined_masses, combined_coords
 
         """
-
-        # ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
-        # ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
-
-        # # extract the 0th conformer
-        # ligand_coords_a = get_romol_conf(self.mol_a)
-        # ligand_coords_b = get_romol_conf(self.mol_b)
-
-        # host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-        # num_host_atoms = host_coords.shape[0]
-
-        # hgt = topology.HostGuestTopology(host_bps, self.top)
-
-        # ff_tuples = [
-        #     [hgt.parameterize_harmonic_bond, (self.ff.hb_handle,)],
-        #     [hgt.parameterize_harmonic_angle, (self.ff.ha_handle,)],
-        #     [hgt.parameterize_periodic_torsion, (self.ff.pt_handle, self.ff.it_handle)],
-        #     [hgt.parameterize_nonbonded, (self.ff.q_handle, self.ff.lj_handle)]
-        # ]
-
-        # final_potentials = []
-        # final_vjp_and_handles = []
-
-        # for fn, handles in ff_tuples:
-        #     combined_params, vjp_fn, combined_potential = jax.vjp(fn, *[handle.params for handle in handles], has_aux=True)
-        #     final_potentials.append(combined_potential.bind(combined_params))
-        #     final_vjp_and_handles.append((vjp_fn, handles))
-
-        # combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
-        # combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
-
-        # return final_potentials, final_vjp_and_handles, combined_masses, combined_coords
-
-
         ligand_masses = [a.GetMass() for a in self.mol.GetAtoms()]
         ligand_coords = get_romol_conf(self.mol)
 
