@@ -71,6 +71,7 @@ with open(path_to_ff) as f:
 
 forcefield = Forcefield(ff_handlers)
 
+
 def wrap_method(args, fxn):
     return fxn(*args)
 
@@ -111,7 +112,7 @@ def type_check_handlers(handlers):
             assert handle_type == type(forcefield.lj_handle)
 
 
-def _print_result(stage, lamb, result):
+def _print_result(lamb, result):
     """
     TODO: include type hint here for ambiguous argument name "result"
     TODO: add units
@@ -123,7 +124,6 @@ def _print_result(stage, lamb, result):
     unit = "kJ/mol"
 
     message = f"""
-    final {stage}
     lambda {lamb:.3f}
     bonded dU/dlambda (in {unit})
         mean = {np.mean(bonded_du_dl):.3f}
@@ -133,23 +133,6 @@ def _print_result(stage, lamb, result):
         stddev = {np.std(nonbonded_du_dl):.3f}
     """
     print(message)
-
-
-def _save_result(stage, lamb, result, rfe, configuration):
-    """
-    TODO: more compact way to store the relevant information about which transformation was computed
-    TODO: include type hint here for ambiguous argument name "result"
-    TODO: add units
-    TODO: move this into part of a .save() method for a RelativeFreeEnergy result object?
-    """
-    # unpack result tuple
-    bonded_du_dl, nonbonded_du_dl, grads_and_handles = result
-
-    # save du/dlambda trajectories
-    du_dl_filename = path_to_results.joinpath(f"du_dlambda trajectories, stage={stage}, lambda={lamb:.3f}.npy")
-    print(f'saving bonded and nonbonded du/dlambda trajectories to {du_dl_filename}...')
-    np.savez(du_dl_filename, bonded_du_dl=bonded_du_dl, nonbonded_du_dl=nonbonded_du_dl, rfe=rfe,
-             configuration=configuration)
 
 
 def _mean_du_dlambda(result):
@@ -174,6 +157,36 @@ def _update_combined_handle_and_grads(ghs, combined_handle_and_grads):
             combined_handle_and_grads[handle_type_lhs] -= grad
 
 
+class ThermodynamicIntegrationResult:
+    def __init__(self, lambda_schedule, results):
+        self.lambda_schedule = lambda_schedule
+        self.results = results
+
+    @staticmethod
+    def _save_result(name, lamb, result, rfe, configuration):
+        """
+        TODO: more compact way to store the relevant information about which transformation was computed
+        TODO: include type hint here for ambiguous argument name "result"
+        TODO: add units
+        TODO: move this into part of a .save() method for a RelativeFreeEnergy result object?
+        TODO: use state index i rather than lambda in filename
+        TODO: include also dU/dparams here?
+        """
+        # unpack result tuple
+        bonded_du_dl, nonbonded_du_dl, grads_and_handles = result
+
+        # save du/dlambda trajectories
+        du_dl_filename = path_to_results.joinpath(
+            f"du_dlambda trajectories ({name}, lambda={lamb:.3f}).npy")
+        print(f'saving bonded and nonbonded du/dlambda trajectories to {du_dl_filename}...')
+        np.savez(du_dl_filename, bonded_du_dl=bonded_du_dl, nonbonded_du_dl=nonbonded_du_dl, rfe=rfe,
+                 configuration=configuration)
+
+    def save(self, name=''):
+        for lamb, result in zip(self.lambda_schedule, self.results):
+            self._save_result(name, lamb, result, rfe, configuration)
+
+
 # TODO: shorten this function
 def predict_dG_and_grad(rfe: RelativeFreeEnergy, conf: Configuration, client: AbstractClient):
     """
@@ -196,7 +209,8 @@ def predict_dG_and_grad(rfe: RelativeFreeEnergy, conf: Configuration, client: Ab
     solvent_box += np.eye(3) * 0.1  # BFGS this later
 
     combined_handle_and_grads = {}
-    stage_dGs = []
+    stage_dGs = dict()
+    stage_results = dict()
 
     # TODO: break up this giant loop body
     for stage, host_system, host_coords, host_box, num_host_windows in [
@@ -216,24 +230,21 @@ def predict_dG_and_grad(rfe: RelativeFreeEnergy, conf: Configuration, client: Ab
             arg = (lamb, host_system, minimized_host_coords, host_box, conf.num_equil_steps, conf.num_prod_steps)
             futures.append(client.submit(do_work, arg))
 
-        print('collecting results from client!')
         results = []
         for fut in futures:
             results.append(fut.result())
 
-        print('results by lambda window:')
-        for lamb, result in zip(lambda_schedule, results):
-            _print_result(stage, lamb, result)
+        stage_results[stage] = ThermodynamicIntegrationResult(lambda_schedule, results)
 
-        print('saving results')
+        print(f'{stage} results by lambda window:')
         for lamb, result in zip(lambda_schedule, results):
-            _save_result(stage, lamb, result, rfe, configuration)
+            _print_result(lamb, result)
 
         # estimate dG for this stage
         pred_dG = np.trapz([_mean_du_dlambda(x) for x in results], lambda_schedule)
         # TODO: refactor this to be a call to something in a generic free_energy.analysis module
         #   to allow comparison / swapping between TI estimator, MBAR estimator, and others
-        stage_dGs.append(pred_dG)
+        stage_dGs[stage] = pred_dG
 
         # collect derivative handlers
         ghs = []
@@ -244,34 +255,33 @@ def predict_dG_and_grad(rfe: RelativeFreeEnergy, conf: Configuration, client: Ab
         # update forcefield gradient handlers in-place
         _update_combined_handle_and_grads(ghs, combined_handle_and_grads)
 
-    # TODO: update stage_dGs keys to name of phase (['complex', 'solvent']) rather than integer index ([0, 1])
-    pred_rbfe = stage_dGs[0] - stage_dGs[1]
-    return pred_rbfe, combined_handle_and_grads
+    pred_rbfe = stage_dGs['complex'] - stage_dGs['solvent']
+    return pred_rbfe, combined_handle_and_grads, stage_results
 
 
 # TODO: define more flexible update rules here, rather than update parameters
 step_sizes = {
-    nonbonded.AM1CCCHandler: 1e-1,
-    nonbonded.LennardJonesHandler: 1e-1,
+    nonbonded.AM1CCCHandler: 1e-2,
+    nonbonded.LennardJonesHandler: 1e-2,
     # ...
 }
 
 gradient_clip_thresholds = {
-    nonbonded.AM1CCCHandler: 0.05,
-    nonbonded.LennardJonesHandler: np.array([0.001, 0]),
+    nonbonded.AM1CCCHandler: 0.001,
+    nonbonded.LennardJonesHandler: np.array([0.001, 0]), # TODO: allow to update epsilon also?
     # ...
 }
 
 
 def _clipped_update(gradient, step_size, clip_threshold):
     """Compute an update based on current gradient
-        x_kplus1 = x_k + update
+        x[k+1] = x[k] + update
 
     The gradient descent update would be
-        update = - step_size * grad(x_k),
+        update = - step_size * grad(x[k]),
 
     and to avoid instability, we clip the absolute values of all components of the update
-        update = - clip(step_size * grad(x_k))
+        update = - clip(step_size * grad(x[k]))
 
     TODO: menu of other, fancier update functions
     """
@@ -326,9 +336,6 @@ def _save_forcefield(filename):
         fh.write(step_params)
 
 
-
-
-
 if __name__ == "__main__":
     # which force field components we'll refit
     forces_to_refit = [nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]
@@ -356,12 +363,17 @@ if __name__ == "__main__":
         #  rather than sampling a transformation at random at each step
 
         # estimate predicted dG, and gradient of predicted dG w.r.t. params
-        pred, grads = predict_dG_and_grad(rfe, configuration, client)
-        #   (also saves some additional diagnostic information to disk: du/dlambda trajectory)
-        #   TODO: save some additional diagnostic information
-        #       * x trajectories,
-        #       * d pred_dG / d parameters trajectories,
-        #       * matrix of U(x; lambda) for all x, lambda
+        pred, grads, stage_results = predict_dG_and_grad(rfe, configuration, client)
+
+        # also save some additional diagnostic information to disk (du/dlambda trajectory)
+        print('saving results')
+        for stage in stage_results:
+            stage_results[stage].save(name=f'step={step}, stage={stage}')
+
+        # TODO: save some further diagnostic information
+        #   * x trajectories,
+        #   * d U / d parameters trajectories,
+        #   * matrix of U(x; lambda) for all x, lambda
 
         # update forcefield parameters in-place, hopefully to match an experimental label
         _update_in_place(pred, grads, label=rfe.label, handle_types_to_update=forces_to_refit)
