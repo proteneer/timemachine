@@ -3,16 +3,16 @@
 template<typename RealType>
 void __global__ k_harmonic_bond(
     const int B,           // number of bonds
-    const double *coords,
-    const double *params,  // [p, 2]
+    const double * __restrict__ coords,
+    const double * __restrict__ params,  // [p, 2]
     const double lambda,
     const int * __restrict__ lambda_mult,
     const int * __restrict__ lambda_offset,
-    const int *bond_idxs,  // [b, 2]
-    unsigned long long *du_dx,
-    double *du_dp,
-    double *du_dl,
-    double *u) {
+    const int * __restrict__ bond_idxs,  // [b, 2]
+    unsigned long long * __restrict__ du_dx,
+    double * __restrict__ du_dp,
+    double * __restrict__ du_dl,
+    double * __restrict__ u) {
 
     const auto b_idx = blockDim.x*blockIdx.x + threadIdx.x;
 

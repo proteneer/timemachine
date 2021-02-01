@@ -142,12 +142,6 @@ class HarmonicBond(BondedWrapper):
 
     pass
 
-    # def get_idxs(self):
-        # return self.args[0]
-
-    # def set_idxs(self, new_idxs):
-        # self.args[0] = new_idxs
-
 # this is an alias to make type checking easier
 class CoreRestraint(HarmonicBond):
 
@@ -163,24 +157,11 @@ class CoreRestraint(HarmonicBond):
         return custom_ctor(*self.args)
 
 class HarmonicAngle(BondedWrapper):
-
     pass
 
-    # def get_idxs(self):
-        # return self.args[0]
-
-    # def set_idxs(self, new_idxs):
-        # self.args[0] = new_idxs
 
 class PeriodicTorsion(BondedWrapper):
-
     pass
-
-    # def get_idxs(self):
-        # return self.args[0]
-
-    # def set_idxs(self, new_idxs):
-        # self.assertrgs[0] = new_idxs
 
 class InertialRestraint(CustomOpWrapper):
 

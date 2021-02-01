@@ -3,16 +3,16 @@
 template<typename RealType, int D>
 void __global__ k_harmonic_angle_inference(
     const int A,     // number of bonds
-    const double *coords,  // [N, 3]
-    const double *params,  // [P, 2]
+    const double * __restrict__ coords,  // [N, 3]
+    const double * __restrict__ params,  // [P, 2]
     const double lambda,
     const int * __restrict__ lambda_mult,
     const int * __restrict__ lambda_offset,
-    const int *angle_idxs,    // [A, 3]
-    unsigned long long *du_dx,
-    double *du_dp,
-    double *du_dl,
-    double *u) {
+    const int * __restrict__ angle_idxs,    // [A, 3]
+    unsigned long long *__restrict__ du_dx,
+    double * __restrict__ du_dp,
+    double * __restrict__ du_dl,
+    double * __restrict__ u) {
 
     const auto a_idx = blockDim.x*blockIdx.x + threadIdx.x;
 

@@ -48,7 +48,6 @@ class BaseFreeEnergy():
         for bp in final_potentials:
             obs_list = []
 
-            # for bp in bps:
             impl = bp.bound_impl(np.float32)
 
             if isinstance(bp, potentials.InterpolatedPotential) or isinstance(bp, potentials.LambdaPotential):
@@ -61,9 +60,6 @@ class BaseFreeEnergy():
 
             all_impls.append(impl)
             du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 5))
-
-            # obs_list.append(custom_ops.AvgPartialUPartialParam(impl, 5))
-            # du_dp_obs.append(obs_list)
 
         intg_impl = integrator.impl()
         # context components: positions, velocities, box, integrator, energy fxns
@@ -87,7 +83,6 @@ class BaseFreeEnergy():
         ctxt.add_observable(nonbonded_du_dl_obs)
 
         for obs in du_dp_obs:
-            # for obs in obs_list:
             ctxt.add_observable(obs)
 
         for _ in range(prod_steps):
@@ -103,10 +98,6 @@ class BaseFreeEnergy():
         # form their vjps.
         grads = []
         for obs in du_dp_obs:
-            # grad_list = []
-            # for obs in obs_list:
-                # grad_list.append()
-            # print(obs.avg_du_dp().shape)
             grads.append(obs.avg_du_dp())
 
         return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std), grads

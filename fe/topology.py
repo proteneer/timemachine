@@ -25,7 +25,7 @@ class HostGuestTopology():
         guest_topology):
         """
         Utility tool for combining host with a guest, in that order. host_potentials must be comprised
-        exclusively of supported potentials
+        exclusively of supported potentials (currently: bonds, angles, torsions, nonbonded).
 
         Parameters
         ----------
@@ -92,8 +92,8 @@ class HostGuestTopology():
             host_lambda_mult = jnp.zeros(len(host_idxs), dtype=np.int32)
             host_lambda_offset = jnp.ones(len(host_idxs), dtype=np.int32)
         else:
-            # (ytz): need to use jnp here since jnp.concatenate does not work with python lists
-            host_params = jnp.array([], dtype=guest_params.dtype).reshape((-1, guest_params.shape[1]))
+            # (ytz): this extra jank is to work around jnp.concatenate not supporting empty lists.
+            host_params = np.array([], dtype=guest_params.dtype).reshape((-1, guest_params.shape[1]))
             host_idxs = np.array([], dtype=guest_idxs.dtype).reshape((-1, guest_idxs.shape[1]))
             host_lambda_mult = []
             host_lambda_offset = []
@@ -120,7 +120,6 @@ class HostGuestTopology():
         return self._parameterize_bonded_term(guest_params, guest_potential, self.host_periodic_torsion)
 
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
-        # this needs to take care of the case when there's parameter interpolation.
         num_guest_atoms = self.guest_topology.get_num_atoms()
         guest_qlj, guest_p = self.guest_topology.parameterize_nonbonded(ff_q_params, ff_lj_params)
         

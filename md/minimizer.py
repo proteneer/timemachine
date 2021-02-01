@@ -100,6 +100,5 @@ def minimize_host_4d(romol, host_system, host_coords, ff, box):
 
     for lamb in np.linspace(1.0, 0, 1000):
         ctxt.step(lamb)
-        # print(np.amax(ctxt._get_du_dx_t_minus_1()))
 
     return ctxt.get_x_t()[:num_host_atoms]
