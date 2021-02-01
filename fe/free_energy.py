@@ -196,7 +196,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         # instantiate the vjps while parameterizing (forward pass)
         for fn, handle in bonded_tuples:
             params, vjp_fn, potential = jax.vjp(fn, handle.params, has_aux=True)
-            final_potentials.append([potential.bind(params)])
+            final_potentials.append([potential.bindV(params)])
             final_vjp_and_handles.append((vjp_fn, handle))
 
         nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
@@ -307,6 +307,69 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             equil_steps,
             prod_steps
         )
+
+    def prepare_host_edge(self, host_system, host_coords):
+        """
+        Prepares the host-edge system
+
+        Parameters
+        ----------
+        host_system: openmm.System
+            openmm System object to be deserialized
+
+        host_coords: np.array
+            Nx3 array of atomic coordinates
+
+        Returns
+        -------
+        4 tuple
+            bound_potentials, vjp_fns_and_handles, combined_masses, combined_coords
+
+        """
+
+        ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
+        ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
+
+        # extract the 0th conformer
+        ligand_coords_a = get_romol_conf(self.mol_a)
+        ligand_coords_b = get_romol_conf(self.mol_b)
+
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+        num_host_atoms = host_coords.shape[0]
+
+        hgt = topology.HostGuestTopology(host_bps, self.top)
+
+        ff_tuples = [
+            [hgt.parameterize_harmonic_bond, (self.ff.hb_handle,)],
+            [hgt.parameterize_harmonic_angle, (self.ff.ha_handle,)],
+            [hgt.parameterize_periodic_torsion, (self.ff.pt_handle, self.ff.it_handle)],
+            [hgt.parameterize_nonbonded, (self.ff.q_handle, self.ff.lj_handle)]
+        ]
+
+        final_potentials = []
+        final_vjp_and_handles = []
+
+        # instantiate the vjps while parameterizing (forward pass)
+        # for fn, handle in bonded_tuples:
+            # guest_params, vjp_fn, guest_potential = jax.vjp(fn, handle.params, has_aux=True)
+            # final_potentials.append(guest_potential.bind(guest_params))
+            # final_vjp_and_handles.append((vjp_fn, handle))
+
+        for fn, handles in ff_tuples:
+            combined_params, vjp_fn, combined_potential = jax.vjp(fn, *[handle.params for handle in handles], has_aux=True)
+            final_potentials.append(combined_potential.bind(combined_params))
+            final_vjp_and_handles.append((vjp_fn, handles))
+
+        # nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
+        # final_potentials.append(nb_potential.bind(nb_params))
+        # final_vjp_and_handles.append((vjp_fn, (self.ff.q_handle, self.ff.lj_handle))) # (ytz): note the handlers are a tuple, this is checked later
+
+        combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
+        combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
+
+        return final_potentials, final_vjp_and_handles, combined_masses, combined_coords
+
+
 
     def host_edge(self, lamb, host_system, host_coords, box, equil_steps=10000, prod_steps=100000):
         """

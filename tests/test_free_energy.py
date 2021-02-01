@@ -1,0 +1,132 @@
+import numpy as np
+import unittest
+
+from rdkit import Chem
+
+from ff.handlers import openmm_deserializer
+from ff import Forcefield
+from ff.handlers.deserialize import deserialize_handlers
+
+from fe import free_energy
+
+from md import builders, minimizer
+
+from timemachine.lib import LangevinIntegrator, custom_ops
+
+
+class TestHostGuest(unittest.TestCase):
+
+    def test_host_guest_single_topology(self):
+        # test that we can properly build a single topology host guest system and that we can run a few steps in a stable
+        # way
+
+        suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
+        all_mols = [x for x in suppl]
+        mol_a = all_mols[1]
+        mol_b = all_mols[4]
+
+        # host_system, host_coords, _, _, host_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
+
+        # host_box += np.eye(3)*0.1 # BFGS this later
+
+        # host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
+        complex_box += np.eye(3)*0.1 # BFGS this later
+
+        # build the water system.
+        solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
+        solvent_box += np.eye(3)*0.1 # BFGS this later
+
+
+        for host_system, host_coords, host_box in [
+            (complex_system, complex_coords, complex_box),
+            (solvent_system, solvent_coords, solvent_box)]:
+
+            core = np.array([
+                [ 0,  0],
+                [ 2,  2],
+                [ 1,  1],
+                [ 6,  6],
+                [ 5,  5],
+                [ 4,  4],
+                [ 3,  3],
+                [15, 16],
+                [16, 17],
+                [17, 18],
+                [18, 19],
+                [19, 20],
+                [20, 21],
+                [32, 30],
+                [26, 25],
+                [27, 26],
+                [ 7,  7],
+                [ 8,  8],
+                [ 9,  9],
+                [10, 10],
+                [29, 11],
+                [11, 12],
+                [12, 13],
+                [14, 15],
+                [31, 29],
+                [13, 14],
+                [23, 24],
+                [30, 28],
+                [28, 27],
+                [21, 22]
+            ])
+
+            ff = Forcefield(deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read()))
+
+            # minimize the host to avoid clashes
+            host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, ff, host_box)
+
+            rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
+
+            final_potentials, final_vjp_and_handles, combined_masses, combined_coords = rfe.prepare_host_edge(
+                host_system,
+                host_coords
+            )
+
+            seed = 2021
+
+            intg = LangevinIntegrator(
+                300.0,
+                1.5e-3,
+                1.0,
+                combined_masses,
+                seed
+            ).impl()
+
+            x0 = combined_coords
+            v0 = np.zeros_like(x0)
+
+            bound_potentials = [bp.bound_impl(np.float32) for bp in final_potentials]
+
+            ctxt = custom_ops.Context(
+                x0,
+                v0,
+                host_box,
+                intg,
+                bound_potentials
+            )
+
+            num_batches = 100
+            steps_per_batch = 1000
+            seconds_per_day = 86400
+            batch_times = []
+
+            lamb = 0.5
+
+            lambda_schedule = np.ones(10000)*lamb
+
+
+
+            ctxt.multiple_steps(lambda_schedule)
+
+            print(ctxt.get_x_t())
+
+            assert np.all(np.abs(ctxt.get_x_t() < 50))
+
+
+            assert np.all(np.abs(ctxt._get_du_dx_t_minus_1() < 10000))

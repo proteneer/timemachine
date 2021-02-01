@@ -22,10 +22,6 @@ class HostGuestTopology():
 
     def __init__(self, 
         host_potentials,
-        # host_harmonic_bond,
-        # host_harmonic_angle,
-        # host_periodic_torsion,
-        # host_nonbonded,
         guest_topology):
         """
         Utility tool for combining host with a guest, in that order. host_potentials must be comprised
@@ -63,7 +59,6 @@ class HostGuestTopology():
                 self.host_nonbonded = bp
             else:
                 raise UnsupportedPotential("Unsupported host potential")
-                print("Warning: HostGuestTopology() Ignoring Host Potential")
 
         self.num_host_atoms = len(self.host_nonbonded.get_lambda_plane_idxs())
 
@@ -73,11 +68,12 @@ class HostGuestTopology():
     # tbd: just merge the hamiltonians here
     def _parameterize_bonded_term(self, guest_params, guest_potential, host_potential):
 
+        if guest_potential is None:
+            raise UnsupportedPotential("Mismatch in guest_potential")
+
         # (ytz): corner case exists if the guest_potential is None
-
-        # guest_params, guest_potential = handle_fn(ff_params)
-
-        assert type(host_potential) == type(guest_potential)
+        if host_potential is not None:
+            assert type(host_potential) == type(guest_potential)
 
         guest_idxs = guest_potential.get_idxs() + self.num_host_atoms
 
@@ -99,17 +95,20 @@ class HostGuestTopology():
             host_lambda_mult = jnp.zeros(len(host_idxs), dtype=np.int32)
             host_lambda_offset = jnp.ones(len(host_idxs), dtype=np.int32)
         else:
-            host_params = []
-            host_idxs = []
+            # (ytz): need to use jnp here since jnp.concatenate does not work with python lists
+            host_params = jnp.array([], dtype=guest_params.dtype).reshape((-1, guest_params.shape[1]))
+            host_idxs = np.array([], dtype=guest_idxs.dtype).reshape((-1, guest_idxs.shape[1]))
             host_lambda_mult = []
             host_lambda_offset = []
 
+        print(host_params.shape, guest_params.shape)
+
         combined_params = jnp.concatenate([host_params, guest_params])
-        combined_idxs = jnp.concatenate([host_idxs, guest_idxs])
+        combined_idxs = np.concatenate([host_idxs, guest_idxs])
         combined_lambda_mult = np.concatenate([host_lambda_mult, guest_lambda_mult]).astype(np.int32)
         combined_lambda_offset = np.concatenate([host_lambda_offset, guest_lambda_offset]).astype(np.int32)
 
-        ctor = type(host_potential)
+        ctor = type(guest_potential)
 
         return combined_params, ctor(combined_idxs, combined_lambda_mult, combined_lambda_offset)
         # return params, potential
