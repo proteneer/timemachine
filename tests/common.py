@@ -449,6 +449,8 @@ class GradientTest(unittest.TestCase):
         """
         OpenMM convention - errors are compared against norm of force vectors
         """
+        assert np.all(np.isfinite(truth))
+        assert np.all(np.isfinite(test))
         assert np.array(truth).shape == np.array(test).shape
 
         norms = np.linalg.norm(truth, axis=-1, keepdims=True)
