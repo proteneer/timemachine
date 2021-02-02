@@ -164,18 +164,22 @@ def nonbonded_v3(
     keep_mask = np.where(eps_ij != 0, keep_mask, 0)
 
     if cutoff is not None:
-        eps_ij = np.where(dij < cutoff, eps_ij, np.zeros_like(eps_ij))
+        eps_ij = np.where(dij < cutoff, eps_ij, 0)
 
     # (ytz): this avoids a nan in the gradient in both jax and tensorflow
-    sig_ij = np.where(keep_mask, sig_ij, np.zeros_like(sig_ij))
-    eps_ij = np.where(keep_mask, eps_ij, np.zeros_like(eps_ij))
+    sig_ij = np.where(keep_mask, sig_ij, 0)
+    eps_ij = np.where(keep_mask, eps_ij, 0)
 
-    sig2 = sig_ij/dij
+    dij = np.where(np.eye(N), 0, dij)
+    inv_dij = 1/dij
+    inv_dij = np.where(np.eye(N), 0, inv_dij)
+
+    sig2 = sig_ij*inv_dij
     sig2 *= sig2
     sig6 = sig2*sig2*sig2
 
     eij_lj = 4*eps_ij*(sig6-1.0)*sig6
-    eij_lj = np.where(keep_mask, eij_lj, np.zeros_like(eij_lj))
+    eij_lj = np.where(keep_mask, eij_lj, 0)
 
     qi = np.expand_dims(charges, 0) # (1, N)
     qj = np.expand_dims(charges, 1) # (N, 1)
@@ -183,13 +187,13 @@ def nonbonded_v3(
 
     # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
     keep_mask = 1 - np.eye(conf.shape[0])
-    qij = np.where(keep_mask, qij, np.zeros_like(qij))
-    dij = np.where(keep_mask, dij, np.zeros_like(dij))
+    qij = np.where(keep_mask, qij, 0)
+    dij = np.where(keep_mask, dij, 0)
 
     # funny enough lim_{x->0} erfc(x)/x = 0
-    eij_charge = np.where(keep_mask, qij*erfc(beta*dij)/dij, np.zeros_like(dij)) # zero out diagonals
+    eij_charge = np.where(keep_mask, qij*erfc(beta*dij)*inv_dij, 0) # zero out diagonals
     if cutoff is not None:
-        eij_charge = np.where(dij > cutoff, np.zeros_like(eij_charge), eij_charge)
+        eij_charge = np.where(dij > cutoff, 0, eij_charge)
 
     eij_total = (eij_lj*lj_rescale_mask + eij_charge*charge_rescale_mask)
 

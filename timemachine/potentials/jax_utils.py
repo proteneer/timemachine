@@ -65,8 +65,9 @@ def delta_r(ri, rj, box=None):
 #     return dij
 
 def distance(ri, rj, box=None):
-    dxdydz = np.power(delta_r(ri, rj, box), 2)
-    # np.linalg.norm nans but this doesn't
-    dij = np.sqrt(np.sum(dxdydz, axis=-1))
+    d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
+    N = d2ij.shape[0]
+    d2ij = np.where(np.eye(N), 0, d2ij)
+    dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
     return dij
 
