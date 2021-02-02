@@ -30,7 +30,7 @@ Configuration = namedtuple(
     'Configuration',
     ['num_gpus', 'num_complex_windows', 'num_solvent_windows', 'num_equil_steps', 'num_prod_steps'])
 
-# define a couple configurations: one for quick tests, and one for productions
+# define a couple configurations: one for quick tests, and one for production
 production_configuration = Configuration(
     num_gpus=10,
     num_complex_windows=60,
@@ -177,7 +177,7 @@ class ThermodynamicIntegrationResult:
 
         # save du/dlambda trajectories
         du_dl_filename = path_to_results.joinpath(
-            f"du_dlambda trajectories ({name}, lambda={lamb:.3f}).npy")
+            f"du_dlambda trajectories ({name}, lambda={lamb:.3f})")
         print(f'saving bonded and nonbonded du/dlambda trajectories to {du_dl_filename}...')
         np.savez(du_dl_filename, bonded_du_dl=bonded_du_dl, nonbonded_du_dl=nonbonded_du_dl, rfe=rfe,
                  configuration=configuration)
@@ -268,7 +268,7 @@ step_sizes = {
 
 gradient_clip_thresholds = {
     nonbonded.AM1CCCHandler: 0.001,
-    nonbonded.LennardJonesHandler: np.array([0.001, 0]), # TODO: allow to update epsilon also?
+    nonbonded.LennardJonesHandler: np.array([0.001, 0]),  # TODO: allow to update epsilon also?
     # ...
 }
 
@@ -310,7 +310,6 @@ class ParameterUpdate:
         )
 
 
-
 def _update_in_place(pred, grads, label,
                      handle_types_to_update=[nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]):
     """
@@ -349,9 +348,9 @@ def _update_in_place(pred, grads, label,
 
         # TODO: define a dict mapping from handle_type to forcefield.q_handle.params or something...
         if handle_type == nonbonded.AM1CCCHandler:
-            before = np.array(forcefield.q_handle.params) # make a copy
+            before = np.array(forcefield.q_handle.params)  # make a copy
             forcefield.q_handle.params += update
-            after = np.array(forcefield.q_handle.params) # make a copy
+            after = np.array(forcefield.q_handle.params)  # make a copy
         elif handle_type == nonbonded.LennardJonesHandler:
             before = np.array(forcefield.lj_handle.params)  # make a copy
             forcefield.lj_handle.params += update
@@ -362,13 +361,14 @@ def _update_in_place(pred, grads, label,
         parameter_updates[handle_type] = ParameterUpdate(before, after, dl_dp, update)
 
         # not sure if I want to print these...
-        #print("before: ", before)
-        #print("after: ", after)
+        # print("before: ", before)
+        # print("after: ", after)
 
     # TODO: also save dl_dp for the other parameter types we're not necessarily updating, for later analysis
     #   (would be easier with syntax like forcefield[handle_type])
 
     return parameter_updates
+
 
 def _save_forcefield(filename):
     # TODO: update path
