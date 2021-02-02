@@ -170,7 +170,6 @@ def nonbonded_v3(
     sig_ij = np.where(keep_mask, sig_ij, 0)
     eps_ij = np.where(keep_mask, eps_ij, 0)
 
-    dij = np.where(np.eye(N), 0, dij)
     inv_dij = 1/dij
     inv_dij = np.where(np.eye(N), 0, inv_dij)
 
