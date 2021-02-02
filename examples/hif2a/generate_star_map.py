@@ -244,7 +244,7 @@ def _compute_label(mol_a, mol_b):
 # note: 9 of 31 transformations fail the factorizability assertion here:
 # https://github.com/proteneer/timemachine/blob/2eb956f9f8ce62287cc531188d1d1481832c5e96/fe/topology.py#L381-L431
 transformations = []
-error_mols = []
+error_transformations = []
 for spoke in others:
     core = get_core(hub, spoke, mcs_map(hub, spoke).queryMol)
     try:
@@ -253,12 +253,15 @@ for spoke in others:
     except AtomMappingError as e:
         print(f'atom mapping error in transformation {get_mol_id(hub)} -> {get_mol_id(spoke)}!')
         print(e)
-        error_mols.append(spoke)
-print(f'total # of molecules that encountered atom mapping errors: {len(error_mols)}')
-# TODO: save error_mols somewhere for later inspection
+        error_transformations.append((hub, spoke, core))
+
+from pickle import dump
+with open(path_to_results.joinpath('error_transformations.pkl'), 'wb') as f:
+    dump(error_transformations, f)
+
+print(f'total # of molecules that encountered atom mapping errors: {len(error_transformations)}')
 
 # serialize
-from pickle import dump
 
 with open(path_to_transformations, 'wb') as f:
     dump(transformations, f)
