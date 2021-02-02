@@ -44,26 +44,6 @@ def delta_r(ri, rj, box=None):
 
     return diff
 
-# def distance(ri, rj, box=None, gij=None):
-#     # assert box is None
-#     if gij is not None:
-#         deltas_4d = np.power(ri - rj, 2)   
-#         # print(deltas_4d.shape)
-#         deltas_3d = deltas_4d[..., :3]
-#         # print(deltas_3d.shape)
-#         dij_4d = np.sqrt(np.sum(deltas_4d, axis=-1))
-#         dij_3d = np.sqrt(np.sum(deltas_3d, axis=-1))
-
-#         # print("shapes", gij.shape, dij_3d.shape, dij_4d.shape)
-#         dij = np.where(gij, dij_3d, dij_4d)
-#     else:
-#         deltas = np.power(ri - rj, 2)
-#         dij = np.sqrt(np.sum(deltas, axis=-1))
-
-#     # print(dij)
-
-#     return dij
-
 
 def distance(x, box):
     # nonbonded distances require the periodic box
@@ -75,19 +55,4 @@ def distance(x, box):
     d2ij = np.where(np.eye(N), 0, d2ij)
     dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
     return dij
-
-
-# def bonded_distance(ri, rj):
-#     # bonded distances do not consider periodic boundary conditions.
-#     assert ri.shape[1] == 3
-#     assert rj.shape[1] == 3
-#     assert ri.shape[0] == ri.shape[0]
-
-#     return np.linalg.norm
-
-#     d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
-#     N = d2ij.shape[0]
-#     d2ij = np.where(np.eye(N), 0, d2ij)
-#     dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
-#     return dij
 

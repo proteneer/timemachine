@@ -1,7 +1,5 @@
 import jax.numpy as np
 
-# from timemachine.potentials.jax_utils import distance, delta_r, convert_to_4d
-
 def centroid_restraint(conf, params, box, lamb, masses, group_a_idxs, group_b_idxs, kb, b0):
 
     xi = conf[group_a_idxs]
