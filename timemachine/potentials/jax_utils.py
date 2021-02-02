@@ -64,10 +64,30 @@ def delta_r(ri, rj, box=None):
 
 #     return dij
 
-def distance(ri, rj, box=None):
+
+def distance(x, box):
+    # nonbonded distances require the periodic box
+    assert x.shape[1] == 3 or x.shape[1] == 4 # 3d or 4d
+    ri = np.expand_dims(x, 0)
+    rj = np.expand_dims(x, 1)
     d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
     N = d2ij.shape[0]
     d2ij = np.where(np.eye(N), 0, d2ij)
     dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
     return dij
+
+
+# def bonded_distance(ri, rj):
+#     # bonded distances do not consider periodic boundary conditions.
+#     assert ri.shape[1] == 3
+#     assert rj.shape[1] == 3
+#     assert ri.shape[0] == ri.shape[0]
+
+#     return np.linalg.norm
+
+#     d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
+#     N = d2ij.shape[0]
+#     d2ij = np.where(np.eye(N), 0, d2ij)
+#     dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
+#     return dij
 
