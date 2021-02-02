@@ -158,7 +158,8 @@ def plot_transformation_sizes(transformation_sizes):
 
 
 plot_transformation_sizes(transformation_sizes)
-plt.savefig('transformation_sizes.png', bbox_inches='tight')
+plt.savefig(path_to_results.joinpath('transformation_sizes.png'), bbox_inches='tight')
+plt.close()
 
 
 # 4. Construct and serialize the relative transformations
