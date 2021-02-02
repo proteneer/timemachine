@@ -382,8 +382,8 @@ if __name__ == "__main__":
     forces_to_refit = [nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]
 
     # how much computation to spend per refitting step
-    configuration = testing_configuration  # a little
-    # configuration = production_configuration # a lot
+    # configuration = testing_configuration  # a little
+    configuration = production_configuration  # a lot
 
     # how many parameter update steps
     num_parameter_updates = 100
