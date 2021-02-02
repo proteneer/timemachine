@@ -177,10 +177,33 @@ def get_core(mol_a, mol_b, query):
     TODO: move this into a utility module or the free energy module
     """
 
-    # TODO: GetSubstructMatch --> GetSubstructMatches
-    inds_a = mol_a.GetSubstructMatch(query)
-    inds_b = mol_b.GetSubstructMatch(query)
+    # fetch conformer, assumed aligned
+    conf_a = mol_a.GetConformer(0).GetPositions()
+    conf_b = mol_b.GetConformer(0).GetPositions()
+
+    # note that >1 match possible here -- must pick minimum-cost match
+    matches_a = mol_a.GetSubstructMatches(query)
+    matches_b = mol_b.GetSubstructMatches(query)
+    n_a, n_b = len(matches_a), len(matches_b)
+
+    # cost[i, j] = sum_i distance(conf)
+    cost = np.zeros((len(matches_a), len(matches_b)))
+    for i, a in enumerate(matches_a):
+        for j, b in enumerate(matches_b):
+            cost[i, j] = np.linalg.norm(conf_a[np.array(a)] - conf_b[np.array(b)], axis=1).sum()
+
+    # find (i,j) = argmin cost
+    min_i, min_j = np.unravel_index(np.argmin(cost, axis=None), cost.shape)
+    print(f'argmin of {n_a} x {n_b} cost matrix: {(min_i, min_j)} ')
+    # TODO: maybe also print the difference between min(cost) and cost[0,0],
+    #   to see how big of a difference it made to pick the default
+
+    # TODO: is there a way to use the matching from MCS directly?
+
+    # concatenate into (n_atoms, 2) array
+    inds_a, inds_b = matches_a[min_i], matches_b[min_j]
     core = np.array([inds_a, inds_b]).T
+
     return core
 
 
