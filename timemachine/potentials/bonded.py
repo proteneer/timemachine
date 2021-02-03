@@ -1,7 +1,5 @@
 import jax.numpy as np
 
-from timemachine.potentials.jax_utils import distance, delta_r, convert_to_4d
-
 def centroid_restraint(conf, params, box, lamb, masses, group_a_idxs, group_b_idxs, kb, b0):
 
     xi = conf[group_a_idxs]
@@ -102,7 +100,7 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs):
 
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
-    dij = distance(ci, cj, box)
+    dij = np.linalg.norm(ci-cj, axis=-1)
     kbs = params[:, 0]
     r0s = params[:, 1]
 
@@ -155,8 +153,8 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, cos_angles=True):
     kas = params[:, 0]
     a0s = params[:, 1]
 
-    vij = delta_r(ci, cj, box)
-    vjk = delta_r(ck, cj, box)
+    vij = ci - cj
+    vjk = ck - cj
 
     top = np.sum(np.multiply(vij, vjk), -1)
     bot = np.linalg.norm(vij, axis=-1)*np.linalg.norm(vjk, axis=-1)
@@ -205,9 +203,9 @@ def signed_torsion_angle(ci, cj, ck, cl):
     # implementation as opposed to the OpenMM energy function to
     # avoid a singularity when the angle is zero.
 
-    rij = delta_r(cj, ci)
-    rkj = delta_r(cj, ck)
-    rkl = delta_r(cl, ck)
+    rij = cj - ci
+    rkj = cj - ck
+    rkl = cl - ck
 
     n1 = np.cross(rij, rkj)
     n2 = np.cross(rkj, rkl)
