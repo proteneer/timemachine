@@ -180,7 +180,7 @@ def _check_core_map_distances(mol_a, mol_b, core, threshold=0.5) -> bool:
     return (distances <= threshold).all()
 
 
-def get_core(mol_a, mol_b, query, threshold=0.5):
+def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     """Return np integer array that can be passed to RelativeFreeEnergy constructor
 
     Parameters
@@ -191,6 +191,18 @@ def get_core(mol_a, mol_b, query, threshold=0.5):
     Returns
     -------
     core : np.ndarray of ints, shape (n_MCS, 2)
+
+    Notes
+    -----
+    * Warning! Some atoms that intuitively should be mapped together are not,
+        when threshold=0.5 Å in custom atom comparison, because conformers aren't
+        quite aligned enough.
+    * Warning! Because of the intermediate representation of a substructure query,
+        the core indices can get flipped around,
+        for example if the substructure match hits only part of an aromatic ring.
+
+        In some cases, this means that pairs of atoms that do not satisfy the
+        atom comparison function can be mapped together.
 
     TODO: move this into a utility module or the free energy module
     """
@@ -227,6 +239,15 @@ def get_core(mol_a, mol_b, query, threshold=0.5):
 
     return core
 
+from fe.utils import core_from_distances
+def get_core_by_matching(mol_a, mol_b, threshold=1.0):
+    """Only allow to map a pair of atoms together if their conformer coordinates are within threshold.
+
+    Of the allowable core mappings, return the maximum-weight matching of maximal-cardinality,
+        where weight(i,j) = threshold - distance(mol_a[i], mol_b[j])
+    """
+    return core_from_distances(mol_a, mol_b, threshold)
+
 
 # for each "spoke" in the star map, construct serializable transformation "hub -> spoke"
 others = list(mols_with_core_1)
@@ -234,6 +255,7 @@ others.pop(hub_index)
 
 from fe.free_energy import RelativeFreeEnergy
 from fe.topology import AtomMappingError
+
 
 def get_mol_id(mol):
     return mol.GetProp('ID')
@@ -254,12 +276,14 @@ def _compute_label(mol_a, mol_b):
 
     return label
 
-# note: 9 of 31 transformations fail the factorizability assertion here:
+
+# note: some of transformations may fail the factorizability assertion here:
 # https://github.com/proteneer/timemachine/blob/2eb956f9f8ce62287cc531188d1d1481832c5e96/fe/topology.py#L381-L431
 transformations = []
 error_transformations = []
 for spoke in others:
-    core = get_core(hub, spoke, mcs_map(hub, spoke).queryMol)
+    #core = get_core_by_mcs(hub, spoke, mcs_map(hub, spoke).queryMol)
+    core = get_core_by_matching(hub, spoke, threshold=0.9)
     try:
         rfe = RelativeFreeEnergy(hub, spoke, core, forcefield, label=_compute_label(hub, spoke))
         transformations.append(rfe)

@@ -49,3 +49,54 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     """
     return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
 
+
+from scipy.spatial.distance import cdist
+import networkx as nx
+
+def _weighted_adjacency_graph(conf_a, conf_b, threshold=1.0):
+    """construct a networkx graph with
+    nodes for atoms in conf_a, conf_b, and
+    weighted edges connecting (conf_a[i], conf_b[j])
+        if distance(conf_a[i], conf_b[j]) <= threshold,
+        with weight = threshold - distance(conf_a[i], conf_b[j])
+    """
+    distances = cdist(conf_a, conf_b)
+    within_threshold = distances <= threshold
+
+    g = nx.Graph()
+    for i in range(len(within_threshold)):
+        neighbors_of_i = np.where(within_threshold[i])[0]
+        for j in neighbors_of_i:
+            g.add_edge(f'conf_a[{i}]', f'conf_b[{j}]', weight=threshold - distances[i, j])
+    return g
+
+
+def _core_from_matching(matching):
+    """matching is a set of pairs of node names"""
+
+    # 'conf_b[9]' -> 9
+    ind_from_node_name = lambda name: int(name.split('[')[1].split(']')[0])
+
+    match_list = list(matching)
+
+    inds_a = [ind_from_node_name(u) for (u, _) in match_list]
+    inds_b = [ind_from_node_name(v) for (_, v) in match_list]
+
+    return np.array([inds_a, inds_b]).T
+
+def core_from_distances(mol_a, mol_b, threshold=1.0):
+    """
+    TODO: docstring
+    TODO: test
+    """
+    # fetch conformer, assumed aligned
+    conf_a = mol_a.GetConformer(0).GetPositions()
+    conf_b = mol_b.GetConformer(0).GetPositions()
+
+    g = _weighted_adjacency_graph(conf_a, conf_b, threshold)
+
+    matching = nx.algorithms.matching.max_weight_matching(g, maxcardinality=True)
+
+    return _core_from_matching(matching)
+
+# TODO: add a module for atom-mapping, with RDKit MCS based and other approaches
