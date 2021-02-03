@@ -135,3 +135,35 @@ def simple_geometry_mapping(mol_a, mol_b, threshold=0.5):
 
 
 # TODO: add a module for atom-mapping, with RDKit MCS based and other approaches
+
+# TODO: add a visualization module?
+# TODO: compare with perses atom map visualizations?
+
+from rdkit.Chem.Draw import rdMolDraw2D
+
+def draw_mol(mol, highlightAtoms, highlightColors):
+    """from YTZ, Feb 1, 2021"""
+    drawer = rdMolDraw2D.MolDraw2DSVG(400, 200)
+    drawer.DrawMolecule(mol, highlightAtoms=highlightAtoms, highlightAtomColors=highlightColors)
+    drawer.FinishDrawing()
+
+    # TODO: return or save image, for inclusion in a PDF report or similar
+
+    # To display in a notebook:
+    #svg = drawer.GetDrawingText().replace('svg:', '')
+    #display(SVG(svg))
+
+
+def plot_atom_mapping(mol_a, mol_b, core):
+    """from YTZ, Feb 1, 2021
+
+    TODO: move this into a SingleTopology.visualize() or SingleTopology.debug() method"""
+    print(repr(core))
+    atom_colors_a = {}
+    atom_colors_b = {}
+    for (a_idx, b_idx), rgb in zip(core, np.random.random((len(core), 3))):
+        atom_colors_a[int(a_idx)] = tuple(rgb.tolist())
+        atom_colors_b[int(b_idx)] = tuple(rgb.tolist())
+
+    draw_mol(mol_a, core[:, 0].tolist(), atom_colors_a)
+    draw_mol(mol_b, core[:, 1].tolist(), atom_colors_b)
