@@ -167,12 +167,24 @@ plt.close()
 
 
 # 4. Construct and serialize the relative transformations
-def get_core(mol_a, mol_b, query):
+def _check_core_map_distances(mol_a, mol_b, core, threshold=0.5) -> bool:
+    """compute vector of distances[i] = distance(conf_a[core_a[i]], conf_b[core_b[i]]),
+    check whether distances[i] <= threshold for all i"""
+
+    a, b = core[:, 0], core[:, 1]
+    conf_a = mol_a.GetConformer(0).GetPositions()
+    conf_b = mol_b.GetConformer(0).GetPositions()
+    distances = np.linalg.norm(conf_a[a] - conf_b[b], axis=1)
+    return (distances <= threshold).all()
+
+
+def get_core(mol_a, mol_b, query, threshold=0.5):
     """Return np integer array that can be passed to RelativeFreeEnergy constructor
 
     Parameters
     ----------
     mol_a, mol_b, query : RDKit molecules
+    threshold : float, in angstroms
 
     Returns
     -------
@@ -207,6 +219,9 @@ def get_core(mol_a, mol_b, query):
     # concatenate into (n_atoms, 2) array
     inds_a, inds_b = matches_a[min_i], matches_b[min_j]
     core = np.array([inds_a, inds_b]).T
+
+    if not _check_core_map_distances(mol_a, mol_b, core, threshold):
+        raise (RuntimeError(f"not all mapped atoms are within {threshold:.3f}Å of each other!"))
 
     return core
 
