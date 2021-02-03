@@ -442,14 +442,18 @@ class SingleTopology():
     def assert_factorizability(self):
         """
         Number of atoms in the combined mol
+
+        TODO: add a reference to Boresch paper describing the assumption being checked
         """
         offending_core_indices = self._identify_offending_core_indices()
         num_problems = len(offending_core_indices)
         if num_problems > 0:
-            bad_pairs = [tuple(self.core[c_index]) for c_index in offending_core_indices]
+
+            # TODO: revisit how to get atom pair indices -- this goes out of bounds
+            # bad_pairs = [tuple(self.core[c_index]) for c_index in offending_core_indices]
 
             message = f"""Atom Mapping Error: the resulting map is non-factorizable!
-            Look at the following {num_problems} mapped atom pairs: {bad_pairs}
+            (The map contained  {num_problems} violations of the factorizability assumption.)
             """
             raise AtomMappingError(message)
 
