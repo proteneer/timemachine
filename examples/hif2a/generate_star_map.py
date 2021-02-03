@@ -52,6 +52,10 @@ mols_with_core_1 = [mol for mol in mols if mol.HasSubstructMatch(bicyclic_query_
 class CompareDist(rdFMCS.MCSAtomCompare):
     """Custom atom comparison: use positions within generated conformer"""
 
+    def __init__(self, p_object, threshold=0.5, *args, **kwargs):
+        super().__init__(p_object, *args, **kwargs)
+        self.threshold = threshold
+
     def compare(self, p, mol1, atom1, mol2, atom2):
         """Atoms match if within 0.5 Å
 
@@ -60,13 +64,13 @@ class CompareDist(rdFMCS.MCSAtomCompare):
         """
         x_i = mol1.GetConformer(0).GetPositions()[atom1]
         x_j = mol2.GetConformer(0).GetPositions()[atom2]
-        return bool(np.linalg.norm(x_i - x_j) <= 0.5)  # must convert from np.bool_ to Python bool!
+        return bool(np.linalg.norm(x_i - x_j) <= self.threshold)  # must convert from np.bool_ to Python bool!
 
 
-def mcs_map(a, b):
+def mcs_map(a, b, threshold=0.5):
     """Find the MCS map of going from A to B"""
     params = rdFMCS.MCSParameters()
-    params.AtomTyper = CompareDist()
+    params.AtomTyper = CompareDist(threshold=threshold)
     return rdFMCS.FindMCS([a, b], params)
 
 
