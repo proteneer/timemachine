@@ -239,15 +239,9 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
 
     return core
 
-from fe.utils import core_from_distances
-def get_core_by_matching(mol_a, mol_b, threshold=1.0):
-    """Only allow to map a pair of atoms together if their conformer coordinates are within threshold.
+from fe.utils import core_from_distances, simple_geometry_mapping
 
-    Of the allowable core mappings, return the maximum-weight matching of maximal-cardinality,
-        where weight(i,j) = threshold - distance(mol_a[i], mol_b[j])
-    """
-    core = core_from_distances(mol_a, mol_b, threshold)
-
+def _assert_core_reasonableness(mol_a, mol_b, core):
     # TODO move any useful run-time assertions from this script into tests/
 
     # bounds
@@ -258,7 +252,27 @@ def get_core_by_matching(mol_a, mol_b, threshold=1.0):
     assert (len(set(core[:, 0])) == len(core))
     assert (len(set(core[:, 1])) == len(core))
 
+
+def get_core_by_matching(mol_a, mol_b, threshold=1.0):
+    """Only allow to map a pair of atoms together if their conformer coordinates are within threshold.
+
+    Of the allowable core mappings, return the maximum-weight matching of maximal-cardinality,
+        where weight(i,j) = threshold - distance(mol_a[i], mol_b[j])
+    """
+    core = core_from_distances(mol_a, mol_b, threshold)
+    _assert_core_reasonableness(mol_a, mol_b, core)
     return core
+
+def get_core_by_geometry(mol_a, mol_b, threshold=0.5):
+    """Only allow to map a pair of atoms together if their conformer coordinates are within threshold.
+
+    Of the allowable core mappings, return the one that contains only atom pairs (i, j)
+    where i in mol_a has exactly one neighbor j in mol_b within threshold
+    """
+    core = simple_geometry_mapping(mol_a, mol_b, threshold)
+    _assert_core_reasonableness(mol_a, mol_b, core)
+    return core
+
 
 
 # for each "spoke" in the star map, construct serializable transformation "hub -> spoke"
@@ -294,8 +308,9 @@ def _compute_label(mol_a, mol_b):
 transformations = []
 error_transformations = []
 for spoke in others:
-    #core = get_core_by_mcs(hub, spoke, mcs_map(hub, spoke).queryMol)
-    core = get_core_by_matching(hub, spoke, threshold=0.9)
+    # core = get_core_by_mcs(hub, spoke, mcs_map(hub, spoke).queryMol)
+    # core = get_core_by_matching(hub, spoke, threshold=0.9)
+    core = get_core_by_geometry(hub, spoke, threshold=0.5)
     try:
         rfe = RelativeFreeEnergy(hub, spoke, core, forcefield, label=_compute_label(hub, spoke))
         transformations.append(rfe)

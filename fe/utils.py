@@ -84,6 +84,7 @@ def _core_from_matching(matching):
 
     return np.array([inds_a, inds_b]).T
 
+
 def core_from_distances(mol_a, mol_b, threshold=1.0):
     """
     TODO: docstring
@@ -98,5 +99,39 @@ def core_from_distances(mol_a, mol_b, threshold=1.0):
     matching = nx.algorithms.matching.max_weight_matching(g, maxcardinality=True)
 
     return _core_from_matching(matching)
+
+
+def simple_geometry_mapping(mol_a, mol_b, threshold=0.5):
+    """For each atom i in conf_a, if there is exactly one atom j in conf_b
+    such that distance(i, j) <= threshold, add (i,j) to atom mapping
+
+    Notes
+    -----
+    * Warning! There are many situations where a pair of atoms that shouldn't be mapped together
+        could appear within distance threshold of each other in their respective conformers
+    """
+
+    # fetch conformer, assumed aligned
+    conf_a = mol_a.GetConformer(0).GetPositions()
+    conf_b = mol_b.GetConformer(0).GetPositions()
+    # TODO: perform initial alignment
+
+    within_threshold = (cdist(conf_a, conf_b) <= threshold)
+    num_neighbors = within_threshold.sum(1)
+    num_mappings_possible = np.prod(num_neighbors[num_neighbors > 0])
+
+    if max(num_neighbors) > 1:
+        print(f'Warning! Multiple (~ {num_mappings_possible}) atom-mappings would be possible at threshold={threshold}Å.')
+        print(f'Only mapping atoms that have exactly one neighbor within {threshold}Å.')
+        # TODO: print more information about difference between size of set returned and set possible
+        # TODO: also assert that only pairs of the same element will be mapped together
+
+    inds = []
+    for i in range(len(conf_a)):
+        if num_neighbors[i] == 1:
+            inds.append((i, np.argmax(within_threshold[i])))
+    core = np.array(inds)
+    return core
+
 
 # TODO: add a module for atom-mapping, with RDKit MCS based and other approaches
