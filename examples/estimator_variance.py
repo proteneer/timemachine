@@ -24,6 +24,7 @@ import numpy as np
 from rdkit import Chem
 
 from fe import free_energy
+from fe.free_energy import construct_lambda_schedule
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 from md import builders
@@ -51,26 +52,6 @@ def wrap_method(args, fn):
     print(f'\t{fn.__name__}({args[1]}):\n\t\texecuted in {elapsed:.3f} s')
     return result
 
-
-def construct_lambda_schedule(num_windows):
-    """manually optimized by YTZ"""
-
-    A = int(.35 * num_windows)
-    B = int(.30 * num_windows)
-    C = num_windows - A - B
-
-    # Empirically, we see the largest variance in std <du/dl> near the endpoints in the nonbonded
-    # terms. Bonded terms are roughly linear. So we add more lambda windows at the endpoint to
-    # help improve convergence.
-    lambda_schedule = np.concatenate([
-        np.linspace(0.0, 0.25, A, endpoint=False),
-        np.linspace(0.25, 0.75, B, endpoint=False),
-        np.linspace(0.75, 1.0, C, endpoint=True)
-    ])
-
-    assert len(lambda_schedule) == num_windows
-
-    return lambda_schedule
 
 
 from collections import namedtuple
