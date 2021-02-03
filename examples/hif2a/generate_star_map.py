@@ -246,7 +246,19 @@ def get_core_by_matching(mol_a, mol_b, threshold=1.0):
     Of the allowable core mappings, return the maximum-weight matching of maximal-cardinality,
         where weight(i,j) = threshold - distance(mol_a[i], mol_b[j])
     """
-    return core_from_distances(mol_a, mol_b, threshold)
+    core = core_from_distances(mol_a, mol_b, threshold)
+
+    # TODO move any useful run-time assertions from this script into tests/
+
+    # bounds
+    assert (max(core[:, 0]) < mol_a.GetNumAtoms())
+    assert (max(core[:, 1]) < mol_b.GetNumAtoms())
+
+    # uniqueness
+    assert (len(set(core[:, 0])) == len(core))
+    assert (len(set(core[:, 1])) == len(core))
+
+    return core
 
 
 # for each "spoke" in the star map, construct serializable transformation "hub -> spoke"
