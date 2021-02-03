@@ -24,6 +24,7 @@ from collections import namedtuple
 
 from pickle import load
 from typing import List
+from time import time
 
 # how much MD to run, on how many GPUs
 Configuration = namedtuple(
@@ -388,8 +389,19 @@ if __name__ == "__main__":
     for step in step_inds:
         rfe = relative_transformations[step]
 
+        # compute a step, measuring total wall-time
+        t0 = time()
         # estimate predicted dG, and gradient of predicted dG w.r.t. params
         pred, grads, stage_results = predict_dG_and_grad(rfe, configuration, client)
+
+        # update forcefield parameters in-place, hopefully to match an experimental label
+        parameter_updates = _update_in_place(pred, grads, label=rfe.label, handle_types_to_update=forces_to_refit)
+        # Note: for certain kinds of method-validation tests, these labels could also be synthetic
+
+        t1 = time()
+        elapsed = t1 - t0
+
+        print(f'completed forcefield-updating step {step} in {elapsed:.3f} s !')
 
         # also save some additional diagnostic information to disk (du/dlambda trajectory)
         print('saving results')
@@ -400,10 +412,6 @@ if __name__ == "__main__":
         #   * x trajectories,
         #   * d U / d parameters trajectories,
         #   * matrix of U(x; lambda) for all x, lambda
-
-        # update forcefield parameters in-place, hopefully to match an experimental label
-        parameter_updates = _update_in_place(pred, grads, label=rfe.label, handle_types_to_update=forces_to_refit)
-        # Note: for certain kinds of method-validation tests, these labels could also be synthetic
 
         # save updated forcefield files after every gradient step
         step_params = serialize_handlers(ff_handlers)
