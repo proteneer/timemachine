@@ -3,7 +3,7 @@
 from pathlib import Path
 import numpy as np
 from rdkit import Chem
-from rdkit.Chem import rdFMCS, Draw
+from rdkit.Chem import rdFMCS
 
 import matplotlib.pyplot as plt
 
@@ -54,8 +54,8 @@ mols_with_core_1 = [mol for mol in mols if mol.HasSubstructMatch(bicyclic_query_
 class CompareDist(rdFMCS.MCSAtomCompare):
     """Custom atom comparison: use positions within generated conformer"""
 
-    def __init__(self, p_object, threshold=0.5, *args, **kwargs):
-        super().__init__(p_object, *args, **kwargs)
+    def __init__(self, threshold=0.5, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.threshold = threshold
 
     def compare(self, p, mol1, atom1, mol2, atom2):
@@ -293,6 +293,7 @@ for spoke in others:
         error_transformations.append((hub, spoke, core))
 
 from pickle import dump
+
 with open(path_to_results.joinpath('error_transformations.pkl'), 'wb') as f:
     dump(error_transformations, f)
 
