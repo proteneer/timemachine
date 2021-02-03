@@ -382,6 +382,12 @@ class SingleTopology():
         """
         Number of atoms in the combined mol
 
+        TODO: extract most of this logic into a function like _label_offending_atoms,
+            that identifies atoms involved in violations of the factorizability assumption,
+            but doesn't immediately raise an error.
+            Later, could use this list to:
+            * if in repair_mode, attempt to repair the mapping by removing offending atoms
+            * otherwise, raise atom mapping error if any atoms were identified
         """
         # Test that R-groups can be properly factorized out in the proposed
         # mapping. The requirement is that R-groups must be branched from exactly
