@@ -41,3 +41,11 @@ def write(xyz, masses, recenter=True):
 
         buf += symbol + ' ' + str(round(x,5)) + ' ' + str(round(y,5)) + ' ' +str(round(z,5)) + '\n'
     return buf
+
+
+def convert_uIC50_to_kJ_per_mole(amount_in_uM):
+    """
+    TODO: more sig figs
+    """
+    return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
+

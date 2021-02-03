@@ -21,10 +21,8 @@ from ff.handlers import nonbonded
 from parallel.client import CUDAPoolClient
 
 from fe import free_energy
+from fe.utils import convert_uIC50_to_kJ_per_mole
 import multiprocessing
-
-def convert_uIC50_to_kJ_per_mole(amount_in_uM):
-    return 0.593*np.log(amount_in_uM*1e-6)*4.18
 
 
 def wrap_method(args, fxn):

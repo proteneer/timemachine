@@ -7,6 +7,8 @@ from rdkit.Chem import rdFMCS, Draw
 
 import matplotlib.pyplot as plt
 
+from fe.utils import convert_uIC50_to_kJ_per_mole
+
 root = Path(__file__).parent.parent.parent
 
 # 0. Get force field
@@ -235,14 +237,6 @@ from fe.topology import AtomMappingError
 
 def get_mol_id(mol):
     return mol.GetProp('ID')
-
-
-def convert_uIC50_to_kJ_per_mole(amount_in_uM):
-    """
-    TODO: move this into a utility module
-    TODO: more sig figs
-    """
-    return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
 
 
 # TODO: add this as an attribute to rfe?

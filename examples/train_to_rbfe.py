@@ -22,10 +22,7 @@ from ff.handlers import nonbonded
 import multiprocessing
 
 from fe import free_energy
-
-
-def convert_uIC50_to_kJ_per_mole(amount_in_uM):
-    return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
+from fe.utils import convert_uIC50_to_kJ_per_mole
 
 
 def wrap_method(args, fn):
