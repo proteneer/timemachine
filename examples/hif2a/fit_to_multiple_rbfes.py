@@ -397,11 +397,20 @@ if __name__ == "__main__":
         relative_transformations: List[RelativeFreeEnergy] = load(f)
 
     # update the forcefield parameters for a few steps, each step informed by a single free energy calculation
-    for step in range(num_parameter_updates):
-        # sample a random transformation
-        rfe = np.random.choice(relative_transformations)
-        # TODO: loop over all transformations per epoch in a random order,
-        #  rather than sampling a transformation at random at each step
+
+    # compute and save the sequence of relative_transformation indices
+    num_epochs = np.ceil(num_parameter_updates / len(relative_transformations))
+    step_inds = []
+    for epoch in range(num_epochs):
+        inds = np.arange(len(relative_transformations))
+        np.random.shuffle(inds)
+        step_inds.append(inds)
+    step_inds = np.hstack(step_inds)[:num_parameter_updates]
+    np.save(path_to_results.joinpath('step_indices.npy'), step_inds)
+
+    # in each optimizer step, look at one transformation from relative_transformations
+    for step in step_inds:
+        rfe = relative_transformations[step]
 
         # estimate predicted dG, and gradient of predicted dG w.r.t. params
         pred, grads, stage_results = predict_dG_and_grad(rfe, configuration, client)
