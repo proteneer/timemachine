@@ -17,7 +17,10 @@
 
 
 from functools import partial
-import multiprocessing
+
+# parallelization across multiple GPUs
+from parallel.client import CUDAPoolClient
+
 import os
 
 import numpy as np
@@ -39,19 +42,9 @@ path_to_ligand = str(root.joinpath('tests/data/ligands_40.sdf'))
 path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
 path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
 
-def wrap_method(args, fn):
-    """set an OS environment variable using args[0], apply fn to args[1:]"""
-    gpu_idx = args[0]
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_idx)
 
-    t0 = time()
-    result = fn(*args[1:])
-    t1 = time()
-    elapsed = t1 - t0
-
-    print(f'\t{fn.__name__}({args[1]}):\n\t\texecuted in {elapsed:.3f} s')
-    return result
-
+def wrap_method(args, fxn):
+    return fxn(*args)
 
 
 from collections import namedtuple
@@ -99,8 +92,17 @@ def estimate_dG(transformation: RelativeTransformation,
             host_args.append((gpu_idx, lamb, host_system, minimized_host_coords,
                               host_box, num_equil_steps, num_steps_per_lambda))
 
+        # one GPU job per lambda window
+        print('submitting tasks to client!')
+        do_work = partial(wrap_method, fxn=rfe.host_edge)
+        futures = []
+        for lambda_idx, lamb in enumerate(lambda_schedule):
+            arg = (lamb, host_system, minimized_host_coords, host_box, num_equil_steps, num_prod_steps)
+            futures.append(client.submit(do_work, arg))
 
-        results = pool.map(partial(wrap_method, fn=rfe.host_edge), host_args, chunksize=1)
+        results = []
+        for fut in futures:
+            results.append(fut.result())
 
         def _mean_du_dlambda(result):
             """summarize result of rfe.host_edge into mean du/dl
@@ -129,8 +131,7 @@ if __name__ == "__main__":
     #   multiple times from scratch?
     num_repeats = 5
 
-    multiprocessing.set_start_method('spawn')  # CUDA runtime is not forkable
-    pool = multiprocessing.Pool(num_gpus)
+    client = CUDAPoolClient(max_workers=num_gpus)
 
     # TODO: move this test system constructor into a test fixture sort of thing
 
