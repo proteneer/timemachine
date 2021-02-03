@@ -378,20 +378,20 @@ class SingleTopology():
 
         self.assert_factorizability()
 
-    def assert_factorizability(self):
-        """
-        Number of atoms in the combined mol
-
-        TODO: extract most of this logic into a function like _label_offending_atoms,
-            that identifies atoms involved in violations of the factorizability assumption,
+    def _identify_offending_core_indices(self):
+        """Identifies atoms involved in violations of a factorizability assumption,
             but doesn't immediately raise an error.
             Later, could use this list to:
-            * if in repair_mode, attempt to repair the mapping by removing offending atoms
+            * plot / debug
+            * if in a "repair_mode", attempt to repair the mapping by removing offending atoms
             * otherwise, raise atom mapping error if any atoms were identified
         """
+
         # Test that R-groups can be properly factorized out in the proposed
         # mapping. The requirement is that R-groups must be branched from exactly
         # a single atom on the core.
+
+        offending_core_indices = []
 
         # first convert to a dense graph
         N = self.get_num_atoms()
@@ -399,15 +399,15 @@ class SingleTopology():
 
         for bond in self.mol_a.GetBonds():
             i, j = self.a_to_c[bond.GetBeginAtomIdx()], self.a_to_c[bond.GetEndAtomIdx()]
-            dense_graph[i, j] = 1 
-            dense_graph[j, i] = 1 
+            dense_graph[i, j] = 1
+            dense_graph[j, i] = 1
 
         for bond in self.mol_b.GetBonds():
             i, j = self.b_to_c[bond.GetBeginAtomIdx()], self.b_to_c[bond.GetEndAtomIdx()]
-            dense_graph[i, j] = 1 
-            dense_graph[j, i] = 1 
+            dense_graph[i, j] = 1
+            dense_graph[j, i] = 1
 
-        # sparsify to simplify and speed up traversal code
+            # sparsify to simplify and speed up traversal code
         sparse_graph = []
         for row in dense_graph:
             nbs = []
@@ -434,7 +434,24 @@ class SingleTopology():
                 visit(c_idx, seen)
                 # (ytz): exactly one of seen should belong to core
                 if np.sum(np.array([self.c_flags[x] for x in seen]) == 0) != 1:
-                    raise AtomMappingError("Atom Mapping Error, the resulting map is non-factorizable")
+                    offending_core_indices.append(c_idx)
+
+        return offending_core_indices
+
+
+    def assert_factorizability(self):
+        """
+        Number of atoms in the combined mol
+        """
+        offending_core_indices = self._identify_offending_core_indices()
+        num_problems = len(offending_core_indices)
+        if num_problems > 0:
+            bad_pairs = [tuple(self.core[c_index]) for c_index in offending_core_indices]
+
+            message = f"""Atom Mapping Error: the resulting map is non-factorizable!
+            Look at the following {num_problems} mapped atom pairs: {bad_pairs}
+            """
+            raise AtomMappingError(message)
 
 
     def get_num_atoms(self):
