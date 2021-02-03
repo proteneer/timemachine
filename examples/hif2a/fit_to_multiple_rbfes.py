@@ -346,11 +346,11 @@ def _update_in_place(pred, grads, label,
     return parameter_updates
 
 
-def _save_forcefield(filename):
+def _save_forcefield(filename, ff_params):
     # TODO: update path
 
     with open(path_to_results.joinpath(filename), 'w') as fh:
-        fh.write(step_params)
+        fh.write(ff_params)
 
 
 if __name__ == "__main__":
@@ -408,7 +408,7 @@ if __name__ == "__main__":
         # save updated forcefield files after every gradient step
         step_params = serialize_handlers(ff_handlers)
         # TODO: consider if there's a more modular way to keep track of ff updates
-        _save_forcefield(f"forcefield_checkpoint_{step}.py")
+        _save_forcefield(f"forcefield_checkpoint_{step}.py", ff_params=step_params)
 
         # also save information about this step's parameter gradient and parameter update
         for handle_type in forces_to_refit:
