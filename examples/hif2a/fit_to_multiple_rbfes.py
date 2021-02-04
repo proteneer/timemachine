@@ -395,8 +395,8 @@ if __name__ == "__main__":
     np.save(path_to_results.joinpath('step_indices.npy'), step_inds)
 
     # in each optimizer step, look at one transformation from relative_transformations
-    for step in step_inds:
-        rfe = relative_transformations[step]
+    for step, rfe_ind in enumerate(step_inds):
+        rfe = relative_transformations[rfe_ind]
 
         # compute a step, measuring total wall-time
         t0 = time()
