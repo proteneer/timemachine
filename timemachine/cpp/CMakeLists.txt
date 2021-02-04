@@ -1,12 +1,12 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(PYBIND11_PYTHON_VERSION 3.7 CACHE STRING "Which version of python we're building wrappers against")
+
 project(timemachine LANGUAGES CXX CUDA)
 
-find_package(PythonInterp 3.6 REQUIRED)
-find_package(PythonLibs 3.6 REQUIRED)
-
-set(CUDA_ARCH sm_70 CACHE STRING "Specific CUDA architecture we're targetting.")
+find_package(PythonInterp 3.7 REQUIRED)
+find_package(PythonLibs 3.7 REQUIRED)
 
 string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo -rdc=true")
 message(${CMAKE_CUDA_FLAGS})
