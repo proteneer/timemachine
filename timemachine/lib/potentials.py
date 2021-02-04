@@ -38,16 +38,10 @@ class CustomOpWrapper():
 
 class InterpolatedPotential(CustomOpWrapper):
 
-
     def bind(self, params):
         assert self.get_u_fn().params is None
         self.params = params
         return self
-
-
-    # pass through so we can use the underlying methods
-    def __getattr__(self, attr):
-        return getattr(self.args[0], attr)
 
     def get_u_fn(self):
         return self.args[0]
@@ -117,13 +111,30 @@ class Shape(CustomOpWrapper):
         return self.args[2]
 
 
-class HarmonicBond(CustomOpWrapper):
+class BondedWrapper(CustomOpWrapper):
 
     def get_idxs(self):
         return self.args[0]
 
     def set_idxs(self, new_idxs):
         self.args[0] = new_idxs
+
+    def get_lambda_mult(self):
+        if len(self.args) > 1:
+            return self.args[1]
+        else:
+            return None
+
+    def get_lambda_offset(self):
+        if len(self.args) > 1:
+            return self.args[2]
+        else:
+            return None
+
+
+class HarmonicBond(BondedWrapper):
+
+    pass
 
 # this is an alias to make type checking easier
 class CoreRestraint(HarmonicBond):
@@ -139,21 +150,12 @@ class CoreRestraint(HarmonicBond):
 
         return custom_ctor(*self.args)
 
-class HarmonicAngle(CustomOpWrapper):
+class HarmonicAngle(BondedWrapper):
+    pass
 
-    def get_idxs(self):
-        return self.args[0]
 
-    def set_idxs(self, new_idxs):
-        self.args[0] = new_idxs
-
-class PeriodicTorsion(CustomOpWrapper):
-
-    def get_idxs(self):
-        return self.args[0]
-
-    def set_idxs(self, new_idxs):
-        self.args[0] = new_idxs
+class PeriodicTorsion(BondedWrapper):
+    pass
 
 class InertialRestraint(CustomOpWrapper):
 
