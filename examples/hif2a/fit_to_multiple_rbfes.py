@@ -376,7 +376,7 @@ if __name__ == "__main__":
     # update the forcefield parameters for a few steps, each step informed by a single free energy calculation
 
     # compute and save the sequence of relative_transformation indices
-    num_epochs = np.ceil(num_parameter_updates / len(relative_transformations))
+    num_epochs = int(np.ceil(num_parameter_updates / len(relative_transformations)))
     step_inds = []
     for epoch in range(num_epochs):
         inds = np.arange(len(relative_transformations))
