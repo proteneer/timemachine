@@ -40,6 +40,14 @@ production_configuration = Configuration(
     num_prod_steps=100000,
 )
 
+intermediate_configuration = Configuration(
+    num_gpus=10,
+    num_complex_windows=30,
+    num_solvent_windows=30,
+    num_equil_steps=10000,
+    num_prod_steps=10000,
+)
+
 testing_configuration = Configuration(
     num_gpus=10,
     num_complex_windows=10,
@@ -359,11 +367,12 @@ if __name__ == "__main__":
     forces_to_refit = [nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]
 
     # how much computation to spend per refitting step
-    configuration = testing_configuration  # a little
+    # configuration = testing_configuration  # a little
     # configuration = production_configuration  # a lot
+    configuration = intermediate_configuration # goldilocks
 
     # how many parameter update steps
-    num_parameter_updates = 100
+    num_parameter_updates = 1000
     # TODO: make this configurable also
 
     # set up multi-GPU client
