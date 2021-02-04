@@ -93,7 +93,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         Returns
         -------
         4 tuple
-            bound_potentials, vjp_fns_and_handles, combined_masses, combined_coords
+            unbound_potentials, system_params, combined_masses, combined_coords
 
         """
         ligand_masses = [a.GetMass() for a in self.mol.GetAtoms()]
@@ -182,7 +182,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         Returns
         -------
         4 tuple
-            bound_potentials, vjp_fns_and_handles, combined_masses, combined_coords
+            unbound_potentials, system_params, combined_masses, combined_coords
 
         """
 

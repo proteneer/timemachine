@@ -87,6 +87,13 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
         periodic boundary vectors, if not None
 
     lamb: float
+        alchemical lambda parameter, linearly rescaled
+
+    lamb_mult: None, or broadcastable to bond_idxs.shape[0]
+        prefactor = (lamb_offset + lamb_mult * lamb)
+
+    lamb_offset: None, or broadcastable to bond_idxs.shape[0]
+        prefactor = (lamb_offset + lamb_mult * lamb)
 
     bond_idxs: [num_bonds, 2] np.array
         each element (src, dst) is a unique bond in the conformation
@@ -136,6 +143,13 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
         periodic boundary vectors, if not None
 
     lamb: float
+        alchemical lambda parameter, linearly rescaled
+
+    lamb_mult: None, or broadcastable to bond_idxs.shape[0]
+        prefactor = (lamb_offset + lamb_mult * lamb)
+
+    lamb_offset: None, or broadcastable to bond_idxs.shape[0]
+        prefactor = (lamb_offset + lamb_mult * lamb)
 
     angle_idxs: shape [num_angles, 3] np.array
         each element (a, b, c) is a unique angle in the conformation. atom b is defined
@@ -241,6 +255,13 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
         periodic boundary vectors, if not None
 
     lamb: float
+        alchemical lambda parameter, linearly rescaled
+
+    lamb_mult: None, or broadcastable to bond_idxs.shape[0]
+        prefactor = (lamb_offset + lamb_mult * lamb)
+
+    lamb_offset: None, or broadcastable to bond_idxs.shape[0]
+        prefactor = (lamb_offset + lamb_mult * lamb)
 
     torsion_idxs: shape [num_torsions, 4] np.array
         indices denoting the four atoms that define a torsion
