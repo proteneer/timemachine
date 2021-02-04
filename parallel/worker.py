@@ -17,7 +17,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
     def Submit(self, request, context):
         task_fn, args = pickle.loads(request.binary)
-        result = task_fn(args)
+        result = task_fn(*args)
         return service_pb2.PickleData(binary=pickle.dumps(result))
 
 def serve(args):

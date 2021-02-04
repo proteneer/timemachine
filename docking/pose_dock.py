@@ -11,7 +11,7 @@ from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
 
 from fe.utils import to_md_units
-from fe import topology, free_energy_v2
+from fe import topology, free_energy
 from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers import openmm_deserializer
 from ff import Forcefield
@@ -109,7 +109,7 @@ def pose_dock(
         )
         ff = Forcefield(guest_ff_handlers)
 
-        afe = free_energy_v2.AbsoluteFreeEnergy(guest_mol, ff)
+        afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
 
         ups, sys_params, masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), host_system, host_conf)
 

@@ -38,11 +38,21 @@ class Forcefield():
                 self.q_handle = handle
 
     def get_ordered_params(self):
-
+        """
+        Returns
+        -------
+        list of np.ndarray
+            Return a flat, pre-determined ordering of the parameters
+        """
         return [x.params for x in self.get_ordered_handles()]
 
     def get_ordered_handles(self):
-
+        """
+        Returns
+        -------
+        list of np.ndarray
+            Return a flat, pre-determined ordering of the handlers
+        """
         return [
             self.hb_handle,
             self.ha_handle,

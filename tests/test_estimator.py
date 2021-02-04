@@ -1,14 +1,13 @@
 import unittest
 import jax
+import numpy as np
+
 
 from fe import estimator
 from timemachine.lib import LangevinIntegrator
-
-import numpy as np
-
 from timemachine.lib import potentials
-
 from parallel.client import CUDAPoolClient
+
 
 def get_harmonic_bond(n_atoms, n_bonds):
     atom_idxs = np.arange(n_atoms)

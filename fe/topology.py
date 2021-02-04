@@ -124,6 +124,7 @@ class HostGuestTopology():
         guest_qlj, guest_p = self.guest_topology.parameterize_nonbonded(ff_q_params, ff_lj_params)
 
         if isinstance(guest_p, potentials.InterpolatedPotential):
+            assert guest_qlj.shape[0] == num_guest_atoms*2
             guest_p = guest_p.get_u_fn()
 
         # see if we're doing parameter interpolation
