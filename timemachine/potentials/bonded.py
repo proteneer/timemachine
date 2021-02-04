@@ -145,10 +145,10 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     lamb: float
         alchemical lambda parameter, linearly rescaled
 
-    lamb_mult: None, or broadcastable to bond_idxs.shape[0]
+    lamb_mult: None, or broadcastable to angle_idxs.shape[0]
         prefactor = (lamb_offset + lamb_mult * lamb)
 
-    lamb_offset: None, or broadcastable to bond_idxs.shape[0]
+    lamb_offset: None, or broadcastable to angle_idxs.shape[0]
         prefactor = (lamb_offset + lamb_mult * lamb)
 
     angle_idxs: shape [num_angles, 3] np.array
@@ -257,10 +257,10 @@ def periodic_torsion(conf, params, box, lamb, torsion_idxs, lamb_mult=None, lamb
     lamb: float
         alchemical lambda parameter, linearly rescaled
 
-    lamb_mult: None, or broadcastable to bond_idxs.shape[0]
+    lamb_mult: None, or broadcastable to torsion_idxs.shape[0]
         prefactor = (lamb_offset + lamb_mult * lamb)
 
-    lamb_offset: None, or broadcastable to bond_idxs.shape[0]
+    lamb_offset: None, or broadcastable to torsion_idxs.shape[0]
         prefactor = (lamb_offset + lamb_mult * lamb)
 
     torsion_idxs: shape [num_torsions, 4] np.array
