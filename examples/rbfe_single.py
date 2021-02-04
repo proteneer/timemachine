@@ -1,16 +1,18 @@
 # This script computes the relative binding free energy of a single edge.
 
+
 import os
 import argparse
 import numpy as np
+import jax
 
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
 from rdkit.Chem import AllChem
 
 from fe import topology
+from fe import model
 from md import builders
-from md import minimizer
 
 import functools
 
@@ -20,9 +22,11 @@ from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers import nonbonded
 from parallel.client import CUDAPoolClient
 
-from fe import free_energy
-from fe.utils import convert_uIC50_to_kJ_per_mole
+
 import multiprocessing
+
+def convert_uIC50_to_kJ_per_mole(amount_in_uM):
+    return 0.593*np.log(amount_in_uM*1e-6)*4.18
 
 
 def wrap_method(args, fxn):
@@ -30,131 +34,6 @@ def wrap_method(args, fxn):
     #   a function accept tuple instead of positional arguments?
     return fxn(*args)
 
-
-def run_epoch(client, ff, mol_a, mol_b, core):
-    # build the protein system.
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
-    complex_box += np.eye(3)*0.1 # BFGS this later
-
-    # build the water system.
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
-    solvent_box += np.eye(3)*0.1 # BFGS this later
-
-    combined_handle_and_grads = {}
-    stage_dGs = []
-
-    for stage, host_system, host_coords, host_box, num_host_windows in [
-        ("complex", complex_system, complex_coords, complex_box, cmd_args.num_complex_windows),
-        ("solvent", solvent_system, solvent_coords, solvent_box, cmd_args.num_solvent_windows)]:
-
-        A = int(.35*num_host_windows)
-        B = int(.30*num_host_windows)
-        C = num_host_windows - A - B
-
-        # Emprically, we see the largest variance in std <du/dl> near the endpoints in the nonbonded
-        # terms. Bonded terms are roughly linear. So we add more lambda windows at the endpoint to
-        # help improve convergence.
-        lambda_schedule = np.concatenate([
-            np.linspace(0.0,  0.25, A, endpoint=False),
-            np.linspace(0.25, 0.75, B, endpoint=False),
-            np.linspace(0.75, 1.0,  C, endpoint=True)
-        ])
-
-        assert len(lambda_schedule) == num_host_windows
-
-        print("Minimizing the host structure to remove clashes.")
-        minimized_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, ff, host_box)
-
-        rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
-
-        # solvent leg
-        # one GPU job per lambda window
-        do_work = functools.partial(wrap_method, fxn=rfe.host_edge)
-        futures = []
-        for lambda_idx, lamb in enumerate(lambda_schedule):
-            arg = (lamb, host_system, minimized_host_coords, host_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps)
-            futures.append(client.submit(do_work, arg))
-
-        results = []
-        for fut in futures:
-            results.append(fut.result())
-
-        ghs = []
-
-        for (lamb, result) in zip(lambda_schedule, results):
-
-            # unpack result tuple
-            bonded_du_dl, nonbonded_du_dl, grads_and_handles = result
-
-            ghs.append(grads_and_handles)
-
-            # TODO: replace print with logger
-            print("final", stage, "lambda", lamb, "bonded:", np.mean(bonded_du_dl), np.std(bonded_du_dl), "nonbonded:",
-                  np.mean(nonbonded_du_dl), np.std(nonbonded_du_dl))
-
-        def _mean_du_dlambda(result):
-            """summarize result of rfe.host_edge into mean du/dl
-
-            TODO: refactor where this analysis step occurs
-            """
-            bonded_du_dl, nonbonded_du_dl, _ = result
-            return np.mean(bonded_du_dl + nonbonded_du_dl)
-
-        dG_host = np.trapz([_mean_du_dlambda(x) for x in results], lambda_schedule)
-
-        stage_dGs.append(dG_host)
-
-        # use gradient information from the endpoints
-        for (grad_lhs, handle_type_lhs), (grad_rhs, handle_type_rhs) in zip(ghs[0], ghs[-1]):
-            assert handle_type_lhs == handle_type_rhs # ffs are forked so the return handler isn't same object as that of ff
-            grad = grad_rhs - grad_lhs
-            # complex - solvent
-            if handle_type_lhs not in combined_handle_and_grads:
-                combined_handle_and_grads[handle_type_lhs] = grad
-            else:
-                combined_handle_and_grads[handle_type_lhs] -= grad
-
-        print(stage, "pred_dG:", dG_host)
-
-    pred = stage_dGs[0] - stage_dGs[1]
-
-    loss = np.abs(pred - label)
-
-    print("loss", loss, "pred", pred, "label", label)
-
-    dl_dpred = np.sign(pred - label)
-
-    # (ytz): these should be made configurable later on.
-    gradient_clip_thresholds = {
-        nonbonded.AM1CCCHandler: 0.05,
-        nonbonded.LennardJonesHandler: np.array([0.001,0])
-    }
-
-    # update gradients in place.
-    # for handle_type, grad in combined_handle_and_grads.items():
-
-    for handle_type, grad in combined_handle_and_grads.items():
-        if handle_type in gradient_clip_thresholds:
-            bounds = gradient_clip_thresholds[handle_type]
-            dl_dp = dl_dpred*grad # chain rule
-            # lots of room to improve here.
-            dl_dp = np.clip(dl_dp, -bounds, bounds) # clip gradients so they're well behaved
-
-
-            if handle_type == nonbonded.AM1CCCHandler:
-                # sanity check as we have other charge methods that exist
-                assert handle_type == type(ff.q_handle)
-                ff.q_handle.params -= dl_dp
-
-                # useful for debugging to dump out the grads
-                # for smirks, dp in zip(ff.q_handle.smirks, dl_dp):
-                    # if np.any(dp) > 0:
-                        # print(smirks, dp)
-
-            elif handle_type == nonbonded.LennardJonesHandler:
-                # sanity check again, even though we don't have other lj methods currently
-                assert handle_type == type(ff.lj_handle)
-                ff.lj_handle.params -= dl_dp
 
 
 if __name__ == "__main__":
@@ -217,7 +96,7 @@ if __name__ == "__main__":
     print("binding dG_a", label_dG_a)
     print("binding dG_b", label_dG_b)
 
-    label = label_dG_b - label_dG_a # complex - solvent
+    label_ddG = label_dG_b - label_dG_a # complex - solvent
 
     core = np.array([[ 0,  0],
        [ 2,  2],
@@ -250,14 +129,87 @@ if __name__ == "__main__":
        [28, 27],
        [21, 22]]
     )
+
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
-    forcefield = Forcefield(ff_handlers)
+    ff = Forcefield(ff_handlers)
+
+    lambda_schedules = []
+
+    for num_host_windows in [cmd_args.num_complex_windows, cmd_args.num_solvent_windows]:
+        A = int(.35*num_host_windows)
+        B = int(.30*num_host_windows)
+        C = num_host_windows - A - B
+
+        # Emprically, we see the largest variance in std <du/dl> near the endpoints in the nonbonded
+        # terms. Bonded terms are roughly linear. So we add more lambda windows at the endpoint to
+        # help improve convergence.
+        lambda_schedule = np.concatenate([
+            np.linspace(0.0,  0.25, A, endpoint=False),
+            np.linspace(0.25, 0.75, B, endpoint=False),
+            np.linspace(0.75, 1.0,  C, endpoint=True)
+        ])
+
+        assert len(lambda_schedule) == num_host_windows
+
+        lambda_schedules.append(lambda_schedule)
+
+    complex_schedule, solvent_schedule = lambda_schedules
+
+    # build the protein system.
+    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
+    complex_box += np.eye(3)*0.1 # BFGS this later
+
+    # build the water system.
+    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
+    solvent_box += np.eye(3)*0.1 # BFGS this later
+
+    # client = None
+
+    binding_model = model.RBFEModel(
+        client,
+        ff,
+        complex_system,
+        complex_coords,
+        complex_box,
+        complex_schedule,
+        solvent_system,
+        solvent_coords,
+        solvent_box,
+        solvent_schedule,
+        cmd_args.num_equil_steps,
+        cmd_args.num_prod_steps
+    )
+
+    vg_fn = jax.value_and_grad(binding_model.loss, argnums=0)
+
+    ordered_params = ff.get_ordered_params()
+    ordered_handles = ff.get_ordered_handles()
+
+    gradient_clip_thresholds = {
+        nonbonded.AM1CCCHandler: 0.05,
+        nonbonded.LennardJonesHandler: np.array([0.001,0])
+    }
 
     for epoch in range(100):
 
-        run_epoch(client, forcefield, mol_a, mol_b, core)
-
         epoch_params = serialize_handlers(ff_handlers)
+        loss, loss_grad = vg_fn(ordered_params, mol_a, mol_b, core, label_ddG)
+
+        print("epoch", epoch, "loss", loss)
+
+        for loss_grad, handle in zip(loss_grad, ordered_handles):
+            assert handle.params.shape == loss_grad.shape
+
+            if type(handle) in gradient_clip_thresholds:
+                bounds = gradient_clip_thresholds[type(handle)]
+                loss_grad = np.clip(loss_grad, -bounds, bounds)
+                print("adjust handle", handle, "by", loss_grad)
+                handle.params -= loss_grad
+
+                # useful for debugging to dump out the grads
+                # for smirks, dp in zip(handle.smirks, loss_grad):
+                    # if np.any(dp) > 0:
+                        # print(smirks, dp)
 
         # write ff parameters after each epoch
         with open("checkpoint_"+str(epoch)+".py", 'w') as fh:

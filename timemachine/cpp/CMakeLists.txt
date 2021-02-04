@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
-set(CMAKE_CXX_STANDARD 14)
+
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(PYBIND11_PYTHON_VERSION 3.7 CACHE STRING "Which version of python we're building wrappers against")
 
@@ -8,7 +9,7 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.7 REQUIRED)
 find_package(PythonLibs 3.7 REQUIRED)
 
-string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo -rdc=true")
+string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo")
 message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -21,7 +22,7 @@ set(PYBIND_SRC_DIR pybind11)
 
 
 if(NOT EXISTS ${PYBIND_SRC_DIR})
-  execute_process(COMMAND git clone --branch tm0.1 https://github.com/proteneer/pybind11.git ${PYBIND_SRC_DIR})
+  execute_process(COMMAND git clone --branch v2.6 https://github.com/pybind/pybind11.git ${PYBIND_SRC_DIR})
 endif()
 
 set(CUB_SRC_DIR cub)
@@ -68,7 +69,7 @@ include_directories(src/kernels)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 14)
-target_link_libraries(${LIBRARY_NAME} -lcurand -lcudart -lcudadevrt)
+target_link_libraries(${LIBRARY_NAME} PRIVATE -lcurand -lcudart -lcudadevrt)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION "lib")

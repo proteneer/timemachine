@@ -11,7 +11,7 @@ from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
 
 from fe.utils import to_md_units
-from fe import topology
+from fe import topology, free_energy
 from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers import openmm_deserializer
 from ff import Forcefield
@@ -87,17 +87,6 @@ def pose_dock(
         host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
     host_conf = np.array(host_conf)
 
-    final_potentials = []
-    host_potentials, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-    host_nb_bp = None
-    for bp in host_potentials:
-        if isinstance(bp, potentials.Nonbonded):
-            # (ytz): hack to ensure we only have one nonbonded term
-            assert host_nb_bp is None
-            host_nb_bp = bp
-        else:
-            final_potentials.append(bp)
-
     # TODO (ytz): we should really fix this later on. This padding was done to
     # address the particles that are too close to the boundary.
     padding = 0.1
@@ -119,28 +108,15 @@ def pose_dock(
             ).read()
         )
         ff = Forcefield(guest_ff_handlers)
-        guest_base_topology = topology.BaseTopology(guest_mol, ff)
 
-        # combine
-        hgt = topology.HostGuestTopology(host_nb_bp, guest_base_topology)
-        # setup the parameter handlers for the ligand
-        bonded_tuples = [
-            [hgt.parameterize_harmonic_bond, ff.hb_handle],
-            [hgt.parameterize_harmonic_angle, ff.ha_handle],
-            [hgt.parameterize_proper_torsion, ff.pt_handle],
-            [hgt.parameterize_improper_torsion, ff.it_handle]
-        ]
-        these_potentials = list(final_potentials)
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            params, potential = fn(handle.params)
-            these_potentials.append(potential.bind(params))
-        nb_params, nb_potential = hgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
-        these_potentials.append(nb_potential.bind(nb_params))
-        bps = these_potentials
+        afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
 
-        guest_masses = [a.GetMass() for a in guest_mol.GetAtoms()]
-        masses = np.concatenate([host_masses, guest_masses])
+        ups, sys_params, masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), host_system, host_conf)
+
+        bps = []
+        for up, sp in zip(ups, sys_params):
+            bps.append(up.bind(sp))
+
 
         for atom_num in constant_atoms:
             masses[atom_num - 1] += 50000

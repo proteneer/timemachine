@@ -20,6 +20,9 @@ def jax_fn(x):
 def square(a):
     return a*a
 
+def mult(x,y):
+    return x*y
+
 class TestProcessPool(unittest.TestCase):
 
     def setUp(self):
@@ -107,11 +110,26 @@ class TestGRPCClient(unittest.TestCase):
 
         self.cli = client.GRPCClient(stubs)
 
-    def test_foo(self):
-        arr = np.linspace(0, 1.0, 5)
+    def test_foo_2_args(self):
+        xs = np.linspace(0, 1.0, 5)
+        ys = np.linspace(1.2, 2.2, 5)
 
         futures = []
-        for x in arr:
+        for x, y in zip(xs, ys):
+            fut = self.cli.submit(mult, x, y)
+            futures.append(fut)
+
+        test_res = []
+        for f in futures:
+            test_res.append(f.result())
+
+        np.testing.assert_array_equal(test_res, xs*ys)
+
+    def test_foo_1_arg(self):
+        xs = np.linspace(0, 1.0, 5)
+
+        futures = []
+        for x in xs:
             fut = self.cli.submit(square, x)
             futures.append(fut)
 
@@ -119,7 +137,7 @@ class TestGRPCClient(unittest.TestCase):
         for f in futures:
             test_res.append(f.result())
 
-        np.testing.assert_array_equal(test_res, arr*arr)
+        np.testing.assert_array_equal(test_res, xs*xs)
 
     def tearDown(self):
         for server in self.servers:

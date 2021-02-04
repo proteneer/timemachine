@@ -137,6 +137,8 @@ class ProperTorsionHandler():
             # if k == 0.0:
                 # print("WARNING: zero force constant torsion generated.")
 
+        scatter_idxs = np.array(scatter_idxs)
+
         return params[scatter_idxs], np.repeat(torsion_idxs, repeats, axis=0).astype(np.int32)
 
     def serialize(self):
@@ -209,5 +211,7 @@ class ImproperTorsionHandler(SerializableMixIn):
             for p in [(others[i], others[j], others[k]) for (i, j, k) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)]]:
                 improper_idxs.append((center, p[0], p[1], p[2]))
                 param_idxs.append(p_idx)
+
+        param_idxs = np.array(param_idxs)
 
         return params[param_idxs], np.array(improper_idxs, dtype=np.int32)

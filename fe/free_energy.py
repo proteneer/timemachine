@@ -34,93 +34,25 @@ class BaseFreeEnergy():
             seed
         )
 
-    # this will be eventually gRPC'd out to a worker
     @staticmethod
-    def _simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps):
-        """
+    def _get_system_params_and_potentials(ff_params, topology):
 
-        Returns
-        -------
-        bonded_full_du_dls
-            Time-series of du/dlambda (for bonded terms only)
-        nonbonded_full_du_dls
-            Time-series of du/dlambda (for nonbonded terms only)
-        grads
-             averaged du/dparameters
-        """
-        all_impls = []
-        bonded_impls = []
-        nonbonded_impls = []
+        ff_tuples = [
+            [topology.parameterize_harmonic_bond, (ff_params[0],)],
+            [topology.parameterize_harmonic_angle, (ff_params[1],)],
+            [topology.parameterize_periodic_torsion, (ff_params[2], ff_params[3])],
+            [topology.parameterize_nonbonded, (ff_params[4], ff_params[5])]
+        ]
 
-        # set up observables for du_dps here as well.
+        final_params = []
+        final_potentials = []
 
-        du_dp_obs = []
+        for fn, params in ff_tuples:
+            combined_params, combined_potential = fn(*params)
+            final_potentials.append(combined_potential)
+            final_params.append(combined_params)
 
-        for bps in final_potentials:
-            obs_list = []
-
-            for bp in bps:
-                impl = bp.bound_impl(np.float32)
-
-                if isinstance(bp, potentials.InterpolatedPotential) or isinstance(bp, potentials.LambdaPotential):
-                    bp = bp.get_u_fn()
-
-                if isinstance(bp, potentials.Nonbonded):
-                    nonbonded_impls.append(impl)
-                else:
-                    bonded_impls.append(impl)
-
-                all_impls.append(impl)
-                obs_list.append(custom_ops.AvgPartialUPartialParam(impl, 5))
-
-            du_dp_obs.append(obs_list)
-
-        intg_impl = integrator.impl()
-        # context components: positions, velocities, box, integrator, energy fxns
-        ctxt = custom_ops.Context(
-            x0,
-            v0,
-            box,
-            intg_impl,
-            all_impls
-        )
-
-        # equilibration
-        for step in range(equil_steps):
-            ctxt.step(lamb)
-
-        bonded_du_dl_obs = custom_ops.FullPartialUPartialLambda(bonded_impls, 5)
-        nonbonded_du_dl_obs = custom_ops.FullPartialUPartialLambda(nonbonded_impls, 5)
-
-        # add observable
-        ctxt.add_observable(bonded_du_dl_obs)
-        ctxt.add_observable(nonbonded_du_dl_obs)
-
-        for obs_list in du_dp_obs:
-            for obs in obs_list:
-                ctxt.add_observable(obs)
-
-        for _ in range(prod_steps):
-            ctxt.step(lamb)
-
-        bonded_full_du_dls = bonded_du_dl_obs.full_du_dl()
-        nonbonded_full_du_dls = nonbonded_du_dl_obs.full_du_dl()
-
-        # keep the structure of grads the same as that of final_potentials so we can properly
-        # form their vjps.
-        grads = []
-        for obs_list in du_dp_obs:
-            grad_list = []
-            for obs in obs_list:
-                grad_list.append(obs.avg_du_dp())
-            grads.append(grad_list)
-
-        return bonded_full_du_dls, nonbonded_full_du_dls, grads
-
-
-def _mean_and_stddev(full_du_dls):
-    """summarize a time-series of du/dl's to its mean and standard deviation"""
-    return np.mean(full_du_dls), np.std(full_du_dls)
+        return final_params, final_potentials
 
 # this class is serializable.
 class AbsoluteFreeEnergy(BaseFreeEnergy):
@@ -142,126 +74,52 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.ff = ff
         self.top = topology.BaseTopology(mol, ff)
 
-    # this can be used for both the solvent leg and the complex leg
-    def host_edge(self, lamb, host_system, host_coords, box, equil_steps=10000, prod_steps=100000):
+
+    def prepare_host_edge(self, ff_params, host_system, host_coords):
         """
-        Run equilibrium decoupling simulation at a given value of lambda in a host environment.
+        Prepares the host-edge system
 
         Parameters
         ----------
-        lamb: float [0, 1]
-            0 is the fully interacting system, and 1 is the non-interacting system
+        ff_params: tuple of np.array
+            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
 
         host_system: openmm.System
-            OpenMM System object to be deserialized. The host can be simply a box of water, or a fully
-            solvated protein
+            openmm System object to be deserialized
 
-        host_coords: np.array of shape [..., 3]
-            Host coordinates, in nanometers. It should be properly minimized and not have clashes
-            with the ligand coordinates.
-
-        box: np.array [3,3]
-            Periodic boundary conditions, in nanometers.
-
-        equil_steps: float
-            Number of steps to run equilibration. Statistics are not gathered.
-
-        prod_steps: float
-            Number of steps to run production. Statistics are gathered.
-
+        host_coords: np.array
+            Nx3 array of atomic coordinates
 
         Returns
         -------
-        float, float
-            Returns a pair of average du_dl values for bonded and nonbonded terms.
+        4 tuple
+            unbound_potentials, system_params, combined_masses, combined_coords
 
         """
-
         ligand_masses = [a.GetMass() for a in self.mol.GetAtoms()]
         ligand_coords = get_romol_conf(self.mol)
 
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
         num_host_atoms = host_coords.shape[0]
 
-        final_potentials = []
-        final_vjp_and_handles = []
+        hgt = topology.HostGuestTopology(host_bps, self.top)
 
-        for bp in host_bps:
-            if isinstance(bp, potentials.Nonbonded):
-                host_p = bp
-            else:
-                final_potentials.append([bp])
-                final_vjp_and_handles.append(None)
-
-        hgt = topology.HostGuestTopology(host_p, self.top)
-
-        # setup the parameter handlers for the ligand
-        bonded_tuples = [
-            [hgt.parameterize_harmonic_bond, self.ff.hb_handle],
-            [hgt.parameterize_harmonic_angle, self.ff.ha_handle],
-            [hgt.parameterize_proper_torsion, self.ff.pt_handle],
-            [hgt.parameterize_improper_torsion, self.ff.it_handle]
-        ]
-
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            params, vjp_fn, potential = jax.vjp(fn, handle.params, has_aux=True)
-            final_potentials.append([potential.bind(params)])
-            final_vjp_and_handles.append((vjp_fn, handle))
-
-        nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
-        final_potentials.append([nb_potential.bind(nb_params)])
-        final_vjp_and_handles.append([vjp_fn])
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
 
         combined_masses = np.concatenate([host_masses, ligand_masses])
         combined_coords = np.concatenate([host_coords, ligand_coords])
 
-        bonded, nonbonded, grads = self._simulate(
-            lamb,
-            box,
-            combined_coords,
-            np.zeros_like(combined_coords),
-            final_potentials,
-            self._get_integrator(combined_masses),
-            equil_steps,
-            prod_steps
-        )
-        return _mean_and_stddev(bonded), _mean_and_stddev(nonbonded), grads
+        return final_potentials, final_params, combined_masses, combined_coords
 
 
 # this class is serializable.
 class RelativeFreeEnergy(BaseFreeEnergy):
 
-    def __init__(self, mol_a, mol_b, core, ff, label=None):
-        """Relative free energy calculation using single-topology
-
-        Parameters
-        ----------
-        mol_a: ROMol
-            First ligand
-
-        mol_b: ROMol
-            Second ligand
-
-        core: np.array (C, 2)
-            Atom mapping from mol_a to to mol_b
-
-        ff: ff.Forcefield
-            Forcefield to be used for parameterization.
-
-        label: None or float
-            Experimental label (later assumed in kJ/mol)
-            TODO: make this a bit more structured, include other experimental information if available
-        """
-        # TODO (JF) : consider refactoring so that this accepts a topology.SingleTopology argument,
-        #   rather than accepting a parameter collection that immediately becomes a topology.SingleTopology object
-
+    def __init__(self, mol_a, mol_b, core, ff):
         self.mol_a = mol_a
         self.mol_b = mol_b
         self.core = core
-        self.ff = ff
         self.top = topology.SingleTopology(mol_a, mol_b, core, ff)
-        self.label = label
 
     def _get_integrator(self, combined_masses):
         """
@@ -278,107 +136,54 @@ class RelativeFreeEnergy(BaseFreeEnergy):
             seed
         )
 
-    def vacuum_edge(self, lamb, equil_steps=10000, prod_steps=100000):
+    def prepare_vacuum_edge(self, ff_params):
         """
-        Run a vacuum decoupling simulation at a given value of lambda.
+        Prepares the vacuum system.
 
         Parameters
         ----------
-        lamb: float [0, 1]
-            0 is the fully interacting system, and 1 is the non-interacting system
-
-        equil_steps: float
-            Number of steps to run equilibration. Statistics are not gathered.
-
-        prod_steps: float
-            Number of steps to run production. Statistics are gathered.
+        ff_params: tuple of np.array
+            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
 
         Returns
         -------
-        bonded_du_dl, nonbonded_du_dl, grads_and_handles
-            Time-series of du/dlambda (decomposed into bonded and nonbonded), and grads_and_handles for du/dparameters
-        """
-        final_potentials = []
-        final_vjp_and_handles = []
+        4 tuple
+            unbound_potentials, system_parameters, combined_masses, combined_coords
 
+        """
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
         ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
 
         ligand_coords_a = get_romol_conf(self.mol_a)
         ligand_coords_b = get_romol_conf(self.mol_b)
 
-        bonded_tuples = [
-            [self.top.parameterize_harmonic_bond, self.ff.hb_handle],
-            [self.top.parameterize_harmonic_angle, self.ff.ha_handle],
-            [self.top.parameterize_proper_torsion, self.ff.pt_handle],
-            [self.top.parameterize_improper_torsion, self.ff.it_handle]
-        ]
-
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            (src_params, dst_params, uni_params), vjp_fn, (src_potential, dst_potential, uni_potential) = jax.vjp(fn, handle.params, has_aux=True)
-            final_potentials.append([src_potential.bind(src_params), dst_potential.bind(dst_params), uni_potential.bind(uni_params)])
-            final_vjp_and_handles.append((vjp_fn, handle))
-
-        nb_params, vjp_fn, nb_potential = jax.vjp(self.top.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
-        final_potentials.append([nb_potential.bind(nb_params)])
-        final_vjp_and_handles.append([vjp_fn])
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, self.top)
 
         combined_masses = np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)
-
-        src_conf, dst_conf = self.top.interpolate_params(ligand_coords_a, ligand_coords_b)
         combined_coords = np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)
 
-        box = np.eye(3) * 100.0
+        return final_potentials, final_params, combined_masses, combined_coords
 
-        bonded, nonbonded, grads = self._simulate(
-            lamb,
-            box,
-            combined_coords,
-            np.zeros_like(combined_coords),
-            final_potentials,
-            self._get_integrator(combined_masses),
-            equil_steps,
-            prod_steps
-        )
-
-        return _mean_and_stddev(bonded), _mean_and_stddev(nonbonded), grads
-
-
-    def host_edge(self, lamb, host_system, host_coords, box, equil_steps=10000, prod_steps=100000):
+    def prepare_host_edge(self, ff_params, host_system, host_coords):
         """
-        Run equilibrium decoupling simulation at a given value of lambda in a host environment.
+        Prepares the host-edge system
 
         Parameters
         ----------
-        lamb: float [0, 1]
-            0 is the fully interacting system, and 1 is the non-interacting system
+        ff_params: tuple of np.array
+            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
 
         host_system: openmm.System
-            OpenMM System object to be deserialized. The host can be simply a box of water, or a fully
-            solvated protein
+            openmm System object to be deserialized
 
-        host_coords: np.array of shape [..., 3]
-            Host coordinates, in nanometers. It should be properly minimized and not have clashes
-            with the ligand coordinates.
-
-        box: np.array [3,3]
-            Periodic boundary conditions, in nanometers.
-
-        equil_steps: float
-            Number of steps to run equilibration. Statistics are not gathered.
-
-        prod_steps: float
-            Number of steps to run production. Statistics are gathered.
+        host_coords: np.array
+            Nx3 array of atomic coordinates
 
         Returns
         -------
-        bonded_du_dl, nonbonded_du_dl, grads_and_handles
-            Time-series of du/dlambda (decomposed into bonded and nonbonded), and grads_and_handles for du/dparameters
+        4 tuple
+            unbound_potentials, system_params, combined_masses, combined_coords
 
-
-        TODO: later analysis : extract equilibration time, mean, stddev, other things from time-series
-        TODO: reduce duplication between vacuum_edge and host_edge
         """
 
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
@@ -391,101 +196,12 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
         num_host_atoms = host_coords.shape[0]
 
-        final_potentials = []
-        final_vjp_and_handles = []
+        hgt = topology.HostGuestTopology(host_bps, self.top)
 
-        # keep the bonded terms in the host the same.
-        # but we keep the nonbonded term for a subsequent modification
-        for bp in host_bps:
-            if isinstance(bp, potentials.Nonbonded):
-                host_p = bp
-            else:
-                final_potentials.append([bp])
-                # (ytz): no protein ff support for now, so we skip their vjps
-                final_vjp_and_handles.append(None)
-
-        hgt = topology.HostGuestTopology(host_p, self.top)
-
-        # setup the parameter handlers for the ligand
-        bonded_tuples = [
-            [hgt.parameterize_harmonic_bond, self.ff.hb_handle],
-            [hgt.parameterize_harmonic_angle, self.ff.ha_handle],
-            [hgt.parameterize_proper_torsion, self.ff.pt_handle],
-            [hgt.parameterize_improper_torsion, self.ff.it_handle]
-        ]
-
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            (src_params, dst_params, uni_params), vjp_fn, (src_potential, dst_potential, uni_potential) = jax.vjp(fn, handle.params, has_aux=True)
-            final_potentials.append([src_potential.bind(src_params), dst_potential.bind(dst_params), uni_potential.bind(uni_params)])
-            final_vjp_and_handles.append((vjp_fn, handle))
-
-        nb_params, vjp_fn, nb_potential = jax.vjp(hgt.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True)
-        final_potentials.append([nb_potential.bind(nb_params)])
-        final_vjp_and_handles.append([vjp_fn, (self.ff.q_handle, self.ff.lj_handle)]) # (ytz): note the handlers are a tuple, this is checked later
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
 
         combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
-
-        src_conf, dst_conf = self.top.interpolate_params(ligand_coords_a, ligand_coords_b)
         combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
 
+        return final_potentials, final_params, combined_masses, combined_coords
 
-        bonded_du_dl, nonbonded_du_dl, grads = self._simulate(
-            lamb,
-            box,
-            combined_coords,
-            np.zeros_like(combined_coords),
-            final_potentials,
-            self._get_integrator(combined_masses),
-            equil_steps,
-            prod_steps
-        )
-
-
-        grads_and_handles = []
-
-        for du_dqs, vjps_and_handles in zip(grads, final_vjp_and_handles):
-            if vjps_and_handles is not None:
-                vjp_fn = vjps_and_handles[0]
-                handles = vjps_and_handles[1]
-
-                # we need to get the shapes correct (eg. nonbonded vjp emits an ndarray, not a list.)
-
-                # (ytz): so far nonbonded grads is the only term that map back out to two 
-                # vjp handlers (charge and lj). the vjp also expects an nd.array, not a list. So we kill
-                # two birds with one stone here, but this is quite brittle and should be refactored later on.
-                if type(handles) == tuple:
-                    # handle nonbonded terms
-                    du_dps = vjp_fn(du_dqs[0])
-                    for du_dp, handler in zip(du_dps, handles):
-                        grads_and_handles.append((du_dp, type(handler)))
-                else:
-                    du_dp = vjp_fn(du_dqs)
-                    # bonded terms return a list, so we need to flatten it here
-                    grads_and_handles.append((du_dp[0], type(handles)))
-
-        return bonded_du_dl, nonbonded_du_dl, grads_and_handles
-
-
-def construct_lambda_schedule(num_windows):
-    """manually optimized by YTZ
-
-    TODO: should move this into a common module, probably in free_energy
-    """
-
-    A = int(.35 * num_windows)
-    B = int(.30 * num_windows)
-    C = num_windows - A - B
-
-    # Empirically, we see the largest variance in std <du/dl> near the endpoints in the nonbonded
-    # terms. Bonded terms are roughly linear. So we add more lambda windows at the endpoint to
-    # help improve convergence.
-    lambda_schedule = np.concatenate([
-        np.linspace(0.0, 0.25, A, endpoint=False),
-        np.linspace(0.25, 0.75, B, endpoint=False),
-        np.linspace(0.75, 1.0, C, endpoint=True)
-    ])
-
-    assert len(lambda_schedule) == num_windows
-
-    return lambda_schedule

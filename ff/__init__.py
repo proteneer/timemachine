@@ -36,3 +36,28 @@ class Forcefield():
             if isinstance(handle, nonbonded.SimpleChargeHandler):
                 assert self.q_handle is None
                 self.q_handle = handle
+
+    def get_ordered_params(self):
+        """
+        Returns
+        -------
+        list of np.ndarray
+            Return a flat, pre-determined ordering of the parameters
+        """
+        return [x.params for x in self.get_ordered_handles()]
+
+    def get_ordered_handles(self):
+        """
+        Returns
+        -------
+        list of np.ndarray
+            Return a flat, pre-determined ordering of the handlers
+        """
+        return [
+            self.hb_handle,
+            self.ha_handle,
+            self.pt_handle,
+            self.it_handle,
+            self.q_handle,
+            self.lj_handle
+        ]
