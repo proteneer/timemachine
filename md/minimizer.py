@@ -17,8 +17,9 @@ def get_romol_conf(mol):
 
 def minimize_host_4d(mols, host_system, host_coords, ff, box):
     """
-    Insert romol into a host system via 4D decoupling under a Langevin thermostat.
-    The ligand coordinates are fixed during this, and only host_coordinates are minimized.
+    Insert mols into a host system via 4D decoupling using a 0 Kelvin Langevin integrator.
+
+    The ligand coordinates are fixed during this, and only host_coords are minimized.
 
     Parameters
     ----------
@@ -85,17 +86,12 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box):
     seed = 0
 
     intg = LangevinIntegrator(
-        300.0,
+        0.0,
         1.5e-3,
         1.0,
         combined_masses,
         seed
-    )
-
-    # remove the randomness completely
-    intg.ccs = np.zeros_like(intg.ccs)
-
-    intg = intg.impl()
+    ).impl()
 
     x0 = combined_coords
     v0 = np.zeros_like(x0)
