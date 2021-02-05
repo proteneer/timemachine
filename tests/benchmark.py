@@ -191,7 +191,7 @@ def benchmark_hif2a(verbose):
     )
 
     # this
-    ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_recharge.py').read())
+    ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
     ff = Forcefield(ff_handlers)
 
     rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
