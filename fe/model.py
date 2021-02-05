@@ -76,6 +76,7 @@ class RBFEModel():
 
             print("Minimizing the host structure to remove clashes.")
             min_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, self.ff, host_box)
+            min_host_coords = minimizer.minimize_host_4d(mol_b, host_system, min_host_coords, self.ff, host_box)
 
             rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, self.ff)
 
