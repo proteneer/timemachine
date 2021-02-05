@@ -112,7 +112,7 @@ def benchmark(
 
     assert np.all(np.abs(ctxt.get_x_t()) < 1000)
 
-    print(f"{label}: N={x0.shape[0]} ns/day: {ns_per_day} total time to run {steps_per_batch * num_batches} steps: {(time.time() - start):.3f} s")
+    print(f"{label}: N={x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt*1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)")
 
     # bond angle torsions nonbonded
     if verbose:
@@ -206,8 +206,8 @@ def benchmark_hif2a(verbose):
     solvent_box += np.eye(3)*0.1 # BFGS this later
 
     for stage, host_system, host_coords, host_box in [
-        ("hif2a-protein", complex_system, complex_coords, complex_box),
-        ("hif2a-solvent", solvent_system, solvent_coords, solvent_box)]:
+        ("hif2a", complex_system, complex_coords, complex_box),
+        ("solvent", solvent_system, solvent_coords, solvent_box)]:
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(
             host_system,

@@ -34,7 +34,7 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         self.mol_b = all_mols[1]
 
         # atom type free
-        ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_recharge.py').read())
+        ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
 
         self.ff = Forcefield(ff_handlers)
 
@@ -258,7 +258,7 @@ class TestFactorizability(unittest.TestCase):
         mol_a = all_mols[0]
         mol_b = all_mols[1]
 
-        ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_recharge.py').read())
+        ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
         ff = Forcefield(ff_handlers)
 
         core = np.array([[ 4,  1],
@@ -296,7 +296,7 @@ class TestFactorizability(unittest.TestCase):
         mol_a = all_mols[1]
         mol_b = all_mols[4]
 
-        ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_recharge.py').read())
+        ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
         ff = Forcefield(ff_handlers)
 
         core = np.array([[ 0,  0],
