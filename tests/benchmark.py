@@ -225,8 +225,7 @@ def benchmark_hif2a(verbose):
         benchmark(stage+"-apo", host_masses, 0.0, x0, v0, host_box, host_fns, verbose)
 
         # RBFE
-        min_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, ff, host_box)
-        min_host_coords = minimizer.minimize_host_4d(mol_b, host_system, min_host_coords, ff, host_box)
+        min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, ff, host_box)
 
         unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, min_host_coords)
 
