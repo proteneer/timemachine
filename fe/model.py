@@ -75,6 +75,9 @@ class RBFEModel():
             ("solvent", self.solvent_system, self.solvent_coords, self.solvent_box, self.solvent_schedule)]:
 
             print("Minimizing the host structure to remove clashes.")
+            # (ytz): this isn't strictly symmetric, and we should modify minimize later on remove
+            # the hysteresis by jointly minimizing against a and b at the same time. We may also want
+            # to remove the randomness completely from the minimization.
             min_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, self.ff, host_box)
             min_host_coords = minimizer.minimize_host_4d(mol_b, host_system, min_host_coords, self.ff, host_box)
 
