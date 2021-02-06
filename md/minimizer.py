@@ -15,15 +15,16 @@ def get_romol_conf(mol):
     return guest_conf/10 # from angstroms to nm
 
 
-def minimize_host_4d(romol, host_system, host_coords, ff, box):
+def minimize_host_4d(mols, host_system, host_coords, ff, box):
     """
-    Insert romol into a host system via 4D decoupling under a Langevin thermostat.
-    The ligand coordinates are fixed during this, and only host_coordinates are minimized.
+    Insert mols into a host system via 4D decoupling using a 0 Kelvin Langevin integrator.
+
+    The ligand coordinates are fixed during this, and only host_coords are minimized.
 
     Parameters
     ----------
-    romol: ROMol
-        Ligand to be inserted. It must be embedded.
+    mols: list of Chem.Mol
+        Ligands to be inserted. This must be of length 1 or 2 for now.
 
     host_system: openmm.System
         OpenMM System representing the host
@@ -46,15 +47,26 @@ def minimize_host_4d(romol, host_system, host_coords, ff, box):
 
     host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
-    # keep the ligand rigid
-    ligand_masses = [a.GetMass()*100000 for a in romol.GetAtoms()]
-    combined_masses = np.concatenate([host_masses, ligand_masses])
-    ligand_coords = get_romol_conf(romol)
-    combined_coords = np.concatenate([host_coords, ligand_coords])
     num_host_atoms = host_coords.shape[0]
 
-    gbt = topology.BaseTopology(romol, ff)
-    hgt = topology.HostGuestTopology(host_bps, gbt)
+    if len(mols) == 1:
+        top = topology.BaseTopology(mols[0], ff)
+    elif len(mols) == 2:
+        top = topology.DualTopology(mols[0], mols[1], ff)
+    else:
+        raise ValueError("mols must be length 1 or 2")
+
+    mass_list = [np.array(host_masses)]
+    conf_list = [np.array(host_coords)]
+    for mol in mols:
+        # mass increase is to keep the ligand fixed
+        mass_list.append(np.array([a.GetMass()*100000 for a in mol.GetAtoms()]))
+        conf_list.append(get_romol_conf(mol))
+
+    combined_masses = np.concatenate(mass_list)
+    combined_coords = np.concatenate(conf_list)
+
+    hgt = topology.HostGuestTopology(host_bps, top)
 
     # setup the parameter handlers for the ligand
     tuples = [
@@ -70,10 +82,11 @@ def minimize_host_4d(romol, host_system, host_coords, ff, box):
         params, potential = fn(*[h.params for h in handles])
         final_potentials.append(potential.bind(params))
 
-    seed = 2020
+    # this value doesn't matter since we will turn off the noise.
+    seed = 0
 
     intg = LangevinIntegrator(
-        300.0,
+        0.0,
         1.5e-3,
         1.0,
         combined_masses,
@@ -101,4 +114,10 @@ def minimize_host_4d(romol, host_system, host_coords, ff, box):
     for lamb in np.linspace(1.0, 0, 1000):
         ctxt.step(lamb)
 
-    return ctxt.get_x_t()[:num_host_atoms]
+    final_coords = ctxt.get_x_t()
+
+    for impl in u_impls:
+        du_dx, _, _ = impl.execute(final_coords, box, 0.0)
+        assert np.all(np.linalg.norm(du_dx, axis=-1) < 25000)
+
+    return final_coords[:num_host_atoms]

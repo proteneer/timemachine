@@ -53,7 +53,7 @@ def test_absolute_free_energy():
             (solvent_system, solvent_coords, solvent_box)]:
 
             # minimize the host to avoid clashes
-            host_coords = minimizer.minimize_host_4d(mol, host_system, host_coords, ff, host_box)
+            host_coords = minimizer.minimize_host_4d([mol], host_system, host_coords, ff, host_box)
 
             unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(ff_params, host_system, host_coords)
 
@@ -207,7 +207,7 @@ def test_relative_free_energy():
             (solvent_system, solvent_coords, solvent_box)]:
 
             # minimize the host to avoid clashes
-            host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, ff, host_box)
+            host_coords = minimizer.minimize_host_4d([mol_a], host_system, host_coords, ff, host_box)
 
             unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, host_coords)
 

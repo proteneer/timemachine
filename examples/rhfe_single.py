@@ -98,7 +98,7 @@ if __name__ == "__main__":
     solvent_box += np.eye(3)*0.1 # BFGS this later
 
     print("Minimizing the host structure to remove clashes.")
-    minimized_solvent_coords = minimizer.minimize_host_4d(mol_a, solvent_system, solvent_coords, ff, solvent_box)
+    minimized_solvent_coords = minimizer.minimize_host_4d([mol_a], solvent_system, solvent_coords, ff, solvent_box)
 
     absolute_lambda_schedule = np.concatenate([
         np.linspace(0.0, 0.333, cmd_args.num_absolute_windows - cmd_args.num_absolute_windows//3, endpoint=False),
