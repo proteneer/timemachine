@@ -12,6 +12,7 @@ from ff.handlers import nonbonded
 
 # free energy classes
 from fe.free_energy import RelativeFreeEnergy, construct_lambda_schedule
+from fe.model import RBFEModel
 
 # MD initialization
 from md import builders
@@ -181,17 +182,6 @@ def predict_dG_and_grad(rfe: RelativeFreeEnergy, conf: Configuration, client: Ab
 
     TODO: add an argument for force field parameters, then register this function with Jax as value_and_grad or similar...
     """
-
-    # build the complex system
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-        path_to_protein)
-    # TODO: optimize box
-    complex_box += np.eye(3) * 0.1  # BFGS this later
-
-    # build the water system
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
-    # TODO: optimize box
-    solvent_box += np.eye(3) * 0.1  # BFGS this later
 
     combined_handle_and_grads = {}
     stage_dGs = dict()
@@ -369,7 +359,7 @@ if __name__ == "__main__":
     # how much computation to spend per refitting step
     # configuration = testing_configuration  # a little
     # configuration = production_configuration  # a lot
-    configuration = intermediate_configuration # goldilocks
+    configuration = intermediate_configuration  # goldilocks
 
     # how many parameter update steps
     num_parameter_updates = 1000
@@ -394,33 +384,63 @@ if __name__ == "__main__":
     step_inds = np.hstack(step_inds)[:num_parameter_updates]
     np.save(path_to_results.joinpath('step_indices.npy'), step_inds)
 
+    # build the complex system
+    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+        path_to_protein)
+    # TODO: optimize box
+    complex_box += np.eye(3) * 0.1  # BFGS this later
+
+    # build the water system
+    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
+    # TODO: optimize box
+    solvent_box += np.eye(3) * 0.1  # BFGS this later
+
+    # note: "complex" means "protein + solvent"
+    binding_model = RBFEModel(
+        client=client,
+        ff=forcefield,
+        complex_system=complex_system,
+        complex_coords=complex_coords,
+        complex_box=complex_box,
+        complex_schedule=construct_lambda_schedule(configuration.num_complex_windows),
+        solvent_system=solvent_system,
+        solvent_coords=solvent_coords,
+        solvent_box=solvent_box,
+        solvent_schedule=construct_lambda_schedule(configuration.num_solvent_windows),
+        equil_steps=configuration.num_equil_steps,
+        prod_steps=configuration.num_prod_steps,
+    )
+
+    import jax
+
+    binding_estimate_and_grad_fxn = jax.value_and_grad(binding_model.loss, argnums=0)
+
+    ordered_params = forcefield.get_ordered_params()
+    ordered_handles = forcefield.get_ordered_handles()
+
     # in each optimizer step, look at one transformation from relative_transformations
     for step, rfe_ind in enumerate(step_inds):
         rfe = relative_transformations[rfe_ind]
 
         # compute a step, measuring total wall-time
         t0 = time()
-        # estimate predicted dG, and gradient of predicted dG w.r.t. params
-        pred, grads, stage_results = predict_dG_and_grad(rfe, configuration, client)
+        loss, loss_grad = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
+        # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
+
+        # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
+        #   e.g. stage_results, and further diagnostic information
+        #   * x trajectories,
+        #   * d U / d parameters trajectories,
+        #   * matrix of U(x; lambda) for all x, lambda
 
         # update forcefield parameters in-place, hopefully to match an experimental label
-        parameter_updates = _update_in_place(pred, grads, label=rfe.label, handle_types_to_update=forces_to_refit)
+        parameter_updates = _update_in_place(loss, loss_grad, label=rfe.label, handle_types_to_update=forces_to_refit)
         # Note: for certain kinds of method-validation tests, these labels could also be synthetic
 
         t1 = time()
         elapsed = t1 - t0
 
         print(f'completed forcefield-updating step {step} in {elapsed:.3f} s !')
-
-        # also save some additional diagnostic information to disk (du/dlambda trajectory)
-        print('saving results')
-        for stage in stage_results:
-            stage_results[stage].save(name=f'step={step}, stage={stage}')
-
-        # TODO: save some further diagnostic information
-        #   * x trajectories,
-        #   * d U / d parameters trajectories,
-        #   * matrix of U(x; lambda) for all x, lambda
 
         # save updated forcefield files after every gradient step
         step_params = serialize_handlers(ff_handlers)
