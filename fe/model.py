@@ -77,8 +77,7 @@ class RBFEModel():
             # (ytz): this isn't strictly symmetric, and we should modify minimize later on remove
             # the hysteresis by jointly minimizing against a and b at the same time. We may also want
             # to remove the randomness completely from the minimization.
-            min_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, self.ff, host_box)
-            min_host_coords = minimizer.minimize_host_4d(mol_b, host_system, min_host_coords, self.ff, host_box)
+            min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, self.ff, host_box)
 
             single_topology = topology.SingleTopology(mol_a, mol_b, core, self.ff)
             rfe = free_energy.RelativeFreeEnergy(single_topology)

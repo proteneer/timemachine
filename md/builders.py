@@ -27,7 +27,7 @@ def build_protein_system(host_pdbfile):
     nha = host_coords.shape[0]
     nwa = solvated_host_coords.shape[0] - nha
 
-    print(nha, "protein atoms", nwa, "water atoms")
+    print("building a protein system with", nha, "protein atoms and", nwa, "water atoms")
     solvated_host_system = host_ff.createSystem(
         modeller.topology,
         nonbondedMethod=app.NoCutoff,
