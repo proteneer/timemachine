@@ -87,7 +87,7 @@ class RBFEModel():
 
             x0 = coords
             v0 = np.zeros_like(coords)
-            box = np.eye(3, dtype=np.float64)*100
+            box = np.eye(3, dtype=np.float64)*100 # note: box unused
 
             seed = 0
 
