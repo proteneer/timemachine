@@ -123,8 +123,6 @@ class HostGuestTopology():
         num_guest_atoms = self.guest_topology.get_num_atoms()
         guest_qlj, guest_p = self.guest_topology.parameterize_nonbonded(ff_q_params, ff_lj_params)
 
-
-
         if isinstance(guest_p, potentials.InterpolatedPotential):
             assert guest_qlj.shape[0] == num_guest_atoms*2
             guest_p = guest_p.get_u_fn()
@@ -375,10 +373,19 @@ class DualTopology():
     def parameterize_harmonic_angle(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.ha_handle, potentials.HarmonicAngle)
 
+    def parameterize_periodic_torsion(self, proper_params, improper_params):
+        """
+        Parameterize all periodic torsions in the system.
+        """
+        proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
+        improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
+        combined_params = jnp.concatenate([proper_params, improper_params])
+        combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
+        combined_potential = potentials.PeriodicTorsion(combined_idxs)
+        return combined_params, combined_potential
 
     def parameterize_proper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.pt_handle, potentials.PeriodicTorsion)
-
 
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
