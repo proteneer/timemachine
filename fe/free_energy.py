@@ -115,11 +115,16 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 # this class is serializable.
 class RelativeFreeEnergy(BaseFreeEnergy):
 
-    def __init__(self, mol_a, mol_b, core, ff):
+    def __init__(self, mol_a, mol_b, core, ff, label=None):
+        """
+        Notes
+        -----
+        TODO: modify constructor to accept a SingleTopology argument"""
         self.mol_a = mol_a
         self.mol_b = mol_b
         self.core = core
         self.top = topology.SingleTopology(mol_a, mol_b, core, ff)
+        self.label = label
 
     def _get_integrator(self, combined_masses):
         """
