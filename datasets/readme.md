@@ -5,3 +5,5 @@ TODO(YTZ) : note which version of FreeSolv is stored, and if any other filtering
 
 ## `fep-benchmark`
 Datasets in the `fep-benchmark` folder are imported from https://github.com/MCompChem/fep-benchmark/releases/tag/v1.0 (distributed under MIT license), created by Christina Schindler and Daniel Kuhn, Merck KGaA, Darmstadt, Germany, December 2018 , accompanying https://chemrxiv.org/articles/preprint/Large-Scale_Assessment_of_Binding_Free_Energy_Calculations_in_Active_Drug_Discovery_Projects/11364884 (Schindler et al., 2019)
+
+Note: This folder may appear empty when you clone the timemachine repository. Clone the repository using `--recursive` flag, or update the dataset submodules after cloning using `git submodule update --init`.
