@@ -7,6 +7,7 @@ from rdkit.Chem import rdFMCS
 
 import matplotlib.pyplot as plt
 
+from fe import topology
 from fe.utils import convert_uIC50_to_kJ_per_mole
 
 root = Path(__file__).parent.parent.parent
@@ -312,7 +313,8 @@ for spoke in others:
     # core = get_core_by_matching(hub, spoke, threshold=0.9)
     core = get_core_by_geometry(hub, spoke, threshold=0.5)
     try:
-        rfe = RelativeFreeEnergy(hub, spoke, core, forcefield, label=_compute_label(hub, spoke))
+        single_topology = topology.SingleTopology(hub, spoke, core, forcefield)
+        rfe = RelativeFreeEnergy(single_topology, label=_compute_label(hub, spoke))
         transformations.append(rfe)
     except AtomMappingError as e:
         print(f'atom mapping error in transformation {get_mol_id(hub)} -> {get_mol_id(spoke)}!')

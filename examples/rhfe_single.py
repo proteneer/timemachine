@@ -140,8 +140,9 @@ if __name__ == "__main__":
     ], axis=1)
 
     for core_idx, core in enumerate([core_full, core_part]):
+        single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
 
-        rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
+        rfe = free_energy.RelativeFreeEnergy(single_topology)
 
         vacuum_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_vacuum_windows)
         solvent_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_solvent_windows)

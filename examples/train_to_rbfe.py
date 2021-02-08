@@ -66,7 +66,9 @@ def run_epoch(ff, mol_a, mol_b, core):
         print("Minimizing the host structure to remove clashes.")
         minimized_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, ff, host_box)
 
-        rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
+        single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
+
+        rfe = free_energy.RelativeFreeEnergy(single_topology)
 
         # solvent leg
         host_args = []

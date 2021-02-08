@@ -8,7 +8,7 @@ from ff.handlers import openmm_deserializer
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
-from fe import free_energy
+from fe import free_energy, topology
 from fe import estimator
 
 from parallel.client import CUDAPoolClient
@@ -157,7 +157,8 @@ def test_relative_free_energy():
     equil_steps = 1000
     prod_steps = 1000
 
-    rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
+    single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
+    rfe = free_energy.RelativeFreeEnergy(single_topology)
 
     def vacuum_model(ff_params):
 
