@@ -161,24 +161,27 @@ def _update_in_place(loss: float, loss_grads: List[jnp.array], ordered_handles: 
 
         handle_type = type(handle)
 
+        # TODO: make the references to handle vs. type(handle) less runtime-error-prone
+
         if handle_type in handle_types_to_update:
             update = _clipped_update(loss_grad, step_sizes[handle_type], gradient_clip_thresholds[handle_type])
             print(f'incrementing the {handle_type.__name__} parameters by {update}')
             handle.params += update
 
-        # TODO: define a dict mapping from handle_type to forcefield.q_handle.params or something...
-        if handle_type == nonbonded.AM1CCCHandler:
-            before = np.array(forcefield.q_handle.params)  # make a copy
-            forcefield.q_handle.params += update
-            after = np.array(forcefield.q_handle.params)  # make a copy
-        elif handle_type == nonbonded.LennardJonesHandler:
-            before = np.array(forcefield.lj_handle.params)  # make a copy
-            forcefield.lj_handle.params += update
-            after = np.array(forcefield.lj_handle.params)  # make a copy
-        else:
-            raise (RuntimeError("Attempting to update an unsupported ff handle type"))
+            # TODO: define a dict mapping from handle_type to forcefield.q_handle.params or something...
+            if handle_type == nonbonded.AM1CCCHandler:
+                before = np.array(forcefield.q_handle.params)  # make a copy
+                forcefield.q_handle.params += update
+                after = np.array(forcefield.q_handle.params)  # make a copy
+            elif handle_type == nonbonded.LennardJonesHandler:
+                before = np.array(forcefield.lj_handle.params)  # make a copy
+                forcefield.lj_handle.params += update
+                after = np.array(forcefield.lj_handle.params)  # make a copy
+            else:
+                message = f"Attempting to update an unsupported ff handle type: {handle_type.__name__} not in {handle_types_to_update}"
+                raise (RuntimeError(message))
 
-        parameter_updates[handle_type] = ParameterUpdate(before, after, loss_grad, update)
+            parameter_updates[handle_type] = ParameterUpdate(before, after, loss_grad, update)
 
         # not sure if I want to print these...
         # print("before: ", before)
