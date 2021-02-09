@@ -82,15 +82,6 @@ with open(path_to_ff) as f:
 forcefield = Forcefield(ff_handlers)
 
 
-def _mean_du_dlambda(result):
-    """summarize result of rfe.host_edge into mean du/dl
-
-    TODO: refactor where this analysis step occurs
-    """
-    bonded_du_dl, nonbonded_du_dl, _ = result
-    return np.mean(bonded_du_dl + nonbonded_du_dl)
-
-
 # TODO: define more flexible update rules here, rather than update parameters
 step_sizes = {
     nonbonded.AM1CCCHandler: 1e-3,
