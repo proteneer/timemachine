@@ -795,9 +795,9 @@ class SingleTopology():
                 core_idxs_b.shape:     {core_idxs_b.shape}
                 unique_idxs_r.shape:   {unique_idxs_r.shape}
                 
-                core_params_a.shape:   {core_params_a.shape}
-                core_params_b.shape:   {core_params_b.shape}
-                unique_params_r.shape: {unique_params_r.shape}
+                core_params_a shapes:   {[p.shape for p in core_params_a]}
+                core_params_b shapes:   {[p.shape for p in core_params_b]}
+                unique_params_r shapes: {[p.shape for p in unique_params_r]}
             '''
 
             raise (RuntimeError(message))
