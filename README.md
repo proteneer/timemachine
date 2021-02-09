@@ -24,9 +24,26 @@ We currently support the following functional forms. Parameters that can be opti
 4. PBC LennardJones 612 (sigma, epsilon)
 5. PBC reaction field electrostatics (charge)
 
-## Running Tests
+## Installation
 
-Note: we currently only support and test on python 3.7, use other versions at your own peril.
+### Pre-requisites
+
+* RDKit
+* OpenEye Toolkits
+* OpenMM
+* Cuda 11.0+
+
+### Setup using Anaconda
+
+If using conda the following can be used to configure your environment
+
+```
+conda create -n timemachine python=3.7
+conda activate timemachine
+conda install -c conda-forge -c openeye -c rdkit openmm openeye-toolkits rdkit
+```
+
+### Install Time Machine
 
 ```
 pip install -r requirements.txt
@@ -35,7 +52,13 @@ mkdir build
 cd build
 cmake -DCUDA_ARCH=sm_70 ../
 make -j4 install
-cd ../../../
+```
+
+## Running Tests
+
+Note: we currently only support and test on python 3.7, use other versions at your own peril.
+
+```
 pytest -xsv tests/
 ```
 
