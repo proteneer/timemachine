@@ -115,11 +115,25 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 # this class is serializable.
 class RelativeFreeEnergy(BaseFreeEnergy):
 
-    def __init__(self, mol_a, mol_b, core, ff):
-        self.mol_a = mol_a
-        self.mol_b = mol_b
-        self.core = core
-        self.top = topology.SingleTopology(mol_a, mol_b, core, ff)
+    def __init__(self, single_topology: topology.SingleTopology, label=None):
+        self.top = single_topology
+        self.label = label
+
+    @property
+    def mol_a(self):
+        return self.top.mol_a
+
+    @property
+    def mol_b(self):
+        return self.top.mol_b
+
+    @property
+    def core(self):
+        return self.top.core
+
+    @property
+    def ff(self):
+        return self.top.ff
 
     def _get_integrator(self, combined_masses):
         """
@@ -205,3 +219,28 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         return final_potentials, final_params, combined_masses, combined_coords
 
+
+def construct_lambda_schedule(num_windows):
+    """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
+
+    Notes
+    -----
+    manually optimized by YTZ
+    """
+
+    A = int(.35 * num_windows)
+    B = int(.30 * num_windows)
+    C = num_windows - A - B
+
+    # Empirically, we see the largest variance in std <du/dl> near the endpoints in the nonbonded
+    # terms. Bonded terms are roughly linear. So we add more lambda windows at the endpoint to
+    # help improve convergence.
+    lambda_schedule = np.concatenate([
+        np.linspace(0.0, 0.25, A, endpoint=False),
+        np.linspace(0.25, 0.75, B, endpoint=False),
+        np.linspace(0.75, 1.0, C, endpoint=True)
+    ])
+
+    assert len(lambda_schedule) == num_windows
+
+    return lambda_schedule

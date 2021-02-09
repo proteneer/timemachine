@@ -450,14 +450,20 @@ class SingleTopology():
 
         self.assert_factorizability()
 
-    def assert_factorizability(self):
+    def _identify_offending_core_indices(self):
+        """Identifies atoms involved in violations of a factorizability assumption,
+            but doesn't immediately raise an error.
+            Later, could use this list to:
+            * plot / debug
+            * if in a "repair_mode", attempt to repair the mapping by removing offending atoms
+            * otherwise, raise atom mapping error if any atoms were identified
         """
-        Number of atoms in the combined mol
 
-        """
         # Test that R-groups can be properly factorized out in the proposed
         # mapping. The requirement is that R-groups must be branched from exactly
         # a single atom on the core.
+
+        offending_core_indices = []
 
         # first convert to a dense graph
         N = self.get_num_atoms()
@@ -465,15 +471,15 @@ class SingleTopology():
 
         for bond in self.mol_a.GetBonds():
             i, j = self.a_to_c[bond.GetBeginAtomIdx()], self.a_to_c[bond.GetEndAtomIdx()]
-            dense_graph[i, j] = 1 
-            dense_graph[j, i] = 1 
+            dense_graph[i, j] = 1
+            dense_graph[j, i] = 1
 
         for bond in self.mol_b.GetBonds():
             i, j = self.b_to_c[bond.GetBeginAtomIdx()], self.b_to_c[bond.GetEndAtomIdx()]
-            dense_graph[i, j] = 1 
-            dense_graph[j, i] = 1 
+            dense_graph[i, j] = 1
+            dense_graph[j, i] = 1
 
-        # sparsify to simplify and speed up traversal code
+            # sparsify to simplify and speed up traversal code
         sparse_graph = []
         for row in dense_graph:
             nbs = []
@@ -500,7 +506,28 @@ class SingleTopology():
                 visit(c_idx, seen)
                 # (ytz): exactly one of seen should belong to core
                 if np.sum(np.array([self.c_flags[x] for x in seen]) == 0) != 1:
-                    raise AtomMappingError("Atom Mapping Error, the resulting map is non-factorizable")
+                    offending_core_indices.append(c_idx)
+
+        return offending_core_indices
+
+
+    def assert_factorizability(self):
+        """
+        Number of atoms in the combined mol
+
+        TODO: add a reference to Boresch paper describing the assumption being checked
+        """
+        offending_core_indices = self._identify_offending_core_indices()
+        num_problems = len(offending_core_indices)
+        if num_problems > 0:
+
+            # TODO: revisit how to get atom pair indices -- this goes out of bounds
+            # bad_pairs = [tuple(self.core[c_index]) for c_index in offending_core_indices]
+
+            message = f"""Atom Mapping Error: the resulting map is non-factorizable!
+            (The map contained  {num_problems} violations of the factorizability assumption.)
+            """
+            raise AtomMappingError(message)
 
 
     def get_num_atoms(self):
@@ -721,7 +748,6 @@ class SingleTopology():
         core_idxs_a = []
         core_idxs_b = []
         unique_idxs_r = []
-
         for p, old_atoms in zip(params_a, idxs_a):
             new_atoms = self.a_to_c[old_atoms]
             if np.all(self.c_flags[new_atoms] == 0):
@@ -740,8 +766,12 @@ class SingleTopology():
                 unique_params_r.append(p)
                 unique_idxs_r.append(new_atoms)
 
+        core_params_a = jnp.array(core_params_a)
+        core_params_b = jnp.array(core_params_b)
+        unique_params_r = jnp.array(unique_params_r)
+
         # number of parameters per term (2 for bonds, 2 for angles, 3 for torsions)
-        P = params_a.shape[-1]
+        P = params_a.shape[-1] # TODO: note P unused
 
         combined_params = self._concatenate([
             core_params_a,
@@ -756,9 +786,9 @@ class SingleTopology():
         core_idxs_b = np.array(core_idxs_b, dtype=np.int32).reshape((-1, K))
         unique_idxs_r = np.array(unique_idxs_r, dtype=np.int32).reshape((-1, K)) # always on
 
-        combined_idxs = np.concatenate([core_idxs_a, core_idxs_b, unique_idxs_r])
+        # TODO: assert `len(core_idxs_a) == len(core_idxs_b)` in a more fine-grained way
 
-        assert len(core_idxs_a) == len(core_idxs_b)
+        combined_idxs = np.concatenate([core_idxs_a, core_idxs_b, unique_idxs_r])
 
         lamb_mult = np.array([-1]*len(core_idxs_a) + [1]*len(core_idxs_b) + [0]*len(unique_idxs_r), dtype=np.int32)
         lamb_offset = np.array([1]*len(core_idxs_a) + [0]*len(core_idxs_b) + [1]*len(unique_idxs_r), dtype=np.int32)

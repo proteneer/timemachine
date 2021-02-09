@@ -6,8 +6,7 @@ from rdkit import Chem
 
 from md import minimizer
 from timemachine.lib import LangevinIntegrator
-from fe import free_energy
-from fe import estimator
+from fe import free_energy, topology, estimator
 from ff import Forcefield
 
 from parallel.client import AbstractClient
@@ -80,13 +79,14 @@ class RBFEModel():
             # to remove the randomness completely from the minimization.
             min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, self.ff, host_box)
 
-            rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, self.ff)
+            single_topology = topology.SingleTopology(mol_a, mol_b, core, self.ff)
+            rfe = free_energy.RelativeFreeEnergy(single_topology)
 
             unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, min_host_coords)
 
             x0 = coords
             v0 = np.zeros_like(coords)
-            box = np.eye(3, dtype=np.float64)*100
+            box = np.eye(3, dtype=np.float64)*100 # note: box unused
 
             seed = 0
 

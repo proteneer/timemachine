@@ -391,4 +391,8 @@ class AM1CCCHandler(SerializableMixIn):
         deltas = params[bond_idx_params]
         incremented = ops.index_add(am1_charges, bond_idxs[:, 0], deltas)
         decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)
-        return decremented
+
+        q_params = decremented
+        assert (q_params.shape[0] == mol.GetNumAtoms()) # check that return shape is consistent with input mol
+
+        return q_params

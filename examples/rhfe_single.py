@@ -140,8 +140,9 @@ if __name__ == "__main__":
     ], axis=1)
 
     for core_idx, core in enumerate([core_full, core_part]):
+        single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
 
-        rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
+        rfe = free_energy.RelativeFreeEnergy(single_topology)
 
         vacuum_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_vacuum_windows)
         solvent_lambda_schedule = np.linspace(0.0, 1.0, cmd_args.num_solvent_windows)
@@ -154,6 +155,7 @@ if __name__ == "__main__":
 
         results = pool.map(functools.partial(wrap_method, fn=rfe.vacuum_edge), vacuum_args, chunksize=1)
 
+        # TODO: update this to reflect new return type of rfe.vacuum_edge
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(vacuum_lambda_schedule, results):
             print("final vacuum lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
 
@@ -167,6 +169,7 @@ if __name__ == "__main__":
             solvent_args.append((gpu_idx, lamb, solvent_system, minimized_solvent_coords, solvent_box, cmd_args.num_equil_steps, cmd_args.num_prod_steps))
         
         results = pool.map(functools.partial(wrap_method, fn=rfe.host_edge), solvent_args, chunksize=1)
+        # TODO: update this to reflect new return type of rfe.vacuum_edge
 
         for lamb, (bonded_du_dl, nonbonded_du_dl) in zip(solvent_lambda_schedule, results):
             print("final solvent lambda", lamb, "bonded:", bonded_du_dl[0], bonded_du_dl[1], "nonbonded:", nonbonded_du_dl[0], nonbonded_du_dl[1])
