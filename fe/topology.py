@@ -767,6 +767,10 @@ class SingleTopology():
                 unique_params_r.append(p)
                 unique_idxs_r.append(new_atoms)
 
+        core_params_a = np.array(core_params_a)
+        core_params_b = np.array(core_params_b)
+        unique_params_r = np.array(unique_params_r)
+
         # number of parameters per term (2 for bonds, 2 for angles, 3 for torsions)
         P = params_a.shape[-1] # TODO: note P unused
 
@@ -795,9 +799,9 @@ class SingleTopology():
                 core_idxs_b.shape:     {core_idxs_b.shape}
                 unique_idxs_r.shape:   {unique_idxs_r.shape}
                 
-                core_params_a shapes:   {[p.shape for p in core_params_a]}
-                core_params_b shapes:   {[p.shape for p in core_params_b]}
-                unique_params_r shapes: {[p.shape for p in unique_params_r]}
+                core_params_a.shape:   {core_params_a.shape}
+                core_params_b.shape:   {core_params_b.shape}
+                unique_params_r.shape: {unique_params_r.shape}
             '''
 
             raise (RuntimeError(message))
