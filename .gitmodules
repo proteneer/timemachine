@@ -1,3 +1,0 @@
-[submodule "datasets/fep-benchmark"]
-	path = datasets/fep-benchmark
-	url = https://github.com/MCompChem/fep-benchmark
