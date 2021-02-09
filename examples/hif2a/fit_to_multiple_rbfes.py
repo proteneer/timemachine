@@ -173,67 +173,6 @@ class ThermodynamicIntegrationResult:
             self._save_result(name, lamb, result, rfe, configuration)
 
 
-# TODO: shorten this function
-def predict_dG_and_grad(rfe: RelativeFreeEnergy, conf: Configuration, client: AbstractClient):
-    """
-    rfe defines the free energy transformation,
-    conf specifies the computational details
-    client specifies a multi-node distributed computing client environment
-
-    TODO: add an argument for force field parameters, then register this function with Jax as value_and_grad or similar...
-    """
-
-    combined_handle_and_grads = {}
-    stage_dGs = dict()
-    stage_results = dict()
-
-    # TODO: break up this giant loop body
-    for stage, host_system, host_coords, host_box, num_host_windows in [
-        ("complex", complex_system, complex_coords, complex_box, conf.num_complex_windows),
-        ("solvent", solvent_system, solvent_coords, solvent_box, conf.num_solvent_windows)]:
-
-        lambda_schedule = construct_lambda_schedule(num_host_windows)
-
-        print("Minimizing the host structure to remove clashes...")
-        minimized_host_coords = minimizer.minimize_host_4d([rfe.mol_a], host_system, host_coords, rfe.ff, host_box)
-
-        # one GPU job per lambda window
-        print('submitting tasks to client!')
-        do_work = functools.partial(wrap_method, fxn=rfe.host_edge)
-        futures = []
-        for lambda_idx, lamb in enumerate(lambda_schedule):
-            arg = (lamb, host_system, minimized_host_coords, host_box, conf.num_equil_steps, conf.num_prod_steps)
-            futures.append(client.submit(do_work, arg))
-
-        results = []
-        for fut in futures:
-            results.append(fut.result())
-
-        stage_results[stage] = ThermodynamicIntegrationResult(lambda_schedule, results)
-
-        print(f'{stage} results by lambda window:')
-        for lamb, result in zip(lambda_schedule, results):
-            _print_result(lamb, result)
-
-        # estimate dG for this stage
-        pred_dG = np.trapz([_mean_du_dlambda(x) for x in results], lambda_schedule)
-        # TODO: refactor this to be a call to something in a generic free_energy.analysis module
-        #   to allow comparison / swapping between TI estimator, MBAR estimator, and others
-        stage_dGs[stage] = pred_dG
-
-        # collect derivative handlers
-        ghs = []
-        for lamb, result in zip(lambda_schedule, results):
-            bonded_du_dl, nonbonded_du_dl, grads_and_handles = result
-            ghs.append(grads_and_handles)
-
-        # update forcefield gradient handlers in-place
-        _update_combined_handle_and_grads(ghs, combined_handle_and_grads)
-
-    pred_rbfe = stage_dGs['complex'] - stage_dGs['solvent']
-    return pred_rbfe, combined_handle_and_grads, stage_results
-
-
 # TODO: define more flexible update rules here, rather than update parameters
 step_sizes = {
     nonbonded.AM1CCCHandler: 1e-3,
