@@ -143,36 +143,6 @@ def _update_combined_handle_and_grads(ghs, combined_handle_and_grads):
             combined_handle_and_grads[handle_type_lhs] -= grad
 
 
-class ThermodynamicIntegrationResult:
-    def __init__(self, lambda_schedule, results):
-        self.lambda_schedule = lambda_schedule
-        self.results = results
-
-    @staticmethod
-    def _save_result(name, lamb, result, rfe, configuration):
-        """
-        TODO: more compact way to store the relevant information about which transformation was computed
-        TODO: include type hint here for ambiguous argument name "result"
-        TODO: add units
-        TODO: move this into part of a .save() method for a RelativeFreeEnergy result object?
-        TODO: use state index i rather than lambda in filename
-        TODO: include also dU/dparams here?
-        """
-        # unpack result tuple
-        bonded_du_dl, nonbonded_du_dl, grads_and_handles = result
-
-        # save du/dlambda trajectories
-        du_dl_filename = path_to_results.joinpath(
-            f"du_dlambda trajectories ({name}, lambda={lamb:.3f})")
-        print(f'saving bonded and nonbonded du/dlambda trajectories to {du_dl_filename}...')
-        np.savez(du_dl_filename, bonded_du_dl=bonded_du_dl, nonbonded_du_dl=nonbonded_du_dl, rfe=rfe,
-                 configuration=configuration)
-
-    def save(self, name=''):
-        for lamb, result in zip(self.lambda_schedule, self.results):
-            self._save_result(name, lamb, result, rfe, configuration)
-
-
 # TODO: define more flexible update rules here, rather than update parameters
 step_sizes = {
     nonbonded.AM1CCCHandler: 1e-3,
