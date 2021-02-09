@@ -809,12 +809,12 @@ class SingleTopology():
         # construct dictionary of (atom_index_tuple : List[parameter]) pairs
         from collections import defaultdict
         torsions_a = defaultdict(lambda : [])
-        for i, row in enumerate(core_idxs_a):
+        for i, row in enumerate(idxs_a):
             key = _canonicalize(tuple([self.a_to_c[a] for a in row]))
             torsions_a[key].append(params_a[i])
 
         torsions_b = defaultdict(lambda: [])
-        for i, row in enumerate(core_idxs_b):
+        for i, row in enumerate(idxs_b):
             key = _canonicalize(tuple([self.b_to_c[b] for b in row]))
             torsions_b[key].append(params_b[i])
 
