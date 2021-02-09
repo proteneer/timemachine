@@ -91,19 +91,6 @@ def _mean_du_dlambda(result):
     return np.mean(bonded_du_dl + nonbonded_du_dl)
 
 
-def _update_combined_handle_and_grads(ghs, combined_handle_and_grads):
-    # use gradient information from the endpoints
-    for (grad_lhs, handle_type_lhs), (grad_rhs, handle_type_rhs) in zip(ghs[0], ghs[-1]):
-        assert handle_type_lhs == handle_type_rhs  # ffs are forked so the return handler isn't same object as that of ff
-        grad = grad_rhs - grad_lhs
-
-        # complex - solvent
-        if handle_type_lhs not in combined_handle_and_grads:
-            combined_handle_and_grads[handle_type_lhs] = grad
-        else:
-            combined_handle_and_grads[handle_type_lhs] -= grad
-
-
 # TODO: define more flexible update rules here, rather than update parameters
 step_sizes = {
     nonbonded.AM1CCCHandler: 1e-3,
