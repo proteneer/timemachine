@@ -1,2 +1,5 @@
 .idea
 *.pkl
+__pycache__/
+timemachine/cpp/build/
+*.so

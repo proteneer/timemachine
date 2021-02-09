@@ -8,3 +8,4 @@ pymbar==3.0.5
 jax==0.2.9
 jaxlib==0.1.59
 hilbertcurve==1.0.5
+networkx==2.5
