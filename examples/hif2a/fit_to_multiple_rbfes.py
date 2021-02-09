@@ -19,7 +19,7 @@ from md import builders
 from md import minimizer
 
 # parallelization across multiple GPUs
-from parallel.client import AbstractClient, CUDAPoolClient
+from parallel.client import CUDAPoolClient
 
 from collections import namedtuple
 
@@ -261,6 +261,7 @@ if __name__ == "__main__":
 
     import jax
 
+    # TODO: use binding_model.predict rather than binding_model.loss
     binding_estimate_and_grad_fxn = jax.value_and_grad(binding_model.loss, argnums=0)
 
     ordered_params = forcefield.get_ordered_params()
