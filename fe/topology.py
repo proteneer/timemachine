@@ -805,6 +805,8 @@ class SingleTopology():
         def _canonicalize(tup):
             if tup[0] > tup[-1]:
                 return tuple(tup[::-1])
+            else:
+                return tup
 
         # construct dictionary of (atom_index_tuple : List[parameter]) pairs
         from collections import defaultdict
