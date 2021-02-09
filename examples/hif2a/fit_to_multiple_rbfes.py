@@ -6,6 +6,7 @@ import numpy as np
 
 # forcefield handlers
 from ff import Forcefield
+from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers import nonbonded
 
