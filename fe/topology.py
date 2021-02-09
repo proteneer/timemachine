@@ -768,7 +768,7 @@ class SingleTopology():
                 unique_idxs_r.append(new_atoms)
 
         # number of parameters per term (2 for bonds, 2 for angles, 3 for torsions)
-        P = params_a.shape[-1]
+        P = params_a.shape[-1] # TODO: note P unused
 
         combined_params = self._concatenate([
             core_params_a,
@@ -785,7 +785,22 @@ class SingleTopology():
 
         combined_idxs = np.concatenate([core_idxs_a, core_idxs_b, unique_idxs_r])
 
-        assert len(core_idxs_a) == len(core_idxs_b)
+        if not len(core_idxs_a) == len(core_idxs_b):
+
+            # TODO: print params_a, idxs_a, params_b, idxs_b
+
+            message = f'''len(core_idxs_a) != len(core_idxs_b)
+                
+                core_idxs_a.shape:     {core_idxs_a.shape}
+                core_idxs_b.shape:     {core_idxs_b.shape}
+                unique_idxs_r.shape:   {unique_idxs_r.shape}
+                
+                core_params_a.shape:   {core_params_a.shape}
+                core_params_b.shape:   {core_params_b.shape}
+                unique_params_r.shape: {unique_params_r.shape}
+            '''
+
+            raise (RuntimeError(message))
 
         lamb_mult = np.array([-1]*len(core_idxs_a) + [1]*len(core_idxs_b) + [0]*len(unique_idxs_r), dtype=np.int32)
         lamb_offset = np.array([1]*len(core_idxs_a) + [0]*len(core_idxs_b) + [1]*len(unique_idxs_r), dtype=np.int32)
