@@ -82,29 +82,6 @@ with open(path_to_ff) as f:
 forcefield = Forcefield(ff_handlers)
 
 
-def _print_result(lamb, result):
-    """
-    TODO: include type hint here for ambiguous argument name "result"
-    TODO: add units
-    TODO: move message into a __str__ method for a result object?
-    TODO: replace print with logger
-    """
-    bonded_du_dl, nonbonded_du_dl, grads_and_handles = result
-
-    unit = "kJ/mol"
-
-    message = f"""
-    lambda {lamb:.3f}
-    bonded dU/dlambda (in {unit})
-        mean = {np.mean(bonded_du_dl):.3f}
-        stddev = {np.std(bonded_du_dl):.3f}
-    nonbonded dU/dlambda (in {unit})
-        mean = {np.mean(nonbonded_du_dl):.3f}
-        stddev = {np.std(nonbonded_du_dl):.3f}
-    """
-    print(message)
-
-
 def _mean_du_dlambda(result):
     """summarize result of rfe.host_edge into mean du/dl
 
