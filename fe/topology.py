@@ -762,6 +762,7 @@ class SingleTopology():
                 core_params_a.append(p)
                 core_idxs_a.append(new_atoms)
             else:
+                print("from a")
                 unique_params_r.append(p)
                 unique_idxs_r.append(new_atoms)
 
@@ -771,6 +772,7 @@ class SingleTopology():
                 core_params_b.append(p)
                 core_idxs_b.append(new_atoms)
             else:
+                print("from b")
                 unique_params_r.append(p)
                 unique_idxs_r.append(new_atoms)
 
