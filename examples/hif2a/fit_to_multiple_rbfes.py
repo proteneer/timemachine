@@ -1,13 +1,11 @@
-# Fit to the multiple relative binding free energy edges
+# Fit to multiple relative binding free energy edges
 
+import jax
 from jax import numpy as jnp
 import numpy as np
 
-import functools
-
 # forcefield handlers
 from ff import Forcefield
-from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers import nonbonded
 
@@ -258,8 +256,6 @@ if __name__ == "__main__":
         prod_steps=configuration.num_prod_steps,
     )
 
-    import jax
-
     # TODO: use binding_model.predict rather than binding_model.loss
     binding_estimate_and_grad_fxn = jax.value_and_grad(binding_model.loss, argnums=0)
 
@@ -272,10 +268,6 @@ if __name__ == "__main__":
 
         # compute a step, measuring total wall-time
         t0 = time()
-
-        # TODO: delete when done debugging
-        loss_0 = binding_model.loss(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
-        continue
 
         loss, loss_grads = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
