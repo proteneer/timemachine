@@ -767,9 +767,9 @@ class SingleTopology():
                 unique_params_r.append(p)
                 unique_idxs_r.append(new_atoms)
 
-        core_params_a = np.array(core_params_a)
-        core_params_b = np.array(core_params_b)
-        unique_params_r = np.array(unique_params_r)
+        core_params_a = jnp.array(core_params_a)
+        core_params_b = jnp.array(core_params_b)
+        unique_params_r = jnp.array(unique_params_r)
 
         # number of parameters per term (2 for bonds, 2 for angles, 3 for torsions)
         P = params_a.shape[-1] # TODO: note P unused
