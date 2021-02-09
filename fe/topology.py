@@ -793,7 +793,39 @@ class SingleTopology():
         K = idxs_a.shape[-1]
 
         core_idxs_a = np.array(core_idxs_a, dtype=np.int32).reshape((-1, K))
+        n_terms_a = len(set([tuple(row) for row in core_idxs_a]))
+
         core_idxs_b = np.array(core_idxs_b, dtype=np.int32).reshape((-1, K))
+        n_terms_b = len(set([tuple(row) for row in core_idxs_b]))
+
+        print('n_terms_a', n_terms_a)
+        print('n_terms_b', n_terms_b)
+
+
+        def _canonicalize(tup):
+            if tup[0] > tup[-1]:
+                return tuple(tup[::-1])
+
+        # construct dictionary of (atom_index_tuple : List[parameter]) pairs
+        from collections import defaultdict
+        torsions_a = defaultdict(lambda : [])
+        for i, row in enumerate(core_idxs_a):
+            key = _canonicalize(tuple([self.a_to_c[a] for a in row]))
+            torsions_a[key].append(params_a[i])
+
+        torsions_b = defaultdict(lambda: [])
+        for i, row in enumerate(core_idxs_b):
+            key = _canonicalize(tuple([self.b_to_c[b] for b in row]))
+            torsions_b[key].append(params_b[i])
+
+        # are there any keys that have different length?
+        keys_in_common = set(torsions_a.keys()).intersection(torsions_b.keys())
+        for key in keys_in_common:
+            if len(torsions_a[key]) != len(torsions_b[key]):
+                print('found a torsion with different multiplicity in a vs b!')
+                print(key, len(torsions_a[key]), len(torsions_b[key]))
+
+
         unique_idxs_r = np.array(unique_idxs_r, dtype=np.int32).reshape((-1, K)) # always on
 
         combined_idxs = np.concatenate([core_idxs_a, core_idxs_b, unique_idxs_r])
