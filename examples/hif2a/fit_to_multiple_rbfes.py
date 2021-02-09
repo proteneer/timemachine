@@ -1,5 +1,6 @@
 # Fit to the multiple relative binding free energy edges
 
+from jax import numpy as jnp
 import numpy as np
 
 import functools
@@ -16,7 +17,6 @@ from fe.model import RBFEModel
 
 # MD initialization
 from md import builders
-from md import minimizer
 
 # parallelization across multiple GPUs
 from parallel.client import CUDAPoolClient
@@ -24,7 +24,8 @@ from parallel.client import CUDAPoolClient
 from collections import namedtuple
 
 from pickle import load
-from typing import List
+from typing import List, Union
+Handler = Union[nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler] # TODO: relax this assumption
 from time import time
 
 # how much MD to run, on how many GPUs
@@ -133,41 +134,38 @@ class ParameterUpdate:
         )
 
 
-def _update_in_place(pred, grads, label,
-                     handle_types_to_update=[nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]):
+def _update_in_place(loss: float, loss_grads: List[jnp.array], ordered_handles: List[Handler],
+                     handle_types_to_update: List[Handler] =[nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]):
     """
-    Notes
-    -----
-    * Currently hard-codes l1 loss -- may want to later break this up
-
     TODO: check if it's too expensive to do out-of-place updates with a copy
+
+    TODO: want to be able to say params -= g, which could be done by abstracting the parameters + handlers blob into
+        something that supports either:
+        * __add__, __mul__, etc.
+        * flatten() / unflatten() to / from traced arrays
     """
 
-    # TODO: refactor loss definition out of this function
-    loss = np.abs(pred - label)
     unit = "kJ/mol"
 
     message = f"""
-    pred:   {pred:.3f} {unit}
-    target: {label:.3f} {unit} 
     loss:   {loss:.3f} {unit}
     """
     print(message)
+    # TODO: restore pred, target to message
     # TODO: save these also to log file
-
-    dl_dpred = np.sign(pred - label)
-
+    # TODO: save dl_dp, update, and params to disk
     # compute updates
     parameter_updates = dict()
 
-    for handle_type in handle_types_to_update:
-        # TODO: move this out of update function to help with saving and logging, and eventually move the chain-rule
-        #  step out of manually written function
-        dl_dp = dl_dpred * grads[handle_type]  # chain rule
-        # TODO: save dl_dp, update, and params to disk
+    for loss_grad, handle in zip(loss_grads, ordered_handles):
+        assert handle.params.shape == loss_grad.shape
 
-        update = _clipped_update(dl_dp, step_sizes[handle_type], gradient_clip_thresholds[handle_type])
-        print(f'incrementing the {handle_type.__name__} parameters by {update}')
+        handle_type = type(handle)
+
+        if handle_type in handle_types_to_update:
+            update = _clipped_update(loss_grad, step_sizes[handle_type], gradient_clip_thresholds[handle_type])
+            print(f'incrementing the {handle_type.__name__} parameters by {update}')
+            handle.params += update
 
         # TODO: define a dict mapping from handle_type to forcefield.q_handle.params or something...
         if handle_type == nonbonded.AM1CCCHandler:
@@ -181,7 +179,7 @@ def _update_in_place(pred, grads, label,
         else:
             raise (RuntimeError("Attempting to update an unsupported ff handle type"))
 
-        parameter_updates[handle_type] = ParameterUpdate(before, after, dl_dp, update)
+        parameter_updates[handle_type] = ParameterUpdate(before, after, loss_grad, update)
 
         # not sure if I want to print these...
         # print("before: ", before)
@@ -224,6 +222,7 @@ if __name__ == "__main__":
 
     # compute and save the sequence of relative_transformation indices
     num_epochs = int(np.ceil(num_parameter_updates / len(relative_transformations)))
+    np.random.seed(2021)
     step_inds = []
     for epoch in range(num_epochs):
         inds = np.arange(len(relative_transformations))
@@ -273,7 +272,7 @@ if __name__ == "__main__":
 
         # compute a step, measuring total wall-time
         t0 = time()
-        loss, loss_grad = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
+        loss, loss_grads = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
 
         # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
@@ -281,9 +280,11 @@ if __name__ == "__main__":
         #   * x trajectories,
         #   * d U / d parameters trajectories,
         #   * matrix of U(x; lambda) for all x, lambda
+        #   * the deltaG pred
+        #   (proper way is probably something like has_aux=True https://jax.readthedocs.io/en/latest/jax.html#jax.value_and_grad)
 
         # update forcefield parameters in-place, hopefully to match an experimental label
-        parameter_updates = _update_in_place(loss, loss_grad, label=rfe.label, handle_types_to_update=forces_to_refit)
+        parameter_updates = _update_in_place(loss, loss_grads, ordered_handles=ordered_handles, handle_types_to_update=forces_to_refit)
         # Note: for certain kinds of method-validation tests, these labels could also be synthetic
 
         t1 = time()
