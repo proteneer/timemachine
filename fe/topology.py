@@ -749,6 +749,13 @@ class SingleTopology():
         core_idxs_b = []
         unique_idxs_r = []
 
+        # from old indices to new indices
+        print('self.a_to_c', self.a_to_c)
+        print('self.b_to_c', self.b_to_c)
+
+        # in final combined molecule, membership of each atom (core, r_a, or r_b)
+        print('self.c_flags', self.c_flags)
+
         for p, old_atoms in zip(params_a, idxs_a):
             new_atoms = self.a_to_c[old_atoms]
             if np.all(self.c_flags[new_atoms] == 0):
