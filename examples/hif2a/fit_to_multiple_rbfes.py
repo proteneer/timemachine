@@ -82,10 +82,6 @@ with open(path_to_ff) as f:
 forcefield = Forcefield(ff_handlers)
 
 
-def wrap_method(args, fxn):
-    return fxn(*args)
-
-
 def type_check_handlers(handlers):
     """check that handlers for charges and vdW parameters are compatible with those in forcefield"""
     for handle_type in handlers:
