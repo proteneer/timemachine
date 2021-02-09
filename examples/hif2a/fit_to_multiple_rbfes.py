@@ -272,6 +272,11 @@ if __name__ == "__main__":
 
         # compute a step, measuring total wall-time
         t0 = time()
+
+        # TODO: delete when done debugging
+        loss_0 = binding_model.loss(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
+        continue
+
         loss, loss_grads = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
 
