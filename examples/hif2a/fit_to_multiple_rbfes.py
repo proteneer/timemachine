@@ -82,18 +82,6 @@ with open(path_to_ff) as f:
 forcefield = Forcefield(ff_handlers)
 
 
-def type_check_handlers(handlers):
-    """check that handlers for charges and vdW parameters are compatible with those in forcefield"""
-    for handle_type in handlers:
-        if handle_type == nonbonded.AM1CCCHandler:
-            # sanity check as we have other charge methods that exist
-            assert handle_type == type(forcefield.q_handle)
-
-        elif handle_type == nonbonded.LennardJonesHandler:
-            # sanity check again, even though we don't have other lj methods currently
-            assert handle_type == type(forcefield.lj_handle)
-
-
 def _print_result(lamb, result):
     """
     TODO: include type hint here for ambiguous argument name "result"
