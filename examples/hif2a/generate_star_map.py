@@ -236,7 +236,7 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     core = np.array([inds_a, inds_b]).T
 
     if not _check_core_map_distances(mol_a, mol_b, core, threshold):
-        raise (RuntimeError(f"not all mapped atoms are within {threshold:.3f}Å of each other!"))
+        raise (AtomMappingError(f"not all mapped atoms are within {threshold:.3f}Å of each other!"))
 
     return core
 
