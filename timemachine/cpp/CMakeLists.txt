@@ -9,7 +9,8 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.7 REQUIRED)
 find_package(PythonLibs 3.7 REQUIRED)
 
-string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo")
+string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -line-info")
+# string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3")
 message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -23,12 +24,6 @@ set(PYBIND_SRC_DIR pybind11)
 
 if(NOT EXISTS ${PYBIND_SRC_DIR})
   execute_process(COMMAND git clone --branch v2.6 https://github.com/pybind/pybind11.git ${PYBIND_SRC_DIR})
-endif()
-
-set(CUB_SRC_DIR cub)
-
-if(NOT EXISTS ${CUB_SRC_DIR})
-  execute_process(COMMAND git clone --depth 1 --branch 1.10.0 https://github.com/NVIDIA/cub.git ${CUB_SRC_DIR})
 endif()
 
 add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})

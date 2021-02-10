@@ -482,7 +482,7 @@ class GradientTest(unittest.TestCase):
         precision,
         benchmark=False):
 
-        test_potential = test_potential.unbound_impl(precision)
+        test_impl = test_potential.unbound_impl(precision)
 
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
@@ -494,9 +494,9 @@ class GradientTest(unittest.TestCase):
         assert params.dtype == np.float64
 
         # test force-only version
-        test_du_dx_only = test_potential.execute_du_dx(x, params, box, lamb)
+        test_du_dx_only = test_impl.execute_du_dx(x, params, box, lamb)
 
-        test_du_dx, test_du_dp, test_du_dl, test_u = test_potential.execute(x, params, box, lamb)
+        test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute(x, params, box, lamb)
 
         if benchmark or x.shape[0] > 10000:
             print("WARNING: Skipping assertions")
@@ -525,13 +525,20 @@ class GradientTest(unittest.TestCase):
 
         # we should obtain the same result after calling the function twice.
         # this checks to make sure that buffers etc are being cleaned properly in GPU code.
-        test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_potential.execute(x, params, box, lamb)
+        test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute(x, params, box, lamb)
 
+        # only the forces are guaranted to be deterministic
         np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
-        np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
-        np.testing.assert_array_equal(test_du_dl, test_du_dl_2)
-        np.testing.assert_array_equal(test_u, test_u_2)
 
-        test_du_dx_only_2 = test_potential.execute_du_dx(x, params, box, lamb)
+        test_du_dx_only_2 = test_impl.execute_du_dx(x, params, box, lamb)
 
         np.testing.assert_array_equal(test_du_dx, test_du_dx_only_2)
+
+        # the following is only guaranteed for nonbonded terms
+        if isinstance(test_potential, potentials.InterpolatedPotential):
+            test_potential = test_potential.get_u_fn()
+
+        if isinstance(test_potential, potentials.Nonbonded):
+            np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
+            np.testing.assert_array_equal(test_du_dl, test_du_dl_2)
+            np.testing.assert_array_equal(test_u, test_u_2)
