@@ -1,4 +1,7 @@
-# test running a simple simulation
+"""Run vanilla "apo" MD on DHFR and HIF2A test systems,
+and running an intermediate lambda window "rbfe" MD for a
+relative binding free energy edge from the HIF2A test system"""
+
 import time
 import numpy as np
 
