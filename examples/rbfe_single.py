@@ -93,11 +93,9 @@ def _smart_clip(
         so that the predicted f_prime(x_next) = {f_prime(x_next):.5f}"""
         print(message)
 
-    ## TODO: replace epsilon fudge with proper np assert almost greater than
-    #eps = 1e-3
-    #assert (f_prime(x_next) >= step_lower_bound - eps)
+    x_increment = np.array(x_next - x)
 
-    return x_next
+    return x_increment
 
 
 def wrap_method(args: Iterable[Any], fxn: callable):
@@ -263,14 +261,18 @@ if __name__ == "__main__":
         flat_theta, unflatten_theta = flatten(ordered_params)
 
         step_lower_bound = loss * relative_improvement_bound
-        next_theta = _smart_clip(flat_theta, loss, flat_loss_grad, step_lower_bound=step_lower_bound)
-        param_updates = unflatten_theta(next_theta)
+        theta_increment = _smart_clip(flat_theta, loss, flat_loss_grad, step_lower_bound=step_lower_bound)
+        param_increments= unflatten_theta(theta_increment)
 
         # for any parameter handler types being updated, update in place
         for handle in ordered_handles:
             handle_type = type(handle)
-            if handle_type in param_updates:
-                handle.params = param_updates[handle_type]
+            if handle_type in param_increments:
+                print(f'updating {handle_type.__name__}')
+
+                print(f'\tbefore update: {handle.params}')
+                handle.params += param_increments[handle_type] # TODO: careful -- this must be a "+=" or "-=" not an "="!
+                print(f'\tafter update:  {handle.params}')
 
                 # useful for debugging to dump out the grads
                 # for smirks, dp in zip(handle.smirks, loss_grad):
@@ -278,7 +280,7 @@ if __name__ == "__main__":
                         # print(smirks, dp)
 
         # checkpoint results to npz (overwrite
-        flat_theta_traj.append(flat_theta)
+        flat_theta_traj.append(np.array(flat_theta))
         flat_grad_traj.append(flat_loss_grad)
         loss_traj.append(loss)
 
