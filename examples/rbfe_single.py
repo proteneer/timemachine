@@ -59,8 +59,23 @@ def _smart_clip(
             some combination of these?
     TODO: generalize to use local surrogates other than first-order Taylor expansions
 
-    Note:
+    Notes
+    -----
     * search_direction not assumed normalized. for example, it could be the raw gradient
+
+    * `step_size` is used to generate an initial proposal `x_proposed`. If `f_prime(x_proposed) < step_lower_bound`,
+        then the step will be truncated.
+
+    * The default `step_lower_bound=0` corresponds to a suggestion in the cited study, incorporating the knowledge that
+        the loss is bounded below by 0. In the script, we pass in a non-default argument to the `step_lower_bound` to
+        make the behavior of the method more conservative, and this is probably something we'll fiddle with a bit.
+
+    * The default value `step_size=0.1` isn't very precisely chosen. The behavior of the method will be insensitive to
+        picking `step_size` anywhere between like 1e-3 and +inf for our problems, since this will trigger the
+        step-truncating logic on most every step.
+        If the `step_size` is chosen sufficiently small that it rarely produces proposals that violate `step_lower_bound`,
+        then that will start to have an effect on the behavior of the optimizer.
+
     """
 
     # default search direction: SGD
