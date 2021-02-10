@@ -13,6 +13,7 @@ from timemachine.lib import LangevinIntegrator
 
 from fe.utils import to_md_units
 from fe import free_energy
+from fe.topology import SingleTopology
 
 from rdkit import Chem
 
@@ -33,19 +34,26 @@ def recenter(conf, box):
 
     return np.array(new_coords)
 
-
 def benchmark(
     label,
     masses,
-    lamb,
+    lamb, # TODO: note lamb unused
     x0,
     v0,
     box,
     bound_potentials,
-    verbose=True):
+    verbose=True,
+    num_batches=100,
+    steps_per_batch=1000,
+):
+    """
+    TODO: configuration blob containing num_batches, steps_per_batch, and any other options
+    """
+
 
     seed = 1234
     dt = 1.5e-3
+    seconds_per_day = 86400
 
     intg = LangevinIntegrator(
         300,
@@ -77,9 +85,6 @@ def benchmark(
 
     lamb = 0.0
 
-    num_batches = 100
-    steps_per_batch = 1000
-    seconds_per_day = 86400
     batch_times = []
 
     lambda_schedule = np.ones(steps_per_batch)*lamb
@@ -121,7 +126,7 @@ def benchmark(
             print(potential, dp.shape)
             print(dp)
 
-def benchmark_dhfr(verbose):
+def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 
     pdb_path = 'tests/data/5dfr_solv_equil.pdb'
     host_pdb = app.PDBFile(pdb_path)
@@ -149,10 +154,11 @@ def benchmark_dhfr(verbose):
     x0 = host_conf
     v0 = np.zeros_like(host_conf)
 
-    benchmark("dhfr-apo", host_masses, 0.0, x0, v0, box, host_fns, verbose)
+    benchmark("dhfr-apo", host_masses, 0.0, x0, v0, box, host_fns, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
-def benchmark_hif2a(verbose):
+def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
+    # TODO: import from testsystems?
     suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
     all_mols = [x for x in suppl]
     mol_a = all_mols[1]
@@ -194,7 +200,8 @@ def benchmark_hif2a(verbose):
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
     ff = Forcefield(ff_handlers)
 
-    rfe = free_energy.RelativeFreeEnergy(mol_a, mol_b, core, ff)
+    single_topology = SingleTopology(mol_a, mol_b, core, ff)
+    rfe = free_energy.RelativeFreeEnergy(single_topology)
 
     ff_params = ff.get_ordered_params()
 
@@ -222,7 +229,8 @@ def benchmark_hif2a(verbose):
         x0 = host_conf
         v0 = np.zeros_like(host_conf)
 
-        benchmark(stage+"-apo", host_masses, 0.0, x0, v0, host_box, host_fns, verbose)
+        # lamb = 0.0
+        benchmark(stage+"-apo", host_masses, 0.0, x0, v0, host_box, host_fns, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
         # RBFE
         min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, ff, host_box)
@@ -234,8 +242,16 @@ def benchmark_hif2a(verbose):
         x0 = coords
         v0 = np.zeros_like(x0)
 
-        benchmark(stage+'-rbfe', masses, 0.5, x0, v0, host_box, bound_potentials, verbose)
+        # lamb = 0.5
+        benchmark(stage+'-rbfe', masses, 0.5, x0, v0, host_box, bound_potentials, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
+
+def test_dhfr():
+    benchmark_dhfr(verbose=True, num_batches=2, steps_per_batch=100)
+
+
+def test_hif2a():
+    benchmark_dhfr(verbose=True, num_batches=2, steps_per_batch=100)
 
 if __name__ == "__main__":
     benchmark_dhfr(verbose=False)
