@@ -37,7 +37,7 @@ def recenter(conf, box):
 def benchmark(
     label,
     masses,
-    lamb, # TODO: note lamb unused
+    lamb,
     x0,
     v0,
     box,
@@ -82,8 +82,6 @@ def benchmark(
         du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, 100)
         ctxt.add_observable(du_dp_obs)
         obs.append(du_dp_obs)
-
-    lamb = 0.0
 
     batch_times = []
 
