@@ -13,14 +13,8 @@ from timemachine.lib import custom_ops
 from timemachine.lib import LangevinIntegrator
 
 from fe.utils import to_md_units
-<<<<<<< HEAD:tests/test_benchmark.py
 from fe import free_energy
 from fe.topology import SingleTopology
-=======
-from fe import free_energy, topology
-
-from rdkit import Chem
->>>>>>> 856185f... First pass:tests/benchmark.py
 
 from md import builders, minimizer
 
