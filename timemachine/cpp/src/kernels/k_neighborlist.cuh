@@ -47,7 +47,7 @@ void __global__ k_compact_trim_atoms(
             if(indexInWarp == 0) {
                 sync_start[0] = atomicAdd(interactionCount, tilesToStore);
             }
-
+            __syncwarp();
             interactingTiles[sync_start[0]] = row_block_idx; // IS THIS CORRECT? CONTESTED
             interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
@@ -62,6 +62,7 @@ void __global__ k_compact_trim_atoms(
         if(indexInWarp == 0) {
             sync_start[0] = atomicAdd(interactionCount, tilesToStore);
         }
+        __syncwarp();
         interactingTiles[sync_start[0]] = row_block_idx;
         interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
     }
@@ -266,6 +267,7 @@ void __global__ k_find_blocks_with_ixns(
             if(indexInWarp == 0) {
                 sync_start[0] = atomicAdd(interactionCount, tilesToStore);
             }
+            __syncwarp();
             interactingTiles[sync_start[0]] = row_block_idx;
             interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
