@@ -1,8 +1,6 @@
 #pragma once
 
 #define FIXED_EXPONENT             0x1000000000
-#define FIXED_BORN_PSI             0x40000000000
-#define FIXED_EXPONENT_BORN_FORCES 0x100000000
 
 template<typename RealType>
 unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED(RealType v) {
