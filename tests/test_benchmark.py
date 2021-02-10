@@ -2,9 +2,7 @@
 import time
 import numpy as np
 
-from ff.handlers import bonded, nonbonded, openmm_deserializer
-from ff.handlers.deserialize import deserialize_handlers
-from ff import Forcefield
+from ff.handlers import openmm_deserializer
 
 from simtk.openmm import app
 
@@ -14,8 +12,6 @@ from timemachine.lib import LangevinIntegrator
 from fe.utils import to_md_units
 from fe import free_energy
 from fe.topology import SingleTopology
-
-from rdkit import Chem
 
 from md import builders, minimizer
 
@@ -156,47 +152,9 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 
 def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
-    # TODO: import from testsystems?
-    suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
-    all_mols = [x for x in suppl]
-    mol_a = all_mols[1]
-    mol_b = all_mols[4]
+    from testsystems.relative import hif2a_ligand_pair as testsystem
 
-    core = np.array([[ 0,  0],
-       [ 2,  2],
-       [ 1,  1],
-       [ 6,  6],
-       [ 5,  5],
-       [ 4,  4],
-       [ 3,  3],
-       [15, 16],
-       [16, 17],
-       [17, 18],
-       [18, 19],
-       [19, 20],
-       [20, 21],
-       [32, 30],
-       [26, 25],
-       [27, 26],
-       [ 7,  7],
-       [ 8,  8],
-       [ 9,  9],
-       [10, 10],
-       [29, 11],
-       [11, 12],
-       [12, 13],
-       [14, 15],
-       [31, 29],
-       [13, 14],
-       [23, 24],
-       [30, 28],
-       [28, 27],
-       [21, 22]]
-    )
-
-    # this
-    ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
-    ff = Forcefield(ff_handlers)
+    mol_a, mol_b, core, ff = testsystem.mol_a, testsystem.mol_b, testsystem.core, testsystem.ff
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
     rfe = free_energy.RelativeFreeEnergy(single_topology)
@@ -250,6 +208,7 @@ def test_dhfr():
 
 def test_hif2a():
     benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
+
 
 if __name__ == "__main__":
     benchmark_dhfr(verbose=False)
