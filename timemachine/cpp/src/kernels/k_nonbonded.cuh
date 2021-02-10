@@ -13,14 +13,65 @@
 #define FIXED_EXPONENT_DU_DSIG    0x2000000000
 #define FIXED_EXPONENT_DU_DEPS    0x4000000000 // this is just getting silly
 
-template<typename RealType, unsigned long long EXPONENT>
-unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED_DU_DP(RealType v) {
-    return static_cast<unsigned long long>((long long)(v*EXPONENT));
-}
 
 template<typename RealType, unsigned long long EXPONENT>
 RealType __device__ __forceinline__ FIXED_TO_FLOAT_DU_DP(unsigned long long v) {
     return static_cast<RealType>(static_cast<long long>(v))/EXPONENT;
+}
+
+// (ytz): courtesy of @scottlegrand/NVIDIA, even faster conversion
+// This was original a hack to improve perf on Maxwell, that is now needed for Ampere
+long long __device__ __forceinline__ real_to_int64(float x) {
+  float z = x * (float)0x1.00000p-32;
+  int hi = __float2int_rz( z );                         // First convert high bits
+  float delta = x - ((float)0x1.00000p32*((float)hi));  // Check remainder sign
+  int test = (__float_as_uint(delta) > 0xbf000000);
+  int lo = __float2uint_rn(fabsf(delta));               // Convert the (unsigned) remainder
+  lo = (test) ? -lo: lo;
+  hi -= test;                                           // Two's complement correction
+  long long res = __double_as_longlong(__hiloint2double(hi,lo)); // Return 64-bit result
+  return res;
+}
+
+// (ytz): reference version, left here for pedagogical reasons, do not remove.
+// long long __device__ __forceinline__ real_to_int64(float x) {
+//     if(x == 0) {
+//         return 0;
+//     }
+//     unsigned int * ptr = reinterpret_cast<unsigned int *>(&x);
+//     // get the sign bit
+//     unsigned int s = *ptr >> 31; // (TBD) there's a faster alternative to shifting here
+//     // get the exponent
+//     unsigned int e = *ptr & 0x7f800000;
+//     // shift the exponent and apply the exponent bias
+//     e >>= 23;
+//     e -= 127;
+//     // get the mantissa and append a 1 at the front
+//     long long m = *ptr & 0x007fffff;
+//     m |= 1 << 23;
+//     // 24 - e, either left shift or right shift depending on exponent
+//     int shift = 23 - e;
+//     m = shift > 0 ? m >> shift : m << -shift;
+//     // copy sign
+//     if(s == 1) {
+//         m = -m;
+//     }
+
+//     return m;
+// }
+
+long long __device__ __forceinline__ real_to_int64(double x) {
+    return static_cast<long long>(x);
+}
+
+template<typename RealType, unsigned long long EXPONENT>
+unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED_DU_DP(RealType v) {
+    return static_cast<unsigned long long>(real_to_int64(v*EXPONENT));
+}
+
+template<typename RealType>
+unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED_NONBONDED(RealType v) {
+    return static_cast<unsigned long long>(real_to_int64(v*FIXED_EXPONENT));
 }
 
 // generate kv values from coordinates to be radix sorted 
@@ -201,7 +252,6 @@ void __global__ k_add_ull_to_real(
         real_array[idx*stride+stride_idx] += FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(ull_array[idx*stride+stride_idx]);
     }
 
-
 }
 
 template<typename RealType>
@@ -236,6 +286,7 @@ void __global__ k_final_add(
     double *double_array) {
 
     if(threadIdx.x == 0) {
+
         double_array[0] += FIXED_TO_FLOAT<double>(ull_array[0]);
     }
 
@@ -323,7 +374,8 @@ void __global__ k_nonbonded_du_dx(
     RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 0;
     RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
 
-    RealType cutoff_squared = cutoff*cutoff;
+    RealType real_cutoff = static_cast<RealType>(cutoff);
+    RealType cutoff_squared = real_cutoff*real_cutoff;
 
     RealType real_lambda = static_cast<RealType>(lambda);
     RealType real_beta = static_cast<RealType>(beta);
@@ -361,12 +413,12 @@ void __global__ k_nonbonded_du_dx(
 
         // compile time evaluates to either 0 or 1
         if(COMPUTE_4D) {
-            RealType delta_w = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*cutoff;
+            RealType delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
             d2ij += delta_w*delta_w;
         }
 
         // (ytz): note that d2ij must be *strictly* less than cutoff_squared. This is because we set the
-        // non-interacting atoms to exactly cutoff*cutoff. This ensures that atoms who's 4th dimension
+        // non-interacting atoms to exactly real_cutoff*real_cutoff. This ensures that atoms who's 4th dimension
         // is set to cutoff are non-interacting.
         if(d2ij < cutoff_squared  && atom_j_idx > atom_i_idx && atom_j_idx < N && atom_i_idx < N) {
 
@@ -391,19 +443,19 @@ void __global__ k_nonbonded_du_dx(
                 delta_prefactor -= eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*48 - 24);
             }
 
-            gi_x += FLOAT_TO_FIXED(delta_prefactor*delta_x);
-            gi_y += FLOAT_TO_FIXED(delta_prefactor*delta_y);
-            gi_z += FLOAT_TO_FIXED(delta_prefactor*delta_z);
+            gi_x += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
+            gi_y += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
+            gi_z += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
 
             // (ytz): the cast relies on undefined behavior since the exclusion terms will overflow.
             // Thus far, the current gen GPUs are deterministic in the resulting value. So long
             // as the UB stays deterministic then this should be fine. There's no guarantee though that
             // NVIDIA will keep the behavior consistent. Furthermore, do *not* attempt to swap signs via:
-            // gj_* -= FLOAT_TO_FIXED(delta_prefactor*delta_*); // this is incorrect and has been shown
+            // gj_* -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_*); // this is incorrect and has been shown
             // to introduce subtle bugs!
-            gj_x += FLOAT_TO_FIXED(-delta_prefactor*delta_x);
-            gj_y += FLOAT_TO_FIXED(-delta_prefactor*delta_y);
-            gj_z += FLOAT_TO_FIXED(-delta_prefactor*delta_z);
+            gj_x += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
+            gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
+            gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
 
         }
 
@@ -521,7 +573,8 @@ void __global__ k_nonbonded(
     unsigned long long g_sigj = 0;
     unsigned long long g_epsj = 0;
 
-    RealType cutoff_squared = cutoff*cutoff;
+    RealType real_cutoff = static_cast<RealType>(cutoff);
+    RealType cutoff_squared = real_cutoff*real_cutoff;
 
     unsigned long long energy = 0;
 
@@ -540,12 +593,12 @@ void __global__ k_nonbonded(
         delta_y -= box_y*nearbyint(delta_y*inv_box_y);
         delta_z -= box_z*nearbyint(delta_z*inv_box_z);
 
-        RealType delta_w = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*cutoff;
+        RealType delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
 
         RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
 
         // (ytz): note that d2ij must be *strictly* less than cutoff_squared. This is because we set the
-        // non-interacting atoms to exactly cutoff*cutoff. This ensures that atoms who's 4th dimension
+        // non-interacting atoms to exactly real_cutoff*real_cutoff. This ensures that atoms who's 4th dimension
         // is set to cutoff are non-interacting.
         if(d2ij < cutoff_squared  && atom_j_idx > atom_i_idx && atom_j_idx < N && atom_i_idx < N) {
 
@@ -593,21 +646,20 @@ void __global__ k_nonbonded(
                 g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_i);
             }
          
-            gi_x += FLOAT_TO_FIXED(delta_prefactor*delta_x);
-            gi_y += FLOAT_TO_FIXED(delta_prefactor*delta_y);
-            gi_z += FLOAT_TO_FIXED(delta_prefactor*delta_z);
+            gi_x += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
+            gi_y += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
+            gi_z += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
 
-            gj_x += FLOAT_TO_FIXED(-delta_prefactor*delta_x);
-            gj_y += FLOAT_TO_FIXED(-delta_prefactor*delta_y);
-            gj_z += FLOAT_TO_FIXED(-delta_prefactor*delta_z);
+            gj_x += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
+            gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
+            gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
 
-            du_dl_i += FLOAT_TO_FIXED(delta_prefactor*delta_w*lambda_offset_i*cutoff);
-            du_dl_j += FLOAT_TO_FIXED(-delta_prefactor*delta_w*lambda_offset_j*cutoff);
+            du_dl_i += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_w*lambda_offset_i*cutoff);
+            du_dl_j += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_w*lambda_offset_j*cutoff);
 
-            energy += FLOAT_TO_FIXED(u);
+            energy += FLOAT_TO_FIXED_NONBONDED(u);
             g_qi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(qj*inv_dij*ebd);
             g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(qi*inv_dij*ebd);
-
 
         }
 
@@ -755,7 +807,9 @@ void __global__ k_nonbonded_exclusions(
 
     RealType real_lambda = static_cast<RealType>(lambda);
     RealType real_beta = static_cast<RealType>(beta);
-    RealType cutoff_squared = cutoff*cutoff;
+
+    RealType real_cutoff = static_cast<RealType>(cutoff);
+    RealType cutoff_squared = real_cutoff*real_cutoff;
 
     RealType charge_scale = scales[e_idx*2 + 0];
     RealType lj_scale = scales[e_idx*2 + 1];
@@ -776,7 +830,7 @@ void __global__ k_nonbonded_exclusions(
     delta_y -= box_y*nearbyint(delta_y*inv_box_y);
     delta_z -= box_z*nearbyint(delta_z*inv_box_z);
 
-    RealType delta_w = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*cutoff;
+    RealType delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
 
     RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
 
@@ -828,34 +882,31 @@ void __global__ k_nonbonded_exclusions(
 
         }
 
-        gi_x += FLOAT_TO_FIXED(-delta_prefactor*delta_x);
-        gi_y += FLOAT_TO_FIXED(-delta_prefactor*delta_y);
-        gi_z += FLOAT_TO_FIXED(-delta_prefactor*delta_z);
+        gi_x -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
+        gi_y -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
+        gi_z -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
 
-        gj_x += FLOAT_TO_FIXED(delta_prefactor*delta_x);
-        gj_y += FLOAT_TO_FIXED(delta_prefactor*delta_y);
-        gj_z += FLOAT_TO_FIXED(delta_prefactor*delta_z);
+        gj_x -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
+        gj_y -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
+        gj_z -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
 
-        du_dl_i += FLOAT_TO_FIXED(-delta_prefactor*delta_w*lambda_offset_i*cutoff);
-        du_dl_j += FLOAT_TO_FIXED(delta_prefactor*delta_w*lambda_offset_j*cutoff);
+        du_dl_i -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_w*lambda_offset_i*cutoff);
+        du_dl_j -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_w*lambda_offset_j*cutoff);
 
         // energy is size extensive so this may not be a good idea
-        energy += FLOAT_TO_FIXED(-u);
+        energy -= FLOAT_TO_FIXED_NONBONDED(u);
 
-        g_qi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(-charge_scale*qj*inv_dij*ebd);
-        g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(-charge_scale*qi*inv_dij*ebd);
+        g_qi -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qj*inv_dij*ebd);
+        g_qj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qi*inv_dij*ebd);
 
         if(du_dx) {
+            atomicAdd(du_dx + atom_i_idx*3 + 0, gi_x);
+            atomicAdd(du_dx + atom_i_idx*3 + 1, gi_y);
+            atomicAdd(du_dx + atom_i_idx*3 + 2, gi_z);
 
-            // these are unsorted
-            auto old_i_x = atomicAdd(du_dx + atom_i_idx*3 + 0, gi_x);
-            auto old_i_y = atomicAdd(du_dx + atom_i_idx*3 + 1, gi_y);
-            auto old_i_z = atomicAdd(du_dx + atom_i_idx*3 + 2, gi_z);
-
-            auto old_j_x = atomicAdd(du_dx + atom_j_idx*3 + 0, gj_x);
-            auto old_j_y = atomicAdd(du_dx + atom_j_idx*3 + 1, gj_y);
-            auto old_j_z = atomicAdd(du_dx + atom_j_idx*3 + 2, gj_z);
-
+            atomicAdd(du_dx + atom_j_idx*3 + 0, gj_x);
+            atomicAdd(du_dx + atom_j_idx*3 + 1, gj_y);
+            atomicAdd(du_dx + atom_j_idx*3 + 2, gj_z);
         }
 
         if(du_dp) {
