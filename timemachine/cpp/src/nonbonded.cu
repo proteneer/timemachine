@@ -32,7 +32,26 @@ Nonbonded<RealType>::Nonbonded(
     d_sort_storage_bytes_(0),
     compute_4d_(false),
     nblist_padding_(0.1),
-    disable_hilbert_(false) {
+    disable_hilbert_(false),
+    kernel_ptrs_({
+        // enumerate over every possible kernel combination
+        &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
+        &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
+        &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
+        &k_nonbonded_unified<RealType, 0, 0, 1, 1>,
+        &k_nonbonded_unified<RealType, 0, 1, 0, 0>,
+        &k_nonbonded_unified<RealType, 0, 1, 0, 1>,
+        &k_nonbonded_unified<RealType, 0, 1, 1, 0>,
+        &k_nonbonded_unified<RealType, 0, 1, 1, 1>,
+        &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
+        &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
+        &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
+        &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
+        &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
+        &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
+        &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
+        &k_nonbonded_unified<RealType, 1, 1, 1, 1>,
+    }) {
 
     for(auto x : lambda_plane_idxs) {
         if(x != 0) {
@@ -85,7 +104,7 @@ Nonbonded<RealType>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_scales_, E_*2*sizeof(*d_scales_)));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], E_*2*sizeof(*d_scales_), cudaMemcpyHostToDevice));
-    
+
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1*sizeof(*p_ixn_count_)));
 
     gpuErrchk(cudaMalloc(&d_nblist_x_, N_*3*sizeof(*d_nblist_x_)));
@@ -254,9 +273,6 @@ void Nonbonded<RealType>::execute_device(
     // f. u and du/dl is buffered into a per-particle array, and then reduced.
     // g. note that du/dl is not an exact per-particle du/dl - it is only used for reduction purposes.
 
-    // assert(N == N_);
-    // assert(P == N_*3);
-
     if(N != N_) {
         std::cout << N << " " << N_ << std::endl;
         throw std::runtime_error("Nonbonded::execute_device() N != N_");
@@ -285,7 +301,7 @@ void Nonbonded<RealType>::execute_device(
         // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
         // to a particular sort order
         if(!disable_hilbert_) {
-            this->hilbert_sort(d_x, d_box, stream);            
+            this->hilbert_sort(d_x, d_box, stream);
         } else {
             k_arange<<<B, 32, 0, stream>>>(N, d_perm_);
             gpuErrchk(cudaPeekAtLastError());
@@ -337,63 +353,31 @@ void Nonbonded<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_u_reduce_sum_, 0, 1*sizeof(*d_u_reduce_sum_), stream));
     }
 
-    if(d_du_dx && !d_du_dp && !d_du_dl && !d_u) {
+    // look up which kernel we need for this computation
+    int kernel_idx = 0;
+    kernel_idx |= d_du_dp ? 1 << 0 : 0;
+    kernel_idx |= d_du_dl ? 1 << 1 : 0;
+    kernel_idx |= d_du_dx ? 1 << 2 : 0;
+    kernel_idx |=     d_u ? 1 << 3 : 0;
 
-        // split tiles into 3D and 4D
-        // templatized, so we need to generate specializations at compile time. Eventually
-        // this whole kernel will be replaced by a JIT'd version
-        if(compute_4d_) {
-            k_nonbonded_du_dx<RealType, true><<<p_ixn_count_[0], 32, 0, stream>>>(
-                N,
-                d_sorted_x_,
-                d_sorted_p_,
-                d_box,
-                lambda,
-                d_sorted_lambda_plane_idxs_,
-                d_sorted_lambda_offset_idxs_,
-                beta_,
-                cutoff_,
-                nblist_.get_ixn_tiles(),
-                nblist_.get_ixn_atoms(),
-                d_du_dx ? d_sorted_du_dx_ : nullptr
-            );
-        } else {
-            k_nonbonded_du_dx<RealType, false><<<p_ixn_count_[0], 32, 0, stream>>>(
-                N,
-                d_sorted_x_,
-                d_sorted_p_,
-                d_box,
-                lambda,
-                d_sorted_lambda_plane_idxs_,
-                d_sorted_lambda_offset_idxs_,
-                beta_,
-                cutoff_,
-                nblist_.get_ixn_tiles(),
-                nblist_.get_ixn_atoms(),
-                d_du_dx ? d_sorted_du_dx_ : nullptr
-            );
-        }
-
-
-    } else {
-        k_nonbonded<RealType><<<p_ixn_count_[0], 32, 0, stream>>>(
-            N,
-            d_sorted_x_,
-            d_sorted_p_,
-            d_box,
-            lambda,
-            d_sorted_lambda_plane_idxs_,
-            d_sorted_lambda_offset_idxs_,
-            beta_,
-            cutoff_,
-            nblist_.get_ixn_tiles(),
-            nblist_.get_ixn_atoms(),
-            d_du_dx ? d_sorted_du_dx_ : nullptr,
-            d_du_dp ? d_sorted_du_dp_ : nullptr,
-            d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
-            d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
-        );
-    }
+    // look up which kernel we need based on the computation
+    kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], 32, 0, stream>>>(
+        N,
+        d_sorted_x_,
+        d_sorted_p_,
+        d_box,
+        lambda,
+        d_sorted_lambda_plane_idxs_,
+        d_sorted_lambda_offset_idxs_,
+        beta_,
+        cutoff_,
+        nblist_.get_ixn_tiles(),
+        nblist_.get_ixn_atoms(),
+        d_sorted_du_dx_,
+        d_sorted_du_dp_,
+        d_du_dl_buffer_, // switch to nullptr if we don't request du_dl
+        d_u_buffer_ // switch to nullptr if we don't request energies
+    );
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -457,7 +441,7 @@ void Nonbonded<RealType>::execute_device(
         k_final_add<<<1, 32, 0, stream>>>(d_u_reduce_sum_, d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
-    
+
 }
 
 template class Nonbonded<double>;

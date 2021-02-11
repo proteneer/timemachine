@@ -6,10 +6,28 @@
 
 namespace timemachine {
 
+typedef void (*k_nonbonded_fn)(const int N,
+    const double * __restrict__ coords,
+    const double * __restrict__ params, // [N]
+    const double * __restrict__ box,
+    const double lambda,
+    const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
+    const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
+    const double beta,
+    const double cutoff,
+    const int * __restrict__ ixn_tiles,
+    const unsigned int * __restrict__ ixn_atoms,
+    unsigned long long * __restrict__ du_dx,
+    unsigned long long * __restrict__ du_dp,
+    unsigned long long * __restrict__ du_dl_buffer,
+    unsigned long long * __restrict__ u_buffer);
+
 template<typename RealType>
 class Nonbonded : public Potential {
 
 private:
+
+    std::array<k_nonbonded_fn, 16> kernel_ptrs_;
 
     int *d_exclusion_idxs_; // [E,2]
     double *d_scales_; // [E, 2]
