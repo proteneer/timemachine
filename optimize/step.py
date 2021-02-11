@@ -5,10 +5,10 @@ from typing import Union, Optional
 
 try:
     from scipy.optimize import root_scalar
-except ImportError as e:
-    print(e)
+except ImportError as error:
     import scipy
     print(f'scipy version is {scipy.__version__}, but `scipy.optimize.root_scalar` was added in 1.2')
+    raise error
 
 
 array = Union[np.array, jnp.array]
