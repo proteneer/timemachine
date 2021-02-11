@@ -1,10 +1,15 @@
 import numpy as np
-import jax
 from jax import numpy as jnp
 
-from typing import Union, Optional, Iterable, Any, Tuple, Dict
+from typing import Union, Optional
 
-from scipy.optimize import root_scalar
+try:
+    from scipy.optimize import root_scalar
+except ImportError as e:
+    print(e)
+    import scipy
+    print(f'scipy version is {scipy.__version__}, but `scipy.optimize.root_scalar` was added in 1.2')
+
 
 array = Union[np.array, jnp.array]
 
