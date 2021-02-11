@@ -23,8 +23,18 @@ from parallel.client import CUDAPoolClient
 from collections import namedtuple
 
 from pickle import load
-from typing import List, Union
-Handler = Union[nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler] # TODO: relax this assumption
+from typing import List, Union, Tuple
+
+from typing import Union, Optional, Iterable, Any, Tuple, Dict
+
+from optimize.step import truncated_step
+
+array = Union[np.array, jnp.array]
+
+from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
+
+Handler = Union[AM1CCCHandler, LennardJonesHandler]  # TODO: relax this assumption
+
 from time import time
 
 # how much MD to run, on how many GPUs
@@ -82,35 +92,6 @@ with open(path_to_ff) as f:
 forcefield = Forcefield(ff_handlers)
 
 
-# TODO: define more flexible update rules here, rather than update parameters
-step_sizes = {
-    nonbonded.AM1CCCHandler: 1e-3,
-    nonbonded.LennardJonesHandler: 1e-3,
-    # ...
-}
-
-gradient_clip_thresholds = {
-    nonbonded.AM1CCCHandler: 0.001,
-    nonbonded.LennardJonesHandler: np.array([0.001, 0]),  # TODO: allow to update epsilon also?
-    # ...
-}
-
-
-def _clipped_update(gradient, step_size, clip_threshold):
-    """Compute an update based on current gradient
-        x[k+1] = x[k] + update
-
-    The gradient descent update would be
-        update = - step_size * grad(x[k]),
-
-    and to avoid instability, we clip the absolute values of all components of the update
-        update = - clip(step_size * grad(x[k]))
-
-    TODO: menu of other, fancier update functions
-    """
-    return - np.clip(step_size * gradient, -clip_threshold, clip_threshold)
-
-
 class ParameterUpdate:
     def __init__(self, before, after, gradient, update):
         self.before = before
@@ -134,7 +115,7 @@ class ParameterUpdate:
 
 
 def _update_in_place(loss: float, loss_grads: List[jnp.array], ordered_handles: List[Handler],
-                     handle_types_to_update: List[Handler] =[nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]):
+                     handle_types_to_update: List[Handler] = [nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]):
     """
     TODO: check if it's too expensive to do out-of-place updates with a copy
 
@@ -262,9 +243,65 @@ if __name__ == "__main__":
 
     # TODO: use binding_model.predict rather than binding_model.loss
     binding_estimate_and_grad_fxn = jax.value_and_grad(binding_model.loss, argnums=0)
+    # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
+    #   e.g. stage_results, and further diagnostic information
+    #   * x trajectories,
+    #   * d U / d parameters trajectories,
+    #   * matrix of U(x; lambda) for all x, lambda
+    #   * the deltaG pred
+    #   (proper way is probably something like has_aux=True https://jax.readthedocs.io/en/latest/jax.html#jax.value_and_grad)
 
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
+
+    handle_types_being_optimized = [AM1CCCHandler, LennardJonesHandler]
+
+
+    # TODO: move flatten into optimize.utils
+    def flatten(params) -> Tuple[np.array, callable]:
+        """Turn params dict into flat array, with an accompanying unflatten function
+
+        TODO: note that the result is going to be in the order given by ordered_handles (filtered by presence in handle_types)
+            rather than in the order they appear in handle_types_being_optimized
+
+        TODO: maybe leave out the reference to handle_types_being optimized altogether
+
+        TODO: does Jax have a pytree-based flatten / unflatten utility?
+        """
+
+        theta_list = []
+        _shapes = dict()
+        _handle_types = []
+
+        for param, handle in zip(params, ordered_handles):
+            assert handle.params.shape == param.shape
+            key = type(handle)
+
+            if key in handle_types_being_optimized:
+                theta_list.append(param.flatten())
+                _shapes[key] = param.shape
+                _handle_types.append(key)
+
+        theta = np.hstack(theta_list)
+
+        def unflatten(theta: array) -> Dict[Handler, array]:
+            params = dict()
+            i = 0
+            for key in _handle_types:
+                shape = _shapes[key]
+                num_params = int(np.prod(shape))
+                params[key] = np.array(theta[i: i + num_params]).reshape(shape)
+                i += num_params
+            return params
+
+        return theta, unflatten
+
+
+    relative_improvement_bound = 0.95
+
+    flat_theta_traj = []
+    flat_grad_traj = []
+    loss_traj = []
 
     # in each optimizer step, look at one transformation from relative_transformations
     for step, rfe_ind in enumerate(step_inds):
@@ -273,32 +310,54 @@ if __name__ == "__main__":
         # compute a step, measuring total wall-time
         t0 = time()
 
-        loss, loss_grads = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
+        loss, loss_grads = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
 
-        # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
-        #   e.g. stage_results, and further diagnostic information
-        #   * x trajectories,
-        #   * d U / d parameters trajectories,
-        #   * matrix of U(x; lambda) for all x, lambda
-        #   * the deltaG pred
-        #   (proper way is probably something like has_aux=True https://jax.readthedocs.io/en/latest/jax.html#jax.value_and_grad)
+        print("epoch", step, "loss", loss)
 
-        # update forcefield parameters in-place, hopefully to match an experimental label
-        parameter_updates = _update_in_place(loss, loss_grads, ordered_handles=ordered_handles, handle_types_to_update=forces_to_refit)
+        # note: unflatten_grad and unflatten_theta have identical definitions for now
+        flat_loss_grad, unflatten_grad = flatten(loss_grads)
+        flat_theta, unflatten_theta = flatten(ordered_params)
+
+        step_lower_bound = loss * relative_improvement_bound
+        theta_increment = truncated_step(flat_theta, loss, flat_loss_grad, step_lower_bound=step_lower_bound)
+        param_increments = unflatten_theta(theta_increment)
+
+        # for any parameter handler types being updated, update in place
+        for handle in ordered_handles:
+            handle_type = type(handle)
+            if handle_type in param_increments:
+                print(f'updating {handle_type.__name__}')
+
+                print(f'\tbefore update: {handle.params}')
+
+                # TODO: careful -- this must be a "+=" or "-=" not an "="!
+                handle.params += param_increments[handle_type]
+
+                print(f'\tafter update:  {handle.params}')
+
         # Note: for certain kinds of method-validation tests, these labels could also be synthetic
-
         t1 = time()
         elapsed = t1 - t0
 
         print(f'completed forcefield-updating step {step} in {elapsed:.3f} s !')
 
-        # save updated forcefield files after every gradient step
+        # also save information about this step's parameter gradient and parameter update
+        # checkpoint results to npz (overwrite
+        flat_theta_traj.append(np.array(flat_theta))
+        flat_grad_traj.append(flat_loss_grad)
+        loss_traj.append(loss)
+
+        path_to_npz = 'results_checkpoint.npz'
+        print(f'saving theta, grad, loss trajs to {path_to_npz}')
+        np.savez(
+            path_to_npz,
+            theta_traj=np.array(flat_theta_traj),
+            grad_traj=np.array(flat_grad_traj),
+            loss_traj=np.array(loss_traj)
+        )
+
+        # save updated forcefield .py files after every gradient step
         step_params = serialize_handlers(ff_handlers)
         # TODO: consider if there's a more modular way to keep track of ff updates
         _save_forcefield(f"forcefield_checkpoint_{step}.py", ff_params=step_params)
-
-        # also save information about this step's parameter gradient and parameter update
-        for handle_type in forces_to_refit:
-            fname = f'parameter update (handle_type={handle_type.__name__}, step={step}).npz'
-            parameter_updates[handle_type].save(fname)
