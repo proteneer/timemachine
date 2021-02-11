@@ -204,7 +204,7 @@ def _get_unique_match(mol, core):
 
 
 def get_core_by_smarts(mol_a, mol_b, core_smarts):
-    """"""
+    """no atom mapping errors with this one, but the core size is smaller"""
     query = Chem.MolFromSmarts(core_smarts)
     return np.array([_get_unique_match(mol_a, query), _get_unique_match(mol_b, query)]).T
 
