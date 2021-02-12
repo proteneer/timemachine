@@ -239,6 +239,19 @@ if __name__ == "__main__":
 
     relative_improvement_bound = 0.95
 
+    def _compute_step_lower_bound(loss):
+        """problem this addresses: on a small fraction of steps, the simulation returns a prediction > 100 kJ/mol
+        away from target, typically indicating an instability was encountered.
+        detect if this occurs, and don't allow a step."""
+
+        blown_up = loss > 100 # loss should never be > 100, unless something has gone very wrong!
+
+        if not blown_up:
+            return loss * relative_improvement_bound
+        else:
+            return loss # don't move!
+
+
     flat_theta_traj = []
     flat_grad_traj = []
     loss_traj = []
@@ -259,8 +272,8 @@ if __name__ == "__main__":
         flat_loss_grad, unflatten_grad = flatten(loss_grads)
         flat_theta, unflatten_theta = flatten(ordered_params)
 
-        step_lower_bound = loss * relative_improvement_bound
-        theta_increment = truncated_step(flat_theta, loss, flat_loss_grad, step_lower_bound=step_lower_bound)
+        theta_increment = truncated_step(flat_theta, loss, flat_loss_grad,
+                                         step_lower_bound=_compute_step_lower_bound(loss))
         param_increments = unflatten_theta(theta_increment)
 
         # for any parameter handler types being updated, update in place
@@ -276,7 +289,7 @@ if __name__ == "__main__":
                 update_mask = increment != 0
 
                 # TODO: replace with a function that knows what to report about each handle type
-                print(f'updated {np.sum(update_mask)} params by between {np.min(increment)} and {np.max(increment)}')
+                print(f'updated {np.sum(update_mask):.4f} params by between {np.min(increment):.4f} and {np.max(increment)}')
 
         # Note: for certain kinds of method-validation tests, these labels could also be synthetic
         t1 = time()
