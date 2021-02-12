@@ -53,8 +53,8 @@ production_configuration = Configuration(
 
 intermediate_configuration = Configuration(
     num_gpus=10,
-    num_complex_windows=30,
-    num_solvent_windows=30,
+    num_complex_windows=60,
+    num_solvent_windows=60,
     num_equil_steps=10000,
     num_prod_steps=10000,
 )
@@ -127,8 +127,8 @@ if __name__ == "__main__":
 
     # how much computation to spend per refitting step
     # configuration = testing_configuration  # a little
-    configuration = production_configuration  # a lot
-    # configuration = intermediate_configuration  # goldilocks
+    # configuration = production_configuration  # a lot
+    configuration = intermediate_configuration  # goldilocks
 
     # how many parameter update steps
     num_parameter_updates = 1000
@@ -253,7 +253,7 @@ if __name__ == "__main__":
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
         loss, loss_grads = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
 
-        print("epoch", step, "loss", loss)
+        print(f"at optimizer step {step}, loss={loss:.3f}")
 
         # note: unflatten_grad and unflatten_theta have identical definitions for now
         flat_loss_grad, unflatten_grad = flatten(loss_grads)
@@ -273,7 +273,7 @@ if __name__ == "__main__":
                 handle.params += param_increments[handle_type]
 
                 increment = param_increments[handle_type]
-                update_mask = np.any(increment != 0)
+                update_mask = increment != 0
 
                 # TODO: replace with a function that knows what to report about each handle type
                 print(f'updated {np.sum(update_mask)} params by between {np.min(increment)} and {np.max(increment)}')
