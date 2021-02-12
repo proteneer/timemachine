@@ -273,10 +273,10 @@ if __name__ == "__main__":
                 handle.params += param_increments[handle_type]
 
                 increment = param_increments[handle_type]
-                update_mask = np.any(increment != 0, axis=0)
+                update_mask = np.any(increment != 0)
 
                 # TODO: replace with a function that knows what to report about each handle type
-                print(f'updated {sum(update_mask)} params by between {min(increment)} and {max(increment)}')
+                print(f'updated {np.sum(update_mask)} params by between {min(increment)} and {max(increment)}')
 
         # Note: for certain kinds of method-validation tests, these labels could also be synthetic
         t1 = time()
