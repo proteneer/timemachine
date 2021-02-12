@@ -114,66 +114,6 @@ class ParameterUpdate:
         )
 
 
-def _update_in_place(loss: float, loss_grads: List[jnp.array], ordered_handles: List[Handler],
-                     handle_types_to_update: List[Handler] = [nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]):
-    """
-    TODO: check if it's too expensive to do out-of-place updates with a copy
-
-    TODO: want to be able to say params -= g, which could be done by abstracting the parameters + handlers blob into
-        something that supports either:
-        * __add__, __mul__, etc.
-        * flatten() / unflatten() to / from traced arrays
-    """
-
-    unit = "kJ/mol"
-
-    message = f"""
-    loss:   {loss:.3f} {unit}
-    """
-    print(message)
-    # TODO: restore pred, target to message
-    # TODO: save these also to log file
-    # TODO: save dl_dp, update, and params to disk
-    # compute updates
-    parameter_updates = dict()
-
-    for loss_grad, handle in zip(loss_grads, ordered_handles):
-        assert handle.params.shape == loss_grad.shape
-
-        handle_type = type(handle)
-
-        # TODO: make the references to handle vs. type(handle) less runtime-error-prone
-
-        if handle_type in handle_types_to_update:
-            update = _clipped_update(loss_grad, step_sizes[handle_type], gradient_clip_thresholds[handle_type])
-            print(f'incrementing the {handle_type.__name__} parameters by {update}')
-            handle.params += update
-
-            # TODO: define a dict mapping from handle_type to forcefield.q_handle.params or something...
-            if handle_type == nonbonded.AM1CCCHandler:
-                before = np.array(forcefield.q_handle.params)  # make a copy
-                forcefield.q_handle.params += update
-                after = np.array(forcefield.q_handle.params)  # make a copy
-            elif handle_type == nonbonded.LennardJonesHandler:
-                before = np.array(forcefield.lj_handle.params)  # make a copy
-                forcefield.lj_handle.params += update
-                after = np.array(forcefield.lj_handle.params)  # make a copy
-            else:
-                message = f"Attempting to update an unsupported ff handle type: {handle_type.__name__} not in {handle_types_to_update}"
-                raise (RuntimeError(message))
-
-            parameter_updates[handle_type] = ParameterUpdate(before, after, loss_grad, update)
-
-        # not sure if I want to print these...
-        # print("before: ", before)
-        # print("after: ", after)
-
-    # TODO: also save dl_dp for the other parameter types we're not necessarily updating, for later analysis
-    #   (would be easier with syntax like forcefield[handle_type])
-
-    return parameter_updates
-
-
 def _save_forcefield(filename, ff_params):
     # TODO: update path
 
@@ -187,8 +127,8 @@ if __name__ == "__main__":
 
     # how much computation to spend per refitting step
     # configuration = testing_configuration  # a little
-    # configuration = production_configuration  # a lot
-    configuration = intermediate_configuration  # goldilocks
+    configuration = production_configuration  # a lot
+    # configuration = intermediate_configuration  # goldilocks
 
     # how many parameter update steps
     num_parameter_updates = 1000
@@ -329,12 +269,14 @@ if __name__ == "__main__":
             if handle_type in param_increments:
                 print(f'updating {handle_type.__name__}')
 
-                print(f'\tbefore update: {handle.params}')
-
                 # TODO: careful -- this must be a "+=" or "-=" not an "="!
                 handle.params += param_increments[handle_type]
 
-                print(f'\tafter update:  {handle.params}')
+                increment = param_increments[handle_type]
+                update_mask = np.any(increment != 0, axis=0)
+
+                # TODO: replace with a function that knows what to report about each handle type
+                print(f'updated {sum(update_mask)} params by between {min(increment)} and {max(increment[])}')
 
         # Note: for certain kinds of method-validation tests, these labels could also be synthetic
         t1 = time()
