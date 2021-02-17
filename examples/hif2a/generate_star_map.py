@@ -13,8 +13,8 @@ root = Path(__file__).parent.parent.parent
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
-# from fe.atom_mapping import get_core_by_geometry, get_core_by_matching, get_core_by_mcs
-from fe.atom_mapping import get_core_by_smarts
+from fe.atom_mapping import get_core_by_geometry
+# from fe.atom_mapping import get_core_by_matching, get_core_by_mcs, get_core_by_smarts
 
 path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
 with open(path_to_ff) as f:
@@ -84,8 +84,8 @@ error_transformations = []
 for spoke in spokes:
     # core = get_core_by_mcs(hub, spoke, mcs_map(hub, spoke).queryMol)
     # core = get_core_by_matching(hub, spoke, threshold=0.9)
-    # core = get_core_by_geometry(hub, spoke, threshold=0.5)
-    core = get_core_by_smarts(hub, spoke, core_smarts=bicyclic_smarts_pattern)
+    core = get_core_by_geometry(hub, spoke, threshold=0.5)
+    # core = get_core_by_smarts(hub, spoke, core_smarts=bicyclic_smarts_pattern)
 
     # TODO: reduce overlap between get_core_by_smarts and get_core_by_mcs
     # TODO: replace big ol' list of get_core_by_*(mol_a, mol_b, **kwargs) functions with something... classy
