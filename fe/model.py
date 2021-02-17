@@ -64,10 +64,12 @@ class RBFEModel():
         -------
         float
             delta delta G in kJ/mol
-
+        aux
+            list of TI results
         """
 
         stage_dGs = []
+        aux = []
 
         for stage, host_system, host_coords, host_box, lambda_schedule in [
             ("complex", self.complex_system, self.complex_coords, self.complex_box, self.complex_schedule),
@@ -110,12 +112,13 @@ class RBFEModel():
                 self.prod_steps
             )
 
-            dG = estimator.deltaG(model, sys_params)
+            dG, stage_aux = estimator.deltaG(model, sys_params)
             stage_dGs.append(dG)
+            aux.append(stage_aux)
 
         pred = stage_dGs[0] - stage_dGs[1]
 
-        return pred
+        return pred, aux
 
     def loss(self, ff_params, mol_a, mol_b, core, label_ddG):
         """
@@ -134,6 +137,6 @@ class RBFEModel():
             loss
 
         """
-        pred_ddG = self.predict(ff_params, mol_a, mol_b, core)
+        pred_ddG, aux = self.predict(ff_params, mol_a, mol_b, core)
         loss = jnp.abs(pred_ddG - label_ddG)
-        return loss
+        return loss, aux
