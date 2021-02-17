@@ -264,7 +264,7 @@ if __name__ == "__main__":
         t0 = time()
 
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
-        loss, loss_grads, aux = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
+        (loss, aux), loss_grads = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
         # TODO: save aux
 
         print(f"at optimizer step {step}, loss={loss:.3f}")

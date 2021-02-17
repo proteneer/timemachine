@@ -172,7 +172,7 @@ if __name__ == "__main__":
 
     for epoch in range(1000):
         epoch_params = serialize_handlers(ordered_handles)
-        loss, loss_grad, aux = vg_fn(ordered_params, mol_a, mol_b, core, label_ddG)
+        (loss, aux), loss_grad = vg_fn(ordered_params, mol_a, mol_b, core, label_ddG)
 
         print("epoch", epoch, "loss", loss)
 
