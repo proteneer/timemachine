@@ -237,7 +237,7 @@ if __name__ == "__main__":
         return theta, unflatten
 
 
-    relative_improvement_bound = 0.95
+    relative_improvement_bound = 0.8
 
     def _compute_step_lower_bound(loss):
         """problem this addresses: on a small fraction of steps, the simulation returns a prediction > 100 kJ/mol
@@ -289,7 +289,7 @@ if __name__ == "__main__":
                 update_mask = increment != 0
 
                 # TODO: replace with a function that knows what to report about each handle type
-                print(f'updated {np.sum(update_mask):.4f} params by between {np.min(increment):.4f} and {np.max(increment)}')
+                print(f'updated {int(np.sum(update_mask))} params by between {np.min(increment[update_mask]):.4f} and {np.max(increment[update_mask])}')
 
         # Note: for certain kinds of method-validation tests, these labels could also be synthetic
         t1 = time()

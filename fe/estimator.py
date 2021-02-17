@@ -7,6 +7,16 @@ import numpy as np
 
 from timemachine.lib import potentials, custom_ops
 
+from collections import namedtuple
+# TODO: possibly also save out the coordinates
+SimulationResult = namedtuple('SimulationResult', ['bonded_du_dls', 'nonbonded_du_dls', 'grads'])
+
+
+def _mean_du_dlambda(result: SimulationResult):
+    """summarize simulation result into sample mean du/dl"""
+    return np.mean(result.bonded_du_dls + result.nonbonded_du_dls)
+
+
 def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps):
     """
     Run a simulation and collect relevant statistics for this simulation.
@@ -67,8 +77,8 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     bonded_full_du_dls = bonded_du_dl_obs.full_du_dl()
     nonbonded_full_du_dls = nonbonded_du_dl_obs.full_du_dl()
 
-    bonded_mean, bonded_std = np.mean(bonded_full_du_dls), np.std(bonded_full_du_dls)
-    nonbonded_mean, nonbonded_std = np.mean(nonbonded_full_du_dls), np.std(nonbonded_full_du_dls)
+    #bonded_mean, bonded_std = np.mean(bonded_full_du_dls), np.std(bonded_full_du_dls)
+    #nonbonded_mean, nonbonded_std = np.mean(nonbonded_full_du_dls), np.std(nonbonded_full_du_dls)
 
     # keep the structure of grads the same as that of final_potentials so we can properly
     # form their vjps.
@@ -76,7 +86,8 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     for obs in du_dp_obs:
         grads.append(obs.avg_du_dp())
 
-    return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std), grads
+    return SimulationResult(bonded_full_du_dls, nonbonded_full_du_dls, grads)
+    #return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std), grads
 
 
 FreeEnergyModel = namedtuple("FreeEnergyModel", [
@@ -99,6 +110,7 @@ def _deltaG(model, sys_params):
         bp = unbound_pot.bind(np.asarray(params))
         bound_potentials.append(bp)
 
+    # TODO: construct a default "null" client with this behavior, so that two code paths aren't necessary
     if model.client is None:
         results = []
         for lamb in model.lambda_schedule:
@@ -114,23 +126,29 @@ def _deltaG(model, sys_params):
     du_dls = []
     all_grads = []
 
-    for (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std), grads in results:
-        du_dls.append(bonded_mean + nonbonded_mean)
-        all_grads.append(grads)
+    for result in results:
+        du_dls.append(_mean_du_dlambda(result))
+        all_grads.append(result.grads)
 
     dG = np.trapz(du_dls, model.lambda_schedule)
     dG_grad = []
     for rhs, lhs in zip(all_grads[-1], all_grads[0]):
         dG_grad.append(rhs - lhs)
 
-    return dG, dG_grad
+    # TODO: use aux later
+    aux = dict(
+        lambda_schedule=model.lambda_schedule,
+        simulation_results=results,
+    )
+
+    return dG, dG_grad, aux
 
 @functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
 def deltaG(model, sys_params):
     return _deltaG(model, sys_params)[0]
 
 def deltaG_fwd(model, sys_params):
-    return _deltaG(model, sys_params)
+    return _deltaG(model, sys_params)[:2]
 
 def deltaG_bwd(model, residual, grad):
     return ([grad*r for r in residual],)
