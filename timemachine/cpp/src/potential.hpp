@@ -7,7 +7,7 @@ namespace timemachine {
 // *Not* guaranteed to be thread-safe.
 class Potential {
 
-public: 
+public:
 
     virtual ~Potential() {};
 

@@ -172,6 +172,50 @@ void __global__ k_check_rebuild_coords(
 }
 
 
+__global__ void k_interpolate_parameters(
+    const double lambda,
+    const int P_base,
+    const double * __restrict__ params_src,
+    const double * __restrict__ params_dst,
+    double *params_out) {
+
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+
+    if(idx >= P_base) {
+        return;
+    }
+
+    params_out[idx] = (1-lambda)*params_src[idx] + lambda*params_dst[idx];
+}
+
+template <typename RealType>
+void __global__ k_permute_interpolated(
+    const double lambda,
+    const int N,
+    const unsigned int * __restrict__ perm,
+    const RealType * __restrict__ d_p,
+    RealType * __restrict__ d_sorted_p,
+    RealType * __restrict__ d_sorted_dp_dl) {
+
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int stride = gridDim.y;
+    int stride_idx = blockIdx.y;
+
+    if(idx >= N) {
+        return;
+    }
+
+    int size = N*stride;
+
+    int source_idx = idx*stride+stride_idx;
+    int target_idx = d_p[perm[idx]*stride+stride_idx];
+
+    d_sorted_p[source_idx] = (1-lambda)*d_p[target_idx] + lambda*d_p[size+target_idx];
+    d_sorted_dp_dl[source_idx] = d_p[size+target_idx] - d_p[target_idx];
+
+}
+
+
 template <typename RealType>
 void __global__ k_permute(
     const int N,
@@ -254,6 +298,39 @@ void __global__ k_add_ull_to_real(
 
 }
 
+template <typename RealType>
+void __global__ k_add_ull_to_real_interpolated(
+    const double lambda,
+    const int N,
+    const unsigned long long * __restrict__ ull_array,
+    RealType * __restrict__ real_array) {
+
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int stride = gridDim.y;
+    int stride_idx = blockIdx.y;
+
+    if(idx >= N) {
+        return;
+    }
+
+    int size = N*stride;
+    int target_idx = idx*stride+stride_idx;
+
+    // handle charges, sigmas, epsilons with different exponents
+    if(stride_idx == 0) {
+        real_array[target_idx] += (1-lambda)*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(ull_array[target_idx]);
+        real_array[size+target_idx] += lambda*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(ull_array[target_idx]);
+    } else if(stride_idx == 1) {
+        real_array[target_idx] += (1-lambda)*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(ull_array[target_idx]);
+        real_array[size+target_idx] += lambda*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(ull_array[target_idx]);
+    } else if(stride_idx == 2) {
+        real_array[target_idx] += (1-lambda)*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(ull_array[target_idx]);
+        real_array[size+target_idx] += lambda*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(ull_array[target_idx]);
+    }
+
+}
+
+
 template<typename RealType>
 void __global__ k_reduce_buffer(
     int N,
@@ -310,12 +387,26 @@ float __device__ __forceinline__ real_es_factor(float real_beta, float dij, floa
     return -inv_d2ij*(static_cast<float>(TWO_OVER_SQRT_PI)*beta_dij*exp_beta_dij_2 + erfc_beta_dij);
 }
 
-template <typename RealType, bool COMPUTE_U, bool COMPUTE_DU_DX, bool COMPUTE_DU_DL, bool COMPUTE_DU_DP>
+
+// ALCHEMICAL == false guarantees that the tile's atoms are such that
+// 1. src_param and dst_params are equal for every i in R and j in C
+// 2. w_i and w_j are identical for every (i,j) in (RxC)
+// DU_DL_DEPENDS_ON_DU_DP indicates whether or not to compute DU_DP when
+// COMPUTE_DU_DL is requested (needed for interpolated potentials)
+template <
+    typename RealType,
+    bool ALCHEMICAL,
+    bool COMPUTE_U,
+    bool COMPUTE_DU_DX,
+    bool COMPUTE_DU_DL,
+    bool COMPUTE_DU_DP
+>
 void __global__ k_nonbonded_unified(
     const int N,
     const double * __restrict__ coords,
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
+    const double * __restrict__ dp_dl,
     const double lambda,
     const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
     const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
@@ -348,6 +439,10 @@ void __global__ k_nonbonded_unified(
     RealType ci_y = atom_i_idx < N ? coords[atom_i_idx*3+1] : 0;
     RealType ci_z = atom_i_idx < N ? coords[atom_i_idx*3+2] : 0;
 
+    RealType dq_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+0] : 0;
+    RealType dsig_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+0] : 0;
+    RealType deps_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+0] : 0;
+
     unsigned long long gi_x = 0;
     unsigned long long gi_y = 0;
     unsigned long long gi_z = 0;
@@ -373,6 +468,10 @@ void __global__ k_nonbonded_unified(
     RealType cj_x = atom_j_idx < N ? coords[atom_j_idx*3+0] : 0;
     RealType cj_y = atom_j_idx < N ? coords[atom_j_idx*3+1] : 0;
     RealType cj_z = atom_j_idx < N ? coords[atom_j_idx*3+2] : 0;
+
+    RealType dq_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+0] : 0;
+    RealType dsig_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+0] : 0;
+    RealType deps_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+0] : 0;
 
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
@@ -411,9 +510,14 @@ void __global__ k_nonbonded_unified(
         delta_y -= box_y*nearbyint(delta_y*inv_box_y);
         delta_z -= box_z*nearbyint(delta_z*inv_box_z);
 
-        RealType delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
+        RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z;
+        RealType delta_w;
 
-        RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
+        if(ALCHEMICAL) {
+            // (ytz): we are guaranteed that delta_w is zero if ALCHEMICAL == false
+            delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
+            d2ij += delta_w * delta_w;
+        }
 
         // (ytz): note that d2ij must be *strictly* less than cutoff_squared. This is because we set the
         // non-interacting atoms to exactly real_cutoff*real_cutoff. This ensures that atoms who's 4th dimension
@@ -457,13 +561,23 @@ void __global__ k_nonbonded_unified(
 
                 delta_prefactor -= lj_prefactor;
 
+                RealType sig_grad = 24*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
+                RealType eps_grad = 4*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+
+                // do chain rule inside loop
                 if(COMPUTE_DU_DP) {
-                    RealType sig_grad = 24*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
                     g_sigi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
                     g_sigj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
-                    RealType eps_grad = 4*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
                     g_epsi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_j);
                     g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_i);
+                }
+
+                if(COMPUTE_DU_DL && ALCHEMICAL) {
+                    // (ytz): note that we can't simply do F2F(a+b) = F2F(a) + F2F(b) due to loss of prec.
+                    du_dl_i += FLOAT_TO_FIXED_NONBONDED(sig_grad*dsig_dl_i);
+                    du_dl_j += FLOAT_TO_FIXED_NONBONDED(sig_grad*dsig_dl_j);
+                    du_dl_i += FLOAT_TO_FIXED_NONBONDED(eps_grad*eps_j*deps_dl_i);
+                    du_dl_j += FLOAT_TO_FIXED_NONBONDED(eps_grad*eps_i*deps_dl_j);
                 }
 
             }
@@ -478,9 +592,13 @@ void __global__ k_nonbonded_unified(
                 gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
             }
 
-            if(COMPUTE_DU_DL) {
+            if(COMPUTE_DU_DL && ALCHEMICAL) {
+                // needed for cancellation of nans (if one term blows up)
                 du_dl_i += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_w*lambda_offset_i*cutoff);
                 du_dl_j += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_w*lambda_offset_j*cutoff);
+
+                du_dl_i += FLOAT_TO_FIXED_NONBONDED(qj*inv_dij*ebd*dq_dl_i);
+                du_dl_j += FLOAT_TO_FIXED_NONBONDED(qj*inv_dij*ebd*dq_dl_j);
             }
 
             if(COMPUTE_U) {
@@ -498,9 +616,10 @@ void __global__ k_nonbonded_unified(
         qj = __shfl_sync(0xffffffff, qj, srcLane);
         eps_j = __shfl_sync(0xffffffff, eps_j, srcLane);
         sig_j = __shfl_sync(0xffffffff, sig_j, srcLane);
-        cj_x = __shfl_sync(0xffffffff, cj_x, srcLane); // needs to support real
-        cj_y = __shfl_sync(0xffffffff, cj_y, srcLane); // needs to support real
-        cj_z = __shfl_sync(0xffffffff, cj_z, srcLane); // needs to support real
+
+        cj_x = __shfl_sync(0xffffffff, cj_x, srcLane);
+        cj_y = __shfl_sync(0xffffffff, cj_y, srcLane);
+        cj_z = __shfl_sync(0xffffffff, cj_z, srcLane);
 
         lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane); // this also can be optimized away
         lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
@@ -517,13 +636,15 @@ void __global__ k_nonbonded_unified(
             g_epsj = __shfl_sync(0xffffffff, g_epsj, srcLane);
         }
 
-        if(COMPUTE_DU_DL) {
-            du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
+        if(COMPUTE_DU_DL && ALCHEMICAL) {
+            du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane); // (ytz): remove this
+            dsig_dl_j = __shfl_sync(0xffffffff, dsig_dl_j, srcLane);
+            deps_dl_j = __shfl_sync(0xffffffff, deps_dl_j, srcLane);
+            dq_dl_j = __shfl_sync(0xffffffff, dq_dl_j, srcLane);
         }
 
     }
 
-    // these reduction buffers are really tricky
     if(COMPUTE_DU_DX) {
         if(atom_i_idx < N) {
             atomicAdd(du_dx + atom_i_idx*3 + 0, gi_x);
@@ -538,7 +659,6 @@ void __global__ k_nonbonded_unified(
     }
 
     if(COMPUTE_DU_DP) {
-
         if(atom_i_idx < N) {
             atomicAdd(du_dp + charge_param_idx_i, g_qi);
             atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
@@ -550,11 +670,10 @@ void __global__ k_nonbonded_unified(
             atomicAdd(du_dp + lj_param_idx_sig_j, g_sigj);
             atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
         }
-
     }
 
     // these are buffered and then reduced to avoid massive conflicts
-    if(COMPUTE_DU_DL) {
+    if(COMPUTE_DU_DL && ALCHEMICAL) {
         if(atom_i_idx < N) {
             atomicAdd(du_dl_buffer + atom_i_idx, du_dl_i + du_dl_j);
         }
@@ -567,6 +686,265 @@ void __global__ k_nonbonded_unified(
     }
 
 }
+
+
+// template <typename RealType, bool COMPUTE_U, bool COMPUTE_DU_DX, bool COMPUTE_DU_DL, bool COMPUTE_DU_DP>
+// void __global__ k_nonbonded_unified(
+//     const int N,
+//     const double * __restrict__ coords,
+//     const double * __restrict__ params, // [N]
+//     const double * __restrict__ box,
+//     const double lambda,
+//     const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
+//     const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
+//     const double beta,
+//     const double cutoff,
+//     const int * __restrict__ ixn_tiles,
+//     const unsigned int * __restrict__ ixn_atoms,
+//     unsigned long long * __restrict__ du_dx,
+//     unsigned long long * __restrict__ du_dp,
+//     unsigned long long * __restrict__ du_dl_buffer,
+//     unsigned long long * __restrict__ u_buffer) {
+
+//     int tile_idx = blockIdx.x;
+
+//     RealType box_x = box[0*3+0];
+//     RealType box_y = box[1*3+1];
+//     RealType box_z = box[2*3+2];
+
+//     RealType inv_box_x = 1/box_x;
+//     RealType inv_box_y = 1/box_y;
+//     RealType inv_box_z = 1/box_z;
+
+//     int row_block_idx = ixn_tiles[tile_idx];
+
+//     int atom_i_idx = row_block_idx*32 + threadIdx.x;
+//     int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
+//     int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
+
+//     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx*3+0] : 0;
+//     RealType ci_y = atom_i_idx < N ? coords[atom_i_idx*3+1] : 0;
+//     RealType ci_z = atom_i_idx < N ? coords[atom_i_idx*3+2] : 0;
+
+//     unsigned long long gi_x = 0;
+//     unsigned long long gi_y = 0;
+//     unsigned long long gi_z = 0;
+//     unsigned long long du_dl_i = 0;
+
+//     int charge_param_idx_i = atom_i_idx*3 + 0;
+//     int lj_param_idx_sig_i = atom_i_idx*3 + 1;
+//     int lj_param_idx_eps_i = atom_i_idx*3 + 2;
+
+//     RealType qi = atom_i_idx < N ? params[charge_param_idx_i] : 0;
+//     RealType sig_i = atom_i_idx < N ? params[lj_param_idx_sig_i] : 0;
+//     RealType eps_i = atom_i_idx < N ? params[lj_param_idx_eps_i] : 0;
+
+//     unsigned long long g_qi = 0;
+//     unsigned long long g_sigi = 0;
+//     unsigned long long g_epsi = 0;
+
+//     // i idx is contiguous but j is not, so we should swap them to avoid having to shuffle atom_j_idx
+//     int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
+//     int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
+//     int lambda_plane_j = atom_j_idx < N ? lambda_plane_idxs[atom_j_idx] : 0;
+
+//     RealType cj_x = atom_j_idx < N ? coords[atom_j_idx*3+0] : 0;
+//     RealType cj_y = atom_j_idx < N ? coords[atom_j_idx*3+1] : 0;
+//     RealType cj_z = atom_j_idx < N ? coords[atom_j_idx*3+2] : 0;
+
+//     unsigned long long gj_x = 0;
+//     unsigned long long gj_y = 0;
+//     unsigned long long gj_z = 0;
+//     unsigned long long du_dl_j = 0;
+
+//     int charge_param_idx_j = atom_j_idx*3 + 0;
+//     int lj_param_idx_sig_j = atom_j_idx*3 + 1;
+//     int lj_param_idx_eps_j = atom_j_idx*3 + 2;
+
+//     RealType qj = atom_j_idx < N ? params[charge_param_idx_j] : 0;
+//     RealType sig_j = atom_j_idx < N ? params[lj_param_idx_sig_j] : 0;
+//     RealType eps_j = atom_j_idx < N ? params[lj_param_idx_eps_j] : 0;
+
+//     unsigned long long g_qj = 0;
+//     unsigned long long g_sigj = 0;
+//     unsigned long long g_epsj = 0;
+
+//     RealType real_cutoff = static_cast<RealType>(cutoff);
+//     RealType cutoff_squared = real_cutoff*real_cutoff;
+
+//     unsigned long long energy = 0;
+
+//     RealType real_lambda = static_cast<RealType>(lambda);
+//     RealType real_beta = static_cast<RealType>(beta);
+
+//     const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
+//     // #pragma unroll
+//     for(int round = 0; round < 32; round++) {
+
+//         RealType delta_x = ci_x - cj_x;
+//         RealType delta_y = ci_y - cj_y;
+//         RealType delta_z = ci_z - cj_z;
+
+//         delta_x -= box_x*nearbyint(delta_x*inv_box_x);
+//         delta_y -= box_y*nearbyint(delta_y*inv_box_y);
+//         delta_z -= box_z*nearbyint(delta_z*inv_box_z);
+
+//         RealType delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
+
+//         RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
+
+//         // (ytz): note that d2ij must be *strictly* less than cutoff_squared. This is because we set the
+//         // non-interacting atoms to exactly real_cutoff*real_cutoff. This ensures that atoms who's 4th dimension
+//         // is set to cutoff are non-interacting.
+//         if(d2ij < cutoff_squared && atom_j_idx > atom_i_idx && atom_j_idx < N && atom_i_idx < N) {
+
+//             // electrostatics
+//             RealType inv_dij = rsqrt(d2ij);
+//             RealType dij = d2ij*inv_dij;
+
+//             RealType inv_d2ij = inv_dij*inv_dij;
+//             RealType beta_dij = real_beta*dij;
+//             RealType ebd = erfc(beta_dij);
+
+//             RealType qij = qi*qj;
+
+//             RealType u = qij*inv_dij*ebd;
+//             RealType es_prefactor = qij*inv_dij*real_es_factor(real_beta, dij, inv_d2ij);
+
+//             // lennard jones
+//             RealType inv_d4ij = inv_d2ij*inv_d2ij;
+//             RealType inv_d6ij = inv_d4ij*inv_d2ij;
+
+//             // lennard jones force
+//             RealType eps_ij = eps_i * eps_j;
+
+//             RealType delta_prefactor = es_prefactor;
+
+//             if(eps_i != 0 && eps_j != 0) {
+//                 RealType sig_ij = sig_i + sig_j;
+
+//                 RealType sig5 = sig_ij*sig_ij*sig_ij*sig_ij*sig_ij;
+
+//                 RealType sig_inv_dij = sig_ij*inv_dij;
+//                 RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
+//                 RealType sig6_inv_d6ij = sig2_inv_d2ij*sig2_inv_d2ij*sig2_inv_d2ij;
+//                 RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
+
+//                 RealType lj_prefactor = eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*48 - 24);
+//                 u += 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+
+//                 delta_prefactor -= lj_prefactor;
+
+//                 if(COMPUTE_DU_DP) {
+//                     RealType sig_grad = 24*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
+//                     g_sigi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
+//                     g_sigj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(sig_grad);
+//                     RealType eps_grad = 4*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+//                     g_epsi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_j);
+//                     g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad*eps_i);
+//                 }
+
+//             }
+
+//             if(COMPUTE_DU_DX) {
+//                 gi_x += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
+//                 gi_y += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
+//                 gi_z += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
+
+//                 gj_x += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
+//                 gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
+//                 gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
+//             }
+
+//             if(COMPUTE_DU_DL) {
+//                 du_dl_i += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_w*lambda_offset_i*cutoff);
+//                 du_dl_j += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_w*lambda_offset_j*cutoff);
+//             }
+
+//             if(COMPUTE_U) {
+//                 energy += FLOAT_TO_FIXED_NONBONDED(u);
+//             }
+
+//             if(COMPUTE_DU_DP) {
+//                 g_qi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(qj*inv_dij*ebd);
+//                 g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(qi*inv_dij*ebd);
+//             }
+
+//         }
+
+//         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane); // we can pre-compute this probably
+//         qj = __shfl_sync(0xffffffff, qj, srcLane);
+//         eps_j = __shfl_sync(0xffffffff, eps_j, srcLane);
+//         sig_j = __shfl_sync(0xffffffff, sig_j, srcLane);
+//         cj_x = __shfl_sync(0xffffffff, cj_x, srcLane); // needs to support real
+//         cj_y = __shfl_sync(0xffffffff, cj_y, srcLane); // needs to support real
+//         cj_z = __shfl_sync(0xffffffff, cj_z, srcLane); // needs to support real
+
+//         lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane); // this also can be optimized away
+//         lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+
+//         if(COMPUTE_DU_DX) {
+//             gj_x = __shfl_sync(0xffffffff, gj_x, srcLane);
+//             gj_y = __shfl_sync(0xffffffff, gj_y, srcLane);
+//             gj_z = __shfl_sync(0xffffffff, gj_z, srcLane);
+//         }
+
+//         if(COMPUTE_DU_DP) {
+//             g_qj = __shfl_sync(0xffffffff, g_qj, srcLane);
+//             g_sigj = __shfl_sync(0xffffffff, g_sigj, srcLane);
+//             g_epsj = __shfl_sync(0xffffffff, g_epsj, srcLane);
+//         }
+
+//         if(COMPUTE_DU_DL) {
+//             du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane);
+//         }
+
+//     }
+
+//     // these reduction buffers are really tricky
+//     if(COMPUTE_DU_DX) {
+//         if(atom_i_idx < N) {
+//             atomicAdd(du_dx + atom_i_idx*3 + 0, gi_x);
+//             atomicAdd(du_dx + atom_i_idx*3 + 1, gi_y);
+//             atomicAdd(du_dx + atom_i_idx*3 + 2, gi_z);
+//         }
+//         if(atom_j_idx < N) {
+//             atomicAdd(du_dx + atom_j_idx*3 + 0, gj_x);
+//             atomicAdd(du_dx + atom_j_idx*3 + 1, gj_y);
+//             atomicAdd(du_dx + atom_j_idx*3 + 2, gj_z);
+//         }
+//     }
+
+//     if(COMPUTE_DU_DP) {
+
+//         if(atom_i_idx < N) {
+//             atomicAdd(du_dp + charge_param_idx_i, g_qi);
+//             atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
+//             atomicAdd(du_dp + lj_param_idx_eps_i, g_epsi);
+//         }
+
+//         if(atom_j_idx < N) {
+//             atomicAdd(du_dp + charge_param_idx_j, g_qj);
+//             atomicAdd(du_dp + lj_param_idx_sig_j, g_sigj);
+//             atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
+//         }
+
+//     }
+
+//     // these are buffered and then reduced to avoid massive conflicts
+//     if(COMPUTE_DU_DL) {
+//         if(atom_i_idx < N) {
+//             atomicAdd(du_dl_buffer + atom_i_idx, du_dl_i + du_dl_j);
+//         }
+//     }
+
+//     if(COMPUTE_U) {
+//         if(atom_i_idx < N) {
+//             atomicAdd(u_buffer + atom_i_idx, energy);
+//         }
+//     }
+
+// }
 
 
 template<typename RealType>

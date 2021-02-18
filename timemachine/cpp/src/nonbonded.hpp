@@ -3,6 +3,7 @@
 #include "neighborlist.hpp"
 #include "potential.hpp"
 #include <vector>
+#include <array>
 
 namespace timemachine {
 
@@ -10,6 +11,7 @@ typedef void (*k_nonbonded_fn)(const int N,
     const double * __restrict__ coords,
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
+    const double * __restrict__ dl_dp,
     const double lambda,
     const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
     const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
@@ -22,12 +24,12 @@ typedef void (*k_nonbonded_fn)(const int N,
     unsigned long long * __restrict__ du_dl_buffer,
     unsigned long long * __restrict__ u_buffer);
 
-template<typename RealType>
+template<typename RealType, bool Interpolated>
 class Nonbonded : public Potential {
 
 private:
 
-    std::array<k_nonbonded_fn, 16> kernel_ptrs_;
+    std::array<k_nonbonded_fn, 32> kernel_ptrs_;
 
     int *d_exclusion_idxs_; // [E,2]
     double *d_scales_; // [E, 2]
@@ -64,6 +66,7 @@ private:
     int *d_sorted_lambda_offset_idxs_;
     double *d_sorted_x_; //
     double *d_sorted_p_; //
+    double *d_sorted_dp_dl_;
     unsigned long long *d_sorted_du_dx_; //
     unsigned long long *d_sorted_du_dp_; //
     unsigned long long *d_du_dp_buffer_; //
@@ -114,6 +117,22 @@ public:
         double *d_u,
         cudaStream_t stream
     ) override;
+
+
+    void execute_device_chain(
+        const int N,
+        const int P,
+        const double *d_x,
+        const double *d_p,
+        const double *d_box,
+        const double *dp_dl, // note extra chain rule term here
+        const double lambda,
+        unsigned long long *d_du_dx,
+        double *d_du_dp,
+        double *d_du_dl,
+        double *d_u,
+        cudaStream_t stream
+    );
 
 
 

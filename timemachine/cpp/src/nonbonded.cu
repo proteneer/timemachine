@@ -15,8 +15,8 @@
 
 namespace timemachine {
 
-template <typename RealType>
-Nonbonded<RealType>::Nonbonded(
+template <typename RealType, bool Interpolated>
+Nonbonded<RealType, Interpolated>::Nonbonded(
     const std::vector<int> &exclusion_idxs, // [E,2]
     const std::vector<double> &scales, // [E, 2]
     const std::vector<int> &lambda_plane_idxs, // [N]
@@ -34,23 +34,48 @@ Nonbonded<RealType>::Nonbonded(
     nblist_padding_(0.1),
     disable_hilbert_(false),
     kernel_ptrs_({
+        // (ytz): this is a little nuts, we should replace this with some
+        // metaprogramming magic.
+
         // enumerate over every possible kernel combination
-        &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
-        &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
-        &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
-        &k_nonbonded_unified<RealType, 0, 0, 1, 1>,
-        &k_nonbonded_unified<RealType, 0, 1, 0, 0>,
-        &k_nonbonded_unified<RealType, 0, 1, 0, 1>,
-        &k_nonbonded_unified<RealType, 0, 1, 1, 0>,
-        &k_nonbonded_unified<RealType, 0, 1, 1, 1>,
-        &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
-        &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
-        &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
-        &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
-        &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
-        &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
-        &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
-        &k_nonbonded_unified<RealType, 1, 1, 1, 1>,
+        // A: Alchemical
+        // U: Compute U
+        // X: Compute DU_DL
+        // L: Compute DU_DX
+        // P: Compute DU_DP
+        //                             A  U  X  L  P
+        &k_nonbonded_unified<RealType, 0, 0, 0, 0, 0>,
+        &k_nonbonded_unified<RealType, 0, 0, 0, 0, 1>,
+        &k_nonbonded_unified<RealType, 0, 0, 0, 1, 0>,
+        &k_nonbonded_unified<RealType, 0, 0, 0, 1, 1>,
+        &k_nonbonded_unified<RealType, 0, 0, 1, 0, 0>,
+        &k_nonbonded_unified<RealType, 0, 0, 1, 0, 1>,
+        &k_nonbonded_unified<RealType, 0, 0, 1, 1, 0>,
+        &k_nonbonded_unified<RealType, 0, 0, 1, 1, 1>,
+        &k_nonbonded_unified<RealType, 0, 1, 0, 0, 0>,
+        &k_nonbonded_unified<RealType, 0, 1, 0, 0, 1>,
+        &k_nonbonded_unified<RealType, 0, 1, 0, 1, 0>,
+        &k_nonbonded_unified<RealType, 0, 1, 0, 1, 1>,
+        &k_nonbonded_unified<RealType, 0, 1, 1, 0, 0>,
+        &k_nonbonded_unified<RealType, 0, 1, 1, 0, 1>,
+        &k_nonbonded_unified<RealType, 0, 1, 1, 1, 0>,
+        &k_nonbonded_unified<RealType, 0, 1, 1, 1, 1>,
+        &k_nonbonded_unified<RealType, 1, 0, 0, 0, 0>,
+        &k_nonbonded_unified<RealType, 1, 0, 0, 0, 1>,
+        &k_nonbonded_unified<RealType, 1, 0, 0, 1, 0>,
+        &k_nonbonded_unified<RealType, 1, 0, 0, 1, 1>,
+        &k_nonbonded_unified<RealType, 1, 0, 1, 0, 0>,
+        &k_nonbonded_unified<RealType, 1, 0, 1, 0, 1>,
+        &k_nonbonded_unified<RealType, 1, 0, 1, 1, 0>,
+        &k_nonbonded_unified<RealType, 1, 0, 1, 1, 1>,
+        &k_nonbonded_unified<RealType, 1, 1, 0, 0, 0>,
+        &k_nonbonded_unified<RealType, 1, 1, 0, 0, 1>,
+        &k_nonbonded_unified<RealType, 1, 1, 0, 1, 0>,
+        &k_nonbonded_unified<RealType, 1, 1, 0, 1, 1>,
+        &k_nonbonded_unified<RealType, 1, 1, 1, 0, 0>,
+        &k_nonbonded_unified<RealType, 1, 1, 1, 0, 1>,
+        &k_nonbonded_unified<RealType, 1, 1, 1, 1, 0>,
+        &k_nonbonded_unified<RealType, 1, 1, 1, 1, 1>
     }) {
 
     for(auto x : lambda_plane_idxs) {
@@ -94,7 +119,9 @@ Nonbonded<RealType>::Nonbonded(
     gpuErrchk(cudaMalloc(&d_sorted_lambda_plane_idxs_, N_*sizeof(*d_sorted_lambda_plane_idxs_)));
     gpuErrchk(cudaMalloc(&d_sorted_lambda_offset_idxs_, N_*sizeof(*d_sorted_lambda_offset_idxs_)));
     gpuErrchk(cudaMalloc(&d_sorted_x_, N_*3*sizeof(*d_sorted_x_)));
-    gpuErrchk(cudaMalloc(&d_sorted_p_, N_*3*sizeof(*d_sorted_p_)));
+
+    gpuErrchk(cudaMalloc(&d_sorted_p_, N_*3*sizeof(*d_sorted_p_))); // interpolated
+    gpuErrchk(cudaMalloc(&d_sorted_dp_dl_, N_*3*sizeof(*d_sorted_dp_dl_))); // interpolated
     gpuErrchk(cudaMalloc(&d_sorted_du_dx_, N_*3*sizeof(*d_sorted_du_dx_)));
     gpuErrchk(cudaMalloc(&d_sorted_du_dp_, N_*3*sizeof(*d_sorted_du_dp_)));
     gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_*3*sizeof(*d_du_dp_buffer_)));
@@ -137,7 +164,7 @@ Nonbonded<RealType>::Nonbonded(
     }
 
     gpuErrchk(cudaMalloc(&d_bin_to_idx_, 256*256*256*sizeof(*d_bin_to_idx_)));
-    gpuErrchk(cudaMemcpy(d_bin_to_idx_, &bin_to_idx[0], 256*256*256*sizeof(*d_bin_to_idx_), cudaMemcpyHostToDevice));   
+    gpuErrchk(cudaMemcpy(d_bin_to_idx_, &bin_to_idx[0], 256*256*256*sizeof(*d_bin_to_idx_), cudaMemcpyHostToDevice));
 
     // estimate size needed to do radix sorting, this can use uninitialized data.
     cub::DeviceRadixSort::SortPairs(
@@ -156,8 +183,8 @@ Nonbonded<RealType>::Nonbonded(
 
 };
 
-template <typename RealType>
-Nonbonded<RealType>::~Nonbonded() {
+template <typename RealType, bool Interpolated>
+Nonbonded<RealType, Interpolated>::~Nonbonded() {
 
     gpuErrchk(cudaFree(d_exclusion_idxs_));
     gpuErrchk(cudaFree(d_scales_));
@@ -171,10 +198,11 @@ Nonbonded<RealType>::~Nonbonded() {
     gpuErrchk(cudaFree(d_du_dl_buffer_));
     gpuErrchk(cudaFree(d_u_buffer_));
     gpuErrchk(cudaFree(d_perm_)); // nullptr if we never built nblist
-    
+
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_sorted_x_));
     gpuErrchk(cudaFree(d_sorted_p_));
+    gpuErrchk(cudaFree(d_sorted_dp_dl_));
     gpuErrchk(cudaFree(d_sorted_du_dx_));
     gpuErrchk(cudaFree(d_sorted_du_dp_));
     gpuErrchk(cudaFree(d_sorted_lambda_plane_idxs_));
@@ -194,19 +222,19 @@ Nonbonded<RealType>::~Nonbonded() {
 };
 
 
-template<typename RealType>
-void Nonbonded<RealType>::set_nblist_padding(double val) {
+template<typename RealType, bool Interpolated>
+void Nonbonded<RealType, Interpolated>::set_nblist_padding(double val) {
     nblist_padding_ = val;
 }
 
 
-template<typename RealType>
-void Nonbonded<RealType>::disable_hilbert_sort() {
+template<typename RealType, bool Interpolated>
+void Nonbonded<RealType, Interpolated>::disable_hilbert_sort() {
     disable_hilbert_ = true;
 }
 
-template <typename RealType>
-void Nonbonded<RealType>::hilbert_sort(
+template <typename RealType, bool Interpolated>
+void Nonbonded<RealType, Interpolated>::hilbert_sort(
     const double *d_coords,
     const double *d_box,
     cudaStream_t stream) {
@@ -243,12 +271,12 @@ void __global__ k_arange(int N, unsigned int *arr) {
     arr[atom_idx] = atom_idx;
 }
 
-template <typename RealType>
-void Nonbonded<RealType>::execute_device(
+template <typename RealType, bool Interpolated>
+void Nonbonded<RealType, Interpolated>::execute_device(
         const int N,
         const int P,
         const double *d_x,
-        const double *d_p, // N*3
+        const double *d_p, // 2 * N * 3
         const double *d_box,
         const double lambda,
         unsigned long long *d_du_dx,
@@ -278,9 +306,17 @@ void Nonbonded<RealType>::execute_device(
         throw std::runtime_error("Nonbonded::execute_device() N != N_");
     }
 
+    const int M = Interpolated? 2 : 1;
+
+    if(P != M*N_*3) {
+        std::cout << P << " " << N_ << std::endl;
+        throw std::runtime_error("Nonbonded::execute_device() P != M*N_*3");
+    }
+
+    // identify which tiles contain interpolated parameters
+
     const int B = (N+32-1)/32;
     const int tpb = 32;
-
 
     dim3 dimGrid(B, 3, 1);
 
@@ -327,14 +363,34 @@ void Nonbonded<RealType>::execute_device(
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaStreamSynchronize(stream));
 
+        // TBD: sort tiles into alchemical and non-alchemical tiles
+
     } else {
         k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
-    gpuErrchk(cudaPeekAtLastError());
+    // build alchemical masks here
 
+    // do parameter interpolation here
+
+    if(Interpolated) {
+        k_permute_interpolated<<<dimGrid, tpb, 0, stream>>>(
+            lambda,
+            N,
+            d_perm_,
+            d_p,
+            d_sorted_p_,
+            d_sorted_dp_dl_
+        );
+        // compute dp_dl
+        // k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_dp_dl, d_sorted_dp_dl_);
+        gpuErrchk(cudaPeekAtLastError());
+    } else {
+        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
+        gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaMemsetAsync(d_sorted_dp_dl_, 0, N*3*sizeof(*d_sorted_dp_dl_), stream))
+    }
 
     // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
     // reset buffers and sorted accumulators
@@ -346,7 +402,7 @@ void Nonbonded<RealType>::execute_device(
     }
     if(d_du_dl) {
         gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N*sizeof(*d_du_dl_buffer_), stream));
-        gpuErrchk(cudaMemsetAsync(d_du_dl_reduce_sum_, 0, 1*sizeof(*d_du_dl_reduce_sum_), stream)); 
+        gpuErrchk(cudaMemsetAsync(d_du_dl_reduce_sum_, 0, 1*sizeof(*d_du_dl_reduce_sum_), stream));
     }
     if(d_u) {
         gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N*sizeof(*d_u_buffer_), stream));
@@ -358,7 +414,8 @@ void Nonbonded<RealType>::execute_device(
     kernel_idx |= d_du_dp ? 1 << 0 : 0;
     kernel_idx |= d_du_dl ? 1 << 1 : 0;
     kernel_idx |= d_du_dx ? 1 << 2 : 0;
-    kernel_idx |=     d_u ? 1 << 3 : 0;
+    kernel_idx |= d_u ? 1 << 3 : 0;
+    kernel_idx |= 1 << 4; // force set alchemical = True for now before we start optimizations
 
     // look up which kernel we need based on the computation
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], 32, 0, stream>>>(
@@ -366,6 +423,7 @@ void Nonbonded<RealType>::execute_device(
         d_sorted_x_,
         d_sorted_p_,
         d_box,
+        d_sorted_dp_dl_,
         lambda,
         d_sorted_lambda_plane_idxs_,
         d_sorted_lambda_offset_idxs_,
@@ -421,7 +479,20 @@ void Nonbonded<RealType>::execute_device(
     }
 
     if(d_du_dp) {
-        k_add_ull_to_real<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+        if(Interpolated) {
+            k_add_ull_to_real_interpolated<<<dimGrid, tpb, 0, stream>>>(
+                lambda,
+                N,
+                d_du_dp_buffer_,
+                d_du_dp
+            );
+        } else {
+            k_add_ull_to_real<<<dimGrid, tpb, 0, stream>>>(
+                N,
+                d_du_dp_buffer_,
+                d_du_dp
+            );
+        }
         gpuErrchk(cudaPeekAtLastError());
     }
 
@@ -444,7 +515,10 @@ void Nonbonded<RealType>::execute_device(
 
 }
 
-template class Nonbonded<double>;
-template class Nonbonded<float>;
+template class Nonbonded<double, true>;
+template class Nonbonded<float, true>;
+template class Nonbonded<double, false>;
+template class Nonbonded<float, false>;
+
 
 } // namespace timemachine

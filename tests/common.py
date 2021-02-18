@@ -508,8 +508,16 @@ class GradientTest(unittest.TestCase):
 
         np.testing.assert_allclose(ref_u, test_u, rtol)
 
+        print("energies passed")
+
+        print(ref_du_dx)
+        print(test_du_dx_only)
+        print(test_du_dx)
+
         self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx_only), rtol)
         self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
+
+        print("forces passed")
 
         np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
 

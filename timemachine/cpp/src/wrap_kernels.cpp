@@ -352,6 +352,53 @@ void declare_potential(py::module &m) {
 
             return py::make_tuple(py_du_dx, py_du_dp, du_dl, u);
     })
+    .def("execute_selective", [](timemachine::Potential &pot,
+        const py::array_t<double, py::array::c_style> &coords,
+        const py::array_t<double, py::array::c_style> &params,
+        const py::array_t<double, py::array::c_style> &box,
+        double lambda,
+        bool compute_u,
+        bool compute_du_dx,
+        bool compute_du_dl,
+        bool compute_du_dp) -> py::tuple  {
+
+            const long unsigned int N = coords.shape()[0];
+            const long unsigned int D = coords.shape()[1];
+            const long unsigned int P = params.size();
+
+            std::vector<unsigned long long> du_dx(N*D);
+            std::vector<double> du_dp(P);
+
+            double du_dl = -9999999999; //debug use, make sure its overwritten
+            double u = 9999999999; //debug use, make sure its overwrriten
+
+            pot.execute_host(
+                N,
+                P,
+                coords.data(),
+                params.data(),
+                box.data(),
+                lambda,
+                compute_du_dx ? &du_dx[0] : nullptr,
+                compute_du_dp ? &du_dp[0] : nullptr,
+                compute_du_dl ? &du_dl : nullptr,
+                compute_u ? &u : nullptr
+            );
+
+            py::array_t<double, py::array::c_style> py_du_dx({N, D});
+            for(int i=0; i < du_dx.size(); i++) {
+                py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+            }
+
+            std::vector<ssize_t> pshape(params.shape(), params.shape()+params.ndim());
+
+            py::array_t<double, py::array::c_style> py_du_dp(pshape);
+            for(int i=0; i < du_dp.size(); i++) {
+                py_du_dp.mutable_data()[i] = du_dp[i];
+            }
+
+            return py::make_tuple(py_du_dx, py_du_dp, du_dl, u);
+    })
     .def("execute_du_dx", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
@@ -769,10 +816,10 @@ void declare_interpolated_potential(py::module &m) {
 
 }
 
-template <typename RealType>
+template <typename RealType, bool Interpolated>
 void declare_nonbonded(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Nonbonded<RealType>;
+    using Class = timemachine::Nonbonded<RealType, Interpolated>;
     std::string pyclass_name = std::string("Nonbonded_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m,
@@ -780,8 +827,8 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         py::buffer_protocol(),
         py::dynamic_attr()
     )
-    .def("set_nblist_padding", &timemachine::Nonbonded<RealType>::set_nblist_padding)
-    .def("disable_hilbert_sort", &timemachine::Nonbonded<RealType>::disable_hilbert_sort)
+    .def("set_nblist_padding", &timemachine::Nonbonded<RealType, Interpolated>::set_nblist_padding)
+    .def("disable_hilbert_sort", &timemachine::Nonbonded<RealType, Interpolated>::disable_hilbert_sort)
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
         const py::array_t<double, py::array::c_style> &scales_i,  // [E, 2]
@@ -802,7 +849,7 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
         std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
 
-        return new timemachine::Nonbonded<RealType>(
+        return new timemachine::Nonbonded<RealType, Interpolated>(
             exclusion_idxs,
             scales,
             lambda_plane_idxs,
@@ -935,8 +982,11 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_periodic_torsion<double>(m, "f64");
     declare_periodic_torsion<float>(m, "f32");
 
-    declare_nonbonded<double>(m, "f64");
-    declare_nonbonded<float>(m, "f32");
+    declare_nonbonded<double, true>(m, "f64_interpolated");
+    declare_nonbonded<float, true>(m, "f32_interpolated");
+
+    declare_nonbonded<double, false>(m, "f64");
+    declare_nonbonded<float, false>(m, "f32");
 
     // declare_gbsa<double>(m, "f64");
     // declare_gbsa<float>(m, "f32");

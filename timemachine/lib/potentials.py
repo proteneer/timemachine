@@ -202,6 +202,10 @@ class NonbondedCustomOpWrapper(CustomOpWrapper):
 
         super(NonbondedCustomOpWrapper, self).__init__(*args)
 
+    def bind(self, params):
+        print("WARNING: Manually doubling parameters - du/dp should not be used")
+        assert 0
+
     def set_exclusion_idxs(self, x):
         self.args[0] = x
 
