@@ -104,7 +104,18 @@ with open(path_to_results.joinpath('error_transformations.pkl'), 'wb') as f:
 
 print(f'total # of molecules that encountered atom mapping errors: {len(error_transformations)}')
 
-# serialize
 
+# filter by transformation size
+def transformation_size(rfe: RelativeFreeEnergy):
+    n_A, n_B, n_MCS = rfe.mol_a.GetNumAtoms(), rfe.mol_b.GetNumAtoms(), len(rfe.core)
+    return (n_A + n_B) - 2 * n_MCS
+
+
+# filter to keep just the 8 edges with very small number of atoms changing
+easy_transformations = [rfe for rfe in transformations if transformation_size(rfe) < 2]
+
+
+# serialize
 with open(path_to_transformations, 'wb') as f:
-    dump(transformations, f)
+    dump(easy_transformations, f)
+    # dump(transformations, f)
