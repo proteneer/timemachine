@@ -183,7 +183,7 @@ def prepare_water_system(
         scales.append([1.0, 1.0])
         scales.append([np.random.rand(), np.random.rand()])
 
-    scales = np.array(scales, dtype=np.int32)
+    scales = np.array(scales, dtype=np.float64)
     exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
     E = len(exclusion_idxs)
 
@@ -519,16 +519,16 @@ class GradientTest(unittest.TestCase):
                 )
                 if compute_u:
                     np.testing.assert_allclose(ref_u, test_u, rtol)
-                    print("U PASSED")
+                    # print("U PASSED")
                 if compute_du_dx:
                     self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
-                    print("DU_DX PASSED")
+                    # print("DU_DX PASSED")
                 if compute_du_dl:
                     np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
-                    print("DU_DL PASSED")
+                    # print("DU_DL PASSED")
                 if compute_du_dp:
                     np.testing.assert_almost_equal(ref_du_dp, test_du_dp, rtol)
-                    print("DU_DP PASSED")
+                    # print("DU_DP PASSED")
 
         # assert 0
 

@@ -66,6 +66,7 @@ private:
     int *d_sorted_lambda_offset_idxs_;
     double *d_sorted_x_; //
     double *d_sorted_p_; //
+    double *d_unsorted_p_; //
     double *d_sorted_dp_dl_;
     double *d_unsorted_dp_dl_;
     unsigned long long *d_sorted_du_dx_; //

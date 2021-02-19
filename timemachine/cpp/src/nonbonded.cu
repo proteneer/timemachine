@@ -120,6 +120,7 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     gpuErrchk(cudaMalloc(&d_sorted_lambda_offset_idxs_, N_*sizeof(*d_sorted_lambda_offset_idxs_)));
     gpuErrchk(cudaMalloc(&d_sorted_x_, N_*3*sizeof(*d_sorted_x_)));
 
+    gpuErrchk(cudaMalloc(&d_unsorted_p_, N_*3*sizeof(*d_unsorted_p_))); // interpolated
     gpuErrchk(cudaMalloc(&d_sorted_p_, N_*3*sizeof(*d_sorted_p_))); // interpolated
     gpuErrchk(cudaMalloc(&d_unsorted_dp_dl_, N_*3*sizeof(*d_unsorted_dp_dl_))); // interpolated
     gpuErrchk(cudaMalloc(&d_sorted_dp_dl_, N_*3*sizeof(*d_sorted_dp_dl_))); // interpolated
@@ -202,6 +203,7 @@ Nonbonded<RealType, Interpolated>::~Nonbonded() {
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_sorted_x_));
+    gpuErrchk(cudaFree(d_unsorted_p_));
     gpuErrchk(cudaFree(d_sorted_p_));
     gpuErrchk(cudaFree(d_unsorted_dp_dl_));
     gpuErrchk(cudaFree(d_sorted_dp_dl_));
@@ -458,13 +460,15 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         const int tpb = 32;
         dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
 
+        k_inv_permute_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_p_, d_unsorted_p_);
+        gpuErrchk(cudaPeekAtLastError());
         k_inv_permute_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_dp_dl_, d_unsorted_dp_dl_);
         gpuErrchk(cudaPeekAtLastError());
 
         k_nonbonded_exclusions<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
             E_,
             d_x,
-            d_p,
+            d_unsorted_p_,
             d_box,
             d_unsorted_dp_dl_,
             lambda,
