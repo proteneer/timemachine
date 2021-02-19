@@ -44,6 +44,23 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
         // L: Compute DU_DX
         // P: Compute DU_DP
         //                             U  X  L  P
+        // &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
+        // &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
+        // &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
+        // &k_nonbonded_unified<RealType, 0, 0, 1, 1>,
+        // &k_nonbonded_unified<RealType, 0, 1, 0, 0>,
+        // &k_nonbonded_unified<RealType, 0, 1, 0, 1>,
+        // &k_nonbonded_unified<RealType, 0, 1, 1, 0>,
+        // &k_nonbonded_unified<RealType, 0, 1, 1, 1>,
+        // &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
+        // &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
+        // &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
+        // &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
+        // &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
+        // &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
+        // &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
+        // &k_nonbonded_unified<RealType, 1, 1, 1, 1>,
+
         &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
         &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
         &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
@@ -59,24 +76,7 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
         &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
         &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
         &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
-        &k_nonbonded_unified<RealType, 1, 1, 1, 1>,
-
-        // &kd_nonbonded_unified<RealType, 1, 0, 0, 0, 0>,
-        // &kd_nonbonded_unified<RealType, 1, 0, 0, 0, 1>,
-        // &kd_nonbonded_unified<RealType, 1, 0, 0, 1, 0>,
-        // &kd_nonbonded_unified<RealType, 1, 0, 0, 1, 1>,
-        // &kd_nonbonded_unified<RealType, 1, 0, 1, 0, 0>,
-        // &kd_nonbonded_unified<RealType, 1, 0, 1, 0, 1>,
-        // &kd_nonbonded_unified<RealType, 1, 0, 1, 1, 0>,
-        // &kd_nonbonded_unified<RealType, 1, 0, 1, 1, 1>,
-        // &kd_nonbonded_unified<RealType, 1, 1, 0, 0, 0>,
-        // &kd_nonbonded_unified<RealType, 1, 1, 0, 0, 1>,
-        // &kd_nonbonded_unified<RealType, 1, 1, 0, 1, 0>,
-        // &kd_nonbonded_unified<RealType, 1, 1, 0, 1, 1>,
-        // &kd_nonbonded_unified<RealType, 1, 1, 1, 0, 0>,
-        // &kd_nonbonded_unified<RealType, 1, 1, 1, 0, 1>,
-        // &kd_nonbonded_unified<RealType, 1, 1, 1, 1, 0>,
-        // &kd_nonbonded_unified<RealType, 1, 1, 1, 1, 1>
+        &k_nonbonded_unified<RealType, 1, 1, 1, 1>
     }) {
 
     for(auto x : lambda_plane_idxs) {
@@ -443,7 +443,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     );
 
     // (ytz): REMOVE ME
-    cudaDeviceSynchronize();
+    // cudaDeviceSynchronize();
 
     // std::cout << "EXEC LAUNCH" << std::endl;
 
