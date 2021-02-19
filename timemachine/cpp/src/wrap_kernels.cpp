@@ -351,16 +351,17 @@ void declare_potential(py::module &m) {
             }
 
             return py::make_tuple(py_du_dx, py_du_dp, du_dl, u);
+
     })
     .def("execute_selective", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
         const py::array_t<double, py::array::c_style> &box,
         double lambda,
-        bool compute_u,
         bool compute_du_dx,
+        bool compute_du_dp,
         bool compute_du_dl,
-        bool compute_du_dp) -> py::tuple  {
+        bool compute_u) -> py::tuple  {
 
             const long unsigned int N = coords.shape()[0];
             const long unsigned int D = coords.shape()[1];
@@ -397,7 +398,27 @@ void declare_potential(py::module &m) {
                 py_du_dp.mutable_data()[i] = du_dp[i];
             }
 
-            return py::make_tuple(py_du_dx, py_du_dp, du_dl, u);
+            auto result = py::make_tuple(
+                py_du_dx,
+                py_du_dp,
+                du_dl,
+                u
+            );
+
+            if(!compute_du_dx) {
+                result[0] = py::none();
+            }
+            if(!compute_du_dp) {
+                result[1] = py::none();
+            }
+            if(!compute_du_dl) {
+                result[2] = py::none();
+            }
+            if(!compute_u) {
+                result[3] = py::none();
+            }
+
+            return result;
     })
     .def("execute_du_dx", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,

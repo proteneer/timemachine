@@ -202,9 +202,9 @@ class NonbondedCustomOpWrapper(CustomOpWrapper):
 
         super(NonbondedCustomOpWrapper, self).__init__(*args)
 
-    def bind(self, params):
-        print("WARNING: Manually doubling parameters - du/dp should not be used")
-        assert 0
+    # def bind(self, params):
+        # print("WARNING: Manually doubling parameters - du/dp should not be used")
+        # assert 0
 
     def set_exclusion_idxs(self, x):
         self.args[0] = x
@@ -223,6 +223,12 @@ class NonbondedCustomOpWrapper(CustomOpWrapper):
 
     def get_lambda_offset_idxs(self):
         return self.args[3]
+
+    def set_lambda_plane_idxs(self, val):
+        self.args[2] = val
+
+    def set_lambda_offset_idxs(self, val):
+        self.args[3] = val
 
     def get_beta(self):
         return self.args[4]

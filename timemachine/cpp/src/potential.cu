@@ -33,26 +33,33 @@ void Potential::execute_host(
     gpuErrchk(cudaMalloc(&d_box, D*D*sizeof(double)));
     gpuErrchk(cudaMemcpy(d_box, h_box, D*D*sizeof(double), cudaMemcpyHostToDevice));
 
-    unsigned long long *d_du_dx; // du/dx
-    double *d_du_dp;
-    double *d_du_dl; // du/dl
-    double *d_u = nullptr; // u
+    unsigned long long *d_du_dx = nullptr;
+    double *d_du_dp = nullptr;
+    double *d_du_dl = nullptr;
+    double *d_u = nullptr;
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
-    gpuErrchk(cudaMalloc(&d_du_dx, N*D*sizeof(unsigned long long)));
-    gpuErrchk(cudaMemset(d_du_dx, 0, N*D*sizeof(unsigned long long)));
-    gpuErrchk(cudaMalloc(&d_du_dp, P*sizeof(unsigned long long)));
-    gpuErrchk(cudaMemset(d_du_dp, 0, P*sizeof(unsigned long long)));
-    gpuErrchk(cudaMalloc(&d_du_dl, sizeof(double)));
-    gpuErrchk(cudaMemset(d_du_dl, 0, sizeof(double)));
-    gpuErrchk(cudaMalloc(&d_u, sizeof(double)));
-    gpuErrchk(cudaMemset(d_u, 0, sizeof(double)));
-
+    if(h_du_dx) {
+        gpuErrchk(cudaMalloc(&d_du_dx, N*D*sizeof(unsigned long long)));
+        gpuErrchk(cudaMemset(d_du_dx, 0, N*D*sizeof(unsigned long long)));
+    }
+    if(h_du_dp) {
+        gpuErrchk(cudaMalloc(&d_du_dp, P*sizeof(unsigned long long)));
+        gpuErrchk(cudaMemset(d_du_dp, 0, P*sizeof(unsigned long long)));
+    }
+    if(h_du_dl) {
+        gpuErrchk(cudaMalloc(&d_du_dl, sizeof(double)));
+        gpuErrchk(cudaMemset(d_du_dl, 0, sizeof(double)));
+    }
+    if(h_u) {
+        gpuErrchk(cudaMalloc(&d_u, sizeof(double)));
+        gpuErrchk(cudaMemset(d_u, 0, sizeof(double)));
+    }
 
     this->execute_device(
         N,
         P,
-        d_x, 
+        d_x,
         d_p,
         d_box,
         lambda,
@@ -63,14 +70,25 @@ void Potential::execute_host(
         static_cast<cudaStream_t>(0)
     );
 
-    gpuErrchk(cudaMemcpy(h_du_dx, d_du_dx, N*D*sizeof(*h_du_dx), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaFree(d_du_dx));
-    gpuErrchk(cudaMemcpy(h_du_dp, d_du_dp, P*sizeof(*h_du_dp), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaFree(d_du_dp));
-    gpuErrchk(cudaMemcpy(h_du_dl, d_du_dl, sizeof(*h_du_dl), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaFree(d_du_dl));
-    gpuErrchk(cudaMemcpy(h_u, d_u, sizeof(*h_u), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaFree(d_u));
+    // outputs
+    if(h_du_dx) {
+        gpuErrchk(cudaMemcpy(h_du_dx, d_du_dx, N*D*sizeof(*h_du_dx), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaFree(d_du_dx));
+    }
+    if(h_du_dp) {
+        gpuErrchk(cudaMemcpy(h_du_dp, d_du_dp, P*sizeof(*h_du_dp), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaFree(d_du_dp));
+    }
+    if(h_du_dl) {
+        gpuErrchk(cudaMemcpy(h_du_dl, d_du_dl, sizeof(*h_du_dl), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaFree(d_du_dl));
+    }
+    if(h_u) {
+        gpuErrchk(cudaMemcpy(h_u, d_u, sizeof(*h_u), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaFree(d_u));
+    }
+
+    // inputs
     gpuErrchk(cudaFree(d_x));
     gpuErrchk(cudaFree(d_p));
     gpuErrchk(cudaFree(d_box));
