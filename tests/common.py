@@ -506,82 +506,43 @@ class GradientTest(unittest.TestCase):
             # print(compute_du_dx, compute_du_dp, compute_du_dl, compute_u)
 
             # do each computation twice to check determinism
-            for _ in range(2):
-                test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute_selective(
-                    x,
-                    params,
-                    box,
-                    lamb,
-                    compute_du_dx,
-                    compute_du_dp,
-                    compute_du_dl,
-                    compute_u
-                )
-                if compute_u:
-                    np.testing.assert_allclose(ref_u, test_u, rtol)
-                    # print("U PASSED")
-                if compute_du_dx:
-                    self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
-                    # print("DU_DX PASSED")
-                if compute_du_dl:
-                    np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
-                    # print("DU_DL PASSED")
-                if compute_du_dp:
-                    np.testing.assert_almost_equal(ref_du_dp, test_du_dp, rtol)
-                    # print("DU_DP PASSED")
+            test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute_selective(
+                x,
+                params,
+                box,
+                lamb,
+                compute_du_dx,
+                compute_du_dp,
+                compute_du_dl,
+                compute_u
+            )
+            if compute_u:
+                np.testing.assert_allclose(ref_u, test_u, rtol)
+                # print("U PASSED")
+            if compute_du_dx:
+                self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
+                # print("DU_DX PASSED")
+            if compute_du_dl:
+                np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
+                # print("DU_DL PASSED")
+            if compute_du_dp:
+                np.testing.assert_almost_equal(ref_du_dp, test_du_dp, rtol)
+                # print("DU_DP PASSED")
 
-        # assert 0
+            test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute_selective(
+                x,
+                params,
+                box,
+                lamb,
+                compute_du_dx,
+                compute_du_dp,
+                compute_du_dl,
+                compute_u
+            )
 
-        # test_du_dx_only = test_impl.execute_du_dx(x, params, box, lamb)
+            np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
 
-        # test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute(x, params, box, lamb)
-
-        # if benchmark or x.shape[0] > 10000:
-        #     print("WARNING: Skipping assertions")
-        #     return
-
-
-        # np.testing.assert_allclose(ref_u, test_u, rtol)
-
-        # print("energies passed")
-
-        # print(ref_du_dx)
-        # print(test_du_dx_only)
-        # print(test_du_dx)
-
-        # self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx_only), rtol)
-        # self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
-
-        # print("forces passed")
-
-        # np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
-
-        # if ref_du_dp.shape[0] > 0:
-        #     # print("REF")
-        #     for xx, yy  in zip(ref_du_dp, test_du_dp):
-        #         if np.linalg.norm(xx-yy) > 0.1:
-        #             print(xx,yy)
-
-        # np.testing.assert_almost_equal(ref_du_dp, test_du_dp, rtol)
-
-        # # print(ref_du_dp, test_du_dp)
-
-        # # we should obtain the same result after calling the function twice.
-        # # this checks to make sure that buffers etc are being cleaned properly in GPU code.
-        # test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute(x, params, box, lamb)
-
-        # # only the forces are guaranted to be deterministic
-        # np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
-
-        # test_du_dx_only_2 = test_impl.execute_du_dx(x, params, box, lamb)
-
-        # np.testing.assert_array_equal(test_du_dx, test_du_dx_only_2)
-
-        # # the following is only guaranteed for nonbonded terms
-        # if isinstance(test_potential, potentials.InterpolatedPotential):
-        #     test_potential = test_potential.get_u_fn()
-
-        # if isinstance(test_potential, potentials.Nonbonded):
-        #     np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
-        #     np.testing.assert_array_equal(test_du_dl, test_du_dl_2)
-        #     np.testing.assert_array_equal(test_u, test_u_2)
+            if isinstance(test_potential, potentials.Nonbonded):
+                np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
+                np.testing.assert_array_equal(test_du_dl, test_du_dl_2)
+                np.testing.assert_array_equal(test_u, test_u_2)

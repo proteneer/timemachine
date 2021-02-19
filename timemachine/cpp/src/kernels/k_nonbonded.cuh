@@ -387,6 +387,26 @@ float __device__ __forceinline__ real_es_factor(float real_beta, float dij, floa
     return -inv_d2ij*(static_cast<float>(TWO_OVER_SQRT_PI)*beta_dij*exp_beta_dij_2 + erfc_beta_dij);
 }
 
+// void __global__ k_repartition_tiles(
+//     const int N,
+//     const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
+//     const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
+//     const double * __restrict__ dp_dl,
+//     const int * __restrict__ ixn_tiles,
+//     const unsigned int * __restrict__ ixn_atoms,
+//     int *alchemical_count,
+//     int *alchemical_tiles,
+//     int *alchemical_atoms,
+//     int *vanilla_count,
+//     int *vanilla_tiles,
+//     int *vanilla_atoms) {
+
+//     // process tiles into alchemical and non-alchemical tiles
+//     // compaction will probably make this faster, but we only call this on nblist construction anyways
+//     // (or the very rare case when parameters are modified)
+
+
+// }
 
 // ALCHEMICAL == false guarantees that the tile's atoms are such that
 // 1. src_param and dst_params are equal for every i in R and j in C
@@ -401,7 +421,7 @@ template <
     bool COMPUTE_DU_DL,
     bool COMPUTE_DU_DP
 >
-void __global__ k_nonbonded_unified(
+void __device__ __forceinline__ v_nonbonded_unified(
     const int N,
     const double * __restrict__ coords,
     const double * __restrict__ params, // [N]
@@ -686,6 +706,108 @@ void __global__ k_nonbonded_unified(
             atomicAdd(u_buffer + atom_i_idx, energy);
         }
     }
+
+}
+
+
+template <
+    typename RealType,
+    bool COMPUTE_U,
+    bool COMPUTE_DU_DX,
+    bool COMPUTE_DU_DL,
+    bool COMPUTE_DU_DP
+>
+void __global__ k_nonbonded_unified(
+    const int N,
+    const double * __restrict__ coords,
+    const double * __restrict__ params, // [N]
+    const double * __restrict__ box,
+    const double * __restrict__ dp_dl,
+    const double lambda,
+    const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
+    const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
+    const double beta,
+    const double cutoff,
+    const int * __restrict__ ixn_tiles,
+    const unsigned int * __restrict__ ixn_atoms,
+    unsigned long long * __restrict__ du_dx,
+    unsigned long long * __restrict__ du_dp,
+    unsigned long long * __restrict__ du_dl_buffer,
+    unsigned long long * __restrict__ u_buffer) {
+
+    int tile_idx = blockIdx.x;
+    int row_block_idx = ixn_tiles[tile_idx];
+    int atom_i_idx = row_block_idx*32 + threadIdx.x;
+    int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
+    int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
+
+    RealType dq_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+0] : 0;
+    RealType dsig_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+1] : 0;
+    RealType deps_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+2] : 0;
+
+    int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
+    int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
+    int lambda_plane_j = atom_j_idx < N ? lambda_plane_idxs[atom_j_idx] : 0;
+
+    RealType dq_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+0] : 0;
+    RealType dsig_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+1] : 0;
+    RealType deps_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+2] : 0;
+
+    int is_vanilla = (
+        lambda_offset_i == 0 &&
+        lambda_plane_i == 0 &&
+        dq_dl_i == 0 &&
+        dsig_dl_i == 0 &&
+        deps_dl_i == 0 &&
+        lambda_offset_j == 0 &&
+        lambda_plane_j == 0 &&
+        dq_dl_j == 0 &&
+        dsig_dl_j == 0 &&
+        deps_dl_j == 0
+    );
+
+    bool tile_is_vanilla = __all_sync(0xffffffff, is_vanilla);
+
+    if(tile_is_vanilla) {
+        v_nonbonded_unified<RealType, 0, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DL, COMPUTE_DU_DP>(
+            N,
+            coords,
+            params,
+            box,
+            dp_dl,
+            lambda,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            beta,
+            cutoff,
+            ixn_tiles,
+            ixn_atoms,
+            du_dx,
+            du_dp,
+            du_dl_buffer,
+            u_buffer
+        );
+    } else {
+        v_nonbonded_unified<RealType, 1, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DL, COMPUTE_DU_DP>(
+            N,
+            coords,
+            params,
+            box,
+            dp_dl,
+            lambda,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            beta,
+            cutoff,
+            ixn_tiles,
+            ixn_atoms,
+            du_dx,
+            du_dp,
+            du_dl_buffer,
+            u_buffer
+        );
+    };
+
 
 }
 

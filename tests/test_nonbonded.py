@@ -186,6 +186,8 @@ class TestNonbondedDHFR(GradientTest):
         # we can't go bigger than this due to memory limitations in the the reference platform.
         for N in [33, 65, 231, 1050, 4080]:
 
+            print("N", N)
+
             test_conf = self.host_conf[:N]
 
             # strip out parts of the system
@@ -234,8 +236,6 @@ class TestNonbondedDHFR(GradientTest):
                     precision=precision
                 )
 
-
-    # @unittest.skip("benchmark-only")
     def test_benchmark(self):
         """
         This is mainly for benchmarking nonbonded computations on the initial state.
@@ -252,18 +252,19 @@ class TestNonbondedDHFR(GradientTest):
         test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
         test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-        nb_fn.set_lambda_plane_idxs(test_lambda_plane_idxs)
-        nb_fn.set_lambda_offset_idxs(test_lambda_offset_idxs)
+        # nb_fn.set_lambda_plane_idxs(test_lambda_plane_idxs)
+        # nb_fn.set_lambda_offset_idxs(test_lambda_offset_idxs)
 
         impl = nb_fn.unbound_impl(np.float32)
 
         for combo in range(2**4):
+
+            print("COMBO", combo)
+
             compute_du_dx = combo & 1 << 0
             compute_du_dp = combo & 1 << 1
             compute_du_dl = combo & 1 << 2
             compute_u = combo & 1 << 3
-
-            print(compute_du_dx, compute_du_dp, compute_du_dl, compute_u)
 
             for trip in range(50):
 

@@ -29,7 +29,7 @@ class Nonbonded : public Potential {
 
 private:
 
-    std::array<k_nonbonded_fn, 32> kernel_ptrs_;
+    std::array<k_nonbonded_fn, 16> kernel_ptrs_;
 
     int *d_exclusion_idxs_; // [E,2]
     double *d_scales_; // [E, 2]
@@ -88,6 +88,8 @@ private:
         const double *d_box,
         cudaStream_t stream
     );
+
+    // alchemical partioning code
 
 public:
 
