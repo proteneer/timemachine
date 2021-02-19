@@ -36,6 +36,7 @@ class CustomOpWrapper():
         return custom_ops.BoundPotential(self.unbound_impl(precision), self.params)
 
 
+# should not be used for Nonbonded Potentials
 class InterpolatedPotential(CustomOpWrapper):
 
     def bind(self, params):
@@ -58,7 +59,6 @@ class InterpolatedPotential(CustomOpWrapper):
             self.unbound_impl(precision),
             self.params
         )
-
 
 class LambdaPotential(CustomOpWrapper):
 
@@ -186,7 +186,7 @@ class CentroidRestraint(CustomOpWrapper):
         self.args[2] = masses
 
 
-class NonbondedCustomOpWrapper(CustomOpWrapper):
+class Nonbonded(CustomOpWrapper):
 
     def __init__(self, *args):
 
@@ -200,7 +200,7 @@ class NonbondedCustomOpWrapper(CustomOpWrapper):
 
         assert len(exclusion_set) == exclusion_idxs.shape[0]
 
-        super(NonbondedCustomOpWrapper, self).__init__(*args)
+        super(Nonbonded, self).__init__(*args)
 
     # def bind(self, params):
         # print("WARNING: Manually doubling parameters - du/dp should not be used")
@@ -236,16 +236,15 @@ class NonbondedCustomOpWrapper(CustomOpWrapper):
     def get_cutoff(self):
         return self.args[-1]
 
-class Nonbonded(NonbondedCustomOpWrapper):
-    pass
+class NonbondedInterpolated(Nonbonded):
 
-class LennardJones(NonbondedCustomOpWrapper):
-    pass
+    def unbound_impl(self, precision):
+        cls_name_base = "Nonbonded"
+        if precision == np.float64:
+            cls_name_base += "_f64_interpolated"
+        else:
+            cls_name_base += "_f32_interpolated"
 
-class Electrostatics(NonbondedCustomOpWrapper):
+        custom_ctor = getattr(custom_ops, cls_name_base)
 
-    def get_beta(self):
-        return self.args[4]
-    pass
-
-
+        return custom_ctor(*self.args)

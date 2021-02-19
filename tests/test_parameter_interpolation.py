@@ -12,7 +12,7 @@ def interpolated_potential(conf, params, box, lamb, u_fn):
     assert params.size % 2 == 0
 
     CP = params.shape[0]//2
-    new_params = (1-lamb)*params[:CP] + lamb*params[CP:] 
+    new_params = (1-lamb)*params[:CP] + lamb*params[CP:]
 
     return u_fn(conf, new_params, box, lamb)
 
@@ -66,22 +66,25 @@ class TestInterpolatedPotential(GradientTest):
 
                     print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
-                    ref_potential = functools.partial(
+                    ref_interpolated_potential = functools.partial(
                         interpolated_potential,
                         u_fn=ref_potential)
 
-                    test_potential = potentials.InterpolatedPotential(
-                        test_potential,
-                        N, qlj.size,
+                    test_interpolated_potential = potentials.NonbondedInterpolated(
+                        *test_potential.args
                     )
+                    # test_potential = potentials.InterpolatedPotential(
+                        # test_potential,
+                        # N, qlj.size,
+                    # )
 
                     self.compare_forces(
                         coords,
                         qlj,
                         box,
                         lamb,
-                        ref_potential,
-                        test_potential,
+                        ref_interpolated_potential,
+                        test_interpolated_potential,
                         rtol,
                         precision=precision
                     )

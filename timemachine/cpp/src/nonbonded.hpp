@@ -67,6 +67,7 @@ private:
     double *d_sorted_x_; //
     double *d_sorted_p_; //
     double *d_sorted_dp_dl_;
+    double *d_unsorted_dp_dl_;
     unsigned long long *d_sorted_du_dx_; //
     unsigned long long *d_sorted_du_dp_; //
     unsigned long long *d_du_dp_buffer_; //
