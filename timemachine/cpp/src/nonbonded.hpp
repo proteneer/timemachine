@@ -80,7 +80,6 @@ private:
     unsigned int *d_sort_storage_;
     size_t d_sort_storage_bytes_;
 
-    bool compute_4d_;
     bool disable_hilbert_;
 
     void hilbert_sort(

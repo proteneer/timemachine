@@ -137,26 +137,36 @@ void __global__ k_check_rebuild_box(
 }
 
 template <typename RealType>
-void __global__ k_check_rebuild_coords(
+void __global__ k_check_rebuild_coords_and_box(
     const int N,
     const double *new_coords,
     const double *old_coords,
+    const double *new_box,
+    const double *old_box,
     double padding,
     int *rebuild) {
 
-    const int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
+    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
 
-    if(atom_idx >= N) {
+    if(idx < 9) {
+        // (ytz): box vectors have exactly 9 components
+        // we can probably derive a looser bound later on.
+        if(old_box[idx] != new_box[idx]) {
+            rebuild[0] = 1;
+        }
+    }
+
+    if(idx >= N) {
         return;
     }
 
-    RealType xi = old_coords[atom_idx*3+0];
-    RealType yi = old_coords[atom_idx*3+1];
-    RealType zi = old_coords[atom_idx*3+2];
+    RealType xi = old_coords[idx*3+0];
+    RealType yi = old_coords[idx*3+1];
+    RealType zi = old_coords[idx*3+2];
 
-    RealType xj = new_coords[atom_idx*3+0];
-    RealType yj = new_coords[atom_idx*3+1];
-    RealType zj = new_coords[atom_idx*3+2];
+    RealType xj = new_coords[idx*3+0];
+    RealType yj = new_coords[idx*3+1];
+    RealType zj = new_coords[idx*3+2];
 
     RealType dx = xi - xj;
     RealType dy = yi - yj;
@@ -386,27 +396,6 @@ float __device__ __forceinline__ real_es_factor(float real_beta, float dij, floa
     float erfc_beta_dij = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*exp_beta_dij_2;
     return -inv_d2ij*(static_cast<float>(TWO_OVER_SQRT_PI)*beta_dij*exp_beta_dij_2 + erfc_beta_dij);
 }
-
-// void __global__ k_repartition_tiles(
-//     const int N,
-//     const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
-//     const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
-//     const double * __restrict__ dp_dl,
-//     const int * __restrict__ ixn_tiles,
-//     const unsigned int * __restrict__ ixn_atoms,
-//     int *alchemical_count,
-//     int *alchemical_tiles,
-//     int *alchemical_atoms,
-//     int *vanilla_count,
-//     int *vanilla_tiles,
-//     int *vanilla_atoms) {
-
-//     // process tiles into alchemical and non-alchemical tiles
-//     // compaction will probably make this faster, but we only call this on nblist construction anyways
-//     // (or the very rare case when parameters are modified)
-
-
-// }
 
 // ALCHEMICAL == false guarantees that the tile's atoms are such that
 // 1. src_param and dst_params are equal for every i in R and j in C

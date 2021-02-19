@@ -30,37 +30,15 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     beta_(beta),
     d_sort_storage_(nullptr),
     d_sort_storage_bytes_(0),
-    compute_4d_(false),
     nblist_padding_(0.1),
     disable_hilbert_(false),
     kernel_ptrs_({
-        // (ytz): this is a little nuts, we should replace this with some
-        // metaprogramming magic.
-
         // enumerate over every possible kernel combination
-        // A: Alchemical
         // U: Compute U
         // X: Compute DU_DL
         // L: Compute DU_DX
         // P: Compute DU_DP
         //                             U  X  L  P
-        // &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
-        // &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
-        // &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
-        // &k_nonbonded_unified<RealType, 0, 0, 1, 1>,
-        // &k_nonbonded_unified<RealType, 0, 1, 0, 0>,
-        // &k_nonbonded_unified<RealType, 0, 1, 0, 1>,
-        // &k_nonbonded_unified<RealType, 0, 1, 1, 0>,
-        // &k_nonbonded_unified<RealType, 0, 1, 1, 1>,
-        // &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
-        // &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
-        // &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
-        // &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
-        // &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
-        // &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
-        // &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
-        // &k_nonbonded_unified<RealType, 1, 1, 1, 1>,
-
         &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
         &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
         &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
@@ -78,18 +56,6 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
         &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
         &k_nonbonded_unified<RealType, 1, 1, 1, 1>
     }) {
-
-    for(auto x : lambda_plane_idxs) {
-        if(x != 0) {
-            compute_4d_ = true;
-        }
-    }
-
-    for(auto x : lambda_offset_idxs) {
-        if(x != 0) {
-            compute_4d_ = true;
-        }
-    }
 
     if(lambda_offset_idxs.size() != N_) {
         throw std::runtime_error("lambda offset idxs need to have size N");
@@ -328,10 +294,18 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     // (ytz) see if we need to rebuild the neighborlist.
     // (ytz + jfass): note that this logic needs to change if we use NPT later on since a resize in the box
     // can introduce new interactions.
-    k_check_rebuild_coords<RealType><<<B, tpb, 0, stream>>>(N, d_x, d_nblist_x_, nblist_padding_, d_rebuild_nblist_);
+    k_check_rebuild_coords_and_box<RealType><<<B, tpb, 0, stream>>>(
+        N,
+        d_x,
+        d_nblist_x_,
+        d_box,
+        d_nblist_box_,
+        nblist_padding_,
+        d_rebuild_nblist_
+    );
     gpuErrchk(cudaPeekAtLastError());
-    k_check_rebuild_box<RealType><<<1, tpb, 0, stream>>>(N, d_box, d_nblist_box_, d_rebuild_nblist_);
-    gpuErrchk(cudaPeekAtLastError());
+    // k_check_rebuild_box<RealType><<<1, tpb, 0, stream>>>(N, d_box, d_nblist_box_, d_rebuild_nblist_);
+    // gpuErrchk(cudaPeekAtLastError());
 
     // we can optimize this away by doing the check on the GPU directly.
     gpuErrchk(cudaMemcpyAsync(p_rebuild_nblist_, d_rebuild_nblist_, 1*sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
@@ -368,14 +342,10 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaStreamSynchronize(stream));
 
-        // TBD: sort tiles into alchemical and non-alchemical tiles
-
     } else {
         k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());
     }
-
-    // build alchemical masks here
 
     // do parameter interpolation here
     if(Interpolated) {
@@ -387,7 +357,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             d_sorted_p_,
             d_sorted_dp_dl_
         );
-        // compute dp_dl
         gpuErrchk(cudaPeekAtLastError());
     } else {
         k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
@@ -398,10 +367,10 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
     // reset buffers and sorted accumulators
     if(d_du_dx) {
-	   gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N*3*sizeof(*d_sorted_du_dx_), stream))
+	    gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N*3*sizeof(*d_sorted_du_dx_), stream))
     }
     if(d_du_dp) {
-	   gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N*3*sizeof(*d_sorted_du_dp_), stream))
+	    gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N*3*sizeof(*d_sorted_du_dp_), stream))
     }
     if(d_du_dl) {
         gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N*sizeof(*d_du_dl_buffer_), stream));
