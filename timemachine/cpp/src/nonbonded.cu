@@ -468,19 +468,19 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         const int tpb = 32;
         dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
 
-        k_inv_permute_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_p_, d_unsorted_p_);
-        gpuErrchk(cudaPeekAtLastError());
-        k_inv_permute_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_dp_dl_, d_unsorted_dp_dl_);
-        gpuErrchk(cudaPeekAtLastError());
-
-        // std::cout << "EXCLUSIONS" << std::endl;
+        if(Interpolated) {
+            k_inv_permute_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_p_, d_unsorted_p_);
+            gpuErrchk(cudaPeekAtLastError());
+            k_inv_permute_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_dp_dl_, d_unsorted_dp_dl_);
+            gpuErrchk(cudaPeekAtLastError());
+        }
 
         k_nonbonded_exclusions<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
             E_,
             d_x,
-            d_unsorted_p_,
+            Interpolated ? d_unsorted_p_ : d_p,
             d_box,
-            d_unsorted_dp_dl_,
+            Interpolated ? d_unsorted_dp_dl_ : d_sorted_dp_dl_,
             lambda,
             d_lambda_plane_idxs_,
             d_lambda_offset_idxs_,
