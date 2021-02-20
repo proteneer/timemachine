@@ -47,7 +47,7 @@ private:
     double *d_v_t_; // velocities
     double *d_box_t_; // box vectors
 
-    unsigned long long *d_du_dx_t_; // du/dx 
+    unsigned long long *d_du_dx_t_; // du/dx
 
     Integrator *intg_;
     std::vector<Observable *> observables_;

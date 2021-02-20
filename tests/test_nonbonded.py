@@ -252,8 +252,8 @@ class TestNonbondedDHFR(GradientTest):
         test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
         test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-        # nb_fn.set_lambda_plane_idxs(test_lambda_plane_idxs)
-        # nb_fn.set_lambda_offset_idxs(test_lambda_offset_idxs)
+        nb_fn.set_lambda_plane_idxs(test_lambda_plane_idxs)
+        nb_fn.set_lambda_offset_idxs(test_lambda_offset_idxs)
 
         impl = nb_fn.unbound_impl(np.float32)
 
@@ -279,10 +279,6 @@ class TestNonbondedDHFR(GradientTest):
                     compute_u
                 )
 
-                # print(test_du_dx)
-                # print(test_du_dp)
-                # print(test_du_dl)
-                # print(test_u)
 
 class TestNonbondedWater(GradientTest):
 

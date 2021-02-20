@@ -283,6 +283,30 @@ void __global__ k_inv_permute_assign(
 
 }
 
+
+template <typename RealType>
+void __global__ k_inv_permute_assign_2x(
+    const int N,
+    const unsigned int * __restrict__ perm,
+    const RealType * __restrict__ sorted_array_1,
+    const RealType * __restrict__ sorted_array_2,
+    RealType * __restrict__ array_1,
+    RealType * __restrict__ array_2) {
+
+    int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int stride = gridDim.y;
+    int stride_idx = blockIdx.y;
+
+    if(idx >= N) {
+        return;
+    }
+
+    array_1[perm[idx]*stride+stride_idx] = sorted_array_1[idx*stride+stride_idx];
+    array_2[perm[idx]*stride+stride_idx] = sorted_array_2[idx*stride+stride_idx];
+
+}
+
+
 template <typename RealType>
 void __global__ k_add_ull_to_real(
     const int N,
