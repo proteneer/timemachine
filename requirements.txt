@@ -3,7 +3,7 @@ bootstrapped==0.0.2
 grpcio==1.30.0
 grpcio-tools==1.30.0
 protobuf==3.12.2
-scipy==1.1.0
+scipy==1.6.0
 pymbar==3.0.5
 jax==0.2.9
 jaxlib==0.1.59
