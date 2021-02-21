@@ -26,7 +26,10 @@ public:
 
     void step(double lambda);
 
-    void multiple_steps(std::vector<double> lambda_schedule);
+    std::vector<double> multiple_steps(
+        const std::vector<double> &lambda_schedule,
+        int store_du_dl_freq=0
+    );
 
     int num_atoms() const;
 
@@ -38,7 +41,7 @@ public:
 
 private:
 
-    void _step(double lambda);
+    void _step(double lambda, double *du_dl_buffer);
 
     int step_;
     int N_; // number of particles
