@@ -85,7 +85,7 @@ Nonbonded<RealType>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_scales_, E_*2*sizeof(*d_scales_)));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], E_*2*sizeof(*d_scales_), cudaMemcpyHostToDevice));
-    
+
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1*sizeof(*p_ixn_count_)));
 
     gpuErrchk(cudaMalloc(&d_nblist_x_, N_*3*sizeof(*d_nblist_x_)));

@@ -139,7 +139,24 @@ void declare_context(py::module &m) {
     }))
     .def("add_observable", &timemachine::Context::add_observable)
     .def("step", &timemachine::Context::step)
-    .def("multiple_steps", &timemachine::Context::multiple_steps)
+    .def("multiple_steps", [](timemachine::Context &ctxt,
+        const py::array_t<double, py::array::c_style> &lambda_schedule,
+        std::optional<int> store_du_dl_freq) -> py::array_t<double, py::array::c_style> {
+        // (ytz): I hate C++
+        std::vector<double> vec_lambda_schedule(lambda_schedule.size());
+        std::memcpy(vec_lambda_schedule.data(), lambda_schedule.data(), vec_lambda_schedule.size()*sizeof(double));
+        std::vector<double> result;
+        if(store_du_dl_freq.has_value()) {
+            result = ctxt.multiple_steps(vec_lambda_schedule, store_du_dl_freq.value());
+        } else {
+            result = ctxt.multiple_steps(vec_lambda_schedule, 0);
+        }
+
+        py::array_t<double, py::array::c_style> out_buffer(result.size());
+        std::memcpy(out_buffer.mutable_data(), result.data(), result.size()*sizeof(double));
+        return out_buffer;
+    }, py::arg("lambda_schedule"), py::arg("store_du_dl_freq") = 0)
+    // .def("multiple_steps", &timemachine::Context::multiple_steps)
     .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();
         unsigned int D = 3;
@@ -155,8 +172,8 @@ void declare_context(py::module &m) {
         return buffer;
     })
     .def("_get_du_dx_t_minus_1", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
-        PyErr_WarnEx(PyExc_DeprecationWarning, 
-            "_get_du_dx_t_minus_1() should only be used for testing. It will be removed in a future release.", 
+        PyErr_WarnEx(PyExc_DeprecationWarning,
+            "_get_du_dx_t_minus_1() should only be used for testing. It will be removed in a future release.",
             1);
         unsigned int N = ctxt.num_atoms();
         unsigned int D = 3;

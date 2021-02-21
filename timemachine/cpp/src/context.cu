@@ -47,19 +47,53 @@ void Context::add_observable(Observable *obs) {
     this->observables_.push_back(obs);
 }
 
-void Context::multiple_steps(std::vector<double> lambda_schedule) {
-    for(auto lambda : lambda_schedule) {
-        this->_step(lambda);
+std::vector<double> Context::multiple_steps(const std::vector<double> &lambda_schedule, int store_du_dl_freq) {
+    double *d_du_dl_buffer = nullptr;
+    // try catch block is to deal with leaks in d_du_dl_buffer
+    if(store_du_dl_freq==0) {
+        store_du_dl_freq = lambda_schedule.size();
     }
-    cudaDeviceSynchronize();
+    int buffer_size = lambda_schedule.size() / store_du_dl_freq;
+    try {
+        // indicator so we can set it to a default arg.
+        gpuErrchk(cudaMalloc(&d_du_dl_buffer, buffer_size*sizeof(*d_du_dl_buffer)));
+        gpuErrchk(cudaMemset(d_du_dl_buffer, 0, buffer_size*sizeof(*d_du_dl_buffer)));
+        for(int i=0; i < lambda_schedule.size(); i++) {
+            // decide if we need to store the du_dl for this step
+            double *du_dl_ptr = nullptr;
+            if(i % store_du_dl_freq == 0) {
+                // pemdas but just to make it clear we're doing pointer arithemtic
+                du_dl_ptr = d_du_dl_buffer + (i / store_du_dl_freq);
+            }
+            // std::cout << du_dl_ptr << std::endl;
+            double lambda = lambda_schedule[i];
+            this->_step(lambda, du_dl_ptr);
+        }
+        cudaDeviceSynchronize();
+
+        std::vector<double> h_du_dl_buffer(buffer_size);
+        gpuErrchk(cudaMemcpy(
+            &h_du_dl_buffer[0],
+            d_du_dl_buffer,
+            buffer_size*sizeof(*d_du_dl_buffer),
+            cudaMemcpyDeviceToHost)
+        );
+
+        return h_du_dl_buffer;
+
+    } catch(...) {
+        gpuErrchk(cudaFree(d_du_dl_buffer));
+        throw;
+    }
+
 }
 
 void Context::step(double lambda) {
-    this->_step(lambda);
+    this->_step(lambda, nullptr);
     cudaDeviceSynchronize();
 }
 
-void Context::_step(double lambda) {
+void Context::_step(double lambda, double *d_du_dl_buffer) {
 
     // the observables decide on whether or not to act on given
     // data (cheap pointers in any case)
@@ -87,7 +121,7 @@ void Context::_step(double lambda) {
             lambda,
             d_du_dx_t_, // we only need the forces
             nullptr,
-            nullptr,
+            d_du_dl_buffer,
             nullptr,
             static_cast<cudaStream_t>(0) // TBD: parallelize me!
             // streams_[i]
