@@ -48,27 +48,23 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     )
 
     # equilibration
-    for step in range(equil_steps):
-        ctxt.step(lamb)
-
-    bonded_du_dl_obs = custom_ops.FullPartialUPartialLambda(bonded_impls, 5)
-    nonbonded_du_dl_obs = custom_ops.FullPartialUPartialLambda(nonbonded_impls, 5)
-
-    # add observable
-    ctxt.add_observable(bonded_du_dl_obs)
-    ctxt.add_observable(nonbonded_du_dl_obs)
+    equil_schedule = np.ones(equil_steps)*lamb
+    ctxt.multiple_steps(equil_schedule)
 
     for obs in du_dp_obs:
         ctxt.add_observable(obs)
 
-    for _ in range(prod_steps):
-        ctxt.step(lamb)
+    prod_schedule = np.ones(prod_steps)*lamb
+    du_dl_freq = 5
+    full_du_dls = ctxt.multiple_steps(prod_schedule, du_dl_freq)
 
-    bonded_full_du_dls = bonded_du_dl_obs.full_du_dl()
-    nonbonded_full_du_dls = nonbonded_du_dl_obs.full_du_dl()
+    # bonded_full_du_dls = bonded_du_dl_obs.full_du_dl()
+    # nonbonded_full_du_dls = nonbonded_du_dl_obs.full_du_dl()
 
-    bonded_mean, bonded_std = np.mean(bonded_full_du_dls), np.std(bonded_full_du_dls)
-    nonbonded_mean, nonbonded_std = np.mean(nonbonded_full_du_dls), np.std(nonbonded_full_du_dls)
+    # bonded_mean, bonded_std = np.mean(bonded_full_du_dls), np.std(bonded_full_du_dls)
+    # nonbonded_mean, nonbonded_std = np.mean(nonbonded_full_du_dls), np.std(nonbonded_full_du_dls)
+
+    du_dl_mean, du_dl_std = np.mean(full_du_dls), np.std(full_du_dls)
 
     # keep the structure of grads the same as that of final_potentials so we can properly
     # form their vjps.
@@ -76,7 +72,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     for obs in du_dp_obs:
         grads.append(obs.avg_du_dp())
 
-    return (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std), grads
+    return (du_dl_mean, du_dl_std), grads
 
 
 FreeEnergyModel = namedtuple("FreeEnergyModel", [
@@ -114,8 +110,9 @@ def _deltaG(model, sys_params):
     du_dls = []
     all_grads = []
 
-    for (bonded_mean, bonded_std), (nonbonded_mean, nonbonded_std), grads in results:
-        du_dls.append(bonded_mean + nonbonded_mean)
+    for (du_dl_mean, du_dl_std), grads in results:
+        # (ytz): figure out what to do with du_dl_std later
+        du_dls.append(du_dl_mean)
         all_grads.append(grads)
 
     dG = np.trapz(du_dls, model.lambda_schedule)

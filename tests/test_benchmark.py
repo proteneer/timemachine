@@ -240,5 +240,5 @@ def test_hif2a():
 
 
 if __name__ == "__main__":
-    # benchmark_dhfr(verbose=False, num_batches=25)
-    benchmark_hif2a(verbose=False, num_batches=25)
+    benchmark_dhfr(verbose=False, num_batches=100)
+    benchmark_hif2a(verbose=False, num_batches=100)
