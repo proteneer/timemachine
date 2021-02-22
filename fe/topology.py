@@ -125,7 +125,6 @@ class HostGuestTopology():
 
         if isinstance(guest_p, potentials.NonbondedInterpolated):
             assert guest_qlj.shape[0] == num_guest_atoms*2
-            # guest_p = guest_p.get_u_fn()
             is_interpolated = True
         else:
             assert guest_qlj.shape[0] == num_guest_atoms

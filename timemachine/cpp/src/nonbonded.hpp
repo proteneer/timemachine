@@ -50,16 +50,6 @@ private:
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
     int *p_rebuild_nblist_; // pinned
 
-    // reduction buffer, no need to sort them
-    // unsigned long long *d_sorted_du_dl_buffer_;
-    // unsigned long long *d_sorted_u_buffer_;
-
-    // unsigned long long *d_du_dl_buffer_;
-    // unsigned long long *d_u_buffer_;
-
-    // unsigned long long *d_du_dl_reduce_sum_;
-    // unsigned long long *d_u_reduce_sum_;
-
     unsigned int *d_perm_; // hilbert curve permutation
 
     int *d_sorted_lambda_plane_idxs_;
@@ -82,16 +72,11 @@ private:
 
     bool disable_hilbert_;
 
-    // unsigned long long *d_sum_storage_;
-    // size_t d_sum_storage_bytes_;
-
     void hilbert_sort(
         const double *d_x,
         const double *d_box,
         cudaStream_t stream
     );
-
-    // alchemical partioning code
 
 public:
 

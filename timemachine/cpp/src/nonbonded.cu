@@ -471,14 +471,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    // if(d_du_dl) {
-    //     this->reduce_du_dl_buffer(d_du_dl, stream);
-    // }
-
-    // if(d_u) {
-    //     this->reduce_u_buffer(d_u, stream);
-    // }
-
 }
 
 template class Nonbonded<double, true>;

@@ -186,8 +186,6 @@ class TestNonbondedDHFR(GradientTest):
         # we can't go bigger than this due to memory limitations in the the reference platform.
         for N in [33, 65, 231, 1050, 4080]:
 
-            print("N", N)
-
             test_conf = self.host_conf[:N]
 
             # strip out parts of the system
@@ -236,6 +234,7 @@ class TestNonbondedDHFR(GradientTest):
                     precision=precision
                 )
 
+    @unittest.skip("benchmark-only")
     def test_benchmark(self):
         """
         This is mainly for benchmarking nonbonded computations on the initial state.

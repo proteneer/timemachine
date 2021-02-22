@@ -503,8 +503,6 @@ class GradientTest(unittest.TestCase):
             compute_du_dl = combo & 1 << 2
             compute_u = combo & 1 << 3
 
-            # print(compute_du_dx, compute_du_dp, compute_du_dl, compute_u)
-
             # do each computation twice to check determinism
             test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute_selective(
                 x,
@@ -518,16 +516,12 @@ class GradientTest(unittest.TestCase):
             )
             if compute_u:
                 np.testing.assert_allclose(ref_u, test_u, rtol)
-                # print("U PASSED")
             if compute_du_dx:
                 self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
-                # print("DU_DX PASSED")
             if compute_du_dl:
                 np.testing.assert_almost_equal(ref_du_dl, test_du_dl, rtol)
-                # print("DU_DL PASSED")
             if compute_du_dp:
                 np.testing.assert_almost_equal(ref_du_dp, test_du_dp, rtol)
-                # print("DU_DP PASSED")
 
             test_du_dx_2, test_du_dp_2, test_du_dl_2, test_u_2 = test_impl.execute_selective(
                 x,

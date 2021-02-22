@@ -37,78 +37,78 @@ class CustomOpWrapper():
 
 
 # should not be used for Nonbonded Potentials
-class InterpolatedPotential(CustomOpWrapper):
+# class InterpolatedPotential(CustomOpWrapper):
 
-    def bind(self, params):
-        assert self.get_u_fn().params is None
-        self.params = params
-        return self
+#     def bind(self, params):
+#         assert self.get_u_fn().params is None
+#         self.params = params
+#         return self
 
-    def get_u_fn(self):
-        return self.args[0]
+#     def get_u_fn(self):
+#         return self.args[0]
 
-    def unbound_impl(self, precision):
-        return custom_ops.InterpolatedPotential(
-            self.get_u_fn().unbound_impl(precision),
-            self.args[1],
-            self.args[2]
-        )
+#     def unbound_impl(self, precision):
+#         return custom_ops.InterpolatedPotential(
+#             self.get_u_fn().unbound_impl(precision),
+#             self.args[1],
+#             self.args[2]
+#         )
 
-    def bound_impl(self, precision):
-        return custom_ops.BoundPotential(
-            self.unbound_impl(precision),
-            self.params
-        )
+#     def bound_impl(self, precision):
+#         return custom_ops.BoundPotential(
+#             self.unbound_impl(precision),
+#             self.params
+#         )
 
-class LambdaPotential(CustomOpWrapper):
+# class LambdaPotential(CustomOpWrapper):
 
-    def bind(self, params):
-        assert self.get_u_fn().params is None
-        self.params = params
-        return self
+#     def bind(self, params):
+#         assert self.get_u_fn().params is None
+#         self.params = params
+#         return self
 
-    # pass through so we can use the underlying methods
-    def __getattr__(self, attr):
-        return getattr(self.args[0], attr)
+#     # pass through so we can use the underlying methods
+#     def __getattr__(self, attr):
+#         return getattr(self.args[0], attr)
 
-    def get_u_fn(self):
-        return self.args[0]
+#     def get_u_fn(self):
+#         return self.args[0]
 
-    def set_N(self, N):
-        self.args[1] = N
+#     def set_N(self, N):
+#         self.args[1] = N
 
-    def get_N(self):
-        return self.args[1]
+#     def get_N(self):
+#         return self.args[1]
 
-    def get_multiplier(self):
-        return self.args[3]
+#     def get_multiplier(self):
+#         return self.args[3]
 
-    def get_offset(self):
-        return self.args[4]
+#     def get_offset(self):
+#         return self.args[4]
 
-    def unbound_impl(self, precision):
-        return custom_ops.LambdaPotential(
-            self.args[0].unbound_impl(precision),
-            *self.args[1:]
-        )
+#     def unbound_impl(self, precision):
+#         return custom_ops.LambdaPotential(
+#             self.args[0].unbound_impl(precision),
+#             *self.args[1:]
+#         )
 
-    def bound_impl(self, precision):
-        u_params = self.get_u_fn().params
-        return custom_ops.BoundPotential(
-            self.unbound_impl(precision),
-            self.params
-        )
+#     def bound_impl(self, precision):
+#         u_params = self.get_u_fn().params
+#         return custom_ops.BoundPotential(
+#             self.unbound_impl(precision),
+#             self.params
+#         )
 
-class Shape(CustomOpWrapper):
+# class Shape(CustomOpWrapper):
 
-    def get_N(self):
-        return self.args[0]
+#     def get_N(self):
+#         return self.args[0]
 
-    def get_a_idxs(self):
-        return self.args[1]
+#     def get_a_idxs(self):
+#         return self.args[1]
 
-    def get_b_idxs(self):
-        return self.args[2]
+#     def get_b_idxs(self):
+#         return self.args[2]
 
 
 class BondedWrapper(CustomOpWrapper):
@@ -171,19 +171,20 @@ class InertialRestraint(CustomOpWrapper):
     def set_masses(self, masses):
         self.args[2] = masses
 
-class CentroidRestraint(CustomOpWrapper):
 
-    def get_a_idxs(self):
-        return self.args[0]
+# class CentroidRestraint(CustomOpWrapper):
 
-    def get_b_idxs(self):
-        return self.args[1]
+#     def get_a_idxs(self):
+#         return self.args[0]
 
-    def get_masses(self):
-        return self.args[2]
+#     def get_b_idxs(self):
+#         return self.args[1]
 
-    def set_masses(self, masses):
-        self.args[2] = masses
+#     def get_masses(self):
+#         return self.args[2]
+
+#     def set_masses(self, masses):
+#         self.args[2] = masses
 
 
 class Nonbonded(CustomOpWrapper):
@@ -201,10 +202,6 @@ class Nonbonded(CustomOpWrapper):
         assert len(exclusion_set) == exclusion_idxs.shape[0]
 
         super(Nonbonded, self).__init__(*args)
-
-    # def bind(self, params):
-        # print("WARNING: Manually doubling parameters - du/dp should not be used")
-        # assert 0
 
     def set_exclusion_idxs(self, x):
         self.args[0] = x

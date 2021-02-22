@@ -80,14 +80,6 @@ void HarmonicBond<RealType>::execute_device(
     int tpb = 32;
     int blocks = (B_+tpb-1)/tpb;
 
-    // if(d_du_dl) {
-    //     this->reset_du_dl_buffer(stream);
-    // }
-
-    // if(d_u) {
-    //     this->reset_u_buffer(stream);
-    // }
-
     if(B_ > 0) {
         k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(
             B_,
@@ -104,14 +96,6 @@ void HarmonicBond<RealType>::execute_device(
         );
         gpuErrchk(cudaPeekAtLastError());
     }
-
-    // if(d_du_dl) {
-    //     this->reduce_du_dl_buffer(d_du_dl, stream);
-    // }
-
-    // if(d_u) {
-    //     this->reduce_u_buffer(d_u, stream);
-    // }
 
 };
 

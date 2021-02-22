@@ -24,8 +24,6 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
 
     for bp in final_potentials:
         impl = bp.bound_impl(np.float32)
-        if isinstance(bp, potentials.InterpolatedPotential) or isinstance(bp, potentials.LambdaPotential):
-            bp = bp.get_u_fn()
         if isinstance(bp, potentials.Nonbonded):
             nonbonded_impls.append(impl)
         else:
@@ -57,12 +55,6 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     prod_schedule = np.ones(prod_steps)*lamb
     du_dl_freq = 5
     full_du_dls = ctxt.multiple_steps(prod_schedule, du_dl_freq)
-
-    # bonded_full_du_dls = bonded_du_dl_obs.full_du_dl()
-    # nonbonded_full_du_dls = nonbonded_du_dl_obs.full_du_dl()
-
-    # bonded_mean, bonded_std = np.mean(bonded_full_du_dls), np.std(bonded_full_du_dls)
-    # nonbonded_mean, nonbonded_std = np.mean(nonbonded_full_du_dls), np.std(nonbonded_full_du_dls)
 
     du_dl_mean, du_dl_std = np.mean(full_du_dls), np.std(full_du_dls)
 

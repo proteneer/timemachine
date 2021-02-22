@@ -73,10 +73,6 @@ class TestInterpolatedPotential(GradientTest):
                     test_interpolated_potential = potentials.NonbondedInterpolated(
                         *test_potential.args
                     )
-                    # test_potential = potentials.InterpolatedPotential(
-                        # test_potential,
-                        # N, qlj.size,
-                    # )
 
                     self.compare_forces(
                         coords,

@@ -133,10 +133,6 @@ class TestContext(unittest.TestCase):
         test_obs = custom_ops.AvgPartialUPartialParam(bp, 1)
         test_obs_f2 = custom_ops.AvgPartialUPartialParam(bp, 2)
 
-        # test_obs_du_dl = custom_ops.AvgPartialUPartialLambda(bps, 1)
-        # test_obs_f2_du_dl = custom_ops.AvgPartialUPartialLambda(bps, 2)
-        # test_obs_f3_du_dl = custom_ops.FullPartialUPartialLambda(bps, 2)
-
         obs = [test_obs, test_obs_f2]
 
         for o in obs:
@@ -155,13 +151,6 @@ class TestContext(unittest.TestCase):
 
         ref_avg_du_dls = np.mean(ref_all_du_dls, axis=0)
         ref_avg_du_dls_f2 = np.mean(ref_all_du_dls[::2], axis=0)
-
-        # np.testing.assert_allclose(test_obs_du_dl.avg_du_dl(), ref_avg_du_dls)
-        # np.testing.assert_allclose(test_obs_f2_du_dl.avg_du_dl(), ref_avg_du_dls_f2)
-
-        # full_du_dls = test_obs_f3_du_dl.full_du_dl()
-        # assert len(full_du_dls) == np.ceil(num_steps/2)
-        # np.testing.assert_allclose(np.mean(full_du_dls), ref_avg_du_dls_f2)
 
         ref_avg_du_dps = np.mean(ref_all_du_dps, axis=0)
         ref_avg_du_dps_f2 = np.mean(ref_all_du_dps[::2], axis=0)
@@ -199,106 +188,6 @@ class TestContext(unittest.TestCase):
             test_du_dls,
             ref_all_du_dls[::du_dl_freq]
         )
-
-
-    # def test_multiple_steps(self):
-    #     """
-    #     Test that the multiple step context behaves as expected when storing du_dls
-    #     """
-
-    #     np.random.seed(4321)
-
-    #     N = 8
-    #     B = 5
-    #     A = 0
-    #     T = 0
-    #     D = 3
-
-    #     x0 = np.random.rand(N,D).astype(dtype=np.float64)*2
-
-    #     E = 2
-
-    #     lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-    #     lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
-
-    #     params, ref_nrg_fn, test_nrg = prepare_nb_system(
-    #         x0,
-    #         E,
-    #         lambda_plane_idxs,
-    #         lambda_offset_idxs,
-    #         p_scale=3.0,
-    #         # cutoff=0.5,
-    #         cutoff=1.5
-    #     )
-
-    #     masses = np.random.rand(N)
-
-    #     v0 = np.random.rand(x0.shape[0], x0.shape[1])
-    #     N = len(masses)
-
-    #     num_steps = 5
-    #     lambda_schedule = np.random.rand(num_steps)
-    #     ca = np.random.rand()
-    #     cbs = -np.random.rand(len(masses))/1
-    #     ccs = np.zeros_like(cbs)
-
-    #     dt = 2e-3
-
-    #     box = np.eye(3)*1.5
-
-    #     intg = custom_ops.LangevinIntegrator(
-    #         dt,
-    #         ca,
-    #         cbs,
-    #         ccs,
-    #         1234
-    #     )
-
-    #     bp = test_nrg.bind(params).bound_impl(precision=np.float64)
-    #     bps = [bp]
-
-    #     ctxt = custom_ops.Context(
-    #         x0,
-    #         v0,
-    #         box,
-    #         intg,
-    #         bps
-    #     )
-
-    #     store_du_dl_freq = 2
-
-    #     full_du_dl_obs = custom_ops.FullPartialUPartialLambda(bps, store_du_dl_freq)
-
-    #     ctxt.add_observable(full_du_dl_obs)
-
-    #     lambda_schedule = np.random.rand(10)
-
-    #     for lamb in lambda_schedule:
-    #         ctxt.step(lamb)
-
-    #     ref_du_dls = full_du_dl_obs.full_du_dl()
-
-    #     # need to re-seed the integrator
-    #     intg_2 = custom_ops.LangevinIntegrator(
-    #         dt,
-    #         ca,
-    #         cbs,
-    #         ccs,
-    #         1234
-    #     )
-
-    #     ctxt_2 = custom_ops.Context(
-    #         x0,
-    #         v0,
-    #         box,
-    #         intg_2,
-    #         bps
-    #     )
-
-    #     test_du_dls = ctxt_2.multiple_steps(lambda_schedule, store_du_dl_freq)
-
-    #     np.testing.assert_equal(ref_du_dls, test_du_dls)
-
 
 if __name__ == "__main__":
     unittest.main()

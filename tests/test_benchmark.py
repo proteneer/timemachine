@@ -103,8 +103,6 @@ def benchmark(
         du_dls = ctxt.multiple_steps(lambda_schedule, compute_du_dl_freq)
         batch_end = time.time()
 
-        # print("du_dl length", len(du_dls), "mean", np.mean(du_dls))
-
         delta = batch_end - batch_start
 
         batch_times.append(delta)
@@ -183,8 +181,8 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
     solvent_box += np.eye(3)*0.1 # BFGS this later
 
     for stage, host_system, host_coords, host_box in [
-        ("hif2a", complex_system, complex_coords, complex_box)]:
-        # ("solvent", solvent_system, solvent_coords, solvent_box)]:
+        ("hif2a", complex_system, complex_coords, complex_box),
+        ("solvent", solvent_system, solvent_coords, solvent_box)]:
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(
             host_system,
