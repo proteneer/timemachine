@@ -76,8 +76,8 @@ void PeriodicTorsion<RealType>::execute_device(
     const double lambda,
     unsigned long long *d_du_dx,
     double *d_du_dp,
-    double *d_du_dl,
-    double *d_u,
+    unsigned long long *d_du_dl,
+    unsigned long long *d_u,
     cudaStream_t stream) {
 
     int tpb = 32;
@@ -98,7 +98,7 @@ void PeriodicTorsion<RealType>::execute_device(
             d_du_dp,
             d_du_dl,
             d_u
-        );        
+        );
         gpuErrchk(cudaPeekAtLastError());
     }
 

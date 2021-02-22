@@ -2,27 +2,28 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
+#include <numeric>
 
 #include "context.hpp"
 #include "potential.hpp"
 #include "bound_potential.hpp"
 #include "harmonic_bond.hpp"
 #include "harmonic_angle.hpp"
-#include "lambda_potential.hpp"
-#include "interpolated_potential.hpp"
+// #include "lambda_potential.hpp"
+// #include "interpolated_potential.hpp"
 // #include "restraint.hpp"
-#include "inertial_restraint.hpp"
-#include "centroid_restraint.hpp"
+// #include "inertial_restraint.hpp"
+// #include "centroid_restraint.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
-#include "lennard_jones.hpp"
-#include "electrostatics.hpp"
+// #include "lennard_jones.hpp"
+// #include "electrostatics.hpp"
 // #include "gbsa.hpp"
 #include "fixed_point.hpp"
 #include "integrator.hpp"
-#include "observable.hpp"
+// #include "observable.hpp"
 #include "neighborlist.hpp"
-#include "shape.hpp"
+// #include "shape.hpp"
 
 
 #include <iostream>
@@ -226,51 +227,51 @@ void declare_avg_partial_u_partial_param(py::module &m) {
 }
 
 
-void declare_avg_partial_u_partial_lambda(py::module &m) {
+// void declare_avg_partial_u_partial_lambda(py::module &m) {
 
-    using Class = timemachine::AvgPartialUPartialLambda;
-    std::string pyclass_name = std::string("AvgPartialUPartialLambda");
-    py::class_<Class, timemachine::Observable>(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        std::vector<timemachine::BoundPotential *> bps,
-        int freq) {
-        return new timemachine::AvgPartialUPartialLambda(bps, freq);
-    }))
-    .def("avg_du_dl", [](timemachine::AvgPartialUPartialLambda &obj) -> double {
-        double avg_du_dl;
-        obj.avg_du_dl(&avg_du_dl);
-        return avg_du_dl;
-    });
-}
+//     using Class = timemachine::AvgPartialUPartialLambda;
+//     std::string pyclass_name = std::string("AvgPartialUPartialLambda");
+//     py::class_<Class, timemachine::Observable>(
+//         m,
+//         pyclass_name.c_str(),
+//         py::buffer_protocol(),
+//         py::dynamic_attr()
+//     )
+//     .def(py::init([](
+//         std::vector<timemachine::BoundPotential *> bps,
+//         int freq) {
+//         return new timemachine::AvgPartialUPartialLambda(bps, freq);
+//     }))
+//     .def("avg_du_dl", [](timemachine::AvgPartialUPartialLambda &obj) -> double {
+//         double avg_du_dl;
+//         obj.avg_du_dl(&avg_du_dl);
+//         return avg_du_dl;
+//     });
+// }
 
 
-void declare_full_partial_u_partial_lambda(py::module &m) {
+// void declare_full_partial_u_partial_lambda(py::module &m) {
 
-    using Class = timemachine::FullPartialUPartialLambda;
-    std::string pyclass_name = std::string("FullPartialUPartialLambda");
-    py::class_<Class, timemachine::Observable>(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        std::vector<timemachine::BoundPotential *> bps,
-        int freq) {
-        return new timemachine::FullPartialUPartialLambda(bps, freq);
-    }))
-    .def("full_du_dl", [](timemachine::FullPartialUPartialLambda &obj) -> py::array_t<double, py::array::c_style> {
-        int count = obj.count();
-        py::array_t<double, py::array::c_style> py_full_du_dl({count});
-        obj.full_du_dl(py_full_du_dl.mutable_data());
-        return py_full_du_dl;
-    });
-}
+//     using Class = timemachine::FullPartialUPartialLambda;
+//     std::string pyclass_name = std::string("FullPartialUPartialLambda");
+//     py::class_<Class, timemachine::Observable>(
+//         m,
+//         pyclass_name.c_str(),
+//         py::buffer_protocol(),
+//         py::dynamic_attr()
+//     )
+//     .def(py::init([](
+//         std::vector<timemachine::BoundPotential *> bps,
+//         int freq) {
+//         return new timemachine::FullPartialUPartialLambda(bps, freq);
+//     }))
+//     .def("full_du_dl", [](timemachine::FullPartialUPartialLambda &obj) -> py::array_t<double, py::array::c_style> {
+//         int count = obj.count();
+//         py::array_t<double, py::array::c_style> py_full_du_dl({count});
+//         obj.full_du_dl(py_full_du_dl.mutable_data());
+//         return py_full_du_dl;
+//     });
+// }
 
 
 void declare_integrator(py::module &m) {
@@ -339,8 +340,9 @@ void declare_potential(py::module &m) {
             std::vector<unsigned long long> du_dx(N*D);
             std::vector<double> du_dp(P);
 
-            double du_dl = -9999999999; //debug use, make sure its overwritten
-            double u = 9999999999; //debug use, make sure its overwrriten
+            // initialize to zero for the accumulator
+            std::vector<unsigned long long> du_dl(N, 0);
+            std::vector<unsigned long long> u(N, 0);
 
             pot.execute_host(
                 N,
@@ -351,13 +353,14 @@ void declare_potential(py::module &m) {
                 lambda,
                 &du_dx[0],
                 &du_dp[0],
-                &du_dl,
-                &u
+                &du_dl[0],
+                &u[0]
             );
 
             py::array_t<double, py::array::c_style> py_du_dx({N, D});
             for(int i=0; i < du_dx.size(); i++) {
-                py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+                // py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+                py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
             }
 
             std::vector<ssize_t> pshape(params.shape(), params.shape()+params.ndim());
@@ -367,7 +370,10 @@ void declare_potential(py::module &m) {
                 py_du_dp.mutable_data()[i] = du_dp[i];
             }
 
-            return py::make_tuple(py_du_dx, py_du_dp, du_dl, u);
+            unsigned long long du_dl_sum = std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
+            unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
+
+            return py::make_tuple(py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
 
     })
     .def("execute_selective", [](timemachine::Potential &pot,
@@ -387,8 +393,8 @@ void declare_potential(py::module &m) {
             std::vector<unsigned long long> du_dx(N*D);
             std::vector<double> du_dp(P);
 
-            double du_dl = -9999999999; //debug use, make sure its overwritten
-            double u = 9999999999; //debug use, make sure its overwrriten
+            std::vector<unsigned long long> du_dl(N, 0);
+            std::vector<unsigned long long> u(N, 0);
 
             pot.execute_host(
                 N,
@@ -399,8 +405,8 @@ void declare_potential(py::module &m) {
                 lambda,
                 compute_du_dx ? &du_dx[0] : nullptr,
                 compute_du_dp ? &du_dp[0] : nullptr,
-                compute_du_dl ? &du_dl : nullptr,
-                compute_u ? &u : nullptr
+                compute_du_dl ? &du_dl[0] : nullptr,
+                compute_u ? &u[0] : nullptr
             );
 
             py::array_t<double, py::array::c_style> py_du_dx({N, D});
@@ -415,11 +421,14 @@ void declare_potential(py::module &m) {
                 py_du_dp.mutable_data()[i] = du_dp[i];
             }
 
+            unsigned long long du_dl_sum = std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
+            unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
+
             auto result = py::make_tuple(
                 py_du_dx,
                 py_du_dp,
-                du_dl,
-                u
+                FIXED_TO_FLOAT<double>(du_dl_sum),
+                FIXED_TO_FLOAT<double>(u_sum)
             );
 
             if(!compute_du_dx) {
@@ -503,9 +512,8 @@ void declare_bound_potential(py::module &m) {
             const long unsigned int D = coords.shape()[1];
 
             std::vector<unsigned long long> du_dx(N*D);
-
-            double du_dl = -9999999999; //debug use, make sure its overwritten
-            double u = 9999999999; //debug use, make sure its overwrriten
+            std::vector<unsigned long long> du_dl(N, 0);
+            std::vector<unsigned long long> u(N, 0);
 
             bp.execute_host(
                 N,
@@ -513,57 +521,60 @@ void declare_bound_potential(py::module &m) {
                 box.data(),
                 lambda,
                 &du_dx[0],
-                &du_dl,
-                &u
+                &du_dl[0],
+                &u[0]
             );
 
             py::array_t<double, py::array::c_style> py_du_dx({N, D});
             for(int i=0; i < du_dx.size(); i++) {
-                py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+                py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
             }
 
-            return py::make_tuple(py_du_dx, du_dl, u);
+            unsigned long long du_dl_sum = std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
+            unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
+
+            return py::make_tuple(py_du_dx, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
     });
 
 }
 
-template <typename RealType>
-void declare_shape(py::module &m, const char *typestr) {
+// template <typename RealType>
+// void declare_shape(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Shape<RealType>;
-    std::string pyclass_name = std::string("Shape_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        const int N,
-        const py::array_t<int, py::array::c_style> &a_idxs,
-        const py::array_t<int, py::array::c_style> &b_idxs,
-        const py::array_t<double, py::array::c_style> &alphas,
-        const py::array_t<double, py::array::c_style> &weights,
-        double k) {
+//     using Class = timemachine::Shape<RealType>;
+//     std::string pyclass_name = std::string("Shape_") + typestr;
+//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+//         m,
+//         pyclass_name.c_str(),
+//         py::buffer_protocol(),
+//         py::dynamic_attr()
+//     )
+//     .def(py::init([](
+//         const int N,
+//         const py::array_t<int, py::array::c_style> &a_idxs,
+//         const py::array_t<int, py::array::c_style> &b_idxs,
+//         const py::array_t<double, py::array::c_style> &alphas,
+//         const py::array_t<double, py::array::c_style> &weights,
+//         double k) {
 
-            std::vector<int> vec_a_idxs(a_idxs.data(), a_idxs.data()+a_idxs.size());
-            std::vector<int> vec_b_idxs(b_idxs.data(), b_idxs.data()+b_idxs.size());
-            std::vector<double> vec_alphas(alphas.data(), alphas.data()+alphas.size());
-            std::vector<double> vec_weights(weights.data(), weights.data()+weights.size());
+//             std::vector<int> vec_a_idxs(a_idxs.data(), a_idxs.data()+a_idxs.size());
+//             std::vector<int> vec_b_idxs(b_idxs.data(), b_idxs.data()+b_idxs.size());
+//             std::vector<double> vec_alphas(alphas.data(), alphas.data()+alphas.size());
+//             std::vector<double> vec_weights(weights.data(), weights.data()+weights.size());
 
-            return new timemachine::Shape<RealType>(
-                N,
-                vec_a_idxs,
-                vec_b_idxs,
-                vec_alphas,
-                vec_weights,
-                k
-            );
+//             return new timemachine::Shape<RealType>(
+//                 N,
+//                 vec_a_idxs,
+//                 vec_b_idxs,
+//                 vec_alphas,
+//                 vec_weights,
+//                 k
+//             );
 
-        }
-    ));
+//         }
+//     ));
 
-}
+// }
 
 
 template <typename RealType>
@@ -687,78 +698,78 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 // }
 
 
-template <typename RealType>
-void declare_centroid_restraint(py::module &m, const char *typestr) {
+// template <typename RealType>
+// void declare_centroid_restraint(py::module &m, const char *typestr) {
 
-    using Class = timemachine::CentroidRestraint<RealType>;
-    std::string pyclass_name = std::string("CentroidRestraint_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        const py::array_t<int, py::array::c_style> &group_a_idxs,
-        const py::array_t<int, py::array::c_style> &group_b_idxs,
-        const py::array_t<double, py::array::c_style> &masses,
-        double kb,
-        double b0
-    ) {
-        std::vector<int> vec_group_a_idxs(group_a_idxs.size());
-        std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
-        std::vector<int> vec_group_b_idxs(group_b_idxs.size());
-        std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
-        std::vector<double> vec_masses(masses.size());
-        std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
+//     using Class = timemachine::CentroidRestraint<RealType>;
+//     std::string pyclass_name = std::string("CentroidRestraint_") + typestr;
+//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+//         m,
+//         pyclass_name.c_str(),
+//         py::buffer_protocol(),
+//         py::dynamic_attr()
+//     )
+//     .def(py::init([](
+//         const py::array_t<int, py::array::c_style> &group_a_idxs,
+//         const py::array_t<int, py::array::c_style> &group_b_idxs,
+//         const py::array_t<double, py::array::c_style> &masses,
+//         double kb,
+//         double b0
+//     ) {
+//         std::vector<int> vec_group_a_idxs(group_a_idxs.size());
+//         std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
+//         std::vector<int> vec_group_b_idxs(group_b_idxs.size());
+//         std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
+//         std::vector<double> vec_masses(masses.size());
+//         std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
 
-        return new timemachine::CentroidRestraint<RealType>(
-            vec_group_a_idxs,
-            vec_group_b_idxs,
-            vec_masses,
-            kb,
-            b0
-        );
+//         return new timemachine::CentroidRestraint<RealType>(
+//             vec_group_a_idxs,
+//             vec_group_b_idxs,
+//             vec_masses,
+//             kb,
+//             b0
+//         );
 
-    }));
+//     }));
 
-}
+// }
 
 
-template <typename RealType>
-void declare_inertial_restraint(py::module &m, const char *typestr) {
+// template <typename RealType>
+// void declare_inertial_restraint(py::module &m, const char *typestr) {
 
-    using Class = timemachine::InertialRestraint<RealType>;
-    std::string pyclass_name = std::string("InertialRestraint_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        const py::array_t<int, py::array::c_style> &group_a_idxs,
-        const py::array_t<int, py::array::c_style> &group_b_idxs,
-        const py::array_t<double, py::array::c_style> &masses,
-        double k
-    ) {
-        std::vector<int> vec_group_a_idxs(group_a_idxs.size());
-        std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
-        std::vector<int> vec_group_b_idxs(group_b_idxs.size());
-        std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
-        std::vector<double> vec_masses(masses.size());
-        std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
+//     using Class = timemachine::InertialRestraint<RealType>;
+//     std::string pyclass_name = std::string("InertialRestraint_") + typestr;
+//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+//         m,
+//         pyclass_name.c_str(),
+//         py::buffer_protocol(),
+//         py::dynamic_attr()
+//     )
+//     .def(py::init([](
+//         const py::array_t<int, py::array::c_style> &group_a_idxs,
+//         const py::array_t<int, py::array::c_style> &group_b_idxs,
+//         const py::array_t<double, py::array::c_style> &masses,
+//         double k
+//     ) {
+//         std::vector<int> vec_group_a_idxs(group_a_idxs.size());
+//         std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
+//         std::vector<int> vec_group_b_idxs(group_b_idxs.size());
+//         std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
+//         std::vector<double> vec_masses(masses.size());
+//         std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
 
-        return new timemachine::InertialRestraint<RealType>(
-            vec_group_a_idxs,
-            vec_group_b_idxs,
-            vec_masses,
-            k
-        );
+//         return new timemachine::InertialRestraint<RealType>(
+//             vec_group_a_idxs,
+//             vec_group_b_idxs,
+//             vec_masses,
+//             k
+//         );
 
-    }));
+//     }));
 
-}
+// }
 
 
 template <typename RealType>
@@ -785,7 +796,7 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
         }
         if(lamb_offset.has_value()) {
             vec_lamb_offset.assign(lamb_offset.value().data(), lamb_offset.value().data()+lamb_offset.value().size());
-        }      
+        }
         return new timemachine::PeriodicTorsion<RealType>(
             vec_torsion_idxs,
             vec_lamb_mult,
@@ -797,62 +808,62 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 
 }
 
-void declare_lambda_potential(py::module &m) {
+// void declare_lambda_potential(py::module &m) {
 
-    using Class = timemachine::LambdaPotential;
-    std::string pyclass_name = std::string("LambdaPotential");
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        std::shared_ptr<timemachine::Potential> potential,
-        int N,
-        int P,
-        double multiplier,
-        double offset) {
+//     using Class = timemachine::LambdaPotential;
+//     std::string pyclass_name = std::string("LambdaPotential");
+//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+//         m,
+//         pyclass_name.c_str(),
+//         py::buffer_protocol(),
+//         py::dynamic_attr()
+//     )
+//     .def(py::init([](
+//         std::shared_ptr<timemachine::Potential> potential,
+//         int N,
+//         int P,
+//         double multiplier,
+//         double offset) {
 
-        return new timemachine::LambdaPotential(
-            potential,
-            N,
-            P,
-            multiplier,
-            offset
-        );
+//         return new timemachine::LambdaPotential(
+//             potential,
+//             N,
+//             P,
+//             multiplier,
+//             offset
+//         );
 
-    }
-    ));
+//     }
+//     ));
 
-}
+// }
 
 
-void declare_interpolated_potential(py::module &m) {
+// void declare_interpolated_potential(py::module &m) {
 
-    using Class = timemachine::InterpolatedPotential;
-    std::string pyclass_name = std::string("InterpolatedPotential");
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-        m,
-        pyclass_name.c_str(),
-        py::buffer_protocol(),
-        py::dynamic_attr()
-    )
-    .def(py::init([](
-        std::shared_ptr<timemachine::Potential> potential,
-        int N,
-        int P) {
+//     using Class = timemachine::InterpolatedPotential;
+//     std::string pyclass_name = std::string("InterpolatedPotential");
+//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+//         m,
+//         pyclass_name.c_str(),
+//         py::buffer_protocol(),
+//         py::dynamic_attr()
+//     )
+//     .def(py::init([](
+//         std::shared_ptr<timemachine::Potential> potential,
+//         int N,
+//         int P) {
 
-        return new timemachine::InterpolatedPotential(
-            potential,
-            N,
-            P
-        );
+//         return new timemachine::InterpolatedPotential(
+//             potential,
+//             N,
+//             P
+//         );
 
-    }
-    ));
+//     }
+//     ));
 
-}
+// }
 
 template <typename RealType, bool Interpolated>
 void declare_nonbonded(py::module &m, const char *typestr) {
@@ -988,28 +999,28 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_observable(m);
     declare_avg_partial_u_partial_param(m);
-    declare_avg_partial_u_partial_lambda(m);
-    declare_full_partial_u_partial_lambda(m);
+    // declare_avg_partial_u_partial_lambda(m);
+    // declare_full_partial_u_partial_lambda(m);
 
     declare_potential(m);
     declare_bound_potential(m);
-    declare_lambda_potential(m);
-    declare_interpolated_potential(m);
+    // declare_lambda_potential(m);
+    // declare_interpolated_potential(m);
 
     declare_neighborlist<double>(m, "f64");
     declare_neighborlist<float>(m, "f32");
 
-    declare_centroid_restraint<double>(m, "f64");
-    declare_centroid_restraint<float>(m, "f32");
+    // declare_centroid_restraint<double>(m, "f64");
+    // declare_centroid_restraint<float>(m, "f32");
 
-    declare_inertial_restraint<double>(m, "f64");
-    declare_inertial_restraint<float>(m, "f32");
+    // declare_inertial_restraint<double>(m, "f64");
+    // declare_inertial_restraint<float>(m, "f32");
 
     // declare_restraint<double>(m, "f64");
     // declare_restraint<float>(m, "f32");
 
-    declare_shape<double>(m, "f64");
-    declare_shape<float>(m, "f32");
+    // declare_shape<double>(m, "f64");
+    // declare_shape<float>(m, "f32");
 
     declare_harmonic_bond<double>(m, "f64");
     declare_harmonic_bond<float>(m, "f32");

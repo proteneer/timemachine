@@ -1,6 +1,6 @@
 #pragma once
 
-#include "potential.hpp"
+#include "buffered_potential.hpp"
 #include <vector>
 
 namespace timemachine {
@@ -35,8 +35,8 @@ public:
         const double lambda,
         unsigned long long *d_du_dx,
         double *d_du_dp,
-        double *d_du_dl,
-        double *d_u,
+        unsigned long long *d_du_dl,
+        unsigned long long *d_u,
         cudaStream_t stream
     ) override;
 

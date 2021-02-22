@@ -8,6 +8,6 @@ unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED(RealType v) {
 }
 
 template<typename RealType>
-RealType __device__ __forceinline__ FIXED_TO_FLOAT(unsigned long long v) {
+RealType __host__ __device__ __forceinline__ FIXED_TO_FLOAT(unsigned long long v) {
     return static_cast<RealType>(static_cast<long long>(v))/FIXED_EXPONENT;
 }

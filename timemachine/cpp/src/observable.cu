@@ -48,96 +48,96 @@ void AvgPartialUPartialParam::avg_du_dp(double *h_buf) const {
 }
 
 
-AvgPartialUPartialLambda::AvgPartialUPartialLambda(
-    std::vector<BoundPotential *>bps, int freq) : bps_(bps), count_(0), freq_(freq) {
-    gpuErrchk(cudaMalloc(&d_sum_du_dl_, 1*sizeof(*d_sum_du_dl_)));
-    gpuErrchk(cudaMemset(d_sum_du_dl_, 0, 1*sizeof(*d_sum_du_dl_)));
-}
+// AvgPartialUPartialLambda::AvgPartialUPartialLambda(
+//     std::vector<BoundPotential *>bps, int freq) : bps_(bps), count_(0), freq_(freq) {
+//     gpuErrchk(cudaMalloc(&d_sum_du_dl_, 1*sizeof(*d_sum_du_dl_)));
+//     gpuErrchk(cudaMemset(d_sum_du_dl_, 0, 1*sizeof(*d_sum_du_dl_)));
+// }
 
-AvgPartialUPartialLambda::~AvgPartialUPartialLambda() {
-    gpuErrchk(cudaFree(d_sum_du_dl_));
-}
+// AvgPartialUPartialLambda::~AvgPartialUPartialLambda() {
+//     gpuErrchk(cudaFree(d_sum_du_dl_));
+// }
 
-void AvgPartialUPartialLambda::observe(
-    int step,
-    int N,
-    double *d_x_t,
-    double *d_box_t,
-    double lambda) {
+// void AvgPartialUPartialLambda::observe(
+//     int step,
+//     int N,
+//     double *d_x_t,
+//     double *d_box_t,
+//     double lambda) {
 
-    if(step % freq_ == 0) {
-        for(int i=0; i < bps_.size(); i++) {
-            bps_[i]->execute_device(
-                N,
-                d_x_t,
-                d_box_t,
-                lambda,
-                nullptr,
-                nullptr,
-                d_sum_du_dl_,
-                nullptr,
-                static_cast<cudaStream_t>(0) // TBD: parallelize me!
-            );
-        }
-        count_ += 1;
-    }
+//     if(step % freq_ == 0) {
+//         for(int i=0; i < bps_.size(); i++) {
+//             bps_[i]->execute_device(
+//                 N,
+//                 d_x_t,
+//                 d_box_t,
+//                 lambda,
+//                 nullptr,
+//                 nullptr,
+//                 d_sum_du_dl_,
+//                 nullptr,
+//                 static_cast<cudaStream_t>(0) // TBD: parallelize me!
+//             );
+//         }
+//         count_ += 1;
+//     }
 
-}
+// }
 
-void AvgPartialUPartialLambda::avg_du_dl(double *h_buf) const {
-    gpuErrchk(cudaMemcpy(h_buf, d_sum_du_dl_, 1*sizeof(*h_buf), cudaMemcpyDeviceToHost));
-    h_buf[0] /= count_;
-}
+// void AvgPartialUPartialLambda::avg_du_dl(double *h_buf) const {
+//     gpuErrchk(cudaMemcpy(h_buf, d_sum_du_dl_, 1*sizeof(*h_buf), cudaMemcpyDeviceToHost));
+//     h_buf[0] /= count_;
+// }
 
 
-FullPartialUPartialLambda::FullPartialUPartialLambda(
-    std::vector<BoundPotential *>bps, int freq) : 
-        bps_(bps),
-        count_(0),
-        freq_(freq),
-        size_(1000000) {
+// FullPartialUPartialLambda::FullPartialUPartialLambda(
+//     std::vector<BoundPotential *>bps, int freq) :
+//         bps_(bps),
+//         count_(0),
+//         freq_(freq),
+//         size_(1000000) {
 
-    gpuErrchk(cudaMalloc(&d_full_du_dl_, size_*sizeof(*d_full_du_dl_)));
-    gpuErrchk(cudaMemset(d_full_du_dl_, 0, size_*sizeof(*d_full_du_dl_)));
-}
+//     gpuErrchk(cudaMalloc(&d_full_du_dl_, size_*sizeof(*d_full_du_dl_)));
+//     gpuErrchk(cudaMemset(d_full_du_dl_, 0, size_*sizeof(*d_full_du_dl_)));
+// }
 
-FullPartialUPartialLambda::~FullPartialUPartialLambda() {
-    gpuErrchk(cudaFree(d_full_du_dl_));
-}
+// FullPartialUPartialLambda::~FullPartialUPartialLambda() {
+//     gpuErrchk(cudaFree(d_full_du_dl_));
+// }
 
-void FullPartialUPartialLambda::observe(
-    int step,
-    int N,
-    double *d_x_t,
-    double *d_box_t,
-    double lambda) {
+// void FullPartialUPartialLambda::observe(
+//     int step,
+//     int N,
+//     double *d_x_t,
+//     double *d_box_t,
+//     double lambda) {
 
-    if(step % freq_ == 0) {
-        if(count_ >= size_) {
-            throw std::runtime_error("overflow in FullPartialUPartialLambda.observe()");
-        }
+//     if(step % freq_ == 0) {
+//         if(count_ >= size_) {
+//             throw std::runtime_error("overflow in FullPartialUPartialLambda.observe()");
+//         }
 
-        for(int i=0; i < bps_.size(); i++) {
-            bps_[i]->execute_device(
-                N,
-                d_x_t,
-                d_box_t,
-                lambda,
-                nullptr,
-                nullptr,
-                d_full_du_dl_ + count_,
-                nullptr,
-                static_cast<cudaStream_t>(0) // TBD: parallelize me!
-            );
-        }
-        count_ += 1;
-    }
+//         for(int i=0; i < bps_.size(); i++) {
+//             bps_[i]->execute_device(
+//                 N,
+//                 d_x_t,
+//                 d_box_t,
+//                 lambda,
+//                 nullptr,
+//                 nullptr,
+//                 d_full_du_dl_ + count_,
+//                 nullptr,
+//                 static_cast<cudaStream_t>(0) // TBD: parallelize me!
+//             );
+//         }
+//         count_ += 1;
+//     }
 
-}
+// }
 
-void FullPartialUPartialLambda::full_du_dl(double *h_buf) const {
-    gpuErrchk(cudaMemcpy(h_buf, d_full_du_dl_, count_*sizeof(*h_buf), cudaMemcpyDeviceToHost));
-}
+// void FullPartialUPartialLambda::full_du_dl(double *h_buf) const {
+//     gpuErrchk(cudaMemcpy(h_buf, d_full_du_dl_, count_*sizeof(*h_buf), cudaMemcpyDeviceToHost));
+// }
 
 
 }

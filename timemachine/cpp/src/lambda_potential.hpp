@@ -21,7 +21,7 @@ private:
     double multiplier_;
     double offset_;
 
-public: 
+public:
 
     LambdaPotential(
         std::shared_ptr<Potential> u,

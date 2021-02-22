@@ -1,7 +1,7 @@
 #pragma once
 
 #include "neighborlist.hpp"
-#include "potential.hpp"
+#include "buffered_potential.hpp"
 #include <vector>
 #include <array>
 
@@ -25,7 +25,7 @@ typedef void (*k_nonbonded_fn)(const int N,
     unsigned long long * __restrict__ u_buffer);
 
 template<typename RealType, bool Interpolated>
-class Nonbonded : public Potential {
+class Nonbonded : public BufferedPotential {
 
 private:
 
@@ -50,15 +50,15 @@ private:
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
     int *p_rebuild_nblist_; // pinned
 
-    // reduction buffer
-    unsigned long long *d_sorted_du_dl_buffer_;
-    unsigned long long *d_sorted_u_buffer_;
+    // reduction buffer, no need to sort them
+    // unsigned long long *d_sorted_du_dl_buffer_;
+    // unsigned long long *d_sorted_u_buffer_;
 
-    unsigned long long *d_du_dl_buffer_;
-    unsigned long long *d_u_buffer_;
+    // unsigned long long *d_du_dl_buffer_;
+    // unsigned long long *d_u_buffer_;
 
-    unsigned long long *d_du_dl_reduce_sum_;
-    unsigned long long *d_u_reduce_sum_;
+    // unsigned long long *d_du_dl_reduce_sum_;
+    // unsigned long long *d_u_reduce_sum_;
 
     unsigned int *d_perm_; // hilbert curve permutation
 
@@ -81,6 +81,9 @@ private:
     size_t d_sort_storage_bytes_;
 
     bool disable_hilbert_;
+
+    // unsigned long long *d_sum_storage_;
+    // size_t d_sum_storage_bytes_;
 
     void hilbert_sort(
         const double *d_x,
@@ -116,28 +119,10 @@ public:
         const double lambda,
         unsigned long long *d_du_dx,
         double *d_du_dp,
-        double *d_du_dl,
-        double *d_u,
+        unsigned long long *d_du_dl,
+        unsigned long long *d_u,
         cudaStream_t stream
     ) override;
-
-
-    void execute_device_chain(
-        const int N,
-        const int P,
-        const double *d_x,
-        const double *d_p,
-        const double *d_box,
-        const double *dp_dl, // note extra chain rule term here
-        const double lambda,
-        unsigned long long *d_du_dx,
-        double *d_du_dp,
-        double *d_du_dl,
-        double *d_u,
-        cudaStream_t stream
-    );
-
-
 
 };
 

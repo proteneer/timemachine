@@ -55,7 +55,8 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
         &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
         &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
         &k_nonbonded_unified<RealType, 1, 1, 1, 1>
-    }) {
+    }),
+    BufferedPotential(lambda_offset_idxs.size()){
 
     if(lambda_offset_idxs.size() != N_) {
         throw std::runtime_error("lambda offset idxs need to have size N");
@@ -150,6 +151,7 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
 
+
 };
 
 template <typename RealType, bool Interpolated>
@@ -159,13 +161,7 @@ Nonbonded<RealType, Interpolated>::~Nonbonded() {
     gpuErrchk(cudaFree(d_scales_));
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
-
-    gpuErrchk(cudaFree(d_du_dl_reduce_sum_));
-    gpuErrchk(cudaFree(d_u_reduce_sum_));
-
     gpuErrchk(cudaFree(d_du_dp_buffer_));
-    gpuErrchk(cudaFree(d_du_dl_buffer_));
-    gpuErrchk(cudaFree(d_u_buffer_));
     gpuErrchk(cudaFree(d_perm_)); // nullptr if we never built nblist
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
@@ -183,6 +179,8 @@ Nonbonded<RealType, Interpolated>::~Nonbonded() {
     gpuErrchk(cudaFree(d_sort_keys_out_));
     gpuErrchk(cudaFree(d_sort_vals_in_));
     gpuErrchk(cudaFree(d_sort_storage_));
+
+    // gpuErrchk(cudaFree(d_sum_storage_));
 
     gpuErrchk(cudaFreeHost(p_ixn_count_));
 
@@ -252,8 +250,8 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         const double lambda,
         unsigned long long *d_du_dx,
         double *d_du_dp,
-        double *d_du_dl,
-        double *d_u,
+        unsigned long long *d_du_dl,
+        unsigned long long *d_u,
         cudaStream_t stream) {
 
     // (ytz) the nonbonded algorithm proceeds as follows:
@@ -372,14 +370,14 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     if(d_du_dp) {
 	    gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N*3*sizeof(*d_sorted_du_dp_), stream))
     }
-    if(d_du_dl) {
-        gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N*sizeof(*d_du_dl_buffer_), stream));
-        gpuErrchk(cudaMemsetAsync(d_du_dl_reduce_sum_, 0, 1*sizeof(*d_du_dl_reduce_sum_), stream));
-    }
-    if(d_u) {
-        gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N*sizeof(*d_u_buffer_), stream));
-        gpuErrchk(cudaMemsetAsync(d_u_reduce_sum_, 0, 1*sizeof(*d_u_reduce_sum_), stream));
-    }
+
+    // if(d_du_dl) {
+    //     this->reset_du_dl_buffer(stream);
+    // }
+
+    // if(d_u) {
+    //     this->reset_u_buffer(stream);
+    // }
 
     // look up which kernel we need for this computation
     int kernel_idx = 0;
@@ -404,8 +402,8 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         nblist_.get_ixn_atoms(),
         d_sorted_du_dx_,
         d_sorted_du_dp_,
-        d_du_dl_buffer_, // switch to nullptr if we don't request du_dl
-        d_u_buffer_ // switch to nullptr if we don't request energies
+        d_du_dl, // switch to nullptr if we don't request du_dl
+        d_u // switch to nullptr if we don't request energies
     );
 
     gpuErrchk(cudaPeekAtLastError());
@@ -456,8 +454,8 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             cutoff_,
             d_du_dx,
             d_du_dp_buffer_,
-            d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
-            d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
+            d_du_dl,
+            d_u
         );
         gpuErrchk(cudaPeekAtLastError());
     }
@@ -480,22 +478,13 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    // (ytz): we must accumulate in fixed point to get the cancellation of nans
-    // otherwise if we convert prematurely floating points become messed up
+    // if(d_du_dl) {
+    //     this->reduce_du_dl_buffer(d_du_dl, stream);
+    // }
 
-    if(d_du_dl) {
-        k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_du_dl_buffer_, d_du_dl_reduce_sum_);
-        gpuErrchk(cudaPeekAtLastError());
-        k_final_add<<<1, 32, 0, stream>>>(d_du_dl_reduce_sum_, d_du_dl);
-        gpuErrchk(cudaPeekAtLastError());
-    }
-
-    if(d_u) {
-        k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_u_buffer_, d_u_reduce_sum_);
-        gpuErrchk(cudaPeekAtLastError());
-        k_final_add<<<1, 32, 0, stream>>>(d_u_reduce_sum_, d_u);
-        gpuErrchk(cudaPeekAtLastError());
-    }
+    // if(d_u) {
+    //     this->reduce_u_buffer(d_u, stream);
+    // }
 
 }
 

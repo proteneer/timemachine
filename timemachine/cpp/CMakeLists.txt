@@ -36,6 +36,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/solver.cpp
   src/potential.cu
   src/bound_potential.cu
+  src/buffered_potential.cu
   src/gpu_utils.cu
   src/observable.cu
   src/hilbert.cpp
@@ -46,16 +47,16 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/harmonic_angle.cu
   src/periodic_torsion.cu
   src/integrator.cu
-  src/shape.cu
-  src/lennard_jones.cu
-  src/electrostatics.cu
+  # src/shape.cu
+  # src/lennard_jones.cu
+  # src/electrostatics.cu
   # src/stepper.cu
   src/context.cu
-  src/lambda_potential.cu
-  src/interpolated_potential.cu
+  # src/lambda_potential.cu
+  # src/interpolated_potential.cu
   # src/gbsa.cu
-  src/centroid_restraint.cu
-  src/inertial_restraint.cu
+  # src/centroid_restraint.cu
+  # src/inertial_restraint.cu
   src/kernels/k_neighborlist.cu
 )
 

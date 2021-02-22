@@ -15,8 +15,8 @@ void Potential::execute_host(
     const double lambda, // [1]
     unsigned long long *h_du_dx, // [N,3]
     double *h_du_dp, // [P]
-    double *h_du_dl, //
-    double *h_u) {
+    unsigned long long *h_du_dl, //
+    unsigned long long *h_u) {
 
     double *d_x;
     double *d_p;
@@ -35,8 +35,8 @@ void Potential::execute_host(
 
     unsigned long long *d_du_dx = nullptr;
     double *d_du_dp = nullptr;
-    double *d_du_dl = nullptr;
-    double *d_u = nullptr;
+    unsigned long long *d_du_dl = nullptr;
+    unsigned long long *d_u = nullptr;
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
     if(h_du_dx) {
@@ -48,12 +48,12 @@ void Potential::execute_host(
         gpuErrchk(cudaMemset(d_du_dp, 0, P*sizeof(unsigned long long)));
     }
     if(h_du_dl) {
-        gpuErrchk(cudaMalloc(&d_du_dl, sizeof(double)));
-        gpuErrchk(cudaMemset(d_du_dl, 0, sizeof(double)));
+        gpuErrchk(cudaMalloc(&d_du_dl, N*sizeof(*d_du_dl)));
+        gpuErrchk(cudaMemset(d_du_dl, 0, N*sizeof(*d_du_dl)));
     }
     if(h_u) {
-        gpuErrchk(cudaMalloc(&d_u, sizeof(double)));
-        gpuErrchk(cudaMemset(d_u, 0, sizeof(double)));
+        gpuErrchk(cudaMalloc(&d_u, N*sizeof(*d_u)));
+        gpuErrchk(cudaMemset(d_u, 0, N*sizeof(*d_u)));
     }
 
     this->execute_device(
@@ -80,11 +80,11 @@ void Potential::execute_host(
         gpuErrchk(cudaFree(d_du_dp));
     }
     if(h_du_dl) {
-        gpuErrchk(cudaMemcpy(h_du_dl, d_du_dl, sizeof(*h_du_dl), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(h_du_dl, d_du_dl, N*sizeof(*h_du_dl), cudaMemcpyDeviceToHost));
         gpuErrchk(cudaFree(d_du_dl));
     }
     if(h_u) {
-        gpuErrchk(cudaMemcpy(h_u, d_u, sizeof(*h_u), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(h_u, d_u, N*sizeof(*h_u), cudaMemcpyDeviceToHost));
         gpuErrchk(cudaFree(d_u));
     }
 
@@ -130,7 +130,7 @@ void Potential::execute_host_du_dx(
     this->execute_device(
         N,
         P,
-        d_x, 
+        d_x,
         d_p,
         d_box,
         lambda,

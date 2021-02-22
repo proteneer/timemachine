@@ -29,8 +29,8 @@ void BoundPotential::execute_host(
     const double *h_box, // [3, 3]
     const double lambda, // [1]
     unsigned long long *h_du_dx, // [N,3]
-    double *h_du_dl, //
-    double *h_u) {
+    unsigned long long *h_du_dl, //
+    unsigned long long *h_u) {
 
     double *d_x;
     double *d_box;
@@ -44,18 +44,18 @@ void BoundPotential::execute_host(
     gpuErrchk(cudaMemcpy(d_box, h_box, D*D*sizeof(double), cudaMemcpyHostToDevice));
 
     unsigned long long *d_du_dx; // du/dx
-    double *d_du_dl; // du/dl
-    double *d_u = nullptr; // u
+    unsigned long long *d_du_dl; // du/dl
+    unsigned long long *d_u = nullptr; // u
 
     const int P = this->size();
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
     gpuErrchk(cudaMalloc(&d_du_dx, N*D*sizeof(unsigned long long)));
     gpuErrchk(cudaMemset(d_du_dx, 0, N*D*sizeof(unsigned long long)));
-    gpuErrchk(cudaMalloc(&d_du_dl, sizeof(double)));
-    gpuErrchk(cudaMemset(d_du_dl, 0, sizeof(double)));
-    gpuErrchk(cudaMalloc(&d_u, sizeof(double)));
-    gpuErrchk(cudaMemset(d_u, 0, sizeof(double)));
+    gpuErrchk(cudaMalloc(&d_du_dl, N*sizeof(double)));
+    gpuErrchk(cudaMemset(d_du_dl, 0, N*sizeof(double)));
+    gpuErrchk(cudaMalloc(&d_u, N*sizeof(double)));
+    gpuErrchk(cudaMemset(d_u, 0, N*sizeof(double)));
 
 
     this->execute_device(

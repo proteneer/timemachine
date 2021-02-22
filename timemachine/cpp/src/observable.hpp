@@ -66,6 +66,11 @@ private:
     int count_;
     int freq_;
 
+    unsigned long long *d_du_dx_t_; // du/dx [N,3]
+    unsigned long long *d_du_dl_buffer_; // du/dl [N]
+    double *d_sum_storage_;
+    size_t d_sum_storage_bytes_;
+
 public:
 
     AvgPartialUPartialLambda(

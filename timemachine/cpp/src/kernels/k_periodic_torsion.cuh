@@ -1,4 +1,5 @@
 #include "../fixed_point.hpp"
+#include "k_fixed_point.cuh"
 
 template<typename RealType>
 inline __device__ RealType dot_product(
@@ -33,8 +34,8 @@ void __global__ k_periodic_torsion(
     const int * __restrict__ torsion_idxs,    // [b, 4]
     unsigned long long * __restrict__ du_dx,
     double * __restrict__ du_dp,
-    double * __restrict__ du_dl,
-    double * __restrict__ u) { 
+    unsigned long long * __restrict__ du_dl,
+    unsigned long long * __restrict__ u) {
 
     const auto t_idx = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -116,11 +117,11 @@ void __global__ k_periodic_torsion(
 
     if(du_dx) {
         for(int d=0; d < 3; d++) {
-            atomicAdd(du_dx + i_idx*D + d, FLOAT_TO_FIXED<RealType>(d_angle_dR0[d] * prefactor * lambda_prefactor));
-            atomicAdd(du_dx + j_idx*D + d, FLOAT_TO_FIXED<RealType>(d_angle_dR1[d] * prefactor * lambda_prefactor));
-            atomicAdd(du_dx + k_idx*D + d, FLOAT_TO_FIXED<RealType>(d_angle_dR2[d] * prefactor * lambda_prefactor));
-            atomicAdd(du_dx + l_idx*D + d, FLOAT_TO_FIXED<RealType>(d_angle_dR3[d] * prefactor * lambda_prefactor));
-        }   
+            atomicAdd(du_dx + i_idx*D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR0[d] * prefactor * lambda_prefactor));
+            atomicAdd(du_dx + j_idx*D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR1[d] * prefactor * lambda_prefactor));
+            atomicAdd(du_dx + k_idx*D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR2[d] * prefactor * lambda_prefactor));
+            atomicAdd(du_dx + l_idx*D + d, FLOAT_TO_FIXED_BONDED<RealType>(d_angle_dR3[d] * prefactor * lambda_prefactor));
+        }
     }
 
     if(du_dp) {
@@ -134,11 +135,11 @@ void __global__ k_periodic_torsion(
     }
 
     if(u) {
-        atomicAdd(u, lambda_prefactor*kt*(1+cos(period*angle - phase)));
+        atomicAdd(u + i_idx, FLOAT_TO_FIXED_BONDED(lambda_prefactor*kt*(1+cos(period*angle - phase))));
     }
 
     if(du_dl) {
-        atomicAdd(du_dl, lambda_mult[t_idx]*kt*(1+cos(period*angle - phase)));   
+        atomicAdd(du_dl + i_idx, FLOAT_TO_FIXED_BONDED(lambda_mult[t_idx]*kt*(1+cos(period*angle - phase))));
     }
 
 }

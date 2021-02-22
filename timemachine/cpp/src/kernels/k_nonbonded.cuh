@@ -2,6 +2,7 @@
 
 #include "surreal.cuh"
 #include "../fixed_point.hpp"
+#include "k_fixed_point.cuh"
 #include "kernel_utils.cuh"
 #define WARPSIZE 32
 
@@ -13,66 +14,6 @@
 #define FIXED_EXPONENT_DU_DSIG    0x2000000000
 #define FIXED_EXPONENT_DU_DEPS    0x4000000000 // this is just getting silly
 
-
-template<typename RealType, unsigned long long EXPONENT>
-RealType __device__ __forceinline__ FIXED_TO_FLOAT_DU_DP(unsigned long long v) {
-    return static_cast<RealType>(static_cast<long long>(v))/EXPONENT;
-}
-
-// (ytz): courtesy of @scottlegrand/NVIDIA, even faster conversion
-// This was original a hack to improve perf on Maxwell, that is now needed for Ampere
-long long __device__ __forceinline__ real_to_int64(float x) {
-  float z = x * (float)0x1.00000p-32;
-  int hi = __float2int_rz( z );                         // First convert high bits
-  float delta = x - ((float)0x1.00000p32*((float)hi));  // Check remainder sign
-  int test = (__float_as_uint(delta) > 0xbf000000);
-  int lo = __float2uint_rn(fabsf(delta));               // Convert the (unsigned) remainder
-  lo = (test) ? -lo: lo;
-  hi -= test;                                           // Two's complement correction
-  long long res = __double_as_longlong(__hiloint2double(hi,lo)); // Return 64-bit result
-  return res;
-}
-
-// (ytz): reference version, left here for pedagogical reasons, do not remove.
-// long long __device__ __forceinline__ real_to_int64(float x) {
-//     if(x == 0) {
-//         return 0;
-//     }
-//     unsigned int * ptr = reinterpret_cast<unsigned int *>(&x);
-//     // get the sign bit
-//     unsigned int s = *ptr >> 31; // (TBD) there's a faster alternative to shifting here
-//     // get the exponent
-//     unsigned int e = *ptr & 0x7f800000;
-//     // shift the exponent and apply the exponent bias
-//     e >>= 23;
-//     e -= 127;
-//     // get the mantissa and append a 1 at the front
-//     long long m = *ptr & 0x007fffff;
-//     m |= 1 << 23;
-//     // 24 - e, either left shift or right shift depending on exponent
-//     int shift = 23 - e;
-//     m = shift > 0 ? m >> shift : m << -shift;
-//     // copy sign
-//     if(s == 1) {
-//         m = -m;
-//     }
-
-//     return m;
-// }
-
-long long __device__ __forceinline__ real_to_int64(double x) {
-    return static_cast<long long>(x);
-}
-
-template<typename RealType, unsigned long long EXPONENT>
-unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED_DU_DP(RealType v) {
-    return static_cast<unsigned long long>(real_to_int64(v*EXPONENT));
-}
-
-template<typename RealType>
-unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED_NONBONDED(RealType v) {
-    return static_cast<unsigned long long>(real_to_int64(v*FIXED_EXPONENT));
-}
 
 // generate kv values from coordinates to be radix sorted
 void __global__ k_coords_to_kv(
@@ -392,32 +333,21 @@ void __global__ k_reduce_ull_buffer(
 
 };
 
-void __global__ k_final_add(
-    const unsigned long long *ull_array,
-    double *double_array) {
-
-    if(threadIdx.x == 0) {
-
-        double_array[0] += FIXED_TO_FLOAT<double>(ull_array[0]);
-    }
-
-}
-
-double __device__ __forceinline__ real_es_factor(double real_beta, double dij, double inv_d2ij) {
+double __device__ __forceinline__ real_es_factor(double real_beta, double dij, double inv_d2ij, double &erfc_beta_dij) {
     double beta_dij = real_beta*dij;
     double exp_beta_dij_2 = exp(-beta_dij*beta_dij);
-    double erfc_beta_dij = erfc(beta_dij);
+    erfc_beta_dij = erfc(beta_dij);
     return -inv_d2ij*(static_cast<double>(TWO_OVER_SQRT_PI)*beta_dij*exp_beta_dij_2 + erfc_beta_dij);
 }
 
-float __device__ __forceinline__ real_es_factor(float real_beta, float dij, float inv_d2ij) {
+float __device__ __forceinline__ real_es_factor(float real_beta, float dij, float inv_d2ij, float &erfc_beta_dij) {
     float beta_dij = real_beta*dij;
     // max ulp error is: 2 + floor(abs(1.16 * x))
     float exp_beta_dij_2 = __expf(-beta_dij*beta_dij);
     // 5th order gaussian polynomial approximation, we need the exp(-x^2) anyways for the chain rule
     // so we use last variant in https://en.wikipedia.org/wiki/Error_function#Approximation_with_elementary_functions
     float t = 1.0f/(1.0f+0.3275911f*beta_dij);
-    float erfc_beta_dij = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*exp_beta_dij_2;
+    erfc_beta_dij = (0.254829592f+(-0.284496736f+(1.421413741f+(-1.453152027f+1.061405429f*t)*t)*t)*t)*t*exp_beta_dij_2;
     return -inv_d2ij*(static_cast<float>(TWO_OVER_SQRT_PI)*beta_dij*exp_beta_dij_2 + erfc_beta_dij);
 }
 
@@ -563,40 +493,57 @@ void __device__ v_nonbonded_unified(
 
             RealType inv_d2ij = inv_dij*inv_dij;
             RealType beta_dij = real_beta*dij;
-            RealType ebd = erfc(beta_dij);
+
 
             RealType qij = qi*qj;
 
-            RealType u = qij*inv_dij*ebd;
-            RealType es_prefactor = qij*inv_dij*real_es_factor(real_beta, dij, inv_d2ij);
+            RealType u = 0;
+
+            RealType ebd;
+            RealType es_prefactor = qij*inv_dij*real_es_factor(real_beta, dij, inv_d2ij, ebd);
+
+            if(COMPUTE_U) {
+                u += qij*inv_dij*ebd;
+            }
+
+            // RealType ebd = erfc(beta_dij);
 
             // lennard jones
-            RealType inv_d4ij = inv_d2ij*inv_d2ij;
-            RealType inv_d6ij = inv_d4ij*inv_d2ij;
+            // RealType inv_d4ij = inv_d2ij*inv_d2ij;
+            // RealType inv_d6ij = inv_d4ij*inv_d2ij;
 
             // lennard jones force
-            RealType eps_ij = eps_i * eps_j;
-
             RealType delta_prefactor = es_prefactor;
 
             RealType real_du_dl = 0;
 
             if(eps_i != 0 && eps_j != 0) {
+                RealType eps_ij = eps_i * eps_j;
                 RealType sig_ij = sig_i + sig_j;
-
-                RealType sig5 = sig_ij*sig_ij*sig_ij*sig_ij*sig_ij;
 
                 RealType sig_inv_dij = sig_ij*inv_dij;
                 RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
-                RealType sig6_inv_d6ij = sig2_inv_d2ij*sig2_inv_d2ij*sig2_inv_d2ij;
+                RealType sig4_inv_d4ij = sig2_inv_d2ij*sig2_inv_d2ij;
+                RealType sig6_inv_d6ij = sig4_inv_d4ij*sig2_inv_d2ij;
                 RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
+                RealType sig5_inv_d6ij = sig_ij*sig4_inv_d4ij*inv_d2ij;
+
+                // optimize this a little more
+                // RealType sig5 = sig_ij*sig_ij*sig_ij*sig_ij*sig_ij;
+
+                // RealType sig_inv_dij = sig_ij*inv_dij;
+                // RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
+                // RealType sig6_inv_d6ij = sig2_inv_d2ij*sig2_inv_d2ij*sig2_inv_d2ij;
+                // RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
 
                 RealType lj_prefactor = eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*48 - 24);
-                u += 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+                if(COMPUTE_U) {
+                    u += 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+                }
 
                 delta_prefactor -= lj_prefactor;
 
-                RealType sig_grad = 24*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
+                RealType sig_grad = 24*eps_ij*sig5_inv_d6ij*(2*sig6_inv_d6ij-1);
                 RealType eps_grad = 4*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
 
                 // do chain rule inside loop
@@ -631,6 +578,7 @@ void __device__ v_nonbonded_unified(
             if(COMPUTE_DU_DL && ALCHEMICAL) {
                 // needed for cancellation of nans (if one term blows up)
                 real_du_dl += delta_w*cutoff*delta_prefactor*(lambda_offset_i - lambda_offset_j);
+                // this extra ebd kills as it requires the erfc to be fully evaluated. SHIT
                 real_du_dl += inv_dij*ebd*(qj*dq_dl_i + qi*dq_dl_j);
                 du_dl += FLOAT_TO_FIXED_NONBONDED(real_du_dl);
             }
@@ -947,10 +895,11 @@ void __global__ k_nonbonded_exclusions(
         RealType inv_d2ij = inv_dij*inv_dij;
 
         RealType beta_dij = real_beta*dij;
-        RealType ebd = erfc(beta_dij);
+        // RealType ebd = erfc(beta_dij);
 
         RealType qij = qi*qj;
-        RealType es_prefactor = charge_scale*qij*inv_dij*real_es_factor(real_beta, dij, inv_d2ij);
+        RealType ebd;
+        RealType es_prefactor = charge_scale*qij*inv_dij*real_es_factor(real_beta, dij, inv_d2ij, ebd);
 
         // lennard jones
         RealType inv_d4ij = inv_d2ij*inv_d2ij;
@@ -962,21 +911,32 @@ void __global__ k_nonbonded_exclusions(
         RealType u = charge_scale*qij*inv_dij*ebd;
         // lennard jones force
         if(eps_i != 0 && eps_j != 0) {
+            // RealType eps_ij = eps_i * eps_j;
+            // RealType sig_ij = sig_i + sig_j;
+            // RealType sig5 = sig_ij*sig_ij*sig_ij*sig_ij*sig_ij;
+
+            // RealType sig_inv_dij = sig_ij*inv_dij;
+            // RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
+            // RealType sig6_inv_d6ij = sig2_inv_d2ij*sig2_inv_d2ij*sig2_inv_d2ij;
+            // RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
+
             RealType eps_ij = eps_i * eps_j;
             RealType sig_ij = sig_i + sig_j;
-            RealType sig5 = sig_ij*sig_ij*sig_ij*sig_ij*sig_ij;
 
             RealType sig_inv_dij = sig_ij*inv_dij;
             RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
-            RealType sig6_inv_d6ij = sig2_inv_d2ij*sig2_inv_d2ij*sig2_inv_d2ij;
+            RealType sig4_inv_d4ij = sig2_inv_d2ij*sig2_inv_d2ij;
+            RealType sig6_inv_d6ij = sig4_inv_d4ij*sig2_inv_d2ij;
             RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
+            RealType sig5_inv_d6ij = sig_ij*sig4_inv_d4ij*inv_d2ij;
 
             RealType lj_prefactor = lj_scale*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*48 - 24);
             delta_prefactor -= lj_prefactor;
             u += lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
 
+            RealType sig_grad = lj_scale*24*eps_ij*sig5_inv_d6ij*(2*sig6_inv_d6ij-1);
             RealType eps_grad = lj_scale*4*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
-            RealType sig_grad = lj_scale*24*eps_ij*sig5*inv_d6ij*(2*sig6_inv_d6ij-1);
+
             g_sigi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(-sig_grad);
             g_sigj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(-sig_grad);
 
