@@ -13,6 +13,7 @@ from timemachine.lib import potentials
 
 from common import GradientTest
 
+import pytest
 
 def recenter(conf):
     """Return copy of conf with mean coordinates subtracted"""
@@ -101,6 +102,7 @@ class TestShape(GradientTest):
                 assert v <= 1
                 assert v >= 0.5
 
+    @pytest.mark.skip("disabled")
     def test_custom_op(self):
         """Construct a Shape potential and validate it using compare_forces"""
         suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
