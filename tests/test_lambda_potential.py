@@ -28,6 +28,7 @@ def lambda_potential(conf, params, box, lamb, multiplier, offset, u_fn):
 
 class TestLambdaPotential(GradientTest):
 
+    @unittest.skip("not supported")
     def test_nonbonded(self):
 
         np.random.seed(4321)
