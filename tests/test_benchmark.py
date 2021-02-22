@@ -200,7 +200,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         v0 = np.zeros_like(host_conf)
 
         # lamb = 0.0
-        # benchmark(stage+"-apo", host_masses, 0.0, x0, v0, host_box, host_fns, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
+        benchmark(stage+"-apo", host_masses, 0.0, x0, v0, host_box, host_fns, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
         # RBFE
         min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, ff, host_box)
@@ -213,9 +213,9 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         v0 = np.zeros_like(x0)
 
         # lamb = 0.5
-        # benchmark(stage+'-rbfe-with-du-dp', masses, 0.5, x0, v0, host_box, bound_potentials, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
+        benchmark(stage+'-rbfe-with-du-dp', masses, 0.5, x0, v0, host_box, bound_potentials, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
-        for du_dl_freq in [0]:
+        for du_dl_freq in [0,1,5]:
             benchmark(
                 stage+'-rbfe-du-dl-freq-'+str(du_dl_freq),
                 masses, 0.5,
