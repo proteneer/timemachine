@@ -147,11 +147,6 @@ def pose_dock(
 
         ctxt = custom_ops.Context(x0, v0, box, intg, impls)
 
-        # collect a du_dl calculation once every other step
-        subsample_freq = 1
-        # du_dl_obs = custom_ops.FullPartialUPartialLambda(impls, subsample_freq)
-        # ctxt.add_observable(du_dl_obs)
-
         if transition_type == "insertion":
             new_lambda_schedule = np.concatenate(
                 [
@@ -171,6 +166,10 @@ def pose_dock(
 
         calc_work = True
         # (ytz): we gotta figure out how to batch this code, tbd: batch this
+
+        # collect a du_dl calculation every step
+        subsample_freq = 1
+
         full_du_dls = ctxt.multiple_steps(new_lambda_schedule, subsample_freq)
         step = len(new_lambda_schedule)-1
         final_lamb = new_lambda_schedule[-1]
