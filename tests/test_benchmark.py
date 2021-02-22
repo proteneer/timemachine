@@ -183,8 +183,8 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
     solvent_box += np.eye(3)*0.1 # BFGS this later
 
     for stage, host_system, host_coords, host_box in [
-        ("hif2a", complex_system, complex_coords, complex_box)]:
-        # ("solvent", solvent_system, solvent_coords, solvent_box)]:
+        ("hif2a", complex_system, complex_coords, complex_box),
+        ("solvent", solvent_system, solvent_coords, solvent_box)]:
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(
             host_system,
@@ -215,7 +215,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         # lamb = 0.5
         benchmark(stage+'-rbfe-with-du-dp', masses, 0.5, x0, v0, host_box, bound_potentials, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
-        for du_dl_freq in [0, 1, 5]:
+        for du_dl_freq in [0,1,5]:
             benchmark(
                 stage+'-rbfe-du-dl-freq-'+str(du_dl_freq),
                 masses, 0.5,
@@ -240,5 +240,5 @@ def test_hif2a():
 
 
 if __name__ == "__main__":
-    # benchmark_dhfr(verbose=False, num_batches=25)
-    benchmark_hif2a(verbose=False, num_batches=25)
+    benchmark_dhfr(verbose=False)
+    benchmark_hif2a(verbose=False)

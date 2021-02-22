@@ -434,7 +434,8 @@ template <
     bool COMPUTE_DU_DL,
     bool COMPUTE_DU_DP
 >
-void __device__ __forceinline__ v_nonbonded_unified(
+// void __device__ __forceinline__ v_nonbonded_unified(
+void __device__ v_nonbonded_unified(
     const int N,
     const double * __restrict__ coords,
     const double * __restrict__ params, // [N]
@@ -479,7 +480,7 @@ void __device__ __forceinline__ v_nonbonded_unified(
     unsigned long long gi_x = 0;
     unsigned long long gi_y = 0;
     unsigned long long gi_z = 0;
-    unsigned long long du_dl_i = 0;
+    unsigned long long du_dl = 0;
 
     int charge_param_idx_i = atom_i_idx*3 + 0;
     int lj_param_idx_sig_i = atom_i_idx*3 + 1;
@@ -509,7 +510,6 @@ void __device__ __forceinline__ v_nonbonded_unified(
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
     unsigned long long gj_z = 0;
-    unsigned long long du_dl_j = 0;
 
     int charge_param_idx_j = atom_j_idx*3 + 0;
     int lj_param_idx_sig_j = atom_j_idx*3 + 1;
@@ -579,6 +579,8 @@ void __device__ __forceinline__ v_nonbonded_unified(
 
             RealType delta_prefactor = es_prefactor;
 
+            RealType real_du_dl = 0;
+
             if(eps_i != 0 && eps_j != 0) {
                 RealType sig_ij = sig_i + sig_j;
 
@@ -606,12 +608,7 @@ void __device__ __forceinline__ v_nonbonded_unified(
                 }
 
                 if(COMPUTE_DU_DL && ALCHEMICAL) {
-                    // (ytz): note that we can't simply do F2F(a+b) = F2F(a) + F2F(b) due to loss of prec.
-                    // (BUT!) this is probably okay. The whole term gets cancelled out regardless.
-                    du_dl_i += FLOAT_TO_FIXED_NONBONDED(sig_grad*dsig_dl_i);
-                    du_dl_j += FLOAT_TO_FIXED_NONBONDED(sig_grad*dsig_dl_j);
-                    du_dl_i += FLOAT_TO_FIXED_NONBONDED(eps_grad*eps_j*deps_dl_i);
-                    du_dl_j += FLOAT_TO_FIXED_NONBONDED(eps_grad*eps_i*deps_dl_j);
+                    real_du_dl += sig_grad*(dsig_dl_i + dsig_dl_j) + eps_grad*(eps_j*deps_dl_i + eps_i*deps_dl_j);
                 }
 
             }
@@ -633,17 +630,14 @@ void __device__ __forceinline__ v_nonbonded_unified(
 
             if(COMPUTE_DU_DL && ALCHEMICAL) {
                 // needed for cancellation of nans (if one term blows up)
-                du_dl_i += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_w*lambda_offset_i*cutoff);
-                du_dl_j += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_w*lambda_offset_j*cutoff);
-
-                du_dl_i += FLOAT_TO_FIXED_NONBONDED(qj*inv_dij*ebd*dq_dl_i);
-                du_dl_j += FLOAT_TO_FIXED_NONBONDED(qi*inv_dij*ebd*dq_dl_j);
+                real_du_dl += delta_w*cutoff*delta_prefactor*(lambda_offset_i - lambda_offset_j);
+                real_du_dl += inv_dij*ebd*(qj*dq_dl_i + qi*dq_dl_j);
+                du_dl += FLOAT_TO_FIXED_NONBONDED(real_du_dl);
             }
 
             if(COMPUTE_U) {
                 energy += FLOAT_TO_FIXED_NONBONDED(u);
             }
-
 
         }
 
@@ -656,8 +650,10 @@ void __device__ __forceinline__ v_nonbonded_unified(
         cj_y = __shfl_sync(0xffffffff, cj_y, srcLane);
         cj_z = __shfl_sync(0xffffffff, cj_z, srcLane);
 
-        lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane); // this also can be optimized away
-        lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+        if(ALCHEMICAL) {
+            lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane); // this also can be optimized away
+            lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+        }
 
         if(COMPUTE_DU_DX) {
             gj_x = __shfl_sync(0xffffffff, gj_x, srcLane);
@@ -672,7 +668,6 @@ void __device__ __forceinline__ v_nonbonded_unified(
         }
 
         if(COMPUTE_DU_DL && ALCHEMICAL) {
-            du_dl_j = __shfl_sync(0xffffffff, du_dl_j, srcLane); // (ytz): remove this
             dsig_dl_j = __shfl_sync(0xffffffff, dsig_dl_j, srcLane);
             deps_dl_j = __shfl_sync(0xffffffff, deps_dl_j, srcLane);
             dq_dl_j = __shfl_sync(0xffffffff, dq_dl_j, srcLane);
@@ -710,7 +705,7 @@ void __device__ __forceinline__ v_nonbonded_unified(
     // these are buffered and then reduced to avoid massive conflicts
     if(COMPUTE_DU_DL && ALCHEMICAL) {
         if(atom_i_idx < N) {
-            atomicAdd(du_dl_buffer + atom_i_idx, du_dl_i + du_dl_j);
+            atomicAdd(du_dl_buffer + atom_i_idx, du_dl);
         }
     }
 
@@ -828,21 +823,21 @@ void __global__ k_nonbonded_unified(
 template<typename RealType>
 void __global__ k_nonbonded_exclusions(
     const int E, // number of exclusions
-    const double *coords,
-    const double *params,
-    const double *box,
-    const double *dp_dl,
+    const double * __restrict__ coords,
+    const double * __restrict__ params,
+    const double * __restrict__ box,
+    const double * __restrict__ dp_dl,
     const double lambda,
-    const int *lambda_plane_idxs, // 0 or 1, shift
-    const int *lambda_offset_idxs, // 0 or 1, if we alolw this atom to be decoupled
-    const int *exclusion_idxs, // [E, 2] pair-list of atoms to be excluded
-    const double *scales, // [E]
+    const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
+    const int * __restrict__ lambda_offset_idxs, // 0 or 1, if we alolw this atom to be decoupled
+    const int * __restrict__ exclusion_idxs, // [E, 2] pair-list of atoms to be excluded
+    const double * __restrict__ scales, // [E]
     const double beta,
     const double cutoff,
-    unsigned long long *du_dx,
-    unsigned long long *du_dp,
-    unsigned long long *du_dl_buffer,
-    unsigned long long *u_buffer) {
+    unsigned long long * __restrict__ du_dx,
+    unsigned long long * __restrict__ du_dp,
+    unsigned long long * __restrict__ du_dl_buffer,
+    unsigned long long * __restrict__ u_buffer) {
 
     // (ytz): oddly enough the order of atom_i and atom_j
     // seem to not matter. I think this is because distance calculations
@@ -871,7 +866,6 @@ void __global__ k_nonbonded_exclusions(
     unsigned long long gi_x = 0;
     unsigned long long gi_y = 0;
     unsigned long long gi_z = 0;
-    unsigned long long du_dl_i = 0;
 
     int charge_param_idx_i = atom_i_idx*3 + 0;
     int lj_param_idx_sig_i = atom_i_idx*3 + 1;
@@ -900,7 +894,6 @@ void __global__ k_nonbonded_exclusions(
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
     unsigned long long gj_z = 0;
-    unsigned long long du_dl_j = 0;
 
     int charge_param_idx_j = atom_j_idx*3+0;
     int lj_param_idx_sig_j = atom_j_idx*3 + 1;
@@ -964,6 +957,7 @@ void __global__ k_nonbonded_exclusions(
         RealType inv_d6ij = inv_d4ij*inv_d2ij;
 
         RealType delta_prefactor = es_prefactor;
+        RealType real_du_dl = 0;
 
         RealType u = charge_scale*qij*inv_dij*ebd;
         // lennard jones force
@@ -989,10 +983,7 @@ void __global__ k_nonbonded_exclusions(
             g_epsi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(-eps_grad*eps_j);
             g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(-eps_grad*eps_i);
 
-            du_dl_i += FLOAT_TO_FIXED_NONBONDED(-sig_grad*dsig_dl_i);
-            du_dl_j += FLOAT_TO_FIXED_NONBONDED(-sig_grad*dsig_dl_j);
-            du_dl_i += FLOAT_TO_FIXED_NONBONDED(-eps_grad*eps_j*deps_dl_i);
-            du_dl_j += FLOAT_TO_FIXED_NONBONDED(-eps_grad*eps_i*deps_dl_j);
+            real_du_dl -= sig_grad*(dsig_dl_i + dsig_dl_j) + eps_grad*(eps_j*deps_dl_i + eps_i*deps_dl_j);
 
         }
 
@@ -1004,18 +995,14 @@ void __global__ k_nonbonded_exclusions(
         gj_y -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
         gj_z -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
 
-        du_dl_i -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_w*lambda_offset_i*cutoff);
-        du_dl_j -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_w*lambda_offset_j*cutoff);
-
-        du_dl_i -= FLOAT_TO_FIXED_NONBONDED(charge_scale*qj*inv_dij*ebd*dq_dl_i);
-        du_dl_j -= FLOAT_TO_FIXED_NONBONDED(charge_scale*qi*inv_dij*ebd*dq_dl_j);
-
         // energy is size extensive so this may not be a good idea
-
         energy -= FLOAT_TO_FIXED_NONBONDED(u);
 
         g_qi -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qj*inv_dij*ebd);
         g_qj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qi*inv_dij*ebd);
+
+        real_du_dl -= delta_w*cutoff*delta_prefactor*(lambda_offset_i - lambda_offset_j);
+        real_du_dl -= charge_scale*inv_dij*ebd*(qj*dq_dl_i + qi*dq_dl_j);
 
         if(du_dx) {
             atomicAdd(du_dx + atom_i_idx*3 + 0, gi_x);
@@ -1039,7 +1026,7 @@ void __global__ k_nonbonded_exclusions(
         }
 
         if(du_dl_buffer) {
-            atomicAdd(du_dl_buffer + atom_i_idx, du_dl_i + du_dl_j);
+            atomicAdd(du_dl_buffer + atom_i_idx, FLOAT_TO_FIXED_NONBONDED(real_du_dl));
         }
 
         if(u_buffer) {
