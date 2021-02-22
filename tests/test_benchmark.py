@@ -215,7 +215,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         # lamb = 0.5
         # benchmark(stage+'-rbfe-with-du-dp', masses, 0.5, x0, v0, host_box, bound_potentials, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
-        for du_dl_freq in [1]:
+        for du_dl_freq in [0]:
             benchmark(
                 stage+'-rbfe-du-dl-freq-'+str(du_dl_freq),
                 masses, 0.5,

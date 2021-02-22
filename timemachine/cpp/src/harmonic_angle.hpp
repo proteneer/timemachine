@@ -1,6 +1,6 @@
 #pragma once
 
-#include "buffered_potential.hpp"
+#include "potential.hpp"
 #include <vector>
 
 namespace timemachine {

@@ -55,8 +55,7 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
         &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
         &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
         &k_nonbonded_unified<RealType, 1, 1, 1, 1>
-    }),
-    BufferedPotential(lambda_offset_idxs.size()){
+    }){
 
     if(lambda_offset_idxs.size() != N_) {
         throw std::runtime_error("lambda offset idxs need to have size N");
@@ -75,12 +74,6 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_, N_*sizeof(*d_lambda_offset_idxs_)));
     gpuErrchk(cudaMemcpy(d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_*sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&d_du_dl_buffer_, N_*sizeof(*d_du_dl_buffer_)));
-    gpuErrchk(cudaMalloc(&d_u_buffer_, N_*sizeof(*d_u_buffer_)));
-
-    gpuErrchk(cudaMalloc(&d_du_dl_reduce_sum_, 1*sizeof(*d_du_dl_reduce_sum_)));
-    gpuErrchk(cudaMalloc(&d_u_reduce_sum_, 1*sizeof(*d_u_reduce_sum_)));
 
     gpuErrchk(cudaMalloc(&d_perm_, N_*sizeof(*d_perm_)));
 

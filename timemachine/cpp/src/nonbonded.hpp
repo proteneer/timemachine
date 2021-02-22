@@ -1,7 +1,7 @@
 #pragma once
 
 #include "neighborlist.hpp"
-#include "buffered_potential.hpp"
+#include "potential.hpp"
 #include <vector>
 #include <array>
 
@@ -25,7 +25,7 @@ typedef void (*k_nonbonded_fn)(const int N,
     unsigned long long * __restrict__ u_buffer);
 
 template<typename RealType, bool Interpolated>
-class Nonbonded : public BufferedPotential {
+class Nonbonded : public Potential {
 
 private:
 
