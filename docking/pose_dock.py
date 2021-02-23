@@ -11,7 +11,7 @@ from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
 
 from fe.utils import to_md_units
-from fe import topology, free_energy
+from fe import free_energy
 from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers import openmm_deserializer
 from ff import Forcefield
@@ -117,7 +117,6 @@ def pose_dock(
         for up, sp in zip(ups, sys_params):
             bps.append(up.bind(sp))
 
-
         for atom_num in constant_atoms:
             masses[atom_num - 1] += 50000
 
@@ -147,11 +146,6 @@ def pose_dock(
 
         ctxt = custom_ops.Context(x0, v0, box, intg, impls)
 
-        # collect a du_dl calculation once every other step
-        subsample_freq = 2
-        du_dl_obs = custom_ops.FullPartialUPartialLambda(impls, subsample_freq)
-        ctxt.add_observable(du_dl_obs)
-
         if transition_type == "insertion":
             new_lambda_schedule = np.concatenate(
                 [
@@ -170,29 +164,35 @@ def pose_dock(
             raise (RuntimeError('invalid `transition_type` (must be one of ["insertion", "deletion"])'))
 
         calc_work = True
-        for step, lamb in enumerate(new_lambda_schedule):
-            ctxt.step(lamb)
-            if step % 100 == 0:
-                report.report_step(ctxt, step, lamb, box, bps, impls, guest_name, n_steps, 'pose_dock')
-                host_coords = ctxt.get_x_t()[: len(host_conf)] * 10
-                guest_coords = ctxt.get_x_t()[len(host_conf) :] * 10
-                report.write_frame(host_coords, host_mol, guest_coords, guest_mol, guest_name, outdir, step, 'pd')
-            if step in (0, int(n_steps/2), n_steps-1):
-                if report.too_much_force(ctxt, lamb, box, bps, impls):
-                    calc_work = False
-                    break
+
+        # (ytz): we gotta figure out how to batch this code, tbd: batch this
+        # collect a du_dl calculation every step
+        subsample_freq = 1
+
+        full_du_dls = ctxt.multiple_steps(new_lambda_schedule, subsample_freq)
+
+        step = len(new_lambda_schedule)-1
+        final_lamb = new_lambda_schedule[-1]
+        report.report_step(ctxt, step, final_lamb, box, bps, impls, guest_name, n_steps, 'pose_dock')
+        host_coords = ctxt.get_x_t()[: len(host_conf)] * 10
+        guest_coords = ctxt.get_x_t()[len(host_conf) :] * 10
+        report.write_frame(host_coords, host_mol, guest_coords, guest_mol, guest_name, outdir, step, 'pd')
+
+        if report.too_much_force(ctxt, final_lamb, box, bps, impls):
+            calc_work = False
+            break
 
         # Note: this condition only applies for ABFE, not RBFE
         if (
-            abs(du_dl_obs.full_du_dl()[0]) > 0.001
-            or abs(du_dl_obs.full_du_dl()[-1]) > 0.001
+            abs(full_du_dls[0]) > 0.001
+            or abs(full_du_dls[-1]) > 0.001
         ):
             print("Error: du_dl endpoints are not ~0")
             calc_work = False
 
         if calc_work:
             work = np.trapz(
-                du_dl_obs.full_du_dl(), new_lambda_schedule[::subsample_freq]
+                full_du_dls, new_lambda_schedule[::subsample_freq]
             )
             print(f"guest_name: {guest_name}\twork: {work:.2f}")
         end_time = time.time()

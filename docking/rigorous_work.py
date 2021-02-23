@@ -12,7 +12,7 @@ from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
 
 from md import builders
-from fe import pdb_writer, topology
+from fe import pdb_writer, free_energy
 from ff import Forcefield
 from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
@@ -25,7 +25,8 @@ DELETION_MAX_LAMBDA = 1.0
 MIN_LAMBDA = 0.0
 TRANSITION_STEPS = 501
 EQ1_STEPS = 5001
-EQ2_STEPS = 10001
+NUM_DELETIONS = 10
+# EQ2_STEPS = 10001
 
 
 def calculate_rigorous_work(
@@ -48,7 +49,7 @@ def calculate_rigorous_work(
     MIN_LAMBDA = {MIN_LAMBDA}
     TRANSITION_STEPS = {TRANSITION_STEPS}
     EQ1_STEPS = {EQ1_STEPS}
-    EQ2_STEPS = {EQ2_STEPS}
+    NUM_DELETIONS = {NUM_DELETIONS}
     """
     )
 
@@ -75,17 +76,6 @@ def calculate_rigorous_work(
     solvated_host_mol = Chem.MolFromPDBFile(solvated_host_pdb, removeHs=False)
     if no_outfiles:
         os.remove(solvated_host_pdb)
-    final_host_potentials = []
-    host_potentials, host_masses = openmm_deserializer.deserialize_system(solvated_host_system, cutoff=1.2)
-    host_nb_bp = None
-    for bp in host_potentials:
-        if isinstance(bp, potentials.Nonbonded):
-            # (ytz): hack to ensure we only have one nonbonded term
-            assert host_nb_bp is None
-            host_nb_bp = bp
-        else:
-            final_host_potentials.append(bp)
-
 
     # Prepare water box
     print("Generating water box...")
@@ -112,17 +102,6 @@ def calculate_rigorous_work(
     if no_outfiles:
         os.remove(water_pdb)
 
-    final_water_potentials = []
-    water_potentials, water_masses = openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
-    water_nb_bp = None
-    for bp in water_potentials:
-        if isinstance(bp, potentials.Nonbonded):
-            # (ytz): hack to ensure we only have one nonbonded term
-            assert water_nb_bp is None
-            water_nb_bp = bp
-        else:
-            final_water_potentials.append(bp)
-
     # Run the procedure
     print("Getting guests...")
     suppl = Chem.SDMolSupplier(guests_sdfile, removeHs=False)
@@ -142,26 +121,19 @@ def calculate_rigorous_work(
             ).read()
         )
         ff = Forcefield(guest_ff_handlers)
-        guest_base_top = topology.BaseTopology(guest_mol, ff)
 
-        # combine host & guest
-        hgt = topology.HostGuestTopology(host_nb_bp, guest_base_top)
-        # setup the parameter handlers for the ligand
-        bonded_tuples = [
-            [hgt.parameterize_harmonic_bond, ff.hb_handle],
-            [hgt.parameterize_harmonic_angle, ff.ha_handle],
-            [hgt.parameterize_proper_torsion, ff.pt_handle],
-            [hgt.parameterize_improper_torsion, ff.it_handle]
-        ]
-        combined_bps = list(final_host_potentials)
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            params, potential = fn(handle.params)
-            combined_bps.append(potential.bind(params))
-        nb_params, nb_potential = hgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
-        combined_bps.append(nb_potential.bind(nb_params))
-        guest_masses = [a.GetMass() for a in guest_mol.GetAtoms()]
-        combined_masses = np.concatenate([host_masses, guest_masses])
+
+        conformer = guest_mol.GetConformer(0)
+        mol_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+        mol_conf = mol_conf / 10  # convert to md_units
+
+        afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
+
+        ups, sys_params, combined_masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), solvated_host_system, solvated_host_coords)
+
+        combined_bps = []
+        for up, sp in zip(ups, sys_params):
+            combined_bps.append(up.bind(sp))
 
         run_leg(
             solvated_host_coords,
@@ -182,25 +154,14 @@ def calculate_rigorous_work(
             f"{guest_name} host leg time:", "%.2f" % (end_time - start_time), "seconds"
         )
 
-        # combine water & guest
-        wgt = topology.HostGuestTopology(water_nb_bp, guest_base_top)
-        # setup the parameter handlers for the ligand
-        bonded_tuples = [
-            [wgt.parameterize_harmonic_bond, ff.hb_handle],
-            [wgt.parameterize_harmonic_angle, ff.ha_handle],
-            [wgt.parameterize_proper_torsion, ff.pt_handle],
-            [wgt.parameterize_improper_torsion, ff.it_handle]
-        ]
-        combined_bps = list(final_water_potentials)
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            params, potential = fn(handle.params)
-            combined_bps.append(potential.bind(params))
-        nb_params, nb_potential = wgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
-        combined_bps.append(nb_potential.bind(nb_params))
-        guest_masses = [a.GetMass() for a in guest_mol.GetAtoms()]
-        combined_masses = np.concatenate([water_masses, guest_masses])
-        start_time = time.time()
+        afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
+
+        ups, sys_params, combined_masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), water_system, orig_water_coords)
+
+        combined_bps = []
+        for up, sp in zip(ups, sys_params):
+            combined_bps.append(up.bind(sp))
+
         run_leg(
             orig_water_coords,
             orig_guest_coords,
@@ -257,111 +218,119 @@ def run_leg(
     insertion_lambda_schedule = np.linspace(
         INSERTION_MAX_LAMBDA, MIN_LAMBDA, TRANSITION_STEPS
     )
-    for step, lamb in enumerate(insertion_lambda_schedule):
-        ctxt.step(lamb)
-        if step % 100 == 0:
-            report.report_step(
-                ctxt,
-                step,
-                lamb,
-                host_box,
-                combined_bps,
-                u_impls,
-                guest_name,
-                TRANSITION_STEPS,
-                f"{leg_type.upper()}_INSERTION",
-            )
-            if not fewer_outfiles and not no_outfiles:
-                host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
-                guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
-                report.write_frame(
-                    host_coords,
-                    host_mol,
-                    guest_coords,
-                    guest_mol,
-                    guest_name,
-                    outdir,
-                    str(step).zfill(len(str(TRANSITION_STEPS))),
-                    f"{leg_type}-ins",
-                )
-        if step in (0, int(TRANSITION_STEPS/2), TRANSITION_STEPS-1):
-            if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
-                return
+
+    ctxt.multiple_steps(insertion_lambda_schedule, 0) # do not collect du_dls
+
+    lamb = insertion_lambda_schedule[-1]
+    step = len(insertion_lambda_schedule) - 1
+
+    report.report_step(
+        ctxt,
+        step,
+        lamb,
+        host_box,
+        combined_bps,
+        u_impls,
+        guest_name,
+        TRANSITION_STEPS,
+        f"{leg_type.upper()}_INSERTION",
+    )
+    if not fewer_outfiles and not no_outfiles:
+        host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
+        guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
+        report.write_frame(
+            host_coords,
+            host_mol,
+            guest_coords,
+            guest_mol,
+            guest_name,
+            outdir,
+            str(step).zfill(len(str(TRANSITION_STEPS))),
+            f"{leg_type}-ins",
+        )
+    if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
+        return
 
     # equilibrate
-    for step in range(EQ1_STEPS):
-        ctxt.step(MIN_LAMBDA)
-        if step % 1000 == 0:
-            report.report_step(
-                ctxt,
-                step,
-                MIN_LAMBDA,
-                host_box,
-                combined_bps,
-                u_impls,
-                guest_name,
-                EQ1_STEPS,
-                f"{leg_type.upper()}_EQUILIBRATION_1",
+    equil_lambda_schedule = np.ones(EQ1_STEPS)*MIN_LAMBDA
+    lamb = equil_lambda_schedule[-1]
+    step = len(equil_lambda_schedule)-1
+    ctxt.multiple_steps(equil_lambda_schedule, 0)
+    report.report_step(
+        ctxt,
+        step,
+        MIN_LAMBDA,
+        host_box,
+        combined_bps,
+        u_impls,
+        guest_name,
+        EQ1_STEPS,
+        f"{leg_type.upper()}_EQUILIBRATION_1",
+    )
+    if not fewer_outfiles and not no_outfiles:
+        host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
+        guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
+        report.write_frame(
+            host_coords,
+            host_mol,
+            guest_coords,
+            guest_mol,
+            guest_name,
+            outdir,
+            str(step).zfill(len(str(EQ1_STEPS))),
+            f"{leg_type}-eq1",
             )
-            if not fewer_outfiles and not no_outfiles:
-                host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
-                guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
-                report.write_frame(
-                    host_coords,
-                    host_mol,
-                    guest_coords,
-                    guest_mol,
-                    guest_name,
-                    outdir,
-                    str(step).zfill(len(str(EQ1_STEPS))),
-                    f"{leg_type}-eq1",
-                )
-        if step in (0, int(EQ1_STEPS/2), EQ1_STEPS-1):
-            if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
-                return
+    if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
+        return
 
     # equilibrate more & shoot off deletion jobs
-    for step in range(EQ2_STEPS):
-        ctxt.step(MIN_LAMBDA)
-        if step % 1000 == 0:
-            report.report_step(
-                ctxt,
-                step,
-                MIN_LAMBDA,
-                host_box,
-                combined_bps,
-                u_impls,
-                guest_name,
-                EQ2_STEPS,
-                f"{leg_type.upper()}_EQUILIBRATION_2",
-            )
+    steps_per_batch = 1000
 
-            # TODO: if guest has undocked, stop simulation
-            if not no_outfiles:
-                host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
-                guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
-                report.write_frame(
-                    host_coords,
-                    host_mol,
-                    guest_coords,
-                    guest_mol,
-                    guest_name,
-                    outdir,
-                    str(step).zfill(len(str(EQ2_STEPS))),
-                    f"{leg_type}-eq2",
-                )
-            if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
-                return
+    for b in range(NUM_DELETIONS):
+        deletion_lambda_schedule = np.ones(steps_per_batch)*MIN_LAMBDA
 
-            do_deletion(
-                ctxt.get_x_t(),
-                ctxt.get_v_t(),
-                combined_bps,
-                combined_masses,
-                host_box,
+        ctxt.multiple_steps(deletion_lambda_schedule, 0)
+        lamb = deletion_lambda_schedule[-1]
+        step = len(deletion_lambda_schedule)-1
+        report.report_step(
+            ctxt,
+            step,
+            MIN_LAMBDA,
+            host_box,
+            combined_bps,
+            u_impls,
+            guest_name,
+            NUM_DELETIONS*steps_per_batch,
+            f"{leg_type.upper()}_EQUILIBRATION_2",
+        )
+
+        # TODO: if guest has undocked, stop simulation
+        if not no_outfiles:
+            host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
+            guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
+            report.write_frame(
+                host_coords,
+                host_mol,
+                guest_coords,
+                guest_mol,
                 guest_name,
-                leg_type,
+                outdir,
+                str(step).zfill(len(str(NUM_DELETIONS*steps_per_batch))),
+                f"{leg_type}-eq2",
             )
+        if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
+            return
+
+        do_deletion(
+            ctxt.get_x_t(),
+            ctxt.get_v_t(),
+            combined_bps,
+            combined_masses,
+            host_box,
+            guest_name,
+            leg_type,
+        )
+
 
 
 def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type):
@@ -375,9 +344,9 @@ def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type
 
     ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
 
-    subsample_freq = 2
-    du_dl_obs = custom_ops.FullPartialUPartialLambda(u_impls, subsample_freq)
-    ctxt.add_observable(du_dl_obs)
+
+    # du_dl_obs = custom_ops.FullPartialUPartialLambda(u_impls, subsample_freq)
+    # ctxt.add_observable(du_dl_obs)
 
     deletion_lambda_schedule = np.linspace(
         MIN_LAMBDA, DELETION_MAX_LAMBDA, TRANSITION_STEPS
@@ -385,36 +354,40 @@ def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type
 
     calc_work = True
 
-    for step, lamb in enumerate(deletion_lambda_schedule):
-        ctxt.step(lamb)
-        if step % 100 == 0:
-            report.report_step(
-                ctxt,
-                step,
-                lamb,
-                box,
-                combined_bps,
-                u_impls,
-                guest_name,
-                TRANSITION_STEPS,
-                f"{leg_type.upper()}_DELETION",
-            )
-        if step in (0, int(TRANSITION_STEPS/2), TRANSITION_STEPS-1):
-            if report.too_much_force(ctxt, lamb, box, combined_bps, u_impls):
-                calc_work = False
-                return
+    subsample_freq = 1
+    full_du_dls = ctxt.multiple_steps(deletion_lambda_schedule, subsample_freq)
+
+    step = len(deletion_lambda_schedule) - 1
+    lamb = deletion_lambda_schedule[-1]
+    ctxt.step(lamb)
+    report.report_step(
+        ctxt,
+        step,
+        lamb,
+        box,
+        combined_bps,
+        u_impls,
+        guest_name,
+        TRANSITION_STEPS,
+        f"{leg_type.upper()}_DELETION",
+    )
+
+    if report.too_much_force(ctxt, lamb, box, combined_bps, u_impls):
+        calc_work = False
+        return
 
     # Note: this condition only applies for ABFE, not RBFE
     if (
-        abs(du_dl_obs.full_du_dl()[0]) > 0.001
-        or abs(du_dl_obs.full_du_dl()[-1]) > 0.001
+        abs(full_du_dls[0]) > 0.001
+        or abs(full_du_dls[-1]) > 0.001
     ):
         print("Error: du_dl endpoints are not ~0")
         calc_work = False
 
     if calc_work:
         work = np.trapz(
-            du_dl_obs.full_du_dl(), deletion_lambda_schedule[::subsample_freq]
+            full_du_dls,
+            deletion_lambda_schedule[::subsample_freq]
         )
         print(f"guest_name: {guest_name}\t{leg_type}_work: {work:.2f}")
 

@@ -26,7 +26,10 @@ public:
 
     void step(double lambda);
 
-    void multiple_steps(std::vector<double> lambda_schedule);
+    std::vector<double> multiple_steps(
+        const std::vector<double> &lambda_schedule,
+        int store_du_dl_freq=0
+    );
 
     int num_atoms() const;
 
@@ -38,7 +41,7 @@ public:
 
 private:
 
-    void _step(double lambda);
+    void _step(double lambda, unsigned long long *du_dl_out);
 
     int step_;
     int N_; // number of particles
@@ -47,7 +50,10 @@ private:
     double *d_v_t_; // velocities
     double *d_box_t_; // box vectors
 
-    unsigned long long *d_du_dx_t_; // du/dx 
+    unsigned long long *d_du_dx_t_; // du/dx [N,3]
+    unsigned long long *d_du_dl_buffer_; // du/dl [N]
+    double *d_sum_storage_;
+    size_t d_sum_storage_bytes_;
 
     Integrator *intg_;
     std::vector<Observable *> observables_;

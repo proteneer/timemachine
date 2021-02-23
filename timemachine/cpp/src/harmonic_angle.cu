@@ -74,14 +74,12 @@ void HarmonicAngle<RealType>::execute_device(
     const double lambda,
     unsigned long long *d_du_dx,
     double *d_du_dp,
-    double *d_du_dl,
-    double *d_u,
+    unsigned long long *d_du_dl,
+    unsigned long long *d_u,
     cudaStream_t stream) {
 
     int tpb = 32;
     int blocks = (A_+tpb-1)/tpb;
-
-    auto start = std::chrono::high_resolution_clock::now();
 
     if(A_ > 0) {
         k_harmonic_angle_inference<RealType, 3><<<blocks, tpb, 0, stream>>>(
@@ -99,7 +97,6 @@ void HarmonicAngle<RealType>::execute_device(
         );
         gpuErrchk(cudaPeekAtLastError());
     }
-
 
 }
 

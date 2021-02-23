@@ -10,7 +10,7 @@ from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
 
 from md import builders
-from fe import pdb_writer, topology
+from fe import pdb_writer, free_energy
 from ff import Forcefield
 from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
@@ -98,16 +98,6 @@ def dock_and_equilibrate(
     writer.close()
     solvated_host_mol = Chem.MolFromPDBFile(solvated_host_pdb, removeHs=False)
     os.remove(solvated_host_pdb)
-    final_host_potentials = []
-    host_potentials, host_masses = openmm_deserializer.deserialize_system(solvated_host_system, cutoff=1.2)
-    host_nb_bp = None
-    for bp in host_potentials:
-        if isinstance(bp, potentials.Nonbonded):
-            # (ytz): hack to ensure we only have one nonbonded term
-            assert host_nb_bp is None
-            host_nb_bp = bp
-        else:
-            final_host_potentials.append(bp)
 
     # Run the procedure
     print("Getting guests...")
@@ -128,26 +118,14 @@ def dock_and_equilibrate(
             ).read()
         )
         ff = Forcefield(guest_ff_handlers)
-        guest_base_top = topology.BaseTopology(guest_mol, ff)
 
-        # combine host & guest
-        hgt = topology.HostGuestTopology(host_nb_bp, guest_base_top)
-        # setup the parameter handlers for the ligand
-        bonded_tuples = [
-            [hgt.parameterize_harmonic_bond, ff.hb_handle],
-            [hgt.parameterize_harmonic_angle, ff.ha_handle],
-            [hgt.parameterize_proper_torsion, ff.pt_handle],
-            [hgt.parameterize_improper_torsion, ff.it_handle]
-        ]
-        combined_bps = list(final_host_potentials)
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            params, potential = fn(handle.params)
-            combined_bps.append(potential.bind(params))
-        nb_params, nb_potential = hgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
-        combined_bps.append(nb_potential.bind(nb_params))
-        guest_masses = [a.GetMass() for a in guest_mol.GetAtoms()]
-        combined_masses = np.concatenate([host_masses, guest_masses])
+        afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
+
+        ups, sys_params, combined_masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), solvated_host_system, solvated_host_coords)
+
+        combined_bps = []
+        for up, sp in zip(ups, sys_params):
+            combined_bps.append(up.bind(sp))
 
         x0 = np.concatenate([solvated_host_coords, orig_guest_coords])
         v0 = np.zeros_like(x0)
@@ -168,49 +146,51 @@ def dock_and_equilibrate(
 
         ctxt = custom_ops.Context(x0, v0, host_box, intg, u_impls)
 
-        # collect a du_dl calculation once every other step
-        subsample_freq = 2
-        du_dl_obs = custom_ops.FullPartialUPartialLambda(u_impls, subsample_freq)
-        ctxt.add_observable(du_dl_obs)
-
         # insert guest
         insertion_lambda_schedule = np.linspace(
             max_lambda, 0.0, insertion_steps
         )
         calc_work = True
-        for step, lamb in enumerate(insertion_lambda_schedule):
-            ctxt.step(lamb)
-            if step % 100 == 0:
-                report.report_step(ctxt, step, lamb, host_box, combined_bps, u_impls, guest_name, insertion_steps, "INSERTION")
-                if not fewer_outfiles:
-                    host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
-                    guest_coords = ctxt.get_x_t()[len(solvated_host_coords) :] * 10
-                    report.write_frame(
-                        host_coords,
-                        solvated_host_mol,
-                        guest_coords,
-                        guest_mol,
-                        guest_name,
-                        outdir,
-                        str(step).zfill(len(str(insertion_steps))),
-                        f"ins",
-                    )
-            if step in (0, int(insertion_steps/2), insertion_steps-1):
-                if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
-                    calc_work = False
-                    break
+
+
+        # collect a du_dl calculation once every other step
+        subsample_freq = 1
+
+        full_du_dls = ctxt.multiple_steps(insertion_lambda_schedule, subsample_freq)
+        step = len(insertion_lambda_schedule) - 1
+        lamb = insertion_lambda_schedule[-1]
+        ctxt.step(lamb)
+
+        report.report_step(ctxt, step, lamb, host_box, combined_bps, u_impls, guest_name, insertion_steps, "INSERTION")
+        if not fewer_outfiles:
+            host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
+            guest_coords = ctxt.get_x_t()[len(solvated_host_coords) :] * 10
+            report.write_frame(
+                host_coords,
+                solvated_host_mol,
+                guest_coords,
+                guest_mol,
+                guest_name,
+                outdir,
+                str(step).zfill(len(str(insertion_steps))),
+                f"ins",
+            )
+
+        if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
+            calc_work = False
+            break
 
         # Note: this condition only applies for ABFE, not RBFE
         if (
-            abs(du_dl_obs.full_du_dl()[0]) > 0.001
-            or abs(du_dl_obs.full_du_dl()[-1]) > 0.001
+            abs(full_du_dls[0]) > 0.001
+            or abs(full_du_dls[-1]) > 0.001
         ):
             print("Error: du_dl endpoints are not ~0")
             calc_work = False
 
         if calc_work:
             work = np.trapz(
-                du_dl_obs.full_du_dl(), insertion_lambda_schedule[::subsample_freq]
+                full_du_dls, insertion_lambda_schedule[::subsample_freq]
             )
             print(f"guest_name: {guest_name}\tinsertion_work: {work:.2f}")
 
@@ -265,7 +245,7 @@ def main():
     parser.add_argument(
         "--max_lambda",
         type=float,
-        default=0.25,
+        default=1.0,
         help=(
             "lambda value the guest should insert from or delete to "
             "(must be =1 for the work calculation to be applicable)"

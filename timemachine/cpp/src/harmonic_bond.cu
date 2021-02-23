@@ -73,14 +73,14 @@ void HarmonicBond<RealType>::execute_device(
     const double lambda,
     unsigned long long *d_du_dx,
     double *d_du_dp,
-    double *d_du_dl,
-    double *d_u,
+    unsigned long long *d_du_dl,
+    unsigned long long *d_u,
     cudaStream_t stream) {
 
     int tpb = 32;
     int blocks = (B_+tpb-1)/tpb;
 
-    if(B_ > 0) { 
+    if(B_ > 0) {
         k_harmonic_bond<RealType><<<blocks, tpb, 0, stream>>>(
             B_,
             d_x,
@@ -96,6 +96,7 @@ void HarmonicBond<RealType>::execute_device(
         );
         gpuErrchk(cudaPeekAtLastError());
     }
+
 };
 
 template class HarmonicBond<double>;

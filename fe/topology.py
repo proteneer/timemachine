@@ -123,9 +123,8 @@ class HostGuestTopology():
         num_guest_atoms = self.guest_topology.get_num_atoms()
         guest_qlj, guest_p = self.guest_topology.parameterize_nonbonded(ff_q_params, ff_lj_params)
 
-        if isinstance(guest_p, potentials.InterpolatedPotential):
+        if isinstance(guest_p, potentials.NonbondedInterpolated):
             assert guest_qlj.shape[0] == num_guest_atoms*2
-            guest_p = guest_p.get_u_fn()
             is_interpolated = True
         else:
             assert guest_qlj.shape[0] == num_guest_atoms
@@ -147,7 +146,7 @@ class HostGuestTopology():
             hg_nb_params_dst = jnp.concatenate([self.host_nonbonded.params, guest_qlj[num_guest_atoms:]])
             hg_nb_params = jnp.concatenate([hg_nb_params_src, hg_nb_params_dst])
 
-            nb = potentials.Nonbonded(
+            nb = potentials.NonbondedInterpolated(
                 hg_exclusion_idxs,
                 hg_scale_factors,
                 hg_lambda_plane_idxs,
@@ -156,7 +155,7 @@ class HostGuestTopology():
                 guest_p.get_cutoff()
             )
 
-            return hg_nb_params, potentials.InterpolatedPotential(nb, self.get_num_atoms(), hg_nb_params.size)
+            return hg_nb_params, nb
         else:
             # no parameter interpolation
             hg_nb_params = jnp.concatenate([self.host_nonbonded.params, guest_qlj])
@@ -710,16 +709,16 @@ class SingleTopology():
         beta = _BETA
         cutoff = _CUTOFF # solve for this analytically later
 
-        nb = potentials.Nonbonded(
+        nb = potentials.NonbondedInterpolated(
             combined_exclusion_idxs,
             combined_scale_factors,
             combined_lambda_plane_idxs,
             combined_lambda_offset_idxs,
             beta,
             cutoff
-        ) 
+        )
 
-        return qlj_params, potentials.InterpolatedPotential(nb, self.get_num_atoms(), qlj_params.size)
+        return qlj_params, nb
 
     @staticmethod
     def _concatenate(arrs):

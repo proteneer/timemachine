@@ -66,11 +66,12 @@ public:
         return d_ixn_count_;
     }
 
-private:
-
+    // get max number of blocks
     int B() const {
         return (N_+32-1)/32;
     }
+
+private:
 
     int Y() const {
         return (this->B()+32-1)/32;

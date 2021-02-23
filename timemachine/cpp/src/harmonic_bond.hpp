@@ -37,10 +37,10 @@ public:
         const double *d_p,
         const double *d_box,
         const double lambda,
-        unsigned long long *d_du_dx,
+        unsigned long long *d_du_dx, // buffered
         double *d_du_dp,
-        double *d_du_dl,
-        double *d_u,
+        unsigned long long *d_du_dl,  // buffered
+        unsigned long long *d_u,  // buffered
         cudaStream_t stream
     ) override;
 
