@@ -164,8 +164,8 @@ def pose_dock(
             raise (RuntimeError('invalid `transition_type` (must be one of ["insertion", "deletion"])'))
 
         calc_work = True
-        # (ytz): we gotta figure out how to batch this code, tbd: batch this
 
+        # (ytz): we gotta figure out how to batch this code, tbd: batch this
         # collect a du_dl calculation every step
         subsample_freq = 1
 
