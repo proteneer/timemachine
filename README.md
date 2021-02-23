@@ -4,9 +4,9 @@ A high-performance differentiable molecular dynamics, docking and optimization e
 
 ## Features
 
-1. Nonbonded softcore potentials are implemented via 4D decoupling.
+1. Interpolated nonbonded softcore potentials are implemented via 4D decoupling.
 2. Computes derivatives of the observables with respect to forcefield parameters.
-3. Equilibrium and non-equilibrium free energy estimates.
+3. Equilibrium and non-equilibrium free energy estimators, with highly optimized du/dl computations.
 
 ## Deficiencies
 
