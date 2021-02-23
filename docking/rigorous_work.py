@@ -1,4 +1,3 @@
-# (ytz): 02.22.2021 this code is currently broken
 """
 1. Solvates a host, inserts guest(s) into solvated host, equilibrates, spins off deletion jobs, calculates work
 2. Creates a water box, inserts guest(s) into water box, equilibrates, spins off deletion jobs, calculates work
@@ -102,17 +101,6 @@ def calculate_rigorous_work(
     if no_outfiles:
         os.remove(water_pdb)
 
-    final_water_potentials = []
-    water_potentials, water_masses = openmm_deserializer.deserialize_system(water_system, cutoff=1.2)
-    water_nb_bp = None
-    for bp in water_potentials:
-        if isinstance(bp, potentials.Nonbonded):
-            # (ytz): hack to ensure we only have one nonbonded term
-            assert water_nb_bp is None
-            water_nb_bp = bp
-        else:
-            final_water_potentials.append(bp)
-
     # Run the procedure
     print("Getting guests...")
     suppl = Chem.SDMolSupplier(guests_sdfile, removeHs=False)
@@ -133,6 +121,11 @@ def calculate_rigorous_work(
         )
         ff = Forcefield(guest_ff_handlers)
 
+
+        conformer = guest_mol.GetConformer(0)
+        mol_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+        mol_conf = mol_conf / 10  # convert to md_units
+
         afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
 
         ups, sys_params, combined_masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), solvated_host_system, solvated_host_coords)
@@ -140,10 +133,6 @@ def calculate_rigorous_work(
         combined_bps = []
         for up, sp in zip(ups, sys_params):
             combined_bps.append(up.bind(sp))
-
-        conformer = guest_mol.GetConformer(0)
-        mol_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-        mol_conf = mol_conf / 10  # convert to md_units
 
         run_leg(
             solvated_host_coords,
@@ -164,25 +153,14 @@ def calculate_rigorous_work(
             f"{guest_name} host leg time:", "%.2f" % (end_time - start_time), "seconds"
         )
 
-        # combine water & guest
-        wgt = topology.HostGuestTopology(water_nb_bp, guest_base_top)
-        # setup the parameter handlers for the ligand
-        bonded_tuples = [
-            [wgt.parameterize_harmonic_bond, ff.hb_handle],
-            [wgt.parameterize_harmonic_angle, ff.ha_handle],
-            [wgt.parameterize_proper_torsion, ff.pt_handle],
-            [wgt.parameterize_improper_torsion, ff.it_handle]
-        ]
-        combined_bps = list(final_water_potentials)
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            params, potential = fn(handle.params)
-            combined_bps.append(potential.bind(params))
-        nb_params, nb_potential = wgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
-        combined_bps.append(nb_potential.bind(nb_params))
-        guest_masses = [a.GetMass() for a in guest_mol.GetAtoms()]
-        combined_masses = np.concatenate([water_masses, guest_masses])
-        start_time = time.time()
+        afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
+
+        ups, sys_params, combined_masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), water_system, orig_water_coords)
+
+        combined_bps = []
+        for up, sp in zip(ups, sys_params):
+            combined_bps.append(up.bind(sp))
+
         run_leg(
             orig_water_coords,
             orig_guest_coords,
