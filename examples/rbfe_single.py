@@ -3,6 +3,10 @@
 # of the free energy prediction.
 
 
+# (ytz): if using GRPC Client, launch workers with:
+# python parallel/worker.py --gpu_idx 0 --port 2021
+# python parallel/worker.py --gpu_idx 0 --port 2022
+
 import argparse
 import numpy as np
 import jax
@@ -17,7 +21,7 @@ from testsystems.relative import hif2a_ligand_pair
 
 from ff.handlers.serialize import serialize_handlers
 from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
-from parallel.client import CUDAPoolClient
+from parallel.client import CUDAPoolClient, GRPCClient
 
 from typing import Union, Optional, Iterable, Any, Tuple, Dict
 
@@ -26,6 +30,8 @@ from optimize.step import truncated_step
 array = Union[np.array, jnp.array]
 Handler = Union[AM1CCCHandler, LennardJonesHandler] # TODO: do these all inherit from a Handler class already?
 
+import parallel
+import grpc
 
 def wrap_method(args: Iterable[Any], fxn: callable):
     # TODO: is there a more functools-y approach to make
@@ -77,7 +83,20 @@ if __name__ == "__main__":
 
     cmd_args = parser.parse_args()
 
-    client = CUDAPoolClient(max_workers=cmd_args.num_gpus)
+    stubs = []
+    ports = [2021, 2022]
+    for port in ports:
+        channel = grpc.insecure_channel('0.0.0.0:'+str(port),
+            options = [
+                ('grpc.max_send_message_length', 500 * 1024 * 1024),
+                ('grpc.max_receive_message_length', 500 * 1024 * 1024)
+            ]
+        )
+        stub = parallel.service_pb2_grpc.WorkerStub(channel)
+        stubs.append(stub)
+
+    client = GRPCClient(stubs=stubs)
+    # client = CUDAPoolClient(max_workers=cmd_args.num_gpus)
 
     # fetch mol_a, mol_b, core, forcefield from testsystem
     mol_a, mol_b, core = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core

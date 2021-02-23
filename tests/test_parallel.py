@@ -98,7 +98,6 @@ class TestGRPCClient(unittest.TestCase):
         # setup client
         stubs = []
         for port in ports:
-            stubs = []
             channel = grpc.insecure_channel('0.0.0.0:'+str(port),
                 options = [
                     ('grpc.max_send_message_length', 500 * 1024 * 1024),
