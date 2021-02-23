@@ -497,11 +497,10 @@ class GradientTest(unittest.TestCase):
         grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
         ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
 
-        for combo in range(2**4):
-            compute_du_dx = combo & 1 << 0
-            compute_du_dp = combo & 1 << 1
-            compute_du_dl = combo & 1 << 2
-            compute_u = combo & 1 << 3
+        from itertools import product
+
+        for combo in product([False, True], repeat=4):
+            (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
 
             # do each computation twice to check determinism
             test_du_dx, test_du_dp, test_du_dl, test_u = test_impl.execute_selective(
