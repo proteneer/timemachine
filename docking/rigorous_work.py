@@ -25,7 +25,8 @@ DELETION_MAX_LAMBDA = 1.0
 MIN_LAMBDA = 0.0
 TRANSITION_STEPS = 501
 EQ1_STEPS = 5001
-EQ2_STEPS = 10001
+NUM_DELETIONS = 10
+# EQ2_STEPS = 10001
 
 
 def calculate_rigorous_work(
@@ -48,7 +49,7 @@ def calculate_rigorous_work(
     MIN_LAMBDA = {MIN_LAMBDA}
     TRANSITION_STEPS = {TRANSITION_STEPS}
     EQ1_STEPS = {EQ1_STEPS}
-    EQ2_STEPS = {EQ2_STEPS}
+    NUM_DELETIONS = {NUM_DELETIONS}
     """
     )
 
@@ -217,111 +218,119 @@ def run_leg(
     insertion_lambda_schedule = np.linspace(
         INSERTION_MAX_LAMBDA, MIN_LAMBDA, TRANSITION_STEPS
     )
-    for step, lamb in enumerate(insertion_lambda_schedule):
-        ctxt.step(lamb)
-        if step % 100 == 0:
-            report.report_step(
-                ctxt,
-                step,
-                lamb,
-                host_box,
-                combined_bps,
-                u_impls,
-                guest_name,
-                TRANSITION_STEPS,
-                f"{leg_type.upper()}_INSERTION",
-            )
-            if not fewer_outfiles and not no_outfiles:
-                host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
-                guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
-                report.write_frame(
-                    host_coords,
-                    host_mol,
-                    guest_coords,
-                    guest_mol,
-                    guest_name,
-                    outdir,
-                    str(step).zfill(len(str(TRANSITION_STEPS))),
-                    f"{leg_type}-ins",
-                )
-        if step in (0, int(TRANSITION_STEPS/2), TRANSITION_STEPS-1):
-            if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
-                return
+
+    ctxt.multiple_steps(insertion_lambda_schedule, 0) # do not collect du_dls
+
+    lamb = insertion_lambda_schedule[-1]
+    step = len(insertion_lambda_schedule) - 1
+
+    report.report_step(
+        ctxt,
+        step,
+        lamb,
+        host_box,
+        combined_bps,
+        u_impls,
+        guest_name,
+        TRANSITION_STEPS,
+        f"{leg_type.upper()}_INSERTION",
+    )
+    if not fewer_outfiles and not no_outfiles:
+        host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
+        guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
+        report.write_frame(
+            host_coords,
+            host_mol,
+            guest_coords,
+            guest_mol,
+            guest_name,
+            outdir,
+            str(step).zfill(len(str(TRANSITION_STEPS))),
+            f"{leg_type}-ins",
+        )
+    if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
+        return
 
     # equilibrate
-    for step in range(EQ1_STEPS):
-        ctxt.step(MIN_LAMBDA)
-        if step % 1000 == 0:
-            report.report_step(
-                ctxt,
-                step,
-                MIN_LAMBDA,
-                host_box,
-                combined_bps,
-                u_impls,
-                guest_name,
-                EQ1_STEPS,
-                f"{leg_type.upper()}_EQUILIBRATION_1",
+    equil_lambda_schedule = np.ones(EQ1_STEPS)*MIN_LAMBDA
+    lamb = equil_lambda_schedule[-1]
+    step = len(equil_lambda_schedule)-1
+    ctxt.multiple_steps(equil_lambda_schedule, 0)
+    report.report_step(
+        ctxt,
+        step,
+        MIN_LAMBDA,
+        host_box,
+        combined_bps,
+        u_impls,
+        guest_name,
+        EQ1_STEPS,
+        f"{leg_type.upper()}_EQUILIBRATION_1",
+    )
+    if not fewer_outfiles and not no_outfiles:
+        host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
+        guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
+        report.write_frame(
+            host_coords,
+            host_mol,
+            guest_coords,
+            guest_mol,
+            guest_name,
+            outdir,
+            str(step).zfill(len(str(EQ1_STEPS))),
+            f"{leg_type}-eq1",
             )
-            if not fewer_outfiles and not no_outfiles:
-                host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
-                guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
-                report.write_frame(
-                    host_coords,
-                    host_mol,
-                    guest_coords,
-                    guest_mol,
-                    guest_name,
-                    outdir,
-                    str(step).zfill(len(str(EQ1_STEPS))),
-                    f"{leg_type}-eq1",
-                )
-        if step in (0, int(EQ1_STEPS/2), EQ1_STEPS-1):
-            if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
-                return
+    if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
+        return
 
     # equilibrate more & shoot off deletion jobs
-    for step in range(EQ2_STEPS):
-        ctxt.step(MIN_LAMBDA)
-        if step % 1000 == 0:
-            report.report_step(
-                ctxt,
-                step,
-                MIN_LAMBDA,
-                host_box,
-                combined_bps,
-                u_impls,
-                guest_name,
-                EQ2_STEPS,
-                f"{leg_type.upper()}_EQUILIBRATION_2",
-            )
+    steps_per_batch = 1000
 
-            # TODO: if guest has undocked, stop simulation
-            if not no_outfiles:
-                host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
-                guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
-                report.write_frame(
-                    host_coords,
-                    host_mol,
-                    guest_coords,
-                    guest_mol,
-                    guest_name,
-                    outdir,
-                    str(step).zfill(len(str(EQ2_STEPS))),
-                    f"{leg_type}-eq2",
-                )
-            if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
-                return
+    for b in range(NUM_DELETIONS):
+        deletion_lambda_schedule = np.ones(steps_per_batch)*MIN_LAMBDA
 
-            do_deletion(
-                ctxt.get_x_t(),
-                ctxt.get_v_t(),
-                combined_bps,
-                combined_masses,
-                host_box,
+        ctxt.multiple_steps(deletion_lambda_schedule, 0)
+        lamb = deletion_lambda_schedule[-1]
+        step = len(deletion_lambda_schedule)-1
+        report.report_step(
+            ctxt,
+            step,
+            MIN_LAMBDA,
+            host_box,
+            combined_bps,
+            u_impls,
+            guest_name,
+            NUM_DELETIONS*steps_per_batch,
+            f"{leg_type.upper()}_EQUILIBRATION_2",
+        )
+
+        # TODO: if guest has undocked, stop simulation
+        if not no_outfiles:
+            host_coords = ctxt.get_x_t()[: len(orig_host_coords)] * 10
+            guest_coords = ctxt.get_x_t()[len(orig_host_coords) :] * 10
+            report.write_frame(
+                host_coords,
+                host_mol,
+                guest_coords,
+                guest_mol,
                 guest_name,
-                leg_type,
+                outdir,
+                str(step).zfill(len(str(NUM_DELETIONS*steps_per_batch))),
+                f"{leg_type}-eq2",
             )
+        if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
+            return
+
+        do_deletion(
+            ctxt.get_x_t(),
+            ctxt.get_v_t(),
+            combined_bps,
+            combined_masses,
+            host_box,
+            guest_name,
+            leg_type,
+        )
+
 
 
 def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type):

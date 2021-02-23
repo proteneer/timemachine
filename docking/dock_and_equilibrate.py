@@ -155,12 +155,12 @@ def dock_and_equilibrate(
 
         # collect a du_dl calculation once every other step
         subsample_freq = 1
-        # for step, lamb in enumerate(insertion_lambda_schedule):
+
         full_du_dls = ctxt.multiple_steps(insertion_lambda_schedule, subsample_freq)
         step = len(insertion_lambda_schedule) - 1
         lamb = insertion_lambda_schedule[-1]
         ctxt.step(lamb)
-        # if step % 100 == 0:
+
         report.report_step(ctxt, step, lamb, host_box, combined_bps, u_impls, guest_name, insertion_steps, "INSERTION")
         if not fewer_outfiles:
             host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
@@ -175,7 +175,7 @@ def dock_and_equilibrate(
                 str(step).zfill(len(str(insertion_steps))),
                 f"ins",
             )
-        # if step in (0, int(insertion_steps/2), insertion_steps-1):
+
         if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
             calc_work = False
             break
