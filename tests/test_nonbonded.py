@@ -256,14 +256,9 @@ class TestNonbondedDHFR(GradientTest):
 
         impl = nb_fn.unbound_impl(np.float32)
 
-        for combo in range(2**4):
+        for combo in itertools.product([False, True], repeat=4):
 
-            print("COMBO", combo)
-
-            compute_du_dx = combo & 1 << 0
-            compute_du_dp = combo & 1 << 1
-            compute_du_dl = combo & 1 << 2
-            compute_u = combo & 1 << 3
+            (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
 
             for trip in range(50):
 

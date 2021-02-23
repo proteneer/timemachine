@@ -1,3 +1,4 @@
+# (ytz): 02.22.2021 this code is currently broken
 """
 1. Solvates a host, inserts guest(s) into solvated host, equilibrates, spins off deletion jobs, calculates work
 2. Creates a water box, inserts guest(s) into water box, equilibrates, spins off deletion jobs, calculates work
@@ -12,7 +13,7 @@ from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
 
 from md import builders
-from fe import pdb_writer, topology
+from fe import pdb_writer, free_energy
 from ff import Forcefield
 from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
@@ -75,17 +76,6 @@ def calculate_rigorous_work(
     solvated_host_mol = Chem.MolFromPDBFile(solvated_host_pdb, removeHs=False)
     if no_outfiles:
         os.remove(solvated_host_pdb)
-    final_host_potentials = []
-    host_potentials, host_masses = openmm_deserializer.deserialize_system(solvated_host_system, cutoff=1.2)
-    host_nb_bp = None
-    for bp in host_potentials:
-        if isinstance(bp, potentials.Nonbonded):
-            # (ytz): hack to ensure we only have one nonbonded term
-            assert host_nb_bp is None
-            host_nb_bp = bp
-        else:
-            final_host_potentials.append(bp)
-
 
     # Prepare water box
     print("Generating water box...")
@@ -142,26 +132,18 @@ def calculate_rigorous_work(
             ).read()
         )
         ff = Forcefield(guest_ff_handlers)
-        guest_base_top = topology.BaseTopology(guest_mol, ff)
 
-        # combine host & guest
-        hgt = topology.HostGuestTopology(host_nb_bp, guest_base_top)
-        # setup the parameter handlers for the ligand
-        bonded_tuples = [
-            [hgt.parameterize_harmonic_bond, ff.hb_handle],
-            [hgt.parameterize_harmonic_angle, ff.ha_handle],
-            [hgt.parameterize_proper_torsion, ff.pt_handle],
-            [hgt.parameterize_improper_torsion, ff.it_handle]
-        ]
-        combined_bps = list(final_host_potentials)
-        # instantiate the vjps while parameterizing (forward pass)
-        for fn, handle in bonded_tuples:
-            params, potential = fn(handle.params)
-            combined_bps.append(potential.bind(params))
-        nb_params, nb_potential = hgt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
-        combined_bps.append(nb_potential.bind(nb_params))
-        guest_masses = [a.GetMass() for a in guest_mol.GetAtoms()]
-        combined_masses = np.concatenate([host_masses, guest_masses])
+        afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
+
+        ups, sys_params, combined_masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), solvated_host_system, solvated_host_coords)
+
+        combined_bps = []
+        for up, sp in zip(ups, sys_params):
+            combined_bps.append(up.bind(sp))
+
+        conformer = guest_mol.GetConformer(0)
+        mol_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+        mol_conf = mol_conf / 10  # convert to md_units
 
         run_leg(
             solvated_host_coords,
@@ -375,9 +357,9 @@ def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type
 
     ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
 
-    subsample_freq = 2
-    du_dl_obs = custom_ops.FullPartialUPartialLambda(u_impls, subsample_freq)
-    ctxt.add_observable(du_dl_obs)
+
+    # du_dl_obs = custom_ops.FullPartialUPartialLambda(u_impls, subsample_freq)
+    # ctxt.add_observable(du_dl_obs)
 
     deletion_lambda_schedule = np.linspace(
         MIN_LAMBDA, DELETION_MAX_LAMBDA, TRANSITION_STEPS
@@ -385,36 +367,40 @@ def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type
 
     calc_work = True
 
-    for step, lamb in enumerate(deletion_lambda_schedule):
-        ctxt.step(lamb)
-        if step % 100 == 0:
-            report.report_step(
-                ctxt,
-                step,
-                lamb,
-                box,
-                combined_bps,
-                u_impls,
-                guest_name,
-                TRANSITION_STEPS,
-                f"{leg_type.upper()}_DELETION",
-            )
-        if step in (0, int(TRANSITION_STEPS/2), TRANSITION_STEPS-1):
-            if report.too_much_force(ctxt, lamb, box, combined_bps, u_impls):
-                calc_work = False
-                return
+    subsample_freq = 1
+    full_du_dls = ctxt.multiple_steps(deletion_lambda_schedule, subsample_freq)
+
+    step = len(deletion_lambda_schedule) - 1
+    lamb = deletion_lambda_schedule[-1]
+    ctxt.step(lamb)
+    report.report_step(
+        ctxt,
+        step,
+        lamb,
+        box,
+        combined_bps,
+        u_impls,
+        guest_name,
+        TRANSITION_STEPS,
+        f"{leg_type.upper()}_DELETION",
+    )
+
+    if report.too_much_force(ctxt, lamb, box, combined_bps, u_impls):
+        calc_work = False
+        return
 
     # Note: this condition only applies for ABFE, not RBFE
     if (
-        abs(du_dl_obs.full_du_dl()[0]) > 0.001
-        or abs(du_dl_obs.full_du_dl()[-1]) > 0.001
+        abs(full_du_dls[0]) > 0.001
+        or abs(full_du_dls[-1]) > 0.001
     ):
         print("Error: du_dl endpoints are not ~0")
         calc_work = False
 
     if calc_work:
         work = np.trapz(
-            du_dl_obs.full_du_dl(), deletion_lambda_schedule[::subsample_freq]
+            full_du_dls,
+            deletion_lambda_schedule[::subsample_freq]
         )
         print(f"guest_name: {guest_name}\t{leg_type}_work: {work:.2f}")
 

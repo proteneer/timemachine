@@ -135,6 +135,7 @@ void __global__ k_periodic_torsion(
     }
 
     if(u) {
+        // printf("%f\n", lambda_prefactor*kt*(1+cos(period*angle - phase)));
         atomicAdd(u + i_idx, FLOAT_TO_FIXED_BONDED(lambda_prefactor*kt*(1+cos(period*angle - phase))));
     }
 

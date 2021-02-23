@@ -45,17 +45,17 @@ void BoundPotential::execute_host(
 
     unsigned long long *d_du_dx; // du/dx
     unsigned long long *d_du_dl; // du/dl
-    unsigned long long *d_u = nullptr; // u
+    unsigned long long *d_u; // u
 
     const int P = this->size();
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
     gpuErrchk(cudaMalloc(&d_du_dx, N*D*sizeof(unsigned long long)));
     gpuErrchk(cudaMemset(d_du_dx, 0, N*D*sizeof(unsigned long long)));
-    gpuErrchk(cudaMalloc(&d_du_dl, N*sizeof(double)));
-    gpuErrchk(cudaMemset(d_du_dl, 0, N*sizeof(double)));
-    gpuErrchk(cudaMalloc(&d_u, N*sizeof(double)));
-    gpuErrchk(cudaMemset(d_u, 0, N*sizeof(double)));
+    gpuErrchk(cudaMalloc(&d_du_dl, N*sizeof(unsigned long long)));
+    gpuErrchk(cudaMemset(d_du_dl, 0, N*sizeof(unsigned long long)));
+    gpuErrchk(cudaMalloc(&d_u, N*sizeof(unsigned long long)));
+    gpuErrchk(cudaMemset(d_u, 0, N*sizeof(unsigned long long)));
 
 
     this->execute_device(
@@ -72,9 +72,9 @@ void BoundPotential::execute_host(
 
     gpuErrchk(cudaMemcpy(h_du_dx, d_du_dx, N*D*sizeof(*h_du_dx), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaFree(d_du_dx));
-    gpuErrchk(cudaMemcpy(h_du_dl, d_du_dl, sizeof(*h_du_dl), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(h_du_dl, d_du_dl, N*sizeof(*h_du_dl), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaFree(d_du_dl));
-    gpuErrchk(cudaMemcpy(h_u, d_u, sizeof(*h_u), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(h_u, d_u, N*sizeof(*h_u), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaFree(d_u));
     gpuErrchk(cudaFree(d_x));
     gpuErrchk(cudaFree(d_box));

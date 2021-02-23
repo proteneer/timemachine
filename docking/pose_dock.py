@@ -11,7 +11,7 @@ from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
 from rdkit.Geometry import Point3D
 
 from fe.utils import to_md_units
-from fe import topology, free_energy
+from fe import free_energy
 from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers import openmm_deserializer
 from ff import Forcefield
@@ -117,7 +117,6 @@ def pose_dock(
         for up, sp in zip(ups, sys_params):
             bps.append(up.bind(sp))
 
-
         for atom_num in constant_atoms:
             masses[atom_num - 1] += 50000
 
@@ -171,6 +170,7 @@ def pose_dock(
         subsample_freq = 1
 
         full_du_dls = ctxt.multiple_steps(new_lambda_schedule, subsample_freq)
+
         step = len(new_lambda_schedule)-1
         final_lamb = new_lambda_schedule[-1]
         report.report_step(ctxt, step, final_lamb, box, bps, impls, guest_name, n_steps, 'pose_dock')

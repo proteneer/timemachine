@@ -10,6 +10,9 @@ from timemachine.lib import potentials, custom_ops
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 
+import itertools
+
+
 
 def prepare_lj_system(
     x,
@@ -497,9 +500,7 @@ class GradientTest(unittest.TestCase):
         grad_fn = jax.grad(ref_potential, argnums=(0, 1, 3))
         ref_du_dx, ref_du_dp, ref_du_dl = grad_fn(x, params, box, lamb)
 
-        from itertools import product
-
-        for combo in product([False, True], repeat=4):
+        for combo in itertools.product([False, True], repeat=4):
             (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
 
             # do each computation twice to check determinism
@@ -534,8 +535,9 @@ class GradientTest(unittest.TestCase):
             )
 
             np.testing.assert_array_equal(test_du_dx, test_du_dx_2)
+            np.testing.assert_array_equal(test_du_dl, test_du_dl_2)
+            np.testing.assert_array_equal(test_u, test_u_2)
 
             if isinstance(test_potential, potentials.Nonbonded):
                 np.testing.assert_array_equal(test_du_dp, test_du_dp_2)
-                np.testing.assert_array_equal(test_du_dl, test_du_dl_2)
-                np.testing.assert_array_equal(test_u, test_u_2)
+
