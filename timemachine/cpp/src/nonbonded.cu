@@ -15,8 +15,8 @@
 
 namespace timemachine {
 
-template <typename RealType>
-Nonbonded<RealType>::Nonbonded(
+template <typename RealType, bool Interpolated>
+Nonbonded<RealType, Interpolated>::Nonbonded(
     const std::vector<int> &exclusion_idxs, // [E,2]
     const std::vector<double> &scales, // [E, 2]
     const std::vector<int> &lambda_plane_idxs, // [N]
@@ -30,21 +30,32 @@ Nonbonded<RealType>::Nonbonded(
     beta_(beta),
     d_sort_storage_(nullptr),
     d_sort_storage_bytes_(0),
-    compute_4d_(false),
     nblist_padding_(0.1),
-    disable_hilbert_(false) {
-
-    for(auto x : lambda_plane_idxs) {
-        if(x != 0) {
-            compute_4d_ = true;
-        }
-    }
-
-    for(auto x : lambda_offset_idxs) {
-        if(x != 0) {
-            compute_4d_ = true;
-        }
-    }
+    disable_hilbert_(false),
+    kernel_ptrs_({
+        // enumerate over every possible kernel combination
+        // U: Compute U
+        // X: Compute DU_DL
+        // L: Compute DU_DX
+        // P: Compute DU_DP
+        //                             U  X  L  P
+        &k_nonbonded_unified<RealType, 0, 0, 0, 0>,
+        &k_nonbonded_unified<RealType, 0, 0, 0, 1>,
+        &k_nonbonded_unified<RealType, 0, 0, 1, 0>,
+        &k_nonbonded_unified<RealType, 0, 0, 1, 1>,
+        &k_nonbonded_unified<RealType, 0, 1, 0, 0>,
+        &k_nonbonded_unified<RealType, 0, 1, 0, 1>,
+        &k_nonbonded_unified<RealType, 0, 1, 1, 0>,
+        &k_nonbonded_unified<RealType, 0, 1, 1, 1>,
+        &k_nonbonded_unified<RealType, 1, 0, 0, 0>,
+        &k_nonbonded_unified<RealType, 1, 0, 0, 1>,
+        &k_nonbonded_unified<RealType, 1, 0, 1, 0>,
+        &k_nonbonded_unified<RealType, 1, 0, 1, 1>,
+        &k_nonbonded_unified<RealType, 1, 1, 0, 0>,
+        &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
+        &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
+        &k_nonbonded_unified<RealType, 1, 1, 1, 1>
+    }){
 
     if(lambda_offset_idxs.size() != N_) {
         throw std::runtime_error("lambda offset idxs need to have size N");
@@ -64,18 +75,16 @@ Nonbonded<RealType>::Nonbonded(
     gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_, N_*sizeof(*d_lambda_offset_idxs_)));
     gpuErrchk(cudaMemcpy(d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_*sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMalloc(&d_du_dl_buffer_, N_*sizeof(*d_du_dl_buffer_)));
-    gpuErrchk(cudaMalloc(&d_u_buffer_, N_*sizeof(*d_u_buffer_)));
-
-    gpuErrchk(cudaMalloc(&d_du_dl_reduce_sum_, 1*sizeof(*d_du_dl_reduce_sum_)));
-    gpuErrchk(cudaMalloc(&d_u_reduce_sum_, 1*sizeof(*d_u_reduce_sum_)));
-
     gpuErrchk(cudaMalloc(&d_perm_, N_*sizeof(*d_perm_)));
 
     gpuErrchk(cudaMalloc(&d_sorted_lambda_plane_idxs_, N_*sizeof(*d_sorted_lambda_plane_idxs_)));
     gpuErrchk(cudaMalloc(&d_sorted_lambda_offset_idxs_, N_*sizeof(*d_sorted_lambda_offset_idxs_)));
     gpuErrchk(cudaMalloc(&d_sorted_x_, N_*3*sizeof(*d_sorted_x_)));
-    gpuErrchk(cudaMalloc(&d_sorted_p_, N_*3*sizeof(*d_sorted_p_)));
+
+    gpuErrchk(cudaMalloc(&d_unsorted_p_, N_*3*sizeof(*d_unsorted_p_))); // interpolated
+    gpuErrchk(cudaMalloc(&d_sorted_p_, N_*3*sizeof(*d_sorted_p_))); // interpolated
+    gpuErrchk(cudaMalloc(&d_unsorted_dp_dl_, N_*3*sizeof(*d_unsorted_dp_dl_))); // interpolated
+    gpuErrchk(cudaMalloc(&d_sorted_dp_dl_, N_*3*sizeof(*d_sorted_dp_dl_))); // interpolated
     gpuErrchk(cudaMalloc(&d_sorted_du_dx_, N_*3*sizeof(*d_sorted_du_dx_)));
     gpuErrchk(cudaMalloc(&d_sorted_du_dp_, N_*3*sizeof(*d_sorted_du_dp_)));
     gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_*3*sizeof(*d_du_dp_buffer_)));
@@ -85,7 +94,7 @@ Nonbonded<RealType>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_scales_, E_*2*sizeof(*d_scales_)));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], E_*2*sizeof(*d_scales_), cudaMemcpyHostToDevice));
-    
+
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1*sizeof(*p_ixn_count_)));
 
     gpuErrchk(cudaMalloc(&d_nblist_x_, N_*3*sizeof(*d_nblist_x_)));
@@ -118,7 +127,7 @@ Nonbonded<RealType>::Nonbonded(
     }
 
     gpuErrchk(cudaMalloc(&d_bin_to_idx_, 256*256*256*sizeof(*d_bin_to_idx_)));
-    gpuErrchk(cudaMemcpy(d_bin_to_idx_, &bin_to_idx[0], 256*256*256*sizeof(*d_bin_to_idx_), cudaMemcpyHostToDevice));   
+    gpuErrchk(cudaMemcpy(d_bin_to_idx_, &bin_to_idx[0], 256*256*256*sizeof(*d_bin_to_idx_), cudaMemcpyHostToDevice));
 
     // estimate size needed to do radix sorting, this can use uninitialized data.
     cub::DeviceRadixSort::SortPairs(
@@ -135,27 +144,25 @@ Nonbonded<RealType>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
 
+
 };
 
-template <typename RealType>
-Nonbonded<RealType>::~Nonbonded() {
+template <typename RealType, bool Interpolated>
+Nonbonded<RealType, Interpolated>::~Nonbonded() {
 
     gpuErrchk(cudaFree(d_exclusion_idxs_));
     gpuErrchk(cudaFree(d_scales_));
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
-
-    gpuErrchk(cudaFree(d_du_dl_reduce_sum_));
-    gpuErrchk(cudaFree(d_u_reduce_sum_));
-
     gpuErrchk(cudaFree(d_du_dp_buffer_));
-    gpuErrchk(cudaFree(d_du_dl_buffer_));
-    gpuErrchk(cudaFree(d_u_buffer_));
     gpuErrchk(cudaFree(d_perm_)); // nullptr if we never built nblist
-    
+
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_sorted_x_));
+    gpuErrchk(cudaFree(d_unsorted_p_));
     gpuErrchk(cudaFree(d_sorted_p_));
+    gpuErrchk(cudaFree(d_unsorted_dp_dl_));
+    gpuErrchk(cudaFree(d_sorted_dp_dl_));
     gpuErrchk(cudaFree(d_sorted_du_dx_));
     gpuErrchk(cudaFree(d_sorted_du_dp_));
     gpuErrchk(cudaFree(d_sorted_lambda_plane_idxs_));
@@ -166,6 +173,8 @@ Nonbonded<RealType>::~Nonbonded() {
     gpuErrchk(cudaFree(d_sort_vals_in_));
     gpuErrchk(cudaFree(d_sort_storage_));
 
+    // gpuErrchk(cudaFree(d_sum_storage_));
+
     gpuErrchk(cudaFreeHost(p_ixn_count_));
 
     gpuErrchk(cudaFree(d_nblist_x_));
@@ -175,19 +184,19 @@ Nonbonded<RealType>::~Nonbonded() {
 };
 
 
-template<typename RealType>
-void Nonbonded<RealType>::set_nblist_padding(double val) {
+template<typename RealType, bool Interpolated>
+void Nonbonded<RealType, Interpolated>::set_nblist_padding(double val) {
     nblist_padding_ = val;
 }
 
 
-template<typename RealType>
-void Nonbonded<RealType>::disable_hilbert_sort() {
+template<typename RealType, bool Interpolated>
+void Nonbonded<RealType, Interpolated>::disable_hilbert_sort() {
     disable_hilbert_ = true;
 }
 
-template <typename RealType>
-void Nonbonded<RealType>::hilbert_sort(
+template <typename RealType, bool Interpolated>
+void Nonbonded<RealType, Interpolated>::hilbert_sort(
     const double *d_coords,
     const double *d_box,
     cudaStream_t stream) {
@@ -224,18 +233,18 @@ void __global__ k_arange(int N, unsigned int *arr) {
     arr[atom_idx] = atom_idx;
 }
 
-template <typename RealType>
-void Nonbonded<RealType>::execute_device(
+template <typename RealType, bool Interpolated>
+void Nonbonded<RealType, Interpolated>::execute_device(
         const int N,
         const int P,
         const double *d_x,
-        const double *d_p, // N*3
+        const double *d_p, // 2 * N * 3
         const double *d_box,
         const double lambda,
         unsigned long long *d_du_dx,
         double *d_du_dp,
-        double *d_du_dl,
-        double *d_u,
+        unsigned long long *d_du_dl,
+        unsigned long long *d_u,
         cudaStream_t stream) {
 
     // (ytz) the nonbonded algorithm proceeds as follows:
@@ -254,27 +263,40 @@ void Nonbonded<RealType>::execute_device(
     // f. u and du/dl is buffered into a per-particle array, and then reduced.
     // g. note that du/dl is not an exact per-particle du/dl - it is only used for reduction purposes.
 
-    // assert(N == N_);
-    // assert(P == N_*3);
-
     if(N != N_) {
         std::cout << N << " " << N_ << std::endl;
         throw std::runtime_error("Nonbonded::execute_device() N != N_");
     }
 
+    const int M = Interpolated? 2 : 1;
+
+    if(P != M*N_*3) {
+        std::cout << P << " " << N_ << std::endl;
+        throw std::runtime_error("Nonbonded::execute_device() P != M*N_*3");
+    }
+
+    // identify which tiles contain interpolated parameters
+
     const int B = (N+32-1)/32;
     const int tpb = 32;
-
 
     dim3 dimGrid(B, 3, 1);
 
     // (ytz) see if we need to rebuild the neighborlist.
     // (ytz + jfass): note that this logic needs to change if we use NPT later on since a resize in the box
     // can introduce new interactions.
-    k_check_rebuild_coords<RealType><<<B, tpb, 0, stream>>>(N, d_x, d_nblist_x_, nblist_padding_, d_rebuild_nblist_);
+    k_check_rebuild_coords_and_box<RealType><<<B, tpb, 0, stream>>>(
+        N,
+        d_x,
+        d_nblist_x_,
+        d_box,
+        d_nblist_box_,
+        nblist_padding_,
+        d_rebuild_nblist_
+    );
     gpuErrchk(cudaPeekAtLastError());
-    k_check_rebuild_box<RealType><<<1, tpb, 0, stream>>>(N, d_box, d_nblist_box_, d_rebuild_nblist_);
-    gpuErrchk(cudaPeekAtLastError());
+    // k_check_rebuild_box<RealType><<<1, tpb, 0, stream>>>(N, d_box, d_nblist_box_, d_rebuild_nblist_);
+    // gpuErrchk(cudaPeekAtLastError());
 
     // we can optimize this away by doing the check on the GPU directly.
     gpuErrchk(cudaMemcpyAsync(p_rebuild_nblist_, d_rebuild_nblist_, 1*sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
@@ -285,7 +307,7 @@ void Nonbonded<RealType>::execute_device(
         // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
         // to a particular sort order
         if(!disable_hilbert_) {
-            this->hilbert_sort(d_x, d_box, stream);            
+            this->hilbert_sort(d_x, d_box, stream);
         } else {
             k_arange<<<B, 32, 0, stream>>>(N, d_perm_);
             gpuErrchk(cudaPeekAtLastError());
@@ -308,7 +330,7 @@ void Nonbonded<RealType>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
         gpuErrchk(cudaMemcpyAsync(p_ixn_count_, nblist_.get_ixn_count(), 1*sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-        gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
+        gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaStreamSynchronize(stream));
 
     } else {
@@ -316,84 +338,66 @@ void Nonbonded<RealType>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
-    gpuErrchk(cudaPeekAtLastError());
-
+    // do parameter interpolation here
+    if(Interpolated) {
+        k_permute_interpolated<<<dimGrid, tpb, 0, stream>>>(
+            lambda,
+            N,
+            d_perm_,
+            d_p,
+            d_sorted_p_,
+            d_sorted_dp_dl_
+        );
+        gpuErrchk(cudaPeekAtLastError());
+    } else {
+        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
+        gpuErrchk(cudaPeekAtLastError());
+        gpuErrchk(cudaMemsetAsync(d_sorted_dp_dl_, 0, N*3*sizeof(*d_sorted_dp_dl_), stream))
+    }
 
     // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
     // reset buffers and sorted accumulators
     if(d_du_dx) {
-	   gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N*3*sizeof(*d_sorted_du_dx_), stream))
+	    gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N*3*sizeof(*d_sorted_du_dx_), stream))
     }
     if(d_du_dp) {
-	   gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N*3*sizeof(*d_sorted_du_dp_), stream))
-    }
-    if(d_du_dl) {
-        gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N*sizeof(*d_du_dl_buffer_), stream));
-        gpuErrchk(cudaMemsetAsync(d_du_dl_reduce_sum_, 0, 1*sizeof(*d_du_dl_reduce_sum_), stream)); 
-    }
-    if(d_u) {
-        gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N*sizeof(*d_u_buffer_), stream));
-        gpuErrchk(cudaMemsetAsync(d_u_reduce_sum_, 0, 1*sizeof(*d_u_reduce_sum_), stream));
+	    gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N*3*sizeof(*d_sorted_du_dp_), stream))
     }
 
-    if(d_du_dx && !d_du_dp && !d_du_dl && !d_u) {
+    // if(d_du_dl) {
+    //     this->reset_du_dl_buffer(stream);
+    // }
 
-        // split tiles into 3D and 4D
-        // templatized, so we need to generate specializations at compile time. Eventually
-        // this whole kernel will be replaced by a JIT'd version
-        if(compute_4d_) {
-            k_nonbonded_du_dx<RealType, true><<<p_ixn_count_[0], 32, 0, stream>>>(
-                N,
-                d_sorted_x_,
-                d_sorted_p_,
-                d_box,
-                lambda,
-                d_sorted_lambda_plane_idxs_,
-                d_sorted_lambda_offset_idxs_,
-                beta_,
-                cutoff_,
-                nblist_.get_ixn_tiles(),
-                nblist_.get_ixn_atoms(),
-                d_du_dx ? d_sorted_du_dx_ : nullptr
-            );
-        } else {
-            k_nonbonded_du_dx<RealType, false><<<p_ixn_count_[0], 32, 0, stream>>>(
-                N,
-                d_sorted_x_,
-                d_sorted_p_,
-                d_box,
-                lambda,
-                d_sorted_lambda_plane_idxs_,
-                d_sorted_lambda_offset_idxs_,
-                beta_,
-                cutoff_,
-                nblist_.get_ixn_tiles(),
-                nblist_.get_ixn_atoms(),
-                d_du_dx ? d_sorted_du_dx_ : nullptr
-            );
-        }
+    // if(d_u) {
+    //     this->reset_u_buffer(stream);
+    // }
 
+    // look up which kernel we need for this computation
+    int kernel_idx = 0;
+    kernel_idx |= d_du_dp ? 1 << 0 : 0;
+    kernel_idx |= d_du_dl ? 1 << 1 : 0;
+    kernel_idx |= d_du_dx ? 1 << 2 : 0;
+    kernel_idx |= d_u ? 1 << 3 : 0;
+    // kernel_idx |= 1 << 4; // force set alchemical = True for now before we start optimizations
 
-    } else {
-        k_nonbonded<RealType><<<p_ixn_count_[0], 32, 0, stream>>>(
-            N,
-            d_sorted_x_,
-            d_sorted_p_,
-            d_box,
-            lambda,
-            d_sorted_lambda_plane_idxs_,
-            d_sorted_lambda_offset_idxs_,
-            beta_,
-            cutoff_,
-            nblist_.get_ixn_tiles(),
-            nblist_.get_ixn_atoms(),
-            d_du_dx ? d_sorted_du_dx_ : nullptr,
-            d_du_dp ? d_sorted_du_dp_ : nullptr,
-            d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
-            d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
-        );
-    }
+    kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], 32, 0, stream>>>(
+        N,
+        d_sorted_x_,
+        d_sorted_p_,
+        d_box,
+        d_sorted_dp_dl_,
+        lambda,
+        d_sorted_lambda_plane_idxs_,
+        d_sorted_lambda_offset_idxs_,
+        beta_,
+        cutoff_,
+        nblist_.get_ixn_tiles(),
+        nblist_.get_ixn_atoms(),
+        d_sorted_du_dx_,
+        d_sorted_du_dp_,
+        d_du_dl, // switch to nullptr if we don't request du_dl
+        d_u // switch to nullptr if we don't request energies
+    );
 
     gpuErrchk(cudaPeekAtLastError());
 
@@ -416,11 +420,24 @@ void Nonbonded<RealType>::execute_device(
         const int tpb = 32;
         dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
 
+        if(Interpolated) {
+            k_inv_permute_assign_2x<<<dimGrid, tpb, 0, stream>>>(
+                N,
+                d_perm_,
+                d_sorted_p_,
+                d_sorted_dp_dl_,
+                d_unsorted_p_,
+                d_unsorted_dp_dl_
+            );
+            gpuErrchk(cudaPeekAtLastError());
+        }
+
         k_nonbonded_exclusions<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
             E_,
             d_x,
-            d_p,
+            Interpolated ? d_unsorted_p_ : d_p,
             d_box,
+            Interpolated ? d_unsorted_dp_dl_ : d_sorted_dp_dl_,
             lambda,
             d_lambda_plane_idxs_,
             d_lambda_offset_idxs_,
@@ -430,37 +447,36 @@ void Nonbonded<RealType>::execute_device(
             cutoff_,
             d_du_dx,
             d_du_dp_buffer_,
-            d_du_dl ? d_du_dl_buffer_ : nullptr, // switch to nullptr if we don't request du_dl
-            d_u ? d_u_buffer_ : nullptr // switch to nullptr if we don't request energies
+            d_du_dl,
+            d_u
         );
         gpuErrchk(cudaPeekAtLastError());
     }
 
     if(d_du_dp) {
-        k_add_ull_to_real<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+        if(Interpolated) {
+            k_add_ull_to_real_interpolated<<<dimGrid, tpb, 0, stream>>>(
+                lambda,
+                N,
+                d_du_dp_buffer_,
+                d_du_dp
+            );
+        } else {
+            k_add_ull_to_real<<<dimGrid, tpb, 0, stream>>>(
+                N,
+                d_du_dp_buffer_,
+                d_du_dp
+            );
+        }
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    // (ytz): we must accumulate in fixed point to get the cancellation of nans
-    // otherwise if we convert prematurely floating points become messed up
-
-    if(d_du_dl) {
-        k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_du_dl_buffer_, d_du_dl_reduce_sum_);
-        gpuErrchk(cudaPeekAtLastError());
-        k_final_add<<<1, 32, 0, stream>>>(d_du_dl_reduce_sum_, d_du_dl);
-        gpuErrchk(cudaPeekAtLastError());
-    }
-
-    if(d_u) {
-        k_reduce_buffer<<<B, 32, 0, stream>>>(N, d_u_buffer_, d_u_reduce_sum_);
-        gpuErrchk(cudaPeekAtLastError());
-        k_final_add<<<1, 32, 0, stream>>>(d_u_reduce_sum_, d_u);
-        gpuErrchk(cudaPeekAtLastError());
-    }
-    
 }
 
-template class Nonbonded<double>;
-template class Nonbonded<float>;
+template class Nonbonded<double, true>;
+template class Nonbonded<float, true>;
+template class Nonbonded<double, false>;
+template class Nonbonded<float, false>;
+
 
 } // namespace timemachine

@@ -1,4 +1,5 @@
 #include "../fixed_point.hpp"
+#include "k_fixed_point.cuh"
 
 template<typename RealType>
 void __global__ k_harmonic_bond(
@@ -11,8 +12,8 @@ void __global__ k_harmonic_bond(
     const int * __restrict__ bond_idxs,  // [b, 2]
     unsigned long long * __restrict__ du_dx,
     double * __restrict__ du_dp,
-    double * __restrict__ du_dl,
-    double * __restrict__ u) {
+    unsigned long long * __restrict__ du_dl,
+    unsigned long long * __restrict__ u) {
 
     const auto b_idx = blockDim.x*blockIdx.x + threadIdx.x;
 
@@ -45,8 +46,8 @@ void __global__ k_harmonic_bond(
     if(du_dx) {
         for(int d=0; d < 3; d++) {
             RealType grad_delta = kb*db*dx[d]/dij;
-            atomicAdd(du_dx + src_idx*3 + d, FLOAT_TO_FIXED<RealType>(grad_delta*prefactor));
-            atomicAdd(du_dx + dst_idx*3 + d, FLOAT_TO_FIXED<RealType>(-grad_delta*prefactor));
+            atomicAdd(du_dx + src_idx*3 + d, FLOAT_TO_FIXED_BONDED<RealType>(grad_delta*prefactor));
+            atomicAdd(du_dx + dst_idx*3 + d, FLOAT_TO_FIXED_BONDED<RealType>(-grad_delta*prefactor));
         }
     }
 
@@ -56,11 +57,11 @@ void __global__ k_harmonic_bond(
     }
 
     if(u) {
-        atomicAdd(u, kb/2*db*db*prefactor);
+        atomicAdd(u + src_idx, FLOAT_TO_FIXED_BONDED<RealType>(kb/2*db*db*prefactor));
     }
 
     if(du_dl) {
-        atomicAdd(du_dl, lambda_mult[b_idx]*kb/2*db*db);
+        atomicAdd(du_dl + src_idx, FLOAT_TO_FIXED_BONDED<RealType>(lambda_mult[b_idx]*kb/2*db*db));
     }
 
 }

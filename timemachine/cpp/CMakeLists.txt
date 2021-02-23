@@ -9,8 +9,7 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.7 REQUIRED)
 find_package(PythonLibs 3.7 REQUIRED)
 
-string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -line-info")
-# string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3")
+string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -arch=${CUDA_ARCH} -O3 -lineinfo")
 message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -41,21 +40,11 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/hilbert.cpp
   src/nonbonded.cu
   src/neighborlist.cu
-  # src/restraint.cu
   src/harmonic_bond.cu
   src/harmonic_angle.cu
   src/periodic_torsion.cu
   src/integrator.cu
-  src/shape.cu
-  src/lennard_jones.cu
-  src/electrostatics.cu
-  # src/stepper.cu
   src/context.cu
-  src/lambda_potential.cu
-  src/interpolated_potential.cu
-  # src/gbsa.cu
-  src/centroid_restraint.cu
-  src/inertial_restraint.cu
   src/kernels/k_neighborlist.cu
 )
 

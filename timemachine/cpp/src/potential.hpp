@@ -7,7 +7,7 @@ namespace timemachine {
 // *Not* guaranteed to be thread-safe.
 class Potential {
 
-public: 
+public:
 
     virtual ~Potential() {};
 
@@ -20,8 +20,8 @@ public:
         const double lambda, // lambda
         unsigned long long *h_du_dx,
         double *h_du_dp,
-        double *h_du_dl,
-        double *h_u
+        unsigned long long *h_du_dl,
+        unsigned long long *h_u
     );
 
     void execute_host_du_dx(
@@ -43,8 +43,8 @@ public:
         const double lambda,
         unsigned long long *d_du_dx,
         double *d_du_dp,
-        double *d_du_dl,
-        double *d_u,
+        unsigned long long *d_du_dl,
+        unsigned long long *d_u,
         cudaStream_t stream
     ) = 0;
 

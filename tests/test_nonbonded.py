@@ -234,11 +234,10 @@ class TestNonbondedDHFR(GradientTest):
                     precision=precision
                 )
 
-
     @unittest.skip("benchmark-only")
     def test_benchmark(self):
         """
-        This is mainly for benchmarking nonbonded computations on the initial state. 
+        This is mainly for benchmarking nonbonded computations on the initial state.
         """
 
         N = self.host_conf.shape[0]
@@ -247,11 +246,33 @@ class TestNonbondedDHFR(GradientTest):
 
         precision = np.float32
 
-        impl = self.nonbonded_fn.unbound_impl(np.float32)
+        nb_fn = copy.deepcopy(self.nonbonded_fn)
 
-        for _ in range(100):
+        test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+        test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-            impl.execute_du_dx(host_conf, self.nonbonded_fn.params, self.box, self.lamb)
+        nb_fn.set_lambda_plane_idxs(test_lambda_plane_idxs)
+        nb_fn.set_lambda_offset_idxs(test_lambda_offset_idxs)
+
+        impl = nb_fn.unbound_impl(np.float32)
+
+        for combo in itertools.product([False, True], repeat=4):
+
+            (compute_du_dx, compute_du_dp, compute_du_dl, compute_u) = combo
+
+            for trip in range(50):
+
+                test_du_dx, test_du_dp, test_du_dl, test_u = impl.execute_selective(
+                    self.host_conf,
+                    self.nonbonded_fn.params,
+                    self.box,
+                    self.lamb,
+                    compute_du_dx,
+                    compute_du_dp,
+                    compute_du_dl,
+                    compute_u
+                )
+
 
 class TestNonbondedWater(GradientTest):
 

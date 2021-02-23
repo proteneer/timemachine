@@ -68,7 +68,7 @@ class TestContext(unittest.TestCase):
 
         def sum_loss_fn(du_dls):
             du_dls = np.sum(du_dls, axis=0)
-            return jnp.sum(du_dls*du_dls)/du_dls.shape[0]            
+            return jnp.sum(du_dls*du_dls)/du_dls.shape[0]
 
         def integrate_once_through(
             x_t,
@@ -133,11 +133,7 @@ class TestContext(unittest.TestCase):
         test_obs = custom_ops.AvgPartialUPartialParam(bp, 1)
         test_obs_f2 = custom_ops.AvgPartialUPartialParam(bp, 2)
 
-        test_obs_du_dl = custom_ops.AvgPartialUPartialLambda(bps, 1)
-        test_obs_f2_du_dl = custom_ops.AvgPartialUPartialLambda(bps, 2)
-        test_obs_f3_du_dl = custom_ops.FullPartialUPartialLambda(bps, 2)
-
-        obs = [test_obs, test_obs_f2, test_obs_du_dl, test_obs_f2_du_dl, test_obs_f3_du_dl]
+        obs = [test_obs, test_obs_f2]
 
         for o in obs:
             ctxt.add_observable(o)
@@ -156,13 +152,6 @@ class TestContext(unittest.TestCase):
         ref_avg_du_dls = np.mean(ref_all_du_dls, axis=0)
         ref_avg_du_dls_f2 = np.mean(ref_all_du_dls[::2], axis=0)
 
-        np.testing.assert_allclose(test_obs_du_dl.avg_du_dl(), ref_avg_du_dls)
-        np.testing.assert_allclose(test_obs_f2_du_dl.avg_du_dl(), ref_avg_du_dls_f2)
-
-        full_du_dls = test_obs_f3_du_dl.full_du_dl()
-        assert len(full_du_dls) == np.ceil(num_steps/2)
-        np.testing.assert_allclose(np.mean(full_du_dls), ref_avg_du_dls_f2)
-
         ref_avg_du_dps = np.mean(ref_all_du_dps, axis=0)
         ref_avg_du_dps_f2 = np.mean(ref_all_du_dps[::2], axis=0)
 
@@ -173,7 +162,32 @@ class TestContext(unittest.TestCase):
         np.testing.assert_allclose(test_obs.avg_du_dp()[:, 1], ref_avg_du_dps[:, 1], 1.5e-6)
         np.testing.assert_allclose(test_obs.avg_du_dp()[:, 2], ref_avg_du_dps[:, 2], 5e-5)
 
+        # test the multiple_steps method
+        intg_2 = custom_ops.LangevinIntegrator(
+            dt,
+            ca,
+            cbs,
+            ccs,
+            1234
+        )
 
+        ctxt_2 = custom_ops.Context(
+            x0,
+            v0,
+            box,
+            intg,
+            bps
+        )
+
+        lambda_schedule = np.ones(num_steps)*lamb
+
+        du_dl_freq = 3
+        test_du_dls = ctxt_2.multiple_steps(lambda_schedule, du_dl_freq)
+
+        np.testing.assert_allclose(
+            test_du_dls,
+            ref_all_du_dls[::du_dl_freq]
+        )
 
 if __name__ == "__main__":
     unittest.main()

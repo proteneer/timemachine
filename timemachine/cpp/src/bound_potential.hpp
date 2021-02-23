@@ -31,8 +31,8 @@ struct BoundPotential {
         const double *h_box,
         const double lambda, // lambda
         unsigned long long *h_du_dx,
-        double *h_du_dl,
-        double *h_u
+        unsigned long long *h_du_dl,
+        unsigned long long *h_u
     );
 
     void execute_device(
@@ -42,8 +42,8 @@ struct BoundPotential {
         const double lambda,
         unsigned long long *d_du_dx,
         double *d_du_dp,
-        double *d_du_dl,
-        double *d_u,
+        unsigned long long *d_du_dl,
+        unsigned long long *d_u,
         cudaStream_t stream) {
         this->potential->execute_device(
             N,
