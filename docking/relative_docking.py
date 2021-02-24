@@ -22,11 +22,11 @@ from testsystems.relative import hif2a_ligand_pair
 
 import report
 
-INSERTION_MAX_LAMBDA = 0.5
+#INSERTION_MAX_LAMBDA = 0.5
 DELETION_MAX_LAMBDA = 1.0
 MIN_LAMBDA = 0.0
 TRANSITION_STEPS = 1001
-EQ1_STEPS = 5001
+#EQ1_STEPS = 5001
 NUM_DELETIONS = 10
 # EQ2_STEPS = 10001
 
@@ -44,12 +44,9 @@ def calculate_rigorous_work(
         f"""
     HOST_PDBFILE = {host_pdbfile}
     OUTDIR = {outdir}
-
-    INSERTION_MAX_LAMBDA = {INSERTION_MAX_LAMBDA}
     DELETION_MAX_LAMBDA = {DELETION_MAX_LAMBDA}
     MIN_LAMBDA = {MIN_LAMBDA}
     TRANSITION_STEPS = {TRANSITION_STEPS}
-    EQ1_STEPS = {EQ1_STEPS}
     NUM_DELETIONS = {NUM_DELETIONS}
     """
     )
@@ -85,7 +82,7 @@ def calculate_rigorous_work(
     water_box_width = min(box_lengths)
     (
         water_system,
-        orig_water_coords,
+        water_coords,
         water_box,
         water_topology,
     ) = builders.build_water_system(water_box_width)
@@ -97,7 +94,7 @@ def calculate_rigorous_work(
     # it's okay if the water box here and the solvated protein box don't align -- they have PBCs
     water_pdb = os.path.join(outdir, "water_box.pdb")
     writer = pdb_writer.PDBWriter([water_topology], water_pdb)
-    writer.write_frame(orig_water_coords)
+    writer.write_frame(water_coords)
     writer.close()
     water_mol = Chem.MolFromPDBFile(water_pdb, removeHs=False)
     if no_outfiles:
@@ -128,36 +125,39 @@ def calculate_rigorous_work(
 
     from md import minimizer
     from fe import topology
-    # minimize w.r.t. both mol_a and mol_b?
-    solvated_host_coords = minimizer.minimize_host_4d([mol_a], solvated_host_system, solvated_host_coords, ff, host_box)
-
-    single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
-    rfe = free_energy.RelativeFreeEnergy(single_topology)
-
-    ups, sys_params, combined_masses, combined_coords = rfe.prepare_host_edge(
-        ff.get_ordered_params(), solvated_host_system, solvated_host_coords
-    )
-
-    combined_bps = []
-    for up, sp in zip(ups, sys_params):
-        combined_bps.append(up.bind(sp))
-
-    works = run_leg(
-        combined_coords,
-        combined_bps,
-        combined_masses,
-        host_box,
-        combined_name,
-        "host",
-        outdir,
-        fewer_outfiles,
-        no_outfiles,
-    )
-    end_time = time.time()
-    print(
-        f"{combined_name} host leg time:", "%.2f" % (end_time - start_time), "seconds"
-    )
-
+    for system, coords, box, label in zip(
+            [solvated_host_system, water_system],
+            [solvated_host_coords, water_coords],
+            [host_box, water_box],
+            ['protein', 'solvent']
+    ):
+        # minimize w.r.t. both mol_a and mol_b?
+        min_coords = minimizer.minimize_host_4d(
+            [mol_a], system, coords, ff, box
+        )
+        single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
+        rfe = free_energy.RelativeFreeEnergy(single_topology)
+        ups, sys_params, combined_masses, combined_coords = rfe.prepare_host_edge(
+            ff.get_ordered_params(), system, min_coords
+        )
+        combined_bps = []
+        for up, sp in zip(ups, sys_params):
+            combined_bps.append(up.bind(sp))
+        works = run_leg(
+            combined_coords,
+            combined_bps,
+            combined_masses,
+            box,
+            combined_name,
+            label,
+            outdir,
+            fewer_outfiles,
+            no_outfiles,
+        )
+        end_time = time.time()
+        print(
+            f"{combined_name} {label} leg time:", "%.2f" % (end_time - start_time), "seconds"
+        )
 
 
 def run_leg(
@@ -189,8 +189,10 @@ def run_leg(
 
     ctxt = custom_ops.Context(x0, v0, host_box, intg, u_impls)
 
+    # TODO: equilibrate?
+
     # equilibrate more & shoot off deletion jobs
-    steps_per_batch = 1000
+    steps_per_batch = 1001
 
     works = []
     for b in range(NUM_DELETIONS):
@@ -200,7 +202,7 @@ def run_leg(
         step = len(equil2_lambda_schedule)-1
         report.report_step(
             ctxt,
-            step,
+            b*step,
             MIN_LAMBDA,
             host_box,
             combined_bps,
@@ -221,32 +223,22 @@ def run_leg(
             host_box,
             guest_name,
             leg_type,
+            u_impls
         )
         works.append(work)
 
-    print(works)
     return works
 
 
-def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type):
+def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type, u_impls):
     seed = 2021
     intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
-    u_impls = []
-    for bp in combined_bps:
-        bp_impl = bp.bound_impl(precision=np.float32)
-        u_impls.append(bp_impl)
-
     ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
-
-    # du_dl_obs = custom_ops.FullPartialUPartialLambda(u_impls, subsample_freq)
-    # ctxt.add_observable(du_dl_obs)
 
     deletion_lambda_schedule = np.linspace(
         MIN_LAMBDA, DELETION_MAX_LAMBDA, TRANSITION_STEPS
     )
-
-    calc_work = True
 
     subsample_freq = 1
     full_du_dls = ctxt.multiple_steps(deletion_lambda_schedule, subsample_freq)
@@ -267,17 +259,14 @@ def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type
     )
 
     if report.too_much_force(ctxt, lamb, box, combined_bps, u_impls):
-        calc_work = False
         return
 
-    if calc_work:
-        work = np.trapz(
-            full_du_dls,
-            deletion_lambda_schedule[::subsample_freq]
-        )
-        print(f"guest_name: {guest_name}\t{leg_type}_work: {work:.2f}")
-        return work
-    return
+    work = np.trapz(
+        full_du_dls,
+        deletion_lambda_schedule[::subsample_freq]
+    )
+    print(f"guest_name: {guest_name}\t{leg_type}_work: {work:.2f}")
+    return work
 
 
 def main():
@@ -312,11 +301,9 @@ def main():
     # fetch mol_a, mol_b, core, forcefield from testsystem
     mol_a, mol_b, core = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core
 
-    print(core)
-    print(core.shape)
     core_rev = core[:,::-1]
-    print(core_rev)
 
+    # A --> B
     calculate_rigorous_work(
         args.host_pdbfile,
         mol_a,
@@ -327,6 +314,7 @@ def main():
         args.no_outfiles,
     )
 
+    # B --> A
     calculate_rigorous_work(
         args.host_pdbfile,
         mol_b,
