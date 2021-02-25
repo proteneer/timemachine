@@ -7,19 +7,15 @@ from simtk.openmm import app
 from simtk.openmm.app import PDBFile
 
 from rdkit import Chem
-from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
-from rdkit.Geometry import Point3D
 
 from fe.utils import to_md_units
 from fe import free_energy
 from ff.handlers.deserialize import deserialize_handlers
-from ff.handlers import openmm_deserializer
 from ff import Forcefield
 from timemachine.lib import LangevinIntegrator
 from timemachine.lib import custom_ops
-from timemachine.lib import potentials
 
-import report
+from docking import report
 
 
 def pose_dock(
@@ -55,15 +51,16 @@ def pose_dock(
     Output
     ------
 
-    A pdb & sdf file every 100 steps (outdir/<guest_name>_<step>.pdb)
-    stdout every 100 steps noting the step number, lambda value, and energy
-    stdout for each guest noting the work of transition
+    A pdb & sdf file for each guest's final step
+      (outdir/<guest_name>_pd_<step>_host.pdb & outdir/<guest_name>_pd_<step>_guest.sdf)
+    stdout for each guest noting the step number, lambda value, and energy for the last step
+    stdout for each guest noting the work of transition, if applicable
     stdout for each guest noting how long it took to run
 
     Note
     ----
-    If any norm of force per atom exceeds 20000 kJ/(mol*nm) [MAX_NORM_FORCE defined in docking/report.py],
-    the simulation for that guest will stop and the work will not be calculated.
+    The work will not be calculated if the du_dl endpoints are not close to 0 or if any norm of
+    force per atom exceeds 20000 kJ/(mol*nm) [MAX_NORM_FORCE defined in docking/report.py]
     """
     assert transition_steps <= n_steps
     assert transition_type in ("insertion", "deletion")
@@ -91,8 +88,8 @@ def pose_dock(
     # address the particles that are too close to the boundary.
     padding = 0.1
     box_lengths = np.amax(host_conf, axis=0) - np.amin(host_conf, axis=0)
-    box_lengths = box_lengths+padding
-    box = np.eye(3, dtype=np.float64)*box_lengths
+    box_lengths = box_lengths + padding
+    box = np.eye(3, dtype=np.float64) * box_lengths
 
     suppl = Chem.SDMolSupplier(guests_sdfile, removeHs=False)
     for guest_mol in suppl:
@@ -111,7 +108,9 @@ def pose_dock(
 
         afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
 
-        ups, sys_params, masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), host_system, host_conf)
+        ups, sys_params, masses, _ = afe.prepare_host_edge(
+            ff.get_ordered_params(), host_system, host_conf
+        )
 
         bps = []
         for up, sp in zip(ups, sys_params):
@@ -161,7 +160,11 @@ def pose_dock(
                 ]
             )
         else:
-            raise (RuntimeError('invalid `transition_type` (must be one of ["insertion", "deletion"])'))
+            raise (
+                RuntimeError(
+                    'invalid `transition_type` (must be one of ["insertion", "deletion"])'
+                )
+            )
 
         calc_work = True
 
@@ -171,29 +174,36 @@ def pose_dock(
 
         full_du_dls = ctxt.multiple_steps(new_lambda_schedule, subsample_freq)
 
-        step = len(new_lambda_schedule)-1
+        step = len(new_lambda_schedule) - 1
         final_lamb = new_lambda_schedule[-1]
-        report.report_step(ctxt, step, final_lamb, box, bps, impls, guest_name, n_steps, 'pose_dock')
+        report.report_step(
+            ctxt, step, final_lamb, box, bps, impls, guest_name, n_steps, "pose_dock"
+        )
         host_coords = ctxt.get_x_t()[: len(host_conf)] * 10
         guest_coords = ctxt.get_x_t()[len(host_conf) :] * 10
-        report.write_frame(host_coords, host_mol, guest_coords, guest_mol, guest_name, outdir, step, 'pd')
+        report.write_frame(
+            host_coords,
+            host_mol,
+            guest_coords,
+            guest_mol,
+            guest_name,
+            outdir,
+            step,
+            "pd",
+        )
 
         if report.too_much_force(ctxt, final_lamb, box, bps, impls):
+            print("Not calculating work (too much force)")
             calc_work = False
             break
 
         # Note: this condition only applies for ABFE, not RBFE
-        if (
-            abs(full_du_dls[0]) > 0.001
-            or abs(full_du_dls[-1]) > 0.001
-        ):
-            print("Error: du_dl endpoints are not ~0")
+        if abs(full_du_dls[0]) > 0.001 or abs(full_du_dls[-1]) > 0.001:
+            print("Not calculating work (du_dl endpoints are not ~0)")
             calc_work = False
 
         if calc_work:
-            work = np.trapz(
-                full_du_dls, new_lambda_schedule[::subsample_freq]
-            )
+            work = np.trapz(full_du_dls, new_lambda_schedule[::subsample_freq])
             print(f"guest_name: {guest_name}\twork: {work:.2f}")
         end_time = time.time()
         print(f"{guest_name} took {(end_time - start_time):.2f} seconds")

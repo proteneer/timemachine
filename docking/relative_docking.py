@@ -1,53 +1,76 @@
 """
-1. Solvates a host, inserts guest(s) into solvated host, equilibrates, spins off deletion jobs, calculates work
-2. Creates a water box, inserts guest(s) into water box, equilibrates, spins off deletion jobs, calculates work
+1. Solvates a protein, minimizes w.r.t guest_A, equilibrates & spins off switching jobs
+   (deleting guest_A while inserting guest_B), calculates work
+2. Does the same thing in solvent instead of protein
+3. Repeats 1 & 2 for the opposite direction (guest_B --> guest_A)
 """
 import os
 import time
-
 import numpy as np
 
-from rdkit import Chem
-from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
-from rdkit.Geometry import Point3D
-
-from md import builders
-from fe import pdb_writer, free_energy
+from md import builders, minimizer
+from fe import free_energy, topology
 from ff import Forcefield
-from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
-from timemachine.lib import potentials, custom_ops, LangevinIntegrator
+from timemachine.lib import custom_ops, LangevinIntegrator
 
 from testsystems.relative import hif2a_ligand_pair
 
-import report
+from docking import report
 
-#INSERTION_MAX_LAMBDA = 0.5
-DELETION_MAX_LAMBDA = 1.0
+MAX_LAMBDA = 1.0
 MIN_LAMBDA = 0.0
-TRANSITION_STEPS = 1001
-#EQ1_STEPS = 5001
-NUM_DELETIONS = 10
-# EQ2_STEPS = 10001
+TRANSITION_STEPS = 501
+NUM_SWITCHES = 10
 
 
-def calculate_rigorous_work(
-        host_pdbfile, mol_a, mol_b, core, outdir, fewer_outfiles=False, no_outfiles=False
+def do_relative_docking(
+    host_pdbfile,
+    mol_a,
+    mol_b,
+    core,
 ):
-    """
-    """
+    """Runs non-equilibrium switching jobs:
+    1. Solvates a protein, minimizes w.r.t guest_A, equilibrates & spins off switching jobs
+       (deleting guest_A while inserting guest_B) every 1000th step, calculates work.
+    2. Does the same thing in solvent instead of protein
+    3. Repeats 1 & 2 for the opposite direction (guest_B --> guest_A)
+    Does 10 switching jobs per leg.
 
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
+    Parameters
+    ----------
+
+    host_pdbfile: path to host pdb file
+    mol_a (rdkit mol): the starting ligand to swap from
+    mol_b (rdkit mol): the ending ligand to swap to
+    core (np.array[[int, int], [int, int], ...]): the common core atoms between mol_a and mol_b
+
+    Returns
+    -------
+
+    {str: float}: map of leg label to work values of switching mol_a to mol_b in that leg,
+                  {'protein': [work values], 'solvent': [work_values]}
+
+    Output
+    ------
+
+    stdout noting the step number, lambda value, and energy at various steps
+    stdout noting the work of transition, if applicable
+    stdout noting how long it took to run
+
+    Note
+    ----
+    The work will not be calculated if any norm of force per atom exceeds 20000 kJ/(mol*nm)
+       [MAX_NORM_FORCE defined in docking/report.py]
+    """
 
     print(
         f"""
     HOST_PDBFILE = {host_pdbfile}
-    OUTDIR = {outdir}
-    DELETION_MAX_LAMBDA = {DELETION_MAX_LAMBDA}
+    MAX_LAMBDA = {MAX_LAMBDA}
     MIN_LAMBDA = {MIN_LAMBDA}
     TRANSITION_STEPS = {TRANSITION_STEPS}
-    NUM_DELETIONS = {NUM_DELETIONS}
+    NUM_SWITCHES = {NUM_SWITCHES}
     """
     )
 
@@ -65,15 +88,6 @@ def calculate_rigorous_work(
 
     # sometimes water boxes are sad. Should be minimized first; this is a workaround
     host_box += np.eye(3) * 0.1
-    print("host box", host_box)
-
-    solvated_host_pdb = os.path.join(outdir, "solvated_host.pdb")
-    writer = pdb_writer.PDBWriter([solvated_topology], solvated_host_pdb)
-    writer.write_frame(solvated_host_coords)
-    writer.close()
-    solvated_host_mol = Chem.MolFromPDBFile(solvated_host_pdb, removeHs=False)
-    if no_outfiles:
-        os.remove(solvated_host_pdb)
 
     # Prepare water box
     print("Generating water box...")
@@ -89,24 +103,13 @@ def calculate_rigorous_work(
 
     # sometimes water boxes are sad. should be minimized first; this is a workaround
     water_box += np.eye(3) * 0.1
-    print("water box", water_box)
-
     # it's okay if the water box here and the solvated protein box don't align -- they have PBCs
-    water_pdb = os.path.join(outdir, "water_box.pdb")
-    writer = pdb_writer.PDBWriter([water_topology], water_pdb)
-    writer.write_frame(water_coords)
-    writer.close()
-    water_mol = Chem.MolFromPDBFile(water_pdb, removeHs=False)
-    if no_outfiles:
-        os.remove(water_pdb)
 
     # Run the procedure
-    print("Getting guests...")
-
     start_time = time.time()
     guest_name_a = mol_a.GetProp("_Name")
     guest_name_b = mol_b.GetProp("_Name")
-    combined_name = guest_name_a +'_'+guest_name_b
+    combined_name = guest_name_a + "-->" + guest_name_b
 
     guest_conformer_a = mol_a.GetConformer(0)
     orig_guest_coords_a = np.array(guest_conformer_a.GetPositions(), dtype=np.float64)
@@ -123,18 +126,15 @@ def calculate_rigorous_work(
     )
     ff = Forcefield(guest_ff_handlers)
 
-    from md import minimizer
-    from fe import topology
+    all_works = {}
     for system, coords, box, label in zip(
-            [solvated_host_system, water_system],
-            [solvated_host_coords, water_coords],
-            [host_box, water_box],
-            ['protein', 'solvent']
+        [solvated_host_system, water_system],
+        [solvated_host_coords, water_coords],
+        [host_box, water_box],
+        ["protein", "solvent"],
     ):
         # minimize w.r.t. both mol_a and mol_b?
-        min_coords = minimizer.minimize_host_4d(
-            [mol_a], system, coords, ff, box
-        )
+        min_coords = minimizer.minimize_host_4d([mol_a], system, coords, ff, box)
         single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
         rfe = free_energy.RelativeFreeEnergy(single_topology)
         ups, sys_params, combined_masses, combined_coords = rfe.prepare_host_edge(
@@ -143,21 +143,21 @@ def calculate_rigorous_work(
         combined_bps = []
         for up, sp in zip(ups, sys_params):
             combined_bps.append(up.bind(sp))
-        works = run_leg(
+        all_works[label] = run_leg(
             combined_coords,
             combined_bps,
             combined_masses,
             box,
             combined_name,
             label,
-            outdir,
-            fewer_outfiles,
-            no_outfiles,
         )
         end_time = time.time()
         print(
-            f"{combined_name} {label} leg time:", "%.2f" % (end_time - start_time), "seconds"
+            f"{combined_name} {label} leg time:",
+            "%.2f" % (end_time - start_time),
+            "seconds",
         )
+    return all_works
 
 
 def run_leg(
@@ -167,9 +167,6 @@ def run_leg(
     host_box,
     guest_name,
     leg_type,
-    outdir,
-    fewer_outfiles=False,
-    no_outfiles=False,
 ):
     x0 = combined_coords
     v0 = np.zeros_like(x0)
@@ -189,33 +186,33 @@ def run_leg(
 
     ctxt = custom_ops.Context(x0, v0, host_box, intg, u_impls)
 
-    # TODO: equilibrate?
+    # TODO: pre-equilibrate?
 
-    # equilibrate more & shoot off deletion jobs
+    # equilibrate & shoot off switching jobs
     steps_per_batch = 1001
 
     works = []
-    for b in range(NUM_DELETIONS):
-        equil2_lambda_schedule = np.ones(steps_per_batch)*MIN_LAMBDA
+    for b in range(NUM_SWITCHES):
+        equil2_lambda_schedule = np.ones(steps_per_batch) * MIN_LAMBDA
         ctxt.multiple_steps(equil2_lambda_schedule, 0)
         lamb = equil2_lambda_schedule[-1]
-        step = len(equil2_lambda_schedule)-1
+        step = len(equil2_lambda_schedule) - 1
         report.report_step(
             ctxt,
-            b*step,
-            MIN_LAMBDA,
+            b * step,
+            lamb,
             host_box,
             combined_bps,
             u_impls,
             guest_name,
-            NUM_DELETIONS*steps_per_batch,
+            NUM_SWITCHES * steps_per_batch,
             f"{leg_type.upper()}_EQUILIBRATION_2",
         )
 
         if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
             return
 
-        work = do_deletion(
+        work = do_switch(
             ctxt.get_x_t(),
             ctxt.get_v_t(),
             combined_bps,
@@ -223,28 +220,30 @@ def run_leg(
             host_box,
             guest_name,
             leg_type,
-            u_impls
+            u_impls,
         )
         works.append(work)
 
     return works
 
 
-def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type, u_impls):
+def do_switch(
+    x0, v0, combined_bps, combined_masses, box, guest_name, leg_type, u_impls
+):
     seed = 2021
     intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
     ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
 
-    deletion_lambda_schedule = np.linspace(
-        MIN_LAMBDA, DELETION_MAX_LAMBDA, TRANSITION_STEPS
+    switching_lambda_schedule = np.linspace(
+        MIN_LAMBDA, MAX_LAMBDA, TRANSITION_STEPS
     )
 
     subsample_freq = 1
-    full_du_dls = ctxt.multiple_steps(deletion_lambda_schedule, subsample_freq)
+    full_du_dls = ctxt.multiple_steps(switching_lambda_schedule, subsample_freq)
 
-    step = len(deletion_lambda_schedule) - 1
-    lamb = deletion_lambda_schedule[-1]
+    step = len(switching_lambda_schedule) - 1
+    lamb = switching_lambda_schedule[-1]
     ctxt.step(lamb)
     report.report_step(
         ctxt,
@@ -255,16 +254,13 @@ def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type
         u_impls,
         guest_name,
         TRANSITION_STEPS,
-        f"{leg_type.upper()}_DELETION",
+        f"{leg_type.upper()}_SWITCH",
     )
 
     if report.too_much_force(ctxt, lamb, box, combined_bps, u_impls):
         return
 
-    work = np.trapz(
-        full_du_dls,
-        deletion_lambda_schedule[::subsample_freq]
-    )
+    work = np.trapz(full_du_dls, switching_lambda_schedule[::subsample_freq])
     print(f"guest_name: {guest_name}\t{leg_type}_work: {work:.2f}")
     return work
 
@@ -276,35 +272,36 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        "-s",
-        "--guests_sdfile",
-        default="tests/data/ligands_40.sdf",
-        help="guests to pose",
-    )
-    parser.add_argument(
         "-p",
         "--host_pdbfile",
         default="tests/data/hif2a_nowater_min.pdb",
         help="host to dock into",
     )
     parser.add_argument(
-        "-o", "--outdir", default="rigorous_work_outdir", help="where to write output"
+        "-s",
+        "--guests_sdfile",
+        default="tests/data/ligands_40__first-two-ligs.sdf",
+        help="guests to pose",
     )
     parser.add_argument(
-        "--fewer_outfiles", action="store_true", help="write fewer output pdb/sdf files"
-    )
-    parser.add_argument(
-        "--no_outfiles", action="store_true", help="write no output pdb/sdf files"
+        "-e",
+        "--edges_file",
+        default="tests/data/ligands_40__first-two-ligs_edges.txt",
+        help="edges file. Each line should be two ligand indices separated by a comma, e.g. '1,2'",
     )
     args = parser.parse_args()
 
     # fetch mol_a, mol_b, core, forcefield from testsystem
-    mol_a, mol_b, core = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core
+    mol_a, mol_b, core = (
+        hif2a_ligand_pair.mol_a,
+        hif2a_ligand_pair.mol_b,
+        hif2a_ligand_pair.core,
+    )
 
-    core_rev = core[:,::-1]
+    core_rev = core[:, ::-1]
 
     # A --> B
-    calculate_rigorous_work(
+    do_relative_docking(
         args.host_pdbfile,
         mol_a,
         mol_b,
@@ -315,7 +312,7 @@ def main():
     )
 
     # B --> A
-    calculate_rigorous_work(
+    do_relative_docking(
         args.host_pdbfile,
         mol_b,
         mol_a,
