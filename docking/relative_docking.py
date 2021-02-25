@@ -291,13 +291,14 @@ def main():
     )
     args = parser.parse_args()
 
+    # TODO: use guests_sdfile & edges_file instead of this test system
+
     # fetch mol_a, mol_b, core, forcefield from testsystem
     mol_a, mol_b, core = (
         hif2a_ligand_pair.mol_a,
         hif2a_ligand_pair.mol_b,
         hif2a_ligand_pair.core,
     )
-
     core_rev = core[:, ::-1]
 
     # A --> B
