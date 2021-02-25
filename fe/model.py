@@ -10,6 +10,7 @@ from fe import free_energy, topology, estimator
 from ff import Forcefield
 
 from parallel.client import AbstractClient
+from typing import Optional
 
 class RBFEModel():
 
@@ -41,7 +42,7 @@ class RBFEModel():
         self.equil_steps = equil_steps
         self.prod_steps = prod_steps
 
-    def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray):
+    def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray, callback: Optional[callable]=None):
         """
         Predict the ddG of morphing mol_a into mol_b. This function is differentiable w.r.t. ff_params.
 
@@ -60,6 +61,9 @@ class RBFEModel():
         core: np.ndarray
             N x 2 list of ints corresponding to the atom mapping of the core.
 
+        callback: function
+            TODO: is there a way to save intermediate results to disk that doesn't require passing a callable a few layers deep here...
+
         Returns
         -------
         float
@@ -69,7 +73,6 @@ class RBFEModel():
         """
 
         stage_dGs = []
-        aux = []
 
         for stage, host_system, host_coords, host_box, lambda_schedule in [
             ("complex", self.complex_system, self.complex_coords, self.complex_box, self.complex_schedule),
@@ -109,16 +112,21 @@ class RBFEModel():
                 integrator,
                 lambda_schedule,
                 self.equil_steps,
-                self.prod_steps
+                self.prod_steps,
+                callback=callback
             )
 
-            dG, stage_aux = estimator.deltaG(model, sys_params)
+            dG = estimator.deltaG(model, sys_params, stage)
             stage_dGs.append(dG)
-            aux.append(stage_aux)
 
         pred = stage_dGs[0] - stage_dGs[1]
 
-        return pred, aux
+        ## TODO: save results to disk
+        ## problem: only have access to two intermediate numbers within this function, wanted access to du_dls...
+        #if not (callback is None):
+        #    callback(stage_dGs)
+
+        return pred
 
     def loss(self, ff_params, mol_a, mol_b, core, label_ddG):
         """
@@ -137,6 +145,6 @@ class RBFEModel():
             loss
 
         """
-        pred_ddG, aux = self.predict(ff_params, mol_a, mol_b, core)
+        pred_ddG = self.predict(ff_params, mol_a, mol_b, core)
         loss = jnp.abs(pred_ddG - label_ddG)
-        return loss, aux
+        return loss

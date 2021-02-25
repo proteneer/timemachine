@@ -182,7 +182,7 @@ if __name__ == "__main__":
     )
 
     # TODO: use binding_model.predict rather than binding_model.loss
-    binding_estimate_and_grad_fxn = jax.value_and_grad(binding_model.loss, argnums=0, has_aux=True)
+    binding_estimate_and_grad_fxn = jax.value_and_grad(binding_model.predict, argnums=0, has_aux=True)
     # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
     #   e.g. stage_results, and further diagnostic information
     #   * x trajectories,
@@ -195,7 +195,6 @@ if __name__ == "__main__":
     ordered_handles = forcefield.get_ordered_handles()
 
     handle_types_being_optimized = [AM1CCCHandler, LennardJonesHandler]
-
 
     # TODO: move flatten into optimize.utils
     def flatten(params) -> Tuple[np.array, callable]:
@@ -264,7 +263,7 @@ if __name__ == "__main__":
         t0 = time()
 
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
-        (loss, aux), loss_grads = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
+        loss, loss_grads = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
         # TODO: save aux
 
         print(f"at optimizer step {step}, loss={loss:.3f}")
