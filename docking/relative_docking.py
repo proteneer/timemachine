@@ -40,7 +40,7 @@ def do_relative_docking(
     Parameters
     ----------
 
-    host_pdbfile: path to host pdb file
+    host_pdbfile (str): path to host pdb file
     mol_a (rdkit mol): the starting ligand to swap from
     mol_b (rdkit mol): the ending ligand to swap to
     core (np.array[[int, int], [int, int], ...]): the common core atoms between mol_a and mol_b
@@ -199,7 +199,7 @@ def run_leg(
         step = len(equil2_lambda_schedule) - 1
         report.report_step(
             ctxt,
-            b * step,
+            (b+1) * step,
             lamb,
             host_box,
             combined_bps,
