@@ -67,7 +67,7 @@ testing_configuration = Configuration(
 from pathlib import Path
 
 # locations relative to project root
-root = Path(__file__).parent.parent.parent
+root = Path(__file__).absolute().parent.parent.parent
 path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
 path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
 
