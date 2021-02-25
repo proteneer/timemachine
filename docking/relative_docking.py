@@ -199,7 +199,7 @@ def run_leg(
         step = len(equil2_lambda_schedule) - 1
         report.report_step(
             ctxt,
-            (b+1) * step,
+            (b + 1) * step,
             lamb,
             host_box,
             combined_bps,
@@ -235,9 +235,7 @@ def do_switch(
 
     ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
 
-    switching_lambda_schedule = np.linspace(
-        MIN_LAMBDA, MAX_LAMBDA, TRANSITION_STEPS
-    )
+    switching_lambda_schedule = np.linspace(MIN_LAMBDA, MAX_LAMBDA, TRANSITION_STEPS)
 
     subsample_freq = 1
     full_du_dls = ctxt.multiple_steps(switching_lambda_schedule, subsample_freq)

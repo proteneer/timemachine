@@ -56,7 +56,7 @@ def too_much_force(ctxt, lamb, box, bps, u_impls):
 
 
 def write_frame(
-        host_coords, host_mol, guest_coords, guest_mol, guest_name, outdir, step, stage
+    host_coords, host_mol, guest_coords, guest_mol, guest_name, outdir, step, stage
 ):
     if not os.path.exists(os.path.join(outdir, guest_name)):
         os.mkdir(os.path.join(outdir, guest_name))
@@ -67,7 +67,11 @@ def write_frame(
         host_frame.SetAtomPosition(i, Point3D(x, y, z))
     conf_id = host_mol.AddConformer(host_frame)
     writer = PDBWriter(
-        os.path.join(outdir, guest_name, f"{guest_name}_{stage}_{step}_host.pdb",)
+        os.path.join(
+            outdir,
+            guest_name,
+            f"{guest_name}_{stage}_{step}_host.pdb",
+        )
     )
     writer.write(host_mol, conf_id)
     writer.close()
@@ -80,7 +84,11 @@ def write_frame(
     conf_id = guest_mol.AddConformer(guest_frame)
     guest_mol.SetProp("_Name", f"{guest_name}_{stage}_{step}_guest")
     writer = SDWriter(
-        os.path.join(outdir, guest_name, f"{guest_name}_{stage}_{step}_guest.sdf",)
+        os.path.join(
+            outdir,
+            guest_name,
+            f"{guest_name}_{stage}_{step}_guest.sdf",
+        )
     )
     writer.write(guest_mol, conf_id)
     writer.close()

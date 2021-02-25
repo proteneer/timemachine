@@ -162,11 +162,11 @@ def calculate_rigorous_work(
         mol_conf = mol_conf / 10  # convert to md_units
 
         for system, coords, host_mol, box, label in zip(
-                [solvated_host_system, water_system],
-                [solvated_host_coords, water_coords],
-                [solvated_host_mol, water_mol],
-                [host_box, water_box],
-                ["protein", "solvent"],
+            [solvated_host_system, water_system],
+            [solvated_host_coords, water_coords],
+            [solvated_host_mol, water_mol],
+            [host_box, water_box],
+            ["protein", "solvent"],
         ):
             afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
 
@@ -195,7 +195,9 @@ def calculate_rigorous_work(
             all_works[guest_name][label] = works
             end_time = time.time()
             print(
-                f"{guest_name} {label} leg time:", "%.2f" % (end_time - start_time), "seconds"
+                f"{guest_name} {label} leg time:",
+                "%.2f" % (end_time - start_time),
+                "seconds",
             )
     return all_works
 
@@ -313,7 +315,7 @@ def run_leg(
         step = len(deletion_lambda_schedule) - 1
         report.report_step(
             ctxt,
-            (b+1)*step,
+            (b + 1) * step,
             MIN_LAMBDA,
             host_box,
             combined_bps,
@@ -334,7 +336,7 @@ def run_leg(
                 guest_mol,
                 guest_name,
                 outdir,
-                str((b+1)*step).zfill(len(str(NUM_DELETIONS * steps_per_batch))),
+                str((b + 1) * step).zfill(len(str(NUM_DELETIONS * steps_per_batch))),
                 f"{leg_type}-eq2",
             )
         if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
@@ -356,7 +358,9 @@ def run_leg(
     return works
 
 
-def do_deletion(x0, v0, combined_bps, combined_masses, box, guest_name, leg_type, u_impls):
+def do_deletion(
+    x0, v0, combined_bps, combined_masses, box, guest_name, leg_type, u_impls
+):
     seed = 2021
     intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
