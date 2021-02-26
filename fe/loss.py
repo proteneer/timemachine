@@ -45,8 +45,8 @@ def BAR_loss(
     lambda_schedule,
     true_dG):
 
-    complex_dG = leg_dG(complex_insertion_du_dls, complex_deletion_du_dls, lambda_schedule)
-    solvent_dG = leg_dG(solvent_insertion_du_dls, solvent_deletion_du_dls, lambda_schedule)
+    complex_dG = leg_dG(complex_insertion_du_dls, complex_deletion_du_dls, lambda_schedule) # TODO: broken: leg_dG unresolved
+    solvent_dG = leg_dG(solvent_insertion_du_dls, solvent_deletion_du_dls, lambda_schedule) # TODO: broken: leg_dG unresolved
 
     pred_dG = solvent_dG - complex_dG
     loss = jnp.power(true_dG - pred_dG, 2)
@@ -81,8 +81,8 @@ def EXP_loss(
     lambda_schedule,
     true_dG):
 
-    complex_dG = EXP(complex_du_dls, lambda_schedule)
-    solvent_dG = EXP(solvent_du_dls, lambda_schedule)
+    complex_dG = EXP(complex_du_dls, lambda_schedule) # TODO: broken: EXP unresolved
+    solvent_dG = EXP(solvent_du_dls, lambda_schedule) # TODO: broken: EXP unresolved
 
     pred_dG = solvent_dG - complex_dG
     loss = jnp.power(true_dG - pred_dG, 2)
