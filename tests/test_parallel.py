@@ -106,7 +106,7 @@ class TestGRPCClient(unittest.TestCase):
     def setUp(self):
 
         # setup server, in reality max_workers is equal to number of gpus
-        ports = [2020, 2021]
+        ports = [2020 + i for i in range(4)]
         self.servers = []
         for port in ports:
             server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=2),
@@ -121,19 +121,8 @@ class TestGRPCClient(unittest.TestCase):
             self.servers.append(server)
 
         # setup client
-        stubs = []
-        for port in ports:
-            stubs = []
-            channel = grpc.insecure_channel('0.0.0.0:'+str(port),
-                options = [
-                    ('grpc.max_send_message_length', 500 * 1024 * 1024),
-                    ('grpc.max_receive_message_length', 500 * 1024 * 1024)
-                ]
-            )
-            stub = parallel.service_pb2_grpc.WorkerStub(channel)
-            stubs.append(stub)
-
-        self.cli = client.GRPCClient(stubs)
+        hosts = [f"0.0.0.0:{port}" for port in ports]
+        self.cli = client.GRPCClient(hosts)
 
     def test_foo_2_args(self):
         xs = np.linspace(0, 1.0, 5)

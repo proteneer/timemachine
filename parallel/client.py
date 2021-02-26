@@ -1,3 +1,4 @@
+from typing import List, Optional, Any
 import numpy as np
 import time
 
@@ -125,7 +126,7 @@ class BinaryFutureWrapper():
 
 class GRPCClient(AbstractClient):
 
-    def __init__(self, stubs):
+    def __init__(self, hosts: List[str], options: Optional[List[Any]] = None):
         """
         GRPCClient is meant for distributed use. The GRPC workers must
         be launched prior to starting the client. The worker version should be compatible
@@ -134,12 +135,24 @@ class GRPCClient(AbstractClient):
 
         Parameters
         ----------
-        stubs: list
-            Initialized grpc stubs to be used
+        hosts: list
+            List of hosts to use as GRPC workers.
+        options: list
+            List of options to configure GRPC connections
 
         """
-
-        self.stubs = stubs
+        self.stubs = []
+        if options is None:
+            options = [
+                ('grpc.max_send_message_length', 500 * 1024 * 1024),
+                ('grpc.max_receive_message_length', 500 * 1024 * 1024)
+            ]
+        for host in hosts:
+            channel = grpc.insecure_channel(
+                host,
+                options=options,
+            )
+            self.stubs.append(service_pb2_grpc.WorkerStub(channel))
         self._idx = 0
 
     def submit(self, task_fn, *args):
