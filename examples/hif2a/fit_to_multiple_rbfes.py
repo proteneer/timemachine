@@ -12,6 +12,7 @@ from ff.handlers import nonbonded
 
 # free energy classes
 from fe.free_energy import RelativeFreeEnergy, construct_lambda_schedule
+from fe.estimator import SimulationResult
 from fe.model import RBFEModel
 from fe.loss import pseudo_huber_loss#, l1_loss, flat_bottom_loss
 
@@ -78,12 +79,12 @@ testing_configuration = Configuration(
 from pathlib import Path
 
 # locations relative to project root
-root = Path(__file__).parent.parent.parent
+root = Path(__file__).absolute().parent.parent.parent
 path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
 path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
 
 # locations relative to example folder
-path_to_results = Path(__file__).parent
+path_to_results = Path(__file__).absolute().parent
 path_to_transformations = str(path_to_results.joinpath('relative_transformations.pkl'))
 
 # load and construct forcefield
@@ -319,6 +320,30 @@ if __name__ == "__main__":
         flat_grad_traj.append(flat_loss_grad)
         loss_traj.append(loss)
 
+        def _results_to_arrays(results: List[SimulationResult]):
+            #result = SimulationResult(xs=xs, du_dls=full_du_dls, du_dps=grads)
+
+            xs = np.array([r.xs for r in results])
+            du_dls = np.array([r.du_dls for r in results])
+            du_dps = np.array([r.du_dps for r in results])
+
+            return xs, du_dls, du_dps
+
+        def _stringify_key(key: Tuple[int, str]):
+            return f'{key[0]}_{key[1]}'
+
+        # TODO: update path
+        path_to_du_dls = 'du_dls_checkpoint.npz'
+        print(f'saving du_dl trajs to {path_to_du_dls}')
+        du_dls_dict = dict() # keywords here must be strings
+        for key in results_traj:
+            du_dls_dict[_stringify_key(key)] = _results_to_arrays(results_traj[key])[1] # TODO: make this less gross
+        np.savez(path_to_du_dls, **du_dls_dict)
+
+        # TODO: same for xs and du_dps checkpoints
+        # TODO: don't do so much re-writing: can we incrementally write into an existing .npz archive?
+
+        # TODO: update path
         path_to_npz = 'results_checkpoint.npz'
         print(f'saving theta, grad, loss trajs to {path_to_npz}')
         np.savez(
