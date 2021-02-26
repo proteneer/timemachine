@@ -259,6 +259,10 @@ if __name__ == "__main__":
     flat_grad_traj = []
     loss_traj = []
 
+    from collections import defaultdict
+
+    results_traj = dict() # indexed by (step, stage) tuples # TODO: proper type hint
+
     # in each optimizer step, look at one transformation from relative_transformations
     for step, rfe_ind in enumerate(step_inds):
         rfe = relative_transformations[rfe_ind]
@@ -268,7 +272,15 @@ if __name__ == "__main__":
 
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
         # TODO: pass callback function here to save intermediate results
-        loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label, callback=None)
+
+
+        def save_in_memory_callback(results, stage):
+            # TODO: replace with saving this to disk rather than accumulating in memory
+            global results_traj
+            results_traj[(step, stage)] = results
+            print(f'collected {stage} results!')
+
+        loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label, callback=save_in_memory_callback)
 
         print(f"at optimizer step {step}, loss={loss:.3f}")
 
