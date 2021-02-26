@@ -108,7 +108,7 @@ class FreeEnergyModel:
         self.lambda_schedule = lambda_schedule
         self.equil_steps = equil_steps
         self.prod_steps = prod_steps
-        self.callback=callback
+        self.callback = callback
 
 
 def _deltaG(model, sys_params, callback=None):
@@ -132,7 +132,9 @@ def _deltaG(model, sys_params, callback=None):
 
         results = [x.result() for x in futures]
 
-    if callable(callback)
+    if not (callback is None):
+        # TODO: what should the signature of callback be?
+        callback(results)
 
     mean_du_dls = []
     all_grads = []
@@ -149,12 +151,12 @@ def _deltaG(model, sys_params, callback=None):
 
     return dG, dG_grad
 
-@functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
-def deltaG(model, sys_params):
-    return _deltaG(model, sys_params)[0]
+@functools.partial(jax.custom_vjp, nondiff_argnums=(0,2))
+def deltaG(model, sys_params, callback=None):
+    return _deltaG(model, sys_params, callback)[0]
 
-def deltaG_fwd(model, sys_params):
-    return _deltaG(model, sys_params)
+def deltaG_fwd(model, sys_params, callback=None):
+    return _deltaG(model, sys_params, callback)
 
 def deltaG_bwd(model, residual, grad):
     return ([grad*r for r in residual],)

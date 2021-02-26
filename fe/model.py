@@ -11,6 +11,14 @@ from ff import Forcefield
 
 from parallel.client import AbstractClient
 from typing import Optional
+from functools import partial
+
+# TODO: options object to determine return types:
+    # * three boolean flags (return xs, return du_dls, return du_dps)
+    # * will need to be picklable
+    # * will be used to determine what to send back / what to expect back
+
+
 
 class RBFEModel():
 
@@ -62,6 +70,7 @@ class RBFEModel():
             N x 2 list of ints corresponding to the atom mapping of the core.
 
         callback: function
+            accepts a list of SimulationResults and a string, and doesn't return anything. may save to disk
             TODO: is there a way to save intermediate results to disk that doesn't require passing a callable a few layers deep here...
 
         Returns
@@ -113,22 +122,16 @@ class RBFEModel():
                 lambda_schedule,
                 self.equil_steps,
                 self.prod_steps,
-                callback=callback
             )
 
-            dG = estimator.deltaG(model, sys_params, stage)
+            dG = estimator.deltaG(model, sys_params, partial(callback, stage=stage))
             stage_dGs.append(dG)
 
         pred = stage_dGs[0] - stage_dGs[1]
 
-        ## TODO: save results to disk
-        ## problem: only have access to two intermediate numbers within this function, wanted access to du_dls...
-        #if not (callback is None):
-        #    callback(stage_dGs)
-
         return pred
 
-    def loss(self, ff_params, mol_a, mol_b, core, label_ddG):
+    def loss(self, ff_params, mol_a, mol_b, core, label_ddG, callback: Optional[callable]=None):
         """
         Computes the L1 loss relative to some label. See predict() for the type signature.
 
@@ -144,7 +147,9 @@ class RBFEModel():
         float
             loss
 
+        TODO: make this configurable, using loss functions from in fe/loss.py
+
         """
-        pred_ddG = self.predict(ff_params, mol_a, mol_b, core)
+        pred_ddG = self.predict(ff_params, mol_a, mol_b, core, callback)
         loss = jnp.abs(pred_ddG - label_ddG)
         return loss
