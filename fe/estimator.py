@@ -111,7 +111,10 @@ class FreeEnergyModel:
         self.callback = callback
 
 
-def _deltaG(model, sys_params, callback=None):
+from typing import Tuple, List, Any
+gradient = List[Any] # TODO: make this more descriptive of dG_grad structure
+
+def _deltaG(model, sys_params, callback=None) -> Tuple[float, gradient]:
 
     assert len(sys_params) == len(model.unbound_potentials)
 
@@ -152,13 +155,21 @@ def _deltaG(model, sys_params, callback=None):
     return dG, dG_grad
 
 @functools.partial(jax.custom_vjp, nondiff_argnums=(0,2))
-def deltaG(model, sys_params, callback=None):
-    return _deltaG(model, sys_params, callback)[0]
+def deltaG(model, sys_params, callback=None) -> float:
+    return _deltaG(model=model, sys_params=sys_params, callback=callback)[0]
 
-def deltaG_fwd(model, sys_params, callback=None):
-    return _deltaG(model, sys_params, callback)
+def deltaG_fwd(model, sys_params, callback=None) -> Tuple[float, gradient]:
+    """same signature as DeltaG, but returns"""
+    return _deltaG(model=model, sys_params=sys_params, callback=callback)
 
-def deltaG_bwd(model, residual, grad, callback=None):
-    return ([grad*r for r in residual],)
+def deltaG_bwd(model, callback, residual, grad) -> Tuple[gradient]:
+    """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!
+
+    Ahh: https://jax.readthedocs.io/en/latest/notebooks/Custom_derivative_rules_for_Python_code.html#jax-custom-vjp-with-nondiff-argnums
+    >A similar option exists for jax.custom_vjp, and similarly the convention is that the non-differentiable arguments
+    >are passed as the first arguments to the rules, no matter where they appear in the original function’s signature.
+
+    """
+    return ([grad*r for r in residual], )
 
 deltaG.defvjp(deltaG_fwd, deltaG_bwd)
