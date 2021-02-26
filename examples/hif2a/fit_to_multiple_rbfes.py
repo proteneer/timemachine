@@ -13,6 +13,7 @@ from ff.handlers import nonbonded
 # free energy classes
 from fe.free_energy import RelativeFreeEnergy, construct_lambda_schedule
 from fe.model import RBFEModel
+from fe.loss import pseudo_huber_loss#, l1_loss, flat_bottom_loss
 
 # MD initialization
 from md import builders
@@ -182,7 +183,10 @@ if __name__ == "__main__":
     )
 
     # TODO: use binding_model.predict rather than binding_model.loss
-    binding_estimate_and_grad_fxn = jax.value_and_grad(binding_model.predict, argnums=0, has_aux=True)
+    def loss_fxn(ff_params, mol_a, mol_b, core, label_ddG, callback=None):
+        pred_ddG = binding_model.predict(ff_params, mol_a, mol_b, core, callback)
+        return pseudo_huber_loss(pred_ddG - label_ddG)
+
     # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
     #   e.g. stage_results, and further diagnostic information
     #   * x trajectories,
@@ -263,8 +267,8 @@ if __name__ == "__main__":
         t0 = time()
 
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
-        loss, loss_grads = binding_estimate_and_grad_fxn(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label)
-        # TODO: save aux
+        # TODO: pass callback function here to save intermediate results
+        loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label, callback=None)
 
         print(f"at optimizer step {step}, loss={loss:.3f}")
 
