@@ -88,3 +88,34 @@ def EXP_loss(
     loss = jnp.power(true_dG - pred_dG, 2)
 
     return loss
+
+
+def l1_loss(residual):
+    """loss = abs(residual)"""
+    return jnp.abs(residual)
+
+
+def pseudo_huber_loss(residual, threshold=4.184):
+    """loss = threshold * (sqrt(1 + (residual/threshold)^2) - 1)
+
+    Reference : https://en.wikipedia.org/wiki/Huber_loss#Pseudo-Huber_loss_function
+
+    Notable properties:
+        * As with Huber loss, behaves ~ like L1 above threshold, and ~ like L2 below threshold
+            * Note: this means that when |residual| < threshold, the gradient magnitude is lower than with L1 loss
+        * Continuous derivatives
+
+    Default value of threshold: 1 kcal/mol, in units of kJ/mol
+    """
+
+    # note: the expression quoted on wikipedia will result in slope = threshold -- rather than slope = 1 as desired --
+    #   when residual >> threshold
+    # return threshold**2 * (np.sqrt(1 + (residual/threshold)**2) - 1)
+
+    # expression used: replace `threshold**2` with `threshold`
+    return threshold * (jnp.sqrt(1 + (residual / threshold) ** 2) - 1)
+
+
+def flat_bottom_loss(residual, threshold=4.184):
+    """loss = max(0, |residual| - threshold)"""
+    return jnp.maximum(0, jnp.abs(residual) - threshold)
