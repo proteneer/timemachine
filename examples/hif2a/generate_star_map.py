@@ -8,8 +8,9 @@ from pickle import dump
 from fe import topology
 from fe.utils import convert_uIC50_to_kJ_per_mole
 
-root = Path(__file__).parent.parent.parent
+root = Path(__file__).absolute().parent.parent.parent
 
+# 0. Get force field
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 

@@ -6,17 +6,14 @@ import time
 import numpy as np
 
 from rdkit import Chem
-from rdkit.Chem.rdmolfiles import PDBWriter, SDWriter
-from rdkit.Geometry import Point3D
 
 from md import builders
 from fe import pdb_writer, free_energy
 from ff import Forcefield
-from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
-from timemachine.lib import potentials, custom_ops, LangevinIntegrator
+from timemachine.lib import custom_ops, LangevinIntegrator
 
-import report
+from docking import report
 
 
 def dock_and_equilibrate(
@@ -27,7 +24,7 @@ def dock_and_equilibrate(
     eq_steps,
     outdir,
     fewer_outfiles=False,
-    constant_atoms=[]
+    constant_atoms=[],
 ):
     """Solvates a host, inserts guest(s) into solvated host, equilibrates
 
@@ -49,16 +46,18 @@ def dock_and_equilibrate(
     Output
     ------
 
-    A pdb & sdf file every 100 steps of insertion (outdir/<guest_name>/<guest_name>_<step>.[pdb/sdf])
-    A pdb & sdf file every 1000 steps of equilibration (outdir/<guest_name>/<guest_name>_<step>.[pdb/sdf])
-    stdout every 100(0) steps noting the step number, lambda value, and energy
-    stdout for each guest noting the work of transition
+    A pdb & sdf file for the last step of insertion
+       (outdir/<guest_name>/<guest_name>_ins_<step>_[host.pdb/guest.sdf])
+    A pdb & sdf file every 1000 steps of equilibration
+       (outdir/<guest_name>/<guest_name>_eq_<step>_[host.pdb/guest.sdf])
+    stdout corresponding to the files written noting the lambda value and energy
+    stdout for each guest noting the work of transition, if applicable
     stdout for each guest noting how long it took to run
 
     Note
     ----
-    If any norm of force per atom exceeds 20000 kJ/(mol*nm) [MAX_NORM_FORCE defined in docking/report.py],
-    the simulation for that guest will stop and the work will not be calculated.
+    The work will not be calculated if the du_dl endpoints are not close to 0 or if any norm of
+    force per atom exceeds 20000 kJ/(mol*nm) [MAX_NORM_FORCE defined in docking/report.py]
     """
 
     if not os.path.exists(outdir):
@@ -78,7 +77,6 @@ def dock_and_equilibrate(
     # Prepare host
     # TODO: handle extra (non-transitioning) guests?
     print("Solvating host...")
-    # TODO: return topology from builders.build_protein_system
     (
         solvated_host_system,
         solvated_host_coords,
@@ -90,7 +88,6 @@ def dock_and_equilibrate(
 
     # sometimes water boxes are sad. Should be minimized first; this is a workaround
     host_box += np.eye(3) * 0.1
-    print("host box", host_box)
 
     solvated_host_pdb = os.path.join(outdir, "solvated_host.pdb")
     writer = pdb_writer.PDBWriter([solvated_topology], solvated_host_pdb)
@@ -121,7 +118,9 @@ def dock_and_equilibrate(
 
         afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
 
-        ups, sys_params, combined_masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), solvated_host_system, solvated_host_coords)
+        ups, sys_params, combined_masses, _ = afe.prepare_host_edge(
+            ff.get_ordered_params(), solvated_host_system, solvated_host_coords
+        )
 
         combined_bps = []
         for up, sp in zip(ups, sys_params):
@@ -130,7 +129,9 @@ def dock_and_equilibrate(
         x0 = np.concatenate([solvated_host_coords, orig_guest_coords])
         v0 = np.zeros_like(x0)
         print(
-            f"SYSTEM", f"guest_name: {guest_name}", f"num_atoms: {len(x0)}",
+            f"SYSTEM",
+            f"guest_name: {guest_name}",
+            f"num_atoms: {len(x0)}",
         )
 
         for atom_num in constant_atoms:
@@ -147,11 +148,8 @@ def dock_and_equilibrate(
         ctxt = custom_ops.Context(x0, v0, host_box, intg, u_impls)
 
         # insert guest
-        insertion_lambda_schedule = np.linspace(
-            max_lambda, 0.0, insertion_steps
-        )
+        insertion_lambda_schedule = np.linspace(max_lambda, 0.0, insertion_steps)
         calc_work = True
-
 
         # collect a du_dl calculation once every other step
         subsample_freq = 1
@@ -161,7 +159,17 @@ def dock_and_equilibrate(
         lamb = insertion_lambda_schedule[-1]
         ctxt.step(lamb)
 
-        report.report_step(ctxt, step, lamb, host_box, combined_bps, u_impls, guest_name, insertion_steps, "INSERTION")
+        report.report_step(
+            ctxt,
+            step,
+            lamb,
+            host_box,
+            combined_bps,
+            u_impls,
+            guest_name,
+            insertion_steps,
+            "INSERTION",
+        )
         if not fewer_outfiles:
             host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
             guest_coords = ctxt.get_x_t()[len(solvated_host_coords) :] * 10
@@ -177,28 +185,34 @@ def dock_and_equilibrate(
             )
 
         if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
+            print("Not calculating work (too much force)")
             calc_work = False
             break
 
         # Note: this condition only applies for ABFE, not RBFE
-        if (
-            abs(full_du_dls[0]) > 0.001
-            or abs(full_du_dls[-1]) > 0.001
-        ):
-            print("Error: du_dl endpoints are not ~0")
+        if abs(full_du_dls[0]) > 0.001 or abs(full_du_dls[-1]) > 0.001:
+            print("Not calculating work (du_dl endpoints are not ~0)")
             calc_work = False
 
         if calc_work:
-            work = np.trapz(
-                full_du_dls, insertion_lambda_schedule[::subsample_freq]
-            )
+            work = np.trapz(full_du_dls, insertion_lambda_schedule[::subsample_freq])
             print(f"guest_name: {guest_name}\tinsertion_work: {work:.2f}")
 
         # equilibrate
         for step in range(eq_steps):
             ctxt.step(0.00)
             if step % 1000 == 0:
-                report.report_step(ctxt, step, 0.00, host_box, combined_bps, u_impls, guest_name, eq_steps, 'EQUILIBRATION')
+                report.report_step(
+                    ctxt,
+                    step,
+                    0.00,
+                    host_box,
+                    combined_bps,
+                    u_impls,
+                    guest_name,
+                    eq_steps,
+                    "EQUILIBRATION",
+                )
                 host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
                 guest_coords = ctxt.get_x_t()[len(solvated_host_coords) :] * 10
                 report.write_frame(
@@ -211,7 +225,7 @@ def dock_and_equilibrate(
                     str(step).zfill(len(str(eq_steps))),
                     f"eq",
                 )
-            if step in (0, int(eq_steps/2), eq_steps-1):
+            if step in (0, int(eq_steps / 2), eq_steps - 1):
                 if report.too_much_force(ctxt, 0.00, host_box, combined_bps, u_impls):
                     break
 
@@ -228,7 +242,7 @@ def main():
     parser.add_argument(
         "-s",
         "--guests_sdfile",
-        default="tests/data/ligands_40.sdf",
+        default="tests/data/ligands_40__first-two-ligs.sdf",
         help="guests to pose",
     )
     parser.add_argument(
