@@ -158,7 +158,7 @@ def deltaG(model, sys_params, callback=None):
 def deltaG_fwd(model, sys_params, callback=None):
     return _deltaG(model, sys_params, callback)
 
-def deltaG_bwd(model, residual, grad):
+def deltaG_bwd(model, residual, grad, callback=None):
     return ([grad*r for r in residual],)
 
 deltaG.defvjp(deltaG_fwd, deltaG_bwd)
