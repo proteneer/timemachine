@@ -157,10 +157,6 @@ def calculate_rigorous_work(
         )
         ff = Forcefield(guest_ff_handlers)
 
-        conformer = guest_mol.GetConformer(0)
-        mol_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-        mol_conf = mol_conf / 10  # convert to md_units
-
         for system, coords, host_mol, box, label in zip(
             [solvated_host_system, water_system],
             [solvated_host_coords, water_coords],
