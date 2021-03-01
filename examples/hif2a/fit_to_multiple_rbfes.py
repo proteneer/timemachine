@@ -19,6 +19,7 @@ from md import builders
 
 # parallelization across multiple GPUs
 from parallel.client import CUDAPoolClient
+from parallel.utils import get_gpu_count
 
 from collections import namedtuple
 
@@ -27,6 +28,8 @@ from typing import List, Union
 Handler = Union[nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler] # TODO: relax this assumption
 from time import time
 
+NUM_GPUS = get_gpu_count()
+
 # how much MD to run, on how many GPUs
 Configuration = namedtuple(
     'Configuration',
@@ -34,7 +37,7 @@ Configuration = namedtuple(
 
 # define a couple configurations: one for quick tests, and one for production
 production_configuration = Configuration(
-    num_gpus=10,
+    num_gpus=NUM_GPUS,
     num_complex_windows=60,
     num_solvent_windows=60,
     num_equil_steps=10000,
@@ -42,7 +45,7 @@ production_configuration = Configuration(
 )
 
 intermediate_configuration = Configuration(
-    num_gpus=10,
+    num_gpus=NUM_GPUS,
     num_complex_windows=30,
     num_solvent_windows=30,
     num_equil_steps=10000,
@@ -50,7 +53,7 @@ intermediate_configuration = Configuration(
 )
 
 testing_configuration = Configuration(
-    num_gpus=10,
+    num_gpus=NUM_GPUS,
     num_complex_windows=10,
     num_solvent_windows=10,
     num_equil_steps=1000,

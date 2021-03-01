@@ -7,6 +7,7 @@ import pickle
 import grpc
 
 from parallel import service_pb2_grpc, service_pb2
+from parallel.utils import get_gpu_count
 
 from concurrent import futures
 
@@ -93,6 +94,10 @@ class CUDAPoolClient(ProcessPoolClient):
     will run on a different GPU modulo num workers, which should be set to
     the number of GPUs.
     """
+    def __init__(self, max_workers):
+        super().__init__(max_workers)
+        gpus = get_gpu_count()
+        assert self.max_workers <= gpus, f"More workers '{self.max_workers}' requested than GPUs '{gpus}'"
 
     @staticmethod
     def wrapper(idx, fn, *args):
