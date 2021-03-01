@@ -327,7 +327,10 @@ if __name__ == "__main__":
         loss_traj.append(loss)
 
         def _results_to_arrays(results: List[SimulationResult]):
-            #result = SimulationResult(xs=xs, du_dls=full_du_dls, du_dps=grads)
+            """each result object was constructed by SimulationResult(xs=xs, du_dls=full_du_dls, du_dps=grads)
+
+            for each field, concatenate into an array
+            """
 
             xs = np.array([r.xs for r in results])
             du_dls = np.array([r.du_dls for r in results])
