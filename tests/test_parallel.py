@@ -4,8 +4,10 @@ import numpy as np
 import parallel
 from parallel import client
 from parallel import worker
+from parallel.utils import get_gpu_count
 
 import unittest
+from unittest.mock import patch
 import os
 
 import grpc
@@ -54,16 +56,32 @@ class TestProcessPool(unittest.TestCase):
 def environ_check():
     return os.environ['CUDA_VISIBLE_DEVICES']
 
+class TestGPUCount(unittest.TestCase):
+
+    @patch("parallel.utils.check_output")
+    def test_get_gpu_count(self, mock_output):
+        mock_output.return_value = b"\n".join([f"GPU #{i}".encode() for i in range(5)])
+        assert parallel.utils.get_gpu_count() == 5
+
+        mock_output.return_value = b"\n".join([f"GPU #{i}".encode() for i in range(100)])
+        assert parallel.utils.get_gpu_count() == 100
+
+        mock_output.side_effect = FileNotFoundError("nvidia-smi missing")
+        with self.assertRaises(FileNotFoundError):
+            parallel.utils.get_gpu_count()
+
 class TestCUDAPoolClient(unittest.TestCase):
 
     def setUp(self):
-        max_workers = 4
-        self.cli = client.CUDAPoolClient(max_workers)
+        self.max_workers = get_gpu_count()
+        self.cli = client.CUDAPoolClient(self.max_workers)
 
     def test_submit(self):
 
+        operations = 10
+
         futures = []
-        for _ in range(10):
+        for _ in range(operations):
             fut = self.cli.submit(environ_check)
             futures.append(fut)
 
@@ -71,10 +89,17 @@ class TestCUDAPoolClient(unittest.TestCase):
         for f in futures:
             test_res.append(f.result())
 
+        expected = [str(i % self.max_workers) for i in range(operations)]
+
         np.testing.assert_array_equal(
             test_res,
-            ['0', '1', '2', '3', '0', '1', '2', '3', '0', '1']
+            expected
         )
+
+    def test_too_many_workers(self):
+        # I look forward to the day that we have 814 GPUs
+        with self.assertRaises(AssertionError):
+            client.CUDAPoolClient(814)
 
 class TestGRPCClient(unittest.TestCase):
 
