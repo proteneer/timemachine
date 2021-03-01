@@ -18,7 +18,8 @@ class SimulationResult:
 
 
 
-def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps, get_trajectory=False):
+def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps, get_trajectory=False,
+    x_interval=1000, du_dl_interval=5):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
@@ -64,23 +65,23 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
         ctxt.add_observable(obs)
 
     prod_schedule = np.ones(prod_steps)*lamb
-    du_dl_freq = 5
 
     # run MD, optionally pausing every du_dl_freq steps to extract x snapshot
     if not get_trajectory:
         xs = None
-        full_du_dls = ctxt.multiple_steps(prod_schedule, du_dl_freq)
+        full_du_dls = ctxt.multiple_steps(prod_schedule, du_dl_interval)
 
     else:
         xs = [] # in nanometers
         full_du_dls = []
 
-        # simulate in du_dl_freq-sized chunks
+        # simulate in x_interval-sized chunks
         t = 0
         while t < len(prod_schedule):
-            full_du_dls.append(ctxt.multiple_steps(prod_schedule[t: (t + du_dl_freq)], du_dl_freq))
+            chunk_size = min(len(prod_schedule), (t + x_interval)) - t
+            full_du_dls.append(ctxt.multiple_steps(prod_schedule[t: (t + chunk_size)], chunk_size))
             xs.append(ctxt.get_x_t())
-            t += du_dl_freq
+            t += chunk_size
 
         # lists -> arrays
         xs = np.array(xs)
