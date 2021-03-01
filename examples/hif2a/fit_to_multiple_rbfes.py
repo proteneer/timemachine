@@ -243,13 +243,12 @@ if __name__ == "__main__":
 
     relative_improvement_bound = 0.8
 
-    def _compute_step_lower_bound(loss):
-        """problem this addresses: on a small fraction of steps, the simulation returns a prediction > 100 kJ/mol
+    def _compute_step_lower_bound(loss, blown_up):
+        """problem this addresses: on a small fraction of steps, the free energy estimate may be grossly unreliable
         away from target, typically indicating an instability was encountered.
-        detect if this occurs, and don't allow a step."""
+        detect if this occurs, and don't allow a step.
 
-        blown_up = loss > 100 # loss should never be > 100, unless something has gone very wrong!
-
+        """
         if not blown_up:
             return loss * relative_improvement_bound
         else:
@@ -259,8 +258,6 @@ if __name__ == "__main__":
     flat_theta_traj = []
     flat_grad_traj = []
     loss_traj = []
-
-    from collections import defaultdict
 
     results_traj = dict() # indexed by (step, stage) tuples # TODO: proper type hint
 
@@ -283,6 +280,15 @@ if __name__ == "__main__":
 
         loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label, callback=save_in_memory_callback)
 
+        def _blew_up(du_dls):
+            """if stddev(du_dls) for any window exceeded 1000 kJ/mol, don't trust result enough to take a step
+            if du_dls contains any nans, don't trust result enough to take a step"""
+
+            # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
+            return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
+
+        blown_up = _blew_up(results_traj[(step, 'complex')]) or _blew_up(results_traj[(step, 'solvent')])
+
         print(f"at optimizer step {step}, loss={loss:.3f}")
 
         # note: unflatten_grad and unflatten_theta have identical definitions for now
@@ -290,7 +296,7 @@ if __name__ == "__main__":
         flat_theta, unflatten_theta = flatten(ordered_params)
 
         theta_increment = truncated_step(flat_theta, loss, flat_loss_grad,
-                                         step_lower_bound=_compute_step_lower_bound(loss))
+                                         step_lower_bound=_compute_step_lower_bound(loss, blown_up))
         param_increments = unflatten_theta(theta_increment)
 
         # for any parameter handler types being updated, update in place
