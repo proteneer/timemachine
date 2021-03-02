@@ -280,14 +280,15 @@ if __name__ == "__main__":
 
         loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label, callback=save_in_memory_callback)
 
-        def _blew_up(du_dls):
+        def _blew_up(results: List[SimulationResult]):
             """if stddev(du_dls) for any window exceeded 1000 kJ/mol, don't trust result enough to take a step
             if du_dls contains any nans, don't trust result enough to take a step"""
+            du_dls = _results_to_arrays(results)[1]
 
             # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
             return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
-        blown_up = _blew_up(results_traj[(step, 'complex')].du_dls) or _blew_up(results_traj[(step, 'solvent')].du_dls)
+        blown_up = _blew_up(results_traj[(step, 'complex')]) or _blew_up(results_traj[(step, 'solvent')])
 
         print(f"at optimizer step {step}, loss={loss:.3f}")
 
