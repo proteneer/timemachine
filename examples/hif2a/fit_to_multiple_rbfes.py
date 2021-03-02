@@ -287,7 +287,7 @@ if __name__ == "__main__":
             # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
             return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
-        blown_up = _blew_up(results_traj[(step, 'complex')]) or _blew_up(results_traj[(step, 'solvent')])
+        blown_up = _blew_up(results_traj[(step, 'complex')].du_dls) or _blew_up(results_traj[(step, 'solvent')].du_dls)
 
         print(f"at optimizer step {step}, loss={loss:.3f}")
 
