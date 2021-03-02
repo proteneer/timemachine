@@ -255,11 +255,44 @@ if __name__ == "__main__":
             return loss # don't move!
 
 
+    def _results_to_arrays(results: List[SimulationResult]):
+        """each result object was constructed by SimulationResult(xs=xs, du_dls=full_du_dls, du_dps=grads)
+
+        for each field, concatenate into an array
+        """
+
+        xs = np.array([r.xs for r in results])
+        du_dls = np.array([r.du_dls for r in results])
+        du_dps = np.array([r.du_dps for r in results])
+
+        return xs, du_dls, du_dps
+
+
+    def _blew_up(results: List[SimulationResult]):
+        """if stddev(du_dls) for any window exceeded 1000 kJ/mol, don't trust result enough to take a step
+        if du_dls contains any nans, don't trust result enough to take a step"""
+        du_dls = _results_to_arrays(results)[1]
+
+        # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
+        return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
+
+
+    def _stringify_key(key: Tuple[int, str]):
+        return f'{key[0]}_{key[1]}'
+
+
     flat_theta_traj = []
     flat_grad_traj = []
     loss_traj = []
 
     results_traj = dict() # indexed by (step, stage) tuples # TODO: proper type hint
+
+
+    def save_in_memory_callback(results, stage):
+        # TODO: replace with saving this to disk rather than accumulating in memory
+        global results_traj
+        results_traj[(step, stage)] = results
+        print(f'collected {stage} results!')
 
     # in each optimizer step, look at one transformation from relative_transformations
     for step, rfe_ind in enumerate(step_inds):
@@ -271,22 +304,7 @@ if __name__ == "__main__":
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
         # TODO: pass callback function here to save intermediate results
 
-
-        def save_in_memory_callback(results, stage):
-            # TODO: replace with saving this to disk rather than accumulating in memory
-            global results_traj
-            results_traj[(step, stage)] = results
-            print(f'collected {stage} results!')
-
         loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label, callback=save_in_memory_callback)
-
-        def _blew_up(results: List[SimulationResult]):
-            """if stddev(du_dls) for any window exceeded 1000 kJ/mol, don't trust result enough to take a step
-            if du_dls contains any nans, don't trust result enough to take a step"""
-            du_dls = _results_to_arrays(results)[1]
-
-            # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
-            return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
         blown_up = _blew_up(results_traj[(step, 'complex')]) or _blew_up(results_traj[(step, 'solvent')])
 
@@ -326,21 +344,6 @@ if __name__ == "__main__":
         flat_theta_traj.append(np.array(flat_theta))
         flat_grad_traj.append(flat_loss_grad)
         loss_traj.append(loss)
-
-        def _results_to_arrays(results: List[SimulationResult]):
-            """each result object was constructed by SimulationResult(xs=xs, du_dls=full_du_dls, du_dps=grads)
-
-            for each field, concatenate into an array
-            """
-
-            xs = np.array([r.xs for r in results])
-            du_dls = np.array([r.du_dls for r in results])
-            du_dps = np.array([r.du_dps for r in results])
-
-            return xs, du_dls, du_dps
-
-        def _stringify_key(key: Tuple[int, str]):
-            return f'{key[0]}_{key[1]}'
 
         # TODO: update path
         path_to_du_dls = 'du_dls_checkpoint.npz'
