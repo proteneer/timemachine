@@ -78,4 +78,8 @@ def test_openmm_handler():
 
     nb_handle.parameterize(nb_handle.typed_params.params, sys_data)
 
-    nb_params, nb_vjp_fn = jax.vjp(functools.partial(nb_handle.parameterize, data=sys_data), pt_handle.params, has_aux=False)
+    nb_params, nb_vjp_fn, exc_info = jax.vjp(functools.partial(nb_handle.parameterize, data=sys_data), pt_handle.params, has_aux=True)
+
+    # print(exc_info)
+
+    # nb_handle.generateExclusions()
