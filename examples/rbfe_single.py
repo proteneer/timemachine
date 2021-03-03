@@ -18,6 +18,7 @@ from testsystems.relative import hif2a_ligand_pair
 from ff.handlers.serialize import serialize_handlers
 from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 from parallel.client import CUDAPoolClient
+from parallel.utils import get_gpu_count
 
 from typing import Union, Optional, Iterable, Any, Tuple, Dict
 
@@ -37,7 +38,7 @@ if __name__ == "__main__":
         "--num_gpus",
         type=int,
         help="number of gpus",
-        required=True
+        default=get_gpu_count()
     )
 
     parser.add_argument(

@@ -4,8 +4,10 @@ import numpy as np
 import parallel
 from parallel import client
 from parallel import worker
+from parallel.utils import get_gpu_count
 
 import unittest
+from unittest.mock import patch
 import os
 
 import grpc
@@ -54,16 +56,32 @@ class TestProcessPool(unittest.TestCase):
 def environ_check():
     return os.environ['CUDA_VISIBLE_DEVICES']
 
+class TestGPUCount(unittest.TestCase):
+
+    @patch("parallel.utils.check_output")
+    def test_get_gpu_count(self, mock_output):
+        mock_output.return_value = b"\n".join([f"GPU #{i}".encode() for i in range(5)])
+        assert parallel.utils.get_gpu_count() == 5
+
+        mock_output.return_value = b"\n".join([f"GPU #{i}".encode() for i in range(100)])
+        assert parallel.utils.get_gpu_count() == 100
+
+        mock_output.side_effect = FileNotFoundError("nvidia-smi missing")
+        with self.assertRaises(FileNotFoundError):
+            parallel.utils.get_gpu_count()
+
 class TestCUDAPoolClient(unittest.TestCase):
 
     def setUp(self):
-        max_workers = 4
-        self.cli = client.CUDAPoolClient(max_workers)
+        self.max_workers = get_gpu_count()
+        self.cli = client.CUDAPoolClient(self.max_workers)
 
     def test_submit(self):
 
+        operations = 10
+
         futures = []
-        for _ in range(10):
+        for _ in range(operations):
             fut = self.cli.submit(environ_check)
             futures.append(fut)
 
@@ -71,17 +89,24 @@ class TestCUDAPoolClient(unittest.TestCase):
         for f in futures:
             test_res.append(f.result())
 
+        expected = [str(i % self.max_workers) for i in range(operations)]
+
         np.testing.assert_array_equal(
             test_res,
-            ['0', '1', '2', '3', '0', '1', '2', '3', '0', '1']
+            expected
         )
+
+    def test_too_many_workers(self):
+        # I look forward to the day that we have 814 GPUs
+        with self.assertRaises(AssertionError):
+            client.CUDAPoolClient(814)
 
 class TestGRPCClient(unittest.TestCase):
 
     def setUp(self):
 
         # setup server, in reality max_workers is equal to number of gpus
-        ports = [2020, 2021]
+        ports = [2020 + i for i in range(4)]
         self.servers = []
         for port in ports:
             server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=2),
@@ -96,19 +121,8 @@ class TestGRPCClient(unittest.TestCase):
             self.servers.append(server)
 
         # setup client
-        stubs = []
-        for port in ports:
-            stubs = []
-            channel = grpc.insecure_channel('0.0.0.0:'+str(port),
-                options = [
-                    ('grpc.max_send_message_length', 500 * 1024 * 1024),
-                    ('grpc.max_receive_message_length', 500 * 1024 * 1024)
-                ]
-            )
-            stub = parallel.service_pb2_grpc.WorkerStub(channel)
-            stubs.append(stub)
-
-        self.cli = client.GRPCClient(stubs)
+        hosts = [f"0.0.0.0:{port}" for port in ports]
+        self.cli = client.GRPCClient(hosts)
 
     def test_foo_2_args(self):
         xs = np.linspace(0, 1.0, 5)

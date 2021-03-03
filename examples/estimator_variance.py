@@ -20,6 +20,7 @@ from functools import partial
 
 # parallelization across multiple GPUs
 from parallel.client import CUDAPoolClient
+from parallel.utils import get_gpu_count
 
 import os
 
@@ -125,7 +126,7 @@ if __name__ == "__main__":
     # command line argument parser generated the following variables:
     # num_gpus, num_complex_windows, num_solvent_windows, num_equil_steps,
     # num_prod_steps ...
-    num_gpus = 10
+    num_gpus = get_gpu_count()
 
     # TODO: can I just get all of the du/dlambda time-series information
     #   so that we can guess the variance of dG_estimate without having to run
