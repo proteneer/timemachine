@@ -1,5 +1,6 @@
 # Fit to multiple relative binding free energy edges
-
+import sys
+from argparse import ArgumentParser
 import jax
 from jax import numpy as jnp
 import numpy as np
@@ -20,7 +21,7 @@ from fe.loss import pseudo_huber_loss#, l1_loss, flat_bottom_loss
 from md import builders
 
 # parallelization across multiple GPUs
-from parallel.client import CUDAPoolClient
+from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
 
 from collections import namedtuple
@@ -30,24 +31,25 @@ from typing import List, Union, Tuple, Dict
 
 from optimize.step import truncated_step
 
-array = Union[np.array, jnp.array]
-
 from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
-Handler = Union[AM1CCCHandler, LennardJonesHandler]  # TODO: relax this assumption
-
+from typing import List, Union
+from pathlib import Path
 from time import time
+
+array = Union[np.array, jnp.array]
+
+Handler = Union[AM1CCCHandler, LennardJonesHandler]  # TODO: relax this assumption
 
 NUM_GPUS = get_gpu_count()
 
 # how much MD to run, on how many GPUs
 Configuration = namedtuple(
     'Configuration',
-    ['num_gpus', 'num_complex_windows', 'num_solvent_windows', 'num_equil_steps', 'num_prod_steps'])
+    ['num_complex_windows', 'num_solvent_windows', 'num_equil_steps', 'num_prod_steps'])
 
 # define a couple configurations: one for quick tests, and one for production
 production_configuration = Configuration(
-    num_gpus=NUM_GPUS,
     num_complex_windows=60,
     num_solvent_windows=60,
     num_equil_steps=10000,
@@ -55,7 +57,6 @@ production_configuration = Configuration(
 )
 
 intermediate_configuration = Configuration(
-    num_gpus=NUM_GPUS,
     num_complex_windows=60,
     num_solvent_windows=60,
     num_equil_steps=10000,
@@ -63,7 +64,6 @@ intermediate_configuration = Configuration(
 )
 
 testing_configuration = Configuration(
-    num_gpus=NUM_GPUS,
     num_complex_windows=10,
     num_solvent_windows=10,
     num_equil_steps=1000,
@@ -77,7 +77,6 @@ testing_configuration = Configuration(
 #       (which describes the overall training loop)
 
 # don't make assumptions about working directory
-from pathlib import Path
 
 # locations relative to project root
 root = Path(__file__).absolute().parent.parent.parent
@@ -125,20 +124,39 @@ def _save_forcefield(filename, ff_params):
 
 
 if __name__ == "__main__":
+    parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
+    parser.add_argument("--num-gpus", default=None, type=int, help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided")
+    parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
+    parser.add_argument("--param-updates", default=1000, type=int, help="Number of updates for parameters")
+    parser.add_argument("--seed", default=2021, type=int, help="Seed for shuffling ordering of transformations")
+    parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
+    args = parser.parse_args()
+    if args.num_gpus is not None and args.hosts is not None:
+        print("Unable to provide --num-gpus and --hosts together")
+        sys.exit(1)
+
     # which force field components we'll refit
-    forces_to_refit = [nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]
+    forces_to_refit = [AM1CCCHandler, LennardJonesHandler]
 
     # how much computation to spend per refitting step
-    # configuration = testing_configuration  # a little
-    # configuration = production_configuration  # a lot
-    configuration = intermediate_configuration  # goldilocks
+    configuration = None
+    if args.config == "intermediate": # goldilocks
+        configuration = intermediate_configuration
+    elif args.config == "test":
+        configuration = testing_configuration # a little
+    elif args.config == "production":
+        configuration = production_configuration # a lot
+    assert configuration is not None, "No configuration provided"
 
-    # how many parameter update steps
-    num_parameter_updates = 1000
-    # TODO: make this configurable also
-
-    # set up multi-GPU client
-    client = CUDAPoolClient(max_workers=configuration.num_gpus)
+    if not args.hosts:
+        num_gpus = args.num_gpus
+        if num_gpus is None:
+            num_gpus = NUM_GPUS
+        # set up multi-GPU client
+        client = CUDAPoolClient(max_workers=num_gpus)
+    else:
+        # Setup GRPC client
+        client = GRPCClient(hosts=args.hosts)
 
     # load pre-defined collection of relative transformations
     with open(path_to_transformations, 'rb') as f:
@@ -147,14 +165,14 @@ if __name__ == "__main__":
     # update the forcefield parameters for a few steps, each step informed by a single free energy calculation
 
     # compute and save the sequence of relative_transformation indices
-    num_epochs = int(np.ceil(num_parameter_updates / len(relative_transformations)))
-    np.random.seed(2021)
+    num_epochs = int(np.ceil(args.param_updates / len(relative_transformations)))
+    np.random.seed(args.seed)
     step_inds = []
     for epoch in range(num_epochs):
         inds = np.arange(len(relative_transformations))
         np.random.shuffle(inds)
         step_inds.append(inds)
-    step_inds = np.hstack(step_inds)[:num_parameter_updates]
+    step_inds = np.hstack(step_inds)[:args.param_updates]
     np.save(path_to_results.joinpath('step_indices.npy'), step_inds)
 
     # build the complex system
