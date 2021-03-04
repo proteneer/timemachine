@@ -13,10 +13,6 @@ from parallel.client import AbstractClient
 from typing import Optional
 from functools import partial
 
-# TODO: options object to determine return types:
-    # * three boolean flags (return xs, return du_dls, return du_dps)
-    # * will need to be picklable
-    # * will be used to determine what to send back / what to expect back
 
 
 
@@ -72,6 +68,14 @@ class RBFEModel():
         callback: function
             accepts a list of SimulationResults and a string, and doesn't return anything. may save to disk
             TODO: is there a way to save intermediate results to disk that doesn't require passing a callable a few layers deep here...
+            TODO: aux return following https://github.com/proteneer/timemachine/pull/360#discussion_r584733991
+                * Update RBFEModel.predict() and estimator.deltaG() signature to:
+                    * accept an options argument that determines what gets put into the aux return
+                    * forward aux return
+                * options object to determine return types:
+                    * three boolean flags (return xs, return du_dls, return du_dps)
+                    * will need to be picklable
+                    * will be used to determine what to send back / what to expect back
 
         Returns
         -------
