@@ -26,9 +26,7 @@ from parallel.utils import get_gpu_count
 from collections import namedtuple
 
 from pickle import load
-from typing import List, Union, Tuple
-
-from typing import Union, Optional, Iterable, Any, Tuple, Dict
+from typing import List, Union, Tuple, Dict
 
 from optimize.step import truncated_step
 
