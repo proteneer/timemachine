@@ -55,7 +55,7 @@ production_configuration = Configuration(
 )
 
 intermediate_configuration = Configuration(
-    num_gpus=10,
+    num_gpus=NUM_GPUS,
     num_complex_windows=60,
     num_solvent_windows=60,
     num_equil_steps=10000,
