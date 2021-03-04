@@ -7,6 +7,8 @@ import numpy as np
 
 from timemachine.lib import potentials, custom_ops
 
+from typing import Tuple, List, Any
+
 class SimulationResult:
     def __init__(self, xs=None, du_dls=None, du_dps=None):
         self.xs = xs
@@ -98,21 +100,13 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     return result
 
 
-class FreeEnergyModel:
-    def __init__(self, unbound_potentials, client, box, x0, v0, integrator, lambda_schedule, equil_steps, prod_steps, callback=None):
-        self.unbound_potentials = unbound_potentials
-        self.client = client
-        self.box = box
-        self.x0 = x0
-        self.v0 = v0
-        self.integrator = integrator
-        self.lambda_schedule = lambda_schedule
-        self.equil_steps = equil_steps
-        self.prod_steps = prod_steps
-        self.callback = callback
+FreeEnergyModel = namedtuple(
+    "FreeEnergyModel",
+    ["unbound_potentials", "client", "box", "x0", "v0", "integrator", "lambda_schedule", "equil_steps", "prod_steps",
+     "callback"],
+    defaults=[None] # note: defaults applied to rightmost parameters
+)
 
-
-from typing import Tuple, List, Any
 gradient = List[Any] # TODO: make this more descriptive of dG_grad structure
 
 def _deltaG(model, sys_params, callback=None) -> Tuple[float, gradient]:
