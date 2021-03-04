@@ -44,6 +44,7 @@ bicyclic_query_mol = Chem.MolFromSmarts(bicyclic_smarts_pattern)
 # filter matches
 has_bicycle = lambda mol: len(mol.GetSubstructMatches(bicyclic_query_mol)) == 1
 mols_with_core_1 = list(filter(has_bicycle, mols))
+# note "== 1" : want to exclude mol id 266 -- which matches bicyclic_query twice -- from mols_with_core_1
 mols_with_core_2 = list(filter(lambda mol: not has_bicycle(mol), mols))
 
 
