@@ -9,7 +9,7 @@ import numpy as np
 from ff import Forcefield
 from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize_handlers
-from ff.handlers import nonbonded
+from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
 # free energy classes
 from fe.free_energy import RelativeFreeEnergy, construct_lambda_schedule
@@ -30,8 +30,6 @@ from pickle import load
 from typing import List, Union, Tuple, Dict
 
 from optimize.step import truncated_step
-
-from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
 from typing import List, Union
 from pathlib import Path
@@ -195,7 +193,6 @@ if __name__ == "__main__":
         prod_steps=configuration.num_prod_steps,
     )
 
-    # TODO: use binding_model.predict rather than binding_model.loss
     def loss_fxn(ff_params, mol_a, mol_b, core, label_ddG, callback=None):
         pred_ddG = binding_model.predict(ff_params, mol_a, mol_b, core, callback)
         return pseudo_huber_loss(pred_ddG - label_ddG)
