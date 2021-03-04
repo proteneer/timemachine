@@ -5,7 +5,7 @@ from fe.loss import l1_loss, pseudo_huber_loss, flat_bottom_loss
 def _assert_nonnegative_loss(loss_fxn: callable):
     residuals = np.linspace(-10, 10, 100)
     losses = np.array([loss_fxn(res) for res in residuals])
-    np.testing.assert_array_less(0, losses)
+    np.testing.assert_array_equal(losses >= 0, True)
 
 
 def _assert_zero_loss_when_perfect(loss_fxn: callable):
