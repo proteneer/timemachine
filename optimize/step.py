@@ -1,5 +1,6 @@
 import numpy as np
 from jax import numpy as jnp
+from ff import nonbonded
 
 from typing import Union, Optional
 
@@ -102,3 +103,33 @@ def truncated_step(
     x_increment = np.array(x_next - x)
 
     return x_increment
+
+
+
+# TODO: define more flexible update rules here, rather than update parameters
+step_sizes = {
+    nonbonded.AM1CCCHandler: 1e-3,
+    nonbonded.LennardJonesHandler: 1e-3,
+    # ...
+}
+
+gradient_clip_thresholds = {
+    nonbonded.AM1CCCHandler: 0.001,
+    nonbonded.LennardJonesHandler: np.array([0.001, 0]),  # TODO: allow to update epsilon also?
+    # ...
+}
+
+
+def _clipped_update(gradient, step_size, clip_threshold):
+    """Compute an update based on current gradient
+        x[k+1] = x[k] + update
+
+    The gradient descent update would be
+        update = - step_size * grad(x[k]),
+
+    and to avoid instability, we clip the absolute values of all components of the update
+        update = - clip(step_size * grad(x[k]))
+
+    TODO: menu of other, fancier update functions
+    """
+    return - np.clip(step_size * gradient, -clip_threshold, clip_threshold)

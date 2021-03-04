@@ -7,7 +7,21 @@ import numpy as np
 
 from timemachine.lib import potentials, custom_ops
 
-def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps):
+from typing import Tuple, List, Any
+
+class SimulationResult:
+    def __init__(self, xs=None, du_dls=None, du_dps=None):
+        self.xs = xs
+        self.du_dls = du_dls
+        self.du_dps = du_dps
+
+    def save(self, path):
+        return np.savez(path, xs=self.xs, du_dls=self.du_dls, du_dps=self.du_dps)
+
+
+
+def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps, get_trajectory=False,
+    x_interval=1000, du_dl_interval=5):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
@@ -53,10 +67,28 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
         ctxt.add_observable(obs)
 
     prod_schedule = np.ones(prod_steps)*lamb
-    du_dl_freq = 5
-    full_du_dls = ctxt.multiple_steps(prod_schedule, du_dl_freq)
 
-    du_dl_mean, du_dl_std = np.mean(full_du_dls), np.std(full_du_dls)
+    # run MD, optionally pausing every du_dl_freq steps to extract x snapshot
+    if not get_trajectory:
+        xs = None
+        full_du_dls = ctxt.multiple_steps(prod_schedule, du_dl_interval)
+
+    else:
+        xs = [] # in nanometers
+        full_du_dls = []
+
+        # simulate in x_interval-sized chunks
+        t = 0
+        while t < len(prod_schedule):
+            chunk_size = min(len(prod_schedule), (t + x_interval)) - t
+            full_du_dls.append(ctxt.multiple_steps(prod_schedule[t: (t + chunk_size)], chunk_size))
+            xs.append(ctxt.get_x_t())
+            t += chunk_size
+
+        # lists -> arrays
+        xs = np.array(xs)
+        full_du_dls = np.hstack(full_du_dls)
+
 
     # keep the structure of grads the same as that of final_potentials so we can properly
     # form their vjps.
@@ -64,21 +96,20 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     for obs in du_dp_obs:
         grads.append(obs.avg_du_dp())
 
-    return (du_dl_mean, du_dl_std), grads
+    result = SimulationResult(xs=xs, du_dls=full_du_dls, du_dps=grads)
+    return result
 
 
-FreeEnergyModel = namedtuple("FreeEnergyModel", [
-    "unbound_potentials",
-    "client",
-    "box",
-    "x0",
-    "v0",
-    "integrator",
-    "lambda_schedule",
-    "equil_steps",
-    "prod_steps"])
+FreeEnergyModel = namedtuple(
+    "FreeEnergyModel",
+    ["unbound_potentials", "client", "box", "x0", "v0", "integrator", "lambda_schedule", "equil_steps", "prod_steps",
+     "callback"],
+    defaults=[None] # note: defaults applied to rightmost parameters
+)
 
-def _deltaG(model, sys_params):
+gradient = List[Any] # TODO: make this more descriptive of dG_grad structure
+
+def _deltaG(model, sys_params, callback=None) -> Tuple[float, gradient]:
 
     assert len(sys_params) == len(model.unbound_potentials)
 
@@ -99,29 +130,41 @@ def _deltaG(model, sys_params):
 
         results = [x.result() for x in futures]
 
-    du_dls = []
+    if callback is not None:
+        # TODO: what should the signature of callback be?
+        callback(results)
+
+    mean_du_dls = []
     all_grads = []
 
-    for (du_dl_mean, du_dl_std), grads in results:
-        # (ytz): figure out what to do with du_dl_std later
-        du_dls.append(du_dl_mean)
-        all_grads.append(grads)
+    for result in results:
+        # (ytz): figure out what to do with stddev(du_dl) later
+        mean_du_dls.append(np.mean(result.du_dls))
+        all_grads.append(result.du_dps)
 
-    dG = np.trapz(du_dls, model.lambda_schedule)
+    dG = np.trapz(mean_du_dls, model.lambda_schedule)
     dG_grad = []
     for rhs, lhs in zip(all_grads[-1], all_grads[0]):
         dG_grad.append(rhs - lhs)
 
     return dG, dG_grad
 
-@functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
-def deltaG(model, sys_params):
-    return _deltaG(model, sys_params)[0]
+@functools.partial(jax.custom_vjp, nondiff_argnums=(0,2))
+def deltaG(model, sys_params, callback=None) -> float:
+    return _deltaG(model=model, sys_params=sys_params, callback=callback)[0]
 
-def deltaG_fwd(model, sys_params):
-    return _deltaG(model, sys_params)
+def deltaG_fwd(model, sys_params, callback=None) -> Tuple[float, gradient]:
+    """same signature as DeltaG, but returns"""
+    return _deltaG(model=model, sys_params=sys_params, callback=callback)
 
-def deltaG_bwd(model, residual, grad):
-    return ([grad*r for r in residual],)
+def deltaG_bwd(model, callback, residual, grad) -> Tuple[gradient]:
+    """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!
+
+    Ahh: https://jax.readthedocs.io/en/latest/notebooks/Custom_derivative_rules_for_Python_code.html#jax-custom-vjp-with-nondiff-argnums
+    >A similar option exists for jax.custom_vjp, and similarly the convention is that the non-differentiable arguments
+    >are passed as the first arguments to the rules, no matter where they appear in the original function’s signature.
+
+    """
+    return ([grad*r for r in residual], )
 
 deltaG.defvjp(deltaG_fwd, deltaG_bwd)

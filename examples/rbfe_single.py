@@ -27,13 +27,6 @@ from optimize.step import truncated_step
 array = Union[np.array, jnp.array]
 Handler = Union[AM1CCCHandler, LennardJonesHandler] # TODO: do these all inherit from a Handler class already?
 
-
-def wrap_method(args: Iterable[Any], fxn: callable):
-    # TODO: is there a more functools-y approach to make
-    #   a function accept tuple instead of positional arguments?
-    return fxn(*args)
-
-
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
@@ -131,17 +124,16 @@ if __name__ == "__main__":
 
     handle_types_being_optimized = [AM1CCCHandler, LennardJonesHandler]
 
-    def flatten(params) -> Tuple[array, callable]:
+    def flatten(params) -> Tuple[np.array, callable]:
         """Turn params dict into flat array, with an accompanying unflatten function
 
-        TODO: note that the result is going to be in the order given by ordered_handles (filtered by presence in hrandle_types)
+        TODO: note that the result is going to be in the order given by ordered_handles (filtered by presence in handle_types)
             rather than in the order they appear in handle_types_being_optimized
 
         TODO: maybe leave out the reference to handle_types_being optimized altogether
 
         TODO: does Jax have a pytree-based flatten / unflatten utility?
         """
-
 
         theta_list = []
         _shapes = dict()
@@ -164,12 +156,11 @@ if __name__ == "__main__":
             for key in _handle_types:
                 shape = _shapes[key]
                 num_params = int(np.prod(shape))
-                params[key] = np.array(theta[i : i + num_params]).reshape(shape)
+                params[key] = np.array(theta[i: i + num_params]).reshape(shape)
                 i += num_params
             return params
 
         return theta, unflatten
-
 
 
     # in each optimization step, don't step so far that you think you're jumping to
@@ -182,7 +173,7 @@ if __name__ == "__main__":
 
     for epoch in range(1000):
         epoch_params = serialize_handlers(ordered_handles)
-        loss, loss_grad = vg_fn(ordered_params, mol_a, mol_b, core, label_ddG)
+        (loss, aux), loss_grad = vg_fn(ordered_params, mol_a, mol_b, core, label_ddG)
 
         print("epoch", epoch, "loss", loss)
 
