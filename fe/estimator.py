@@ -136,7 +136,7 @@ def _deltaG(model, sys_params, callback=None) -> Tuple[float, gradient]:
 
         results = [x.result() for x in futures]
 
-    if not (callback is None):
+    if callback is not None:
         # TODO: what should the signature of callback be?
         callback(results)
 
