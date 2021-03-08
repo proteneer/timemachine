@@ -340,7 +340,7 @@ if __name__ == "__main__":
         print(f'completed forcefield-updating step {step} in {elapsed:.3f} s !')
 
         # save du_dls snapshot
-        path_to_du_dls = output_path.join(f'du_dls_snapshot_{step}.npz')
+        path_to_du_dls = output_path.joinpath(f'du_dls_snapshot_{step}.npz')
         print(f'saving du_dl trajs to {path_to_du_dls}')
         du_dls_dict = dict() # keywords here must be strings
         for stage in {'solvent', 'complex'}:
@@ -349,7 +349,7 @@ if __name__ == "__main__":
 
         # also save information about this step's parameter gradient and parameter update
         # results to npz
-        path_to_npz = output_path.join(f'theta_grad_loss_snapshot_{step}.npz')
+        path_to_npz = output_path.joinpath(f'theta_grad_loss_snapshot_{step}.npz')
         print(f'saving theta, grad, loss snapshot to {path_to_npz}')
         np.savez(
             path_to_npz,
@@ -363,4 +363,4 @@ if __name__ == "__main__":
         # save updated forcefield .py files after every gradient step
         step_params = serialize_handlers(ff_handlers)
         # TODO: consider if there's a more modular way to keep track of ff updates
-        _save_forcefield(output_path.join("forcefield_checkpoint_{step}.py"), ff_params=step_params)
+        _save_forcefield(output_path.joinpath("forcefield_checkpoint_{step}.py"), ff_params=step_params)
