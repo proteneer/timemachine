@@ -5,6 +5,7 @@ import jax
 from jax import numpy as jnp
 import numpy as np
 import datetime
+import timemachine
 
 # forcefield handlers
 from ff import Forcefield
@@ -16,7 +17,7 @@ from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 from fe.free_energy import RelativeFreeEnergy, construct_lambda_schedule
 from fe.estimator import SimulationResult
 from fe.model import RBFEModel
-from fe.loss import pseudo_huber_loss#, l1_loss, flat_bottom_loss
+from fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 
 # MD initialization
 from md import builders
@@ -77,7 +78,6 @@ testing_configuration = Configuration(
 
 
 # locations relative to project root
-import timemachine
 root = Path(timemachine.__file__).parent
 path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
 
@@ -111,7 +111,8 @@ def _save_forcefield(fname, ff_params):
 if __name__ == "__main__":
     default_output_path = f"results_{str(datetime.datetime.now())}"
     parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
-    parser.add_argument("--num-gpus", default=None, type=int, help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided")
+    parser.add_argument("--num-gpus", default=None, type=int,
+                        help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided")
     parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
     parser.add_argument("--param-updates", default=1000, type=int, help="Number of updates for parameters")
     parser.add_argument("--seed", default=2021, type=int, help="Seed for shuffling ordering of transformations")
@@ -128,7 +129,7 @@ if __name__ == "__main__":
     output_path = Path(args.output_path)
     output_path.mkdir(parents=True, exist_ok=True)
     print(f'output path: {output_path}')
-    
+
     # xor num_gpus and hosts args
     args = parser.parse_args()
     if args.num_gpus is not None and args.hosts is not None:
@@ -140,12 +141,12 @@ if __name__ == "__main__":
 
     # how much computation to spend per refitting step
     configuration = None
-    if args.config == "intermediate": # goldilocks
+    if args.config == "intermediate":  # goldilocks
         configuration = intermediate_configuration
     elif args.config == "test":
-        configuration = testing_configuration # a little
+        configuration = testing_configuration  # a little
     elif args.config == "production":
-        configuration = production_configuration # a lot
+        configuration = production_configuration  # a lot
     assert configuration is not None, "No configuration provided"
 
     if not args.hosts:
@@ -157,7 +158,7 @@ if __name__ == "__main__":
     else:
         # Setup GRPC client
         client = GRPCClient(hosts=args.hosts)
-        
+
     # load and construct forcefield
     with open(args.path_to_ff) as f:
         ff_handlers = deserialize_handlers(f.read())
@@ -179,7 +180,7 @@ if __name__ == "__main__":
         np.random.shuffle(inds)
         step_inds.append(inds)
     step_inds = np.hstack(step_inds)[:args.param_updates]
-    
+
     np.save(output_path.joinpath('step_indices.npy'), step_inds)
 
     # build the complex system
@@ -209,9 +210,11 @@ if __name__ == "__main__":
         prod_steps=configuration.num_prod_steps,
     )
 
+
     def loss_fxn(ff_params, mol_a, mol_b, core, label_ddG, callback=None):
         pred_ddG = binding_model.predict(ff_params, mol_a, mol_b, core, callback)
         return pseudo_huber_loss(pred_ddG - label_ddG)
+
 
     # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
     #   e.g. stage_results, and further diagnostic information
@@ -225,6 +228,7 @@ if __name__ == "__main__":
     ordered_handles = forcefield.get_ordered_handles()
 
     handle_types_being_optimized = [AM1CCCHandler, LennardJonesHandler]
+
 
     # TODO: move flatten into optimize.utils
     def flatten(params) -> Tuple[np.array, callable]:
@@ -268,6 +272,7 @@ if __name__ == "__main__":
 
     relative_improvement_bound = 0.8
 
+
     def _compute_step_lower_bound(loss, blown_up):
         """problem this addresses: on a small fraction of steps, the free energy estimate may be grossly unreliable
         away from target, typically indicating an instability was encountered.
@@ -277,7 +282,7 @@ if __name__ == "__main__":
         if not blown_up:
             return loss * relative_improvement_bound
         else:
-            return loss # don't move!
+            return loss  # don't move!
 
 
     def _results_to_arrays(results: List[SimulationResult]):
@@ -301,12 +306,15 @@ if __name__ == "__main__":
         # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
         return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
-    results_this_step = dict() # {stage : result} pairs # TODO: proper type hint
+
+    results_this_step = dict()  # {stage : result} pairs # TODO: proper type hint
+
 
     def save_in_memory_callback(results, stage):
         global results_this_step
         results_this_step[stage] = results
         print(f'collected {stage} results!')
+
 
     # in each optimizer step, look at one transformation from relative_transformations
     for step, rfe_ind in enumerate(step_inds):
@@ -316,7 +324,8 @@ if __name__ == "__main__":
         t0 = time()
 
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
-        loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label, callback=save_in_memory_callback)
+        loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core,
+                                                                   rfe.label, callback=save_in_memory_callback)
         print(f"at optimizer step {step}, loss={loss:.3f}")
 
         # check if it's probably okay to take an optimizer step on the basis of this result
@@ -345,7 +354,8 @@ if __name__ == "__main__":
                 update_mask = increment != 0
 
                 # TODO: replace with a function that knows what to report about each handle type
-                print(f'updated {int(np.sum(update_mask))} params by between {np.min(increment[update_mask]):.4f} and {np.max(increment[update_mask])}')
+                print(
+                    f'updated {int(np.sum(update_mask))} params by between {np.min(increment[update_mask]):.4f} and {np.max(increment[update_mask])}')
 
         t1 = time()
         elapsed = t1 - t0
@@ -355,7 +365,7 @@ if __name__ == "__main__":
         # save du_dls snapshot
         path_to_du_dls = output_path.joinpath(f'du_dls_snapshot_{step}.npz')
         print(f'saving du_dl trajs to {path_to_du_dls}')
-        du_dls_dict = dict() # keywords here must be strings
+        du_dls_dict = dict()  # keywords here must be strings
         for stage, results in results_this_step.items():
             du_dls_dict[stage] = _results_to_arrays(results)[1]
         np.savez(path_to_du_dls, **du_dls_dict)
