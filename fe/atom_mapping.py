@@ -1,7 +1,11 @@
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
+
+import matplotlib.pyplot as plt
+
 from fe.topology import AtomMappingError
+from fe.utils import core_from_distances, simple_geometry_mapping
 
 
 class CompareDist(rdFMCS.MCSAtomCompare):
@@ -22,7 +26,7 @@ class CompareDist(rdFMCS.MCSAtomCompare):
         return bool(np.linalg.norm(x_i - x_j) <= self.threshold)  # must convert from np.bool_ to Python bool!
 
 
-def mcs_map(a, b, threshold=0.5):
+def mcs_map(a, b, threshold: float = 0.5):
     """Find the MCS map of going from A to B"""
     params = rdFMCS.MCSParameters()
     params.AtomTyper = CompareDist(threshold=threshold)
@@ -53,7 +57,7 @@ def transformation_size(n_A, n_B, n_MCS):
     return (n_A + n_B) - 2 * n_MCS
 
 
-def compute_all_pairs_mcs(mols):
+def compute_all_pairs_mcs(mols, threshold: float = 0.5):
     """Generate square matrix of MCS(mols[i], mols[j]) for all pairs i,j
 
     Parameters
@@ -71,8 +75,10 @@ def compute_all_pairs_mcs(mols):
     mcs_s = np.zeros((len(mols), len(mols)), dtype=object)
 
     for i in range(len(mols)):
-        for j in range(len(mols)):
-            mcs_s[i, j] = mcs_map(mols[i], mols[j])
+        for j in range(i, len(mols)):
+            mapped = mcs_map(mols[i], mols[j])
+            mcs_s[i, j] = mapped
+            mcs_s[j, i] = mapped
     return mcs_s
 
 
@@ -160,9 +166,6 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     return core
 
 
-from fe.utils import core_from_distances, simple_geometry_mapping
-
-
 def _assert_core_reasonableness(mol_a, mol_b, core):
     # TODO move any useful run-time assertions from this script into tests/
 
@@ -215,25 +218,18 @@ def _identify_hub(transformation_sizes):
     return int(np.argmin(transformation_sizes.sum(0)))
 
 
-def get_star_map(mols, path_to_results):
-    mcs_s = compute_all_pairs_mcs(mols)
+def get_star_map(mols, threshold: float = 0.5):
+    mcs_s = compute_all_pairs_mcs(mols, threshold=threshold)
     transformation_sizes = compute_transformation_size_matrix(mols, mcs_s)
 
     hub_index = _identify_hub(transformation_sizes)
     hub = mols[hub_index]
-
-    plot_transformation_sizes(transformation_sizes)
-    plt.savefig(path_to_results.joinpath('transformation_sizes.png'), bbox_inches='tight')
-    plt.close()
 
     # for each "spoke" in the star map, construct serializable transformation "hub -> spoke"
     others = list(mols)
     others.pop(hub_index)
 
     return hub, others
-
-
-import matplotlib.pyplot as plt
 
 
 def plot_transformation_sizes(transformation_sizes):
