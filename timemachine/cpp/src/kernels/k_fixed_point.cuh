@@ -22,7 +22,7 @@ long long __device__ __forceinline__ real_to_int64(float x) {
   long long res = __double_as_longlong(__hiloint2double(hi,lo)); // Return 64-bit result
   return res;
 #else
-    return static_cast<long long>(x);
+    return llrintf(x);
 #endif
 }
 
