@@ -19,7 +19,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\x16parallel/service.proto\"\x1c\n\nPickleData\x12\x0e\n\x06\x62inary\x18\x01 \x01(\x0c\"\x81\x01\n\x0fSimulateRequest\x12\x12\n\npotentials\x18\x01 \x01(\x0c\x12\x0c\n\x04lamb\x18\x02 \x01(\x01\x12\n\n\x02x0\x18\x03 \x01(\x0c\x12\n\n\x02v0\x18\x04 \x01(\x0c\x12\x0b\n\x03\x62ox\x18\x05 \x01(\x0c\x12\x13\n\x0b\x65quil_steps\x18\x06 \x01(\x05\x12\x12\n\nprod_steps\x18\x07 \x01(\x05\"\x1d\n\rSimulateReply\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x32.\n\x06Worker\x12$\n\x06Submit\x12\x0b.PickleData\x1a\x0b.PickleData\"\x00\x62\x06proto3'
+  serialized_pb=b'\n\x16parallel/service.proto\"\x1c\n\nPickleData\x12\x0e\n\x06\x62inary\x18\x01 \x01(\x0c\"\x0f\n\rStatusRequest\"8\n\x0eStatusResponse\x12\x15\n\rnvidia_driver\x18\x01 \x01(\t\x12\x0f\n\x07git_sha\x18\x02 \x01(\t2[\n\x06Worker\x12$\n\x06Submit\x12\x0b.PickleData\x1a\x0b.PickleData\"\x00\x12+\n\x06Status\x12\x0e.StatusRequest\x1a\x0f.StatusResponse\"\x00\x62\x06proto3'
 )
 
 
@@ -57,63 +57,14 @@ _PICKLEDATA = _descriptor.Descriptor(
 )
 
 
-_SIMULATEREQUEST = _descriptor.Descriptor(
-  name='SimulateRequest',
-  full_name='SimulateRequest',
+_STATUSREQUEST = _descriptor.Descriptor(
+  name='StatusRequest',
+  full_name='StatusRequest',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
-    _descriptor.FieldDescriptor(
-      name='potentials', full_name='SimulateRequest.potentials', index=0,
-      number=1, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"",
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='lamb', full_name='SimulateRequest.lamb', index=1,
-      number=2, type=1, cpp_type=5, label=1,
-      has_default_value=False, default_value=float(0),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='x0', full_name='SimulateRequest.x0', index=2,
-      number=3, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"",
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='v0', full_name='SimulateRequest.v0', index=3,
-      number=4, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"",
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='box', full_name='SimulateRequest.box', index=4,
-      number=5, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"",
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='equil_steps', full_name='SimulateRequest.equil_steps', index=5,
-      number=6, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='prod_steps', full_name='SimulateRequest.prod_steps', index=6,
-      number=7, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -126,23 +77,30 @@ _SIMULATEREQUEST = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=57,
-  serialized_end=186,
+  serialized_start=56,
+  serialized_end=71,
 )
 
 
-_SIMULATEREPLY = _descriptor.Descriptor(
-  name='SimulateReply',
-  full_name='SimulateReply',
+_STATUSRESPONSE = _descriptor.Descriptor(
+  name='StatusResponse',
+  full_name='StatusResponse',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='data', full_name='SimulateReply.data', index=0,
-      number=1, type=12, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"",
+      name='nvidia_driver', full_name='StatusResponse.nvidia_driver', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='git_sha', full_name='StatusResponse.git_sha', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
@@ -158,13 +116,13 @@ _SIMULATEREPLY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=188,
-  serialized_end=217,
+  serialized_start=73,
+  serialized_end=129,
 )
 
 DESCRIPTOR.message_types_by_name['PickleData'] = _PICKLEDATA
-DESCRIPTOR.message_types_by_name['SimulateRequest'] = _SIMULATEREQUEST
-DESCRIPTOR.message_types_by_name['SimulateReply'] = _SIMULATEREPLY
+DESCRIPTOR.message_types_by_name['StatusRequest'] = _STATUSREQUEST
+DESCRIPTOR.message_types_by_name['StatusResponse'] = _STATUSRESPONSE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 PickleData = _reflection.GeneratedProtocolMessageType('PickleData', (_message.Message,), {
@@ -174,19 +132,19 @@ PickleData = _reflection.GeneratedProtocolMessageType('PickleData', (_message.Me
   })
 _sym_db.RegisterMessage(PickleData)
 
-SimulateRequest = _reflection.GeneratedProtocolMessageType('SimulateRequest', (_message.Message,), {
-  'DESCRIPTOR' : _SIMULATEREQUEST,
+StatusRequest = _reflection.GeneratedProtocolMessageType('StatusRequest', (_message.Message,), {
+  'DESCRIPTOR' : _STATUSREQUEST,
   '__module__' : 'parallel.service_pb2'
-  # @@protoc_insertion_point(class_scope:SimulateRequest)
+  # @@protoc_insertion_point(class_scope:StatusRequest)
   })
-_sym_db.RegisterMessage(SimulateRequest)
+_sym_db.RegisterMessage(StatusRequest)
 
-SimulateReply = _reflection.GeneratedProtocolMessageType('SimulateReply', (_message.Message,), {
-  'DESCRIPTOR' : _SIMULATEREPLY,
+StatusResponse = _reflection.GeneratedProtocolMessageType('StatusResponse', (_message.Message,), {
+  'DESCRIPTOR' : _STATUSRESPONSE,
   '__module__' : 'parallel.service_pb2'
-  # @@protoc_insertion_point(class_scope:SimulateReply)
+  # @@protoc_insertion_point(class_scope:StatusResponse)
   })
-_sym_db.RegisterMessage(SimulateReply)
+_sym_db.RegisterMessage(StatusResponse)
 
 
 
@@ -197,8 +155,8 @@ _WORKER = _descriptor.ServiceDescriptor(
   index=0,
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_start=219,
-  serialized_end=265,
+  serialized_start=131,
+  serialized_end=222,
   methods=[
   _descriptor.MethodDescriptor(
     name='Submit',
@@ -207,6 +165,16 @@ _WORKER = _descriptor.ServiceDescriptor(
     containing_service=None,
     input_type=_PICKLEDATA,
     output_type=_PICKLEDATA,
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+  ),
+  _descriptor.MethodDescriptor(
+    name='Status',
+    full_name='Worker.Status',
+    index=1,
+    containing_service=None,
+    input_type=_STATUSREQUEST,
+    output_type=_STATUSRESPONSE,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
   ),

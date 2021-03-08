@@ -10,6 +10,7 @@ from concurrent import futures
 
 from parallel import service_pb2
 from parallel import service_pb2_grpc
+from parallel.utils import get_worker_status
 
 import grpc
 
@@ -19,6 +20,10 @@ class Worker(service_pb2_grpc.WorkerServicer):
         task_fn, args = pickle.loads(request.binary)
         result = task_fn(*args)
         return service_pb2.PickleData(binary=pickle.dumps(result))
+
+    def Status(self, request, context):
+        return get_worker_status()
+
 
 def serve(args):
 

@@ -163,6 +163,7 @@ class GRPCClient(AbstractClient):
             List of options to configure GRPC connections
 
         """
+        self.hosts = hosts
         self.stubs = []
         if options is None:
             options = [
@@ -186,3 +187,16 @@ class GRPCClient(AbstractClient):
         future = self.stubs[self._idx].Submit.future(request)
         self._idx = (self._idx + 1) % len(self.stubs)
         return BinaryFutureWrapper(future)
+
+    def verify(self):
+        """
+        See abstract class for documentation.
+        """
+        futures = [stub.Status.future(service_pb2.StatusRequest()) for stub in self.stubs]
+        workers_status = [x.result() for x in futures]
+        for field in ("nvidia_driver", "git_sha",):
+            # All fields should be the same
+            host_values = {self.hosts[i]: getattr(x, field) for i, x in enumerate(workers_status)}
+            uni_vals = set(host_values.values())
+            assert len(uni_vals) == 1, f"Not all hosts agreed for {field}: {host_values}"
+            assert all(uni_vals), f"Missing values for {field}: {host_values}"
