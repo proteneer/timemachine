@@ -19,12 +19,23 @@ class WorkerStub(object):
                 request_serializer=parallel_dot_service__pb2.PickleData.SerializeToString,
                 response_deserializer=parallel_dot_service__pb2.PickleData.FromString,
                 )
+        self.Status = channel.unary_unary(
+                '/Worker/Status',
+                request_serializer=parallel_dot_service__pb2.StatusRequest.SerializeToString,
+                response_deserializer=parallel_dot_service__pb2.StatusResponse.FromString,
+                )
 
 
 class WorkerServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def Submit(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Status(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -37,6 +48,11 @@ def add_WorkerServicer_to_server(servicer, server):
                     servicer.Submit,
                     request_deserializer=parallel_dot_service__pb2.PickleData.FromString,
                     response_serializer=parallel_dot_service__pb2.PickleData.SerializeToString,
+            ),
+            'Status': grpc.unary_unary_rpc_method_handler(
+                    servicer.Status,
+                    request_deserializer=parallel_dot_service__pb2.StatusRequest.FromString,
+                    response_serializer=parallel_dot_service__pb2.StatusResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -61,5 +77,21 @@ class Worker(object):
         return grpc.experimental.unary_unary(request, target, '/Worker/Submit',
             parallel_dot_service__pb2.PickleData.SerializeToString,
             parallel_dot_service__pb2.PickleData.FromString,
+            options, channel_credentials,
+            call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def Status(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Worker/Status',
+            parallel_dot_service__pb2.StatusRequest.SerializeToString,
+            parallel_dot_service__pb2.StatusResponse.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)
