@@ -1,5 +1,5 @@
 # Fit to multiple relative binding free energy edges
-
+import sys
 from argparse import ArgumentParser
 import jax
 from jax import numpy as jnp
@@ -31,6 +31,7 @@ from pickle import load
 from optimize.step import truncated_step
 
 from typing import Tuple, Dict, List, Union
+
 from pathlib import Path
 from time import time
 
@@ -73,6 +74,7 @@ testing_configuration = Configuration(
 #   and a "training configuration"
 #       (which describes the overall training loop)
 
+
 # locations relative to project root
 root = Path(__file__).absolute().parent.parent.parent
 path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
@@ -107,13 +109,13 @@ def _save_forcefield(fname, ff_params):
 if __name__ == "__main__":
     import datetime
     default_output_path = f"results_{str(datetime.datetime.now())}"
-
     parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
-    parser.add_argument("--num-gpus", default=NUM_GPUS, help="Number of GPUs to run against")
+    parser.add_argument("--num-gpus", default=None, type=int, help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided")
     parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
     parser.add_argument("--param-updates", default=1000, type=int, help="Number of updates for parameters")
     parser.add_argument("--seed", default=2021, type=int, help="Seed for shuffling ordering of transformations")
     parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
+
     parser.add_argument("--path_to_ff", default=str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py')))
     parser.add_argument("--path_to_edges", default="relative_transformations.pkl",
                         help="Path to pickle file containing list of RelativeFreeEnergy objects")
@@ -125,6 +127,12 @@ if __name__ == "__main__":
     output_path = Path(args.output_path)
     output_path.mkdir(parents=True, exist_ok=True)
     print(f'output path: {output_path}')
+    
+    # xor num_gpus and hosts args
+    args = parser.parse_args()
+    if args.num_gpus is not None and args.hosts is not None:
+        print("Unable to provide --num-gpus and --hosts together")
+        sys.exit(1)
 
     # which force field components we'll refit
     forces_to_refit = [AM1CCCHandler, LennardJonesHandler]
@@ -135,17 +143,20 @@ if __name__ == "__main__":
         configuration = intermediate_configuration
     elif args.config == "test":
         configuration = testing_configuration # a little
-    else:
+    elif args.config == "production":
         configuration = production_configuration # a lot
     assert configuration is not None, "No configuration provided"
 
     if not args.hosts:
+        num_gpus = args.num_gpus
+        if num_gpus is None:
+            num_gpus = NUM_GPUS
         # set up multi-GPU client
-        client = CUDAPoolClient(max_workers=args.num_gpus)
+        client = CUDAPoolClient(max_workers=num_gpus)
     else:
         # Setup GRPC client
         client = GRPCClient(hosts=args.hosts)
-
+        
     # load and construct forcefield
     with open(args.path_to_ff) as f:
         ff_handlers = deserialize_handlers(f.read())
@@ -167,6 +178,7 @@ if __name__ == "__main__":
         np.random.shuffle(inds)
         step_inds.append(inds)
     step_inds = np.hstack(step_inds)[:args.param_updates]
+    
     np.save(output_path.joinpath('step_indices.npy'), step_inds)
 
     # build the complex system
