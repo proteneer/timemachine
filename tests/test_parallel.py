@@ -98,8 +98,9 @@ class TestCUDAPoolClient(unittest.TestCase):
 
     def test_too_many_workers(self):
         # I look forward to the day that we have 814 GPUs
+        cli = client.CUDAPoolClient(814)
         with self.assertRaises(AssertionError):
-            client.CUDAPoolClient(814)
+            cli.verify()
 
 class TestGRPCClient(unittest.TestCase):
 
