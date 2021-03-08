@@ -308,7 +308,7 @@ if __name__ == "__main__":
 
         # check if it's probably okay to take an optimizer step on the basis of this result
         # TODO: move responsibility for returning error flags / simulation uncertainty estimates further upstream
-        blown_up = _blew_up(results_this_step[(step, 'complex')]) or _blew_up(results_this_step[(step, 'solvent')])
+        blown_up = _blew_up(results_this_step['complex']) or _blew_up(results_this_step['solvent'])
 
         # note: unflatten_grad and unflatten_theta have identical definitions for now
         flat_loss_grad, unflatten_grad = flatten(loss_grads)
