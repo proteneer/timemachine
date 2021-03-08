@@ -5,6 +5,7 @@ grpcio-tools==1.30.0
 protobuf==3.12.2
 scipy==1.6.0
 pymbar==3.0.5
+pyyaml==5.4.1
 jax==0.2.9
 jaxlib==0.1.59
 hilbertcurve==1.0.5
