@@ -155,6 +155,7 @@ if __name__ == "__main__":
     else:
         # Setup GRPC client
         client = GRPCClient(hosts=args.hosts)
+    client.verify()
 
     # load pre-defined collection of relative transformations
     with open(path_to_transformations, 'rb') as f:

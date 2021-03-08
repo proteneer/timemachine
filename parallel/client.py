@@ -57,6 +57,17 @@ class AbstractClient():
         """
         raise NotImplementedError()
 
+    def verify(self):
+        """Verify performs any necessary checks to verify the client is ready to
+        handle calls to submit.
+
+        Raises
+        ------
+        Exception
+            If verification fails
+        """
+        raise NotImplementedError()
+
 
 
 class ProcessPoolClient(AbstractClient):
@@ -89,6 +100,12 @@ class ProcessPoolClient(AbstractClient):
         self._idx = (self._idx + 1) % self.max_workers
         return future
 
+    def verify(self):
+        """
+        See abstract class for documentation.
+        """
+        return
+
 class CUDAPoolClient(ProcessPoolClient):
     """
     Specialized wrapper for CUDA-dependent processes. Each call to submit()
@@ -97,8 +114,6 @@ class CUDAPoolClient(ProcessPoolClient):
     """
     def __init__(self, max_workers):
         super().__init__(max_workers)
-        gpus = get_gpu_count()
-        assert self.max_workers <= gpus, f"More workers '{self.max_workers}' requested than GPUs '{gpus}'"
 
     @staticmethod
     def wrapper(idx, fn, *args):
@@ -112,6 +127,13 @@ class CUDAPoolClient(ProcessPoolClient):
         future = self.executor.submit(self.wrapper, self._idx, task_fn, *args)
         self._idx = (self._idx + 1) % self.max_workers
         return future
+
+    def verify(self):
+        """
+        See abstract class for documentation.
+        """
+        gpus = get_gpu_count()
+        assert self.max_workers <= gpus, f"More workers '{self.max_workers}' requested than GPUs '{gpus}'"
 
 class BinaryFutureWrapper():
 
