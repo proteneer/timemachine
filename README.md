@@ -85,7 +85,7 @@ When we have experimental measurements, the loss function and its derivative is 
 
 An example source code of how one can train the RBFE via TI is available at:
 
-- [training/rbfe_single.py](https://github.com/proteneer/timemachine/blob/master/training/rbfe_single.py)
+- [examples/rbfe_single.py](https://github.com/proteneer/timemachine/blob/master/examples/rbfe_single.py)
 
 To update the forcefield parameters, the timemachine computes derivatives of the potential with respect to redundant system parameters (C++/CUDA), which are backprop'd into unique forcefield parameters using vector jacobian products (python/jax). The parameters are fitted using gradient descent with gradient clipping whose bounds are set to physically sensible and numerically stable values for each parameter type.
 
