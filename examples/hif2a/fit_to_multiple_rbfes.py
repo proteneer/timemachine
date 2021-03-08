@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 import jax
 from jax import numpy as jnp
 import numpy as np
+import datetime
 
 # forcefield handlers
 from ff import Forcefield
@@ -74,7 +75,8 @@ testing_configuration = Configuration(
 #       (which describes the overall training loop)
 
 # locations relative to project root
-root = Path(__file__).absolute().parent.parent.parent
+import timemachine
+root = Path(timemachine.__file__).parent
 path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
 
 
@@ -105,7 +107,6 @@ def _save_forcefield(fname, ff_params):
 
 
 if __name__ == "__main__":
-    import datetime
     default_output_path = f"results_{str(datetime.datetime.now())}"
 
     parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
@@ -343,8 +344,8 @@ if __name__ == "__main__":
         path_to_du_dls = output_path.joinpath(f'du_dls_snapshot_{step}.npz')
         print(f'saving du_dl trajs to {path_to_du_dls}')
         du_dls_dict = dict() # keywords here must be strings
-        for stage in {'solvent', 'complex'}:
-            du_dls_dict[stage] = _results_to_arrays(results_this_step[stage])[1]
+        for stage, results in results_this_step.items():
+            du_dls_dict[stage] = _results_to_arrays(results)[1]
         np.savez(path_to_du_dls, **du_dls_dict)
 
         # also save information about this step's parameter gradient and parameter update
