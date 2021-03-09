@@ -1,53 +1,55 @@
 # Fit to multiple relative binding free energy edges
-
+import sys
+from argparse import ArgumentParser
 import jax
 from jax import numpy as jnp
 import numpy as np
+import datetime
+import timemachine
 
 # forcefield handlers
 from ff import Forcefield
 from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize_handlers
-from ff.handlers import nonbonded
+from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
 # free energy classes
 from fe.free_energy import RelativeFreeEnergy, construct_lambda_schedule
 from fe.estimator import SimulationResult
 from fe.model import RBFEModel
-from fe.loss import pseudo_huber_loss#, l1_loss, flat_bottom_loss
+from fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 
 # MD initialization
 from md import builders
 
 # parallelization across multiple GPUs
-from parallel.client import CUDAPoolClient
+from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
 
 from collections import namedtuple
 
 from pickle import load
-from typing import List, Union, Tuple, Dict
 
 from optimize.step import truncated_step
 
+from typing import Tuple, Dict, List, Union
+
+from pathlib import Path
+from time import time
+
 array = Union[np.array, jnp.array]
 
-from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
-
 Handler = Union[AM1CCCHandler, LennardJonesHandler]  # TODO: relax this assumption
-
-from time import time
 
 NUM_GPUS = get_gpu_count()
 
 # how much MD to run, on how many GPUs
 Configuration = namedtuple(
     'Configuration',
-    ['num_gpus', 'num_complex_windows', 'num_solvent_windows', 'num_equil_steps', 'num_prod_steps'])
+    ['num_complex_windows', 'num_solvent_windows', 'num_equil_steps', 'num_prod_steps'])
 
 # define a couple configurations: one for quick tests, and one for production
 production_configuration = Configuration(
-    num_gpus=NUM_GPUS,
     num_complex_windows=60,
     num_solvent_windows=60,
     num_equil_steps=10000,
@@ -55,7 +57,6 @@ production_configuration = Configuration(
 )
 
 intermediate_configuration = Configuration(
-    num_gpus=NUM_GPUS,
     num_complex_windows=60,
     num_solvent_windows=60,
     num_equil_steps=10000,
@@ -63,7 +64,6 @@ intermediate_configuration = Configuration(
 )
 
 testing_configuration = Configuration(
-    num_gpus=NUM_GPUS,
     num_complex_windows=10,
     num_solvent_windows=10,
     num_equil_steps=1000,
@@ -76,23 +76,10 @@ testing_configuration = Configuration(
 #   and a "training configuration"
 #       (which describes the overall training loop)
 
-# don't make assumptions about working directory
-from pathlib import Path
 
 # locations relative to project root
-root = Path(__file__).absolute().parent.parent.parent
+root = Path(timemachine.__file__).parent
 path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
-path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
-
-# locations relative to example folder
-path_to_results = Path(__file__).absolute().parent
-path_to_transformations = str(path_to_results.joinpath('relative_transformations.pkl'))
-
-# load and construct forcefield
-with open(path_to_ff) as f:
-    ff_handlers = deserialize_handlers(f.read())
-
-forcefield = Forcefield(ff_handlers)
 
 
 class ParameterUpdate:
@@ -104,12 +91,11 @@ class ParameterUpdate:
 
     # TODO: def __str__
 
-    def save(self, name='parameter_update.npz'):
-        """save numpy arrays to path/to/results/{name}.npz"""
-        parameter_update_path = path_to_results.joinpath(name)
-        print(f'saving parameter updates to {parameter_update_path}')
+    def save(self, fname='parameter_update.npz'):
+        """save numpy arrays to fname"""
+        print(f'saving parameter updates to {fname}')
         np.savez(
-            file=parameter_update_path,
+            file=fname,
             before=self.before,
             after=self.after,
             gradient=self.gradient,
@@ -117,45 +103,86 @@ class ParameterUpdate:
         )
 
 
-def _save_forcefield(filename, ff_params):
-    # TODO: update path
-
-    with open(path_to_results.joinpath(filename), 'w') as fh:
+def _save_forcefield(fname, ff_params):
+    with open(fname, 'w') as fh:
         fh.write(ff_params)
 
 
 if __name__ == "__main__":
+    default_output_path = f"results_{str(datetime.datetime.now())}"
+    parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
+    parser.add_argument("--num-gpus", default=None, type=int,
+                        help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided")
+    parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
+    parser.add_argument("--param-updates", default=1000, type=int, help="Number of updates for parameters")
+    parser.add_argument("--seed", default=2021, type=int, help="Seed for shuffling ordering of transformations")
+    parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
+
+    parser.add_argument("--path_to_ff", default=str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py')))
+    parser.add_argument("--path_to_edges", default="relative_transformations.pkl",
+                        help="Path to pickle file containing list of RelativeFreeEnergy objects")
+    parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
+    # TODO: also make configurable: forces_to_refit, optimizer params, path_to_protein, path_to_protein_ff, ...
+    args = parser.parse_args()
+
+    # create path if it doesn't exist
+    output_path = Path(args.output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+    print(f'output path: {output_path}')
+
+    # xor num_gpus and hosts args
+    args = parser.parse_args()
+    if args.num_gpus is not None and args.hosts is not None:
+        print("Unable to provide --num-gpus and --hosts together")
+        sys.exit(1)
+
     # which force field components we'll refit
-    forces_to_refit = [nonbonded.AM1CCCHandler, nonbonded.LennardJonesHandler]
+    forces_to_refit = [AM1CCCHandler, LennardJonesHandler]
 
     # how much computation to spend per refitting step
-    # configuration = testing_configuration  # a little
-    # configuration = production_configuration  # a lot
-    configuration = intermediate_configuration  # goldilocks
+    configuration = None
+    if args.config == "intermediate":  # goldilocks
+        configuration = intermediate_configuration
+    elif args.config == "test":
+        configuration = testing_configuration  # a little
+    elif args.config == "production":
+        configuration = production_configuration  # a lot
+    assert configuration is not None, "No configuration provided"
 
-    # how many parameter update steps
-    num_parameter_updates = 1000
-    # TODO: make this configurable also
+    if not args.hosts:
+        num_gpus = args.num_gpus
+        if num_gpus is None:
+            num_gpus = NUM_GPUS
+        # set up multi-GPU client
+        client = CUDAPoolClient(max_workers=num_gpus)
+    else:
+        # Setup GRPC client
+        client = GRPCClient(hosts=args.hosts)
+    client.verify()
 
-    # set up multi-GPU client
-    client = CUDAPoolClient(max_workers=configuration.num_gpus)
+    # load and construct forcefield
+    with open(args.path_to_ff) as f:
+        ff_handlers = deserialize_handlers(f.read())
+
+    forcefield = Forcefield(ff_handlers)
 
     # load pre-defined collection of relative transformations
-    with open(path_to_transformations, 'rb') as f:
+    with open(args.path_to_edges, 'rb') as f:
         relative_transformations: List[RelativeFreeEnergy] = load(f)
 
     # update the forcefield parameters for a few steps, each step informed by a single free energy calculation
 
     # compute and save the sequence of relative_transformation indices
-    num_epochs = int(np.ceil(num_parameter_updates / len(relative_transformations)))
-    np.random.seed(2021)
+    num_epochs = int(np.ceil(args.param_updates / len(relative_transformations)))
+    np.random.seed(args.seed)
     step_inds = []
     for epoch in range(num_epochs):
         inds = np.arange(len(relative_transformations))
         np.random.shuffle(inds)
         step_inds.append(inds)
-    step_inds = np.hstack(step_inds)[:num_parameter_updates]
-    np.save(path_to_results.joinpath('step_indices.npy'), step_inds)
+    step_inds = np.hstack(step_inds)[:args.param_updates]
+
+    np.save(output_path.joinpath('step_indices.npy'), step_inds)
 
     # build the complex system
     complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
@@ -184,10 +211,11 @@ if __name__ == "__main__":
         prod_steps=configuration.num_prod_steps,
     )
 
-    # TODO: use binding_model.predict rather than binding_model.loss
+
     def loss_fxn(ff_params, mol_a, mol_b, core, label_ddG, callback=None):
         pred_ddG = binding_model.predict(ff_params, mol_a, mol_b, core, callback)
         return pseudo_huber_loss(pred_ddG - label_ddG)
+
 
     # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
     #   e.g. stage_results, and further diagnostic information
@@ -201,6 +229,7 @@ if __name__ == "__main__":
     ordered_handles = forcefield.get_ordered_handles()
 
     handle_types_being_optimized = [AM1CCCHandler, LennardJonesHandler]
+
 
     # TODO: move flatten into optimize.utils
     def flatten(params) -> Tuple[np.array, callable]:
@@ -244,6 +273,7 @@ if __name__ == "__main__":
 
     relative_improvement_bound = 0.8
 
+
     def _compute_step_lower_bound(loss, blown_up):
         """problem this addresses: on a small fraction of steps, the free energy estimate may be grossly unreliable
         away from target, typically indicating an instability was encountered.
@@ -253,7 +283,7 @@ if __name__ == "__main__":
         if not blown_up:
             return loss * relative_improvement_bound
         else:
-            return loss # don't move!
+            return loss  # don't move!
 
 
     def _results_to_arrays(results: List[SimulationResult]):
@@ -278,22 +308,14 @@ if __name__ == "__main__":
         return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
 
-    def _stringify_key(key: Tuple[int, str]):
-        return f'{key[0]}_{key[1]}'
-
-
-    flat_theta_traj = []
-    flat_grad_traj = []
-    loss_traj = []
-
-    results_traj = dict() # indexed by (step, stage) tuples # TODO: proper type hint
+    results_this_step = dict()  # {stage : result} pairs # TODO: proper type hint
 
 
     def save_in_memory_callback(results, stage):
-        # TODO: replace with saving this to disk rather than accumulating in memory
-        global results_traj
-        results_traj[(step, stage)] = results
+        global results_this_step
+        results_this_step[stage] = results
         print(f'collected {stage} results!')
+
 
     # in each optimizer step, look at one transformation from relative_transformations
     for step, rfe_ind in enumerate(step_inds):
@@ -303,18 +325,19 @@ if __name__ == "__main__":
         t0 = time()
 
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
-        # TODO: pass callback function here to save intermediate results
-
-        loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core, rfe.label, callback=save_in_memory_callback)
-
-        blown_up = _blew_up(results_traj[(step, 'complex')]) or _blew_up(results_traj[(step, 'solvent')])
-
+        loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core,
+                                                                   rfe.label, callback=save_in_memory_callback)
         print(f"at optimizer step {step}, loss={loss:.3f}")
+
+        # check if it's probably okay to take an optimizer step on the basis of this result
+        # TODO: move responsibility for returning error flags / simulation uncertainty estimates further upstream
+        blown_up = _blew_up(results_this_step['complex']) or _blew_up(results_this_step['solvent'])
 
         # note: unflatten_grad and unflatten_theta have identical definitions for now
         flat_loss_grad, unflatten_grad = flatten(loss_grads)
         flat_theta, unflatten_theta = flatten(ordered_params)
 
+        # based on current estimate of (loss, grad, and simulation stability), return a conservative step to take in parameter space
         theta_increment = truncated_step(flat_theta, loss, flat_loss_grad,
                                          step_lower_bound=_compute_step_lower_bound(loss, blown_up))
         param_increments = unflatten_theta(theta_increment)
@@ -332,42 +355,36 @@ if __name__ == "__main__":
                 update_mask = increment != 0
 
                 # TODO: replace with a function that knows what to report about each handle type
-                print(f'updated {int(np.sum(update_mask))} params by between {np.min(increment[update_mask]):.4f} and {np.max(increment[update_mask])}')
+                print(
+                    f'updated {int(np.sum(update_mask))} params by between {np.min(increment[update_mask]):.4f} and {np.max(increment[update_mask])}')
 
-        # Note: for certain kinds of method-validation tests, these labels could also be synthetic
         t1 = time()
         elapsed = t1 - t0
 
         print(f'completed forcefield-updating step {step} in {elapsed:.3f} s !')
 
-        # also save information about this step's parameter gradient and parameter update
-        # checkpoint results to npz (overwrite
-        flat_theta_traj.append(np.array(flat_theta))
-        flat_grad_traj.append(flat_loss_grad)
-        loss_traj.append(loss)
-
-        # TODO: update path
-        path_to_du_dls = 'du_dls_checkpoint.npz'
+        # save du_dls snapshot
+        path_to_du_dls = output_path.joinpath(f'du_dls_snapshot_{step}.npz')
         print(f'saving du_dl trajs to {path_to_du_dls}')
-        du_dls_dict = dict() # keywords here must be strings
-        for key in results_traj:
-            du_dls_dict[_stringify_key(key)] = _results_to_arrays(results_traj[key])[1] # TODO: make this less gross
+        du_dls_dict = dict()  # keywords here must be strings
+        for stage, results in results_this_step.items():
+            du_dls_dict[stage] = _results_to_arrays(results)[1]
         np.savez(path_to_du_dls, **du_dls_dict)
 
-        # TODO: same for xs and du_dps checkpoints
-        # TODO: don't do so much re-writing: can we incrementally write into an existing .npz archive?
-
-        # TODO: update path
-        path_to_npz = 'results_checkpoint.npz'
-        print(f'saving theta, grad, loss trajs to {path_to_npz}')
+        # also save information about this step's parameter gradient and parameter update
+        # results to npz
+        path_to_npz = output_path.joinpath(f'theta_grad_loss_snapshot_{step}.npz')
+        print(f'saving theta, grad, loss snapshot to {path_to_npz}')
         np.savez(
             path_to_npz,
-            theta_traj=np.array(flat_theta_traj),
-            grad_traj=np.array(flat_grad_traj),
-            loss_traj=np.array(loss_traj)
+            theta=np.array(flat_theta),
+            grad=np.array(flat_loss_grad),
+            loss=loss
         )
+
+        # TODO: same for xs and du_dps snapshots
 
         # save updated forcefield .py files after every gradient step
         step_params = serialize_handlers(ff_handlers)
         # TODO: consider if there's a more modular way to keep track of ff updates
-        _save_forcefield(f"forcefield_checkpoint_{step}.py", ff_params=step_params)
+        _save_forcefield(output_path.joinpath("forcefield_checkpoint_{step}.py"), ff_params=step_params)

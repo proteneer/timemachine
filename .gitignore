@@ -3,3 +3,4 @@
 __pycache__/
 timemachine/cpp/build/
 *.so
+*.DS_Store

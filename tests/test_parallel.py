@@ -98,8 +98,9 @@ class TestCUDAPoolClient(unittest.TestCase):
 
     def test_too_many_workers(self):
         # I look forward to the day that we have 814 GPUs
+        cli = client.CUDAPoolClient(814)
         with self.assertRaises(AssertionError):
-            client.CUDAPoolClient(814)
+            cli.verify()
 
 class TestGRPCClient(unittest.TestCase):
 
@@ -123,6 +124,17 @@ class TestGRPCClient(unittest.TestCase):
         # setup client
         hosts = [f"0.0.0.0:{port}" for port in ports]
         self.cli = client.GRPCClient(hosts)
+
+    @patch("parallel.worker.get_worker_status")
+    def test_checking_host_status(self, mock_status):
+        # All the workers return the same thing
+        mock_status.side_effect = [parallel.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers]
+        self.cli.verify()
+
+        mock_status.side_effect = [parallel.service_pb2.StatusResponse(nvidia_driver=f"foo{i}", git_sha=f"bar{i}") for i in range(len(self.servers))]
+
+        with self.assertRaises(AssertionError):
+            self.cli.verify()
 
     def test_foo_2_args(self):
         xs = np.linspace(0, 1.0, 5)
