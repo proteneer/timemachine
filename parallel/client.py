@@ -57,6 +57,17 @@ class AbstractClient():
         """
         raise NotImplementedError()
 
+    def verify(self):
+        """Verify performs any necessary checks to verify the client is ready to
+        handle calls to submit.
+
+        Raises
+        ------
+        Exception
+            If verification fails
+        """
+        raise NotImplementedError()
+
 
 
 class ProcessPoolClient(AbstractClient):
@@ -89,6 +100,12 @@ class ProcessPoolClient(AbstractClient):
         self._idx = (self._idx + 1) % self.max_workers
         return future
 
+    def verify(self):
+        """
+        See abstract class for documentation.
+        """
+        return
+
 class CUDAPoolClient(ProcessPoolClient):
     """
     Specialized wrapper for CUDA-dependent processes. Each call to submit()
@@ -97,8 +114,6 @@ class CUDAPoolClient(ProcessPoolClient):
     """
     def __init__(self, max_workers):
         super().__init__(max_workers)
-        gpus = get_gpu_count()
-        assert self.max_workers <= gpus, f"More workers '{self.max_workers}' requested than GPUs '{gpus}'"
 
     @staticmethod
     def wrapper(idx, fn, *args):
@@ -112,6 +127,13 @@ class CUDAPoolClient(ProcessPoolClient):
         future = self.executor.submit(self.wrapper, self._idx, task_fn, *args)
         self._idx = (self._idx + 1) % self.max_workers
         return future
+
+    def verify(self):
+        """
+        See abstract class for documentation.
+        """
+        gpus = get_gpu_count()
+        assert self.max_workers <= gpus, f"More workers '{self.max_workers}' requested than GPUs '{gpus}'"
 
 class BinaryFutureWrapper():
 
@@ -141,6 +163,7 @@ class GRPCClient(AbstractClient):
             List of options to configure GRPC connections
 
         """
+        self.hosts = hosts
         self.stubs = []
         if options is None:
             options = [
@@ -164,3 +187,16 @@ class GRPCClient(AbstractClient):
         future = self.stubs[self._idx].Submit.future(request)
         self._idx = (self._idx + 1) % len(self.stubs)
         return BinaryFutureWrapper(future)
+
+    def verify(self):
+        """
+        See abstract class for documentation.
+        """
+        futures = [stub.Status.future(service_pb2.StatusRequest()) for stub in self.stubs]
+        workers_status = [x.result() for x in futures]
+        for field in ("nvidia_driver", "git_sha",):
+            # All fields should be the same
+            host_values = {self.hosts[i]: getattr(x, field) for i, x in enumerate(workers_status)}
+            uni_vals = set(host_values.values())
+            assert len(uni_vals) == 1, f"Not all hosts agreed for {field}: {host_values}"
+            assert all(uni_vals), f"Missing values for {field}: {host_values}"

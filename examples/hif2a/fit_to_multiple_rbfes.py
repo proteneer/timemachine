@@ -158,6 +158,7 @@ if __name__ == "__main__":
     else:
         # Setup GRPC client
         client = GRPCClient(hosts=args.hosts)
+    client.verify()
 
     # load and construct forcefield
     with open(args.path_to_ff) as f:

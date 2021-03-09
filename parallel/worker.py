@@ -10,6 +10,7 @@ from concurrent import futures
 
 from parallel import service_pb2
 from parallel import service_pb2_grpc
+from parallel.utils import get_worker_status
 
 import grpc
 
@@ -20,12 +21,16 @@ class Worker(service_pb2_grpc.WorkerServicer):
         result = task_fn(*args)
         return service_pb2.PickleData(binary=pickle.dumps(result))
 
+    def Status(self, request, context):
+        return get_worker_status()
+
+
 def serve(args):
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1),
         options = [
-            ('grpc.max_send_message_length', 50 * 1024 * 1024),
-            ('grpc.max_receive_message_length', 50 * 1024 * 1024)
+            ('grpc.max_send_message_length', 500 * 1024 * 1024),
+            ('grpc.max_receive_message_length', 500 * 1024 * 1024)
         ]
     )
     service_pb2_grpc.add_WorkerServicer_to_server(Worker(), server)
