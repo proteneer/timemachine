@@ -79,7 +79,6 @@ testing_configuration = Configuration(
 
 # locations relative to project root
 root = Path(timemachine.__file__).parent
-path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
 
 
 class ParameterUpdate:
@@ -122,8 +121,12 @@ if __name__ == "__main__":
     parser.add_argument("--path_to_edges", default="relative_transformations.pkl",
                         help="Path to pickle file containing list of RelativeFreeEnergy objects")
     parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
+    parser.add_argument("--protein-path", default=str(root.joinpath("datasets/fep-benchmark/hif2a/5tbm_prepared.pdb")), help="Path to protein")
     # TODO: also make configurable: forces_to_refit, optimizer params, path_to_protein, path_to_protein_ff, ...
     args = parser.parse_args()
+
+
+    protein_path = prepare_protein(args.protein_path)
 
     # create path if it doesn't exist
     output_path = Path(args.output_path)

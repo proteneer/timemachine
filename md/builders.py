@@ -1,15 +1,59 @@
+from tempfile import NamedTemporaryFile
+
 import numpy as np
 from simtk import unit
 from simtk.openmm import app, Vec3
+
+from openeye.oechem import (
+    oemolistream,
+    oemolostream,
+    OEGraphMol,
+    OEReadMolecule,
+    OEWriteMolecule,
+    OEAltLocationFactory,
+)
+from openeye.oespruce import (
+    OEStructureMetadata,
+    OEMakeDesignUnitOptions,
+    OEMakeBioDesignUnits,
+)
+
+from ff.handlers.bcc_aromaticity import openeye_log_wrapper
+
+
+def prepare_protein(path: str, output_path: str):
+    with openeye_log_wrapper() as log_stream:
+        ifs = oemolistream()
+        if not ifs.open(path):
+            raise IOError(f"Unable to open {path}")
+        temp_mol = OEGraphMol()
+        if not OEReadMolecule(ifs, temp_mol):
+            raise IOError(f"Unable to read mol from {path}")
+        ifs.close()
+        # Its GraphMols all the time with Spruce
+        mol = OEGraphMol()
+        fact = OEAltLocationFactory(temp_mol)
+        fact.MakePrimaryAltMol(mol)
+        output_mol = OEGraphMol()
+        for i, design_unit in enumerate(OEMakeBioDesignUnits(mol, OEStructureMetadata(), OEMakeDesignUnitOptions())):
+            if i > 0:
+                raise AssertionError("Got more than one BioUnit")
+            design_unit.GetProtein(output_mol)
+            with oemolostream(output_path) as ofs:
+                OEWriteMolecule(ofs, output_mol)
 
 
 def strip_units(coords):
     return unit.Quantity(np.array(coords / coords.unit), coords.unit)
 
-def build_protein_system(host_pdbfile):
-
+def build_protein_system(host_pdbfile: str, prepare: bool = True):
     host_ff = app.ForceField('amber99sbildn.xml', 'tip3p.xml')
-    host_pdb = app.PDBFile(host_pdbfile)
+    if not prepare:
+        host_pdb = app.PDBFile(host_pdbfile)
+    else:
+        with NamedTemporaryFile(suffix=".pdb") as temp:
+            prepare_protein(host_pdbfile, temp.name)
+            host_pdb = app.PDBFile(temp.name)
 
     modeller = app.Modeller(host_pdb.topology, host_pdb.positions)
     host_coords = strip_units(host_pdb.positions)
