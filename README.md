@@ -31,7 +31,7 @@ We currently support the following functional forms. Parameters that can be opti
 * RDKit
 * OpenEye Toolkits
 * OpenMM
-* Cuda 11.2+
+* Cuda 11.1+
 * CMake 3.10.2 (newer versions may vary in the CMAKE_INSTALL_PREFIX and CUDA flags)
 
 ### Setup using Anaconda
