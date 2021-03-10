@@ -5,6 +5,7 @@
 import re
 from openeye import oechem
 from typing import Any, Dict, List, Callable, Type, TypeVar
+from contextlib import contextmanager
 
 T = TypeVar("T")
 
@@ -24,6 +25,18 @@ class InvalidSmirksError(RechargeException):
 
         super(InvalidSmirksError, self).__init__(*args, **kwargs)
         self.smirks = smirks
+
+@contextmanager
+def openeye_log_wrapper():
+    output_stream = oechem.oeosstream()
+
+    oechem.OEThrow.SetOutputStream(output_stream)
+    oechem.OEThrow.Clear()
+    try:
+        yield output_stream
+    finally:
+        oechem.OEThrow.SetOutputStream(oechem.oeerr)
+
 
 def call_openeye(
     oe_callable: Callable[[T], bool],
@@ -50,14 +63,8 @@ def call_openeye(
     if exception_kwargs is None:
         exception_kwargs = {}
 
-    output_stream = oechem.oeosstream()
-
-    oechem.OEThrow.SetOutputStream(output_stream)
-    oechem.OEThrow.Clear()
-
-    status = oe_callable(*args)
-
-    oechem.OEThrow.SetOutputStream(oechem.oeerr)
+    with openeye_log_wrapper() as output_stream:
+        status = oe_callable(*args)
 
     output_string = output_stream.str().decode("UTF-8")
 
