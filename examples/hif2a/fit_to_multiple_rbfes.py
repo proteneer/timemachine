@@ -387,4 +387,4 @@ if __name__ == "__main__":
         # save updated forcefield .py files after every gradient step
         step_params = serialize_handlers(ff_handlers)
         # TODO: consider if there's a more modular way to keep track of ff updates
-        _save_forcefield(output_path.joinpath("forcefield_checkpoint_{step}.py"), ff_params=step_params)
+        _save_forcefield(output_path.joinpath(f"forcefield_checkpoint_{step}.py"), ff_params=step_params)
