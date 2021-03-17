@@ -95,7 +95,6 @@ if __name__ == "__main__":
 
     # the water system first.
     solvent_system, solvent_coords, solvent_box, omm_topology = builders.build_water_system(4.0)
-    solvent_box += np.eye(3)*0.1 # BFGS this later
 
     print("Minimizing the host structure to remove clashes.")
     minimized_solvent_coords = minimizer.minimize_host_4d([mol_a], solvent_system, solvent_coords, ff, solvent_box)

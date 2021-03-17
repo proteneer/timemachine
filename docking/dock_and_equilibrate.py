@@ -7,7 +7,7 @@ import numpy as np
 
 from rdkit import Chem
 
-from md import builders
+from md import builders, minimizer
 from fe import pdb_writer, free_energy
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -86,15 +86,23 @@ def dock_and_equilibrate(
         solvated_topology,
     ) = builders.build_protein_system(host_pdbfile)
 
-    # sometimes water boxes are sad. Should be minimized first; this is a workaround
-    host_box += np.eye(3) * 0.1
-
     solvated_host_pdb = os.path.join(outdir, "solvated_host.pdb")
     writer = pdb_writer.PDBWriter([solvated_topology], solvated_host_pdb)
     writer.write_frame(solvated_host_coords)
     writer.close()
     solvated_host_mol = Chem.MolFromPDBFile(solvated_host_pdb, removeHs=False)
     os.remove(solvated_host_pdb)
+
+    guest_ff_handlers = deserialize_handlers(
+        open(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..",
+                "ff/params/smirnoff_1_1_0_ccc.py",
+            )
+        ).read()
+    )
+    ff = Forcefield(guest_ff_handlers)
 
     # Run the procedure
     print("Getting guests...")
@@ -105,28 +113,20 @@ def dock_and_equilibrate(
         guest_conformer = guest_mol.GetConformer(0)
         orig_guest_coords = np.array(guest_conformer.GetPositions(), dtype=np.float64)
         orig_guest_coords = orig_guest_coords / 10  # convert to md_units
-        guest_ff_handlers = deserialize_handlers(
-            open(
-                os.path.join(
-                    os.path.dirname(os.path.abspath(__file__)),
-                    "..",
-                    "ff/params/smirnoff_1_1_0_ccc.py",
-                )
-            ).read()
-        )
-        ff = Forcefield(guest_ff_handlers)
+
+        minimized_coords = minimizer.minimize_host_4d([guest_mol], solvated_host_system, solvated_host_coords, ff, host_box)
 
         afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
 
         ups, sys_params, combined_masses, _ = afe.prepare_host_edge(
-            ff.get_ordered_params(), solvated_host_system, solvated_host_coords
+            ff.get_ordered_params(), solvated_host_system, minimized_coords
         )
 
         combined_bps = []
         for up, sp in zip(ups, sys_params):
             combined_bps.append(up.bind(sp))
 
-        x0 = np.concatenate([solvated_host_coords, orig_guest_coords])
+        x0 = np.concatenate([minimized_coords, orig_guest_coords])
         v0 = np.zeros_like(x0)
         print(
             f"SYSTEM",

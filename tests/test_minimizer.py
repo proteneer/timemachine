@@ -11,7 +11,6 @@ from ff import Forcefield
 def test_minimizer():
 
     complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
-    complex_box += np.eye(3)*0.1 # BFGS this later
 
     suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
     all_mols = [x for x in suppl]

@@ -31,8 +31,7 @@ from fe import free_energy, topology
 from fe.free_energy import construct_lambda_schedule
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
-from md import builders
-from md import minimizer
+from md import builders, minimizer
 
 from time import time
 
@@ -61,11 +60,9 @@ def estimate_dG(transformation: RelativeTransformation,
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box = builders.build_protein_system(
         path_to_protein)
-    complex_box += np.eye(3) * 0.1  # BFGS this later
 
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
-    solvent_box += np.eye(3) * 0.1  # BFGS this later
 
     stage_dGs = []
 

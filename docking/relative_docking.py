@@ -86,9 +86,6 @@ def do_relative_docking(
         solvated_topology,
     ) = builders.build_protein_system(host_pdbfile)
 
-    # sometimes water boxes are sad. Should be minimized first; this is a workaround
-    host_box += np.eye(3) * 0.1
-
     # Prepare water box
     print("Generating water box...")
     # TODO: water box probably doesn't need to be this big
@@ -101,8 +98,6 @@ def do_relative_docking(
         water_topology,
     ) = builders.build_water_system(water_box_width)
 
-    # sometimes water boxes are sad. should be minimized first; this is a workaround
-    water_box += np.eye(3) * 0.1
     # it's okay if the water box here and the solvated protein box don't align -- they have PBCs
 
     # Run the procedure

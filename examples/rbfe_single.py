@@ -96,11 +96,9 @@ if __name__ == "__main__":
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
         'tests/data/hif2a_nowater_min.pdb')
-    complex_box += np.eye(3) * 0.1  # BFGS this later
 
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
-    solvent_box += np.eye(3) * 0.1  # BFGS this later
 
     binding_model = model.RBFEModel(
         client,
