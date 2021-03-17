@@ -109,11 +109,11 @@ def _save_forcefield(fname, ff_params):
 
 if __name__ == "__main__":
     default_output_path = f"results_{str(datetime.datetime.now())}"
-    parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
-    parser.add_argument("--num-gpus", default=None, type=int,
+    parser = ArgumentParser(description="Fit Forcefield parameters to multiple RBFEs")
+    parser.add_argument("--num_gpus", default=None, type=int,
                         help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided")
     parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
-    parser.add_argument("--param-updates", default=1000, type=int, help="Number of updates for parameters")
+    parser.add_argument("--param_updates", default=1000, type=int, help="Number of updates for parameters")
     parser.add_argument("--seed", default=2021, type=int, help="Seed for shuffling ordering of transformations")
     parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
 
@@ -121,7 +121,7 @@ if __name__ == "__main__":
     parser.add_argument("--path_to_edges", default="relative_transformations.pkl",
                         help="Path to pickle file containing list of RelativeFreeEnergy objects")
     parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
-    parser.add_argument("--protein-path", default=str(root.joinpath("datasets/fep-benchmark/hif2a/5tbm_prepared.pdb")), help="Path to protein")
+    parser.add_argument("--protein_path", default=str(root.joinpath("datasets/fep-benchmark/hif2a/5tbm_prepared.pdb")), help="Path to protein")
     # TODO: also make configurable: forces_to_refit, optimizer params, path_to_protein, path_to_protein_ff, ...
     args = parser.parse_args()
 
