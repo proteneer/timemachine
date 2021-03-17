@@ -91,20 +91,21 @@ def pose_dock(
     box_lengths = box_lengths + padding
     box = np.eye(3, dtype=np.float64) * box_lengths
 
+    guest_ff_handlers = deserialize_handlers(
+        open(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..",
+                "ff/params/smirnoff_1_1_0_ccc.py",
+            )
+        ).read()
+    )
+    ff = Forcefield(guest_ff_handlers)
+
     suppl = Chem.SDMolSupplier(guests_sdfile, removeHs=False)
     for guest_mol in suppl:
         start_time = time.time()
         guest_name = guest_mol.GetProp("_Name")
-        guest_ff_handlers = deserialize_handlers(
-            open(
-                os.path.join(
-                    os.path.dirname(os.path.abspath(__file__)),
-                    "..",
-                    "ff/params/smirnoff_1_1_0_ccc.py",
-                )
-            ).read()
-        )
-        ff = Forcefield(guest_ff_handlers)
 
         afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
 

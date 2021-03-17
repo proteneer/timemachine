@@ -175,10 +175,8 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
-    complex_box += np.eye(3)*0.1 # BFGS this later
 
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
-    solvent_box += np.eye(3)*0.1 # BFGS this later
 
     for stage, host_system, host_coords, host_box in [
         ("hif2a", complex_system, complex_coords, complex_box),

@@ -65,7 +65,7 @@ ff = Forcefield(ff_handlers)
 
 # for RHFE we need to insert the reference ligand first, before inserting the
 # decoupling ligand
-minimized_coords = minimizer.minimize_4d(romol_a, system, host_coords, ff, box)
+minimized_coords = minimizer.minimize_host_4d([romol_a], system, host_coords, ff, box)
 
 # note the order in which the coordinates are concatenated in this step --
 #   in a later step we will need to combine recipes in the same order

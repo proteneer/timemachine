@@ -9,7 +9,7 @@ import numpy as np
 
 from rdkit import Chem
 
-from md import builders
+from md import builders, minimizer
 from fe import pdb_writer, free_energy
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -103,9 +103,6 @@ def calculate_rigorous_work(
         solvated_topology,
     ) = builders.build_protein_system(host_pdbfile)
 
-    # sometimes water boxes are sad. Should be minimized first; this is a workaround
-    host_box += np.eye(3) * 0.1
-
     solvated_host_pdb = os.path.join(outdir, "solvated_host.pdb")
     writer = pdb_writer.PDBWriter([solvated_topology], solvated_host_pdb)
     writer.write_frame(solvated_host_coords)
@@ -125,9 +122,6 @@ def calculate_rigorous_work(
         water_topology,
     ) = builders.build_water_system(water_box_width)
 
-    # sometimes water boxes are sad. should be minimized first; this is a workaround
-    water_box += np.eye(3) * 0.1
-
     # it's okay if the water box here and the solvated protein box don't align -- they have PBCs
     water_pdb = os.path.join(outdir, "water_box.pdb")
     writer = pdb_writer.PDBWriter([water_topology], water_pdb)
@@ -135,6 +129,17 @@ def calculate_rigorous_work(
     writer.close()
     water_mol = Chem.MolFromPDBFile(water_pdb, removeHs=False)
     os.remove(water_pdb)
+
+    guest_ff_handlers = deserialize_handlers(
+        open(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..",
+                "ff/params/smirnoff_1_1_0_ccc.py",
+            )
+        ).read()
+    )
+    ff = Forcefield(guest_ff_handlers)
 
     # Run the procedure
     all_works = defaultdict(dict)
@@ -146,16 +151,6 @@ def calculate_rigorous_work(
         guest_conformer = guest_mol.GetConformer(0)
         orig_guest_coords = np.array(guest_conformer.GetPositions(), dtype=np.float64)
         orig_guest_coords = orig_guest_coords / 10  # convert to md_units
-        guest_ff_handlers = deserialize_handlers(
-            open(
-                os.path.join(
-                    os.path.dirname(os.path.abspath(__file__)),
-                    "..",
-                    "ff/params/smirnoff_1_1_0_ccc.py",
-                )
-            ).read()
-        )
-        ff = Forcefield(guest_ff_handlers)
 
         for system, coords, host_mol, box, label in zip(
             [solvated_host_system, water_system],
@@ -169,13 +164,14 @@ def calculate_rigorous_work(
             ups, sys_params, combined_masses, _ = afe.prepare_host_edge(
                 ff.get_ordered_params(), system, coords
             )
+            minimized_coords = minimizer.minimize_host_4d([guest_mol], system, coords, ff, box)
 
             combined_bps = []
             for up, sp in zip(ups, sys_params):
                 combined_bps.append(up.bind(sp))
 
             works = run_leg(
-                coords,
+                minimized_coords,
                 orig_guest_coords,
                 combined_bps,
                 combined_masses,

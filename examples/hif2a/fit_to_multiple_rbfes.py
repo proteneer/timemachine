@@ -266,13 +266,9 @@ if __name__ == "__main__":
         # build the complex system
         # note: "complex" means "protein + solvent"
         complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(prot_path)
-        # TODO: optimize box
-        complex_box += np.eye(3) * 0.1  # BFGS this later
 
         # build the water system
         solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
-        # TODO: optimize box
-        solvent_box += np.eye(3) * 0.1  # BFGS this later
 
         systems[prot_path] = RBFEModel(
             client=client,
