@@ -78,7 +78,7 @@ testing_configuration = Configuration(
 
 
 # locations relative to project root
-root = Path(timemachine.__file__).parent
+root = Path(timemachine.__file__).parent.parent
 
 
 class ParameterUpdate:
@@ -125,8 +125,6 @@ if __name__ == "__main__":
     # TODO: also make configurable: forces_to_refit, optimizer params, path_to_protein, path_to_protein_ff, ...
     args = parser.parse_args()
 
-
-    protein_path = prepare_protein(args.protein_path)
 
     # create path if it doesn't exist
     output_path = Path(args.output_path)
@@ -188,8 +186,7 @@ if __name__ == "__main__":
     np.save(output_path.joinpath('step_indices.npy'), step_inds)
 
     # build the complex system
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-        path_to_protein)
+    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(args.protein_path)
     # TODO: optimize box
     complex_box += np.eye(3) * 0.1  # BFGS this later
 

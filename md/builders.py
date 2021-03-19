@@ -22,6 +22,26 @@ from ff.handlers.bcc_aromaticity import openeye_log_wrapper
 
 
 def prepare_protein(path: str, output_path: str):
+    """
+    Prepares protein
+
+    Performs the following preparation:
+    * Add missing hydrogens
+    * Remove everything except for the protein
+
+    Parameters
+    ----------
+
+    path: string
+        Path to a PDB/CIF file that contains an unprepared protein
+
+    output_path: string
+        Path to write the prepared protein to
+
+    Relevant Docs:
+        https://docs.eyesopen.com/toolkits/python/sprucetk/OESpruceFunctions/OEMakeBioDesignUnits.html
+        https://docs.eyesopen.com/toolkits/python/sprucetk/OESpruceClasses/OEMakeDesignUnitOptions.html
+    """
     with openeye_log_wrapper() as log_stream:
         ifs = oemolistream()
         if not ifs.open(path):
@@ -35,7 +55,14 @@ def prepare_protein(path: str, output_path: str):
         fact = OEAltLocationFactory(temp_mol)
         fact.MakePrimaryAltMol(mol)
         output_mol = OEGraphMol()
-        for i, design_unit in enumerate(OEMakeBioDesignUnits(mol, OEStructureMetadata(), OEMakeDesignUnitOptions())):
+        opts = OEMakeDesignUnitOptions()
+        opts.GetPrepOptions().SetProtonate(False)
+        build_opts = opts.GetPrepOptions().GetBuildOptions()
+        build_opts.SetBuildSidechains(False)
+        build_opts.SetBuildLoops(False)
+        build_opts.SetCapCTermini(False)
+        build_opts.SetCapNTermini(False)
+        for i, design_unit in enumerate(OEMakeBioDesignUnits(mol, OEStructureMetadata(), opts)):
             if i > 0:
                 raise AssertionError("Got more than one BioUnit")
             design_unit.GetProtein(output_mol)
