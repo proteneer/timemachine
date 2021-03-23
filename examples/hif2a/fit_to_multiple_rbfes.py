@@ -63,13 +63,6 @@ intermediate_configuration = Configuration(
     num_prod_steps=10000,
 )
 
-intermediate_configuration = Configuration(
-    num_complex_windows=2,
-    num_solvent_windows=2,
-    num_equil_steps=1000,
-    num_prod_steps=1000,
-)
-
 testing_configuration = Configuration(
     num_complex_windows=10,
     num_solvent_windows=10,
