@@ -78,7 +78,7 @@ testing_configuration = Configuration(
 
 
 # locations relative to project root
-root = Path(__file__).parent.parent.parent
+root = Path(timemachine.__file__).parent.parent
 path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
 
 
