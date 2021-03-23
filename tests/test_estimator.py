@@ -70,11 +70,11 @@ def test_free_energy_estimator():
             100
         )
 
-        value_and_grad_fn = jax.value_and_grad(estimator.deltaG, argnums=1)
-        dG, sys_grad = value_and_grad_fn(mdl, sys_params) # run fwd, store result, and run bwd
+        value_and_grad_fn = jax.value_and_grad(estimator.deltaG, argnums=1, has_aux=True)
+        (dG, _), sys_grad = value_and_grad_fn(mdl, sys_params) # run fwd, store result, and run bwd
 
-        grad_fn = jax.grad(estimator.deltaG, argnums=1)
-        grad = grad_fn(mdl, sys_params)
+        grad_fn = jax.grad(estimator.deltaG, argnums=1, has_aux=True)
+        grad, _ = grad_fn(mdl, sys_params)
 
         assert len(grad) == 2
         assert grad[0].shape == sys_params[0].shape
