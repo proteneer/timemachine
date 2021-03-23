@@ -19,11 +19,11 @@ class SimulationResult:
    du_dps: np.array
 
 def flatten(v):
-  return tuple(), (v.xs, v.du_dls, v.du_dps)
+    return tuple(), (v.xs, v.du_dls, v.du_dps)
 
 def unflatten(aux_data, children):
-  xs, du_dls, du_dps = aux_data
-  return SimulationResult(xs, du_dls, du_dps)
+    xs, du_dls, du_dps = aux_data
+    return SimulationResult(xs, du_dls, du_dps)
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
@@ -109,8 +109,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
 
 FreeEnergyModel = namedtuple(
     "FreeEnergyModel",
-    ["unbound_potentials", "client", "box", "x0", "v0", "integrator", "lambda_schedule", "equil_steps", "prod_steps"],
-    defaults=[None] # note: defaults applied to rightmost parameters
+    ["unbound_potentials", "client", "box", "x0", "v0", "integrator", "lambda_schedule", "equil_steps", "prod_steps"]
 )
 
 gradient = List[Any] # TODO: make this more descriptive of dG_grad structure
