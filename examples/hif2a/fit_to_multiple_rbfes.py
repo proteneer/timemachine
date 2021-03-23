@@ -78,7 +78,7 @@ testing_configuration = Configuration(
 
 
 # locations relative to project root
-root = Path(timemachine.__file__).parent
+root = Path(timemachine.__file__).parent.parent
 path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
 
 
@@ -211,11 +211,9 @@ if __name__ == "__main__":
         prod_steps=configuration.num_prod_steps,
     )
 
-
-    def loss_fxn(ff_params, mol_a, mol_b, core, label_ddG, callback=None):
-        pred_ddG = binding_model.predict(ff_params, mol_a, mol_b, core, callback)
-        return pseudo_huber_loss(pred_ddG - label_ddG)
-
+    def loss_fxn(ff_params, mol_a, mol_b, core, label_ddG):
+        pred_ddG, stage_results = binding_model.predict(ff_params, mol_a, mol_b, core)
+        return pseudo_huber_loss(pred_ddG - label_ddG), stage_results
 
     # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
     #   e.g. stage_results, and further diagnostic information
@@ -307,15 +305,7 @@ if __name__ == "__main__":
         # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
         return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
-
     results_this_step = dict()  # {stage : result} pairs # TODO: proper type hint
-
-
-    def save_in_memory_callback(results, stage):
-        global results_this_step
-        results_this_step[stage] = results
-        print(f'collected {stage} results!')
-
 
     # in each optimizer step, look at one transformation from relative_transformations
     for step, rfe_ind in enumerate(step_inds):
@@ -325,8 +315,18 @@ if __name__ == "__main__":
         t0 = time()
 
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
-        loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core,
-                                                                   rfe.label, callback=save_in_memory_callback)
+        (loss, stage_results), loss_grads = jax.value_and_grad(loss_fxn, argnums=0, has_aux=True)(
+            ordered_params,
+            rfe.mol_a,
+            rfe.mol_b,
+            rfe.core,
+            rfe.label
+        )
+
+        for stage, result in stage_results:
+            results_this_step[stage] = result
+            print(f'collected {stage} results!')
+
         print(f"at optimizer step {step}, loss={loss:.3f}")
 
         # check if it's probably okay to take an optimizer step on the basis of this result
