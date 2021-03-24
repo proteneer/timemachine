@@ -1,4 +1,3 @@
-
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
@@ -921,5 +920,3 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_context(m);
 
 }
-
-
