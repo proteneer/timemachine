@@ -219,8 +219,8 @@ void declare_avg_partial_u_partial_param(py::module &m) {
     )
     .def(py::init([](
         timemachine::BoundPotential *bp,
-        int freq) {
-        return new timemachine::AvgPartialUPartialParam(bp, freq);
+        int interval) {
+        return new timemachine::AvgPartialUPartialParam(bp, interval);
     }))
     .def("avg_du_dp", [](timemachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
         std::vector<int> shape = obj.shape();

@@ -6,7 +6,7 @@
 namespace timemachine {
 
 AvgPartialUPartialParam::AvgPartialUPartialParam(
-    BoundPotential *bp, int freq) : bp_(bp), count_(0), freq_(freq) {
+    BoundPotential *bp, int interval) : bp_(bp), count_(0), interval_(interval) {
     int P = bp_->size();
     gpuErrchk(cudaMalloc(&d_sum_du_dp_, P*sizeof(*d_sum_du_dp_)));
     gpuErrchk(cudaMemset(d_sum_du_dp_, 0, P*sizeof(*d_sum_du_dp_)));
@@ -23,7 +23,7 @@ void AvgPartialUPartialParam::observe(
     double *d_box_t,
     double lambda) {
 
-    if(step % freq_ == 0) {
+    if(step % interval_ == 0) {
         bp_->execute_device(
             N,
             d_x_t,
