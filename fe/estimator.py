@@ -27,13 +27,49 @@ def unflatten(aux_data, children):
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
-def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps, get_trajectory=False,
+def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps,
     x_interval=1000, du_dl_interval=5):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
     Parameters
     ----------
+    lamb: float
+        lambda parameter
+
+    box: np.array
+        3x3 numpy array of the box, dtype should be np.float64
+
+    x0: np.array
+        Nx3 numpy array of the coordinates
+
+    v0: np.array
+        Nx3 numpy array of the velocities
+
+    final_potentials: list
+        list of unbound potentials
+
+    integrator: timemachine.Integrator
+        integrator to be used for dynamics
+
+    equil_steps: int
+        number of equilibration steps
+
+    prod_steps: int
+        number of production steps
+
+    x_interval: int
+        how often we store coordinates. if x_interval == 0 then
+        no frames are returned.
+
+    du_dl_interval: int
+        how often we store du_dls. if du_dl_interval == 5 then
+        no du_dls are returned
+
+    Returns
+    -------
+    SimulationResult
+        Results of the simulation.
 
     """
     all_impls = []
@@ -75,27 +111,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
 
     prod_schedule = np.ones(prod_steps)*lamb
 
-    # run MD, optionally pausing every du_dl_freq steps to extract x snapshot
-    if not get_trajectory:
-        xs = None
-        full_du_dls = ctxt.multiple_steps(prod_schedule, du_dl_interval)
-
-    else:
-        xs = [] # in nanometers
-        full_du_dls = []
-
-        # simulate in x_interval-sized chunks
-        t = 0
-        while t < len(prod_schedule):
-            chunk_size = min(len(prod_schedule), (t + x_interval)) - t
-            full_du_dls.append(ctxt.multiple_steps(prod_schedule[t: (t + chunk_size)], chunk_size))
-            xs.append(ctxt.get_x_t())
-            t += chunk_size
-
-        # lists -> arrays
-        xs = np.array(xs)
-        full_du_dls = np.hstack(full_du_dls)
-
+    full_du_dls, xs = ctxt.multiple_steps(prod_schedule, du_dl_interval, x_interval)
 
     # keep the structure of grads the same as that of final_potentials so we can properly
     # form their vjps.

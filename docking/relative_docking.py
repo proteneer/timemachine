@@ -238,7 +238,7 @@ def do_switch(
     switching_lambda_schedule = np.linspace(MIN_LAMBDA, MAX_LAMBDA, TRANSITION_STEPS)
 
     subsample_freq = 1
-    full_du_dls = ctxt.multiple_steps(switching_lambda_schedule, subsample_freq)
+    full_du_dls, _ = ctxt.multiple_steps(switching_lambda_schedule, subsample_freq)
 
     step = len(switching_lambda_schedule) - 1
     lamb = switching_lambda_schedule[-1]

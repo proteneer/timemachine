@@ -154,7 +154,7 @@ def dock_and_equilibrate(
         # collect a du_dl calculation once every other step
         subsample_freq = 1
 
-        full_du_dls = ctxt.multiple_steps(insertion_lambda_schedule, subsample_freq)
+        full_du_dls, _ = ctxt.multiple_steps(insertion_lambda_schedule, subsample_freq)
         step = len(insertion_lambda_schedule) - 1
         lamb = insertion_lambda_schedule[-1]
         ctxt.step(lamb)

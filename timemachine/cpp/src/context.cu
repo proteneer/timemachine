@@ -68,7 +68,6 @@ std::array<std::vector<double>, 2> Context::multiple_steps(
     int store_du_dl_freq,
     int store_x_freq) {
     unsigned long long *d_du_dl_buffer = nullptr;
-    double *d_x_buffer = nullptr;
     // try catch block is to deal with leaks in d_du_dl_buffer
     if(store_du_dl_freq <= 0) {
         throw std::runtime_error("store_du_dl_freq <= 0");

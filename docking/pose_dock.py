@@ -172,7 +172,7 @@ def pose_dock(
         # collect a du_dl calculation every step
         subsample_freq = 1
 
-        full_du_dls = ctxt.multiple_steps(new_lambda_schedule, subsample_freq)
+        full_du_dls, _ = ctxt.multiple_steps(new_lambda_schedule, subsample_freq)
 
         step = len(new_lambda_schedule) - 1
         final_lamb = new_lambda_schedule[-1]
