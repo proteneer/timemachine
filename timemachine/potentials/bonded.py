@@ -111,13 +111,24 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
 
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
-    dij = np.linalg.norm(ci-cj, axis=-1)
+
+    cij = ci-cj
+    d2ij = np.sum(cij*cij, axis=-1)
+    d2ij = np.where(d2ij == 0, 0, d2ij) # stabilize derivative
+    dij = np.sqrt(d2ij)
     kbs = params[:, 0]
     r0s = params[:, 1]
     prefactor = (lamb_offset + lamb_mult * lamb)
-    energy = np.sum(prefactor * kbs/2 * np.power(dij - r0s, 2.0))
-    return energy
 
+    # this is here to prevent a numerical instability
+    # when b0 == 0 and dij == 0
+    energy = np.where(
+        r0s == 0,
+        prefactor * kbs/2 * d2ij,
+        prefactor * kbs/2 * np.power(dij - r0s, 2.0)
+    )
+
+    return np.sum(energy)
 
 def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_offset=None, cos_angles=True):
     """

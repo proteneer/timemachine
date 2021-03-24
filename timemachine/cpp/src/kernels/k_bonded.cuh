@@ -38,16 +38,26 @@ void __global__ k_harmonic_bond_inference(
     RealType kb = params[b_idx*2+0];
     RealType b0 = params[b_idx*2+1];
 
-    RealType dij = sqrt(d2ij);
-    RealType db = dij - b0;
+    if(b0 != 0) {
 
-    for(int d=0; d < 3; d++) {
-        RealType grad_delta = kb*db*dx[d]/dij;
+        RealType dij = sqrt(d2ij);
+        RealType db = dij - b0;
 
-        atomicAdd(grad_coords + src_idx*3 + d, static_cast<unsigned long long>((long long) (grad_delta*FIXED_EXPONENT)));
-        atomicAdd(grad_coords + dst_idx*3 + d, static_cast<unsigned long long>((long long) (-grad_delta*FIXED_EXPONENT)));
+        for(int d=0; d < 3; d++) {
+            grad_delta = kb*db*dx[d]/dij;
+            atomicAdd(grad_coords + src_idx*3 + d, static_cast<unsigned long long>((long long) (grad_delta*FIXED_EXPONENT)));
+            atomicAdd(grad_coords + dst_idx*3 + d, static_cast<unsigned long long>((long long) (-grad_delta*FIXED_EXPONENT)));
+        }
+
+    } else{
+
+        for(int d=0; d < 3; d++) {
+            grad_delta = kb*dx[d];
+            atomicAdd(grad_coords + src_idx*3 + d, static_cast<unsigned long long>((long long) (grad_delta*FIXED_EXPONENT)));
+            atomicAdd(grad_coords + dst_idx*3 + d, static_cast<unsigned long long>((long long) (-grad_delta*FIXED_EXPONENT)));
+        }
+
     }
-
     atomicAdd(energy, kb/2*db*db);
 
 }

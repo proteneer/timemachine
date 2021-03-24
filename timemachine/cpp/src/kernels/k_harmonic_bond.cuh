@@ -45,7 +45,12 @@ void __global__ k_harmonic_bond(
 
     if(du_dx) {
         for(int d=0; d < 3; d++) {
-            RealType grad_delta = kb*db*dx[d]/dij;
+            RealType grad_delta;
+            if(b0 !=0 ) {
+                grad_delta = kb*db*dx[d]/dij;
+            } else{
+                grad_delta = kb*dx[d];
+            }
             atomicAdd(du_dx + src_idx*3 + d, FLOAT_TO_FIXED_BONDED<RealType>(grad_delta*prefactor));
             atomicAdd(du_dx + dst_idx*3 + d, FLOAT_TO_FIXED_BONDED<RealType>(-grad_delta*prefactor));
         }
