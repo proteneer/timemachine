@@ -46,7 +46,7 @@ void __global__ k_harmonic_bond(
     if(du_dx) {
         for(int d=0; d < 3; d++) {
             RealType grad_delta;
-            if(b0 !=0 ) {
+            if(b0 != 0) {
                 grad_delta = kb*db*dx[d]/dij;
             } else{
                 grad_delta = kb*dx[d];
