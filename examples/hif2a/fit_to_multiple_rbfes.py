@@ -355,11 +355,15 @@ if __name__ == "__main__":
                 handle.params += param_increments[handle_type]
 
                 increment = param_increments[handle_type]
-                update_mask = increment != 0
-
+                increment = increment[increment != 0]
+                min_update = 0.0
+                max_update = 0.0
+                if len(increment):
+                    min_update = np.min(increment)
+                    max_update = np.max(increment)
                 # TODO: replace with a function that knows what to report about each handle type
                 print(
-                    f'updated {int(np.sum(update_mask))} params by between {np.min(increment[update_mask]):.4f} and {np.max(increment[update_mask])}')
+                    f'updated {len(increment)} params by between {min_update:.4f} and {max_update:.4f}')
 
         t1 = time()
         elapsed = t1 - t0
