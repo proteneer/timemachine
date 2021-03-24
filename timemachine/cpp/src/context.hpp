@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <vector>
 #include "integrator.hpp"
 #include "bound_potential.hpp"
@@ -26,9 +27,10 @@ public:
 
     void step(double lambda);
 
-    std::vector<double> multiple_steps(
+    std::array<std::vector<double>, 2> multiple_steps(
         const std::vector<double> &lambda_schedule,
-        int store_du_dl_freq=0
+        int store_du_dl_interval,
+        int store_x_interval
     );
 
     int num_atoms() const;
@@ -62,3 +64,4 @@ private:
 };
 
 }
+

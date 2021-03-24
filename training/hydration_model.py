@@ -48,19 +48,19 @@ def simulate(
 
         # endpoint lambda
         if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
-            observe_du_dl_freq = 5000 # this is analytically zero.
-            observe_du_dp_freq = 25
+            observe_du_dl_interval = 5000 # this is analytically zero.
+            observe_du_dp_interval = 25
         else:
-            observe_du_dl_freq = 25 # this is analytically zero.
-            observe_du_dp_freq = 0
+            observe_du_dl_interval = 25 # this is analytically zero.
+            observe_du_dp_interval = 0
 
         request = service_pb2.SimulateRequest(
             simulation=pickle.dumps(simulation),
             lamb=lamb,
             prep_steps=5000,
             prod_steps=n_steps,
-            observe_du_dl_freq=observe_du_dl_freq,
-            observe_du_dp_freq=observe_du_dp_freq,
+            observe_du_dl_interval=observe_du_dl_interval,
+            observe_du_dp_interval=observe_du_dp_interval,
             precision="single",
             n_frames=n_frames,
         )

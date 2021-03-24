@@ -1,4 +1,3 @@
-
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
@@ -142,21 +141,28 @@ void declare_context(py::module &m) {
     .def("step", &timemachine::Context::step)
     .def("multiple_steps", [](timemachine::Context &ctxt,
         const py::array_t<double, py::array::c_style> &lambda_schedule,
-        std::optional<int> store_du_dl_freq) -> py::array_t<double, py::array::c_style> {
+        int store_du_dl_interval,
+        int store_x_interval) -> py::tuple {
         // (ytz): I hate C++
         std::vector<double> vec_lambda_schedule(lambda_schedule.size());
         std::memcpy(vec_lambda_schedule.data(), lambda_schedule.data(), vec_lambda_schedule.size()*sizeof(double));
-        std::vector<double> result;
-        if(store_du_dl_freq.has_value()) {
-            result = ctxt.multiple_steps(vec_lambda_schedule, store_du_dl_freq.value());
-        } else {
-            result = ctxt.multiple_steps(vec_lambda_schedule, 0);
-        }
 
-        py::array_t<double, py::array::c_style> out_buffer(result.size());
-        std::memcpy(out_buffer.mutable_data(), result.data(), result.size()*sizeof(double));
-        return out_buffer;
-    }, py::arg("lambda_schedule"), py::arg("store_du_dl_freq") = 0)
+        int du_dl_interval = (store_du_dl_interval <= 0) ? lambda_schedule.size() : store_du_dl_interval;
+        int x_interval = (store_x_interval <= 0) ? lambda_schedule.size() : store_x_interval;
+
+        std::array<std::vector<double>, 2> result = ctxt.multiple_steps(vec_lambda_schedule, du_dl_interval, x_interval);
+
+        py::array_t<double, py::array::c_style> out_du_dl_buffer(result[0].size());
+        std::memcpy(out_du_dl_buffer.mutable_data(), result[0].data(), result[0].size()*sizeof(double));
+
+        int N = ctxt.num_atoms();
+        int D = 3;
+        int F = (lambda_schedule.size() + x_interval - 1) / x_interval;
+        py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
+        std::memcpy(out_x_buffer.mutable_data(), result[1].data(), result[1].size()*sizeof(double));
+
+        return py::make_tuple(out_du_dl_buffer, out_x_buffer);
+    }, py::arg("lambda_schedule"), py::arg("store_du_dl_interval") = 0, py::arg("store_x_interval") = 0)
     // .def("multiple_steps", &timemachine::Context::multiple_steps)
     .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();
@@ -213,8 +219,8 @@ void declare_avg_partial_u_partial_param(py::module &m) {
     )
     .def(py::init([](
         timemachine::BoundPotential *bp,
-        int freq) {
-        return new timemachine::AvgPartialUPartialParam(bp, freq);
+        int interval) {
+        return new timemachine::AvgPartialUPartialParam(bp, interval);
     }))
     .def("avg_du_dp", [](timemachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
         std::vector<int> shape = obj.shape();

@@ -1,3 +1,5 @@
+
+
 #include "context.hpp"
 #include "gpu_utils.cuh"
 #include "fixed_point.hpp"
@@ -61,46 +63,66 @@ void Context::add_observable(Observable *obs) {
     this->observables_.push_back(obs);
 }
 
-std::vector<double> Context::multiple_steps(
+std::array<std::vector<double>, 2> Context::multiple_steps(
     const std::vector<double> &lambda_schedule,
-    int store_du_dl_freq) {
+    int store_du_dl_interval,
+    int store_x_interval) {
     unsigned long long *d_du_dl_buffer = nullptr;
     // try catch block is to deal with leaks in d_du_dl_buffer
-    if(store_du_dl_freq==0) {
-        store_du_dl_freq = lambda_schedule.size();
+    if(store_du_dl_interval <= 0) {
+        throw std::runtime_error("store_du_dl_interval <= 0");
     }
-    int buffer_size = (lambda_schedule.size() + store_du_dl_freq - 1) / store_du_dl_freq;
+    if(store_x_interval <= 0) {
+        throw std::runtime_error("store_x_interval <= 0");
+    }
+    int du_dl_buffer_size = (lambda_schedule.size() + store_du_dl_interval - 1) / store_du_dl_interval;
+    int x_buffer_size = (lambda_schedule.size() + store_x_interval - 1) / store_x_interval;
+
+    std::vector<double> h_x_buffer(x_buffer_size*N_*3);
+
     try {
         // indicator so we can set it to a default arg.
-        gpuErrchk(cudaMalloc(&d_du_dl_buffer, buffer_size*sizeof(*d_du_dl_buffer)));
-        gpuErrchk(cudaMemset(d_du_dl_buffer, 0, buffer_size*sizeof(*d_du_dl_buffer)));
+        gpuErrchk(cudaMalloc(&d_du_dl_buffer, du_dl_buffer_size*sizeof(*d_du_dl_buffer)));
+        gpuErrchk(cudaMemset(d_du_dl_buffer, 0, du_dl_buffer_size*sizeof(*d_du_dl_buffer)));
+
         for(int i=0; i < lambda_schedule.size(); i++) {
             // decide if we need to store the du_dl for this step
             unsigned long long *du_dl_ptr = nullptr;
-            if(i % store_du_dl_freq == 0) {
+            if(i % store_du_dl_interval == 0) {
                 // pemdas but just to make it clear we're doing pointer arithmetic
-                du_dl_ptr = d_du_dl_buffer + (i / store_du_dl_freq);
+                du_dl_ptr = d_du_dl_buffer + (i / store_du_dl_interval);
             }
+
+            if(i % store_x_interval == 0) {
+                gpuErrchk(cudaMemcpy(
+                    &h_x_buffer[0] + (i / store_x_interval)*N_*3,
+                    d_x_t_,
+                    N_*3*sizeof(double),
+                    cudaMemcpyDeviceToHost)
+                );
+            }
+
             double lambda = lambda_schedule[i];
             this->_step(lambda, du_dl_ptr);
         }
+
         cudaDeviceSynchronize();
 
-        std::vector<unsigned long long> h_du_dl_buffer_ull(buffer_size);
+        std::vector<unsigned long long> h_du_dl_buffer_ull(du_dl_buffer_size);
         gpuErrchk(cudaMemcpy(
             &h_du_dl_buffer_ull[0],
             d_du_dl_buffer,
-            buffer_size*sizeof(*d_du_dl_buffer),
+            du_dl_buffer_size*sizeof(*d_du_dl_buffer),
             cudaMemcpyDeviceToHost)
         );
 
-        std::vector<double> h_du_dl_buffer_double(buffer_size);
+        std::vector<double> h_du_dl_buffer_double(du_dl_buffer_size);
         for(int i=0; i < h_du_dl_buffer_ull.size(); i++) {
             h_du_dl_buffer_double[i] = FIXED_TO_FLOAT<double>(h_du_dl_buffer_ull[i]);
         }
 
         gpuErrchk(cudaFree(d_du_dl_buffer));
-        return h_du_dl_buffer_double;
+        return std::array<std::vector<double>, 2>({h_du_dl_buffer_double, h_x_buffer});
 
     } catch(...) {
         gpuErrchk(cudaFree(d_du_dl_buffer));

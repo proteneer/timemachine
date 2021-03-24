@@ -152,9 +152,9 @@ def dock_and_equilibrate(
         calc_work = True
 
         # collect a du_dl calculation once every other step
-        subsample_freq = 1
+        subsample_interval = 1
 
-        full_du_dls = ctxt.multiple_steps(insertion_lambda_schedule, subsample_freq)
+        full_du_dls, _ = ctxt.multiple_steps(insertion_lambda_schedule, subsample_interval)
         step = len(insertion_lambda_schedule) - 1
         lamb = insertion_lambda_schedule[-1]
         ctxt.step(lamb)
@@ -195,7 +195,7 @@ def dock_and_equilibrate(
             calc_work = False
 
         if calc_work:
-            work = np.trapz(full_du_dls, insertion_lambda_schedule[::subsample_freq])
+            work = np.trapz(full_du_dls, insertion_lambda_schedule[::subsample_interval])
             print(f"guest_name: {guest_name}\tinsertion_work: {work:.2f}")
 
         # equilibrate

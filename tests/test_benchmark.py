@@ -46,8 +46,8 @@ def benchmark(
     verbose=True,
     num_batches=100,
     steps_per_batch=1000,
-    compute_du_dp_freq=100,
-    compute_du_dl_freq=0
+    compute_du_dp_interval=100,
+    compute_du_dl_interval=0
 ):
     """
     TODO: configuration blob containing num_batches, steps_per_batch, and any other options
@@ -80,10 +80,10 @@ def benchmark(
     )
 
     # initialize observables
-    if compute_du_dp_freq > 0:
+    if compute_du_dp_interval > 0:
         obs = []
         for bp in bps:
-            du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, compute_du_dp_freq)
+            du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, compute_du_dp_interval)
             ctxt.add_observable(du_dp_obs)
             obs.append(du_dp_obs)
 
@@ -92,7 +92,7 @@ def benchmark(
     lambda_schedule = np.ones(steps_per_batch)*lamb
 
     # run once before timer starts
-    ctxt.multiple_steps(lambda_schedule, compute_du_dl_freq)
+    ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
 
     start = time.time()
 
@@ -100,7 +100,7 @@ def benchmark(
 
         # time the current batch
         batch_start = time.time()
-        du_dls = ctxt.multiple_steps(lambda_schedule, compute_du_dl_freq)
+        du_dls, _ = ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
         batch_end = time.time()
 
         delta = batch_end - batch_start
@@ -122,7 +122,7 @@ def benchmark(
     print(f"{label}: N={x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt*1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)")
 
     # bond angle torsions nonbonded
-    if verbose and compute_du_dp_freq > 0:
+    if verbose and compute_du_dp_interval > 0:
         for potential, du_dp_obs in zip(bound_potentials, obs):
             dp = du_dp_obs.avg_du_dp()
             print(potential, dp.shape)
@@ -213,9 +213,9 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         # lamb = 0.5
         benchmark(stage+'-rbfe-with-du-dp', masses, 0.5, x0, v0, host_box, bound_potentials, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
-        for du_dl_freq in [0,1,5]:
+        for du_dl_interval in [0,1,5]:
             benchmark(
-                stage+'-rbfe-du-dl-freq-'+str(du_dl_freq),
+                stage+'-rbfe-du-dl-interval-'+str(du_dl_interval),
                 masses, 0.5,
                 x0,
                 v0,
@@ -224,8 +224,8 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
                 verbose,
                 num_batches=num_batches,
                 steps_per_batch=steps_per_batch,
-                compute_du_dp_freq=0,
-                compute_du_dl_freq=du_dl_freq
+                compute_du_dp_interval=0,
+                compute_du_dl_interval=du_dl_interval
             )
 
 

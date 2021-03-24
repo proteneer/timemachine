@@ -94,9 +94,10 @@ class TestContext(unittest.TestCase):
                 all_du_dps.append(du_dp)
                 du_dx = dU_dx_fn(x_t, params, box, lamb)[0]
                 all_du_dxs.append(du_dx)
+                all_xs.append(x_t)
                 v_t = ca*v_t + np.expand_dims(cbs, axis=-1)*du_dx
                 x_t = x_t + v_t*dt
-                all_xs.append(x_t)
+
                 # note that we do not calculate the du_dl of the last frame.
 
             return all_xs, all_du_dxs, all_du_dps, all_du_dls, all_us
@@ -140,14 +141,15 @@ class TestContext(unittest.TestCase):
 
         for step in range(num_steps):
             print("comparing step", step)
-            ctxt.step(lamb)
             test_x_t = ctxt.get_x_t()
+            np.testing.assert_allclose(test_x_t, ref_all_xs[step])
+            ctxt.step(lamb)
             test_v_t = ctxt.get_v_t()
             test_du_dx_t = ctxt._get_du_dx_t_minus_1()
             # test_u_t = ctxt._get_u_t_minus_1()
             # np.testing.assert_allclose(test_u_t, ref_all_us[step])
             np.testing.assert_allclose(test_du_dx_t, ref_all_du_dxs[step])
-            np.testing.assert_allclose(test_x_t, ref_all_xs[step])
+
 
         ref_avg_du_dls = np.mean(ref_all_du_dls, axis=0)
         ref_avg_du_dls_f2 = np.mean(ref_all_du_dls[::2], axis=0)
@@ -181,13 +183,21 @@ class TestContext(unittest.TestCase):
 
         lambda_schedule = np.ones(num_steps)*lamb
 
-        du_dl_freq = 3
-        test_du_dls = ctxt_2.multiple_steps(lambda_schedule, du_dl_freq)
+        du_dl_interval = 3
+        x_interval = 2
+        test_du_dls, test_xs = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval, x_interval)
 
         np.testing.assert_allclose(
             test_du_dls,
-            ref_all_du_dls[::du_dl_freq]
+            ref_all_du_dls[::du_dl_interval]
         )
+
+        np.testing.assert_allclose(
+            test_xs,
+            ref_all_xs[::x_interval]
+        )
+
+        test_du_dls, test_xs = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval)
 
 if __name__ == "__main__":
     unittest.main()
