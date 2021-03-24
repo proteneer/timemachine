@@ -63,7 +63,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
         no frames are returned.
 
     du_dl_interval: int
-        how often we store du_dls. if du_dl_interval == 5 then
+        how often we store du_dls. if du_dl_interval == 0 then
         no du_dls are returned
 
     Returns
