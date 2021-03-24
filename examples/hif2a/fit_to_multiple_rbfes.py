@@ -111,10 +111,10 @@ def _save_forcefield(fname, ff_params):
 if __name__ == "__main__":
     default_output_path = f"results_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}"
     parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
-    parser.add_argument("--num-gpus", default=None, type=int,
+    parser.add_argument("--num_gpus", default=None, type=int,
                         help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided")
     parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
-    parser.add_argument("--param-updates", default=1000, type=int, help="Number of updates for parameters")
+    parser.add_argument("--param_updates", default=1000, type=int, help="Number of updates for parameters")
     parser.add_argument("--seed", default=2021, type=int, help="Seed for shuffling ordering of transformations")
     parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
 
