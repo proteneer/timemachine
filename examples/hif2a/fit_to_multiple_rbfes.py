@@ -79,7 +79,7 @@ testing_configuration = Configuration(
 
 # locations relative to project root
 root = Path(timemachine.__file__).parent.parent
-path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
+path_to_protein = root.joinpath("tests/data/hif2a_nowater_min.pdb").as_posix()
 
 
 class ParameterUpdate:
@@ -109,7 +109,7 @@ def _save_forcefield(fname, ff_params):
 
 
 if __name__ == "__main__":
-    default_output_path = f"results_{str(datetime.datetime.now())}"
+    default_output_path = f"results_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}"
     parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
     parser.add_argument("--num-gpus", default=None, type=int,
                         help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided")
@@ -122,16 +122,16 @@ if __name__ == "__main__":
     parser.add_argument("--path_to_edges", default="relative_transformations.pkl",
                         help="Path to pickle file containing list of RelativeFreeEnergy objects")
     parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
+    parser.add_argument("--protein_path", default=path_to_protein, help="Path to output directory")
     # TODO: also make configurable: forces_to_refit, optimizer params, path_to_protein, path_to_protein_ff, ...
     args = parser.parse_args()
-
-    # create path if it doesn't exist
-    output_path = Path(args.output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
-    print(f'output path: {output_path}')
+    protein_path = Path(args.protein_path).expanduser()
+    path_to_protein = protein_path.as_posix()
+    if not protein_path.is_file():
+        print(f"Unable to find path: {path_to_protein}")
+        sys.exit(1)
 
     # xor num_gpus and hosts args
-    args = parser.parse_args()
     if args.num_gpus is not None and args.hosts is not None:
         print("Unable to provide --num-gpus and --hosts together")
         sys.exit(1)
@@ -159,6 +159,11 @@ if __name__ == "__main__":
         # Setup GRPC client
         client = GRPCClient(hosts=args.hosts)
     client.verify()
+
+    # create path if it doesn't exist
+    output_path = Path(args.output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+    print(f'Storing results in {output_path}')
 
     # load and construct forcefield
     with open(args.path_to_ff) as f:
@@ -226,15 +231,13 @@ if __name__ == "__main__":
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
 
-    handle_types_being_optimized = [AM1CCCHandler, LennardJonesHandler]
-
 
     # TODO: move flatten into optimize.utils
     def flatten(params) -> Tuple[np.array, callable]:
         """Turn params dict into flat array, with an accompanying unflatten function
 
         TODO: note that the result is going to be in the order given by ordered_handles (filtered by presence in handle_types)
-            rather than in the order they appear in handle_types_being_optimized
+            rather than in the order they appear in forces_to_refit
 
         TODO: maybe leave out the reference to handle_types_being optimized altogether
 
@@ -249,7 +252,7 @@ if __name__ == "__main__":
             assert handle.params.shape == param.shape
             key = type(handle)
 
-            if key in handle_types_being_optimized:
+            if key in forces_to_refit:
                 theta_list.append(param.flatten())
                 _shapes[key] = param.shape
                 _handle_types.append(key)
