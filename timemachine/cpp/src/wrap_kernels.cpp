@@ -141,28 +141,28 @@ void declare_context(py::module &m) {
     .def("step", &timemachine::Context::step)
     .def("multiple_steps", [](timemachine::Context &ctxt,
         const py::array_t<double, py::array::c_style> &lambda_schedule,
-        int store_du_dl_freq,
-        int store_x_freq) -> py::tuple {
+        int store_du_dl_interval,
+        int store_x_interval) -> py::tuple {
         // (ytz): I hate C++
         std::vector<double> vec_lambda_schedule(lambda_schedule.size());
         std::memcpy(vec_lambda_schedule.data(), lambda_schedule.data(), vec_lambda_schedule.size()*sizeof(double));
 
-        int du_dl_freq = (store_du_dl_freq <= 0) ? lambda_schedule.size() : store_du_dl_freq;
-        int x_freq = (store_x_freq <= 0) ? lambda_schedule.size() : store_x_freq;
+        int du_dl_interval = (store_du_dl_interval <= 0) ? lambda_schedule.size() : store_du_dl_interval;
+        int x_interval = (store_x_interval <= 0) ? lambda_schedule.size() : store_x_interval;
 
-        std::array<std::vector<double>, 2> result = ctxt.multiple_steps(vec_lambda_schedule, du_dl_freq, x_freq);
+        std::array<std::vector<double>, 2> result = ctxt.multiple_steps(vec_lambda_schedule, du_dl_interval, x_interval);
 
         py::array_t<double, py::array::c_style> out_du_dl_buffer(result[0].size());
         std::memcpy(out_du_dl_buffer.mutable_data(), result[0].data(), result[0].size()*sizeof(double));
 
         int N = ctxt.num_atoms();
         int D = 3;
-        int F = (lambda_schedule.size() + x_freq - 1) / x_freq;
+        int F = (lambda_schedule.size() + x_interval - 1) / x_interval;
         py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
         std::memcpy(out_x_buffer.mutable_data(), result[1].data(), result[1].size()*sizeof(double));
 
         return py::make_tuple(out_du_dl_buffer, out_x_buffer);
-    }, py::arg("lambda_schedule"), py::arg("store_du_dl_freq") = 0, py::arg("store_x_freq") = 0)
+    }, py::arg("lambda_schedule"), py::arg("store_du_dl_interval") = 0, py::arg("store_x_interval") = 0)
     // .def("multiple_steps", &timemachine::Context::multiple_steps)
     .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();

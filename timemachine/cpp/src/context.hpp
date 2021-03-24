@@ -29,8 +29,8 @@ public:
 
     std::array<std::vector<double>, 2> multiple_steps(
         const std::vector<double> &lambda_schedule,
-        int store_du_dl_freq,
-        int store_x_freq
+        int store_du_dl_interval,
+        int store_x_interval
     );
 
     int num_atoms() const;

@@ -237,8 +237,8 @@ def do_switch(
 
     switching_lambda_schedule = np.linspace(MIN_LAMBDA, MAX_LAMBDA, TRANSITION_STEPS)
 
-    subsample_freq = 1
-    full_du_dls, _ = ctxt.multiple_steps(switching_lambda_schedule, subsample_freq)
+    subsample_interval = 1
+    full_du_dls, _ = ctxt.multiple_steps(switching_lambda_schedule, subsample_interval)
 
     step = len(switching_lambda_schedule) - 1
     lamb = switching_lambda_schedule[-1]
@@ -258,7 +258,7 @@ def do_switch(
     if report.too_much_force(ctxt, lamb, box, combined_bps, u_impls):
         return
 
-    work = np.trapz(full_du_dls, switching_lambda_schedule[::subsample_freq])
+    work = np.trapz(full_du_dls, switching_lambda_schedule[::subsample_interval])
     print(f"guest_name: {guest_name}\t{leg_type}_work: {work:.2f}")
     return work
 
