@@ -27,6 +27,7 @@ class MapGenerationConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "MapGenerationConfig":
         return cls(**data)
 
+
 @dataclass
 class TimemachineConfig:
 
@@ -34,18 +35,17 @@ class TimemachineConfig:
 
     @classmethod
     def from_yaml(cls, yaml_path: str) -> "TimemachineConfig":
-            """from_yaml
-            """
-            if not Path(yaml_path).is_file():
-                raise FileNotFoundError(yaml_path)
-            conf = cls()
-            with open(yaml_path, "r") as ifs:
-                data = safe_load(ifs)
-            if MAP_GENERATION in data:
-                conf.map_generation = MapGenerationConfig.from_dict(data[MAP_GENERATION])
-            inited = False
-            for field in fields(cls):
-                if getattr(cls, field.name) is not None:
-                    inited = True
-                    break
-            return conf
+        """from_yaml"""
+        if not Path(yaml_path).is_file():
+            raise FileNotFoundError(yaml_path)
+        conf = cls()
+        with open(yaml_path, "r") as ifs:
+            data = safe_load(ifs)
+        if MAP_GENERATION in data:
+            conf.map_generation = MapGenerationConfig.from_dict(data[MAP_GENERATION])
+        inited = False
+        for field in fields(cls):
+            if getattr(cls, field.name) is not None:
+                inited = True
+                break
+        return conf
