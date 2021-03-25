@@ -43,7 +43,12 @@ Handler = Union[AM1CCCHandler, LennardJonesHandler]  # TODO: relax this assumpti
 
 NUM_GPUS = get_gpu_count()
 
-# how much MD to run, on how many GPUs
+# how much MD to runf
+# TODO: rename this to something more descriptive than "Configuration"...
+#   want to distinguish later between an "RBFE configuration"
+#       (which describes the computation of a single edge)
+#   and a "training configuration"
+#       (which describes the overall training loop)
 Configuration = namedtuple(
     'Configuration',
     ['num_complex_windows', 'num_solvent_windows', 'num_equil_steps', 'num_prod_steps'])
@@ -70,42 +75,92 @@ testing_configuration = Configuration(
     num_prod_steps=1000,
 )
 
-# TODO: rename this to something more descriptive than "Configuration"...
-#   want to distinguish later between an "RBFE configuration"
-#       (which describes the computation of a single edge)
-#   and a "training configuration"
-#       (which describes the overall training loop)
-
 
 # locations relative to project root
 root = Path(timemachine.__file__).parent.parent
 path_to_protein = root.joinpath("tests/data/hif2a_nowater_min.pdb").as_posix()
 
 
-class ParameterUpdate:
-    def __init__(self, before, after, gradient, update):
-        self.before = before
-        self.after = after
-        self.gradient = gradient
-        self.update = update
-
-    # TODO: def __str__
-
-    def save(self, fname='parameter_update.npz'):
-        """save numpy arrays to fname"""
-        print(f'saving parameter updates to {fname}')
-        np.savez(
-            file=fname,
-            before=self.before,
-            after=self.after,
-            gradient=self.gradient,
-            update=self.update,
-        )
-
-
 def _save_forcefield(fname, ff_params):
     with open(fname, 'w') as fh:
         fh.write(ff_params)
+
+
+def _compute_step_lower_bound(loss: float, blown_up: bool, relative_improvement_bound: float = 0.8) -> float:
+    """problem this addresses: on a small fraction of steps, the free energy estimate may be grossly unreliable
+    away from target, typically indicating an instability was encountered.
+    detect if this occurs, and don't allow a step.
+
+    """
+    if not blown_up:
+        return loss * relative_improvement_bound
+    else:
+        return loss  # don't move!
+
+
+def _results_to_arrays(results: List[SimulationResult]):
+    """each result object was constructed by SimulationResult(xs=xs, du_dls=full_du_dls, du_dps=grads)
+
+    for each field, concatenate into an array
+    """
+
+    xs = np.array([r.xs for r in results])
+    du_dls = np.array([r.du_dls for r in results])
+    du_dps = np.array([r.du_dps for r in results])
+
+    return xs, du_dls, du_dps
+
+
+def _blew_up(results: List[SimulationResult]) -> bool:
+    """if stddev(du_dls) for any window exceeded 1000 kJ/mol, don't trust result enough to take a step
+    if du_dls contains any nans, don't trust result enough to take a step"""
+    du_dls = _results_to_arrays(results)[1]
+
+    # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
+    return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
+
+def loss_fxn(model, ff_params, mol_a, mol_b, core, label_ddG):
+    pred_ddG, stage_results = model.predict(ff_params, mol_a, mol_b, core)
+    return pseudo_huber_loss(pred_ddG - label_ddG), stage_results
+
+# TODO: move flatten into optimize.utils
+def flatten(params, handles) -> Tuple[np.array, callable]:
+    """Turn params dict into flat array, with an accompanying unflatten function
+
+    TODO: note that the result is going to be in the order given by ordered_handles (filtered by presence in handle_types)
+        rather than in the order they appear in forces_to_refit
+
+    TODO: maybe leave out the reference to handle_types_being optimized altogether
+
+    TODO: does Jax have a pytree-based flatten / unflatten utility?
+    """
+
+    theta_list = []
+    _shapes = dict()
+    _handle_types = []
+
+    for param, handle in zip(params, handles):
+        assert handle.params.shape == param.shape
+        key = type(handle)
+
+        if key in forces_to_refit:
+            theta_list.append(param.flatten())
+            _shapes[key] = param.shape
+            _handle_types.append(key)
+
+    theta = np.hstack(theta_list)
+
+    def unflatten(theta: array) -> Dict[Handler, array]:
+        params = dict()
+        i = 0
+        for key in _handle_types:
+            shape = _shapes[key]
+            num_params = int(np.prod(shape))
+            params[key] = np.array(theta[i: i + num_params]).reshape(shape)
+            i += num_params
+        return params
+
+    return theta, unflatten
 
 
 if __name__ == "__main__":
@@ -232,81 +287,7 @@ if __name__ == "__main__":
     ordered_handles = forcefield.get_ordered_handles()
 
 
-    # TODO: move flatten into optimize.utils
-    def flatten(params) -> Tuple[np.array, callable]:
-        """Turn params dict into flat array, with an accompanying unflatten function
-
-        TODO: note that the result is going to be in the order given by ordered_handles (filtered by presence in handle_types)
-            rather than in the order they appear in forces_to_refit
-
-        TODO: maybe leave out the reference to handle_types_being optimized altogether
-
-        TODO: does Jax have a pytree-based flatten / unflatten utility?
-        """
-
-        theta_list = []
-        _shapes = dict()
-        _handle_types = []
-
-        for param, handle in zip(params, ordered_handles):
-            assert handle.params.shape == param.shape
-            key = type(handle)
-
-            if key in forces_to_refit:
-                theta_list.append(param.flatten())
-                _shapes[key] = param.shape
-                _handle_types.append(key)
-
-        theta = np.hstack(theta_list)
-
-        def unflatten(theta: array) -> Dict[Handler, array]:
-            params = dict()
-            i = 0
-            for key in _handle_types:
-                shape = _shapes[key]
-                num_params = int(np.prod(shape))
-                params[key] = np.array(theta[i: i + num_params]).reshape(shape)
-                i += num_params
-            return params
-
-        return theta, unflatten
-
-
     relative_improvement_bound = 0.8
-
-
-    def _compute_step_lower_bound(loss, blown_up):
-        """problem this addresses: on a small fraction of steps, the free energy estimate may be grossly unreliable
-        away from target, typically indicating an instability was encountered.
-        detect if this occurs, and don't allow a step.
-
-        """
-        if not blown_up:
-            return loss * relative_improvement_bound
-        else:
-            return loss  # don't move!
-
-
-    def _results_to_arrays(results: List[SimulationResult]):
-        """each result object was constructed by SimulationResult(xs=xs, du_dls=full_du_dls, du_dps=grads)
-
-        for each field, concatenate into an array
-        """
-
-        xs = np.array([r.xs for r in results])
-        du_dls = np.array([r.du_dls for r in results])
-        du_dps = np.array([r.du_dps for r in results])
-
-        return xs, du_dls, du_dps
-
-
-    def _blew_up(results: List[SimulationResult]):
-        """if stddev(du_dls) for any window exceeded 1000 kJ/mol, don't trust result enough to take a step
-        if du_dls contains any nans, don't trust result enough to take a step"""
-        du_dls = _results_to_arrays(results)[1]
-
-        # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
-        return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
     results_this_step = dict()  # {stage : result} pairs # TODO: proper type hint
 
