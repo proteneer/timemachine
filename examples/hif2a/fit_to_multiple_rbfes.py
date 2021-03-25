@@ -78,7 +78,6 @@ testing_configuration = Configuration(
 
 # locations relative to project root
 root = Path(timemachine.__file__).parent.parent
-path_to_protein = root.joinpath("tests/data/hif2a_nowater_min.pdb").as_posix()
 
 
 def _save_forcefield(fname, ff_params):
@@ -177,14 +176,16 @@ if __name__ == "__main__":
     parser.add_argument("--path_to_edges", default="relative_transformations.pkl",
                         help="Path to pickle file containing list of RelativeFreeEnergy objects")
     parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
-    parser.add_argument("--protein_path", default=path_to_protein, help="Path to output directory")
+    parser.add_argument("--protein_path", default=None, help="Path to protein if edges don't provide protein")
     # TODO: also make configurable: forces_to_refit, optimizer params, path_to_protein, path_to_protein_ff, ...
     args = parser.parse_args()
-    protein_path = Path(args.protein_path).expanduser()
-    path_to_protein = protein_path.as_posix()
-    if not protein_path.is_file():
-        print(f"Unable to find path: {path_to_protein}")
-        sys.exit(1)
+    protein_path = None
+    if args.protein_path:
+        protein_path = Path(args.protein_path).expanduser()
+        path_to_protein = protein_path.as_posix()
+        if not protein_path.is_file():
+            print(f"Unable to find path: {path_to_protein}")
+            sys.exit(1)
 
     # xor num_gpus and hosts args
     if args.num_gpus is not None and args.hosts is not None:
@@ -230,50 +231,40 @@ if __name__ == "__main__":
     with open(args.path_to_edges, 'rb') as f:
         relative_transformations: List[RelativeFreeEnergy] = load(f)
 
-    # update the forcefield parameters for a few steps, each step informed by a single free energy calculation
+    protein_paths = set(x.complex_path for x in relative_transformations)
+    if protein_path is not None:
+        protein_paths.add(protein_path)
 
-    # compute and save the sequence of relative_transformation indices
-    num_epochs = int(np.ceil(args.param_updates / len(relative_transformations)))
-    np.random.seed(args.seed)
-    step_inds = []
-    for epoch in range(num_epochs):
-        inds = np.arange(len(relative_transformations))
-        np.random.shuffle(inds)
-        step_inds.append(inds)
-    step_inds = np.hstack(step_inds)[:args.param_updates]
 
-    np.save(output_path.joinpath('step_indices.npy'), step_inds)
+    # Build all of the differen protein systems
+    systems = {}
+    for prot_path in protein_paths:
+        # build the complex system
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(prot_path)
+        # TODO: optimize box
+        complex_box += np.eye(3) * 0.1  # BFGS this later
 
-    # build the complex system
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-        path_to_protein)
-    # TODO: optimize box
-    complex_box += np.eye(3) * 0.1  # BFGS this later
+        # build the water system
+        solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
+        # TODO: optimize box
+        solvent_box += np.eye(3) * 0.1  # BFGS this later
 
-    # build the water system
-    solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
-    # TODO: optimize box
-    solvent_box += np.eye(3) * 0.1  # BFGS this later
-
-    # note: "complex" means "protein + solvent"
-    binding_model = RBFEModel(
-        client=client,
-        ff=forcefield,
-        complex_system=complex_system,
-        complex_coords=complex_coords,
-        complex_box=complex_box,
-        complex_schedule=construct_lambda_schedule(configuration.num_complex_windows),
-        solvent_system=solvent_system,
-        solvent_coords=solvent_coords,
-        solvent_box=solvent_box,
-        solvent_schedule=construct_lambda_schedule(configuration.num_solvent_windows),
-        equil_steps=configuration.num_equil_steps,
-        prod_steps=configuration.num_prod_steps,
-    )
-
-    def loss_fxn(ff_params, mol_a, mol_b, core, label_ddG):
-        pred_ddG, stage_results = binding_model.predict(ff_params, mol_a, mol_b, core)
-        return pseudo_huber_loss(pred_ddG - label_ddG), stage_results
+        # note: "complex" means "protein + solvent"
+        binding_model = RBFEModel(
+            client=client,
+            ff=forcefield,
+            complex_system=complex_system,
+            complex_coords=complex_coords,
+            complex_box=complex_box,
+            complex_schedule=construct_lambda_schedule(configuration.num_complex_windows),
+            solvent_system=solvent_system,
+            solvent_coords=solvent_coords,
+            solvent_box=solvent_box,
+            solvent_schedule=construct_lambda_schedule(configuration.num_solvent_windows),
+            equil_steps=configuration.num_equil_steps,
+            prod_steps=configuration.num_prod_steps,
+        )
+        systems[prot_path] = binding_model
 
     # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
     #   e.g. stage_results, and further diagnostic information
