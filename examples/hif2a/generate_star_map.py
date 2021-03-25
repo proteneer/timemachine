@@ -33,9 +33,6 @@ from fe.atom_mapping import (
     get_star_map,
 )
 
-# Get the root off of the timemachine install
-root = Path(timemachine.__file__).absolute().parent
-
 
 def get_mol_id(mol, mol_prop):
     return mol.GetProp(mol_prop)
@@ -236,7 +233,12 @@ if __name__ == "__main__":
         with open(f"core_{i}_error_transformations.pkl", "wb") as f:
             dump(errors, f)
         print(f"Core {i} had {len(edges)} edges and {len(errors)} errors")
-
+    # if protein path provided, set the path
+    if map_config.protein is not None:
+        path = Path(map_config.protein)
+        abs_path = str(path.expanduser().resolve())
+        for edge in all_edges:
+            edge.complex_path = abs_path
     # serialize
     with open(map_config.output, 'wb') as f:
         dump(all_edges, f)
