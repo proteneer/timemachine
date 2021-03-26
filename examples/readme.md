@@ -1,5 +1,8 @@
 ### Examples
 
+#### MD
+`npt_simulation.py` samples the constant temperature and pressure ensemble by running thermostatted MD and pausing every few steps to apply a Monte Carlo barostat move
+
 #### Absolute hydration free energy
 
 `ahfe.py` runs 4D decoupling simulations of aspirin in a waterbox, for later use in a TI estimator of the absolute hydration free energy.
