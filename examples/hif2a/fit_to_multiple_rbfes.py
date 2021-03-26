@@ -105,7 +105,8 @@ def _results_to_arrays(results: List[SimulationResult]):
 
     xs = np.array([r.xs for r in results])
     du_dls = np.array([r.du_dls for r in results])
-    du_dps = np.array([r.du_dps for r in results])
+    # without dtype=object get a warning about ragged arrays (inconsistent size/type)
+    du_dps = np.array([r.du_dps for r in results], dtype=object)
 
     return xs, du_dls, du_dps
 

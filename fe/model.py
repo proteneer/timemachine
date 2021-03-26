@@ -80,7 +80,7 @@ class RBFEModel():
             ("complex", self.complex_system, self.complex_coords, self.complex_box, self.complex_schedule),
             ("solvent", self.solvent_system, self.solvent_coords, self.solvent_box, self.solvent_schedule)]:
 
-            print("Minimizing the host structure to remove clashes.")
+            print(f"Minimizing the {stage} host structure to remove clashes.")
             # (ytz): this isn't strictly symmetric, and we should modify minimize later on remove
             # the hysteresis by jointly minimizing against a and b at the same time. We may also want
             # to remove the randomness completely from the minimization.
