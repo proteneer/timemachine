@@ -1,6 +1,6 @@
 import numpy as np
 from simtk import unit
-from barostat.utils import compute_volume
+from barostat.utils import compute_box_volume
 
 # TODO: should these be imported from a project-wide constants.py file?
 ENERGY_UNIT = unit.kilojoule_per_mole
@@ -13,9 +13,9 @@ class PotentialEnergyModel:
         self.unbound_potentials = unbound_potentials
         self.bp_cache = dict()
         self.precision = precision
+        self._initialize()
 
-    def energy_and_gradient(self, x, box, lam):
-        Us, dU_dxs = [], []
+    def _initialize(self):
         for component_params, unbound_pot in zip(self.sys_params, self.unbound_potentials):
             key = unbound_pot
 
@@ -23,6 +23,14 @@ class PotentialEnergyModel:
                 impl = unbound_pot.bind(np.asarray(component_params)).bound_impl(self.precision)
                 self.bp_cache[key] = impl
 
+    @property
+    def all_impls(self):
+        """List of impl, e.g. as required by context constructor"""
+        return [self.bp_cache[key] for key in self.unbound_potentials]
+
+    def energy_and_gradient(self, x, box, lam):
+        Us, dU_dxs = [], []
+        for key in self.unbound_potentials:
             dU_dx, dU_dl, U = self.bp_cache[key].execute(x, box, lam)
 
             Us.append(U)
@@ -64,7 +72,7 @@ class NPTEnsemble:
     def reduced_potential_and_gradient(self, x, box, lam):
         U, dU_dx = self.potential_energy.energy_and_gradient(x, box, lam)
 
-        volume = compute_volume(box) * DISTANCE_UNIT ** 3
+        volume = compute_box_volume(box) * DISTANCE_UNIT ** 3
 
         # reduced potential u
         #   (unitless)
