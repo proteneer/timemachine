@@ -46,7 +46,7 @@ class RBFEModel():
         self.equil_steps = equil_steps
         self.prod_steps = prod_steps
 
-    def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray, callback: Optional[callable]=None):
+    def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray):
         """
         Predict the ddG of morphing mol_a into mol_b. This function is differentiable w.r.t. ff_params.
 
@@ -65,18 +65,6 @@ class RBFEModel():
         core: np.ndarray
             N x 2 list of ints corresponding to the atom mapping of the core.
 
-        callback: function
-            accepts a list of SimulationResults and a string, and doesn't return anything. may save to disk
-            TODO: is there a way to save intermediate results to disk that doesn't require passing a callable a few layers deep here...
-            TODO: aux return following https://github.com/proteneer/timemachine/pull/360#discussion_r584733991
-                * Update RBFEModel.predict() and estimator.deltaG() signature to:
-                    * accept an options argument that determines what gets put into the aux return
-                    * forward aux return
-                * options object to determine return types:
-                    * three boolean flags (return xs, return du_dls, return du_dps)
-                    * will need to be picklable
-                    * will be used to determine what to send back / what to expect back
-
         Returns
         -------
         float
@@ -86,6 +74,7 @@ class RBFEModel():
         """
 
         stage_dGs = []
+        stage_results = []
 
         for stage, host_system, host_coords, host_box, lambda_schedule in [
             ("complex", self.complex_system, self.complex_coords, self.complex_box, self.complex_schedule),
@@ -128,14 +117,16 @@ class RBFEModel():
                 self.prod_steps,
             )
 
-            dG = estimator.deltaG(model, sys_params, partial(callback, stage=stage))
+            dG, results = estimator.deltaG(model, sys_params)
+
             stage_dGs.append(dG)
+            stage_results.append((stage, results))
 
         pred = stage_dGs[0] - stage_dGs[1]
 
-        return pred
+        return pred, stage_results
 
-    def loss(self, ff_params, mol_a, mol_b, core, label_ddG, callback: Optional[callable]=None):
+    def loss(self, ff_params, mol_a, mol_b, core, label_ddG):
         """
         Computes the L1 loss relative to some label. See predict() for the type signature.
 
@@ -154,6 +145,6 @@ class RBFEModel():
         TODO: make this configurable, using loss functions from in fe/loss.py
 
         """
-        pred_ddG = self.predict(ff_params, mol_a, mol_b, core, callback)
+        pred_ddG, results = self.predict(ff_params, mol_a, mol_b, core)
         loss = jnp.abs(pred_ddG - label_ddG)
-        return loss
+        return loss, results

@@ -78,8 +78,8 @@ testing_configuration = Configuration(
 
 
 # locations relative to project root
-root = Path(timemachine.__file__).parent
-path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
+root = Path(timemachine.__file__).parent.parent
+path_to_protein = root.joinpath("tests/data/hif2a_nowater_min.pdb").as_posix()
 
 
 class ParameterUpdate:
@@ -109,12 +109,12 @@ def _save_forcefield(fname, ff_params):
 
 
 if __name__ == "__main__":
-    default_output_path = f"results_{str(datetime.datetime.now())}"
+    default_output_path = f"results_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}"
     parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
-    parser.add_argument("--num-gpus", default=None, type=int,
+    parser.add_argument("--num_gpus", default=None, type=int,
                         help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided")
     parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
-    parser.add_argument("--param-updates", default=1000, type=int, help="Number of updates for parameters")
+    parser.add_argument("--param_updates", default=1000, type=int, help="Number of updates for parameters")
     parser.add_argument("--seed", default=2021, type=int, help="Seed for shuffling ordering of transformations")
     parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
 
@@ -122,16 +122,16 @@ if __name__ == "__main__":
     parser.add_argument("--path_to_edges", default="relative_transformations.pkl",
                         help="Path to pickle file containing list of RelativeFreeEnergy objects")
     parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
+    parser.add_argument("--protein_path", default=path_to_protein, help="Path to output directory")
     # TODO: also make configurable: forces_to_refit, optimizer params, path_to_protein, path_to_protein_ff, ...
     args = parser.parse_args()
-
-    # create path if it doesn't exist
-    output_path = Path(args.output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
-    print(f'output path: {output_path}')
+    protein_path = Path(args.protein_path).expanduser()
+    path_to_protein = protein_path.as_posix()
+    if not protein_path.is_file():
+        print(f"Unable to find path: {path_to_protein}")
+        sys.exit(1)
 
     # xor num_gpus and hosts args
-    args = parser.parse_args()
     if args.num_gpus is not None and args.hosts is not None:
         print("Unable to provide --num-gpus and --hosts together")
         sys.exit(1)
@@ -159,6 +159,11 @@ if __name__ == "__main__":
         # Setup GRPC client
         client = GRPCClient(hosts=args.hosts)
     client.verify()
+
+    # create path if it doesn't exist
+    output_path = Path(args.output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+    print(f'Storing results in {output_path}')
 
     # load and construct forcefield
     with open(args.path_to_ff) as f:
@@ -211,11 +216,9 @@ if __name__ == "__main__":
         prod_steps=configuration.num_prod_steps,
     )
 
-
-    def loss_fxn(ff_params, mol_a, mol_b, core, label_ddG, callback=None):
-        pred_ddG = binding_model.predict(ff_params, mol_a, mol_b, core, callback)
-        return pseudo_huber_loss(pred_ddG - label_ddG)
-
+    def loss_fxn(ff_params, mol_a, mol_b, core, label_ddG):
+        pred_ddG, stage_results = binding_model.predict(ff_params, mol_a, mol_b, core)
+        return pseudo_huber_loss(pred_ddG - label_ddG), stage_results
 
     # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
     #   e.g. stage_results, and further diagnostic information
@@ -228,15 +231,13 @@ if __name__ == "__main__":
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
 
-    handle_types_being_optimized = [AM1CCCHandler, LennardJonesHandler]
-
 
     # TODO: move flatten into optimize.utils
     def flatten(params) -> Tuple[np.array, callable]:
         """Turn params dict into flat array, with an accompanying unflatten function
 
         TODO: note that the result is going to be in the order given by ordered_handles (filtered by presence in handle_types)
-            rather than in the order they appear in handle_types_being_optimized
+            rather than in the order they appear in forces_to_refit
 
         TODO: maybe leave out the reference to handle_types_being optimized altogether
 
@@ -251,7 +252,7 @@ if __name__ == "__main__":
             assert handle.params.shape == param.shape
             key = type(handle)
 
-            if key in handle_types_being_optimized:
+            if key in forces_to_refit:
                 theta_list.append(param.flatten())
                 _shapes[key] = param.shape
                 _handle_types.append(key)
@@ -307,15 +308,7 @@ if __name__ == "__main__":
         # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
         return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
-
     results_this_step = dict()  # {stage : result} pairs # TODO: proper type hint
-
-
-    def save_in_memory_callback(results, stage):
-        global results_this_step
-        results_this_step[stage] = results
-        print(f'collected {stage} results!')
-
 
     # in each optimizer step, look at one transformation from relative_transformations
     for step, rfe_ind in enumerate(step_inds):
@@ -325,8 +318,18 @@ if __name__ == "__main__":
         t0 = time()
 
         # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
-        loss, loss_grads = jax.value_and_grad(loss_fxn, argnums=0)(ordered_params, rfe.mol_a, rfe.mol_b, rfe.core,
-                                                                   rfe.label, callback=save_in_memory_callback)
+        (loss, stage_results), loss_grads = jax.value_and_grad(loss_fxn, argnums=0, has_aux=True)(
+            ordered_params,
+            rfe.mol_a,
+            rfe.mol_b,
+            rfe.core,
+            rfe.label
+        )
+
+        for stage, result in stage_results:
+            results_this_step[stage] = result
+            print(f'collected {stage} results!')
+
         print(f"at optimizer step {step}, loss={loss:.3f}")
 
         # check if it's probably okay to take an optimizer step on the basis of this result
@@ -352,11 +355,15 @@ if __name__ == "__main__":
                 handle.params += param_increments[handle_type]
 
                 increment = param_increments[handle_type]
-                update_mask = increment != 0
-
+                increment = increment[increment != 0]
+                min_update = 0.0
+                max_update = 0.0
+                if len(increment):
+                    min_update = np.min(increment)
+                    max_update = np.max(increment)
                 # TODO: replace with a function that knows what to report about each handle type
                 print(
-                    f'updated {int(np.sum(update_mask))} params by between {np.min(increment[update_mask]):.4f} and {np.max(increment[update_mask])}')
+                    f'updated {len(increment)} params by between {min_update:.4f} and {max_update:.4f}')
 
         t1 = time()
         elapsed = t1 - t0

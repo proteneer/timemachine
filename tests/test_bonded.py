@@ -124,6 +124,71 @@ class TestBonded(GradientTest):
             )
 
 
+    def test_harmonic_bond_singularity(self):
+        """ Test that two particles sitting directly on top of each other should generate a proper force. """
+        x = np.array([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0]], dtype=np.float64)
+
+        params = np.array([[2.0, 0.0]], dtype=np.float64)
+        bond_idxs = np.array([[0, 1]], dtype=np.int32)
+
+        lamb = 0.0
+        box = np.eye(3) * 100
+
+        # specific to harmonic bond force
+        relative_tolerance_at_precision = {np.float32: 2e-5, np.float64: 1e-9}
+
+        for precision, rtol in relative_tolerance_at_precision.items():
+            test_potential = potentials.HarmonicBond(bond_idxs)
+            ref_potential = functools.partial(
+                bonded.harmonic_bond,
+                bond_idxs=bond_idxs
+            )
+
+            # we assert finite-ness of the forces.
+            self.compare_forces(
+                x,
+                params,
+                box,
+                lamb,
+                ref_potential,
+                test_potential,
+                rtol,
+                precision=precision
+            )
+
+        # test with both zero and non zero terms
+        x = np.array([
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0]], dtype=np.float64)
+
+        params = np.array([[2.0, 0.0], [2.0, 1.0]], dtype=np.float64)
+        bond_idxs = np.array([[0, 1], [0, 2]], dtype=np.int32)
+
+        # specific to harmonic bond force
+        relative_tolerance_at_precision = {np.float32: 2e-5, np.float64: 1e-9}
+
+        for precision, rtol in relative_tolerance_at_precision.items():
+            test_potential = potentials.HarmonicBond(bond_idxs)
+            ref_potential = functools.partial(
+                bonded.harmonic_bond,
+                bond_idxs=bond_idxs
+            )
+
+            # we assert finite-ness of the forces.
+            self.compare_forces(
+                x,
+                params,
+                box,
+                lamb,
+                ref_potential,
+                test_potential,
+                rtol,
+                precision=precision
+            )
+
     def test_harmonic_angle(self, n_particles=64, n_angles=25, dim=3):
         """Randomly connect triples of particles, then validate the resulting HarmonicAngle force"""
         np.random.seed(125)

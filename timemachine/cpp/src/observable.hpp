@@ -28,13 +28,13 @@ private:
     double *d_sum_du_dp_;
     BoundPotential *bp_;
     int count_;
-    int freq_;
+    int interval_;
 
 public:
 
     AvgPartialUPartialParam(
         BoundPotential *bp,
-        int freq
+        int interval
     );
 
     ~AvgPartialUPartialParam();

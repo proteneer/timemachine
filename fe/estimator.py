@@ -9,24 +9,67 @@ from timemachine.lib import potentials, custom_ops
 
 from typing import Tuple, List, Any
 
+import dataclasses
+import jax.numpy as jnp
+
+@dataclasses.dataclass
 class SimulationResult:
-    def __init__(self, xs=None, du_dls=None, du_dps=None):
-        self.xs = xs
-        self.du_dls = du_dls
-        self.du_dps = du_dps
+   xs: np.array
+   du_dls: np.array
+   du_dps: np.array
 
-    def save(self, path):
-        return np.savez(path, xs=self.xs, du_dls=self.du_dls, du_dps=self.du_dps)
+def flatten(v):
+    return tuple(), (v.xs, v.du_dls, v.du_dps)
 
+def unflatten(aux_data, children):
+    xs, du_dls, du_dps = aux_data
+    return SimulationResult(xs, du_dls, du_dps)
 
+jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
-def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps, get_trajectory=False,
+def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps,
     x_interval=1000, du_dl_interval=5):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
     Parameters
     ----------
+    lamb: float
+        lambda parameter
+
+    box: np.array
+        3x3 numpy array of the box, dtype should be np.float64
+
+    x0: np.array
+        Nx3 numpy array of the coordinates
+
+    v0: np.array
+        Nx3 numpy array of the velocities
+
+    final_potentials: list
+        list of unbound potentials
+
+    integrator: timemachine.Integrator
+        integrator to be used for dynamics
+
+    equil_steps: int
+        number of equilibration steps
+
+    prod_steps: int
+        number of production steps
+
+    x_interval: int
+        how often we store coordinates. if x_interval == 0 then
+        no frames are returned.
+
+    du_dl_interval: int
+        how often we store du_dls. if du_dl_interval == 0 then
+        no du_dls are returned
+
+    Returns
+    -------
+    SimulationResult
+        Results of the simulation.
 
     """
     all_impls = []
@@ -68,27 +111,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
 
     prod_schedule = np.ones(prod_steps)*lamb
 
-    # run MD, optionally pausing every du_dl_freq steps to extract x snapshot
-    if not get_trajectory:
-        xs = None
-        full_du_dls = ctxt.multiple_steps(prod_schedule, du_dl_interval)
-
-    else:
-        xs = [] # in nanometers
-        full_du_dls = []
-
-        # simulate in x_interval-sized chunks
-        t = 0
-        while t < len(prod_schedule):
-            chunk_size = min(len(prod_schedule), (t + x_interval)) - t
-            full_du_dls.append(ctxt.multiple_steps(prod_schedule[t: (t + chunk_size)], chunk_size))
-            xs.append(ctxt.get_x_t())
-            t += chunk_size
-
-        # lists -> arrays
-        xs = np.array(xs)
-        full_du_dls = np.hstack(full_du_dls)
-
+    full_du_dls, xs = ctxt.multiple_steps(prod_schedule, du_dl_interval, x_interval)
 
     # keep the structure of grads the same as that of final_potentials so we can properly
     # form their vjps.
@@ -102,14 +125,12 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
 
 FreeEnergyModel = namedtuple(
     "FreeEnergyModel",
-    ["unbound_potentials", "client", "box", "x0", "v0", "integrator", "lambda_schedule", "equil_steps", "prod_steps",
-     "callback"],
-    defaults=[None] # note: defaults applied to rightmost parameters
+    ["unbound_potentials", "client", "box", "x0", "v0", "integrator", "lambda_schedule", "equil_steps", "prod_steps"]
 )
 
 gradient = List[Any] # TODO: make this more descriptive of dG_grad structure
 
-def _deltaG(model, sys_params, callback=None) -> Tuple[float, gradient]:
+def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     assert len(sys_params) == len(model.unbound_potentials)
 
@@ -130,10 +151,6 @@ def _deltaG(model, sys_params, callback=None) -> Tuple[float, gradient]:
 
         results = [x.result() for x in futures]
 
-    if callback is not None:
-        # TODO: what should the signature of callback be?
-        callback(results)
-
     mean_du_dls = []
     all_grads = []
 
@@ -147,24 +164,22 @@ def _deltaG(model, sys_params, callback=None) -> Tuple[float, gradient]:
     for rhs, lhs in zip(all_grads[-1], all_grads[0]):
         dG_grad.append(rhs - lhs)
 
-    return dG, dG_grad
+    return (dG, results), dG_grad
 
-@functools.partial(jax.custom_vjp, nondiff_argnums=(0,2))
-def deltaG(model, sys_params, callback=None) -> float:
-    return _deltaG(model=model, sys_params=sys_params, callback=callback)[0]
+@functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
+def deltaG(model, sys_params) -> Tuple[float, List]:
+    return _deltaG(model=model, sys_params=sys_params)[0]
 
-def deltaG_fwd(model, sys_params, callback=None) -> Tuple[float, gradient]:
-    """same signature as DeltaG, but returns"""
-    return _deltaG(model=model, sys_params=sys_params, callback=callback)
+def deltaG_fwd(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
+    """same signature as DeltaG, but returns the full tuple"""
+    return _deltaG(model=model, sys_params=sys_params)
 
-def deltaG_bwd(model, callback, residual, grad) -> Tuple[gradient]:
+def deltaG_bwd(model, residual, grad) -> Tuple[np.array]:
     """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!
-
-    Ahh: https://jax.readthedocs.io/en/latest/notebooks/Custom_derivative_rules_for_Python_code.html#jax-custom-vjp-with-nondiff-argnums
-    >A similar option exists for jax.custom_vjp, and similarly the convention is that the non-differentiable arguments
-    >are passed as the first arguments to the rules, no matter where they appear in the original function’s signature.
-
     """
-    return ([grad*r for r in residual], )
+    # residual are the partial dG / partial dparams for each term
+    # grad[0] is the adjoint of dG w.r.t. loss: partial L/partial dG
+    # grad[1] is the adjoint of dG w.r.t. simulation result, which we don't use
+    return ([grad[0]*r for r in residual],)
 
 deltaG.defvjp(deltaG_fwd, deltaG_bwd)

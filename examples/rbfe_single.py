@@ -117,7 +117,7 @@ if __name__ == "__main__":
         cmd_args.num_prod_steps
     )
 
-    vg_fn = jax.value_and_grad(binding_model.loss, argnums=0)
+
 
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
@@ -171,8 +171,11 @@ if __name__ == "__main__":
     flat_grad_traj = []
     loss_traj = []
 
+    vg_fn = jax.value_and_grad(binding_model.loss, argnums=0, has_aux=True)
+
     for epoch in range(1000):
         epoch_params = serialize_handlers(ordered_handles)
+
         (loss, aux), loss_grad = vg_fn(ordered_params, mol_a, mol_b, core, label_ddG)
 
         print("epoch", epoch, "loss", loss)

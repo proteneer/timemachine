@@ -81,7 +81,7 @@ def test_absolute_free_energy():
                 prod_steps
             )
 
-            dG = estimator.deltaG(model, sys_params)
+            dG, _ = estimator.deltaG(model, sys_params)
             dGs.append(dG)
 
 
@@ -189,7 +189,7 @@ def test_relative_free_energy():
             prod_steps
         )
 
-        return estimator.deltaG(model, sys_params)
+        return estimator.deltaG(model, sys_params)[0]
 
     vg_fn = jax.value_and_grad(vacuum_model)
     dG, ff_grads = vg_fn(ff_params) # dG and ff_params_grad
@@ -236,7 +236,7 @@ def test_relative_free_energy():
                 prod_steps
             )
 
-            dG = estimator.deltaG(model, sys_params)
+            dG, _ = estimator.deltaG(model, sys_params)
             dGs.append(dG)
 
         return dGs[0] - dGs[1]
