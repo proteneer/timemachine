@@ -1,4 +1,8 @@
-from jax import vmap, numpy as jnp
+from jax import jit, vmap, numpy as jnp
+from jax.config import config
+
+config.update("jax_enable_x64", True)
+
 import numpy as onp
 from simtk import unit
 
@@ -11,32 +15,61 @@ from collections import namedtuple
 CoordsAndBox = namedtuple('CoordsAndBox', ['coords', 'box'])
 
 
+def _scatter_inds_from_group_inds(group_inds):
+    """
+    given a list of arrays of ints, representing groups of particles,
+    construct a flat array, representing which group index to sort each particle into
+
+    [[0,1,2], [3,4,5]] --> [0, 0, 0, 1, 1, 1]
+    """
+    all_inds = onp.hstack(group_inds)
+    scatter_inds = onp.zeros(len(all_inds))
+
+    # assert group_inds not overlapping
+    assert (len(all_inds) == len(set(all_inds)))
+
+    for i, group in enumerate(group_inds):
+        for j in group:
+            scatter_inds[j] = i
+
+    return jnp.array(scatter_inds, dtype=int)
+
+
+def compute_centroid(group):
+    return jnp.mean(group, axis=0)
+
+
+def compute_centroid_from_inds(coords, inds):
+    return compute_centroid(coords[inds])
+
+
+@jit
+def vmap_compute_centroids(coords, homogeneous_group_inds):
+    """homogeneous_group_inds contains indices for groups of homogeneous size
+    """
+    return vmap(compute_centroid_from_inds, in_axes=(None, 0))(coords, homogeneous_group_inds)
+
+
 class CentroidRescaler:
     def __init__(self, group_inds, weights=None):
         self.group_inds = group_inds
-        self.scatter_inds = self._scatter_inds_from_group_inds(group_inds)
+        # make sure these are sorted by group size?
+
+        # Some extra bookkeeping -- we'll jax.vmap over all the
+
+        # currently assume groups are given in order of ascending size
+        self._group_sizes = jnp.array(list(map(len, group_inds)))
+        assert ((self._group_sizes[1:] >= self._group_sizes[:-1]).all())
+        # TODO: sort these, if they're not given in this order...
+        self._homogeneous_inds = dict()
+        for group_size in sorted(set(self._group_sizes)):
+            self._homogeneous_inds[group_size] = jnp.vstack(
+                [inds for inds in self.group_inds if len(inds) == group_size])
+
+        self.scatter_inds = _scatter_inds_from_group_inds(group_inds)
 
         if weights is not None:
-            raise(NotImplementedError)
-
-    def _scatter_inds_from_group_inds(self, group_inds):
-        """
-        given a list of arrays of ints, representing groups of particles,
-        construct a flat array, representing which group index to sort each particle into
-
-        [[0,1,2], [3,4,5]] --> [0, 0, 0, 1, 1, 1]
-        """
-        all_inds = onp.hstack(group_inds)
-        scatter_inds = onp.zeros(len(all_inds))
-
-        # assert group_inds not overlapping
-        assert (len(all_inds) == len(set(all_inds)))
-
-        for i, group in enumerate(group_inds):
-            for j in group:
-                scatter_inds[j] = i
-
-        return jnp.array(scatter_inds, dtype=int)
+            raise (NotImplementedError)
 
     def rescale(self, coords, center, scale=1.0):
         """scale distances of coords to center"""
@@ -44,9 +77,6 @@ class CentroidRescaler:
         dx_initial = coords - center
         dx_updated = scale * dx_initial
         return center + dx_updated
-
-    def compute_centroid(self, group):
-        return jnp.mean(group, axis=0)
 
     def compute_centroids(self, coords):
         # naive way to write this in Python: a list comprehension
@@ -58,9 +88,12 @@ class CentroidRescaler:
         #   the tree of axis sizes is: [3,3,3,...,35]
         # return vmap(lambda inds: self.compute_centroid(coords[inds]))(self.group_inds)
 
-        # TODO: concise and Jax-y way to implement this
-
-        return jnp.array([self.compute_centroid(coords[inds]) for inds in self.group_inds])
+        # a compromise way to write this: one call to vmap per group size.
+        #   (most of the heavy lifting will be for group_size=3, all the waters)
+        centroids = []
+        for group_size in sorted(set(self._group_sizes)):
+            centroids.append(vmap_compute_centroids(coords, self._homogeneous_inds[group_size]))
+        return jnp.vstack(centroids)
 
     def displace_by_group(self, coords, displacements):
         return coords + displacements[self.scatter_inds]
