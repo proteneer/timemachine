@@ -17,6 +17,7 @@ from barostat.moves import MonteCarloBarostat, CoordsAndBox
 from barostat.utils import get_group_indices, compute_box_volume
 
 from timemachine.lib import custom_ops, LangevinIntegrator
+from timemachine.constants import BOLTZ
 
 if __name__ == '__main__':
 
@@ -69,9 +70,13 @@ if __name__ == '__main__':
     integrator_impl = integrator.impl()
 
     def sample_velocities():
+        """ TODO: move this into integrator or something? """
         v_unscaled = np.random.randn(len(masses), 3)
-        scale = np.sqrt(1 / (ensemble.beta * masses)) # TODO: fix units!
-        return (scale * v_unscaled.T).T
+
+        # intended to be consistent with timemachine.integrator:langevin_coefficients
+        sigma = np.sqrt(BOLTZ * ensemble.temperature.value_in_unit(unit.kelvin)) * np.sqrt(1 / masses)
+
+        return (sigma * v_unscaled.T).T
 
 
     def run_thermostatted_md(x: CoordsAndBox, n_steps=5) -> CoordsAndBox:
