@@ -12,9 +12,12 @@ CoordsAndBox = namedtuple('CoordsAndBox', ['coords', 'box'])
 
 
 class CentroidRescaler:
-    def __init__(self, group_inds):
+    def __init__(self, group_inds, weights=None):
         self.group_inds = group_inds
         self.scatter_inds = self._scatter_inds_from_group_inds(group_inds)
+
+        if weights is not None:
+            raise(NotImplementedError)
 
     def _scatter_inds_from_group_inds(self, group_inds):
         """
@@ -42,21 +45,16 @@ class CentroidRescaler:
         dx_updated = scale * dx_initial
         return center + dx_updated
 
-    def compute_centroid(self, group, weights=None):
-        if weights is not None:
-            assert (not (weights < 0).any())
-            normalized_weights = weights / jnp.sum(weights)
-            return jnp.mean(normalized_weights * group, axis=0)
-
+    def compute_centroid(self, group):
         return jnp.mean(group, axis=0)
 
-    def compute_centroids(self, coords, weights=None):
-        return jnp.array([self.compute_centroid(coords[inds], weights) for inds in self.group_inds])
+    def compute_centroids(self, coords):
+        return jnp.array([self.compute_centroid(coords[inds]) for inds in self.group_inds])
 
     def displace_by_group(self, coords, displacements):
         return coords + displacements[self.scatter_inds]
 
-    def scale_centroids(self, coords, center, scale, weights=None):
+    def scale_centroids(self, coords, center, scale):
         """
 
         Notes
@@ -66,7 +64,7 @@ class CentroidRescaler:
         * Later, particle weights could be set in some arbitrary way within each group
         """
 
-        centroids = self.compute_centroids(coords, weights)
+        centroids = self.compute_centroids(coords)
         group_displacements = self.rescale(centroids, center, scale) - centroids
         displaced_coords = self.displace_by_group(coords, group_displacements)
 
