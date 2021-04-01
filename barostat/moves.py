@@ -1,4 +1,4 @@
-import jax.numpy as jnp
+from jax import vmap, numpy as jnp
 import numpy as onp
 from simtk import unit
 
@@ -49,6 +49,17 @@ class CentroidRescaler:
         return jnp.mean(group, axis=0)
 
     def compute_centroids(self, coords):
+        # naive way to write this in Python: a list comprehension
+        # --> very slow to run in Jax, and jit compiling times out
+        # return jnp.array([self.compute_centroid(coords[inds]) for inds in self.group_inds])
+
+        # naive way to write this in Jax: vmap
+        # ValueError: vmap got inconsistent sizes for array axes to be mapped:
+        #   the tree of axis sizes is: [3,3,3,...,35]
+        # return vmap(lambda inds: self.compute_centroid(coords[inds]))(self.group_inds)
+
+        # TODO: concise and Jax-y way to implement this
+
         return jnp.array([self.compute_centroid(coords[inds]) for inds in self.group_inds])
 
     def displace_by_group(self, coords, displacements):
