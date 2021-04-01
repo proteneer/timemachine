@@ -36,7 +36,7 @@ class CentroidRescaler:
             for j in group:
                 scatter_inds[j] = i
 
-        return jnp.array(scatter_inds)
+        return jnp.array(scatter_inds, dtype=int)
 
     def rescale(self, coords, center, scale=1.0):
         """scale distances of coords to center"""
