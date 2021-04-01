@@ -2,6 +2,7 @@
 
 import numpy as np
 from simtk import unit
+from tqdm import tqdm
 
 from testsystems.relative import hif2a_ligand_pair
 
@@ -73,7 +74,7 @@ if __name__ == '__main__':
         return (scale * v_unscaled.T).T
 
 
-    def run_thermostatted_md(x: CoordsAndBox, n_steps=100) -> CoordsAndBox:
+    def run_thermostatted_md(x: CoordsAndBox, n_steps=5) -> CoordsAndBox:
 
         # TODO: is there a way to set context coords, box, velocities without initializing a fresh Context?
         # TODO: is there a way to get velocities at the end?
@@ -93,12 +94,15 @@ if __name__ == '__main__':
 
     # alternate between thermostat moves and barostat moves
     traj = [CoordsAndBox(coords, complex_box)]
+    volume_traj = [compute_box_volume(traj[0].box)]
 
-    for _ in range(1000):
+    trange = tqdm(range(1000))
+    for _ in trange:
         after_nvt = run_thermostatted_md(traj[-1])
         after_npt = barostat.move(after_nvt)
 
         traj.append(after_npt)
+        volume_traj.append(compute_box_volume(after_npt.box))
 
-    volume_traj = [compute_box_volume(t.box) for t in traj]
-    print(volume_traj)
+        trange.set_postfix(volume=f'{volume_traj[-1]:.3f}',
+                           acceptance_fraction=f'{(barostat.n_accepted / barostat.n_proposed):.3f}')
