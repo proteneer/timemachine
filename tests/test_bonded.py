@@ -6,8 +6,8 @@ config.update("jax_enable_x64", True)
 import functools
 
 from common import GradientTest
-from timemachine.lib import potentials
-from timemachine.potentials import bonded
+from jankmachine.lib import potentials
+from jankmachine.potentials import bonded
 
 
 class TestBonded(GradientTest):

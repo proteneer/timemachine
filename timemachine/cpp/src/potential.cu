@@ -4,7 +4,7 @@
 #include "gpu_utils.cuh"
 #include "surreal.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 void Potential::execute_host(
     const int N,

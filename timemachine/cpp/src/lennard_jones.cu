@@ -12,7 +12,7 @@
 #include "k_lennard_jones_jvp.cuh"
 
 
-namespace timemachine {
+namespace jankmachine {
 
 template <typename RealType>
 LennardJones<RealType>::LennardJones(
@@ -192,4 +192,4 @@ void LennardJones<RealType>::execute_device(
 template class LennardJones<double>;
 template class LennardJones<float>;
 
-} // namespace timemachine
+} // namespace jankmachine

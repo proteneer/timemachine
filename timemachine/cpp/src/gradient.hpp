@@ -2,7 +2,7 @@
 
 // #include <cuda_runtime.h>
 
-// namespace timemachine {
+// namespace jankmachine {
 
 // class Params {
 

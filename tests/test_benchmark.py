@@ -11,8 +11,8 @@ from ff import Forcefield
 
 from simtk.openmm import app
 
-from timemachine.lib import custom_ops
-from timemachine.lib import LangevinIntegrator
+from jankmachine.lib import custom_ops
+from jankmachine.lib import LangevinIntegrator
 
 from fe.utils import to_md_units
 from fe import free_energy

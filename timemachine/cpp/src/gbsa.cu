@@ -9,7 +9,7 @@
 #include "k_gbsa.cuh"
 #include "k_gbsa_jvp.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 template <typename RealType>
 GBSA<RealType>::GBSA(

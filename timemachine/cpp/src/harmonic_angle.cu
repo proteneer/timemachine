@@ -6,7 +6,7 @@
 #include "gpu_utils.cuh"
 #include "k_harmonic_angle.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 template <typename RealType>
 HarmonicAngle<RealType>::HarmonicAngle(
@@ -104,4 +104,4 @@ void HarmonicAngle<RealType>::execute_device(
 template class HarmonicAngle<double>;
 template class HarmonicAngle<float>;
 
-} // namespace timemachine
+} // namespace jankmachine

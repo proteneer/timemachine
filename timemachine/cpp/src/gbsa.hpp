@@ -5,7 +5,7 @@
 #include "surreal.cuh"
 #include <vector>
 
-namespace timemachine {
+namespace jankmachine {
 
 template<typename RealType>
 class GBSA : public Gradient {

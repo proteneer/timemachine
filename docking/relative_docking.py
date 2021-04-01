@@ -12,7 +12,7 @@ from md import builders, minimizer
 from fe import free_energy, topology
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
-from timemachine.lib import custom_ops, LangevinIntegrator
+from jankmachine.lib import custom_ops, LangevinIntegrator
 
 from testsystems.relative import hif2a_ligand_pair
 

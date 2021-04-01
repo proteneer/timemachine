@@ -4,7 +4,7 @@
 
 #include "gradient.hpp"
 
-namespace timemachine {
+namespace jankmachine {
 
 class Stepper {
 

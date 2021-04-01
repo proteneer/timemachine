@@ -26,7 +26,7 @@ from training import hydration_model, hydration_setup
 from training import simulation
 from training import service_pb2_grpc
 
-from timemachine.lib import LangevinIntegrator
+from jankmachine.lib import LangevinIntegrator
 from md import builders
 
 # used during visualization to bring everything back to home box

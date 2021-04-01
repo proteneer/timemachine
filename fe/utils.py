@@ -14,7 +14,7 @@ def write(xyz, masses, recenter=True):
     if recenter:
         xyz = xyz - np.mean(xyz, axis=0, keepdims=True)
     buf = str(len(masses)) + '\n'
-    buf += 'timemachine\n'
+    buf += 'jankmachine\n'
     for m, (x,y,z) in zip(masses, xyz):
         if int(round(m)) == 12:
             symbol = 'C'

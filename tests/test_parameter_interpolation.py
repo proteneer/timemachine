@@ -4,7 +4,7 @@ import functools
 import numpy as np
 
 from common import GradientTest
-from timemachine.lib import potentials
+from jankmachine.lib import potentials
 
 from common import prepare_water_system
 

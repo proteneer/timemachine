@@ -4,7 +4,7 @@
 #include "bound_potential.hpp"
 
 
-namespace timemachine {
+namespace jankmachine {
 
 class Observable {
 

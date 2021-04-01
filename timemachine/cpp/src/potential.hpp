@@ -2,7 +2,7 @@
 
 #include <cuda_runtime.h>
 
-namespace timemachine {
+namespace jankmachine {
 
 // *Not* guaranteed to be thread-safe.
 class Potential {

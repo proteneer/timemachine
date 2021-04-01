@@ -5,7 +5,7 @@ import copy
 import jax
 import numpy as np
 
-from timemachine.lib import potentials, custom_ops
+from jankmachine.lib import potentials, custom_ops
 
 from typing import Tuple, List, Any
 
@@ -49,7 +49,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     final_potentials: list
         list of unbound potentials
 
-    integrator: timemachine.Integrator
+    integrator: jankmachine.Integrator
         integrator to be used for dynamics
 
     equil_steps: int

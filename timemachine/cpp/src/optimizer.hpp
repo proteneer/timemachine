@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <cstdio>
 
-namespace timemachine {
+namespace jankmachine {
 
 // Optimizer owns *everything*. This design basically
 // goes against the design of almost every text-book pattern.

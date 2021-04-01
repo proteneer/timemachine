@@ -3,10 +3,10 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import functools
-from timemachine.constants import ONE_4PI_EPS0
+from jankmachine.constants import ONE_4PI_EPS0
 
-from timemachine.potentials import bonded, nonbonded, gbsa
-from timemachine.lib import potentials, custom_ops
+from jankmachine.potentials import bonded, nonbonded, gbsa
+from jankmachine.lib import potentials, custom_ops
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 

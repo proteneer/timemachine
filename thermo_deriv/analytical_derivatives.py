@@ -27,7 +27,7 @@ import numpy as np
 import functools
 
 
-from timemachine.constants import BOLTZ
+from jankmachine.constants import BOLTZ
 
 lennard_jones = jax.jit(lennard_jones)
 dU_dp = jax.jit(jax.grad(lennard_jones, argnums=(1,)))

@@ -1,7 +1,7 @@
 #include "optimizer.hpp"
 #include "kernel_utils.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 template<typename RealType> 
 void Optimizer<RealType>::step_host(

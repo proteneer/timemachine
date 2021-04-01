@@ -1,5 +1,5 @@
 import numpy as np
-from timemachine.lib import custom_ops
+from jankmachine.lib import custom_ops
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 

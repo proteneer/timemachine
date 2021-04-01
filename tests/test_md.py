@@ -8,9 +8,9 @@ import jax
 import jax.numpy as jnp
 
 
-from timemachine.lib import custom_ops
-# from timemachine.lib import potentials
-from timemachine.potentials import bonded, nonbonded
+from jankmachine.lib import custom_ops
+# from jankmachine.lib import potentials
+from jankmachine.potentials import bonded, nonbonded
 
 from common import GradientTest
 from common import prepare_nb_system

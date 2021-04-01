@@ -2,7 +2,7 @@ import numpy as np
 import functools
 import jax
 import jax.numpy as jnp
-from timemachine.integrator import langevin_coefficients
+from jankmachine.integrator import langevin_coefficients
 
 from jax.config import config; config.update("jax_enable_x64", True)
 

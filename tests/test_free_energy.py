@@ -15,7 +15,7 @@ from parallel.client import CUDAPoolClient
 
 from md import builders, minimizer
 
-from timemachine.lib import LangevinIntegrator, custom_ops
+from jankmachine.lib import LangevinIntegrator, custom_ops
 
 
 def test_absolute_free_energy():

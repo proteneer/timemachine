@@ -22,8 +22,8 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from ff import handlers
-from timemachine.potentials import bonded, shape
-from timemachine.integrator import langevin_coefficients
+from jankmachine.potentials import bonded, shape
+from jankmachine.integrator import langevin_coefficients
 
 
 def pmi_restraints_new(conf, params, box, lamb, a_idxs, b_idxs, masses, angle_force, com_force):

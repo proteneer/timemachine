@@ -2,7 +2,7 @@
 
 #include <vector>
 
-namespace timemachine {
+namespace jankmachine {
 
 // enable 64bit stuff later
 template<typename RealType>

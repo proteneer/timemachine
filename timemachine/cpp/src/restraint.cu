@@ -6,7 +6,7 @@
 #include "gpu_utils.cuh"
 #include "k_restraint.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 template <typename RealType>
 Restraint<RealType>::Restraint(
@@ -158,4 +158,4 @@ void Restraint<RealType>::execute_lambda_jvp_device(
 template class Restraint<double>;
 template class Restraint<float>;
 
-} // namespace timemachine
+} // namespace jankmachine

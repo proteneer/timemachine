@@ -5,7 +5,7 @@
 #include <vector>
 #include <array>
 
-namespace timemachine {
+namespace jankmachine {
 
 typedef void (*k_nonbonded_fn)(const int N,
     const double * __restrict__ coords,

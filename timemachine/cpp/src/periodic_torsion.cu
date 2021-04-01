@@ -6,7 +6,7 @@
 #include "gpu_utils.cuh"
 #include "k_periodic_torsion.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 template <typename RealType>
 PeriodicTorsion<RealType>::PeriodicTorsion(
@@ -107,4 +107,4 @@ void PeriodicTorsion<RealType>::execute_device(
 template class PeriodicTorsion<double>;
 template class PeriodicTorsion<float>;
 
-} // namespace timemachine
+} // namespace jankmachine

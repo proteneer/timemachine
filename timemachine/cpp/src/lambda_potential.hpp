@@ -5,7 +5,7 @@
 #include <memory>
 #include <typeinfo>
 
-namespace timemachine {
+namespace jankmachine {
 
 class LambdaPotential : public Potential {
 

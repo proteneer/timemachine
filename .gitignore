@@ -1,6 +1,6 @@
 .idea
 *.pkl
 __pycache__/
-timemachine/cpp/build/
+jankmachine/cpp/build/
 *.so
 *.DS_Store

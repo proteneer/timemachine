@@ -6,7 +6,7 @@
 
 #include <stdexcept>
 
-namespace timemachine {
+namespace jankmachine {
 
 
 __global__ void k_final_add(

@@ -8,7 +8,7 @@
 #include "solver.hpp"
 #include "../fixed_point.hpp"
 
-namespace timemachine {
+namespace jankmachine {
 
 template <typename RealType>
 InertialRestraint<RealType>::InertialRestraint(
@@ -234,7 +234,7 @@ void grad_eigh(
     double a_adjoint[3][3]   // input array adjoints
     ) {
     /*
-    (ytz): I really hate this code. See timemachine.lib.pmi.grad_eigh for a slightly more
+    (ytz): I really hate this code. See jankmachine.lib.pmi.grad_eigh for a slightly more
     readable python implementation.
 
     Reference implementation of the vector jacobian product of the derivative of column
@@ -447,4 +447,4 @@ void InertialRestraint<RealType>::execute_device(
 template class InertialRestraint<double>;
 template class InertialRestraint<float>;
 
-} // namespace timemachine
+} // namespace jankmachine

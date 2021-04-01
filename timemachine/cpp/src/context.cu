@@ -7,7 +7,7 @@
 #include <chrono>
 #include <cub/cub.cuh>
 
-namespace timemachine {
+namespace jankmachine {
 
 Context::Context(
     int N,

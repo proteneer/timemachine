@@ -6,7 +6,7 @@
 #include "gpu_utils.cuh"
 #include "k_harmonic_bond.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 template <typename RealType>
 HarmonicBond<RealType>::HarmonicBond(
@@ -102,4 +102,4 @@ void HarmonicBond<RealType>::execute_device(
 template class HarmonicBond<double>;
 template class HarmonicBond<float>;
 
-} // namespace timemachine
+} // namespace jankmachine

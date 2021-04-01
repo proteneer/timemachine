@@ -1,4 +1,4 @@
-from timemachine.constants import BOLTZ
+from jankmachine.constants import BOLTZ
 import numpy as np
 
 

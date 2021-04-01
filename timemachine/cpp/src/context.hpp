@@ -6,7 +6,7 @@
 #include "bound_potential.hpp"
 #include "observable.hpp"
 
-namespace timemachine {
+namespace jankmachine {
 
 class Context {
 

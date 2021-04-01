@@ -3,7 +3,7 @@
 #include <iostream>
 
 
-namespace timemachine {
+namespace jankmachine {
 
 AvgPartialUPartialParam::AvgPartialUPartialParam(
     BoundPotential *bp, int interval) : bp_(bp), count_(0), interval_(interval) {

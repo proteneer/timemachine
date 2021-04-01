@@ -1,7 +1,7 @@
 import numpy as np
 
-from timemachine.lib import custom_ops
-from timemachine.integrator import langevin_coefficients
+from jankmachine.lib import custom_ops
+from jankmachine.integrator import langevin_coefficients
 
 # safe to pickle!
 

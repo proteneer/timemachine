@@ -5,7 +5,7 @@
 #define PI  3.1415926535897932384626433
 
 #include <iostream>
-namespace timemachine {
+namespace jankmachine {
 
 Stepper::Stepper(int F) : streams_(F) {
     for(int i=0; i < F; i++) {

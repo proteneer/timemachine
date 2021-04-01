@@ -3,7 +3,7 @@
 #include "potential.hpp"
 #include <vector>
 
-namespace timemachine {
+namespace jankmachine {
 
 template<typename RealType>
 class PeriodicTorsion : public Potential {

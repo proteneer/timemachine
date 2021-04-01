@@ -5,7 +5,7 @@
 
 #include "potential.hpp"
 
-namespace timemachine {
+namespace jankmachine {
 
 // a potential bounded to a set of parameters with some shape
 struct BoundPotential {
@@ -63,4 +63,4 @@ struct BoundPotential {
 };
 
 
-} // namespace timemachine
+} // namespace jankmachine

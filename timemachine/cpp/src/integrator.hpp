@@ -2,7 +2,7 @@
 
 #include "curand.h"
 
-namespace timemachine {
+namespace jankmachine {
 
 class Integrator {
 
@@ -69,4 +69,4 @@ public:
 //     RealType *d_x_new,
 //     RealType *d_v_new);
 
-} // end namespace timemachine
+} // end namespace jankmachine

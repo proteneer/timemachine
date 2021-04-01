@@ -1,5 +1,5 @@
 """
-Tests for the timemachine/docking/ files
+Tests for the jankmachine/docking/ files
 """
 
 import unittest

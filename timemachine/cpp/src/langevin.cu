@@ -88,7 +88,7 @@
 // }
 
 
-// namespace timemachine {
+// namespace jankmachine {
 
 
 // template<typename RealType> 
@@ -421,5 +421,5 @@
 
 // }
 
-// template class timemachine::LangevinOptimizer<double>;
-// template class timemachine::LangevinOptimizer<float>;
+// template class jankmachine::LangevinOptimizer<double>;
+// template class jankmachine::LangevinOptimizer<float>;

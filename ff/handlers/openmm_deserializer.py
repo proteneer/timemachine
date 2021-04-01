@@ -7,8 +7,8 @@ from simtk.openmm.app import PDBFile
 from simtk.openmm.app import forcefield as ff
 from simtk import unit
 
-from timemachine import constants
-from timemachine.lib import potentials
+from jankmachine import constants
+from jankmachine.lib import potentials
 
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)

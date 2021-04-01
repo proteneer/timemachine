@@ -7,8 +7,8 @@ from functools import partial
 
 from pickle import dump
 
-import timemachine
-from timemachine.parser import TimemachineConfig
+import jankmachine
+from jankmachine.parser import TimemachineConfig
 
 from fe import topology
 from fe.utils import convert_uIC50_to_kJ_per_mole
@@ -119,7 +119,7 @@ def generate_star(
             transformations.append(rfe)
         except AtomMappingError as e:
             # note: some of transformations may fail the factorizability assertion here:
-            # https://github.com/proteneer/timemachine/blob/2eb956f9f8ce62287cc531188d1d1481832c5e96/fe/topology.py#L381-L431
+            # https://github.com/proteneer/jankmachine/blob/2eb956f9f8ce62287cc531188d1d1481832c5e96/fe/topology.py#L381-L431
             error_transformations.append((hub, spoke, core))
 
     print(f'total # of edges that encountered atom mapping errors: {len(error_transformations)}')

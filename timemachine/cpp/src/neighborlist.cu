@@ -6,7 +6,7 @@
 #include "k_neighborlist.cuh"
 #include "gpu_utils.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 template<typename RealType>
 Neighborlist<RealType>::Neighborlist(

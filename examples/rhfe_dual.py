@@ -9,8 +9,8 @@ from fe import topology
 from md import builders
 from md import minimizer
 
-from timemachine.lib import potentials, custom_ops
-from timemachine.lib import LangevinIntegrator
+from jankmachine.lib import potentials, custom_ops
+from jankmachine.lib import LangevinIntegrator
 
 import functools
 import jax
@@ -131,7 +131,7 @@ for lamb_idx, final_lamb in enumerate(np.linspace(1, 0, 8)):
 
     # note: the .impl() call at the end returns a pickle-able version of the
     #   wrapper function -- since contexts are not pickle-able -- which will
-    #   be useful later in timemachine's multi-device parallelization strategy)
+    #   be useful later in jankmachine's multi-device parallelization strategy)
     # note: OpenMM unit system used throughout
     #   (temperature: kelvin, timestep: picosecond, collision_rate: picosecond^-1)
     intg = LangevinIntegrator(

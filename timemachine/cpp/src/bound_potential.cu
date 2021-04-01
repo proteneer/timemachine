@@ -1,7 +1,7 @@
 #include "bound_potential.hpp"
 #include "gpu_utils.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 BoundPotential::BoundPotential(
     std::shared_ptr<Potential> potential,

@@ -6,7 +6,7 @@ from quadpy import quad
 from thermo_deriv.lj_non_periodic import lennard_jones
 import numpy as np
 import functools
-from timemachine.constants import BOLTZ
+from jankmachine.constants import BOLTZ
 
 BOLTZ = RGAS/1000
 

@@ -14,7 +14,7 @@ from ff.handlers.deserialize import deserialize_handlers
 
 import jax
 
-from timemachine.lib import potentials
+from jankmachine.lib import potentials
 
 def get_romol_conf(mol):
     """Coordinates of mol's 0th conformer, in nanometers"""

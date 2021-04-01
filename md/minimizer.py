@@ -2,8 +2,8 @@ import numpy as np
 
 from fe import topology
 
-from timemachine.lib import potentials
-from timemachine.lib import LangevinIntegrator, custom_ops
+from jankmachine.lib import potentials
+from jankmachine.lib import LangevinIntegrator, custom_ops
 
 from ff.handlers import openmm_deserializer
 from ff import Forcefield

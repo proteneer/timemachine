@@ -39,8 +39,8 @@ We currently support the following functional forms. Parameters that can be opti
 If using conda the following can be used to configure your environment
 
 ```
-conda create -n timemachine python=3.7
-conda activate timemachine
+conda create -n jankmachine python=3.7
+conda activate jankmachine
 conda install -c conda-forge -c openeye -c rdkit openmm openeye-toolkits rdkit
 ```
 
@@ -48,7 +48,7 @@ conda install -c conda-forge -c openeye -c rdkit openmm openeye-toolkits rdkit
 
 ```
 pip install -r requirements.txt
-cd timemachine/cpp
+cd jankmachine/cpp
 mkdir build
 cd build
 cmake -DCUDA_ARCH=sm_70 ../
@@ -85,13 +85,13 @@ When we have experimental measurements, the loss function and its derivative is 
 
 An example source code of how one can train the RBFE via TI is available at:
 
-- [examples/rbfe_single.py](https://github.com/proteneer/timemachine/blob/master/examples/rbfe_single.py)
+- [examples/rbfe_single.py](https://github.com/proteneer/jankmachine/blob/master/examples/rbfe_single.py)
 
-To update the forcefield parameters, the timemachine computes derivatives of the potential with respect to redundant system parameters (C++/CUDA), which are backprop'd into unique forcefield parameters using vector jacobian products (python/jax). The parameters are fitted using gradient descent with gradient clipping whose bounds are set to physically sensible and numerically stable values for each parameter type.
+To update the forcefield parameters, the jankmachine computes derivatives of the potential with respect to redundant system parameters (C++/CUDA), which are backprop'd into unique forcefield parameters using vector jacobian products (python/jax). The parameters are fitted using gradient descent with gradient clipping whose bounds are set to physically sensible and numerically stable values for each parameter type.
 
 ## Forcefield Gotchas
 
-Most of the training is using the correctable charge corrections [ccc forcefield](https://github.com/proteneer/timemachine/blob/master/ff/params/smirnoff_1_1_0_ccc.py), which is SMIRNOFF 1.1.0 augmented with BCCs ported via the [recharge](https://github.com/openforcefield/openff-recharge) project. There are some additional modifications:
+Most of the training is using the correctable charge corrections [ccc forcefield](https://github.com/proteneer/jankmachine/blob/master/ff/params/smirnoff_1_1_0_ccc.py), which is SMIRNOFF 1.1.0 augmented with BCCs ported via the [recharge](https://github.com/openforcefield/openff-recharge) project. There are some additional modifications:
 
 1. The charges have been multiplied by sqrt(ONE_4PI_EPS0) as an optimization.
 2. The eps parameter in LJ have been replaced by an alpha such that alpha^2=eps in order to avoid negative eps values during training.

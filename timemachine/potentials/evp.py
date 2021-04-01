@@ -7,7 +7,7 @@ from jax.config import config; config.update("jax_enable_x64", True)
 from scipy.stats import special_ortho_group
 
 
-from timemachine.potentials import evp
+from jankmachine.potentials import evp
 
 def recenter(conf):
     return conf - np.mean(conf, axis=0)

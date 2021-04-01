@@ -1,4 +1,4 @@
-# Adapted from https://github.com/proteneer/timemachine/blob/8f4c6d009ff27e070c19ff16901082197c54494d/examples/rbfe_single.py
+# Adapted from https://github.com/proteneer/jankmachine/blob/8f4c6d009ff27e070c19ff16901082197c54494d/examples/rbfe_single.py
 
 # without computing gradient (just computing dG_estimate), with default lambda protocol,
 # what is the bias and variance of dG_estimate as a function of computational effort?

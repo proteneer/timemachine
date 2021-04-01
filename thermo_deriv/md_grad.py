@@ -5,10 +5,10 @@ import jax.numpy as jnp
 
 from quadpy import quad
 from thermo_deriv.lj import lennard_jones
-from timemachine.integrator import langevin_coefficients
+from jankmachine.integrator import langevin_coefficients
 import numpy as np
 import functools
-from timemachine.constants import BOLTZ
+from jankmachine.constants import BOLTZ
 
 from matplotlib import pyplot as plt
 

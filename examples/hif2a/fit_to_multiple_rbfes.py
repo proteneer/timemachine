@@ -5,7 +5,7 @@ import jax
 from jax import numpy as jnp
 import numpy as np
 import datetime
-import timemachine
+import jankmachine
 from training.dataset import Dataset
 
 # forcefield handlers
@@ -78,7 +78,7 @@ testing_configuration = Configuration(
 
 
 # locations relative to project root
-root = Path(timemachine.__file__).parent.parent
+root = Path(jankmachine.__file__).parent.parent
 
 
 def _save_forcefield(fname, ff_params):

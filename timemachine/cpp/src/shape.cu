@@ -8,7 +8,7 @@
 
 #define PI 3.141592653589793115997963468544185161
 
-namespace timemachine {
+namespace jankmachine {
 
 
 // tbd chain rule for parameter derivatives
@@ -309,4 +309,4 @@ void Shape<RealType>::execute_device(
 template class Shape<double>;
 template class Shape<float>;
 
-} // namespace timemachine
+} // namespace jankmachine

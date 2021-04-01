@@ -6,7 +6,7 @@
 #include "gpu_utils.cuh"
 #include "k_centroid_restraint.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 template <typename RealType>
 CentroidRestraint<RealType>::CentroidRestraint(
@@ -92,4 +92,4 @@ void CentroidRestraint<RealType>::execute_device(
 template class CentroidRestraint<double>;
 template class CentroidRestraint<float>;
 
-} // namespace timemachine
+} // namespace jankmachine

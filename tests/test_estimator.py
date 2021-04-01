@@ -4,8 +4,8 @@ import numpy as np
 
 
 from fe import estimator
-from timemachine.lib import LangevinIntegrator
-from timemachine.lib import potentials
+from jankmachine.lib import LangevinIntegrator
+from jankmachine.lib import potentials
 from parallel.client import CUDAPoolClient
 
 

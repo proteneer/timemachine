@@ -8,8 +8,8 @@ from rdkit import Chem
 import functools
 import numpy as np
 
-from timemachine.potentials import shape
-from timemachine.lib import potentials
+from jankmachine.potentials import shape
+from jankmachine.lib import potentials
 
 from common import GradientTest
 

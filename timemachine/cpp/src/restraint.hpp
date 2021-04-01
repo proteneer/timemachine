@@ -3,7 +3,7 @@
 #include "gradient.hpp"
 #include <vector>
 
-namespace timemachine {
+namespace jankmachine {
 
 template<typename RealType>
 class Restraint : public Gradient {

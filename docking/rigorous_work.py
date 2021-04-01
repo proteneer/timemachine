@@ -13,7 +13,7 @@ from md import builders
 from fe import pdb_writer, free_energy
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
-from timemachine.lib import custom_ops, LangevinIntegrator
+from jankmachine.lib import custom_ops, LangevinIntegrator
 
 from docking import report
 

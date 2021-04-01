@@ -3,7 +3,7 @@
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 __global__ void k_reduce_add_force_buffer(
     int count,

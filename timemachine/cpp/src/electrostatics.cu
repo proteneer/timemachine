@@ -13,7 +13,7 @@
 #include "k_electrostatics.cuh"
 #include "k_electrostatics_jvp.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 template <typename RealType>
 Electrostatics<RealType>::Electrostatics(
@@ -480,4 +480,4 @@ void Electrostatics<RealType>::execute_device(
 template class Electrostatics<double>;
 template class Electrostatics<float>;
 
-} // namespace timemachine
+} // namespace jankmachine

@@ -5,7 +5,7 @@ from simtk import openmm
 from rdkit import Chem
 
 from md import minimizer
-from timemachine.lib import LangevinIntegrator
+from jankmachine.lib import LangevinIntegrator
 from fe import free_energy, topology, estimator
 from ff import Forcefield
 

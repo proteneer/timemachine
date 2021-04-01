@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(PYBIND11_PYTHON_VERSION 3.7 CACHE STRING "Which version of python we're building wrappers against")
 
-project(timemachine LANGUAGES CXX CUDA)
+project(jankmachine LANGUAGES CXX CUDA)
 
 find_package(PythonInterp 3.7 REQUIRED)
 find_package(PythonLibs 3.7 REQUIRED)

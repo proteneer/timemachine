@@ -5,7 +5,7 @@
 #include "kernel_utils.cuh"
 #include "math_utils.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 
 template <int D>

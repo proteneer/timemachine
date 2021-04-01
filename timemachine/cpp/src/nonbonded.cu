@@ -13,7 +13,7 @@
 
 #include "k_nonbonded.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 template <typename RealType, bool Interpolated>
 Nonbonded<RealType, Interpolated>::Nonbonded(
@@ -479,4 +479,4 @@ template class Nonbonded<double, false>;
 template class Nonbonded<float, false>;
 
 
-} // namespace timemachine
+} // namespace jankmachine

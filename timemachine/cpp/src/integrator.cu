@@ -4,7 +4,7 @@
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 
-namespace timemachine {
+namespace jankmachine {
 
 int round_up_even(int count) {
     if(count % 2 == 1) {
@@ -99,7 +99,7 @@ void LangevinIntegrator::step_fwd(
 
 }
 
-} // end namespace timemachine
+} // end namespace jankmachine
 
 // template<typename RealType>
 // void step_forward(

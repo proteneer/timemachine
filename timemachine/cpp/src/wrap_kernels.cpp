@@ -33,7 +33,7 @@ namespace py = pybind11;
 template <typename RealType>
 void declare_neighborlist(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Neighborlist<RealType>;
+    using Class = jankmachine::Neighborlist<RealType>;
     std::string pyclass_name = std::string("Neighborlist_") + typestr;
     py::class_<Class>(
         m,
@@ -42,10 +42,10 @@ void declare_neighborlist(py::module &m, const char *typestr) {
         py::dynamic_attr()
     )
     .def(py::init([](int N) {
-        return new timemachine::Neighborlist<RealType>(N);
+        return new jankmachine::Neighborlist<RealType>(N);
     }))
     .def("compute_block_bounds", [](
-        timemachine::Neighborlist<RealType> &nblist,
+        jankmachine::Neighborlist<RealType> &nblist,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &box,
         int block_size) -> py::tuple {
@@ -75,7 +75,7 @@ void declare_neighborlist(py::module &m, const char *typestr) {
 
     })
     .def("get_nblist", [](
-        timemachine::Neighborlist<RealType> &nblist,
+        jankmachine::Neighborlist<RealType> &nblist,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &box,
         const double cutoff) -> std::vector<std::vector<int> > {
@@ -99,7 +99,7 @@ void declare_neighborlist(py::module &m, const char *typestr) {
 
 void declare_context(py::module &m) {
 
-    using Class = timemachine::Context;
+    using Class = jankmachine::Context;
     std::string pyclass_name = std::string("Context");
     py::class_<Class>(
         m,
@@ -111,9 +111,9 @@ void declare_context(py::module &m) {
         const py::array_t<double, py::array::c_style> &x0,
         const py::array_t<double, py::array::c_style> &v0,
         const py::array_t<double, py::array::c_style> &box0,
-        timemachine::Integrator *intg,
-        std::vector<timemachine::BoundPotential *> bps) {
-        // std::vector<timemachine::Observable *> obs) {
+        jankmachine::Integrator *intg,
+        std::vector<jankmachine::BoundPotential *> bps) {
+        // std::vector<jankmachine::Observable *> obs) {
 
         int N = x0.shape()[0];
         int D = x0.shape()[1];
@@ -126,7 +126,7 @@ void declare_context(py::module &m) {
             throw std::runtime_error("v0 D != x0 D");
         }
 
-        return new timemachine::Context(
+        return new jankmachine::Context(
             N,
             x0.data(),
             v0.data(),
@@ -137,9 +137,9 @@ void declare_context(py::module &m) {
         );
 
     }))
-    .def("add_observable", &timemachine::Context::add_observable)
-    .def("step", &timemachine::Context::step)
-    .def("multiple_steps", [](timemachine::Context &ctxt,
+    .def("add_observable", &jankmachine::Context::add_observable)
+    .def("step", &jankmachine::Context::step)
+    .def("multiple_steps", [](jankmachine::Context &ctxt,
         const py::array_t<double, py::array::c_style> &lambda_schedule,
         int store_du_dl_interval,
         int store_x_interval) -> py::tuple {
@@ -163,22 +163,22 @@ void declare_context(py::module &m) {
 
         return py::make_tuple(out_du_dl_buffer, out_x_buffer);
     }, py::arg("lambda_schedule"), py::arg("store_du_dl_interval") = 0, py::arg("store_x_interval") = 0)
-    // .def("multiple_steps", &timemachine::Context::multiple_steps)
-    .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+    // .def("multiple_steps", &jankmachine::Context::multiple_steps)
+    .def("get_x_t", [](jankmachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();
         unsigned int D = 3;
         py::array_t<double, py::array::c_style> buffer({N, D});
         ctxt.get_x_t(buffer.mutable_data());
         return buffer;
     })
-    .def("get_v_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+    .def("get_v_t", [](jankmachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();
         unsigned int D = 3;
         py::array_t<double, py::array::c_style> buffer({N, D});
         ctxt.get_v_t(buffer.mutable_data());
         return buffer;
     })
-    .def("_get_du_dx_t_minus_1", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+    .def("_get_du_dx_t_minus_1", [](jankmachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         PyErr_WarnEx(PyExc_DeprecationWarning,
             "_get_du_dx_t_minus_1() should only be used for testing. It will be removed in a future release.",
             1);
@@ -197,7 +197,7 @@ void declare_context(py::module &m) {
 
 void declare_observable(py::module &m) {
 
-    using Class = timemachine::Observable;
+    using Class = jankmachine::Observable;
     std::string pyclass_name = std::string("Observable");
     py::class_<Class>(
         m,
@@ -209,20 +209,20 @@ void declare_observable(py::module &m) {
 
 void declare_avg_partial_u_partial_param(py::module &m) {
 
-    using Class = timemachine::AvgPartialUPartialParam;
+    using Class = jankmachine::AvgPartialUPartialParam;
     std::string pyclass_name = std::string("AvgPartialUPartialParam");
-    py::class_<Class, timemachine::Observable>(
+    py::class_<Class, jankmachine::Observable>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
         py::dynamic_attr()
     )
     .def(py::init([](
-        timemachine::BoundPotential *bp,
+        jankmachine::BoundPotential *bp,
         int interval) {
-        return new timemachine::AvgPartialUPartialParam(bp, interval);
+        return new jankmachine::AvgPartialUPartialParam(bp, interval);
     }))
-    .def("avg_du_dp", [](timemachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
+    .def("avg_du_dp", [](jankmachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
         std::vector<int> shape = obj.shape();
         py::array_t<double, py::array::c_style> buffer(shape);
 
@@ -234,7 +234,7 @@ void declare_avg_partial_u_partial_param(py::module &m) {
 
 void declare_integrator(py::module &m) {
 
-    using Class = timemachine::Integrator;
+    using Class = jankmachine::Integrator;
     std::string pyclass_name = std::string("Integrator");
     py::class_<Class>(
         m,
@@ -247,9 +247,9 @@ void declare_integrator(py::module &m) {
 
 void declare_langevin_integrator(py::module &m) {
 
-    using Class = timemachine::LangevinIntegrator;
+    using Class = jankmachine::LangevinIntegrator;
     std::string pyclass_name = std::string("LangevinIntegrator");
-    py::class_<Class, timemachine::Integrator>(
+    py::class_<Class, jankmachine::Integrator>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -262,7 +262,7 @@ void declare_langevin_integrator(py::module &m) {
         const py::array_t<double, py::array::c_style> &ccs,
         int seed) {
 
-        return new timemachine::LangevinIntegrator(
+        return new jankmachine::LangevinIntegrator(
             cbs.size(),
             dt,
             ca,
@@ -278,14 +278,14 @@ void declare_langevin_integrator(py::module &m) {
 
 void declare_potential(py::module &m) {
 
-    using Class = timemachine::Potential;
+    using Class = jankmachine::Potential;
     std::string pyclass_name = std::string("Potential");
     py::class_<Class, std::shared_ptr<Class> >(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
         py::dynamic_attr())
-    .def("execute", [](timemachine::Potential &pot,
+    .def("execute", [](jankmachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
         const py::array_t<double, py::array::c_style> &box,
@@ -334,7 +334,7 @@ void declare_potential(py::module &m) {
             return py::make_tuple(py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
 
     })
-    .def("execute_selective", [](timemachine::Potential &pot,
+    .def("execute_selective", [](jankmachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
         const py::array_t<double, py::array::c_style> &box,
@@ -404,7 +404,7 @@ void declare_potential(py::module &m) {
 
             return result;
     })
-    .def("execute_du_dx", [](timemachine::Potential &pot,
+    .def("execute_du_dx", [](jankmachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
         const py::array_t<double, py::array::c_style> &box,
@@ -439,7 +439,7 @@ void declare_potential(py::module &m) {
 
 void declare_bound_potential(py::module &m) {
 
-    using Class = timemachine::BoundPotential;
+    using Class = jankmachine::BoundPotential;
     std::string pyclass_name = std::string("BoundPotential");
     py::class_<Class>(
         m,
@@ -447,21 +447,21 @@ void declare_bound_potential(py::module &m) {
         py::buffer_protocol(),
         py::dynamic_attr())
     .def(py::init([](
-        std::shared_ptr<timemachine::Potential> potential,
+        std::shared_ptr<jankmachine::Potential> potential,
         const py::array_t<double, py::array::c_style> &params
     ) {
 
         std::vector<int> pshape(params.shape(), params.shape()+params.ndim());
 
-        return new timemachine::BoundPotential(
+        return new jankmachine::BoundPotential(
             potential,
             pshape,
             params.data()
         );
     }
     ))
-    .def("size", &timemachine::BoundPotential::size)
-    .def("execute", [](timemachine::BoundPotential &bp,
+    .def("size", &jankmachine::BoundPotential::size)
+    .def("execute", [](jankmachine::BoundPotential &bp,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &box,
         double lambda) -> py::tuple  {
@@ -499,9 +499,9 @@ void declare_bound_potential(py::module &m) {
 // template <typename RealType>
 // void declare_shape(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::Shape<RealType>;
+//     using Class = jankmachine::Shape<RealType>;
 //     std::string pyclass_name = std::string("Shape_") + typestr;
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+//     py::class_<Class, std::shared_ptr<Class>, jankmachine::Potential>(
 //         m,
 //         pyclass_name.c_str(),
 //         py::buffer_protocol(),
@@ -520,7 +520,7 @@ void declare_bound_potential(py::module &m) {
 //             std::vector<double> vec_alphas(alphas.data(), alphas.data()+alphas.size());
 //             std::vector<double> vec_weights(weights.data(), weights.data()+weights.size());
 
-//             return new timemachine::Shape<RealType>(
+//             return new jankmachine::Shape<RealType>(
 //                 N,
 //                 vec_a_idxs,
 //                 vec_b_idxs,
@@ -538,9 +538,9 @@ void declare_bound_potential(py::module &m) {
 template <typename RealType>
 void declare_harmonic_bond(py::module &m, const char *typestr) {
 
-    using Class = timemachine::HarmonicBond<RealType>;
+    using Class = jankmachine::HarmonicBond<RealType>;
     std::string pyclass_name = std::string("HarmonicBond_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, jankmachine::Potential>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -560,7 +560,7 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
         if(lamb_offset.has_value()) {
             vec_lamb_offset.assign(lamb_offset.value().data(), lamb_offset.value().data()+lamb_offset.value().size());
         }
-        return new timemachine::HarmonicBond<RealType>(
+        return new jankmachine::HarmonicBond<RealType>(
             vec_bond_idxs,
             vec_lamb_mult,
             vec_lamb_offset
@@ -574,9 +574,9 @@ void declare_harmonic_bond(py::module &m, const char *typestr) {
 template <typename RealType>
 void declare_harmonic_angle(py::module &m, const char *typestr) {
 
-    using Class = timemachine::HarmonicAngle<RealType>;
+    using Class = jankmachine::HarmonicAngle<RealType>;
     std::string pyclass_name = std::string("HarmonicAngle_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, jankmachine::Potential>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -597,7 +597,7 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
         if(lamb_offset.has_value()) {
             vec_lamb_offset.assign(lamb_offset.value().data(), lamb_offset.value().data()+lamb_offset.value().size());
         }
-        return new timemachine::HarmonicAngle<RealType>(
+        return new jankmachine::HarmonicAngle<RealType>(
             vec_angle_idxs,
             vec_lamb_mult,
             vec_lamb_offset
@@ -613,9 +613,9 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 // template <typename RealType>
 // void declare_restraint(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::Restraint<RealType>;
+//     using Class = jankmachine::Restraint<RealType>;
 //     std::string pyclass_name = std::string("Restraint_") + typestr;
-//     py::class_<Class, timemachine::Gradient>(
+//     py::class_<Class, jankmachine::Gradient>(
 //         m,
 //         pyclass_name.c_str(),
 //         py::buffer_protocol(),
@@ -633,20 +633,20 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 //         std::vector<int> vec_lambda_flags(lambda_flags.size());
 //         std::memcpy(vec_lambda_flags.data(), lambda_flags.data(), vec_lambda_flags.size()*sizeof(int));
 
-//         return new timemachine::Restraint<RealType>(
+//         return new jankmachine::Restraint<RealType>(
 //             vec_bond_idxs,
 //             vec_params,
 //             vec_lambda_flags
 //         );
 //     }
 //     ))
-//     .def("get_du_dp_primals", [](timemachine::Restraint<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+//     .def("get_du_dp_primals", [](jankmachine::Restraint<RealType> &grad) -> py::array_t<double, py::array::c_style> {
 //         const int B = grad.num_bonds();
 //         py::array_t<double, py::array::c_style> buffer({B, 3});
 //         grad.get_du_dp_primals(buffer.mutable_data());
 //         return buffer;
 //     })
-//     .def("get_du_dp_tangents", [](timemachine::Restraint<RealType> &grad) -> py::array_t<double, py::array::c_style> {
+//     .def("get_du_dp_tangents", [](jankmachine::Restraint<RealType> &grad) -> py::array_t<double, py::array::c_style> {
 //         const int B = grad.num_bonds();
 //         py::array_t<double, py::array::c_style> buffer({B, 3});
 //         grad.get_du_dp_tangents(buffer.mutable_data());
@@ -659,9 +659,9 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 // template <typename RealType>
 // void declare_centroid_restraint(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::CentroidRestraint<RealType>;
+//     using Class = jankmachine::CentroidRestraint<RealType>;
 //     std::string pyclass_name = std::string("CentroidRestraint_") + typestr;
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+//     py::class_<Class, std::shared_ptr<Class>, jankmachine::Potential>(
 //         m,
 //         pyclass_name.c_str(),
 //         py::buffer_protocol(),
@@ -681,7 +681,7 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 //         std::vector<double> vec_masses(masses.size());
 //         std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
 
-//         return new timemachine::CentroidRestraint<RealType>(
+//         return new jankmachine::CentroidRestraint<RealType>(
 //             vec_group_a_idxs,
 //             vec_group_b_idxs,
 //             vec_masses,
@@ -697,9 +697,9 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 // template <typename RealType>
 // void declare_inertial_restraint(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::InertialRestraint<RealType>;
+//     using Class = jankmachine::InertialRestraint<RealType>;
 //     std::string pyclass_name = std::string("InertialRestraint_") + typestr;
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+//     py::class_<Class, std::shared_ptr<Class>, jankmachine::Potential>(
 //         m,
 //         pyclass_name.c_str(),
 //         py::buffer_protocol(),
@@ -718,7 +718,7 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 //         std::vector<double> vec_masses(masses.size());
 //         std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
 
-//         return new timemachine::InertialRestraint<RealType>(
+//         return new jankmachine::InertialRestraint<RealType>(
 //             vec_group_a_idxs,
 //             vec_group_b_idxs,
 //             vec_masses,
@@ -733,9 +733,9 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 template <typename RealType>
 void declare_periodic_torsion(py::module &m, const char *typestr) {
 
-    using Class = timemachine::PeriodicTorsion<RealType>;
+    using Class = jankmachine::PeriodicTorsion<RealType>;
     std::string pyclass_name = std::string("PeriodicTorsion_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, jankmachine::Potential>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
@@ -755,7 +755,7 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
         if(lamb_offset.has_value()) {
             vec_lamb_offset.assign(lamb_offset.value().data(), lamb_offset.value().data()+lamb_offset.value().size());
         }
-        return new timemachine::PeriodicTorsion<RealType>(
+        return new jankmachine::PeriodicTorsion<RealType>(
             vec_torsion_idxs,
             vec_lamb_mult,
             vec_lamb_offset
@@ -768,22 +768,22 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 
 // void declare_lambda_potential(py::module &m) {
 
-//     using Class = timemachine::LambdaPotential;
+//     using Class = jankmachine::LambdaPotential;
 //     std::string pyclass_name = std::string("LambdaPotential");
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+//     py::class_<Class, std::shared_ptr<Class>, jankmachine::Potential>(
 //         m,
 //         pyclass_name.c_str(),
 //         py::buffer_protocol(),
 //         py::dynamic_attr()
 //     )
 //     .def(py::init([](
-//         std::shared_ptr<timemachine::Potential> potential,
+//         std::shared_ptr<jankmachine::Potential> potential,
 //         int N,
 //         int P,
 //         double multiplier,
 //         double offset) {
 
-//         return new timemachine::LambdaPotential(
+//         return new jankmachine::LambdaPotential(
 //             potential,
 //             N,
 //             P,
@@ -799,20 +799,20 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 
 // void declare_interpolated_potential(py::module &m) {
 
-//     using Class = timemachine::InterpolatedPotential;
+//     using Class = jankmachine::InterpolatedPotential;
 //     std::string pyclass_name = std::string("InterpolatedPotential");
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+//     py::class_<Class, std::shared_ptr<Class>, jankmachine::Potential>(
 //         m,
 //         pyclass_name.c_str(),
 //         py::buffer_protocol(),
 //         py::dynamic_attr()
 //     )
 //     .def(py::init([](
-//         std::shared_ptr<timemachine::Potential> potential,
+//         std::shared_ptr<jankmachine::Potential> potential,
 //         int N,
 //         int P) {
 
-//         return new timemachine::InterpolatedPotential(
+//         return new jankmachine::InterpolatedPotential(
 //             potential,
 //             N,
 //             P
@@ -826,16 +826,16 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 template <typename RealType, bool Interpolated>
 void declare_nonbonded(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Nonbonded<RealType, Interpolated>;
+    using Class = jankmachine::Nonbonded<RealType, Interpolated>;
     std::string pyclass_name = std::string("Nonbonded_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+    py::class_<Class, std::shared_ptr<Class>, jankmachine::Potential>(
         m,
         pyclass_name.c_str(),
         py::buffer_protocol(),
         py::dynamic_attr()
     )
-    .def("set_nblist_padding", &timemachine::Nonbonded<RealType, Interpolated>::set_nblist_padding)
-    .def("disable_hilbert_sort", &timemachine::Nonbonded<RealType, Interpolated>::disable_hilbert_sort)
+    .def("set_nblist_padding", &jankmachine::Nonbonded<RealType, Interpolated>::set_nblist_padding)
+    .def("disable_hilbert_sort", &jankmachine::Nonbonded<RealType, Interpolated>::disable_hilbert_sort)
     .def(py::init([](
         const py::array_t<int, py::array::c_style> &exclusion_i,  // [E, 2] comprised of elements from N
         const py::array_t<double, py::array::c_style> &scales_i,  // [E, 2]
@@ -856,7 +856,7 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
         std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
 
-        return new timemachine::Nonbonded<RealType, Interpolated>(
+        return new jankmachine::Nonbonded<RealType, Interpolated>(
             exclusion_idxs,
             scales,
             lambda_plane_idxs,

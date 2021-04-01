@@ -3,8 +3,8 @@ import jax.numpy as np
 from jax.scipy.special import erf, erfc
 from jax.ops import index_update, index
 
-from timemachine.constants import ONE_4PI_EPS0
-from timemachine.potentials.jax_utils import delta_r, distance, convert_to_4d
+from jankmachine.constants import ONE_4PI_EPS0
+from jankmachine.potentials.jax_utils import delta_r, distance, convert_to_4d
 
 
 

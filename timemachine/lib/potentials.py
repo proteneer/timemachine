@@ -1,5 +1,5 @@
 import numpy as np
-from timemachine.lib import custom_ops
+from jankmachine.lib import custom_ops
 
 # (ytz): classes in this class wrap custom_ops but have the added benefit
 # of being pickleable.

@@ -11,7 +11,7 @@ from ff.handlers.utils import match_smirks, sort_tuple
 from ff.handlers.serialize import SerializableMixIn
 from ff.handlers.bcc_aromaticity import AromaticityModel
 
-from timemachine import constants
+from jankmachine import constants
 
 from jax import ops
 

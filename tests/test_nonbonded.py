@@ -17,8 +17,8 @@ import functools
 from common import GradientTest
 from common import prepare_nb_system, prepare_water_system, prepare_reference_nonbonded
 
-from timemachine.potentials import bonded, nonbonded, gbsa
-from timemachine.lib import potentials
+from jankmachine.potentials import bonded, nonbonded, gbsa
+from jankmachine.lib import potentials
 from md import builders
 
 from hilbertcurve.hilbertcurve import HilbertCurve
