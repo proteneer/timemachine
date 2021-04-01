@@ -36,11 +36,11 @@ def displace_by_group(coords, group_inds, displacements):
     # note: this implementation will fail silently for overlapping group_inds
     # TODO: assert group_inds not overlapping
 
-    displaced_coords = jnp.array(coords)
+    displaced_coords = onp.array(coords)
     for (inds, displacement) in zip(group_inds, displacements):
         displaced_coords[inds] += displacement
 
-    return displaced_coords
+    return jnp.array(displaced_coords)
 
 
 def scale_centroids(coords, center, group_inds, scale, weights=None):
