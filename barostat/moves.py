@@ -11,56 +11,66 @@ from collections import namedtuple
 CoordsAndBox = namedtuple('CoordsAndBox', ['coords', 'box'])
 
 
-def rescale(coords, center, scale=1.0):
-    """scale distances of coords to center"""
+class CentroidRescaler:
+    def __init__(self, group_inds):
+        self.group_inds = group_inds
+        self.scatter_inds = self._scatter_inds_from_group_inds(group_inds)
 
-    dx_initial = coords - center
-    dx_updated = scale * dx_initial
-    return center + dx_updated
+    def _scatter_inds_from_group_inds(self, group_inds):
+        """
+        given a list of arrays of ints, representing groups of particles,
+        construct a flat array, representing which group index to sort each particle into
 
+        [[0,1,2], [3,4,5]] --> [0, 0, 0, 1, 1, 1]
+        """
+        all_inds = onp.hstack(group_inds)
+        scatter_inds = onp.zeros(len(all_inds))
 
-def compute_centroid(group, weights=None):
-    if weights is not None:
-        assert (not (weights < 0).any())
-        normalized_weights = weights / jnp.sum(weights)
-        return jnp.mean(normalized_weights * group, axis=0)
+        # assert group_inds not overlapping
+        assert (len(all_inds) == len(set(all_inds)))
 
-    return jnp.mean(group, axis=0)
+        for i, group in enumerate(group_inds):
+            for j in group:
+                scatter_inds[j] = i
 
+        return jnp.array(scatter_inds)
 
-def compute_centroids(coords, group_inds, weights=None):
-    return jnp.array([compute_centroid(coords[inds], weights) for inds in group_inds])
+    def rescale(self, coords, center, scale=1.0):
+        """scale distances of coords to center"""
 
+        dx_initial = coords - center
+        dx_updated = scale * dx_initial
+        return center + dx_updated
 
-def displace_by_group(coords, group_inds, displacements):
-    # note: this implementation will fail silently for overlapping group_inds
-    # TODO: assert group_inds not overlapping
+    def compute_centroid(self, group, weights=None):
+        if weights is not None:
+            assert (not (weights < 0).any())
+            normalized_weights = weights / jnp.sum(weights)
+            return jnp.mean(normalized_weights * group, axis=0)
 
-    displaced_coords = onp.array(coords)
-    for (inds, displacement) in zip(group_inds, displacements):
-        displaced_coords[inds] += displacement
+        return jnp.mean(group, axis=0)
 
-    return jnp.array(displaced_coords)
+    def compute_centroids(self, coords, weights=None):
+        return jnp.array([self.compute_centroid(coords[inds], weights) for inds in self.group_inds])
 
+    def displace_by_group(self, coords, displacements):
+        return coords + displacements[self.scatter_inds]
 
-def scale_centroids(coords, center, group_inds, scale, weights=None):
-    """
+    def scale_centroids(self, coords, center, scale, weights=None):
+        """
 
-    Notes
-    -----
-    * Currently ignores particle mass -- the centroid of a group of
-        particles will be computed assuming all particles have equal weight
-    * Later, particle weights could be set in some arbitrary way within each group
-    """
+        Notes
+        -----
+        * Currently ignores particle mass -- the centroid of a group of
+            particles will be computed assuming all particles have equal weight
+        * Later, particle weights could be set in some arbitrary way within each group
+        """
 
-    centroids = compute_centroids(coords, group_inds, weights)
-    group_displacements = rescale(centroids, center, scale) - centroids
-    displaced_coords = displace_by_group(coords, group_inds, group_displacements)
+        centroids = self.compute_centroids(coords, weights)
+        group_displacements = self.rescale(centroids, center, scale) - centroids
+        displaced_coords = self.displace_by_group(coords, group_displacements)
 
-    return displaced_coords
-
-
-# TODO: group the above few functions into a CentroidScaler class
+        return displaced_coords
 
 
 class MonteCarloMove:
@@ -113,6 +123,8 @@ class MonteCarloBarostat(MonteCarloMove):
         # how many molecule groups will we be adjusting...
         self.N = len(group_indices)
 
+        self.centroid_rescaler = CentroidRescaler(group_indices)
+
     def propose(self, x: CoordsAndBox) -> Tuple[CoordsAndBox, float]:
         u_0 = self.reduced_potential_fxn(x.coords, x.box)
         volume = compute_box_volume(x.box)
@@ -125,8 +137,8 @@ class MonteCarloBarostat(MonteCarloMove):
         proposed_volume = volume + delta_volume
         length_scale = (proposed_volume / volume) ** (1. / 3)
 
-        proposed_coords = scale_centroids(x.coords, compute_box_center(x.box), group_inds=self.group_indices,
-                                          scale=length_scale)
+        proposed_coords = self.centroid_rescaler.scale_centroids(x.coords, compute_box_center(x.box), length_scale)
+
         proposed_box = length_scale * x.box
 
         proposed_state = CoordsAndBox(proposed_coords, proposed_box)
