@@ -68,9 +68,9 @@ if __name__ == '__main__':
     integrator_impl = integrator.impl()
 
     def sample_velocities():
-        v_unscaled = np.random.randn(*masses.shape)
+        v_unscaled = np.random.randn(len(masses), 3)
         scale = np.sqrt(1 / (ensemble.beta * masses)) # TODO: fix units!
-        return scale * v_unscaled
+        return (scale * v_unscaled.T).T
 
 
     def run_thermostatted_md(x: CoordsAndBox, n_steps=100) -> CoordsAndBox:
