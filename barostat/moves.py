@@ -130,6 +130,6 @@ class MonteCarloBarostat(MonteCarloMove):
 
         jacobian_contribution = self.N * jnp.log(proposed_volume / volume)
 
-        log_acceptance_probability = jnp.maximum(0, - (delta_u - jacobian_contribution))
+        log_acceptance_probability = jnp.minimum(0, - (delta_u - jacobian_contribution))
 
         return proposed_state, log_acceptance_probability
