@@ -13,7 +13,6 @@ private:
     int *d_group_a_idxs_;
     int *d_group_b_idxs_;
 
-    int N_;
     int N_A_;
     int N_B_;
 
@@ -23,7 +22,6 @@ private:
 public:
 
     CentroidRestraint(
-        const int N,
         const std::vector<int> &group_a_idxs,
         const std::vector<int> &group_b_idxs,
         const double kb,
@@ -41,8 +39,8 @@ public:
         const double lambda,
         unsigned long long *d_du_dx,
         double *d_du_dp,
-        double *d_du_dl,
-        double *d_u,
+        unsigned long long *d_du_dl,
+        unsigned long long *d_u,
         cudaStream_t stream
     ) override;
 

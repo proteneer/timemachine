@@ -1,12 +1,12 @@
 import jax.numpy as np
 
-def centroid_restraint(conf, params, box, lamb, masses, group_a_idxs, group_b_idxs, kb, b0):
+def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, b0):
 
     xi = conf[group_a_idxs]
     xj = conf[group_b_idxs]
 
-    avg_xi = np.average(xi, axis=0, weights=masses[group_a_idxs])
-    avg_xj = np.average(xj, axis=0, weights=masses[group_b_idxs])
+    avg_xi = np.mean(xi, axis=0)
+    avg_xj = np.mean(xj, axis=0)
 
     dx = avg_xi - avg_xj
     dij = np.sqrt(np.sum(dx*dx))

@@ -35,6 +35,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/solver.cpp
   src/potential.cu
   src/bound_potential.cu
+  src/centroid_restraint.cu
   src/gpu_utils.cu
   src/observable.cu
   src/hilbert.cpp
