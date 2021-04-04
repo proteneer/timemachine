@@ -57,16 +57,30 @@ void __global__ k_centroid_restraint(
     // grads
     if(grad_coords) {
         for(int d=0; d < 3; d++) {
-            double ddij_dxi = (group_a_ctr[d] - group_b_ctr[d])/dij;
 
-            for(int i=0; i < N_A; i++) {
-                double dx = du_ddij*ddij_dxi/N_A;
-                atomicAdd(grad_coords + group_a_idxs[i]*3 + d, FLOAT_TO_FIXED<RealType>(dx));
+            if(b0 != 0) {
+                double ddij_dxi = (group_a_ctr[d] - group_b_ctr[d])/dij;
+                for(int i=0; i < N_A; i++) {
+                    double delta = du_ddij*ddij_dxi/N_A;
+                    atomicAdd(grad_coords + group_a_idxs[i]*3 + d, FLOAT_TO_FIXED<RealType>(delta));
+                }
+
+                for(int i=0; i < N_B; i++) {
+                    double delta = -du_ddij*ddij_dxi/N_B;
+                    atomicAdd(grad_coords + group_b_idxs[i]*3 + d, FLOAT_TO_FIXED<RealType>(delta));
+                }
+            } else {
+                for(int i=0; i < N_A; i++) {
+                    double delta = (group_a_ctr[d] - group_b_ctr[d])/N_A;
+                    atomicAdd(grad_coords + group_a_idxs[i]*3 + d, FLOAT_TO_FIXED<RealType>(delta));
+                }
+
+                for(int i=0; i < N_B; i++) {
+                    double delta = -(group_a_ctr[d] - group_b_ctr[d])/N_B;
+                    atomicAdd(grad_coords + group_b_idxs[i]*3 + d, FLOAT_TO_FIXED<RealType>(delta));
+                }
             }
-            for(int i=0; i < N_B; i++) {
-                double dx = -du_ddij*ddij_dxi/N_B;
-                atomicAdd(grad_coords + group_b_idxs[i]*3 + d, FLOAT_TO_FIXED<RealType>(dx));
-            }
+
         }
     }
 

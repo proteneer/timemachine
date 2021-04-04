@@ -9,10 +9,18 @@ def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, 
     avg_xj = np.mean(xj, axis=0)
 
     dx = avg_xi - avg_xj
-    dij = np.sqrt(np.sum(dx*dx))
+    d2ij = np.sum(dx*dx)
+    d2ij = np.where(d2ij == 0, 0, d2ij) # stabilize derivative
+    dij = np.sqrt(d2ij)
     delta = dij - b0
 
-    return kb*delta*delta
+    # when b0 == 0 and dij == 0
+    return np.where(
+        b0 == 0,
+        kb * d2ij,
+        kb * np.power(dij - b0, 2.0)
+    )
+
 
 def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     """
