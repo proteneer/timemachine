@@ -12,7 +12,6 @@ private:
 
     int *d_group_a_idxs_;
     int *d_group_b_idxs_;
-    double *d_masses_;
 
     int N_;
     int N_A_;
@@ -24,9 +23,9 @@ private:
 public:
 
     CentroidRestraint(
+        const int N,
         const std::vector<int> &group_a_idxs,
         const std::vector<int> &group_b_idxs,
-        const std::vector<double> &masses,
         const double kb,
         const double b0
     );

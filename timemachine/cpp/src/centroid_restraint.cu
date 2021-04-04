@@ -10,12 +10,12 @@ namespace timemachine {
 
 template <typename RealType>
 CentroidRestraint<RealType>::CentroidRestraint(
+    const int N,
     const std::vector<int> &group_a_idxs,
     const std::vector<int> &group_b_idxs,
-    const std::vector<double> &masses,
     const double kb,
     const double b0
-) : N_(masses.size()),
+) : N_(N),
     N_A_(group_a_idxs.size()),
     N_B_(group_b_idxs.size()),
     kb_(kb),
@@ -33,9 +33,6 @@ CentroidRestraint<RealType>::CentroidRestraint(
         }
     }
 
-    gpuErrchk(cudaMalloc(&d_masses_, N_*sizeof(*d_masses_)));
-    gpuErrchk(cudaMemcpy(d_masses_, &masses[0], N_*sizeof(*d_masses_), cudaMemcpyHostToDevice));
-
     gpuErrchk(cudaMalloc(&d_group_a_idxs_, N_A_*sizeof(*d_group_a_idxs_)));
     gpuErrchk(cudaMemcpy(d_group_a_idxs_, &group_a_idxs[0], N_A_*sizeof(*d_group_a_idxs_), cudaMemcpyHostToDevice));
 
@@ -46,7 +43,6 @@ CentroidRestraint<RealType>::CentroidRestraint(
 
 template <typename RealType>
 CentroidRestraint<RealType>::~CentroidRestraint() {
-    gpuErrchk(cudaFree(d_masses_));
     gpuErrchk(cudaFree(d_group_a_idxs_));
     gpuErrchk(cudaFree(d_group_b_idxs_));
 };
@@ -62,8 +58,8 @@ void CentroidRestraint<RealType>::execute_device(
         const double lambda,
         unsigned long long *d_du_dx,
         double *d_du_dp,
-        double *d_du_dl,
-        double *d_u,
+        unsigned long long *d_du_dl,
+        unsigned long long *d_u,
         cudaStream_t stream) {
 
     int tpb = 32;
@@ -75,7 +71,7 @@ void CentroidRestraint<RealType>::execute_device(
         d_group_b_idxs_,
         N_A_,
         N_B_,
-        d_masses_,
+        // d_masses_,
         kb_,
         b0_,
         d_du_dx,
