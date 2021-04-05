@@ -5,6 +5,7 @@ from barostat.utils import compute_box_volume
 # TODO: should these be imported from a project-wide constants.py file?
 ENERGY_UNIT = unit.kilojoule_per_mole
 DISTANCE_UNIT = unit.nanometer
+kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 
 
 class PotentialEnergyModel:
@@ -43,10 +44,10 @@ class NVTEnsemble:
     def __init__(self, potential_energy: PotentialEnergyModel, temperature: unit.Quantity):
         self.potential_energy = potential_energy
         self.temperature = temperature
-        self.beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
+        self.beta = 1.0 / (kB * self.temperature)
 
         # given a value assumed to be in units of ENERGY_UNIT, multiply by this to get unitless reduced potential energy
-        self._prefactor = self.beta * ENERGY_UNIT / unit.AVOGADRO_CONSTANT_NA
+        self._prefactor = self.beta * ENERGY_UNIT
 
     def reduced_potential_and_gradient(self, x, box, lam):
         U, dU_dx = self.potential_energy.energy_and_gradient(x, box, lam)
@@ -67,7 +68,7 @@ class NPTEnsemble:
         self.potential_energy = potential_energy
         self.temperature = temperature
         self.pressure = pressure
-        self.beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
+        self.beta = 1.0 / (kB * self.temperature)
 
     def reduced_potential_and_gradient(self, x, box, lam):
         U, dU_dx = self.potential_energy.energy_and_gradient(x, box, lam)
@@ -76,10 +77,10 @@ class NPTEnsemble:
 
         # reduced potential u
         #   (unitless)
-        u = self.beta * ((U * ENERGY_UNIT / unit.AVOGADRO_CONSTANT_NA) + self.pressure * volume)
+        u = self.beta * (U * ENERGY_UNIT + self.pressure * volume)
 
         # d reduced potential / dx
         #   (units of 1 / nm, but returned without units, since (x, box) don't have units either)
-        du_dx = self.beta * ((dU_dx * ENERGY_UNIT / unit.AVOGADRO_CONSTANT_NA) + self.pressure * volume)
+        du_dx = self.beta * (dU_dx * ENERGY_UNIT + self.pressure * volume)
 
         return u, du_dx
