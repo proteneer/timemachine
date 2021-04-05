@@ -18,7 +18,7 @@ def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, 
     return np.where(
         b0 == 0,
         kb * d2ij,
-        kb * np.power(dij - b0, 2.0)
+        kb * delta**2
     )
 
 
