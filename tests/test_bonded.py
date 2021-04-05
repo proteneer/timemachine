@@ -1,5 +1,7 @@
 import numpy as np
 import jax
+
+from jax import numpy as jnp
 from jax.config import config
 
 config.update("jax_enable_x64", True)
@@ -9,8 +11,42 @@ from common import GradientTest
 from timemachine.lib import potentials
 from timemachine.potentials import bonded
 
+from tests.optimize_testcases import optimize_point_sets, force_magnitude_loss_factory
+from functools import partial
 
 class TestBonded(GradientTest):
+
+    def test_rmsd_restraint_stability(self):
+        """ generate point clouds that are optimized to have large force magnitudes,
+        and assert that the force magnitudes are below some tolerable threshold indicating stability for MD """
+
+        seed = 2021
+        threshold = 1e+6  # kJ/mol / nm
+
+        for N in [5, 10, 20]:
+            required_kwargs = dict(
+                lamb=0.0,
+                box=jnp.eye(3),
+                params=jnp.array([], dtype=jnp.float64),
+            )
+
+            U = partial(bonded.rmsd_restraint,
+                        k=10.0,
+                        group_a_idxs=jnp.arange(N),
+                        group_b_idxs=jnp.arange(N) + N,
+                        **required_kwargs
+                        )
+
+            def restraint_potential(x0, x1):
+                return U(jnp.vstack([x0, x1]))
+
+            x0, x1 = optimize_point_sets(restraint_potential, force_magnitude_loss_factory, N=N, seed=seed)
+
+            forces = - jax.grad(U)(jnp.vstack([x0, x1]))
+            force_magnitudes = jnp.linalg.norm(forces, axis=1)
+
+            assert (jnp.max(force_magnitudes) < threshold).all()
+
 
     def test_centroid_restraint(self, n_particles=10, n_A=4, n_B=3, kb=5.4, b0=2.3):
         """Randomly define subsets A and B of a larger collection of particles,
