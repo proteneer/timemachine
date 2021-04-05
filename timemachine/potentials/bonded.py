@@ -1,7 +1,13 @@
 import jax.numpy as np
 
 def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, b0):
-
+    """Computes kb  * (r - b0)**2 where r is the distance between the centroids of group_a and group_b
+    
+    Notes
+    ------
+    * Geometric centroid, not mass-weighted centroid
+    * Gradient undefined when `r - b0 == 0` and `b0 != 0` (explicitly stabilized in case `b0 == 0`)
+    """
     xi = conf[group_a_idxs]
     xj = conf[group_b_idxs]
 
