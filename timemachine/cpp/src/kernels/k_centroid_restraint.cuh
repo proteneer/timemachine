@@ -52,13 +52,15 @@ void __global__ k_centroid_restraint(
         atomicAdd(energy, FLOAT_TO_FIXED<RealType>(nrg));
     }
 
-    double du_ddij = 2*kb*(dij-b0);
+
 
     // grads
     if(grad_coords) {
         for(int d=0; d < 3; d++) {
 
             if(b0 != 0) {
+
+                double du_ddij = 2*kb*(dij-b0);
                 double ddij_dxi = (group_a_ctr[d] - group_b_ctr[d])/dij;
                 for(int i=0; i < N_A; i++) {
                     double delta = du_ddij*ddij_dxi/N_A;
@@ -71,12 +73,12 @@ void __global__ k_centroid_restraint(
                 }
             } else {
                 for(int i=0; i < N_A; i++) {
-                    double delta = (group_a_ctr[d] - group_b_ctr[d])/N_A;
+                    double delta = 2*kb*(group_a_ctr[d] - group_b_ctr[d])/N_A;
                     atomicAdd(grad_coords + group_a_idxs[i]*3 + d, FLOAT_TO_FIXED<RealType>(delta));
                 }
 
                 for(int i=0; i < N_B; i++) {
-                    double delta = -(group_a_ctr[d] - group_b_ctr[d])/N_B;
+                    double delta = -2*kb*(group_a_ctr[d] - group_b_ctr[d])/N_B;
                     atomicAdd(grad_coords + group_b_idxs[i]*3 + d, FLOAT_TO_FIXED<RealType>(delta));
                 }
             }
