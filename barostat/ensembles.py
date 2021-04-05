@@ -75,7 +75,6 @@ class NPTEnsemble:
         self.potential_energy = potential_energy
         self.temperature = temperature
         self.pressure = pressure
-        self.beta = 1.0 / (kB * self.temperature)
 
     def reduce(self, U: non_unitted, volume: non_unitted):
         """u_npt = beta * (U + pressure * volume)
@@ -83,7 +82,7 @@ class NPTEnsemble:
         U assumed to be in units of ENERGY_UNIT (kJ/mol), but without simtk unit attached
         volume assumed to be in units of DISTANCE_UNIT^3 (nm^3), but without simtk unit attached
         """
-        return self.beta * (U * ENERGY_UNIT + self.pressure * volume * DISTANCE_UNIT**3)
+        return (U * ENERGY_UNIT / unit.AVOGADRO_CONSTANT_NA + self.pressure * volume * DISTANCE_UNIT**3) / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
 
     def reduced_potential_and_gradient(self, x, box, lam):
         U, dU_dx = self.potential_energy.energy_and_gradient(x, box, lam)
