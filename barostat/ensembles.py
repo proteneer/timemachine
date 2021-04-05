@@ -1,11 +1,7 @@
 import numpy as np
 from simtk import unit
 from barostat.utils import compute_box_volume
-
-# TODO: should these be imported from a project-wide constants.py file?
-ENERGY_UNIT = unit.kilojoule_per_mole
-DISTANCE_UNIT = unit.nanometer
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+from timemachine.constants import kB, ENERGY_UNIT, DISTANCE_UNIT
 
 
 class PotentialEnergyModel:
