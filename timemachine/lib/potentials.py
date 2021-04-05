@@ -110,6 +110,9 @@ class CustomOpWrapper():
 #     def get_b_idxs(self):
 #         return self.args[2]
 
+class RMSDRestraint(CustomOpWrapper):
+    pass
+
 
 class BondedWrapper(CustomOpWrapper):
 
@@ -133,7 +136,6 @@ class BondedWrapper(CustomOpWrapper):
 
 
 class HarmonicBond(BondedWrapper):
-
     pass
 
 # this is an alias to make type checking easier

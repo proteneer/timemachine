@@ -13,6 +13,7 @@
 // #include "restraint.hpp"
 // #include "inertial_restraint.hpp"
 #include "centroid_restraint.hpp"
+#include "rmsd_restraint.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
 // #include "lennard_jones.hpp"
@@ -657,6 +658,36 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 
 
 template <typename RealType>
+void declare_rmsd_restraint(py::module &m, const char *typestr) {
+
+    using Class = timemachine::RMSDRestraint<RealType>;
+    std::string pyclass_name = std::string("RMSDRestraint_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &atom_map,
+        const int N,
+        const double k
+    ) {
+        std::vector<int> vec_atom_map(atom_map.size());
+        std::memcpy(vec_atom_map.data(), atom_map.data(), vec_atom_map.size()*sizeof(int));
+
+        return new timemachine::RMSDRestraint<RealType>(
+            vec_atom_map,
+            N,
+            k
+        );
+
+    }));
+
+}
+
+
+template <typename RealType>
 void declare_centroid_restraint(py::module &m, const char *typestr) {
 
     using Class = timemachine::CentroidRestraint<RealType>;
@@ -889,8 +920,8 @@ PYBIND11_MODULE(custom_ops, m) {
     // declare_inertial_restraint<double>(m, "f64");
     // declare_inertial_restraint<float>(m, "f32");
 
-    // declare_restraint<double>(m, "f64");
-    // declare_restraint<float>(m, "f32");
+    declare_rmsd_restraint<double>(m, "f64");
+    declare_rmsd_restraint<float>(m, "f32");
 
     // declare_shape<double>(m, "f64");
     // declare_shape<float>(m, "f32");

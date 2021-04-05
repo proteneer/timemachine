@@ -483,6 +483,7 @@ class GradientTest(unittest.TestCase):
         test_potential,
         rtol,
         precision,
+        atol=1e-8,
         benchmark=False):
 
         test_impl = test_potential.unbound_impl(precision)
@@ -515,7 +516,7 @@ class GradientTest(unittest.TestCase):
                 compute_u
             )
             if compute_u:
-                np.testing.assert_allclose(ref_u, test_u, rtol)
+                np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
             if compute_du_dx:
                 self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
             if compute_du_dl:
