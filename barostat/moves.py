@@ -1,4 +1,5 @@
-from jax import jit, vmap, numpy as jnp
+from jax import numpy as jnp
+from jax.ops import segment_sum
 from jax.config import config
 
 config.update("jax_enable_x64", True)
@@ -13,6 +14,10 @@ from typing import List, Iterable, Tuple
 from collections import namedtuple
 
 CoordsAndBox = namedtuple('CoordsAndBox', ['coords', 'box'])
+
+
+def compute_centroid(group):
+    return jnp.mean(group, axis=0)
 
 
 def _scatter_inds_from_group_inds(group_inds):
@@ -35,36 +40,11 @@ def _scatter_inds_from_group_inds(group_inds):
     return jnp.array(scatter_inds, dtype=int)
 
 
-def compute_centroid(group):
-    return jnp.mean(group, axis=0)
-
-
-def compute_centroid_from_inds(coords, inds):
-    return compute_centroid(coords[inds])
-
-
-@jit
-def vmap_compute_centroids(coords, homogeneous_group_inds):
-    """homogeneous_group_inds contains indices for groups of homogeneous size
-    """
-    return vmap(compute_centroid_from_inds, in_axes=(None, 0))(coords, homogeneous_group_inds)
-
-
 class CentroidRescaler:
     def __init__(self, group_inds, weights=None):
         self.group_inds = group_inds
-        # make sure these are sorted by group size?
-
-        # Some extra bookkeeping -- we'll jax.vmap over all the
-
-        # currently assume groups are given in order of ascending size
-        self._group_sizes = jnp.array(list(map(len, group_inds)))
-        assert ((self._group_sizes[1:] >= self._group_sizes[:-1]).all())
-        # TODO: sort these, if they're not given in this order...
-        self._homogeneous_inds = dict()
-        for group_size in sorted(set(self._group_sizes)):
-            self._homogeneous_inds[group_size] = jnp.vstack(
-                [inds for inds in self.group_inds if len(inds) == group_size])
+        self.group_sizes = jnp.array(list(map(len, self.group_inds)))
+        assert (jnp.min(self.group_sizes) > 0)
 
         self.scatter_inds = _scatter_inds_from_group_inds(group_inds)
 
@@ -79,21 +59,12 @@ class CentroidRescaler:
         return center + dx_updated
 
     def compute_centroids(self, coords):
-        # naive way to write this in Python: a list comprehension
-        # --> very slow to run in Jax, and jit compiling times out
-        # return jnp.array([self.compute_centroid(coords[inds]) for inds in self.group_inds])
+        """Returns an array containing the centroids of each group"""
+        return segment_sum(coords, self.scatter_inds) / jnp.expand_dims(self.group_sizes, axis=1)
 
-        # naive way to write this in Jax: vmap
-        # ValueError: vmap got inconsistent sizes for array axes to be mapped:
-        #   the tree of axis sizes is: [3,3,3,...,35]
-        # return vmap(lambda inds: self.compute_centroid(coords[inds]))(self.group_inds)
-
-        # a compromise way to write this: one call to vmap per group size.
-        #   (most of the heavy lifting will be for group_size=3, all the waters)
-        centroids = []
-        for group_size in sorted(set(self._group_sizes)):
-            centroids.append(vmap_compute_centroids(coords, self._homogeneous_inds[group_size]))
-        return jnp.vstack(centroids)
+    def _slow_compute_centroids(self, coords):
+        """For testing / reference"""
+        return jnp.array([compute_centroid(coords[g]) for g in self.group_inds])
 
     def displace_by_group(self, coords, displacements):
         return coords + displacements[self.scatter_inds]
