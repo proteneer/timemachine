@@ -12,7 +12,7 @@
 // #include "interpolated_potential.hpp"
 // #include "restraint.hpp"
 // #include "inertial_restraint.hpp"
-// #include "centroid_restraint.hpp"
+#include "centroid_restraint.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
 // #include "lennard_jones.hpp"
@@ -656,42 +656,38 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 // }
 
 
-// template <typename RealType>
-// void declare_centroid_restraint(py::module &m, const char *typestr) {
+template <typename RealType>
+void declare_centroid_restraint(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::CentroidRestraint<RealType>;
-//     std::string pyclass_name = std::string("CentroidRestraint_") + typestr;
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const py::array_t<int, py::array::c_style> &group_a_idxs,
-//         const py::array_t<int, py::array::c_style> &group_b_idxs,
-//         const py::array_t<double, py::array::c_style> &masses,
-//         double kb,
-//         double b0
-//     ) {
-//         std::vector<int> vec_group_a_idxs(group_a_idxs.size());
-//         std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
-//         std::vector<int> vec_group_b_idxs(group_b_idxs.size());
-//         std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
-//         std::vector<double> vec_masses(masses.size());
-//         std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
+    using Class = timemachine::CentroidRestraint<RealType>;
+    std::string pyclass_name = std::string("CentroidRestraint_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &group_a_idxs,
+        const py::array_t<int, py::array::c_style> &group_b_idxs,
+        double kb,
+        double b0
+    ) {
+        std::vector<int> vec_group_a_idxs(group_a_idxs.size());
+        std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
+        std::vector<int> vec_group_b_idxs(group_b_idxs.size());
+        std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
 
-//         return new timemachine::CentroidRestraint<RealType>(
-//             vec_group_a_idxs,
-//             vec_group_b_idxs,
-//             vec_masses,
-//             kb,
-//             b0
-//         );
+        return new timemachine::CentroidRestraint<RealType>(
+            vec_group_a_idxs,
+            vec_group_b_idxs,
+            kb,
+            b0
+        );
 
-//     }));
+    }));
 
-// }
+}
 
 
 // template <typename RealType>
@@ -887,8 +883,8 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_neighborlist<double>(m, "f64");
     declare_neighborlist<float>(m, "f32");
 
-    // declare_centroid_restraint<double>(m, "f64");
-    // declare_centroid_restraint<float>(m, "f32");
+    declare_centroid_restraint<double>(m, "f64");
+    declare_centroid_restraint<float>(m, "f32");
 
     // declare_inertial_restraint<double>(m, "f64");
     // declare_inertial_restraint<float>(m, "f32");
