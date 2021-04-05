@@ -5,9 +5,11 @@ from barostat.moves import CentroidRescaler
 import numpy as onp
 
 from jax.config import config
+
 config.update("jax_enable_x64", True)
 
 from jax import numpy as jnp
+
 
 def test_compute_centroids():
     """test that CentroidRescaler's compute_centroids agrees with _slow_compute_centroids
@@ -34,4 +36,6 @@ def test_compute_centroids():
 
         # assert compute_centroids agrees with _slow_compute_centroids
         rescaler = CentroidRescaler(group_inds)
-        onp.testing.assert_array_almost_equal(rescaler.compute_centroids(coords), rescaler._slow_compute_centroids(coords))
+        fast_centroids = rescaler.compute_centroids(coords)
+        slow_centroids = rescaler._slow_compute_centroids(coords)
+        onp.testing.assert_array_almost_equal(slow_centroids, fast_centroids)
