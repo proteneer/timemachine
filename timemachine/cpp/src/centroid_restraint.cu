@@ -25,12 +25,16 @@ CentroidRestraint<RealType>::CentroidRestraint(
     gpuErrchk(cudaMalloc(&d_group_b_idxs_, N_B_*sizeof(*d_group_b_idxs_)));
     gpuErrchk(cudaMemcpy(d_group_b_idxs_, &group_b_idxs[0], N_B_*sizeof(*d_group_b_idxs_), cudaMemcpyHostToDevice));
 
+    gpuErrchk(cudaMalloc(&d_centroid_a_, 3*sizeof(RealType)));
+    gpuErrchk(cudaMalloc(&d_centroid_b_, 3*sizeof(RealType)));
 };
 
 template <typename RealType>
 CentroidRestraint<RealType>::~CentroidRestraint() {
     gpuErrchk(cudaFree(d_group_a_idxs_));
     gpuErrchk(cudaFree(d_group_b_idxs_));
+    gpuErrchk(cudaFree(d_centroid_a_));
+    gpuErrchk(cudaFree(d_centroid_b_));
 };
 
 
@@ -50,20 +54,35 @@ void CentroidRestraint<RealType>::execute_device(
 
     int tpb = 32;
 
-    k_centroid_restraint<RealType><<<1, tpb, 0, stream>>>(
-        N,
+    int blocks = (N_B_ + N_A_ + tpb -1)/tpb;
+    gpuErrchk(cudaMemset(d_centroid_a_, 0.0, 3*sizeof(RealType)));
+    gpuErrchk(cudaMemset(d_centroid_b_, 0.0, 3*sizeof(RealType)));
+    k_calc_centroid<RealType><<<blocks, tpb, 0, stream>>>(
         d_x,
         d_group_a_idxs_,
         d_group_b_idxs_,
         N_A_,
         N_B_,
+        d_centroid_a_,
+        d_centroid_b_
+    );
+
+    gpuErrchk(cudaPeekAtLastError());
+
+    k_centroid_restraint<RealType><<<blocks, tpb, 0, stream>>>(
+        d_x,
+        d_group_a_idxs_,
+        d_group_b_idxs_,
+        N_A_,
+        N_B_,
+        d_centroid_a_,
+        d_centroid_b_,
         kb_,
         b0_,
         d_du_dx,
         d_u
     );
     gpuErrchk(cudaPeekAtLastError());
-
 };
 
 template class CentroidRestraint<double>;
