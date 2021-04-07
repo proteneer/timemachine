@@ -187,21 +187,17 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
             cutoff=1.0
         )
 
-        host_conf = []
-        for x,y,z in host_coords:
-            host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-        host_conf = np.array(host_conf)
+        # resolve host clashes
+        min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, ff, host_box)
 
-        x0 = host_conf
-        v0 = np.zeros_like(host_conf)
+        x0 = min_host_coords
+        v0 = np.zeros_like(x0)
 
         # lamb = 0.0
         benchmark(stage+"-apo", host_masses, 0.0, x0, v0, host_box, host_fns, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
         # RBFE
-        min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, ff, host_box)
-
-        unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, min_host_coords)
+        unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, x0)
 
         bound_potentials = [x.bind(y) for (x,y) in zip(unbound_potentials, sys_params)]
 
