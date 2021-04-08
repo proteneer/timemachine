@@ -21,19 +21,23 @@ INSERTION_MAX_LAMBDA = 0.5
 DELETION_MAX_LAMBDA = 1.0
 MIN_LAMBDA = 0.0
 INSERTION_STEPS = 501
-DELETION_STEPS = 501
 EQ1_STEPS = 5001
-NUM_DELETIONS = 10
 
 
 def calculate_rigorous_work(
-    host_pdbfile, guests_sdfile, outdir, fewer_outfiles=False, no_outfiles=False
+    host_pdbfile,
+    guests_sdfile,
+    outdir,
+    num_deletions,
+    deletion_steps,
+    fewer_outfiles=False,
+    no_outfiles=False,
 ):
     """Runs non-equilibrium deletion jobs:
     1. Solvates a protein, inserts guest, equilibrates, equilibrates more & spins off deletion jobs
        every 1000th step, calculates work.
     2. Does the same thing in solvent instead of protein.
-    Does 10 deletion jobs per leg per compound.
+    Does num_deletions deletion jobs per leg per compound.
 
     Parameters
     ----------
@@ -41,8 +45,10 @@ def calculate_rigorous_work(
     host_pdbfile (str): path to host pdb file
     guests_sdfile (str): path to guests sdf file
     outdir (str): path to directory to which to write output
-    fewer_outfiles (bool): ?
-    no_outfiles (bool): ?
+    num_deletions (int): number of deletion trajectories to run per leg per compound
+    deletion_steps (int): length of each deletion trajectory
+    fewer_outfiles (bool): only save the starting frame of each deletion trajectory
+    no_outfiles (bool): don't keep any output files
 
     Returns
     -------
@@ -85,9 +91,9 @@ def calculate_rigorous_work(
     DELETION_MAX_LAMBDA = {DELETION_MAX_LAMBDA}
     MIN_LAMBDA = {MIN_LAMBDA}
     INSERTION_STEPS = {INSERTION_STEPS}
-    DELETION_STEPS = {DELETION_STEPS}
     EQ1_STEPS = {EQ1_STEPS}
-    NUM_DELETIONS = {NUM_DELETIONS}
+    num_deletions = {num_deletions}
+    deletion_steps = {deletion_steps}
     """
     )
 
@@ -159,12 +165,14 @@ def calculate_rigorous_work(
             [host_box, water_box],
             ["protein", "solvent"],
         ):
-            afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
-
-            ups, sys_params, combined_masses, _ = afe.prepare_host_edge(
-                ff.get_ordered_params(), system, coords
+            minimized_coords = minimizer.minimize_host_4d(
+                [guest_mol], system, coords, ff, box
             )
-            minimized_coords = minimizer.minimize_host_4d([guest_mol], system, coords, ff, box)
+
+            afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
+            ups, sys_params, combined_masses, combined_coords = afe.prepare_host_edge(
+                ff.get_ordered_params(), system, minimized_coords
+            )
 
             combined_bps = []
             for up, sp in zip(ups, sys_params):
@@ -181,6 +189,8 @@ def calculate_rigorous_work(
                 host_mol,
                 guest_mol,
                 outdir,
+                num_deletions,
+                deletion_steps,
                 fewer_outfiles,
                 no_outfiles,
             )
@@ -205,6 +215,8 @@ def run_leg(
     host_mol,
     guest_mol,
     outdir,
+    num_deletions,
+    deletion_steps,
     fewer_outfiles=False,
     no_outfiles=False,
 ):
@@ -299,7 +311,7 @@ def run_leg(
     # equilibrate more & shoot off deletion jobs
     steps_per_batch = 1001
     works = []
-    for b in range(NUM_DELETIONS):
+    for b in range(num_deletions):
         deletion_lambda_schedule = np.ones(steps_per_batch) * MIN_LAMBDA
 
         ctxt.multiple_steps(deletion_lambda_schedule, 0)
@@ -313,7 +325,7 @@ def run_leg(
             combined_bps,
             u_impls,
             guest_name,
-            NUM_DELETIONS * steps_per_batch,
+            num_deletions * steps_per_batch,
             f"{leg_type.upper()}_EQUILIBRATION_2",
         )
 
@@ -328,7 +340,7 @@ def run_leg(
                 guest_mol,
                 guest_name,
                 outdir,
-                str((b + 1) * step).zfill(len(str(NUM_DELETIONS * steps_per_batch))),
+                str((b + 1) * step).zfill(len(str(num_deletions * steps_per_batch))),
                 f"{leg_type}-eq2",
             )
         if report.too_much_force(ctxt, MIN_LAMBDA, host_box, combined_bps, u_impls):
@@ -344,6 +356,7 @@ def run_leg(
             guest_name,
             leg_type,
             u_impls,
+            deletion_steps,
         )
         works.append(work)
 
@@ -351,7 +364,15 @@ def run_leg(
 
 
 def do_deletion(
-    x0, v0, combined_bps, combined_masses, box, guest_name, leg_type, u_impls
+    x0,
+    v0,
+    combined_bps,
+    combined_masses,
+    box,
+    guest_name,
+    leg_type,
+    u_impls,
+    deletion_steps,
 ):
     seed = 2021
     intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
@@ -362,7 +383,7 @@ def do_deletion(
     # ctxt.add_observable(du_dl_obs)
 
     deletion_lambda_schedule = np.linspace(
-        MIN_LAMBDA, DELETION_MAX_LAMBDA, DELETION_STEPS
+        MIN_LAMBDA, DELETION_MAX_LAMBDA, deletion_steps
     )
 
     subsample_freq = 1
@@ -379,7 +400,7 @@ def do_deletion(
         combined_bps,
         u_impls,
         guest_name,
-        DELETION_STEPS,
+        deletion_steps,
         f"{leg_type.upper()}_DELETION",
     )
 
@@ -424,12 +445,20 @@ def main():
     parser.add_argument(
         "--no_outfiles", action="store_true", help="write no output pdb/sdf files"
     )
+    parser.add_argument(
+        "--deletion_steps", type=int, default=501, help="how many steps to delete over"
+    )
+    parser.add_argument(
+        "--num_deletions", type=int, default=10, help="number of deletions to do"
+    )
     args = parser.parse_args()
 
     calculate_rigorous_work(
         args.host_pdbfile,
         args.guests_sdfile,
         args.outdir,
+        args.num_deletions,
+        args.deletion_steps,
         args.fewer_outfiles,
         args.no_outfiles,
     )

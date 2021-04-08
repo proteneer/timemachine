@@ -173,7 +173,9 @@ def pose_dock(
         # collect a du_dl calculation every step
         subsample_du_dl_interval = 1
 
-        full_du_dls, _ = ctxt.multiple_steps(new_lambda_schedule, subsample_du_dl_interval)
+        full_du_dls, _ = ctxt.multiple_steps(
+            new_lambda_schedule, subsample_du_dl_interval
+        )
 
         step = len(new_lambda_schedule) - 1
         final_lamb = new_lambda_schedule[-1]
@@ -204,7 +206,9 @@ def pose_dock(
             calc_work = False
 
         if calc_work:
-            work = np.trapz(full_du_dls, new_lambda_schedule[::subsample_du_dl_interval])
+            work = np.trapz(
+                full_du_dls, new_lambda_schedule[::subsample_du_dl_interval]
+            )
             print(f"guest_name: {guest_name}\twork: {work:.2f}")
         end_time = time.time()
         print(f"{guest_name} took {(end_time - start_time):.2f} seconds")
@@ -236,10 +240,7 @@ if __name__ == "__main__":
         help="file containing comma-separated atom numbers to hold ~fixed",
     )
     parser.add_argument(
-        "-t",
-        "--transition_type",
-        help="'insertion' or 'deletion'",
-        default="insertion",
+        "-t", "--transition_type", help="'insertion' or 'deletion'", default="insertion"
     )
     parser.add_argument(
         "--nsteps",
