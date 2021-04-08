@@ -2,7 +2,9 @@
 # pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_dhfr && nvprof pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_benchmark
 
 import copy
+import gzip
 
+import pickle
 import functools
 import unittest
 import scipy.linalg
@@ -333,6 +335,25 @@ class TestNonbondedWater(GradientTest):
 
 
 class TestNonbonded(GradientTest):
+
+    def test_fma_compiler_bug(self):
+
+        # this test case deals with a rather annoying fma compiler bug in CUDA.
+        # see https://github.com/proteneer/timemachine/issues/386
+        fp=gzip.open('tests/repro.pkl.gz','rb') # This assumes that primes.data is already packed with gzip
+        x_t, box, lamb, nb_bp = pickle.load(fp)
+        impl = nb_bp.unbound_impl(np.float32)
+        du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
+
+        uimpl2 = nb_bp.unbound_impl(np.float32)
+
+        uimpl2.disable_hilbert_sort()
+        du_dx2, du_dp2, du_dl2, u2 = uimpl2.execute(x_t, nb_bp.params, box, lamb)
+
+        np.testing.assert_array_equal(u2, u)
+        np.testing.assert_array_equal(du_dx2, du_dx)
+        np.testing.assert_array_equal(du_dp2, du_dp)
+        np.testing.assert_array_equal(du_dl2, du_dl) # this one fails without the patch.
 
     def test_exclusion(self):
 
