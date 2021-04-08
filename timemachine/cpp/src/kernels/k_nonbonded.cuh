@@ -358,7 +358,7 @@ float __device__ __forceinline__ fix_nvidia_fmad(float a, float b, float c, floa
     return __fmul_rn(a, b) + __fmul_rn(c, d);
 }
 
-double __device__ __forceinline__ fix_nvidia_fmad(double a, double b, double c, float d) {
+double __device__ __forceinline__ fix_nvidia_fmad(double a, double b, double c, double d) {
     return __dmul_rn(a, b) + __dmul_rn(c, d);
 }
 
@@ -594,7 +594,7 @@ void __device__ v_nonbonded_unified(
                 // needed for cancellation of nans (if one term blows up)
                 real_du_dl += delta_w*cutoff*delta_prefactor*(lambda_offset_i - lambda_offset_j);
                 // this extra ebd kills as it requires the erfc to be fully evaluated. SHIT
-                real_du_dl += inv_dij*ebd*(qj*dq_dl_i + qi*dq_dl_j);
+                real_du_dl += inv_dij*ebd*fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
                 du_dl += FLOAT_TO_FIXED_NONBONDED(real_du_dl);
             }
 
@@ -979,7 +979,7 @@ void __global__ k_nonbonded_exclusions(
         g_qj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qi*inv_dij*ebd);
 
         real_du_dl -= delta_w*cutoff*delta_prefactor*(lambda_offset_i - lambda_offset_j);
-        real_du_dl -= charge_scale*inv_dij*ebd*(qj*dq_dl_i + qi*dq_dl_j);
+        real_du_dl -= charge_scale*inv_dij*ebd*fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
 
         if(du_dx) {
             atomicAdd(du_dx + atom_i_idx*3 + 0, gi_x);
