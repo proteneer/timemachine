@@ -172,16 +172,74 @@ class TestBonded(GradientTest):
                     rtol,
                     atol=atol,
                     precision=precision
+
                 )
 
+    def test_rmsd_restraint_degeneracy(self):
 
-    def test_rmsd_restraint_singularity(self):
+        x0 = [[ 0.67018822,  0.87794771,  0.76787838],
+              [-0.36996975, -0.55761617, -0.76387467],
+              [ 0.16623181, -0.06480128,  0.00461404],
+              [ 0.13497186, -1.35321825, -0.75348531],
+              [-0.19436091,  1.2559552 ,  0.86422046]]
+        x1 = [[ 0.406436  ,  0.64659409,  0.07927596],
+              [ 0.14817958,  0.41605204, -0.1526847 ],
+              [ 0.17584186, -0.65330597, -0.23854746],
+              [-0.34553881, -0.10549689,  0.14724521],
+              [-0.16015376, -0.19867848,  0.03281286]]
+
+        coords = np.concatenate([x0, x1])
+
+        box = np.eye(3) * 100
+
+        # try some random mappings
+
+        group_a_idxs = np.arange(5)
+        group_b_idxs = np.arange(5) + 5
+
+        n = coords.shape[0]
+        k = 1.35
+
+        params = np.array([], dtype=np.float64)
+        lamb = 0.0
+
+        ref_u = functools.partial(bonded.rmsd_restraint,
+            group_a_idxs=group_a_idxs,
+            group_b_idxs=group_b_idxs,
+            k=k
+        )
+
+        for precision, rtol, atol in [(np.float64, 1e-6, 1e-6), (np.float32, 1e-4, 1e-6)]:
+
+            atom_map = np.stack([group_a_idxs, group_b_idxs], axis=1).astype(np.int32)
+
+            test_u = potentials.RMSDRestraint(atom_map, n, k)
+
+            self.compare_forces(
+                coords,
+                params,
+                box,
+                lamb,
+                ref_u,
+                test_u,
+                rtol,
+                atol=atol,
+                precision=precision
+            )
+
+
+    def test_rmsd_restraint_deficient_rank(self):
         # test the RMSD force by generating random coordinates.
 
         #  *   and  + +
         # * *        +
-        # the rotation and reflection matrix for this particular case is completely
-        # arbitrary, so we perturb the points slightly
+        #
+        # the resulting correlation matrix is deficient in rank, the C++ and
+        # python code differ in the choice of unitary matrices that gets returned
+        # one corresponds to a proper rotation and one corresponds to an improper
+        # rotation. if the zero eigenvalue check is not present, the return values
+        # would differ arbitrarily
+
         x0 = np.array([
             [ 0,  1, 0],
             [-1, -1, 0],
