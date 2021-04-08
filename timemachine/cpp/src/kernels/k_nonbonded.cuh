@@ -351,6 +351,9 @@ float __device__ __forceinline__ real_es_factor(float real_beta, float dij, floa
     return -inv_d2ij*(static_cast<float>(TWO_OVER_SQRT_PI)*beta_dij*exp_beta_dij_2 + erfc_beta_dij);
 }
 
+
+// These are two lines of code are to deal with the formation of a non-commutative fma.
+// For more information, see: https://github.com/proteneer/timemachine/issues/386
 float __device__ __forceinline__ fix_nvidia_fmad(float a, float b, float c, float d) {
     return __fmul_rn(a, b) + __fmul_rn(c, d);
 }
