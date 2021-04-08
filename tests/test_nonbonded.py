@@ -344,10 +344,11 @@ class TestNonbonded(GradientTest):
         # see https://github.com/proteneer/timemachine/issues/386
         fp=gzip.open('tests/repro.pkl.gz','rb') # This assumes that primes.data is already packed with gzip
         x_t, box, lamb, nb_bp = pickle.load(fp)
-        impl = nb_bp.unbound_impl(np.float32)
-        du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
 
         for precision in [np.float32, np.float64]:
+
+            impl = nb_bp.unbound_impl(precision)
+            du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
 
             uimpl2 = nb_bp.unbound_impl(precision)
 
