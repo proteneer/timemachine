@@ -89,44 +89,46 @@ class TestNonbondedDHFR(GradientTest):
 
         N = self.host_conf.shape[0]
 
-        ref_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
-        ref_nonbonded_impl.disable_hilbert_sort()
+        for precision in [np.float32, np.float64]:
 
-        test_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
+            ref_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(precision)
+            ref_nonbonded_impl.disable_hilbert_sort()
 
-        padding = 0.1
-        deltas = np.random.rand(N,3)-0.5 # [-0.5, +0.5]
-        divisor = 0.5*(2*np.sqrt(3))/padding
-        # if deltas are kept under +- p/(2*sqrt(3)) then no rebuild gets triggered
-        deltas = deltas/divisor # exactly within bounds, and should not trigger a rebuild
+            test_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(precision)
 
-        for d in deltas:
-            assert np.linalg.norm(d) < padding/2
+            padding = 0.1
+            deltas = np.random.rand(N,3)-0.5 # [-0.5, +0.5]
+            divisor = 0.5*(2*np.sqrt(3))/padding
+            # if deltas are kept under +- p/(2*sqrt(3)) then no rebuild gets triggered
+            deltas = deltas/divisor # exactly within bounds, and should not trigger a rebuild
 
-        xs = [self.host_conf, self.host_conf + deltas]
+            for d in deltas:
+                assert np.linalg.norm(d) < padding/2
 
-        np.set_printoptions(precision=16)
-        # under pure fixed point accumulation the results should be identical.
-        for x_idx, x in enumerate(xs):
+            xs = [self.host_conf, self.host_conf + deltas]
 
-            ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
+            np.set_printoptions(precision=16)
+            # under pure fixed point accumulation the results should be identical.
+            for x_idx, x in enumerate(xs):
 
-            np.testing.assert_array_equal(ref_du_dx, test_du_dx)
-            np.testing.assert_array_equal(ref_du_dp, test_du_dp)
-            np.testing.assert_array_equal(ref_du_dl, test_du_dl)
-            np.testing.assert_array_equal(ref_u, test_u)
+                ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
+                test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
 
-            ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
-            test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+                np.testing.assert_array_equal(ref_du_dx, test_du_dx)
+                np.testing.assert_array_equal(ref_du_dp, test_du_dp)
+                np.testing.assert_array_equal(ref_du_dl, test_du_dl)
+                np.testing.assert_array_equal(ref_u, test_u)
 
-            for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
-                if np.linalg.norm(a-b) != 0:
-                    print(idx, a, b)
-                    assert 0
-                np.testing.assert_array_equal(a, b)
+                ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+                test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
 
-            np.testing.assert_array_equal(ref_du_dx, test_du_dx)
+                for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
+                    if np.linalg.norm(a-b) != 0:
+                        print(idx, a, b)
+                        assert 0
+                    np.testing.assert_array_equal(a, b)
+
+                np.testing.assert_array_equal(ref_du_dx, test_du_dx)
 
     def test_nblist_rebuild(self):
         """
@@ -342,18 +344,21 @@ class TestNonbonded(GradientTest):
         # see https://github.com/proteneer/timemachine/issues/386
         fp=gzip.open('tests/repro.pkl.gz','rb') # This assumes that primes.data is already packed with gzip
         x_t, box, lamb, nb_bp = pickle.load(fp)
-        impl = nb_bp.unbound_impl(np.float32)
-        du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
 
-        uimpl2 = nb_bp.unbound_impl(np.float32)
+        for precision in [np.float32, np.float64]:
 
-        uimpl2.disable_hilbert_sort()
-        du_dx2, du_dp2, du_dl2, u2 = uimpl2.execute(x_t, nb_bp.params, box, lamb)
+            impl = nb_bp.unbound_impl(precision)
+            du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
 
-        np.testing.assert_array_equal(u2, u)
-        np.testing.assert_array_equal(du_dx2, du_dx)
-        np.testing.assert_array_equal(du_dp2, du_dp)
-        np.testing.assert_array_equal(du_dl2, du_dl) # this one fails without the patch.
+            uimpl2 = nb_bp.unbound_impl(precision)
+
+            uimpl2.disable_hilbert_sort()
+            du_dx2, du_dp2, du_dl2, u2 = uimpl2.execute(x_t, nb_bp.params, box, lamb)
+
+            np.testing.assert_array_equal(u2, u)
+            np.testing.assert_array_equal(du_dx2, du_dx)
+            np.testing.assert_array_equal(du_dp2, du_dp)
+            np.testing.assert_array_equal(du_dl2, du_dl) # this one fails without the patch.
 
     def test_exclusion(self):
 
