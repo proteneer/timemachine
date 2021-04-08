@@ -141,7 +141,7 @@ def rmsd_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, k):
     # by having degenerate singular values. jfass pointed out that this can probably be
     # reduced to two checks since the list is sorted, but the C++ code may not guarantee
     # this, so just for sanity and simplicity, we check all three comparisons.
-    if np.any(np.abs([s[0] -  s[1], s[0] -  s[2], s[1] -  s[2]])) < alpha:
+    if np.any(np.abs(np.array([S[0] - S[1], S[0] - S[2], S[1] - S[2]]))) < alpha:
         return 0.0
 
     is_reflection = (np.linalg.det(U) * np.linalg.det(V_tr)) < 0.0
