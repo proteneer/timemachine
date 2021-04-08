@@ -125,30 +125,38 @@ def rmsd_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, k):
     # recenter
     x1 = x1 - np.mean(x1, axis=0)
     x2 = x2 - np.mean(x2, axis=0)
-
     correlation_matrix = np.dot(x2.T, x1)
     U, S, V_tr = np.linalg.svd(correlation_matrix, full_matrices=False)
 
-    is_reflection = (np.linalg.det(U) * np.linalg.det(V_tr)) < 0.0
-    rotation = np.dot(U, V_tr)
-
+    # there are two singularites we catch for, in the first case, where a zero singular
+    # value is present, the correlation matrix is no longer full rank. So we set the
+    # rotation matrix to identity, and a zero energy is returned.
     epsilon = 1e-8
-
-    cond = np.any(S < epsilon)
-    # if matrix is not full rank we skip, SVD is underdetermined
     if np.any(S < epsilon):
         return 0.0
 
-    term = np.where(is_reflection,
-        (np.trace(rotation) + 1)/2 - 1,
-        (np.trace(rotation) - 1)/2 - 1
+    alpha = 1e-3
+
+    # this second singularity is when the choice of rotation is arbitrary, and is shown
+    # by having degenerate singular values. jfass pointed out that this can probably be
+    # reduced to two checks since the list is sorted, but the C++ code may not guarantee
+    # this, so just for sanity and simplicity, we check all three comparisons.
+    if np.any(np.abs([s[0] -  s[1], s[0] -  s[2], s[1] -  s[2]])) < alpha:
+        return 0.0
+
+    is_reflection = (np.linalg.det(U) * np.linalg.det(V_tr)) < 0.0
+
+    U = jax.ops.index_update(U,
+        jax.ops.index[:, -1],
+        np.where(is_reflection, -U[:, -1], U[:, -1])
     )
 
-    term = np.where(cond, 0.0, term)
+    rotation = np.dot(U, V_tr)
 
-    nrg = k*term*term
+    term = (np.trace(rotation) - 1)/2 - 1
 
-    return nrg
+    return k*term*term
+
 
 # lamb is *not used* it is used in the alchemical stuff after
 def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offset=None):
