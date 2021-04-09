@@ -120,36 +120,24 @@ void RMSDRestraint<RealType>::execute_device(
     gpuErrchk(cudaMemset(d_u_buf_, 0, sizeof(*d_u_buf_)));
     gpuErrchk(cudaMemset(d_du_dx_buf_, 0, N*3*sizeof(*d_du_dx_buf_)));
 
-    // improper and proper rotations both satisfy this
     if(s[0] < epsilon || s[1] < epsilon || s[2] < epsilon) {
         return;
     }
-
-    double alpha = 1e-3;
-
-    // degenerate eigenvalues, set rotation to identity.
-    if(abs(s[0] -  s[1]) < alpha || abs(s[0] -  s[2]) < alpha || abs(s[1] -  s[2]) < alpha) {
-        return;
-    }
-
 
     Eigen::MatrixXd u = svd.matrixU();
     Eigen::MatrixXd v = svd.matrixV();
     Eigen::MatrixXd v_t = v.transpose();
 
-    bool is_reflection = (u.determinant() * v_t.determinant()) < 0.0;
+    bool is_reflection = u.determinant() * v_t.determinant() < 0.0;
 
-    Eigen::MatrixXd u_flip = u;
+    Eigen::MatrixXd rotation = u * v_t;
 
+    double term = 0;
     if(is_reflection) {
-        u_flip(0, 2) = -u_flip(0, 2);
-        u_flip(1, 2) = -u_flip(1, 2);
-        u_flip(2, 2) = -u_flip(2, 2);
+        return;
+    } else {
+        term = (rotation.trace() - 1)/2 - 1;
     }
-
-    Eigen::MatrixXd rotation = u_flip * v_t;
-
-    double term = (rotation.trace() - 1)/2 - 1;
 
     double squared_term = term*term;
 
@@ -162,14 +150,7 @@ void RMSDRestraint<RealType>::execute_device(
     double term_adjoint = squared_term_adjoint*2*term;
     Eigen::MatrixXd r_a = eye*term_adjoint/2;
     Eigen::MatrixXd u_a = r_a * v_t.transpose();
-
-    if(is_reflection) {
-        u_a(0, 2) = -u_a(0, 2);
-        u_a(1, 2) = -u_a(1, 2);
-        u_a(2, 2) = -u_a(2, 2);
-    }
-
-    Eigen::MatrixXd v_a_t = u_flip.transpose() * r_a;
+    Eigen::MatrixXd v_a_t = u.transpose() * r_a;
 
     Eigen::MatrixXd smat(3,3);
     Eigen::MatrixXd smat_inv(3,3);
@@ -206,16 +187,6 @@ void RMSDRestraint<RealType>::execute_device(
     std::vector<unsigned long long> du_dx(N*3, 0);
 
     for(int b=0; b < B; b++) {
-
-        if(abs(x1_adjoint(b, 0)) > 100000 || abs(x1_adjoint(b, 1)) > 100000 || abs(x1_adjoint(b, 2)) > 100000) {
-            throw std::runtime_error("Rotation Force Blew Up");
-        }
-
-
-        if(abs(x2_adjoint(b, 0)) > 100000 || abs(x2_adjoint(b, 1)) > 100000 || abs(x2_adjoint(b, 2)) > 100000) {
-            throw std::runtime_error("Rotation Force Blew Up");
-        }
-
         int src_idx = h_atom_map_[b*2+0];
         du_dx[src_idx*3+0] += static_cast<unsigned long long>(llrint(k_*x1_adjoint(b, 0)*FIXED_EXPONENT));
         du_dx[src_idx*3+1] += static_cast<unsigned long long>(llrint(k_*x1_adjoint(b, 1)*FIXED_EXPONENT));

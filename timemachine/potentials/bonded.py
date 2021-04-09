@@ -137,25 +137,24 @@ def rmsd_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, k):
 
     alpha = 1e-3
 
-    # this second singularity is when the choice of rotation is arbitrary, and is shown
-    # by having degenerate singular values. jfass pointed out that this can probably be
-    # reduced to two checks since the list is sorted, but the C++ code may not guarantee
-    # this, so just for sanity and simplicity, we check all three comparisons.
-    if np.any(np.abs(np.array([S[0] - S[1], S[0] - S[2], S[1] - S[2]])) < alpha):
-        return 0.0
-
     is_reflection = (np.linalg.det(U) * np.linalg.det(V_tr)) < 0.0
-
-    U = jax.ops.index_update(U,
-        jax.ops.index[:, -1],
-        np.where(is_reflection, -U[:, -1], U[:, -1])
-    )
-
     rotation = np.dot(U, V_tr)
 
-    term = (np.trace(rotation) - 1)/2 - 1
+    epsilon = 1e-8
 
-    return k*term*term
+    # if matrix is not full rank we skip, SVD is underdetermined
+    cond = np.any(S < epsilon)
+
+    term = np.where(is_reflection,
+        0,
+        (np.trace(rotation) - 1)/2 - 1
+    )
+
+    term = np.where(cond, 0.0, term)
+
+    nrg = k*term*term
+
+    return nrg
 
 
 # lamb is *not used* it is used in the alchemical stuff after
