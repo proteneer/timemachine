@@ -469,9 +469,7 @@ class GradientTest(unittest.TestCase):
         errors = np.abs(errors) > rtol
 
         # print("max relative error", max_error, "rtol", rtol, norms[max_error_arg], "mean error", mean_error, "std error", std_error)
-        if np.sum(errors) > 0:
-            print("FATAL: max relative error", max_error, truth[max_error_arg], test[max_error_arg])
-            assert 0
+        assert np.sum(errors) <= 0, f"Max relative error: {max_error}, rtol: {rtol}, {truth[max_error_arg]}, {test[max_error_arg]}"
 
     def compare_forces(
         self,
