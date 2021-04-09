@@ -13,8 +13,10 @@ private:
     const std::vector<int> h_atom_map_;
     const int N_;
     const double k_;
-    unsigned long long *d_u_buf_;
-    unsigned long long *d_du_dx_buf_;
+    int * d_atom_map_;
+    // Centroids are also used as adjoints
+    RealType * d_centroid_a_;
+    RealType * d_centroid_b_;
 
 public:
 
