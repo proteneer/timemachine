@@ -23,8 +23,6 @@ from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import custom_ops, LangevinIntegrator
 
-from testsystems.relative import hif2a_ligand_pair
-
 from docking import report
 
 

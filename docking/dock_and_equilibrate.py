@@ -2,6 +2,7 @@
 """
 import os
 import time
+import tempfile
 
 import numpy as np
 
@@ -86,7 +87,7 @@ def dock_and_equilibrate(
         solvated_topology,
     ) = builders.build_protein_system(host_pdbfile)
 
-    solvated_host_pdb = os.path.join(outdir, "solvated_host.pdb")
+    _, solvated_host_pdb = tempfile.mkstemp(suffix='.pdb', text=True)
     writer = pdb_writer.PDBWriter([solvated_topology], solvated_host_pdb)
     writer.write_frame(solvated_host_coords)
     writer.close()
@@ -243,21 +244,16 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        "-s",
-        "--guests_sdfile",
-        default="tests/data/ligands_40__first-two-ligs.sdf",
-        help="guests to pose",
-    )
-    parser.add_argument(
         "-p",
         "--host_pdbfile",
         default="tests/data/hif2a_nowater_min.pdb",
         help="host to dock into",
     )
     parser.add_argument(
-        "-c",
-        "--constant_atoms_file",
-        help="file containing comma-separated atom numbers to hold ~fixed",
+        "-s",
+        "--guests_sdfile",
+        default="tests/data/ligands_40__first-two-ligs.sdf",
+        help="guests to pose",
     )
     parser.add_argument(
         "--max_lambda",
@@ -269,22 +265,27 @@ def main():
         ),
     )
     parser.add_argument(
-        "--eq_steps",
-        type=int,
-        default=15001,
-        help="equilibration length (1 step = 1.5 femtoseconds)",
-    )
-    parser.add_argument(
         "--insertion_steps",
         type=int,
         default=501,
         help="how many steps to take while phasing in each guest",
     )
     parser.add_argument(
+        "--eq_steps",
+        type=int,
+        default=15001,
+        help="equilibration length (1 step = 1.5 femtoseconds)",
+    )
+    parser.add_argument(
         "-o", "--outdir", default="dock_equil_out", help="where to write output"
     )
     parser.add_argument(
         "--fewer_outfiles", action="store_true", help="write fewer output pdb/sdf files"
+    )
+    parser.add_argument(
+        "-c",
+        "--constant_atoms_file",
+        help="file containing comma-separated atom numbers to hold ~fixed (1-indexed)",
     )
     args = parser.parse_args()
 
