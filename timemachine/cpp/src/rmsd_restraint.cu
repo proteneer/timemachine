@@ -135,10 +135,10 @@ void RMSDRestraint<RealType>::execute_device(
     x1 = x1.rowwise() - h_a_centroid_mean.transpose();
     x2 = x2.rowwise() - h_b_centroid_mean.transpose();
 
-    Eigen::Matrix<RealType, 3, 3> c = x2.transpose() * x1;
+    Eigen::Matrix<double, 3, 3> c = x2.transpose().template cast<double>() * x1.template cast<double>();
 
     // Keep SVD in double to avoid inconsistent behavior in float32
-    Eigen::JacobiSVD<Eigen::Matrix<double, 3, 3>> svd(c.template cast<double>(), Eigen::ComputeFullU | Eigen::ComputeFullV);
+    Eigen::JacobiSVD<Eigen::Matrix<double, 3, 3>> svd(c, Eigen::ComputeFullU | Eigen::ComputeFullV);
     auto s = svd.singularValues();
 
     RealType epsilon = 1e-8;
@@ -147,13 +147,13 @@ void RMSDRestraint<RealType>::execute_device(
         return;
     }
 
-    Eigen::Matrix<RealType, 3, 3> u = svd.matrixU().template cast<RealType>();
-    Eigen::Matrix<RealType, 3, 3> v = svd.matrixV().template cast<RealType>();
-    Eigen::Matrix<RealType, 3, 3> v_t = v.transpose();
+    Eigen::Matrix<double, 3, 3> u = svd.matrixU();
+    Eigen::Matrix<double, 3, 3> v = svd.matrixV();
+    Eigen::Matrix<double, 3, 3> v_t = v.transpose();
 
     bool is_reflection = u.determinant() * v_t.determinant() < 0.0;
 
-    Eigen::Matrix<RealType, 3, 3> rotation = u * v_t;
+    Eigen::Matrix<double, 3, 3> rotation = u * v_t;
 
     RealType term = 0;
     if(is_reflection) {
@@ -163,17 +163,17 @@ void RMSDRestraint<RealType>::execute_device(
     }
 
     // backprop'd forces
-    Eigen::Matrix<RealType, 3, 3> eye = Eigen::Matrix<RealType, 3, 3>::Identity(3, 3);
+    Eigen::Matrix<double, 3, 3> eye = Eigen::Matrix<double, 3, 3>::Identity(3, 3);
 
     RealType squared_term_adjoint = 1.0;
     RealType term_adjoint = squared_term_adjoint*2*term;
-    Eigen::Matrix<RealType, 3, 3> r_a = eye*term_adjoint/2;
-    Eigen::Matrix<RealType, 3, 3> u_a = r_a * v;
-    Eigen::Matrix<RealType, 3, 3> v_a_t = u.transpose() * r_a;
+    Eigen::Matrix<double, 3, 3> r_a = eye*term_adjoint/2;
+    Eigen::Matrix<double, 3, 3> u_a = r_a * v;
+    Eigen::Matrix<double, 3, 3> v_a_t = u.transpose() * r_a;
 
-    Eigen::Matrix<RealType, 3, 3> smat(3,3);
-    Eigen::Matrix<RealType, 3, 3> smat_inv(3,3);
-    Eigen::Matrix<RealType, 3, 3> F(3,3);
+    Eigen::Matrix<double, 3, 3> smat(3,3);
+    Eigen::Matrix<double, 3, 3> smat_inv(3,3);
+    Eigen::Matrix<double, 3, 3> F(3,3);
     for(int i=0; i < 3; i++) {
         for(int j=0; j < 3; j++) {
             if(i == j) {
@@ -192,17 +192,17 @@ void RMSDRestraint<RealType>::execute_device(
     // (ytz): taken from here https://j-towns.github.io/papers/svd-derivative.pdf
     // using equations 30-31. note that adjoints of the singular values are always zero,
     // so the middle term is skipped.
-    Eigen::Matrix<RealType, 3, 3> v_a = v_a_t.transpose();
-    Eigen::Matrix<RealType, 3, 3> lhs_1 = u*F.cwiseProduct(u.transpose()*u_a - u_a.transpose()*u)*smat;
-    Eigen::Matrix<RealType, 3, 3> lhs_2 = (eye - u*u.transpose())*u_a*smat_inv;
-    Eigen::Matrix<RealType, 3, 3> lhs = (lhs_1+lhs_2)*v_t;
-    Eigen::Matrix<RealType, 3, 3> rhs_1 = smat*(F.cwiseProduct(v_t*v_a - v_a_t*v))*v_t;
-    Eigen::Matrix<RealType, 3, 3> rhs_2 = smat_inv*v_a_t*(eye - v*v_t);
-    Eigen::Matrix<RealType, 3, 3> rhs = u*(rhs_1 + rhs_2);
-    Eigen::Matrix<RealType, 3, 3> c_adjoint = lhs + rhs;
+    Eigen::Matrix<double, 3, 3> v_a = v_a_t.transpose();
+    Eigen::Matrix<double, 3, 3> lhs_1 = u*F.cwiseProduct(u.transpose()*u_a - u_a.transpose()*u)*smat;
+    Eigen::Matrix<double, 3, 3> lhs_2 = (eye - u*u.transpose())*u_a*smat_inv;
+    Eigen::Matrix<double, 3, 3> lhs = (lhs_1+lhs_2)*v_t;
+    Eigen::Matrix<double, 3, 3> rhs_1 = smat*(F.cwiseProduct(v_t*v_a - v_a_t*v))*v_t;
+    Eigen::Matrix<double, 3, 3> rhs_2 = smat_inv*v_a_t*(eye - v*v_t);
+    Eigen::Matrix<double, 3, 3> rhs = u*(rhs_1 + rhs_2);
+    Eigen::Matrix<double, 3, 3> c_adjoint = lhs + rhs;
     // Eigen::RowMajor required to be able to copy out of device
-    Eigen::Matrix<RealType, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> x2_adjoint = (c_adjoint*x1.transpose()).transpose();
-    Eigen::Matrix<RealType, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> x1_adjoint = x2*c_adjoint;
+    Eigen::Matrix<RealType, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> x2_adjoint = (c_adjoint.cast<RealType>()*x1.transpose()).transpose();
+    Eigen::Matrix<RealType, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> x1_adjoint = x2*c_adjoint.cast<RealType>();
 
     // Reusing d_centroid_a_ and d_centroid_b_ for x1 and x2 adjoints
     gpuErrchk(cudaMemcpy(d_centroid_a_, x1_adjoint.data(), B*3*sizeof(RealType), cudaMemcpyHostToDevice));
