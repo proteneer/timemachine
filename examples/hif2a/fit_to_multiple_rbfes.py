@@ -164,6 +164,36 @@ def flatten(params, handles) -> Tuple[np.array, callable]:
     return theta, unflatten
 
 
+def run_validation_edges(validation: Dataset, params, systems, epoch):
+    if len(validation) <= 0:
+        return
+    val_loss = np.zeros(len(validation))
+    for i, rfe in enumerate(validation.data):
+        if getattr(rfe, "complex_path", None) is not None:
+            model = systems[rfe.complex_path]
+        else:
+            model = systems[protein_path]
+        start = time()
+
+        loss, stage_results = loss_fxn(
+            model,
+            params,
+            rfe.mol_a,
+            rfe.mol_b,
+            rfe.core,
+            rfe.label
+        )
+        elapsed = time() - start
+        print(f"Validation edge {i}: time={elapsed:.2f}s, loss={loss:.2f}")
+        du_dls_dict = {stage: _results_to_arrays(results)[1] for stage, results in stage_results}
+        np.savez(output_path.joinpath(f"validation_du_dls_snapshot_{epoch}_{i}.npz"), **du_dls_dict)
+        val_loss[i] = loss
+    np.savez(
+        output_path.joinpath(f"validation_edge_losses_{epoch}.npz"),
+        loss=val_loss
+    )
+
+
 if __name__ == "__main__":
     default_output_path = f"results_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}"
     parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
@@ -311,8 +341,13 @@ if __name__ == "__main__":
     np.save(output_path.joinpath('step_indices.npy'), np.hstack(step_inds)[:args.param_updates])
 
     step = 0
+    epoch = 0
     # in each optimizer step, look at one transformation from relative_transformations
-    for epoch, steps in enumerate(step_inds):
+    for steps in step_inds:
+        # Run Validation edges at start of epoch. Unlike NNs we have a reasonable starting
+        # point that is worth knowing
+        run_validation_edges(validation, ordered_params, systems, epoch)
+        epoch += 1
         print(f"Epoch: {epoch}")
         for i in steps:
             rfe = training.data[i]
@@ -405,31 +440,4 @@ if __name__ == "__main__":
             step += 1
             if step >= args.param_updates:
                 break
-        if len(validation) > 0:
-            val_loss = np.zeros(len(validation))
-            for i, rfe in enumerate(validation.data):
-                if getattr(rfe, "complex_path", None):
-                    model = systems[rfe.complex_path]
-                else:
-                    model = systems[protein_path]
-                start = time()
-
-                loss, stage_results = loss_fxn(
-                    model,
-                    ordered_params,
-                    rfe.mol_a,
-                    rfe.mol_b,
-                    rfe.core,
-                    rfe.label
-                )
-                elapsed = time() - start
-                print(f"Validation edge {i}: time={elapsed:.2f}s, loss={loss:.2f}")
-                du_dls_dict = dict()
-                for stage, results in stage_results:
-                    du_dls_dict[stage] = _results_to_arrays(results)[1]
-                np.savez(output_path.joinpath(f"validation_du_dls_snapshot_{epoch}_{i}.npz"), **du_dls_dict)
-                val_loss[i] = loss
-            np.savez(
-                output_path.joinpath(f"validation_edge_losses_{epoch}.npz"),
-                loss=val_loss
-            )
+    run_validation_edges(validation, ordered_params, systems, epoch)
