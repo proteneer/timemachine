@@ -326,8 +326,6 @@ if __name__ == "__main__":
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
 
-    results_this_step = dict()  # {stage : result} pairs # TODO: proper type hint
-
     # compute and save the sequence of relative_transformation indices
     num_epochs = int(np.ceil(args.param_updates / len(relative_transformations)))
     np.random.seed(args.seed)
@@ -368,15 +366,17 @@ if __name__ == "__main__":
                 rfe.label
             )
 
-            for stage, result in stage_results:
-                results_this_step[stage] = result
-                print(f'collected {stage} results!')
+            results_this_step = {stage: result for stage, result in stage_results}
 
             print(f"at optimizer step {step}, loss={loss:.3f}")
 
             # check if it's probably okay to take an optimizer step on the basis of this result
             # TODO: move responsibility for returning error flags / simulation uncertainty estimates further upstream
-            blown_up = any(_blew_up(results) for results in results_this_step.values())
+            blown_up = False
+            for stage, results in results_this_step.items():
+                if _blew_up(results):
+                    blown_up = True
+                    print(f"step {step} blew up in {stage} stage")
 
             # note: unflatten_grad and unflatten_theta have identical definitions for now
             flat_loss_grad, unflatten_grad = flatten(loss_grads, ordered_handles)
@@ -391,7 +391,6 @@ if __name__ == "__main__":
             for handle in ordered_handles:
                 handle_type = type(handle)
                 if handle_type in param_increments:
-                    print(f'updating {handle_type.__name__}')
 
                     # TODO: careful -- this must be a "+=" or "-=" not an "="!
                     handle.params += param_increments[handle_type]
@@ -405,7 +404,7 @@ if __name__ == "__main__":
                         max_update = np.max(increment)
                     # TODO: replace with a function that knows what to report about each handle type
                     print(
-                        f'updated {len(increment)} params by between {min_update:.4f} and {max_update:.4f}')
+                        f'updated {len(increment)} {handle_type.__name__} params by between {min_update:.4f} and {max_update:.4f}')
 
             t1 = time()
             elapsed = t1 - t0
