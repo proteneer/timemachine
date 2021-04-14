@@ -196,9 +196,13 @@ if __name__ == "__main__":
     forcefield = Forcefield(ff_handlers)
 
     mols = []
+    # Ensure we pickle up mol properties
+    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
     for lig_path in map_config.ligands:
         supplier = Chem.SDMolSupplier(lig_path, removeHs=False)
-        mols.extend(list(supplier))
+        # Prefer the list comp over casting to a list, seems to be inconsistent
+        # on OSX/linux
+        mols.extend([mol for mol in supplier])
 
     # In the future hopefully we can programmatically find the cores rather specifying
     cores = map_config.cores
