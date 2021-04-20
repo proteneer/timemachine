@@ -127,6 +127,9 @@ def benchmark(
             dp = du_dp_obs.avg_du_dp()
             print(potential, dp.shape)
             print(dp)
+            dp_std = du_dp_obs.std_du_dp()
+            print(potential, dp.shape)
+            print(dp)
 
 def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 

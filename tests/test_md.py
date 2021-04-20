@@ -139,7 +139,20 @@ class TestContext(unittest.TestCase):
         for o in obs:
             ctxt.add_observable(o)
 
+        test_avg_du_dp = test_obs.avg_du_dp()
+        ref_init_du_dps = np.zeros_like(test_avg_du_dp)
+        np.testing.assert_array_equal(test_avg_du_dp[:, 0], ref_init_du_dps[:, 0])
+        np.testing.assert_array_equal(test_avg_du_dp[:, 1], ref_init_du_dps[:, 1])
+        np.testing.assert_array_equal(test_avg_du_dp[:, 2], ref_init_du_dps[:, 2])
+
         for step in range(num_steps):
+            if step < 2:
+                # Until we have run 3 steps, std is 0
+                test_std_du_dp = test_obs.std_du_dp()
+
+                np.testing.assert_array_equal(test_std_du_dp[:, 0], ref_init_du_dps[:, 0])
+                np.testing.assert_array_equal(test_std_du_dp[:, 1], ref_init_du_dps[:, 1])
+                np.testing.assert_array_equal(test_std_du_dp[:, 2], ref_init_du_dps[:, 2])
             print("comparing step", step)
             test_x_t = ctxt.get_x_t()
             np.testing.assert_allclose(test_x_t, ref_all_xs[step])
@@ -155,6 +168,7 @@ class TestContext(unittest.TestCase):
         ref_avg_du_dls_f2 = np.mean(ref_all_du_dls[::2], axis=0)
 
         ref_avg_du_dps = np.mean(ref_all_du_dps, axis=0)
+        ref_std_du_dps = np.std(ref_all_du_dps, axis=0)
         ref_avg_du_dps_f2 = np.mean(ref_all_du_dps[::2], axis=0)
 
         # the fixed point accumulator makes it hard to converge some of these
@@ -163,6 +177,10 @@ class TestContext(unittest.TestCase):
         np.testing.assert_allclose(test_obs.avg_du_dp()[:, 0], ref_avg_du_dps[:, 0], 1.5e-6)
         np.testing.assert_allclose(test_obs.avg_du_dp()[:, 1], ref_avg_du_dps[:, 1], 1.5e-6)
         np.testing.assert_allclose(test_obs.avg_du_dp()[:, 2], ref_avg_du_dps[:, 2], 5e-5)
+
+        np.testing.assert_allclose(test_obs.std_du_dp()[:, 0], ref_std_du_dps[:, 0], 1.5e-6)
+        np.testing.assert_allclose(test_obs.std_du_dp()[:, 1], ref_std_du_dps[:, 1], 1.5e-6)
+        np.testing.assert_allclose(test_obs.std_du_dp()[:, 2], ref_std_du_dps[:, 2], 5e-5)
 
         # test the multiple_steps method
         intg_2 = custom_ops.LangevinIntegrator(
