@@ -151,12 +151,16 @@ def estimate_delta_us(
     def u_lhs(x_t):
         return core_restr(x_t)
 
-    def delta_u_fn(x_t):
+    def delta_u_fwd_fn(x_t):
         return u_rhs(x_t) - u_lhs(x_t)
 
-    delta_u_batch = jax.jit(jax.vmap(delta_u_fn))
+    def delta_u_rev_fn(x_t):
+        return u_lhs(x_t) - u_rhs(x_t)
 
-    lhs_du = delta_u_batch(lhs_xs)
+    delta_u_fwd_batch = jax.jit(jax.vmap(delta_u_fwd_fn))
+    delta_u_rev_batch = jax.jit(jax.vmap(delta_u_rev_fn))
+
+    lhs_du = delta_u_fwd_batch(lhs_xs)
 
     sample_size = rhs_xs.shape[0]
     rotation_samples = sample_multiple_rotations(k_rotation, beta, sample_size)
@@ -172,10 +176,9 @@ def estimate_delta_us(
 
     batch_align_fn = jax.jit(jax.vmap(align, (0, 0, 0)))
     rhs_xs_aligned = batch_align_fn(rhs_xs, rotation_samples, translation_samples)
-    rhs_du = delta_u_batch(rhs_xs_aligned)
+    rhs_du = delta_u_rev_batch(rhs_xs_aligned)
 
-    return lhs_du, -rhs_du, rotation_samples, translation_samples
-
+    return lhs_du, rhs_du, rotation_samples, translation_samples
 
 # courtesy of jfass
 def ecdf(x: np.array) -> Tuple[np.array, np.array]:
