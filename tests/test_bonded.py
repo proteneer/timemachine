@@ -26,7 +26,7 @@ class TestBonded(GradientTest):
             gai = np.random.randint(0, n_particles, n_A, dtype=np.int32)
             gbi = np.random.randint(0, n_particles, n_B, dtype=np.int32)
 
-            masses = np.random.rand(n_particles)
+            # masses = np.random.rand(n_particles)
 
             ref_nrg = jax.partial(
                 bonded.centroid_restraint,
