@@ -49,7 +49,7 @@ def test_cycle_closure_consistency_dense(n_nodes=100):
     assert (np.isclose(true_fs, fs).all())
 
 
-def test_optimization_with_cycle_closure(n_nodes=10):
+def test_optimization_with_cycle_closure(n_nodes=10, verbose=True):
     """Optimize a collection of dense pairwise simulated_rbfes values so that the cycle-closure-corrected estimates they
     imply will equal some known realizable set of true_fs."""
 
@@ -77,10 +77,12 @@ def test_optimization_with_cycle_closure(n_nodes=10):
         return float(l), onp.array(g, dtype=onp.float64)
 
     x0 = onp.random.randn(n_comparisons)
-    print(L(x0))
+    if verbose:
+        print(f'sum((fs - true_fs)^2) before optimization: {L(x0):.3f}')
     assert L(x0) > 1
 
     result = minimize(fun, x0=x0, jac=True, tol=0.0)
-    print(result.fun)
+    if verbose:
+        print(f'sum((fs - true_fs)^2) after optimization: {L(result.x):.20f}')
 
     assert result.fun < 1e-16
