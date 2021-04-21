@@ -17,7 +17,7 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
     n_nodes : int
         number of compounds being compaired
     comparison_inds : int array, shape (n_comparisons, 2)
-        assume input will be an array of comparisons simulated_rbfes, with
+        assume input will be an array of n_comparisons simulated_rbfes, with
         simulated_rbfes = [fs[j] - fs[i] for (i,j) in comparison_inds]
 
     Returns
@@ -50,7 +50,7 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
     -----
     * Here we used an independent Gaussian noise model for the likelihood of simulated_rbfe(i, j) given
         true underlying value of fs[j] - fs[i].
-        Further, we assumed the same amount of Gaussian noise for all edges.
+        Further, we assumed the same amount of Gaussian noise for all comparisons.
         Other noise models could be plugged in here (e.g. ones that allow heavy-tailed noise or correlated errors),
         as long as log_likelihood still permits a cvxpy-friendly expression.
     * Here we used no prior information about plausible values of estimated_fs.
@@ -92,7 +92,7 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
     constraints = []
     # constraints = [corrected_abfes[0] == 0]
 
-    # gaussian log likelihood of simulated rbfes, compared with the relative free energies implied by trial_abfes
+    # gaussian log likelihood of simulated_rbfes, compared with the relative free energies implied by trial_abfes
     residuals = implied_rbfes - simulated_rbfes
     log_likelihood = cp.sum(- (residuals / sigma) ** 2 - np.log(sigma * np.sqrt(2 * np.pi)))
 
@@ -104,7 +104,7 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
     # return value of the cvxpylayer_fxn callable is a 1-tuple containing a jax array, (fs,)
     cvxpylayer_fxn = CvxpyLayer(problem, parameters=problem.parameters(), variables=[trial_abfes])
 
-    # for convenience, extract the jax array from the 0th index of that tuple
+    # for convenience, return the jax array rather than a 1-tuple
     predict_fs = lambda simulated_rbfes: cvxpylayer_fxn(simulated_rbfes)[0]
 
     # return callable function, predict_fs(simulated_rbfes) -> fs
