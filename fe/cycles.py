@@ -53,14 +53,14 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
         Further, we assumed the same amount of Gaussian noise for all comparisons.
         Other noise models could be plugged in here (e.g. ones that allow heavy-tailed noise or correlated errors),
         as long as log_likelihood still permits a cvxpy-friendly expression.
-    * Here we used no prior information about plausible values of estimated_fs.
+    * Here we used no prior information about plausible values of fs.
         Rather than returning a maximum likelihood estimate
-            argmax_{trial_abfes} log_likelihood(trial_abfes),
+            argmax_{trial_fs} log_likelihood(trial_fs),
         we could just as well compute a maximum a posteriori estimate
-            argmax_{trial_abfes} log_prior(trial_abfes) + log_likelihood(trial_abfes),
-        where log_prior(trial_abfes) could be informed by a cheminformatics model or similar.
-    * Here we do not make use of absolute free energy estimates if available, but these can be incorporated by adding a
-        cp.Parameter for simulated_abfes and modifying log_likelihood definition accordingly.
+            argmax_{trial_fs} log_prior(trial_fs) + log_likelihood(trial_fs),
+        where log_prior(trial_fs) could be informed by a cheminformatics model or similar.
+    * Here we do not make use of absolute free energy estimates, which may be available. To incorporate these in the
+        future, we would add a cp.Parameter for simulated_abfes, and modify the log_likelihood definition accordingly.
     * predicted_fs only identifiable up to a constant offset, without further information.
 
     References
@@ -73,7 +73,6 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
     """
 
     # currently assuming all edges have equal error
-    # TODO: relax this assumption
     sigma = 1.0
 
     n_comparisons = len(comparison_inds)
@@ -82,11 +81,11 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
     # parameters that define the optimization problem: simulated_rbfes
     simulated_rbfes = cp.Parameter(n_comparisons)
 
-    # the optimization variable is the collection of absolute free energies
-    trial_abfes = cp.Variable(n_nodes)  # up to an offset
+    # the optimization variable is a collection of trial absolute free energies
+    trial_fs = cp.Variable(n_nodes)  # up to an offset
 
     # express the expected values of rbfe calculations in terms of differences of underlying trial abfe values
-    implied_rbfes = trial_abfes[inds_r] - trial_abfes[inds_l]
+    implied_rbfes = trial_fs[inds_r] - trial_fs[inds_l]
 
     # no constraints at the moment, but maybe we would want to apply constraints here
     constraints = []
@@ -102,7 +101,7 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
     assert problem.is_dpp()
 
     # return value of the cvxpylayer_fxn callable is a 1-tuple containing a jax array, (fs,)
-    cvxpylayer_fxn = CvxpyLayer(problem, parameters=problem.parameters(), variables=[trial_abfes])
+    cvxpylayer_fxn = CvxpyLayer(problem, parameters=problem.parameters(), variables=[trial_fs])
 
     # for convenience, return the jax array rather than a 1-tuple
     predict_fs = lambda simulated_rbfes: cvxpylayer_fxn(simulated_rbfes)[0]
