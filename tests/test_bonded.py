@@ -7,8 +7,9 @@ import functools
 
 from common import GradientTest
 from timemachine.lib import potentials
-from timemachine.potentials import bonded
+from timemachine.potentials import bonded, rmsd
 
+import pytest
 
 class TestBonded(GradientTest):
 
@@ -116,8 +117,7 @@ class TestBonded(GradientTest):
                     precision=precision
                 )
 
-
-
+    @pytest.mark.skip("Currently not needed")
     def test_rmsd_restraint(self):
         # test the RMSD force by generating random coordinates.
 
@@ -154,7 +154,7 @@ class TestBonded(GradientTest):
 
                 for precision, rtol, atol in [(np.float64, 1e-6, 1e-6), (np.float32, 1e-4, 1e-6)]:
 
-                    ref_u = functools.partial(bonded.rmsd_restraint,
+                    ref_u = functools.partial(rmsd.rmsd_restraint,
                         group_a_idxs=atom_map[:, 0],
                         group_b_idxs=atom_map[:, 1],
                         k=k
