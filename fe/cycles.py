@@ -9,16 +9,18 @@ import cvxpy as cp
 from cvxpylayers.jax import CvxpyLayer
 
 
-def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
+def construct_mle_layer(n_nodes: int, comparison_inds: np.array, sigmas: np.array) -> callable:
     """Construct a differentiable function predict_fs(simulated_rbfes) -> fs
 
     Parameters
     ----------
     n_nodes : int
         number of compounds being compaired
+
     comparison_inds : int array, shape (n_comparisons, 2)
+    sigmas : float array, shape (n_comparisons,)
         assume input will be an array of n_comparisons simulated_rbfes, with
-        simulated_rbfes = [fs[j] - fs[i] for (i,j) in comparison_inds]
+        simulated_rbfes = [fs[b] - fs[a] + Normal(0, sigmas[i]) for i, (a, b) in enumerate(comparison_inds)]
 
     Returns
     -------
@@ -37,7 +39,8 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
     >>> n_nodes = 3
     >>> comparison_inds = np.array([[0,1], [1,2], [2,0]])
     >>> simulated_rbfes = np.array([-1.0, -1.0, +2.0])
-    >>> predict_fs = construct_cvxpylayer(n_nodes, comparison_inds)
+    >>> sigmas = np.ones(len(comparison_inds))
+    >>> predict_fs = construct_cvxpylayer(n_nodes, comparison_inds, sigmas)
     >>> fs = predict_fs(simulated_rbfes)
     >>> reconstructed_diffs = onp.array([fs[j] - fs[i] for (i, j) in comparison_inds])
     >>> onp.isclose(reconstructed_diffs, simulated_rbfes).all()
@@ -50,7 +53,6 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
     -----
     * Here we used an independent Gaussian noise model for the likelihood of simulated_rbfe(i, j) given
         true underlying value of fs[j] - fs[i].
-        Further, we assumed the same amount of Gaussian noise for all comparisons.
         Other noise models could be plugged in here (e.g. ones that allow heavy-tailed noise or correlated errors),
         as long as log_likelihood still permits a cvxpy-friendly expression.
     * Here we used no prior information about plausible values of fs.
@@ -72,9 +74,6 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
         J. Chem. Inf. Model. 59, 4720-4728, 2019, https://doi.org/10.1021/acs.jcim.9b00528.
     """
 
-    # currently assuming all edges have equal error
-    sigma = 1.0
-
     n_comparisons = len(comparison_inds)
     inds_l, inds_r = comparison_inds.T
 
@@ -87,15 +86,14 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
     # express the expected values of rbfe calculations in terms of differences of underlying trial abfe values
     implied_rbfes = trial_fs[inds_r] - trial_fs[inds_l]
 
-    # no constraints at the moment, but maybe we would want to apply constraints here
-    constraints = []
-    # constraints = [corrected_abfes[0] == 0]
+    # offset so that trial_fs[0] = 0
+    constraints = [trial_fs[0] == 0]
 
     # gaussian log likelihood of simulated_rbfes, compared with the relative free energies implied by trial_abfes
     residuals = implied_rbfes - simulated_rbfes
-    log_likelihood = cp.sum(- (residuals / sigma) ** 2 - np.log(sigma * np.sqrt(2 * np.pi)))
+    log_likelihood = cp.sum(- (residuals / sigmas) ** 2 - np.log(sigmas * np.sqrt(2 * np.pi)))
 
-    # predicted fs are obtained by varying trial_abfes to maximize log_likelihood of simulated_rbfes
+    # predicted fs are obtained by varying trial_fs to maximize log_likelihood of simulated_rbfes
     objective = cp.Minimize(- log_likelihood)
     problem = cp.Problem(objective, constraints=constraints)
     assert problem.is_dpp()
@@ -108,3 +106,4 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array) -> callable:
 
     # return callable function, predict_fs(simulated_rbfes) -> fs
     return predict_fs
+

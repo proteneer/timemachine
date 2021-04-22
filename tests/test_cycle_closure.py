@@ -19,13 +19,13 @@ def test_cycle_closure_consistency_triangle():
     true_fs -= true_fs[0]
 
     comparison_inds = np.array([[0, 1], [1, 2], [2, 0]])
+    sigmas = np.ones(len(comparison_inds))
     inds_l, inds_r = comparison_inds.T
     simulated_rbfes = true_fs[inds_r] - true_fs[inds_l]
 
-    predict_fs = construct_mle_layer(n_nodes, comparison_inds)
+    predict_fs = construct_mle_layer(n_nodes, comparison_inds, sigmas)
 
     fs = predict_fs(simulated_rbfes)
-    fs -= fs[0]
 
     assert (np.isclose(true_fs, fs).all())
 
@@ -39,12 +39,12 @@ def test_cycle_closure_consistency_dense(n_nodes=100):
 
     inds_l, inds_r = np.triu_indices(n_nodes, k=1)
     comparison_inds = np.stack([inds_l, inds_r]).T
+    sigmas = np.ones(len(comparison_inds))
 
     simulated_rbfes = true_fs[inds_r] - true_fs[inds_l]
 
-    predict_fs = construct_mle_layer(n_nodes, comparison_inds)
+    predict_fs = construct_mle_layer(n_nodes, comparison_inds, sigmas)
     fs = predict_fs(simulated_rbfes)
-    fs -= fs[0]
 
     assert (np.isclose(true_fs, fs).all())
 
@@ -58,17 +58,16 @@ def test_optimization_with_cycle_closure(n_nodes=10, verbose=True):
 
     inds_l, inds_r = np.triu_indices(n_nodes, k=1)
     comparison_inds = np.stack([inds_l, inds_r]).T
+    sigmas = np.ones(len(comparison_inds))
     n_comparisons = len(comparison_inds)
 
-    predict_fs = construct_mle_layer(n_nodes, comparison_inds)
+    predict_fs = construct_mle_layer(n_nodes, comparison_inds, sigmas)
 
     def L(simulated_rbfes):
         """sum((fs - true_fs)^2)"""
         assert (len(simulated_rbfes) == n_comparisons)
         fs = predict_fs(simulated_rbfes)
         assert (len(fs) == n_nodes)
-
-        fs -= fs[0]
 
         return np.sum((fs - true_fs) ** 2)
 
