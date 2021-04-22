@@ -107,7 +107,7 @@ def construct_mle_layer(n_nodes: int,
     # get ABFE info
     no_abfe = abfe_inds is None
     if no_abfe:
-        abfe_inds = np.array([0])
+        abfe_inds = onp.array([0])
     n_absolute = len(abfe_inds)
     if abfe_sigmas is None:
         abfe_sigmas = np.ones(n_absolute)
