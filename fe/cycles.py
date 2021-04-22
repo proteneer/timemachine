@@ -76,6 +76,8 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array, sigmas: np.arra
 
     n_comparisons = len(comparison_inds)
     inds_l, inds_r = comparison_inds.T
+    if (inds_l == inds_r).any():
+        raise AssertionError(f'invalid comparison_inds: {comparison_inds[(inds_l == inds_r)]}')
 
     # parameters that define the optimization problem: simulated_rbfes
     simulated_rbfes = cp.Parameter(n_comparisons)
