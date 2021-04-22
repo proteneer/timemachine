@@ -172,3 +172,31 @@ def test_grad_cycle_closure(n_nodes=5, tol=1e-3, verbose=True):
     exact_rbfes = true_fs[inds_r] - true_fs[inds_l]
     assert np.isclose(f(exact_rbfes), 0)
     assert np.isclose(g(exact_rbfes), 0).all()
+
+
+def test_absolute(n_nodes=10, n_absolute=5, n_rbfes=20):
+    """Given a collection of relative and absolute measurements derived from a set of random ground-truth fs,
+    assert that we can exactly reconstruct these fs, including their absolute offset."""
+
+    # random ground-truth, with true_fs[0] not necessarily = 0
+    true_fs = np.array(onp.random.randn(n_nodes))
+
+    # absolute measurements for subset of nodes
+    # TODO: randomize abfe_inds by shuffling?
+    abfe_inds = onp.arange(n_nodes)[:n_absolute]
+    exact_partial_abfes = true_fs[abfe_inds]
+
+    # relative measurements for subset of pairs
+    # TODO: randomize inds_l, inds_r, rbfe_inds by shuffling?
+    all_inds_l, all_inds_r = np.triu_indices(n_nodes, k=1)
+    inds_l, inds_r = all_inds_l[:n_rbfes], all_inds_r[:n_rbfes]
+    rbfe_inds = np.stack([inds_l, inds_r]).T[:n_rbfes]
+    exact_partial_rbfes = true_fs[inds_r] - true_fs[inds_l]
+
+    # all rbfes and abfes get equal weight
+    predict_fs = construct_mle_layer(n_nodes, rbfe_inds=rbfe_inds, abfe_inds=abfe_inds)
+
+    # reconstruct fs from these partial views -- should be able to exactly recover true_fs
+    reconstructed_fs = predict_fs(exact_partial_rbfes, exact_partial_abfes)
+
+    assert np.isclose(reconstructed_fs, true_fs).all()
