@@ -49,6 +49,53 @@ def test_cycle_closure_consistency_dense(n_nodes=100):
     assert (np.isclose(true_fs, fs).all())
 
 
+def test_deadlock_triangle(verbose=True):
+    """Construct a 3-cycle with a set of edge labels and initial edge predictions that could result in a cancellation of
+    gradients in some situations. Assert that the gradient of the cycle-corrected edge loss is non-zero for this set of
+    initial predictions, and assert that this loss can be minimized."""
+
+    n_nodes = 3
+
+    comparison_inds = np.array([[0, 1], [1, 2], [2, 0]])
+    n_comparisons = len(comparison_inds)
+    inds_l, inds_r = comparison_inds.T
+
+    true_fs = np.array([0, 2, -1], dtype=np.float64)
+    true_rbfes = true_fs[inds_r] - true_fs[inds_l]
+    simulated_rbfes = np.array([4, -1, 5], dtype=np.float64)
+
+    predict_fs = construct_mle_layer(n_nodes, comparison_inds, np.ones(n_comparisons))
+
+    def apply_cycle_correction_to_rbfes(simulated_rbfes):
+        """estimate mle_fs, then return [mle_fs[j] - mle_fs[i] for (i,j) in comparison_inds]"""
+        fs = predict_fs(simulated_rbfes)
+        cycle_corrected_rbfes = fs[inds_r] - fs[inds_l]
+
+        return cycle_corrected_rbfes
+
+    def corrected_relative_loss(simulated_rbfes):
+        cycle_corrected_rbfes = apply_cycle_correction_to_rbfes(simulated_rbfes)
+
+        return np.sum((cycle_corrected_rbfes - true_rbfes) ** 2)
+
+    assert np.linalg.norm(grad(corrected_relative_loss)(simulated_rbfes)) > 1 # 3.26598621
+
+    def fun(x):
+        l, g = value_and_grad(corrected_relative_loss)(x)
+        return float(l), onp.array(g, dtype=onp.float64)
+
+    x0 = simulated_rbfes
+    if verbose:
+        print(f'sum((edge_predictions - edge_labels)^2) before optimization: {corrected_relative_loss(x0):.3f}')
+    assert corrected_relative_loss(x0) > 1
+
+    result = minimize(fun, x0=x0, jac=True, tol=0.0)
+    if verbose:
+        print(f'sum((edge_predictions - edge_labels)^2) after optimization: {corrected_relative_loss(result.x):.20f}')
+
+    assert result.fun < 1e-16
+
+
 def test_optimization_with_cycle_closure(n_nodes=10, verbose=True):
     """Optimize a collection of dense pairwise simulated_rbfes values so that the cycle-closure-corrected estimates they
     imply will equal some known realizable set of true_fs."""
