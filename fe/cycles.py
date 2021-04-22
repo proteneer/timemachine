@@ -92,7 +92,15 @@ def construct_mle_layer(n_nodes: int,
     n_rbfes = len(rbfe_inds)
     inds_l, inds_r = rbfe_inds.T
     if (inds_l == inds_r).any():
-        raise AssertionError(f'invalid rbfe_inds: {rbfe_inds[(inds_l == inds_r)]}')
+        raise AssertionError(f'invalid rbfe_inds -- includes self-comparisons: {rbfe_inds[(inds_l == inds_r)]}')
+
+    # check that the "map" is connected
+    if len(set(rbfe_inds.flatten())) != n_nodes:
+        present = set(rbfe_inds.flatten())
+        expected = set(np.arange(n_nodes))
+        missing_inds = list(expected.difference(present))
+        raise AssertionError(f'invalid rbfe_inds -- missing comparisons for nodes: {missing_inds}')
+
     if rbfe_sigmas is None:
         rbfe_sigmas = np.ones(n_rbfes)
 
