@@ -18,12 +18,11 @@ def test_cycle_closure_consistency_triangle():
     true_fs = onp.random.randn(n_nodes)
     true_fs -= true_fs[0]
 
-    comparison_inds = np.array([[0, 1], [1, 2], [2, 0]])
-    sigmas = np.ones(len(comparison_inds))
-    inds_l, inds_r = comparison_inds.T
+    rbfe_inds = np.array([[0, 1], [1, 2], [2, 0]])
+    inds_l, inds_r = rbfe_inds.T
     simulated_rbfes = true_fs[inds_r] - true_fs[inds_l]
 
-    predict_fs = construct_mle_layer(n_nodes, comparison_inds, sigmas)
+    predict_fs = construct_mle_layer(n_nodes, rbfe_inds)
 
     fs = predict_fs(simulated_rbfes)
 
@@ -38,12 +37,11 @@ def test_cycle_closure_consistency_dense(n_nodes=100):
     true_fs -= true_fs[0]
 
     inds_l, inds_r = np.triu_indices(n_nodes, k=1)
-    comparison_inds = np.stack([inds_l, inds_r]).T
-    sigmas = np.ones(len(comparison_inds))
+    rbfe_inds = np.stack([inds_l, inds_r]).T
 
     simulated_rbfes = true_fs[inds_r] - true_fs[inds_l]
 
-    predict_fs = construct_mle_layer(n_nodes, comparison_inds, sigmas)
+    predict_fs = construct_mle_layer(n_nodes, rbfe_inds)
     fs = predict_fs(simulated_rbfes)
 
     assert (np.isclose(true_fs, fs).all())
@@ -56,18 +54,17 @@ def test_deadlock_triangle(verbose=True):
 
     n_nodes = 3
 
-    comparison_inds = np.array([[0, 1], [1, 2], [2, 0]])
-    n_comparisons = len(comparison_inds)
-    inds_l, inds_r = comparison_inds.T
+    rbfe_inds = np.array([[0, 1], [1, 2], [2, 0]])
+    inds_l, inds_r = rbfe_inds.T
 
     true_fs = np.array([0, 2, -1], dtype=np.float64)
     true_rbfes = true_fs[inds_r] - true_fs[inds_l]
     simulated_rbfes = np.array([4, -1, 5], dtype=np.float64)
 
-    predict_fs = construct_mle_layer(n_nodes, comparison_inds, np.ones(n_comparisons))
+    predict_fs = construct_mle_layer(n_nodes, rbfe_inds)
 
     def apply_cycle_correction_to_rbfes(simulated_rbfes):
-        """estimate mle_fs, then return [mle_fs[j] - mle_fs[i] for (i,j) in comparison_inds]"""
+        """estimate mle_fs, then return [mle_fs[j] - mle_fs[i] for (i,j) in rbfe_inds]"""
         fs = predict_fs(simulated_rbfes)
         cycle_corrected_rbfes = fs[inds_r] - fs[inds_l]
 
@@ -78,7 +75,7 @@ def test_deadlock_triangle(verbose=True):
 
         return np.sum((cycle_corrected_rbfes - true_rbfes) ** 2)
 
-    assert np.linalg.norm(grad(corrected_relative_loss)(simulated_rbfes)) > 1 # 3.26598621
+    assert np.linalg.norm(grad(corrected_relative_loss)(simulated_rbfes)) > 1  # 3.26598621
 
     def fun(x):
         l, g = value_and_grad(corrected_relative_loss)(x)
@@ -104,15 +101,14 @@ def test_optimization_with_cycle_closure(n_nodes=10, verbose=True):
     true_fs -= true_fs[0]
 
     inds_l, inds_r = np.triu_indices(n_nodes, k=1)
-    comparison_inds = np.stack([inds_l, inds_r]).T
-    sigmas = np.ones(len(comparison_inds))
-    n_comparisons = len(comparison_inds)
+    rbfe_inds = np.stack([inds_l, inds_r]).T
+    n_rbfes = len(rbfe_inds)
 
-    predict_fs = construct_mle_layer(n_nodes, comparison_inds, sigmas)
+    predict_fs = construct_mle_layer(n_nodes, rbfe_inds)
 
     def L(simulated_rbfes):
         """sum((fs - true_fs)^2)"""
-        assert (len(simulated_rbfes) == n_comparisons)
+        assert (len(simulated_rbfes) == n_rbfes)
         fs = predict_fs(simulated_rbfes)
         assert (len(fs) == n_nodes)
 
@@ -122,7 +118,7 @@ def test_optimization_with_cycle_closure(n_nodes=10, verbose=True):
         l, g = value_and_grad(L)(x)
         return float(l), onp.array(g, dtype=onp.float64)
 
-    x0 = onp.random.randn(n_comparisons)
+    x0 = onp.random.randn(n_rbfes)
     if verbose:
         print(f'sum((fs - true_fs)^2) before optimization: {L(x0):.3f}')
     assert L(x0) > 1
@@ -146,15 +142,14 @@ def test_grad_cycle_closure(n_nodes=5, tol=1e-3, verbose=True):
     true_fs -= true_fs[0]
 
     inds_l, inds_r = np.triu_indices(n_nodes, k=1)
-    comparison_inds = np.stack([inds_l, inds_r]).T
-    sigmas = np.ones(len(comparison_inds))
-    n_comparisons = len(comparison_inds)
+    rbfe_inds = np.stack([inds_l, inds_r]).T
+    n_rbfes = len(rbfe_inds)
 
-    predict_fs = construct_mle_layer(n_nodes, comparison_inds, sigmas)
+    predict_fs = construct_mle_layer(n_nodes, rbfe_inds)
 
     def loss_fxn(simulated_rbfes):
         """sum((fs - true_fs)^2)"""
-        assert (len(simulated_rbfes) == n_comparisons)
+        assert (len(simulated_rbfes) == n_rbfes)
         fs = predict_fs(simulated_rbfes)
         fs -= fs[0]
         assert (len(fs) == n_nodes)
@@ -166,8 +161,8 @@ def test_grad_cycle_closure(n_nodes=5, tol=1e-3, verbose=True):
 
     # check on some random rbfe guesses
     for _ in range(5):
-        x = onp.random.randn(n_comparisons)
-        x /= np.linalg.norm(x)  #
+        x = onp.random.randn(n_rbfes)
+        x /= np.linalg.norm(x)
         c = check_grad(f, g, x)
         if verbose:
             print('sum((grad(cycle_closure_loss)(x) - finite_difference_grad(cycle_closure_loss)(x))^2) = ', c)
