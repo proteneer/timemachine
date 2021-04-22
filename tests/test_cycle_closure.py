@@ -2,10 +2,10 @@ from jax import config
 
 config.update("jax_enable_x64", True)
 
-from jax import value_and_grad, numpy as np
+from jax import grad, value_and_grad, numpy as np
 import numpy as onp
 
-from scipy.optimize import minimize
+from scipy.optimize import minimize, check_grad
 from fe.cycles import construct_mle_layer
 
 onp.random.seed(2021)
@@ -85,3 +85,48 @@ def test_optimization_with_cycle_closure(n_nodes=10, verbose=True):
         print(f'sum((fs - true_fs)^2) after optimization: {L(result.x):.20f}')
 
     assert result.fun < 1e-16
+
+
+def test_grad_cycle_closure(n_nodes=5, tol=1e-3, verbose=True):
+    """Compare grad(loss_fxn)(x) with finite difference,
+    where loss_fxn is in terms of absolute error of cycle-closure-corrected estimates derived from x
+    and where x is random.
+
+    Also check that grad(loss_fxn)(the_right_answer) = zeros.
+    """
+
+    true_fs = np.array(onp.random.randn(n_nodes))
+    true_fs -= true_fs[0]
+
+    inds_l, inds_r = np.triu_indices(n_nodes, k=1)
+    comparison_inds = np.stack([inds_l, inds_r]).T
+    sigmas = np.ones(len(comparison_inds))
+    n_comparisons = len(comparison_inds)
+
+    predict_fs = construct_mle_layer(n_nodes, comparison_inds, sigmas)
+
+    def loss_fxn(simulated_rbfes):
+        """sum((fs - true_fs)^2)"""
+        assert (len(simulated_rbfes) == n_comparisons)
+        fs = predict_fs(simulated_rbfes)
+        fs -= fs[0]
+        assert (len(fs) == n_nodes)
+
+        return np.sum((fs - true_fs) ** 2)
+
+    f = lambda x: float(loss_fxn(x))
+    g = lambda x: onp.array(grad(loss_fxn)(x))
+
+    # check on some random rbfe guesses
+    for _ in range(5):
+        x = onp.random.randn(n_comparisons)
+        x /= np.linalg.norm(x)  #
+        c = check_grad(f, g, x)
+        if verbose:
+            print('sum((grad(cycle_closure_loss)(x) - finite_difference_grad(cycle_closure_loss)(x))^2) = ', c)
+        assert c < tol
+
+    # check on exact rbfes
+    exact_rbfes = true_fs[inds_r] - true_fs[inds_l]
+    assert np.isclose(f(exact_rbfes), 0)
+    assert np.isclose(g(exact_rbfes), 0).all()
