@@ -15,7 +15,7 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array, sigmas: np.arra
     Parameters
     ----------
     n_nodes : int
-        number of compounds being compaired
+        number of compounds being compared
 
     comparison_inds : int array, shape (n_comparisons, 2)
     sigmas : float array, shape (n_comparisons,)
@@ -40,7 +40,7 @@ def construct_mle_layer(n_nodes: int, comparison_inds: np.array, sigmas: np.arra
     >>> comparison_inds = np.array([[0,1], [1,2], [2,0]])
     >>> simulated_rbfes = np.array([-1.0, -1.0, +2.0])
     >>> sigmas = np.ones(len(comparison_inds))
-    >>> predict_fs = construct_cvxpylayer(n_nodes, comparison_inds, sigmas)
+    >>> predict_fs = construct_mle_layer(n_nodes, comparison_inds, sigmas)
     >>> fs = predict_fs(simulated_rbfes)
     >>> reconstructed_diffs = onp.array([fs[j] - fs[i] for (i, j) in comparison_inds])
     >>> onp.isclose(reconstructed_diffs, simulated_rbfes).all()
