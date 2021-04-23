@@ -72,6 +72,7 @@ if __name__ == "__main__":
     cmd_args = parser.parse_args()
 
     client = CUDAPoolClient(max_workers=cmd_args.num_gpus)
+    client = None
 
     # fetch mol_a, mol_b, core, forcefield from testsystem
     mol_a, mol_b, core = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core
@@ -173,6 +174,8 @@ if __name__ == "__main__":
 
     for epoch in range(1000):
         epoch_params = serialize_handlers(ordered_handles)
+
+        # binding_model.loss(ordered_params, mol_a, mol_b, core, label_ddG)
 
         (loss, aux), loss_grad = vg_fn(ordered_params, mol_a, mol_b, core, label_ddG)
 

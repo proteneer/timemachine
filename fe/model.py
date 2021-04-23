@@ -18,8 +18,18 @@ from functools import partial
 
 from timemachine.lib import custom_ops
 
-def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps,
-    x_interval=1000, du_dl_interval=5):
+def simulate(
+    lamb,
+    box,
+    x0,
+    v0,
+    final_potentials,
+    integrator,
+    equil_steps,
+    prod_steps,
+    compute_grad,
+    x_interval=1000,
+    du_dl_interval=5):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
@@ -49,6 +59,9 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     prod_steps: int
         number of production steps
 
+    compute_grad: bool
+        whether or not we compute derivatives
+
     x_interval: int
         how often we store coordinates. if x_interval == 0 then
         no frames are returned.
@@ -68,10 +81,11 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     # set up observables for du_dps here as well.
     du_dp_obs = []
 
-    for bp in final_potentials:
-        impl = bp.bound_impl(np.float32)
-        all_impls.append(impl)
-        du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 5))
+    if compute_grad:
+        for bp in final_potentials:
+            impl = bp.bound_impl(np.float32)
+            all_impls.append(impl)
+            du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 5))
 
     if integrator.seed == 0:
         integrator = copy.deepcopy(integrator)
@@ -100,9 +114,12 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
 
     # keep the structure of grads the same as that of final_potentials so we can properly
     # form their vjps.
-    grads = []
-    for obs in du_dp_obs:
-        grads.append(obs.avg_du_dp())
+    if compute_grad:
+        grads = []
+        for obs in du_dp_obs:
+            grads.append(obs.avg_du_dp())
+    else:
+        grads = None
 
     return xs, full_du_dls, grads
 
@@ -192,9 +209,19 @@ class RBFEModel():
                 seed
             )
 
+            # dynamically detect if we need derivatives or not.
+            assert np.all([isinstance(x, jax.interpreters.ad.JVPTracer) for x in sys_params])
+
+            compute_grad = False
+
+            for x in sys_params:
+                if isinstance(x, jax.interpreters.ad.JVPTracer):
+                    compute_grad = True
+                    break
+
             bound_potentials = []
             for params, unbound_pot in zip(
-                    # (ytz): this little piece of magic stops backprop
+                    # (ytz): stop backprop on sys_params
                     jax.lax.stop_gradient(sys_params),
                     unbound_potentials):
                 bp = unbound_pot.bind(np.asarray(params))
@@ -210,7 +237,8 @@ class RBFEModel():
                     bound_potentials,
                     integrator,
                     self.equil_steps,
-                    self.prod_steps
+                    self.prod_steps,
+                    compute_grad
                 ))
 
             if self.client is None:
@@ -224,15 +252,15 @@ class RBFEModel():
                 results = [x.result() for x in futures]
 
             mean_du_dls = []
-            all_grads = []
+            # this will be populated with None if derivatives are not required
+            dG_grads = []
 
             for _, du_dls, du_dps in results:
                 # (ytz): figure out what to do with stddev(du_dl) later
                 mean_du_dls.append(np.mean(du_dls))
-                all_grads.append(du_dps)
+                dG_grads.append(du_dps)
 
             dGs = np.trapz(mean_du_dls, lambda_schedule)
-            dG_grads = all_grads
 
             # (ytz): use the thermodynamic derivative
             model = estimator.FreeEnergyModel(
