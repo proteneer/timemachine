@@ -1,4 +1,5 @@
 import numpy as np
+import jax
 import jax.numpy as jnp
 
 from simtk import openmm
@@ -14,6 +15,16 @@ from typing import Optional
 from functools import partial
 
 
+
+# def collect_results(
+#     sys_params,
+#     unbound_potentials,
+#     x0,
+#     v0,
+#     box,
+#     integrator,
+#     equil_steps,
+#     ):
 
 
 class RBFEModel():
@@ -81,9 +92,6 @@ class RBFEModel():
             ("solvent", self.solvent_system, self.solvent_coords, self.solvent_box, self.solvent_schedule)]:
 
             print(f"Minimizing the {stage} host structure to remove clashes.")
-            # (ytz): this isn't strictly symmetric, and we should modify minimize later on remove
-            # the hysteresis by jointly minimizing against a and b at the same time. We may also want
-            # to remove the randomness completely from the minimization.
             min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, self.ff, host_box)
 
             single_topology = topology.SingleTopology(mol_a, mol_b, core, self.ff)
@@ -104,19 +112,55 @@ class RBFEModel():
                 seed
             )
 
+            bound_potentials = []
+            for params, unbound_pot in zip(
+                    # (ytz): this little piece of magic stops backprop
+                    jax.lax.stop_gradient(sys_params),
+                    unbound_potentials):
+                bp = unbound_pot.bind(np.asarray(params))
+                bound_potentials.append(bp)
+
+            all_args = []
+            for lamb in lambda_schedule:
+                all_args.append((
+                    lamb,
+                    host_box,
+                    x0,
+                    v0,
+                    bound_potentials,
+                    integrator,
+                    self.equil_steps,
+                    self.prod_steps
+                ))
+
+            if self.client is None:
+                results = []
+                for args in all_args:
+                    results.append(estimator.simulate(*args))
+            else:
+                futures = []
+                for args in all_args:
+                    futures.append(self.client.submit(estimator.simulate, *args))
+                results = [x.result() for x in futures]
+
+            mean_du_dls = []
+            all_grads = []
+
+            for _, du_dls, du_dps in results:
+                # (ytz): figure out what to do with stddev(du_dl) later
+                mean_du_dls.append(np.mean(du_dls))
+                all_grads.append(du_dps)
+
+            dGs = np.trapz(mean_du_dls, lambda_schedule)
+            dG_grads = all_grads
+
+            # (ytz): use the thermodynamic derivative
             model = estimator.FreeEnergyModel(
-                unbound_potentials,
-                self.client,
-                host_box,
-                x0,
-                v0,
-                integrator,
-                lambda_schedule,
-                self.equil_steps,
-                self.prod_steps,
+                [dGs],
+                [dG_grads]
             )
 
-            dG, results = estimator.deltaG(model, sys_params)
+            dG = estimator.deltaG(model, sys_params)
 
             stage_dGs.append(dG)
             stage_results.append((stage, results))

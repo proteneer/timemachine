@@ -9,23 +9,7 @@ from timemachine.lib import potentials, custom_ops
 
 from typing import Tuple, List, Any
 
-import dataclasses
 import jax.numpy as jnp
-
-@dataclasses.dataclass
-class SimulationResult:
-   xs: np.array
-   du_dls: np.array
-   du_dps: np.array
-
-def flatten(v):
-    return tuple(), (v.xs, v.du_dls, v.du_dps)
-
-def unflatten(aux_data, children):
-    xs, du_dls, du_dps = aux_data
-    return SimulationResult(xs, du_dls, du_dps)
-
-jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
 def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps,
     x_interval=1000, du_dl_interval=5):
@@ -73,18 +57,12 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
 
     """
     all_impls = []
-    bonded_impls = []
-    nonbonded_impls = []
 
     # set up observables for du_dps here as well.
     du_dp_obs = []
 
     for bp in final_potentials:
         impl = bp.bound_impl(np.float32)
-        if isinstance(bp, potentials.Nonbonded):
-            nonbonded_impls.append(impl)
-        else:
-            bonded_impls.append(impl)
         all_impls.append(impl)
         du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 5))
 
@@ -119,52 +97,25 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     for obs in du_dp_obs:
         grads.append(obs.avg_du_dp())
 
-    result = SimulationResult(xs=xs, du_dls=full_du_dls, du_dps=grads)
-    return result
+    return xs, full_du_dls, grads
 
 
 FreeEnergyModel = namedtuple(
     "FreeEnergyModel",
-    ["unbound_potentials", "client", "box", "x0", "v0", "integrator", "lambda_schedule", "equil_steps", "prod_steps"]
+    ["dGs", "dG_grads"]
+
 )
 
 gradient = List[Any] # TODO: make this more descriptive of dG_grad structure
 
 def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
-    assert len(sys_params) == len(model.unbound_potentials)
-
-    bound_potentials = []
-    for params, unbound_pot in zip(sys_params, model.unbound_potentials):
-        bp = unbound_pot.bind(np.asarray(params))
-        bound_potentials.append(bp)
-
-    if model.client is None:
-        results = []
-        for lamb in model.lambda_schedule:
-            results.append(simulate(lamb, model.box, model.x0, model.v0, bound_potentials, model.integrator, model.equil_steps, model.prod_steps))
-    else:
-        futures = []
-        for lamb in model.lambda_schedule:
-            args = (lamb, model.box, model.x0, model.v0, bound_potentials, model.integrator, model.equil_steps, model.prod_steps)
-            futures.append(model.client.submit(simulate, *args))
-
-        results = [x.result() for x in futures]
-
-    mean_du_dls = []
-    all_grads = []
-
-    for result in results:
-        # (ytz): figure out what to do with stddev(du_dl) later
-        mean_du_dls.append(np.mean(result.du_dls))
-        all_grads.append(result.du_dps)
-
-    dG = np.trapz(mean_du_dls, model.lambda_schedule)
     dG_grad = []
-    for rhs, lhs in zip(all_grads[-1], all_grads[0]):
+    for lhs, rhs in zip(model.dG_grads[0][0], model.dG_grads[-1][-1]):
         dG_grad.append(rhs - lhs)
 
-    return (dG, results), dG_grad
+    return np.sum(model.dGs), dG_grad
+
 
 @functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
 def deltaG(model, sys_params) -> Tuple[float, List]:
@@ -178,8 +129,7 @@ def deltaG_bwd(model, residual, grad) -> Tuple[np.array]:
     """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!
     """
     # residual are the partial dG / partial dparams for each term
-    # grad[0] is the adjoint of dG w.r.t. loss: partial L/partial dG
-    # grad[1] is the adjoint of dG w.r.t. simulation result, which we don't use
-    return ([grad[0]*r for r in residual],)
+    # grad is the adjoint of dG w.r.t. loss: partial L/partial dG
+    return ([grad*r for r in residual],)
 
 deltaG.defvjp(deltaG_fwd, deltaG_bwd)
