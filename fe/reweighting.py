@@ -12,7 +12,35 @@ from typing import List
 
 class ReweightingLayer:
     def __init__(self, x_k: List[np.array], u_fxn: callable, params_0: np.array, lambdas: np.array):
-        """Assume samples x_k[k] are drawn from e^{-u_fxn(x, lambdas[k], params_0)}"""
+        """Assumes samples x_k[k] are drawn from e^{-u_fxn(x, lambdas[k], params_0)}.
+
+        The constructor will
+        * aggregate all the samples into a flat structure xs (dropping information about which lambda window each sample
+            came from),
+        * precompute a matrix "u_kn" containing u_fxn(x, lam, params_0) for x in xs, lam in lambdas, and
+        * pass this matrix to pymbar.MBAR to form self-consistent estimates for the free energies of all lambda windows.
+
+        These free energy estimates in turn imply statistical weights of each sample x in a weighted mixture of the
+        sampled lambda windows. These statistical weights allow us to re-use the samples xs to compute arbitrary
+        expectations in thermodynamic states that have sufficient "overlap" with this weighted mixture.
+
+        In particular, to compute a differentiable estimate for the free energy difference between lam=1.0 and lam=0.0,
+        using the same potential energy function u_fxn but a possibly new parameter set params, we need to be able to
+        compute u_fxn(x, lam=0, params), u_fxn(x, lam=1, params) and their gradients w.r.t. params on all cached xs.
+
+        References
+        ----------
+        * Shirts MR and Chodera JD. Statistically optimal analysis of samples from multiple equilibrium states.
+            J. Chem. Phys. 129:124105, 2008. http://dx.doi.org/10.1063/1.2978177
+        * Shirts MR. Reweighting from the mixture distribution as a better way to describe the Multistate Bennett Acceptance Ratio.
+            arXiv preprint, 2017. https://arxiv.org/abs/1704.00891
+        * pymbar implementation of computePerturbedFreeEnergies , which has an associated uncertainty estimate as well!
+            https://github.com/choderalab/pymbar/blob/3c4262c490261110a7595eec37df3e2b8caeab37/pymbar/old_mbar.py#L1106-L1212
+        * PyTorch implementation of differentiable reweighting in neutromeratio
+            https://github.com/choderalab/neutromeratio/blob/2abf29f03e5175a988503b5d6ceeee8ce5bfd4ad/neutromeratio/parameter_gradients.py#L246-L267
+
+        TODO: allow constructor to accept a precomputed u_kn matrix, if available
+        """
 
         self.x_k = x_k  # list of arrays of snapshots, of length len(lambdas)
         self.N_k = list(map(len, x_k))
@@ -55,7 +83,10 @@ class ReweightingLayer:
         return np.array(u_kn)
 
     def compute_delta_f(self, params: np.array) -> float:
-        """Compute an estimate of Delta f_{0 \to 1} , differentiable w.r.t. params"""
+        """Compute an estimate of Delta f_{0 \to 1} , differentiable w.r.t. params.
+
+        Assumes self.u_fxn(x, lam, params) is differentiable w.r.t. params at lam=0.0 and at lam=1.0, and that Jax has
+        been made aware of how to compute this derivative!"""
 
         u_0 = self.vmapped_u_fxn(self.xs, 0.0, params)
         u_1 = self.vmapped_u_fxn(self.xs, 1.0, params)
