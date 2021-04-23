@@ -1,6 +1,10 @@
 import numpy as np
 import simtk.unit
 
+import networkx as nx
+
+from typing import List
+
 def set_velocities_to_temperature(n_atoms, temperature, masses):
     assert 0 # don't call this yet until its
     v_t = np.random.normal(size=(n_atoms, 3))
@@ -167,3 +171,78 @@ def plot_atom_mapping(mol_a, mol_b, core):
 
     draw_mol(mol_a, core[:, 0].tolist(), atom_colors_a)
     draw_mol(mol_b, core[:, 1].tolist(), atom_colors_b)
+
+
+def get_connected_components(nodes, relative_inds, absolute_inds) -> List[np.array]:
+    """Construct a graph containing (len(nodes) + 1) nodes -- one for each original node, plus a new "reference" node.*
+
+        Add edges
+        * (i, j) in relative_inds,
+        * (i, "reference") for i in absolute_inds
+
+        And then return the connected components of this graph (omitting the "reference" node we added).*
+
+        * Unless "nodes" already contained something named "reference"!
+    """
+    g = nx.Graph()
+    g.add_nodes_from(nodes)
+
+    if 'reference' not in nodes:
+        g.add_node('reference')
+
+    for (i, j) in relative_inds:
+        g.add_edge(i, j)
+
+    if len(absolute_inds) == 0:
+        absolute_inds = [0]
+
+    for i in absolute_inds:
+        g.add_edge(i, 'reference')
+
+    # return list of lists of elements of the nodes
+    # we will remove the "reference" node we added
+    # however, if the user actually had a node named "reference", don't remove it
+
+    components = list(map(list, list(nx.connected_components(g))))
+
+    if 'reference' in nodes:
+        return components
+    else:
+        filtered_components = []
+
+        for component in components:
+            if 'reference' in component:
+                component.remove('reference')
+            filtered_components.append(component)
+        return filtered_components
+
+
+def validate_map(n_nodes: int, relative_inds: np.array, absolute_inds: np.array) -> bool:
+    """Construct a graph containing (n_nodes + 1) nodes -- one for each original node, plus a new "reference" node.
+
+    Add edges
+    * (i, j) in relative_inds,
+    * (i, "reference") for i in absolute_inds
+
+    And then return whether this graph is connected.
+
+    If no absolute_inds provided, treat node 0 as "reference".
+
+    Examples
+    --------
+
+    >>> validate_map(4, relative_inds=[[0,1], [2,3]], absolute_inds=[0])
+    False
+
+    >>> validate_map(4, relative_inds=[[0,1], [1,2], [2,3]], absolute_inds=[0])
+    True
+
+    >>> validate_map(4, relative_inds=[[0,1], [2,3]], absolute_inds=[0,2])
+    True
+    """
+
+    if len(absolute_inds) == 0:
+        absolute_inds = [0]
+
+    components = get_connected_components(list(range(n_nodes)), relative_inds, absolute_inds)
+    return len(components) == 1

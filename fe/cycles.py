@@ -8,49 +8,9 @@ import numpy as onp
 import cvxpy as cp
 from cvxpylayers.jax import CvxpyLayer
 
-import networkx as nx
+from fe.utils import validate_map
 
 from typing import Optional
-
-
-def validate_map(n_nodes: int, relative_inds: np.array, absolute_inds: np.array) -> bool:
-    """Construct a graph containing (n_nodes + 1) nodes -- one for each original node, plus a new "reference" node.
-
-    Add edges
-    * (i, j) in relative_inds,
-    * (i, "reference") for i in absolute_inds
-
-    And then return whether this graph is simply connected.
-
-    If no absolute_inds provided, treat node 0 as "reference".
-
-    Examples
-    --------
-
-    >>> validate_map(4, relative_inds=[[0,1], [2,3]], absolute_inds=[0])
-    False
-
-    >>> validate_map(4, relative_inds=[[0,1], [1,2], [2,3]], absolute_inds=[0])
-    True
-
-    >>> validate_map(4, relative_inds=[[0,1], [2,3]], absolute_inds=[0,2])
-    True
-    """
-
-    g = nx.Graph()
-    g.add_nodes_from(list(range(n_nodes)))
-    g.add_node('reference')
-
-    for (i, j) in relative_inds:
-        g.add_edge(i, j)
-
-    if len(absolute_inds) == 0:
-        absolute_inds = [0]
-
-    for i in absolute_inds:
-        g.add_edge(i, 'reference')
-
-    return nx.is_connected(g)
 
 
 def construct_mle_layer(n_nodes: int,
@@ -150,7 +110,7 @@ def construct_mle_layer(n_nodes: int,
     # check that the "map" is connected
     valid = validate_map(n_nodes, relative_inds=rbfe_inds, absolute_inds=abfe_inds)
     if not valid:
-        raise AssertionError(f'invalid map -- not simply connected')
+        raise AssertionError(f'invalid map -- disconnected!')
 
     # parameters that define the optimization problem: simulated_rbfes and simulated_abfes
     simulated_rbfes = cp.Parameter(n_rbfes)
