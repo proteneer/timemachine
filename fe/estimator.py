@@ -1,21 +1,16 @@
 from collections import namedtuple
 
 import functools
-import copy
 import jax
 import numpy as np
-
-from timemachine.lib import potentials, custom_ops
 
 from typing import Tuple, List, Any
 
 import jax.numpy as jnp
 
-
 FreeEnergyModel = namedtuple(
     "FreeEnergyModel",
     ["dGs", "dG_grads"]
-
 )
 
 gradient = List[Any] # TODO: make this more descriptive of dG_grad structure

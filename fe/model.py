@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -14,6 +15,8 @@ from parallel.client import AbstractClient
 from typing import Optional
 from functools import partial
 
+
+from timemachine.lib import custom_ops
 
 def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps,
     x_interval=1000, du_dl_interval=5):
