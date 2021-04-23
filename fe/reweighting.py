@@ -13,24 +13,29 @@ from typing import List
 class ReweightingLayer:
     def __init__(self, x_k: List[np.array], u_fxn: callable, params_0: np.array, lambdas: np.array):
         """Assume samples x_k[k] are drawn from e^{-u_fxn(x, lambdas[k], params_0)}"""
+
         self.x_k = x_k  # list of arrays of snapshots, of length len(lambdas)
         self.N_k = list(map(len, x_k))
         N, K = sum(self.N_k), len(self.N_k)
         assert len(lambdas) == K
 
         self.xs = np.vstack(x_k)
+
+        # double-check vstacking didn't result in an unexpected shape
         assert len(self.xs) == sum(self.N_k)
 
-        self.u_fxn = u_fxn  # signature u_fxn(x, lam, params) -> energy
+        self.u_fxn = u_fxn  # signature u_fxn(x, lam, params) -> reduced potential energy (unitless float)
         self.params_0 = params_0
         self.lambdas = lambdas
 
-        assert (min(self.N_k) > 0)  # assume samples from each lambda window
+        # assume samples from each lambda window
+        assert (min(self.N_k) > 0)
 
         # compute u_fxn(x, lam, params_0) for x in xs, lam in lambdas
         self.vmapped_u_fxn = vmap(self.u_fxn, in_axes=(0, None, None))
         u_kn = self._compute_u_kn(self.xs)
 
+        # double-check vmapped_u_fxn didn't expand dims along the way
         assert (u_kn.shape == (len(lambdas), sum(self.N_k)))
 
         # compute free energies among all K lambda windows at fixed params_0
@@ -40,6 +45,7 @@ class ReweightingLayer:
         self.log_q_k = self.mbar.f_k - self.mbar.u_kn.T
         self.log_denominator_n = logsumexp(self.log_q_k, b=self.mbar.N_k, axis=1)
 
+        # double-check broadcasts and transposes didn't result in an unexpected shape
         assert self.log_denominator_n.shape == (len(self.xs),)
 
     def _compute_u_kn(self, xs: np.array) -> np.array:
@@ -55,6 +61,8 @@ class ReweightingLayer:
         u_1 = self.vmapped_u_fxn(self.xs, 1.0, params)
 
         log_q_ln = np.stack([- u_0 - self.log_denominator_n, - u_1 - self.log_denominator_n])
+        assert log_q_ln.shape == (2, len(self.xs))
+
         fs = - logsumexp(log_q_ln, axis=1)
         delta_f = fs[1] - fs[0]
 
