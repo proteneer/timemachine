@@ -8,7 +8,49 @@ import numpy as onp
 import cvxpy as cp
 from cvxpylayers.jax import CvxpyLayer
 
+import networkx as nx
+
 from typing import Optional
+
+
+def validate_map(n_nodes: int, relative_inds: np.array, absolute_inds: np.array) -> bool:
+    """Construct a graph containing (n_nodes + 1) nodes -- one for each original node, plus a new "reference" node.
+
+    Add edges
+    * (i, j) in relative_inds,
+    * (i, "reference") for i in absolute_inds
+
+    And then return whether this graph is simply connected.
+
+    If no absolute_inds provided, treat node 0 as "reference".
+
+    Examples
+    --------
+
+    >>> validate_map(4, relative_inds=[[0,1], [2,3]], absolute_inds=[0])
+    False
+
+    >>> validate_map(4, relative_inds=[[0,1], [1,2], [2,3]], absolute_inds=[0])
+    True
+
+    >>> validate_map(4, relative_inds=[[0,1], [2,3]], absolute_inds=[0,2])
+    True
+    """
+
+    g = nx.Graph()
+    g.add_nodes_from(list(range(n_nodes)))
+    g.add_node('reference')
+
+    for (i, j) in relative_inds:
+        g.add_edge(i, j)
+
+    if len(absolute_inds) == 0:
+        absolute_inds = [0]
+
+    for i in absolute_inds:
+        g.add_edge(i, 'reference')
+
+    return nx.is_connected(g)
 
 
 def construct_mle_layer(n_nodes: int,
@@ -94,13 +136,6 @@ def construct_mle_layer(n_nodes: int,
     if (inds_l == inds_r).any():
         raise AssertionError(f'invalid rbfe_inds -- includes self-comparisons: {rbfe_inds[(inds_l == inds_r)]}')
 
-    # check that the "map" is connected
-    if len(set(rbfe_inds.flatten())) != n_nodes:
-        present = set(rbfe_inds.flatten())
-        expected = set(np.arange(n_nodes))
-        missing_inds = list(expected.difference(present))
-        raise AssertionError(f'invalid rbfe_inds -- missing comparisons for nodes: {missing_inds}')
-
     if rbfe_sigmas is None:
         rbfe_sigmas = np.ones(n_rbfes)
 
@@ -112,7 +147,12 @@ def construct_mle_layer(n_nodes: int,
     if abfe_sigmas is None:
         abfe_sigmas = np.ones(n_absolute)
 
-    # parameters that define the optimization problem: simulated_rbfes
+    # check that the "map" is connected
+    valid = validate_map(n_nodes, relative_inds=rbfe_inds, absolute_inds=abfe_inds)
+    if not valid:
+        raise AssertionError(f'invalid map -- not simply connected')
+
+    # parameters that define the optimization problem: simulated_rbfes and simulated_abfes
     simulated_rbfes = cp.Parameter(n_rbfes)
     simulated_abfes = cp.Parameter(n_absolute)
 
