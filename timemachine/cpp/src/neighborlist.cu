@@ -87,7 +87,7 @@ void Neighborlist<RealType>::compute_block_bounds_host(
         d_box,
         static_cast<cudaStream_t>(0)
     );
-
+    // Does this need to peek at the last error?
     cudaDeviceSynchronize();
 
     gpuErrchk(cudaMemcpy(h_bb_ctrs, d_block_bounds_ctr_, this->B()*3*sizeof(*d_block_bounds_ctr_), cudaMemcpyDeviceToHost));
@@ -116,8 +116,8 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_host(
     );
 
     cudaDeviceSynchronize();
-
     const int B = this->B(); //(N+32-1)/32;
+    // Q:: What does Y stand for? Blocks divided by 32?
     const int Y = this->Y(); //(B+32-1)/32;
 
     unsigned long long MAX_TILE_BUFFER = B*B;

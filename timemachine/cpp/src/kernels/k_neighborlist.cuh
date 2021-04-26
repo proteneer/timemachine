@@ -1,6 +1,11 @@
 #pragma once
 
 #define FULL_MASK 0xffffffff
+
+// the actual task itself is simple, Scott Le Grand told me that reducing the
+// tile size from 32x32 to 16x16 makes a huge difference on the newer cards
+
+// Why is this defined here and in k_neighborlist.cu
 void __global__ k_find_block_bounds(
     const int N,
     const int D,
@@ -106,6 +111,7 @@ void __global__ k_find_blocks_with_ixns(
 
     __shared__ int ixn_j_buffer[64]; // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
 
+    // Q:: Should this be indexed using indexInWarp and not threadIdx.x??
     // initialize
     ixn_j_buffer[threadIdx.x] = N;
     ixn_j_buffer[32+threadIdx.x] = N;
@@ -114,6 +120,7 @@ void __global__ k_find_blocks_with_ixns(
     
     const int row_block_idx = blockIdx.x;
 
+    // Retrieve the center coords of row's box and outer limits of row box.
     RealType row_bb_ctr_x = bb_ctr[row_block_idx*3+0];
     RealType row_bb_ctr_y = bb_ctr[row_block_idx*3+1];
     RealType row_bb_ctr_z = bb_ctr[row_block_idx*3+2];
@@ -151,6 +158,7 @@ void __global__ k_find_blocks_with_ixns(
 
     if (include_col_block) {
 
+        // Compute center of column box and external coords. 
         RealType col_bb_ctr_x = bb_ctr[col_block_idx*3+0];
         RealType col_bb_ctr_y = bb_ctr[col_block_idx*3+1];
         RealType col_bb_ctr_z = bb_ctr[col_block_idx*3+2];
@@ -159,18 +167,21 @@ void __global__ k_find_blocks_with_ixns(
         RealType col_bb_ext_y = bb_ext[col_block_idx*3+1];
         RealType col_bb_ext_z = bb_ext[col_block_idx*3+2];
 
+        // Find delta between boxes
         RealType box_box_dx = row_bb_ctr_x - col_bb_ctr_x;
         RealType box_box_dy = row_bb_ctr_y - col_bb_ctr_y;
         RealType box_box_dz = row_bb_ctr_z - col_bb_ctr_z;
 
+        // Q:: center delta box??
         box_box_dx -= bx*nearbyint(box_box_dx*inv_bx);
         box_box_dy -= by*nearbyint(box_box_dy*inv_by);
         box_box_dz -= bz*nearbyint(box_box_dz*inv_bz);
-
+        // Q:: Unclear the intended use of this, bounding box magic?
         box_box_dx = max(static_cast<RealType>(0.0), fabs(box_box_dx) - row_bb_ext_x - col_bb_ext_x);
         box_box_dy = max(static_cast<RealType>(0.0), fabs(box_box_dy) - row_bb_ext_y - col_bb_ext_y);
         box_box_dz = max(static_cast<RealType>(0.0), fabs(box_box_dz) - row_bb_ext_z - col_bb_ext_z);
 
+        // Check if the deltas between boxes are within cutoff
         include_col_block &= (box_box_dx*box_box_dx + box_box_dy*box_box_dy + box_box_dz*box_box_dz) < cutoff_squared;
 
     }
@@ -189,7 +200,7 @@ void __global__ k_find_blocks_with_ixns(
         // ffs(2^3=8) == 4
         // ffs(2^31) == 32
 
-        int offset = __ffs(includeBlockFlags)-1;
+        int offset = __ffs(includeBlockFlags)-1; // __ffs(0) - 1 == -1?
 
         includeBlockFlags &= includeBlockFlags-1;
         int col_block = col_block_base + offset;
@@ -202,9 +213,13 @@ void __global__ k_find_blocks_with_ixns(
         RealType col_bb_ext_y = bb_ext[col_block*3+1];
         RealType col_bb_ext_z = bb_ext[col_block*3+2];
 
-        RealType atom_box_dx = __shfl_sync(0xffffffff, pos_i_x, threadIdx.x) - col_bb_ctr_x;
-        RealType atom_box_dy = __shfl_sync(0xffffffff, pos_i_y, threadIdx.x) - col_bb_ctr_y;
-        RealType atom_box_dz = __shfl_sync(0xffffffff, pos_i_z, threadIdx.x) - col_bb_ctr_z;
+        // Q:: Isn't this requesting from itself? threadIdx.x does get % if >32, but still seems wrong?
+        //                                 Mask       Value    Src Thread
+        //                                   |          |          |
+        //                                   v          v          v
+        RealType atom_box_dx = __shfl_sync(FULL_MASK, pos_i_x, threadIdx.x) - col_bb_ctr_x;
+        RealType atom_box_dy = __shfl_sync(FULL_MASK, pos_i_y, threadIdx.x) - col_bb_ctr_y;
+        RealType atom_box_dz = __shfl_sync(FULL_MASK, pos_i_z, threadIdx.x) - col_bb_ctr_z;
 
         atom_box_dx -= bx*nearbyint(atom_box_dx*inv_bx);
         atom_box_dy -= by*nearbyint(atom_box_dy*inv_by);
@@ -249,9 +264,8 @@ void __global__ k_find_blocks_with_ixns(
             atom_atom_dx -= bx*nearbyint(atom_atom_dx*inv_bx);
             atom_atom_dy -= by*nearbyint(atom_atom_dy*inv_by);
             atom_atom_dz -= bz*nearbyint(atom_atom_dz*inv_bz);
-
+            // Once interacts is 'true', continue just because you need __shfl_sync in the rest of the warp
             interacts |= (atom_atom_dx*atom_atom_dx + atom_atom_dy*atom_atom_dy + atom_atom_dz*atom_atom_dz < cutoff_squared ? 1<<row_atom : 0);
-
         }
         
         // Add any interacting atoms to the buffer.
@@ -259,6 +273,7 @@ void __global__ k_find_blocks_with_ixns(
 
         if (interacts) {
             int index = neighborsInBuffer+__popc(includeAtomFlags & warpMask); // where to store this in shared memory
+            // Indices can be at most 64
             ixn_j_buffer[index] = atom_j_idx;
         }
         neighborsInBuffer += __popc(includeAtomFlags);
@@ -269,6 +284,7 @@ void __global__ k_find_blocks_with_ixns(
                 sync_start[0] = atomicAdd(interactionCount, tilesToStore);
             }
             __syncwarp();
+            // Won't sync_start have the same value across warps?
             interactingTiles[sync_start[0]] = row_block_idx;
             interactingAtoms[sync_start[0]*32 + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
