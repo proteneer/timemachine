@@ -10,6 +10,20 @@ from jax.scipy.special import logsumexp
 from typing import List
 
 
+def ESS(log_weights: np.array) -> float:
+    """Effective sample size available for reweighting using a collection of log importance weights.
+
+    Notes
+    -----
+    * This uses the conventional definition ESS(w) = 1 / \sum_i w_i^2, which has some important known limitations!
+    * See [Elvira, Martino, Robert, 2018] "Rethinking the effective sample size" https://arxiv.org/abs/1809.04129
+        and references therein for some insightful discussion of limitations and possible improvements
+    """
+    log_Z = logsumexp(log_weights)
+    weights = np.exp(log_weights - log_Z)  # sum(weights) == 1
+    return 1 / np.sum(weights ** 2)  # between 1 and len(weights)
+
+
 class ReweightingLayer:
     def __init__(self, x_k: List[np.array], u_fxn: callable, ref_params: np.array, lambdas: np.array):
         """Assumes samples x_k[k] are drawn from e^{-u_fxn(x, lambdas[k], ref_params)}.
@@ -88,16 +102,29 @@ class ReweightingLayer:
             u_kn.append(self.vmapped_u_fxn(xs, lam, self.ref_params))
         return np.array(u_kn)
 
-    def compute_delta_f(self, params: np.array) -> float:
-        """Compute an estimate of Delta f_{0 \to 1} , differentiable w.r.t. params.
+    def compute_delta_f(self, params: np.array, ess_warn_threshold: float=50.0) -> float:
+        """Compute an estimate of the free energy difference between lam=0 and lam=1 at a new value of params.
 
         This function is differentiable w.r.t. params, assuming self.u_fxn(x, lam, params) is differentiable w.r.t.
-        params at lam=0.0 and at lam=1.0."""
+        params at lam=0.0 and at lam=1.0 on the cached samples in self.xs.
+
+        Prints a warning if the number of effective samples available for reweighting to
+        u(self.xs, 0.0, params) or u(self.xs, 1.0, params) is less than ess_warn_threshold.
+        """
 
         u_0 = self.vmapped_u_fxn(self.xs, 0.0, params)
         u_1 = self.vmapped_u_fxn(self.xs, 1.0, params)
 
         log_q_ln = np.stack([- u_0 - self.log_denominator_n, - u_1 - self.log_denominator_n])
+        ess_0, ess_1 = ESS(log_q_ln[0]), ESS(log_q_ln[1])
+        if min(ess_0, ess_1) < ess_warn_threshold:
+            message = f"""
+            The number of effective samples is lower than {ess_warn_threshold}! proceed with caution...
+                ESS(state 0) = {ess_0:.3f}
+                ESS(state 1) = {ess_1:.3f}
+            """
+            print(UserWarning(message))
+
         assert log_q_ln.shape == (2, len(self.xs))
 
         fs = - logsumexp(log_q_ln, axis=1)
