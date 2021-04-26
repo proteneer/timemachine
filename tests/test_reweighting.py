@@ -48,19 +48,19 @@ lambdas = np.linspace(0, 1, n_windows)
 n_samples_per_window = 100
 
 # force field parameters
-params_0 = np.array([1.0, -1.0])
+ref_params = np.array([1.0, -1.0])
 
 onp.random.seed(0)
-x_k = [sample(lam, params_0, n_samples_per_window) for lam in lambdas]
+x_k = [sample(lam, ref_params, n_samples_per_window) for lam in lambdas]
 
 
 def test_self_consistent(verbose=True):
-    """Assert that reweighting from params_0 to params_0 gives same estimate as MBAR on params_0"""
-    reweighter = ReweightingLayer(x_k, u_fxn, params_0, lambdas)
+    """Assert that reweighting from ref_params to ref_params gives same estimate as MBAR on ref_params"""
+    reweighter = ReweightingLayer(x_k, u_fxn, ref_params, lambdas)
 
-    # assert that reweighting from params_0 to params_0 is self-consistent
+    # assert that reweighting from ref_params to ref_params is self-consistent
     mbar_delta_f = reweighter.mbar.f_k[-1] - reweighter.mbar.f_k[0]
-    reweighted_delta_f = reweighter.compute_delta_f(params_0)
+    reweighted_delta_f = reweighter.compute_delta_f(ref_params)
     if verbose:
         print('mbar delta f vs. reweighted delta f on same samples and params', mbar_delta_f, reweighted_delta_f)
     assert np.isclose(mbar_delta_f, reweighted_delta_f)
@@ -73,13 +73,13 @@ def test_zeros(verbose=True, sim_atol=1e-1):
     * gradient of delta_f w.r.t. params is approximately zeros, when varying params cannot influence free energy difference"""
 
     # assert free energy differences between sampled, normalized states are approximately zero
-    reweighter = ReweightingLayer(x_k, normalized_u_fxn, params_0, lambdas)
+    reweighter = ReweightingLayer(x_k, normalized_u_fxn, ref_params, lambdas)
     if verbose:
         print('mbar f_k on finite samples, where true f_k known to be 0', reweighter.mbar.f_k)
     assert np.isclose(reweighter.mbar.f_k, 0, atol=sim_atol).all()
 
     # assert that reweighting estimate for delta_f is still close to 0
-    params_new = params_0 * 0.5  # should have good overlap...
+    params_new = ref_params * 0.5  # should have good overlap...
     reweighted_delta_f = reweighter.compute_delta_f(params_new)
     if verbose:
         print('reweighted delta f on new unsampled states, but known to be 0', reweighted_delta_f)
