@@ -151,7 +151,7 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_host(
 
 template<typename RealType>
 void Neighborlist<RealType>::build_nblist_device(
-    int N,
+    const int N,
     const double *d_coords,
     const double *d_box,
     const double cutoff,
@@ -208,17 +208,17 @@ void Neighborlist<RealType>::build_nblist_device(
 
 template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_device(
-	int N,
-	int D,
-	const double *d_coords,
-    const double *d_box,
+	int N, // Number of atoms
+	int D, // Box dimensions
+	const double *d_coords, // [N*3]
+    const double *d_box, // [D*3]
 	cudaStream_t stream) {
 
     assert(N == N_);
     assert(D == 3);
 
-    int tpb = 32;
-    int B = (N+tpb-1)/tpb; // total number of blocks we need to process
+    const int tpb = 32;
+    const int B = (N+tpb-1)/tpb; // total number of blocks we need to process
 
     gpuErrchk(cudaMemsetAsync(d_block_bounds_ctr_, 0, B*D*sizeof(*d_block_bounds_ctr_), stream));
     gpuErrchk(cudaMemsetAsync(d_block_bounds_ext_, 0, B*D*sizeof(*d_block_bounds_ext_), stream));
