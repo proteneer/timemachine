@@ -20,7 +20,7 @@ class RBFEModel():
 
     def __init__(
         self,
-        client: AbstractClient or None,
+        client: Optional[AbstractClient],
         ff: Forcefield,
         complex_system: openmm.System,
         complex_coords: np.ndarray,
@@ -93,7 +93,6 @@ class RBFEModel():
 
             x0 = coords
             v0 = np.zeros_like(coords)
-            box = np.eye(3, dtype=np.float64)*100 # note: box unused
 
             seed = 0
 

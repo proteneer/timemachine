@@ -230,9 +230,16 @@ void declare_avg_partial_u_partial_param(py::module &m) {
         obj.avg_du_dp(buffer.mutable_data());
 
         return buffer;
+    })
+    .def("std_du_dp", [](timemachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
+        std::vector<int> shape = obj.shape();
+        py::array_t<double, py::array::c_style> buffer(shape);
+
+        obj.std_du_dp(buffer.mutable_data());
+
+        return buffer;
     });
 }
-
 void declare_integrator(py::module &m) {
 
     using Class = timemachine::Integrator;

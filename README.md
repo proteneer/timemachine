@@ -41,7 +41,7 @@ If using conda the following can be used to configure your environment
 ```
 conda create -n timemachine python=3.7
 conda activate timemachine
-conda install -c conda-forge -c openeye -c rdkit openmm openeye-toolkits rdkit
+conda install -c conda-forge -c openeye openmm openeye-toolkits rdkit=2021.03.1
 ```
 
 ### Install Time Machine
@@ -97,7 +97,7 @@ Most of the training is using the correctable charge corrections [ccc forcefield
 2. The eps parameter in LJ have been replaced by an alpha such that alpha^2=eps in order to avoid negative eps values during training.
 3. We use a consistent 0.5 scaling for the 1-4 terms across LJ and electrostatics.
 4. The reaction field used is the real part of PME with a beta (alpha) coefficient of 2.0 
-5. The recharge BCC port is not yet complete, as there are some missing types that will cause very large errors (eg. P=S moeities).
+5. The recharge BCC port is not yet complete, as there are some missing types that will cause very large errors (eg. P=S moieties).
 
 # License
 

@@ -135,7 +135,7 @@ class NonbondedHandler(SerializableMixIn):
     def static_parameterize(params, smirks, mol):
         """
         Carry out parameterization of given molecule, with an option to attach additional parameters
-        via concateation. Typically aux_params are protein charges etc.
+        via concatenation. Typically aux_params are protein charges etc.
 
         Parameters
         ----------

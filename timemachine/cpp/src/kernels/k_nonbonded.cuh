@@ -351,6 +351,17 @@ float __device__ __forceinline__ real_es_factor(float real_beta, float dij, floa
     return -inv_d2ij*(static_cast<float>(TWO_OVER_SQRT_PI)*beta_dij*exp_beta_dij_2 + erfc_beta_dij);
 }
 
+
+// These are two lines of code are to deal with the formation of a non-commutative fma.
+// For more information, see: https://github.com/proteneer/timemachine/issues/386
+float __device__ __forceinline__ fix_nvidia_fmad(float a, float b, float c, float d) {
+    return __fmul_rn(a, b) + __fmul_rn(c, d);
+}
+
+double __device__ __forceinline__ fix_nvidia_fmad(double a, double b, double c, double d) {
+    return __dmul_rn(a, b) + __dmul_rn(c, d);
+}
+
 // ALCHEMICAL == false guarantees that the tile's atoms are such that
 // 1. src_param and dst_params are equal for every i in R and j in C
 // 2. w_i and w_j are identical for every (i,j) in (RxC)
@@ -555,7 +566,11 @@ void __device__ v_nonbonded_unified(
                 }
 
                 if(COMPUTE_DU_DL && ALCHEMICAL) {
-                    real_du_dl += sig_grad*(dsig_dl_i + dsig_dl_j) + eps_grad*(eps_j*deps_dl_i + eps_i*deps_dl_j);
+
+                    real_du_dl += sig_grad*(dsig_dl_i + dsig_dl_j);
+                    RealType term = eps_grad*fix_nvidia_fmad(eps_j, deps_dl_i, eps_i, deps_dl_j);
+                    real_du_dl += term;
+
                 }
 
             }
@@ -579,7 +594,7 @@ void __device__ v_nonbonded_unified(
                 // needed for cancellation of nans (if one term blows up)
                 real_du_dl += delta_w*cutoff*delta_prefactor*(lambda_offset_i - lambda_offset_j);
                 // this extra ebd kills as it requires the erfc to be fully evaluated. SHIT
-                real_du_dl += inv_dij*ebd*(qj*dq_dl_i + qi*dq_dl_j);
+                real_du_dl += inv_dij*ebd*fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
                 du_dl += FLOAT_TO_FIXED_NONBONDED(real_du_dl);
             }
 
@@ -943,7 +958,9 @@ void __global__ k_nonbonded_exclusions(
             g_epsi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(-eps_grad*eps_j);
             g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(-eps_grad*eps_i);
 
-            real_du_dl -= sig_grad*(dsig_dl_i + dsig_dl_j) + eps_grad*(eps_j*deps_dl_i + eps_i*deps_dl_j);
+            real_du_dl -= sig_grad*(dsig_dl_i + dsig_dl_j);
+            RealType term = eps_grad*fix_nvidia_fmad(eps_j, deps_dl_i, eps_i, deps_dl_j);
+            real_du_dl -= term;
 
         }
 
@@ -962,7 +979,7 @@ void __global__ k_nonbonded_exclusions(
         g_qj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qi*inv_dij*ebd);
 
         real_du_dl -= delta_w*cutoff*delta_prefactor*(lambda_offset_i - lambda_offset_j);
-        real_du_dl -= charge_scale*inv_dij*ebd*(qj*dq_dl_i + qi*dq_dl_j);
+        real_du_dl -= charge_scale*inv_dij*ebd*fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
 
         if(du_dx) {
             atomicAdd(du_dx + atom_i_idx*3 + 0, gi_x);

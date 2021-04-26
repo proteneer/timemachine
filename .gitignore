@@ -4,3 +4,5 @@ __pycache__/
 timemachine/cpp/build/
 *.so
 *.DS_Store
+oe_license.txt
+*.swp

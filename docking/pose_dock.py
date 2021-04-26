@@ -19,8 +19,8 @@ from docking import report
 
 
 def pose_dock(
-    guests_sdfile,
     host_pdbfile,
+    guests_sdfile,
     transition_type,
     n_steps,
     transition_steps,
@@ -34,8 +34,8 @@ def pose_dock(
     Parameters
     ----------
 
-    guests_sdfile: path to input sdf with guests to pose/dock
     host_pdbfile: path to host pdb file to dock into
+    guests_sdfile: path to input sdf with guests to pose/dock
     transition_type: "insertion" or "deletion"
     n_steps: how many total steps of simulation to do (recommended: <= 1000)
     transition_steps: how many steps to insert/delete the guest over (recommended: <= 500)
@@ -173,7 +173,9 @@ def pose_dock(
         # collect a du_dl calculation every step
         subsample_du_dl_interval = 1
 
-        full_du_dls, _ = ctxt.multiple_steps(new_lambda_schedule, subsample_du_dl_interval)
+        full_du_dls, _ = ctxt.multiple_steps(
+            new_lambda_schedule, subsample_du_dl_interval
+        )
 
         step = len(new_lambda_schedule) - 1
         final_lamb = new_lambda_schedule[-1]
@@ -204,7 +206,9 @@ def pose_dock(
             calc_work = False
 
         if calc_work:
-            work = np.trapz(full_du_dls, new_lambda_schedule[::subsample_du_dl_interval])
+            work = np.trapz(
+                full_du_dls, new_lambda_schedule[::subsample_du_dl_interval]
+            )
             print(f"guest_name: {guest_name}\twork: {work:.2f}")
         end_time = time.time()
         print(f"{guest_name} took {(end_time - start_time):.2f} seconds")
@@ -219,39 +223,31 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "-s",
-        "--guests_sdfile",
-        default="tests/data/ligands_40.sdf",
-        help="guests to pose",
-    )
-    parser.add_argument(
         "-p",
         "--host_pdbfile",
         default="tests/data/hif2a_nowater_min.pdb",
         help="host to dock into",
     )
     parser.add_argument(
-        "-c",
-        "--constant_atoms_file",
-        help="file containing comma-separated atom numbers to hold ~fixed",
+        "-s",
+        "--guests_sdfile",
+        default="tests/data/ligands_40.sdf",
+        help="guests to pose",
     )
     parser.add_argument(
-        "-t",
-        "--transition_type",
-        help="'insertion' or 'deletion'",
-        default="insertion",
+        "-t", "--transition_type", help="'insertion' or 'deletion'", default="insertion"
     )
     parser.add_argument(
-        "--nsteps",
+        "--n_steps",
         type=int,
         default=1001,
-        help="simulation length (1 step = 1.5 femtoseconds)",
+        help="total simulation length (1 step = 1.5 femtoseconds)",
     )
     parser.add_argument(
         "--transition_steps",
         type=int,
         default=500,
-        help="how many steps to take while phasing in or out the guest",
+        help="how many steps to take while phasing in or out the guest (must be <= n_steps)",
     )
     parser.add_argument(
         "--max_lambda",
@@ -263,12 +259,17 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
+        "-o", "--outdir", default="pose_dock_outdir", help="where to write output"
+    )
+    parser.add_argument(
         "--random_rotation",
         action="store_true",
         help="apply a random rotation to each guest before inserting",
     )
     parser.add_argument(
-        "-o", "--outdir", default="pose_dock_outdir", help="where to write output"
+        "-c",
+        "--constant_atoms_file",
+        help="file containing comma-separated atom numbers to hold ~fixed",
     )
     args = parser.parse_args()
     print(args)
@@ -282,10 +283,10 @@ if __name__ == "__main__":
                 constant_atoms_list += atoms
 
     pose_dock(
-        args.guests_sdfile,
         args.host_pdbfile,
+        args.guests_sdfile,
         args.transition_type,
-        args.nsteps,
+        args.n_steps,
         args.transition_steps,
         args.max_lambda,
         args.outdir,

@@ -21,7 +21,7 @@ def mybar_vjp(g, w):
     return g*tmbar.dG_dw(w)
 
 def mybar(x):
-  return mybar_p.bind(x)
+    return mybar_p.bind(x)
 
 mybar_p = core.Primitive('mybar')
 mybar_p.def_impl(mybar_impl)
