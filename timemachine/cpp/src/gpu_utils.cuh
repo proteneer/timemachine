@@ -16,6 +16,8 @@ curandStatus_t templateCurandNormal(
 
 
 
+
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -35,6 +37,16 @@ inline void curandAssert(curandStatus_t code, const char *file, int line, bool a
       if (abort) exit(code);
    }
 }
+
+#define NVRTC_SAFE_CALL(x)                                        \
+  do {                                                            \
+    nvrtcResult result = x;                                       \
+    if (result != NVRTC_SUCCESS) {                                \
+      std::cerr << "\nerror: " #x " failed with error "           \
+                << nvrtcGetErrorString(result) << '\n';           \
+      exit(1);                                                    \
+    }                                                             \
+  } while(0)
 
 // safe is for use of gpuErrchk
 template<typename T>

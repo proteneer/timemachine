@@ -3,6 +3,12 @@
 // cuda specific version
 #include "../fixed_point.hpp"
 
+// we need to use a different level of precision for parameter derivatives
+#define FIXED_EXPONENT_DU_DCHARGE 0x1000000000
+#define FIXED_EXPONENT_DU_DSIG    0x2000000000
+#define FIXED_EXPONENT_DU_DEPS    0x4000000000 // this is just getting silly
+
+
 template<typename RealType, unsigned long long EXPONENT>
 RealType __device__ __forceinline__ FIXED_TO_FLOAT_DU_DP(unsigned long long v) {
     return static_cast<RealType>(static_cast<long long>(v))/EXPONENT;

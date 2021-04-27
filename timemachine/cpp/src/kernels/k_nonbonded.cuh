@@ -9,11 +9,6 @@
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
-// we need to use a different level of precision for parameter derivatives
-#define FIXED_EXPONENT_DU_DCHARGE 0x1000000000
-#define FIXED_EXPONENT_DU_DSIG    0x2000000000
-#define FIXED_EXPONENT_DU_DEPS    0x4000000000 // this is just getting silly
-
 
 // generate kv values from coordinates to be radix sorted
 void __global__ k_coords_to_kv(
@@ -122,51 +117,6 @@ void __global__ k_check_rebuild_coords_and_box(
 
 }
 
-
-__global__ void k_interpolate_parameters(
-    const double lambda,
-    const int P_base,
-    const double * __restrict__ params_src,
-    const double * __restrict__ params_dst,
-    double *params_out) {
-
-    int idx = blockIdx.x*blockDim.x + threadIdx.x;
-
-    if(idx >= P_base) {
-        return;
-    }
-
-    params_out[idx] = (1-lambda)*params_src[idx] + lambda*params_dst[idx];
-}
-
-template <typename RealType>
-void __global__ k_permute_interpolated(
-    const double lambda,
-    const int N,
-    const unsigned int * __restrict__ perm,
-    const RealType * __restrict__ d_p,
-    RealType * __restrict__ d_sorted_p,
-    RealType * __restrict__ d_sorted_dp_dl) {
-
-    int idx = blockIdx.x*blockDim.x + threadIdx.x;
-    int stride = gridDim.y;
-    int stride_idx = blockIdx.y;
-
-    if(idx >= N) {
-        return;
-    }
-
-    int size = N*stride;
-
-    int source_idx = idx*stride+stride_idx;
-    int target_idx = perm[idx]*stride+stride_idx;
-
-    d_sorted_p[source_idx] = (1-lambda)*d_p[target_idx] + lambda*d_p[size+target_idx];
-    d_sorted_dp_dl[source_idx] = d_p[size+target_idx] - d_p[target_idx];
-
-}
-
-
 template <typename RealType>
 void __global__ k_permute(
     const int N,
@@ -273,38 +223,6 @@ void __global__ k_add_ull_to_real(
 
 }
 
-template <typename RealType>
-void __global__ k_add_ull_to_real_interpolated(
-    const double lambda,
-    const int N,
-    const unsigned long long * __restrict__ ull_array,
-    RealType * __restrict__ real_array) {
-
-    int idx = blockIdx.x*blockDim.x + threadIdx.x;
-    int stride = gridDim.y;
-    int stride_idx = blockIdx.y;
-
-    if(idx >= N) {
-        return;
-    }
-
-    int size = N*stride;
-    int target_idx = idx*stride+stride_idx;
-
-    // handle charges, sigmas, epsilons with different exponents
-    if(stride_idx == 0) {
-        real_array[target_idx] += (1-lambda)*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(ull_array[target_idx]);
-        real_array[size+target_idx] += lambda*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(ull_array[target_idx]);
-    } else if(stride_idx == 1) {
-        real_array[target_idx] += (1-lambda)*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(ull_array[target_idx]);
-        real_array[size+target_idx] += lambda*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(ull_array[target_idx]);
-    } else if(stride_idx == 2) {
-        real_array[target_idx] += (1-lambda)*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(ull_array[target_idx]);
-        real_array[size+target_idx] += lambda*FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(ull_array[target_idx]);
-    }
-
-}
-
 
 template<typename RealType>
 void __global__ k_reduce_buffer(
@@ -362,6 +280,32 @@ double __device__ __forceinline__ fix_nvidia_fmad(double a, double b, double c, 
     return __dmul_rn(a, b) + __dmul_rn(c, d);
 }
 
+// void __global__ k_compute_w_coords(
+//     const int N,
+//     const double lambda,
+//     const double cutoff,
+//     const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
+//     const int * __restrict__ lambda_offset_idxs,
+//     double * __restrict__ coords_w,
+//     double * __restrict__ dw_dl) {
+
+//     int atom_i_idx = blockIdx.x*blockDim.x + threadIdx.x;
+
+//     if(atom_i_idx >= N) {
+//         return;
+//     }
+
+//     int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
+//     int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
+
+//     double coords_w_i = (lambda_plane_i + lambda_offset_i*lambda)*cutoff;
+//     double dw_dl_i = lambda_offset_i*cutoff;
+
+//     coords_w[atom_i_idx] = coords_w_i;
+//     dw_dl[atom_i_idx] = dw_dl_i;
+
+// } // 0 or 1, how much we offset from the plane by )
+
 // ALCHEMICAL == false guarantees that the tile's atoms are such that
 // 1. src_param and dst_params are equal for every i in R and j in C
 // 2. w_i and w_j are identical for every (i,j) in (RxC)
@@ -382,9 +326,11 @@ void __device__ v_nonbonded_unified(
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
     const double * __restrict__ dp_dl,
+    const double * __restrict__ coords_w, // 4D coords
+    const double * __restrict__ dw_dl, // 4D derivatives
     const double lambda,
-    const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
-    const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
+    // const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
+    // const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
     const double cutoff,
     const int * __restrict__ ixn_tiles,
@@ -407,16 +353,18 @@ void __device__ v_nonbonded_unified(
     int row_block_idx = ixn_tiles[tile_idx];
 
     int atom_i_idx = row_block_idx*32 + threadIdx.x;
-    int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
-    int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
+    // int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
+    // int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
 
     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx*3+0] : 0;
     RealType ci_y = atom_i_idx < N ? coords[atom_i_idx*3+1] : 0;
     RealType ci_z = atom_i_idx < N ? coords[atom_i_idx*3+2] : 0;
+    RealType ci_w = atom_i_idx < N ? coords_w[atom_i_idx] : 0;
 
     RealType dq_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+0] : 0;
     RealType dsig_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+1] : 0;
     RealType deps_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+2] : 0;
+    RealType dw_dl_i = atom_i_idx < N ? dw_dl[atom_i_idx] : 0;
 
     unsigned long long gi_x = 0;
     unsigned long long gi_y = 0;
@@ -437,16 +385,18 @@ void __device__ v_nonbonded_unified(
 
     // i idx is contiguous but j is not, so we should swap them to avoid having to shuffle atom_j_idx
     int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
-    int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
-    int lambda_plane_j = atom_j_idx < N ? lambda_plane_idxs[atom_j_idx] : 0;
+    // int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
+    // int lambda_plane_j = atom_j_idx < N ? lambda_plane_idxs[atom_j_idx] : 0;
 
     RealType cj_x = atom_j_idx < N ? coords[atom_j_idx*3+0] : 0;
     RealType cj_y = atom_j_idx < N ? coords[atom_j_idx*3+1] : 0;
     RealType cj_z = atom_j_idx < N ? coords[atom_j_idx*3+2] : 0;
+    RealType cj_w = atom_j_idx < N ? coords_w[atom_j_idx] : 0;
 
     RealType dq_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+0] : 0;
     RealType dsig_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+1] : 0;
     RealType deps_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+2] : 0;
+    RealType dw_dl_j = atom_j_idx < N ? dw_dl[atom_j_idx] : 0;
 
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
@@ -489,7 +439,8 @@ void __device__ v_nonbonded_unified(
 
         if(ALCHEMICAL) {
             // (ytz): we are guaranteed that delta_w is zero if ALCHEMICAL == false
-            delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
+            // delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
+            delta_w = ci_w - cj_w;
             d2ij += delta_w * delta_w;
         }
 
@@ -592,8 +543,7 @@ void __device__ v_nonbonded_unified(
 
             if(COMPUTE_DU_DL && ALCHEMICAL) {
                 // needed for cancellation of nans (if one term blows up)
-                real_du_dl += delta_w*cutoff*delta_prefactor*(lambda_offset_i - lambda_offset_j);
-                // this extra ebd kills as it requires the erfc to be fully evaluated. SHIT
+                real_du_dl += delta_w*delta_prefactor*(dw_dl_i - dw_dl_j);
                 real_du_dl += inv_dij*ebd*fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
                 du_dl += FLOAT_TO_FIXED_NONBONDED(real_du_dl);
             }
@@ -614,8 +564,8 @@ void __device__ v_nonbonded_unified(
         cj_z = __shfl_sync(0xffffffff, cj_z, srcLane);
 
         if(ALCHEMICAL) {
-            lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane); // this also can be optimized away
-            lambda_plane_j = __shfl_sync(0xffffffff, lambda_plane_j, srcLane);
+            cj_w = __shfl_sync(0xffffffff, cj_w, srcLane); // this also can be optimized away
+            dw_dl_j = __shfl_sync(0xffffffff, dw_dl_j, srcLane);
         }
 
         if(COMPUTE_DU_DX) {
@@ -694,9 +644,9 @@ void __global__ k_nonbonded_unified(
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
     const double * __restrict__ dp_dl,
+    const double * __restrict__ coords_w, // 4D coords
+    const double * __restrict__ dw_dl, // 4D derivatives
     const double lambda,
-    const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
-    const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
     const double cutoff,
     const int * __restrict__ ixn_tiles,
@@ -709,29 +659,25 @@ void __global__ k_nonbonded_unified(
     int tile_idx = blockIdx.x;
     int row_block_idx = ixn_tiles[tile_idx];
     int atom_i_idx = row_block_idx*32 + threadIdx.x;
-    int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
-    int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
 
     RealType dq_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+0] : 0;
     RealType dsig_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+1] : 0;
     RealType deps_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+2] : 0;
+    RealType cw_i = atom_i_idx < N ? coords_w[atom_i_idx] : 0;
 
     int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
-    int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
-    int lambda_plane_j = atom_j_idx < N ? lambda_plane_idxs[atom_j_idx] : 0;
 
     RealType dq_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+0] : 0;
     RealType dsig_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+1] : 0;
     RealType deps_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+2] : 0;
+    RealType cw_j = atom_j_idx < N ? coords_w[atom_j_idx] : 0;
 
     int is_vanilla = (
-        lambda_offset_i == 0 &&
-        lambda_plane_i == 0 &&
+        cw_i == 0 &&
         dq_dl_i == 0 &&
         dsig_dl_i == 0 &&
         deps_dl_i == 0 &&
-        lambda_offset_j == 0 &&
-        lambda_plane_j == 0 &&
+        cw_j == 0 &&
         dq_dl_j == 0 &&
         dsig_dl_j == 0 &&
         deps_dl_j == 0
@@ -746,9 +692,9 @@ void __global__ k_nonbonded_unified(
             params,
             box,
             dp_dl,
+            coords_w,
+            dw_dl,
             lambda,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
             beta,
             cutoff,
             ixn_tiles,
@@ -765,9 +711,9 @@ void __global__ k_nonbonded_unified(
             params,
             box,
             dp_dl,
+            coords_w,
+            dw_dl,
             lambda,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
             beta,
             cutoff,
             ixn_tiles,
@@ -790,9 +736,9 @@ void __global__ k_nonbonded_exclusions(
     const double * __restrict__ params,
     const double * __restrict__ box,
     const double * __restrict__ dp_dl,
+    const double * __restrict__ coords_w, // 4D coords
+    const double * __restrict__ dw_dl, // 4D derivatives
     const double lambda,
-    const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
-    const int * __restrict__ lambda_offset_idxs, // 0 or 1, if we alolw this atom to be decoupled
     const int * __restrict__ exclusion_idxs, // [E, 2] pair-list of atoms to be excluded
     const double * __restrict__ scales, // [E]
     const double beta,
@@ -815,16 +761,16 @@ void __global__ k_nonbonded_exclusions(
     }
 
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
-    int lambda_offset_i = lambda_offset_idxs[atom_i_idx];
-    int lambda_plane_i = lambda_plane_idxs[atom_i_idx];
 
     RealType ci_x = coords[atom_i_idx*3+0];
     RealType ci_y = coords[atom_i_idx*3+1];
     RealType ci_z = coords[atom_i_idx*3+2];
+    RealType ci_w = coords_w[atom_i_idx];
 
     RealType dq_dl_i = dp_dl[atom_i_idx*3+0];
     RealType dsig_dl_i = dp_dl[atom_i_idx*3+1];
     RealType deps_dl_i = dp_dl[atom_i_idx*3+2];
+    RealType dw_dl_i = dw_dl[atom_i_idx];
 
     unsigned long long gi_x = 0;
     unsigned long long gi_y = 0;
@@ -843,16 +789,16 @@ void __global__ k_nonbonded_exclusions(
     unsigned long long g_epsi = 0;
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
-    int lambda_offset_j = lambda_offset_idxs[atom_j_idx];
-    int lambda_plane_j = lambda_plane_idxs[atom_j_idx];
 
     RealType cj_x = coords[atom_j_idx*3+0];
     RealType cj_y = coords[atom_j_idx*3+1];
     RealType cj_z = coords[atom_j_idx*3+2];
+    RealType cj_w = coords_w[atom_j_idx];
 
     RealType dq_dl_j = dp_dl[atom_j_idx*3+0];
     RealType dsig_dl_j = dp_dl[atom_j_idx*3+1];
     RealType deps_dl_j = dp_dl[atom_j_idx*3+2];
+    RealType dw_dl_j = dw_dl[atom_j_idx];
 
     unsigned long long gj_x = 0;
     unsigned long long gj_y = 0;
@@ -895,8 +841,7 @@ void __global__ k_nonbonded_exclusions(
     delta_y -= box_y*nearbyint(delta_y*inv_box_y);
     delta_z -= box_z*nearbyint(delta_z*inv_box_z);
 
-    RealType delta_w = (lambda_plane_i - lambda_plane_j)*real_cutoff + (lambda_offset_i - lambda_offset_j)*real_lambda*real_cutoff;
-
+    RealType delta_w = ci_w - cj_w;
     RealType d2ij = delta_x*delta_x + delta_y*delta_y + delta_z*delta_z + delta_w*delta_w;
 
     unsigned long long energy = 0;
@@ -991,7 +936,7 @@ void __global__ k_nonbonded_exclusions(
         g_qi -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qj*inv_dij*ebd);
         g_qj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qi*inv_dij*ebd);
 
-        real_du_dl -= delta_w*cutoff*delta_prefactor*(lambda_offset_i - lambda_offset_j);
+        real_du_dl -= delta_w*delta_prefactor*(dw_dl_i - dw_dl_j);
         real_du_dl -= charge_scale*inv_dij*ebd*fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
 
         if(du_dx) {
