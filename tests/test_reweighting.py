@@ -90,3 +90,9 @@ def test_zeros(verbose=True, sim_atol=1e-1):
     if verbose:
         print('gradient w.r.t. params', g)
     assert np.isclose(g, 0, atol=sim_atol).all()
+
+
+def test_ess_warn():
+    """Check that ess_warn_threshold argument can be used."""
+    reweighter = ReweightingLayer(x_k, normalized_u_fxn, ref_params, lambdas)
+    reweighter.compute_delta_f(ref_params, ess_warn_threshold=1e6)
