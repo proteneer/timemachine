@@ -91,7 +91,7 @@ class ReweightingLayer:
 
         # compute mixture weights for samples collected at ref_params
         self.log_q_k = self.mbar.f_k - self.mbar.u_kn.T
-        self.log_denominator_n = logsumexp(self.log_q_k, b=self.mbar.N_k, axis=1)
+        self.log_denominator_n = logsumexp(self.log_q_k, b=np.array(self.mbar.N_k, dtype=np.float64), axis=1)
 
         # double-check broadcasts and transposes didn't result in an unexpected shape
         assert self.log_denominator_n.shape == (len(self.xs),)
