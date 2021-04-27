@@ -56,9 +56,14 @@ class ReweightingLayer:
         * Messerly RA, Razavi SM, and Shirts MR. Configuration-Sampling-Based Surrogate Models for Rapid
             Parameterization of Non-Bonded Interactions.
             J. Chem. Theory Comput. 2018, 14, 6, 3144–3162 https://doi.org/10.1021/acs.jctc.8b00223
-        * PyTorch implementation of differentiable reweighting in neutromeratio
+        * Wieder et al. PyTorch implementation of differentiable reweighting in neutromeratio
             https://github.com/choderalab/neutromeratio/blob/2abf29f03e5175a988503b5d6ceeee8ce5bfd4ad/neutromeratio/parameter_gradients.py#L246-L267
+        * Boothroyd et al. Implementations of free energy gradients in OpenFF evaluator, which has used both
+            finite-difference reweighting and <dU/dparams>_1 - <dU/dparams>_0
+            https://github.com/openforcefield/openff-evaluator/blob/6e6f0a47e1157f8f4b2971b5071c11f2e0291092/docs/releasehistory.rst#030
 
+        Notes
+        -----
         TODO: allow constructor to accept a precomputed u_kn matrix, if available
         """
 
@@ -102,7 +107,7 @@ class ReweightingLayer:
             u_kn.append(self.vmapped_u_fxn(xs, lam, self.ref_params))
         return np.array(u_kn)
 
-    def compute_delta_f(self, params: np.array, ess_warn_threshold: float=50.0) -> float:
+    def compute_delta_f(self, params: np.array, ess_warn_threshold: float = 50.0) -> float:
         """Compute an estimate of the free energy difference between lam=0 and lam=1 at a new value of params.
 
         This function is differentiable w.r.t. params, assuming self.u_fxn(x, lam, params) is differentiable w.r.t.
