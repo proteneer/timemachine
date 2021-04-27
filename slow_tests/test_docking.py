@@ -14,10 +14,11 @@ class TestDocking(unittest.TestCase):
         guests_sdfile = str(
             Path(__file__)
             .resolve()
-            .parent.joinpath("data", "ligands_40__first-two-ligs.sdf")
+            .parent.parent.joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
         )
         host_pdbfile = str(
-            Path(__file__).resolve().parent.joinpath("data", "hif2a_nowater_min.pdb")
+            Path(__file__).resolve()
+            .parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb")
         )
         transition_type = "insertion"
         n_steps = 1001
@@ -51,12 +52,16 @@ class TestDocking(unittest.TestCase):
     def test_dock_and_equilibrate(self):
         """Tests basic functionality of dock_and_equilibrate"""
         host_pdbfile = str(
-            Path(__file__).resolve().parent.joinpath("data", "hif2a_nowater_min.pdb")
+            Path(__file__).resolve()
+            .parent
+            .parent.joinpath("tests", "data", "hif2a_nowater_min.pdb")
         )
         guests_sdfile = str(
             Path(__file__)
             .resolve()
-            .parent.joinpath("data", "ligands_40__first-two-ligs.sdf")
+            .parent
+            .parent
+            .joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
         )
         max_lambda = 0.25
         insertion_steps = 501
@@ -83,12 +88,16 @@ class TestDocking(unittest.TestCase):
     def test_rigorous_work(self):
         """Tests basic functionality of rigorous_work"""
         host_pdbfile = str(
-            Path(__file__).resolve().parent.joinpath("data", "hif2a_nowater_min.pdb")
+            Path(__file__).resolve()
+            .parent
+            .parent.joinpath("tests", "data", "hif2a_nowater_min.pdb")
         )
         guests_sdfile = str(
             Path(__file__)
             .resolve()
-            .parent.joinpath("data", "ligands_40__first-two-ligs.sdf")
+            .parent
+            .parent
+            .joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
         )
         num_deletions = 10
         deletion_steps = 501
@@ -126,7 +135,10 @@ class TestDocking(unittest.TestCase):
             hif2a_ligand_pair.core,
         )
         host_pdbfile = str(
-            Path(__file__).resolve().parent.joinpath("data", "hif2a_nowater_min.pdb")
+            Path(__file__).resolve()
+            .parent
+            .parent
+            .joinpath("tests", "data", "hif2a_nowater_min.pdb")
         )
         num_switches = 10
         transition_steps = 501
