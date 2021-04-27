@@ -96,10 +96,10 @@ class ReweightingLayer:
 
         # compute mixture weights for samples collected at ref_params
         self.log_q_k = self.mbar.f_k - self.mbar.u_kn.T
-        self.log_denominator_n = logsumexp(self.log_q_k, b=np.array(self.mbar.N_k, dtype=np.float64), axis=1)
+        self.reference_log_weights = logsumexp(self.log_q_k, b=np.array(self.mbar.N_k, dtype=np.float64), axis=1)
 
         # double-check broadcasts and transposes didn't result in an unexpected shape
-        assert self.log_denominator_n.shape == (len(self.xs),)
+        assert self.reference_log_weights.shape == (len(self.xs),)
 
     def _compute_u_kn(self, xs: np.array) -> np.array:
         u_kn = []
@@ -120,7 +120,7 @@ class ReweightingLayer:
         u_0 = self.vmapped_u_fxn(self.xs, 0.0, params)
         u_1 = self.vmapped_u_fxn(self.xs, 1.0, params)
 
-        log_q_ln = np.stack([- u_0 - self.log_denominator_n, - u_1 - self.log_denominator_n])
+        log_q_ln = np.stack([- u_0 - self.reference_log_weights, - u_1 - self.reference_log_weights])
         ess_0, ess_1 = ESS(log_q_ln[0]), ESS(log_q_ln[1])
         if min(ess_0, ess_1) < ess_warn_threshold:
             message = f"""
