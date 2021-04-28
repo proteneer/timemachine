@@ -15,8 +15,8 @@ void __global__ k_find_block_bounds(
     double *block_bounds_ext);
 
 void __global__ k_compact_trim_atoms(
-    int N,
-    int Y,
+    const int N,
+    const int Y,
     unsigned int* __restrict__ trim_atoms,
     unsigned int* __restrict__ interactionCount,
     int* __restrict__ interactingTiles,
@@ -169,10 +169,12 @@ void __global__ k_find_blocks_with_ixns(
         RealType box_box_dy = row_bb_ctr_y - col_bb_ctr_y;
         RealType box_box_dz = row_bb_ctr_z - col_bb_ctr_z;
 
+        // Recenter delta box
         box_box_dx -= bx*nearbyint(box_box_dx*inv_bx);
         box_box_dy -= by*nearbyint(box_box_dy*inv_by);
         box_box_dz -= bz*nearbyint(box_box_dz*inv_bz);
 
+        // If boxes overlap, treat distance as 0
         box_box_dx = max(static_cast<RealType>(0.0), fabs(box_box_dx) - row_bb_ext_x - col_bb_ext_x);
         box_box_dy = max(static_cast<RealType>(0.0), fabs(box_box_dy) - row_bb_ext_y - col_bb_ext_y);
         box_box_dz = max(static_cast<RealType>(0.0), fabs(box_box_dz) - row_bb_ext_z - col_bb_ext_z);
@@ -182,7 +184,7 @@ void __global__ k_find_blocks_with_ixns(
 
     }
 
-    // __ballot returns number of col blocks in this group whose distance to the row block is closer than the cutoff.
+    // __ballot returns number of col blocks in this set of columns whose distance to the row block is closer than the cutoff.
     unsigned includeBlockFlags = __ballot_sync(FULL_MASK, include_col_block);
 
     // Loop over the col blocks we identified as potentially containing neighbors.
@@ -200,7 +202,7 @@ void __global__ k_find_blocks_with_ixns(
 
         includeBlockFlags &= includeBlockFlags-1;
         int col_block = col_block_base + offset;
-
+        // Compute overlap between column bounding box and row atom
         RealType col_bb_ctr_x = bb_ctr[col_block*3+0];
         RealType col_bb_ctr_y = bb_ctr[col_block*3+1];
         RealType col_bb_ctr_z = bb_ctr[col_block*3+2];
@@ -221,10 +223,10 @@ void __global__ k_find_blocks_with_ixns(
         atom_box_dy = max(static_cast<RealType>(0.0), fabs(atom_box_dy) - col_bb_ext_y);
         atom_box_dz = max(static_cast<RealType>(0.0), fabs(atom_box_dz) - col_bb_ext_z);
 
-        // Find atoms where the row and column boxes within cutoff
+        // Find rows where the row atom and column boxs are within cutoff
         unsigned atomFlags = __ballot_sync(FULL_MASK, atom_box_dx*atom_box_dx + atom_box_dy*atom_box_dy + atom_box_dz*atom_box_dz < cutoff_squared);
         bool interacts = false;
-        int atom_j_idx = col_block*TILESIZE+threadIdx.x; // each thread loads a different atom
+        int atom_j_idx = col_block*WARPSIZE+threadIdx.x; // each thread loads a different atom
 
         //       threadIdx
         //      0 1 2 3 4 5
@@ -244,9 +246,9 @@ void __global__ k_find_blocks_with_ixns(
         RealType pos_j_y = atom_j_idx < N ? coords[atom_j_idx*3 + 1] : 0;
         RealType pos_j_z = atom_j_idx < N ? coords[atom_j_idx*3 + 2] : 0;
 
+        unsigned includeAtomFlags = 0;
         while(atomFlags) {
-
-            int row_atom = __ffs(atomFlags)-1;
+            const int row_atom = __ffs(atomFlags)-1;
             atomFlags &= atomFlags-1;
 
             RealType atom_atom_dx = __shfl_sync(FULL_MASK, pos_i_x, row_atom) - pos_j_x;
@@ -256,11 +258,15 @@ void __global__ k_find_blocks_with_ixns(
             atom_atom_dx -= bx*nearbyint(atom_atom_dx*inv_bx);
             atom_atom_dy -= by*nearbyint(atom_atom_dy*inv_by);
             atom_atom_dz -= bz*nearbyint(atom_atom_dz*inv_bz);
-            interacts |= (atom_atom_dx*atom_atom_dx + atom_atom_dy*atom_atom_dy + atom_atom_dz*atom_atom_dz < cutoff_squared ? 1<<row_atom : 0);
+            interacts |= atom_atom_dx*atom_atom_dx + atom_atom_dy*atom_atom_dy + atom_atom_dz*atom_atom_dz < cutoff_squared;
+            includeAtomFlags = __ballot_sync(FULL_MASK, interacts);
+            // If all threads in the warp have found interactions, can terminate early
+            if (includeAtomFlags == FULL_MASK) {
+                break;
+            }
         }
         
         // Add any interacting atoms to the buffer.
-        int includeAtomFlags = __ballot_sync(FULL_MASK, interacts);
 
         if (interacts) {
             int index = neighborsInBuffer+__popc(includeAtomFlags & warpMask); // where to store this in shared memory
@@ -287,5 +293,4 @@ void __global__ k_find_blocks_with_ixns(
     // store trim
     const int Y = gridDim.y;
     trim_atoms[blockIdx.x*Y*WARPSIZE+blockIdx.y*WARPSIZE+threadIdx.x] = ixn_j_buffer[threadIdx.x];
-
 }
