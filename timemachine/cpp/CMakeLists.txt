@@ -31,7 +31,6 @@ endif()
 
 add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
 
-
 # NO_EXTRAS is needed since cuda doesn't use flto
 pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/fixed_point.hpp
