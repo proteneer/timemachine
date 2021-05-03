@@ -343,7 +343,10 @@ class TestNonbonded(GradientTest):
         fp=gzip.open('tests/bad_test_547.pkl.gz','rb')
         x_t, box, lamb, nb_bp =  pickle.load(fp)
 
-        nb_bp.args = nb_bp.args[:-4]
+        nb_bp.args = nb_bp.args[:-4] # ignore any extra args from future PRs
+
+        for i, j in nb_bp.get_exclusion_idxs():
+            assert i < j
 
         for precision in [np.float64, np.float32]:
 
