@@ -127,10 +127,11 @@ def nonbonded_v3(
     cutoff,
     lambda_plane_idxs,
     lambda_offset_idxs):
-    
+
     N = conf.shape[0]
 
-    conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+    if conf.shape[-1] == 3:
+        conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
     # make 4th dimension of box large enough so its roughly aperiodic
     if box is not None:
