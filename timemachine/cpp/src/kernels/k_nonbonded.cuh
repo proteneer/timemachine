@@ -847,13 +847,11 @@ void __global__ k_nonbonded_exclusions(
     unsigned long long energy = 0;
 
     int is_vanilla = (
-        lambda_offset_i == 0 &&
-        lambda_plane_i == 0 &&
+        ci_w == 0 &&
         dq_dl_i == 0 &&
         dsig_dl_i == 0 &&
         deps_dl_i == 0 &&
-        lambda_offset_j == 0 &&
-        lambda_plane_j == 0 &&
+        cj_w == 0 &&
         dq_dl_j == 0 &&
         dsig_dl_j == 0 &&
         deps_dl_j == 0
