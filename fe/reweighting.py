@@ -52,7 +52,7 @@ class ReweightingLayer:
         * Shirts MR. Reweighting from the mixture distribution as a better way to describe the Multistate Bennett Acceptance Ratio.
             arXiv preprint, 2017. https://arxiv.org/abs/1704.00891
         * pymbar implementation of computePerturbedFreeEnergies , which has an associated uncertainty estimate as well!
-            https://github.com/choderalab/pymbar/blob/3c4262c490261110a7595eec37df3e2b8caeab37/pymbar/old_mbar.py#L1106-L1212
+            https://github.com/choderalab/pymbar/blob/3c4262c490261110a7595eec37df3e2b8caeab37/pymbar/mbar.py#L1163-L1237
         * Messerly RA, Razavi SM, and Shirts MR. Configuration-Sampling-Based Surrogate Models for Rapid
             Parameterization of Non-Bonded Interactions.
             J. Chem. Theory Comput. 2018, 14, 6, 3144–3162 https://doi.org/10.1021/acs.jctc.8b00223
