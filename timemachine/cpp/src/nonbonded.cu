@@ -239,7 +239,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         const int P,
         const double *d_x,
         const double *d_p, // 2 * N * 3
-        const double *d_box,
+        const double *d_box, // 3 * 3
         const double lambda,
         unsigned long long *d_du_dx,
         double *d_du_dp,
