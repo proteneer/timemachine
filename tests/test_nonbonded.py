@@ -338,6 +338,25 @@ class TestNonbondedWater(GradientTest):
 
 class TestNonbonded(GradientTest):
 
+    def test_non_zero_du_dl(self):
+        # du_dl should be zero for this test case.
+        fp=gzip.open('tests/bad_test_547.pkl.gz','rb')
+        x_t, box, lamb, nb_bp =  pickle.load(fp)
+
+        nb_bp.args = nb_bp.args[:-4] # ignore any extra args from future PRs
+
+        for i, j in nb_bp.get_exclusion_idxs():
+            assert i < j
+
+        for precision in [np.float64, np.float32]:
+
+            impl = nb_bp.unbound_impl(precision)
+            du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
+
+            print(du_dx, du_dp, du_dl, u)
+
+            assert du_dl == 0.0
+
     def test_fma_compiler_bug(self):
 
         # this test case deals with a rather annoying fma compiler bug in CUDA.

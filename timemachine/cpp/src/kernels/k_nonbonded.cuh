@@ -901,6 +901,19 @@ void __global__ k_nonbonded_exclusions(
 
     unsigned long long energy = 0;
 
+    int is_vanilla = (
+        lambda_offset_i == 0 &&
+        lambda_plane_i == 0 &&
+        dq_dl_i == 0 &&
+        dsig_dl_i == 0 &&
+        deps_dl_i == 0 &&
+        lambda_offset_j == 0 &&
+        lambda_plane_j == 0 &&
+        dq_dl_j == 0 &&
+        dsig_dl_j == 0 &&
+        deps_dl_j == 0
+    );
+
     // see note: this must be strictly less than
     if(d2ij < cutoff_squared) {
 
@@ -1002,7 +1015,7 @@ void __global__ k_nonbonded_exclusions(
             atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
         }
 
-        if(du_dl_buffer) {
+        if(du_dl_buffer && !is_vanilla) {
             atomicAdd(du_dl_buffer + atom_i_idx, FLOAT_TO_FIXED_NONBONDED(real_du_dl));
         }
 
