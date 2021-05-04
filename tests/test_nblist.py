@@ -26,13 +26,16 @@ def test_block_bounds():
             start_idx = bidx*block_size
             end_idx = min((bidx+1)*block_size, N)
             block_coords = coords[start_idx:end_idx]
-            block_coords -= box_diag*np.floor(block_coords//box_diag)
+            min_coords = block_coords[0]
+            max_coords = block_coords[0]
+            for new_coords in block_coords[1:]:
+                center = 0.5 * (max_coords + min_coords)
+                new_coords -= box_diag * np.floor((new_coords - center) / box_diag + 0.5)
+                min_coords = np.minimum(min_coords, new_coords)
+                max_coords = np.maximum(max_coords, new_coords)
 
-            c_max = np.amax(block_coords, axis=0)       
-            c_min = np.amin(block_coords, axis=0)
-
-            ref_ctrs.append((c_max + c_min)/2)
-            ref_exts.append((c_max - c_min)/2)
+            ref_ctrs.append((max_coords + min_coords)/2)
+            ref_exts.append((max_coords - min_coords)/2)
 
         ref_ctrs = np.array(ref_ctrs)
         ref_exts = np.array(ref_exts)
