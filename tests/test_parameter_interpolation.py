@@ -119,7 +119,7 @@ class TestInterpolatedPotential(GradientTest):
             return jnp.sin(lamb*np.pi/2)
 
         def transform_e(lamb):
-            return jnp.cos(lamb*np.pi/2)
+            return jnp.where(lamb < 0.5, jnp.sin(lamb*np.pi)*jnp.sin(lamb*np.pi), 1)
 
         def transform_w(lamb):
             return (1-lamb*lamb)
@@ -159,7 +159,7 @@ class TestInterpolatedPotential(GradientTest):
 
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
-            for lamb in [0.0, 0.2, 1.0]:
+            for lamb in [0.0, 0.2, 0.6, 0.7, 0.8, 1.0]:
 
                     qlj = np.concatenate([qlj_src, qlj_dst])
 
@@ -168,7 +168,7 @@ class TestInterpolatedPotential(GradientTest):
                     args = copy.deepcopy(test_potential.args)
                     args.append("lambda*lambda") # transform q
                     args.append("sin(lambda*PI/2)") # transform sigma
-                    args.append("cos(lambda*PI/2)") # transform epsilon
+                    args.append("lambda < 0.5 ? sin(lambda*PI)*sin(lambda*PI) : 1") # transform epsilon
                     args.append("1-lambda*lambda") # transform w
 
                     test_interpolated_potential = potentials.NonbondedInterpolated(

@@ -20,9 +20,6 @@
 
 namespace timemachine {
 
-static jitify::JitCache kernel_cache;
-
-
 template <typename RealType, bool Interpolated>
 Nonbonded<RealType, Interpolated>::Nonbonded(
     const std::vector<int> &exclusion_idxs, // [E,2]
@@ -69,9 +66,9 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
         &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
         &k_nonbonded_unified<RealType, 1, 1, 1, 1>
     }),
-    compute_w_coords_instance_(kernel_cache.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
-    compute_permute_interpolated_(kernel_cache.program(kernel_src.c_str()).kernel("k_permute_interpolated").instantiate()),
-    compute_add_ull_to_real_interpolated_(kernel_cache.program(kernel_src.c_str()).kernel("k_add_ull_to_real_interpolated").instantiate()) {
+    compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
+    compute_permute_interpolated_(kernel_cache_.program(kernel_src.c_str()).kernel("k_permute_interpolated").instantiate()),
+    compute_add_ull_to_real_interpolated_(kernel_cache_.program(kernel_src.c_str()).kernel("k_add_ull_to_real_interpolated").instantiate()) {
 
     if(lambda_offset_idxs.size() != N_) {
         throw std::runtime_error("lambda offset idxs need to have size N");

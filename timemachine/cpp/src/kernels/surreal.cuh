@@ -15,6 +15,7 @@ struct Surreal {
 
     DECL Surreal<RealType>() {}; // uninitialized for efficiency
     DECL Surreal<RealType>(const RealType& v, const RealType& d) : real(v), imag(d) {}
+    DECL Surreal<RealType>(const RealType& v) : real(v), imag(0) {}
 
     // copy constructor
     DECL Surreal<RealType>(const Surreal<RealType> &z) : real(z.real), imag(z.imag) {}
