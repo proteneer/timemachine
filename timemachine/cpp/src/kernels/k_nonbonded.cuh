@@ -170,25 +170,6 @@ void __global__ k_permute(
 
 }
 
-
-// void __global__ k_permute_int(
-//     const int N,
-//     const unsigned int * __restrict__ perm,
-//     const int * __restrict__ array,
-//     int * __restrict__ sorted_array) {
-
-//     int idx = blockIdx.x*blockDim.x + threadIdx.x;
-//     int stride = gridDim.y;
-//     int stride_idx = blockIdx.y;
-
-//     if(idx >= N) {
-//         return;
-//     }
-
-//     sorted_array[idx*stride+stride_idx] = array[perm[idx]*stride+stride_idx];
-
-// }
-
 template <typename RealType>
 void __global__ k_inv_permute_accum(
     const int N,
@@ -1081,15 +1062,6 @@ void __global__ k_nonbonded_exclusions(
             real_du_dl -= term;
 
         }
-
-        // gi_x -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
-        // gi_y -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
-        // gi_z -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
-
-        // gj_x -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
-        // gj_y -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
-        // gj_z -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
-
 
         if(shrink_i == shrink_j) {
             gi_x -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);

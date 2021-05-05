@@ -172,9 +172,7 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
         }
         shrink_flags[atom_idx] = 1;
     }
-    // for(int i=0; i < shrink_flags.size(); i++) {
-        // std::cout << i << " " << shrink_flags[i] << std::endl;
-    // }
+
     gpuErrchk(cudaMemcpy(d_shrink_flags_, &shrink_flags[0], N_*sizeof(*d_shrink_flags_), cudaMemcpyHostToDevice));
 
 };
@@ -481,7 +479,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     // exclusions use the non-sorted version
     if(E_ > 0) {
-        // std::cout << "RUNNING exclusions" << std::endl;
         const int tpb = 32;
         dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
 

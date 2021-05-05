@@ -4,7 +4,7 @@ from jax.scipy.special import erf, erfc
 from jax.ops import index_update, index
 
 from timemachine.constants import ONE_4PI_EPS0
-from timemachine.potentials.jax_utils import delta_r, distance, distance_multi, convert_to_4d
+from timemachine.potentials.jax_utils import delta_r, distance, convert_to_4d
 
 
 

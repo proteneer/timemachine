@@ -55,17 +55,3 @@ def distance(x, box):
     d2ij = np.where(np.eye(N), 0, d2ij)
     dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
     return dij
-
-
-
-def distance_multi(ri, rj, box):
-    # nonbonded distances require the periodic box
-    # assert x.shape[1] == 3 or x.shape[1] == 4 # 3d or 4d
-    ri = np.expand_dims(ri, 0)
-    rj = np.expand_dims(rj, 1)
-    d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
-    # N = d2ij.shape[0]
-    # d2ij = np.where(np.eye(N), 0, d2ij)
-    # dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
-    return np.sqrt(d2ij)
-
