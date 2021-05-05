@@ -28,12 +28,10 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
     const double cutoff,
+    const std::vector<int> &shrink_idxs,
     const std::string &kernel_src
-    // const std::string &transform_lambda_charge,
-    // const std::string &transform_lambda_sigma,
-    // const std::string &transform_lambda_epsilon,
-    // const std::string &transform_lambda_w
 ) :  N_(lambda_offset_idxs.size()),
+    K_(shrink_idxs.size()),
     cutoff_(cutoff),
     E_(exclusion_idxs.size()/2),
     nblist_(lambda_offset_idxs.size()),
@@ -159,6 +157,26 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
 
+    gpuErrchk(cudaMalloc(&d_shrink_centroid_, 3*sizeof(*d_shrink_centroid_)));
+    gpuErrchk(cudaMalloc(&d_shrink_centroid_grad_, 3*sizeof(*d_shrink_centroid_grad_)));
+    const int K = shrink_idxs.size();
+    gpuErrchk(cudaMalloc(&d_shrink_idxs_, K*sizeof(*d_shrink_idxs_)));
+    gpuErrchk(cudaMemcpy(d_shrink_idxs_, &shrink_idxs[0], K*sizeof(*d_shrink_idxs_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMalloc(&d_sorted_shrink_flags_, N_*sizeof(*d_sorted_shrink_flags_)));
+    gpuErrchk(cudaMalloc(&d_shrink_flags_, N_*sizeof(*d_shrink_flags_)));
+    std::vector<int> shrink_flags(N_, 0);
+    for(int i=0; i < shrink_idxs.size(); i++) {
+        int atom_idx = shrink_idxs[i];
+        if(atom_idx >= N_) {
+            throw std::runtime_error("Fatal shrink index!");
+        }
+        shrink_flags[atom_idx] = 1;
+    }
+    // for(int i=0; i < shrink_flags.size(); i++) {
+        // std::cout << i << " " << shrink_flags[i] << std::endl;
+    // }
+    gpuErrchk(cudaMemcpy(d_shrink_flags_, &shrink_flags[0], N_*sizeof(*d_shrink_flags_), cudaMemcpyHostToDevice));
+
 };
 
 template <typename RealType, bool Interpolated>
@@ -174,6 +192,11 @@ Nonbonded<RealType, Interpolated>::~Nonbonded() {
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_sorted_x_));
 
+    gpuErrchk(cudaFree(d_shrink_centroid_));
+    gpuErrchk(cudaFree(d_shrink_centroid_grad_));
+    gpuErrchk(cudaFree(d_shrink_idxs_));
+    gpuErrchk(cudaFree(d_shrink_flags_));
+    gpuErrchk(cudaFree(d_sorted_shrink_flags_));
     gpuErrchk(cudaFree(d_w_));
     gpuErrchk(cudaFree(d_dw_dl_));
     gpuErrchk(cudaFree(d_sorted_w_));
@@ -392,7 +415,20 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         throw std::runtime_error("Driver call to k_compute_w_coords");
     }
 
+
+    gpuErrchk(cudaMemsetAsync(d_shrink_centroid_, 0, 3*sizeof(*d_shrink_centroid_), stream));
+    gpuErrchk(cudaMemsetAsync(d_shrink_centroid_grad_, 0, 3*sizeof(*d_shrink_centroid_grad_), stream));
+    // unsorted
+    if(K_ > 0) {
+        k_calc_centroid<<<(K_+32-1)/32, tpb, 0, stream>>>(K_, d_x, d_shrink_idxs_, d_shrink_centroid_);
+        gpuErrchk(cudaPeekAtLastError());
+    }
+
+    // (ytz): shrink_flags need to get sorted here.
+
+    k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_shrink_flags_, d_sorted_shrink_flags_);
     gpuErrchk(cudaPeekAtLastError());
+    // (ytz): cache, only do this if lambda value changes.
     k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_sorted_w_);
     gpuErrchk(cudaPeekAtLastError());
     k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_dw_dl_, d_sorted_dw_dl_);
@@ -407,6 +443,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], 32, 0, stream>>>(
         N,
+        K_,
         d_sorted_x_,
         d_sorted_p_,
         d_box,
@@ -416,12 +453,15 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         lambda,
         beta_,
         cutoff_,
+        d_shrink_centroid_,
+        d_sorted_shrink_flags_,
         nblist_.get_ixn_tiles(),
         nblist_.get_ixn_atoms(),
         d_sorted_du_dx_,
         d_sorted_du_dp_,
         d_du_dl, // switch to nullptr if we don't request du_dl
-        d_u // switch to nullptr if we don't request energies
+        d_u, // switch to nullptr if we don't request energies,
+        d_shrink_centroid_grad_
     );
 
     gpuErrchk(cudaPeekAtLastError());
@@ -441,7 +481,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     // exclusions use the non-sorted version
     if(E_ > 0) {
-
+        // std::cout << "RUNNING exclusions" << std::endl;
         const int tpb = 32;
         dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
 
@@ -470,10 +510,13 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             d_scales_,
             beta_,
             cutoff_,
+            d_shrink_centroid_,
+            d_shrink_flags_,
             d_du_dx,
             d_du_dp_buffer_,
             d_du_dl,
-            d_u
+            d_u,
+            d_shrink_centroid_grad_
         );
         gpuErrchk(cudaPeekAtLastError());
     }
@@ -497,6 +540,16 @@ void Nonbonded<RealType, Interpolated>::execute_device(
                 d_du_dp
             );
         }
+        gpuErrchk(cudaPeekAtLastError());
+    }
+
+    if(K_ > 0 && d_du_dx) {
+        k_calc_centroid_grad<<<(K_+32-1)/32, tpb, 0, stream>>>(
+            K_,
+            d_shrink_idxs_,
+            d_shrink_centroid_grad_,
+            d_du_dx
+        );
         gpuErrchk(cudaPeekAtLastError());
     }
 

@@ -9,6 +9,40 @@
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
+void __global__ k_calc_centroid(
+    const int K,
+    const double * __restrict__ coords,  // [n, 3]
+    const int * __restrict__ shrink_idxs,
+    double * centroid){
+
+    int t_idx = blockDim.x*blockIdx.x + threadIdx.x;
+    if(t_idx >= K) {
+        return;
+    }
+
+    for(int d=0; d < 3; d++) {
+        atomicAdd(centroid + d, coords[shrink_idxs[t_idx]*3+d]/K);
+    }
+
+ }
+
+void __global__ k_calc_centroid_grad(
+    const int K,
+    const int * __restrict__ shrink_idxs,
+    const unsigned long long * centroid_grad,
+    unsigned long long * __restrict__ du_dx) {
+
+    int t_idx = blockDim.x*blockIdx.x + threadIdx.x;
+    if(t_idx >= K) {
+        return;
+    }
+
+    for(int d=0; d < 3; d++) {
+        double val = FIXED_TO_FLOAT<double>(centroid_grad[d])/K;
+        atomicAdd(du_dx + shrink_idxs[t_idx]*3 + d, FLOAT_TO_FIXED_NONBONDED(val));
+    }
+
+}
 
 // generate kv values from coordinates to be radix sorted
 void __global__ k_coords_to_kv(
@@ -135,6 +169,25 @@ void __global__ k_permute(
     sorted_array[idx*stride+stride_idx] = array[perm[idx]*stride+stride_idx];
 
 }
+
+
+// void __global__ k_permute_int(
+//     const int N,
+//     const unsigned int * __restrict__ perm,
+//     const int * __restrict__ array,
+//     int * __restrict__ sorted_array) {
+
+//     int idx = blockIdx.x*blockDim.x + threadIdx.x;
+//     int stride = gridDim.y;
+//     int stride_idx = blockIdx.y;
+
+//     if(idx >= N) {
+//         return;
+//     }
+
+//     sorted_array[idx*stride+stride_idx] = array[perm[idx]*stride+stride_idx];
+
+// }
 
 template <typename RealType>
 void __global__ k_inv_permute_accum(
@@ -280,32 +333,6 @@ double __device__ __forceinline__ fix_nvidia_fmad(double a, double b, double c, 
     return __dmul_rn(a, b) + __dmul_rn(c, d);
 }
 
-// void __global__ k_compute_w_coords(
-//     const int N,
-//     const double lambda,
-//     const double cutoff,
-//     const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
-//     const int * __restrict__ lambda_offset_idxs,
-//     double * __restrict__ coords_w,
-//     double * __restrict__ dw_dl) {
-
-//     int atom_i_idx = blockIdx.x*blockDim.x + threadIdx.x;
-
-//     if(atom_i_idx >= N) {
-//         return;
-//     }
-
-//     int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
-//     int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
-
-//     double coords_w_i = (lambda_plane_i + lambda_offset_i*lambda)*cutoff;
-//     double dw_dl_i = lambda_offset_i*cutoff;
-
-//     coords_w[atom_i_idx] = coords_w_i;
-//     dw_dl[atom_i_idx] = dw_dl_i;
-
-// } // 0 or 1, how much we offset from the plane by )
-
 // ALCHEMICAL == false guarantees that the tile's atoms are such that
 // 1. src_param and dst_params are equal for every i in R and j in C
 // 2. w_i and w_j are identical for every (i,j) in (RxC)
@@ -319,9 +346,9 @@ template <
     bool COMPUTE_DU_DL,
     bool COMPUTE_DU_DP
 >
-// void __device__ __forceinline__ v_nonbonded_unified(
 void __device__ v_nonbonded_unified(
     const int N,
+    const int K,
     const double * __restrict__ coords,
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
@@ -329,16 +356,17 @@ void __device__ v_nonbonded_unified(
     const double * __restrict__ coords_w, // 4D coords
     const double * __restrict__ dw_dl, // 4D derivatives
     const double lambda,
-    // const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
-    // const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
     const double cutoff,
+    const double * __restrict__ shrink_centroid,
+    const int * __restrict__ shrink_flags,
     const int * __restrict__ ixn_tiles,
     const unsigned int * __restrict__ ixn_atoms,
     unsigned long long * __restrict__ du_dx,
     unsigned long long * __restrict__ du_dp,
     unsigned long long * __restrict__ du_dl_buffer,
-    unsigned long long * __restrict__ u_buffer) {
+    unsigned long long * __restrict__ u_buffer,
+    unsigned long long * __restrict__ du_dcentroid) {
 
     int tile_idx = blockIdx.x;
 
@@ -352,9 +380,16 @@ void __device__ v_nonbonded_unified(
 
     int row_block_idx = ixn_tiles[tile_idx];
 
+    RealType centroid_x = shrink_centroid[0];
+    RealType centroid_y = shrink_centroid[1];
+    RealType centroid_z = shrink_centroid[2];
+
+    unsigned long long centroid_x_grad = 0;
+    unsigned long long centroid_y_grad = 0;
+    unsigned long long centroid_z_grad = 0;
+
     int atom_i_idx = row_block_idx*32 + threadIdx.x;
-    // int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
-    // int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
+    int shrink_i = atom_i_idx < N ? shrink_flags[atom_i_idx] : 0;
 
     RealType ci_x = atom_i_idx < N ? coords[atom_i_idx*3+0] : 0;
     RealType ci_y = atom_i_idx < N ? coords[atom_i_idx*3+1] : 0;
@@ -385,8 +420,7 @@ void __device__ v_nonbonded_unified(
 
     // i idx is contiguous but j is not, so we should swap them to avoid having to shuffle atom_j_idx
     int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
-    // int lambda_offset_j = atom_j_idx < N ? lambda_offset_idxs[atom_j_idx] : 0;
-    // int lambda_plane_j = atom_j_idx < N ? lambda_plane_idxs[atom_j_idx] : 0;
+    int shrink_j = atom_j_idx < N ? shrink_flags[atom_j_idx] : 0;
 
     RealType cj_x = atom_j_idx < N ? coords[atom_j_idx*3+0] : 0;
     RealType cj_y = atom_j_idx < N ? coords[atom_j_idx*3+1] : 0;
@@ -424,11 +458,41 @@ void __device__ v_nonbonded_unified(
 
     const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
     // #pragma unroll
+    const RealType shrink_prefactor = 1-lambda;
+
     for(int round = 0; round < 32; round++) {
 
-        RealType delta_x = ci_x - cj_x;
-        RealType delta_y = ci_y - cj_y;
-        RealType delta_z = ci_z - cj_z;
+        RealType delta_x;
+        RealType delta_y;
+        RealType delta_z;
+        RealType ddelta_dlambda_x;
+        RealType ddelta_dlambda_y;
+        RealType ddelta_dlambda_z;
+
+        if(shrink_i == shrink_j) {
+            delta_x = ci_x - cj_x;
+            delta_y = ci_y - cj_y;
+            delta_z = ci_z - cj_z;
+            ddelta_dlambda_x = 0;
+            ddelta_dlambda_y = 0;
+            ddelta_dlambda_z = 0;
+        } else {
+            if(shrink_i == 1) {
+                delta_x = ((ci_x - centroid_x)*shrink_prefactor + centroid_x) - cj_x;
+                delta_y = ((ci_y - centroid_y)*shrink_prefactor + centroid_y) - cj_y;
+                delta_z = ((ci_z - centroid_z)*shrink_prefactor + centroid_z) - cj_z;
+                ddelta_dlambda_x = -(ci_x - centroid_x);
+                ddelta_dlambda_y = -(ci_y - centroid_y);
+                ddelta_dlambda_z = -(ci_z - centroid_z);
+            } else if(shrink_j == 1) {
+                delta_x = ci_x - ((cj_x - centroid_x)*shrink_prefactor + centroid_x);
+                delta_y = ci_y - ((cj_y - centroid_y)*shrink_prefactor + centroid_y);
+                delta_z = ci_z - ((cj_z - centroid_z)*shrink_prefactor + centroid_z);
+                ddelta_dlambda_x = -(cj_x - centroid_x);
+                ddelta_dlambda_y = -(cj_y - centroid_y);
+                ddelta_dlambda_z = -(cj_z - centroid_z);
+            }
+        }
 
         delta_x -= box_x*nearbyint(delta_x*inv_box_x);
         delta_y -= box_y*nearbyint(delta_y*inv_box_y);
@@ -468,12 +532,6 @@ void __device__ v_nonbonded_unified(
                 u += qij*inv_dij*ebd;
             }
 
-            // RealType ebd = erfc(beta_dij);
-
-            // lennard jones
-            // RealType inv_d4ij = inv_d2ij*inv_d2ij;
-            // RealType inv_d6ij = inv_d4ij*inv_d2ij;
-
             // lennard jones force
             RealType delta_prefactor = es_prefactor;
 
@@ -489,14 +547,6 @@ void __device__ v_nonbonded_unified(
                 RealType sig6_inv_d6ij = sig4_inv_d4ij*sig2_inv_d2ij;
                 RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
                 RealType sig5_inv_d6ij = sig_ij*sig4_inv_d4ij*inv_d2ij;
-
-                // optimize this a little more
-                // RealType sig5 = sig_ij*sig_ij*sig_ij*sig_ij*sig_ij;
-
-                // RealType sig_inv_dij = sig_ij*inv_dij;
-                // RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
-                // RealType sig6_inv_d6ij = sig2_inv_d2ij*sig2_inv_d2ij*sig2_inv_d2ij;
-                // RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
 
                 RealType lj_prefactor = eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*48 - 24);
                 if(COMPUTE_U) {
@@ -517,23 +567,61 @@ void __device__ v_nonbonded_unified(
                 }
 
                 if(COMPUTE_DU_DL && ALCHEMICAL) {
-
                     real_du_dl += sig_grad*(dsig_dl_i + dsig_dl_j);
                     RealType term = eps_grad*fix_nvidia_fmad(eps_j, deps_dl_i, eps_i, deps_dl_j);
                     real_du_dl += term;
-
                 }
-
             }
 
             if(COMPUTE_DU_DX) {
-                gi_x += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
-                gi_y += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
-                gi_z += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
 
-                gj_x += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
-                gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
-                gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
+                if(shrink_i == shrink_j) {
+
+                    gi_x += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
+                    gi_y += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
+                    gi_z += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
+
+                    gj_x += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
+                    gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
+                    gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
+
+                } else {
+
+                    if(shrink_i == 1) {
+                        // let f = (ci_x - centroid_x)*(1-lamb) + centroid_x
+                        // df/dlamb = -(ci_x - centroid_x)
+                        // df/dci_x = (1-lamb)
+                        // df/dcentroid_x = lamb
+                        gi_x += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x*shrink_prefactor);
+                        gi_y += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y*shrink_prefactor);
+                        gi_z += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z*shrink_prefactor);
+
+                        centroid_x_grad += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x*lambda);
+                        centroid_y_grad += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y*lambda);
+                        centroid_z_grad += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z*lambda);
+
+                        gj_x += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
+                        gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
+                        gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
+
+
+                    } else if (shrink_j == 1) {
+
+                        gi_x += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
+                        gi_y += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
+                        gi_z += FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
+
+                        gj_x += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x*shrink_prefactor);
+                        gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y*shrink_prefactor);
+                        gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z*shrink_prefactor);
+
+                        centroid_x_grad += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x*lambda);
+                        centroid_y_grad += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y*lambda);
+                        centroid_z_grad += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z*lambda);
+
+                    }
+                }
+
             }
 
             if(COMPUTE_DU_DP) {
@@ -542,10 +630,27 @@ void __device__ v_nonbonded_unified(
             }
 
             if(COMPUTE_DU_DL && ALCHEMICAL) {
+
+                if(shrink_i == shrink_j) {
+                    // do nothing
+                } else {
+                    if(shrink_i == 1) {
+                        real_du_dl += delta_prefactor*delta_x*ddelta_dlambda_x;
+                        real_du_dl += delta_prefactor*delta_y*ddelta_dlambda_y;
+                        real_du_dl += delta_prefactor*delta_z*ddelta_dlambda_z;
+                    } else if (shrink_j == 1) {
+                        real_du_dl += -delta_prefactor*delta_x*ddelta_dlambda_x;
+                        real_du_dl += -delta_prefactor*delta_y*ddelta_dlambda_y;
+                        real_du_dl += -delta_prefactor*delta_z*ddelta_dlambda_z;
+                    }
+                }
+
                 // needed for cancellation of nans (if one term blows up)
                 real_du_dl += delta_w*delta_prefactor*(dw_dl_i - dw_dl_j);
                 real_du_dl += inv_dij*ebd*fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
+                // printf("adding %d %d %f parts %f %f %f\n", atom_i_idx, atom_j_idx, real_du_dl, delta_w*delta_prefactor*(dw_dl_i - dw_dl_j), inv_dij*ebd*fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j), delta_prefactor*delta_x*ddelta_dlambda_x);
                 du_dl += FLOAT_TO_FIXED_NONBONDED(real_du_dl);
+
             }
 
             if(COMPUTE_U) {
@@ -558,6 +663,7 @@ void __device__ v_nonbonded_unified(
         qj = __shfl_sync(0xffffffff, qj, srcLane);
         eps_j = __shfl_sync(0xffffffff, eps_j, srcLane);
         sig_j = __shfl_sync(0xffffffff, sig_j, srcLane);
+        shrink_j = __shfl_sync(0xffffffff, shrink_j, srcLane);
 
         cj_x = __shfl_sync(0xffffffff, cj_x, srcLane);
         cj_y = __shfl_sync(0xffffffff, cj_y, srcLane);
@@ -628,6 +734,10 @@ void __device__ v_nonbonded_unified(
         }
     }
 
+    atomicAdd(du_dcentroid + 0, centroid_x_grad);
+    atomicAdd(du_dcentroid + 1, centroid_y_grad);
+    atomicAdd(du_dcentroid + 2, centroid_z_grad);
+
 }
 
 
@@ -640,6 +750,7 @@ template <
 >
 void __global__ k_nonbonded_unified(
     const int N,
+    const int K,
     const double * __restrict__ coords,
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
@@ -649,12 +760,15 @@ void __global__ k_nonbonded_unified(
     const double lambda,
     const double beta,
     const double cutoff,
+    const double * __restrict__ shrink_centroid,
+    const int * __restrict__ shrink_flags,
     const int * __restrict__ ixn_tiles,
     const unsigned int * __restrict__ ixn_atoms,
     unsigned long long * __restrict__ du_dx,
     unsigned long long * __restrict__ du_dp,
     unsigned long long * __restrict__ du_dl_buffer,
-    unsigned long long * __restrict__ u_buffer) {
+    unsigned long long * __restrict__ u_buffer,
+    unsigned long long * __restrict__ centroid_grad) {
 
     int tile_idx = blockIdx.x;
     int row_block_idx = ixn_tiles[tile_idx];
@@ -664,6 +778,7 @@ void __global__ k_nonbonded_unified(
     RealType dsig_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+1] : 0;
     RealType deps_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+2] : 0;
     RealType cw_i = atom_i_idx < N ? coords_w[atom_i_idx] : 0;
+    int shrink_i = atom_i_idx < N ? shrink_flags[atom_i_idx] : 0;
 
     int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
 
@@ -671,16 +786,19 @@ void __global__ k_nonbonded_unified(
     RealType dsig_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+1] : 0;
     RealType deps_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+2] : 0;
     RealType cw_j = atom_j_idx < N ? coords_w[atom_j_idx] : 0;
+    int shrink_j = atom_j_idx < N ? shrink_flags[atom_j_idx] : 0;
 
     int is_vanilla = (
         cw_i == 0 &&
         dq_dl_i == 0 &&
         dsig_dl_i == 0 &&
         deps_dl_i == 0 &&
+        shrink_i == 0 &&
         cw_j == 0 &&
         dq_dl_j == 0 &&
         dsig_dl_j == 0 &&
-        deps_dl_j == 0
+        deps_dl_j == 0 &&
+        shrink_j == 0
     );
 
     bool tile_is_vanilla = __all_sync(0xffffffff, is_vanilla);
@@ -688,6 +806,7 @@ void __global__ k_nonbonded_unified(
     if(tile_is_vanilla) {
         v_nonbonded_unified<RealType, 0, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DL, COMPUTE_DU_DP>(
             N,
+            K,
             coords,
             params,
             box,
@@ -697,16 +816,20 @@ void __global__ k_nonbonded_unified(
             lambda,
             beta,
             cutoff,
+            shrink_centroid,
+            shrink_flags,
             ixn_tiles,
             ixn_atoms,
             du_dx,
             du_dp,
             du_dl_buffer,
-            u_buffer
+            u_buffer,
+            centroid_grad
         );
     } else {
         v_nonbonded_unified<RealType, 1, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DL, COMPUTE_DU_DP>(
             N,
+            K,
             coords,
             params,
             box,
@@ -716,12 +839,15 @@ void __global__ k_nonbonded_unified(
             lambda,
             beta,
             cutoff,
+            shrink_centroid,
+            shrink_flags,
             ixn_tiles,
             ixn_atoms,
             du_dx,
             du_dp,
             du_dl_buffer,
-            u_buffer
+            u_buffer,
+            centroid_grad
         );
     };
 
@@ -743,10 +869,13 @@ void __global__ k_nonbonded_exclusions(
     const double * __restrict__ scales, // [E]
     const double beta,
     const double cutoff,
+    const double * __restrict__ shrink_centroid,
+    const int * __restrict__ shrink_flags,
     unsigned long long * __restrict__ du_dx,
     unsigned long long * __restrict__ du_dp,
     unsigned long long * __restrict__ du_dl_buffer,
-    unsigned long long * __restrict__ u_buffer) {
+    unsigned long long * __restrict__ u_buffer,
+    unsigned long long * __restrict__ du_dcentroid) {
 
     // (ytz): oddly enough the order of atom_i and atom_j
     // seem to not matter. I think this is because distance calculations
@@ -761,6 +890,7 @@ void __global__ k_nonbonded_exclusions(
     }
 
     int atom_i_idx = exclusion_idxs[e_idx*2 + 0];
+    int shrink_i = shrink_flags[atom_i_idx];
 
     RealType ci_x = coords[atom_i_idx*3+0];
     RealType ci_y = coords[atom_i_idx*3+1];
@@ -789,6 +919,7 @@ void __global__ k_nonbonded_exclusions(
     unsigned long long g_epsi = 0;
 
     int atom_j_idx = exclusion_idxs[e_idx*2 + 1];
+    int shrink_j = shrink_flags[atom_j_idx];
 
     RealType cj_x = coords[atom_j_idx*3+0];
     RealType cj_y = coords[atom_j_idx*3+1];
@@ -833,9 +964,47 @@ void __global__ k_nonbonded_exclusions(
     RealType inv_box_y = 1/box_y;
     RealType inv_box_z = 1/box_z;
 
-    RealType delta_x = ci_x - cj_x;
-    RealType delta_y = ci_y - cj_y;
-    RealType delta_z = ci_z - cj_z;
+    RealType centroid_x = shrink_centroid[0];
+    RealType centroid_y = shrink_centroid[1];
+    RealType centroid_z = shrink_centroid[2];
+
+    unsigned long long centroid_x_grad = 0;
+    unsigned long long centroid_y_grad = 0;
+    unsigned long long centroid_z_grad = 0;
+
+    RealType delta_x;
+    RealType delta_y;
+    RealType delta_z;
+    RealType ddelta_dlambda_x;
+    RealType ddelta_dlambda_y;
+    RealType ddelta_dlambda_z;
+
+    RealType shrink_prefactor = 1-lambda;
+
+    if(shrink_i == shrink_j) {
+        delta_x = ci_x - cj_x;
+        delta_y = ci_y - cj_y;
+        delta_z = ci_z - cj_z;
+        ddelta_dlambda_x = 0;
+        ddelta_dlambda_y = 0;
+        ddelta_dlambda_z = 0;
+    } else {
+        if(shrink_i == 1) {
+            delta_x = ((ci_x - centroid_x)*shrink_prefactor + centroid_x) - cj_x;
+            delta_y = ((ci_y - centroid_y)*shrink_prefactor + centroid_y) - cj_y;
+            delta_z = ((ci_z - centroid_z)*shrink_prefactor + centroid_z) - cj_z;
+            ddelta_dlambda_x = -(ci_x - centroid_x);
+            ddelta_dlambda_y = -(ci_y - centroid_y);
+            ddelta_dlambda_z = -(ci_z - centroid_z);
+        } else if(shrink_j == 1) {
+            delta_x = ci_x - ((cj_x - centroid_x)*shrink_prefactor + centroid_x);
+            delta_y = ci_y - ((cj_y - centroid_y)*shrink_prefactor + centroid_y);
+            delta_z = ci_z - ((cj_z - centroid_z)*shrink_prefactor + centroid_z);
+            ddelta_dlambda_x = -(cj_x - centroid_x);
+            ddelta_dlambda_y = -(cj_y - centroid_y);
+            ddelta_dlambda_z = -(cj_z - centroid_z);
+        }
+    }
 
     delta_x -= box_x*nearbyint(delta_x*inv_box_x);
     delta_y -= box_y*nearbyint(delta_y*inv_box_y);
@@ -851,10 +1020,12 @@ void __global__ k_nonbonded_exclusions(
         dq_dl_i == 0 &&
         dsig_dl_i == 0 &&
         deps_dl_i == 0 &&
+        shrink_i == 0 &&
         cj_w == 0 &&
         dq_dl_j == 0 &&
         dsig_dl_j == 0 &&
-        deps_dl_j == 0
+        deps_dl_j == 0 &&
+        shrink_j == 0
     );
 
     // see note: this must be strictly less than
@@ -882,15 +1053,6 @@ void __global__ k_nonbonded_exclusions(
         RealType u = charge_scale*qij*inv_dij*ebd;
         // lennard jones force
         if(eps_i != 0 && eps_j != 0) {
-            // RealType eps_ij = eps_i * eps_j;
-            // RealType sig_ij = sig_i + sig_j;
-            // RealType sig5 = sig_ij*sig_ij*sig_ij*sig_ij*sig_ij;
-
-            // RealType sig_inv_dij = sig_ij*inv_dij;
-            // RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
-            // RealType sig6_inv_d6ij = sig2_inv_d2ij*sig2_inv_d2ij*sig2_inv_d2ij;
-            // RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
-
             RealType eps_ij = eps_i * eps_j;
             RealType sig_ij = sig_i + sig_j;
 
@@ -920,19 +1082,66 @@ void __global__ k_nonbonded_exclusions(
 
         }
 
-        gi_x -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
-        gi_y -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
-        gi_z -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
+        // gi_x -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
+        // gi_y -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
+        // gi_z -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
 
-        gj_x -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
-        gj_y -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
-        gj_z -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
+        // gj_x -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
+        // gj_y -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
+        // gj_z -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
+
+
+        if(shrink_i == shrink_j) {
+            gi_x -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
+            gi_y -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
+            gi_z -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
+            gj_x -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
+            gj_y -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
+            gj_z -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
+        } else {
+
+            if(shrink_i == 1) {
+                gi_x -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x*shrink_prefactor);
+                gi_y -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y*shrink_prefactor);
+                gi_z -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z*shrink_prefactor);
+                centroid_x_grad -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x*lambda);
+                centroid_y_grad -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y*lambda);
+                centroid_z_grad -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z*lambda);
+                gj_x -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x);
+                gj_y -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y);
+                gj_z -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z);
+            } else if (shrink_j == 1) {
+                gi_x -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
+                gi_y -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_y);
+                gi_z -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_z);
+                gj_x -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x*shrink_prefactor);
+                gj_y -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y*shrink_prefactor);
+                gj_z -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z*shrink_prefactor);
+                centroid_x_grad -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_x*lambda);
+                centroid_y_grad -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_y*lambda);
+                centroid_z_grad -= FLOAT_TO_FIXED_NONBONDED(-delta_prefactor*delta_z*lambda);
+            }
+        }
 
         // energy is size extensive so this may not be a good idea
         energy -= FLOAT_TO_FIXED_NONBONDED(u);
 
         g_qi -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qj*inv_dij*ebd);
         g_qj -= FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale*qi*inv_dij*ebd);
+
+        if(shrink_i == shrink_j) {
+            // do nothing
+        } else {
+            if(shrink_i == 1) {
+                real_du_dl -= delta_prefactor*delta_x*ddelta_dlambda_x;
+                real_du_dl -= delta_prefactor*delta_y*ddelta_dlambda_y;
+                real_du_dl -= delta_prefactor*delta_z*ddelta_dlambda_z;
+            } else if (shrink_j == 1) {
+                real_du_dl -= -delta_prefactor*delta_x*ddelta_dlambda_x;
+                real_du_dl -= -delta_prefactor*delta_y*ddelta_dlambda_y;
+                real_du_dl -= -delta_prefactor*delta_z*ddelta_dlambda_z;
+            }
+        }
 
         real_du_dl -= delta_w*delta_prefactor*(dw_dl_i - dw_dl_j);
         real_du_dl -= charge_scale*inv_dij*ebd*fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
@@ -966,6 +1175,11 @@ void __global__ k_nonbonded_exclusions(
             atomicAdd(u_buffer + atom_i_idx, energy);
         }
 
+        atomicAdd(du_dcentroid + 0, centroid_x_grad);
+        atomicAdd(du_dcentroid + 1, centroid_y_grad);
+        atomicAdd(du_dcentroid + 2, centroid_z_grad);
+
     }
+
 
 }

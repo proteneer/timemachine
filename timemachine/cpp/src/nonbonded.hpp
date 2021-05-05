@@ -8,7 +8,9 @@
 
 namespace timemachine {
 
-typedef void (*k_nonbonded_fn)(const int N,
+typedef void (*k_nonbonded_fn)(
+    const int N,
+    const int K,
     const double * __restrict__ coords,
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
@@ -18,12 +20,15 @@ typedef void (*k_nonbonded_fn)(const int N,
     const double lambda,
     const double beta,
     const double cutoff,
+    const double * __restrict__ shrink_centroid,
+    const int * __restrict__ shrink_flags,
     const int * __restrict__ ixn_tiles,
     const unsigned int * __restrict__ ixn_atoms,
     unsigned long long * __restrict__ du_dx,
     unsigned long long * __restrict__ du_dp,
     unsigned long long * __restrict__ du_dl_buffer,
-    unsigned long long * __restrict__ u_buffer);
+    unsigned long long * __restrict__ u_buffer,
+    unsigned long long * __restrict__ centroid_grad);
 
 template<typename RealType, bool Interpolated>
 class Nonbonded : public Potential {
@@ -44,6 +49,7 @@ private:
 
     const int E_;
     const int N_;
+    const int K_;
 
     double nblist_padding_;
     double *d_nblist_x_; // coords which were used to compute the nblist
@@ -55,6 +61,12 @@ private:
 
     double *d_w_; //
     double *d_dw_dl_; //
+
+    double *d_shrink_centroid_;
+    unsigned long long *d_shrink_centroid_grad_;
+    int *d_shrink_idxs_;
+    int *d_shrink_flags_;
+    int *d_sorted_shrink_flags_;
 
     double *d_sorted_x_; //
     double *d_sorted_w_; //
@@ -100,6 +112,7 @@ public:
         const std::vector<int> &lambda_offset_idxs, // N
         const double beta,
         const double cutoff,
+        const std::vector<int> &shrink_idxs,
         const std::string &kernel_src
     );
 

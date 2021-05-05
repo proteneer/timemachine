@@ -338,6 +338,57 @@ class TestNonbondedWater(GradientTest):
 
 class TestNonbonded(GradientTest):
 
+
+    def test_shrinking(self):
+
+        np.random.seed(4321)
+        D = 3
+
+        for size in [30, 231, 1050]:
+
+            _, coords, box, _ = builders.build_water_system(6.2)
+            coords = coords/coords.unit
+            coords = coords[:size]
+
+            N = coords.shape[0]
+
+            lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+            lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+
+            for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
+
+                for cutoff in [1.0]:
+
+                    # these are chosen to be connected, otherwise, shrunken versions may be very very
+                    # poorly behaved.
+                    for shrink_idxs in [[3,4,5],[12,13,14]]:
+
+                        params, ref_potential, test_potential = prepare_water_system(
+                            coords,
+                            lambda_plane_idxs,
+                            lambda_offset_idxs,
+                            p_scale=1.0,
+                            cutoff=cutoff
+                        )
+
+                        test_potential.args.append(shrink_idxs)
+                        ref_potential = functools.partial(ref_potential, shrink_idxs=np.array(shrink_idxs, dtype=np.int32))
+
+                        for lamb in [0.0, 0.2, 0.346, 0.6, 1.0]:
+
+                            print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
+
+                            self.compare_forces(
+                                coords,
+                                params,
+                                box,
+                                lamb,
+                                ref_potential,
+                                test_potential,
+                                rtol,
+                                precision=precision
+                            )
+
     def test_non_zero_du_dl(self):
         # du_dl should be zero for this test case.
         fp=gzip.open('tests/bad_test_547.pkl.gz','rb')

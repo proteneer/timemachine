@@ -4,7 +4,7 @@ from jax.scipy.special import erf, erfc
 from jax.ops import index_update, index
 
 from timemachine.constants import ONE_4PI_EPS0
-from timemachine.potentials.jax_utils import delta_r, distance, convert_to_4d
+from timemachine.potentials.jax_utils import delta_r, distance, distance_multi, convert_to_4d
 
 
 
@@ -126,12 +126,25 @@ def nonbonded_v3(
     beta,
     cutoff,
     lambda_plane_idxs,
-    lambda_offset_idxs):
+    lambda_offset_idxs,
+    shrink_idxs=None):
 
     N = conf.shape[0]
 
     if conf.shape[-1] == 3:
         conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+
+
+    if shrink_idxs is None or len(shrink_idxs) == 0:
+        conf_shrunk = np.zeros((0, 4), dtype=np.float64)
+    else:
+        conf_3d = conf[shrink_idxs, :3]
+        com = np.mean(conf_3d, axis=0)
+        conf_3d = conf_3d - com
+        conf_3d = (1-lamb)*conf_3d
+        conf_3d = conf_3d + com
+        conf_shrunk = np.concatenate((conf_3d, conf[shrink_idxs, -1:]), axis=1)
+
 
     # make 4th dimension of box large enough so its roughly aperiodic
     if box is not None:
@@ -156,7 +169,21 @@ def nonbonded_v3(
 
     eps_ij = eps_i * eps_j
 
-    dij = distance(conf, box)
+    dij_raw = distance(conf, box)
+
+    ri = np.expand_dims(conf_shrunk, 0)
+    rj = np.expand_dims(conf, 1)
+    d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
+    mask = onp.ones((N, len(shrink_idxs)), dtype=np.int32)
+    for s_idx, s in enumerate(shrink_idxs):
+        mask[s, s_idx] = 0
+    d2ij = np.where(mask, d2ij, 0)
+    dij_shrunk = np.sqrt(d2ij)
+
+    dij = index_update(dij_raw, index[:, shrink_idxs], dij_shrunk)    # urt
+    dij = index_update(dij, index[shrink_idxs, :], dij_shrunk.T)  # llt
+    mesh = np.ix_(shrink_idxs, shrink_idxs)
+    dij = index_update(dij, mesh, dij_raw[mesh])
 
     N = conf.shape[0]
     keep_mask = np.ones((N,N)) - np.eye(N)
