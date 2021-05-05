@@ -192,11 +192,16 @@ class GRPCClient(AbstractClient):
         """
         See abstract class for documentation.
         """
-        futures = [stub.Status.future(service_pb2.StatusRequest()) for stub in self.stubs]
-        workers_status = [x.result() for x in futures]
-        for field in ("nvidia_driver", "git_sha",):
-            # All fields should be the same
-            host_values = {self.hosts[i]: getattr(x, field) for i, x in enumerate(workers_status)}
-            uni_vals = set(host_values.values())
-            assert len(uni_vals) == 1, f"Not all hosts agreed for {field}: {host_values}"
-            assert all(uni_vals), f"Missing values for {field}: {host_values}"
+        prev_vals = {}
+        for host, stub in zip(self.hosts, self.stubs):
+            try:
+                status = stub.Status(service_pb2.StatusRequest())
+            except grpc.RpcError as e:
+                raise AssertionError(f"Failed to connect to {host}") from e
+            for field in ("nvidia_driver", "git_sha",):
+                # All fields should be the same
+                new_val = getattr(status, field)
+                if field in prev_vals and prev_vals[field] != new_val:
+                    assert False, f"Host {host} '{field}' new value of {new_val} != {prev_vals[field]}"
+                else:
+                    prev_vals[field] = new_val

@@ -107,9 +107,9 @@ class TestGRPCClient(unittest.TestCase):
     def setUp(self):
 
         # setup server, in reality max_workers is equal to number of gpus
-        ports = [2020 + i for i in range(4)]
+        self.ports = [2020 + i for i in range(4)]
         self.servers = []
-        for port in ports:
+        for port in self.ports:
             server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=2),
                 options = [
                     ('grpc.max_send_message_length', 50 * 1024 * 1024),
@@ -122,8 +122,8 @@ class TestGRPCClient(unittest.TestCase):
             self.servers.append(server)
 
         # setup client
-        hosts = [f"0.0.0.0:{port}" for port in ports]
-        self.cli = client.GRPCClient(hosts)
+        self.hosts = [f"0.0.0.0:{port}" for port in self.ports]
+        self.cli = client.GRPCClient(self.hosts)
 
     @patch("parallel.worker.get_worker_status")
     def test_checking_host_status(self, mock_status):
@@ -135,6 +135,21 @@ class TestGRPCClient(unittest.TestCase):
 
         with self.assertRaises(AssertionError):
             self.cli.verify()
+
+    @patch("parallel.worker.get_worker_status")
+    def test_unavailable_host(self, mock_status):
+
+        hosts = self.hosts.copy()
+        bad_host = "128.128.128.128:8888"
+        hosts.append(bad_host) # Give it a bad connexion, should fail
+        cli = client.GRPCClient(hosts)
+
+        # All the workers return the same thing
+        mock_status.side_effect = [parallel.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers]
+
+        with self.assertRaises(AssertionError) as e:
+            cli.verify()
+        self.assertIn(bad_host, str(e.exception))
 
     def test_foo_2_args(self):
         xs = np.linspace(0, 1.0, 5)
