@@ -40,7 +40,7 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     beta_(beta),
     d_sort_storage_(nullptr),
     d_sort_storage_bytes_(0),
-    nblist_padding_(0.1),
+    nblist_padding_(0.09),
     disable_hilbert_(false),
     kernel_ptrs_({
         // enumerate over every possible kernel combination
