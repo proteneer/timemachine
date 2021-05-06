@@ -55,9 +55,10 @@ void AvgPartialUPartialParam::observe(
     double *d_box_t,
     double lambda) {
 
-    if(step % interval_ == 0) {
+    const int size = bp_->size();
+    // If size == 0 then no reason to execute the bound potential
+    if(size != 0 && step % interval_ == 0) {
         cudaStream_t stream = static_cast<cudaStream_t>(0);
-        const int size = bp_->size();
         // Need the latest du_dp, so reset to zero each round
         gpuErrchk(cudaMemsetAsync(d_du_dp_, 0, size*sizeof(*d_du_dp_), stream));
         bp_->execute_device(
