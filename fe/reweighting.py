@@ -9,8 +9,13 @@ from jax.scipy.special import logsumexp
 
 from typing import List
 
+def normalize(log_weights):
+    log_Z = logsumexp(log_weights)
+    weights = np.exp(log_weights - log_Z) # sum(weights) == 1
+    return weights
 
-def ESS(log_weights: np.array) -> float:
+
+def effective_sample_size(log_weights: np.array) -> float:
     """Effective sample size available for reweighting using a collection of log importance weights.
 
     Notes
@@ -19,8 +24,7 @@ def ESS(log_weights: np.array) -> float:
     * See [Elvira, Martino, Robert, 2018] "Rethinking the effective sample size" https://arxiv.org/abs/1809.04129
         and references therein for some insightful discussion of limitations and possible improvements
     """
-    log_Z = logsumexp(log_weights)
-    weights = np.exp(log_weights - log_Z)  # sum(weights) == 1
+    weights = normalize(log_weights)
     return 1 / np.sum(weights ** 2)  # between 1 and len(weights)
 
 
@@ -121,7 +125,7 @@ class ReweightingLayer:
         u_1 = self.vmapped_u_fxn(self.xs, 1.0, params)
 
         log_q_ln = np.stack([- u_0 - self.reference_log_weights, - u_1 - self.reference_log_weights])
-        ess_0, ess_1 = ESS(log_q_ln[0]), ESS(log_q_ln[1])
+        ess_0, ess_1 = effective_sample_size(log_q_ln[0]), effective_sample_size(log_q_ln[1])
         if min(ess_0, ess_1) < ess_warn_threshold:
             message = f"""
             The number of effective samples is lower than {ess_warn_threshold}! proceed with caution...
