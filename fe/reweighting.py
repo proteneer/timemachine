@@ -28,6 +28,47 @@ def effective_sample_size(log_weights: np.array) -> float:
     return 1 / np.sum(weights ** 2)  # between 1 and len(weights)
 
 
+class CachedImportanceSamples:
+    def __init(self, xs, log_denominators):
+        """Samples from a reference distribution, for use in importance sampling.
+        Assume xs[i] ~ e^{log_denominators[i]}."""
+        self.xs = xs
+        self.log_denominators = log_denominators
+
+    def compute_log_importance_weights(self, logpdf_fxn):
+        """logpdf_fxn(xs[i]) - log_denominators[i]"""
+        log_numerators = vmap(logpdf_fxn)(self.xs)
+        log_importance_weights = log_numerators - self.log_denominators
+        return log_importance_weights
+
+    def estimate_expectation(self, logpdf_fxn, observable_fxn):
+        """Estimate <observable_fxn(x)>, x ~ logpdf_fxn by importance weighting from reference distribution.
+
+        Example usage
+        -------------
+        * Estimating <volume>, and gradient w.r.t. logpdf_fxn params
+        * Estimating <du/dl>, and gradient w.r.t. both logpdf_fxn params and observable_fxn params
+        """
+        weights = normalize(self.compute_log_importance_weights(logpdf_fxn))
+        observable_values = vmap(observable_fxn)(self.xs)
+
+        return np.sum(weights * observable_values, 0)
+
+    def estimate_free_energy(self, logpdf_fxn):
+        """Estimate - log(Z/Z_ref) where Z is the normalizing constant of logpdf_fxn,
+        Z_ref is the normalizing constant of reference distribution"""
+
+        log_numerators = vmap(logpdf_fxn)(self.xs)
+        log_importance_weights = log_numerators - self.log_denominators
+
+        return - logsumexp(log_importance_weights)
+
+    def __repr__(self):
+        n_samples, sample_shape = len(self.xs), self.xs[0].shape
+
+        return f"CachedImportanceSamples({n_samples} of shape {sample_shape})"
+
+
 class ReweightingLayer:
     def __init__(self, x_k: List[np.array], u_fxn: callable, ref_params: np.array, lambdas: np.array):
         """Assumes samples x_k[k] are drawn from e^{-u_fxn(x, lambdas[k], ref_params)}.
