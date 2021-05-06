@@ -9,6 +9,7 @@ from jax.scipy.special import logsumexp
 
 from typing import List
 
+
 def normalize(log_weights):
     log_Z = logsumexp(log_weights)
     weights = np.exp(log_weights - log_Z) # sum(weights) == 1
@@ -29,7 +30,7 @@ def effective_sample_size(log_weights: np.array) -> float:
 
 
 class CachedImportanceSamples:
-    def __init(self, xs, log_denominators):
+    def __init__(self, xs, log_denominators):
         """Samples from a reference distribution, for use in importance sampling.
         Assume xs[i] ~ e^{log_denominators[i]}."""
         self.xs = xs
@@ -69,8 +70,12 @@ class CachedImportanceSamples:
         return f"CachedImportanceSamples({n_samples} of shape {sample_shape})"
 
 
+# options: CachedImportanceSamples using all intermediates vs. just endpoints
+
+
+
 class ReweightingLayer:
-    def __init__(self, x_k: List[np.array], u_fxn: callable, ref_params: np.array, lambdas: np.array):
+    def __init__(self, x_k: List[np.array], u_fxn: callable, ref_params: np.array, lambdas: np.array, endpoint_padding=1):
         """Assumes samples x_k[k] are drawn from e^{-u_fxn(x, lambdas[k], ref_params)}.
 
         The constructor will
@@ -152,7 +157,23 @@ class ReweightingLayer:
             u_kn.append(self.vmapped_u_fxn(xs, lam, self.ref_params))
         return np.array(u_kn)
 
-    def compute_delta_f(self, params: np.array, ess_warn_threshold: float = 50.0) -> float:
+    def _reweighting_inds_from_mode(self, mode='all_intermediates'):
+        supported_modes = ['all_intermediates', 'endpoints_only']
+
+        if mode not in supported_modes:
+            raise(NotImplementedError(f'Unsupported reweighting mode {mode}. Must be one of {supported_modes}.'))
+
+        if mode == 'all_intermediates':
+            reweighting_inds = np.arange(len(self.xs))
+        elif mode == 'endpoints_only':
+            N = len(self.xs)
+            _inds_0 = np.arange(self.N_k[0])
+            _inds_1 = np.arange(N - self.N_k[-1], N)
+            reweighting_inds = np.hstack([_inds_0, _inds_1])
+
+        return reweighting_inds
+
+    def compute_delta_f(self, params: np.array, ess_warn_threshold: float = 50.0, mode='all_intermediates') -> float:
         """Compute an estimate of the free energy difference between lam=0 and lam=1 at a new value of params.
 
         This function is differentiable w.r.t. params, assuming self.u_fxn(x, lam, params) is differentiable w.r.t.
@@ -160,13 +181,28 @@ class ReweightingLayer:
 
         Prints a warning if the number of effective samples available for reweighting to
         u(self.xs, 0.0, params) or u(self.xs, 1.0, params) is less than ess_warn_threshold.
+
+        If mode == 'all_intermediates', cached samples from all MBAR intermediates will be used.
+        If mode == 'endpoints_only', only cached samples from the lambda=0 and lambda=1 endpoints will be used.
         """
 
-        u_0 = self.vmapped_u_fxn(self.xs, 0.0, params)
-        u_1 = self.vmapped_u_fxn(self.xs, 1.0, params)
+        log_q_0 = lambda xs : - self.vmapped_u_fxn(xs, 0.0, params)
+        log_q_1 = lambda xs : - self.vmapped_u_fxn(xs, 1.0, params)
 
-        log_q_ln = np.stack([- u_0 - self.reference_log_weights, - u_1 - self.reference_log_weights])
-        ess_0, ess_1 = effective_sample_size(log_q_ln[0]), effective_sample_size(log_q_ln[1])
+        reweighting_inds = self._reweighting_inds_from_mode(mode)
+        cached_samples = CachedImportanceSamples(self.xs[reweighting_inds],
+                                                 self.reference_log_weights[reweighting_inds])
+
+        f_0 = cached_samples.estimate_free_energy(log_q_0)
+        f_1 = cached_samples.estimate_free_energy(log_q_1)
+
+        delta_f = f_1 - f_0
+
+        # TODO: compute effective sample size without so much redundant effort
+        log_w_0 = cached_samples.compute_log_importance_weights(log_q_0)
+        log_w_1 = cached_samples.compute_log_importance_weights(log_q_1)
+
+        ess_0, ess_1 = effective_sample_size(log_w_0), effective_sample_size(log_w_1)
         if min(ess_0, ess_1) < ess_warn_threshold:
             message = f"""
             The number of effective samples is lower than {ess_warn_threshold}! proceed with caution...
@@ -174,10 +210,5 @@ class ReweightingLayer:
                 ESS(state 1) = {ess_1:.3f}
             """
             print(UserWarning(message))
-
-        assert log_q_ln.shape == (2, len(self.xs))
-
-        fs = - logsumexp(log_q_ln, axis=1)
-        delta_f = fs[1] - fs[0]
 
         return delta_f
