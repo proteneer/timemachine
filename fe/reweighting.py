@@ -157,23 +157,25 @@ class ReweightingLayer:
             u_kn.append(self.vmapped_u_fxn(xs, lam, self.ref_params))
         return np.array(u_kn)
 
-    def _reweighting_inds_from_mode(self, mode='all_intermediates'):
-        supported_modes = ['all_intermediates', 'endpoints_only']
+    def _reweighting_inds_from_cutoff(self, endpoint_cutoff=0.5):
+        """Get indices of samples self.xs that came from lambda windows within endpoint cutoff of lambda=0 or lambda=1"""
+        assert (endpoint_cutoff >= 0.0) and (endpoint_cutoff <= 1.0)
+        K = len(self.lambdas)
 
-        if mode not in supported_modes:
-            raise(NotImplementedError(f'Unsupported reweighting mode {mode}. Must be one of {supported_modes}.'))
+        endpoint_filter = lambda k: (self.lambdas[k] <= endpoint_cutoff) or (self.lambdas[k] >= (1 - endpoint_cutoff))
 
-        if mode == 'all_intermediates':
-            reweighting_inds = np.arange(len(self.xs))
-        elif mode == 'endpoints_only':
-            N = len(self.xs)
-            _inds_0 = np.arange(self.N_k[0])
-            _inds_1 = np.arange(N - self.N_k[-1], N)
-            reweighting_inds = np.hstack([_inds_0, _inds_1])
+        _inds = []
+        position = 0
+        for k in range(K):
+            _inds.append(np.arange(position, position + self.N_k[k]))
+            position += self.N_k[k]
 
+        reweighting_inds = np.hstack([_inds[k] for k in range(K) if endpoint_filter(k)])
+        assert (len(reweighting_inds) > 0)
         return reweighting_inds
 
-    def compute_delta_f(self, params: np.array, ess_warn_threshold: float = 50.0, mode='all_intermediates') -> float:
+    def compute_delta_f(self, params: np.array, ess_warn_threshold: float = 50.0,
+                        endpoint_cutoff: float = 0.5) -> float:
         """Compute an estimate of the free energy difference between lam=0 and lam=1 at a new value of params.
 
         This function is differentiable w.r.t. params, assuming self.u_fxn(x, lam, params) is differentiable w.r.t.
@@ -182,13 +184,17 @@ class ReweightingLayer:
         Prints a warning if the number of effective samples available for reweighting to
         u(self.xs, 0.0, params) or u(self.xs, 1.0, params) is less than ess_warn_threshold.
 
-        If mode == 'all_intermediates', cached samples from all MBAR intermediates will be used.
-        If mode == 'endpoints_only', only cached samples from the lambda=0 and lambda=1 endpoints will be used.
+        Optionally, we may want to compute importance weights using samples from only some of the lambda windows.
+        This is controlled by endpoint_cutoff.
+        If endpoint_cutoff>=0.5, cached samples from all MBAR intermediates will be used.
+        If endpoint_cutoff=0.0, cached samples only from the lambda=0 and lambda=1 endpoints will be used.
+        For values of endpoint_cutoff between 0 and 0.5, cached samples from a window lambdas_k will be used if
+            lambdas_k <= endpoint_cutoff or lambdas_k >= 1 - endpoint_cutoff
         """
-        log_q_0 = lambda x : - self.u_fxn(x, 0.0, params)
-        log_q_1 = lambda x : - self.u_fxn(x, 1.0, params)
+        log_q_0 = lambda x: - self.u_fxn(x, 0.0, params)
+        log_q_1 = lambda x: - self.u_fxn(x, 1.0, params)
 
-        reweighting_inds = self._reweighting_inds_from_mode(mode)
+        reweighting_inds = self._reweighting_inds_from_cutoff(endpoint_cutoff)
         cached_samples = CachedImportanceSamples(self.xs[reweighting_inds],
                                                  self.reference_log_weights[reweighting_inds])
 
