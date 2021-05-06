@@ -185,8 +185,8 @@ class ReweightingLayer:
         If mode == 'all_intermediates', cached samples from all MBAR intermediates will be used.
         If mode == 'endpoints_only', only cached samples from the lambda=0 and lambda=1 endpoints will be used.
         """
-        log_q_0 = lambda xs : - self.u_fxn(xs, 0.0, params)
-        log_q_1 = lambda xs : - self.u_fxn(xs, 1.0, params)
+        log_q_0 = lambda x : - self.u_fxn(x, 0.0, params)
+        log_q_1 = lambda x : - self.u_fxn(x, 1.0, params)
 
         reweighting_inds = self._reweighting_inds_from_mode(mode)
         cached_samples = CachedImportanceSamples(self.xs[reweighting_inds],
