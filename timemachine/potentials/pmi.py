@@ -458,7 +458,7 @@ def test0():
             )
 
         jnp_res = np.linalg.eigh(a_tensor)
-        evp_res = evp.dsyevv3(a_tensor)
+        evp_res = dsyevv3(a_tensor)
 
         np.set_printoptions(formatter={'float': lambda x: "{0:0.16f}".format(x)})
 

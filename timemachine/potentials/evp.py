@@ -7,7 +7,7 @@ from jax.config import config; config.update("jax_enable_x64", True)
 from scipy.stats import special_ortho_group
 
 
-from timemachine.potentials import evp
+from timemachine.potentials.pmi import dsyevv3
 
 def recenter(conf):
     return conf - np.mean(conf, axis=0)
@@ -137,15 +137,15 @@ def test_force(a_tensor, b_tensor):
     # a_eval, a_evec = np.linalg.eigh(a_tensor)
     # b_eval, b_evec = np.linalg.eigh(b_tensor)
 
-    a_eval, a_evec = evp.dsyevv3(a_tensor)
-    b_eval, b_evec = evp.dsyevv3(b_tensor)
+    a_eval, a_evec = dsyevv3(a_tensor)
+    b_eval, b_evec = dsyevv3(b_tensor)
 
 
     # print("ref w", a_eval)
-    # print("test w", evp.dsyevc3(a_tensor))
+    # print("test w", dsyevc3(a_tensor))
 
     # print("ref v", a_evec)
-    # print("test v", evp.dsyevv3(a_tensor))
+    # print("test v", dsyevv3(a_tensor))
 
     # assert 0
 
@@ -234,7 +234,7 @@ def test0():
             )
 
         jnp_res = np.linalg.eigh(a_tensor)
-        evp_res = evp.dsyevv3(a_tensor)
+        evp_res = dsyevv3(a_tensor)
 
 
         np.set_printoptions(formatter={'float': lambda x: "{0:0.16f}".format(x)})
