@@ -13,40 +13,6 @@ def switch_fn(dij, cutoff):
     return np.power(np.cos((np.pi*np.power(dij, 8))/(2*cutoff)), 2)
 
 
-def nonbonded_v2(
-    conf,
-    params,
-    box,
-    lamb,
-    exclusion_idxs,
-    scales,
-    beta,
-    cutoff,
-    lambda_offset_idxs):
-
-    # assert box is None
-
-    conf_4d = convert_to_4d(conf, lamb, lambda_offset_idxs)
-
-    # print(conf_4d)
-    if box is not None:
-        box_4d = np.eye(4)*1000
-        box_4d = index_update(box_4d, index[:3, :3], box)
-    else:
-        box_4d = None
-
-    charge_params = params[:, 0]
-    lj_params = params[:, 1:]
-
-    charge_scales = scales[:, 0]
-    lj_scales = scales[:, 1]
-
-    lj = lennard_jones(conf_4d, lj_params, box_4d, cutoff)
-    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, box_4d, exclusion_idxs, lj_scales, cutoff)
-    es = simple_energy(conf_4d, box_4d, charge_params, exclusion_idxs, charge_scales, beta, cutoff)
-
-    return lj - lj_exc + es
-
 def lennard_jones_v2(
     conf,
     lj_params,
