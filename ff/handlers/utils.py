@@ -15,6 +15,13 @@ def sort_tuple(arr):
         return arr
 
 def match_smirks(mol, smirks):
+    """
+    Notes
+    -----
+    * See also implementations of match_smirks in
+        * bootstrap_am1.py, which is identical
+        * bcc_aromaticity.py, which uses OpenEye instead of RDKit
+    """
     
     # Make a copy of the molecule
     rdmol = Chem.Mol(mol)
