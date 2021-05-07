@@ -15,7 +15,6 @@ def recenter(conf):
 def inertia_tensor(conf, masses):
     com = np.average(conf, axis=0, weights=masses)
     conf = conf - com
-    conf_T = conf.transpose()
     
     xs = conf[:, 0]
     ys = conf[:, 1]
@@ -158,8 +157,6 @@ def test_force(a_tensor, b_tensor):
     acos_pos = np.arccos(pos) # 3 -> 3
     acos_neg = np.arccos(neg) # 3 -> 3
     a = np.amin([acos_pos, acos_neg], axis=0) # 2x3 -> 3
-    a2 = a*a # 3->3
-    l = np.sum(a2) # 3->1
 
     # derivatives, start backprop
     dl_da2 = np.ones(3) # 1 x 3
@@ -167,11 +164,6 @@ def test_force(a_tensor, b_tensor):
     da_darg = np.stack([
         np.eye(3)*(acos_pos < acos_neg),
         np.eye(3)*(acos_neg < acos_pos)
-    ])
-
-    darg_dpn = np.stack([
-        np.eye(3)*(-1/np.sqrt(1-pos*pos)),
-        np.eye(3)*(-1/np.sqrt(1-neg*neg))
     ])
 
     dl_darg = np.matmul(np.matmul(dl_da2, da2_da), da_darg)
@@ -215,10 +207,6 @@ def test1():
 
         a_com, a_tensor = inertia_tensor(x_a, onp.ones(N, dtype=np.float64))
         b_com, b_tensor = inertia_tensor(x_b, onp.ones(N, dtype=np.float64))
-
-
-        a_evec = special_ortho_group.rvs(3)
-        b_evec = special_ortho_group.rvs(3)
 
         rf = onp.asarray(grad_fn(a_tensor, b_tensor))
         tf = onp.asarray(test_force(a_tensor, b_tensor))
