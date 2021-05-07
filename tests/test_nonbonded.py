@@ -5,21 +5,18 @@ import copy
 import gzip
 
 import pickle
-import functools
 import unittest
-import scipy.linalg
 from jax.config import config; config.update("jax_enable_x64", True)
 
 import numpy as np
-import jax
-import jax.numpy as jnp
 
 import functools
+import itertools
 
 from common import GradientTest
-from common import prepare_nb_system, prepare_water_system, prepare_reference_nonbonded
+from common import prepare_water_system, prepare_reference_nonbonded
 
-from timemachine.potentials import bonded, nonbonded, gbsa
+from timemachine.potentials import nonbonded
 from timemachine.lib import potentials
 from md import builders
 
