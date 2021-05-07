@@ -13,31 +13,6 @@ def switch_fn(dij, cutoff):
     return np.power(np.cos((np.pi*np.power(dij, 8))/(2*cutoff)), 2)
 
 
-def electrostatics_v2(
-    conf,
-    charge_params,
-    box,
-    lamb,
-    exclusion_idxs,
-    charge_scales,
-    beta,
-    cutoff,
-    lambda_offset_idxs):
-
-    # assert box is None
-
-    conf_4d = convert_to_4d(conf, lamb, lambda_offset_idxs)
-
-    # print(conf_4d)
-    if box is not None:
-        box_4d = np.eye(4)*1000
-        box_4d = index_update(box_4d, index[:3, :3], box)
-    else:
-        box_4d = None
-
-    return simple_energy(conf_4d, box_4d, charge_params, exclusion_idxs, charge_scales, beta, cutoff)
-
-
 def nonbonded_v2(
     conf,
     params,
