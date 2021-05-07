@@ -71,7 +71,7 @@ class CachedImportanceSamples:
 
 
 class ReweightingLayer:
-    def __init__(self, x_k: List[np.array], u_fxn: callable, ref_params: np.array, lambdas: np.array, endpoint_padding=1):
+    def __init__(self, x_k: List[np.array], u_fxn: callable, ref_params: np.array, lambdas: np.array):
         """Assumes samples x_k[k] are drawn from e^{-u_fxn(x, lambdas[k], ref_params)}.
 
         The constructor will
