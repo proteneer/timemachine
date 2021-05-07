@@ -930,10 +930,10 @@ void declare_nonbonded(py::module &m, const char *typestr) {
     py::arg("lambda_offset_idxs_i"),
     py::arg("beta"),
     py::arg("cutoff"),
-    py::arg("transform_lambda_charge")="lambda",
-    py::arg("transform_lambda_sigma")="lambda",
-    py::arg("transform_lambda_epsilon")="lambda",
-    py::arg("transform_lambda_w")="lambda");
+    py::arg("transform_lambda_charge")="return lambda",
+    py::arg("transform_lambda_sigma")="return lambda",
+    py::arg("transform_lambda_epsilon")="return lambda",
+    py::arg("transform_lambda_w")="return lambda");
 
 }
 

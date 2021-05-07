@@ -121,8 +121,27 @@ class TestInterpolatedPotential(GradientTest):
         def transform_e(lamb):
             return jnp.where(lamb < 0.5, jnp.sin(lamb*np.pi)*jnp.sin(lamb*np.pi), 1)
 
+        offsets = np.arange(N)/N
+        offsets = offsets*0.5
+
         def transform_w(lamb):
-            return (1-lamb*lamb)
+            w = jnp.sin((lamb - offsets)*np.pi)**2
+            w = jnp.where(lamb < offsets, 0, w)
+            w = jnp.where(lamb > 0.5+offsets, 1.0, w)
+            return w
+
+        # (ytz: leave this here in case the user wants to see what the
+        # decoupling looks like)
+        # all_ws = []
+        # lambda_schedule = np.linspace(0, 1, 100)
+        # for lamb in lambda_schedule:
+        #     ws = transform_w(lamb)
+        #     all_ws.append(ws)
+        # all_ws = np.array(all_ws)
+        # import matplotlib.pyplot as plt
+        # for ws in all_ws.T:
+        #     plt.plot(lambda_schedule, ws)
+        # plt.show()
 
         # E = 0 # DEBUG!
         qlj_src, ref_potential, test_potential = prepare_water_system(
@@ -148,7 +167,7 @@ class TestInterpolatedPotential(GradientTest):
             return jnp.stack([new_q, new_s, new_e], axis=1)
 
         def u_reference(x, params, box, lamb):
-            d4 = cutoff*(lambda_plane_idxs + lambda_offset_idxs*transform_w(lamb))
+            d4 = cutoff*(lambda_plane_idxs + lambda_offset_idxs*transform_w(lamb, ))
             d4 = jnp.expand_dims(d4, axis=-1)
             x = jnp.concatenate((x, d4), axis=1)
 
@@ -166,10 +185,21 @@ class TestInterpolatedPotential(GradientTest):
                     print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
                     args = copy.deepcopy(test_potential.args)
-                    args.append("lambda*lambda") # transform q
-                    args.append("sin(lambda*PI/2)") # transform sigma
-                    args.append("lambda < 0.5 ? sin(lambda*PI)*sin(lambda*PI) : 1") # transform epsilon
-                    args.append("1-lambda*lambda") # transform w
+                    args.append("return lambda*lambda") # transform q
+                    args.append("return sin(lambda*PI/2)") # transform sigma
+                    args.append("return lambda < 0.5 ? sin(lambda*PI)*sin(lambda*PI) : 1") # transform epsilon
+                    args.append("""
+                        double offset = atom_idx / (2.0*N);
+                        if(lambda < offset) {
+                            return 0.0;
+                        } else if (lambda > (0.5 + offset)) {
+                            return 1.0;
+                        } else {
+                            NumericType term = sin((lambda - offset)*PI);
+                            return term*term;
+                        }
+
+                    """)
 
                     test_interpolated_potential = potentials.NonbondedInterpolated(
                         *args,

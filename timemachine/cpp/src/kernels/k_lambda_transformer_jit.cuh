@@ -6,23 +6,23 @@ jit_program
 #define PI 3.141592653589793115997963468544185161
 
 template <typename NumericType>
-NumericType __device__ __forceinline__ transform_lambda_charge(NumericType lambda) {
-    return CUSTOM_EXPRESSION_CHARGE;
+NumericType __device__ __forceinline__ transform_lambda_charge(NumericType lambda, int atom_idx, int N) {
+    CUSTOM_EXPRESSION_CHARGE;
 }
 
 template <typename NumericType>
-NumericType __device__ __forceinline__ transform_lambda_sigma(NumericType lambda) {
-    return CUSTOM_EXPRESSION_SIGMA;
+NumericType __device__ __forceinline__ transform_lambda_sigma(NumericType lambda, int atom_idx, int N) {
+    CUSTOM_EXPRESSION_SIGMA;
 }
 
 template <typename NumericType>
-NumericType __device__ __forceinline__ transform_lambda_epsilon(NumericType lambda) {
-    return CUSTOM_EXPRESSION_EPSILON;
+NumericType __device__ __forceinline__ transform_lambda_epsilon(NumericType lambda, int atom_idx, int N) {
+    CUSTOM_EXPRESSION_EPSILON;
 }
 
 template <typename NumericType>
-NumericType __device__ __forceinline__ transform_lambda_w(NumericType lambda) {
-    return CUSTOM_EXPRESSION_W;
+NumericType __device__ __forceinline__ transform_lambda_w(NumericType lambda, int atom_idx, int N) {
+    CUSTOM_EXPRESSION_W;
 }
 
 void __global__ k_compute_w_coords(
@@ -43,11 +43,11 @@ void __global__ k_compute_w_coords(
     int lambda_offset_i = atom_i_idx < N ? lambda_offset_idxs[atom_i_idx] : 0;
     int lambda_plane_i = atom_i_idx < N ? lambda_plane_idxs[atom_i_idx] : 0;
 
-    double f_lambda = transform_lambda_w(lambda);
+    double f_lambda = transform_lambda_w(lambda, atom_i_idx, N);
 
     double step = 1e-7;
     Surreal<double> lambda_surreal(lambda, step);
-    double f_lambda_grad = (transform_lambda_w(lambda_surreal).imag)/step;
+    double f_lambda_grad = (transform_lambda_w(lambda_surreal, atom_i_idx, N).imag)/step;
 
     double coords_w_i = (lambda_plane_i + lambda_offset_i*f_lambda)*cutoff;
     double dw_dl_i = lambda_offset_i*f_lambda_grad*cutoff;
@@ -85,16 +85,16 @@ void __global__ k_permute_interpolated(
     double f_lambda_grad;
 
     if(stride_idx == 0) {
-        f_lambda = transform_lambda_charge(lambda);
-        f_lambda_grad = (transform_lambda_charge(lambda_surreal).imag)/step;
+        f_lambda = transform_lambda_charge(lambda, idx, N);
+        f_lambda_grad = (transform_lambda_charge(lambda_surreal, idx, N).imag)/step;
     }
     if(stride_idx == 1) {
-        f_lambda = transform_lambda_sigma(lambda);
-        f_lambda_grad = (transform_lambda_sigma(lambda_surreal).imag)/step;
+        f_lambda = transform_lambda_sigma(lambda, idx, N);
+        f_lambda_grad = (transform_lambda_sigma(lambda_surreal, idx, N).imag)/step;
     }
     if(stride_idx == 2) {
-        f_lambda = transform_lambda_epsilon(lambda);
-        f_lambda_grad = (transform_lambda_epsilon(lambda_surreal).imag)/step;
+        f_lambda = transform_lambda_epsilon(lambda, idx, N);
+        f_lambda_grad = (transform_lambda_epsilon(lambda_surreal, idx, N).imag)/step;
     }
 
     d_sorted_p[source_idx] = (1-f_lambda)*d_p[target_idx] + f_lambda*d_p[size+target_idx];
@@ -121,15 +121,15 @@ void __global__ k_add_ull_to_real_interpolated(
 
     // handle charges, sigmas, epsilons with different exponents
     if(stride_idx == 0) {
-        double f_lambda = transform_lambda_charge(lambda);
+        double f_lambda = transform_lambda_charge(lambda, idx, N);
         real_array[target_idx] += (1-f_lambda)*FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(ull_array[target_idx]);
         real_array[size+target_idx] += f_lambda*FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(ull_array[target_idx]);
     } else if(stride_idx == 1) {
-        double f_lambda = transform_lambda_sigma(lambda);
+        double f_lambda = transform_lambda_sigma(lambda, idx, N);
         real_array[target_idx] += (1-f_lambda)*FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(ull_array[target_idx]);
         real_array[size+target_idx] += f_lambda*FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(ull_array[target_idx]);
     } else if(stride_idx == 2) {
-        double f_lambda = transform_lambda_epsilon(lambda);
+        double f_lambda = transform_lambda_epsilon(lambda, idx, N);
         real_array[target_idx] += (1-f_lambda)*FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(ull_array[target_idx]);
         real_array[size+target_idx] += f_lambda*FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(ull_array[target_idx]);
     }
