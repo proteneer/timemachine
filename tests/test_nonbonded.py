@@ -255,7 +255,7 @@ class TestNonbondedDHFR(GradientTest):
         nb_fn.set_lambda_plane_idxs(test_lambda_plane_idxs)
         nb_fn.set_lambda_offset_idxs(test_lambda_offset_idxs)
 
-        impl = nb_fn.unbound_impl(np.float32)
+        impl = nb_fn.unbound_impl(precision)
 
         for combo in itertools.product([False, True], repeat=4):
 
