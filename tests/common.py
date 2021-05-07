@@ -81,7 +81,7 @@ def prepare_lj_system(
 #     N = x.shape[0]
 #     D = x.shape[1]
 
-#     charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
+#     charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(ONE_4PI_EPS0)
 
 #     atom_idxs = np.arange(N)
 #     exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
@@ -162,7 +162,7 @@ def prepare_water_system(
     assert N % 3 == 0
 
     params = np.stack([
-        (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456), # q
+        (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(ONE_4PI_EPS0), # q
         np.random.rand(N).astype(np.float64)/5.0, # sig
         np.random.rand(N).astype(np.float64) # eps
     ], axis=1)
