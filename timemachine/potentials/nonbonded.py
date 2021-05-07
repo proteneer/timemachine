@@ -13,29 +13,6 @@ def switch_fn(dij, cutoff):
     return np.power(np.cos((np.pi*np.power(dij, 8))/(2*cutoff)), 2)
 
 
-def nonbonded(
-    conf,
-    lamb,
-    charge_params,
-    lj_params,
-    exclusion_idxs,
-    charge_scales,
-    lj_scales,
-    cutoff,
-    lambda_plane_idxs,
-    lambda_offset_idxs):
-
-    # assert box is None
-
-    conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
-    lj = lennard_jones(conf_4d, lj_params, cutoff)
-    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, exclusion_idxs, lj_scales, cutoff)
-    es = simple_energy(conf_4d, charge_params, exclusion_idxs, charge_scales, cutoff)
-
-    return lj - lj_exc + es
-
-
 def electrostatics_v2(
     conf,
     charge_params,
