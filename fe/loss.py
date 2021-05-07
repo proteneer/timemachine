@@ -9,6 +9,9 @@ from fe import bar as tmbar
 import pymbar
 from fe import math_utils
 
+from timemachine.constants import kB
+from simtk import unit
+
 
 # (ytz): the AD override trick is taken from:
 # https://github.com/google/jax/issues/1142
@@ -79,10 +82,13 @@ def EXP_loss(
     complex_du_dls, # [C, N]
     solvent_du_dls, # [C, N]
     lambda_schedule,
-    true_dG):
+    true_dG,
+    temperature=300 * unit.kelvin):
 
-    complex_dG = EXP(complex_du_dls, lambda_schedule) # TODO: broken: EXP unresolved
-    solvent_dG = EXP(solvent_du_dls, lambda_schedule) # TODO: broken: EXP unresolved
+    kT = kB * temperature
+
+    complex_dG = EXP_from_du_dls(complex_du_dls, lambda_schedule, kT)
+    solvent_dG = EXP_from_du_dls(solvent_du_dls, lambda_schedule, kT)
 
     pred_dG = solvent_dG - complex_dG
     loss = jnp.power(true_dG - pred_dG, 2)
