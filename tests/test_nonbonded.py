@@ -340,7 +340,7 @@ class TestNonbonded(GradientTest):
 
     def test_non_zero_du_dl(self):
         # du_dl should be zero for this test case.
-        fp=gzip.open('tests/bad_test_547.pkl.gz','rb')
+        fp=gzip.open('tests/data/bad_test_547.pkl.gz','rb')
         x_t, box, lamb, nb_bp =  pickle.load(fp)
 
         nb_bp.args = nb_bp.args[:-4] # ignore any extra args from future PRs
@@ -361,7 +361,7 @@ class TestNonbonded(GradientTest):
 
         # this test case deals with a rather annoying fma compiler bug in CUDA.
         # see https://github.com/proteneer/timemachine/issues/386
-        fp=gzip.open('tests/repro.pkl.gz','rb') # This assumes that primes.data is already packed with gzip
+        fp=gzip.open('tests/data/repro.pkl.gz','rb') # This assumes that primes.data is already packed with gzip
         x_t, box, lamb, nb_bp = pickle.load(fp)
 
         for precision in [np.float32, np.float64]:
