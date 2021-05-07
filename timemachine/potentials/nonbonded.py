@@ -13,26 +13,6 @@ def switch_fn(dij, cutoff):
     return np.power(np.cos((np.pi*np.power(dij, 8))/(2*cutoff)), 2)
 
 
-def lennard_jones_v2(
-    conf,
-    lj_params,
-    box,
-    lamb,
-    exclusion_idxs,
-    lj_scales,
-    cutoff,
-    lambda_plane_idxs,
-    lambda_offset_idxs):
-
-    conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-    box_4d = np.eye(4)*1000
-    box_4d = index_update(box_4d, index[:3, :3], box)
-
-    lj = lennard_jones(conf_4d, lj_params, box_4d, cutoff)
-    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, box_4d, exclusion_idxs, lj_scales, cutoff)
-
-    return lj - lj_exc
-
 def nonbonded_v3(
     conf,
     params,
