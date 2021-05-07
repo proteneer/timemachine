@@ -23,6 +23,8 @@ def deserialize_system(
     ----------
     system: openmm.System
         A system object to be deserialized
+    cutoff: float
+        Nonbonded cutoff, in nm
 
     Returns
     -------
