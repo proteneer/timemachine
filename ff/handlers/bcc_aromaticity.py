@@ -330,7 +330,5 @@ class AromaticityModel:
         ----------
         oe_molecule
             The molecule to assign aromatic flags to.
-        model
-            The aromaticity model to apply.
         """
         cls._assign_am1bcc(oe_molecule)
