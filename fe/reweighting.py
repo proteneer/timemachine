@@ -70,10 +70,6 @@ class CachedImportanceSamples:
         return f"CachedImportanceSamples({n_samples} of shape {sample_shape})"
 
 
-# options: CachedImportanceSamples using all intermediates vs. just endpoints
-
-
-
 class ReweightingLayer:
     def __init__(self, x_k: List[np.array], u_fxn: callable, ref_params: np.array, lambdas: np.array, endpoint_padding=1):
         """Assumes samples x_k[k] are drawn from e^{-u_fxn(x, lambdas[k], ref_params)}.
