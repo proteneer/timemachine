@@ -1,4 +1,6 @@
 import jax.numpy as np
+import numpy as onp
+import jax
 
 def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
 
@@ -20,9 +22,10 @@ def rescale_coordinates(
     indices,
     box,
     scales):
+    """Note: scales unused"""
     
     mol_sizes = np.expand_dims(onp.bincount(indices), axis=1)
-    mol_centers = jax.ops.segment_sum(coords, indices)/mol_sizes
+    mol_centers = jax.ops.segment_sum(conf, indices)/mol_sizes
 
     new_centers = mol_centers - box[2]*np.floor(np.expand_dims(mol_centers[...,2], axis=-1)/box[2][2])
     new_centers -= box[1]*np.floor(np.expand_dims(new_centers[...,1], axis=-1)/box[1][1])

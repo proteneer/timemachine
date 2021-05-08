@@ -5,21 +5,18 @@ import copy
 import gzip
 
 import pickle
-import functools
 import unittest
-import scipy.linalg
 from jax.config import config; config.update("jax_enable_x64", True)
 
 import numpy as np
-import jax
-import jax.numpy as jnp
 
 import functools
+import itertools
 
 from common import GradientTest
-from common import prepare_nb_system, prepare_water_system, prepare_reference_nonbonded
+from common import prepare_water_system, prepare_reference_nonbonded
 
-from timemachine.potentials import bonded, nonbonded, gbsa
+from timemachine.potentials import nonbonded
 from timemachine.lib import potentials
 from md import builders
 
@@ -258,7 +255,7 @@ class TestNonbondedDHFR(GradientTest):
         nb_fn.set_lambda_plane_idxs(test_lambda_plane_idxs)
         nb_fn.set_lambda_offset_idxs(test_lambda_offset_idxs)
 
-        impl = nb_fn.unbound_impl(np.float32)
+        impl = nb_fn.unbound_impl(precision)
 
         for combo in itertools.product([False, True], repeat=4):
 
@@ -340,7 +337,7 @@ class TestNonbonded(GradientTest):
 
     def test_non_zero_du_dl(self):
         # du_dl should be zero for this test case.
-        fp=gzip.open('tests/bad_test_547.pkl.gz','rb')
+        fp=gzip.open('tests/data/bad_test_547.pkl.gz','rb')
         x_t, box, lamb, nb_bp =  pickle.load(fp)
 
         nb_bp.args = nb_bp.args[:-4] # ignore any extra args from future PRs
@@ -361,7 +358,7 @@ class TestNonbonded(GradientTest):
 
         # this test case deals with a rather annoying fma compiler bug in CUDA.
         # see https://github.com/proteneer/timemachine/issues/386
-        fp=gzip.open('tests/repro.pkl.gz','rb') # This assumes that primes.data is already packed with gzip
+        fp=gzip.open('tests/data/repro.pkl.gz','rb') # This assumes that primes.data is already packed with gzip
         x_t, box, lamb, nb_bp = pickle.load(fp)
 
         for precision in [np.float32, np.float64]:
