@@ -96,7 +96,7 @@ def estimate_dG(transformation: RelativeTransformation,
         do_work = partial(wrap_method, fxn=rfe.host_edge)
         futures = []
         for lambda_idx, lamb in enumerate(lambda_schedule):
-            arg = (lamb, host_system, minimized_host_coords, host_box, num_equil_steps, num_prod_steps)
+            arg = (lamb, host_system, minimized_host_coords, host_box, num_equil_steps, num_steps_per_lambda)
             futures.append(client.submit(do_work, arg))
 
         results = []

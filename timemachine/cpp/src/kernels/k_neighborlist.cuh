@@ -146,7 +146,24 @@ void __global__ k_find_blocks_with_ixns(
     RealType inv_by = 1/by;
     RealType inv_bz = 1/bz;
 
-    RealType cutoff_squared = static_cast<RealType>(cutoff)*static_cast<RealType>(cutoff);
+    RealType non_periodic_dist_i = 0;
+    RealType non_periodic_dist_j = 0;
+
+    // Determine if the row block can be translated into a periodic box
+    // to optimize distance calculations
+    // https://github.com/proteneer/timemachine/issues/320
+    const bool single_periodic_box = (0.5f*bx-row_bb_ext_x >= cutoff &&
+                                      0.5f*by-row_bb_ext_y >= cutoff &&
+                                      0.5f*bz-row_bb_ext_z >= cutoff);
+    if (single_periodic_box) {
+        pos_i_x -= bx*nearbyint((pos_i_x-row_bb_ctr_x)*inv_bx);
+        pos_i_y -= by*nearbyint((pos_i_y-row_bb_ctr_y)*inv_by);
+        pos_i_z -= bz*nearbyint((pos_i_z-row_bb_ctr_z)*inv_bz);
+
+        non_periodic_dist_i = static_cast<RealType>(0.5) * (pos_i_x*pos_i_x + pos_i_y*pos_i_y + pos_i_z*pos_i_z);
+    }
+
+    const RealType cutoff_squared = static_cast<RealType>(cutoff)*static_cast<RealType>(cutoff);
 
     int col_block_base = blockIdx.y*TILESIZE;
 
@@ -211,9 +228,10 @@ void __global__ k_find_blocks_with_ixns(
         RealType col_bb_ext_y = bb_ext[col_block*3+1];
         RealType col_bb_ext_z = bb_ext[col_block*3+2];
 
-        RealType atom_box_dx = pos_i_x - col_bb_ctr_x;
-        RealType atom_box_dy = pos_i_y - col_bb_ctr_y;
-        RealType atom_box_dz = pos_i_z - col_bb_ctr_z;
+        // Don't use pos_i_* here, as might have been shifted to center
+        RealType atom_box_dx = (atom_i_idx < N ? coords[atom_i_idx*3 + 0] : 0) - col_bb_ctr_x;
+        RealType atom_box_dy = (atom_i_idx < N ? coords[atom_i_idx*3 + 1] : 0) - col_bb_ctr_y;
+        RealType atom_box_dz = (atom_i_idx < N ? coords[atom_i_idx*3 + 2] : 0) - col_bb_ctr_z;
 
         atom_box_dx -= bx*nearbyint(atom_box_dx*inv_bx);
         atom_box_dy -= by*nearbyint(atom_box_dy*inv_by);
@@ -246,19 +264,41 @@ void __global__ k_find_blocks_with_ixns(
         RealType pos_j_y = atom_j_idx < N ? coords[atom_j_idx*3 + 1] : 0;
         RealType pos_j_z = atom_j_idx < N ? coords[atom_j_idx*3 + 2] : 0;
 
+        if (single_periodic_box) {
+	    // Recenter using **row** box center
+            pos_j_x -= bx*nearbyint((pos_j_x-row_bb_ctr_x)*inv_bx);
+            pos_j_y -= by*nearbyint((pos_j_y-row_bb_ctr_y)*inv_by);
+            pos_j_z -= bz*nearbyint((pos_j_z-row_bb_ctr_z)*inv_bz);
+
+            non_periodic_dist_j = static_cast<RealType>(0.5) * (pos_j_x*pos_j_x + pos_j_y*pos_j_y + pos_j_z*pos_j_z);
+        }
+
+
         unsigned includeAtomFlags = 0;
         while(atomFlags) {
             const int row_atom = __ffs(atomFlags)-1;
             atomFlags &= atomFlags-1;
+            RealType row_i_x = __shfl_sync(FULL_MASK, pos_i_x, row_atom);
+            RealType row_i_y = __shfl_sync(FULL_MASK, pos_i_y, row_atom);
+            RealType row_i_z = __shfl_sync(FULL_MASK, pos_i_z, row_atom);
+            if (!single_periodic_box) {
+                RealType atom_atom_dx = row_i_x - pos_j_x;
+                RealType atom_atom_dy = row_i_y - pos_j_y;
+                RealType atom_atom_dz = row_i_z - pos_j_z;
 
-            RealType atom_atom_dx = __shfl_sync(FULL_MASK, pos_i_x, row_atom) - pos_j_x;
-            RealType atom_atom_dy = __shfl_sync(FULL_MASK, pos_i_y, row_atom) - pos_j_y;
-            RealType atom_atom_dz = __shfl_sync(FULL_MASK, pos_i_z, row_atom) - pos_j_z;
+                atom_atom_dx -= bx*nearbyint(atom_atom_dx*inv_bx);
+                atom_atom_dy -= by*nearbyint(atom_atom_dy*inv_by);
+                atom_atom_dz -= bz*nearbyint(atom_atom_dz*inv_bz);
 
-            atom_atom_dx -= bx*nearbyint(atom_atom_dx*inv_bx);
-            atom_atom_dy -= by*nearbyint(atom_atom_dy*inv_by);
-            atom_atom_dz -= bz*nearbyint(atom_atom_dz*inv_bz);
-            interacts |= atom_atom_dx*atom_atom_dx + atom_atom_dy*atom_atom_dy + atom_atom_dz*atom_atom_dz < cutoff_squared;
+                interacts |= (atom_atom_dx*atom_atom_dx + atom_atom_dy*atom_atom_dy + atom_atom_dz*atom_atom_dz) < cutoff_squared;
+            } else {
+		// All threads in warp need single_periodic_box to be true for this not to hang
+		RealType corrected_i = __shfl_sync(FULL_MASK, non_periodic_dist_i, row_atom);
+
+                // Below is half the magnitude of the distance equation, expanded.
+                RealType half_dist = corrected_i  + non_periodic_dist_j - row_i_x*pos_j_x - row_i_y*pos_j_y - row_i_z*pos_j_z;
+                interacts |= half_dist < (static_cast<RealType>(0.5) * cutoff_squared);
+            }
             includeAtomFlags = __ballot_sync(FULL_MASK, interacts);
             // If all threads in the warp have found interactions, can terminate early
             if (includeAtomFlags == FULL_MASK) {

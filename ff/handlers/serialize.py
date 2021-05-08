@@ -30,16 +30,10 @@ class SerializableMixIn():
 
     def serialize(self):
         """
-        Parameters
-        ----------
-        handler: instance of a handler
-            The handler we will be serialization
 
         Returns
         -------
-        str
-            serialized string representation.
-
+        result : dict
         """
         handler = self
         key = type(handler).__name__[:-len(_SUFFIX)]

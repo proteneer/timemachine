@@ -1,5 +1,6 @@
 #pragma once
 
+#include "jitify.hpp"
 #include "neighborlist.hpp"
 #include "potential.hpp"
 #include <vector>
@@ -12,9 +13,9 @@ typedef void (*k_nonbonded_fn)(const int N,
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
     const double * __restrict__ dl_dp,
+    const double * __restrict__ coords_w, // 4D coords
+    const double * __restrict__ dw_dl, // 4D derivatives
     const double lambda,
-    const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
-    const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
     const double cutoff,
     const int * __restrict__ ixn_tiles,
@@ -52,9 +53,12 @@ private:
 
     unsigned int *d_perm_; // hilbert curve permutation
 
-    int *d_sorted_lambda_plane_idxs_;
-    int *d_sorted_lambda_offset_idxs_;
+    double *d_w_; //
+    double *d_dw_dl_; //
+
     double *d_sorted_x_; //
+    double *d_sorted_w_; //
+    double *d_sorted_dw_dl_; //
     double *d_sorted_p_; //
     double *d_unsorted_p_; //
     double *d_sorted_dp_dl_;
@@ -78,6 +82,11 @@ private:
         cudaStream_t stream
     );
 
+    jitify::JitCache kernel_cache_;
+    jitify::KernelInstantiation compute_w_coords_instance_;
+    jitify::KernelInstantiation compute_permute_interpolated_;
+    jitify::KernelInstantiation compute_add_ull_to_real_interpolated_;
+
 public:
 
     // these are marked public but really only intended for testing.
@@ -89,8 +98,9 @@ public:
         const std::vector<double> &scales, // [E, 2]
         const std::vector<int> &lambda_plane_idxs, // N
         const std::vector<int> &lambda_offset_idxs, // N
-        double beta,
-        double cutoff
+        const double beta,
+        const double cutoff,
+        const std::string &kernel_src
     );
 
     ~Nonbonded();

@@ -3,7 +3,7 @@ import simtk.unit as unit
 import scipy.special
 import numpy as np
 
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+from timemachine.constants import kB
 
 def harmonic_com_vol(kb, b0, T):
     """

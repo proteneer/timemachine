@@ -217,7 +217,7 @@ if __name__ == "__main__":
         prot_path = Path(args.protein_path).expanduser()
         protein_path = prot_path.as_posix()
         if not prot_path.is_file():
-            print(f"Unable to find path: {path_to_protein}")
+            print(f"Unable to find path: {protein_path}")
             sys.exit(1)
 
     # xor num_gpus and hosts args
