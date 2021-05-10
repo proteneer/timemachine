@@ -29,8 +29,7 @@ def nonbonded_v3(
     ----------
     conf : (N, 3) or (N, 4) np.array
         3D or 4D coordinates
-        if 3D, will be converted to 4D using
-            (x,y,z) -> (x,y,z,w)
+        if 3D, will be converted to 4D using (x,y,z) -> (x,y,z,w)
             where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)
     params : (N, 3) np.array
         columns [charges, sigmas, epsilons], one row per particle
@@ -41,7 +40,7 @@ def nonbonded_v3(
     lj_rescale_mask : (N, N) np.array
         the Lennard-Jones contribution of pair (i,j) will be multiplied by lj_rescale_mask[i,j]
     scales
-        unused
+        unused # TODO: remove?
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
@@ -53,6 +52,12 @@ def nonbonded_v3(
     Returns
     -------
     energy : float
+
+    References
+    ----------
+    * Rodinger, 2005, J. Chem. Phys. "Absolute free energy calculations by thermodynamic integration in four spatial
+        dimensions" https://aip.scitation.org/doi/abs/10.1063/1.1946750
+    * TODO: Add a reference for the reaction field treatment?
     """
 
     N = conf.shape[0]
