@@ -4,15 +4,78 @@
 #define TILESIZE 32
 #define WARPSIZE 32
 
-
+template<typename RealType>
 void __global__ k_find_block_bounds(
-    const int N,
-    const int D,
-    const int T,
-    const double *coords,
-    const double *box,
-    double *block_bounds_ctr,
-    double *block_bounds_ext);
+    const int N, // Number of atoms
+    const int D, // Box dimensions, typically 3
+    const int T, // Number of tiles
+    const double * __restrict__ coords, // [N*3]
+    const double * __restrict__ box, // [D*3]
+    double *block_bounds_ctr, // [T*3]
+    double *block_bounds_ext // [T*3]
+) {
+
+    // Algorithm taken from https://github.com/openmm/openmm/blob/master/platforms/cuda/src/kernels/findInteractingBlocks.cu#L7
+    // Computes smaller bounding boxes than simpler form by accounting for periodic box conditions
+
+    // each thread processes one tile
+    const int index = blockIdx.x*blockDim.x+threadIdx.x;
+    if(index >= T) {
+        return;
+    }
+
+    const RealType bx = box[0*3+0];
+    const RealType by = box[1*3+1];
+    const RealType bz = box[2*3+2];
+
+    const RealType inv_bx = 1/bx;
+    const RealType inv_by = 1/by;
+    const RealType inv_bz = 1/bz;
+    const int base = index*TILESIZE;
+
+    RealType pos_x = coords[base*3+0];
+    RealType pos_y = coords[base*3+1];
+    RealType pos_z = coords[base*3+2];
+
+    RealType minPos_x = pos_x;
+    RealType minPos_y = pos_y;
+    RealType minPos_z = pos_z;
+
+    RealType maxPos_x = pos_x;
+    RealType maxPos_y = pos_y;
+    RealType maxPos_z = pos_z;
+
+    const int last = min(base+TILESIZE, N);
+    for (int i = base+1; i < last; i++) {
+        pos_x = coords[i*3+0];
+        pos_y = coords[i*3+1];
+        pos_z = coords[i*3+2];
+        // Build up center over time, and recenter before computing
+        // min and max, to reduce overall size of box thanks to accounting
+        // for periodic boundary conditions
+        RealType center_x = static_cast<RealType>(0.5)*(maxPos_x+minPos_x);
+        RealType center_y = static_cast<RealType>(0.5)*(maxPos_y+minPos_y);
+        RealType center_z = static_cast<RealType>(0.5)*(maxPos_z+minPos_z);
+        pos_x -= bx*nearbyint((pos_x-center_x)*inv_bx);
+        pos_y -= by*nearbyint((pos_y-center_y)*inv_by);
+        pos_z -= bz*nearbyint((pos_z-center_z)*inv_bz);
+        minPos_x = min(minPos_x,pos_x);
+        minPos_y = min(minPos_y,pos_y);
+        minPos_z = min(minPos_z,pos_z);
+
+        maxPos_x = max(maxPos_x,pos_x);
+        maxPos_y = max(maxPos_y,pos_y);
+        maxPos_z = max(maxPos_z,pos_z);
+    }
+
+    block_bounds_ctr[index*3+0]  = static_cast<RealType>(0.5)*(maxPos_x+minPos_x);
+    block_bounds_ctr[index*3+1]  = static_cast<RealType>(0.5)*(maxPos_y+minPos_y);
+    block_bounds_ctr[index*3+2]  = static_cast<RealType>(0.5)*(maxPos_z+minPos_z);
+
+    block_bounds_ext[index*3+0] = static_cast<RealType>(0.5)*(maxPos_x-minPos_x);
+    block_bounds_ext[index*3+1] = static_cast<RealType>(0.5)*(maxPos_y-minPos_y);
+    block_bounds_ext[index*3+2] = static_cast<RealType>(0.5)*(maxPos_z-minPos_z);
+}
 
 void __global__ k_compact_trim_atoms(
     const int N,
@@ -94,16 +157,16 @@ Each block proceeds as follows:
 
 template<typename RealType>
 void __global__ k_find_blocks_with_ixns(
-    int N,
-    const double *bb_ctr,
-    const double *bb_ext,
+    const int N,
+    const double * __restrict__ bb_ctr, // [N * 3]
+    const double * __restrict__ bb_ext, // [N * 3]
     const double* __restrict__ coords, //TBD make float32 version
     const double* __restrict__ box,
     unsigned int* __restrict__ interactionCount, // number of tiles that have interactions
     int* __restrict__ interactingTiles, // the row block idx of the tile that is interacting
     unsigned int* __restrict__ interactingAtoms, // the col block of the atoms that are interacting
     unsigned int* __restrict__ trim_atoms, // the left-over trims that will later be compacted
-    double cutoff) {
+    const double cutoff) {
 
     const int indexInWarp = threadIdx.x%WARPSIZE;
     const int warpMask = (1<<indexInWarp)-1;
@@ -126,7 +189,6 @@ void __global__ k_find_blocks_with_ixns(
     RealType row_bb_ext_x = bb_ext[row_block_idx*3+0];
     RealType row_bb_ext_y = bb_ext[row_block_idx*3+1];
     RealType row_bb_ext_z = bb_ext[row_block_idx*3+2];
-
 
     int neighborsInBuffer = 0;
 
@@ -197,11 +259,11 @@ void __global__ k_find_blocks_with_ixns(
         box_box_dz = max(static_cast<RealType>(0.0), fabs(box_box_dz) - row_bb_ext_z - col_bb_ext_z);
 
         // Check if the deltas between boxes are within cutoff
-        include_col_block &= (box_box_dx*box_box_dx + box_box_dy*box_box_dy + box_box_dz*box_box_dz) < cutoff_squared;
+        include_col_block &= (box_box_dx*box_box_dx + box_box_dy*box_box_dy + box_box_dz*box_box_dz) < (cutoff_squared);
 
     }
 
-    // __ballot returns number of col blocks in this set of columns whose distance to the row block is closer than the cutoff.
+    // __ballot returns bit flags to indicate which thread in the warp identified a column block within the cutoff.
     unsigned includeBlockFlags = __ballot_sync(FULL_MASK, include_col_block);
 
     // Loop over the col blocks we identified as potentially containing neighbors.
@@ -241,9 +303,9 @@ void __global__ k_find_blocks_with_ixns(
         atom_box_dy = max(static_cast<RealType>(0.0), fabs(atom_box_dy) - col_bb_ext_y);
         atom_box_dz = max(static_cast<RealType>(0.0), fabs(atom_box_dz) - col_bb_ext_z);
 
-        // Find rows where the row atom and column boxs are within cutoff
-        unsigned atomFlags = __ballot_sync(FULL_MASK, atom_box_dx*atom_box_dx + atom_box_dy*atom_box_dy + atom_box_dz*atom_box_dz < cutoff_squared);
+        // Find rows where the row atom and column boxes are within cutoff
         bool interacts = false;
+        unsigned atomFlags = __ballot_sync(FULL_MASK, atom_box_dx*atom_box_dx + atom_box_dy*atom_box_dy + atom_box_dz*atom_box_dz < cutoff_squared);
         int atom_j_idx = col_block*WARPSIZE+threadIdx.x; // each thread loads a different atom
 
         //       threadIdx
@@ -265,7 +327,7 @@ void __global__ k_find_blocks_with_ixns(
         RealType pos_j_z = atom_j_idx < N ? coords[atom_j_idx*3 + 2] : 0;
 
         if (single_periodic_box) {
-	    // Recenter using **row** box center
+            // Recenter using **row** box center
             pos_j_x -= bx*nearbyint((pos_j_x-row_bb_ctr_x)*inv_bx);
             pos_j_y -= by*nearbyint((pos_j_y-row_bb_ctr_y)*inv_by);
             pos_j_z -= bz*nearbyint((pos_j_z-row_bb_ctr_z)*inv_bz);
@@ -292,11 +354,11 @@ void __global__ k_find_blocks_with_ixns(
 
                 interacts |= (atom_atom_dx*atom_atom_dx + atom_atom_dy*atom_atom_dy + atom_atom_dz*atom_atom_dz) < cutoff_squared;
             } else {
-		// All threads in warp need single_periodic_box to be true for this not to hang
-		RealType corrected_i = __shfl_sync(FULL_MASK, non_periodic_dist_i, row_atom);
+                // All threads in warp need single_periodic_box to be true for this not to hang
+                RealType corrected_i = __shfl_sync(FULL_MASK, non_periodic_dist_i, row_atom);
 
                 // Below is half the magnitude of the distance equation, expanded.
-                RealType half_dist = corrected_i  + non_periodic_dist_j - row_i_x*pos_j_x - row_i_y*pos_j_y - row_i_z*pos_j_z;
+                RealType half_dist = corrected_i + non_periodic_dist_j - row_i_x*pos_j_x - row_i_y*pos_j_y - row_i_z*pos_j_z;
                 interacts |= half_dist < (static_cast<RealType>(0.5) * cutoff_squared);
             }
             includeAtomFlags = __ballot_sync(FULL_MASK, interacts);
@@ -307,7 +369,6 @@ void __global__ k_find_blocks_with_ixns(
         }
         
         // Add any interacting atoms to the buffer.
-
         if (interacts) {
             int index = neighborsInBuffer+__popc(includeAtomFlags & warpMask); // where to store this in shared memory
             // Indices can be at most 64
