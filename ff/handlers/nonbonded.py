@@ -52,6 +52,10 @@ def generate_exclusion_idxs(mol, scale12, scale13, scale14):
     scale14: float
         torsions scales
 
+    Returns
+    -------
+    idxs : int array
+    scales: float array
     """
 
     exclusions = {}
@@ -86,11 +90,15 @@ def generate_nonbonded_idxs(mol, smirks):
 
     Parameters
     ----------
+    mol: ROMol
+        RDKit ROMol object.
+
     smirks: list of str
         SMIRKS patterns for the forcefield type.
 
-    mol: ROMol
-        RDKit ROMol object.
+    Returns
+    -------
+    param_idxs
 
     """
     N = mol.GetNumAtoms()
@@ -112,11 +120,12 @@ class NonbondedHandler(SerializableMixIn):
         Parameters
         ----------
         smirks: list of str (P,)
-            SMIRKS patterns for each pattern
+            SMIRKS patterns
 
-        params: np.array, (P,)
-            normalized charge for each
+        params: np.array, (P, k)
+            parameters associated with each SMIRKS pattern
 
+        props: any
         """
         
         assert len(smirks) == len(params)
@@ -139,10 +148,17 @@ class NonbondedHandler(SerializableMixIn):
 
         Parameters
         ----------
+        params: np.array, (P, k)
+            parameters associated with each SMIRKS pattern
+
+        smirks: list of str (P,)
+            SMIRKS patterns
+
         mol: Chem.ROMol
             rdkit molecule, should have hydrogens pre-added
 
         """
+        assert (len(smirks) == len(params))
         param_idxs = generate_nonbonded_idxs(mol, smirks)
         return params[param_idxs]
 
@@ -156,14 +172,20 @@ class LennardJonesHandler(NonbondedHandler):
         """
         Parameters
         ----------
+        params: np.array of shape (P, 2)
+            Lennard-Jones associated with each SMIRKS pattern
+            params[:, 0] = 2 * sqrt(sigmas)
+            params[:, 1] = sqrt(epsilons)
+
+        smirks: list of str (P,)
+            SMIRKS patterns
 
         mol: Chem.ROMol
-            molecule to be parameterized.
+            molecule to be parameterized
 
         Returns
         -------
-        tuple
-            (parameters of shape [N,2], vjp_fn)
+        applied_parameters: np.array of shape (N, 2)
 
         """
         param_idxs = generate_nonbonded_idxs(mol, smirks)
@@ -284,10 +306,12 @@ class AM1CCCHandler(SerializableMixIn):
         Parameters
         ----------
         smirks: list of str (P,)
-            SMIRKS patterns for each pattern
+            SMIRKS patterns
 
         params: np.array, (P,)
             normalized charge for each
+
+        props: any
 
         """
         
@@ -308,7 +332,10 @@ class AM1CCCHandler(SerializableMixIn):
         """
         Parameters
         ----------
-
+        params: np.array, (P,)
+            normalized charge increment for each matched bond
+        smirks: list of str (P,)
+            SMIRKS patterns matching bonds
         mol: Chem.ROMol
             molecule to be parameterized.
 

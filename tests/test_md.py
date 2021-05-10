@@ -8,12 +8,11 @@ import jax
 import jax.numpy as jnp
 
 
-from timemachine.lib import custom_ops
-# from timemachine.lib import potentials
+from timemachine.lib import custom_ops, potentials
+
 from timemachine.potentials import bonded, nonbonded
 
-from common import GradientTest
-from common import prepare_nb_system
+from common import GradientTest, prepare_nb_system
 
 class TestContext(unittest.TestCase):
 
@@ -27,9 +26,6 @@ class TestContext(unittest.TestCase):
         np.random.seed(4321)
 
         N = 8
-        B = 5
-        A = 0
-        T = 0
         D = 3
 
         x0 = np.random.rand(N,D).astype(dtype=np.float64)*2
@@ -216,6 +212,75 @@ class TestContext(unittest.TestCase):
         )
 
         test_du_dls, test_xs = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval)
+
+class TestObservable(unittest.TestCase):
+
+    def test_avg_potential_param_sizes_is_zero(self):
+        np.random.seed(814)
+
+        N = 8
+        D = 3
+
+        x0 = np.random.rand(N,D).astype(dtype=np.float64)*2
+
+        masses = np.random.rand(N)
+
+        v0 = np.random.rand(x0.shape[0], x0.shape[1])
+
+        num_steps = 3
+        lambda_schedule = np.random.rand(num_steps)
+        ca = np.random.rand()
+        cbs = -np.random.rand(len(masses))/1
+        ccs = np.zeros_like(cbs)
+
+        dt = 2e-3
+        lamb = np.random.rand()
+        box = np.eye(3)*1.5
+
+        intg = custom_ops.LangevinIntegrator(
+            dt,
+            ca,
+            cbs,
+            ccs,
+            814
+        )
+
+        # Construct a 'bad' centroid restraint
+        potential = potentials.CentroidRestraint(
+            np.random.randint(N, size=5, dtype=np.int32),
+            np.random.randint(N, size=5, dtype=np.int32),
+            10.0,
+            0.0
+        )
+        # Bind to empty params
+        bp = potential.bind(np.zeros(0)).bound_impl(precision=np.float64)
+
+        ctxt = custom_ops.Context(
+            x0,
+            v0,
+            box,
+            intg,
+            [bp]
+        )
+
+
+        du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, 1)
+        ctxt.add_observable(du_dp_obs)
+
+        test_avg_du_dp = du_dp_obs.avg_du_dp()
+        zero_du_dps = np.zeros_like(test_avg_du_dp)
+
+        for _ in range(num_steps):
+            # For all steps, should get back an empty du_dp avg/std
+            test_avg_du_dp = du_dp_obs.avg_du_dp()
+            test_std_du_dp = du_dp_obs.std_du_dp()
+
+            np.testing.assert_array_equal(test_avg_du_dp, zero_du_dps)
+            np.testing.assert_array_equal(test_std_du_dp, zero_du_dps)
+
+            ctxt.step(lamb)
+
+
 
 if __name__ == "__main__":
     unittest.main()

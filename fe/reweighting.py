@@ -62,7 +62,7 @@ class CachedImportanceSamples:
         log_numerators = vmap(logpdf_fxn)(self.xs)
         log_importance_weights = log_numerators - self.log_denominators
 
-        return - logsumexp(log_importance_weights)
+        return - (logsumexp(log_importance_weights) - np.log(len(log_importance_weights)))
 
     def __repr__(self):
         n_samples, sample_shape = len(self.xs), self.xs[0].shape

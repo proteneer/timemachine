@@ -60,7 +60,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/eigen)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 14)
-target_link_libraries(${LIBRARY_NAME} PRIVATE -lcurand -lcudart -lcudadevrt)
+target_link_libraries(${LIBRARY_NAME} PRIVATE -lcurand -lcuda -lcudart -lcudadevrt -lnvrtc)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
 install(TARGETS ${LIBRARY_NAME} DESTINATION "lib")

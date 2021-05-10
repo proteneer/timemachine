@@ -7,7 +7,7 @@ xmldoc = minidom.parse('ff/smirnoff_1.1.0.xml')
 # (ytz): lol i think i wrote this originally
 def _ast_eval(node):
     """
-    Performs an algebraic syntax tree evaluation of a unit.
+    Performs an abstract syntax tree evaluation of a unit.
     Parameters
     ----------
     node : An ast parsing tree node

@@ -6,12 +6,17 @@
 #include <complex>
 #include <cstdlib>
 #include <cub/cub.cuh>
+#include "jitify.hpp"
 
 #include "nonbonded.hpp"
 #include "hilbert.h"
 #include "gpu_utils.cuh"
 
 #include "k_nonbonded.cuh"
+
+#include <string>
+#include <fstream>
+#include <streambuf>
 
 namespace timemachine {
 
@@ -21,8 +26,13 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     const std::vector<double> &scales, // [E, 2]
     const std::vector<int> &lambda_plane_idxs, // [N]
     const std::vector<int> &lambda_offset_idxs, // [N]
-    double beta,
-    double cutoff
+    const double beta,
+    const double cutoff,
+    const std::string &kernel_src
+    // const std::string &transform_lambda_charge,
+    // const std::string &transform_lambda_sigma,
+    // const std::string &transform_lambda_epsilon,
+    // const std::string &transform_lambda_w
 ) :  N_(lambda_offset_idxs.size()),
     cutoff_(cutoff),
     E_(exclusion_idxs.size()/2),
@@ -55,7 +65,10 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
         &k_nonbonded_unified<RealType, 1, 1, 0, 1>,
         &k_nonbonded_unified<RealType, 1, 1, 1, 0>,
         &k_nonbonded_unified<RealType, 1, 1, 1, 1>
-    }){
+    }),
+    compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
+    compute_permute_interpolated_(kernel_cache_.program(kernel_src.c_str()).kernel("k_permute_interpolated").instantiate()),
+    compute_add_ull_to_real_interpolated_(kernel_cache_.program(kernel_src.c_str()).kernel("k_add_ull_to_real_interpolated").instantiate()) {
 
     if(lambda_offset_idxs.size() != N_) {
         throw std::runtime_error("lambda offset idxs need to have size N");
@@ -77,9 +90,12 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_perm_, N_*sizeof(*d_perm_)));
 
-    gpuErrchk(cudaMalloc(&d_sorted_lambda_plane_idxs_, N_*sizeof(*d_sorted_lambda_plane_idxs_)));
-    gpuErrchk(cudaMalloc(&d_sorted_lambda_offset_idxs_, N_*sizeof(*d_sorted_lambda_offset_idxs_)));
     gpuErrchk(cudaMalloc(&d_sorted_x_, N_*3*sizeof(*d_sorted_x_)));
+
+    gpuErrchk(cudaMalloc(&d_w_, N_*sizeof(*d_w_)));
+    gpuErrchk(cudaMalloc(&d_dw_dl_, N_*sizeof(*d_dw_dl_)));
+    gpuErrchk(cudaMalloc(&d_sorted_w_, N_*sizeof(*d_sorted_w_)));
+    gpuErrchk(cudaMalloc(&d_sorted_dw_dl_, N_*sizeof(*d_sorted_dw_dl_)));
 
     gpuErrchk(cudaMalloc(&d_unsorted_p_, N_*3*sizeof(*d_unsorted_p_))); // interpolated
     gpuErrchk(cudaMalloc(&d_sorted_p_, N_*3*sizeof(*d_sorted_p_))); // interpolated
@@ -141,9 +157,7 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     );
 
     gpuErrchk(cudaPeekAtLastError());
-
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
-
 
 };
 
@@ -159,21 +173,22 @@ Nonbonded<RealType, Interpolated>::~Nonbonded() {
 
     gpuErrchk(cudaFree(d_bin_to_idx_));
     gpuErrchk(cudaFree(d_sorted_x_));
+
+    gpuErrchk(cudaFree(d_w_));
+    gpuErrchk(cudaFree(d_dw_dl_));
+    gpuErrchk(cudaFree(d_sorted_w_));
+    gpuErrchk(cudaFree(d_sorted_dw_dl_));
     gpuErrchk(cudaFree(d_unsorted_p_));
     gpuErrchk(cudaFree(d_sorted_p_));
     gpuErrchk(cudaFree(d_unsorted_dp_dl_));
     gpuErrchk(cudaFree(d_sorted_dp_dl_));
     gpuErrchk(cudaFree(d_sorted_du_dx_));
     gpuErrchk(cudaFree(d_sorted_du_dp_));
-    gpuErrchk(cudaFree(d_sorted_lambda_plane_idxs_));
-    gpuErrchk(cudaFree(d_sorted_lambda_offset_idxs_));
 
     gpuErrchk(cudaFree(d_sort_keys_in_));
     gpuErrchk(cudaFree(d_sort_keys_out_));
     gpuErrchk(cudaFree(d_sort_vals_in_));
     gpuErrchk(cudaFree(d_sort_storage_));
-
-    // gpuErrchk(cudaFree(d_sum_storage_));
 
     gpuErrchk(cudaFreeHost(p_ixn_count_));
 
@@ -295,8 +310,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         d_rebuild_nblist_
     );
     gpuErrchk(cudaPeekAtLastError());
-    // k_check_rebuild_box<RealType><<<1, tpb, 0, stream>>>(N, d_box, d_nblist_box_, d_rebuild_nblist_);
-    // gpuErrchk(cudaPeekAtLastError());
 
     // we can optimize this away by doing the check on the GPU directly.
     gpuErrchk(cudaMemcpyAsync(p_rebuild_nblist_, d_rebuild_nblist_, 1*sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
@@ -315,10 +328,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
         // compute new coordinates, new lambda_idxs, new_plane_idxs
         k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
-        gpuErrchk(cudaPeekAtLastError());
-        k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_lambda_plane_idxs_, d_sorted_lambda_plane_idxs_);
-        gpuErrchk(cudaPeekAtLastError());
-        k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_lambda_offset_idxs_, d_sorted_lambda_offset_idxs_);
         gpuErrchk(cudaPeekAtLastError());
         nblist_.build_nblist_device(
             N,
@@ -340,7 +349,8 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     // do parameter interpolation here
     if(Interpolated) {
-        k_permute_interpolated<<<dimGrid, tpb, 0, stream>>>(
+        CUresult result = compute_permute_interpolated_.configure(dimGrid, 32, 0, stream)
+        .launch(
             lambda,
             N,
             d_perm_,
@@ -348,7 +358,9 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             d_sorted_p_,
             d_sorted_dp_dl_
         );
-        gpuErrchk(cudaPeekAtLastError());
+        if(result != 0) {
+            throw std::runtime_error("Driver call to k_permute_interpolated failed");
+        }
     } else {
         k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_p, d_sorted_p_);
         gpuErrchk(cudaPeekAtLastError());
@@ -364,13 +376,27 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 	    gpuErrchk(cudaMemsetAsync(d_sorted_du_dp_, 0, N*3*sizeof(*d_sorted_du_dp_), stream))
     }
 
-    // if(d_du_dl) {
-    //     this->reset_du_dl_buffer(stream);
-    // }
+    // update new w coordinates
+    // (tbd): cache lambda value for equilibrium calculations
+    CUresult result = compute_w_coords_instance_.configure(B, tpb, 0, stream)
+    .launch(
+        N,
+        lambda,
+        cutoff_,
+        d_lambda_plane_idxs_,
+        d_lambda_offset_idxs_,
+        d_w_,
+        d_dw_dl_
+    );
+    if(result != 0) {
+        throw std::runtime_error("Driver call to k_compute_w_coords");
+    }
 
-    // if(d_u) {
-    //     this->reset_u_buffer(stream);
-    // }
+    gpuErrchk(cudaPeekAtLastError());
+    k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_sorted_w_);
+    gpuErrchk(cudaPeekAtLastError());
+    k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_dw_dl_, d_sorted_dw_dl_);
+    gpuErrchk(cudaPeekAtLastError());
 
     // look up which kernel we need for this computation
     int kernel_idx = 0;
@@ -378,7 +404,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     kernel_idx |= d_du_dl ? 1 << 1 : 0;
     kernel_idx |= d_du_dx ? 1 << 2 : 0;
     kernel_idx |= d_u ? 1 << 3 : 0;
-    // kernel_idx |= 1 << 4; // force set alchemical = True for now before we start optimizations
 
     kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], 32, 0, stream>>>(
         N,
@@ -386,9 +411,9 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         d_sorted_p_,
         d_box,
         d_sorted_dp_dl_,
+        d_sorted_w_,
+        d_sorted_dw_dl_,
         lambda,
-        d_sorted_lambda_plane_idxs_,
-        d_sorted_lambda_offset_idxs_,
         beta_,
         cutoff_,
         nblist_.get_ixn_tiles(),
@@ -438,9 +463,9 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             Interpolated ? d_unsorted_p_ : d_p,
             d_box,
             Interpolated ? d_unsorted_dp_dl_ : d_sorted_dp_dl_,
+            d_w_,
+            d_dw_dl_,
             lambda,
-            d_lambda_plane_idxs_,
-            d_lambda_offset_idxs_,
             d_exclusion_idxs_,
             d_scales_,
             beta_,
@@ -455,12 +480,16 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     if(d_du_dp) {
         if(Interpolated) {
-            k_add_ull_to_real_interpolated<<<dimGrid, tpb, 0, stream>>>(
+            CUresult result = compute_add_ull_to_real_interpolated_.configure(dimGrid, tpb, 0, stream)
+            .launch(
                 lambda,
                 N,
                 d_du_dp_buffer_,
                 d_du_dp
             );
+            if(result != 0) {
+                throw std::runtime_error("Driver call to k_add_ull_to_real_interpolated failed");
+            }
         } else {
             k_add_ull_to_real<<<dimGrid, tpb, 0, stream>>>(
                 N,
