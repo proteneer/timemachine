@@ -447,7 +447,6 @@ class TestNonbonded(GradientTest):
                 nonbonded.nonbonded_v3,
                 charge_rescale_mask=charge_rescale_mask,
                 lj_rescale_mask=lj_rescale_mask,
-                scales=scales,
                 beta=beta,
                 cutoff=cutoff,
                 lambda_plane_idxs=lambda_plane_idxs,
