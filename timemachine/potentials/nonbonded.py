@@ -15,7 +15,6 @@ def nonbonded_v3(
     lamb,
     charge_rescale_mask,
     lj_rescale_mask,
-    scales,
     beta,
     cutoff,
     lambda_plane_idxs,
@@ -39,8 +38,6 @@ def nonbonded_v3(
         the Coulomb contribution of pair (i,j) will be multiplied by charge_rescale_mask[i,j]
     lj_rescale_mask : (N, N) np.array
         the Lennard-Jones contribution of pair (i,j) will be multiplied by lj_rescale_mask[i,j]
-    scales
-        unused # TODO: remove?
     beta : float
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
