@@ -1,12 +1,7 @@
-import numpy as onp
 import jax.numpy as np
-from jax.scipy.special import erf, erfc
+from jax.scipy.special import erfc
 from jax.ops import index_update, index
-
-from timemachine.constants import ONE_4PI_EPS0
-from timemachine.potentials.jax_utils import delta_r, distance, convert_to_4d
-
-
+from timemachine.potentials.jax_utils import distance, convert_to_4d
 
 
 def switch_fn(dij, cutoff):
@@ -25,6 +20,40 @@ def nonbonded_v3(
     cutoff,
     lambda_plane_idxs,
     lambda_offset_idxs):
+    """Lennard-Jones + Coulomb, with a few important twists:
+    * distances are computed in 4D, controlled by lambda, lambda_plane_idxs, lambda_offset_idxs
+    * each pairwise LJ and Coulomb term can be multiplied by an adjustable rescale_mask parameter
+    * Coulomb terms are multiplied by erfc(beta * distance)
+
+    Parameters
+    ----------
+    conf : (N, 3) or (N, 4) np.array
+        3D or 4D coordinates
+        if 3D, will be converted to 4D using
+            (x,y,z) -> (x,y,z,w)
+            where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)
+    params : (N, 3) np.array
+        columns contain [charges, sigmas, epsilons] per particle
+    box : Optional 3x3 np.array
+    lamb : float
+    charge_rescale_mask : (N, N) np.array
+        the Coulomb contribution of pair (i,j) will be multiplied by charge_rescale_mask[i,j]
+    lj_rescale_mask : (N, N) np.array
+        the Lennard-Jones contribution of pair (i,j) will be multiplied by lj_rescale_mask[i,j]
+    scales
+        unused
+    beta : float
+        the charge product q_ij will be multiplied by erfc(beta*d_ij)
+    cutoff : Optional float
+        a pair of particles (i,j) will be considered non-interacting if the distance d_ij
+        between their 4D coordinates exceeds cutoff
+    lambda_plane_idxs : Optional (N,) np.array
+    lambda_offset_idxs : Optional (N,) np.array
+
+    Returns
+    -------
+    energy : float
+    """
 
     N = conf.shape[0]
 
@@ -47,7 +76,6 @@ def nonbonded_v3(
     sig_i = np.expand_dims(sig, 0)
     sig_j = np.expand_dims(sig, 1)
     sig_ij = sig_i + sig_j
-    sig_ij_raw = sig_ij
 
     eps_i = np.expand_dims(eps, 0)
     eps_j = np.expand_dims(eps, 1)
@@ -56,7 +84,6 @@ def nonbonded_v3(
 
     dij = distance(conf, box)
 
-    N = conf.shape[0]
     keep_mask = np.ones((N,N)) - np.eye(N)
     keep_mask = np.where(eps_ij != 0, keep_mask, 0)
 
@@ -82,7 +109,7 @@ def nonbonded_v3(
     qij = np.multiply(qi, qj)
 
     # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
-    keep_mask = 1 - np.eye(conf.shape[0])
+    keep_mask = 1 - np.eye(N)
     qij = np.where(keep_mask, qij, 0)
     dij = np.where(keep_mask, dij, 0)
 
