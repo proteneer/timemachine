@@ -33,7 +33,7 @@ def nonbonded_v3(
             (x,y,z) -> (x,y,z,w)
             where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)
     params : (N, 3) np.array
-        columns contain [charges, sigmas, epsilons] per particle
+        columns [charges, sigmas, epsilons], one row per particle
     box : Optional 3x3 np.array
     lamb : float
     charge_rescale_mask : (N, N) np.array
