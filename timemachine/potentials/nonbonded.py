@@ -131,5 +131,5 @@ def nonbonded_v3(
 def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
     """check whether f(r) = erfc(beta * r) <= threshold at r = cutoff
     following https://github.com/proteneer/timemachine/pull/424#discussion_r629678467"""
-    if erfc(beta * cutoff) <= threshold:
+    if erfc(beta * cutoff) > threshold:
         print(UserWarning(f"erfc(beta * cutoff) = {erfc(beta * cutoff)} > threshold = {threshold}"))
