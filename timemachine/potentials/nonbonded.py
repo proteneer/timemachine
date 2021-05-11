@@ -52,9 +52,11 @@ def nonbonded_v3(
 
     References
     ----------
-    * Rodinger, 2005, J. Chem. Phys. "Absolute free energy calculations by thermodynamic integration in four spatial
+    * Rodinger, Howell, Pomès, 2005, J. Chem. Phys. "Absolute free energy calculations by thermodynamic integration in four spatial
         dimensions" https://aip.scitation.org/doi/abs/10.1063/1.1946750
-    * TODO: Add a reference for the reaction field treatment?
+    * Darden, York, Pedersen, 1993, J. Chem. Phys. "Particle mesh Ewald: An N log(N) method for Ewald sums in large
+    systems" https://aip.scitation.org/doi/abs/10.1063/1.470117
+        * Coulomb interactions are treated using the direct-space contribution from eq 2
     """
 
     N = conf.shape[0]
