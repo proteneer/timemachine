@@ -92,6 +92,7 @@ def nonbonded_v3(
     keep_mask = np.where(eps_ij != 0, keep_mask, 0)
 
     if cutoff is not None:
+        validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
         eps_ij = np.where(dij < cutoff, eps_ij, 0)
 
     # (ytz): this avoids a nan in the gradient in both jax and tensorflow
@@ -125,3 +126,10 @@ def nonbonded_v3(
     eij_total = (eij_lj*lj_rescale_mask + eij_charge*charge_rescale_mask)
 
     return np.sum(eij_total/2)
+
+
+def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
+    """check whether f(r) = erfc(beta * r) <= threshold at r = cutoff
+    following https://github.com/proteneer/timemachine/pull/424#discussion_r629678467"""
+    if erfc(beta * cutoff) <= threshold:
+        print(UserWarning(f"erfc(beta * cutoff) = {erfc(beta * cutoff)} > threshold = {threshold}"))
