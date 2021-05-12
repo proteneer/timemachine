@@ -13,49 +13,84 @@ def stringify_ubp(ubp):
 
 
 class UnboundPotentialEnergyModel:
-    def __init__(self, sys_params, unbound_potentials, precision=np.float64, box=np.eye(3) * 100):
-        self.sys_params = sys_params
-        self.unbound_potentials = unbound_potentials
-        self.ubp_cache = dict()
+    def __init__(self, topology, ff, unbound_potentials, precision=np.float64, box=np.eye(3) * 100):
+        self.topology = topology
+        self.ff = ff
         self.precision = precision
-        self._initialize()
+        self.unbound_potentials = unbound_potentials
+        self.unbound_impls = self._get_impls(unbound_potentials)
         self.box = box
 
-    def _initialize(self):
-        for component_params, unbound_pot in zip(self.sys_params, self.unbound_potentials):
-            key = stringify_ubp(unbound_pot)
-
-            if key not in self.ubp_cache:
-                impl = unbound_pot.unbound_impl(self.precision)
-                self.ubp_cache[key] = impl
+    def _get_impls(self, unbound_potentials):
+        return [ubp.unbound_impl(self.precision) for ubp in unbound_potentials]
 
     @property
     def all_impls(self):
         """List of impl, e.g. as required by context constructor"""
-        return list(self.ubp_cache.values())
+        return self.unbound_impls
 
-    def execute(self, x, lam, params_dict, box=None):
+    def handle_optional_box(self, box=None):
         if box is None:
-            box = self.box
+            return self.box
+        else:
+            return box
 
-        Us, dU_dxs, dU_dls = [], [], []
-        dU_dparamses = OrderedDict()
-        for key in self.ubp_cache:
-            dU_dx, dU_dparams, dU_dl, U = self.ubp_cache[key].execute(x, params_dict[key], box, lam)
+    def apply_params(self, ff_params):
+        raise(NotImplementedError)
 
-            Us.append(U)
-            dU_dxs.append(dU_dx)
-            dU_dparamses[key] = dU_dparams
-            dU_dls.append(dU_dl)
 
-        result = dict(
-            val=np.sum(np.array(Us)),
-            du_dx=np.sum(np.array(dU_dxs), 0),
-            du_dparams=dU_dparamses,  # don't reduce -- will be a dict of arrays of different shape
-            du_dl=np.sum(np.array(dU_dls))
-        )
+    def execute_U(self, x, lam, ff_params, box=None):
+        """TODO: reduce code duplication between execute_U, execute_dU_dx, execute_dU_dlam"""
+        box = self.handle_optional_box(box)
 
-        return result
+        applied_params = self.apply_params(ff_params)
+
+        # from inspecting source: arg4-arg7 bools mean compute_du_dx, compute_du_dp, compute_du_dl, compute_u
+        selection = (False, False, False, True)
+
+        U = 0.0
+        for (impl, params) in zip(self.unbound_impls, applied_params):
+            U += impl.execute_selective(x, params, box, lam, *selection)[3]
+        return U
+
+
+    def execute_dU_dx(self, x, lam, ff_params, box=None):
+        """TODO: reduce code duplication between execute_U, execute_dU_dx, execute_dU_dlam"""
+        box = self.handle_optional_box(box)
+
+        applied_params = self.apply_params(ff_params)
+
+        # from inspecting source: arg4-arg7 bools mean compute_du_dx, compute_du_dp, compute_du_dl, compute_u
+        selection = (True, False, False, False)
+
+        dU_dx = 0.0
+        for (impl, params) in zip(self.unbound_impls, applied_params):
+            dU_dx += impl.execute_selective(x, params, box, lam, *selection)[0]
+        return dU_dx
+
+    def execute_dU_dlam(self, x, lam, ff_params, box=None):
+        """TODO: reduce code duplication between execute_U, execute_dU_dx, execute_dU_dlam"""
+        box = self.handle_optional_box(box)
+
+        applied_params = self.apply_params(ff_params)
+
+        # from inspecting source: arg4-arg7 bools mean compute_du_dx, compute_du_dp, compute_du_dl, compute_u
+        selection = (False, False, True, False)
+
+        dU_dlam = 0.0
+        for (impl, params) in zip(self.unbound_impls, applied_params):
+            dU_dlam += impl.execute_selective(x, params, box, lam, *selection)[2]
+        return dU_dlam
+
+    def execute_dU_dparams(self, x, lam, ff_params, box=None):
+        box = self.handle_optional_box(box)
+        applied_params = self.apply_params(ff_params)
+
+        # TODO: Oh, I should re-organize this slightly: can naturally get d U_component / d ff_params
+        #   for each U_component in self.unbound_impls
+
+        raise(NotImplementedError)
+
 
 
 def construct_differentiable_interface(sys_params, unbound_potentials):
@@ -69,9 +104,6 @@ def construct_differentiable_interface(sys_params, unbound_potentials):
     """
 
     potential_energy_model = UnboundPotentialEnergyModel(sys_params, unbound_potentials)
-    params_dict = OrderedDict()
-    for ubp, params in zip(unbound_potentials, sys_params):
-        params_dict[stringify_ubp(ubp)] = params
 
     @custom_jvp
     def u_fxn(x, lam, params):
