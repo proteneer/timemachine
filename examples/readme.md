@@ -26,3 +26,6 @@
 #### Measuring performance
 
 `estimator_variance.py` measures run-to-run variability as a function of number of MD steps performed per run
+
+#### Interfacing with Jax
+`u_x_lam_params.py` abstracts `u(x, lam, params)` as a Jax-transformable function (supporting `grad(u, argnums=(0,1,2))(x, lam, params))`)
