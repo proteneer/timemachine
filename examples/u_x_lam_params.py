@@ -2,7 +2,7 @@ from fe.functional import construct_differentiable_interface
 from testsystems.relative import hif2a_ligand_pair
 from jax import grad, value_and_grad
 
-ff_params = hif2a_ligand_pair.ff
+ff_params = hif2a_ligand_pair.ff.get_ordered_params()
 final_potentials, final_params, combined_masses, combined_coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
 u_fxn = construct_differentiable_interface(sys_params=final_params, unbound_potentials=final_potentials)
 
