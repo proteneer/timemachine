@@ -1,5 +1,5 @@
 import jax
-from jax import grad, value_and_grad, config
+from jax import grad, value_and_grad, config, jacfwd, jacrev
 config.update("jax_enable_x64", True)
 
 import numpy as np
@@ -254,7 +254,8 @@ def test_relative_free_energy():
 
 def test_functional():
     """Assert that derivatives of U w.r.t. x, params, and lam accessible by grad(U) are of the correct shape.
-    Also assert that a differentiable loss function in terms of U can be minimized"""
+    Also assert that a differentiable loss function in terms of U can be minimized, and that
+    forward-mode and reverse-mode differentiation of loss agree."""
 
     ff_params = hif2a_ligand_pair.ff.get_ordered_params()
     unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
@@ -292,5 +293,12 @@ def test_functional():
             v, g = value_and_grad(flat_loss)(flat_nb_params)
             return float(v), np.array(g)
 
+        # forward-mode agrees with reverse-mode
+        fwd_result = jacfwd(flat_loss)(x0)
+        rev_result = jacrev(flat_loss)(x0)
+
+        np.testing.assert_array_almost_equal(fwd_result, rev_result)
+
+        # minimization successful
         result = minimize(fun, x0, jac=True, tol=0)
         assert flat_loss(result.x) < 1e-10
