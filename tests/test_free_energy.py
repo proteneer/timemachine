@@ -1,10 +1,10 @@
 import jax
+from jax import grad
 
 import numpy as np
 
 from rdkit import Chem
 
-from ff.handlers import openmm_deserializer
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
@@ -15,7 +15,10 @@ from parallel.client import CUDAPoolClient
 
 from md import builders, minimizer
 
-from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.lib import LangevinIntegrator
+
+from fe.functional import construct_differentiable_interface
+from testsystems.relative import hif2a_ligand_pair
 
 
 def test_absolute_free_energy():
@@ -245,3 +248,25 @@ def test_relative_free_energy():
         assert np.all(np.abs(g) < 10000)
 
     assert np.abs(dG) < 1000.0
+
+
+def test_functional():
+    """Assert that derivatives of U w.r.t. x, params, and lam accessible by grad(U) are of the correct shape"""
+
+    ff_params = hif2a_ligand_pair.ff.get_ordered_params()
+    unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
+    box = np.eye(3) * 100
+    lam = 0.5
+
+    for precision in [np.float32, np.float64]:
+        U = construct_differentiable_interface(unbound_potentials, precision)
+
+        # can call U
+        assert(U(coords, sys_params, box, lam))
+
+        # can call grad(U)
+        du_dx, du_dp, du_dl = grad(U, argnums=(0, 1, 3))(coords, sys_params, box, lam)
+        assert du_dx.shape == coords.shape
+        for (p, p_prime) in zip(sys_params, du_dp):
+            assert p.shape == p_prime.shape
+        assert du_dl.shape == ()
