@@ -306,6 +306,49 @@ double __device__ __forceinline__ fix_nvidia_fmad(double a, double b, double c, 
 
 // } // 0 or 1, how much we offset from the plane by )
 
+// Handles the computation related to the LJ terms.
+// This is pulled out into a function to ensure that the same bit values
+// are computed to ensure that that the fixed point values are exactly the same regardless
+// of where the values are computed.
+template <
+    typename RealType,
+    bool COMPUTE_U
+>
+void __device__ __forceinline__ compute_lj(
+    RealType lj_scale,
+    RealType eps_i,
+    RealType eps_j,
+    RealType sig_i,
+    RealType sig_j,
+    RealType inv_dij,
+    RealType inv_d2ij,
+    RealType &u,
+    RealType &delta_prefactor,
+    RealType &sig_grad,
+    RealType &eps_grad
+) {
+    RealType eps_ij = eps_i * eps_j;
+    RealType sig_ij = sig_i + sig_j;
+
+    RealType sig_inv_dij = sig_ij*inv_dij;
+    RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
+    RealType sig4_inv_d4ij = sig2_inv_d2ij*sig2_inv_d2ij;
+    RealType sig6_inv_d6ij = sig4_inv_d4ij*sig2_inv_d2ij;
+    RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
+    RealType sig5_inv_d6ij = sig_ij*sig4_inv_d4ij*inv_d2ij;
+
+    RealType lj_prefactor = lj_scale*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*48 - 24);
+    if(COMPUTE_U) {
+        u += lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+    }
+
+    delta_prefactor -= lj_prefactor;
+
+    sig_grad = lj_scale*24*eps_ij*sig5_inv_d6ij*(2*sig6_inv_d6ij-1);
+    eps_grad = lj_scale*4*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+
+}
+
 // ALCHEMICAL == false guarantees that the tile's atoms are such that
 // 1. src_param and dst_params are equal for every i in R and j in C
 // 2. w_i and w_j are identical for every (i,j) in (RxC)
@@ -480,33 +523,9 @@ void __device__ v_nonbonded_unified(
             RealType real_du_dl = 0;
 
             if(eps_i != 0 && eps_j != 0) {
-                RealType eps_ij = eps_i * eps_j;
-                RealType sig_ij = sig_i + sig_j;
-
-                RealType sig_inv_dij = sig_ij*inv_dij;
-                RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
-                RealType sig4_inv_d4ij = sig2_inv_d2ij*sig2_inv_d2ij;
-                RealType sig6_inv_d6ij = sig4_inv_d4ij*sig2_inv_d2ij;
-                RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
-                RealType sig5_inv_d6ij = sig_ij*sig4_inv_d4ij*inv_d2ij;
-
-                // optimize this a little more
-                // RealType sig5 = sig_ij*sig_ij*sig_ij*sig_ij*sig_ij;
-
-                // RealType sig_inv_dij = sig_ij*inv_dij;
-                // RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
-                // RealType sig6_inv_d6ij = sig2_inv_d2ij*sig2_inv_d2ij*sig2_inv_d2ij;
-                // RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
-
-                RealType lj_prefactor = eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*48 - 24);
-                if(COMPUTE_U) {
-                    u += 4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
-                }
-
-                delta_prefactor -= lj_prefactor;
-
-                RealType sig_grad = 24*eps_ij*sig5_inv_d6ij*(2*sig6_inv_d6ij-1);
-                RealType eps_grad = 4*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+                RealType sig_grad;
+                RealType eps_grad;
+                compute_lj<RealType, COMPUTE_U>(1.0, eps_i, eps_j, sig_i, sig_j, inv_dij, inv_d2ij, u, delta_prefactor, sig_grad, eps_grad);
 
                 // do chain rule inside loop
                 if(COMPUTE_DU_DP) {
@@ -517,13 +536,10 @@ void __device__ v_nonbonded_unified(
                 }
 
                 if(COMPUTE_DU_DL && ALCHEMICAL) {
-
                     real_du_dl += sig_grad*(dsig_dl_i + dsig_dl_j);
                     RealType term = eps_grad*fix_nvidia_fmad(eps_j, deps_dl_i, eps_i, deps_dl_j);
                     real_du_dl += term;
-
                 }
-
             }
 
             if(COMPUTE_DU_DX) {
@@ -882,42 +898,18 @@ void __global__ k_nonbonded_exclusions(
         RealType u = charge_scale*qij*inv_dij*ebd;
         // lennard jones force
         if(eps_i != 0 && eps_j != 0) {
-            // RealType eps_ij = eps_i * eps_j;
-            // RealType sig_ij = sig_i + sig_j;
-            // RealType sig5 = sig_ij*sig_ij*sig_ij*sig_ij*sig_ij;
-
-            // RealType sig_inv_dij = sig_ij*inv_dij;
-            // RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
-            // RealType sig6_inv_d6ij = sig2_inv_d2ij*sig2_inv_d2ij*sig2_inv_d2ij;
-            // RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
-
-            RealType eps_ij = eps_i * eps_j;
-            RealType sig_ij = sig_i + sig_j;
-
-            RealType sig_inv_dij = sig_ij*inv_dij;
-            RealType sig2_inv_d2ij = sig_inv_dij*sig_inv_dij;
-            RealType sig4_inv_d4ij = sig2_inv_d2ij*sig2_inv_d2ij;
-            RealType sig6_inv_d6ij = sig4_inv_d4ij*sig2_inv_d2ij;
-            RealType sig6_inv_d8ij = sig6_inv_d6ij*inv_d2ij;
-            RealType sig5_inv_d6ij = sig_ij*sig4_inv_d4ij*inv_d2ij;
-
-            RealType lj_prefactor = lj_scale*eps_ij*sig6_inv_d8ij*(sig6_inv_d6ij*48 - 24);
-            delta_prefactor -= lj_prefactor;
-            u += lj_scale*4*eps_ij*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
-
-            RealType sig_grad = lj_scale*24*eps_ij*sig5_inv_d6ij*(2*sig6_inv_d6ij-1);
-            RealType eps_grad = lj_scale*4*(sig6_inv_d6ij-1)*sig6_inv_d6ij;
+            RealType sig_grad;
+            RealType eps_grad;
+            compute_lj<RealType, true>(lj_scale, eps_i, eps_j, sig_i, sig_j, inv_dij, inv_d2ij, u, delta_prefactor, sig_grad, eps_grad);
 
             g_sigi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(-sig_grad);
             g_sigj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(-sig_grad);
-
             g_epsi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(-eps_grad*eps_j);
             g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(-eps_grad*eps_i);
 
             real_du_dl -= sig_grad*(dsig_dl_i + dsig_dl_j);
             RealType term = eps_grad*fix_nvidia_fmad(eps_j, deps_dl_i, eps_i, deps_dl_j);
             real_du_dl -= term;
-
         }
 
         gi_x -= FLOAT_TO_FIXED_NONBONDED(delta_prefactor*delta_x);
