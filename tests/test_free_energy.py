@@ -5,7 +5,7 @@ config.update("jax_enable_x64", True)
 import numpy as np
 
 from rdkit import Chem
-from scipy.optimize import minimize
+from scipy.optimize import minimize, check_grad
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -252,11 +252,81 @@ def test_relative_free_energy():
     assert np.abs(dG) < 1000.0
 
 
+def assert_shapes_consistent(U, coords, sys_params, box, lam):
+    """assert U, grad(U) have the right shapes"""
+    # can call U and get right shape
+    energy = U(coords, sys_params, box, lam)
+    assert energy.shape == ()
+
+    # can call grad(U) and get right shape
+    du_dx, du_dp, du_dl = grad(U, argnums=(0, 1, 3))(coords, sys_params, box, lam)
+    assert du_dx.shape == coords.shape
+    for (p, p_prime) in zip(sys_params, du_dp):
+        assert p.shape == p_prime.shape
+    assert du_dl.shape == ()
+
+
+def assert_fwd_rev_consistent(f, x):
+    """assert jacfwd(f)(x) == jacrev(f)(x)"""
+
+    # forward-mode agrees with reverse-mode
+    fwd_result = jacfwd(f)(x)
+    rev_result = jacrev(f)(x)
+
+    np.testing.assert_array_almost_equal(fwd_result, rev_result)
+
+
+def assert_no_second_derivative(f, x):
+    """assert an exception is raised if we try to access second derivatives of f"""
+
+    # shouldn't be able to take second derivatives
+    def div_f(x):
+        return np.sum(grad(f)(x))
+
+    problem = None
+    try:
+        # another grad should be a no-no
+        grad(div_f)(x)
+    except Exception as e:
+        problem = e
+    assert type(problem) == TypeError
+
+def assert_ff_optimizable(U, coords, sys_params, box, lam):
+    """define a differentiable loss function in terms of U, assert it can be minimized,
+    and return initial params, optimized params, and the loss function"""
+    
+    nb_params = sys_params[-1]
+    nb_params_shape = nb_params.shape
+
+    def loss(nb_params):
+        concat_params = sys_params[:-1] + [nb_params]
+        return (U(coords, concat_params, box, lam) - 666) ** 2
+
+    x_0 = nb_params.flatten()
+
+    def flat_loss(flat_nb_params):
+        return loss(flat_nb_params.reshape(nb_params_shape))
+
+    def fun(flat_nb_params):
+        v, g = value_and_grad(flat_loss)(flat_nb_params)
+        return float(v), np.array(g)
+
+    # minimization successful
+    result = minimize(fun, x_0, jac=True, tol=0)
+    x_opt = result.x
+    assert flat_loss(x_opt) < 1e-10
+
+    return x_0, x_opt, flat_loss
+
+
 def test_functional():
-    """Assert that derivatives of U w.r.t. x, params, and lam accessible by grad(U) are of the correct shape.
-    Also assert that a differentiable loss function in terms of U can be minimized, that
-    forward-mode and reverse-mode differentiation of loss agree, and that an exception is raised if we try
-    to do something that requires second derivatives."""
+    """Assert that
+    * derivatives of U w.r.t. x, params, and lam accessible by grad(U) are of the correct shape,
+    * a differentiable loss function in terms of U can be minimized,
+    * forward-mode and reverse-mode differentiation of loss agree,
+    * an exception is raised if we try to do something that requires second derivatives,
+    * grad(nonlinear_function_in_terms_of_U) agrees with finite-difference
+    """
 
     ff_params = hif2a_ligand_pair.ff.get_ordered_params()
     unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
@@ -266,51 +336,28 @@ def test_functional():
     for precision in [np.float32, np.float64]:
         U = construct_differentiable_interface(unbound_potentials, precision)
 
-        # can call U and get right shape
-        energy = U(coords, sys_params, box, lam)
-        assert energy.shape == ()
-
-        # can call grad(U) and get right shape
-        du_dx, du_dp, du_dl = grad(U, argnums=(0, 1, 3))(coords, sys_params, box, lam)
-        assert du_dx.shape == coords.shape
-        for (p, p_prime) in zip(sys_params, du_dp):
-            assert p.shape == p_prime.shape
-        assert du_dl.shape == ()
+        # U, grad(U) have the right shapes
+        assert_shapes_consistent(U, coords, sys_params, box, lam)
 
         # can scipy.optimize a differentiable Jax function that calls U
-        nb_params = sys_params[-1]
-        nb_params_shape = nb_params.shape
+        x_0, x_opt, flat_loss = assert_ff_optimizable(U, coords, sys_params, box, lam)
 
-        def loss(nb_params):
-            concat_params = sys_params[:-1] + [nb_params]
-            return (U(coords, concat_params, box, lam) - 666) ** 2
+        # jacfwd agrees with jacrev
+        assert_fwd_rev_consistent(flat_loss, x_0)
 
-        x0 = nb_params.flatten()
+        # calling grad twice shouldn't be allowed
+        assert_no_second_derivative(flat_loss, x_0)
 
-        def flat_loss(flat_nb_params):
-            return loss(flat_nb_params.reshape(nb_params_shape))
+        # check grad by comparison to forward finite-difference
+        if precision == np.float64:
+            def low_dim_f(perturb: float) -> float:
+                """low-dimensional input so that finite-difference isn't too expensive"""
 
-        def fun(flat_nb_params):
-            v, g = value_and_grad(flat_loss)(flat_nb_params)
-            return float(v), np.array(g)
+                # scaling perturbation down by 1e-4 so that f(1.0) isn't 10^30ish...
+                return flat_loss(x_opt + 1e-4 * perturb) ** 2
 
-        # forward-mode agrees with reverse-mode
-        fwd_result = jacfwd(flat_loss)(x0)
-        rev_result = jacrev(flat_loss)(x0)
+            perturbations = np.linspace(-1, 1, 10)
 
-        np.testing.assert_array_almost_equal(fwd_result, rev_result)
-
-        # minimization successful
-        result = minimize(fun, x0, jac=True, tol=0)
-        assert flat_loss(result.x) < 1e-10
-
-        # shouldn't be able to take second derivatives
-        def divergence_of_loss(x):
-            return np.sum(grad(flat_loss)(x))
-        problem = None
-        try:
-            # another grad should be a no-no
-            grad(divergence_of_loss)(x0)
-        except Exception as e:
-            problem = e
-        assert type(problem) == TypeError
+            for perturb in perturbations:
+                abs_err = check_grad(low_dim_f, grad(low_dim_f), perturb, epsilon=1e-4)
+                assert abs_err < 1e-3
