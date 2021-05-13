@@ -3,6 +3,7 @@ import numpy as onp
 import jax
 
 def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
+    """(x,y,z) -> (x,y,z,w) where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)"""
 
     # (ytz): this initializes the 4th dimension to a fixed plane adjust by an offset
     # followed by a scaling by cutoff.
