@@ -254,8 +254,9 @@ def test_relative_free_energy():
 
 def test_functional():
     """Assert that derivatives of U w.r.t. x, params, and lam accessible by grad(U) are of the correct shape.
-    Also assert that a differentiable loss function in terms of U can be minimized, and that
-    forward-mode and reverse-mode differentiation of loss agree."""
+    Also assert that a differentiable loss function in terms of U can be minimized, that
+    forward-mode and reverse-mode differentiation of loss agree, and that an exception is raised if we try
+    to do something that requires second derivatives."""
 
     ff_params = hif2a_ligand_pair.ff.get_ordered_params()
     unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
@@ -302,3 +303,14 @@ def test_functional():
         # minimization successful
         result = minimize(fun, x0, jac=True, tol=0)
         assert flat_loss(result.x) < 1e-10
+
+        # shouldn't be able to take second derivatives
+        def divergence_of_loss(x):
+            return np.sum(grad(flat_loss)(x))
+        problem = None
+        try:
+            # another grad should be a no-no
+            grad(divergence_of_loss)(x0)
+        except Exception as e:
+            problem = e
+        assert type(problem) == TypeError
