@@ -26,3 +26,6 @@
 #### Measuring performance
 
 `estimator_variance.py` measures run-to-run variability as a function of number of MD steps performed per run
+
+#### Interfacing with Jax
+`potential_energy.py` computes the potential energy of an "alchemical" system, as well as its derivatives w.r.t. coords, params, or lam
