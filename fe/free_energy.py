@@ -36,10 +36,6 @@ class BaseFreeEnergy():
 
     @staticmethod
     def _get_system_params_and_potentials(ff_params, topology):
-        """ff_params is a"""
-
-        assert len(ff_params) == 6
-
 
         ff_tuples = [
             [topology.parameterize_harmonic_bond, (ff_params[0],)],
