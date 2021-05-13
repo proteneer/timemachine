@@ -1,9 +1,11 @@
 import jax
-from jax import grad
+from jax import grad, value_and_grad, config
+config.update("jax_enable_x64", True)
 
 import numpy as np
 
 from rdkit import Chem
+from scipy.optimize import minimize
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -251,7 +253,8 @@ def test_relative_free_energy():
 
 
 def test_functional():
-    """Assert that derivatives of U w.r.t. x, params, and lam accessible by grad(U) are of the correct shape"""
+    """Assert that derivatives of U w.r.t. x, params, and lam accessible by grad(U) are of the correct shape.
+    Also assert that a differentiable loss function in terms of U can be minimized"""
 
     ff_params = hif2a_ligand_pair.ff.get_ordered_params()
     unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
@@ -261,13 +264,33 @@ def test_functional():
     for precision in [np.float32, np.float64]:
         U = construct_differentiable_interface(unbound_potentials, precision)
 
-        # can call U
+        # can call U and get right shape
         energy = U(coords, sys_params, box, lam)
         assert energy.shape == ()
 
-        # can call grad(U)
+        # can call grad(U) and get right shape
         du_dx, du_dp, du_dl = grad(U, argnums=(0, 1, 3))(coords, sys_params, box, lam)
         assert du_dx.shape == coords.shape
         for (p, p_prime) in zip(sys_params, du_dp):
             assert p.shape == p_prime.shape
         assert du_dl.shape == ()
+
+        # can scipy.optimize a differentiable Jax function that calls U
+        nb_params = sys_params[-1]
+        nb_params_shape = nb_params.shape
+
+        def loss(nb_params):
+            concat_params = sys_params[:-1] + [nb_params]
+            return (U(coords, concat_params, box, lam) - 666) ** 2
+
+        x0 = nb_params.flatten()
+
+        def flat_loss(flat_nb_params):
+            return loss(flat_nb_params.reshape(nb_params_shape))
+
+        def fun(flat_nb_params):
+            v, g = value_and_grad(flat_loss)(flat_nb_params)
+            return float(v), np.array(g)
+
+        result = minimize(fun, x0, jac=True, tol=0)
+        assert flat_loss(result.x) < 1e-10
