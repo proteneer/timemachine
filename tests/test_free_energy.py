@@ -262,7 +262,8 @@ def test_functional():
         U = construct_differentiable_interface(unbound_potentials, precision)
 
         # can call U
-        assert(U(coords, sys_params, box, lam))
+        energy = U(coords, sys_params, box, lam)
+        assert energy.shape == ()
 
         # can call grad(U)
         du_dx, du_dp, du_dl = grad(U, argnums=(0, 1, 3))(coords, sys_params, box, lam)
