@@ -7,7 +7,13 @@ config.update("jax_enable_x64", True)
 from jax import vmap, numpy as np
 from jax.scipy.special import logsumexp
 
-from typing import List
+from typing import List, Callable
+from functools import partial
+
+# types
+Trajectory = Coords = Params = np.array
+Lambda = float
+ReducedPotentialFxn = LogPdfFxn = Callable[[Coords, Params, Lambda], float]
 
 
 def normalize(log_weights):
@@ -29,8 +35,19 @@ def effective_sample_size(log_weights: np.array) -> float:
     return 1 / np.sum(weights ** 2)  # between 1 and len(weights)
 
 
+def vmap_if_possible(f):
+    def vmapped_if_possible(x):
+        """if vmap(f)(x) errors for any reason, fall back to python loop"""
+        try:
+            return vmap(f)(x)
+        except:
+            return np.array([f(x_i) for x_i in x])
+
+    return vmapped_if_possible
+
+
 class CachedImportanceSamples:
-    def __init__(self, xs, log_denominators):
+    def __init__(self, xs: Trajectory, log_denominators: np.array):
         """Samples from a reference distribution, for use in importance sampling.
         Assume xs[i] ~ e^{log_denominators[i]}."""
         self.xs = xs
@@ -38,11 +55,11 @@ class CachedImportanceSamples:
 
     def compute_log_importance_weights(self, logpdf_fxn):
         """logpdf_fxn(xs[i]) - log_denominators[i]"""
-        log_numerators = vmap(logpdf_fxn)(self.xs)
+        log_numerators = vmap_if_possible(logpdf_fxn)(self.xs)
         log_importance_weights = log_numerators - self.log_denominators
         return log_importance_weights
 
-    def estimate_expectation(self, logpdf_fxn, observable_fxn):
+    def estimate_expectation(self, logpdf_fxn: LogPdfFxn, observable_fxn: Callable[[Coords], float]):
         """Estimate <observable_fxn(x)>, x ~ logpdf_fxn by importance weighting from reference distribution.
 
         Example usage
@@ -51,7 +68,7 @@ class CachedImportanceSamples:
         * Estimating <du/dl>, and gradient w.r.t. both logpdf_fxn params and observable_fxn params
         """
         weights = normalize(self.compute_log_importance_weights(logpdf_fxn))
-        observable_values = vmap(observable_fxn)(self.xs)
+        observable_values = vmap_if_possible(observable_fxn)(self.xs)
 
         return np.sum(weights * observable_values, 0)
 
@@ -59,7 +76,7 @@ class CachedImportanceSamples:
         """Estimate - log(Z/Z_ref) where Z is the normalizing constant of logpdf_fxn,
         Z_ref is the normalizing constant of reference distribution"""
 
-        log_numerators = vmap(logpdf_fxn)(self.xs)
+        log_numerators = vmap_if_possible(logpdf_fxn)(self.xs)
         log_importance_weights = log_numerators - self.log_denominators
 
         return - (logsumexp(log_importance_weights) - np.log(len(log_importance_weights)))
@@ -71,7 +88,7 @@ class CachedImportanceSamples:
 
 
 class ReweightingLayer:
-    def __init__(self, x_k: List[np.array], u_fxn: callable, ref_params: np.array, lambdas: np.array):
+    def __init__(self, x_k: List[np.array], u_fxn: ReducedPotentialFxn, ref_params: np.array, lambdas: np.array):
         """Assumes samples x_k[k] are drawn from e^{-u_fxn(x, lambdas[k], ref_params)}.
 
         The constructor will
@@ -131,10 +148,9 @@ class ReweightingLayer:
         assert (min(self.N_k) > 0)
 
         # compute u_fxn(x, lam, ref_params) for x in xs, lam in lambdas
-        self.vmapped_u_fxn = vmap(self.u_fxn, in_axes=(0, None, None))
         u_kn = self._compute_u_kn(self.xs)
 
-        # double-check vmapped_u_fxn didn't expand dims along the way
+        # double-check vmapped u_fxn didn't expand dims along the way
         assert (u_kn.shape == (len(lambdas), sum(self.N_k)))
 
         # compute free energies among all K lambda windows at fixed ref_params
@@ -150,7 +166,8 @@ class ReweightingLayer:
     def _compute_u_kn(self, xs: np.array) -> np.array:
         u_kn = []
         for lam in self.lambdas:
-            u_kn.append(self.vmapped_u_fxn(xs, lam, self.ref_params))
+            u_lam = partial(self.u_fxn, lam=lam, params=self.ref_params)
+            u_kn.append(vmap_if_possible(u_lam)(xs))
         return np.array(u_kn)
 
     def _reweighting_inds_from_cutoff(self, endpoint_cutoff=0.5):
