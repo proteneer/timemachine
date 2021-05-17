@@ -76,6 +76,11 @@ class NPTEnsemble:
         self.temperature = temperature
         self.pressure = pressure
 
+        # interpret "1.0 atm" as "1.0 atm / mole"
+        #    similar to https://github.com/openmm/openmm/blob/d8ef57fed6554ec95684e53768188e1f666405c9/openmmapi/src/MonteCarloBarostatImpl.cpp#L88
+        #    where a barostat pressure of X bar is multiplied by (AVOGADRO*1e-25) to yield pressure = X bar / mole
+        self._pressure_over_mole = pressure.value_in_unit(unit.atmosphere) * (unit.atmosphere / unit.mole)
+
     def reduce(self, U: non_unitted, volume: non_unitted):
         """u_npt = beta * (U + pressure * volume)
 
@@ -90,10 +95,7 @@ class NPTEnsemble:
         U_unitted = U * ENERGY_UNIT
         V_unitted = volume * DISTANCE_UNIT**3
 
-        beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
-        reduced_potential = (U_unitted / unit.AVOGADRO_CONSTANT_NA) + (self.pressure * V_unitted)
-        return beta * reduced_potential
-    
+        return (U_unitted + self._pressure_over_mole * V_unitted) / (kB * self.temperature)
 
     def reduced_potential_and_gradient(self, x, box, lam):
         U, dU_dx = self.potential_energy.energy_and_gradient(x, box, lam)
