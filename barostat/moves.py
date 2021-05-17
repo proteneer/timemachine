@@ -139,6 +139,7 @@ class MonteCarloBarostat(MonteCarloMove):
         self.centroid_rescaler = CentroidRescaler(group_indices)
 
     def propose(self, x: CoordsAndBox) -> Tuple[CoordsAndBox, float]:
+        print('initial')
         u_0 = self.reduced_potential_fxn(x.coords, x.box)
         volume = compute_box_volume(x.box)
 
@@ -156,10 +157,12 @@ class MonteCarloBarostat(MonteCarloMove):
 
         proposed_state = CoordsAndBox(proposed_coords, proposed_box)
 
+        print('proposed')
         u_proposed = self.reduced_potential_fxn(proposed_coords, proposed_box)
         delta_u = u_proposed - u_0
 
         jacobian_contribution = self.N * jnp.log(proposed_volume / volume)
+        print('jacobian contribution', jacobian_contribution)
 
         log_acceptance_probability = jnp.minimum(0, - (delta_u - jacobian_contribution))
 
