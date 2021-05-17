@@ -38,7 +38,12 @@ class PotentialEnergyModel:
             Us.append(U)
             dU_dxs.append(dU_dx)
 
-        return np.sum(Us), np.sum(dU_dxs, 0)
+        U_ = np.sum(Us)
+        F_ = np.sum(dU_dxs, 0)
+        if np.abs(U) > 1e6:
+            return + np.inf, np.nan * F_
+        else:
+            return U_, F_
 
 
 class NVTEnsemble:
