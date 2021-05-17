@@ -106,7 +106,7 @@ if __name__ == '__main__':
         traj = [CoordsAndBox(coords, box)]
         volume_traj = [compute_box_volume(traj[0].box)]
 
-        trange = tqdm(range(1000))
+        trange = tqdm(range(n_moves))
 
         from time import time
 
