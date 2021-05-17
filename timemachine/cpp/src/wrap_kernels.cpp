@@ -906,9 +906,11 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
 
         std::string dir_path = dirname(__FILE__);
-        std::string src_path = dir_path + "/kernels/k_lambda_transformer_jit.cuh";
+        std::string kernel_dir = dir_path + "/kernels";
+        std::string src_path = kernel_dir + "/k_lambda_transformer_jit.cuh";
         std::ifstream t(src_path);
         std::string source_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
+        source_str = std::regex_replace(source_str, std::regex("KERNEL_DIR"), kernel_dir);
         source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_CHARGE"), transform_lambda_charge);
         source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_SIGMA"), transform_lambda_sigma);
         source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_EPSILON"), transform_lambda_epsilon);

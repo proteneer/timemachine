@@ -1,7 +1,7 @@
 jit_program
 
-#include "timemachine/cpp/src/kernels/surreal.cuh"
-#include "timemachine/cpp/src/kernels/k_fixed_point.cuh"
+#include "KERNEL_DIR/surreal.cuh"
+#include "KERNEL_DIR/k_fixed_point.cuh"
 
 #define PI 3.141592653589793115997963468544185161
 
