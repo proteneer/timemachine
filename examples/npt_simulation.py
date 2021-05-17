@@ -74,9 +74,12 @@ if __name__ == '__main__':
         v_unscaled = np.random.randn(len(masses), 3)
 
         # intended to be consistent with timemachine.integrator:langevin_coefficients
-        sigma = np.sqrt(BOLTZ * ensemble.temperature.value_in_unit(unit.kelvin)) * np.sqrt(1 / masses)
+        temperature = ensemble.temperature.value_in_unit(unit.kelvin)
+        sigma = np.sqrt(BOLTZ * temperature) * np.sqrt(1 / masses)
 
-        return (sigma * v_unscaled.T).T
+        return v_unscaled * np.expand_dims(sigma, axis=1)
+
+        #return (sigma * v_unscaled.T).T
 
 
     def run_thermostatted_md(x: CoordsAndBox, n_steps=5) -> CoordsAndBox:
