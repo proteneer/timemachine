@@ -76,11 +76,6 @@ class NPTEnsemble:
         self.temperature = temperature
         self.pressure = pressure
 
-        # interpret "1.0 atm" as "1.0 atm / mole"
-        #    similar to https://github.com/openmm/openmm/blob/d8ef57fed6554ec95684e53768188e1f666405c9/openmmapi/src/MonteCarloBarostatImpl.cpp#L88
-        #    where a barostat pressure of X bar is multiplied by (AVOGADRO*1e-25) to yield pressure = X bar / mole
-        self._pressure_over_mole = pressure.value_in_unit(unit.atmosphere) * (unit.atmosphere / unit.mole)
-
     def reduce(self, U: non_unitted, volume: non_unitted):
         """u_npt = beta * (U + pressure * volume)
 
@@ -92,15 +87,13 @@ class NPTEnsemble:
         OpenMMTools thermodynamic states
             https://github.com/choderalab/openmmtools/blob/321b998fc5977a1f8893e4ad5700b1b3aef6101c/openmmtools/states.py#L1904-L1912
         """
-        U_unitted = U * ENERGY_UNIT
-        V_unitted = volume * DISTANCE_UNIT**3
+        potential_energy = U * ENERGY_UNIT
+        volume = volume * DISTANCE_UNIT**3
 
-        beta = 1.0 / (kB * self.temperature)
+        beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
 
-        reduced_u = beta * U_unitted
-        reduced_pv = beta * (self._pressure_over_mole * V_unitted)
-        #reduced_pv = beta * (self._pressure_over_mole * V_unitted / 1e-25)
-
+        reduced_u = beta * potential_energy / unit.AVOGADRO_CONSTANT_NA
+        reduced_pv = beta * self.pressure * volume
 
         if type(U) == np.float64:
             print('\treduced_u: ', reduced_u)
