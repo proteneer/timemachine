@@ -2,12 +2,13 @@
 """
 import os
 import time
+import tempfile
 
 import numpy as np
 
 from rdkit import Chem
 
-from md import builders
+from md import builders, minimizer
 from fe import pdb_writer, free_energy
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -86,15 +87,23 @@ def dock_and_equilibrate(
         solvated_topology,
     ) = builders.build_protein_system(host_pdbfile)
 
-    # sometimes water boxes are sad. Should be minimized first; this is a workaround
-    host_box += np.eye(3) * 0.1
-
-    solvated_host_pdb = os.path.join(outdir, "solvated_host.pdb")
+    _, solvated_host_pdb = tempfile.mkstemp(suffix='.pdb', text=True)
     writer = pdb_writer.PDBWriter([solvated_topology], solvated_host_pdb)
     writer.write_frame(solvated_host_coords)
     writer.close()
     solvated_host_mol = Chem.MolFromPDBFile(solvated_host_pdb, removeHs=False)
     os.remove(solvated_host_pdb)
+
+    guest_ff_handlers = deserialize_handlers(
+        open(
+            os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "..",
+                "ff/params/smirnoff_1_1_0_ccc.py",
+            )
+        ).read()
+    )
+    ff = Forcefield(guest_ff_handlers)
 
     # Run the procedure
     print("Getting guests...")
@@ -105,34 +114,24 @@ def dock_and_equilibrate(
         guest_conformer = guest_mol.GetConformer(0)
         orig_guest_coords = np.array(guest_conformer.GetPositions(), dtype=np.float64)
         orig_guest_coords = orig_guest_coords / 10  # convert to md_units
-        guest_ff_handlers = deserialize_handlers(
-            open(
-                os.path.join(
-                    os.path.dirname(os.path.abspath(__file__)),
-                    "..",
-                    "ff/params/smirnoff_1_1_0_ccc.py",
-                )
-            ).read()
+
+        minimized_coords = minimizer.minimize_host_4d(
+            [guest_mol], solvated_host_system, solvated_host_coords, ff, host_box
         )
-        ff = Forcefield(guest_ff_handlers)
 
         afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
 
         ups, sys_params, combined_masses, _ = afe.prepare_host_edge(
-            ff.get_ordered_params(), solvated_host_system, solvated_host_coords
+            ff.get_ordered_params(), solvated_host_system, minimized_coords
         )
 
         combined_bps = []
         for up, sp in zip(ups, sys_params):
             combined_bps.append(up.bind(sp))
 
-        x0 = np.concatenate([solvated_host_coords, orig_guest_coords])
+        x0 = np.concatenate([minimized_coords, orig_guest_coords])
         v0 = np.zeros_like(x0)
-        print(
-            f"SYSTEM",
-            f"guest_name: {guest_name}",
-            f"num_atoms: {len(x0)}",
-        )
+        print(f"SYSTEM", f"guest_name: {guest_name}", f"num_atoms: {len(x0)}")
 
         for atom_num in constant_atoms:
             combined_masses[atom_num - 1] += 50000
@@ -154,7 +153,9 @@ def dock_and_equilibrate(
         # collect a du_dl calculation once every other step
         subsample_interval = 1
 
-        full_du_dls, _ = ctxt.multiple_steps(insertion_lambda_schedule, subsample_interval)
+        full_du_dls, _ = ctxt.multiple_steps(
+            insertion_lambda_schedule, subsample_interval
+        )
         step = len(insertion_lambda_schedule) - 1
         lamb = insertion_lambda_schedule[-1]
         ctxt.step(lamb)
@@ -181,13 +182,13 @@ def dock_and_equilibrate(
                 guest_name,
                 outdir,
                 str(step).zfill(len(str(insertion_steps))),
-                f"ins",
+                "ins",
             )
 
         if report.too_much_force(ctxt, lamb, host_box, combined_bps, u_impls):
             print("Not calculating work (too much force)")
             calc_work = False
-            break
+            continue
 
         # Note: this condition only applies for ABFE, not RBFE
         if abs(full_du_dls[0]) > 0.001 or abs(full_du_dls[-1]) > 0.001:
@@ -195,7 +196,9 @@ def dock_and_equilibrate(
             calc_work = False
 
         if calc_work:
-            work = np.trapz(full_du_dls, insertion_lambda_schedule[::subsample_interval])
+            work = np.trapz(
+                full_du_dls, insertion_lambda_schedule[::subsample_interval]
+            )
             print(f"guest_name: {guest_name}\tinsertion_work: {work:.2f}")
 
         # equilibrate
@@ -213,18 +216,19 @@ def dock_and_equilibrate(
                     eq_steps,
                     "EQUILIBRATION",
                 )
-                host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
-                guest_coords = ctxt.get_x_t()[len(solvated_host_coords) :] * 10
-                report.write_frame(
-                    host_coords,
-                    solvated_host_mol,
-                    guest_coords,
-                    guest_mol,
-                    guest_name,
-                    outdir,
-                    str(step).zfill(len(str(eq_steps))),
-                    f"eq",
-                )
+                if (not fewer_outfiles) or (step == eq_steps - 1):
+                    host_coords = ctxt.get_x_t()[: len(solvated_host_coords)] * 10
+                    guest_coords = ctxt.get_x_t()[len(solvated_host_coords) :] * 10
+                    report.write_frame(
+                        host_coords,
+                        solvated_host_mol,
+                        guest_coords,
+                        guest_mol,
+                        guest_name,
+                        outdir,
+                        str(step).zfill(len(str(eq_steps))),
+                        "eq",
+                    )
             if step in (0, int(eq_steps / 2), eq_steps - 1):
                 if report.too_much_force(ctxt, 0.00, host_box, combined_bps, u_impls):
                     break
@@ -240,21 +244,16 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        "-s",
-        "--guests_sdfile",
-        default="tests/data/ligands_40__first-two-ligs.sdf",
-        help="guests to pose",
-    )
-    parser.add_argument(
         "-p",
         "--host_pdbfile",
         default="tests/data/hif2a_nowater_min.pdb",
         help="host to dock into",
     )
     parser.add_argument(
-        "-c",
-        "--constant_atoms_file",
-        help="file containing comma-separated atom numbers to hold ~fixed",
+        "-s",
+        "--guests_sdfile",
+        default="tests/data/ligands_40__first-two-ligs.sdf",
+        help="guests to pose",
     )
     parser.add_argument(
         "--max_lambda",
@@ -266,22 +265,27 @@ def main():
         ),
     )
     parser.add_argument(
-        "--eq_steps",
-        type=int,
-        default=15001,
-        help="equilibration length (1 step = 1.5 femtoseconds)",
-    )
-    parser.add_argument(
         "--insertion_steps",
         type=int,
         default=501,
         help="how many steps to take while phasing in each guest",
     )
     parser.add_argument(
+        "--eq_steps",
+        type=int,
+        default=15001,
+        help="equilibration length (1 step = 1.5 femtoseconds)",
+    )
+    parser.add_argument(
         "-o", "--outdir", default="dock_equil_out", help="where to write output"
     )
     parser.add_argument(
         "--fewer_outfiles", action="store_true", help="write fewer output pdb/sdf files"
+    )
+    parser.add_argument(
+        "-c",
+        "--constant_atoms_file",
+        help="file containing comma-separated atom numbers to hold ~fixed (1-indexed)",
     )
     args = parser.parse_args()
 

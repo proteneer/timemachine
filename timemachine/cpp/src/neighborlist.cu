@@ -87,7 +87,7 @@ void Neighborlist<RealType>::compute_block_bounds_host(
         d_box,
         static_cast<cudaStream_t>(0)
     );
-
+    // Does this need to peek at the last error?
     cudaDeviceSynchronize();
 
     gpuErrchk(cudaMemcpy(h_bb_ctrs, d_block_bounds_ctr_, this->B()*3*sizeof(*d_block_bounds_ctr_), cudaMemcpyDeviceToHost));
@@ -116,9 +116,7 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_host(
     );
 
     cudaDeviceSynchronize();
-
     const int B = this->B(); //(N+32-1)/32;
-    const int Y = this->Y(); //(B+32-1)/32;
 
     unsigned long long MAX_TILE_BUFFER = B*B;
     unsigned long long MAX_ATOM_BUFFER = B*B*32;
@@ -151,7 +149,7 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_host(
 
 template<typename RealType>
 void Neighborlist<RealType>::build_nblist_device(
-    int N,
+    const int N,
     const double *d_coords,
     const double *d_box,
     const double cutoff,
@@ -208,22 +206,19 @@ void Neighborlist<RealType>::build_nblist_device(
 
 template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_device(
-	int N,
-	int D,
-	const double *d_coords,
-    const double *d_box,
+	const int N, // Number of atoms
+	const int D, // Box dimensions
+	const double *d_coords, // [N*3]
+        const double *d_box, // [D*3]
 	cudaStream_t stream) {
 
     assert(N == N_);
     assert(D == 3);
 
-    int tpb = 32;
-    int B = (N+tpb-1)/tpb; // total number of blocks we need to process
+    const int tpb = 32;
+    const int B = (N+tpb-1)/tpb; // total number of blocks we need to process
 
-    gpuErrchk(cudaMemsetAsync(d_block_bounds_ctr_, 0, B*D*sizeof(*d_block_bounds_ctr_), stream));
-    gpuErrchk(cudaMemsetAsync(d_block_bounds_ext_, 0, B*D*sizeof(*d_block_bounds_ext_), stream));
-
-    k_find_block_bounds<<<B, tpb, 0, stream>>>(
+    k_find_block_bounds<RealType><<<B, tpb, 0, stream>>>(
         N,
         D,
         B,

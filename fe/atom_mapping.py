@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
@@ -26,10 +28,16 @@ class CompareDist(rdFMCS.MCSAtomCompare):
         return bool(np.linalg.norm(x_i - x_j) <= self.threshold)  # must convert from np.bool_ to Python bool!
 
 
-def mcs_map(a, b, threshold: float = 0.5):
+def mcs_map(a, b, threshold: float = 0.5, timeout: int = 5, smarts: Optional[str] = None):
     """Find the MCS map of going from A to B"""
     params = rdFMCS.MCSParameters()
+    params.BondCompareParameters.CompleteRingsOnly = 1
+    params.BondCompareParameters.RingMatchesRingOnly = 1
+    params.AtomCompareParameters.matchValences = 1
     params.AtomTyper = CompareDist(threshold=threshold)
+    params.Timeout = timeout
+    if smarts is not None:
+        params.InitialSeed = smarts
     return rdFMCS.FindMCS([a, b], params)
 
 
@@ -51,8 +59,6 @@ def transformation_size(n_A, n_B, n_MCS):
         * min(n_A, n_B) - n_MCS
         * max(n_A, n_B) - n_MCS
         * 1.0 - (n_MCS / min(n_A, n_B))
-
-    TODO: move this into a utility module or the free energy module
     """
     return (n_A + n_B) - 2 * n_MCS
 
@@ -76,7 +82,7 @@ def compute_all_pairs_mcs(mols, threshold: float = 0.5):
 
     for i in range(len(mols)):
         for j in range(i, len(mols)):
-            mapped = mcs_map(mols[i], mols[j])
+            mapped = mcs_map(mols[i], mols[j], threshold=threshold)
             mcs_s[i, j] = mapped
             mcs_s[j, i] = mapped
     return mcs_s
@@ -86,11 +92,13 @@ def compute_transformation_size_matrix(mols, mcs_s):
     N = len(mols)
     transformation_sizes = np.zeros((N, N))
     for i in range(N):
-        for j in range(N):
+        for j in range(i, N):
             n_i = mols[i].GetNumAtoms()
             n_j = mols[j].GetNumAtoms()
             n_mcs = mcs_s[i, j].numAtoms
-            transformation_sizes[i, j] = transformation_size(n_i, n_j, n_mcs)
+            transforms = transformation_size(n_i, n_j, n_mcs)
+            transformation_sizes[i, j] = transforms
+            transformation_sizes[j, i] = transforms
     return transformation_sizes
 
 
@@ -129,8 +137,6 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
 
         In some cases, this means that pairs of atoms that do not satisfy the
         atom comparison function can be mapped together.
-
-    TODO: move this into a utility module or the free energy module
     """
 
     # fetch conformer, assumed aligned
@@ -150,7 +156,7 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
 
     # find (i,j) = argmin cost
     min_i, min_j = np.unravel_index(np.argmin(cost, axis=None), cost.shape)
-    print(f'argmin of {n_a} x {n_b} cost matrix: {(min_i, min_j)} ')
+    # print(f'argmin of {n_a} x {n_b} cost matrix: {(min_i, min_j)} ')
     # TODO: maybe also print the difference between min(cost) and cost[0,0],
     #   to see how big of a difference it made to pick the default
 

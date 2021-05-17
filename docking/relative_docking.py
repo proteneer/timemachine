@@ -8,34 +8,36 @@ import os
 import time
 import numpy as np
 
+from rdkit import Chem
+from rdkit.Chem import rdFMCS
+
 from md import builders, minimizer
 from fe import free_energy, topology
+from fe.atom_mapping import (
+    get_core_by_geometry,
+    get_core_by_mcs,
+    get_core_by_smarts,
+    mcs_map,
+)
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import custom_ops, LangevinIntegrator
 
-from testsystems.relative import hif2a_ligand_pair
-
 from docking import report
+
 
 MAX_LAMBDA = 1.0
 MIN_LAMBDA = 0.0
-TRANSITION_STEPS = 501
-NUM_SWITCHES = 10
 
 
 def do_relative_docking(
-    host_pdbfile,
-    mol_a,
-    mol_b,
-    core,
+    host_pdbfile, mol_a, mol_b, core, num_switches, transition_steps
 ):
     """Runs non-equilibrium switching jobs:
     1. Solvates a protein, minimizes w.r.t guest_A, equilibrates & spins off switching jobs
        (deleting guest_A while inserting guest_B) every 1000th step, calculates work.
     2. Does the same thing in solvent instead of protein
-    3. Repeats 1 & 2 for the opposite direction (guest_B --> guest_A)
-    Does 10 switching jobs per leg.
+    Does num_switches switching jobs per leg.
 
     Parameters
     ----------
@@ -44,6 +46,8 @@ def do_relative_docking(
     mol_a (rdkit mol): the starting ligand to swap from
     mol_b (rdkit mol): the ending ligand to swap to
     core (np.array[[int, int], [int, int], ...]): the common core atoms between mol_a and mol_b
+    num_switches (int): number of switching trajectories to run per compound pair per leg
+    transition_stpes (int): length of each switching trajectory
 
     Returns
     -------
@@ -62,17 +66,8 @@ def do_relative_docking(
     ----
     The work will not be calculated if any norm of force per atom exceeds 20000 kJ/(mol*nm)
        [MAX_NORM_FORCE defined in docking/report.py]
+    The simulations won't run if the atom maps are not factorizable
     """
-
-    print(
-        f"""
-    HOST_PDBFILE = {host_pdbfile}
-    MAX_LAMBDA = {MAX_LAMBDA}
-    MIN_LAMBDA = {MIN_LAMBDA}
-    TRANSITION_STEPS = {TRANSITION_STEPS}
-    NUM_SWITCHES = {NUM_SWITCHES}
-    """
-    )
 
     # Prepare host
     # TODO: handle extra (non-transitioning) guests?
@@ -86,9 +81,6 @@ def do_relative_docking(
         solvated_topology,
     ) = builders.build_protein_system(host_pdbfile)
 
-    # sometimes water boxes are sad. Should be minimized first; this is a workaround
-    host_box += np.eye(3) * 0.1
-
     # Prepare water box
     print("Generating water box...")
     # TODO: water box probably doesn't need to be this big
@@ -101,8 +93,6 @@ def do_relative_docking(
         water_topology,
     ) = builders.build_water_system(water_box_width)
 
-    # sometimes water boxes are sad. should be minimized first; this is a workaround
-    water_box += np.eye(3) * 0.1
     # it's okay if the water box here and the solvated protein box don't align -- they have PBCs
 
     # Run the procedure
@@ -135,11 +125,18 @@ def do_relative_docking(
     ):
         # minimize w.r.t. both mol_a and mol_b?
         min_coords = minimizer.minimize_host_4d([mol_a], system, coords, ff, box)
-        single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
-        rfe = free_energy.RelativeFreeEnergy(single_topology)
-        ups, sys_params, combined_masses, combined_coords = rfe.prepare_host_edge(
-            ff.get_ordered_params(), system, min_coords
-        )
+
+        try:
+            single_topology = topology.SingleTopology(mol_a, mol_b, core, ff)
+            rfe = free_energy.RelativeFreeEnergy(single_topology)
+            ups, sys_params, combined_masses, combined_coords = rfe.prepare_host_edge(
+                ff.get_ordered_params(), system, min_coords
+            )
+        except topology.AtomMappingError as e:
+            print(f"NON-FACTORIZABLE PAIR: {combined_name}")
+            print(e)
+            return {}
+
         combined_bps = []
         for up, sp in zip(ups, sys_params):
             combined_bps.append(up.bind(sp))
@@ -150,6 +147,8 @@ def do_relative_docking(
             box,
             combined_name,
             label,
+            num_switches,
+            transition_steps,
         )
         end_time = time.time()
         print(
@@ -167,6 +166,8 @@ def run_leg(
     host_box,
     guest_name,
     leg_type,
+    num_switches,
+    transition_steps,
 ):
     x0 = combined_coords
     v0 = np.zeros_like(x0)
@@ -192,7 +193,7 @@ def run_leg(
     steps_per_batch = 1001
 
     works = []
-    for b in range(NUM_SWITCHES):
+    for b in range(num_switches):
         equil2_lambda_schedule = np.ones(steps_per_batch) * MIN_LAMBDA
         ctxt.multiple_steps(equil2_lambda_schedule, 0)
         lamb = equil2_lambda_schedule[-1]
@@ -205,7 +206,7 @@ def run_leg(
             combined_bps,
             u_impls,
             guest_name,
-            NUM_SWITCHES * steps_per_batch,
+            num_switches * steps_per_batch,
             f"{leg_type.upper()}_EQUILIBRATION_2",
         )
 
@@ -221,6 +222,7 @@ def run_leg(
             guest_name,
             leg_type,
             u_impls,
+            transition_steps,
         )
         works.append(work)
 
@@ -228,14 +230,22 @@ def run_leg(
 
 
 def do_switch(
-    x0, v0, combined_bps, combined_masses, box, guest_name, leg_type, u_impls
+    x0,
+    v0,
+    combined_bps,
+    combined_masses,
+    box,
+    guest_name,
+    leg_type,
+    u_impls,
+    transition_steps,
 ):
     seed = 2021
     intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
     ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
 
-    switching_lambda_schedule = np.linspace(MIN_LAMBDA, MAX_LAMBDA, TRANSITION_STEPS)
+    switching_lambda_schedule = np.linspace(MIN_LAMBDA, MAX_LAMBDA, transition_steps)
 
     subsample_interval = 1
     full_du_dls, _ = ctxt.multiple_steps(switching_lambda_schedule, subsample_interval)
@@ -251,7 +261,7 @@ def do_switch(
         combined_bps,
         u_impls,
         guest_name,
-        TRANSITION_STEPS,
+        transition_steps,
         f"{leg_type.upper()}_SWITCH",
     )
 
@@ -261,6 +271,59 @@ def do_switch(
     work = np.trapz(full_du_dls, switching_lambda_schedule[::subsample_interval])
     print(f"guest_name: {guest_name}\t{leg_type}_work: {work:.2f}")
     return work
+
+
+def get_core_by_permissive_mcs(mol_a, mol_b):
+    # copied from timemachine/examples/hif2a/generate_star_map.py
+    mcs_result = rdFMCS.FindMCS(
+        [mol_a, mol_b],
+        timeout=30,
+        threshold=1.0,
+        atomCompare=rdFMCS.AtomCompare.CompareAny,
+        completeRingsOnly=True,
+        bondCompare=rdFMCS.BondCompare.CompareAny,
+        matchValences=True,
+    )
+    query = mcs_result.queryMol
+
+    # fails distance assertions
+    # return get_core_by_mcs(mol_a, mol_b, query)
+
+    inds_a = mol_a.GetSubstructMatches(query)[0]
+    inds_b = mol_b.GetSubstructMatches(query)[0]
+    core = np.array([inds_a, inds_b]).T
+
+    return core
+
+
+def _get_match(mol, query):
+    # copied from timemachine/examples/hif2a/generate_star_map.py
+    matches = mol.GetSubstructMatches(query)
+    return matches[0]
+
+
+def _get_core_by_smarts_wo_checking_uniqueness(mol_a, mol_b, core_smarts):
+    # copied from timemachine/examples/hif2a/generate_star_map.py
+    """no atom mapping errors with this one, but the core size is smaller"""
+    query = Chem.MolFromSmarts(core_smarts)
+
+    return np.array([_get_match(mol_a, query), _get_match(mol_b, query)]).T
+
+
+def get_core(strategy, mol_a, mol_b, smarts=None):
+    # adapted from timemachine/examples/hif2a/generate_star_map.py
+    core_strategies = {
+        "custom_mcs": lambda a, b, s: get_core_by_mcs(a, b, mcs_map(a, b).queryMol),
+        "any_mcs": lambda a, b, s: get_core_by_permissive_mcs(a, b),
+        "geometry": lambda a, b, s: get_core_by_geometry(a, b, threshold=0.5),
+        "smarts": lambda a, b, s: get_core_by_smarts(a, b, core_smarts=s),
+        "smarts_wo_uniqueness": lambda a, b, s: _get_core_by_smarts_wo_checking_uniqueness(
+            a, b, core_smarts=s
+        ),
+    }
+    f = core_strategies[strategy]
+    core = f(mol_a, mol_b, smarts)
+    return core
 
 
 def main():
@@ -278,48 +341,72 @@ def main():
     parser.add_argument(
         "-s",
         "--guests_sdfile",
-        default="tests/data/ligands_40__first-two-ligs.sdf",
+        default="tests/data/ligands_40.sdf",
         help="guests to pose",
     )
     parser.add_argument(
         "-e",
         "--edges_file",
-        default="tests/data/ligands_40__first-two-ligs_edges.txt",
+        default="tests/data/ligands_40__edges.txt",
         help="edges file. Each line should be two ligand indices separated by a comma, e.g. '1,2'",
     )
+    parser.add_argument(
+        "-c",
+        "--core_strategy",
+        default="geometry",
+        help="algorithm to use to find common core. can be 'geometry', 'custom_mcs', 'any_mcs', 'smarts', or 'smarts_wo_uniqueness'",
+    )
+    parser.add_argument(
+        "--smarts",
+        default=None,
+        help="core smarts pattern, to be used with core_strategy 'smarts' or 'smarts_wo_uniqueness'",
+    )
+    parser.add_argument(
+        "--num_switches",
+        default=15,
+        type=int,
+        help="number of A-->B transitions to do for each compound pair",
+    )
+    parser.add_argument(
+        "--transition_steps",
+        default=1001,
+        type=int,
+        help="how many steps to transition from A-->B over",
+    )
+
     args = parser.parse_args()
 
-    # TODO: use guests_sdfile & edges_file instead of this test system
-
-    # fetch mol_a, mol_b, core, forcefield from testsystem
-    mol_a, mol_b, core = (
-        hif2a_ligand_pair.mol_a,
-        hif2a_ligand_pair.mol_b,
-        hif2a_ligand_pair.core,
+    print(
+        f"""
+    MAX_LAMBDA = {MAX_LAMBDA}
+    MIN_LAMBDA = {MIN_LAMBDA}
+    """
     )
-    core_rev = core[:, ::-1]
+    print(args)
 
-    # A --> B
-    do_relative_docking(
-        args.host_pdbfile,
-        mol_a,
-        mol_b,
-        core,
-        args.outdir,
-        args.fewer_outfiles,
-        args.no_outfiles,
-    )
+    suppl = Chem.SDMolSupplier(args.guests_sdfile, removeHs=False)
+    mols = [x for x in suppl]
 
-    # B --> A
-    do_relative_docking(
-        args.host_pdbfile,
-        mol_b,
-        mol_a,
-        core_rev,
-        args.outdir,
-        args.fewer_outfiles,
-        args.no_outfiles,
-    )
+    with open(args.edges_file, "r") as rfile:
+        lines = rfile.readlines()
+    for line in lines:
+        i, j = [int(x) for x in line.strip().split(",")]
+        mol_a = mols[i]
+        mol_b = mols[j]
+
+        core = get_core(args.core_strategy, mol_a, mol_b, args.smarts)
+        print(core)
+
+        # A --> B
+        all_works = do_relative_docking(
+            args.host_pdbfile,
+            mol_a,
+            mol_b,
+            core,
+            args.num_switches,
+            args.transition_steps,
+        )
+        print(all_works)
 
 
 if __name__ == "__main__":

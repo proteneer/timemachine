@@ -2,6 +2,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/numpy.h>
 #include <numeric>
+#include <regex>
 
 #include "context.hpp"
 #include "potential.hpp"
@@ -12,7 +13,8 @@
 // #include "interpolated_potential.hpp"
 // #include "restraint.hpp"
 // #include "inertial_restraint.hpp"
-// #include "centroid_restraint.hpp"
+#include "centroid_restraint.hpp"
+#include "rmsd_restraint.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
 // #include "lennard_jones.hpp"
@@ -229,9 +231,16 @@ void declare_avg_partial_u_partial_param(py::module &m) {
         obj.avg_du_dp(buffer.mutable_data());
 
         return buffer;
+    })
+    .def("std_du_dp", [](timemachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
+        std::vector<int> shape = obj.shape();
+        py::array_t<double, py::array::c_style> buffer(shape);
+
+        obj.std_du_dp(buffer.mutable_data());
+
+        return buffer;
     });
 }
-
 void declare_integrator(py::module &m) {
 
     using Class = timemachine::Integrator;
@@ -656,42 +665,68 @@ void declare_harmonic_angle(py::module &m, const char *typestr) {
 // }
 
 
-// template <typename RealType>
-// void declare_centroid_restraint(py::module &m, const char *typestr) {
+template <typename RealType>
+void declare_rmsd_restraint(py::module &m, const char *typestr) {
 
-//     using Class = timemachine::CentroidRestraint<RealType>;
-//     std::string pyclass_name = std::string("CentroidRestraint_") + typestr;
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const py::array_t<int, py::array::c_style> &group_a_idxs,
-//         const py::array_t<int, py::array::c_style> &group_b_idxs,
-//         const py::array_t<double, py::array::c_style> &masses,
-//         double kb,
-//         double b0
-//     ) {
-//         std::vector<int> vec_group_a_idxs(group_a_idxs.size());
-//         std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
-//         std::vector<int> vec_group_b_idxs(group_b_idxs.size());
-//         std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
-//         std::vector<double> vec_masses(masses.size());
-//         std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
+    using Class = timemachine::RMSDRestraint<RealType>;
+    std::string pyclass_name = std::string("RMSDRestraint_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &atom_map,
+        const int N,
+        const double k
+    ) {
+        std::vector<int> vec_atom_map(atom_map.size());
+        std::memcpy(vec_atom_map.data(), atom_map.data(), vec_atom_map.size()*sizeof(int));
 
-//         return new timemachine::CentroidRestraint<RealType>(
-//             vec_group_a_idxs,
-//             vec_group_b_idxs,
-//             vec_masses,
-//             kb,
-//             b0
-//         );
+        return new timemachine::RMSDRestraint<RealType>(
+            vec_atom_map,
+            N,
+            k
+        );
 
-//     }));
+    }));
 
-// }
+}
+
+
+template <typename RealType>
+void declare_centroid_restraint(py::module &m, const char *typestr) {
+
+    using Class = timemachine::CentroidRestraint<RealType>;
+    std::string pyclass_name = std::string("CentroidRestraint_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+        const py::array_t<int, py::array::c_style> &group_a_idxs,
+        const py::array_t<int, py::array::c_style> &group_b_idxs,
+        double kb,
+        double b0
+    ) {
+        std::vector<int> vec_group_a_idxs(group_a_idxs.size());
+        std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
+        std::vector<int> vec_group_b_idxs(group_b_idxs.size());
+        std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
+
+        return new timemachine::CentroidRestraint<RealType>(
+            vec_group_a_idxs,
+            vec_group_b_idxs,
+            kb,
+            b0
+        );
+
+    }));
+
+}
 
 
 // template <typename RealType>
@@ -823,6 +858,16 @@ void declare_periodic_torsion(py::module &m, const char *typestr) {
 
 // }
 
+
+// stackoverflow
+std::string dirname(const std::string& fname) {
+     size_t pos = fname.find_last_of("\\/");
+     return (std::string::npos == pos)
+         ? ""
+         : fname.substr(0, pos);
+}
+
+
 template <typename RealType, bool Interpolated>
 void declare_nonbonded(py::module &m, const char *typestr) {
 
@@ -841,8 +886,12 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         const py::array_t<double, py::array::c_style> &scales_i,  // [E, 2]
         const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i, //
         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i, //
-        double beta,
-        double cutoff) {
+        const double beta,
+        const double cutoff,
+        const std::string &transform_lambda_charge="lambda",
+        const std::string &transform_lambda_sigma="lambda",
+        const std::string &transform_lambda_epsilon="lambda",
+        const std::string &transform_lambda_w="lambda") {
 
         std::vector<int> exclusion_idxs(exclusion_i.size());
         std::memcpy(exclusion_idxs.data(), exclusion_i.data(), exclusion_i.size()*sizeof(int));
@@ -856,16 +905,35 @@ void declare_nonbonded(py::module &m, const char *typestr) {
         std::vector<int> lambda_offset_idxs(lambda_offset_idxs_i.size());
         std::memcpy(lambda_offset_idxs.data(), lambda_offset_idxs_i.data(), lambda_offset_idxs_i.size()*sizeof(int));
 
+        std::string dir_path = dirname(__FILE__);
+        std::string src_path = dir_path + "/kernels/k_lambda_transformer_jit.cuh";
+        std::ifstream t(src_path);
+        std::string source_str((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
+        source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_CHARGE"), transform_lambda_charge);
+        source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_SIGMA"), transform_lambda_sigma);
+        source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_EPSILON"), transform_lambda_epsilon);
+        source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_W"), transform_lambda_w);
+
         return new timemachine::Nonbonded<RealType, Interpolated>(
             exclusion_idxs,
             scales,
             lambda_plane_idxs,
             lambda_offset_idxs,
             beta,
-            cutoff
+            cutoff,
+            source_str
         );
-    }
-    ));
+    }),
+    py::arg("exclusion_i"),
+    py::arg("scales_i"),
+    py::arg("lambda_plane_idxs_i"),
+    py::arg("lambda_offset_idxs_i"),
+    py::arg("beta"),
+    py::arg("cutoff"),
+    py::arg("transform_lambda_charge")="lambda",
+    py::arg("transform_lambda_sigma")="lambda",
+    py::arg("transform_lambda_epsilon")="lambda",
+    py::arg("transform_lambda_w")="lambda");
 
 }
 
@@ -887,14 +955,14 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_neighborlist<double>(m, "f64");
     declare_neighborlist<float>(m, "f32");
 
-    // declare_centroid_restraint<double>(m, "f64");
-    // declare_centroid_restraint<float>(m, "f32");
+    declare_centroid_restraint<double>(m, "f64");
+    declare_centroid_restraint<float>(m, "f32");
 
     // declare_inertial_restraint<double>(m, "f64");
     // declare_inertial_restraint<float>(m, "f32");
 
-    // declare_restraint<double>(m, "f64");
-    // declare_restraint<float>(m, "f32");
+    declare_rmsd_restraint<double>(m, "f64");
+    declare_rmsd_restraint<float>(m, "f32");
 
     // declare_shape<double>(m, "f64");
     // declare_shape<float>(m, "f32");

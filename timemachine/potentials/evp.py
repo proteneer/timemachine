@@ -7,7 +7,7 @@ from jax.config import config; config.update("jax_enable_x64", True)
 from scipy.stats import special_ortho_group
 
 
-from timemachine.potentials import evp
+from timemachine.potentials.pmi import dsyevv3
 
 def recenter(conf):
     return conf - np.mean(conf, axis=0)
@@ -15,7 +15,6 @@ def recenter(conf):
 def inertia_tensor(conf, masses):
     com = np.average(conf, axis=0, weights=masses)
     conf = conf - com
-    conf_T = conf.transpose()
     
     xs = conf[:, 0]
     ys = conf[:, 1]
@@ -138,15 +137,15 @@ def test_force(a_tensor, b_tensor):
     # a_eval, a_evec = np.linalg.eigh(a_tensor)
     # b_eval, b_evec = np.linalg.eigh(b_tensor)
 
-    a_eval, a_evec = evp.dsyevv3(a_tensor)
-    b_eval, b_evec = evp.dsyevv3(b_tensor)
+    a_eval, a_evec = dsyevv3(a_tensor)
+    b_eval, b_evec = dsyevv3(b_tensor)
 
 
     # print("ref w", a_eval)
-    # print("test w", evp.dsyevc3(a_tensor))
+    # print("test w", dsyevc3(a_tensor))
 
     # print("ref v", a_evec)
-    # print("test v", evp.dsyevv3(a_tensor))
+    # print("test v", dsyevv3(a_tensor))
 
     # assert 0
 
@@ -158,8 +157,6 @@ def test_force(a_tensor, b_tensor):
     acos_pos = np.arccos(pos) # 3 -> 3
     acos_neg = np.arccos(neg) # 3 -> 3
     a = np.amin([acos_pos, acos_neg], axis=0) # 2x3 -> 3
-    a2 = a*a # 3->3
-    l = np.sum(a2) # 3->1
 
     # derivatives, start backprop
     dl_da2 = np.ones(3) # 1 x 3
@@ -167,11 +164,6 @@ def test_force(a_tensor, b_tensor):
     da_darg = np.stack([
         np.eye(3)*(acos_pos < acos_neg),
         np.eye(3)*(acos_neg < acos_pos)
-    ])
-
-    darg_dpn = np.stack([
-        np.eye(3)*(-1/np.sqrt(1-pos*pos)),
-        np.eye(3)*(-1/np.sqrt(1-neg*neg))
     ])
 
     dl_darg = np.matmul(np.matmul(dl_da2, da2_da), da_darg)
@@ -216,10 +208,6 @@ def test1():
         a_com, a_tensor = inertia_tensor(x_a, onp.ones(N, dtype=np.float64))
         b_com, b_tensor = inertia_tensor(x_b, onp.ones(N, dtype=np.float64))
 
-
-        a_evec = special_ortho_group.rvs(3)
-        b_evec = special_ortho_group.rvs(3)
-
         rf = onp.asarray(grad_fn(a_tensor, b_tensor))
         tf = onp.asarray(test_force(a_tensor, b_tensor))
 
@@ -246,7 +234,7 @@ def test0():
             )
 
         jnp_res = np.linalg.eigh(a_tensor)
-        evp_res = evp.dsyevv3(a_tensor)
+        evp_res = dsyevv3(a_tensor)
 
 
         np.set_printoptions(formatter={'float': lambda x: "{0:0.16f}".format(x)})

@@ -4,6 +4,7 @@ from collections import defaultdict
 from argparse import ArgumentParser
 from pathlib import Path
 from functools import partial
+from typing import Dict, Any, List, Optional
 
 from pickle import dump
 
@@ -32,9 +33,6 @@ from fe.atom_mapping import (
     transformation_size,
     get_star_map,
 )
-
-# Get the root off of the timemachine install
-root = Path(timemachine.__file__).absolute().parent
 
 
 def get_mol_id(mol, mol_prop):
@@ -92,12 +90,21 @@ def _get_core_by_smarts_wo_checking_uniqueness(mol_a, mol_b, core_smarts):
 
     return np.array([_get_match(mol_a, query), _get_match(mol_b, query)]).T
 
+def _strip_invalid_keys(ref: Dict[Any, Any], keys=List[Any]) -> Dict[Any, Any]:
+    output = {}
+    for key in keys:
+        assert key in ref
+        val = ref[key]
+        if val is not None:
+            output[key] = val
+    return output
+
+
+
 core_strategies = {
-    'custom_mcs': lambda a, b : get_core_by_mcs(a, b, mcs_map(a, b).queryMol),
-    'any_mcs': lambda a, b : get_core_by_permissive_mcs(a, b),
-    'geometry': lambda a, b: get_core_by_geometry(a, b, threshold=0.5),
-    'smarts_core_1': lambda a, b: get_core_by_smarts(a, b, core_smarts=bicyclic_smarts_pattern),
-    'smarts_core_2': lambda a, b: _get_core_by_smarts_wo_checking_uniqueness(a, b, core_smarts=core_2_smarts)
+    "mcs": lambda a, b, kwargs: get_core_by_mcs(a, b, mcs_map(a, b, **_strip_invalid_keys(kwargs, ["smarts"])).queryMol),
+    "any_mcs": lambda a, b, kwargs: get_core_by_permissive_mcs(a, b),
+    "geometry": lambda a, b, kwargs: get_core_by_geometry(a, b, threshold=0.5),
 }
 
 
@@ -107,16 +114,19 @@ def generate_star(
         forcefield,
         transformation_size_threshold: int = 2,
         core_strategy: str = 'geometry',
-        label_property: str="IC50[uM](SPA)"):
+        label_property: str="IC50[uM](SPA)",
+        core_kwargs: Optional[Dict[str, Any]] = None):
+    if core_kwargs is None:
+        core_kwargs = {}
     transformations = []
     error_transformations = []
     for spoke in spokes:
-        core = core_strategies[core_strategy](hub, spoke)
 
         # TODO: reduce overlap between get_core_by_smarts and get_core_by_mcs
         # TODO: replace big ol' list of get_core_by_*(mol_a, mol_b, **kwargs) functions with something... classy
-
+        core = None
         try:
+            core = core_strategies[core_strategy](hub, spoke, core_kwargs)
             single_topology = topology.SingleTopology(hub, spoke, core, forcefield)
             rfe = RelativeFreeEnergy(single_topology, label=_compute_label(hub, spoke, label_property))
             transformations.append(rfe)
@@ -199,9 +209,13 @@ if __name__ == "__main__":
     forcefield = Forcefield(ff_handlers)
 
     mols = []
+    # Ensure we pickle up mol properties
+    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
     for lig_path in map_config.ligands:
         supplier = Chem.SDMolSupplier(lig_path, removeHs=False)
-        mols.extend(list(supplier))
+        # Prefer the list comp over casting to a list, seems to be inconsistent
+        # on OSX/linux
+        mols.extend([mol for mol in supplier])
 
     # In the future hopefully we can programmatically find the cores rather specifying
     cores = map_config.cores
@@ -229,14 +243,27 @@ if __name__ == "__main__":
             sys.exit(1)
         hub_method = network_generation_methods[method](**map_config.networks[i])
         hub, mols = hub_method(mols)
-        edges, errors = generate_star(hub, mols, forcefield, transformation_size_threshold=map_config.transformation_threshold, core_strategy=map_config.atom_mapping_strategy, label_property=map_config.label)
+        edges, errors = generate_star(
+            hub,
+            mols,
+            forcefield,
+            transformation_size_threshold=map_config.transformation_threshold,
+            label_property=map_config.label,
+            core_strategy=map_config.atom_mapping_strategy,
+            core_kwargs=cores[i],
+        )
         all_edges.extend(edges)
         for hub, spoke, _ in errors:
             print(f'atom mapping error in transformation {get_mol_id(hub, map_config.identifier)} -> {get_mol_id(spoke, map_config.identifier)}!')
         with open(f"core_{i}_error_transformations.pkl", "wb") as f:
             dump(errors, f)
         print(f"Core {i} had {len(edges)} edges and {len(errors)} errors")
-
+    # if protein path provided, set the path
+    if map_config.protein is not None:
+        path = Path(map_config.protein)
+        abs_path = str(path.expanduser().resolve())
+        for edge in all_edges:
+            edge.complex_path = abs_path
     # serialize
     with open(map_config.output, 'wb') as f:
         dump(all_edges, f)

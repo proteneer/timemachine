@@ -81,7 +81,7 @@ def prepare_lj_system(
 #     N = x.shape[0]
 #     D = x.shape[1]
 
-#     charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
+#     charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(ONE_4PI_EPS0)
 
 #     atom_idxs = np.arange(N)
 #     exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
@@ -139,7 +139,6 @@ def prepare_reference_nonbonded(
         nonbonded.nonbonded_v3,
         charge_rescale_mask=charge_rescale_mask,
         lj_rescale_mask=lj_rescale_mask,
-        scales=scales,
         beta=beta,
         cutoff=cutoff,
         lambda_plane_idxs=lambda_plane_idxs,
@@ -162,7 +161,7 @@ def prepare_water_system(
     assert N % 3 == 0
 
     params = np.stack([
-        (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456), # q
+        (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(ONE_4PI_EPS0), # q
         np.random.rand(N).astype(np.float64)/5.0, # sig
         np.random.rand(N).astype(np.float64) # eps
     ], axis=1)
@@ -215,7 +214,6 @@ def prepare_water_system(
         nonbonded.nonbonded_v3,
         charge_rescale_mask=charge_rescale_mask,
         lj_rescale_mask=lj_rescale_mask,
-        scales=scales,
         beta=beta,
         cutoff=cutoff,
         lambda_plane_idxs=lambda_plane_idxs,
@@ -277,7 +275,6 @@ def prepare_nb_system(
         nonbonded.nonbonded_v3,
         charge_rescale_mask=charge_rescale_mask,
         lj_rescale_mask=lj_rescale_mask,
-        scales=scales,
         beta=beta,
         cutoff=cutoff,
         lambda_plane_idxs=lambda_plane_idxs,
@@ -286,55 +283,6 @@ def prepare_nb_system(
 
     return params, ref_total_energy, test_potential
 
-
-
-def prepare_nonbonded_system(
-    x,
-    E, # number of exclusions
-    lambda_plane_idxs,
-    lambda_offset_idxs,
-    p_scale,
-    cutoff=100.0,
-    precision=np.float64):
-
-    N = x.shape[0]
-    D = x.shape[1]
-
-    charge_params = (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456)
-    sig_params = np.random.rand(N) / p_scale
-    eps_params = np.random.rand(N)
-    lj_params = np.stack([sig_params, eps_params], axis=1)
-
-    atom_idxs = np.arange(N)
-    exclusion_idxs = np.random.choice(atom_idxs, size=(E, 2), replace=False)
-    exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32).reshape(-1, 2)
-
-    charge_scales = np.random.rand(E)
-    lj_scales = np.random.rand(E)
-
-    custom_nonbonded_ctor = functools.partial(potentials.Nonbonded,
-        charge_params,
-        lj_params,
-        exclusion_idxs,
-        charge_scales,
-        lj_scales,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
-        cutoff,
-        precision=precision
-    )
-
-    ref_total_energy = functools.partial(
-        nonbonded.nonbonded,
-        exclusion_idxs=exclusion_idxs,
-        charge_scales=charge_scales,
-        lj_scales=lj_scales,
-        cutoff=cutoff,
-        lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs
-    )
-
-    return (charge_params, lj_params), ref_total_energy, custom_nonbonded_ctor
 
 def prepare_restraints(
     x,
@@ -483,6 +431,7 @@ class GradientTest(unittest.TestCase):
         test_potential,
         rtol,
         precision,
+        atol=1e-8,
         benchmark=False):
 
         test_impl = test_potential.unbound_impl(precision)
@@ -515,7 +464,7 @@ class GradientTest(unittest.TestCase):
                 compute_u
             )
             if compute_u:
-                np.testing.assert_allclose(ref_u, test_u, rtol)
+                np.testing.assert_allclose(ref_u, test_u, rtol=rtol, atol=atol)
             if compute_du_dx:
                 self.assert_equal_vectors(np.array(ref_du_dx), np.array(test_du_dx), rtol)
             if compute_du_dl:

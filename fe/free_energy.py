@@ -115,9 +115,10 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 # this class is serializable.
 class RelativeFreeEnergy(BaseFreeEnergy):
 
-    def __init__(self, single_topology: topology.SingleTopology, label=None):
+    def __init__(self, single_topology: topology.SingleTopology, label=None, complex_path=None):
         self.top = single_topology
         self.label = label
+        self.complex_path = complex_path
 
     @property
     def mol_a(self):

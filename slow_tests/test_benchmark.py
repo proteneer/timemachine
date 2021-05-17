@@ -125,8 +125,7 @@ def benchmark(
     if verbose and compute_du_dp_interval > 0:
         for potential, du_dp_obs in zip(bound_potentials, obs):
             dp = du_dp_obs.avg_du_dp()
-            print(potential, dp.shape)
-            print(dp)
+            dp_std = du_dp_obs.std_du_dp()
 
 def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 
@@ -175,10 +174,8 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
-    complex_box += np.eye(3)*0.1 # BFGS this later
 
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
-    solvent_box += np.eye(3)*0.1 # BFGS this later
 
     for stage, host_system, host_coords, host_box in [
         ("hif2a", complex_system, complex_coords, complex_box),
@@ -189,21 +186,17 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
             cutoff=1.0
         )
 
-        host_conf = []
-        for x,y,z in host_coords:
-            host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
-        host_conf = np.array(host_conf)
+        # resolve host clashes
+        min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, ff, host_box)
 
-        x0 = host_conf
-        v0 = np.zeros_like(host_conf)
+        x0 = min_host_coords
+        v0 = np.zeros_like(x0)
 
         # lamb = 0.0
         benchmark(stage+"-apo", host_masses, 0.0, x0, v0, host_box, host_fns, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
         # RBFE
-        min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, ff, host_box)
-
-        unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, min_host_coords)
+        unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, x0)
 
         bound_potentials = [x.bind(y) for (x,y) in zip(unbound_potentials, sys_params)]
 
@@ -238,5 +231,6 @@ def test_hif2a():
 
 
 if __name__ == "__main__":
+
     benchmark_dhfr(verbose=False, num_batches=100)
     benchmark_hif2a(verbose=False, num_batches=100)

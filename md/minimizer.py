@@ -2,11 +2,12 @@ import numpy as np
 
 from fe import topology
 
-from timemachine.lib import potentials
-from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.lib import potentials, LangevinIntegrator, custom_ops
 
 from ff.handlers import openmm_deserializer
 from ff import Forcefield
+
+from md.fire import fire_descent
 
 def get_romol_conf(mol):
     """Coordinates of mol's 0th conformer, in nanometers"""
@@ -14,10 +15,67 @@ def get_romol_conf(mol):
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
     return guest_conf/10 # from angstroms to nm
 
+def bind_potentials(topo, ff):
+    # setup the parameter handlers for the ligand
+    tuples = [
+        [topo.parameterize_harmonic_bond, [ff.hb_handle]],
+        [topo.parameterize_harmonic_angle, [ff.ha_handle]],
+        [topo.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]],
+        [topo.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]],
+    ]
 
-def minimize_host_4d(mols, host_system, host_coords, ff, box):
+    u_impls = []
+
+    for fn, handles in tuples:
+        params, potential = fn(*[h.params for h in handles])
+        bp = potential.bind(params)
+        u_impls.append(bp.bound_impl(precision=np.float32))
+    return u_impls
+
+def fire_minimize(x0: np.ndarray, u_impls, box: np.ndarray, lamb_sched: np.array) -> np.ndarray:
     """
-    Insert mols into a host system via 4D decoupling using a 0 Kelvin Langevin integrator.
+    Minimize coordinates using the FIRE algorithm
+
+    Parameters
+    ----------
+    coords: np.ndarray
+        N x 3 coordinates. units of nanometers.
+
+    u_impls: list of bound impls of potentials
+
+    box: np.ndarray [3,3]
+        Box matrix for periodic boundary conditions. units of nanometers.
+
+    lamb_sched: np.array [N]
+        Array of lambda for each step of the optimization.
+
+    Returns
+    -------
+    np.ndarray
+        Minimized coords.
+
+    """
+
+    def force(coords, lamb: float = 1.0, **kwargs):
+        forces = np.zeros_like(coords)
+        for impl in u_impls:
+            du_dx, _, _ = impl.execute(coords, box, lamb)
+            forces -= du_dx
+        return forces
+
+    def shift(d, dr, **kwargs):
+        return d + dr
+
+    init, f = fire_descent(force, shift)
+    opt_state = init(x0, lamb=lamb_sched[0])
+    for lamb in lamb_sched[1:]:
+        opt_state = f(opt_state, lamb=lamb)
+    return np.asarray(opt_state.position)
+
+def minimize_host_4d(mols, host_system, host_coords, ff, box) -> np.ndarray:
+    """
+    Insert mols into a host system via 4D decoupling using Fire minimizer at lambda=1.0,
+    0 Kelvin Langevin integration at a sequence of lambda from 1.0 to 0.0, and Fire minimizer again at lambda=0.0
 
     The ligand coordinates are fixed during this, and only host_coords are minimized.
 
@@ -68,19 +126,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box):
 
     hgt = topology.HostGuestTopology(host_bps, top)
 
-    # setup the parameter handlers for the ligand
-    tuples = [
-        [hgt.parameterize_harmonic_bond, [ff.hb_handle]],
-        [hgt.parameterize_harmonic_angle, [ff.ha_handle]],
-        [hgt.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]],
-        [hgt.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]],
-    ]
-
-    final_potentials = []
-
-    for fn, handles in tuples:
-        params, potential = fn(*[h.params for h in handles])
-        final_potentials.append(potential.bind(params))
+    u_impls = bind_potentials(hgt, ff)
 
     # this value doesn't matter since we will turn off the noise.
     seed = 0
@@ -96,12 +142,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box):
     x0 = combined_coords
     v0 = np.zeros_like(x0)
 
-    u_impls = []
-
-    for bp in final_potentials:
-        fn = bp.bound_impl(precision=np.float32)
-        u_impls.append(fn)
-
+    x0 = fire_minimize(x0, u_impls, box, np.ones(50))
     # context components: positions, velocities, box, integrator, energy fxns
     ctxt = custom_ops.Context(
         x0,
@@ -110,14 +151,12 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box):
         intg,
         u_impls
     )
+    ctxt.multiple_steps(np.linspace(1.0, 0, 1000))
 
-    for lamb in np.linspace(1.0, 0, 1000):
-        ctxt.step(lamb)
-
-    final_coords = ctxt.get_x_t()
-
+    final_coords = fire_minimize(ctxt.get_x_t(), u_impls, box, np.zeros(50))
     for impl in u_impls:
         du_dx, _, _ = impl.execute(final_coords, box, 0.0)
-        assert np.all(np.linalg.norm(du_dx, axis=-1) < 25000)
+        norm = np.linalg.norm(du_dx, axis=-1)
+        assert np.all(norm < 25000)
 
     return final_coords[:num_host_atoms]

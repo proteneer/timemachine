@@ -1,119 +1,12 @@
-import numpy as onp
 import jax.numpy as np
-from jax.scipy.special import erf, erfc
+from jax.scipy.special import erfc
 from jax.ops import index_update, index
-
-from timemachine.constants import ONE_4PI_EPS0
-from timemachine.potentials.jax_utils import delta_r, distance, convert_to_4d
-
-
+from timemachine.potentials.jax_utils import distance, convert_to_4d
 
 
 def switch_fn(dij, cutoff):
     return np.power(np.cos((np.pi*np.power(dij, 8))/(2*cutoff)), 2)
 
-
-def nonbonded(
-    conf,
-    lamb,
-    charge_params,
-    lj_params,
-    exclusion_idxs,
-    charge_scales,
-    lj_scales,
-    cutoff,
-    lambda_plane_idxs,
-    lambda_offset_idxs):
-
-    # assert box is None
-
-    conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
-    lj = lennard_jones(conf_4d, lj_params, cutoff)
-    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, exclusion_idxs, lj_scales, cutoff)
-    es = simple_energy(conf_4d, charge_params, exclusion_idxs, charge_scales, cutoff)
-
-    return lj - lj_exc + es
-
-
-def electrostatics_v2(
-    conf,
-    charge_params,
-    box,
-    lamb,
-    exclusion_idxs,
-    charge_scales,
-    beta,
-    cutoff,
-    lambda_offset_idxs):
-
-    # assert box is None
-
-    conf_4d = convert_to_4d(conf, lamb, lambda_offset_idxs)
-
-    # print(conf_4d)
-    if box is not None:
-        box_4d = np.eye(4)*1000
-        box_4d = index_update(box_4d, index[:3, :3], box)
-    else:
-        box_4d = None
-
-    return simple_energy(conf_4d, box_4d, charge_params, exclusion_idxs, charge_scales, beta, cutoff)
-
-
-def nonbonded_v2(
-    conf,
-    params,
-    box,
-    lamb,
-    exclusion_idxs,
-    scales,
-    beta,
-    cutoff,
-    lambda_offset_idxs):
-
-    # assert box is None
-
-    conf_4d = convert_to_4d(conf, lamb, lambda_offset_idxs)
-
-    # print(conf_4d)
-    if box is not None:
-        box_4d = np.eye(4)*1000
-        box_4d = index_update(box_4d, index[:3, :3], box)
-    else:
-        box_4d = None
-
-    charge_params = params[:, 0]
-    lj_params = params[:, 1:]
-
-    charge_scales = scales[:, 0]
-    lj_scales = scales[:, 1]
-
-    lj = lennard_jones(conf_4d, lj_params, box_4d, cutoff)
-    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, box_4d, exclusion_idxs, lj_scales, cutoff)
-    es = simple_energy(conf_4d, box_4d, charge_params, exclusion_idxs, charge_scales, beta, cutoff)
-
-    return lj - lj_exc + es
-
-def lennard_jones_v2(
-    conf,
-    lj_params,
-    box,
-    lamb,
-    exclusion_idxs,
-    lj_scales,
-    cutoff,
-    lambda_plane_idxs,
-    lambda_offset_idxs):
-
-    conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-    box_4d = np.eye(4)*1000
-    box_4d = index_update(box_4d, index[:3, :3], box)
-
-    lj = lennard_jones(conf_4d, lj_params, box_4d, cutoff)
-    lj_exc = lennard_jones_exclusion(conf_4d, lj_params, box_4d, exclusion_idxs, lj_scales, cutoff)
-
-    return lj - lj_exc
 
 def nonbonded_v3(
     conf,
@@ -122,15 +15,54 @@ def nonbonded_v3(
     lamb,
     charge_rescale_mask,
     lj_rescale_mask,
-    scales,
     beta,
     cutoff,
     lambda_plane_idxs,
     lambda_offset_idxs):
-    
+    """Lennard-Jones + Coulomb, with a few important twists:
+    * distances are computed in 4D, controlled by lambda, lambda_plane_idxs, lambda_offset_idxs
+    * each pairwise LJ and Coulomb term can be multiplied by an adjustable rescale_mask parameter
+    * Coulomb terms are multiplied by erfc(beta * distance)
+
+    Parameters
+    ----------
+    conf : (N, 3) or (N, 4) np.array
+        3D or 4D coordinates
+        if 3D, will be converted to 4D using (x,y,z) -> (x,y,z,w)
+            where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)
+    params : (N, 3) np.array
+        columns [charges, sigmas, epsilons], one row per particle
+    box : Optional 3x3 np.array
+    lamb : float
+    charge_rescale_mask : (N, N) np.array
+        the Coulomb contribution of pair (i,j) will be multiplied by charge_rescale_mask[i,j]
+    lj_rescale_mask : (N, N) np.array
+        the Lennard-Jones contribution of pair (i,j) will be multiplied by lj_rescale_mask[i,j]
+    beta : float
+        the charge product q_ij will be multiplied by erfc(beta*d_ij)
+    cutoff : Optional float
+        a pair of particles (i,j) will be considered non-interacting if the distance d_ij
+        between their 4D coordinates exceeds cutoff
+    lambda_plane_idxs : Optional (N,) np.array
+    lambda_offset_idxs : Optional (N,) np.array
+
+    Returns
+    -------
+    energy : float
+
+    References
+    ----------
+    * Rodinger, Howell, Pomès, 2005, J. Chem. Phys. "Absolute free energy calculations by thermodynamic integration in four spatial
+        dimensions" https://aip.scitation.org/doi/abs/10.1063/1.1946750
+    * Darden, York, Pedersen, 1993, J. Chem. Phys. "Particle mesh Ewald: An N log(N) method for Ewald sums in large
+    systems" https://aip.scitation.org/doi/abs/10.1063/1.470117
+        * Coulomb interactions are treated using the direct-space contribution from eq 2
+    """
+
     N = conf.shape[0]
 
-    conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+    if conf.shape[-1] == 3:
+        conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
     # make 4th dimension of box large enough so its roughly aperiodic
     if box is not None:
@@ -148,7 +80,6 @@ def nonbonded_v3(
     sig_i = np.expand_dims(sig, 0)
     sig_j = np.expand_dims(sig, 1)
     sig_ij = sig_i + sig_j
-    sig_ij_raw = sig_ij
 
     eps_i = np.expand_dims(eps, 0)
     eps_j = np.expand_dims(eps, 1)
@@ -157,11 +88,11 @@ def nonbonded_v3(
 
     dij = distance(conf, box)
 
-    N = conf.shape[0]
     keep_mask = np.ones((N,N)) - np.eye(N)
     keep_mask = np.where(eps_ij != 0, keep_mask, 0)
 
     if cutoff is not None:
+        validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
         eps_ij = np.where(dij < cutoff, eps_ij, 0)
 
     # (ytz): this avoids a nan in the gradient in both jax and tensorflow
@@ -183,7 +114,7 @@ def nonbonded_v3(
     qij = np.multiply(qi, qj)
 
     # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
-    keep_mask = 1 - np.eye(conf.shape[0])
+    keep_mask = 1 - np.eye(N)
     qij = np.where(keep_mask, qij, 0)
     dij = np.where(keep_mask, dij, 0)
 
@@ -195,3 +126,10 @@ def nonbonded_v3(
     eij_total = (eij_lj*lj_rescale_mask + eij_charge*charge_rescale_mask)
 
     return np.sum(eij_total/2)
+
+
+def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
+    """check whether f(r) = erfc(beta * r) <= threshold at r = cutoff
+    following https://github.com/proteneer/timemachine/pull/424#discussion_r629678467"""
+    if erfc(beta * cutoff) > threshold:
+        print(UserWarning(f"erfc(beta * cutoff) = {erfc(beta * cutoff)} > threshold = {threshold}"))

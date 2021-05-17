@@ -1,86 +1,78 @@
+#pragma once
 
-#include "surreal.cuh"
-#include "../fixed_point.hpp"
+#include "k_fixed_point.cuh"
 
-
-__device__ const double PI = 3.14159265358979323846;
+template<typename RealType>
+void __global__ k_calc_centroid(
+    const double * __restrict__ d_coords,  // [n, 3]
+    const int * __restrict__ d_group_a_idxs,
+    const int * __restrict__ d_group_b_idxs,
+    const int N_A,
+    const int N_B,
+    RealType * d_centroid_a, // [3]
+    RealType * d_centroid_b // [3]
+    ){
+    int t_idx = blockDim.x*blockIdx.x + threadIdx.x;
+    if (N_A + N_B <= t_idx) {
+        return;
+    }
+    int group_idx = t_idx < N_A ? t_idx : t_idx - N_A;
+    RealType * centroid = t_idx < N_A ? d_centroid_a : d_centroid_b;
+    const int * cur_array = t_idx < N_A ? d_group_a_idxs : d_group_b_idxs;
+    for(int d=0; d < 3; d++) {
+        atomicAdd(centroid + d, d_coords[cur_array[group_idx]*3+d]);
+    }
+ }
 
 template<typename RealType>
 void __global__ k_centroid_restraint(
-    const int N,     // number of bonds
-    const double *coords,  // [n, 3]
-    const int *group_a_idxs,
-    const int *group_b_idxs,
+    // const int N,     // number of bonds, ignore for now
+    const double * __restrict__ d_coords,  // [n, 3]
+    const int * __restrict__ d_group_a_idxs,
+    const int * __restrict__ d_group_b_idxs,
     const int N_A,
     const int N_B,
-    const double *masses, // ignore masses for now
+    const RealType * __restrict__ d_centroid_a, // [3]
+    const RealType * __restrict__ d_centroid_b, // [3]
+    // const double *d_masses, // ignore d_masses for now
     const double kb,
     const double b0,
-    unsigned long long *grad_coords,
-    double *energy) {
+    unsigned long long *d_du_dx,
+    unsigned long long *d_u) {
 
-    // (ytz): ultra shitty inefficient algorithm, optimize later
-    const auto t_idx = blockDim.x*blockIdx.x + threadIdx.x;
-
-    if(t_idx != 0) {
+    const int t_idx = blockDim.x*blockIdx.x + threadIdx.x;
+    if (N_A + N_B <= t_idx) {
         return;
     }
-
-    double group_a_ctr[3] = {0};
-    double mass_a_sums[3] = {0};
-    for(int d=0; d < 3; d++) {
-
-        for(int i=0; i < N_A; i++) {
-            double mass_i = masses[group_a_idxs[i]];
-            group_a_ctr[d] += mass_i*coords[group_a_idxs[i]*3+d];
-            mass_a_sums[d] += mass_i;
-        }
-        group_a_ctr[d] /= mass_a_sums[d];
+    int group_idx = t_idx < N_A ? t_idx : t_idx - N_A;
+    int count = t_idx < N_A ? N_A : N_B;
+    const int * cur_array = t_idx < N_A ? d_group_a_idxs : d_group_b_idxs;
+    RealType sign = t_idx < N_A ? 1.0 : -1.0;
+    RealType dij = 0;
+    RealType deltas[3];
+    for (int d=0; d < 3; d++) {
+        deltas[d] = d_centroid_a[d] / N_A - d_centroid_b[d] / N_B;
+        dij += deltas[d]*deltas[d];
     }
+    dij = sqrt(dij);
 
-    double group_b_ctr[3] = {0};
-    double mass_b_sums[3] = {0};
-    for(int d=0; d < 3; d++) {
-
-        for(int i=0; i < N_B; i++) {
-            double mass_i = masses[group_b_idxs[i]];
-            group_b_ctr[d] += mass_i*coords[group_b_idxs[i]*3+d];
-            mass_b_sums[d] += mass_i;
-        }
-        group_b_ctr[d] /= mass_b_sums[d];
+    if(t_idx == 0 && d_u) {
+        RealType nrg = kb*(dij-b0)*(dij-b0);
+        d_u[0] = FLOAT_TO_FIXED<RealType>(nrg);
     }
-
-    double dx = group_a_ctr[0] - group_b_ctr[0];
-    double dy = group_a_ctr[1] - group_b_ctr[1];
-    double dz = group_a_ctr[2] - group_b_ctr[2];
-
-    double dij = sqrt(dx*dx + dy*dy + dz*dz);
-
-    double nrg = kb*(dij-b0)*(dij-b0);
-
-    if(energy) {
-        atomicAdd(energy, nrg);
-    }
-
-
-    double du_ddij = 2*kb*(dij-b0);
 
     // grads
-    if(grad_coords) {
+    if(d_du_dx) {
         for(int d=0; d < 3; d++) {
-            double ddij_dxi = (group_a_ctr[d] - group_b_ctr[d])/dij;
-
-            for(int i=0; i < N_A; i++) {
-                double mass_i = masses[group_a_idxs[i]];
-                double dx = du_ddij*ddij_dxi*(mass_i/mass_a_sums[d]);
-                atomicAdd(grad_coords + group_a_idxs[i]*3 + d, static_cast<unsigned long long>((long long) (dx*FIXED_EXPONENT)));
-            }
-            for(int i=0; i < N_B; i++) {
-                double mass_i = masses[group_b_idxs[i]];
-                double dx = -du_ddij*ddij_dxi*(mass_i/mass_b_sums[d]);
-                atomicAdd(grad_coords + group_b_idxs[i]*3 + d, static_cast<unsigned long long>((long long) (dx*FIXED_EXPONENT)));
+            if(b0 != 0) {
+                RealType du_ddij = 2*kb*(dij-b0);
+                RealType ddij_dxi = deltas[d]/dij;
+                RealType delta = sign*du_ddij*ddij_dxi/count;
+                atomicAdd(d_du_dx + cur_array[group_idx]*3 + d, FLOAT_TO_FIXED<RealType>(delta));
+            } else {
+                RealType delta = sign*2*kb*deltas[d]/count;
+                atomicAdd(d_du_dx + cur_array[group_idx]*3 + d, FLOAT_TO_FIXED<RealType>(delta));
             }
         }
     }
-
 }

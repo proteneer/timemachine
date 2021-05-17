@@ -35,6 +35,8 @@ def parameterize_ligand(params, param_idxs):
 class ReversibleBondHandler(SerializableMixIn):
 
     def __init__(self, smirks, params, props):
+        """ "Reversible" here means that bond energy is symmetric to index reversal
+        u_bond(x[i], x[j]) = u_bond(x[j], x[i])"""
         self.smirks = smirks
         self.params = np.array(params, dtype=np.float64)
         self.props = props

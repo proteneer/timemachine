@@ -5,6 +5,7 @@
 import re
 from openeye import oechem
 from typing import Any, Dict, List, Callable, Type, TypeVar
+import logging
 
 T = TypeVar("T")
 
@@ -71,7 +72,7 @@ def call_openeye(
         raise exception_type("\n" + output_string, **exception_kwargs)
 
     elif len(output_string) > 0:
-        logger.debug(output_string)
+        logging.debug(output_string)
 
 
 def match_smirks(
@@ -329,7 +330,5 @@ class AromaticityModel:
         ----------
         oe_molecule
             The molecule to assign aromatic flags to.
-        model
-            The aromaticity model to apply.
         """
         cls._assign_am1bcc(oe_molecule)

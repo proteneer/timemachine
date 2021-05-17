@@ -1,18 +1,33 @@
+import jax
 import jax.numpy as np
 
-def centroid_restraint(conf, params, box, lamb, masses, group_a_idxs, group_b_idxs, kb, b0):
+def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, b0):
+    """Computes kb  * (r - b0)**2 where r is the distance between the centroids of group_a and group_b
 
+    Notes
+    ------
+    * Geometric centroid, not mass-weighted centroid
+    * Gradient undefined when `(r - b0) == 0` and `b0 != 0` (explicitly stabilized in case `b0 == 0`)
+    """
     xi = conf[group_a_idxs]
     xj = conf[group_b_idxs]
 
-    avg_xi = np.average(xi, axis=0, weights=masses[group_a_idxs])
-    avg_xj = np.average(xj, axis=0, weights=masses[group_b_idxs])
+    avg_xi = np.mean(xi, axis=0)
+    avg_xj = np.mean(xj, axis=0)
 
     dx = avg_xi - avg_xj
-    dij = np.sqrt(np.sum(dx*dx))
+    d2ij = np.sum(dx*dx)
+    d2ij = np.where(d2ij == 0, 0, d2ij) # stabilize derivative
+    dij = np.sqrt(d2ij)
     delta = dij - b0
 
-    return kb*delta*delta
+    # when b0 == 0 and dij == 0
+    return np.where(
+        b0 == 0,
+        kb * d2ij,
+        kb * delta**2
+    )
+
 
 def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
     """
@@ -104,10 +119,15 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
 
     """
     assert params.shape == bond_idxs.shape
-    if lamb_mult is None:
-        lamb_mult = np.zeros(bond_idxs.shape[0])
-    if lamb_offset is None:
-        lamb_offset = np.ones(bond_idxs.shape[0])
+
+    if lamb_mult is None or lamb_offset is None or lamb is None:
+        assert lamb_mult is None
+        assert lamb_offset is None
+        prefactor = 1.0
+    else:
+        assert lamb_mult is not None
+        assert lamb_offset is not None
+        prefactor = (lamb_offset + lamb_mult * lamb)
 
     ci = conf[bond_idxs[:, 0]]
     cj = conf[bond_idxs[:, 1]]
@@ -118,7 +138,6 @@ def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offse
     dij = np.sqrt(d2ij)
     kbs = params[:, 0]
     r0s = params[:, 1]
-    prefactor = (lamb_offset + lamb_mult * lamb)
 
     # this is here to prevent a numerical instability
     # when b0 == 0 and dij == 0
@@ -174,10 +193,14 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
     ------
     * lamb argument unused
     """
-    if lamb_mult is None:
-        lamb_mult = np.zeros(angle_idxs.shape[0])
-    if lamb_offset is None:
-        lamb_offset = np.ones(angle_idxs.shape[0])
+    if lamb_mult is None or lamb_offset is None or lamb is None:
+        assert lamb_mult is None
+        assert lamb_offset is None
+        prefactor = 1.0
+    else:
+        assert lamb_mult is not None
+        assert lamb_offset is not None
+        prefactor = (lamb_offset + lamb_mult * lamb)
 
     ci = conf[angle_idxs[:, 0]]
     cj = conf[angle_idxs[:, 1]]
@@ -194,7 +217,6 @@ def harmonic_angle(conf, params, box, lamb, angle_idxs, lamb_mult=None, lamb_off
 
     tb = top/bot
 
-    prefactor = (lamb_offset + lamb_mult * lamb)
     # (ytz): we use the squared version so that the energy is strictly positive
     if cos_angles:
         energies = prefactor*kas/2*np.power(tb - np.cos(a0s), 2)

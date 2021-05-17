@@ -4,8 +4,6 @@ from timemachine.lib import custom_ops
 # (ytz): classes in this class wrap custom_ops but have the added benefit
 # of being pickleable.
 
-BoundPotential = custom_ops.BoundPotential
-
 class CustomOpWrapper():
 
     def __init__(self, *args):
@@ -110,6 +108,9 @@ class CustomOpWrapper():
 #     def get_b_idxs(self):
 #         return self.args[2]
 
+class RMSDRestraint(CustomOpWrapper):
+    pass
+
 
 class BondedWrapper(CustomOpWrapper):
 
@@ -133,7 +134,6 @@ class BondedWrapper(CustomOpWrapper):
 
 
 class HarmonicBond(BondedWrapper):
-
     pass
 
 # this is an alias to make type checking easier
@@ -172,19 +172,13 @@ class InertialRestraint(CustomOpWrapper):
         self.args[2] = masses
 
 
-# class CentroidRestraint(CustomOpWrapper):
+class CentroidRestraint(CustomOpWrapper):
 
-#     def get_a_idxs(self):
-#         return self.args[0]
+    def get_a_idxs(self):
+        return self.args[0]
 
-#     def get_b_idxs(self):
-#         return self.args[1]
-
-#     def get_masses(self):
-#         return self.args[2]
-
-#     def set_masses(self, masses):
-#         self.args[2] = masses
+    def get_b_idxs(self):
+        return self.args[1]
 
 
 class Nonbonded(CustomOpWrapper):

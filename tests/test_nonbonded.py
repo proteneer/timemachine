@@ -2,22 +2,21 @@
 # pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_dhfr && nvprof pytest -xsv tests/test_nonbonded.py::TestNonbonded::test_benchmark
 
 import copy
+import gzip
 
-import functools
+import pickle
 import unittest
-import scipy.linalg
 from jax.config import config; config.update("jax_enable_x64", True)
 
 import numpy as np
-import jax
-import jax.numpy as jnp
 
 import functools
+import itertools
 
 from common import GradientTest
-from common import prepare_nb_system, prepare_water_system, prepare_reference_nonbonded
+from common import prepare_water_system, prepare_reference_nonbonded
 
-from timemachine.potentials import bonded, nonbonded, gbsa
+from timemachine.potentials import nonbonded
 from timemachine.lib import potentials
 from md import builders
 
@@ -87,44 +86,46 @@ class TestNonbondedDHFR(GradientTest):
 
         N = self.host_conf.shape[0]
 
-        ref_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
-        ref_nonbonded_impl.disable_hilbert_sort()
+        for precision in [np.float32, np.float64]:
 
-        test_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
+            ref_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(precision)
+            ref_nonbonded_impl.disable_hilbert_sort()
 
-        padding = 0.1
-        deltas = np.random.rand(N,3)-0.5 # [-0.5, +0.5]
-        divisor = 0.5*(2*np.sqrt(3))/padding
-        # if deltas are kept under +- p/(2*sqrt(3)) then no rebuild gets triggered
-        deltas = deltas/divisor # exactly within bounds, and should not trigger a rebuild
+            test_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(precision)
 
-        for d in deltas:
-            assert np.linalg.norm(d) < padding/2
+            padding = 0.1
+            deltas = np.random.rand(N,3)-0.5 # [-0.5, +0.5]
+            divisor = 0.5*(2*np.sqrt(3))/padding
+            # if deltas are kept under +- p/(2*sqrt(3)) then no rebuild gets triggered
+            deltas = deltas/divisor # exactly within bounds, and should not trigger a rebuild
 
-        xs = [self.host_conf, self.host_conf + deltas]
+            for d in deltas:
+                assert np.linalg.norm(d) < padding/2
 
-        np.set_printoptions(precision=16)
-        # under pure fixed point accumulation the results should be identical.
-        for x_idx, x in enumerate(xs):
+            xs = [self.host_conf, self.host_conf + deltas]
 
-            ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
+            np.set_printoptions(precision=16)
+            # under pure fixed point accumulation the results should be identical.
+            for x_idx, x in enumerate(xs):
 
-            np.testing.assert_array_equal(ref_du_dx, test_du_dx)
-            np.testing.assert_array_equal(ref_du_dp, test_du_dp)
-            np.testing.assert_array_equal(ref_du_dl, test_du_dl)
-            np.testing.assert_array_equal(ref_u, test_u)
+                ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
+                test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
 
-            ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
-            test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+                np.testing.assert_array_equal(ref_du_dx, test_du_dx)
+                np.testing.assert_array_equal(ref_du_dp, test_du_dp)
+                np.testing.assert_array_equal(ref_du_dl, test_du_dl)
+                np.testing.assert_array_equal(ref_u, test_u)
 
-            for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
-                if np.linalg.norm(a-b) != 0:
-                    print(idx, a, b)
-                    assert 0
-                np.testing.assert_array_equal(a, b)
+                ref_du_dx = ref_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
+                test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
 
-            np.testing.assert_array_equal(ref_du_dx, test_du_dx)
+                for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
+                    if np.linalg.norm(a-b) != 0:
+                        print(idx, a, b)
+                        assert 0
+                    np.testing.assert_array_equal(a, b)
+
+                np.testing.assert_array_equal(ref_du_dx, test_du_dx)
 
     def test_nblist_rebuild(self):
         """
@@ -254,7 +255,7 @@ class TestNonbondedDHFR(GradientTest):
         nb_fn.set_lambda_plane_idxs(test_lambda_plane_idxs)
         nb_fn.set_lambda_offset_idxs(test_lambda_offset_idxs)
 
-        impl = nb_fn.unbound_impl(np.float32)
+        impl = nb_fn.unbound_impl(precision)
 
         for combo in itertools.product([False, True], repeat=4):
 
@@ -334,6 +335,47 @@ class TestNonbondedWater(GradientTest):
 
 class TestNonbonded(GradientTest):
 
+    def test_non_zero_du_dl(self):
+        # du_dl should be zero for this test case.
+        fp=gzip.open('tests/data/bad_test_547.pkl.gz','rb')
+        x_t, box, lamb, nb_bp =  pickle.load(fp)
+
+        nb_bp.args = nb_bp.args[:-4] # ignore any extra args from future PRs
+
+        for i, j in nb_bp.get_exclusion_idxs():
+            assert i < j
+
+        for precision in [np.float64, np.float32]:
+
+            impl = nb_bp.unbound_impl(precision)
+            du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
+
+            print(du_dx, du_dp, du_dl, u)
+
+            assert du_dl == 0.0
+
+    def test_fma_compiler_bug(self):
+
+        # this test case deals with a rather annoying fma compiler bug in CUDA.
+        # see https://github.com/proteneer/timemachine/issues/386
+        fp=gzip.open('tests/data/repro.pkl.gz','rb') # This assumes that primes.data is already packed with gzip
+        x_t, box, lamb, nb_bp = pickle.load(fp)
+
+        for precision in [np.float32, np.float64]:
+
+            impl = nb_bp.unbound_impl(precision)
+            du_dx, du_dp, du_dl, u = impl.execute(x_t, nb_bp.params, box, lamb)
+
+            uimpl2 = nb_bp.unbound_impl(precision)
+
+            uimpl2.disable_hilbert_sort()
+            du_dx2, du_dp2, du_dl2, u2 = uimpl2.execute(x_t, nb_bp.params, box, lamb)
+
+            np.testing.assert_array_equal(u2, u)
+            np.testing.assert_array_equal(du_dx2, du_dx)
+            np.testing.assert_array_equal(du_dp2, du_dp)
+            np.testing.assert_array_equal(du_dl2, du_dl) # this one fails without the patch.
+
     def test_exclusion(self):
 
         # This test verifies behavior when two particles are arbitrarily
@@ -405,7 +447,6 @@ class TestNonbonded(GradientTest):
                 nonbonded.nonbonded_v3,
                 charge_rescale_mask=charge_rescale_mask,
                 lj_rescale_mask=lj_rescale_mask,
-                scales=scales,
                 beta=beta,
                 cutoff=cutoff,
                 lambda_plane_idxs=lambda_plane_idxs,
