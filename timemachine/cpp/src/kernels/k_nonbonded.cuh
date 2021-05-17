@@ -306,6 +306,41 @@ double __device__ __forceinline__ fix_nvidia_fmad(double a, double b, double c, 
 
 // } // 0 or 1, how much we offset from the plane by )
 
+
+// Compute the terms associated with electrostatics.
+// This is pulled out into a function to ensure that the same bit values
+// are computed to ensure that that the fixed point values are exactly the same regardless
+// of where the values are computed.
+template <
+    typename RealType,
+    bool COMPUTE_U
+>
+void __device__ __forceinline__ compute_electrostatics(
+    const RealType charge_scale,
+    const RealType qi,
+    const RealType qj,
+    const RealType d2ij,
+    const RealType beta,
+    RealType &dij,
+    RealType &inv_dij,
+    RealType &inv_d2ij,
+    RealType &ebd,
+    RealType &es_prefactor,
+    RealType &u
+) {
+    inv_dij = rsqrt(d2ij);
+
+    dij = d2ij*inv_dij;
+    inv_d2ij = inv_dij*inv_dij;
+
+    RealType qij = qi*qj;
+    es_prefactor = charge_scale*qij*inv_dij*real_es_factor(beta, dij, inv_d2ij, ebd);
+
+    if (COMPUTE_U) {
+        u = charge_scale*qij*inv_dij*ebd;
+    }
+}
+
 // Handles the computation related to the LJ terms.
 // This is pulled out into a function to ensure that the same bit values
 // are computed to ensure that that the fixed point values are exactly the same regardless
@@ -493,35 +528,31 @@ void __device__ v_nonbonded_unified(
         if(d2ij < cutoff_squared && atom_j_idx > atom_i_idx && atom_j_idx < N && atom_i_idx < N) {
 
             // electrostatics
-            RealType inv_dij = rsqrt(d2ij);
-            RealType dij = d2ij*inv_dij;
-
-            RealType inv_d2ij = inv_dij*inv_dij;
-            RealType beta_dij = real_beta*dij;
-
-
-            RealType qij = qi*qj;
-
-            RealType u = 0;
-
+            RealType u;
+            RealType es_prefactor;
             RealType ebd;
-            RealType es_prefactor = qij*inv_dij*real_es_factor(real_beta, dij, inv_d2ij, ebd);
+            RealType dij;
+            RealType inv_dij;
+            RealType inv_d2ij;
+            compute_electrostatics<RealType, COMPUTE_U>(
+                1.0,
+                qi,
+                qj,
+                d2ij,
+                beta,
+                dij,
+                inv_dij,
+                inv_d2ij,
+                ebd,
+                es_prefactor,
+                u
+            );
 
-            if(COMPUTE_U) {
-                u += qij*inv_dij*ebd;
-            }
-
-            // RealType ebd = erfc(beta_dij);
-
-            // lennard jones
-            // RealType inv_d4ij = inv_d2ij*inv_d2ij;
-            // RealType inv_d6ij = inv_d4ij*inv_d2ij;
-
-            // lennard jones force
             RealType delta_prefactor = es_prefactor;
 
             RealType real_du_dl = 0;
 
+            // lennard jones force
             if(eps_i != 0 && eps_j != 0) {
                 RealType sig_grad;
                 RealType eps_grad;
@@ -876,26 +907,28 @@ void __global__ k_nonbonded_exclusions(
     // see note: this must be strictly less than
     if(d2ij < cutoff_squared) {
 
-        RealType inv_dij = rsqrt(d2ij);
-
-        RealType dij = d2ij*inv_dij;
-        RealType inv_d2ij = inv_dij*inv_dij;
-
-        RealType beta_dij = real_beta*dij;
-        // RealType ebd = erfc(beta_dij);
-
-        RealType qij = qi*qj;
+        RealType u;
         RealType ebd;
-        RealType es_prefactor = charge_scale*qij*inv_dij*real_es_factor(real_beta, dij, inv_d2ij, ebd);
-
-        // lennard jones
-        RealType inv_d4ij = inv_d2ij*inv_d2ij;
-        RealType inv_d6ij = inv_d4ij*inv_d2ij;
+        RealType es_prefactor;
+        RealType dij;
+        RealType inv_dij;
+        RealType inv_d2ij;
+        compute_electrostatics<RealType, true>(
+            charge_scale,
+            qi,
+            qj,
+            d2ij,
+            beta,
+            dij,
+            inv_dij,
+            inv_d2ij,
+            ebd,
+            es_prefactor,
+            u
+        );
 
         RealType delta_prefactor = es_prefactor;
         RealType real_du_dl = 0;
-
-        RealType u = charge_scale*qij*inv_dij*ebd;
         // lennard jones force
         if(eps_i != 0 && eps_j != 0) {
             RealType sig_grad;
