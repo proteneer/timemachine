@@ -42,7 +42,7 @@ if __name__ == '__main__':
     potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
     ensemble = NPTEnsemble(potential_energy_model, temperature, pressure)
 
-    lam = 0.5
+    lam = 0.63
 
 
     def reduced_potential_fxn(x, box):
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     harmonic_bond_potential = unbound_potentials[0]
     group_indices = get_group_indices(harmonic_bond_potential)
 
-    barostat = MonteCarloBarostat(reduced_potential_fxn, group_indices, max_delta_volume=0.05)
+    barostat = MonteCarloBarostat(reduced_potential_fxn, group_indices, max_delta_volume=0.1)
 
     # define a thermostat
     seed = 2021
@@ -69,6 +69,7 @@ if __name__ == '__main__':
     )
     integrator_impl = integrator.impl()
 
+
     def sample_velocities():
         """ TODO: move this into integrator or something? """
         v_unscaled = np.random.randn(len(masses), 3)
@@ -79,7 +80,7 @@ if __name__ == '__main__':
 
         return v_unscaled * np.expand_dims(sigma, axis=1)
 
-        #return (sigma * v_unscaled.T).T
+        # return (sigma * v_unscaled.T).T
 
 
     def run_thermostatted_md(x: CoordsAndBox, n_steps=5) -> CoordsAndBox:
@@ -100,28 +101,50 @@ if __name__ == '__main__':
         return CoordsAndBox(xs[-1], x.box)
 
 
-    # alternate between thermostat moves and barostat moves
-    traj = [CoordsAndBox(coords, complex_box)]
-    volume_traj = [compute_box_volume(traj[0].box)]
+    def simulate_npt_traj(coords, box, n_moves=1000):
+        # alternate between thermostat moves and barostat moves
+        traj = [CoordsAndBox(coords, box)]
+        volume_traj = [compute_box_volume(traj[0].box)]
 
-    trange = tqdm(range(1000))
+        trange = tqdm(range(1000))
 
-    from time import time
+        from time import time
 
-    for _ in trange:
-        t0 = time()
-        after_nvt = run_thermostatted_md(traj[-1])
-        t1 = time()
-        after_npt = barostat.move(after_nvt)
-        t2 = time()
+        for _ in trange:
+            t0 = time()
+            after_nvt = run_thermostatted_md(traj[-1])
+            t1 = time()
+            after_npt = barostat.move(after_nvt)
+            t2 = time()
+
+            traj.append(after_npt)
+            volume_traj.append(compute_box_volume(after_npt.box))
+
+            trange.set_postfix(volume=f'{volume_traj[-1]:.3f}',
+                               acceptance_fraction=f'{(barostat.n_accepted / barostat.n_proposed):.3f}',
+                               md_proposal_time=f'{(t1 - t0):.3f}s',
+                               barostat_proposal_time=f'{(t2 - t1):.3f}s',
+                               )
+
+        traj = np.array(traj)
+        volume_traj = np.array(volume_traj)
+        return traj, volume_traj
 
 
+    import matplotlib.pyplot as plt
 
-        traj.append(after_npt)
-        volume_traj.append(compute_box_volume(after_npt.box))
+    initial_box_scales = [1.0, 1.05, 1.1, 1.15]
+    trajs = []
+    volume_trajs = []
+    for scale in initial_box_scales:
+        traj, volume_traj = simulate_npt_traj(coords, complex_box * scale, n_moves=1000)
 
-        trange.set_postfix(volume=f'{volume_traj[-1]:.3f}',
-                           acceptance_fraction=f'{(barostat.n_accepted / barostat.n_proposed):.3f}',
-                           md_proposal_time=f'{(t1 - t0):.3f}s',
-                           barostat_proposal_time=f'{(t2 - t1):.3f}s',
-                           )
+        trajs.append(traj)
+        volume_trajs.append(volume_traj)
+
+    for volume_traj in volume_trajs:
+        plt.plot(volume_traj)
+    plt.xlabel('# moves')
+    plt.ylabel('volume')
+    plt.savefig('volume_traj.png', dpi=300, bbox_inches='tight')
+    plt.close()
