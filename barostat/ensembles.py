@@ -81,8 +81,19 @@ class NPTEnsemble:
 
         U assumed to be in units of ENERGY_UNIT (kJ/mol), but without simtk unit attached
         volume assumed to be in units of DISTANCE_UNIT^3 (nm^3), but without simtk unit attached
+
+        Reference
+        ---------
+        OpenMMTools thermodynamic states
+            https://github.com/choderalab/openmmtools/blob/321b998fc5977a1f8893e4ad5700b1b3aef6101c/openmmtools/states.py#L1904-L1912
         """
-        return (U * ENERGY_UNIT / unit.AVOGADRO_CONSTANT_NA + self.pressure * volume * DISTANCE_UNIT**3) / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
+        U_unitted = U * ENERGY_UNIT
+        V_unitted = volume * DISTANCE_UNIT**3
+
+        beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
+        reduced_potential = (U_unitted / unit.AVOGADRO_CONSTANT_NA) + (self.pressure * V_unitted)
+        return beta * reduced_potential
+    
 
     def reduced_potential_and_gradient(self, x, box, lam):
         U, dU_dx = self.potential_energy.energy_and_gradient(x, box, lam)
