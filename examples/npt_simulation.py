@@ -56,7 +56,7 @@ if __name__ == '__main__':
     harmonic_bond_potential = unbound_potentials[0]
     group_indices = get_group_indices(harmonic_bond_potential)
 
-    barostat = MonteCarloBarostat(reduced_potential_fxn, group_indices, max_delta_volume=0.1)
+    barostat = MonteCarloBarostat(reduced_potential_fxn, group_indices, max_delta_volume=1.0)
 
     # define a thermostat
     seed = 2021
@@ -83,7 +83,7 @@ if __name__ == '__main__':
         # return (sigma * v_unscaled.T).T
 
 
-    def run_thermostatted_md(x: CoordsAndBox, n_steps=5) -> CoordsAndBox:
+    def run_thermostatted_md(x: CoordsAndBox, n_steps=10) -> CoordsAndBox:
 
         # TODO: is there a way to set context coords, box, velocities without initializing a fresh Context?
         # TODO: is there a way to get velocities at the end?
