@@ -95,7 +95,19 @@ class NPTEnsemble:
         U_unitted = U * ENERGY_UNIT
         V_unitted = volume * DISTANCE_UNIT**3
 
-        return (U_unitted + self._pressure_over_mole * V_unitted) / (kB * self.temperature)
+        beta = 1.0 / (kB * self.temperature)
+
+        reduced_u = beta * U_unitted
+        reduced_pv = beta * (self._pressure_over_mole * V_unitted)
+        #reduced_pv = beta * (self._pressure_over_mole * V_unitted / 1e-25)
+
+
+        if type(U) == np.float64:
+            print('\treduced_u: ', reduced_u)
+            print('\treduced_pv: ', reduced_pv)
+
+        return reduced_u + reduced_pv
+
 
     def reduced_potential_and_gradient(self, x, box, lam):
         U, dU_dx = self.potential_energy.energy_and_gradient(x, box, lam)
