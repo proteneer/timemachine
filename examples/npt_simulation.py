@@ -56,7 +56,7 @@ if __name__ == '__main__':
     harmonic_bond_potential = unbound_potentials[0]
     group_indices = get_group_indices(harmonic_bond_potential)
 
-    barostat = MonteCarloBarostat(reduced_potential_fxn, group_indices, max_delta_volume=1.0)
+    barostat = MonteCarloBarostat(reduced_potential_fxn, group_indices, max_delta_volume=0.5)
 
     # define a thermostat
     seed = 2021
