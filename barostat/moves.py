@@ -194,8 +194,8 @@ class MonteCarloBarostat(MonteCarloMove):
 
         """
         adaptation_multiplier = 1.1  # multiply/divide by this factor when increasing/decreasing proposal scale
-        lower_bound = 0.1  # don't let self.max_delta_volume drop below lower_bound nm^3
-        upper_bound = 10.0  # don't let self.max_delta_volume exceed upper_bound nm^3
+        lower_bound = 1e-3  # don't let self.max_delta_volume drop below lower_bound nm^3
+        upper_bound = 1e+1  # don't let self.max_delta_volume exceed upper_bound nm^3
 
         if self.n_proposed >= 10:
 
