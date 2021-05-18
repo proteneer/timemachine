@@ -20,12 +20,10 @@ class Dataset():
         np.random.shuffle(self.data)
 
     def iterbatches(self, batch_size: int) -> List[Any]:
-        batch = 0
-        for _ in range(self.num_batches(batch_size)):
+        for batch in range(self.num_batches(batch_size)):
             start = batch*batch_size
             end = min((batch+1)*batch_size, len(self.data))
             yield self.data[start:end]
-            batch += 1
 
     def split(self, frac: float) -> Tuple["Dataset", "Dataset"]:
         """Split dataset into two, using a fraction.
