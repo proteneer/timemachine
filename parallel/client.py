@@ -1,4 +1,4 @@
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union
 import numpy as np
 import time
 
@@ -148,7 +148,7 @@ class BinaryFutureWrapper():
 
 class GRPCClient(AbstractClient):
 
-    def __init__(self, hosts: List[str], options: Optional[List[Any]] = None, default_port: int = 8888):
+    def __init__(self, hosts: Union[str, List[str]], options: Optional[List[Any]] = None, default_port: int = 8888):
         """
         GRPCClient is meant for distributed use. The GRPC workers must
         be launched prior to starting the client. The worker version should be compatible
@@ -157,8 +157,8 @@ class GRPCClient(AbstractClient):
 
         Parameters
         ----------
-        hosts: list
-            List of hosts to use as GRPC workers.
+        hosts: str or list
+            List of hosts to use as GRPC workers or a line delimited file with hosts.
         options: list
             List of options to configure GRPC connections
         default_port: int
@@ -180,7 +180,14 @@ class GRPCClient(AbstractClient):
             self.stubs.append(service_pb2_grpc.WorkerStub(channel))
         self._idx = 0
 
-    def _prepare_hosts(self, hosts: List[str], default_port: int):
+    def _prepare_hosts(self, hosts: Union[str, List[str]], default_port: int):
+        if isinstance(hosts, str):
+            assert os.path.isfile(hosts), f"{hosts} is not a file or a list of hosts"
+            new_hosts = []
+            with open(hosts, "r") as ifs:
+                for line in ifs.readlines():
+                    new_hosts.append(line.strip())
+            hosts = new_hosts
         modded_hosts = []
         for host in hosts:
             if ":" not in host:
