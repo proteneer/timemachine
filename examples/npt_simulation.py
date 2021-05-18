@@ -124,7 +124,7 @@ if __name__ == '__main__':
             volume_traj.append(compute_box_volume(after_npt.box))
 
             trange.set_postfix(volume=f'{volume_traj[-1]:.3f}',
-                               acceptance_fraction=f'{(barostat.n_accepted / barostat.n_proposed):.3f}',
+                               acceptance_fraction=f'{barostat.acceptance_fraction:.3f}',
                                md_proposal_time=f'{(t1 - t0):.3f}s',
                                barostat_proposal_time=f'{(t2 - t1):.3f}s',
                                proposal_scale=f'{barostat.max_delta_volume:.3f}',

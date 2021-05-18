@@ -106,6 +106,13 @@ class MonteCarloMove:
         else:
             return x
 
+    @property
+    def acceptance_fraction(self):
+        if self.n_proposed > 0:
+            return self.n_accepted / self.n_proposed
+        else:
+            return 0.0
+
 
 class MonteCarloBarostat(MonteCarloMove):
     def __init__(self,  # target_ensemble: NPTEnsemble,
@@ -186,14 +193,13 @@ class MonteCarloBarostat(MonteCarloMove):
 
         if self.n_proposed >= 10:
 
-            accepted_fraction = self.n_accepted / self.n_proposed
-            if accepted_fraction < 0.25:
+            if self.acceptance_fraction < 0.25:
                 decreased = self.max_delta_volume / adaptation_multiplier
                 self.max_delta_volume = max(lower_bound, decreased)
 
                 self.n_proposed = 0
                 self.n_accepted = 0
-            elif accepted_fraction > 0.75:
+            elif self.acceptance_fraction > 0.75:
                 increased = self.max_delta_volume * adaptation_multiplier
                 self.max_delta_volume = min(upper_bound, increased)
 
