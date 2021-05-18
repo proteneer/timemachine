@@ -2,6 +2,7 @@
 
 #### MD
 `npt_simulation.py` samples the constant temperature and pressure ensemble by running thermostatted MD and pausing every few steps to apply a Monte Carlo barostat move
+`npt_equilibration_at_multiple_lambdas.py` runs a simulation including a barostat on several lambda windows
 
 #### Absolute hydration free energy
 
