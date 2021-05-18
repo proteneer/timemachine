@@ -151,6 +151,11 @@ class TestGRPCClient(unittest.TestCase):
             cli.verify()
         self.assertIn(bad_host, str(e.exception))
 
+    def test_default_port(self):
+        host = "128.128.128.128"
+        cli = client.GRPCClient([host], default_port=9999)
+        self.assertEqual(cli.hosts[0], "128.128.128.128:9999")
+
     def test_foo_2_args(self):
         xs = np.linspace(0, 1.0, 5)
         ys = np.linspace(1.2, 2.2, 5)

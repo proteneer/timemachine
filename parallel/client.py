@@ -148,7 +148,7 @@ class BinaryFutureWrapper():
 
 class GRPCClient(AbstractClient):
 
-    def __init__(self, hosts: List[str], options: Optional[List[Any]] = None):
+    def __init__(self, hosts: List[str], options: Optional[List[Any]] = None, default_port: int = 8888):
         """
         GRPCClient is meant for distributed use. The GRPC workers must
         be launched prior to starting the client. The worker version should be compatible
@@ -161,22 +161,32 @@ class GRPCClient(AbstractClient):
             List of hosts to use as GRPC workers.
         options: list
             List of options to configure GRPC connections
+        default_port: int
+            Default port to expect client running on, if none provided
 
         """
-        self.hosts = hosts
+        self.hosts = self._prepare_hosts(hosts, default_port)
         self.stubs = []
         if options is None:
             options = [
                 ('grpc.max_send_message_length', 500 * 1024 * 1024),
                 ('grpc.max_receive_message_length', 500 * 1024 * 1024)
             ]
-        for host in hosts:
+        for host in self.hosts:
             channel = grpc.insecure_channel(
                 host,
                 options=options,
             )
             self.stubs.append(service_pb2_grpc.WorkerStub(channel))
         self._idx = 0
+
+    def _prepare_hosts(self, hosts: List[str], default_port: int):
+        modded_hosts = []
+        for host in hosts:
+            if ":" not in host:
+                host = f"{host}:{default_port}"
+            modded_hosts.append(host)
+        return modded_hosts
 
     def submit(self, task_fn, *args):
         """
