@@ -112,6 +112,7 @@ if __name__ == '__main__':
         from time import time
 
         v_t = sample_velocities()
+        barostat.reset()
 
         for _ in trange:
             t0 = time()

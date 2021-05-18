@@ -141,6 +141,7 @@ class MonteCarloBarostat(MonteCarloMove):
 
         self.group_indices = group_indices
         self.max_delta_volume = max_delta_volume
+        self._initial_max_delta_volume = max_delta_volume
 
         # how many molecule groups will we be adjusting...
         self.N = len(group_indices)
@@ -188,7 +189,7 @@ class MonteCarloBarostat(MonteCarloMove):
         Direct clone of https://github.com/openmm/openmm/blob/d8ef57fed6554ec95684e53768188e1f666405c9/openmmapi/src/MonteCarloBarostatImpl.cpp#L103-L113
         """
         adaptation_multiplier = 1.1  # multiply/divide by this factor when increasing/decreasing proposal scale
-        lower_bound = 0.0  # don't let self.max_delta_volume drop below lower_bound nm^3
+        lower_bound = 0.1  # don't let self.max_delta_volume drop below lower_bound nm^3
         upper_bound = 10.0  # don't let self.max_delta_volume exceed upper_bound nm^3
 
         if self.n_proposed >= 10:
@@ -196,15 +197,24 @@ class MonteCarloBarostat(MonteCarloMove):
             if self.acceptance_fraction < 0.25:
                 decreased = self.max_delta_volume / adaptation_multiplier
                 self.max_delta_volume = max(lower_bound, decreased)
+                self.reset_counters()
 
-                self.n_proposed = 0
-                self.n_accepted = 0
             elif self.acceptance_fraction > 0.75:
                 increased = self.max_delta_volume * adaptation_multiplier
                 self.max_delta_volume = min(upper_bound, increased)
 
-                self.n_proposed = 0
-                self.n_accepted = 0
+                self.reset_counters()
+
+    def reset_counters(self):
+        self.n_proposed = 0
+        self.n_accepted = 0
+
+    def reset_proposal_scale(self):
+        self.max_delta_volume = self._initial_max_delta_volume
+
+    def reset(self):
+        self.reset_counters()
+        self.reset_proposal_scale()
 
     def move(self, x: CoordsAndBox) -> CoordsAndBox:
         x_next = super().move(x)
