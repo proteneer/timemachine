@@ -204,7 +204,7 @@ class MonteCarloBarostat(MonteCarloMove):
                 self.n_accepted = 0
 
     def move(self, x: CoordsAndBox) -> CoordsAndBox:
-        x_next = super(self).move(x)
+        x_next = super().move(x)
         if self.adapt_proposal_scale:
             self.adapt()
         return x_next
