@@ -111,7 +111,8 @@ class MonteCarloBarostat(MonteCarloMove):
     def __init__(self,  # target_ensemble: NPTEnsemble,
                  reduced_potential_fxn: callable,
                  group_indices: List[Iterable[int]],
-                 max_delta_volume: float = 0.05
+                 max_delta_volume: float = 0.05,
+                 adapt_proposal_scale: bool = True,
                  ):
         """
 
@@ -138,6 +139,7 @@ class MonteCarloBarostat(MonteCarloMove):
         self.N = len(group_indices)
 
         self.centroid_rescaler = CentroidRescaler(group_indices)
+        self.adapt_proposal_scale = adapt_proposal_scale
 
     def propose(self, x: CoordsAndBox) -> Tuple[CoordsAndBox, float]:
         print('initial')
@@ -168,3 +170,41 @@ class MonteCarloBarostat(MonteCarloMove):
         log_acceptance_probability = jnp.minimum(0, - (delta_u - jacobian_contribution))
 
         return proposed_state, log_acceptance_probability
+
+    def adapt(self):
+        """Adapt self.max_delta_volume if the recent acceptance fraction is outside of range [0.25, 0.75]
+
+        Notes
+        -----
+        TODO: refactor so that this doesn't overwrite the global barostat.n_proposed, barostat.n_accepted counters,
+            instead using something like barostat.n_proposed_since_last_adaptation?
+
+        References
+        ----------
+        Direct clone of https://github.com/openmm/openmm/blob/d8ef57fed6554ec95684e53768188e1f666405c9/openmmapi/src/MonteCarloBarostatImpl.cpp#L103-L113
+        """
+        adaptation_multiplier = 1.1  # multiply/divide by this factor when increasing/decreasing proposal scale
+        lower_bound = 0.0  # don't let self.max_delta_volume drop below lower_bound nm^3
+        upper_bound = 10.0  # don't let self.max_delta_volume exceed upper_bound nm^3
+
+        if self.n_proposed >= 10:
+
+            accepted_fraction = self.n_accepted / self.n_proposed
+            if accepted_fraction < 0.25:
+                decreased = self.max_delta_volume / adaptation_multiplier
+                self.max_delta_volume = max(lower_bound, decreased)
+
+                self.n_proposed = 0
+                self.n_accepted = 0
+            elif accepted_fraction > 0.75:
+                increased = self.max_delta_volume * adaptation_multiplier
+                self.max_delta_volume = min(upper_bound, increased)
+
+                self.n_proposed = 0
+                self.n_accepted = 0
+
+    def move(self, x: CoordsAndBox) -> CoordsAndBox:
+        x_next = super(self).move(x)
+        if self.adapt_proposal_scale:
+            self.adapt()
+        return x_next

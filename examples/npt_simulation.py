@@ -127,6 +127,7 @@ if __name__ == '__main__':
                                acceptance_fraction=f'{(barostat.n_accepted / barostat.n_proposed):.3f}',
                                md_proposal_time=f'{(t1 - t0):.3f}s',
                                barostat_proposal_time=f'{(t2 - t1):.3f}s',
+                               proposal_scale=f'{barostat.max_delta_volume:.3f}',
                                )
 
         traj = np.array(traj)
