@@ -83,7 +83,7 @@ if __name__ == '__main__':
         # return (sigma * v_unscaled.T).T
 
 
-    def run_thermostatted_md(x: CoordsAndBox, v: np.array, n_steps=100) -> CoordsAndBox:
+    def run_thermostatted_md(x: CoordsAndBox, v: np.array, n_steps=10) -> CoordsAndBox:
 
         # TODO: is there a way to set context coords, box, velocities without initializing a fresh Context?
 
