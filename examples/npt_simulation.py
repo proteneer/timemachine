@@ -56,7 +56,7 @@ if __name__ == '__main__':
     harmonic_bond_potential = unbound_potentials[0]
     group_indices = get_group_indices(harmonic_bond_potential)
 
-    barostat = MonteCarloBarostat(reduced_potential_fxn, group_indices, max_delta_volume=0.5)
+    barostat = MonteCarloBarostat(reduced_potential_fxn, group_indices, max_delta_volume=3.0)
 
     # define a thermostat
     seed = 2021
@@ -83,7 +83,7 @@ if __name__ == '__main__':
         # return (sigma * v_unscaled.T).T
 
 
-    def run_thermostatted_md(x: CoordsAndBox, v: np.array, n_steps=10) -> CoordsAndBox:
+    def run_thermostatted_md(x: CoordsAndBox, v: np.array, n_steps=5) -> CoordsAndBox:
 
         # TODO: is there a way to set context coords, box, velocities without initializing a fresh Context?
 
@@ -103,16 +103,18 @@ if __name__ == '__main__':
 
 
     def simulate_npt_traj(coords, box, n_moves=1000):
+        barostat.reset()
+
         # alternate between thermostat moves and barostat moves
         traj = [CoordsAndBox(coords, box)]
         volume_traj = [compute_box_volume(traj[0].box)]
+        proposal_scale_traj = [barostat.max_delta_volume]
 
         trange = tqdm(range(n_moves))
 
         from time import time
 
         v_t = sample_velocities()
-        barostat.reset()
 
         for _ in trange:
             t0 = time()
@@ -123,6 +125,7 @@ if __name__ == '__main__':
 
             traj.append(after_npt)
             volume_traj.append(compute_box_volume(after_npt.box))
+            proposal_scale_traj.append(barostat.max_delta_volume)
 
             trange.set_postfix(volume=f'{volume_traj[-1]:.3f}',
                                acceptance_fraction=f'{barostat.acceptance_fraction:.3f}',
@@ -133,23 +136,32 @@ if __name__ == '__main__':
 
         traj = np.array(traj)
         volume_traj = np.array(volume_traj)
-        return traj, volume_traj
+        return traj, volume_traj, proposal_scale_traj
 
 
     import matplotlib.pyplot as plt
 
-    initial_box_scales = [1.0, 1.05, 1.1, 1.15]
+    initial_box_scales = np.array([1.0, 1.05, 1.1, 1.15, 1.2, 1.25]) ** (1.0 / 3)
     trajs = []
     volume_trajs = []
-    for scale in initial_box_scales:
-        traj, volume_traj = simulate_npt_traj(coords, complex_box * scale, n_moves=1000)
+    proposal_scale_trajs = []
+    for scale in initial_box_scales[::-1]:
+        traj, volume_traj, proposal_scale_traj = simulate_npt_traj(coords, complex_box * scale, n_moves=2000)
 
         trajs.append(traj)
         volume_trajs.append(volume_traj)
+        proposal_scale_trajs.append(proposal_scale_traj)
 
-    for volume_traj in volume_trajs:
+    for volume_traj in volume_trajs[::-1]:
         plt.plot(volume_traj)
     plt.xlabel('# moves')
     plt.ylabel('volume')
     plt.savefig('volume_traj.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    for proposal_scale_traj in proposal_scale_trajs[::-1]:
+        plt.plot(proposal_scale_traj)
+    plt.xlabel('# moves')
+    plt.ylabel('proposal scale')
+    plt.savefig('proposal_scale_traj.png', dpi=300, bbox_inches='tight')
     plt.close()
