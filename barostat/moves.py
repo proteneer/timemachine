@@ -187,6 +187,11 @@ class MonteCarloBarostat(MonteCarloMove):
         References
         ----------
         Direct clone of https://github.com/openmm/openmm/blob/d8ef57fed6554ec95684e53768188e1f666405c9/openmmapi/src/MonteCarloBarostatImpl.cpp#L103-L113
+        with the following tweaks:
+            * introduces a lower_bound (so that the proposal scale can't go below some preset value)
+            * introduces an upper_bound (so that the proposal scale can't go above some preset value,
+                rather than using the state-dependent limit 0.3 * current_box_volume in OpenMM)
+
         """
         adaptation_multiplier = 1.1  # multiply/divide by this factor when increasing/decreasing proposal scale
         lower_bound = 0.1  # don't let self.max_delta_volume drop below lower_bound nm^3
@@ -202,7 +207,6 @@ class MonteCarloBarostat(MonteCarloMove):
             elif self.acceptance_fraction > 0.75:
                 increased = self.max_delta_volume * adaptation_multiplier
                 self.max_delta_volume = min(upper_bound, increased)
-
                 self.reset_counters()
 
     def reset_counters(self):
