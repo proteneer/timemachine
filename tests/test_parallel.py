@@ -1,14 +1,16 @@
 # tests for parallel execution
 import numpy as np
 
+from tempfile import NamedTemporaryFile
+
 import parallel
-from parallel import client
-from parallel import worker
+from parallel import client, worker
 from parallel.utils import get_gpu_count
 
+import os
 import unittest
 from unittest.mock import patch
-import os
+
 
 import grpc
 import concurrent
@@ -155,6 +157,19 @@ class TestGRPCClient(unittest.TestCase):
         host = "128.128.128.128"
         cli = client.GRPCClient([host], default_port=9999)
         self.assertEqual(cli.hosts[0], "128.128.128.128:9999")
+
+    def test_hosts_from_file(self):
+        with self.assertRaises(AssertionError):
+            cli = client.GRPCClient("nosuchfile", default_port=9999)
+
+        hosts = ["128.128.128.128", "127.127.127.127:8888"]
+        with NamedTemporaryFile(suffix=".txt") as temp:
+            for host in hosts:
+                temp.write(f"{host}\n".encode("utf-8"))
+            temp.flush()
+            cli = client.GRPCClient(temp.name, default_port=9999)
+            self.assertEqual(cli.hosts[0], "128.128.128.128:9999")
+            self.assertEqual(cli.hosts[1], hosts[1])
 
     def test_foo_2_args(self):
         xs = np.linspace(0, 1.0, 5)
