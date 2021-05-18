@@ -1,5 +1,6 @@
 # tests for parallel execution
 import numpy as np
+import random
 
 from tempfile import NamedTemporaryFile
 
@@ -108,11 +109,12 @@ class TestGRPCClient(unittest.TestCase):
 
     def setUp(self):
 
+        starting_port = random.randint(2000, 5000)
         # setup server, in reality max_workers is equal to number of gpus
-        self.ports = [2020 + i for i in range(4)]
+        self.ports = [starting_port + i for i in range(2)]
         self.servers = []
         for port in self.ports:
-            server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=2),
+            server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=1),
                 options = [
                     ('grpc.max_send_message_length', 50 * 1024 * 1024),
                     ('grpc.max_receive_message_length', 50 * 1024 * 1024)
