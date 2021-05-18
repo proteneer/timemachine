@@ -99,7 +99,8 @@ class MonteCarloMove:
         self.n_proposed += 1
 
         alpha = onp.random.rand()
-        if alpha < onp.exp(log_acceptance_probability):
+        acceptance_probability = onp.exp(log_acceptance_probability)
+        if alpha < acceptance_probability:
             self.n_accepted += 1
             return proposal
         else:
