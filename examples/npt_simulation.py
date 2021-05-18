@@ -83,14 +83,13 @@ if __name__ == '__main__':
         # return (sigma * v_unscaled.T).T
 
 
-    def run_thermostatted_md(x: CoordsAndBox, n_steps=10) -> CoordsAndBox:
+    def run_thermostatted_md(x: CoordsAndBox, v: np.array, n_steps=100) -> CoordsAndBox:
 
         # TODO: is there a way to set context coords, box, velocities without initializing a fresh Context?
-        # TODO: is there a way to get velocities at the end?
 
         ctxt = custom_ops.Context(
             x.coords,
-            sample_velocities(),
+            v,
             x.box,
             integrator_impl,
             potential_energy_model.all_impls
@@ -98,7 +97,9 @@ if __name__ == '__main__':
 
         # lambda schedule, du_dl_interval, x interval
         du_dls, xs = ctxt.multiple_steps(lam * np.ones(n_steps), 0, n_steps - 1)
-        return CoordsAndBox(xs[-1], x.box)
+        x_t = ctxt.get_x_t()
+        v_t = ctxt.get_v_t()
+        return CoordsAndBox(x_t, x.box), v_t
 
 
     def simulate_npt_traj(coords, box, n_moves=1000):
@@ -110,9 +111,11 @@ if __name__ == '__main__':
 
         from time import time
 
+        v_t = sample_velocities()
+
         for _ in trange:
             t0 = time()
-            after_nvt = run_thermostatted_md(traj[-1])
+            after_nvt, v_t = run_thermostatted_md(traj[-1], v_t)
             t1 = time()
             after_npt = barostat.move(after_nvt)
             t2 = time()
