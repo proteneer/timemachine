@@ -100,10 +100,6 @@ class NPTEnsemble:
         reduced_u = beta * potential_energy / unit.AVOGADRO_CONSTANT_NA
         reduced_pv = beta * self.pressure * volume
 
-        if type(U) == np.float64:
-            print('\treduced_u: ', reduced_u)
-            print('\treduced_pv: ', reduced_pv)
-
         return reduced_u + reduced_pv
 
 
