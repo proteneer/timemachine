@@ -12,9 +12,9 @@ from md.minimizer import minimize_host_4d
 from fe.topology import SingleTopology
 from fe.free_energy import RelativeFreeEnergy
 
-from barostat.ensembles import PotentialEnergyModel, NPTEnsemble
-from barostat.moves import MonteCarloBarostat, CoordsAndBox
-from barostat.utils import get_group_indices, compute_box_volume
+from md.ensembles import PotentialEnergyModel, NPTEnsemble
+from md.barostat.moves import MonteCarloBarostat, CoordsAndBox
+from md.barostat.utils import get_group_indices, compute_box_volume
 
 from timemachine.lib import custom_ops, LangevinIntegrator
 from timemachine.constants import BOLTZ

@@ -1,6 +1,6 @@
 # TODO: molecular ideal gas test system
 
-from barostat.moves import CentroidRescaler
+from md.barostat.moves import CentroidRescaler
 
 import numpy as onp
 

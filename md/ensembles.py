@@ -109,7 +109,6 @@ class NPTEnsemble:
 
         # reduced potential u
         #   (unitless)
-
         u = self.reduce(U, volume)
 
         # d reduced potential / dx

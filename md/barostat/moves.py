@@ -5,10 +5,8 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 import numpy as onp
-from simtk import unit
 
-from barostat.ensembles import NPTEnsemble
-from barostat.utils import compute_box_volume, compute_box_center
+from md.barostat.utils import compute_box_volume, compute_box_center
 
 from typing import List, Iterable, Tuple
 from collections import namedtuple
