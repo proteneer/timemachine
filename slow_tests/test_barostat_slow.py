@@ -14,7 +14,8 @@ from fe.free_energy import AbsoluteFreeEnergy
 
 from md.ensembles import PotentialEnergyModel, NPTEnsemble
 from md.barostat.moves import MonteCarloBarostat
-from md.barostat.utils import get_group_indices, simulate_npt_traj
+from md.barostat.utils import get_group_indices
+from md.utils import simulate_npt_traj
 from md.thermostat.utils import sample_velocities
 
 from timemachine.lib import LangevinIntegrator

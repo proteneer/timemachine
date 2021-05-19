@@ -1,17 +1,16 @@
-from jax import numpy as jnp
+from jax import config, numpy as jnp
 from jax.ops import segment_sum
-from jax.config import config
 
 config.update("jax_enable_x64", True)
 
 import numpy as onp
 
+from md.states import CoordsAndBox
 from md.barostat.utils import compute_box_volume, compute_box_center
 
-from typing import List, Iterable, Tuple
-from collections import namedtuple
+from md.moves import MonteCarloMove
 
-CoordsAndBox = namedtuple('CoordsAndBox', ['coords', 'box'])
+from typing import List, Iterable, Tuple
 
 
 def compute_centroid(group):
@@ -82,34 +81,6 @@ class CentroidRescaler:
         displaced_coords = self.displace_by_group(coords, group_displacements)
 
         return displaced_coords
-
-
-class MonteCarloMove:
-    n_proposed: int = 0
-    n_accepted: int = 0
-
-    def propose(self, x: CoordsAndBox) -> Tuple[CoordsAndBox, float]:
-        """ return proposed state and log acceptance probability """
-        raise NotImplementedError
-
-    def move(self, x: CoordsAndBox) -> CoordsAndBox:
-        proposal, log_acceptance_probability = self.propose(x)
-        self.n_proposed += 1
-
-        alpha = onp.random.rand()
-        acceptance_probability = onp.exp(log_acceptance_probability)
-        if alpha < acceptance_probability:
-            self.n_accepted += 1
-            return proposal
-        else:
-            return x
-
-    @property
-    def acceptance_fraction(self):
-        if self.n_proposed > 0:
-            return self.n_accepted / self.n_proposed
-        else:
-            return 0.0
 
 
 class MonteCarloBarostat(MonteCarloMove):
