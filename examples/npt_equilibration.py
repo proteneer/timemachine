@@ -112,7 +112,7 @@ if __name__ == '__main__':
     for lam in lambdas:
         barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
         v_0 = sample_velocities(masses * unit.amu, temperature)
-        initial_state = CoordsVelBox(coords, complex_box, v_0)
+        initial_state = CoordsVelBox(coords, v_0, complex_box)
         x_traj, box_traj, extras = simulate_npt_traj(
             ensemble, integrator_impl, barostat, initial_state,
             lam, n_moves=n_moves, barostat_interval=barostat_interval)
