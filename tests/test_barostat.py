@@ -99,9 +99,11 @@ def test_molecular_ideal_gas():
     trajs = []
     volume_trajs = []
 
+    potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
+    lam = 1.0
+
     for temperature in temperatures:
         # define NPT ensemble
-        potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
         ensemble = NPTEnsemble(potential_energy_model, temperature, pressure)
 
         # define a thermostat
