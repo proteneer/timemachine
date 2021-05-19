@@ -5,7 +5,7 @@ config.update("jax_enable_x64", True)
 
 import numpy as onp
 
-from md.states import CoordsAndBox
+from md.states import CoordsVelBox
 from md.barostat.utils import compute_box_volume, compute_box_center
 
 from md.moves import MonteCarloMove
@@ -118,7 +118,7 @@ class MonteCarloBarostat(MonteCarloMove):
         self.centroid_rescaler = CentroidRescaler(group_indices)
         self.adapt_proposal_scale = adapt_proposal_scale
 
-    def propose(self, x: CoordsAndBox) -> Tuple[CoordsAndBox, float]:
+    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
         u_0 = self.reduced_potential_fxn(x.coords, x.box)
         volume = compute_box_volume(x.box)
 
@@ -134,7 +134,7 @@ class MonteCarloBarostat(MonteCarloMove):
 
         proposed_box = length_scale * x.box
 
-        proposed_state = CoordsAndBox(proposed_coords, proposed_box)
+        proposed_state = CoordsVelBox(proposed_coords, x.velocities, proposed_box)
 
         u_proposed = self.reduced_potential_fxn(proposed_coords, proposed_box)
         delta_u = u_proposed - u_0
@@ -189,7 +189,7 @@ class MonteCarloBarostat(MonteCarloMove):
         self.reset_counters()
         self.reset_proposal_scale()
 
-    def move(self, x: CoordsAndBox) -> CoordsAndBox:
+    def move(self, x: CoordsVelBox) -> CoordsVelBox:
         x_next = super().move(x)
         if self.adapt_proposal_scale:
             self.adapt()

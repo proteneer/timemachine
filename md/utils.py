@@ -1,27 +1,26 @@
-from collections import namedtuple
 import numpy as np
 from tqdm import tqdm
 from time import time
 
 from typing import Tuple, Dict
 
+from md.states import CoordsVelBox
 from md.ensembles import NPTEnsemble
 from md.barostat.moves import MonteCarloBarostat
 from md.barostat.utils import compute_box_volume
 
 from timemachine.lib import custom_ops
 
-CoordsAndBox = namedtuple('CoordsAndBox', ['coords', 'box'])
-
 
 def run_thermostatted_md(
-        integrator_impl, bound_impls,
-        x: np.array, box: np.array, v: np.array,
+        integrator_impl, bound_impls, initial_state: CoordsVelBox,
         lam: float, n_steps=5) -> Tuple[np.array, np.array]:
+
+
     ctxt = custom_ops.Context(
-        x.coords,
-        v,
-        box,
+        initial_state.coords,
+        initial_state.velocities,
+        initial_state.box,
         integrator_impl,
         bound_impls
     )
@@ -34,14 +33,15 @@ def run_thermostatted_md(
     return x_t, v_t
 
 
-def simulate_npt_traj(ensemble: NPTEnsemble, integrator_impl, barostat: MonteCarloBarostat,
-                      coords: np.array, box: np.array, velocities: np.array,
-                      lam=1.0, n_moves=1000, barostat_interval=5) -> Tuple[np.array, np.array, Dict]:
+def simulate_npt_traj(
+        ensemble: NPTEnsemble, integrator_impl, barostat: MonteCarloBarostat,
+        initial_state: CoordsVelBox,
+        lam=1.0, n_moves=1000, barostat_interval=5) -> Tuple[np.array, np.array, Dict]:
     """TODO: replace with more modular design: composition of [MDMove, MCBarostatMove]"""
     barostat.reset()
 
     # alternate between thermostat moves and barostat moves
-    traj = [CoordsAndBox(coords, box)]
+    traj = [initial_state]
     volume_traj = [compute_box_volume(traj[0].box)]
     proposal_scale_traj = [barostat.max_delta_volume]
 
@@ -49,15 +49,14 @@ def simulate_npt_traj(ensemble: NPTEnsemble, integrator_impl, barostat: MonteCar
 
     bound_impls = ensemble.potential_energy.all_impls
 
-    v_t = velocities.copy()
+    v_t = initial_state.velocities.copy()
     for _ in trange:
         t0 = time()
 
         # MDMove
-        x_0, v_0, box = traj[-1].coords, v_t.copy(), traj[-1].box
         x_t, v_t = run_thermostatted_md(
-            integrator_impl, bound_impls, x_0, box, v_0, lam, n_steps=barostat_interval)
-        after_nvt = CoordsAndBox(x_t, box)
+            integrator_impl, bound_impls, traj[-1], lam, n_steps=barostat_interval)
+        after_nvt = CoordsVelBox(x_t, v_t, traj[-1].box.copy())
 
         t1 = time()
 

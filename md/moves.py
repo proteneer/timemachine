@@ -1,16 +1,17 @@
-from md.states import CoordsAndBox
+from md.states import CoordsVelBox
 from typing import Tuple
 import numpy as np
+
 
 class MonteCarloMove:
     n_proposed: int = 0
     n_accepted: int = 0
 
-    def propose(self, x: CoordsAndBox) -> Tuple[CoordsAndBox, float]:
+    def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
         """ return proposed state and log acceptance probability """
         raise NotImplementedError
 
-    def move(self, x: CoordsAndBox) -> CoordsAndBox:
+    def move(self, x: CoordsVelBox) -> CoordsVelBox:
         proposal, log_acceptance_probability = self.propose(x)
         self.n_proposed += 1
 
@@ -28,10 +29,3 @@ class MonteCarloMove:
             return self.n_accepted / self.n_proposed
         else:
             return 0.0
-
-
-import numpy as np
-from timemachine.lib import custom_ops
-from typing import Tuple
-
-

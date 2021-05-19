@@ -15,6 +15,7 @@ from md.thermostat.utils import sample_velocities
 from md.barostat.utils import get_group_indices
 from md.barostat.moves import MonteCarloBarostat
 
+from md.states import CoordsVelBox
 from md.utils import simulate_npt_traj
 
 from fe.free_energy import AbsoluteFreeEnergy, construct_lambda_schedule
@@ -111,10 +112,10 @@ if __name__ == '__main__':
     for lam in lambdas:
         barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
         v_0 = sample_velocities(masses * unit.amu, temperature)
+        initial_state = CoordsVelBox(coords, complex_box, v_0)
         x_traj, box_traj, extras = simulate_npt_traj(
-            ensemble, integrator_impl, barostat,
-            coords, complex_box, v_0, lam,
-            n_moves=n_moves, barostat_interval=barostat_interval)
+            ensemble, integrator_impl, barostat, initial_state,
+            lam, n_moves=n_moves, barostat_interval=barostat_interval)
         trajs.append(x_traj)
         volume_trajs.append(extras['volume_traj'])
 

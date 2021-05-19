@@ -8,6 +8,7 @@ from md.minimizer import minimize_host_4d
 
 from fe.free_energy import AbsoluteFreeEnergy
 
+from md.states import CoordsVelBox
 from md.ensembles import PotentialEnergyModel, NPTEnsemble
 from md.barostat.moves import MonteCarloBarostat, CentroidRescaler
 from md.barostat.utils import get_group_indices
@@ -119,10 +120,10 @@ def test_molecular_ideal_gas():
         barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=1.0), group_indices, max_delta_volume=3.0)
 
         v_0 = sample_velocities(masses * unit.amu, temperature)
+        initial_state = CoordsVelBox(coords, complex_box, v_0)
         x_traj, box_traj, extras = simulate_npt_traj(
-            ensemble, integrator_impl, barostat,
-            coords, complex_box, v_0, 1.0,
-            n_moves=n_moves, barostat_interval=barostat_interval)
+            ensemble, integrator_impl, barostat, initial_state,
+            lam=1.0, n_moves=n_moves, barostat_interval=barostat_interval)
         trajs.append(x_traj)
         volume_trajs.append(extras['volume_traj'])
 
