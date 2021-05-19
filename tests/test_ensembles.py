@@ -4,6 +4,8 @@ from simtk.unit import kelvin, atmosphere, kilojoule_per_mole, nanometer
 from simtk import unit
 import numpy as np
 
+from timemachine.constants import ENERGY_UNIT, DISTANCE_UNIT
+
 
 def _compute_reduced_potential(potential_energy, temperature, volume, pressure):
     """Convert potential energy into reduced potential.
@@ -38,7 +40,7 @@ def test_nvt():
     for (U, T) in zip(potential_energies, temperatures):
         ref = _compute_reduced_potential(U, T, None, None)
         nvt = NVTEnsemble(potential_energy=None, temperature=T)
-        assert (ref == nvt.reduce(U))
+        assert (ref == nvt.reduce(U.value_in_unit(ENERGY_UNIT)))
 
 
 def test_npt():
@@ -71,4 +73,4 @@ def test_npt():
     for (U, T, V, P) in zip(potential_energies, temperatures, volumes, pressures):
         ref = _compute_reduced_potential(U, T, V, P)
         npt = NPTEnsemble(potential_energy=None, temperature=T, pressure=P)
-        assert (ref == npt.reduce(U, V))
+        assert (ref == npt.reduce(U.value_in_unit(ENERGY_UNIT), V.value_in_unit(DISTANCE_UNIT**3)))
