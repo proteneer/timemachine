@@ -33,9 +33,26 @@ class MonteCarloMove:
 
 class CompoundMove(MonteCarloMove):
     def __init__(self, moves: List[MonteCarloMove]):
+        """Apply each of a list of moves in sequence"""
         self.moves = moves
 
     def move(self, x: CoordsVelBox) -> CoordsVelBox:
         for individual_move in self.moves:
             x = individual_move.move(x)
         return x
+
+    @property
+    def n_accepted_by_move(self):
+        return np.array([m.n_accepted for m in self.moves])
+
+    @property
+    def n_proposed_by_move(self):
+        return np.array([m.n_proposed for m in self.moves])
+
+    @property
+    def n_accepted(self):
+        return np.sum(self.n_accepted_by_move)
+
+    @property
+    def n_proposed(self):
+        return np.sum(self.n_proposed_by_move)
