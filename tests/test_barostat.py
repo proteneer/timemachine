@@ -151,5 +151,4 @@ def test_molecular_ideal_gas():
     equil_time = n_moves // 2  # TODO: don't hard-code this?
     actual_volume_in_md = np.array([np.mean(volume_traj[equil_time:]) for volume_traj in volume_trajs])
 
-    # tolerance from https://github.com/openmm/openmm/blob/d8ef57fed6554ec95684e53768188e1f666405c9/tests/TestMonteCarloBarostat.h#L138
-    np.testing.assert_allclose(actual=actual_volume_in_md, desired=expected_volume_in_md, atol=3 / np.sqrt(n_moves - equil_time))
+    np.testing.assert_allclose(actual=actual_volume_in_md, desired=expected_volume_in_md, rtol=1e-2)
