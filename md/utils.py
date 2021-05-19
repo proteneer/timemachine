@@ -1,5 +1,4 @@
 import numpy as np
-from tqdm import tqdm
 
 from typing import Tuple, Dict, List
 
@@ -20,23 +19,14 @@ def simulate_npt_traj(thermostat: UnadjustedLangevinMove, barostat: MonteCarloBa
     volume_traj = [compute_box_volume(traj[0].box)]
     proposal_scale_traj = [barostat.max_delta_volume]
 
-    trange = tqdm(range(n_moves))
-
     compound_move = CompoundMove([thermostat, barostat])
 
-    for _ in trange:
+    for _ in range(n_moves):
         traj.append(compound_move.move(traj[-1]))
 
         # accumulate result trajectories
         volume_traj.append(compute_box_volume(traj[-1].box))
         proposal_scale_traj.append(barostat.max_delta_volume)
-
-        # informative progress bar
-        trange.set_postfix(
-            volume=f'{volume_traj[-1]:.3f}',
-            acceptance_fraction=f'{barostat.acceptance_fraction:.3f}',
-            proposal_scale=f'{barostat.max_delta_volume:.3f}',
-        )
 
     extras = dict(
         volume_traj=np.array(volume_traj),
