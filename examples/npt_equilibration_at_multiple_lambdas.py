@@ -15,6 +15,8 @@ from md.ensembles import PotentialEnergyModel, NPTEnsemble
 from md.barostat.moves import MonteCarloBarostat, CoordsAndBox
 from md.barostat.utils import get_group_indices, compute_box_volume
 
+from md.thermostat.utils import sample_velocities
+
 from timemachine.lib import custom_ops, LangevinIntegrator
 from timemachine.constants import BOLTZ
 
@@ -42,18 +44,6 @@ unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
 # define NPT ensemble
 potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
 ensemble = NPTEnsemble(potential_energy_model, temperature, pressure)
-
-
-def sample_velocities():
-    """ TODO: move this into integrator or something? """
-    v_unscaled = np.random.randn(len(masses), 3)
-
-    # intended to be consistent with timemachine.integrator:langevin_coefficients
-    temperature = ensemble.temperature.value_in_unit(unit.kelvin)
-    sigma = np.sqrt(BOLTZ * temperature) * np.sqrt(1 / masses)
-
-    return v_unscaled * np.expand_dims(sigma, axis=1)
-
 
 # define a thermostat
 seed = 2021
@@ -109,7 +99,7 @@ def simulate_npt_traj(coords, box, lam, n_moves=1000):
 
     from time import time
 
-    v_t = sample_velocities()
+    v_t = sample_velocities(masses * unit.amu, temperature)
 
     for _ in trange:
         t0 = time()
