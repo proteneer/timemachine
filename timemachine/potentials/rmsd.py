@@ -2,7 +2,14 @@ import jax
 import jax.numpy as np
 
 def psi(rotation, k):
-    term = (np.trace(rotation) - 1)/2 - 1
+    cos_theta = (np.trace(rotation) - 1)/2
+    return cos_angle_u(cos_theta, k)
+
+def angle_u(theta, k):
+    return cos_angle_u(np.cos(theta), k)
+
+def cos_angle_u(cos_theta, k):
+    term = cos_theta - 1
     nrg = k*term*term
     return nrg
 
