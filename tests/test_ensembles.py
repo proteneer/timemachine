@@ -40,7 +40,8 @@ def test_nvt():
     for (U, T) in zip(potential_energies, temperatures):
         ref = _compute_reduced_potential(U, T, None, None)
         nvt = NVTEnsemble(potential_energy=None, temperature=T)
-        assert (ref == nvt.reduce(U.value_in_unit(ENERGY_UNIT)))
+        actual = nvt.reduce(U.value_in_unit(ENERGY_UNIT))
+        np.testing.assert_almost_equal(actual, ref)
 
 
 def test_npt():
@@ -48,7 +49,6 @@ def test_npt():
 
     U = -100 * kilojoule_per_mole
     volume = 4 * nanometer ** 3
-    u_0 = npt.reduce(U, volume)
     u_0 = npt.reduce(U, volume)
 
     # check that reduced potential increases with increasing U or volume
@@ -73,4 +73,6 @@ def test_npt():
     for (U, T, V, P) in zip(potential_energies, temperatures, volumes, pressures):
         ref = _compute_reduced_potential(U, T, V, P)
         npt = NPTEnsemble(potential_energy=None, temperature=T, pressure=P)
-        assert (ref == npt.reduce(U.value_in_unit(ENERGY_UNIT), V.value_in_unit(DISTANCE_UNIT**3)))
+        actual = npt.reduce(U.value_in_unit(ENERGY_UNIT), V.value_in_unit(DISTANCE_UNIT**3)
+
+        np.testing.assert_almost_equal(actual, ref)
