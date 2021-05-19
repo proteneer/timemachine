@@ -10,7 +10,7 @@ from fe.free_energy import AbsoluteFreeEnergy
 
 from md.states import CoordsVelBox
 from md.ensembles import PotentialEnergyModel, NPTEnsemble
-from md.thermostat.moves import UnadjustedMDMove
+from md.thermostat.moves import UnadjustedLangevinMove
 from md.barostat.moves import MonteCarloBarostat, CentroidRescaler
 from md.barostat.utils import get_group_indices
 from md.utils import simulate_npt_traj
@@ -118,13 +118,13 @@ def test_molecular_ideal_gas():
             u, du_dx = ensemble.reduced_potential_and_gradient(x, box, lam)
             return u
 
-        thermostat = UnadjustedMDMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=barostat_interval)
+        thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=barostat_interval)
         barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
 
         v_0 = sample_velocities(masses * unit.amu, temperature)
         initial_state = CoordsVelBox(coords, v_0, complex_box)
 
-        traj, extras = simulate_npt_traj(ensemble, thermostat, barostat, initial_state, n_moves=n_moves)
+        traj, extras = simulate_npt_traj(thermostat, barostat, initial_state, n_moves=n_moves)
 
         trajs.append(traj)
         volume_trajs.append(extras['volume_traj'])

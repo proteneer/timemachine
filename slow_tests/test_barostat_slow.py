@@ -17,7 +17,7 @@ from md.barostat.moves import MonteCarloBarostat
 from md.barostat.utils import get_group_indices
 from md.states import CoordsVelBox
 from md.utils import simulate_npt_traj
-from md.thermostat.moves import UnadjustedMDMove
+from md.thermostat.moves import UnadjustedLangevinMove
 from md.thermostat.utils import sample_velocities
 
 from timemachine.lib import LangevinIntegrator
@@ -83,13 +83,13 @@ if __name__ == '__main__':
     lambdas = np.ones(n_replicates)
 
     for lam in lambdas:
-        thermostat = UnadjustedMDMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=barostat_interval)
+        thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=barostat_interval)
         barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
 
         v_0 = sample_velocities(masses * unit.amu, temperature)
         initial_state = CoordsVelBox(coords, v_0, complex_box)
 
-        traj, extras = simulate_npt_traj(ensemble, thermostat, barostat, initial_state, n_moves=n_moves)
+        traj, extras = simulate_npt_traj(thermostat, barostat, initial_state, n_moves=n_moves)
 
         trajs.append(traj)
         volume_trajs.append(extras['volume_traj'])
