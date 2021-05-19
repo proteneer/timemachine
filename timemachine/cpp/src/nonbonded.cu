@@ -216,8 +216,8 @@ void Nonbonded<RealType, Interpolated>::hilbert_sort(
     const double *d_box,
     cudaStream_t stream) {
 
-    const int B = (N_+32-1)/32;
     const int tpb = 32;
+    const int B = (N_+tpb-1)/tpb;
 
     k_coords_to_kv<<<B, tpb, 0, stream>>>(N_, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
 
