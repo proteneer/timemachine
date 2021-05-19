@@ -154,11 +154,17 @@ if __name__ == '__main__':
     plt.close()
 
 
-    final_volumes = [np.median(volume_traj[-1000:]) for volume_traj in volume_trajs]
-    plt.scatter(lambdas, final_volumes)
+    final_volumes = np.array([np.median(volume_traj[-1000:]) for volume_traj in volume_trajs])
+
+    volume = final_volumes * unit.nanometer ** 3
+    n_molecules = complex_top.getNumResidues()
+    water_molecule_mass = 18.01528 * unit.amu
+    density = n_molecules * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
+
+    plt.scatter(lambdas, density.value_in_unit(unit.kilogram / unit.liter))
     plt.xlabel('$\lambda$')
-    plt.ylabel('volume (nm$^3$)')
-    plt.savefig('volume_vs_lambda.png', dpi=300, bbox_inches='tight')
+    plt.ylabel('density (kg/L)')
+    plt.savefig('density_vs_lambda.png', dpi=300, bbox_inches='tight')
     plt.close()
 
     for i, volume_traj in enumerate(volume_trajs):
