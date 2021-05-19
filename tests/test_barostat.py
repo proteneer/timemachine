@@ -64,7 +64,7 @@ def test_molecular_ideal_gas():
     """
 
     # simulation parameters
-    initial_waterbox_width = 3.0 * unit.nanometer
+    initial_waterbox_width = 1.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     collision_rate = 1.0 / unit.picosecond
     n_moves = 2000
@@ -138,7 +138,7 @@ def test_molecular_ideal_gas():
 
     # expected volume
     md_pressure_unit = ENERGY_UNIT / DISTANCE_UNIT ** 3
-    pressure_in_md = pressure.value_in_unit(md_pressure_unit)
+    pressure_in_md = (pressure * unit.AVOGADRO_CONSTANT_NA).value_in_unit(md_pressure_unit)
     expected_volume_in_md = (n_molecules + 1) * BOLTZ * temperatures.value_in_unit(unit.kelvin) / pressure_in_md
 
     np.testing.assert_allclose(actual=actual_volume_in_md, desired=expected_volume_in_md, atol=0.02)
