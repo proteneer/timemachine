@@ -12,7 +12,7 @@ from md.states import CoordsVelBox
 from md.ensembles import PotentialEnergyModel, NPTEnsemble
 from md.thermostat.moves import UnadjustedLangevinMove
 from md.barostat.moves import MonteCarloBarostat, CentroidRescaler
-from md.barostat.utils import get_group_indices
+from md.barostat.utils import get_group_indices, compute_box_volume, compute_box_center
 from md.utils import simulate_npt_traj
 from md.thermostat.utils import sample_velocities
 
@@ -64,7 +64,7 @@ def test_molecular_ideal_gas():
     """
 
     # simulation parameters
-    initial_waterbox_width = 1.0 * unit.nanometer
+    initial_waterbox_width = 2.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     collision_rate = 1.0 / unit.picosecond
     n_moves = 2000
@@ -102,7 +102,15 @@ def test_molecular_ideal_gas():
     potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
     lam = 1.0
 
-    for temperature in temperatures:
+    n_molecules = complex_top.getNumResidues()
+
+    # expected volume
+    md_pressure_unit = ENERGY_UNIT / DISTANCE_UNIT ** 3
+    pressure_in_md = (pressure * unit.AVOGADRO_CONSTANT_NA).value_in_unit(md_pressure_unit)
+    expected_volume_in_md = (n_molecules + 1) * BOLTZ * temperatures.value_in_unit(unit.kelvin) / pressure_in_md
+
+
+    for i, temperature in enumerate(temperatures):
         # define NPT ensemble
         ensemble = NPTEnsemble(potential_energy_model, temperature, pressure)
 
@@ -124,7 +132,16 @@ def test_molecular_ideal_gas():
         barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
 
         v_0 = sample_velocities(masses * unit.amu, temperature)
-        initial_state = CoordsVelBox(coords, v_0, complex_box)
+
+        # rescale the box to be approximately the desired box volume already
+        rescaler = CentroidRescaler(group_indices)
+        initial_volume = compute_box_volume(complex_box)
+        initial_center = compute_box_center(complex_box)
+        length_scale = (expected_volume_in_md[i] / initial_volume) ** (1. / 3)
+        new_coords = rescaler.rescale(coords, initial_center, length_scale)
+        new_box = complex_box * length_scale
+
+        initial_state = CoordsVelBox(new_coords, v_0, new_box)
 
         traj, extras = simulate_npt_traj(thermostat, barostat, initial_state, n_moves=n_moves)
 
@@ -133,12 +150,5 @@ def test_molecular_ideal_gas():
 
     equil_time = n_moves // 2  # TODO: don't hard-code this?
     actual_volume_in_md = np.array([np.mean(volume_traj[equil_time:]) for volume_traj in volume_trajs])
-
-    n_molecules = complex_top.getNumResidues()
-
-    # expected volume
-    md_pressure_unit = ENERGY_UNIT / DISTANCE_UNIT ** 3
-    pressure_in_md = (pressure * unit.AVOGADRO_CONSTANT_NA).value_in_unit(md_pressure_unit)
-    expected_volume_in_md = (n_molecules + 1) * BOLTZ * temperatures.value_in_unit(unit.kelvin) / pressure_in_md
 
     np.testing.assert_allclose(actual=actual_volume_in_md, desired=expected_volume_in_md, atol=0.02)
