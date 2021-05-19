@@ -22,12 +22,14 @@ from functools import partial
 
 import matplotlib.pyplot as plt
 
+# simulation parameters
 n_lambdas = 40
-initial_waterbox_width_in_nm = 3.0
-timestep_in_ps = 1.5e-3
-collision_rate_in_inv_ps = 1.0
+initial_waterbox_width = 3.0 * unit.nanometer
+timestep = 1.5 * unit.femtosecond
+collision_rate = 1.0 / unit.picosecond
 n_moves = 2000
 barostat_interval = 5
+seed = 2021
 
 # thermodynamic parameters
 temperature = 300 * unit.kelvin
@@ -36,7 +38,8 @@ lambdas = construct_lambda_schedule(n_lambdas)
 
 # build a pair of alchemical ligands in a water box
 mol_a, mol_b, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
-complex_system, complex_coords, complex_box, complex_top = build_water_system(initial_waterbox_width_in_nm)
+complex_system, complex_coords, complex_box, complex_top = build_water_system(
+    initial_waterbox_width.value_in_unit(unit.nanometer))
 
 min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
 afe = AbsoluteFreeEnergy(mol_a, ff)
@@ -50,11 +53,10 @@ potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
 ensemble = NPTEnsemble(potential_energy_model, temperature, pressure)
 
 # define a thermostat
-seed = 2021
 integrator = LangevinIntegrator(
     temperature.value_in_unit(unit.kelvin),
-    timestep_in_ps,
-    collision_rate_in_inv_ps,
+    timestep.value_in_unit(unit.picosecond),
+    collision_rate.value_in_unit(1 / unit.picosecond),
     masses,
     seed
 )
@@ -101,6 +103,7 @@ if __name__ == '__main__':
     harmonic_bond_potential = unbound_potentials[0]
     group_indices = get_group_indices(harmonic_bond_potential)
 
+    # loop over lambdas, collecting NPT trajectories
     trajs = []
     volume_trajs = []
     for lam in lambdas:
@@ -113,5 +116,6 @@ if __name__ == '__main__':
         trajs.append(x_traj)
         volume_trajs.append(extras['volume_traj'])
 
+    # plot volume equilibration, final densities
     plot_volume_trajs(volume_trajs)
     plot_density(volume_trajs)
