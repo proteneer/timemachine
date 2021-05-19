@@ -17,6 +17,7 @@
 #include "rmsd_restraint.hpp"
 #include "periodic_torsion.hpp"
 #include "nonbonded.hpp"
+#include "bitplay.hpp"
 // #include "lennard_jones.hpp"
 // #include "electrostatics.hpp"
 // #include "gbsa.hpp"
@@ -939,8 +940,38 @@ void declare_nonbonded(py::module &m, const char *typestr) {
 
 }
 
+void declare_bitplay(py::module &m) {
+
+    using Class = timemachine::BitPlay;
+    std::string pyclass_name = std::string("BitPlay");
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def("compute_dist", &timemachine::BitPlay::compute_dist)
+    .def("compute_dist_f32", &timemachine::BitPlay::compute_dist_f32)
+    .def("get_dist", [](timemachine::BitPlay &bit) -> py::array_t<double, py::array::c_style> {
+        int N = bit.N_;
+        py::array_t<float, py::array::c_style> buffer({N, N});
+        bit.get_dist(buffer.mutable_data());
+        return buffer;
+    })
+    .def(py::init([](
+        const int N,
+        const py::array_t<double, py::array::c_style> &x0
+    ) {
+        return new timemachine::BitPlay(
+            N,
+            x0.data()
+        );
+    }));
+}
+
 PYBIND11_MODULE(custom_ops, m) {
 
+	declare_bitplay(m);
     declare_integrator(m);
     declare_langevin_integrator(m);
 
