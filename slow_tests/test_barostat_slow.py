@@ -4,7 +4,6 @@
 
 import numpy as np
 from simtk import unit
-from tqdm import tqdm
 
 from testsystems.relative import hif2a_ligand_pair
 
@@ -14,13 +13,21 @@ from md.minimizer import minimize_host_4d
 from fe.free_energy import AbsoluteFreeEnergy
 
 from md.ensembles import PotentialEnergyModel, NPTEnsemble
-from md.barostat.moves import MonteCarloBarostat, CoordsAndBox
-from md.barostat.utils import get_group_indices, compute_box_volume
-from md.thermostat.utils import sample_velocities, run_thermostatted_md
+from md.barostat.moves import MonteCarloBarostat
+from md.barostat.utils import get_group_indices, simulate_npt_traj
+from md.thermostat.utils import sample_velocities
 
 from timemachine.lib import LangevinIntegrator
 
 from functools import partial
+
+# simulation parameters
+n_replicates = 10
+initial_waterbox_width_in_nm = 3.0
+timestep_in_ps = 1.5e-3
+collision_rate_in_inv_ps = 1.0
+n_moves = 2000
+barostat_interval = 5
 
 # thermodynamic parameters
 temperature = 300 * unit.kelvin
@@ -47,8 +54,8 @@ ensemble = NPTEnsemble(potential_energy_model, temperature, pressure)
 seed = 2021
 integrator = LangevinIntegrator(
     temperature.value_in_unit(unit.kelvin),
-    1.5e-3,
-    1.0,
+    timestep_in_ps,
+    collision_rate_in_inv_ps,
     masses,
     seed
 )
@@ -63,62 +70,26 @@ def reduced_potential_fxn(x, box, lam):
     u, du_dx = ensemble.reduced_potential_and_gradient(x, box, lam)
     return u
 
-
-def simulate_npt_traj(coords, box, lam, n_moves=1000):
-    barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
-
-    barostat.reset()
-
-    # alternate between thermostat moves and barostat moves
-    traj = [CoordsAndBox(coords, box)]
-    volume_traj = [compute_box_volume(traj[0].box)]
-
-    trange = tqdm(range(n_moves))
-
-    from time import time
-
-    v_t = sample_velocities(masses * unit.amu, temperature)
-
-    for _ in trange:
-        t0 = time()
-        x_0, v_0, box = traj[-1].coords, v_t.copy(), traj[-1].box
-        x_t, v_t = run_thermostatted_md(integrator_impl, potential_energy_model.all_impls, x_0, box, v_0, lam,
-                                        n_steps=5)
-        after_nvt = CoordsAndBox(x_t, box)
-        t1 = time()
-        after_npt = barostat.move(after_nvt)
-        t2 = time()
-
-        traj.append(after_npt)
-        volume_traj.append(compute_box_volume(after_npt.box))
-
-        trange.set_postfix(volume=f'{volume_traj[-1]:.3f}',
-                           acceptance_fraction=f'{barostat.acceptance_fraction:.3f}',
-                           md_proposal_time=f'{(t1 - t0):.3f}s',
-                           barostat_proposal_time=f'{(t2 - t1):.3f}s',
-                           proposal_scale=f'{barostat.max_delta_volume:.3f}',
-                           )
-
-    traj = np.array(traj)
-    volume_traj = np.array(volume_traj)
-    return traj, volume_traj
-
-
 if __name__ == '__main__':
 
     trajs = []
     volume_trajs = []
 
     # run at lambda=1.0, n_replicates times
-    n_replicates = 10
     lambdas = np.ones(n_replicates)
 
     for lam in lambdas:
-        traj, volume_traj = simulate_npt_traj(coords, complex_box, lam, n_moves=2000)
-        trajs.append(traj)
-        volume_trajs.append(volume_traj)
+        barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
+        v_0 = sample_velocities(masses * unit.amu, temperature)
+        x_traj, box_traj, extras = simulate_npt_traj(
+            ensemble, integrator_impl, barostat,
+            coords, complex_box, v_0, lam,
+            n_moves=n_moves, barostat_interval=barostat_interval)
+        trajs.append(x_traj)
+        volume_trajs.append(extras['volume_traj'])
 
-    final_volumes = np.array([np.mean(volume_traj[-1000:]) for volume_traj in volume_trajs])
+    equil_time = n_moves // 2 # TODO: don't hard-code this?
+    final_volumes = np.array([np.mean(volume_traj[equil_time:]) for volume_traj in volume_trajs])
 
     volume = final_volumes * unit.nanometer ** 3
     n_molecules = complex_top.getNumResidues()
