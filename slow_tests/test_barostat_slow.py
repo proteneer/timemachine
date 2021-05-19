@@ -57,7 +57,7 @@ ensemble = NPTEnsemble(potential_energy_model, temperature, pressure)
 integrator = LangevinIntegrator(
     temperature.value_in_unit(unit.kelvin),
     timestep.value_in_unit(unit.picosecond),
-    collision_rate.value_in_unit(1 / unit.picosecond),
+    collision_rate.value_in_unit(unit.picosecond**-1),
     masses,
     seed
 )
