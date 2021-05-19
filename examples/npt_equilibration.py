@@ -15,6 +15,8 @@ from md.thermostat.utils import sample_velocities
 from md.barostat.utils import get_group_indices
 from md.barostat.moves import MonteCarloBarostat
 
+from md.thermostat.moves import UnadjustedMDMove
+
 from md.states import CoordsVelBox
 from md.utils import simulate_npt_traj
 
@@ -110,13 +112,13 @@ if __name__ == '__main__':
     trajs = []
     volume_trajs = []
     for lam in lambdas:
+        thermostat = UnadjustedMDMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=barostat_interval)
         barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
+
         v_0 = sample_velocities(masses * unit.amu, temperature)
         initial_state = CoordsVelBox(coords, v_0, complex_box)
-        x_traj, box_traj, extras = simulate_npt_traj(
-            ensemble, integrator_impl, barostat, initial_state,
-            lam, n_moves=n_moves, barostat_interval=barostat_interval)
-        trajs.append(x_traj)
+        traj, extras = simulate_npt_traj(ensemble, thermostat, barostat, initial_state, n_moves=n_moves)
+        trajs.append(traj)
         volume_trajs.append(extras['volume_traj'])
 
     # plot volume equilibration, final densities

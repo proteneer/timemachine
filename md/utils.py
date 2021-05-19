@@ -1,11 +1,13 @@
 import numpy as np
 from tqdm import tqdm
-from time import time
 
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 
 from md.states import CoordsVelBox
 from md.ensembles import NPTEnsemble
+
+from md.thermostat.moves import UnadjustedMDMove
+from md.moves import CompoundMove
 from md.barostat.moves import MonteCarloBarostat
 from md.barostat.utils import compute_box_volume
 
@@ -16,13 +18,13 @@ def run_thermostatted_md(
         integrator_impl, bound_impls, initial_state: CoordsVelBox,
         lam: float, n_steps=5) -> Tuple[np.array, np.array]:
 
-
+    # note: context creation overhead here is actually very small!
     ctxt = custom_ops.Context(
         initial_state.coords,
         initial_state.velocities,
         initial_state.box,
         integrator_impl,
-        bound_impls
+        bound_impls,
     )
 
     # arguments: lambda_schedule, du_dl_interval, x_interval
@@ -34,10 +36,9 @@ def run_thermostatted_md(
 
 
 def simulate_npt_traj(
-        ensemble: NPTEnsemble, integrator_impl, barostat: MonteCarloBarostat,
-        initial_state: CoordsVelBox,
-        lam=1.0, n_moves=1000, barostat_interval=5) -> Tuple[np.array, np.array, Dict]:
-    """TODO: replace with more modular design: composition of [MDMove, MCBarostatMove]"""
+        ensemble: NPTEnsemble, thermostat, barostat: MonteCarloBarostat,
+        initial_state: CoordsVelBox, n_moves=1000) -> Tuple[List[CoordsVelBox], Dict]:
+
     barostat.reset()
 
     # alternate between thermostat moves and barostat moves
@@ -49,42 +50,25 @@ def simulate_npt_traj(
 
     bound_impls = ensemble.potential_energy.all_impls
 
-    v_t = initial_state.velocities.copy()
+    compound_move = CompoundMove([thermostat, barostat])
+
     for _ in trange:
-        t0 = time()
-
-        # MDMove
-        x_t, v_t = run_thermostatted_md(
-            integrator_impl, bound_impls, traj[-1], lam, n_steps=barostat_interval)
-        after_nvt = CoordsVelBox(x_t, v_t, traj[-1].box.copy())
-
-        t1 = time()
-
-        # MCBarostatMove
-        after_npt = barostat.move(after_nvt)
-
-        t2 = time()
+        traj.append(compound_move.move(traj[-1]))
 
         # accumulate result trajectories
-        traj.append(after_npt)
-        volume_traj.append(compute_box_volume(after_npt.box))
+        volume_traj.append(compute_box_volume(traj[-1].box))
         proposal_scale_traj.append(barostat.max_delta_volume)
 
         # informative progress bar
-        trange.set_postfix(volume=f'{volume_traj[-1]:.3f}',
-                           acceptance_fraction=f'{barostat.acceptance_fraction:.3f}',
-                           md_proposal_time=f'{(t1 - t0):.3f}s',
-                           barostat_proposal_time=f'{(t2 - t1):.3f}s',
-                           proposal_scale=f'{barostat.max_delta_volume:.3f}',
-                           )
+        trange.set_postfix(
+            volume=f'{volume_traj[-1]:.3f}',
+            acceptance_fraction=f'{barostat.acceptance_fraction:.3f}',
+            proposal_scale=f'{barostat.max_delta_volume:.3f}',
+        )
 
-    # TODO: make this an MDTraj trajectory?
-    x_traj = np.array([snapshot.coords for snapshot in traj])
-    box_traj = np.array([snapshot.box for snapshot in traj])
+    extras = dict(
+        volume_traj=np.array(volume_traj),
+        proposal_scale_traj=np.array(proposal_scale_traj),
+    )
 
-    volume_traj = np.array(volume_traj)
-    proposal_scale_traj = np.array(proposal_scale_traj)
-
-    extras = dict(volume_traj=volume_traj, proposal_scale_traj=proposal_scale_traj)
-
-    return x_traj, box_traj, extras
+    return traj, extras

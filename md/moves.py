@@ -1,5 +1,5 @@
 from md.states import CoordsVelBox
-from typing import Tuple
+from typing import List, Tuple
 import numpy as np
 
 
@@ -29,3 +29,13 @@ class MonteCarloMove:
             return self.n_accepted / self.n_proposed
         else:
             return 0.0
+
+
+class CompoundMove(MonteCarloMove):
+    def __init__(self, moves: List[MonteCarloMove]):
+        self.moves = moves
+
+    def move(self, x: CoordsVelBox) -> CoordsVelBox:
+        for individual_move in self.moves:
+            x = individual_move.move(x)
+        return x
