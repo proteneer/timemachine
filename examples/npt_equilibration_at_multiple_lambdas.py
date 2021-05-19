@@ -10,7 +10,7 @@ from md.builders import build_water_system
 from md.minimizer import minimize_host_4d
 
 from fe.topology import SingleTopology
-from fe.free_energy import RelativeFreeEnergy
+from fe.free_energy import AbsoluteFreeEnergy
 
 from barostat.ensembles import PotentialEnergyModel, NPTEnsemble
 from barostat.moves import MonteCarloBarostat, CoordsAndBox
@@ -27,18 +27,16 @@ from functools import partial
 # thermodynamic parameters
 temperature = 300 * unit.kelvin
 pressure = 1.0 * unit.atmosphere
-lambdas = construct_lambda_schedule(20)
+lambdas = construct_lambda_schedule(40)
 
 # build a pair of alchemical ligands in a water box
 mol_a, mol_b, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
-complex_system, complex_coords, complex_box, complex_top = build_water_system(4.0)
+complex_system, complex_coords, complex_box, complex_top = build_water_system(3.0)
 
-min_complex_coords = minimize_host_4d([mol_a, mol_b], complex_system, complex_coords, ff, complex_box)
+min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
+afe = AbsoluteFreeEnergy(mol_a, ff)
 
-single_topology = SingleTopology(mol_a, mol_b, core, ff)
-rfe = RelativeFreeEnergy(single_topology)
-
-unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(
+unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
     ff.get_ordered_params(), complex_system, min_complex_coords
 )
 
@@ -148,9 +146,24 @@ if __name__ == '__main__':
     cmap = plt.get_cmap('viridis')
     colors = cmap.colors[::len(cmap.colors) // len(lambdas)][:len(lambdas)]
 
-    for volume_traj in volume_trajs[::-1]:
-        plt.plot(volume_traj, c=colors)
+    for i, volume_traj in enumerate(volume_trajs):
+        plt.plot(volume_traj, color=colors[i])
     plt.xlabel('# moves')
-    plt.ylabel('volume')
+    plt.ylabel('volume (nm$^3$)')
     plt.savefig('volume_traj.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+    final_volumes = [np.median(volume_traj[-1000:]) for volume_traj in volume_trajs]
+    plt.scatter(lambdas, final_volumes)
+    plt.xlabel('$\lambda$')
+    plt.ylabel('volume (nm$^3$)')
+    plt.savefig('volume_vs_lambda.png', dpi=300, bbox_inches='tight')
+    plt.close()
+
+    for i, volume_traj in enumerate(volume_trajs):
+        plt.hist(volume_traj[-1000:], c=colors[i], alpha=0.5, density=True)
+    plt.xlabel('volume (nm$^3$)')
+    plt.ylabel('probability density')
+    plt.savefig('volume_distributions.png', dpi=300, bbox_inches='tight')
     plt.close()
