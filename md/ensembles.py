@@ -10,12 +10,15 @@ non_unitted = Union[float, np.ndarray, jnp.ndarray]  # raw value without simtk u
 
 
 class PotentialEnergyModel:
-    def __init__(self, sys_params, unbound_potentials, precision=np.float64):
+    def __init__(self, sys_params, unbound_potentials, precision=np.float64, guard_threshold=1e6):
         self.sys_params = sys_params
         self.unbound_potentials = unbound_potentials
         self.bp_cache = dict()
         self.precision = precision
         self._initialize()
+
+        # potential energies lower than - abs(guard_threshold) will be treated as +inf
+        self.guard_threshold = guard_threshold
 
     def _initialize(self):
         for component_params, unbound_pot in zip(self.sys_params, self.unbound_potentials):
@@ -40,7 +43,7 @@ class PotentialEnergyModel:
 
         U_ = np.sum(Us)
         F_ = np.sum(dU_dxs, 0)
-        if np.abs(U) > 1e6:
+        if np.abs(U) > self.guard_threshold:
             return + np.inf, np.nan * F_
         else:
             return U_, F_
