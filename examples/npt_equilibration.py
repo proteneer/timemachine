@@ -117,7 +117,9 @@ if __name__ == '__main__':
 
         v_0 = sample_velocities(masses * unit.amu, temperature)
         initial_state = CoordsVelBox(coords, v_0, complex_box)
+
         traj, extras = simulate_npt_traj(ensemble, thermostat, barostat, initial_state, n_moves=n_moves)
+
         trajs.append(traj)
         volume_trajs.append(extras['volume_traj'])
 
