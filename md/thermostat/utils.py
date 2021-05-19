@@ -11,7 +11,7 @@ def sample_velocities(masses: unit.Quantity, temperature: unit.Quantity) -> np.a
     v_unscaled = np.random.randn(n_particles, spatial_dim)
 
     # intended to be consistent with timemachine.integrator:langevin_coefficients
-    sigma = np.sqrt(BOLTZ * temperature.value_in_unit.kelvin) * np.sqrt(1 / masses)
+    sigma = np.sqrt(BOLTZ * temperature.value_in_unit(unit.kelvin)) * np.sqrt(1 / masses)
     v_scaled = v_unscaled * np.expand_dims(sigma, axis=1)
 
     assert v_scaled.shape == (n_particles, spatial_dim)
