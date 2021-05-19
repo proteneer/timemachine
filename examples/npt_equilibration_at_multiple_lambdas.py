@@ -162,7 +162,7 @@ if __name__ == '__main__':
     plt.close()
 
     for i, volume_traj in enumerate(volume_trajs):
-        plt.hist(volume_traj[-1000:], c=colors[i], alpha=0.5, density=True)
+        plt.hist(volume_traj[-1000:], color=colors[i], alpha=0.5, density=True)
     plt.xlabel('volume (nm$^3$)')
     plt.ylabel('probability density')
     plt.savefig('volume_distributions.png', dpi=300, bbox_inches='tight')
