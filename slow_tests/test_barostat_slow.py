@@ -23,6 +23,8 @@ from timemachine.constants import BOLTZ
 
 from functools import partial
 
+from typing import Tuple
+
 # thermodynamic parameters
 temperature = 300 * unit.kelvin
 pressure = 1.0 * unit.atmosphere
