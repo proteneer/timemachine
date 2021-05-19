@@ -15,10 +15,9 @@ from fe.free_energy import RelativeFreeEnergy
 from md.ensembles import PotentialEnergyModel, NPTEnsemble
 from md.barostat.moves import MonteCarloBarostat, CoordsAndBox
 from md.barostat.utils import get_group_indices, compute_box_volume
-from md.thermostat.utils import sample_velocities
+from md.thermostat.utils import sample_velocities, run_thermostatted_md
 
-from timemachine.lib import custom_ops, LangevinIntegrator
-from timemachine.constants import BOLTZ
+from timemachine.lib import LangevinIntegrator
 
 if __name__ == '__main__':
 
@@ -70,25 +69,6 @@ if __name__ == '__main__':
     )
     integrator_impl = integrator.impl()
 
-    def run_thermostatted_md(x: CoordsAndBox, v: np.array, n_steps=5) -> CoordsAndBox:
-
-        # TODO: is there a way to set context coords, box, velocities without initializing a fresh Context?
-
-        ctxt = custom_ops.Context(
-            x.coords,
-            v,
-            x.box,
-            integrator_impl,
-            potential_energy_model.all_impls
-        )
-
-        # lambda schedule, du_dl_interval, x interval
-        du_dls, xs = ctxt.multiple_steps(lam * np.ones(n_steps), 0, n_steps - 1)
-        x_t = ctxt.get_x_t()
-        v_t = ctxt.get_v_t()
-        return CoordsAndBox(x_t, x.box), v_t
-
-
     def simulate_npt_traj(coords, box, n_moves=1000):
         barostat.reset()
 
@@ -105,7 +85,10 @@ if __name__ == '__main__':
 
         for _ in trange:
             t0 = time()
-            after_nvt, v_t = run_thermostatted_md(traj[-1], v_t)
+            x_0, v_0, box = traj[-1].coords, v_t.copy(), traj[-1].box
+            x_t, v_t = run_thermostatted_md(integrator_impl, potential_energy_model.all_impls, x_0, box, v_0, lam,
+                                            n_steps=5)
+            after_nvt = CoordsAndBox(x_t, box)
             t1 = time()
             after_npt = barostat.move(after_nvt)
             t2 = time()
