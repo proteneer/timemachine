@@ -1,4 +1,5 @@
 import numpy as onp
+onp.random.seed(0)
 from jax import (
     grad, value_and_grad, jit, vmap, numpy as np, config,
 )
@@ -92,8 +93,8 @@ def stddev_du_dl_on_samples(xs, lam: float, params: np.array):
 
 
 if __name__ == '__main__':
-    x_samples = onp.random.rand(1000) * cutoff
-    onp.random.seed(0)
+    x_samples = onp.random.rand(10000) * cutoff
+
     n_control_params = 2
     params = np.ones((n_basis, n_control_params))
 
@@ -131,8 +132,11 @@ if __name__ == '__main__':
         return float(v), onp.array(g, dtype=onp.float64)
 
 
+    print(f'optimizing! initial loss = {L(initial_protocol):.3f}')
     result = minimize(fun, initial_protocol, jac=True, tol=0.0)
     opt_params = unflatten(result.x)
+    print(f'done! final loss = {L(result.x):.3f}')
+    print(f'details:\n{result}')
 
 
     def discretize(lambdas, flat_params):
