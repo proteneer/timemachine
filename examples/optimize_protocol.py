@@ -1,4 +1,5 @@
 import numpy as onp
+
 onp.random.seed(0)
 from jax import (
     grad, value_and_grad, jit, vmap, numpy as np, config,
@@ -71,7 +72,13 @@ def compute_dials(lam: float, params: np.array):
 
 
 def log_weights(xs, dials):
-    return - vmap(u_dials, (0, None))(xs, dials)
+    """In less toy system, would replace this with weighted samples
+    e.g. with log_denominators from MBAR
+        https://github.com/proteneer/timemachine/blob/95eb017bbe6bef4b3d5d3f5b550522057e845995/fe/reweighting.py#L211-L212
+    """
+    log_numerators = - vmap(u_dials, (0, None))(xs, dials)  # -u_target
+    log_denominators = np.zeros(len(xs))  # -u_proposed (here a constant because propoosals are uniform)
+    return log_numerators - log_denominators
 
 
 def stddev_du_dl_on_samples(xs, lam: float, params: np.array):
