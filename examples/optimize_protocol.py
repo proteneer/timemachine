@@ -102,8 +102,10 @@ def stddev_du_dl_on_samples(xs, lam: float, params: np.array):
 if __name__ == '__main__':
     x_samples = onp.random.rand(10000) * cutoff
 
+    # parameters governing shape of control protocol
     n_control_params = 2
-    params = np.ones((n_basis, n_control_params))
+    params_shape = (n_basis, n_control_params)
+    params = np.ones(params_shape) + 1e-1 * onp.random.randn(*params_shape)
 
     lambdas = np.linspace(0, 1, 50)
 
