@@ -12,7 +12,7 @@ from md.ensembles import PotentialEnergyModel, NPTEnsemble
 
 from md.thermostat.utils import sample_velocities
 
-from md.barostat.utils import get_group_indices
+from md.barostat.utils import get_bond_list, get_group_indices
 from md.barostat.moves import MonteCarloBarostat
 
 from md.thermostat.moves import UnadjustedLangevinMove
@@ -106,7 +106,8 @@ if __name__ == '__main__':
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
-    group_indices = get_group_indices(harmonic_bond_potential)
+    bond_list = get_bond_list(harmonic_bond_potential)
+    group_indices = get_group_indices(bond_list)
 
     # loop over lambdas, collecting NPT trajectories
     trajs = []

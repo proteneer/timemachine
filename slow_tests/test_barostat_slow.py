@@ -14,7 +14,7 @@ from fe.free_energy import AbsoluteFreeEnergy
 
 from md.ensembles import PotentialEnergyModel, NPTEnsemble
 from md.barostat.moves import MonteCarloBarostat
-from md.barostat.utils import get_group_indices
+from md.barostat.utils import get_bond_list, get_group_indices
 from md.states import CoordsVelBox
 from md.utils import simulate_npt_traj
 from md.thermostat.moves import UnadjustedLangevinMove
@@ -74,7 +74,8 @@ if __name__ == '__main__':
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
-    group_indices = get_group_indices(harmonic_bond_potential)
+    bond_list = get_bond_list(harmonic_bond_potential)
+    group_indices = get_group_indices(bond_list)
 
     trajs = []
     volume_trajs = []

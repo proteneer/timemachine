@@ -1,7 +1,7 @@
 import numpy as np
 import networkx as nx
 from scipy.spatial.distance import pdist
-from typing import List
+from typing import List, Tuple
 from timemachine.lib.potentials import HarmonicBond
 
 
@@ -22,18 +22,28 @@ def compute_box_center(box: np.ndarray) -> np.ndarray:
     return center
 
 
-def get_group_indices(harmonic_bond_potential: HarmonicBond) -> List[np.array]:
-    # read off topology from harmonic bond indices
-    # NOTE: this assumes all bonds are represented by harmonic bond force
-    bond_list = list(map(tuple, harmonic_bond_potential.get_idxs()))
-    # TODO: if we add HBond constraints, be sure to add these to the bond_list!
-    alchemical_topology = nx.Graph(bond_list)
-    connected_components = list(map(list, nx.algorithms.connected_components(alchemical_topology)))
+def get_bond_list(harmonic_bond_potential: HarmonicBond) -> List[Tuple[int, int]]:
+    """Read off topology from indices of harmonic bond force
 
-    return connected_components
+    Notes
+    -----
+    * Assumes all valence bonds are represented by this harmonic bond force.
+        This assumption could break if there are multiple harmonic bond forces in the system,
+        or if there are valence bonds not represented as harmonic bonds (e.g. as length constraints)
+    """
+
+    bond_list = list(map(tuple, harmonic_bond_potential.get_idxs()))
+    return bond_list
+
+
+def get_group_indices(bond_list: List[np.array]) -> List[np.array]:
+    """Connected components of bond graph"""
+
+    topology = nx.Graph(bond_list)
+    components = [np.array(list(c)) for c in nx.algorithms.connected_components(topology)]
+    return components
 
 
 def compute_intramolecular_distances(coords: np.array, group_indices: List[np.array]) -> List[np.array]:
     """pairwise distances within each group"""
     return [pdist(coords[inds]) for inds in group_indices]
-
