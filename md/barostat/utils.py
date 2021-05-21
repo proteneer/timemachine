@@ -33,27 +33,6 @@ def get_group_indices(harmonic_bond_potential: HarmonicBond) -> List[np.array]:
     return connected_components
 
 
-def merge_big_groups(group_indices: List[np.array]) -> List[np.array]:
-    """
-    assume any molecules with > 3 atoms are the protein and the ligand,
-    and treat the protein:ligand complex as a unit
-    """
-
-    molecule_sizes = np.array(list(map(len, group_indices)))
-
-    protein_and_ligand_mol_inds = np.where(molecule_sizes > 3)[0]
-    n_components, component_sizes = len(protein_and_ligand_mol_inds), molecule_sizes[protein_and_ligand_mol_inds]
-    print(f'merging {n_components} connected components, of sizes {component_sizes}')
-
-    # waters, and possibly ions if present
-    other_mol_inds = np.where(molecule_sizes <= 3)[0]
-
-    protein_ligand_group = np.hstack([group_indices[i] for i in protein_and_ligand_mol_inds])
-    merged_group_indices = [protein_ligand_group] + [group_indices[i] for i in other_mol_inds]
-
-    return merged_group_indices
-
-
 def compute_intramolecular_distances(coords: np.array, group_indices: List[np.array]) -> List[np.array]:
     """pairwise distances within each group"""
     return [pdist(coords[inds]) for inds in group_indices]
