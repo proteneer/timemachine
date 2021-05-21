@@ -73,7 +73,7 @@ def test_molecular_ideal_gas():
 
     # thermodynamic parameters
     temperatures = np.array([300, 600, 1000]) * unit.kelvin
-    pressure = 1.0 * unit.atmosphere
+    pressure = 1.013 * unit.bar
 
     # generate an alchemical system of a waterbox + alchemical ligand:
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0

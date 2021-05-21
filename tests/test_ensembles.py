@@ -67,8 +67,8 @@ def test_npt():
     # box lengths uniform between 1 and 4 nm
     volumes = (np.random.rand(n_trials) * 3 + 1.0) ** 3 * unit.nanometer ** 3
 
-    # uniform between 0.5 and 1.5 atmospheres
-    pressures = (np.random.rand(n_trials) + 0.5) * unit.atmosphere
+    # uniform between 0.5 and 1.5 bar
+    pressures = (np.random.rand(n_trials) + 0.5) * unit.bar
 
     for (U, T, V, P) in zip(potential_energies, temperatures, volumes, pressures):
         ref = _compute_reduced_potential(U, T, V, P)

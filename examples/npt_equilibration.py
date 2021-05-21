@@ -38,7 +38,7 @@ seed = 2021
 
 # thermodynamic parameters
 temperature = 300 * unit.kelvin
-pressure = 1.0 * unit.atmosphere
+pressure = 1.013 * unit.bar
 lambdas = construct_lambda_schedule(n_lambdas)
 
 # build a pair of alchemical ligands in a water box
