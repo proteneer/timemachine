@@ -29,7 +29,7 @@ Geometry = namedtuple('Geometry', ['r'])
 FFParams = namedtuple('FFParams', ['sigma', 'epsilon', 'charge_product'])
 ControlDials = namedtuple('ControlDials', ['lj_offset', 'coulomb_offset'])
 
-default_ff = FFParams(sigma=1.0, eps=1.0, charge_prod=-1.0)
+default_ff = FFParams(sigma=1.0, epsilon=1.0, charge_product=-1.0)
 
 
 def u_controllable(x: Geometry, ff: FFParams, dials: ControlDials) -> float:
