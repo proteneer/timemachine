@@ -50,35 +50,32 @@ def rescale_control_dials(normalized_control_params: np.array) -> ControlDials:
     return ControlDials(*rescaled)
 
 
-ProtocolParams = namedtuple('ProtocolParams', ['offset'])
+# ProtocolParams = namedtuple('ProtocolParams', ['lj_offset_phi', 'coulomb_offset_phi'])
+
+def u_dials(r: float, dials: ControlDials):
+    return u_controllable(Geometry(r), default_ff, dials)
 
 
 def u_vec(r: float, dial_vec: np.array) -> float:
-    x, dials = Geometry(r), rescale_control_dials(dial_vec)
-    return u_controllable(x, default_ff, dials)
+    return u_dials(r, rescale_control_dials(dial_vec))
 
 
-def u_lam(r: float, lam: float, phi: ProtocolParams) -> float:
-    # compute_
-    # dial_vec = parameterized_protocol(lam, params)
-    # control_params = convert(dial_vec)
-
-    x, dials = Geometry(r), compute_dials(lam, phi)
-    return u_controllable(x, default_ff, dials)
+def u_lam(r: float, lam: float, params: np.array) -> float:
+    return u_dials(r, compute_dials(lam, params))
 
 
-def compute_dials(lam: float, phi: ProtocolParams):
-    unscaled_control_dials = np.array([parameterized_protocol(lam, params) for params in phi])
+def compute_dials(lam: float, params: np.array):
+    unscaled_control_dials = parameterized_protocol(lam, params)
     return rescale_control_dials(unscaled_control_dials)
 
 
 def log_weights(xs, dials):
-    return - vmap(u_vec, (0, None))(xs, dials)
+    return - vmap(u_dials, (0, None))(xs, dials)
 
 
 def stddev_du_dl_on_samples(xs, lam: float, params: np.array):
     # get weights for samples at (lam, params)
-    dials = parameterized_protocol(lam, params)
+    dials = compute_dials(lam, params)
     log_w = log_weights(xs, dials)
     w = np.exp(log_w - logsumexp(log_w)).flatten()
 
@@ -98,8 +95,7 @@ if __name__ == '__main__':
     x_samples = onp.random.rand(1000) * cutoff
     onp.random.seed(0)
     n_control_params = 2
-    params = np.ones((n_control_params, n_basis))
-    phi = ProtocolParams(*params)
+    params = np.ones((n_basis, n_control_params))
 
     lambdas = np.linspace(0, 1, 50)
 
