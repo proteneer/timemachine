@@ -168,27 +168,31 @@ def plot_protocols_and_stddevs(lambdas, initial_protocol, optimized_protocol):
     optimized_stddevs = vmap(stddev_du_dl_on_samples, (None, 0, None))(x_samples, lambdas,
                                                                        unflatten(optimized_protocol))
 
+    y_ticks = [0, cutoff]
+    y_labels = [0, 'cutoff']
     labels = ['LJ offset', 'Coulomb offset']
 
     plt.figure(figsize=(10, 4))
 
     plt.subplot(1, 3, 1)
     plt.title('initial protocol')
-    ys = discretize(lambdas, initial_protocol).T
+    ys = cutoff * (1 - discretize(lambdas, initial_protocol).T)
     for label, y in zip(labels, ys):
         plt.plot(lambdas, y, label=label)
     plt.legend()
     plt.xlabel('$\lambda$')
-    plt.ylabel('normalized_dial($\lambda$)')
+    plt.ylabel('control_dial($\lambda$)')
+    plt.yticks(y_ticks, y_labels)
 
     plt.subplot(1, 3, 2)
     plt.title('optimized protocol')
-    ys = discretize(lambdas, optimized_protocol).T
+    ys = cutoff * (1 - discretize(lambdas, optimized_protocol).T)
     for label, y in zip(labels, ys):
         plt.plot(lambdas, y, label=label)
     plt.legend()
     plt.xlabel('$\lambda$')
-    plt.ylabel('normalized_dial($\lambda$)')
+    plt.ylabel('control_dial($\lambda$)')
+    plt.yticks(y_ticks, y_labels)
 
     plt.subplot(1, 3, 3)
     plt.title('variance(du/d$\lambda$)\nbefore and after optimization')
