@@ -1,3 +1,14 @@
+"""
+Approach:
+* Express u as a differentiable function of x and control_params
+* Express control_params as a differentiable function of lam and protocol_params
+* Express estimate of stddev(du_dl) @ lam in terms of importance weights of pre-cached samples from some distribution
+    that has good overlap with all relevant values of lam.
+    (This estimate is differentiable w.r.t. protocol_params if importance weights are
+    differentiable w.r.t. control_params.)
+* Express estimate of TI protocol quality in terms of stddev(du_dl) @ lam, for lam in linspace(0,1,n_windows)
+* Differentiate this estimate w.r.t. protocol_params
+"""
 import numpy as onp
 
 onp.random.seed(0)
