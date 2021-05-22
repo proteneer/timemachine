@@ -9,19 +9,19 @@ Approach:
 * Express estimate of TI protocol quality in terms of stddev(du_dl) @ lam, for lam in linspace(0,1,n_windows)
 * Differentiate this estimate w.r.t. protocol_params
 """
+import os
 import numpy as onp
-
-onp.random.seed(0)
-from jax import (
-    grad, value_and_grad, jit, vmap, numpy as np, config,
-)
+from jax import grad, value_and_grad, jit, vmap, numpy as np, config
 from jax.scipy.special import logsumexp
 
 config.update("jax_enable_x64", True)
 
-from fe.protocol_optimization import parameterized_protocol, n_basis
 from collections import namedtuple
-from scipy.optimize import minimize
+from scipy.optimize import minimize, Bounds
+
+import matplotlib.pyplot as plt
+
+from fe.protocol_optimization import parameterized_protocol, n_basis
 
 cutoff = 5.0
 
