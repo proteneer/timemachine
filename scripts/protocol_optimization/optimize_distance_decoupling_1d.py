@@ -23,11 +23,11 @@ import matplotlib.pyplot as plt
 
 from fe.protocol_optimization import parameterized_protocol, n_basis
 
-cutoff = 5.0
+
+# TODO: refactor basis expansion
 
 
-# force field terms
-
+# Express u as a differentiable function of x and control_params
 def lennard_jones(r: float, sigma: float, epsilon: float) -> float:
     """https://en.wikipedia.org/wiki/Lennard-Jones_potential"""
     return 4 * epsilon * ((sigma / r) ** 12 - (sigma / r) ** 6)
@@ -43,6 +43,7 @@ FFParams = namedtuple('FFParams', ['sigma', 'epsilon', 'charge_product'])
 ControlDials = namedtuple('ControlDials', ['lj_offset', 'coulomb_offset'])
 
 default_ff = FFParams(sigma=1.0, epsilon=1.0, charge_product=-1.0)
+cutoff = 5.0
 
 
 def u_controllable(x: Geometry, ff: FFParams, dials: ControlDials) -> float:
@@ -53,7 +54,7 @@ def u_controllable(x: Geometry, ff: FFParams, dials: ControlDials) -> float:
     return u_lj + u_coulomb
 
 
-# how to expose derivatives w.r.t. "protocol shape"
+# Express control_params as a differentiable function of lam and protocol_params
 
 def rescale_control_dials(normalized_control_params: np.array) -> ControlDials:
     """n -> ControlDials(cutoff * (1-n[0]), cutoff * (1 - n[1]))"""
@@ -62,8 +63,6 @@ def rescale_control_dials(normalized_control_params: np.array) -> ControlDials:
 
     return ControlDials(*rescaled)
 
-
-# ProtocolParams = namedtuple('ProtocolParams', ['lj_offset_phi', 'coulomb_offset_phi'])
 
 def u_dials(r: float, dials: ControlDials):
     return u_controllable(Geometry(r), default_ff, dials)
@@ -82,6 +81,7 @@ def compute_dials(lam: float, params: np.array):
     return rescale_control_dials(unscaled_control_dials)
 
 
+# Express estimate of stddev(du_dl) @ lam in terms of importance weights of pre-cached samples
 def log_weights(xs, dials):
     """In less toy system, would replace this with weighted samples
     e.g. with log_denominators from MBAR
@@ -110,54 +110,108 @@ def stddev_du_dl_on_samples(xs, lam: float, params: np.array):
     return stddev
 
 
+onp.random.seed(0)
+x_samples = onp.random.rand(1000) * cutoff
+
+# parameters governing shape of control protocol
+n_control_params = 2
+params_shape = (n_basis, n_control_params)
+params = np.ones(params_shape) + 1e-1 * onp.random.randn(*params_shape)
+
+initial_protocol = params.flatten()
+unflatten = lambda x: x.reshape(params.shape)
+
+# evenly spaced lambda
+n_windows = 50
+lambdas = np.linspace(0, 1, n_windows)
+
+
+# Express estimate of TI protocol quality in terms of stddev(du_dl) @ lam, for lam in linspace(0,1,n_windows)
+@jit
+def loss(params):
+    stddevs = vmap(stddev_du_dl_on_samples, (None, 0, None))(x_samples, lambdas, params)
+    variances = stddevs ** 2
+
+    goal = np.mean(variances)
+
+    # NOTE: penalizing parameters being much different from 1, rather than much different from 0
+    #   if we penalize norm(params) directly, then we can get really tiny values of the parameters (like, 1e-12)
+    #   but still have a reasonable-looking function
+
+    # TODO: rather than penalizing the parameters themselves, should penalize how "squiggly" the protocol is...
+
+    penalty = np.mean((params.flatten() - 1.0) ** 2)
+
+    return goal + penalty
+
+
+def L(flat_protocol):
+    return loss(unflatten(flat_protocol))
+
+
+# Differentiate this estimate w.r.t. protocol_params
+def fun(flat_protocol):
+    v, g = value_and_grad(L)(flat_protocol)
+    return float(v), onp.array(g, dtype=onp.float64)
+
+
+def discretize(lambdas, flat_params):
+    return vmap(parameterized_protocol, (0, None))(lambdas, unflatten(flat_params))
+
+
+def get_figure_fpath(fname):
+    return os.path.join(os.path.dirname(__file__), f'figures/{fname}')
+
+
+def plot_protocols_and_stddevs(lambdas, initial_protocol, optimized_protocol):
+    initial_stddevs = vmap(stddev_du_dl_on_samples, (None, 0, None))(x_samples, lambdas, unflatten(initial_protocol))
+    optimized_stddevs = vmap(stddev_du_dl_on_samples, (None, 0, None))(x_samples, lambdas,
+                                                                       unflatten(optimized_protocol))
+
+    labels = ['LJ offset', 'Coulomb offset']
+
+    plt.figure(figsize=(10, 4))
+
+    plt.subplot(1, 3, 1)
+    plt.title('initial protocol')
+    ys = discretize(lambdas, initial_protocol).T
+    for label, y in zip(labels, ys):
+        plt.plot(lambdas, y, label=label)
+    plt.legend()
+    plt.xlabel('$\lambda$')
+    plt.ylabel('normalized_dial($\lambda$)')
+
+    plt.subplot(1, 3, 2)
+    plt.title('optimized protocol')
+    ys = discretize(lambdas, optimized_protocol).T
+    for label, y in zip(labels, ys):
+        plt.plot(lambdas, y, label=label)
+    plt.legend()
+    plt.xlabel('$\lambda$')
+    plt.ylabel('normalized_dial($\lambda$)')
+
+    plt.subplot(1, 3, 3)
+    plt.title('variance(du/d$\lambda$)\nbefore and after optimization')
+    plt.plot(lambdas, initial_stddevs ** 2, label='initial')
+    plt.plot(lambdas, optimized_stddevs ** 2, label='optimized')
+    plt.legend()
+
+    plt.xlabel('$\lambda$')
+    plt.ylabel('variance(du/d$\lambda$)')
+
+    figure_fpath = get_figure_fpath('distance_decoupling_1d_variance.png')
+    print(f'saving figure to {figure_fpath}')
+    plt.tight_layout()
+    plt.savefig(figure_fpath, dpi=300, bbox_inches='tight')
+    plt.close()
+
+
 if __name__ == '__main__':
-    x_samples = onp.random.rand(10000) * cutoff
-
-    # parameters governing shape of control protocol
-    n_control_params = 2
-    params_shape = (n_basis, n_control_params)
-    params = np.ones(params_shape) + 1e-1 * onp.random.randn(*params_shape)
-
-    lambdas = np.linspace(0, 1, 50)
-
-
-    @jit
-    def loss(params):
-        stddevs = vmap(stddev_du_dl_on_samples, (None, 0, None))(x_samples, lambdas, params)
-        variances = stddevs ** 2
-
-        goal = np.mean(variances)
-
-        # NOTE: penalizing parameters being much different from 1, rather than much different from 0
-        #   if we penalize norm(params) directly, then we can get really tiny values of the parameters (like, 1e-12)
-        #   but still have a reasonable-looking function
-
-        # TODO: rather than penalizing the parameters themselves, should penalize how "squiggly" the protocol is...
-
-        penalty = np.mean((params.flatten() - 1.0) ** 2)
-
-        return goal + penalty
-
-
-    initial_protocol = params.flatten()
-    unflatten = lambda x: x.reshape(params.shape)
-
-
-    def L(flat_protocol):
-        return loss(unflatten(flat_protocol))
-
-
-    def fun(flat_protocol):
-        v, g = value_and_grad(L)(flat_protocol)
-        return float(v), onp.array(g, dtype=onp.float64)
-
-
     print(f'optimizing! initial loss = {L(initial_protocol):.3f}')
-    result = minimize(fun, initial_protocol, jac=True, tol=0.0)
-    opt_params = unflatten(result.x)
-    print(f'done! final loss = {L(result.x):.3f}')
+    bounds = Bounds(0, +np.inf)  # keep it positive
+    result = minimize(fun, initial_protocol, jac=True, bounds=bounds, method='L-BFGS-B', options=dict(maxiter=200))
+    optimized_protocol = result.x  # note: flattened
+    print(f'done! final loss = {L(optimized_protocol):.3f}')
     print(f'details:\n{result}')
 
-
-    def discretize(lambdas, flat_params):
-        return vmap(parameterized_protocol, (0, None))(lambdas, unflatten(flat_params))
+    plot_protocols_and_stddevs(lambdas, initial_protocol, optimized_protocol)
