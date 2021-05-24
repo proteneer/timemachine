@@ -1,5 +1,6 @@
 import numpy as np
 from md.barostat.moves import CentroidRescaler
+
 np.random.seed(2021)
 
 def _generate_random_instance():
@@ -21,10 +22,17 @@ def _generate_random_instance():
 
     return coords, group_inds
 
+
 def test_null_rescaling():
-    pass
+    """scaling by a factor of 1.0x shouldn't change coordinates"""
+    for _ in range(10):
+        coords, group_inds = _generate_random_instance()
+        center = np.random.randn(3)
 
+        rescaler = CentroidRescaler(group_inds)
+        coords_prime = rescaler.scale_centroids(coords, center, 1.0)
 
+        np.testing.assert_allclose(coords_prime, coords)
 
 
 def test_compute_centroids():
@@ -34,10 +42,8 @@ def test_compute_centroids():
     for _ in range(10):
         coords, group_inds = _generate_random_instance()
 
-
         # assert compute_centroids agrees with _slow_compute_centroids
         rescaler = CentroidRescaler(group_inds)
         fast_centroids = rescaler.compute_centroids(coords)
         slow_centroids = rescaler._slow_compute_centroids(coords)
         np.testing.assert_array_almost_equal(slow_centroids, fast_centroids)
-
