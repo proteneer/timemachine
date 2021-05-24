@@ -7,4 +7,7 @@ BOLTZ = RGAS/1000
 ONE_4PI_EPS0 = 138.935456
 VIBRATIONAL_CONSTANT = 1302.79 # http://openmopac.net/manual/Hessian_Matrix.html
 
+ENERGY_UNIT = unit.kilojoule_per_mole
+DISTANCE_UNIT = unit.nanometer
+
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA

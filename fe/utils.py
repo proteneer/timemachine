@@ -5,12 +5,6 @@ import networkx as nx
 
 from typing import List
 
-def set_velocities_to_temperature(n_atoms, temperature, masses):
-    assert 0 # don't call this yet until its
-    v_t = np.random.normal(size=(n_atoms, 3))
-    velocity_scale = np.sqrt(constants.BOLTZ*temperature/np.expand_dims(masses, -1))
-    return v_t*velocity_scale
-
 def to_md_units(q):
     return q.value_in_unit_system(simtk.unit.md_unit_system)
 

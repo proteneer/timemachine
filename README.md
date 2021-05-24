@@ -10,9 +10,8 @@ A high-performance differentiable molecular dynamics, docking and optimization e
 
 ## Deficiencies
 
-1. NVT only
-2. No constraints (HMR is needed to increase step size)
-3. Explicit solvent is supported by reaction field, not PME
+1. No constraints (HMR is needed to increase step size)
+2. Explicit solvent is supported by reaction field, not PME
 
 ## Functional Forms
 
