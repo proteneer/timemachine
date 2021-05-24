@@ -38,7 +38,7 @@ def test_molecular_ideal_gas():
     initial_waterbox_width = 2.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     collision_rate = 1.0 / unit.picosecond
-    n_moves = 2000
+    n_moves = 10000
     barostat_interval = 5
     seed = 2021
 
