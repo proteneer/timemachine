@@ -38,7 +38,7 @@ def test_molecular_ideal_gas():
     initial_waterbox_width = 2.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     collision_rate = 1.0 / unit.picosecond
-    n_moves = 10000
+    n_moves = 2000
     barostat_interval = 5
     seed = 2021
 
@@ -74,6 +74,9 @@ def test_molecular_ideal_gas():
     potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
     lam = 1.0
 
+    relative_tolerance = 1e-2
+    initial_relative_box_perturbation = 2 * relative_tolerance
+
     n_molecules = complex_top.getNumResidues()
 
     # expected volume
@@ -101,16 +104,15 @@ def test_molecular_ideal_gas():
             return u
 
         thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=barostat_interval)
-        barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
+        barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices)
 
         v_0 = sample_velocities(masses * unit.amu, temperature)
 
         # rescale the box to be approximately the desired box volume already
-        initialize_bigger_than_expected = 1.1 # initialize with a box 10% bigger than expected
         rescaler = CentroidRescaler(group_indices)
         initial_volume = compute_box_volume(complex_box)
         initial_center = compute_box_center(complex_box)
-        length_scale = (initialize_bigger_than_expected * expected_volume_in_md[i] / initial_volume) ** (1. / 3)
+        length_scale = (initial_relative_box_perturbation * expected_volume_in_md[i] / initial_volume) ** (1. / 3)
         new_coords = rescaler.rescale(coords, initial_center, length_scale)
         new_box = complex_box * length_scale
 
@@ -124,4 +126,4 @@ def test_molecular_ideal_gas():
     equil_time = n_moves // 2  # TODO: don't hard-code this?
     actual_volume_in_md = np.array([np.mean(volume_traj[equil_time:]) for volume_traj in volume_trajs])
 
-    np.testing.assert_allclose(actual=actual_volume_in_md, desired=expected_volume_in_md, rtol=1e-2)
+    np.testing.assert_allclose(actual=actual_volume_in_md, desired=expected_volume_in_md, rtol=relative_tolerance)
