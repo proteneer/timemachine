@@ -22,6 +22,7 @@ from scipy.optimize import minimize, Bounds
 import matplotlib.pyplot as plt
 
 from fe.protocol_optimization import parameterized_protocol, n_basis
+from fe.reweighting import CachedImportanceSamples
 
 
 # TODO: refactor basis expansion
@@ -82,25 +83,16 @@ def compute_dials(lam: float, params: np.array):
 
 
 # Express estimate of stddev(du_dl) @ lam in terms of importance weights of pre-cached samples
-def log_weights(xs, dials):
-    """In less toy system, would replace this with weighted samples
-    e.g. with log_denominators from MBAR
-        https://github.com/proteneer/timemachine/blob/95eb017bbe6bef4b3d5d3f5b550522057e845995/fe/reweighting.py#L211-L212
-    """
-    log_numerators = - vmap(u_dials, (0, None))(xs, dials)  # -u_target
-    log_denominators = np.zeros(len(xs))  # -u_proposed (here a constant because propoosals are uniform)
-    return log_numerators - log_denominators
-
-
-def stddev_du_dl_on_samples(xs, lam: float, params: np.array):
+def stddev_du_dl_on_samples(sample_cache: CachedImportanceSamples, lam: float, params: np.array):
     # get weights for samples at (lam, params)
     dials = compute_dials(lam, params)
-    log_w = log_weights(xs, dials)
+    logpdf_fxn = lambda x: - u_dials(x, dials)
+    log_w = sample_cache.compute_log_importance_weights(logpdf_fxn)
     w = np.exp(log_w - logsumexp(log_w)).flatten()
 
     # get du_dls for samples at (lam, params)
     vmapped_du_dl = vmap(grad(u_lam, argnums=1), in_axes=(0, None, None))
-    du_dls = vmapped_du_dl(xs, lam, params)
+    du_dls = vmapped_du_dl(sample_cache.xs, lam, params)
 
     # compute weighted estimate of stddev(du_dl(x)), x ~ p(x | lam, params)
     mean = np.sum(du_dls * w)
@@ -111,7 +103,10 @@ def stddev_du_dl_on_samples(xs, lam: float, params: np.array):
 
 
 onp.random.seed(0)
-x_samples = onp.random.rand(1000) * cutoff
+n_samples = 1000
+xs = onp.random.rand(n_samples) * cutoff
+log_denominators = np.ones(n_samples) * np.log(1 / cutoff)  # uniform
+sample_cache = CachedImportanceSamples(xs, log_denominators)
 
 # parameters governing shape of control protocol
 n_control_params = 2
@@ -129,7 +124,7 @@ lambdas = np.linspace(0, 1, n_windows)
 # Express estimate of TI protocol quality in terms of stddev(du_dl) @ lam, for lam in linspace(0,1,n_windows)
 @jit
 def loss(params):
-    stddevs = vmap(stddev_du_dl_on_samples, (None, 0, None))(x_samples, lambdas, params)
+    stddevs = vmap(stddev_du_dl_on_samples, (None, 0, None))(sample_cache, lambdas, params)
     variances = stddevs ** 2
 
     goal = np.mean(variances)
@@ -163,10 +158,10 @@ def get_figure_fpath(fname):
     return os.path.join(os.path.dirname(__file__), f'figures/{fname}')
 
 
-def plot_protocols_and_stddevs(lambdas, initial_protocol, optimized_protocol):
-    initial_stddevs = vmap(stddev_du_dl_on_samples, (None, 0, None))(x_samples, lambdas, unflatten(initial_protocol))
-    optimized_stddevs = vmap(stddev_du_dl_on_samples, (None, 0, None))(x_samples, lambdas,
-                                                                       unflatten(optimized_protocol))
+def plot_protocols_and_stddevs(lambdas, initial_protocol, optimized_protocol, sample_cache):
+    stddev_du_dl_vec_lambda = vmap(stddev_du_dl_on_samples, (None, 0, None))
+    initial_stddevs = stddev_du_dl_vec_lambda(sample_cache, lambdas, unflatten(initial_protocol))
+    optimized_stddevs = stddev_du_dl_vec_lambda(sample_cache, lambdas, unflatten(optimized_protocol))
 
     y_ticks = [0, cutoff]
     y_labels = [0, 'cutoff']
@@ -218,4 +213,4 @@ if __name__ == '__main__':
     print(f'done! final loss = {L(optimized_protocol):.3f}')
     print(f'details:\n{result}')
 
-    plot_protocols_and_stddevs(lambdas, initial_protocol, optimized_protocol)
+    plot_protocols_and_stddevs(lambdas, initial_protocol, optimized_protocol, sample_cache)
