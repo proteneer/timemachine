@@ -1,4 +1,5 @@
 from jax import vmap, config, numpy as np
+
 config.update("jax_enable_x64", True)
 config.update('jax_platform_name', 'cpu')
 
@@ -23,9 +24,9 @@ controlled_ti_curve = np.mean(controlled_ti_vals, 1)
 controlled_ti_stddev = np.std(controlled_ti_vals, 1)
 
 # 1. Plot raw TI vs. controlled TI with error bands
-plt.figure(figsize=(8,4))
+plt.figure(figsize=(8, 4))
 
-ax = plt.subplot(1,2,1)
+ax = plt.subplot(1, 2, 1)
 plt.plot(lambdas, ti_curve)
 plt.fill_between(lambdas, ti_curve - ti_stddev, ti_curve + ti_stddev, alpha=0.5)
 plt.title('raw TI curve\n(sample average <du/dl>)')
@@ -33,7 +34,7 @@ plt.xlabel('$\lambda$')
 plt.ylabel(r'$\partial u / \partial \lambda$')
 
 # 2. Plot controlled TI
-plt.subplot(1,2,2,sharey=ax)
+plt.subplot(1, 2, 2, sharey=ax)
 plt.plot(lambdas, controlled_ti_curve)
 lb, ub = controlled_ti_curve - controlled_ti_stddev, controlled_ti_curve + controlled_ti_stddev
 plt.xlabel('$\lambda$')
@@ -59,7 +60,7 @@ plt.plot(lambdas, (ti_stddev / controlled_ti_stddev) ** 2, '.')
 plt.hlines(1, 0, 1, colors='grey', linestyles='--')
 plt.xlabel('$\lambda$')
 plt.ylabel('variance reduction')
-#plt.yscale('log')
+# plt.yscale('log')
 plt.title('variance reduction')
 
 plt.subplot(2, 2, 3)
@@ -85,7 +86,7 @@ plt.tight_layout()
 plt.savefig('figures/variance_comparison.png')
 plt.close()
 
-# 4. Plot optimized control variates at all lambdas?
+# 4. Plot optimized control variates at all lambdas
 r = np.linspace(0, 5.0, 1000)
 cmap = plt.get_cmap('viridis')
 colors = cmap.colors[::len(cmap.colors) // len(lambdas)][:len(lambdas)]
@@ -102,8 +103,9 @@ plt.tight_layout()
 plt.savefig('figures/optimized_control_variates.png')
 plt.close()
 
+# 5. Plot time series of controlled and uncontrolled du/dlambda
 plt.title('traces')
-ax = plt.subplot(1,2,1)
+ax = plt.subplot(1, 2, 1)
 ratios = np.nan_to_num(ti_stddev / controlled_ti_stddev)
 i = np.argmax(ratios)
 print(f'plotting a trace for an example where ti_stddev / controlled_ti_stddev = {ratios[i]}')
@@ -112,7 +114,7 @@ plt.title('uncontrolled')
 plt.xlabel('MD snapshot')
 plt.ylabel(r'$\partial u / \partial \lambda$')
 
-plt.subplot(1,2,2,sharey=ax)
+plt.subplot(1, 2, 2, sharey=ax)
 plt.plot(controlled_ti_vals[i], '.', label='controlled')
 plt.xlabel('MD snapshot')
 plt.ylabel(r'$\partial u / \partial \lambda - g$')
