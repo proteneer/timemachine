@@ -1,14 +1,17 @@
 # tests for parallel execution
 import numpy as np
+import random
+
+from tempfile import NamedTemporaryFile
 
 import parallel
-from parallel import client
-from parallel import worker
+from parallel import client, worker
 from parallel.utils import get_gpu_count
 
+import os
 import unittest
 from unittest.mock import patch
-import os
+
 
 import grpc
 import concurrent
@@ -106,11 +109,12 @@ class TestGRPCClient(unittest.TestCase):
 
     def setUp(self):
 
+        starting_port = random.randint(2000, 5000)
         # setup server, in reality max_workers is equal to number of gpus
-        self.ports = [2020 + i for i in range(4)]
+        self.ports = [starting_port + i for i in range(2)]
         self.servers = []
         for port in self.ports:
-            server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=2),
+            server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=1),
                 options = [
                     ('grpc.max_send_message_length', 50 * 1024 * 1024),
                     ('grpc.max_receive_message_length', 50 * 1024 * 1024)
@@ -150,6 +154,24 @@ class TestGRPCClient(unittest.TestCase):
         with self.assertRaises(AssertionError) as e:
             cli.verify()
         self.assertIn(bad_host, str(e.exception))
+
+    def test_default_port(self):
+        host = "128.128.128.128"
+        cli = client.GRPCClient([host], default_port=9999)
+        self.assertEqual(cli.hosts[0], "128.128.128.128:9999")
+
+    def test_hosts_from_file(self):
+        with self.assertRaises(AssertionError):
+            cli = client.GRPCClient("nosuchfile", default_port=9999)
+
+        hosts = ["128.128.128.128", "127.127.127.127:8888"]
+        with NamedTemporaryFile(suffix=".txt") as temp:
+            for host in hosts:
+                temp.write(f"{host}\n".encode("utf-8"))
+            temp.flush()
+            cli = client.GRPCClient(temp.name, default_port=9999)
+            self.assertEqual(cli.hosts[0], "128.128.128.128:9999")
+            self.assertEqual(cli.hosts[1], hosts[1])
 
     def test_foo_2_args(self):
         xs = np.linspace(0, 1.0, 5)
