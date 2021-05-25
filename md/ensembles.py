@@ -100,7 +100,7 @@ class NPTEnsemble:
         volume = volume * DISTANCE_UNIT**3
 
         reduced_u = self.beta * potential_energy
-        reduced_pv = self.beta * self.pressure * volume / unit.AVOGADRO_CONSTANT_NA
+        reduced_pv = self.beta * self.pressure * volume * unit.AVOGADRO_CONSTANT_NA
 
         return reduced_u + reduced_pv
 
