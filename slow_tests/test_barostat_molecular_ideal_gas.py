@@ -1,4 +1,5 @@
 import numpy as np
+np.random.seed(2021)
 from simtk import unit
 
 from testsystems.relative import hif2a_ligand_pair
