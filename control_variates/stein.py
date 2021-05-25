@@ -32,6 +32,8 @@ def cv_from_scalar_langevin_stein_operator(
         https://arxiv.org/abs/1404.5053
     * [Mira, Solgi, Imparato, 2010] Zero Variance Markov Chain Monte Carlo for Bayesian Estimators
         https://arxiv.org/abs/1012.2983
+    * [Anastasiou et al., 2021] Stein's Method Meets Statistics: A Review of Some Recent Developments
+        https://arxiv.org/abs/2105.03481
     """
 
     def g(x: Array, params: Array) -> float:
