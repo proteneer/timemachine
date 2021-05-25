@@ -64,7 +64,7 @@ def construct_laplacian_of_pair_sum_fxn(pair_fxn: PairFxn, pairs: Array) -> Tria
 def adaptive_tanh_basis(r: Distance, params: Params) -> np.array:
     """Compute a tanh basis expansion with variable locations and scales, of the form
 
-    f_i(r) = coeff_i * tanh(exp(scales_i) * (r - offsets_i))
+    f_i(r) = coeff_i * tanh(exp(log_scales_i) * (r - offsets_i))
 
     where params contains a flat concatenation of coefficients, offsets, and log_scales
     """
