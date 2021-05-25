@@ -25,9 +25,6 @@ from fe.protocol_optimization import parameterized_protocol, n_basis
 from fe.reweighting import CachedImportanceSamples
 
 
-# TODO: refactor basis expansion
-
-
 # Express u as a differentiable function of x and control_params
 def lennard_jones(r: float, sigma: float, epsilon: float) -> float:
     """https://en.wikipedia.org/wiki/Lennard-Jones_potential"""
