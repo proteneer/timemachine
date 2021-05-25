@@ -4,8 +4,8 @@ config.update("jax_enable_x64", True)
 import numpy as onp
 onp.random.seed(0)
 
-from analysis.control_variates.stein import cv_from_scalar_langevin_stein_operator
-from analysis.control_variates.trial_fxns.pair import (
+from control_variates.stein import cv_from_scalar_langevin_stein_operator
+from control_variates.trial_fxns.pair import (
     construct_pair_sum_fxn,
     construct_laplacian_of_pair_sum_fxn,
     adaptive_tanh_basis
