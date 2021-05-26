@@ -1,56 +1,32 @@
-from md.builders import build_water_system
-from md.minimizer import minimize_host_4d
-from md.ensembles import PotentialEnergyModel, NVTEnsemble
 from md.thermostat.utils import sample_velocities
 from md.thermostat.moves import UnadjustedLangevinMove
 from md.states import CoordsVelBox
-from fe.free_energy import AbsoluteFreeEnergy, construct_lambda_schedule
-
-from testsystems.relative import hif2a_ligand_pair
-
+import os
 from simtk import unit
 import numpy as np
 from scipy.optimize import root_scalar
 
-from timemachine.lib import LangevinIntegrator, custom_ops
 from tqdm import tqdm
-
 from typing import List
-from functools import partial
-
 from pymbar import EXP
 
-import os
-
-temperature = 300 * unit.kelvin
-initial_waterbox_width = 3.0 * unit.nanometer
-timestep = 1.5 * unit.femtosecond
-collision_rate = 1.0 / unit.picosecond
-seed = 2021
-
-mol_a, _, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
-complex_system, complex_coords, complex_box, complex_top = build_water_system(
-    initial_waterbox_width.value_in_unit(unit.nanometer))
-
-min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
-afe = AbsoluteFreeEnergy(mol_a, ff)
-
-unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-    ff.get_ordered_params(), complex_system, min_complex_coords
+from testsystem import (
+    temperature, timestep,
+    integrator_impl, ensemble, potential_energy_model,
+    coords, masses, complex_box,
 )
 
-potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials, precision=np.float32)
-integrator = LangevinIntegrator(
-    temperature.value_in_unit(unit.kelvin),
-    timestep.value_in_unit(unit.picosecond),
-    collision_rate.value_in_unit(unit.picosecond ** -1),
-    masses,
-    seed
-)
-integrator_impl = integrator.impl()
-bound_impls = potential_energy_model.all_impls
+# paths where we'll later save results
+work_increments_path = os.path.join(os.path.dirname(__file__), 'results/works_via_potential_increments.npz')
+optimized_lam_traj_path = os.path.join(os.path.dirname(__file__), 'results/optimized_lam_traj.npz')
 
-ensemble = NVTEnsemble(potential_energy_model, temperature)
+# equilibrium options
+n_equil_steps = 10000
+n_samples = 100
+
+# adaptation options
+n_md_steps_per_increment = 100  # number of MD steps run at fixed lambda, between lambda increments
+incremental_stddev_threshold = 0.25  # tolerable stddev(w) in k_BT per lambda increment
 
 
 def u(state: CoordsVelBox, lam: float) -> float:
@@ -71,10 +47,10 @@ def sample_at_equilibrium(initial_state: CoordsVelBox, lam: float = 0.0, thinnin
     thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=thinning)
 
     samples = [initial_state]
-    for _ in tqdm(range(n_samples - 1)):
+    for _ in tqdm(range(n_samples)):
         samples.append(thermostat.move(samples[-1]))
 
-    return samples
+    return samples[1:]
 
 
 def propagate(states: List[CoordsVelBox], lam: float = 0.0, n_steps: float = 500) -> List[CoordsVelBox]:
@@ -90,7 +66,7 @@ def propagate(states: List[CoordsVelBox], lam: float = 0.0, n_steps: float = 500
 
 def find_next_increment(
         samples: List[CoordsVelBox], lam_initial: float,
-        max_increment_size: float = 0.1, incremental_stddev_threshold: float = 0.1, xtol: float = 1e-4
+        max_increment_size: float = 0.1, incremental_stddev_threshold: float = 0.1, xtol: float = 1e-5
 ) -> float:
     u_s = u_vec(samples, lam_initial)
 
@@ -115,16 +91,6 @@ def find_next_increment(
         lam_increment = max_increment_size
 
     return lam_increment
-
-
-def noneq_du_dl(x: CoordsVelBox, lambda_schedule: np.array) -> np.array:
-    """Compute du_dl per step along nonequilibrium trajectory"""
-    ctxt = custom_ops.Context(x.coords, x.velocities, x.box, integrator_impl, potential_energy_model.all_impls)
-
-    # arguments: lambda_schedule, du_dl_interval, x_interval
-    du_dl_traj, _ = ctxt.multiple_steps(lambda_schedule, 1, 0)
-
-    return du_dl_traj
 
 
 def adaptive_noneq(samples_0: List[CoordsVelBox], n_md_steps_per_increment=100, incremental_stddev_threshold=0.5):
@@ -179,27 +145,26 @@ def adaptive_noneq(samples_0: List[CoordsVelBox], n_md_steps_per_increment=100, 
 if __name__ == '__main__':
 
     # collect endstate samples
-    n_equil_steps = 10000
-    n_samples = 100
-
     v_0 = sample_velocities(masses * unit.amu, temperature)
     initial_state = CoordsVelBox(coords, v_0, complex_box)
     print('equilibrating...')
-    thermostat = UnadjustedLangevinMove(integrator_impl, bound_impls, lam=0.0, n_steps=n_equil_steps)
+    thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam=0.0,
+                                        n_steps=n_equil_steps)
     equilibrated = thermostat.move(initial_state)
 
     print(f'collecting {n_samples} samples from lam=0...')
     samples_0 = sample_at_equilibrium(equilibrated, lam=0.0, n_samples=n_samples)
 
-    adaptation_options = dict(
-        n_md_steps_per_increment=100,  # number of MD steps run at fixed lambda, between lambda increments
-        incremental_stddev_threshold=0.25,  # tolerable stddev(w) in k_BT per lambda increment
+    # run switching with adaptive lambda steps
+    print(f'running adaptive noneq switching with {n_samples} trajectories')
+    sample_traj, lam_traj = adaptive_noneq(
+        samples_0,
+        n_md_steps_per_increment=n_md_steps_per_increment,
+        incremental_stddev_threshold=incremental_stddev_threshold,
     )
 
-    sample_traj, lam_traj = adaptive_noneq(samples_0, **adaptation_options)
-
-    print(f'collecting {n_samples} samples from lam=1...')
-    samples_1 = sample_at_equilibrium(sample_traj[-1][-1], lam=1.0)
+    print(f'saving optimized lambda schedule to {optimized_lam_traj_path}')
+    np.save(optimized_lam_traj_path, lam_traj)
 
     # compute work via u(x, lam[t+1]) - u(x, lam[t]) increments
     work_increments = []
@@ -209,47 +174,5 @@ if __name__ == '__main__':
     works = np.sum(work_increments, 0)
     print(f'EXP(w_f): {EXP(works)}\n(via w = sum_t u(x_t, lam[t+1]) - u(x_t, lam[t])')
 
-    # construct interpolated version of this schedule, rather than doing cycles of
-    #   lambda increment <-> MD propagation
-    total_md_steps = len(lam_traj) * 100
-    md_steps = np.linspace(0, 1, total_md_steps)
-    xp, fp = np.linspace(0, 1, len(lam_traj)), np.array(lam_traj)
-    optimized_schedule = np.interp(md_steps, xp, fp)
-
-    default_schedule = construct_lambda_schedule(total_md_steps)
-
-    # now run timemachine noneq moves, computing work via du_dl increments,
-    # default vs. optimized protocol, forward vs. reverse
-    protocol_names = ['default', 'optimized']
-    directions = ['forward', 'reverse']
-    forward_schedules = dict(default=default_schedule, optimized=optimized_schedule)
-    reverse_schedules = dict(default=default_schedule[::-1], optimized=optimized_schedule[::-1])
-    schedules = dict(forward=forward_schedules, reverse=reverse_schedules)
-    initial_ensembles = dict(forward=samples_0, reverse=samples_1)
-
-    # save lambda schedule before doing anything
-    schedule_path = os.path.join(os.path.dirname(__file__), 'results/schedules.npz')
-    print(f'saving results to {schedule_path}')
-    np.savez(schedule_path, **forward_schedules)
-
-    du_dl_trajs, works = dict(), dict()
-    for name in protocol_names:
-        for direction in directions:
-            schedule = schedules[direction][name]
-
-            key = f'{name}_{direction}'
-            noneq_mover = partial(noneq_du_dl, lambda_schedule=schedule)
-            du_dl_trajs[key] = np.array([noneq_mover(x) for x in tqdm(initial_ensembles[direction])])
-            works[key] = ensemble.reduce(np.trapz(du_dl_trajs, schedule, axis=1))
-
-    du_dl_path = os.path.join(os.path.dirname(__file__), 'results/du_dl_trajs.npz')
-    work_path = os.path.join(os.path.dirname(__file__), 'results/works.npz')
-
-    print(f'saving results to {du_dl_path}')
-    np.savez(du_dl_path, **du_dl_trajs)
-
-    print(f'saving results to {work_path}')
-    np.savez(work_path, **works)
-
-    for key in works:
-        print(f'stddev(w) in {key} condition: {np.std(works[key]):.3f} kBT')
+    print(f'saving works to {work_increments_path}')
+    np.save(work_increments_path, work_increments)
