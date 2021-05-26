@@ -1,6 +1,6 @@
 from md.builders import build_water_system
 from md.minimizer import minimize_host_4d
-from md.ensembles import PotentialEnergyModel
+from md.ensembles import PotentialEnergyModel, NVTEnsemble
 from md.thermostat.utils import sample_velocities
 from md.thermostat.moves import UnadjustedLangevinMove
 from md.states import CoordsVelBox
@@ -13,11 +13,14 @@ import numpy as np
 from scipy.optimize import root_scalar
 
 from timemachine.lib import LangevinIntegrator, custom_ops
-from timemachine.constants import kB
 from tqdm import tqdm
 
 from typing import List
 from functools import partial
+
+from pymbar import EXP
+
+import os
 
 temperature = 300 * unit.kelvin
 initial_waterbox_width = 3.0 * unit.nanometer
@@ -45,21 +48,26 @@ integrator = LangevinIntegrator(
     seed
 )
 integrator_impl = integrator.impl()
-
 bound_impls = potential_energy_model.all_impls
 
-
-def u(state: CoordsVelBox, lam: float):
-    """evaluate reduced potential """
-    energy, gradient = potential_energy_model.energy_and_gradient(state.coords, state.box, lam)
-    return energy * unit.kilojoule_per_mole / (kB * temperature)
+ensemble = NVTEnsemble(potential_energy_model, temperature)
 
 
-def u_vec(states: List[CoordsVelBox], lam: float):
+def u(state: CoordsVelBox, lam: float) -> float:
+    """compute reduced potential"""
+    energy, gradient = ensemble.reduced_potential_and_gradient(state.coords, state.box, lam)
+    return energy
+
+
+def u_vec(states: List[CoordsVelBox], lam: float) -> np.array:
+    """compute reduced potential on list of states"""
     return np.array([u(state, lam) for state in states])
 
 
-def sample_endstate(initial_state, lam=0.0, thinning=1000, n_samples=100):
+def sample_at_equilibrium(initial_state: CoordsVelBox, lam: float = 0.0, thinning: int = 1000, n_samples: int = 100) -> \
+        List[CoordsVelBox]:
+    """run MD """
+
     thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=thinning)
 
     samples = [initial_state]
@@ -69,9 +77,10 @@ def sample_endstate(initial_state, lam=0.0, thinning=1000, n_samples=100):
     return samples
 
 
-def propagate(states, lam=0.0, n_steps=500):
+def propagate(states: List[CoordsVelBox], lam: float = 0.0, n_steps: float = 500) -> List[CoordsVelBox]:
     thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=n_steps)
 
+    print(f'propagating {len(states)} systems by {n_steps * timestep.value_in_unit(unit.picosecond)}ps each...')
     updated_states = []
     for state in tqdm(states):  # TODO: loop could be paralllelized (e.g. on CUDAPoolClient)
         updated_states.append(thermostat.move(state))
@@ -79,16 +88,22 @@ def propagate(states, lam=0.0, n_steps=500):
     return updated_states
 
 
-def find_next_increment(samples, lam_initial, max_increment_size=0.1, incremental_stddev_threshold=0.1, xtol=1e-4):
+def find_next_increment(
+        samples: List[CoordsVelBox], lam_initial: float,
+        max_increment_size: float = 0.1, incremental_stddev_threshold: float = 0.1, xtol: float = 1e-4
+) -> float:
     u_s = u_vec(samples, lam_initial)
 
-    def work_increment_stddev(lam_increment):
+    def work_increment_stddev(lam_increment: float) -> float:
+        """stddev(u(samples, lam + lam_increment) - u(samples, lam))"""
         lam = lam_initial + lam_increment
         u_trial = u_vec(samples, lam)
         return np.std(u_trial - u_s)
 
-    def f(lam):
-        return work_increment_stddev(lam) - incremental_stddev_threshold
+    def f(lam_increment: float) -> float:
+        """find the zero of this function to get a lambda increment
+        that controls the stddev of work accumulated this step"""
+        return work_increment_stddev(lam_increment) - incremental_stddev_threshold
 
     # try-except to catch rootfinding ValueError: f(a) and f(b) must have different signs
     #   which occurs when jumping all the way to lam=1.0 is still less than threshold
@@ -102,18 +117,46 @@ def find_next_increment(samples, lam_initial, max_increment_size=0.1, incrementa
     return lam_increment
 
 
-def noneq_move(x, lambda_schedule):
+def noneq_du_dl(x: CoordsVelBox, lambda_schedule: np.array) -> np.array:
+    """Compute du_dl per step along nonequilibrium trajectory"""
     ctxt = custom_ops.Context(x.coords, x.velocities, x.box, integrator_impl, potential_energy_model.all_impls)
 
     # arguments: lambda_schedule, du_dl_interval, x_interval
     du_dl_traj, _ = ctxt.multiple_steps(lambda_schedule, 1, 0)
-    after = CoordsVelBox(ctxt.get_x_t(), ctxt.get_v_t(), x.box.copy())
 
-    return after, du_dl_traj
+    return du_dl_traj
 
 
-def adaptive_noneq(samples_0, n_md_steps_per_increment=100, incremental_stddev_threshold=0.5):
-    """ generate lam=0 -> lam=1 trajectory """
+def adaptive_noneq(samples_0: List[CoordsVelBox], n_md_steps_per_increment=100, incremental_stddev_threshold=0.5):
+    """Generate lam=0 -> lam=1 trajectories by a scheme that makes adaptively sized lambda increments.
+
+        Alternates between the following two steps:
+        * Select the next lambda increment by finding the root of
+            f(increment) = stddev(u(samples, lam + increment) - u(samples, lam)) - incremental_stddev_threshold
+        * Propagate all samples for n_md_steps_per_increment
+            (n_md_steps_per_increment can be << equilibration time)
+
+    Notes
+    -----
+    * TODO: be able to run this also in reverse -- currently hard-codes lam=0 -> lam=1
+
+    References
+    ----------
+    * Based on description of an adaptive SMC approach that appeared in
+        Section 2.4.2. of https://arxiv.org/abs/1612.06468,
+        which references Del Moral et al., 2012 and Zhou et al., 2015
+        introducing and refining the approach.
+        * OpenMM implementation with optional resampling https://gist.github.com/maxentile/be328e929abf4a92bee7d26967277f54
+            with the threshold defined using a different criterion ("conditional effective sample size") vs. stddev(w)
+        * More sophisticated implementation of adaptive SMC in perses
+            https://github.com/choderalab/perses/blob/18ec8b9d69afeb6128b251cf1d1b89ac7801ed68/perses/app/relative_setup.py#L1378-L1838
+    * A closely related approach "thermodynamic trailblazing" is developed in Andrea Rizzi's thesis
+        https://search.proquest.com/openview/0f0bda7dc135aad7216b6acecb815d3c/1.pdf?pq-origsite=gscholar&cbl=18750&diss=y
+        and implemented in Yank
+        https://github.com/choderalab/yank/blob/59fc6313b3b7d82966afc539604c36f4db9b952c/Yank/pipeline.py#L1983-L2648
+        One substantive difference compared with trailblazing is that here the samples are not in equilibrium after
+        step 0, and here optimization only uses information in one direction.
+    """
 
     sample_traj = [samples_0]
     lam_traj = [0.0]
@@ -121,15 +164,11 @@ def adaptive_noneq(samples_0, n_md_steps_per_increment=100, incremental_stddev_t
     while lam_traj[-1] < 1.0:
         samples, lam = sample_traj[-1], lam_traj[-1]
 
-        print('finding next lambda increment...')
         options = dict(max_increment_size=1.0 - lam, incremental_stddev_threshold=incremental_stddev_threshold)
-        next_increment = find_next_increment(samples, lam, **options)
-        updated_lam = lam + next_increment
-        print(f'found! new lambda={updated_lam:.4f}')
+        updated_lam = lam + find_next_increment(samples, lam, **options)
+        print(f'next lambda={updated_lam:.4f}')
 
-        print('propagating...')
         updated_samples = propagate(samples, updated_lam, n_steps=n_md_steps_per_increment)
-        print('done!')
 
         sample_traj.append(updated_samples)
         lam_traj.append(updated_lam)
@@ -137,56 +176,73 @@ def adaptive_noneq(samples_0, n_md_steps_per_increment=100, incremental_stddev_t
     return sample_traj, np.array(lam_traj)
 
 
-def reduced_work_from_du_dl_trajs(lambda_schedule, du_dl_trajs):
-    Works = np.trapz(du_dl_trajs, lambda_schedule, axis=1) * unit.kilojoule_per_mole
-    works = Works / (kB * temperature)
-
-    return works
-
-
 if __name__ == '__main__':
 
     # collect endstate samples
+    n_equil_steps = 10000
     v_0 = sample_velocities(masses * unit.amu, temperature)
     initial_state = CoordsVelBox(coords, v_0, complex_box)
     print('equilibrating...')
-    thermostat = UnadjustedLangevinMove(integrator_impl, bound_impls, lam=0.0, n_steps=10000)
+    thermostat = UnadjustedLangevinMove(integrator_impl, bound_impls, lam=0.0, n_steps=n_equil_steps)
     equilibrated = thermostat.move(initial_state)
 
     print('collecting samples from lam=0...')
-    samples_0 = sample_endstate(equilibrated, lam=0.0, thinning=1000, n_samples=100)
+    samples_0 = sample_at_equilibrium(equilibrated, lam=0.0)
 
     adaptation_options = dict(
         n_md_steps_per_increment=100,  # number of MD steps run at fixed lambda, between lambda increments
-        incremental_stddev_threshold=0.5,  # tolerable stddev(w) in k_BT per lambda increment
+        incremental_stddev_threshold=0.25,  # tolerable stddev(w) in k_BT per lambda increment
     )
 
     sample_traj, lam_traj = adaptive_noneq(samples_0, **adaptation_options)
+
+    print('collecting samples from lam=1...')
+    samples_1 = sample_at_equilibrium(sample_traj[-1][-1], lam=1.0)
 
     # compute work via u(x, lam[t+1]) - u(x, lam[t]) increments
     work_increments = []
     for (X, lam_init, lam_final) in zip(sample_traj[:-1], lam_traj[:-1], lam_traj[1:]):
         work_increments.append(u_vec(X, lam_final) - u_vec(X, lam_init))
     work_increments = np.array(work_increments)
+    works = np.sum(work_increments, 0)
+    print(f'EXP(w_f): {EXP(works)}\n(via w = sum_t u(x_t, lam[t+1]) - u(x_t, lam[t])')
 
     # construct interpolated version of this schedule, rather than doing cycles of
     #   lambda increment <-> MD propagation
     total_md_steps = len(lam_traj) * 100
     md_steps = np.linspace(0, 1, total_md_steps)
-    xp = np.linspace(0, 1, len(lam_traj))
-    fp = np.array(lam_traj)
+    xp, fp = np.linspace(0, 1, len(lam_traj)), np.array(lam_traj)
     optimized_schedule = np.interp(md_steps, xp, fp)
 
     default_schedule = construct_lambda_schedule(total_md_steps)
 
-    # now run timemachine noneq moves, computing work via du_dl increments
-    default_noneq_move = partial(noneq_move, lambda_schedule=default_schedule)
-    optimized_noneq_move = partial(noneq_move, lambda_schedule=optimized_schedule)
+    # now run timemachine noneq moves, computing work via du_dl increments,
+    # default vs. optimized protocol, forward vs. reverse
+    protocol_names = ['default', 'optimized']
+    directions = ['forward', 'reverse']
+    forward_schedules = dict(default=default_schedule, optimized=optimized_schedule)
+    reverse_schedules = dict(default=default_schedule[::-1], optimized=optimized_schedule[::-1])
+    schedules = dict(forward=forward_schedules, reverse=reverse_schedules)
 
-    default_du_dl_trajs = np.array([default_noneq_move(x0) for x0 in tqdm(samples_0)])
-    optimized_du_dl_trajs = np.array([optimized_noneq_move(x0) for x0 in tqdm(samples_0)])
+    initial_ensembles = dict(forward=samples_0, reverse=samples_1)
+    du_dl_trajs, works = dict(), dict()
+    for name in protocol_names:
+        for direction in directions:
+            schedule = schedules[direction][name]
 
-    default_w = reduced_work_from_du_dl_trajs(default_schedule, default_du_dl_trajs)
-    optimized_w = reduced_work_from_du_dl_trajs(optimized_schedule, optimized_du_dl_trajs)
+            key = f'{name}_{direction}'
+            noneq_mover = partial(noneq_du_dl, lambda_schedule=schedule)
+            du_dl_trajs[key] = np.array([noneq_mover(x) for x in tqdm(initial_ensembles[direction])])
+            works[key] = ensemble.reduce(np.trapz(du_dl_trajs, schedule, axis=1))
 
-    # TODO: plots and analysis
+    du_dl_path = os.path.join(os.path.dirname(__file__), 'results/du_dl_trajs.npz')
+    work_path = os.path.join(os.path.dirname(__file__), 'results/works.npz')
+
+    print(f'saving results to {du_dl_path}')
+    np.savez(du_dl_path, **du_dl_trajs)
+
+    print(f'saving results to {work_path}')
+    np.savez(work_path, **works)
+
+    for key in works:
+        print(f'stddev(w) in {key} condition: {np.std(works[key]):.3f} kBT')
