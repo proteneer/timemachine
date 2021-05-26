@@ -132,12 +132,12 @@ def adaptive_noneq(samples_0: List[CoordsVelBox], n_md_steps_per_increment=100, 
 
         options = dict(max_increment_size=1.0 - lam, incremental_stddev_threshold=incremental_stddev_threshold)
         updated_lam = lam + find_next_increment(samples, lam, **options)
+        lam_traj.append(updated_lam)
         print(f'next lambda={updated_lam:.4f}')
 
-        updated_samples = propagate(samples, updated_lam, n_steps=n_md_steps_per_increment)
-
-        sample_traj.append(updated_samples)
-        lam_traj.append(updated_lam)
+        if updated_lam < 1.0:
+            updated_samples = propagate(samples, updated_lam, n_steps=n_md_steps_per_increment)
+            sample_traj.append(updated_samples)
 
     return sample_traj, np.array(lam_traj)
 
@@ -168,7 +168,7 @@ if __name__ == '__main__':
 
     # compute work via sum of u(x, lam[t+1]) - u(x, lam[t]) increments
     work_increments = []
-    for (X, lam_init, lam_final) in zip(sample_traj[:-1], lam_traj[:-1], lam_traj[1:]):
+    for (X, lam_init, lam_final) in zip(sample_traj, lam_traj[:-1], lam_traj[1:]):
         work_increments.append(u_vec(X, lam_final) - u_vec(X, lam_init))
     work_increments = np.array(work_increments)
     works = np.sum(work_increments, 0)
