@@ -66,12 +66,12 @@ def u_vec(states: List[CoordsVelBox], lam: float) -> np.array:
 
 def sample_at_equilibrium(initial_state: CoordsVelBox, lam: float = 0.0, thinning: int = 1000, n_samples: int = 100) -> \
         List[CoordsVelBox]:
-    """run MD """
+    """run MD"""
 
     thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=thinning)
 
     samples = [initial_state]
-    for _ in tqdm(range(n_samples)):
+    for _ in tqdm(range(n_samples - 1)):
         samples.append(thermostat.move(samples[-1]))
 
     return samples
@@ -180,14 +180,16 @@ if __name__ == '__main__':
 
     # collect endstate samples
     n_equil_steps = 10000
+    n_samples = 100
+
     v_0 = sample_velocities(masses * unit.amu, temperature)
     initial_state = CoordsVelBox(coords, v_0, complex_box)
     print('equilibrating...')
     thermostat = UnadjustedLangevinMove(integrator_impl, bound_impls, lam=0.0, n_steps=n_equil_steps)
     equilibrated = thermostat.move(initial_state)
 
-    print('collecting samples from lam=0...')
-    samples_0 = sample_at_equilibrium(equilibrated, lam=0.0)
+    print(f'collecting {n_samples} samples from lam=0...')
+    samples_0 = sample_at_equilibrium(equilibrated, lam=0.0, n_samples=n_samples)
 
     adaptation_options = dict(
         n_md_steps_per_increment=100,  # number of MD steps run at fixed lambda, between lambda increments
@@ -196,7 +198,7 @@ if __name__ == '__main__':
 
     sample_traj, lam_traj = adaptive_noneq(samples_0, **adaptation_options)
 
-    print('collecting samples from lam=1...')
+    print(f'collecting {n_samples} samples from lam=1...')
     samples_1 = sample_at_equilibrium(sample_traj[-1][-1], lam=1.0)
 
     # compute work via u(x, lam[t+1]) - u(x, lam[t]) increments
@@ -223,8 +225,13 @@ if __name__ == '__main__':
     forward_schedules = dict(default=default_schedule, optimized=optimized_schedule)
     reverse_schedules = dict(default=default_schedule[::-1], optimized=optimized_schedule[::-1])
     schedules = dict(forward=forward_schedules, reverse=reverse_schedules)
-
     initial_ensembles = dict(forward=samples_0, reverse=samples_1)
+
+    # save lambda schedule before doing anything
+    schedule_path = os.path.join(os.path.dirname(__file__), 'results/schedules.npz')
+    print(f'saving results to {schedule_path}')
+    np.savez(schedule_path, **forward_schedules)
+
     du_dl_trajs, works = dict(), dict()
     for name in protocol_names:
         for direction in directions:
