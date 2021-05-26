@@ -22,6 +22,8 @@ from testsystem import (
 )
 from adapt_noneq import optimized_lam_traj_path, sample_at_equilibrium
 
+from pymbar import EXP
+
 
 def interpolate_lambda_schedule(lambda_schedule, num_md_steps):
     """given a lambda schedule, with n windows, turn it into a lambda
@@ -68,7 +70,7 @@ if __name__ == '__main__':
     # construct interpolated versions of the adapted schedule, rather than doing cycles of
     #   lambda increment <-> MD propagation
 
-    total_md_step_range = np.array(sorted(set(np.array(np.logspace(2, 3, 3, base=10), dtype=int))))
+    total_md_step_range = np.array(sorted(set(np.array(np.logspace(2, 5, 20, base=10), dtype=int))))
     print(total_md_step_range)
 
     # dicts, for later dumping into .npz files since they'll have different shapes depending on
@@ -99,8 +101,17 @@ if __name__ == '__main__':
         works_default.append(np.trapz(du_dl_default, default_schedule, axis=1))
         works_optimized.append(np.trapz(du_dl_optimized, optimized_schedule, axis=1))
 
-        print(f'\tdefault stddev(w_f): {np.std(works_default[-1]):.3f} kBT')
-        print(f'\toptimized stddev(w_f): {np.std(works_optimized[-1]):.3f} kBT')
+        def describe(works):
+            print(f'\tmean(w_f): {np.mean(works):.3f} kBT')
+            print(f'\tstddev(w_f): {np.std(works):.3f} kBT')
+            print(f'\tmin(w_f): {np.min(works):.3f} kBT')
+            print(f'\tmax(w_f): {np.max(works):.3f} kBT')
+            print(f'\tEXP(w_f): {EXP(works)[0]:.3f} kBT')
+
+        print(f'default:')
+        describe(works_default[-1])
+        print('optimized:')
+        describe(works_optimized[-1])
 
         # overwrite results at each iteration
         results = dict(
