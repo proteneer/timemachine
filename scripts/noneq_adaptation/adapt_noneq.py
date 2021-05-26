@@ -17,8 +17,8 @@ from testsystem import (
 )
 
 # paths where we'll later save results
-work_increments_path = os.path.join(os.path.dirname(__file__), 'results/works_via_potential_increments.npz')
-optimized_lam_traj_path = os.path.join(os.path.dirname(__file__), 'results/optimized_lam_traj.npz')
+work_increments_path = os.path.join(os.path.dirname(__file__), 'results/works_via_potential_increments.npy')
+optimized_lam_traj_path = os.path.join(os.path.dirname(__file__), 'results/optimized_lam_traj.npy')
 
 # equilibrium options
 n_equil_steps = 10000
