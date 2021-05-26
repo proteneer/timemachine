@@ -120,7 +120,7 @@ def adaptive_noneq(samples_0: List[CoordsVelBox], n_md_steps_per_increment=100, 
         https://search.proquest.com/openview/0f0bda7dc135aad7216b6acecb815d3c/1.pdf?pq-origsite=gscholar&cbl=18750&diss=y
         and implemented in Yank
         https://github.com/choderalab/yank/blob/59fc6313b3b7d82966afc539604c36f4db9b952c/Yank/pipeline.py#L1983-L2648
-        One substantive difference compared with trailblazing is that here the samples are not in equilibrium after
+        Differences compared with trailblazing include that here the samples are not in equilibrium after
         step 0, and here optimization only uses information in one direction.
     """
 
@@ -166,13 +166,15 @@ if __name__ == '__main__':
     print(f'saving optimized lambda schedule to {optimized_lam_traj_path}')
     np.save(optimized_lam_traj_path, lam_traj)
 
-    # compute work via u(x, lam[t+1]) - u(x, lam[t]) increments
+    # compute work via sum of u(x, lam[t+1]) - u(x, lam[t]) increments
     work_increments = []
     for (X, lam_init, lam_final) in zip(sample_traj[:-1], lam_traj[:-1], lam_traj[1:]):
         work_increments.append(u_vec(X, lam_final) - u_vec(X, lam_init))
     work_increments = np.array(work_increments)
     works = np.sum(work_increments, 0)
-    print(f'EXP(w_f): {EXP(works)}\n(via w = sum_t u(x_t, lam[t+1]) - u(x_t, lam[t])')
+    print(f'stddev(w_f): {np.std(works):.3f} kBT')
+    print(f'EXP(w_f): {EXP(works)[0]:.3f} kBT')
+    print('(with work computed via w = sum_t u(x_t, lam[t+1]) - u(x_t, lam[t])')
 
     print(f'saving works to {work_increments_path}')
     np.save(work_increments_path, work_increments)
