@@ -18,7 +18,7 @@ from testsystem import (
 
 # paths where we'll later save results
 work_increments_path = os.path.join(os.path.dirname(__file__), 'results/works_via_potential_increments.npy')
-optimized_lam_traj_path = os.path.join(os.path.dirname(__file__), 'results/optimized_lam_traj.npy')
+optimized_lam_trajs_path = os.path.join(os.path.dirname(__file__), 'results/optimized_lam_trajs.npz')
 
 # equilibrium options
 n_equil_steps = 10000
@@ -26,7 +26,6 @@ n_samples = 100
 
 # adaptation options
 n_md_steps_per_increment = 100  # number of MD steps run at fixed lambda, between lambda increments
-incremental_stddev_threshold = 0.25  # tolerable stddev(w) in k_BT per lambda increment
 
 
 def u(state: CoordsVelBox, lam: float) -> float:
@@ -133,7 +132,7 @@ def adaptive_noneq(samples_0: List[CoordsVelBox], n_md_steps_per_increment=100, 
         options = dict(max_increment_size=1.0 - lam, incremental_stddev_threshold=incremental_stddev_threshold)
         updated_lam = lam + find_next_increment(samples, lam, **options)
         lam_traj.append(updated_lam)
-        print(f'next lambda={updated_lam:.4f}')
+        print(f'next lambda={updated_lam:.6f}')
 
         if updated_lam < 1.0:
             updated_samples = propagate(samples, updated_lam, n_steps=n_md_steps_per_increment)
@@ -142,30 +141,7 @@ def adaptive_noneq(samples_0: List[CoordsVelBox], n_md_steps_per_increment=100, 
     return sample_traj, np.array(lam_traj)
 
 
-if __name__ == '__main__':
-
-    # collect endstate samples
-    v_0 = sample_velocities(masses * unit.amu, temperature)
-    initial_state = CoordsVelBox(coords, v_0, complex_box)
-    print('equilibrating...')
-    thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam=0.0,
-                                        n_steps=n_equil_steps)
-    equilibrated = thermostat.move(initial_state)
-
-    print(f'collecting {n_samples} samples from lam=0...')
-    samples_0 = sample_at_equilibrium(equilibrated, lam=0.0, n_samples=n_samples)
-
-    # run switching with adaptive lambda steps
-    print(f'running adaptive noneq switching with {n_samples} trajectories')
-    sample_traj, lam_traj = adaptive_noneq(
-        samples_0,
-        n_md_steps_per_increment=n_md_steps_per_increment,
-        incremental_stddev_threshold=incremental_stddev_threshold,
-    )
-
-    print(f'saving optimized lambda schedule to {optimized_lam_traj_path}')
-    np.save(optimized_lam_traj_path, lam_traj)
-
+def compute_work_increments(sample_traj, lam_traj):
     # compute work via sum of u(x, lam[t+1]) - u(x, lam[t]) increments
     work_increments = []
     for (X, lam_init, lam_final) in zip(sample_traj, lam_traj[:-1], lam_traj[1:]):
@@ -176,5 +152,35 @@ if __name__ == '__main__':
     print(f'EXP(w_f): {EXP(works)[0]:.3f} kBT')
     print('(with work computed via w = sum_t u(x_t, lam[t+1]) - u(x_t, lam[t])')
 
-    print(f'saving works to {work_increments_path}')
-    np.save(work_increments_path, work_increments)
+    return work_increments
+
+
+if __name__ == '__main__':
+
+    # collect endstate samples
+    v_0 = sample_velocities(masses * unit.amu, temperature)
+    initial_state = CoordsVelBox(coords, v_0, complex_box)
+    print('equilibrating...')
+    thermostat = UnadjustedLangevinMove(
+        integrator_impl, potential_energy_model.all_impls, lam=0.0, n_steps=n_equil_steps)
+    equilibrated = thermostat.move(initial_state)
+
+    print(f'collecting {n_samples} samples from lam=0...')
+    samples_0 = sample_at_equilibrium(equilibrated, lam=0.0, n_samples=n_samples)
+
+    incremental_stddev_thresholds = np.logspace(1, -2, 10)
+    results = dict()
+    results['incremental_stddev_thresholds'] = incremental_stddev_thresholds
+
+    for i, incremental_stddev_threshold in enumerate(incremental_stddev_thresholds):
+        # run switching with adaptive lambda steps
+        print(f'running adaptive noneq switching with {n_samples} trajectories and a threshold of {incremental_stddev_threshold}')
+        sample_traj, lam_traj = adaptive_noneq(
+            samples_0,
+            n_md_steps_per_increment=n_md_steps_per_increment,
+            incremental_stddev_threshold=incremental_stddev_threshold,
+        )
+        results[str(i)] = lam_traj
+
+        print(f'saving optimized lambda schedules to {optimized_lam_trajs_path}')
+        np.savez(optimized_lam_trajs_path, **results)

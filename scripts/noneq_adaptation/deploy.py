@@ -70,7 +70,7 @@ if __name__ == '__main__':
     # construct interpolated versions of the adapted schedule, rather than doing cycles of
     #   lambda increment <-> MD propagation
 
-    total_md_step_range = np.array(sorted(set(np.array(np.logspace(2, 5, 20, base=10), dtype=int))))
+    total_md_step_range = np.array(sorted(set(np.array(np.logspace(2, 5, 30, base=10), dtype=int))))
     print(total_md_step_range)
 
     # dicts, for later dumping into .npz files since they'll have different shapes depending on
