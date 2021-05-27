@@ -25,7 +25,7 @@
 // #include "observable.hpp"
 #include "neighborlist.hpp"
 // #include "shape.hpp"
-
+#include "barostat.hpp"
 
 #include <iostream>
 
@@ -114,7 +114,8 @@ void declare_context(py::module &m) {
         const py::array_t<double, py::array::c_style> &v0,
         const py::array_t<double, py::array::c_style> &box0,
         timemachine::Integrator *intg,
-        std::vector<timemachine::BoundPotential *> bps) {
+        std::vector<timemachine::BoundPotential *> bps,
+        std::optional<timemachine::MonteCarloBarostat *> barostat) {
         // std::vector<timemachine::Observable *> obs) {
 
         int N = x0.shape()[0];
@@ -134,11 +135,14 @@ void declare_context(py::module &m) {
             v0.data(),
             box0.data(),
             intg,
-            bps
+            bps,
+            barostat.has_value() ? barostat.value() : nullptr
             // obs
         );
 
-    }))
+    }),
+    py::arg("x0"), py::arg("v0"), py::arg("box"), py::arg("integrator"), py::arg("bps"), py::arg("barostat") = py::none()
+	)
     .def("add_observable", &timemachine::Context::add_observable)
     .def("step", &timemachine::Context::step)
     .def("multiple_steps", [](timemachine::Context &ctxt,
@@ -178,6 +182,12 @@ void declare_context(py::module &m) {
         unsigned int D = 3;
         py::array_t<double, py::array::c_style> buffer({N, D});
         ctxt.get_v_t(buffer.mutable_data());
+        return buffer;
+    })
+    .def("get_box", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+        unsigned int D = 3;
+        py::array_t<double, py::array::c_style> buffer({D, D});
+        ctxt.get_box(buffer.mutable_data());
         return buffer;
     })
     .def("_get_du_dx_t_minus_1", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
@@ -939,7 +949,43 @@ void declare_nonbonded(py::module &m, const char *typestr) {
 
 }
 
+void declare_barostat(py::module &m) {
+
+    using Class = timemachine::MonteCarloBarostat;
+    std::string pyclass_name = std::string("MonteCarloBarostat");
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+		const int N,
+		const double pressure,
+		const double temperature,
+        std::vector<std::vector<int> > group_idxs,
+        const int frequency,
+        std::vector<timemachine::BoundPotential *> bps,
+		const int seed) {
+        return new timemachine::MonteCarloBarostat(
+			N,
+			pressure,
+			temperature,
+			group_idxs,
+			frequency,
+			bps,
+			seed
+        );
+    })
+	)
+    .def("set_interval", &timemachine::MonteCarloBarostat::set_interval)
+    .def("set_pressure", &timemachine::MonteCarloBarostat::set_pressure)
+	;
+}
+
 PYBIND11_MODULE(custom_ops, m) {
+
+	declare_barostat(m);
 
     declare_integrator(m);
     declare_langevin_integrator(m);

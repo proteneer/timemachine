@@ -1,5 +1,3 @@
-
-
 #include "context.hpp"
 #include "gpu_utils.cuh"
 #include "fixed_point.hpp"
@@ -9,19 +7,23 @@
 
 namespace timemachine {
 
+
+
 Context::Context(
     int N,
     const double *x_0,
     const double *v_0,
     const double *box_0,
     Integrator* intg,
-    std::vector<BoundPotential *> bps) :
+    std::vector<BoundPotential *> bps,
+    MonteCarloBarostat* barostat) :
     N_(N),
     intg_(intg),
     bps_(bps),
     step_(0),
     d_sum_storage_(nullptr),
-    d_sum_storage_bytes_(0) {
+    d_sum_storage_bytes_(0),
+    barostat_(barostat) {
 
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N*3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N*3);
@@ -200,6 +202,12 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
         d_box_t_
     );
 
+    if(barostat_) {
+        // May modify coords and box size
+        barostat_->inplace_move(d_x_t_, d_box_t_, lambda);
+    }
+
+
     step_ += 1;
 
 };
@@ -219,6 +227,10 @@ void Context::get_x_t(double *out_buffer) const {
 
 void Context::get_v_t(double *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_v_t_, N_*3*sizeof(*out_buffer), cudaMemcpyDeviceToHost));
+}
+
+void Context::get_box(double *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_box_t_, 3*3*sizeof(*out_buffer), cudaMemcpyDeviceToHost));
 }
 
 }
