@@ -73,7 +73,10 @@ def find_next_increment(
         """stddev(u(samples, lam + lam_increment) - u(samples, lam))"""
         lam = lam_initial + lam_increment
         u_trial = u_vec(samples, lam)
-        return np.std(u_trial - u_s)
+        stddev = np.std(u_trial - u_s)
+
+        # root-finder needs to check sign of stddev
+        return np.nan_to_num(stddev, nan=+np.inf)
 
     def f(lam_increment: float) -> float:
         """find the zero of this function to get a lambda increment
