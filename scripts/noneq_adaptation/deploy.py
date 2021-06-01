@@ -20,7 +20,7 @@ from testsystem import (
     temperature, coords, masses, complex_box,
     integrator_impl, ensemble, potential_energy_model,
 )
-from adapt_noneq import optimized_lam_trajs_path, sample_at_equilibrium
+from adapt_noneq import optimized_lam_trajs_path, sample_at_equilibrium, n_md_steps_per_increment
 
 from pymbar import EXP
 
@@ -68,24 +68,15 @@ if __name__ == '__main__':
     print(f'collecting {n_samples} samples from lam=0...')
     samples_0 = sample_at_equilibrium(equilibrated_0, lam=0.0, n_samples=n_samples)
 
-    # TODO: modify to run at the same total number of MD steps as each corresponding
-    #   protocol optimization, rather than picking a single stddev threshold of interest
-    #   and looking at the resulting protocol's "generalizability" to other switching times
+    # will run at the same total number of MD steps as each corresponding protocol optimization
     keys = list(lambda_spacing_results.keys())
     keys.remove('incremental_stddev_thresholds')
     available_thresholds = [incremental_stddev_thresholds[int(i)] for i in keys]
-    i = min([int(i) for i in keys], key=lambda i : available_thresholds[i])
-    threshold = incremental_stddev_thresholds[i]
-    key = str(i)
-    lam_traj = lambda_spacing_results[key]
-    print(f'using the protocol optimized with an incremental stddev threshold of {threshold:.3f}')
-    print(f'\tother settings for which optimized lambda schedules are available: {available_thresholds}')
+    print('running noneq MD at protocols computed with the following incremental_stddev_thresholds')
+    print(available_thresholds)
 
     # construct interpolated versions of the adapted schedule, rather than doing cycles of
     #   lambda increment <-> MD propagation
-
-    total_md_step_range = np.array(sorted(set(np.array(np.logspace(2, 5, 30, base=10), dtype=int))))
-    print(total_md_step_range)
 
     # dicts, for later dumping into .npz files since they'll have different shapes depending on
     #   total_md_steps
@@ -96,7 +87,16 @@ if __name__ == '__main__':
     works_default = []
     works_optimized = []
 
-    for total_md_steps in total_md_step_range:
+    total_md_step_range = []
+
+    for key in keys:
+        lam_traj = lambda_spacing_results[key]
+        ind = int(key)
+        threshold = incremental_stddev_thresholds[ind]
+        total_md_steps = len(lam_traj) * n_md_steps_per_increment
+        total_md_step_range.append(total_md_steps)
+
+        print(f'using the protocol optimized with an incremental stddev threshold of {threshold:.3f}')
         print(f'running default and optimized protocols at # MD steps = {total_md_steps}...')
         # TODO: reduce the 2x code duplications here...
         default_schedule = construct_lambda_schedule(total_md_steps)
