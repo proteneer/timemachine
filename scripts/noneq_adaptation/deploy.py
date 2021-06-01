@@ -69,12 +69,15 @@ if __name__ == '__main__':
     samples_0 = sample_at_equilibrium(equilibrated_0, lam=0.0, n_samples=n_samples)
 
     # let's just look at the results from one stddev threshold
-    i = len(incremental_stddev_thresholds) // 2
+    keys = list(lambda_spacing_results.keys())
+    keys.remove('incremental_stddev_thresholds')
+    available_thresholds = [incremental_stddev_thresholds[int(i)] for i in keys]
+    i = min([int(i) for i in keys], key=lambda i : available_thresholds[i])
     threshold = incremental_stddev_thresholds[i]
-    key = str(threshold)
+    key = str(i)
     lam_traj = lambda_spacing_results[key]
     print(f'using the protocol optimized with an incremental stddev threshold of {threshold:.3f}')
-    print(f'\tother settings for which optimized lambda schedules are available: {incremental_stddev_thresholds}')
+    print(f'\tother settings for which optimized lambda schedules are available: {available_thresholds}')
 
     # construct interpolated versions of the adapted schedule, rather than doing cycles of
     #   lambda increment <-> MD propagation
@@ -93,7 +96,7 @@ if __name__ == '__main__':
 
     for total_md_steps in total_md_step_range:
         print(f'running default and optimized protocols at # MD steps = {total_md_steps}...')
-        # TODO: reduce the 2x duplications here...
+        # TODO: reduce the 2x code duplications here...
         default_schedule = construct_lambda_schedule(total_md_steps)
         optimized_schedule = interpolate_lambda_schedule(lam_traj, total_md_steps)
 

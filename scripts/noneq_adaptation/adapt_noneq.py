@@ -157,7 +157,7 @@ if __name__ == '__main__':
     print(f'collecting {n_samples} samples from lam=0...')
     samples_0 = sample_at_equilibrium(equilibrated, lam=0.0, n_samples=n_samples)
 
-    incremental_stddev_thresholds = np.logspace(1, -2, 10)
+    incremental_stddev_thresholds = np.logspace(0, -1, 5)
     results = dict()
     results['incremental_stddev_thresholds'] = incremental_stddev_thresholds
 
