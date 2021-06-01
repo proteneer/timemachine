@@ -12,6 +12,8 @@ from typing import Tuple, List, Any
 import dataclasses
 import jax.numpy as jnp
 
+from parallel.client import SerialClient
+
 @dataclasses.dataclass
 class SimulationResult:
    xs: np.array
@@ -139,29 +141,28 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         bp = unbound_pot.bind(np.asarray(params))
         bound_potentials.append(bp)
 
-    if model.client is None:
-        results = []
-        for lamb in model.lambda_schedule:
-            results.append(simulate(lamb, model.box, model.x0, model.v0, bound_potentials, model.integrator, model.equil_steps, model.prod_steps))
-    else:
-        futures = []
-        for lamb in model.lambda_schedule:
-            args = (lamb, model.box, model.x0, model.v0, bound_potentials, model.integrator, model.equil_steps, model.prod_steps)
-            futures.append(model.client.submit(simulate, *args))
+    client = model.client
+    if client is None:
+        client = SerialClient()
+        client.verify()
 
-        results = [x.result() for x in futures]
+    futures = []
+    for lamb in model.lambda_schedule:
+        args = (lamb, model.box, model.x0, model.v0, bound_potentials, model.integrator, model.equil_steps, model.prod_steps)
+        kwargs = {}  # Unused for now
+        futures.append(client.submit(simulate, *args, **kwargs))
+
+    results = [x.result() for x in futures]
 
     mean_du_dls = []
-    all_grads = []
 
     for result in results:
         # (ytz): figure out what to do with stddev(du_dl) later
         mean_du_dls.append(np.mean(result.du_dls))
-        all_grads.append(result.du_dps)
 
     dG = np.trapz(mean_du_dls, model.lambda_schedule)
     dG_grad = []
-    for rhs, lhs in zip(all_grads[-1], all_grads[0]):
+    for rhs, lhs in zip(results[-1].du_dps, results[0].du_dps):
         dG_grad.append(rhs - lhs)
 
     return (dG, results), dG_grad
