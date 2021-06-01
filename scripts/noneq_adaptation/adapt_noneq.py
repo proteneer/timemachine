@@ -8,7 +8,6 @@ from scipy.optimize import root_scalar
 
 from tqdm import tqdm
 from typing import List
-from pymbar import EXP
 
 from testsystem import (
     temperature, timestep,
