@@ -10,4 +10,5 @@ jax==0.2.9
 jaxlib==0.1.59
 hilbertcurve==1.0.5
 networkx==2.5
-cvxpylayers==0.1.5 # this depends on jax -- upgrade when jax / jaxlib are upgraded
+cvxpylayers==0.1.5  # this depends on jax -- upgrade when jax / jaxlib are upgraded
+tqdm                # progress bars
