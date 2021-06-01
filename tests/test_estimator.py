@@ -4,9 +4,9 @@ import numpy as np
 
 
 from fe import estimator
-from timemachine.lib import LangevinIntegrator
-from timemachine.lib import potentials
+from timemachine.lib import LangevinIntegrator, potentials, MonteCarloBarostat
 from parallel.client import CUDAPoolClient
+from md.barostat.utils import get_bond_list, get_group_indices
 
 
 def get_harmonic_bond(n_atoms, n_bonds):
@@ -52,7 +52,27 @@ def test_free_energy_estimator():
 
     seed = 2021
 
-    integrator = LangevinIntegrator(300, 1.5e-3, 1.0, masses, seed)
+    group_idxs = get_group_indices(get_bond_list(hb_pot))
+
+    temperature = 300.0
+    pressure = 1.0
+
+    integrator = LangevinIntegrator(
+        temperature,
+        1.5e-3,
+        1.0,
+        masses,
+        seed
+    )
+
+    barostat = MonteCarloBarostat(
+        x0.shape[0],
+        pressure,
+        temperature,
+        group_idxs,
+        25,
+        seed
+    )
 
     lambda_schedule = np.linspace(0, 1.0, 4)
 
@@ -67,7 +87,8 @@ def test_free_energy_estimator():
             integrator,
             lambda_schedule,
             100,
-            100
+            100,
+            barostat
         )
 
         value_and_grad_fn = jax.value_and_grad(estimator.deltaG, argnums=1, has_aux=True)
