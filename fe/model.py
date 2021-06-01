@@ -5,13 +5,13 @@ from simtk import openmm
 from rdkit import Chem
 
 from md import minimizer
-from timemachine.lib import LangevinIntegrator
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from fe import free_energy, topology, estimator
 from ff import Forcefield
+from md.barostat.utils import get_bond_list, get_group_indices
 
 from parallel.client import AbstractClient
 from typing import Optional
-from functools import partial
 
 
 
@@ -31,7 +31,8 @@ class RBFEModel():
         solvent_box: np.ndarray,
         solvent_schedule: np.ndarray,
         equil_steps: int,
-        prod_steps: int):
+        prod_steps: int,
+        barostat_interval: int = 25):
 
         self.complex_system = complex_system
         self.complex_coords = complex_coords
@@ -45,6 +46,7 @@ class RBFEModel():
         self.ff = ff
         self.equil_steps = equil_steps
         self.prod_steps = prod_steps
+        self.barostat_interval = barostat_interval
 
     def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray):
         """
@@ -91,16 +93,31 @@ class RBFEModel():
 
             unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, min_host_coords)
 
+            harmonic_bond_potential = unbound_potentials[0]
+            group_idxs = get_group_indices(get_bond_list(harmonic_bond_potential))
+
             x0 = coords
             v0 = np.zeros_like(coords)
 
             seed = 0
 
+            temperature = 300.0
+            pressure = 1.0
+
             integrator = LangevinIntegrator(
-                300.0,
+                temperature,
                 1.5e-3,
                 1.0,
                 masses,
+                seed
+            )
+
+            barostat = MonteCarloBarostat(
+                x0.shape[0],
+                pressure,
+                temperature,
+                group_idxs,
+                self.barostat_interval,
                 seed
             )
 
@@ -114,6 +131,7 @@ class RBFEModel():
                 lambda_schedule,
                 self.equil_steps,
                 self.prod_steps,
+                barostat,
             )
 
             dG, results = estimator.deltaG(model, sys_params)

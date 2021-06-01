@@ -17,9 +17,10 @@ from parallel.client import CUDAPoolClient
 
 from md import builders, minimizer
 
-from timemachine.lib import LangevinIntegrator
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 
 from fe.functional import construct_differentiable_interface
+from md.barostat.utils import get_bond_list, get_group_indices
 from testsystems.relative import hif2a_ligand_pair
 
 
@@ -60,15 +61,29 @@ def test_absolute_free_energy():
 
             unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(ff_params, host_system, host_coords)
 
+            harmonic_bond_potential = unbound_potentials[0]
+            group_idxs = get_group_indices(get_bond_list(harmonic_bond_potential))
+
             x0 = coords
             v0 = np.zeros_like(coords)
             client = CUDAPoolClient(1)
+            temperature = 300.0
+            pressure = 1.0
 
             integrator = LangevinIntegrator(
-                300.0,
+                temperature,
                 1.5e-3,
                 1.0,
                 masses,
+                seed
+            )
+
+            barostat = MonteCarloBarostat(
+                x0.shape[0],
+                pressure,
+                temperature,
+                group_idxs,
+                25,
                 seed
             )
 
@@ -81,7 +96,8 @@ def test_absolute_free_energy():
                 integrator,
                 lambda_schedule,
                 equil_steps,
-                prod_steps
+                prod_steps,
+                barostat
             )
 
             dG, _ = estimator.deltaG(model, sys_params)
@@ -170,14 +186,31 @@ def test_relative_free_energy():
         client = CUDAPoolClient(1)
         box = np.eye(3, dtype=np.float64)*100
 
+        harmonic_bond_potential = unbound_potentials[0]
+        group_idxs = get_group_indices(get_bond_list(harmonic_bond_potential))
+
+        x0 = coords
+        v0 = np.zeros_like(coords)
+        client = CUDAPoolClient(1)
+        temperature = 300.0
+        pressure = 1.0
+
         integrator = LangevinIntegrator(
-            300.0,
+            temperature,
             1.5e-3,
             1.0,
             masses,
             seed
         )
 
+        barostat = MonteCarloBarostat(
+            x0.shape[0],
+            pressure,
+            temperature,
+            group_idxs,
+            25,
+            seed
+        )
         model = estimator.FreeEnergyModel(
             unbound_potentials,
             client,
@@ -187,7 +220,8 @@ def test_relative_free_energy():
             integrator,
             lambda_schedule,
             equil_steps,
-            prod_steps
+            prod_steps,
+            barostat
         )
 
         return estimator.deltaG(model, sys_params)[0]
@@ -217,11 +251,26 @@ def test_relative_free_energy():
             v0 = np.zeros_like(coords)
             client = CUDAPoolClient(1)
 
+            harmonic_bond_potential = unbound_potentials[0]
+            group_idxs = get_group_indices(get_bond_list(harmonic_bond_potential))
+
+            temperature = 300.0
+            pressure = 1.0
+
             integrator = LangevinIntegrator(
-                300.0,
+                temperature,
                 1.5e-3,
                 1.0,
                 masses,
+                seed
+            )
+
+            barostat = MonteCarloBarostat(
+                x0.shape[0],
+                pressure,
+                temperature,
+                group_idxs,
+                25,
                 seed
             )
 
@@ -234,7 +283,8 @@ def test_relative_free_energy():
                 integrator,
                 lambda_schedule,
                 equil_steps,
-                prod_steps
+                prod_steps,
+                barostat
             )
 
             dG, _ = estimator.deltaG(model, sys_params)
