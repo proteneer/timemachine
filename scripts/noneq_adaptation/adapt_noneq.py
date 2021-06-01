@@ -144,20 +144,6 @@ def adaptive_noneq(samples_0: List[CoordsVelBox], n_md_steps_per_increment=100, 
     return sample_traj, np.array(lam_traj)
 
 
-def compute_work_increments(sample_traj, lam_traj):
-    # compute work via sum of u(x, lam[t+1]) - u(x, lam[t]) increments
-    work_increments = []
-    for (X, lam_init, lam_final) in zip(sample_traj, lam_traj[:-1], lam_traj[1:]):
-        work_increments.append(u_vec(X, lam_final) - u_vec(X, lam_init))
-    work_increments = np.array(work_increments)
-    works = np.sum(work_increments, 0)
-    print(f'stddev(w_f): {np.std(works):.3f} kBT')
-    print(f'EXP(w_f): {EXP(works)[0]:.3f} kBT')
-    print('(with work computed via w = sum_t u(x_t, lam[t+1]) - u(x_t, lam[t])')
-
-    return work_increments
-
-
 if __name__ == '__main__':
 
     # collect endstate samples

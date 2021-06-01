@@ -20,7 +20,7 @@ from testsystem import (
     temperature, coords, masses, complex_box,
     integrator_impl, ensemble, potential_energy_model,
 )
-from adapt_noneq import optimized_lam_traj_path, sample_at_equilibrium
+from adapt_noneq import optimized_lam_trajs_path, sample_at_equilibrium
 
 from pymbar import EXP
 
@@ -48,7 +48,9 @@ def noneq_du_dl(x: CoordsVelBox, lambda_schedule: np.array) -> np.array:
 
 if __name__ == '__main__':
 
-    lam_traj = np.load(optimized_lam_traj_path)
+    # load results from adaptive lambda spacing
+    lambda_spacing_results = np.load(optimized_lam_trajs_path)
+    incremental_stddev_thresholds = lambda_spacing_results['incremental_stddev_thresholds']
 
     # generate end-state samples
     n_equil_steps = 10000
@@ -56,7 +58,6 @@ if __name__ == '__main__':
 
     v_0 = sample_velocities(masses * unit.amu, temperature)
     initial_state = CoordsVelBox(coords, v_0, complex_box)
-
     print('equilibrating...')
     thermostat_0 = UnadjustedLangevinMove(
         integrator_impl, potential_energy_model.all_impls,
@@ -66,6 +67,14 @@ if __name__ == '__main__':
 
     print(f'collecting {n_samples} samples from lam=0...')
     samples_0 = sample_at_equilibrium(equilibrated_0, lam=0.0, n_samples=n_samples)
+
+    # let's just look at the results from one stddev threshold
+    i = len(incremental_stddev_thresholds) // 2
+    threshold = incremental_stddev_thresholds[i]
+    key = str(threshold)
+    lam_traj = lambda_spacing_results[key]
+    print(f'using the protocol optimized with an incremental stddev threshold of {threshold:.3f}')
+    print(f'\tother settings for which optimized lambda schedules are available: {incremental_stddev_thresholds}')
 
     # construct interpolated versions of the adapted schedule, rather than doing cycles of
     #   lambda increment <-> MD propagation
