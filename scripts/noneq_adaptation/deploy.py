@@ -68,7 +68,9 @@ if __name__ == '__main__':
     print(f'collecting {n_samples} samples from lam=0...')
     samples_0 = sample_at_equilibrium(equilibrated_0, lam=0.0, n_samples=n_samples)
 
-    # let's just look at the results from one stddev threshold
+    # TODO: modify to run at the same total number of MD steps as each corresponding
+    #   protocol optimization, rather than picking a single stddev threshold of interest
+    #   and looking at the resulting protocol's "generalizability" to other switching times
     keys = list(lambda_spacing_results.keys())
     keys.remove('incremental_stddev_thresholds')
     available_thresholds = [incremental_stddev_thresholds[int(i)] for i in keys]
