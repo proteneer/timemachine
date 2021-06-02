@@ -294,7 +294,9 @@ void declare_langevin_integrator(py::module &m) {
         );
 
     }
-    ));
+    ),
+    py::arg("dt"), py::arg("ca"),  py::arg("cbs"), py::arg("ccs"), py::arg("seed")
+    );
 
 }
 
@@ -355,7 +357,9 @@ void declare_potential(py::module &m) {
 
             return py::make_tuple(py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
 
-    })
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam")
+    )
     .def("execute_selective", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
@@ -425,7 +429,10 @@ void declare_potential(py::module &m) {
             }
 
             return result;
-    })
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam"),
+    py::arg("compute_du_dx"), py::arg("compute_du_dp"), py::arg("compute_du_dl"), py::arg("compute_u")
+    )
     .def("execute_du_dx", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
@@ -454,7 +461,9 @@ void declare_potential(py::module &m) {
             }
 
             return py_du_dx;
-    });
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam")
+    );
 
 }
 
@@ -481,7 +490,9 @@ void declare_bound_potential(py::module &m) {
             params.data()
         );
     }
-    ))
+    ),
+    py::arg("potential"), py::arg("params")
+    )
     .def("size", &timemachine::BoundPotential::size)
     .def("execute", [](timemachine::BoundPotential &bp,
         const py::array_t<double, py::array::c_style> &coords,
@@ -514,7 +525,9 @@ void declare_bound_potential(py::module &m) {
             unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
 
             return py::make_tuple(py_du_dx, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
-    });
+    },
+    py::arg("coords"), py::arg("box"), py::arg("lam")
+    );
 
 }
 
