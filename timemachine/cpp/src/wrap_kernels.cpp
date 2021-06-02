@@ -458,7 +458,9 @@ void declare_potential(py::module &m) {
             }
 
             return py_du_dx;
-    });
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam")
+    );
 
 }
 
