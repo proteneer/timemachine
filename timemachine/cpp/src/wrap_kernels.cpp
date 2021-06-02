@@ -291,7 +291,9 @@ void declare_langevin_integrator(py::module &m) {
         );
 
     }
-    ));
+    ),
+    py::arg("dt"), py::arg("ca"),  py::arg("cbs"), py::arg("ccs"), py::arg("seed")
+    );
 
 }
 
