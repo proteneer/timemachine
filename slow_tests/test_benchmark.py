@@ -100,7 +100,7 @@ def benchmark(
 
         # time the current batch
         batch_start = time.time()
-        du_dls, _ = ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
+        du_dls, _, _ = ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
         batch_end = time.time()
 
         delta = batch_end - batch_start
