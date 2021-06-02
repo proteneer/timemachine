@@ -156,7 +156,7 @@ void declare_context(py::module &m) {
         int du_dl_interval = (store_du_dl_interval <= 0) ? lambda_schedule.size() : store_du_dl_interval;
         int x_interval = (store_x_interval <= 0) ? lambda_schedule.size() : store_x_interval;
 
-        std::array<std::vector<double>, 2> result = ctxt.multiple_steps(vec_lambda_schedule, du_dl_interval, x_interval);
+        std::array<std::vector<double>, 3> result = ctxt.multiple_steps(vec_lambda_schedule, du_dl_interval, x_interval);
 
         py::array_t<double, py::array::c_style> out_du_dl_buffer(result[0].size());
         std::memcpy(out_du_dl_buffer.mutable_data(), result[0].data(), result[0].size()*sizeof(double));
@@ -167,7 +167,10 @@ void declare_context(py::module &m) {
         py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
         std::memcpy(out_x_buffer.mutable_data(), result[1].data(), result[1].size()*sizeof(double));
 
-        return py::make_tuple(out_du_dl_buffer, out_x_buffer);
+        py::array_t<double, py::array::c_style> box_buffer({F, D, D});
+        std::memcpy(box_buffer.mutable_data(), result[2].data(), result[2].size()*sizeof(double));
+
+        return py::make_tuple(out_du_dl_buffer, out_x_buffer, box_buffer);
     }, py::arg("lambda_schedule"), py::arg("store_du_dl_interval") = 0, py::arg("store_x_interval") = 0)
     // .def("multiple_steps", &timemachine::Context::multiple_steps)
     .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
