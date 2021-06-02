@@ -426,7 +426,10 @@ void declare_potential(py::module &m) {
             }
 
             return result;
-    })
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam"),
+    py::arg("compute_du_dx"), py::arg("compute_du_dp"), py::arg("compute_du_dl"), py::arg("compute_u")
+    )
     .def("execute_du_dx", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
