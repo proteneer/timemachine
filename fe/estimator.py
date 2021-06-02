@@ -111,7 +111,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
 
     prod_schedule = np.ones(prod_steps)*lamb
 
-    full_du_dls, xs = ctxt.multiple_steps(prod_schedule, du_dl_interval, x_interval)
+    full_du_dls, xs, _ = ctxt.multiple_steps(prod_schedule, du_dl_interval, x_interval)
 
     # keep the structure of grads the same as that of final_potentials so we can properly
     # form their vjps.
