@@ -522,7 +522,9 @@ void declare_bound_potential(py::module &m) {
             unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
 
             return py::make_tuple(py_du_dx, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
-    });
+    },
+    py::arg("coords"), py::arg("box"), py::arg("lam")
+    );
 
 }
 
