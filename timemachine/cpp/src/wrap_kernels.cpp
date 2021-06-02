@@ -354,7 +354,9 @@ void declare_potential(py::module &m) {
 
             return py::make_tuple(py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
 
-    })
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam")
+    )
     .def("execute_selective", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
