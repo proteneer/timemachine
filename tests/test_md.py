@@ -199,7 +199,9 @@ class TestContext(unittest.TestCase):
 
         du_dl_interval = 3
         x_interval = 2
-        test_du_dls, test_xs = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval, x_interval)
+        start_box = ctxt_2.get_box()
+        test_du_dls, test_xs, test_boxes = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval, x_interval)
+        end_box = ctxt_2.get_box()
 
         np.testing.assert_allclose(
             test_du_dls,
@@ -210,8 +212,13 @@ class TestContext(unittest.TestCase):
             test_xs,
             ref_all_xs[::x_interval]
         )
+        np.testing.assert_array_equal(start_box, end_box)
+        for i in range(test_boxes.shape[0]):
+            np.testing.assert_array_equal(start_box, test_boxes[i])
+        self.assertEqual(test_boxes.shape[0], test_xs.shape[0])
+        self.assertEqual(test_boxes.shape[1], D)
+        self.assertEqual(test_boxes.shape[2], test_xs.shape[2])
 
-        test_du_dls, test_xs = ctxt_2.multiple_steps(lambda_schedule, du_dl_interval)
 
 class TestObservable(unittest.TestCase):
 
