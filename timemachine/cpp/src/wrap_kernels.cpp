@@ -156,7 +156,7 @@ void declare_context(py::module &m) {
         int du_dl_interval = (store_du_dl_interval <= 0) ? lambda_schedule.size() : store_du_dl_interval;
         int x_interval = (store_x_interval <= 0) ? lambda_schedule.size() : store_x_interval;
 
-        std::array<std::vector<double>, 2> result = ctxt.multiple_steps(vec_lambda_schedule, du_dl_interval, x_interval);
+        std::array<std::vector<double>, 3> result = ctxt.multiple_steps(vec_lambda_schedule, du_dl_interval, x_interval);
 
         py::array_t<double, py::array::c_style> out_du_dl_buffer(result[0].size());
         std::memcpy(out_du_dl_buffer.mutable_data(), result[0].data(), result[0].size()*sizeof(double));
@@ -167,7 +167,10 @@ void declare_context(py::module &m) {
         py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
         std::memcpy(out_x_buffer.mutable_data(), result[1].data(), result[1].size()*sizeof(double));
 
-        return py::make_tuple(out_du_dl_buffer, out_x_buffer);
+        py::array_t<double, py::array::c_style> box_buffer({F, D, D});
+        std::memcpy(box_buffer.mutable_data(), result[2].data(), result[2].size()*sizeof(double));
+
+        return py::make_tuple(out_du_dl_buffer, out_x_buffer, box_buffer);
     }, py::arg("lambda_schedule"), py::arg("store_du_dl_interval") = 0, py::arg("store_x_interval") = 0)
     // .def("multiple_steps", &timemachine::Context::multiple_steps)
     .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
@@ -291,7 +294,9 @@ void declare_langevin_integrator(py::module &m) {
         );
 
     }
-    ));
+    ),
+    py::arg("dt"), py::arg("ca"),  py::arg("cbs"), py::arg("ccs"), py::arg("seed")
+    );
 
 }
 
@@ -352,7 +357,9 @@ void declare_potential(py::module &m) {
 
             return py::make_tuple(py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
 
-    })
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam")
+    )
     .def("execute_selective", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
@@ -422,7 +429,10 @@ void declare_potential(py::module &m) {
             }
 
             return result;
-    })
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam"),
+    py::arg("compute_du_dx"), py::arg("compute_du_dp"), py::arg("compute_du_dl"), py::arg("compute_u")
+    )
     .def("execute_du_dx", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
@@ -451,7 +461,9 @@ void declare_potential(py::module &m) {
             }
 
             return py_du_dx;
-    });
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam")
+    );
 
 }
 
@@ -478,7 +490,9 @@ void declare_bound_potential(py::module &m) {
             params.data()
         );
     }
-    ))
+    ),
+    py::arg("potential"), py::arg("params")
+    )
     .def("size", &timemachine::BoundPotential::size)
     .def("execute", [](timemachine::BoundPotential &bp,
         const py::array_t<double, py::array::c_style> &coords,
@@ -511,7 +525,9 @@ void declare_bound_potential(py::module &m) {
             unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
 
             return py::make_tuple(py_du_dx, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
-    });
+    },
+    py::arg("coords"), py::arg("box"), py::arg("lam")
+    );
 
 }
 

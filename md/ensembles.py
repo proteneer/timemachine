@@ -83,6 +83,7 @@ class NPTEnsemble:
         self.potential_energy = potential_energy
         self.temperature = temperature
         self.pressure = pressure
+        self.beta = 1.0 / (kB * self.temperature)
 
     def reduce(self, U: non_unitted, volume: non_unitted):
         """u_npt = beta * (U + pressure * volume)
@@ -98,10 +99,8 @@ class NPTEnsemble:
         potential_energy = U * ENERGY_UNIT
         volume = volume * DISTANCE_UNIT**3
 
-        beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
-
-        reduced_u = beta * potential_energy / unit.AVOGADRO_CONSTANT_NA
-        reduced_pv = beta * self.pressure * volume
+        reduced_u = self.beta * potential_energy
+        reduced_pv = self.beta * self.pressure * volume * unit.AVOGADRO_CONSTANT_NA
 
         return reduced_u + reduced_pv
 
