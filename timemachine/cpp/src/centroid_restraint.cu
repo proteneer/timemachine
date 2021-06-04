@@ -55,8 +55,8 @@ void CentroidRestraint<RealType>::execute_device(
     int tpb = 32;
 
     int blocks = (N_B_ + N_A_ + tpb -1)/tpb;
-    gpuErrchk(cudaMemset(d_centroid_a_, 0.0, 3*sizeof(RealType)));
-    gpuErrchk(cudaMemset(d_centroid_b_, 0.0, 3*sizeof(RealType)));
+    gpuErrchk(cudaMemsetAsync(d_centroid_a_, 0.0, 3*sizeof(RealType), stream));
+    gpuErrchk(cudaMemsetAsync(d_centroid_b_, 0.0, 3*sizeof(RealType), stream));
     k_calc_centroid<RealType><<<blocks, tpb, 0, stream>>>(
         d_x,
         d_group_a_idxs_,

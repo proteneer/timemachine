@@ -292,8 +292,8 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     // identify which tiles contain interpolated parameters
 
-    const int B = (N+32-1)/32;
     const int tpb = 32;
+    const int B = (N+tpb-1)/tpb;
 
     dim3 dimGrid(B, 3, 1);
 
@@ -322,7 +322,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         if(!disable_hilbert_) {
             this->hilbert_sort(d_x, d_box, stream);
         } else {
-            k_arange<<<B, 32, 0, stream>>>(N, d_perm_);
+            k_arange<<<B, tpb, 0, stream>>>(N, d_perm_);
             gpuErrchk(cudaPeekAtLastError());
         }
 
@@ -349,7 +349,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     // do parameter interpolation here
     if(Interpolated) {
-        CUresult result = compute_permute_interpolated_.configure(dimGrid, 32, 0, stream)
+        CUresult result = compute_permute_interpolated_.configure(dimGrid, tpb, 0, stream)
         .launch(
             lambda,
             N,
@@ -405,7 +405,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     kernel_idx |= d_du_dx ? 1 << 2 : 0;
     kernel_idx |= d_u ? 1 << 3 : 0;
 
-    kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], 32, 0, stream>>>(
+    kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], tpb, 0, stream>>>(
         N,
         d_sorted_x_,
         d_sorted_p_,
@@ -442,7 +442,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     // exclusions use the non-sorted version
     if(E_ > 0) {
 
-        const int tpb = 32;
         dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
 
         if(Interpolated) {
