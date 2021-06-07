@@ -8,3 +8,4 @@ oe_license.txt
 *.swp
 *.npy
 *.npz
+.ipynb_checkpoints/

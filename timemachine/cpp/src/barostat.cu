@@ -317,6 +317,10 @@ void MonteCarloBarostat::set_interval(const int interval){
     step_ = 0;
 }
 
+int MonteCarloBarostat::get_interval(){
+    return interval_;
+}
+
 void MonteCarloBarostat::set_pressure(const double pressure){
     pressure_ = pressure;
     // Could have equilibrated and be a large number of steps from shifting volume

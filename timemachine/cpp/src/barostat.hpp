@@ -46,6 +46,8 @@ public:
 
     void set_interval(const int interval);
 
+    int get_interval();
+
     void set_pressure(const double pressure);
 
 

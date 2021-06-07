@@ -20,7 +20,7 @@ import os
 
 class AbstractClient():
 
-    def submit(self, task_fn, *args):
+    def submit(self, task_fn, *args, **kwargs):
         """
         Submit is an asynchronous method that will launch task_fn whose 
         results will be collected at a later point in time. The input task_fn
@@ -69,6 +69,23 @@ class AbstractClient():
         raise NotImplementedError()
 
 
+class _MockFuture:
+
+    __slots__ = ("val",)
+
+    def __init__(self, val):
+        self.val = val
+
+    def result(self):
+        return self.val
+
+class SerialClient(AbstractClient):
+
+    def submit(self, task_fn, *args, **kwargs):
+        return _MockFuture(task_fn(*args, **kwargs))
+
+    def verify(self):
+        return
 
 class ProcessPoolClient(AbstractClient):
 
@@ -92,7 +109,7 @@ class ProcessPoolClient(AbstractClient):
         self.max_workers = max_workers
         self._idx = 0
 
-    def submit(self, task_fn, *args):
+    def submit(self, task_fn, *args, **kwargs):
         """
         See abstract class for documentation.
         """
@@ -120,7 +137,7 @@ class CUDAPoolClient(ProcessPoolClient):
         os.environ['CUDA_VISIBLE_DEVICES'] = str(idx)
         return fn(*args)
 
-    def submit(self, task_fn, *args):
+    def submit(self, task_fn, *args, **kwargs):
         """
         See abstract class for documentation.
         """
@@ -195,11 +212,11 @@ class GRPCClient(AbstractClient):
             modded_hosts.append(host)
         return modded_hosts
 
-    def submit(self, task_fn, *args):
+    def submit(self, task_fn, *args, **kwargs):
         """
         See abstract class for documentation.
         """
-        binary = pickle.dumps((task_fn, args))
+        binary = pickle.dumps((task_fn, args, kwargs))
         request = service_pb2.PickleData(binary=binary)
         future = self.stubs[self._idx].Submit.future(request)
         self._idx = (self._idx + 1) % len(self.stubs)

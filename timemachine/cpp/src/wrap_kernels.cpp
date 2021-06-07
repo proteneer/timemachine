@@ -995,6 +995,7 @@ void declare_barostat(py::module &m) {
     })
 	)
     .def("set_interval", &timemachine::MonteCarloBarostat::set_interval)
+    .def("get_interval", &timemachine::MonteCarloBarostat::get_interval)
     .def("set_pressure", &timemachine::MonteCarloBarostat::set_pressure)
 	;
 }
