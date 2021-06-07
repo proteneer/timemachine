@@ -6,3 +6,4 @@ timemachine/cpp/build/
 *.DS_Store
 oe_license.txt
 *.swp
+.ipynb_checkpoints/
