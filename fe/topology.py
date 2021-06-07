@@ -765,7 +765,7 @@ class DualTopologyMinimization(DualTopology):
 
 class SingleTopology():
 
-    def __init__(self, mol_a, mol_b, core, ff):
+    def __init__(self, mol_a, mol_b, core, ff, minimize: bool = False):
         """
         SingleTopology combines two molecules through a common core. The combined mol has
         atom indices laid out such that mol_a is identically mapped to the combined mol indices.
@@ -785,11 +785,15 @@ class SingleTopology():
         ff: ff.Forcefield
             Forcefield to be used for parameterization.
 
+        minimize: bool
+            Whether both R groups should be interacting at lambda=0.5
+
         """
         self.mol_a = mol_a
         self.mol_b = mol_b
         self.ff = ff
         self.core = core
+        self.minimize = minimize
 
         assert core.shape[1] == 2
 
@@ -1065,19 +1069,21 @@ class SingleTopology():
         combined_lambda_plane_idxs = np.zeros(self.get_num_atoms(), dtype=np.int32)
         combined_lambda_offset_idxs = np.zeros(self.get_num_atoms(), dtype=np.int32)
 
+
+        # w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)
         for atom, group in enumerate(self.c_flags):
             if group == 0:
                 # core atom
                 combined_lambda_plane_idxs[atom] = 0
                 combined_lambda_offset_idxs[atom] = 0
-            elif group == 1:
+            elif group == 1: # RA or RA and RB (if minimize) interact at lamb=0.0
                 combined_lambda_plane_idxs[atom] = 0
                 combined_lambda_offset_idxs[atom] = 1
-            elif group == 2:
+            elif group == 2: # R Groups of Mol B
                 combined_lambda_plane_idxs[atom] = -1
                 combined_lambda_offset_idxs[atom] = 1
             else:
-                assert 0
+                assert 0, f"Unknown group {group}"
 
         beta = _BETA
         cutoff = _CUTOFF # solve for this analytically later
