@@ -47,11 +47,7 @@ conda install -c conda-forge -c openeye openmm openeye-toolkits rdkit=2021.03.1
 
 ```
 pip install -r requirements.txt
-cd timemachine/cpp
-mkdir build
-cd build
-cmake -DCUDA_ARCH=sm_70 ../
-make -j4 install
+make CUDA_ARCH=sm_70 build
 ```
 
 ## Running Tests
