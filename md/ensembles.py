@@ -10,7 +10,7 @@ non_unitted = Union[float, np.ndarray, jnp.ndarray]  # raw value without simtk u
 
 
 class PotentialEnergyModel:
-    def __init__(self, sys_params, unbound_potentials, precision=np.float64, guard_threshold=1e6):
+    def __init__(self, sys_params, unbound_potentials, precision=np.float32, guard_threshold=1e6):
         self.sys_params = sys_params
         self.unbound_potentials = unbound_potentials
         self.all_impls = []
