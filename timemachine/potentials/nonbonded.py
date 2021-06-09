@@ -1,28 +1,19 @@
 import jax.numpy as np
 from jax.scipy.special import erfc
 from jax.ops import index_update, index
-from timemachine.potentials.jax_utils import distance, convert_to_4d, get_all_pairs_indices
-from jax import jit
+from timemachine.potentials.jax_utils import delta_r, distance, convert_to_4d, get_all_pairs_indices, pairwise_distance
 
 
 def switch_fn(dij, cutoff):
-    return np.power(np.cos((np.pi*np.power(dij, 8))/(2*cutoff)), 2)
+    return np.power(np.cos((np.pi * np.power(dij, 8)) / (2 * cutoff)), 2)
+
 
 """
 TODO:
 * refactor Jax nonbonded to accept specific interacting particle pairs,
     given by arrays particles_i, particles_j where len(particles_i) == len(particles_j)
     rather than a single collection of particles.
-    
-    on top of this, we could define two convenience functions for getting the list of interacting particles, emulating
-    cdist and pdist from scipy.spatial.distance
-    >>> inds_i, inds_j = all_pairs(mol)
-    >>> particles_i, particles_j = mol[inds_i], mol[inds_j]
-    or
-    >>> (inds_i, inds_j) = all_pairs(mol_a, mol_b)
-    >>> particles_i, particles_j = mol_a[particles_i], mol_b[particles_j]
-    
-    
+
     Intent:
         * be able to work with pre-defined neighbor lists
         * be able to evaluate batches of interactions during parallel monte carlo moves
@@ -48,18 +39,66 @@ TODO:
     (for example, if conf.shape[1] == 4, we use a code path where 3 required arguments are ignored)
 """
 
+from typing import NamedTuple, Optional
+
+Array = np.array
+
+
+class Params(NamedTuple):
+    sig: Array
+    eps: Array
+    charges: Array
+
+
+class Particles(NamedTuple):
+    coords: Array
+    params: Params
+
+
+def lennard_jones(dij, sig_ij, eps_ij):
+    inv_dij = 1 / dij
+
+    sig6 = (sig_ij * inv_dij) ** 6
+    sig12 = sig6 ** 2
+
+    return 4 * eps_ij * (sig12 - sig6)
+
+
+def compute_nonbonded_terms(particles_i: Particles, particles_j: Particles,
+                            box: Array, beta: float, cutoff: Optional[float] = None):
+    dij = distance(particles_i.coords, particles_j.coords, box)
+
+    # Lennard-Jones
+    sig_ij = particles_i.params.sig + particles_j.params.sig
+    eps_ij = particles_j.params.eps * particles_j.params.eps
+    lj = lennard_jones(dij, sig_ij, eps_ij)
+
+    # Coulomb
+    qij = particles_i.params.charges * particles_j.params.charges
+    # funny enough lim_{x->0} erfc(x)/x = 0
+    coulomb = qij * erfc(beta * dij) / dij
+
+    # apply cutoff
+    if cutoff is not None:
+        cutoff_mask = dij > cutoff
+        lj = np.where(cutoff_mask, 0, lj)
+        coulomb = np.where(cutoff_mask, 0, coulomb)
+
+    return lj, coulomb
+
+
 def nonbonded_v3(
-    conf,
-    params,
-    box,
-    lamb,
-    charge_rescale_mask,
-    lj_rescale_mask,
-    beta,
-    cutoff,
-    lambda_plane_idxs,
-    lambda_offset_idxs,
-    runtime_validate=False,
+        conf,
+        params,
+        box,
+        lamb,
+        charge_rescale_mask,
+        lj_rescale_mask,
+        beta,
+        cutoff,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
+        runtime_validate=False,
 ):
     """Lennard-Jones + Coulomb, with a few important twists:
     * distances are computed in 4D, controlled by lambda, lambda_plane_idxs, lambda_offset_idxs
@@ -104,11 +143,13 @@ def nonbonded_v3(
     N = conf.shape[0]
 
     if conf.shape[-1] == 3:
-        conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+        conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+    else:
+        conf_4d = conf
 
     # make 4th dimension of box large enough so its roughly aperiodic
     if box is not None:
-        box_4d = np.eye(4)*1000
+        box_4d = np.eye(4) * 1000
         box_4d = index_update(box_4d, index[:3, :3], box)
     else:
         box_4d = None
@@ -120,33 +161,23 @@ def nonbonded_v3(
     eps = params[:, 2]
 
     inds_i, inds_j = get_all_pairs_indices(N)
-    sig_ij = sig[inds_i] + sig[inds_j]
+    # n_interactions = len(inds_i)
 
-    eps_ij = eps[inds_i] * eps[inds_j]
+    particles_i = Particles(
+        coords=conf_4d[inds_i],
+        params=Params(sig=sig[inds_i], eps=eps[inds_i], charges=charges[inds_i])
+    )
+    particles_j = Particles(
+        coords=conf_4d[inds_j],
+        params=Params(sig=sig[inds_j], eps=eps[inds_j], charges=charges[inds_j])
+    )
 
-    dij = distance(conf, box)
+    lj, coulomb = compute_nonbonded_terms(particles_i, particles_j, box, beta, cutoff)
 
-    if cutoff is not None:
-        eps_ij = np.where(dij < cutoff, eps_ij, 0)
+    if (cutoff is not None) and runtime_validate:
+        validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
 
-        if runtime_validate:
-            validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
-
-    inv_dij = 1/dij
-
-    sig2 = sig_ij*inv_dij
-    sig2 *= sig2
-    sig6 = sig2*sig2*sig2
-
-    eij_lj = 4*eps_ij*(sig6-1.0)*sig6
-    qij = charges[inds_i] * charges[inds_j]
-
-    # funny enough lim_{x->0} erfc(x)/x = 0
-    eij_charge = qij*erfc(beta*dij)*inv_dij
-    if cutoff is not None:
-        eij_charge = np.where(dij > cutoff, 0, eij_charge)
-
-    eij_total = (eij_lj*lj_rescale_mask + eij_charge*charge_rescale_mask)
+    eij_total = lj * lj_rescale_mask + coulomb * charge_rescale_mask
 
     return np.sum(eij_total)
 

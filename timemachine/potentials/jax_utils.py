@@ -96,14 +96,17 @@ def delta_r(ri, rj, box=None):
 
     return diff
 
+def distance(ri, rj, box=None):
+    assert len(ri) == len(rj)
 
-def distance(x, box):
-    # nonbonded distances require the periodic box
-    assert x.shape[1] == 3 or x.shape[1] == 4 # 3d or 4d
-    n = len(x)
-    inds_i, inds_j = get_all_pairs_indices(n)
-    ri, rj = x[inds_i], x[inds_j]
     diff = delta_r(ri, rj, box)
     dij = np.linalg.norm(diff, axis=-1)
     return dij
 
+
+def pairwise_distance(x, box=None):
+    # nonbonded distances require the periodic box
+    assert x.shape[1] == 3 or x.shape[1] == 4 # 3d or 4d
+    inds_i, inds_j = get_all_pairs_indices(len(x))
+    ri, rj = x[inds_i], x[inds_j]
+    return distance(ri, rj, box)
