@@ -32,14 +32,18 @@ def get_group_group_indices(n: int, m: int) -> Tuple[Array, Array]:
 
 
 def compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
-    # (ytz): this initializes the 4th dimension to a fixed plane adjust by an offset
-    # followed by a scaling by cutoff.
+    """
+    Notes
+    -----
+    (ytz): this initializes the 4th dimension to a fixed plane adjust by an offset
+    followed by a scaling by cutoff.
 
-    # lambda_plane_idxs are typically 0 or 1 and allows us to turn off an interaction
-    # independent of the lambda value.
+    lambda_plane_idxs are typically 0 or 1 and allows us to turn off an interaction
+    independent of the lambda value.
 
-    # lambda_offset_idxs are typically 0 and 1, and allows us to adjust the w coordinate
-    # in a lambda-dependent way.
+    lambda_offset_idxs are typically 0 and 1, and allows us to adjust the w coordinate
+    in a lambda-dependent way.
+    """
 
     w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)
     return w
