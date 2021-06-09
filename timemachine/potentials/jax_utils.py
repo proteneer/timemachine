@@ -29,9 +29,9 @@ def get_group_group_indices(n: int, m: int) -> Tuple[Array, Array]:
     return inds_i, inds_j
 
 
-def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
-    """(x,y,z) -> (x,y,z,w) where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)"""
 
+
+def compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
     # (ytz): this initializes the 4th dimension to a fixed plane adjust by an offset
     # followed by a scaling by cutoff.
 
@@ -40,10 +40,28 @@ def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
 
     # lambda_offset_idxs are typically 0 and 1, and allows us to adjust the w coordinate
     # in a lambda-dependent way.
-    d4 = cutoff*(lambda_plane_idxs + lambda_offset_idxs*lamb)
-    d4 = np.expand_dims(d4, axis=-1)
+
+    w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)
+    return w
+
+
+def augment_dim(x3: Array, w: Array) -> Array:
+    """(x,y,z) -> (x,y,z,w)"""
+
+    d4 = np.expand_dims(w, axis=-1)
     x4 = np.concatenate((x3, d4), axis=1)
+
+    assert len(x4) == len(x3)
+    assert x4.shape[1] == 4
+
     return x4
+
+
+
+def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
+    """(x,y,z) -> (x,y,z,w) where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)"""
+    w = compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+    return augment_dim(x3, w)
 
 def rescale_coordinates(
     conf,
@@ -51,7 +69,7 @@ def rescale_coordinates(
     box,
     scales):
     """Note: scales unused"""
-    
+
     mol_sizes = np.expand_dims(onp.bincount(indices), axis=1)
     mol_centers = jax.ops.segment_sum(conf, indices)/mol_sizes
 
