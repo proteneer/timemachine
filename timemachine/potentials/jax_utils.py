@@ -2,6 +2,33 @@ import jax.numpy as np
 import numpy as onp
 import jax
 
+from typing import Tuple
+Array = onp.array
+
+
+def get_all_pairs_indices(n: int) -> Tuple[Array, Array]:
+    """all indices i, j such that i < j < n"""
+    n_interactions = n * (n - 1) / 2
+
+    inds_i, inds_j = np.triu_indices(n, k=1)
+
+    assert len(inds_i) == n_interactions
+
+    return inds_i, inds_j
+
+
+def get_group_group_indices(n: int, m: int) -> Tuple[Array, Array]:
+    """all indices i, j such that i < n, j < m"""
+    n_interactions = n * m
+
+    _inds_i, _inds_j = np.indices((n, m))
+    inds_i, inds_j = _inds_i.flatten(), _inds_j.flatten()
+
+    assert len(inds_i) == n_interactions
+
+    return inds_i, inds_j
+
+
 def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
     """(x,y,z) -> (x,y,z,w) where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)"""
 
