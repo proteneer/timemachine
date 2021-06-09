@@ -7,6 +7,46 @@ from timemachine.potentials.jax_utils import distance, convert_to_4d
 def switch_fn(dij, cutoff):
     return np.power(np.cos((np.pi*np.power(dij, 8))/(2*cutoff)), 2)
 
+"""
+TODO:
+* refactor Jax nonbonded to accept specific interacting particle pairs,
+    given by arrays particles_i, particles_j where len(particles_i) == len(particles_j)
+    rather than a single collection of particles.
+    
+    on top of this, we could define two convenience functions for getting the list of interacting particles, emulating
+    cdist and pdist from scipy.spatial.distance
+    >>> inds_i, inds_j = all_pairs(mol)
+    >>> particles_i, particles_j = mol[inds_i], mol[inds_j]
+    or
+    >>> (inds_i, inds_j) = all_pairs(mol_a, mol_b)
+    >>> particles_i, particles_j = mol_a[particles_i], mol_b[particles_j]
+    
+    
+    Intent:
+        * be able to work with pre-defined neighbor lists
+        * be able to evaluate batches of interactions during parallel monte carlo moves
+            (e.g. where particles_i is a large collection of trial positions for a displaced particle
+            and particles_j are all the other "frozen" coordinates)
+        * be able to evaluate just the alchemical interactions
+    Will require:
+        * refactoring distance(x, box) function
+* refactor nonbonded_v3 to output "per atom" energies, so that a collection of trial moves can be scored in a batch
+    for the MC use case above
+* refactor nonbonded_v3 to accept 4d offset w directly, rather than hard-coding that w must be computed using
+    lamb, lambda_plane_idxs, lambda_offset_idxs
+        Intent:
+            * protocol optimization
+* restore nonbonded_v3's JIT-ability -- the branch in validate_coulomb_cutoff makes it JIT-unfriendly!
+* add utility function using np.triu_indices to get all-pairs interactions,
+    without while avoiding need for dij keep_mask
+* point of uncertainty:
+    will making this change have any performance impact?
+* possibly reduce the number of arguments?
+    (currently 10)
+* possibly make the signatures more "type-stable"?
+    (for example, if conf.shape[1] == 4, we use a code path where 3 required arguments are ignored)
+"""
+
 
 def nonbonded_v3(
     conf,
