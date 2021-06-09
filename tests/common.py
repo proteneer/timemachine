@@ -135,15 +135,16 @@ def prepare_reference_nonbonded(
         lj_rescale_mask[i][j] = 1 - exc
         lj_rescale_mask[j][i] = 1 - exc
 
-    ref_total_energy = functools.partial(
+    ref_total_energy = jax.jit(functools.partial(
         nonbonded.nonbonded_v3,
         charge_rescale_mask=charge_rescale_mask,
         lj_rescale_mask=lj_rescale_mask,
         beta=beta,
         cutoff=cutoff,
         lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs
-    )
+        lambda_offset_idxs=lambda_offset_idxs,
+        runtime_validate=False,
+    ))
 
     return ref_total_energy
 
@@ -210,15 +211,16 @@ def prepare_water_system(
         lj_rescale_mask[i][j] = 1 - exc
         lj_rescale_mask[j][i] = 1 - exc
 
-    ref_total_energy = functools.partial(
+    ref_total_energy = jax.jit(functools.partial(
         nonbonded.nonbonded_v3,
         charge_rescale_mask=charge_rescale_mask,
         lj_rescale_mask=lj_rescale_mask,
         beta=beta,
         cutoff=cutoff,
         lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs
-    )
+        lambda_offset_idxs=lambda_offset_idxs,
+        runtime_validate=False,
+    ))
 
     return params, ref_total_energy, test_potential
 
@@ -271,15 +273,16 @@ def prepare_nb_system(
         lj_rescale_mask[i][j] = 1 - exc
         lj_rescale_mask[j][i] = 1 - exc
 
-    ref_total_energy = functools.partial(
+    ref_total_energy = jax.jit(functools.partial(
         nonbonded.nonbonded_v3,
         charge_rescale_mask=charge_rescale_mask,
         lj_rescale_mask=lj_rescale_mask,
         beta=beta,
         cutoff=cutoff,
         lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs
-    )
+        lambda_offset_idxs=lambda_offset_idxs,
+        runtime_validate=False
+    ))
 
     return params, ref_total_energy, test_potential
 

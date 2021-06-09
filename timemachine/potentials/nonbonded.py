@@ -2,6 +2,7 @@ import jax.numpy as np
 from jax.scipy.special import erfc
 from jax.ops import index_update, index
 from timemachine.potentials.jax_utils import distance, convert_to_4d, get_all_pairs_indices
+from jax import jit
 
 
 def switch_fn(dij, cutoff):
@@ -47,7 +48,6 @@ TODO:
     (for example, if conf.shape[1] == 4, we use a code path where 3 required arguments are ignored)
 """
 
-
 def nonbonded_v3(
     conf,
     params,
@@ -58,7 +58,9 @@ def nonbonded_v3(
     beta,
     cutoff,
     lambda_plane_idxs,
-    lambda_offset_idxs):
+    lambda_offset_idxs,
+    runtime_validate=False,
+):
     """Lennard-Jones + Coulomb, with a few important twists:
     * distances are computed in 4D, controlled by lambda, lambda_plane_idxs, lambda_offset_idxs
     * each pairwise LJ and Coulomb term can be multiplied by an adjustable rescale_mask parameter
@@ -125,9 +127,10 @@ def nonbonded_v3(
     dij = distance(conf, box)
 
     if cutoff is not None:
-        validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
         eps_ij = np.where(dij < cutoff, eps_ij, 0)
 
+        if runtime_validate:
+            validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
 
     inv_dij = 1/dij
 
