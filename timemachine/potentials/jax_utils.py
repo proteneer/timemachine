@@ -61,7 +61,6 @@ def augment_dim(x3: Array, w: Array) -> Array:
     return x4
 
 
-
 def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
     """(x,y,z) -> (x,y,z,w) where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)"""
     w = compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
@@ -101,11 +100,10 @@ def delta_r(ri, rj, box=None):
 def distance(x, box):
     # nonbonded distances require the periodic box
     assert x.shape[1] == 3 or x.shape[1] == 4 # 3d or 4d
-    ri = np.expand_dims(x, 0)
-    rj = np.expand_dims(x, 1)
-    d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
-    N = d2ij.shape[0]
-    d2ij = np.where(np.eye(N), 0, d2ij)
-    dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
+    n = len(x)
+    inds_i, inds_j = get_all_pairs_indices(n)
+    ri, rj = x[inds_i], x[inds_j]
+    diff = delta_r(ri, rj, box)
+    dij = np.linalg.norm(diff, axis=-1)
     return dij
 

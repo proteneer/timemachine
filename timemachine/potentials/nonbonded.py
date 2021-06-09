@@ -1,7 +1,7 @@
 import jax.numpy as np
 from jax.scipy.special import erfc
 from jax.ops import index_update, index
-from timemachine.potentials.jax_utils import distance, convert_to_4d
+from timemachine.potentials.jax_utils import distance, convert_to_4d, get_all_pairs_indices
 
 
 def switch_fn(dij, cutoff):
@@ -117,55 +117,35 @@ def nonbonded_v3(
     sig = params[:, 1]
     eps = params[:, 2]
 
-    sig_i = np.expand_dims(sig, 0)
-    sig_j = np.expand_dims(sig, 1)
-    sig_ij = sig_i + sig_j
+    inds_i, inds_j = get_all_pairs_indices(N)
+    sig_ij = sig[inds_i] + sig[inds_j]
 
-    eps_i = np.expand_dims(eps, 0)
-    eps_j = np.expand_dims(eps, 1)
-
-    eps_ij = eps_i * eps_j
+    eps_ij = eps[inds_i] * eps[inds_j]
 
     dij = distance(conf, box)
-
-    keep_mask = np.ones((N,N)) - np.eye(N)
-    keep_mask = np.where(eps_ij != 0, keep_mask, 0)
 
     if cutoff is not None:
         validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
         eps_ij = np.where(dij < cutoff, eps_ij, 0)
 
-    # (ytz): this avoids a nan in the gradient in both jax and tensorflow
-    sig_ij = np.where(keep_mask, sig_ij, 0)
-    eps_ij = np.where(keep_mask, eps_ij, 0)
 
     inv_dij = 1/dij
-    inv_dij = np.where(np.eye(N), 0, inv_dij)
 
     sig2 = sig_ij*inv_dij
     sig2 *= sig2
     sig6 = sig2*sig2*sig2
 
     eij_lj = 4*eps_ij*(sig6-1.0)*sig6
-    eij_lj = np.where(keep_mask, eij_lj, 0)
-
-    qi = np.expand_dims(charges, 0) # (1, N)
-    qj = np.expand_dims(charges, 1) # (N, 1)
-    qij = np.multiply(qi, qj)
-
-    # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
-    keep_mask = 1 - np.eye(N)
-    qij = np.where(keep_mask, qij, 0)
-    dij = np.where(keep_mask, dij, 0)
+    qij = charges[inds_i] * charges[inds_j]
 
     # funny enough lim_{x->0} erfc(x)/x = 0
-    eij_charge = np.where(keep_mask, qij*erfc(beta*dij)*inv_dij, 0) # zero out diagonals
+    eij_charge = qij*erfc(beta*dij)*inv_dij
     if cutoff is not None:
         eij_charge = np.where(dij > cutoff, 0, eij_charge)
 
     eij_total = (eij_lj*lj_rescale_mask + eij_charge*charge_rescale_mask)
 
-    return np.sum(eij_total/2)
+    return np.sum(eij_total)
 
 
 def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
