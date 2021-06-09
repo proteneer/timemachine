@@ -177,7 +177,7 @@ def nonbonded_v3(
     if (cutoff is not None) and runtime_validate:
         validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
 
-    eij_total = lj * lj_rescale_mask + coulomb * charge_rescale_mask
+    eij_total = lj * lj_rescale_mask[inds_i, inds_j] + coulomb * charge_rescale_mask[inds_i, inds_j]
 
     return np.sum(eij_total)
 
