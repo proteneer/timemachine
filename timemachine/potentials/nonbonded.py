@@ -72,7 +72,7 @@ def compute_nonbonded_terms(particles_i: Particles, particles_j: Particles,
 
     # Lennard-Jones
     sig_ij = particles_i.params.sig + particles_j.params.sig
-    eps_ij = particles_j.params.eps * particles_j.params.eps
+    eps_ij = particles_i.params.eps * particles_j.params.eps
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
     # Coulomb
