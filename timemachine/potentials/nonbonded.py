@@ -66,23 +66,24 @@ def lennard_jones(dij, sig_ij, eps_ij):
 
 def compute_nonbonded_terms(particles_i: Particles, particles_j: Particles,
                             box: Array, beta: float, cutoff: Optional[float] = None):
+
+    # distances and cutoff
     dij = distance(particles_i.coords, particles_j.coords, box)
+    if cutoff is None:
+        cutoff = np.inf
+    keep_mask = dij <= cutoff
 
     # Lennard-Jones
     sig_ij = particles_i.params.sig + particles_j.params.sig
     eps_ij = particles_i.params.eps * particles_j.params.eps
+    eps_ij = np.where(keep_mask, eps_ij, 0)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
     # Coulomb
     qij = particles_i.params.charges * particles_j.params.charges
     # funny enough lim_{x->0} erfc(x)/x = 0
     coulomb = qij * erfc(beta * dij) / dij
-
-    # apply cutoff
-    if cutoff is not None:
-        cutoff_mask = dij > cutoff
-        lj = np.where(cutoff_mask, 0, lj)
-        coulomb = np.where(cutoff_mask, 0, coulomb)
+    coulomb = np.where(keep_mask, coulomb, 0)
 
     return lj, coulomb
 
