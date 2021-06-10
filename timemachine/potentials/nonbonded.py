@@ -58,9 +58,7 @@ class Particles(NamedTuple):
 
 
 def lennard_jones(dij, sig_ij, eps_ij):
-    inv_dij = 1 / dij
-
-    sig6 = (sig_ij * inv_dij) ** 6
+    sig6 = (sig_ij / dij) ** 6
     sig12 = sig6 ** 2
 
     return 4 * eps_ij * (sig12 - sig6)
@@ -145,17 +143,12 @@ def nonbonded_v3(
     N = conf.shape[0]
 
     if conf.shape[-1] == 3:
-        conf_4d = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-    else:
-        conf_4d = conf
+        conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
 
     # make 4th dimension of box large enough so its roughly aperiodic
     if box is not None:
         box_4d = np.eye(4) * 1000
         box_4d = index_update(box_4d, index[:3, :3], box)
-    else:
-        box_4d = None
-
     box = box_4d
 
     charges = params[:, 0]
@@ -166,11 +159,11 @@ def nonbonded_v3(
     # n_interactions = len(inds_i)
 
     particles_i = Particles(
-        coords=conf_4d[inds_i],
+        coords=conf[inds_i],
         params=Params(sig=sig[inds_i], eps=eps[inds_i], charges=charges[inds_i])
     )
     particles_j = Particles(
-        coords=conf_4d[inds_j],
+        coords=conf[inds_j],
         params=Params(sig=sig[inds_j], eps=eps[inds_j], charges=charges[inds_j])
     )
 
