@@ -58,10 +58,17 @@ class Particles(NamedTuple):
 
 
 def lennard_jones(dij, sig_ij, eps_ij):
-    sig6 = (sig_ij / dij) ** 6
-    sig12 = sig6 ** 2
+    #sig6 = (sig_ij / dij) ** 6
+    #sig12 = sig6 ** 2
+    #return 4 * eps_ij * (sig12 - sig6)
 
-    return 4 * eps_ij * (sig12 - sig6)
+    sig2 = sig_ij / dij
+    sig2 *= sig2
+    sig6 = sig2 * sig2 * sig2
+
+    return 4 * eps_ij * (sig6 - 1.0) * sig6
+
+
 
 
 def compute_nonbonded_terms(particles_i: Particles, particles_j: Particles,
