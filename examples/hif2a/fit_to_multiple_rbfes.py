@@ -164,9 +164,12 @@ def flatten(params, handles) -> Tuple[np.array, callable]:
     return theta, unflatten
 
 
-def run_validation_edges(validation: Dataset, params, systems, epoch):
+def run_validation_edges(validation: Dataset, params, systems, epoch, inference: bool = False):
     if len(validation) <= 0:
         return
+    message_prefix = "Validation"
+    if inference:
+        message_prefix = "Inference"
     val_loss = np.zeros(len(validation))
     for i, rfe in enumerate(validation.data):
         if getattr(rfe, "complex_path", None) is not None:
@@ -184,7 +187,7 @@ def run_validation_edges(validation: Dataset, params, systems, epoch):
             rfe.label
         )
         elapsed = time() - start
-        print(f"Validation edge {i}: time={elapsed:.2f}s, loss={loss:.2f}")
+        print(f"{message_prefix} edge {i}: time={elapsed:.2f}s, loss={loss:.2f}")
         du_dls_dict = {stage: _results_to_arrays(results)[1] for stage, results in stage_results}
         np.savez(output_path.joinpath(f"validation_du_dls_snapshot_{epoch}_{i}.npz"), **du_dls_dict)
         val_loss[i] = loss
@@ -210,6 +213,7 @@ if __name__ == "__main__":
     parser.add_argument("--split", action="store_true", help="Split edges into train and validation set")
     parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
     parser.add_argument("--protein_path", default=None, help="Path to protein if edges don't provide protein")
+    parser.add_argument("--inference_only", action="store_true", help="Disable training, run all edges as validation edges")
     # TODO: also make configurable: forces_to_refit, optimizer params, path_to_protein, path_to_protein_ff, ...
     args = parser.parse_args()
     protein_path = None
@@ -276,13 +280,19 @@ if __name__ == "__main__":
     print(f'Storing results in {output_path}')
 
     dataset = Dataset(relative_transformations)
-    if args.split:
-        # TODO: More physically meaningful split
-        # 80, 20 split on transformations
-        training, validation = dataset.random_split(0.8)
+    if not args.inference_only:
+        if args.split:
+            # TODO: More physically meaningful split
+            # 80, 20 split on transformations
+            training, validation = dataset.random_split(0.8)
+        else:
+            validation = Dataset([])
+            training = dataset
     else:
-        validation = Dataset([])
-        training = dataset
+        validation = dataset
+        dataset = Dataset([])
+
+
 
     with open(output_path.joinpath("training_edges.pk"), "wb") as ofs:
         dump(training.data, ofs)
@@ -339,15 +349,13 @@ if __name__ == "__main__":
     np.save(output_path.joinpath('step_indices.npy'), np.hstack(step_inds)[:args.param_updates])
 
     step = 0
-    epoch = 0
     # in each optimizer step, look at one transformation from relative_transformations
-    for steps in step_inds:
+    for epoch in range(num_epochs):
         # Run Validation edges at start of epoch. Unlike NNs we have a reasonable starting
         # point that is worth knowing
-        run_validation_edges(validation, ordered_params, systems, epoch)
-        epoch += 1
-        print(f"Epoch: {epoch}")
-        for i in steps:
+        run_validation_edges(validation, ordered_params, systems, epoch+1, inference=args.inference_only)
+        print(f"Epoch: {epoch+1}/{num_epochs}")
+        for i in step_inds[epoch]:
             rfe = training.data[i]
             if getattr(rfe, "complex_path", None):
                 model = systems[rfe.complex_path]
@@ -439,4 +447,5 @@ if __name__ == "__main__":
             step += 1
             if step >= args.param_updates:
                 break
-    run_validation_edges(validation, ordered_params, systems, epoch)
+    if not args.inference_only:
+        run_validation_edges(validation, ordered_params, systems, epoch+1)
