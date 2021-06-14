@@ -120,9 +120,28 @@ def _blew_up(results: List[SimulationResult]) -> bool:
     # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
     return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
-def loss_fxn(model, ff_params, mol_a, mol_b, core, label_ddG):
-    pred_ddG, stage_results = model.predict(ff_params, mol_a, mol_b, core)
-    return pseudo_huber_loss(pred_ddG - label_ddG), stage_results
+# def loss_fxn(model, ff_params, mol_a, mol_b, core, label_ddG):
+#     pred_ddG, stage_results = model.predict(ff_params, mol_a, mol_b, core)
+#     return pseudo_huber_loss(pred_ddG - label_ddG), stage_results
+
+def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
+    all_results = []
+    # indices = []
+    preds = []
+    for rfe, model in batch:
+        pred_ddG, stage_results = model.predict(ff_params, rfe.mol_a, rfe.mol_b, rfe.core)
+        all_results.extend(list(stage_results))
+        preds.append(pred_ddG)
+    # indices = jnp.asarray(indices)
+    # ind_l, ind_r = indices.T
+    # layer = construct_mle_layer(len(transform_index), indices)
+    # corrected_dg = layer(jnp.asarray(preds))
+    # cycle_corrected_rbfes = corrected_dg[ind_r] - corrected_dg[ind_l]
+    # cycle_corrected_rbfes = jnp.asarray(preds)
+    preds = jnp.asarray(preds)
+    labels = jnp.asarray([rfe.label for rfe, _ in batch])
+    loss = jnp.sum(jnp.abs(preds - labels))
+    return loss, (preds, all_results)
 
 # TODO: move flatten into optimize.utils
 def flatten(params, handles) -> Tuple[np.array, callable]:
@@ -178,14 +197,7 @@ def run_validation_edges(validation: Dataset, params, systems, epoch, inference:
             model = systems[protein_path]
         start = time()
 
-        loss, stage_results = loss_fxn(
-            model,
-            params,
-            rfe.mol_a,
-            rfe.mol_b,
-            rfe.core,
-            rfe.label
-        )
+        loss, (preds, stage_results) = loss_fxn(params, [(rfe, model)])
         elapsed = time() - start
         print(f"{message_prefix} edge {i}: time={elapsed:.2f}s, loss={loss:.2f}")
         du_dls_dict = {stage: _results_to_arrays(results)[1] for stage, results in stage_results}
@@ -206,6 +218,7 @@ if __name__ == "__main__":
     parser.add_argument("--param_updates", default=1000, type=int, help="Number of updates for parameters")
     parser.add_argument("--seed", default=2021, type=int, help="Seed for shuffling ordering of transformations")
     parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
+    parser.add_argument("--batch_size", default=1, type=int, help="Number of items to batch together for training")
 
     parser.add_argument("--path_to_ff", default=str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py')))
     parser.add_argument("--path_to_edges", default=["relative_transformations.pkl"], nargs="+",
@@ -290,7 +303,7 @@ if __name__ == "__main__":
             training = dataset
     else:
         validation = dataset
-        dataset = Dataset([])
+        training = Dataset([])
 
 
 
@@ -340,11 +353,17 @@ if __name__ == "__main__":
     num_epochs = int(np.ceil(args.param_updates / len(relative_transformations)))
     np.random.seed(args.seed)
 
+    batch_size = args.batch_size
     step_inds = []
     for epoch in range(num_epochs):
         inds = np.arange(len(training.data))
         np.random.shuffle(inds)
-        step_inds.append(inds)
+        batched_inds = []
+        num_steps = (len(inds) + batch_size - 1) // batch_size
+        for i in range(num_steps):
+            offset = i * batch_size
+            batched_inds.append(inds[offset:offset+batch_size])
+        step_inds.append(np.asarray(batched_inds, dtype=object))
 
     np.save(output_path.joinpath('step_indices.npy'), np.hstack(step_inds)[:args.param_updates])
 
@@ -355,23 +374,21 @@ if __name__ == "__main__":
         # point that is worth knowing
         run_validation_edges(validation, ordered_params, systems, epoch+1, inference=args.inference_only)
         print(f"Epoch: {epoch+1}/{num_epochs}")
-        for i in step_inds[epoch]:
-            rfe = training.data[i]
-            if getattr(rfe, "complex_path", None):
-                model = systems[rfe.complex_path]
-            else:
-                model = systems[protein_path]
-            # compute a step, measuring total wall-time
+        for batch in step_inds[epoch]:
+            batch_data = []
+            for i in batch:
+                rfe = training.data[i]
+                if getattr(rfe, "complex_path", None):
+                    model = systems[rfe.complex_path]
+                else:
+                    model = systems[protein_path]
+                batch_data.append((rfe, model))
+            # compute a batch, measuring total wall-time
             t0 = time()
 
-            # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
-            (loss, stage_results), loss_grads = jax.value_and_grad(loss_fxn, argnums=1, has_aux=True)(
-                model,
+            (loss, (predictions, stage_results)), loss_grads = jax.value_and_grad(loss_fxn, argnums=0, has_aux=True)(
                 ordered_params,
-                rfe.mol_a,
-                rfe.mol_b,
-                rfe.core,
-                rfe.label
+                batch_data
             )
 
             results_this_step = {stage: result for stage, result in stage_results}
