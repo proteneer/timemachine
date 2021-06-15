@@ -11,9 +11,14 @@ from timemachine.potentials.jax_utils import delta_r
 def test_delta_r():
     """assert that
     * delta_r(ri, rj, box) == - delta_r(rj, ri, box)
-    * and that delta_r agrees with jit(delta_r)
+    * delta_r agrees with jit(delta_r)
+    * jit(norm(delta_r)) symmetric
     on a few random inputs of varying size
     """
+
+    @jit
+    def _distances(ri, rj, box):
+        return np.linalg.norm(delta_r(ri, rj, box), axis=1)
 
     for _ in range(5):
         n_atoms = onp.random.randint(50, 1000)
@@ -31,3 +36,8 @@ def test_delta_r():
 
         onp.testing.assert_allclose(dr_ij_1, dr_ij_2)
         onp.testing.assert_allclose(dr_ji_1, dr_ji_2)
+
+        dij = _distances(ri, rj, box)
+        dji = _distances(rj, ri, box)
+
+        onp.testing.assert_allclose(dij, dji)
