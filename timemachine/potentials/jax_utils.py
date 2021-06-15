@@ -1,6 +1,7 @@
 import jax.numpy as np
 import numpy as onp
 import jax
+from jax.lax import fori_loop
 
 def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
     """(x,y,z) -> (x,y,z,w) where w = cutoff * (lambda_plane_idxs + lambda_offset_idxs * lamb)"""
@@ -43,8 +44,16 @@ def delta_r(ri, rj, box=None):
 
     # box is None for harmonic bonds, not None for nonbonded terms
     if box is not None:
-        for d in range(dims):
-            diff -= box[d]*np.floor(np.expand_dims(diff[...,d], axis=-1)/box[d][d]+0.5)
+
+        # Note: On some jax/jaxlib versions, the following Python for-loop
+        # produces incorrect results when JIT-compiled:
+        # for d in range(dims):
+        #    diff -= box[d]*np.floor(np.expand_dims(diff[...,d], axis=-1)/box[d][d]+0.5)
+
+        def loop_body(d, diff):
+            return diff - box[d] * np.floor(np.expand_dims(diff[..., d], axis=-1) / box[d][d] + 0.5)
+
+        diff = fori_loop(lower=0, upper=dims, body_fun=loop_body, init_val=diff)
 
     return diff
 
