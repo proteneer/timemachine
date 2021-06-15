@@ -1,6 +1,7 @@
 import jax.numpy as np
 import numpy as onp
 import jax
+from jax.ops import index_update, index
 
 from typing import Tuple
 Array = onp.array
@@ -66,6 +67,7 @@ def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
     w = compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
     return augment_dim(x3, w)
 
+
 def rescale_coordinates(
     conf,
     indices,
@@ -96,17 +98,26 @@ def delta_r(ri, rj, box=None):
 
     return diff
 
-def distance(ri, rj, box=None):
+
+def distance_on_pairs(ri, rj, box=None):
+    """O(n) where n = len(ri) = len(rj)"""
     assert len(ri) == len(rj)
 
     diff = delta_r(ri, rj, box)
     dij = np.linalg.norm(diff, axis=-1)
+
+    assert len(dij) == len(ri)
+
     return dij
 
 
-def pairwise_distance(x, box=None):
+def distance(x, box):
     # nonbonded distances require the periodic box
     assert x.shape[1] == 3 or x.shape[1] == 4 # 3d or 4d
-    inds_i, inds_j = get_all_pairs_indices(len(x))
-    ri, rj = x[inds_i], x[inds_j]
-    return distance(ri, rj, box)
+    ri = np.expand_dims(x, 0)
+    rj = np.expand_dims(x, 1)
+    d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
+    N = d2ij.shape[0]
+    d2ij = np.where(np.eye(N), 0, d2ij)
+    dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
+    return dij
