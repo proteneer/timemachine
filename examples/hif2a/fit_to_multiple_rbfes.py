@@ -15,9 +15,14 @@ from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
 # free energy classes
-from fe.free_energy import RelativeFreeEnergy, construct_lambda_schedule
+from fe.free_energy import (
+    RelativeFreeEnergy,
+    construct_lambda_schedule,
+    RBFETransformIndex,
+)
 from fe.estimator import SimulationResult
 from fe.model import RBFEModel
+from fe.cycles import construct_mle_layer, DisconnectedEdgesError
 from fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 
 # MD initialization
@@ -120,28 +125,33 @@ def _blew_up(results: List[SimulationResult]) -> bool:
     # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
     return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
-# def loss_fxn(model, ff_params, mol_a, mol_b, core, label_ddG):
-#     pred_ddG, stage_results = model.predict(ff_params, mol_a, mol_b, core)
-#     return pseudo_huber_loss(pred_ddG - label_ddG), stage_results
 
 def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
+    index = RBFETransformIndex()
+    index.build([edge[0] for edge in batch])
+    indices = []
     all_results = []
-    # indices = []
     preds = []
     for rfe, model in batch:
+        indices.append(list(index.get_transform_indices(rfe)))
         pred_ddG, stage_results = model.predict(ff_params, rfe.mol_a, rfe.mol_b, rfe.core)
         all_results.extend(list(stage_results))
         preds.append(pred_ddG)
-    # indices = jnp.asarray(indices)
-    # ind_l, ind_r = indices.T
-    # layer = construct_mle_layer(len(transform_index), indices)
-    # corrected_dg = layer(jnp.asarray(preds))
-    # cycle_corrected_rbfes = corrected_dg[ind_r] - corrected_dg[ind_l]
-    # cycle_corrected_rbfes = jnp.asarray(preds)
-    preds = jnp.asarray(preds)
+    # If the edges in the batch are within a cycle, correct the ddGs
+    indices = jnp.asarray(indices)
+    ind_l, ind_r = indices.T
+    try:
+        layer = construct_mle_layer(len(index), indices)
+        corrected_dg = layer(jnp.asarray(preds))
+        cycle_corrected_rbfes = corrected_dg[ind_r] - corrected_dg[ind_l]
+    except DisconnectedEdgesError:
+        # Provided non connected graph, use the ddGs directly
+        cycle_corrected_rbfes = jnp.asarray(preds)
     labels = jnp.asarray([rfe.label for rfe, _ in batch])
-    loss = jnp.sum(jnp.abs(preds - labels))
-    return loss, (preds, all_results)
+    loss = pseudo_huber_loss(cycle_corrected_rbfes - labels)
+    # Aggregate the pseudo huber loss using mean
+    loss = jnp.mean(loss)
+    return loss, (cycle_corrected_rbfes, all_results)
 
 # TODO: move flatten into optimize.utils
 def flatten(params, handles) -> Tuple[np.array, callable]:
