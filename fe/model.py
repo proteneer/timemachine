@@ -67,7 +67,7 @@ class RBFEModel():
         lamb: float = 0.0,
         barostat_interval: int = 10,
         equilibration_steps: int = 100000,
-        save_cache: str = "equilibration_cache_min.pkl"
+        cache_path: str = "equilibration_cache.pkl"
     ):
         """
         edges: List of tuples with mol_a, mol_b, core
@@ -82,7 +82,7 @@ class RBFEModel():
         equilibration_steps: int
             Number of steps to equilibrate the edge for
 
-        save_cache: string
+        cache_path: string
             Path to look for existing cache or path to where to save cache. By default
             it will write out a pickle file in the local directory.
 
@@ -92,8 +92,8 @@ class RBFEModel():
         """
         if not self.pre_equilibrate:
             return
-        if os.path.isfile(save_cache):
-            with open(save_cache, "rb") as ifs:
+        if os.path.isfile(cache_path):
+            with open(cache_path, "rb") as ifs:
                 self._equil_cache = load(ifs)
             print("Loaded Pre-equilibrated structures from cache")
             return
@@ -127,10 +127,10 @@ class RBFEModel():
             if (i + 1) % 5 == 0:
                 print(f"Pre-equilibrated {i+1} of {num_equil} edges")
         print(f"Pre-equilibrated {num_equil} edges")
-        if save_cache:
-            with open(save_cache, "wb") as ofs:
+        if cache_path:
+            with open(cache_path, "wb") as ofs:
                 dump(self._equil_cache, ofs)
-            print(f"Saved equilibration_cache to {save_cache}")
+            print(f"Saved equilibration_cache to {cache_path}")
 
 
     def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray):
