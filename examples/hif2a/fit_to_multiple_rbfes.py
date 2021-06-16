@@ -251,6 +251,7 @@ if __name__ == "__main__":
         default=None,
         help="Number of pre equilibration steps or path to cached equilibrated edges, if not provided no pre equilibration performed"
     )
+    parser.add_argument("--hmr", action="store_true", help="Enable HMR")
     parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
     parser.add_argument("--protein_path", default=None, help="Path to protein if edges don't provide protein")
     parser.add_argument("--inference_only", action="store_true", help="Disable training, run all edges as validation edges")
@@ -364,6 +365,7 @@ if __name__ == "__main__":
             equil_steps=configuration.num_equil_steps,
             prod_steps=configuration.num_prod_steps,
             pre_equilibrate=args.pre_equil is not None,
+            hmr=args.hmr,
         )
 
     # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?

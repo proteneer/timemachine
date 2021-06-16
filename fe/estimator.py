@@ -35,7 +35,8 @@ def unflatten(aux_data, children):
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
-def equilibrate(time_step, group_idxs, potentials, coords, masses, box, lamb, barostat_interval, equil_steps) -> Tuple:
+
+def equilibrate(integrator, barostat, potentials, coords, box, lamb, equil_steps) -> Tuple:
     all_impls = []
     v0 = np.zeros_like(coords)
 
@@ -43,24 +44,13 @@ def equilibrate(time_step, group_idxs, potentials, coords, masses, box, lamb, ba
         impl = bp.bound_impl(np.float32)
         all_impls.append(impl)
 
-    temperature = 300.0
-    pressure = 1.0
+    if integrator.seed == 0:
+        integrator = copy.deepcopy(integrator)
+        integrator.seed = np.random.randint(np.iinfo(np.int32).max)
 
-    integrator = LangevinIntegrator(
-        temperature,
-        time_step,
-        1.0,
-        masses,
-        np.random.randint(np.iinfo(np.int32).max),
-    )
-    barostat = MonteCarloBarostat(
-        coords.shape[0],
-        pressure,
-        temperature,
-        group_idxs,
-        barostat_interval,
-        np.random.randint(np.iinfo(np.int32).max),
-    )
+    if barostat.seed == 0:
+        barostat = copy.deepcopy(barostat)
+        barostat.seed = np.random.randint(np.iinfo(np.int32).max)
 
     intg_impl = integrator.impl()
     baro_impl = barostat.impl(all_impls)

@@ -9,13 +9,12 @@ from rdkit import Chem
 from md import minimizer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from fe import free_energy, topology, estimator
+from fe.model_utils import apply_hmr
 from ff import Forcefield
 from md.barostat.utils import get_bond_list, get_group_indices
 
 from parallel.client import AbstractClient, SerialClient
 from typing import Optional, List, Tuple
-
-
 
 
 class RBFEModel():
@@ -35,7 +34,8 @@ class RBFEModel():
         equil_steps: int,
         prod_steps: int,
         barostat_interval: int = 25,
-        pre_equilibrate: bool = False):
+        pre_equilibrate: bool = False,
+        hmr: bool = False):
 
         self.complex_system = complex_system
         self.complex_coords = complex_coords
@@ -53,6 +53,7 @@ class RBFEModel():
         self.prod_steps = prod_steps
         self.barostat_interval = barostat_interval
         self.pre_equilibrate = pre_equilibrate
+        self.hmr = hmr
         self._equil_cache = {}
 
     def _edge_hash(self, stage: str, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray) -> str:
@@ -99,6 +100,10 @@ class RBFEModel():
             return
         futures = []
         ordered_params = self.ff.get_ordered_params()
+
+        temperature = 300.0
+        pressure = 1.0
+
         for stage, host_system, host_coords, host_box in [
             ("complex", self.complex_system, self.complex_coords, self.complex_box),
             ("solvent", self.solvent_system, self.solvent_coords, self.solvent_box)]:
@@ -115,10 +120,28 @@ class RBFEModel():
                 bond_list = get_bond_list(harmonic_bond_potential)
                 group_idxs = get_group_indices(bond_list)
                 time_step = 1.5e-3
+                if self.hmr:
+                    masses = apply_hmr(masses, bond_list)
+                    time_step = 2.5e-3
+                integrator = LangevinIntegrator(
+                    temperature,
+                    time_step,
+                    1.0,
+                    masses,
+                    0
+                )
+                barostat = MonteCarloBarostat(
+                    coords.shape[0],
+                    pressure,
+                    temperature,
+                    group_idxs,
+                    barostat_interval,
+                    0
+                )
                 pots = []
                 for bp, params in zip(unbound_potentials, sys_params):
                     pots.append(bp.bind(np.asarray(params)))
-                future = self.client.submit(estimator.equilibrate, *[time_step, group_idxs, pots, coords, masses, host_box, lamb, barostat_interval, equilibration_steps])
+                future = self.client.submit(estimator.equilibrate, *[integrator, barostat, pots, coords, host_box, lamb, equilibration_steps])
                 futures.append((stage, (mol_a, mol_b, core), future))
         num_equil = len(futures)
         for i, (stage, edge, future) in enumerate(futures):
@@ -209,6 +232,9 @@ class RBFEModel():
 
             harmonic_bond_potential = unbound_potentials[0]
             bond_list = get_bond_list(harmonic_bond_potential)
+            if self.hmr:
+                masses = apply_hmr(masses, bond_list)
+                time_step = 2.5e-3
             group_idxs = get_group_indices(bond_list)
 
             seed = 0
@@ -218,7 +244,7 @@ class RBFEModel():
 
             integrator = LangevinIntegrator(
                 temperature,
-                time_step
+                time_step,
                 1.0,
                 masses,
                 seed
