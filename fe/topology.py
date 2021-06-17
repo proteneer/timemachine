@@ -1,3 +1,7 @@
+import networkx
+from abc import ABC
+from rdkit import Chem
+
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -10,6 +14,52 @@ _SCALE_13 = 1.0
 _SCALE_14 = 0.5
 _BETA = 2.0
 _CUTOFF = 1.2
+
+
+_STANDARD_CHARGE = 0.0
+
+# ff independent "standard" sig/eps
+def simple_lj_typer(mol):
+
+    sig_eps = []
+
+    for atom in mol.GetAtoms():
+        a_num = atom.GetAtomicNum()
+        if a_num == 1:
+            assert len(atom.GetNeighbors()) == 1
+            neighbor = atom.GetNeighbors()[0]
+            b_num = neighbor.GetAtomicNum()
+            if b_num == 6:
+                val = (0.25, 0.25)
+            elif b_num == 7:
+                val = (0.10, 0.25)
+            elif b_num == 8:
+                val = (0.05, 0.02)
+            elif b_num == 16:
+                val = (0.10, 0.25)
+            else:
+                val = (0.10, 0.25)
+        elif a_num == 6:
+            val = (0.34, 0.6)
+        elif a_num == 7:
+            val = (0.32, 0.8)
+        elif a_num == 8:
+            val = (0.30, 0.9)
+        elif a_num == 9:
+            val = (0.3, 0.5)
+        elif a_num == 15:
+            val = (0.37, 0.9)
+        elif a_num == 16:
+            val = (0.35, 1.0)
+        else:
+            assert 0
+
+        # sigmas need to be halved
+        sig_eps.append((val[0]/2, val[1]))
+
+    sig_eps = np.array(sig_eps)
+
+    return sig_eps
 
 
 class AtomMappingError(Exception):
@@ -219,7 +269,7 @@ class BaseTopology():
             lambda_offset_idxs,
             beta,
             cutoff
-        ) 
+        )
 
         params = jnp.concatenate([
             jnp.reshape(q_params, (-1, 1)),
@@ -253,11 +303,191 @@ class BaseTopology():
         improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
         combined_params = jnp.concatenate([proper_params, improper_params])
         combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
-        combined_potential = potentials.PeriodicTorsion(combined_idxs)
+
+        # dual topology needs this fix too... probably
+        proper_lambda_mult = proper_potential.get_lambda_mult()
+        proper_lambda_offset = proper_potential.get_lambda_offset()
+
+        if proper_lambda_mult is None:
+            proper_lambda_mult = np.zeros(len(proper_params))
+        if proper_lambda_offset is None:
+            proper_lambda_offset = np.ones(len(proper_params))
+
+        improper_lambda_mult = improper_potential.get_lambda_mult()
+        improper_lambda_offset = improper_potential.get_lambda_offset()
+
+        if improper_lambda_mult is None:
+            improper_lambda_mult = np.zeros(len(improper_params))
+        if improper_lambda_offset is None:
+            improper_lambda_offset = np.ones(len(improper_params))
+
+        combined_lambda_mult = np.concatenate([proper_lambda_mult, improper_lambda_mult]).astype(np.int32)
+        combined_lambda_offset = np.concatenate([proper_lambda_offset, improper_lambda_offset]).astype(np.int32)
+
+        combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
         return combined_params, combined_potential
 
 
-class DualTopology():
+class BaseTopologyConversion(BaseTopology):
+    """
+    Converts a single ligand into a standard, forcefield independent state. The ligand has its 4D
+    coordinate set to zero at all times, so that it will be fully interacting with the host. The
+    ligand is converted to a chargeless state, with torsions between non-ring atoms fully disabled.
+
+    lambda=0 forcefield dependent state
+    lambda=1 forcefield independent state
+    """
+
+    def parameterize_proper_torsion(self, ff_params):
+        # alchemically turn off proper torsions.
+        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+        membership = get_ring_membership(self.mol)
+
+        num_torsions = torsion_params.shape[0]
+
+        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+
+        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+            if membership[b] != membership[c]:
+                lambda_mult_idxs[torsion_idx] = -1
+
+        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+
+        return torsion_params, torsion_potential
+
+
+    def parameterize_nonbonded(self,
+        ff_q_params,
+        ff_lj_params):
+
+        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+        src_qlj_params = qlj_params
+        dst_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], _STANDARD_CHARGE)
+        sig_eps = simple_lj_typer(self.mol)
+        dst_qlj_params = jax.ops.index_update(dst_qlj_params, jax.ops.index[:, 1], sig_eps[:, 0])
+        dst_qlj_params = jax.ops.index_update(dst_qlj_params, jax.ops.index[:, 2], sig_eps[:, 1])
+
+        combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
+        lambda_plane_idxs = np.zeros(self.mol.GetNumAtoms(), dtype=np.int32)
+        lambda_offset_idxs = np.zeros(self.mol.GetNumAtoms(), dtype=np.int32)
+
+        interpolated_potential = nb_potential.interpolate()
+        interpolated_potential.set_lambda_plane_idxs(lambda_plane_idxs)
+        interpolated_potential.set_lambda_offset_idxs(lambda_offset_idxs)
+
+        return combined_qlj_params, interpolated_potential
+
+
+class BaseTopologyStandardDecoupling(BaseTopology):
+    """
+    Decouple a standardize ligand from the environment. The ligand's non-ring
+    torsions will be disabled at both end-states. In addition, the charges will be
+    removed and Lennard-Jones terms will be standardized.
+
+    lambda=0 fully interacting
+    lambda=1 fully non-interacting.
+    """
+    def parameterize_proper_torsion(self, ff_params):
+        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+        membership = get_ring_membership(self.mol)
+
+        num_torsions = torsion_params.shape[0]
+
+        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+
+        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+            if membership[b] != membership[c]:
+                lambda_offset_idxs[torsion_idx] = 0
+
+        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+
+        return torsion_params, torsion_potential
+
+    def parameterize_nonbonded(self,
+        ff_q_params,
+        ff_lj_params):
+
+        # mol is standardized into a forcefield independent state.
+        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], _STANDARD_CHARGE)
+
+        sig_eps = simple_lj_typer(self.mol)
+        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 1], sig_eps[:, 0])
+        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 2], sig_eps[:, 1])
+
+        return qlj_params, nb_potential
+
+class AbsoluteTopology(BaseTopology):
+    # specialized variant of BaseTopology that overrides the nonbonded parameterization
+
+    def parameterize_nonbonded(self, ff_q_params, ff_lj_params, dummy=None):
+        # (ytz): First we convert the ligand to a "neutral state", whereby charges
+        # and epsilons are made into a forcefield independent state by lambda=0.5.
+        # then the ligand is pulled out in 4D, and the results are typically cached
+        # then during training.
+        # one current issue with this protocol is that a vacuum is formed in the solvent
+        # leg when we reach a 4D distance near rmin (2^(1/6) of sigma, a future PR will
+        # attempt to address this better.
+
+        q_params = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol)
+        lj_params = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol)
+
+        exclusion_idxs, scale_factors = nonbonded.generate_exclusion_idxs(
+            self.mol,
+            scale12=_SCALE_12,
+            scale13=_SCALE_13,
+            scale14=_SCALE_14
+        )
+
+        scale_factors = np.stack([scale_factors, scale_factors], axis=1)
+
+        N = len(q_params)
+
+        if dummy is None:
+            lambda_plane_idxs = np.zeros(N, dtype=np.int32)
+            lambda_offset_idxs = np.ones(N, dtype=np.int32)
+        else:
+            lambda_plane_idxs = np.zeros(N, dtype=np.int32)
+            lambda_offset_idxs = np.ones(N, dtype=np.int32)
+            lambda_plane_idxs[dummy] = 1
+            lambda_offset_idxs[dummy] = 0
+            # lambda_offset_idxs[core] = 0
+
+        beta = _BETA
+        cutoff = _CUTOFF # solve for this analytically later
+
+        qlj_params = jnp.concatenate([
+            jnp.reshape(q_params, (-1, 1)),
+            jnp.reshape(lj_params, (-1, 2))
+        ], axis=1)
+
+        # interpolate every atom down to the same epsilon before we decouple
+        # this can be bigger than default values (eg. H-O)
+        safe_sigmas = jnp.ones_like(qlj_params[:, 1])*0.1 # half sigma
+        safe_epsilons = jnp.ones_like(qlj_params[:, 2])*0.2 # sqrt(eps)
+
+        # ligand is decharged first
+        src_qlj_params = qlj_params
+        dst_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], 0)
+        dst_qlj_params = jax.ops.index_update(dst_qlj_params, jax.ops.index[:, 1], safe_sigmas)
+        dst_qlj_params = jax.ops.index_update(dst_qlj_params, jax.ops.index[:, 2], safe_epsilons)
+
+        qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
+
+        return qlj_params, potentials.NonbondedInterpolated(
+            exclusion_idxs,
+            scale_factors,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            beta,
+            cutoff
+        )
+
+
+class DualTopology(ABC):
+
 
     def __init__(self, mol_a, mol_b, forcefield):
         """
@@ -283,7 +513,12 @@ class DualTopology():
     def get_num_atoms(self):
         return self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms()
 
-    def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
+    def parameterize_nonbonded(
+        self,
+        ff_q_params,
+        ff_lj_params):
+
+        # dummy is either "a or "b
         q_params_a = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_a)
         q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b)
         lj_params_a = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_a)
@@ -332,30 +567,25 @@ class DualTopology():
             mutual_scale_factors
         ]).astype(np.float64)
 
-        combined_lambda_plane_idxs = np.zeros(NA+NB, dtype=np.int32)
-        combined_lambda_offset_idxs = np.concatenate([
-            np.ones(NA, dtype=np.int32),
-            np.ones(NB, dtype=np.int32)
-        ])
+        combined_lambda_plane_idxs = None
+        combined_lambda_offset_idxs = None
 
         beta = _BETA
         cutoff = _CUTOFF # solve for this analytically later
 
-        nb = potentials.Nonbonded(
+        qlj_params = jnp.concatenate([
+            jnp.reshape(q_params, (-1, 1)),
+            jnp.reshape(lj_params, (-1, 2))
+        ], axis=1)
+
+        return qlj_params, potentials.Nonbonded(
             combined_exclusion_idxs,
             combined_scale_factors,
             combined_lambda_plane_idxs,
             combined_lambda_offset_idxs,
             beta,
             cutoff
-        ) 
-
-        params = jnp.concatenate([
-            jnp.reshape(q_params, (-1, 1)),
-            jnp.reshape(lj_params, (-1, 2))
-        ], axis=1)
-
-        return params, nb
+        )
 
     def _parameterize_bonded_term(self, ff_params, bonded_handle, potential):
         offset = self.mol_a.GetNumAtoms()
@@ -378,6 +608,7 @@ class DualTopology():
         """
         proper_params, proper_potential = self.parameterize_proper_torsion(proper_params)
         improper_params, improper_potential = self.parameterize_improper_torsion(improper_params)
+
         combined_params = jnp.concatenate([proper_params, improper_params])
         combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
         combined_potential = potentials.PeriodicTorsion(combined_idxs)
@@ -389,6 +620,154 @@ class DualTopology():
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
 
+
+
+class DualTopologyRHFE(DualTopology):
+    """
+    Utility class used for relative hydration free energies. Ligand B is decoupled as lambda goes
+    from 0 to 1, while ligand A is fully coupled. At the same time, at lambda=0, ligand B and ligand A
+    have their charges and epsilons reduced by half.
+    """
+    def parameterize_nonbonded(self,
+        ff_q_params,
+        ff_lj_params):
+
+        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+
+        # halve the strength of the charge and the epsilon parameters
+        src_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], qlj_params[:, 0]*0.5)
+        src_qlj_params = jax.ops.index_update(src_qlj_params, jax.ops.index[:, 2], qlj_params[:, 2]*0.5)
+        dst_qlj_params = qlj_params
+        combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
+
+        combined_lambda_plane_idxs = np.zeros(
+            self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(),
+            dtype=np.int32
+        )
+        combined_lambda_offset_idxs = np.concatenate([
+            np.zeros(self.mol_a.GetNumAtoms(), dtype=np.int32),
+            np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)
+        ])
+
+        nb_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
+        nb_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
+
+        return combined_qlj_params, nb_potential.interpolate()
+
+def get_ring_membership(mol):
+
+    # for _ in mol_a.
+    g = networkx.Graph()
+    for bond in mol.GetBonds():
+        g.add_edge(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())
+
+    # find bridges and remove them
+    for bridge in networkx.bridges(g):
+        g.remove_edge(*bridge)
+
+    # find connected components after bridge removal
+    membership = np.zeros(mol.GetNumAtoms(), dtype=np.int32)
+    for group_idx, atom_list in enumerate(networkx.connected_components(g)):
+        for atom_idx in atom_list:
+            membership[atom_idx] = group_idx
+
+    return membership
+
+class DualTopologyStandardDecoupling(DualTopology):
+    """
+    Standardized variant, where both ligands A and B have their charges, sigma, and epsilons are set
+    to standard, forcefield-independent values. There is no parameter interpolation. lambda=0 has both
+    Ligand A and B fully in the pocket. lambda=1 has ligand b fully decoupled, while ligand a is kept
+    in place.
+
+    Furthermore, the ligand's non-ring torsions are turned off at the standard state to improve
+    sampling.
+
+    """
+    def parameterize_proper_torsion(self, ff_params):
+        # (ytz): TBD need to do this for Base Topology as well
+
+        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+
+        mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
+        membership = get_ring_membership(mol_c)
+
+        num_torsions = torsion_params.shape[0]
+
+        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+
+        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+            if membership[b] != membership[c]:
+                lambda_offset_idxs[torsion_idx] = 0
+
+        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+
+        return torsion_params, torsion_potential
+
+    def parameterize_nonbonded(self,
+        ff_q_params,
+        ff_lj_params):
+
+        # both mol_a and mol_b are standardized.
+        # we don't actually need derivatives for this stage.
+
+        # zero out/stop grad
+        ff_q_params = np.zeros_like(ff_q_params)
+        ff_lj_params = np.zeros_like(ff_lj_params)
+
+        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], _STANDARD_CHARGE)
+        mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
+        sig_eps = simple_lj_typer(mol_c)
+        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 1], sig_eps[:, 0])
+        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 2], sig_eps[:, 1])
+
+        # ligand is already decharged by now
+        # super-ligand state should have half the epsilons
+        src_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 2], qlj_params[:, 2]*0.5)
+        dst_qlj_params = qlj_params
+
+        combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
+
+        interpolated_potential = nb_potential.interpolate()
+        combined_lambda_plane_idxs = np.zeros(
+            self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(),
+            dtype=np.int32
+        )
+        combined_lambda_offset_idxs = np.concatenate([
+            np.zeros(self.mol_a.GetNumAtoms(), dtype=np.int32),
+            np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)
+        ])
+        interpolated_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
+        interpolated_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
+
+        return combined_qlj_params, interpolated_potential
+
+
+class DualTopologyMinimization(DualTopology):
+
+    def parameterize_nonbonded(self,
+        ff_q_params,
+        ff_lj_params):
+
+        # both mol_a and mol_b are standardized.
+        # we don't actually need derivatives for this stage.
+        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+
+        combined_lambda_plane_idxs = np.zeros(
+            self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(),
+            dtype=np.int32
+        )
+        combined_lambda_offset_idxs = np.concatenate([
+            np.ones(self.mol_a.GetNumAtoms(), dtype=np.int32),
+            np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)
+        ])
+
+        nb_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
+        nb_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
+
+        return qlj_params, nb_potential
 
 class SingleTopology():
 
