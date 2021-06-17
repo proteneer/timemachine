@@ -153,3 +153,21 @@ def test_dual_topology_standard_decoupling():
 
     np.testing.assert_array_equal(dst_qlj_params[:, 0], np.zeros(mol_c.GetNumAtoms()))
     np.testing.assert_array_equal(dst_qlj_params[:, 1:], expected_lj)
+
+def test_dual_topology_minimization():
+
+    # Identical to the vanilla Dual Topology class, except that both ligands are
+    # decouple simultaneously
+
+    ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
+    ff = Forcefield(ff_handlers)
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1F"))
+    mol_top = topology.DualTopologyMinimization(mol_a, mol_b, ff)
+
+    C = mol_a.GetNumAtoms() + mol_b.GetNumAtoms()
+
+    _, potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+
+    np.testing.assert_array_equal(potential.get_lambda_offset_idxs(), np.ones(C, dtype=np.int32))
+    np.testing.assert_array_equal(potential.get_lambda_plane_idxs(), np.zeros(C, dtype=np.int32))
