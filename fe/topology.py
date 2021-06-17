@@ -589,13 +589,21 @@ class DualTopologyRHFE(DualTopology):
 
 
 def get_ring_membership(mol):
+    """
+    Get the membership of each atom in the mol. The algorithm
+    finds islands that are formed connected by bond bridges.
 
-    # for _ in mol_a.
+    Let N = mol.GetNumAtoms()
+
+    The returned array is of length N, where each atom is marked
+    by a membership class K such that 0 < K < N.
+    """
+
     g = networkx.Graph()
     for bond in mol.GetBonds():
         g.add_edge(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())
 
-    # find bridges and remove them
+    # find bridges and remove them to form islands
     for bridge in networkx.bridges(g):
         g.remove_edge(*bridge)
 
@@ -606,6 +614,7 @@ def get_ring_membership(mol):
             membership[atom_idx] = group_idx
 
     return membership
+
 
 class DualTopologyStandardDecoupling(DualTopology):
     """

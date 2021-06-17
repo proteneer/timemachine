@@ -101,6 +101,8 @@ def test_base_topology_standard_decoupling():
 
     qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
 
+    assert not isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
+
     np.testing.assert_array_equal(topology.simple_lj_typer(mol), qlj_params[:,1:])
     np.testing.assert_array_equal(np.zeros_like(qlj_params[:,0]), qlj_params[:,0])
 
@@ -154,6 +156,17 @@ def test_dual_topology_standard_decoupling():
     np.testing.assert_array_equal(dst_qlj_params[:, 0], np.zeros(mol_c.GetNumAtoms()))
     np.testing.assert_array_equal(dst_qlj_params[:, 1:], expected_lj)
 
+    combined_lambda_plane_idxs = nonbonded_potential.get_lambda_plane_idxs()
+    combined_lambda_offset_idxs = nonbonded_potential.get_lambda_offset_idxs()
+
+    A = mol_a.GetNumAtoms()
+    B = mol_b.GetNumAtoms()
+    C = mol_c.GetNumAtoms()
+
+    np.testing.assert_array_equal(combined_lambda_plane_idxs, np.zeros(C))
+    np.testing.assert_array_equal(combined_lambda_offset_idxs[:A], np.zeros(A))
+    np.testing.assert_array_equal(combined_lambda_offset_idxs[A:], np.ones(B))
+
 def test_dual_topology_minimization():
 
     # Identical to the vanilla Dual Topology class, except that both ligands are
@@ -167,7 +180,52 @@ def test_dual_topology_minimization():
 
     C = mol_a.GetNumAtoms() + mol_b.GetNumAtoms()
 
-    _, potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+    _, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
 
-    np.testing.assert_array_equal(potential.get_lambda_offset_idxs(), np.ones(C, dtype=np.int32))
-    np.testing.assert_array_equal(potential.get_lambda_plane_idxs(), np.zeros(C, dtype=np.int32))
+    assert not isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
+
+    np.testing.assert_array_equal(nonbonded_potential.get_lambda_offset_idxs(), np.ones(C, dtype=np.int32))
+    np.testing.assert_array_equal(nonbonded_potential.get_lambda_plane_idxs(), np.zeros(C, dtype=np.int32))
+
+
+def test_dual_topology_rhfe():
+
+    # used in testing the relative hydration protocol. The nonbonded charges and epsilons are reduced
+    # to half strength
+
+    ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
+    ff = Forcefield(ff_handlers)
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1F"))
+    mol_c = Chem.CombineMols(mol_a, mol_b)
+    mol_top = topology.DualTopologyRHFE(mol_a, mol_b, ff)
+
+    C = mol_a.GetNumAtoms() + mol_b.GetNumAtoms()
+
+    ref_qlj_params, _ = topology.BaseTopology(mol_c, ff).parameterize_nonbonded(
+        ff.q_handle.params,
+        ff.lj_handle.params
+    )
+
+    qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+
+    assert isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
+
+    src_qlj_params = qlj_params[:len(qlj_params)//2]
+    dst_qlj_params = qlj_params[len(qlj_params)//2:]
+
+    np.testing.assert_array_equal(src_qlj_params[:, 0], ref_qlj_params[:, 0]/2)
+    np.testing.assert_array_equal(src_qlj_params[:, 1], ref_qlj_params[:, 1])
+    np.testing.assert_array_equal(src_qlj_params[:, 2], ref_qlj_params[:, 2]/2)
+    np.testing.assert_array_equal(dst_qlj_params, ref_qlj_params)
+
+    combined_lambda_plane_idxs = nonbonded_potential.get_lambda_plane_idxs()
+    combined_lambda_offset_idxs = nonbonded_potential.get_lambda_offset_idxs()
+
+    A = mol_a.GetNumAtoms()
+    B = mol_b.GetNumAtoms()
+    C = mol_c.GetNumAtoms()
+
+    np.testing.assert_array_equal(combined_lambda_plane_idxs, np.zeros(C))
+    np.testing.assert_array_equal(combined_lambda_offset_idxs[:A], np.zeros(A))
+    np.testing.assert_array_equal(combined_lambda_offset_idxs[A:], np.ones(B))
