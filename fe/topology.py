@@ -618,9 +618,9 @@ def get_ring_membership(mol):
 
 class DualTopologyStandardDecoupling(DualTopology):
     """
-    Standardized variant, where both ligands A and B have their charges, sigma, and epsilons are set
+    Standardized variant, where both ligands A and B have their charges, sigmas, and epsilons set
     to standard, forcefield-independent values. There is no parameter interpolation. lambda=0 has both
-    Ligand A and B fully in the pocket. lambda=1 has ligand b fully decoupled, while ligand a is kept
+    ligand A and B fully in the pocket. lambda=1 has ligand B fully decoupled, while ligand A is kept
     in place.
 
     Furthermore, the ligand's non-ring torsions are turned off at the standard state to improve
