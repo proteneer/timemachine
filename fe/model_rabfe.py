@@ -18,7 +18,7 @@ from timemachine.lib import potentials
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine import constants
 from timemachine.potentials import rmsd
-from fe import free_energy, topology, estimator_abfe, model_utils
+from fe import free_energy_rabfe, topology, estimator_abfe, model_utils
 from ff import Forcefield
 
 from parallel.client import AbstractClient
@@ -26,7 +26,7 @@ from typing import Optional
 from functools import partial
 from scipy.optimize import linear_sum_assignment
 
-from md.barostat.utils import get_group_indices
+from md.barostat.utils import get_group_indices, get_bond_list
 
 def get_romol_conf(mol):
     """Coordinates of mol's 0th conformer, in nanometers"""
@@ -120,7 +120,7 @@ class AbsoluteModel(ABC):
         standardize=False):
 
         print(f"Minimizing the host structure to remove clashes.")
-        minimized_coords, _, _ = minimizer.minimize_host_4d(
+        minimized_host_coords = minimizer.minimize_host_4d(
             [mol],
             self.host_system,
             self.host_coords,
@@ -128,18 +128,22 @@ class AbsoluteModel(ABC):
             self.host_box
         )
 
-        if standardize:
-            top = topology.BaseTopologyStandardDecoupling(mol, self.ff)
-        else:
-            top = topology.BaseTopology(mol, self.ff)
+        # if standardize:
+            # top = topology.BaseTopologyStandardDecoupling(mol, self.ff)
+        # else:
+            # top = topology.BaseTopology(mol, self.ff)
+        top = self.setup_topology(mol)
 
-        afe = free_energy.AbsoluteFreeEnergy(mol, self.ff)
+        afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, self.ff)
 
         unbound_potentials, sys_params, masses = afe.prepare_host_edge(
             ff_params,
-            self.host_system,
-            top
+            self.host_system
         )
+
+
+        ligand_coords = get_romol_conf(mol)
+        combined_coords = np.concatenate([minimized_host_coords, ligand_coords])
 
         endpoint_correct = False
 
@@ -162,7 +166,7 @@ class AbsoluteModel(ABC):
         group_indices = get_group_indices(bond_list)
         barostat_interval = 5
         barostat = MonteCarloBarostat(
-            minimized_coords.shape[0],
+            combined_coords.shape[0],
             1.0,
             temperature,
             group_indices,
@@ -170,8 +174,8 @@ class AbsoluteModel(ABC):
             seed
         )
 
-        x0 = minimized_coords
-        v0 = np.zeros_like(minimized_coords)
+        x0 = combined_coords
+        v0 = np.zeros_like(combined_coords)
 
         model = estimator_abfe.FreeEnergyModel(
             unbound_potentials,
@@ -254,7 +258,7 @@ class RelativeModel(ABC):
         standardize):
 
         dual_topology = self.setup_topology(mol_a, mol_b)
-        rfe = free_energy.RelativeDualTopologyFreeEnergy(dual_topology)
+        rfe = free_energy_rabfe.RelativeFreeEnergy(dual_topology)
 
         unbound_potentials, sys_params, masses = rfe.prepare_host_edge(
             ff_params,

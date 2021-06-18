@@ -10,7 +10,7 @@ import numpy as np
 import jax
 from jax import numpy as jnp
 
-from fe.free_energy import construct_absolute_lambda_schedule
+from fe.free_energy_rabfe import construct_absolute_lambda_schedule
 from fe.utils import convert_uIC50_to_kJ_per_mole
 from fe import model_rabfe
 from md import builders
