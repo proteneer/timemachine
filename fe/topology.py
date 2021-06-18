@@ -337,6 +337,9 @@ class BaseTopologyConversion(BaseTopology):
 
     lambda=0 forcefield dependent state
     lambda=1 forcefield independent state
+
+    (ytz): Note that rdkit's RingInfo does something totally different. It is populated by either
+    FastFindRings or SSSRs (ring basis), of which neither is what we want.
     """
 
     def parameterize_proper_torsion(self, ff_params):
@@ -704,14 +707,9 @@ class DualTopologyMinimization(DualTopology):
         # we don't actually need derivatives for this stage.
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
 
-        combined_lambda_plane_idxs = np.zeros(
-            self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(),
-            dtype=np.int32
-        )
-        combined_lambda_offset_idxs = np.concatenate([
-            np.ones(self.mol_a.GetNumAtoms(), dtype=np.int32),
-            np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)
-        ])
+        N_A, N_B = self.mol_a.GetNumAtoms(), self.mol_b.GetNumAtoms()
+        combined_lambda_plane_idxs = np.zeros(N_A + N_B, dtype=np.int32)
+        combined_lambda_offset_idxs = np.ones(N_A + N_B, dtype=np.int32)
 
         nb_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
         nb_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
