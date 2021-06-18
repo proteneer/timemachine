@@ -452,7 +452,7 @@ class DualTopology(ABC):
         ff_q_params,
         ff_lj_params):
 
-        # dummy is either "a or "b
+        # dummy is either "a or "b"
         q_params_a = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_a)
         q_params_b = self.ff.q_handle.partial_parameterize(ff_q_params, self.mol_b)
         lj_params_a = self.ff.lj_handle.partial_parameterize(ff_lj_params, self.mol_a)
@@ -1144,4 +1144,3 @@ class SingleTopology():
         combined_lambda_offset = np.concatenate([proper_potential.get_lambda_offset(), improper_potential.get_lambda_offset()])
         combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
         return combined_params, combined_potential
-
