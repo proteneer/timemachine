@@ -15,13 +15,15 @@ _SCALE_14 = 0.5
 _BETA = 2.0
 _CUTOFF = 1.2
 
+def standard_qlj_typer(mol):
+    """
+    This function parameterizes the nonbonded terms of a molecule
+    in a relatively simple and forcefield independent way. The
+    parameters here roughly follow the Smirnoff 1.1.0 Lennard Jones
+    types.
+    """
 
-_STANDARD_CHARGE = 0.0
-
-# ff independent "standard" sig/eps
-def simple_lj_typer(mol):
-
-    sig_eps = []
+    standard_qlj = []
 
     for atom in mol.GetAtoms():
         a_num = atom.GetAtomicNum()
@@ -30,36 +32,36 @@ def simple_lj_typer(mol):
             neighbor = atom.GetNeighbors()[0]
             b_num = neighbor.GetAtomicNum()
             if b_num == 6:
-                val = (0.25, 0.25)
+                val = (0.0, 0.25, 0.25)
             elif b_num == 7:
-                val = (0.10, 0.25)
+                val = (0.0, 0.10, 0.25)
             elif b_num == 8:
-                val = (0.05, 0.02)
+                val = (0.0, 0.05, 0.02)
             elif b_num == 16:
-                val = (0.10, 0.25)
+                val = (0.0, 0.10, 0.25)
             else:
-                val = (0.10, 0.25)
+                val = (0.0, 0.10, 0.25)
         elif a_num == 6:
-            val = (0.34, 0.6)
+            val = (0.0, 0.34, 0.6)
         elif a_num == 7:
-            val = (0.32, 0.8)
+            val = (0.0, 0.32, 0.8)
         elif a_num == 8:
-            val = (0.30, 0.9)
+            val = (0.0, 0.30, 0.9)
         elif a_num == 9:
-            val = (0.3, 0.5)
+            val = (0.0, 0.3, 0.5)
         elif a_num == 15:
-            val = (0.37, 0.9)
+            val = (0.0, 0.37, 0.9)
         elif a_num == 16:
-            val = (0.35, 1.0)
+            val = (0.0, 0.35, 1.0)
         else:
             assert 0
 
         # sigmas need to be halved
-        sig_eps.append((val[0]/2, val[1]))
+        standard_qlj.append((val[0], val[1]/2, val[2]))
 
-    sig_eps = np.array(sig_eps)
+    standard_qlj = np.array(standard_qlj)
 
-    return sig_eps
+    return standard_qlj
 
 
 class AtomMappingError(Exception):
@@ -304,7 +306,6 @@ class BaseTopology():
         combined_params = jnp.concatenate([proper_params, improper_params])
         combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
 
-        # dual topology needs this fix too... probably
         proper_lambda_mult = proper_potential.get_lambda_mult()
         proper_lambda_offset = proper_potential.get_lambda_offset()
 
@@ -363,10 +364,7 @@ class BaseTopologyConversion(BaseTopology):
 
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
         src_qlj_params = qlj_params
-        dst_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], _STANDARD_CHARGE)
-        sig_eps = simple_lj_typer(self.mol)
-        dst_qlj_params = jax.ops.index_update(dst_qlj_params, jax.ops.index[:, 1], sig_eps[:, 0])
-        dst_qlj_params = jax.ops.index_update(dst_qlj_params, jax.ops.index[:, 2], sig_eps[:, 1])
+        dst_qlj_params = standard_qlj_typer(self.mol)
 
         combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
         lambda_plane_idxs = np.zeros(self.mol.GetNumAtoms(), dtype=np.int32)
@@ -410,12 +408,8 @@ class BaseTopologyStandardDecoupling(BaseTopology):
         ff_lj_params):
 
         # mol is standardized into a forcefield independent state.
-        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
-        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], _STANDARD_CHARGE)
-
-        sig_eps = simple_lj_typer(self.mol)
-        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 1], sig_eps[:, 0])
-        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 2], sig_eps[:, 1])
+        _, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+        qlj_params = standard_qlj_typer(self.mol)
 
         return qlj_params, nb_potential
 
@@ -545,7 +539,27 @@ class DualTopology(ABC):
 
         combined_params = jnp.concatenate([proper_params, improper_params])
         combined_idxs = np.concatenate([proper_potential.get_idxs(), improper_potential.get_idxs()])
-        combined_potential = potentials.PeriodicTorsion(combined_idxs)
+
+        proper_lambda_mult = proper_potential.get_lambda_mult()
+        proper_lambda_offset = proper_potential.get_lambda_offset()
+
+        if proper_lambda_mult is None:
+            proper_lambda_mult = np.zeros(len(proper_params))
+        if proper_lambda_offset is None:
+            proper_lambda_offset = np.ones(len(proper_params))
+
+        improper_lambda_mult = improper_potential.get_lambda_mult()
+        improper_lambda_offset = improper_potential.get_lambda_offset()
+
+        if improper_lambda_mult is None:
+            improper_lambda_mult = np.zeros(len(improper_params))
+        if improper_lambda_offset is None:
+            improper_lambda_offset = np.ones(len(improper_params))
+
+        combined_lambda_mult = np.concatenate([proper_lambda_mult, improper_lambda_mult]).astype(np.int32)
+        combined_lambda_offset = np.concatenate([proper_lambda_offset, improper_lambda_offset]).astype(np.int32)
+
+        combined_potential = potentials.PeriodicTorsion(combined_idxs, combined_lambda_mult, combined_lambda_offset)
         return combined_params, combined_potential
 
     def parameterize_proper_torsion(self, ff_params):
@@ -648,26 +662,18 @@ class DualTopologyStandardDecoupling(DualTopology):
 
         return torsion_params, torsion_potential
 
-    def parameterize_nonbonded(self,
+    def parameterize_nonbonded(
+        self,
         ff_q_params,
         ff_lj_params):
 
         # both mol_a and mol_b are standardized.
-        # we don't actually need derivatives for this stage.
-
-        # zero out/stop grad
-        ff_q_params = np.zeros_like(ff_q_params)
-        ff_lj_params = np.zeros_like(ff_lj_params)
-
-        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
-        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], _STANDARD_CHARGE)
+        _, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+        # qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], _STANDARD_CHARGE)
         mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
-        sig_eps = simple_lj_typer(mol_c)
-        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 1], sig_eps[:, 0])
-        qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 2], sig_eps[:, 1])
+        qlj_params = standard_qlj_typer(mol_c)
 
-        # ligand is already decharged by now
-        # super-ligand state should have half the epsilons
+        # ligand is already decharged, and super-ligand state should have half the epsilons
         src_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 2], qlj_params[:, 2]*0.5)
         dst_qlj_params = qlj_params
 

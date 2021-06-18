@@ -46,8 +46,7 @@ def test_base_topology_conversion_ring_torsion():
     dst_qlj_params = qlj_params[len(qlj_params)//2:]
 
     np.testing.assert_array_equal(vanilla_qlj_params, src_qlj_params)
-    np.testing.assert_array_equal(topology.simple_lj_typer(mol), dst_qlj_params[:,1:])
-    np.testing.assert_array_equal(np.zeros_like(dst_qlj_params[:,0]), dst_qlj_params[:,0])
+    np.testing.assert_array_equal(topology.standard_qlj_typer(mol), dst_qlj_params)
 
 
 def test_base_topology_conversion_r_group():
@@ -91,20 +90,38 @@ def test_base_topology_standard_decoupling():
     # be alchemically turned off.
     is_in_ring = [1,1,1,1,1,1,0,0]
 
-    for torsion_idxs, mult, offset in zip(torsion_potential.get_idxs(), torsion_potential.get_lambda_mult(), torsion_potential.get_lambda_offset()):
+    combined_decouple_torsion_params, combined_torsion_potential = mol_top.parameterize_periodic_torsion(
+        ff.pt_handle.params,
+        ff.it_handle.params
+    )
+
+    assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_idxs())
+    assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_lambda_offset())
+
+    # impropers should always be turned on.
+    num_proper_torsions = len(torsion_potential.get_idxs())
+
+    for idx, (torsion_idxs, mult, offset) in enumerate(zip(
+        combined_torsion_potential.get_idxs(),
+        combined_torsion_potential.get_lambda_mult(),
+        combined_torsion_potential.get_lambda_offset())):
         _, b, c, _ = torsion_idxs
-        assert mult == 0
-        if is_in_ring[b] != is_in_ring[c]:
-            assert offset == 0
+
+        if idx < num_proper_torsions:
+            assert mult == 0
+            if is_in_ring[b] != is_in_ring[c]:
+                assert offset == 0
+            else:
+                assert offset == 1
         else:
             assert offset == 1
+
 
     qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
 
     assert not isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
 
-    np.testing.assert_array_equal(topology.simple_lj_typer(mol), qlj_params[:,1:])
-    np.testing.assert_array_equal(np.zeros_like(qlj_params[:,0]), qlj_params[:,0])
+    np.testing.assert_array_equal(topology.standard_qlj_typer(mol), qlj_params)
 
     np.testing.assert_array_equal(nonbonded_potential.get_lambda_plane_idxs(), np.zeros(mol.GetNumAtoms(), dtype=np.int32))
     np.testing.assert_array_equal(nonbonded_potential.get_lambda_offset_idxs(), np.ones(mol.GetNumAtoms(), dtype=np.int32))
@@ -130,11 +147,30 @@ def test_dual_topology_standard_decoupling():
     #             C C C C C C O H H H H H H  C C C C C C F H H H H H H
     is_in_ring = [1,1,1,1,1,1,0,0,0,0,0,0,0, 1,1,1,1,1,1,0,0,0,0,0,0,0]
 
-    for torsion_idxs, mult, offset in zip(torsion_potential.get_idxs(), torsion_potential.get_lambda_mult(), torsion_potential.get_lambda_offset()):
+    combined_decouple_torsion_params, combined_torsion_potential = mol_top.parameterize_periodic_torsion(
+        ff.pt_handle.params,
+        ff.it_handle.params
+    )
+
+    assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_idxs())
+    assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_lambda_offset())
+
+    # impropers should always be turned on.
+    num_proper_torsions = len(torsion_potential.get_idxs())
+
+    for idx, (torsion_idxs, mult, offset) in enumerate(zip(
+        combined_torsion_potential.get_idxs(),
+        combined_torsion_potential.get_lambda_mult(),
+        combined_torsion_potential.get_lambda_offset())):
         _, b, c, _ = torsion_idxs
-        assert mult == 0
-        if is_in_ring[b] != is_in_ring[c]:
-            assert offset == 0
+
+        if idx < num_proper_torsions:
+            assert mult == 0
+            if is_in_ring[b] != is_in_ring[c]:
+                assert offset == 0
+            else:
+                assert offset == 1
+
         else:
             assert offset == 1
 
@@ -142,19 +178,17 @@ def test_dual_topology_standard_decoupling():
 
     assert isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
 
-    expected_lj = topology.simple_lj_typer(mol_c)
-    expected_lj[:, 1] = expected_lj[:, 1]/2
+    expected_qlj = topology.standard_qlj_typer(mol_c)
+    expected_qlj[:, 2] = expected_qlj[:, 2]/2 # eps should be halved
 
     src_qlj_params = qlj_params[:len(qlj_params)//2]
     dst_qlj_params = qlj_params[len(qlj_params)//2:]
 
-    np.testing.assert_array_equal(src_qlj_params[:, 0], np.zeros(mol_c.GetNumAtoms()))
-    np.testing.assert_array_equal(src_qlj_params[:, 1:], expected_lj)
+    np.testing.assert_array_equal(src_qlj_params, expected_qlj)
 
-    expected_lj = topology.simple_lj_typer(mol_c)
+    expected_qlj = topology.standard_qlj_typer(mol_c)
 
-    np.testing.assert_array_equal(dst_qlj_params[:, 0], np.zeros(mol_c.GetNumAtoms()))
-    np.testing.assert_array_equal(dst_qlj_params[:, 1:], expected_lj)
+    np.testing.assert_array_equal(dst_qlj_params, expected_qlj)
 
     combined_lambda_plane_idxs = nonbonded_potential.get_lambda_plane_idxs()
     combined_lambda_offset_idxs = nonbonded_potential.get_lambda_offset_idxs()
