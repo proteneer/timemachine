@@ -67,6 +67,7 @@ def compute_specific_pairs(conf, params, box, inds_l, inds_r, beta: float, cutof
     sig_ij = sig[inds_l] + sig[inds_r]
     eps_ij = eps[inds_l] * eps[inds_r]
     eps_ij = np.where(keep_mask, eps_ij, 0)
+    sig_ij = np.where(keep_mask, sig_ij, 0)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
     # Coulomb
