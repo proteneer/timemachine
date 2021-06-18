@@ -19,6 +19,9 @@ def get_romol_conf(mol):
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
     return guest_conf/10 # from angstroms to nm
 
+class UnsupportedTopology(Exception):
+    pass
+
 class BaseFreeEnergy():
 
     @staticmethod
@@ -157,17 +160,14 @@ class RelativeFreeEnergy(BaseFreeEnergy):
     def prepare_vacuum_edge(self, ff_params):
         """
         Prepares the vacuum system.
-
         Parameters
         ----------
         ff_params: tuple of np.array
             Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
-
         Returns
         -------
         4 tuple
             unbound_potentials, system_parameters, combined_masses, combined_coords
-
         """
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
         ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
@@ -185,23 +185,18 @@ class RelativeFreeEnergy(BaseFreeEnergy):
     def prepare_host_edge(self, ff_params, host_system, host_coords):
         """
         Prepares the host-edge system
-
         Parameters
         ----------
         ff_params: tuple of np.array
             Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
-
         host_system: openmm.System
             openmm System object to be deserialized
-
         host_coords: np.array
             Nx3 array of atomic coordinates
-
         Returns
         -------
         4 tuple
             unbound_potentials, system_params, combined_masses, combined_coords
-
         """
 
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
@@ -222,6 +217,65 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
 
         return final_potentials, final_params, combined_masses, combined_coords
+
+
+
+# this class is serializable.
+class RelativeDualTopologyFreeEnergy(BaseFreeEnergy):
+
+    def __init__(self, dual_topology: topology.DualTopology, label=None, complex_path=None):
+        self.top = dual_topology
+        self.label = label
+        self.complex_path = complex_path
+
+    @property
+    def mol_a(self):
+        return self.top.mol_a
+
+    @property
+    def mol_b(self):
+        return self.top.mol_b
+
+    @property
+    def ff(self):
+        return self.top.ff
+
+    def prepare_host_edge(self, ff_params, host_system):
+        """
+        Prepares the host-edge system
+        Parameters
+        ----------
+        ff_params: tuple of np.array
+            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+        host_system: openmm.System
+            openmm System object to be deserialized
+
+        Returns
+        -------
+        3-tuple
+            unbound_potentials, system_params, combined_masses
+
+        """
+
+        ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
+        ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
+
+        # extract the 0th conformer
+        ligand_coords_a = get_romol_conf(self.mol_a)
+        ligand_coords_b = get_romol_conf(self.mol_b)
+
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+
+        hgt = topology.HostGuestTopology(host_bps, self.top)
+
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
+
+        combined_masses = np.concatenate([host_masses, ligand_masses_a, ligand_masses_b])
+
+        return final_potentials, final_params, combined_masses
+
+
+
 
 
 class RBFETransformIndex:
@@ -274,5 +328,17 @@ def construct_lambda_schedule(num_windows):
     ])
 
     assert len(lambda_schedule) == num_windows
+
+    return lambda_schedule
+
+
+def construct_absolute_lambda_schedule(num_windows):
+    A = int(0.70 * num_windows)
+    B = num_windows - A
+
+    lambda_schedule = np.concatenate([
+        np.linspace(0.0, 0.3, A, endpoint=False),
+        np.linspace(0.3, 1.0, B, endpoint=True)
+    ])
 
     return lambda_schedule
