@@ -46,17 +46,6 @@ from typing import NamedTuple, Optional
 Array = np.array
 
 
-class Params(NamedTuple):
-    sig: Array
-    eps: Array
-    charges: Array
-
-
-class Particles(NamedTuple):
-    coords: Array
-    params: Params
-
-
 def lennard_jones(dij, sig_ij, eps_ij):
     sig6 = (sig_ij / dij) ** 6
     sig12 = sig6 ** 2
@@ -64,31 +53,31 @@ def lennard_jones(dij, sig_ij, eps_ij):
     return 4 * eps_ij * (sig12 - sig6)
 
 
-def compute_nonbonded_terms(particles_i: Particles, particles_j: Particles,
-                            box: Array, beta: float, cutoff: Optional[float] = None):
+def compute_specific_pairs(conf, params, box, inds_l, inds_r, beta: float, cutoff: Optional[float] = None):
 
     # distances and cutoff
-    dij = distance_on_pairs(particles_i.coords, particles_j.coords, box)
+    dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
     if cutoff is None:
         cutoff = np.inf
     keep_mask = dij <= cutoff
 
+    charges, sig, eps = params.T
+
     # Lennard-Jones
-    sig_ij = particles_i.params.sig + particles_j.params.sig
-    eps_ij = particles_i.params.eps * particles_j.params.eps
+    sig_ij = sig[inds_l] + sig[inds_r]
+    eps_ij = eps[inds_l] * eps[inds_r]
     eps_ij = np.where(keep_mask, eps_ij, 0)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
     # Coulomb
-    qij = particles_i.params.charges * particles_j.params.charges
-    # funny enough lim_{x->0} erfc(x)/x = 0
+    qij = charges[inds_l] * charges[inds_r]
     coulomb = qij * erfc(beta * dij) / dij
     coulomb = np.where(keep_mask, coulomb, 0)
 
     return lj, coulomb
 
 
-def nonbonded(
+def _nonbonded_v3_clone(
         conf,
         params,
         box,
@@ -114,23 +103,11 @@ def nonbonded(
         box_4d = index_update(box_4d, index[:3, :3], box)
     box = box_4d
 
-    charges = params[:, 0]
-    sig = params[:, 1]
-    eps = params[:, 2]
-
+    # TODO: break this into more manageable blocks
     inds_i, inds_j = get_all_pairs_indices(N)
     # n_interactions = len(inds_i)
 
-    particles_i = Particles(
-        coords=conf[inds_i],
-        params=Params(sig=sig[inds_i], eps=eps[inds_i], charges=charges[inds_i])
-    )
-    particles_j = Particles(
-        coords=conf[inds_j],
-        params=Params(sig=sig[inds_j], eps=eps[inds_j], charges=charges[inds_j])
-    )
-
-    lj, coulomb = compute_nonbonded_terms(particles_i, particles_j, box, beta, cutoff)
+    lj, coulomb = compute_specific_pairs(conf, params, box, inds_i, inds_j, beta, cutoff)
 
     if (cutoff is not None) and runtime_validate:
         validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
@@ -149,7 +126,9 @@ def nonbonded_v3(
     beta,
     cutoff,
     lambda_plane_idxs,
-    lambda_offset_idxs):
+    lambda_offset_idxs,
+    runtime_validate=False,
+):
     """Lennard-Jones + Coulomb, with a few important twists:
     * distances are computed in 4D, controlled by lambda, lambda_plane_idxs, lambda_offset_idxs
     * each pairwise LJ and Coulomb term can be multiplied by an adjustable rescale_mask parameter
@@ -220,7 +199,8 @@ def nonbonded_v3(
     keep_mask = np.where(eps_ij != 0, keep_mask, 0)
 
     if cutoff is not None:
-        validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
+        if runtime_validate:
+            validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
         eps_ij = np.where(dij < cutoff, eps_ij, 0)
 
     # (ytz): this avoids a nan in the gradient in both jax and tensorflow

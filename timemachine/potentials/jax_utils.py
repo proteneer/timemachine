@@ -1,7 +1,7 @@
 import jax.numpy as np
 import numpy as onp
 import jax
-from jax.ops import index_update, index
+from jax.ops import index_update
 
 from typing import Tuple
 Array = onp.array

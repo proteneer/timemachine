@@ -6,7 +6,7 @@ jax.config.update("jax_enable_x64", True)
 import numpy as onp
 from numpy.random import randn, rand, randint
 from jax import numpy as np, value_and_grad, jit
-from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded
+from timemachine.potentials.nonbonded import nonbonded_v3, _nonbonded_v3_clone
 
 
 def generate_random_inputs(n_atoms, dim=3):
@@ -53,8 +53,8 @@ def compare_two_potentials(u_a, u_b, args, differentiate_wrt=(0, 1, 3)):
 
 
 def test_jax_nonbonded():
-    u_a, u_b = nonbonded_v3, nonbonded
+    u_a, u_b = nonbonded_v3, _nonbonded_v3_clone
     args = generate_random_inputs(20, 3)
 
     compare_two_potentials(u_a, u_b, args)
-    compare_two_potentials(u_a, jit(u_b), args)
+    compare_two_potentials(jit(u_a), jit(u_b), args)
