@@ -14,8 +14,9 @@ from typing import Tuple, Callable
 Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = np.array
 Lamb = Beta = Cutoff = Energy = float
 
-NonbondedArgs = Tuple[Conf, Params, Box, Lamb, ChargeMask, LJMask, Beta, Cutoff, LambdaPlaneIdxs, LambdaOffsetIdxs]
-NonbondedFxn = Callable[[*NonbondedArgs], Energy]
+nonbonded_args = Conf, Params, Box, Lamb, ChargeMask, LJMask, Beta, Cutoff, LambdaPlaneIdxs, LambdaOffsetIdxs
+NonbondedArgs = Tuple[nonbonded_args]
+NonbondedFxn = Callable[[*nonbonded_args], Energy]
 
 
 def generate_random_inputs(n_atoms: int, dim: int = 3) -> NonbondedArgs:
