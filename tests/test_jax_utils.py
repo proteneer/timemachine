@@ -67,3 +67,26 @@ def test_get_group_group_indices():
 
         assert len(inds_i) == n * m
 
+
+def test_compute_lifting_parameter():
+    cutoff = 5.0
+
+    lambda_plane_idxs = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
+    lambda_offset_idxs = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
+
+    w0 = compute_lifting_parameter(0.0, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+    onp.testing.assert_allclose(w0, cutoff * lambda_offset_idxs)
+
+    w1 = compute_lifting_parameter(1.0, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+    onp.testing.assert_allclose(w1, cutoff * (lambda_offset_idxs + lambda_plane_idxs))
+
+
+def test_augment_dim():
+    for _ in range(5):
+        n = onp.random.randint(5, 10)
+        xyz = onp.random.randn(n, 3)
+        w = onp.random.randn(n)
+
+        xyzw = augment_dim(xyz, w)
+        onp.testing.assert_allclose(xyzw[:, :3], xyz)
+        onp.testing.assert_allclose(xyzw[:, -1], w)
