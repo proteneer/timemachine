@@ -238,13 +238,13 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     tibar_dG = 0
     for lambda_idx in range(len(model.lambda_schedule) - 1):
-        fwd_work = ti_results[lambda_idx].du_dls
-        rev_work = -ti_results[lambda_idx+1].du_dls
         delta_lamb = model.lambda_schedule[lambda_idx+1] - model.lambda_schedule[lambda_idx]
+        fwd_work = ti_results[lambda_idx].du_dls*delta_lamb
+        rev_work = -ti_results[lambda_idx+1].du_dls*delta_lamb
         tibar, err = pymbar.BAR(model.beta*fwd_work, model.beta*rev_work)
         overlap = endpoint_correction.overlap_from_cdf(fwd_work, rev_work)
-        print("tibar", (tibar/model.beta), "delta", delta_lamb, "overlap", overlap, "increment", (tibar/model.beta)*delta_lamb)
-        tibar_dG += (tibar/model.beta)*delta_lamb
+        print("tibar", tibar/model.beta, "delta", delta_lamb, "overlap", overlap)
+        tibar_dG += tibar/model.beta
 
     dG = np.trapz(mean_du_dls, model.lambda_schedule)
     dG_grad = []
