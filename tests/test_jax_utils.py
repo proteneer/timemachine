@@ -47,3 +47,23 @@ def test_delta_r():
 
         onp.testing.assert_allclose(dij, dji)
 
+
+def test_get_all_pairs_indices():
+    ns = onp.random.randint(5, 50, 10)
+    for n in ns:
+        inds_i, inds_j = get_all_pairs_indices(n)
+        assert (inds_i < inds_j).all()
+        assert (inds_j < n).all()
+
+
+def test_get_group_group_indices():
+    ns = onp.random.randint(5, 50, 10)
+    ms = onp.random.randin(5, 50, 10)
+
+    for n, m in zip(ns, ms):
+        inds_i, inds_j = get_group_group_indices(n, m)
+        assert (inds_i < n).all()
+        assert (inds_j < m).all()
+
+        assert len(inds_i) == n * m
+
