@@ -33,7 +33,9 @@ def get_group_group_indices(n: int, m: int) -> Tuple[Array, Array]:
 
 
 def compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
-    """
+    """One way to compute a per-particle "4D" offset in terms of an adjustable lamb and
+    constant per-particle parameters.
+
     Notes
     -----
     (ytz): this initializes the 4th dimension to a fixed plane adjust by an offset
@@ -85,7 +87,6 @@ def rescale_coordinates(
     offset = new_centers - mol_centers
 
     return conf + offset[indices]
-
 
 def delta_r(ri, rj, box=None):
     diff = ri - rj # this can be either N,N,3 or B,3
