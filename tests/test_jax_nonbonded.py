@@ -6,7 +6,10 @@ from numpy.random import randn, rand, randint, seed
 seed(2021)
 
 from jax import numpy as np, value_and_grad, jit
-from timemachine.potentials.nonbonded import nonbonded_v3, _nonbonded_v3_clone
+
+from jax.ops import index_update, index
+from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded_v3_on_specific_pairs
+from timemachine.potentials.jax_utils import convert_to_4d, get_all_pairs_indices
 
 from functools import partial
 from typing import Tuple, Callable
@@ -62,6 +65,46 @@ def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: Nonbonded
     onp.testing.assert_almost_equal(energy_a, energy_b)
     for (g_a, g_b) in zip(gradients_a, gradients_b):
         onp.testing.assert_allclose(g_a, g_b)
+
+
+def _nonbonded_v3_clone(
+        conf,
+        params,
+        box,
+        lamb,
+        charge_rescale_mask,
+        lj_rescale_mask,
+        beta,
+        cutoff,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
+        runtime_validate=False,
+):
+    """See docstring of nonbonded_v3 for more details
+
+    This is here just for testing purposes...
+    """
+
+    N = conf.shape[0]
+
+    if conf.shape[-1] == 3:
+        conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
+
+    # make 4th dimension of box large enough so its roughly aperiodic
+    if box is not None:
+        box_4d = np.eye(4) * 1000
+        box_4d = index_update(box_4d, index[:3, :3], box)
+    box = box_4d
+
+    # TODO: break this into more manageable blocks
+    inds_i, inds_j = get_all_pairs_indices(N)
+    # n_interactions = len(inds_i)
+
+    lj, coulomb = nonbonded_v3_on_specific_pairs(conf, params, box, inds_i, inds_j, beta, cutoff)
+
+    eij_total = lj * lj_rescale_mask[inds_i, inds_j] + coulomb * charge_rescale_mask[inds_i, inds_j]
+
+    return np.sum(eij_total)
 
 
 def test_jax_nonbonded(n_instances=10):

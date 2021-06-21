@@ -10,75 +10,29 @@ def switch_fn(dij, cutoff):
     return np.power(np.cos((np.pi * np.power(dij, 8)) / (2 * cutoff)), 2)
 
 
-"""
-TODO:
-* refactor Jax nonbonded to accept specific interacting particle pairs,
-    given by arrays particles_i, particles_j where len(particles_i) == len(particles_j)
-    rather than a single collection of particles.
-
-    Intent:
-        * be able to work with pre-defined neighbor lists
-        * be able to evaluate batches of interactions during parallel monte carlo moves
-            (e.g. where particles_i is a large collection of trial positions for a displaced particle
-            and particles_j are all the other "frozen" coordinates)
-        * be able to evaluate just the alchemical interactions
-    Will require:
-        * refactoring distance(x, box) function
-* refactor nonbonded_v3 to output "per atom" energies, so that a collection of trial moves can be scored in a batch
-    for the MC use case above
-* refactor nonbonded_v3 to accept 4d offset w directly, rather than hard-coding that w must be computed using
-    lamb, lambda_plane_idxs, lambda_offset_idxs
-        Intent:
-            * protocol optimization
-* restore nonbonded_v3's JIT-ability -- the branch in validate_coulomb_cutoff makes it JIT-unfriendly!
-* add utility function using np.triu_indices to get all-pairs interactions,
-    without while avoiding need for dij keep_mask
-* point of uncertainty:
-    will making this change have any performance impact?
-* possibly reduce the number of arguments?
-    (currently 10)
-* possibly make the signatures more "type-stable"?
-    (for example, if conf.shape[1] == 4, we use a code path where 3 required arguments are ignored)
-"""
-
-from typing import NamedTuple, Optional
+from typing import Optional
 
 Array = np.array
 
 
 def lennard_jones(dij, sig_ij, eps_ij):
+    """https://en.wikipedia.org/wiki/Lennard-Jones_potential"""
     sig6 = (sig_ij / dij) ** 6
     sig12 = sig6 ** 2
 
     return 4 * eps_ij * (sig12 - sig6)
 
 
-def compute_specific_pairs(conf, params, box, inds_l, inds_r, beta: float, cutoff: Optional[float] = None):
-
-    # distances and cutoff
-    dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
-    if cutoff is None:
-        cutoff = np.inf
-    keep_mask = dij <= cutoff
-
-    charges, sig, eps = params.T
-
-    # Lennard-Jones
-    sig_ij = sig[inds_l] + sig[inds_r]
-    eps_ij = eps[inds_l] * eps[inds_r]
-    eps_ij = np.where(keep_mask, eps_ij, 0)
-    sig_ij = np.where(keep_mask, sig_ij, 0)
-    lj = lennard_jones(dij, sig_ij, eps_ij)
-
-    # Coulomb
-    qij = charges[inds_l] * charges[inds_r]
-    coulomb = qij * erfc(beta * dij) / dij
-    coulomb = np.where(keep_mask, coulomb, 0)
-
-    return lj, coulomb
+def direct_space_pme(dij, qij, beta):
+    """Direct-space contribution from eq 2 of:
+        Darden, York, Pedersen, 1993, J. Chem. Phys.
+        "Particle mesh Ewald: An N log(N) method for Ewald sums in large systems"
+        https://aip.scitation.org/doi/abs/10.1063/1.470117
+    """
+    return qij * erfc(beta * dij) / dij
 
 
-def _nonbonded_v3_clone(
+def nonbonded_v3(
         conf,
         params,
         box,
@@ -91,49 +45,11 @@ def _nonbonded_v3_clone(
         lambda_offset_idxs,
         runtime_validate=False,
 ):
-    """See docstring of nonbonded_v3 for more details"""
-
-    N = conf.shape[0]
-
-    if conf.shape[-1] == 3:
-        conf = convert_to_4d(conf, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-
-    # make 4th dimension of box large enough so its roughly aperiodic
-    if box is not None:
-        box_4d = np.eye(4) * 1000
-        box_4d = index_update(box_4d, index[:3, :3], box)
-    box = box_4d
-
-    # TODO: break this into more manageable blocks
-    inds_i, inds_j = get_all_pairs_indices(N)
-    # n_interactions = len(inds_i)
-
-    lj, coulomb = compute_specific_pairs(conf, params, box, inds_i, inds_j, beta, cutoff)
-
-    if (cutoff is not None) and runtime_validate:
-        validate_coulomb_cutoff(cutoff, beta, threshold=1e-2)
-
-    eij_total = lj * lj_rescale_mask[inds_i, inds_j] + coulomb * charge_rescale_mask[inds_i, inds_j]
-
-    return np.sum(eij_total)
-
-def nonbonded_v3(
-    conf,
-    params,
-    box,
-    lamb,
-    charge_rescale_mask,
-    lj_rescale_mask,
-    beta,
-    cutoff,
-    lambda_plane_idxs,
-    lambda_offset_idxs,
-    runtime_validate=False,
-):
     """Lennard-Jones + Coulomb, with a few important twists:
     * distances are computed in 4D, controlled by lambda, lambda_plane_idxs, lambda_offset_idxs
     * each pairwise LJ and Coulomb term can be multiplied by an adjustable rescale_mask parameter
     * Coulomb terms are multiplied by erfc(beta * distance)
+
     Parameters
     ----------
     conf : (N, 3) or (N, 4) np.array
@@ -155,9 +71,11 @@ def nonbonded_v3(
         between their 4D coordinates exceeds cutoff
     lambda_plane_idxs : Optional (N,) np.array
     lambda_offset_idxs : Optional (N,) np.array
+
     Returns
     -------
     energy : float
+
     References
     ----------
     * Rodinger, Howell, Pomès, 2005, J. Chem. Phys. "Absolute free energy calculations by thermodynamic integration in four spatial
@@ -174,7 +92,7 @@ def nonbonded_v3(
 
     # make 4th dimension of box large enough so its roughly aperiodic
     if box is not None:
-        box_4d = np.eye(4)*1000
+        box_4d = np.eye(4) * 1000
         box_4d = index_update(box_4d, index[:3, :3], box)
     else:
         box_4d = None
@@ -196,7 +114,7 @@ def nonbonded_v3(
 
     dij = distance(conf, box)
 
-    keep_mask = np.ones((N,N)) - np.eye(N)
+    keep_mask = np.ones((N, N)) - np.eye(N)
     keep_mask = np.where(eps_ij != 0, keep_mask, 0)
 
     if cutoff is not None:
@@ -208,18 +126,18 @@ def nonbonded_v3(
     sig_ij = np.where(keep_mask, sig_ij, 0)
     eps_ij = np.where(keep_mask, eps_ij, 0)
 
-    inv_dij = 1/dij
+    inv_dij = 1 / dij
     inv_dij = np.where(np.eye(N), 0, inv_dij)
 
-    sig2 = sig_ij*inv_dij
+    sig2 = sig_ij * inv_dij
     sig2 *= sig2
-    sig6 = sig2*sig2*sig2
+    sig6 = sig2 * sig2 * sig2
 
-    eij_lj = 4*eps_ij*(sig6-1.0)*sig6
+    eij_lj = 4 * eps_ij * (sig6 - 1.0) * sig6
     eij_lj = np.where(keep_mask, eij_lj, 0)
 
-    qi = np.expand_dims(charges, 0) # (1, N)
-    qj = np.expand_dims(charges, 1) # (N, 1)
+    qi = np.expand_dims(charges, 0)  # (1, N)
+    qj = np.expand_dims(charges, 1)  # (N, 1)
     qij = np.multiply(qi, qj)
 
     # (ytz): trick used to avoid nans in the diagonal due to the 1/dij term.
@@ -228,13 +146,41 @@ def nonbonded_v3(
     dij = np.where(keep_mask, dij, 0)
 
     # funny enough lim_{x->0} erfc(x)/x = 0
-    eij_charge = np.where(keep_mask, qij*erfc(beta*dij)*inv_dij, 0) # zero out diagonals
+    eij_charge = np.where(keep_mask, qij * erfc(beta * dij) * inv_dij, 0)  # zero out diagonals
     if cutoff is not None:
         eij_charge = np.where(dij > cutoff, 0, eij_charge)
 
-    eij_total = (eij_lj*lj_rescale_mask + eij_charge*charge_rescale_mask)
+    eij_total = (eij_lj * lj_rescale_mask + eij_charge * charge_rescale_mask)
 
-    return np.sum(eij_total/2)
+    return np.sum(eij_total / 2)
+
+
+def nonbonded_v3_on_specific_pairs(conf, params, box, inds_l, inds_r, beta: float, cutoff: Optional[float] = None):
+    """See nonbonded_v3 docstring for more details"""
+
+    # distances and cutoff
+    dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
+    if cutoff is None:
+        cutoff = np.inf
+    keep_mask = dij <= cutoff
+
+    def apply_cutoff(x):
+        return np.where(keep_mask, x, 0)
+
+    charges, sig, eps = params.T
+
+    # vdW by Lennard-Jones
+    sig_ij = apply_cutoff(sig[inds_l] + sig[inds_r])
+    eps_ij = apply_cutoff(eps[inds_l] * eps[inds_r])
+    vdW = lennard_jones(dij, sig_ij, eps_ij)
+
+    # Electrostatics by direct-space part of PME
+    qij = charges[inds_l] * charges[inds_r]
+    electrostatics = direct_space_pme(dij, qij, beta)
+    electrostatics = apply_cutoff(electrostatics)
+
+    return vdW, electrostatics
+
 
 def validate_coulomb_cutoff(cutoff=1.0, beta=2.0, threshold=1e-2):
     """check whether f(r) = erfc(beta * r) <= threshold at r = cutoff
