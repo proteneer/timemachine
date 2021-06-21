@@ -146,6 +146,17 @@ if __name__ == "__main__":
 
     M = len(dataset.data)
 
+
+    for epoch in range(100):
+
+        i = 0
+
+        mol_a = dataset.data[i]
+
+        dG_a = model_absolute.predict(ordered_params, mol_a, prefix='solvent_absolute_'+mol_a.GetProp('_Name'))
+
+    assert 0
+
     for epoch in range(100):
 
         for i in range(M):
