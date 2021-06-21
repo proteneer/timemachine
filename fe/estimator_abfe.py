@@ -242,6 +242,8 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         rev_work = -ti_results[lambda_idx+1].du_dls
         delta_lamb = model.lambda_schedule[lambda_idx+1] - model.lambda_schedule[lambda_idx]
         tibar, err = pymbar.BAR(model.beta*fwd_work, model.beta*rev_work)
+        overlap = endpoint_correction.overlap_from_cdf(fwd_work, rev_work)
+        print("tibar increment", (tibar/model.beta), "delta", delta_lamb, "overlap", overlap)
         tibar_dG += (tibar/model.beta)*delta_lamb
 
     dG = np.trapz(mean_du_dls, model.lambda_schedule)
