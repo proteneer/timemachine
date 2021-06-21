@@ -236,6 +236,14 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         mean_du_dls.append(np.mean(result.du_dls))
         all_grads.append(result.du_dps)
 
+    tibar_dG = 0
+    for lambda_idx in range(len(model.lambda_schedule) - 1):
+        fwd_work = ti_results[lambda_idx].du_dls
+        rev_work = -ti_results[lambda_idx+1].du_dls
+        delta_lamb = model.lambda_schedule[lambda_idx+1] - model.lambda_schedule[lambda_idx]
+        tibar, err = pymbar.BAR(model.beta*fwd_work, model.beta*rev_work)
+        tibar_dG += (tibar/model.beta)*delta_lamb
+
     dG = np.trapz(mean_du_dls, model.lambda_schedule)
     dG_grad = []
     for rhs, lhs in zip(all_grads[-1], all_grads[0]):
@@ -267,10 +275,10 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         overlap = endpoint_correction.overlap_from_cdf(lhs_du, rhs_du)
         lhs_mean = np.mean(lhs_du)
         rhs_mean = np.mean(rhs_du)
-        print(f"{model.prefix} dG_ti {dG:.3f} dG_endpoint {dG_endpoint:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
+        print(f"{model.prefix} dG_ti {dG:.3f} tibar_dG {tibar_dG:.3f} dG_endpoint {dG_endpoint:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
         dG += dG_endpoint + dG_ssc_translation + dG_ssc_rotation
     else:
-        print(f"{model.prefix} dG_ti {dG:.3f}")
+        print(f"{model.prefix} dG_ti {dG:.3f} tibar_dG {tibar_dG:.3f}")
 
     return (dG, results), dG_grad
 
