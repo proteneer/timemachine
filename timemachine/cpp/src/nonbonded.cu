@@ -393,9 +393,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     }
 
     gpuErrchk(cudaPeekAtLastError());
-    k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_sorted_w_);
-    gpuErrchk(cudaPeekAtLastError());
-    k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_dw_dl_, d_sorted_dw_dl_);
+    k_permute_2x<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_dw_dl_, d_sorted_w_, d_sorted_dw_dl_);
     gpuErrchk(cudaPeekAtLastError());
 
     // look up which kernel we need for this computation
