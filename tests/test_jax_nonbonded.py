@@ -66,7 +66,7 @@ def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: Nonbonded
 
 def test_jax_nonbonded(n_instances=10):
     """Assert that nonbonded_v3 and _nonbonded_v3 agree on several random instances"""
-    u_a, u_b = nonbonded_v3, _nonbonded_v3_clone
+    u_a, u_b = jit(nonbonded_v3), jit(_nonbonded_v3_clone)
     jit_u_a, jit_u_b = jit(u_a), jit(u_b)
 
     min_size, max_size = 10, 50
@@ -76,6 +76,4 @@ def test_jax_nonbonded(n_instances=10):
 
     for n_atoms, dim in zip(random_sizes, dims):
         args = generate_random_inputs(n_atoms, dim)
-
         compare_two_potentials(u_a, u_b, args)
-        compare_two_potentials(jit_u_a, jit_u_b, args)
