@@ -34,7 +34,7 @@ def unflatten(aux_data, children):
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
 def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_steps, prod_steps,
-    x_interval=50, du_dl_interval=5):
+    x_interval=50, du_dl_interval=200):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
