@@ -267,7 +267,7 @@ class RelativeModel(ABC):
 
         # setup restraints and align to the blocker
         num_host_atoms = len(self.host_coords)
-        combined_topology = model_utils.generate_topology(
+        combined_topology = model_utils.generate_openmm_topology(
             [self.host_topology, mol_a, mol_b],
             self.host_coords,
             prefix+".pdb"
