@@ -136,6 +136,8 @@ def test_vmap():
 
     # signature: conf -> ljs, coulombs, where ljs.shape == (n_interactions, )
     u_pairs = partial(nonbonded_v3_on_specific_pairs, **fixed_kwargs)
+    ljs, coulombs = u_pairs(conf)
+    assert ljs.shape == (n_interactions, )
 
     def u(conf):
         ljs, coulombs = u_pairs(conf)
