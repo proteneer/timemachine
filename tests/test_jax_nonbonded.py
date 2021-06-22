@@ -138,5 +138,6 @@ def test_vmap():
     vmapped = jit(vmap(u))
     n_snapshots = 100
     confs = onp.random.randn(n_snapshots, n_total, 3)
-    us = vmapped(confs)
+    ljs, coulombs = vmapped(confs)
+    us = ljs + coulombs
     assert us.shape == (n_snapshots, )
