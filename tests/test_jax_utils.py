@@ -58,7 +58,7 @@ def test_get_all_pairs_indices():
 
 def test_get_group_group_indices():
     ns = onp.random.randint(5, 50, 10)
-    ms = onp.random.randin(5, 50, 10)
+    ms = onp.random.randint(5, 50, 10)
 
     for n, m in zip(ns, ms):
         inds_i, inds_j = get_group_group_indices(n, m)
