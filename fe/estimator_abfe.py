@@ -23,18 +23,20 @@ class SimulationResult:
    boxes: np.array
    du_dls: np.array
    du_dps: np.array
+   left_dus: np.array
+   right_dus: np.array
 
 def flatten(v):
-    return tuple(), (v.xs, v.boxes, v.du_dls, v.du_dps)
+    return tuple(), (v.xs, v.boxes, v.du_dls, v.du_dps, v.left_dus, v.right_dus)
 
 def unflatten(aux_data, children):
-    xs, boxes, du_dls, du_dps = aux_data
-    return SimulationResult(xs, boxes, du_dls, du_dps)
+    xs, boxes, du_dls, du_dps, left_dus, right_dus = aux_data
+    return SimulationResult(xs, boxes, du_dls, du_dps, left_dus, right_dus)
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
 def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_steps, prod_steps,
-    x_interval=50, du_dl_interval=200):
+    x_interval=50, du_dl_interval=200, lambda_left=None, lambda_right=None):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
@@ -74,6 +76,12 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     du_dl_interval: int
         how often we store du_dls. if du_dl_interval == 0 then
         no du_dls are returned
+
+    lambda_left: float or None
+        lhs lambda value
+
+    lambda_right: float or None
+        rhs lambda value
 
     Returns
     -------
@@ -140,7 +148,60 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     for obs in du_dp_obs:
         grads.append(obs.avg_du_dp())
 
-    result = SimulationResult(xs=xs, boxes=boxes, du_dls=full_du_dls, du_dps=grads)
+    # gather delta_Us
+    unbound_impls = []
+    unbound_params = []
+    for bp in final_potentials:
+        impl = bp.unbound_impl(np.float32)
+        unbound_impls.append(impl)
+        unbound_params.append(bp.params)
+
+    if lambda_left is not None or lambda_right is not None:
+        center_Us = []
+        for x, b in zip(xs, boxes):
+            u = 0
+            for ub, p in zip(unbound_impls, unbound_params):
+                _, _, _, nrg = ub.execute_selective(x, p, b, lamb, False, False, False, True)
+                u += nrg
+            center_Us.append(u)
+
+    if lambda_left is not None:
+        left_Us = []
+        for x, b in zip(xs, boxes):
+            u = 0
+            for ub, p in zip(unbound_impls, unbound_params):
+                _, _, _, nrg = ub.execute_selective(x, p, b, lambda_left, False, False, False, True)
+                u += nrg
+            left_Us.append(u)
+        left_dus = []
+        for lu, cu in zip(left_Us, center_Us):
+            left_dus.append(lu - cu)
+    else:
+        left_dus = None
+
+    if lambda_right is not None:
+        right_Us = []
+        for x, b in zip(xs, boxes):
+            u = 0
+            for ub, p in zip(unbound_impls, unbound_params):
+                _, _, _, nrg = ub.execute_selective(x, p, b, lambda_right, False, False, False, True)
+                u += nrg
+            right_Us.append(u)
+        right_dus = []
+        for ru, cu in zip(right_Us, center_Us):
+            right_dus.append(ru - cu)
+    else:
+        right_dus = None
+
+    result = SimulationResult(
+        xs=xs,
+        boxes=boxes,
+        du_dls=full_du_dls,
+        du_dps=grads,
+        left_dus=np.array(left_dus),
+        right_dus=np.array(right_dus)
+    )
+
     return result
 
 
@@ -180,7 +241,17 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         if model.endpoint_correct and lamb_idx == len(model.lambda_schedule) - 1:
             x_interval = 200
         else:
-            x_interval = 10000
+            x_interval = 200
+
+        if lamb_idx == 0:
+            lambda_left = None
+        else:
+            lambda_left = model.lambda_schedule[lamb_idx-1]
+
+        if lamb_idx == len(model.lambda_schedule) - 1:
+            lambda_right = None
+        else:
+            lambda_right = model.lambda_schedule[lamb_idx+1]
 
         all_args.append((
             lamb,
@@ -192,7 +263,10 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.barostat,
             model.equil_steps,
             model.prod_steps,
-            x_interval
+            x_interval,
+            200,
+            lambda_left,
+            lambda_right
         ))
 
     if model.endpoint_correct:
@@ -206,7 +280,10 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.barostat,
             model.equil_steps,
             model.prod_steps,
-            200
+            200,
+            200,
+            None,
+            None
         ))
 
     if model.client is None:
@@ -237,35 +314,28 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         all_grads.append(result.du_dps)
 
     tibar_dG = 0
+
+    bar_dG = 0
     for lambda_idx in range(len(model.lambda_schedule) - 1):
+        # tibar
         lamb_start = model.lambda_schedule[lambda_idx]
         lamb_end = model.lambda_schedule[lambda_idx+1]
         delta_lamb = lamb_end - lamb_start
         fwd_work = ti_results[lambda_idx].du_dls*delta_lamb
         rev_work = -ti_results[lambda_idx+1].du_dls*delta_lamb
-        tibar, err = pymbar.BAR(model.beta*fwd_work, model.beta*rev_work)
+        tibar, ti_bar_err = pymbar.BAR(model.beta*fwd_work, model.beta*rev_work)
         overlap = endpoint_correction.overlap_from_cdf(fwd_work, rev_work)
-        # print(f"{model.prefix} index {lambda_idx} lambda {lambda_window:.5f} <du/dl> {np.mean(result.du_dls):.5f} med(du/dl) {np.median(result.du_dls):.5f}  o(du/dl) {np.std(result.du_dls):.5f}")
-        print("lamb_start", lamb_start, "tibar", tibar/model.beta, "delta", delta_lamb, "overlap", overlap, "err", err/model.beta)
         tibar_dG += tibar/model.beta
 
-    bar_dG = 0
+        # exact_bar
+        fwd_work_exact = model.beta*ti_results[lambda_idx].right_dus
+        rev_work_exact = model.beta*ti_results[lambda_idx+1].left_dus
 
-    for lambda_idx in range(len(model.lambda_schedule) - 1):
-        lamb_start = model.lambda_schedule[lambda_idx]
-        lamb_end = model.lambda_schedule[lambda_idx+1]
-        delta_U
-        for x, box in zip(ti_results[lambda_idx].xs, ti_results[lambda_idx].boxes):
-        # for bp in bound_potentials:
-            bp.execute_selective(x, box, lamb_start, False, False, False, True)
-        # delta_lamb = lamb_end - lamb_start
-        # fwd_work = ti_results[lambda_idx].du_dls*delta_lamb
-        # rev_work = -ti_results[lambda_idx+1].du_dls*delta_lamb
-        # tibar, err = pymbar.BAR(model.beta*fwd_work, model.beta*rev_work)
-        # overlap = endpoint_correction.overlap_from_cdf(fwd_work, rev_work)
-        # print(f"{model.prefix} index {lambda_idx} lambda {lambda_window:.5f} <du/dl> {np.mean(result.du_dls):.5f} med(du/dl) {np.median(result.du_dls):.5f}  o(du/dl) {np.std(result.du_dls):.5f}")
-        # print("lamb_start", lamb_start, "tibar", tibar/model.beta, "delta", delta_lamb, "overlap", overlap, "err", err/model.beta)
-        # tibar_dG += tibar/model.beta
+        dG_exact, exact_bar_err = pymbar.BAR(fwd_work, rev_work)
+        bar_dG += dG_exact/model.beta
+        overlap = endpoint_correction.overlap_from_cdf(fwd_work_exact, -rev_work_exact)
+
+        print("BAR: lamb_start", lamb_start, "ti_bar", tibar/model.beta, "exact_bar", dG_exact/model.beta, "overlap", overlap, "ti_bar_err", ti_bar_err/model.beta, "exact_bar_err", exact_bar_err/model.beta)
 
     dG = np.trapz(mean_du_dls, model.lambda_schedule)
     dG_grad = []
@@ -298,10 +368,10 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         overlap = endpoint_correction.overlap_from_cdf(lhs_du, rhs_du)
         lhs_mean = np.mean(lhs_du)
         rhs_mean = np.mean(rhs_du)
-        print(f"{model.prefix} dG_ti {dG:.3f} tibar_dG {tibar_dG:.3f} dG_endpoint {dG_endpoint:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
+        print(f"{model.prefix} dG_ti {dG:.3f} tibar_dG {tibar_dG:.3f} exact_bar {bar_dG:.3f} dG_endpoint {dG_endpoint:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
         dG += dG_endpoint + dG_ssc_translation + dG_ssc_rotation
     else:
-        print(f"{model.prefix} dG_ti {dG:.3f} tibar_dG {tibar_dG:.3f}")
+        print(f"{model.prefix} dG_ti {dG:.3f} tibar_dG {tibar_dG:.3f} exact_bar {bar_dG:.3f} ")
 
     return (dG, results), dG_grad
 
