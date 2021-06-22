@@ -49,7 +49,7 @@ def apply_hmr(masses, bond_list, multiplier=2):
     return masses
 
 
-def generate_topology(objs, host_coords, out_filename):
+def generate_openmm_topology(objs, host_coords, out_filename):
     rd_mols = []
     # super jank
     for obj in objs:

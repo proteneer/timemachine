@@ -1,9 +1,6 @@
-# this script validates the endpoint correction protocol on relative hydration free energies
-
-# This script repeatedly estimates the relative binding free energy of a single edge, along with the gradient of the
-# estimate with respect to force field parameters, and adjusts the force field parameters to improve tha accuracy
-# of the free energy prediction.
-
+# This script validates the endpoint correction protocol on
+# relative hydration free energies by comparing two absolute differences
+# against the relative difference.
 
 import argparse
 import numpy as np
@@ -40,7 +37,7 @@ if __name__ == "__main__":
     multiprocessing.set_start_method('spawn')
 
     parser = argparse.ArgumentParser(
-        description="Absolute Binding Free Energy Testing",
+        description="Absolute Hydration Free Energy Testing",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
