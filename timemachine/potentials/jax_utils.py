@@ -135,7 +135,7 @@ def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
         for later XLA steps
     """
     assert len(confs.shape) == 3
-    distances = vmap(distance_on_pairs, (0, 0, None, 0))(confs[:,inds_l], confs[:, inds_r], cutoff, boxes)
+    distances = vmap(distance_on_pairs)(confs[:,inds_l], confs[:, inds_r], boxes)
     assert distances.shape == (len(confs), len(inds_l))
 
     neighbor_masks = distances < cutoff

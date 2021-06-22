@@ -2,14 +2,14 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from jax import numpy as np, jit
+from jax import numpy as np, jit, vmap
 import numpy as onp
 
 onp.random.seed(2021)
 
 from timemachine.potentials.jax_utils import (
-    delta_r, get_all_pairs_indices, get_group_group_indices,
-    compute_lifting_parameter, augment_dim
+    delta_r, distance_on_pairs, get_all_pairs_indices, get_group_group_indices,
+    compute_lifting_parameter, augment_dim, batched_neighbor_inds,
 )
 
 
@@ -90,3 +90,33 @@ def test_augment_dim():
         xyzw = augment_dim(xyz, w)
         onp.testing.assert_allclose(xyzw[:, :3], xyz)
         onp.testing.assert_allclose(xyzw[:, -1], w)
+
+
+def test_batched_neighbor_inds():
+    n_confs, n_particles, dim = 100, 1000, 3
+
+    confs = onp.random.rand(n_confs, n_particles, dim)
+    cutoff = 0.3
+
+    boxes = np.array([np.eye(3)] * n_confs)
+
+    n_alchemical = 50
+    inds_l, inds_r = get_group_group_indices(n=n_alchemical, m=n_particles - n_alchemical)
+    inds_r += n_alchemical
+    n_possible_interactions = len(inds_l)
+
+    full_distances = vmap(distance_on_pairs)(confs[:, inds_l], confs[:, inds_r], boxes)
+    assert full_distances.shape == (n_confs, n_possible_interactions)
+
+    neighbor_inds_l, neighbor_inds_r = batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes)
+    n_neighbor_pairs = neighbor_inds_l.shape[1]
+    assert neighbor_inds_r.shape == (n_confs, n_neighbor_pairs)
+    assert n_neighbor_pairs <= n_possible_interactions
+
+    def d(conf, inds_l, inds_r, box):
+        return distance_on_pairs(conf[inds_l], conf[inds_r], box)
+
+    neighbor_distances = vmap(d)(confs, neighbor_inds_l, neighbor_inds_r, boxes)
+
+    assert neighbor_distances.shape == (n_confs, n_neighbor_pairs)
+    assert np.sum(neighbor_distances < cutoff) == np.sum(full_distances < cutoff)
