@@ -321,10 +321,10 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         lamb_start = model.lambda_schedule[lambda_idx]
         lamb_end = model.lambda_schedule[lambda_idx+1]
         delta_lamb = lamb_end - lamb_start
-        fwd_work = ti_results[lambda_idx].du_dls*delta_lamb
-        rev_work = -ti_results[lambda_idx+1].du_dls*delta_lamb
-        tibar, ti_bar_err = pymbar.BAR(model.beta*fwd_work, model.beta*rev_work)
-        tibar_overlap = endpoint_correction.overlap_from_cdf(fwd_work, rev_work)
+        fwd_work_approx = ti_results[lambda_idx].du_dls*delta_lamb
+        rev_work_approx = -ti_results[lambda_idx+1].du_dls*delta_lamb
+        tibar, ti_bar_err = pymbar.BAR(model.beta*fwd_work_approx, model.beta*rev_work_approx)
+        tibar_overlap = endpoint_correction.overlap_from_cdf(fwd_work_approx, rev_work_approx)
         tibar_dG += tibar/model.beta
 
         # exact_bar
@@ -333,7 +333,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
         dG_exact, exact_bar_err = pymbar.BAR(fwd_work_exact, rev_work_exact)
         bar_dG += dG_exact/model.beta
-        exact_bar_overlap = endpoint_correction.overlap_from_cdf(fwd_work_exact, -rev_work_exact)
+        exact_bar_overlap = endpoint_correction.overlap_from_cdf(fwd_work_exact, rev_work_exact)
 
         print("BAR: lamb_start", lamb_start, "ti_bar", tibar/model.beta, "exact_bar", dG_exact/model.beta, "tibar_overlap", tibar_overlap, "exact_bar_overlap", exact_bar_overlap, "ti_bar_err", ti_bar_err/model.beta, "exact_bar_err", exact_bar_err/model.beta)
 
