@@ -331,7 +331,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         fwd_work_exact = model.beta*ti_results[lambda_idx].right_dus
         rev_work_exact = model.beta*ti_results[lambda_idx+1].left_dus
 
-        dG_exact, exact_bar_err = pymbar.BAR(fwd_work, rev_work)
+        dG_exact, exact_bar_err = pymbar.BAR(fwd_work_exact, rev_work_exact)
         bar_dG += dG_exact/model.beta
         exact_bar_overlap = endpoint_correction.overlap_from_cdf(fwd_work_exact, -rev_work_exact)
 
