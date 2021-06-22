@@ -130,14 +130,20 @@ def test_vmap():
 
     inds_i, inds_j = get_group_group_indices(n_ligand, n_environment)
     inds_j += n_ligand
+    n_interactions = len(inds_i)
 
     fixed_kwargs = dict(params=params, box=box, inds_l=inds_i, inds_r=inds_j, beta=beta, cutoff=cutoff)
-    u = partial(nonbonded_v3_on_specific_pairs, **fixed_kwargs)
+
+    # signature: conf -> ljs, coulombs, where ljs.shape == (n_interactions, )
+    u_pairs = partial(nonbonded_v3_on_specific_pairs, **fixed_kwargs)
+
+    def u(conf):
+        ljs, coulombs = u_pairs(conf)
+        return np.sum(ljs + coulombs)
 
     # vmap over snapshots
     vmapped = jit(vmap(u))
     n_snapshots = 100
     confs = onp.random.randn(n_snapshots, n_total, 3)
-    ljs, coulombs = vmapped(confs)
-    us = ljs + coulombs
+    us = vmapped(confs)
     assert us.shape == (n_snapshots, )
