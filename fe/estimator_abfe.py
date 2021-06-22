@@ -314,8 +314,9 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         all_grads.append(result.du_dps)
 
     tibar_dG = 0
-
     bar_dG = 0
+    bar_dG_err = 0
+
     for lambda_idx in range(len(model.lambda_schedule) - 1):
         # tibar
         lamb_start = model.lambda_schedule[lambda_idx]
@@ -335,9 +336,17 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         bar_dG += dG_exact/model.beta
         exact_bar_overlap = endpoint_correction.overlap_from_cdf(fwd_work_exact, rev_work_exact)
 
-        print("BAR: lamb_start", lamb_start, "ti_bar", tibar/model.beta, "exact_bar", dG_exact/model.beta, "tibar_overlap", tibar_overlap, "exact_bar_overlap", exact_bar_overlap, "ti_bar_err", ti_bar_err/model.beta, "exact_bar_err", exact_bar_err/model.beta)
+        # probably off by a factor of two
+        bar_dG_err += (exact_bar_err/model.beta)**2
 
-    dG = np.trapz(mean_du_dls, model.lambda_schedule)
+        # print("BAR: lamb_start", lamb_start, "ti_bar", tibar/model.beta, "exact_bar", dG_exact/model.beta, "tibar_overlap", tibar_overlap, "exact_bar_overlap", exact_bar_overlap, "ti_bar_err", ti_bar_err/model.beta, "exact_bar_err", exact_bar_err/model.beta)
+        # print("BAR:", lamb_start, "ti_bar", tibar/model.beta, "exact_bar", dG_exact/model.beta, "tibar_overlap", tibar_overlap, "exact_bar_overlap", exact_bar_overlap, "ti_bar_err", ti_bar_err/model.beta, "exact_bar_err", exact_bar_err/model.beta)
+        print(f"{model.prefix}_BAR: lambda {lamb_start:.3f} -> {lamb_end:.3f} dG: {dG_exact/model.beta:.3f} dG_err: {exact_bar_err/model.beta:.3f} overlap: {exact_bar_overlap:.3f}")
+
+    bar_dG_err = np.sqrt(bar_dG_err)
+
+    # dG = np.trapz(mean_du_dls, model.lambda_schedule)
+    dG = bar_dG
     dG_grad = []
     for rhs, lhs in zip(all_grads[-1], all_grads[0]):
         dG_grad.append(rhs - lhs)
@@ -358,7 +367,9 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             lhs_xs=results[-2].xs,
             rhs_xs=results[-1].xs
         )
-        dG_endpoint = pymbar.BAR(model.beta*lhs_du, model.beta*np.array(rhs_du))[0]/model.beta
+        dG_endpoint, endpoint_err = pymbar.BAR(model.beta*lhs_du, model.beta*np.array(rhs_du))
+        dG_endpoint = dG_endpoint/model.beta
+        endpoint_err = endpoint_err/model.beta
         # compute standard state corrections for translation and rotation
         dG_ssc_translation, dG_ssc_rotation = standard_state.release_orientational_restraints(
             k_translation,
@@ -368,10 +379,12 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         overlap = endpoint_correction.overlap_from_cdf(lhs_du, rhs_du)
         lhs_mean = np.mean(lhs_du)
         rhs_mean = np.mean(rhs_du)
-        print(f"{model.prefix} dG_ti {dG:.3f} tibar_dG {tibar_dG:.3f} exact_bar {bar_dG:.3f} dG_endpoint {dG_endpoint:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
+        print(f"{model.prefix} dG_ti {dG:.3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} dG_endpoint {dG_endpoint:.3f} dG_endpoint_err {endpoint_err:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
         dG += dG_endpoint + dG_ssc_translation + dG_ssc_rotation
+        bar_dG_err += endpoint_err**2
+        bar_dG_err = np.sqrt(bar_dG_err)
     else:
-        print(f"{model.prefix} dG_ti {dG:.3f} tibar_dG {tibar_dG:.3f} exact_bar {bar_dG:.3f} ")
+        print(f"{model.prefix} dG_ti {dG:.3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} ")
 
     return (dG, results), dG_grad
 
