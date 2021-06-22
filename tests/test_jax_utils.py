@@ -49,6 +49,7 @@ def test_delta_r():
 
 
 def test_get_all_pairs_indices():
+    """check i < j < n"""
     ns = onp.random.randint(5, 50, 10)
     for n in ns:
         inds_i, inds_j = get_all_pairs_indices(n)
@@ -57,6 +58,7 @@ def test_get_all_pairs_indices():
 
 
 def test_get_group_group_indices():
+    """check i < n, j < m"""
     ns = onp.random.randint(5, 50, 10)
     ms = onp.random.randint(5, 50, 10)
 
@@ -69,6 +71,8 @@ def test_get_group_group_indices():
 
 
 def test_compute_lifting_parameter():
+    """check expected behavior at lambda=0, lambda=1 for combinations of
+    lambda_plane_idx, lambda_offset_idxs in [-1, 0, +1]"""
     cutoff = 5.0
 
     lambda_plane_idxs = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
@@ -82,6 +86,7 @@ def test_compute_lifting_parameter():
 
 
 def test_augment_dim():
+    """check xyz -> xyzw stacking"""
     for _ in range(5):
         n = onp.random.randint(5, 10)
         xyz = onp.random.randn(n, 3)
@@ -93,6 +98,11 @@ def test_augment_dim():
 
 
 def test_batched_neighbor_inds():
+    """compute n x m distances on each of a batch of confs,
+    get fixed-length "neighbor lists" using padded index masks,
+    and assert that the same number of pairs is within cutoff for
+    original and masked variants
+    """
     n_confs, n_particles, dim = 100, 1000, 3
 
     confs = onp.random.rand(n_confs, n_particles, dim)

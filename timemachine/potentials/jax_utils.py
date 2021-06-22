@@ -144,6 +144,8 @@ def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
     n_neighbors = np.sum(neighbor_masks, 1)
     max_n_neighbors = max(n_neighbors)
 
+    assert max_n_neighbors > 0
+
     # sorting in order of [falses, ..., trues]
     keep_inds = np.argsort(neighbor_masks, axis=1)[:, -max_n_neighbors:]
     neighbor_inds_l = inds_l[keep_inds]
