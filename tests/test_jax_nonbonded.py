@@ -131,7 +131,7 @@ def test_vmap():
     inds_i, inds_j = get_group_group_indices(n_ligand, n_environment)
     inds_j += n_ligand
 
-    fixed_kwargs = dict(params=params, box=box, inds_i=inds_i, inds_j=inds_j, beta=beta, cutoff=cutoff)
+    fixed_kwargs = dict(params=params, box=box, inds_l=inds_i, inds_r=inds_j, beta=beta, cutoff=cutoff)
     u = partial(nonbonded_v3_on_specific_pairs, **fixed_kwargs)
 
     # vmap over snapshots
