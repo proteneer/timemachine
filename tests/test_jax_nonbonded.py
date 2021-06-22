@@ -5,11 +5,11 @@ import numpy as onp
 from numpy.random import randn, rand, randint, seed
 seed(2021)
 
-from jax import numpy as np, value_and_grad, jit
+from jax import numpy as np, value_and_grad, jit, vmap
 
 from jax.ops import index_update, index
 from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded_v3_on_specific_pairs
-from timemachine.potentials.jax_utils import convert_to_4d, get_all_pairs_indices
+from timemachine.potentials.jax_utils import convert_to_4d, get_all_pairs_indices, get_group_group_indices
 
 from functools import partial
 from typing import Tuple, Callable
@@ -119,3 +119,24 @@ def test_jax_nonbonded(n_instances=10):
     for n_atoms, dim in zip(random_sizes, dims):
         args = generate_random_inputs(n_atoms, dim)
         compare_two_potentials(u_a, u_b, args)
+
+def test_vmap():
+    """Can call jit(vmap(nonbonded_v3_on_specific_pairs))"""
+
+    # # atoms in "ligand" vs. "environment"
+    n_ligand, n_environment = 50, 1000
+    n_total = n_ligand + n_environment
+    conf, params, box, lamb, _, _, beta, cutoff, _, _ = generate_random_inputs(n_total, 3)
+
+    inds_i, inds_j = get_group_group_indices(n_ligand, n_environment)
+    inds_j += n_ligand
+
+    fixed_kwargs = dict(params=params, box=box, inds_i=inds_i, inds_j=inds_j, beta=beta, cutoff=cutoff)
+    u = partial(nonbonded_v3_on_specific_pairs, **fixed_kwargs)
+
+    # vmap over snapshots
+    vmapped = jit(vmap(u))
+    n_snapshots = 100
+    confs = onp.random.randn(n_snapshots, n_total, 3)
+    us = vmapped(confs)
+    assert us.shape == (n_snapshots, )
