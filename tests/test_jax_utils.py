@@ -75,7 +75,7 @@ def test_compute_lifting_parameter():
     lambda_offset_idxs = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
 
     w0 = compute_lifting_parameter(0.0, lambda_plane_idxs, lambda_offset_idxs, cutoff)
-    onp.testing.assert_allclose(w0, cutoff * lambda_offset_idxs)
+    onp.testing.assert_allclose(w0, cutoff * lambda_plane_idxs)
 
     w1 = compute_lifting_parameter(1.0, lambda_plane_idxs, lambda_offset_idxs, cutoff)
     onp.testing.assert_allclose(w1, cutoff * (lambda_offset_idxs + lambda_plane_idxs))
