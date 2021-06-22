@@ -2,6 +2,7 @@ import jax.numpy as np
 import numpy as onp
 import jax
 from jax.ops import index_update
+from jax import vmap
 
 from typing import Tuple
 Array = onp.array
@@ -115,6 +116,43 @@ def distance_on_pairs(ri, rj, box=None):
     assert len(dij) == len(ri)
 
     return dij
+
+
+def neighbor_mask(conf, inds_l, inds_r, cutoff, box):
+    dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
+    return dij < cutoff
+
+
+def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
+    """Given candidate interacting pairs (inds_l, inds_r),
+        inds_l.shape == n_interactions
+    exclude most pairs whose distances are >= cutoff (neighbor_inds_l, neighbor_inds_r)
+        neighbor_inds_l.shape == (len(confs), max_n_neighbors)
+        where the total number of neighbors returned for each conf in confs is the same
+        max_n_neighbors
+
+    This padding causes some amount of wasted effort, but keeps things nice and fixed-dimensional
+        for later XLA steps
+    """
+    assert len(confs.shape) == 3
+    distances = vmap(distance_on_pairs, (0, 0, None, 0))(confs[:,inds_l], confs[:, inds_r], cutoff, boxes)
+    assert distances.shape == (len(confs), len(inds_l))
+
+    neighbor_masks = distances < cutoff
+    # how many total neighbors?
+
+    n_neighbors = np.sum(neighbor_masks, 1)
+    max_n_neighbors = max(n_neighbors)
+
+    # sorting in order of [falses, ..., trues]
+    keep_inds = np.argsort(neighbor_masks, axis=1)[:, -max_n_neighbors:]
+    neighbor_inds_l = inds_l[keep_inds]
+    neighbor_inds_r = inds_r[keep_inds]
+
+    assert neighbor_inds_l.shape == (len(confs), max_n_neighbors)
+    assert neighbor_inds_l.shape == neighbor_inds_r.shape
+
+    return neighbor_inds_l, neighbor_inds_r
 
 
 def distance(x, box):
