@@ -118,7 +118,8 @@ def _nonbonded_v3_clone(
 
 def test_jax_nonbonded(n_instances=10):
     """Assert that nonbonded_v3 and _nonbonded_v3 agree on several random instances"""
-    u_a, u_b = jit(nonbonded_v3), jit(_nonbonded_v3_clone)
+    jittable_nonbonded_v3 = partial(nonbonded_v3, runtime_validate=False)
+    u_a, u_b = jit(jittable_nonbonded_v3), jit(_nonbonded_v3_clone)
 
     min_size, max_size = 10, 50
 
