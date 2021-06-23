@@ -43,7 +43,7 @@ def nonbonded_v3(
         cutoff,
         lambda_plane_idxs,
         lambda_offset_idxs,
-        runtime_validate=False,
+        runtime_validate=True,
 ):
     """Lennard-Jones + Coulomb, with a few important twists:
     * distances are computed in 4D, controlled by lambda, lambda_plane_idxs, lambda_offset_idxs
@@ -71,6 +71,11 @@ def nonbonded_v3(
         between their 4D coordinates exceeds cutoff
     lambda_plane_idxs : Optional (N,) np.array
     lambda_offset_idxs : Optional (N,) np.array
+    runtime_validate: bool
+        check whether beta is compatible with cutoff
+        (if True, this function will currently not play nice with Jax JIT)
+        TODO: is there a way to conditionally print a runtime warning inside
+            of a Jax JIT-compiled function, without triggering a Jax ConcretizationTypeError?
 
     Returns
     -------

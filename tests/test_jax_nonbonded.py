@@ -83,7 +83,6 @@ def _nonbonded_v3_clone(
         cutoff,
         lambda_plane_idxs,
         lambda_offset_idxs,
-        runtime_validate=False,
 ):
     """See docstring of nonbonded_v3 for more details
 
