@@ -38,6 +38,7 @@ def generate_random_inputs(n_atoms: int, dim: int = 3) -> NonbondedArgs:
     params[:, 0] -= np.mean(params[:, 0])
 
     box = np.diag(np.max(conf, axis=0)) + 0.1
+    assert box.shape == (dim, dim)
 
     lamb = rand()
 
