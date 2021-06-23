@@ -186,7 +186,7 @@ def construct_absolute_lambda_schedule(num_windows):
     """
 
     A = int(.2 * num_windows)
-    B = int(.8 * num_windows)
+    B = int(.6 * num_windows)
     C = num_windows - A - B
 
     # Empirically, we see the largest variance in std <du/dl> near the endpoints in the nonbonded
@@ -194,8 +194,8 @@ def construct_absolute_lambda_schedule(num_windows):
     # help improve convergence.
     lambda_schedule = np.concatenate([
         np.linspace(0.0, 0.1, A, endpoint=False),
-        np.linspace(0.1, 0.35, B, endpoint=False),
-        np.linspace(0.35, 1.0, C, endpoint=True)
+        np.linspace(0.1, 0.27, B, endpoint=False),
+        np.linspace(0.27, 1.0, C, endpoint=True)
     ])
 
     assert len(lambda_schedule) == num_windows
