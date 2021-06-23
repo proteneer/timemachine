@@ -95,13 +95,8 @@ def delta_r(ri, rj, box=None):
 
     # box is None for harmonic bonds, not None for nonbonded terms
     if box is not None:
-
-        # Equivalent to:
-        #    for d in range(dims):
-        #       diff -= box[d]*np.floor(np.expand_dims(diff[...,d], axis=-1)/box[d][d]+0.5)
-        def loop_body(d, diff):
-            return diff - box[d] * np.floor(np.expand_dims(diff[..., d], axis=-1) / box[d][d] + 0.5)
-        diff = jax.lax.fori_loop(lower=0, upper=dims, body_fun=loop_body, init_val=diff)
+        for d in range(dims):
+            diff -= box[d]*np.floor(np.expand_dims(diff[...,d], axis=-1)/box[d][d]+0.5)
 
     return diff
 
