@@ -23,7 +23,11 @@ NonbondedFxn = Callable[[*nonbonded_args], Energy]
 
 
 def generate_random_inputs(n_atoms: int, dim: int = 3) -> NonbondedArgs:
-    # jittered
+    # distribute somewhat sparsely within box by:
+    #   * generating evenly spaced points along each axis
+    #   * shuffling independently along each axis
+    #   * adding small Gaussian noise
+    # so that it's unlikely that two points will be right on top of each other
     offsets = onp.array([onp.arange(n_atoms)] * dim).T
     assert (offsets.shape == (n_atoms, dim))
     for i in range(dim):
