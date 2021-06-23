@@ -1,6 +1,7 @@
 import pymbar
 from fe import endpoint_correction
 from collections import namedtuple
+import pickle
 
 import dataclasses
 import time
@@ -316,6 +317,9 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     tibar_dG = 0
     bar_dG = 0
     bar_dG_err = 0
+
+    # for ti_idx, ti_res in enumerate(ti_results):
+        # pickle.dump(ti_res, open("ti_results_pickle_idx_"+str(ti_idx)+".pkl", "wb"))
 
     for lambda_idx in range(len(model.lambda_schedule) - 1):
         # tibar
