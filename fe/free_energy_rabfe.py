@@ -177,7 +177,7 @@ class RBFETransformIndex:
         return MolToSmiles(mol)
 
 
-def construct_lambda_schedule(num_windows):
+def construct_absolute_lambda_schedule(num_windows):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
 
     Notes
