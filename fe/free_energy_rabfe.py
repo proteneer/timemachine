@@ -193,8 +193,8 @@ def construct_absolute_lambda_schedule(num_windows):
     # optimizing the overlap
     lambda_schedule = np.concatenate([
         np.linspace(0.0,  0.08,  A, endpoint=False),
-        np.linspace(0.08,  0.23, B, endpoint=False),
-        np.linspace(0.23, 0.45,  C, endpoint=True),
+        np.linspace(0.08,  0.27, B, endpoint=False),
+        np.linspace(0.27, 0.41,  C, endpoint=True),
         [1.0],
     ])
 
