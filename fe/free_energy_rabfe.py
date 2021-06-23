@@ -186,7 +186,7 @@ def construct_absolute_lambda_schedule(num_windows):
     """
 
     A = int(.2 * num_windows)
-    B = int(.6 * num_windows)
+    B = int(.8 * num_windows)
     C = num_windows - A - B
 
     # Empirically, we see the largest variance in std <du/dl> near the endpoints in the nonbonded
