@@ -110,7 +110,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box) -> np.ndarray:
     if len(mols) == 1:
         top = topology.BaseTopology(mols[0], ff)
     elif len(mols) == 2:
-        top = topology.DualTopology(mols[0], mols[1], ff)
+        top = topology.DualTopologyMinimization(mols[0], mols[1], ff)
     else:
         raise ValueError("mols must be length 1 or 2")
 
