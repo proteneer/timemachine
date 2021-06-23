@@ -92,8 +92,11 @@ def nonbonded_v3(
 
     # make 4th dimension of box large enough so its roughly aperiodic
     if box is not None:
-        box_4d = np.eye(4) * 1000
-        box_4d = index_update(box_4d, index[:3, :3], box)
+        if box.shape[-1] == 3:
+            box_4d = np.eye(4) * 1000
+            box_4d = index_update(box_4d, index[:3, :3], box)
+        else:
+            box_4d = box
     else:
         box_4d = None
 
