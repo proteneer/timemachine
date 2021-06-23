@@ -100,9 +100,9 @@ def _nonbonded_v3_clone(
         box_4d = index_update(box_4d, index[:3, :3], box)
     box = box_4d
 
-    # TODO: break this into more manageable blocks
+    # TODO: len(inds_i) == n_interactions -- may want to break this
+    #   up into more manageable blocks if n_interactions is large
     inds_i, inds_j = get_all_pairs_indices(N)
-    # n_interactions = len(inds_i)
 
     lj, coulomb = nonbonded_v3_on_specific_pairs(conf, params, box, inds_i, inds_j, beta, cutoff)
 
