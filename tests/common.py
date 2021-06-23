@@ -1,7 +1,6 @@
 import unittest
 import numpy as np
 import jax
-jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import functools
 from timemachine.constants import ONE_4PI_EPS0
