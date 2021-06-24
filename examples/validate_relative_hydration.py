@@ -125,7 +125,6 @@ if __name__ == "__main__":
         cmd_args.num_prod_steps
     )
 
-    # assert 0
     model_absolute = model_rabfe.AbsoluteHydrationModel(
         client,
         forcefield,
@@ -146,22 +145,9 @@ if __name__ == "__main__":
 
     for epoch in range(100):
 
-        i = 0
-
-        mol_a = dataset.data[i]
-
-        dG_a = model_absolute.predict(ordered_params, mol_a, prefix='solvent_absolute_'+mol_a.GetProp('_Name'))
-
-    assert 0
-
-    for epoch in range(100):
-
         for i in range(M):
 
             for j in range(i+1, M):
-
-                if i != 0 or j != 3:
-                    continue
 
                 mol_a = dataset.data[i]
                 mol_b = dataset.data[j]

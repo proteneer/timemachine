@@ -158,7 +158,7 @@ def construct_absolute_lambda_schedule(num_windows):
     """
 
     A = int(.20 * num_windows)
-    B = int(.68 * num_windows)
+    B = int(.75 * num_windows)
     D = 1 # need only one window from 0.6 to 1.0
     C = num_windows - A - B - D
 
@@ -174,18 +174,3 @@ def construct_absolute_lambda_schedule(num_windows):
     assert len(lambda_schedule) == num_windows
 
     return lambda_schedule
-
-
-# def construct_absolute_lambda_schedule(num_windows):
-#     A = int(0.70 * num_windows)
-#     B = num_windows - A
-
-#     lambda_schedule = np.concatenate([
-#         np.linspace(0.0, 0.3, A, endpoint=False),
-#         np.linspace(0.3, 1.0, B, endpoint=True)
-#     ])
-
-#     # lambda_schedule = np.linspace(0, 1, num_windows)
-
-#     return lambda_schedule
-
