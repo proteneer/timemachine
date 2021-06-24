@@ -149,34 +149,6 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         return final_potentials, final_params, combined_masses
 
 
-class RBFETransformIndex:
-    """Builds an index of relative free energy transformations to use
-    with construct_mle_layer
-    """
-
-    def __len__(self):
-        return len(self._indices)
-
-    def __init__(self):
-        self._indices = {}
-
-    def build(self, refs: List[RelativeFreeEnergy]):
-        for ref in refs:
-            self.get_transform_indices(ref)
-
-    def get_transform_indices(self, ref: RelativeFreeEnergy) -> List[int]:
-        return self.get_mol_idx(ref.mol_a), self.get_mol_idx(ref.mol_b)
-
-    def get_mol_idx(self, mol):
-        hashed = self._mol_hash(mol)
-        if hashed not in self._indices:
-            self._indices[hashed] = len(self._indices)
-        return self._indices[hashed]
-
-    def _mol_hash(self, mol):
-        return MolToSmiles(mol)
-
-
 def construct_absolute_lambda_schedule(num_windows):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
 
@@ -185,12 +157,13 @@ def construct_absolute_lambda_schedule(num_windows):
     manually optimized by YTZ
     """
 
-    A = int(.2 * num_windows)
-    B = int(.6 * num_windows)
+    A = int(.20 * num_windows)
+    B = int(.68 * num_windows)
     D = 1 # need only one window from 0.6 to 1.0
     C = num_windows - A - B - D
 
-    # optimizing the overlap
+    # optimizing the overlap based on eyeballing absolute hydration free energies
+    # there's probably some better way to deal with this by inspecting the curvature
     lambda_schedule = np.concatenate([
         np.linspace(0.0,  0.08,  A, endpoint=False),
         np.linspace(0.08,  0.27, B, endpoint=False),
