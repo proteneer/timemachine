@@ -158,7 +158,7 @@ def construct_absolute_lambda_schedule(num_windows):
     """
 
     A = int(.20 * num_windows)
-    B = int(.75 * num_windows)
+    B = int(.66 * num_windows)
     D = 1 # need only one window from 0.6 to 1.0
     C = num_windows - A - B - D
 
