@@ -86,7 +86,8 @@ def _nonbonded_v3_clone(
 ):
     """See docstring of nonbonded_v3 for more details
 
-    This is here just for testing purposes...
+    This is here just for testing purposes, to mimic the signature of nonbonded_v3 but to use
+    nonbonded_v3_on_specific_pairs under the hood.
     """
 
     N = conf.shape[0]
