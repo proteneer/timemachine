@@ -7,7 +7,7 @@ import numpy as np
 import jax
 from jax import numpy as jnp
 
-from fe.free_energy_rabfe import construct_absolute_lambda_schedule
+from fe.free_energy_rabfe import construct_absolute_lambda_schedule, construct_relative_lambda_schedule
 from fe.utils import convert_uIC50_to_kJ_per_mole
 from fe import model_rabfe
 from md import builders
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     dataset = Dataset(mols)
 
     absolute_solvent_schedule = construct_absolute_lambda_schedule(cmd_args.num_windows)
-    relative_solvent_schedule = construct_absolute_lambda_schedule(cmd_args.num_windows-1)
+    relative_solvent_schedule = construct_relative_lambda_schedule(cmd_args.num_windows-1)
     solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
     # pick the largest mol as the blocker
@@ -159,7 +159,7 @@ if __name__ == "__main__":
                     prefix='epoch_'+str(epoch)+'_solvent_relative_'+mol_a.GetProp('_Name')+'_'+mol_b.GetProp('_Name')
                 )
 
-                dG_a = model_absolute.predict(ordered_params, mol_a, prefix='solvent_absolute_'+mol_a.GetProp('_Name'))
-                dG_b = model_absolute.predict(ordered_params, mol_b, prefix='solvent_absolute_'+mol_b.GetProp('_Name'))
+                # dG_a = model_absolute.predict(ordered_params, mol_a, prefix='solvent_absolute_'+mol_a.GetProp('_Name'))
+                # dG_b = model_absolute.predict(ordered_params, mol_b, prefix='solvent_absolute_'+mol_b.GetProp('_Name'))
 
-                print("mol_i", i, mol_a.GetProp("_Name"), "mol_j", j, mol_b.GetProp("_Name"), "ddG_ab", ddG_ab, "dG_a-dG_b", dG_a-dG_b)
+                # print("mol_i", i, mol_a.GetProp("_Name"), "mol_j", j, mol_b.GetProp("_Name"), "ddG_ab", ddG_ab, "dG_a-dG_b", dG_a-dG_b)
