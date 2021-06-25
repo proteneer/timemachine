@@ -113,11 +113,6 @@ def distance_on_pairs(ri, rj, box=None):
     return dij
 
 
-def neighbor_mask(conf, inds_l, inds_r, cutoff, box):
-    dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
-    return dij < cutoff
-
-
 def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
     """Given candidate interacting pairs (inds_l, inds_r),
         inds_l.shape == n_interactions
