@@ -62,9 +62,15 @@ __global__ void update_forward(
     int local_idx = atom_idx*D + d_idx;
 
     auto force = static_cast<RealType>(static_cast<long long>(du_dx[local_idx]))/FIXED_EXPONENT;
-    auto new_v_t = ca*v_t[local_idx] + cbs[atom_idx]*force + ccs[atom_idx]*noise[local_idx];
-    v_t[local_idx] = new_v_t; 
-    x_t[local_idx] = x_t[local_idx] + new_v_t*dt;
+
+    // BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep
+    auto v_mid = v_t[local_idx] + dt * force;
+    auto x_mid = x_t[local_idx] + 0.5 * dt * v_mid;
+
+    auto new_v_t = ca * v_mid + ccs[atom_idx] * noise[local_idx];
+
+    v_t[local_idx] = new_v_t;
+    x_t[local_idx] = x_mid + 0.5 * dt * new_v_t;
 
 };
 
