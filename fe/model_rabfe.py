@@ -130,6 +130,9 @@ class AbsoluteModel(ABC):
         mol: Chem.Mol
             Molecule we want to decouple
 
+        prefix: str
+            String to prepend to print out statements
+
         Returns
         -------
         float
@@ -214,8 +217,8 @@ class AbsoluteModel(ABC):
 
         return dG, dG_err
 
+        # disabled since image molecules is broken.
         for idx, result in enumerate(results):
-            # print(result.xs.shape)
             traj = mdtraj.Trajectory(result.xs, mdtraj.Topology.from_openmm(combined_topology))
             unit_cell = np.repeat(self.host_box[None, :], len(result.xs), axis=0)
             traj.unitcell_vectors = unit_cell
