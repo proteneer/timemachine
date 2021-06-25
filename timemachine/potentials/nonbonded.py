@@ -1,9 +1,7 @@
-import jax
-jax.config.update("jax_enable_x64", True)
 import jax.numpy as np
 from jax.scipy.special import erfc
 from jax.ops import index_update, index
-from timemachine.potentials.jax_utils import distance_on_pairs, distance, convert_to_4d, get_all_pairs_indices
+from timemachine.potentials.jax_utils import distance_on_pairs, distance, convert_to_4d
 
 
 def switch_fn(dij, cutoff):
