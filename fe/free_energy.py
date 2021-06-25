@@ -157,17 +157,14 @@ class RelativeFreeEnergy(BaseFreeEnergy):
     def prepare_vacuum_edge(self, ff_params):
         """
         Prepares the vacuum system.
-
         Parameters
         ----------
         ff_params: tuple of np.array
             Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
-
         Returns
         -------
         4 tuple
             unbound_potentials, system_parameters, combined_masses, combined_coords
-
         """
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
         ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
@@ -185,23 +182,18 @@ class RelativeFreeEnergy(BaseFreeEnergy):
     def prepare_host_edge(self, ff_params, host_system, host_coords):
         """
         Prepares the host-edge system
-
         Parameters
         ----------
         ff_params: tuple of np.array
             Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
-
         host_system: openmm.System
             openmm System object to be deserialized
-
         host_coords: np.array
             Nx3 array of atomic coordinates
-
         Returns
         -------
         4 tuple
             unbound_potentials, system_params, combined_masses, combined_coords
-
         """
 
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]

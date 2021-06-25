@@ -588,7 +588,10 @@ class DualTopologyRHFE(DualTopology):
         src_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], qlj_params[:, 0]*0.5)
         src_qlj_params = jax.ops.index_update(src_qlj_params, jax.ops.index[:, 2], qlj_params[:, 2]*0.5)
         dst_qlj_params = qlj_params
-        combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
+        combined_qlj_params = jnp.concatenate([
+            src_qlj_params,
+            dst_qlj_params
+        ])
 
         combined_lambda_plane_idxs = np.zeros(
             self.mol_a.GetNumAtoms() + self.mol_b.GetNumAtoms(),
