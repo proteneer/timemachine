@@ -141,6 +141,10 @@ class AbsoluteModel(ABC):
         float
             BAR error in the delta G in kJ/mol
 
+        Note that the error estimate is likely to be biased for two reasons: we don't
+            know the true decorrelation time, and by re-using intermediate windows
+            to compute delta_Us, the BAR estimates themselves become correlated.
+
         """
 
         print(f"Minimizing the host structure to remove clashes.")
@@ -400,6 +404,10 @@ class RelativeModel(ABC):
 
         float
             BAR error in the delta delta G in kJ/mol
+
+        Note that the error estimate is likely to be biased for two reasons: we don't
+            know the true decorrelation time, and by re-using intermediate windows
+            to compute delta_Us, the BAR estimates themselves become correlated.
 
         """
 
