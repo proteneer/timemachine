@@ -571,6 +571,28 @@ class DualTopology(ABC):
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
 
+# (ytz): for hydration free energy tests, we turn off the torsions between non-ring atoms to improve
+# sampling.
+class BaseTopologyRHFE(BaseTopology):
+
+    def parameterize_proper_torsion(self, ff_params):
+        # alchemically turn off proper torsions.
+        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+        membership = get_ring_membership(self.mol)
+
+        num_torsions = torsion_params.shape[0]
+
+        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+
+        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+            if membership[b] != membership[c]:
+                lambda_offset_idxs[torsion_idx] = 0
+
+        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+
+        return torsion_params, torsion_potential
+
 
 class DualTopologyRHFE(DualTopology):
     """
@@ -578,6 +600,28 @@ class DualTopologyRHFE(DualTopology):
     from 0 to 1, while ligand A is fully coupled. At the same time, at lambda=0, ligand B and ligand A
     have their charges and epsilons reduced by half.
     """
+
+    def parameterize_proper_torsion(self, ff_params):
+
+        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+
+        mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
+        membership = get_ring_membership(mol_c)
+
+        num_torsions = torsion_params.shape[0]
+
+        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+
+        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+            if membership[b] != membership[c]:
+                lambda_offset_idxs[torsion_idx] = 0
+
+        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+
+        return torsion_params, torsion_potential
+
+
     def parameterize_nonbonded(self,
         ff_q_params,
         ff_lj_params):

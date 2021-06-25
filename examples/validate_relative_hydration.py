@@ -152,14 +152,15 @@ if __name__ == "__main__":
                 mol_a = dataset.data[i]
                 mol_b = dataset.data[j]
 
-                ddG_ab = model_relative.predict(
+                ddG_ab, ddG_ab_err = model_relative.predict(
                     ordered_params,
                     mol_a,
                     mol_b,
                     prefix='epoch_'+str(epoch)+'_solvent_relative_'+mol_a.GetProp('_Name')+'_'+mol_b.GetProp('_Name')
                 )
 
-                dG_a = model_absolute.predict(ordered_params, mol_a, prefix='solvent_absolute_'+mol_a.GetProp('_Name'))
-                dG_b = model_absolute.predict(ordered_params, mol_b, prefix='solvent_absolute_'+mol_b.GetProp('_Name'))
+                dG_a, dG_a_err = model_absolute.predict(ordered_params, mol_a, prefix='solvent_absolute_'+mol_a.GetProp('_Name'))
+                dG_b, dG_b_err = model_absolute.predict(ordered_params, mol_b, prefix='solvent_absolute_'+mol_b.GetProp('_Name'))
+                dG_ab_err = np.sqrt(dG_a_err**2 + dG_b_err**2)
 
-                print("mol_i", i, mol_a.GetProp("_Name"), "mol_j", j, mol_b.GetProp("_Name"), "ddG_ab", ddG_ab, "dG_a-dG_b", dG_a-dG_b)
+                print(f"mol_i {i} {mol_a.GetProp('_Name')} mol_j {j} {mol_b.GetProp('_Name')} ddG_ab {ddG_ab:.3f} +- {ddG_ab_err:.3f} dG_a-dG_b {dG_a-dG_b:.3f} +- {dG_ab_err:.3f}")
