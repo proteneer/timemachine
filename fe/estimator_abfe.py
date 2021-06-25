@@ -310,7 +310,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     for lambda_idx, (lambda_window, result) in enumerate(zip(model.lambda_schedule, ti_results)):
         # (ytz): figure out what to do with stddev(du_dl) later
-        print(f"{model.prefix} index {lambda_idx} lambda {lambda_window:.5f} <du/dl> {np.mean(result.du_dls):.5f} med(du/dl) {np.median(result.du_dls):.5f}  o(du/dl) {np.std(result.du_dls):.5f}")
+        # print(f"{model.prefix} index {lambda_idx} lambda {lambda_window:.5f} <du/dl> {np.mean(result.du_dls):.5f} med(du/dl) {np.median(result.du_dls):.5f}  o(du/dl) {np.std(result.du_dls):.5f}")
         mean_du_dls.append(np.mean(result.du_dls))
         all_grads.append(result.du_dps)
 
