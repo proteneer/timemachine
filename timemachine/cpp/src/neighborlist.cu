@@ -10,7 +10,7 @@ namespace timemachine {
 
 template<typename RealType>
 Neighborlist<RealType>::Neighborlist(
-	int N) : N_(N) {
+    int N) : N_(N) {
 
     const int B = this->B(); //(N+32-1)/32;
     const int Y = this->Y(); //(B+32-1)/32;
@@ -221,12 +221,12 @@ void Neighborlist<RealType>::build_nblist_device(
 
 template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_device(
-	const int N, // Number of atoms
-	const int D, // Box dimensions
-	const double *d_coords, // [N*3]
+    const int N, // Number of atoms
+    const int D, // Box dimensions
+    const double *d_coords, // [N*3]
     const double *d_box, // [D*3]
     const int * d_rebuild_nblist,
-	cudaStream_t stream) {
+    cudaStream_t stream) {
 
     assert(N == N_);
     assert(D == 3);
