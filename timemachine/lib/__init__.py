@@ -12,14 +12,14 @@ class LangevinIntegrator():
         self.dt = dt
         self.seed = seed
 
-        ca, _, cc = langevin_coefficients(temperature, dt, friction, masses)
-
+        ca, cb, cc = langevin_coefficients(temperature, dt, friction, masses)
+        cb *= -1
         self.ca = ca
-        self.invMasses = 1.0 / masses
+        self.cbs = cb
         self.ccs = cc
 
     def impl(self):
-        return custom_ops.LangevinIntegrator(self.dt, self.ca, self.invMasses, self.ccs, self.seed)
+        return custom_ops.LangevinIntegrator(self.dt, self.ca, self.cbs, self.ccs, self.seed)
 
 
 class MonteCarloBarostat():
