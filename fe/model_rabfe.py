@@ -116,8 +116,36 @@ class AbsoluteModel(ABC):
     def predict(self,
         ff_params,
         mol,
-        prefix,
-        standardize=False):
+        prefix):
+        """ Compute the absolute free of energy of decoupling mol_a.
+
+        This function is differentiable w.r.t. ff_params.
+
+        Parameters
+        ----------
+
+        ff_params: list of np.ndarray
+            This should match the ordered params returned by the forcefield
+
+        mol: Chem.Mol
+            Molecule we want to decouple
+
+        prefix: str
+            String to prepend to print out statements
+
+        Returns
+        -------
+        float
+            delta G in kJ/mol
+
+        float
+            BAR error in the delta G in kJ/mol
+
+        Note that the error estimate is likely to be biased for two reasons: we don't
+            know the true decorrelation time, and by re-using intermediate windows
+            to compute delta_Us, the BAR estimates themselves become correlated.
+
+        """
 
         print(f"Minimizing the host structure to remove clashes.")
         minimized_host_coords = minimizer.minimize_host_4d(
@@ -128,10 +156,6 @@ class AbsoluteModel(ABC):
             self.host_box
         )
 
-        # if standardize:
-            # top = topology.BaseTopologyStandardDecoupling(mol, self.ff)
-        # else:
-            # top = topology.BaseTopology(mol, self.ff)
         top = self.setup_topology(mol)
 
         afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, self.ff)
@@ -193,12 +217,12 @@ class AbsoluteModel(ABC):
             prefix
         )
 
-        dG, results = estimator_abfe.deltaG(model, sys_params)
+        dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
-        return dG
+        return dG, dG_err
 
+        # disabled since image molecules is broken.
         for idx, result in enumerate(results):
-            # print(result.xs.shape)
             traj = mdtraj.Trajectory(result.xs, mdtraj.Topology.from_openmm(combined_topology))
             unit_cell = np.repeat(self.host_box[None, :], len(result.xs), axis=0)
             traj.unitcell_vectors = unit_cell
@@ -254,8 +278,7 @@ class RelativeModel(ABC):
         mol_b,
         core_idxs,
         combined_coords,
-        prefix,
-        standardize):
+        prefix):
 
         dual_topology = self.setup_topology(mol_a, mol_b)
         rfe = free_energy_rabfe.RelativeFreeEnergy(dual_topology)
@@ -342,15 +365,16 @@ class RelativeModel(ABC):
             prefix
         )
 
-        dG, results = estimator_abfe.deltaG(model, sys_params)
+        dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
-        for idx, result in enumerate(results):
-            traj = mdtraj.Trajectory(result.xs, mdtraj.Topology.from_openmm(combined_topology))
-            traj.unitcell_vectors = result.boxes
-            traj.image_molecules()
-            traj.save_xtc(prefix+"_complex_lambda_"+str(idx)+".xtc")
+        # disable this for now since image_molecules() is unstable.
+        # for idx, result in enumerate(results):
+        #     traj = mdtraj.Trajectory(result.xs, mdtraj.Topology.from_openmm(combined_topology))
+        #     traj.unitcell_vectors = result.boxes
+        #     traj.image_molecules()
+        #     traj.save_xtc(prefix+"_complex_lambda_"+str(idx)+".xtc")
 
-        return dG, results
+        return dG, dG_err, results
 
     def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, prefix: str):
         """
@@ -364,15 +388,26 @@ class RelativeModel(ABC):
         ff_params: list of np.ndarray
             This should match the ordered params returned by the forcefield
 
-        mol: Chem.Mol
-            Molecule we want to decouple
+        mol_a: Chem.Mol
+            Starting molecule
+
+        mol_b: Chem.Mol
+            Resulting molecule
+
+        prefix: str
+            Auxiliary string to prepend print-outs
 
         Returns
         -------
         float
-            delta delta G in kJ/mol
-        aux
-            list of TI results
+            delta delta G in kJ/mol of morphing mol_a into mol_b
+
+        float
+            BAR error in the delta delta G in kJ/mol
+
+        Note that the error estimate is likely to be biased for two reasons: we don't
+            know the true decorrelation time, and by re-using intermediate windows
+            to compute delta_Us, the BAR estimates themselves become correlated.
 
         """
 
@@ -404,14 +439,13 @@ class RelativeModel(ABC):
             mol_a_coords,
             mol_b_coords
         ])
-        dG_0, results_0 = self._predict_a_to_b(
+        dG_0, dG_0_err, results_0 = self._predict_a_to_b(
             ff_params,
             mol_a,
             mol_b,
             combined_core_idxs,
             combined_coords,
-            prefix+"_ref_to_mol",
-            standardize=None)
+            prefix+"_ref_to_mol")
 
         # pull out mol_a from combined state
         combined_core_idxs = np.copy(core_idxs)
@@ -425,21 +459,22 @@ class RelativeModel(ABC):
             mol_b_coords,
             mol_a_coords
         ])
-        dG_1, results_1 = self._predict_a_to_b(
+        dG_1, dG_1_err, results_1 = self._predict_a_to_b(
             ff_params,
             mol_b,
             mol_a,
             combined_core_idxs,
             combined_coords,
-            prefix+"_mol_to_ref",
-            standardize=None)
+            prefix+"_mol_to_ref")
 
         # dG_0 is the free energy of moving X-B-A into X-B+A
         # dG_1 is the free energy of moving X-A-B into X-A+B
         # -dG_1 + dG_0 is the free energy of moving X-A+B -> X-B+A
         # i.e. the free energy of "unbinding" A
 
-        return -dG_0 + dG_1
+        dG_err = np.sqrt(dG_0_err**2 + dG_1_err**2)
+
+        return -dG_0 + dG_1, dG_err
 
 
 class RelativeHydrationModel(RelativeModel):

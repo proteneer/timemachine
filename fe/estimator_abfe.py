@@ -310,7 +310,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     for lambda_idx, (lambda_window, result) in enumerate(zip(model.lambda_schedule, ti_results)):
         # (ytz): figure out what to do with stddev(du_dl) later
-        print(f"{model.prefix} index {lambda_idx} lambda {lambda_window:.5f} <du/dl> {np.mean(result.du_dls):.5f} med(du/dl) {np.median(result.du_dls):.5f}  o(du/dl) {np.std(result.du_dls):.5f}")
+        # print(f"{model.prefix} index {lambda_idx} lambda {lambda_window:.5f} <du/dl> {np.mean(result.du_dls):.5f} med(du/dl) {np.median(result.du_dls):.5f}  o(du/dl) {np.std(result.du_dls):.5f}")
         mean_du_dls.append(np.mean(result.du_dls))
         all_grads.append(result.du_dps)
 
@@ -380,12 +380,11 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         rhs_mean = np.mean(rhs_du)
         print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} dG_endpoint {dG_endpoint:.3f} dG_endpoint_err {endpoint_err:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
         dG += dG_endpoint + dG_ssc_translation + dG_ssc_rotation
-        bar_dG_err += endpoint_err**2
-        bar_dG_err = np.sqrt(bar_dG_err)
+        bar_dG_err = np.sqrt(bar_dG_err**2 + endpoint_err**2)
     else:
         print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} ")
 
-    return (dG, results), dG_grad
+    return (dG, bar_dG_err, results), dG_grad
 
 @functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
 def deltaG(model, sys_params) -> Tuple[float, List]:
@@ -400,7 +399,8 @@ def deltaG_bwd(model, residual, grad) -> Tuple[np.array]:
     """
     # residual are the partial dG / partial dparams for each term
     # grad[0] is the adjoint of dG w.r.t. loss: partial L/partial dG
-    # grad[1] is the adjoint of dG w.r.t. simulation result, which we don't use
+    # grad[1] is the adjoint of dG_err w.r.t. loss: which we don't use
+    # grad[2] is the adjoint of simulation results w.r.t. loss: which we don't use
     return ([grad[0]*r for r in residual],)
 
 deltaG.defvjp(deltaG_fwd, deltaG_bwd)
