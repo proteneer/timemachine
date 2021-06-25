@@ -164,7 +164,13 @@ def nonbonded_v3(
 
 
 def nonbonded_v3_on_specific_pairs(conf, params, box, inds_l, inds_r, beta: float, cutoff: Optional[float] = None):
-    """See nonbonded_v3 docstring for more details"""
+    """See nonbonded_v3 docstring for more details
+
+    Notes
+    -----
+    * Responsibility of caller to ensure pair indices (inds_l, inds_r) are complete.
+        In case of parameter interpolation, more pairs need to be added.
+    """
 
     # distances and cutoff
     dij = distance_on_pairs(conf[inds_l], conf[inds_r], box)
