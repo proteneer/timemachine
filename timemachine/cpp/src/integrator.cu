@@ -18,12 +18,12 @@ LangevinIntegrator::LangevinIntegrator(
     int N,
     double dt,
     double ca,
-    const double *h_invMasses,
+    const double *h_cbs,
     const double *h_ccs,
     int seed
 ) : N_(N), dt_(dt), ca_(ca) {
 
-    d_invMasses_ = gpuErrchkCudaMallocAndCopy(h_invMasses, N);
+    d_cbs_ = gpuErrchkCudaMallocAndCopy(h_cbs, N);
     d_ccs_ = gpuErrchkCudaMallocAndCopy(h_ccs, N);
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
@@ -33,7 +33,7 @@ LangevinIntegrator::LangevinIntegrator(
 }
 
 LangevinIntegrator::~LangevinIntegrator() {
-    gpuErrchk(cudaFree(d_invMasses));
+    gpuErrchk(cudaFree(d_cbs_));
     gpuErrchk(cudaFree(d_ccs_));
     gpuErrchk(cudaFree(d_noise_));
     curandErrchk(curandDestroyGenerator(cr_rng_));
@@ -45,7 +45,7 @@ __global__ void update_forward(
     const int N,
     const int D,
     const RealType ca,
-    const RealType *invMasses, // N x 3, not P x N x 3, but we could just pass in the first index
+    const RealType *cbs, // N x 3, not P x N x 3, but we could just pass in the first index
     const RealType *ccs, // N
     const RealType *noise,
     RealType *x_t,
@@ -64,7 +64,7 @@ __global__ void update_forward(
     auto force = static_cast<RealType>(static_cast<long long>(du_dx[local_idx]))/FIXED_EXPONENT;
 
     // BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep
-    auto v_mid = v_t[local_idx] + dt * force * invMasses;
+    auto v_mid = v_t[local_idx] + dt * force;
     auto x_mid = x_t[local_idx] + 0.5 * dt * v_mid;
 
     auto new_v_t = ca * v_mid + ccs[atom_idx] * noise[local_idx];
@@ -92,7 +92,7 @@ void LangevinIntegrator::step_fwd(
         N_,
         D,
         ca_,
-        d_invMasses,
+        d_cbs_,
         d_ccs_,
         d_noise_,
         d_x_t,

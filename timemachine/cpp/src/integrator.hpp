@@ -26,7 +26,7 @@ private:
     double dt_;
     double N_;
     double ca_;
-    double *d_invMasses;
+    double *d_cbs_;
     double *d_ccs_;
     double *d_noise_;
 
@@ -38,7 +38,7 @@ public:
         int N,
         double dt,
         double ca,
-        const double *h_invMasses,
+        const double *h_cbs,
         const double *h_ccs,
         int seed
     );
