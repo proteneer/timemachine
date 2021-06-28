@@ -68,7 +68,7 @@ __global__ void update_forward(
     // ca assumed to contain exp(-friction * dt)
     // cbs assumed to contain dt / mass
     // ccs assumed to contain sqrt(1 - exp(-2 * friction * dt)) * sqrt(kT / mass)
-    auto v_mid = v_t[local_idx] + cbs[local_idx] * force;
+    auto v_mid = v_t[local_idx] + cbs[atom_idx] * force;
 
     v_t[local_idx] = ca * v_mid + ccs[atom_idx] * noise[local_idx];
     x_t[local_idx] += 0.5 * dt * (v_mid + v_t[local_idx]);
