@@ -203,7 +203,7 @@ void declare_context(py::module &m) {
         ctxt.get_du_dx_t_minus_1(&du_dx[0]);
         py::array_t<double, py::array::c_style> py_du_dx({N, D});
         for(int i=0; i < du_dx.size(); i++) {
-            py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+            py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
         }
         return py_du_dx;
     });
@@ -395,7 +395,7 @@ void declare_potential(py::module &m) {
 
             py::array_t<double, py::array::c_style> py_du_dx({N, D});
             for(int i=0; i < du_dx.size(); i++) {
-                py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+                py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
             }
 
             std::vector<ssize_t> pshape(params.shape(), params.shape()+params.ndim());
@@ -457,7 +457,7 @@ void declare_potential(py::module &m) {
 
             py::array_t<double, py::array::c_style> py_du_dx({N, D});
             for(int i=0; i < du_dx.size(); i++) {
-                py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+                py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
             }
 
             return py_du_dx;

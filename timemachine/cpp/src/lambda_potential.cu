@@ -18,7 +18,7 @@ __global__ void k_reduce_add_force_buffer(
     }
 
     // convert fixed to double
-    double val = static_cast<double>(static_cast<long long>(buffer[idx]))/FIXED_EXPONENT;
+    double val = FIXED_TO_FLOAT<double>(buffer[idx]);
     val *= lambda;
 
     unsigned long long fixed_val = static_cast<unsigned long long>((long long) (val*FIXED_EXPONENT));
