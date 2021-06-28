@@ -6,8 +6,7 @@ import numpy as np
 
 from fe import topology
 
-from timemachine.lib import potentials, custom_ops
-from timemachine.lib import LangevinIntegrator
+from timemachine.lib import potentials, custom_ops, LangevinIntegrator
 
 from ff.handlers import openmm_deserializer
 
@@ -56,6 +55,29 @@ class BaseFreeEnergy():
             final_params.append(combined_params)
 
         return final_params, final_potentials
+
+    def prepare_host_edge(self, ff_params, host_system, host_coords):
+        """
+        Prepares the host-edge system
+
+        Parameters
+        ----------
+        ff_params: tuple of np.array
+            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+
+        host_system: openmm.System
+            openmm System object to be deserialized
+
+        host_coords: np.array
+            Nx3 array of atomic coordinates
+
+        Returns
+        -------
+        4 tuple
+            unbound_potentials, system_params, combined_masses, combined_coords
+
+        """
+        raise NotImplementedError("Not implemented")
 
 # this class is serializable.
 class AbsoluteFreeEnergy(BaseFreeEnergy):
@@ -209,9 +231,12 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         hgt = topology.HostGuestTopology(host_bps, self.top)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
-
-        combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
-        combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
+        if isinstance(self.top, topology.SingleTopology):
+            combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
+            combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
+        else:
+            combined_masses = np.concatenate([host_masses, ligand_masses_a, ligand_masses_b])
+            combined_coords = np.concatenate([host_coords, ligand_coords_a, ligand_coords_b])
 
         return final_potentials, final_params, combined_masses, combined_coords
 

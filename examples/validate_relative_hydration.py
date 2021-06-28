@@ -142,7 +142,6 @@ if __name__ == "__main__":
 
     M = len(dataset.data)
 
-
     for epoch in range(100):
 
         for i in range(M):
