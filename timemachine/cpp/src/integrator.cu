@@ -65,12 +65,9 @@ __global__ void update_forward(
 
     // BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep
     auto v_mid = v_t[local_idx] - cbs[local_idx] * force;
-    auto x_mid = x_t[local_idx] + 0.5 * dt * v_mid;
 
-    auto new_v_t = ca * v_mid + ccs[atom_idx] * noise[local_idx];
-
-    v_t[local_idx] = new_v_t;
-    x_t[local_idx] = x_mid + 0.5 * dt * new_v_t;
+    v_t[local_idx] = ca * v_mid + ccs[atom_idx] * noise[local_idx];
+    x_t[local_idx] = x + 0.5 * dt * (v_mid + v_t[local_idx]);
 
 };
 
