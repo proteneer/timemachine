@@ -64,10 +64,14 @@ __global__ void update_forward(
     auto force = static_cast<RealType>(static_cast<long long>(du_dx[local_idx]))/FIXED_EXPONENT;
 
     // BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep
-    auto v_mid = v_t[local_idx] - cbs[local_idx] * force;
+
+    // ca assumed to contain exp(-friction * dt)
+    // cbs assumed to contain dt / mass
+    // ccs assumed to contain sqrt(1 - exp(-2 * friction * dt)) * sqrt(kT / mass)
+    auto v_mid = v_t[local_idx] + cbs[local_idx] * force;
 
     v_t[local_idx] = ca * v_mid + ccs[atom_idx] * noise[local_idx];
-    x_t[local_idx] = x + 0.5 * dt * (v_mid + v_t[local_idx]);
+    x_t[local_idx] += 0.5 * dt * (v_mid + v_t[local_idx]);
 
 };
 
