@@ -166,7 +166,7 @@ void __global__ find_group_centroids(
     const int atom_idx = atom_idxs[idx];
     const int mol_idx = mol_idxs[idx];
     atomicAdd(centroids + mol_idx*3+0, coords[atom_idx*3+0]);
-    atomicAdd(centroids + mol_idx*3+1, coords[atom_idx*3+2]);
+    atomicAdd(centroids + mol_idx*3+1, coords[atom_idx*3+1]);
     atomicAdd(centroids + mol_idx*3+2, coords[atom_idx*3+2]);
 }
 
