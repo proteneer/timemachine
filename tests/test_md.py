@@ -1,18 +1,14 @@
-import functools
 import unittest
 
 import numpy as np
 
 from jax.config import config; config.update("jax_enable_x64", True)
 import jax
-import jax.numpy as jnp
 
 
 from timemachine.lib import custom_ops, potentials
 
-from timemachine.potentials import bonded, nonbonded
-
-from common import GradientTest, prepare_nb_system
+from common import prepare_nb_system
 
 class TestContext(unittest.TestCase):
 
@@ -48,10 +44,8 @@ class TestContext(unittest.TestCase):
         masses = np.random.rand(N)
 
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
-        N = len(masses)
 
         num_steps = 5
-        lambda_schedule = np.random.rand(num_steps)
         ca = np.random.rand()
         cbs = -np.random.rand(len(masses))/1
         ccs = np.zeros_like(cbs)
@@ -59,12 +53,6 @@ class TestContext(unittest.TestCase):
         dt = 2e-3
         lamb = np.random.rand()
 
-        def loss_fn(du_dls):
-            return jnp.sum(du_dls*du_dls)/du_dls.shape[0]
-
-        def sum_loss_fn(du_dls):
-            du_dls = np.sum(du_dls, axis=0)
-            return jnp.sum(du_dls*du_dls)/du_dls.shape[0]
 
         def integrate_once_through(
             x_t,
@@ -160,12 +148,8 @@ class TestContext(unittest.TestCase):
             np.testing.assert_allclose(test_du_dx_t, ref_all_du_dxs[step])
 
 
-        ref_avg_du_dls = np.mean(ref_all_du_dls, axis=0)
-        ref_avg_du_dls_f2 = np.mean(ref_all_du_dls[::2], axis=0)
-
         ref_avg_du_dps = np.mean(ref_all_du_dps, axis=0)
         ref_std_du_dps = np.std(ref_all_du_dps, axis=0)
-        ref_avg_du_dps_f2 = np.mean(ref_all_du_dps[::2], axis=0)
 
         # the fixed point accumulator makes it hard to converge some of these
         # if the derivative is super small - in which case they probably don't matter
@@ -179,14 +163,6 @@ class TestContext(unittest.TestCase):
         np.testing.assert_allclose(test_obs.std_du_dp()[:, 2], ref_std_du_dps[:, 2], 5e-5)
 
         # test the multiple_steps method
-        intg_2 = custom_ops.LangevinIntegrator(
-            dt,
-            ca,
-            cbs,
-            ccs,
-            1234
-        )
-
         ctxt_2 = custom_ops.Context(
             x0,
             v0,
