@@ -7,6 +7,7 @@ import jax
 
 
 from timemachine.lib import custom_ops, potentials
+from timemachine.integrator import langevin_coefficients
 
 from common import prepare_nb_system
 
@@ -46,11 +47,12 @@ class TestContext(unittest.TestCase):
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
 
         num_steps = 5
-        ca = np.random.rand()
-        cbs = -np.random.rand(len(masses))/1
-        ccs = np.zeros_like(cbs)
-
+        temperature = 300
         dt = 2e-3
+        friction = 10.0
+
+        ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
+
         lamb = np.random.rand()
 
 
@@ -79,8 +81,13 @@ class TestContext(unittest.TestCase):
                 du_dx = dU_dx_fn(x_t, params, box, lamb)[0]
                 all_du_dxs.append(du_dx)
                 all_xs.append(x_t)
-                v_t = ca*v_t + np.expand_dims(cbs, axis=-1)*du_dx
-                x_t = x_t + v_t*dt
+
+                noise = np.random.randn(*v_t.shape)
+
+                v_mid = v_t + dt * du_dx / masses
+
+                v_t = ca * v_mid + np.expand_dims(ccs, axis=-1) * noise
+                x_t += 0.5 * dt * (v_mid + v_t)
 
                 # note that we do not calculate the du_dl of the last frame.
 
