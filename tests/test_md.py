@@ -84,7 +84,7 @@ class TestContext(unittest.TestCase):
 
                 noise = np.random.randn(*v_t.shape)
 
-                v_mid = v_t + dt * du_dx / masses
+                v_mid = v_t + np.expand_dims(cbs, axis=-1) * du_dx
 
                 v_t = ca * v_mid + np.expand_dims(ccs, axis=-1) * noise
                 x_t += 0.5 * dt * (v_mid + v_t)
