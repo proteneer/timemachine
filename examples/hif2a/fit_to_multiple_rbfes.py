@@ -32,13 +32,13 @@ from md import builders
 from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
 
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 
 from pickle import load, dump
 
 from optimize.step import truncated_step
 
-from typing import Tuple, Dict, List, Union
+from typing import Tuple, Dict, List, Union, Any
 
 from pathlib import Path
 from time import time
@@ -218,6 +218,18 @@ def run_validation_edges(validation: Dataset, params, systems, epoch, inference:
         loss=val_loss
     )
 
+def equilibrate_edges(datasets: List[Dataset], systems: List[Dict[str, Any]], num_steps: int, cache_path: str):
+    model_set = defaultdict(list)
+    for dataset in datasets:
+        for rfe in dataset.data:
+            if getattr(rfe, "complex_path", None) is not None:
+                model_set[rfe.complex_path].append(rfe)
+            else:
+                model_set[protein_path].append(rfe)
+    for path, edges in model_set.items():
+        model = systems[path]
+        model.equilibrate_edges([(edge.mol_a, edge.mol_b, edge.core) for edge in edges], equilibration_steps=num_steps, cache_path=cache_path)
+
 
 if __name__ == "__main__":
     default_output_path = f"results_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}"
@@ -234,6 +246,12 @@ if __name__ == "__main__":
     parser.add_argument("--path_to_edges", default=["relative_transformations.pkl"], nargs="+",
                         help="Path to pickle file containing list of RelativeFreeEnergy objects")
     parser.add_argument("--split", action="store_true", help="Split edges into train and validation set")
+    parser.add_argument(
+        "--pre_equil",
+        default=None,
+        help="Number of pre equilibration steps or path to cached equilibrated edges, if not provided no pre equilibration performed"
+    )
+    parser.add_argument("--hmr", action="store_true", help="Enable HMR")
     parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
     parser.add_argument("--protein_path", default=None, help="Path to protein if edges don't provide protein")
     parser.add_argument("--inference_only", action="store_true", help="Disable training, run all edges as validation edges")
@@ -346,6 +364,8 @@ if __name__ == "__main__":
             solvent_schedule=construct_lambda_schedule(configuration.num_solvent_windows),
             equil_steps=configuration.num_equil_steps,
             prod_steps=configuration.num_prod_steps,
+            pre_equilibrate=args.pre_equil is not None,
+            hmr=args.hmr,
         )
 
     # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
@@ -376,6 +396,20 @@ if __name__ == "__main__":
         step_inds.append(np.asarray(batched_inds, dtype=object))
 
     np.save(output_path.joinpath('step_indices.npy'), np.hstack(step_inds)[:args.param_updates])
+
+    pre_equil = args.pre_equil
+    if pre_equil is not None:
+        steps = 0
+        cache_path = output_path.joinpath("equilibration_cache.pkl")
+        if pre_equil.isdigit():
+            steps = int(pre_equil)
+        elif Path(pre_equil).is_file():
+            cache_path = pre_equil
+        else:
+            print(f"Must provide either an integer or a valid path for --pre_equil, got {pre_equil}")
+            sys.exit(1)
+
+        equilibrate_edges([training, validation], systems, steps, cache_path)
 
     step = 0
     # in each optimizer step, look at one transformation from relative_transformations

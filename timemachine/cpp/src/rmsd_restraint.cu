@@ -117,9 +117,6 @@ void RMSDRestraint<RealType>::execute_device(
 
     double epsilon = 1e-8;
 
-    gpuErrchk(cudaMemset(d_u_buf_, 0, sizeof(*d_u_buf_)));
-    gpuErrchk(cudaMemset(d_du_dx_buf_, 0, N*3*sizeof(*d_du_dx_buf_)));
-
     if(s[0] < epsilon || s[1] < epsilon || s[2] < epsilon) {
         return;
     }
@@ -198,8 +195,8 @@ void RMSDRestraint<RealType>::execute_device(
         du_dx[dst_idx*3+2] += static_cast<unsigned long long>(llrint(k_*x2_adjoint(b, 2)*FIXED_EXPONENT));
     }
 
-    gpuErrchk(cudaMemcpy(d_u_buf_, &nrg, sizeof(*d_u_buf_), cudaMemcpyHostToDevice));
-    gpuErrchk(cudaMemcpy(d_du_dx_buf_, &du_dx[0], N*3*sizeof(*d_du_dx_buf_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpyAsync(d_u_buf_, &nrg, sizeof(*d_u_buf_), cudaMemcpyHostToDevice, stream));
+    gpuErrchk(cudaMemcpyAsync(d_du_dx_buf_, &du_dx[0], N*3*sizeof(*d_du_dx_buf_), cudaMemcpyHostToDevice, stream));
 
     const int blocks= (N_+32-1)/32;
     const int tpb = 32;

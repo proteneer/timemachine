@@ -38,6 +38,34 @@ from simtk.openmm.app import PDBFile, Topology
 
 from rdkit import Chem
 
+
+def convert_single_topology_mols(coords: np.ndarray, topo: "SingleTopology") -> np.ndarray:
+    """Convert a single topology frame's ligand coordinates into two complete ligands.
+
+    coords: np.ndarray
+        The coordinates that represent the single topology alchemical ligand
+
+    topo: topology.SingleTopology
+        Topology that was used in the simulation.
+
+
+    Example
+    -------
+
+        >>> writer = PDBWriter(...)
+        >>> lig_coords = convert_single_topology_mols(x0[num_host_coords:], topo)
+        >>> new_coords = np.concatenate((x0[:num_host_coords], lig_coords), axis=0)
+        >>> writer.write_frame(new_coords*10)
+        >>> writer.close()
+    """
+    xa = np.zeros((topo.mol_a.GetNumAtoms(), 3))
+    xb = np.zeros((topo.mol_b.GetNumAtoms(), 3))
+    for a_idx, c_idx in enumerate(topo.a_to_c):
+        xa[a_idx] = coords[c_idx]
+    for b_idx, c_idx in enumerate(topo.b_to_c):
+        xb[b_idx] = coords[c_idx]
+    return np.concatenate((xa, xb), axis=0)
+
 class PDBWriter():
 
     def __init__(self, objs, out_filepath): 
