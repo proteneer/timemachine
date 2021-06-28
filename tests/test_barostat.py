@@ -1,3 +1,4 @@
+import platform
 import numpy as np
 from simtk import unit
 import time
@@ -92,6 +93,7 @@ def test_barostat_partial_group_idxs():
     ctxt.multiple_steps(np.ones(1000)*lam)
 
 def test_barostat_varying_pressure():
+    platform_version = platform.version().lower()
     temperature = 300.0 * unit.kelvin
     initial_waterbox_width = 2.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
@@ -99,6 +101,16 @@ def test_barostat_varying_pressure():
     collision_rate = 1.0 / unit.picosecond
     seed = 2021
     np.random.seed(seed)
+
+    box_vol = 7.8336338769085809
+    box_diff = 0.5439182266135552
+    lig_charge_vals = np.array([1.4572377542719206, -0.37011462071257184, 1.1478267014520305, -4.920166483601927, 0.16985194917937935])
+    if "ubuntu" not in platform_version:
+        print("Test expected to run under ubuntu 20.04 or 18.04")
+    if "20.04" in platform_version:
+        box_vol = 7.722300793290474
+        box_diff = 0.23923388075982022
+        lig_charge_vals[3] = -4.920284514559682
 
     # Start out with a very large pressure
     pressure = 1000. * unit.atmosphere
@@ -126,6 +138,9 @@ def test_barostat_varying_pressure():
     lam = 1.0
 
     bound_potentials = []
+    # Look at the first five atoms and their assigned charges
+    ligand_charges = sys_params[-1][:, 0][len(min_complex_coords):][:5]
+    np.testing.assert_array_almost_equal(lig_charge_vals, ligand_charges, decimal=5)
     for params, unbound_pot in zip(sys_params, unbound_potentials):
         bp = unbound_pot.bind(np.asarray(params))
         bound_potentials.append(bp)
@@ -167,15 +182,14 @@ def test_barostat_varying_pressure():
     baro.set_pressure((1 * unit.atmosphere).value_in_unit(unit.bar))
     # Changing the barostat interval resets the barostat step.
     baro.set_interval(2)
-    start = time.time()
-    volumes = []
-    while time.time() - start < 15:
-        ctxt.multiple_steps(np.ones(1000)*lam)
-        atm_box = ctxt.get_box()
-        volumes.append(compute_box_volume(atm_box))
 
+    ctxt.multiple_steps(np.ones(5000)*lam)
+    atm_box = ctxt.get_box()
+    # OpenEye's AM1 Charging values are OS platform dependent. To ensure that we have deterministic values
+    # we check against our two most common OS versions, Ubuntu 18.04 and 20.04.
+    np.testing.assert_almost_equal(compute_box_volume(atm_box), box_vol, decimal=5)
     # Box will grow thanks to the lower pressure
-    assert np.abs(ten_atm_box_vol - np.mean(volumes[len(volumes)//2:])) >= 0.2
+    np.testing.assert_almost_equal(np.abs(ten_atm_box_vol - compute_box_volume(atm_box)), box_diff, decimal=5)
 
 def test_molecular_ideal_gas():
     """
