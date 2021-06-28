@@ -378,7 +378,10 @@ class RelativeModel(ABC):
 
     def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, prefix: str):
         """
-        Compute the free of energy of converting mol_a into mol_b.
+        Compute the free of energy of converting mol_a into mol_b. The starting state
+        has mol_a fully interacting with the environment, mol_b is non-interacting.
+        The end state has mol_b fully interacting with the environment, and mol_a is
+        non-interacting.
 
         This function is differentiable w.r.t. ff_params.
 
@@ -467,9 +470,9 @@ class RelativeModel(ABC):
             combined_coords,
             prefix+"_mol_to_ref")
 
-        # dG_0 is the free energy of moving X-B-A into X-B+A
-        # dG_1 is the free energy of moving X-A-B into X-A+B
-        # -dG_1 + dG_0 is the free energy of moving X-A+B -> X-B+A
+        # dG_0 is the free energy of moving X-A-B into X-A+B
+        # dG_1 is the free energy of moving X-B-A into X-B+A
+        # -dG_0 + dG_1 is the free energy of moving X-A+B -> X-B+A
         # i.e. the free energy of "unbinding" A
 
         dG_err = np.sqrt(dG_0_err**2 + dG_1_err**2)
