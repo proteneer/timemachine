@@ -361,6 +361,10 @@ class AM1CCCHandler(SerializableMixIn):
             if result is False:
                 raise Exception('Unable to assign charges')
 
+            # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
+            # to be an issue that the atom ordering modifies the return values as well. A follow up
+            # with OpenEye is in order
+            # https://github.com/openforcefield/openff-toolkit/issues/983
             am1_charges = [] 
             for index, atom in enumerate(oemol.GetAtoms()):
                 q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
