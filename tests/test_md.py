@@ -49,9 +49,11 @@ class TestContext(unittest.TestCase):
         num_steps = 5
         temperature = 300
         dt = 2e-3
-        friction = 10.0
-
+        friction = 0.0
         ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
+
+        # not convenient to simulate identical trajectories otherwise
+        assert (ccs == 0).all()
 
         lamb = np.random.rand()
 
