@@ -19,7 +19,7 @@ def langevin_coefficients(
         units of picoseconds
 
     friction: float
-        frequency in picoseconds
+        collision rate in 1 / picoseconds
 
     masses: array
         mass of each atom in standard mass units
@@ -35,8 +35,6 @@ def langevin_coefficients(
 
         during force update
         v -> v + cb * force
-
-
     """
     kT = BOLTZ * temperature
     nscale = np.sqrt(kT / masses)
