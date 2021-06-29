@@ -19,7 +19,7 @@ def langevin_coefficients(
         units of picoseconds
 
     friction: float
-        frequency in picoseconds
+        collision rate in 1 / picoseconds
 
     masses: array
         mass of each atom in standard mass units
@@ -28,63 +28,19 @@ def langevin_coefficients(
     -------
     tuple (ca, cb, cc)
         ca is scalar, and cb and cc are n length arrays
-        that are used during langevin dynamics
+        that are used during langevin dynamics as follows:
 
+        during heat-bath update
+        v -> ca * v + cc * gaussian
 
+        during force update
+        v -> v + cb * force
     """
-    vscale = np.exp(-dt*friction)
-    if friction == 0:
-        fscale = dt
-    else:
-        fscale = (1-vscale)/friction
     kT = BOLTZ * temperature
-    nscale = np.sqrt(kT*(1-vscale*vscale)) # noise scale
-    invMasses = 1.0/masses
-    sqrtInvMasses = np.sqrt(invMasses)
+    nscale = np.sqrt(kT / masses)
 
-    ca = vscale
-    cb = fscale*invMasses
-    cc = nscale*sqrtInvMasses
-    return ca, cb, cc
+    ca = np.exp(-friction * dt)
+    cb = dt / masses
+    cc = np.sqrt(1 - np.exp(-2 * friction * dt)) * nscale
 
-def brownian_coefficients(
-    temperature,
-    dt,
-    friction,
-    masses):
-    """
-    Compute coefficients for langevin dynamics
-
-    Parameters
-    ----------
-    temperature: float
-        units of Kelvin
-
-    dt: float
-        units of picoseconds
-
-    friction: float
-        frequency in picoseconds
-
-    masses: array
-        mass of each atom in standard mass units
-
-    Returns
-    -------
-    tuple (ca, cb, cc)
-        ca is scalar, and cb and cc are n length arrays
-        that are used during langevin dynamics
-
-    """
-    fscale = dt/friction
-    kT = BOLTZ * temperature
-
-    invMasses = 1.0/masses
-    sqrtInvMasses = np.sqrt(invMasses)
-
-    nscale = np.sqrt(2.0*kT*dt/friction);
-
-    ca = 0.0
-    cb = fscale*invMasses
-    cc = nscale*sqrtInvMasses
     return ca, cb, cc
