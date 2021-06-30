@@ -1,17 +1,13 @@
 from typing import List
 from jax.config import config; config.update("jax_enable_x64", True)
 
-import jax
 import numpy as np
 
 from fe import topology
 
-from timemachine.lib import potentials, custom_ops
-from timemachine.lib import LangevinIntegrator
-
 from ff.handlers import openmm_deserializer
 
-from rdkit.Chem import MolToSmiles
+from scipy.optimize import linear_sum_assignment
 
 def get_romol_conf(mol):
     """Coordinates of mol's 0th conformer, in nanometers"""
@@ -134,10 +130,6 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
         ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
 
-        # extract the 0th conformer
-        ligand_coords_a = get_romol_conf(self.mol_a)
-        ligand_coords_b = get_romol_conf(self.mol_b)
-
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
 
         hgt = topology.HostGuestTopology(host_bps, self.top)
@@ -198,3 +190,48 @@ def construct_relative_lambda_schedule(num_windows):
     assert len(lambda_schedule) == num_windows
 
     return lambda_schedule
+
+
+def setup_relative_restraints(
+    mol_a,
+    mol_b):
+    """
+    Setup restraints between ring atoms in two molecules.
+
+    """
+    # setup relative orientational restraints
+    # rough sketch of algorithm:
+    # find core atoms in mol_a
+    # find core atoms in mol_b
+    # use the hungarian algorithm to assign matching
+
+    ligand_coords_a = get_romol_conf(mol_a)
+    ligand_coords_b = get_romol_conf(mol_b)
+
+    core_idxs_a = []
+    for idx, a in enumerate(mol_a.GetAtoms()):
+        if a.IsInRing():
+            core_idxs_a.append(idx)
+
+    core_idxs_b = []
+    for idx, b in enumerate(mol_b.GetAtoms()):
+        if b.IsInRing():
+            core_idxs_b.append(idx)
+
+    ri = np.expand_dims(ligand_coords_a[core_idxs_a], 1)
+    rj = np.expand_dims(ligand_coords_b[core_idxs_b], 0)
+    rij = np.sqrt(np.sum(np.power(ri-rj, 2), axis=-1))
+
+    row_idxs, col_idxs = linear_sum_assignment(rij)
+
+    core_idxs = []
+
+    for core_a, core_b in zip(row_idxs, col_idxs):
+        core_idxs.append((
+            core_idxs_a[core_a],
+            core_idxs_b[core_b]
+        ))
+
+    core_idxs = np.array(core_idxs, dtype=np.int32)
+
+    return core_idxs
