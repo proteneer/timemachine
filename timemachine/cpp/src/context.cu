@@ -35,6 +35,7 @@ Context::Context(
     unsigned long long *d_in_tmp_ = nullptr; // dummy
     unsigned long long *d_out_tmp_ = nullptr; // dummy
 
+    // Compute the storage size necessary to reduce du_dl
     cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_in_tmp_, d_out_tmp_, N_);
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMalloc(&d_sum_storage_, d_sum_storage_bytes_));
@@ -151,6 +152,8 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
     // the observables decide on whether or not to act on given
     // data (cheap pointers in any case)
 
+    cudaStream_t stream = static_cast<cudaStream_t>(0);
+
     for(int i=0; i < observables_.size(); i++) {
         observables_[i]->observe(
             step_,
@@ -161,16 +164,13 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
         );
     }
 
-    gpuErrchk(cudaMemset(d_du_dx_t_, 0, N_*3*sizeof(*d_du_dx_t_)));
+    gpuErrchk(cudaMemsetAsync(d_du_dx_t_, 0, N_*3*sizeof(*d_du_dx_t_), stream));
 
     if(du_dl_out) {
-        gpuErrchk(cudaMemset(d_du_dl_buffer_, 0, N_*sizeof(*d_du_dl_buffer_)));
+        gpuErrchk(cudaMemsetAsync(d_du_dl_buffer_, 0, N_*sizeof(*d_du_dl_buffer_), stream));
     }
 
-    auto start = std::chrono::high_resolution_clock::now();
-
     for(int i=0; i < bps_.size(); i++) {
-
         bps_[i]->execute_device(
             N_,
             d_x_t_,
@@ -180,8 +180,7 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
             nullptr,
             du_dl_out ? d_du_dl_buffer_ : nullptr,
             nullptr,
-            static_cast<cudaStream_t>(0) // TBD: parallelize me!
-            // streams_[i]
+            stream
         );
     }
 
@@ -193,7 +192,7 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
             d_du_dl_buffer_,
             du_dl_out,
             N_,
-            static_cast<cudaStream_t>(0)
+            stream
         );
         gpuErrchk(cudaPeekAtLastError());
     }
@@ -207,7 +206,8 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
         d_x_t_,
         d_v_t_,
         d_du_dx_t_,
-        d_box_t_
+        d_box_t_,
+        stream
     );
 
     if(barostat_) {
