@@ -24,19 +24,20 @@ Context::Context(
     d_sum_storage_(nullptr),
     d_sum_storage_bytes_(0),
     barostat_(barostat) {
-
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N*3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N*3);
     d_box_t_ = gpuErrchkCudaMallocAndCopy(box_0, 3*3);
-
     gpuErrchk(cudaMalloc(&d_du_dx_t_, N*3*sizeof(*d_du_dx_t_)));
     gpuErrchk(cudaMalloc(&d_du_dl_buffer_, N*sizeof(*d_du_dl_buffer_)));
+    if (barostat_){
+        gpuErrchk(cudaMalloc(&d_u_buffer_, N*sizeof(*d_u_buffer_)));
+    }
 
-    unsigned long long *d_in_tmp_ = nullptr; // dummy
-    unsigned long long *d_out_tmp_ = nullptr; // dummy
+    unsigned long long *d_in_tmp = nullptr; // dummy
+    unsigned long long *d_out_tmp = nullptr; // dummy
 
     // Compute the storage size necessary to reduce du_dl
-    cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_in_tmp_, d_out_tmp_, N_);
+    cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_in_tmp, d_out_tmp, N_);
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMalloc(&d_sum_storage_, d_sum_storage_bytes_));
 
@@ -56,6 +57,9 @@ Context::~Context() {
     gpuErrchk(cudaFree(d_du_dx_t_));
     gpuErrchk(cudaFree(d_du_dl_buffer_));
     gpuErrchk(cudaFree(d_sum_storage_));
+    if (barostat_) {
+        gpuErrchk(cudaFree(d_u_buffer_));
+    }
 
     // for(int i=0; i < streams_.size(); i++) {
         // gpuErrchk(cudaStreamDestroy(streams_[i]));
@@ -153,6 +157,11 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
     // data (cheap pointers in any case)
 
     cudaStream_t stream = static_cast<cudaStream_t>(0);
+    bool compute_u = false;
+    if(barostat_ && barostat_->run_next_step()) {
+        compute_u = true;
+        gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N_*sizeof(*d_u_buffer_), stream));
+    }
 
     for(int i=0; i < observables_.size(); i++) {
         observables_[i]->observe(
@@ -179,7 +188,7 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
             d_du_dx_t_, // we only need the forces
             nullptr,
             du_dl_out ? d_du_dl_buffer_ : nullptr,
-            nullptr,
+            compute_u ? d_u_buffer_ : nullptr,
             stream
         );
     }
@@ -202,6 +211,18 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
         // gpuErrchk(cudaStreamSynchronize(streams_[i]));
     // }
 
+    if(barostat_) {
+        // May modify coords, du_dx and box size
+        barostat_->inplace_move(
+            d_x_t_,
+            d_box_t_,
+            d_du_dx_t_,
+            d_u_buffer_,
+            lambda,
+            stream
+        );
+    }
+
     intg_->step_fwd(
         d_x_t_,
         d_v_t_,
@@ -209,11 +230,6 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
         d_box_t_,
         stream
     );
-
-    if(barostat_) {
-        // May modify coords and box size
-        barostat_->inplace_move(d_x_t_, d_box_t_, lambda);
-    }
 
 
     step_ += 1;

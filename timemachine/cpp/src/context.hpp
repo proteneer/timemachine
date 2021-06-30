@@ -57,6 +57,7 @@ private:
 
     unsigned long long *d_du_dx_t_; // du/dx [N,3]
     unsigned long long *d_du_dl_buffer_; // du/dl [N]
+    unsigned long long *d_u_buffer_; // u [N] // Only used if barostat
     double *d_sum_storage_;
     size_t d_sum_storage_bytes_;
 

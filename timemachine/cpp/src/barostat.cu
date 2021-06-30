@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <stdio.h>
 #include <set>
+#include <cub/cub.cuh>
 
 #include "kernels/k_fixed_point.cuh"
 
@@ -14,7 +15,7 @@ namespace timemachine {
 
 MonteCarloBarostat::MonteCarloBarostat(
     const int N,
-    const double pressure,  // Expected in Bar
+    const double pressure, // Expected in Bar
     const double temperature, // Kelvin
     const std::vector<std::vector<int> > group_idxs,
     const int interval,
@@ -27,9 +28,8 @@ MonteCarloBarostat::MonteCarloBarostat(
     bps_(bps),
     group_idxs_(group_idxs),
     num_grouped_atoms_(0),
-    volume_scale_(0),
-    num_attempted_(0),
-    num_accepted_(0),
+    d_sum_storage_(nullptr),
+    d_sum_storage_bytes_(0),
     seed_(seed),
     step_(0) {
 
@@ -45,15 +45,25 @@ MonteCarloBarostat::MonteCarloBarostat(
     mt_ = std::mt19937(seed_);
     dist_ = std::uniform_real_distribution<double>(0.0, 1.0);
 
-    //gpuErrchk(cudaMalloc(&d_group_idxs_, group_idxs_.size()*sizeof(*d_group_idxs_)));
-
     const int num_mols = group_idxs_.size();
 
     gpuErrchk(cudaMalloc(&d_x_after_, N_*3*sizeof(*d_x_after_)));
     gpuErrchk(cudaMalloc(&d_box_after_, 3*3*sizeof(*d_box_after_)));
+    gpuErrchk(cudaMalloc(&d_u_after_buffer_, N_*sizeof(*d_u_after_buffer_)));
 
-    gpuErrchk(cudaMalloc(&d_u_before_, N_*sizeof(*d_u_before_)));
-    gpuErrchk(cudaMalloc(&d_u_after_, N_*sizeof(*d_u_after_)));
+    gpuErrchk(cudaMalloc(&d_init_u_, 1*sizeof(*d_init_u_)));
+    gpuErrchk(cudaMalloc(&d_final_u_, 1*sizeof(*d_final_u_)));
+
+    gpuErrchk(cudaMalloc(&d_num_accepted_, 1*sizeof(*d_num_accepted_)));
+    gpuErrchk(cudaMalloc(&d_num_attempted_, 1*sizeof(*d_num_attempted_)));
+
+    gpuErrchk(cudaMalloc(&d_volume_, 1*sizeof(*d_volume_)));
+    gpuErrchk(cudaMalloc(&d_length_scale_, 1*sizeof(*d_length_scale_)));
+    gpuErrchk(cudaMalloc(&d_volume_scale_, 1*sizeof(*d_volume_scale_)));
+    gpuErrchk(cudaMalloc(&d_volume_delta_, 1*sizeof(*d_volume_delta_)));
+    gpuErrchk(cudaMalloc(&d_du_dx_after_, N_*3*sizeof(*d_du_dx_after_)));
+
+    gpuErrchk(cudaMemset(d_volume_scale_, 0, 1*sizeof(*d_volume_scale_)));
 
 
     std::set<int> group_set;
@@ -98,6 +108,15 @@ MonteCarloBarostat::MonteCarloBarostat(
     gpuErrchk(cudaMemcpy(d_atom_idxs_, atom_idxs, num_grouped_atoms_*sizeof(*d_atom_idxs_), cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_mol_offsets_, mol_offsets, (num_mols+1)*sizeof(*d_mol_offsets_), cudaMemcpyHostToDevice));
 
+    // Use a typed nullptr so cub can calculate space needed to reduce
+    unsigned long long *d_in_tmp = nullptr; // dummy
+    unsigned long long *d_out_tmp = nullptr; // dummy
+
+    // Compute amount of space to reduce energies
+    cub::DeviceReduce::Sum(d_sum_storage_, d_sum_storage_bytes_, d_in_tmp, d_out_tmp, N_);
+    gpuErrchk(cudaPeekAtLastError());
+    gpuErrchk(cudaMalloc(&d_sum_storage_, d_sum_storage_bytes_));
+
 };
 
 MonteCarloBarostat::~MonteCarloBarostat() {
@@ -107,15 +126,22 @@ MonteCarloBarostat::~MonteCarloBarostat() {
     gpuErrchk(cudaFree(d_mol_idxs_));
     gpuErrchk(cudaFree(d_mol_offsets_));
     gpuErrchk(cudaFree(d_box_after_));
-    gpuErrchk(cudaFree(d_u_before_));
-    gpuErrchk(cudaFree(d_u_after_));
+    gpuErrchk(cudaFree(d_u_after_buffer_));
+    gpuErrchk(cudaFree(d_init_u_));
+    gpuErrchk(cudaFree(d_final_u_));
+    gpuErrchk(cudaFree(d_length_scale_));
+    gpuErrchk(cudaFree(d_volume_scale_));
+    gpuErrchk(cudaFree(d_volume_delta_));
+    gpuErrchk(cudaFree(d_du_dx_after_));
+    gpuErrchk(cudaFree(d_num_accepted_));
+    gpuErrchk(cudaFree(d_num_attempted_));
 };
 
 
 void __global__ rescale_positions(
     const int N, // Number of atoms to shift
     double * __restrict__ coords, // Cordinates
-    const double length_scale,
+    const double * __restrict__ length_scale, // [1]
     const double * __restrict__ box, // [9]
     double * __restrict__ scaled_box, // [9]
     const int * __restrict__ atom_idxs, // [N]
@@ -140,17 +166,17 @@ void __global__ rescale_positions(
     const double centroid_y = FIXED_TO_FLOAT<double>(centroids[mol_idx*3+1]) / num_atoms;
     const double centroid_z = FIXED_TO_FLOAT<double>(centroids[mol_idx*3+2]) / num_atoms;
 
-    const double displacement_x = ((centroid_x - center_x) * length_scale) + center_x - centroid_x;
-    const double displacement_y = ((centroid_y - center_y) * length_scale) + center_y - centroid_y;
-    const double displacement_z = ((centroid_z - center_z) * length_scale) + center_z - centroid_z;
+    const double displacement_x = ((centroid_x - center_x) * length_scale[0]) + center_x - centroid_x;
+    const double displacement_y = ((centroid_y - center_y) * length_scale[0]) + center_y - centroid_y;
+    const double displacement_z = ((centroid_z - center_z) * length_scale[0]) + center_z - centroid_z;
 
     coords[atom_idx*3+0] += displacement_x;
     coords[atom_idx*3+1] += displacement_y;
     coords[atom_idx*3+2] += displacement_z;
     if (atom_idx == 0) {
-        scaled_box[0*3+0] *= length_scale;
-        scaled_box[1*3+1] *= length_scale;
-        scaled_box[2*3+2] *= length_scale;
+        scaled_box[0*3+0] *= length_scale[0];
+        scaled_box[1*3+1] *= length_scale[0];
+        scaled_box[2*3+2] *= length_scale[0];
     }
 }
 
@@ -172,76 +198,170 @@ void __global__ find_group_centroids(
     atomicAdd(centroids + mol_idx*3+2, FLOAT_TO_FIXED<double>(coords[atom_idx*3+2]));
 }
 
-void MonteCarloBarostat::reset_counters() {
-    num_attempted_ = 0;
-    num_accepted_ = 0;
+void __global__ k_setup_barostat_move(
+    const double volume_scaling,
+    double * __restrict__ d_box, // [3*3]
+    double * __restrict__ d_volume_delta, // [1]
+    double * __restrict__ d_volume_scale, // [1]
+    double * __restrict__ d_length_scale // [1]
+) {
+    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= 1) {
+        return; // Only a single thread needs to perform this operation
+    }
+    const double volume = d_box[0*3+0] * d_box[1*3+1] * d_box[2*3+2];
+    if(d_volume_scale[0] == 0) {
+        d_volume_scale[0] = 0.1 * volume;
+    }
+    const double delta_volume = d_volume_scale[0]*2*(volume_scaling-0.5);
+    const double new_volume = volume+delta_volume;
+    d_volume_delta[0] = delta_volume;
+    d_length_scale[0] = pow(new_volume/volume, 1.0/3.0);
+}
+
+void __global__ k_decide_move(
+    const int N,
+    const int num_molecules,
+    const double kt,
+    const double pressure,
+    const double metropolis_condition,
+    double * __restrict__ d_volume_delta,
+    double * __restrict__ d_volume_scale,
+    const unsigned long long * __restrict__ d_init_u,
+    const unsigned long long * __restrict__ d_final_u,
+    unsigned long long * __restrict__ d_du_dx,
+    const unsigned long long * __restrict__ d_du_dx_output,
+    double * __restrict__ d_box,
+    const double * __restrict__ d_box_output,
+    double * __restrict__ d_x,
+    const double * __restrict__ d_x_output,
+    int * __restrict__ num_accepted,
+    int * __restrict__ num_attempted
+) {
+    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= N) {
+        return;
+    }
+
+    const double volume = d_box[0*3+0] * d_box[1*3+1] * d_box[2*3+2];
+    const double new_volume = volume+d_volume_scale[0];
+    const double energy_delta = FIXED_TO_FLOAT<double>(d_final_u[0] - d_init_u[0]);
+    const double w = energy_delta + pressure*d_volume_delta[0] - num_molecules * kt * std::log(new_volume/volume);
+
+    const bool rejected = w > 0 && metropolis_condition > std::exp(-w/kt);
+    if(idx == 0) {
+        if (!rejected) {
+            num_accepted[0]++;
+        }
+        num_attempted[0]++;
+        if(num_attempted[0] >= 10) {
+            if (num_accepted[0] < 0.25*num_attempted[0]) {
+                d_volume_scale[0] /= 1.1;
+                // Reset the counters
+                num_attempted[0] = 0;
+                num_accepted[0] = 0;
+            } else if (num_accepted[0] > 0.75*num_attempted[0]) {
+                d_volume_scale[0] = min(d_volume_scale[0]*1.1, volume*0.3);
+                // Reset the counters
+                num_attempted[0] = 0;
+                num_accepted[0] = 0;
+            }
+        }
+    }
+    if (rejected) {
+        return;
+    }
+    // If the mc move was accepted copy all of the data into place
+
+    if (idx < 9) {
+        d_box[idx] = d_box_output[idx];
+    }
+
+    #pragma unroll
+    for (int i = 0; i < 3; i ++) {
+        d_x[idx*3+i] = d_x_output[idx*3+i];
+        d_du_dx[idx*3+i] = d_du_dx_output[idx*3+i];
+    }
+}
+
+
+
+void MonteCarloBarostat::reset_counters(){
+    gpuErrchk(cudaMemset(d_num_accepted_, 0, sizeof(*d_num_accepted_)));
+    gpuErrchk(cudaMemset(d_num_attempted_, 0, sizeof(*d_num_attempted_)));
+}
+
+// run_next_step indicates that upon the next call to inplace_move
+// the barostat will trigger
+bool MonteCarloBarostat::run_next_step() {
+    return (step_ + 1) % interval_ == 0;
 }
 
 void MonteCarloBarostat::inplace_move(
-    double *d_x,
-    double *d_box,
-    const double lambda
-    ) {
-
+    double *d_x, // [N*3]
+    double *d_box, // [3*3]
+    unsigned long long *d_du_dx, // [N*3]
+    unsigned long long *d_u, // [N]
+    const double lambda,
+    cudaStream_t stream
+) {
     step_++;
     if (step_ % interval_ != 0) {
         return;
     }
-    std::vector<double> h_box(9);
-    gpuErrchk(cudaMemcpy(&h_box[0], d_box, 9*sizeof(d_box), cudaMemcpyDeviceToHost));
 
-    double volume = h_box[0*3+0]*h_box[1*3+1]*h_box[2*3+2];
+    const double volume_shift = dist_(mt_);
 
-    if(volume_scale_ == 0) {
-        volume_scale_ = 0.01*volume;
-    }
+    k_setup_barostat_move<<<1, 1, 0, stream>>>(
+        volume_shift,
+        d_box,
+        d_volume_delta_,
+        d_volume_scale_,
+        d_length_scale_
+    );
+    gpuErrchk(cudaPeekAtLastError());
+
+    gpuErrchk(cudaMemsetAsync(d_init_u_, 0, sizeof(*d_init_u_), stream));
+    gpuErrchk(cudaMemsetAsync(d_final_u_, 0, sizeof(*d_final_u_), stream));
+
+    cub::DeviceReduce::Sum(
+        d_sum_storage_,
+        d_sum_storage_bytes_,
+        d_u,
+        d_init_u_,
+        N_,
+        stream
+    );
+    gpuErrchk(cudaPeekAtLastError());
 
     const int num_molecules = group_idxs_.size();
+
+    gpuErrchk(cudaMemsetAsync(d_u_after_buffer_, 0, N_*sizeof(*d_u_after_buffer_), stream));
+    gpuErrchk(cudaMemsetAsync(d_centroids_, 0, num_molecules*3*sizeof(*d_centroids_), stream));
+    gpuErrchk(cudaMemsetAsync(d_du_dx_after_, 0, N_*3*sizeof(*d_du_dx_after_), stream));
+
+    // Create duplicates of the coords/box that we can modify
+    gpuErrchk(cudaMemcpyAsync(d_x_after_, d_x, N_*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
+    gpuErrchk(cudaMemcpyAsync(d_box_after_, d_box, 3*3*sizeof(*d_box_after_), cudaMemcpyDeviceToDevice, stream));
 
     const int tpb = 32;
     const int blocks = (num_grouped_atoms_ + tpb - 1) / tpb;
 
-    // Compute the energy of the modified system.
-
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
-    gpuErrchk(cudaMemsetAsync(d_u_before_, 0, N_*sizeof(*d_u_before_), stream));
-    gpuErrchk(cudaMemsetAsync(d_u_after_, 0, N_*sizeof(*d_u_after_), stream));
-    gpuErrchk(cudaMemsetAsync(d_centroids_, 0, num_molecules*3*sizeof(*d_centroids_), stream));
-
-    for(int i=0; i < bps_.size(); i++) {
-        bps_[i]->execute_device(
-            N_,
-            d_x,
-            d_box,
-            lambda,
-            nullptr,
-            nullptr,
-            nullptr,
-            d_u_before_,
-            stream // TBD: parallelize me!
-        );
-    }
-
-    gpuErrchk(cudaMemcpyAsync(d_x_after_, d_x, N_*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-    gpuErrchk(cudaMemcpyAsync(d_box_after_, d_box, 3*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-
     find_group_centroids<<<blocks, tpb, 0, stream>>>(
         num_grouped_atoms_,
-        d_x_after_,
+        d_x,
         d_atom_idxs_,
         d_mol_idxs_,
         d_centroids_
     );
 
-    double delta_volume = volume_scale_*2*(dist_(mt_)-0.5);
-    double new_volume = volume+delta_volume;
-    double length_scale = std::pow(new_volume/volume, 1.0/3.0);
+    gpuErrchk(cudaPeekAtLastError());
 
     // Scale centroids
     rescale_positions<<<blocks, tpb, 0, stream>>>(
         num_grouped_atoms_,
         d_x_after_,
-        length_scale,
+        d_length_scale_,
         d_box,
         d_box_after_, // Box will be rescaled by length_scale
         d_atom_idxs_,
@@ -251,66 +371,59 @@ void MonteCarloBarostat::inplace_move(
     );
     gpuErrchk(cudaPeekAtLastError());
 
+
     for(int i=0; i < bps_.size(); i++) {
         bps_[i]->execute_device(
             N_,
             d_x_after_,
             d_box_after_,
             lambda,
+            d_du_dx_after_,
             nullptr,
             nullptr,
-            nullptr,
-            d_u_after_,
+            d_u_after_buffer_,
             stream // TBD: parallelize me!
         );
     }
 
+    cub::DeviceReduce::Sum(
+        d_sum_storage_,
+        d_sum_storage_bytes_,
+        d_u_after_buffer_,
+        d_final_u_,
+        N_,
+        stream
+    );
+    gpuErrchk(cudaPeekAtLastError());
+
     double pressure = pressure_*AVOGADRO*1e-25;
     const double kT = BOLTZ*temperature_;
 
-    unsigned long long u_init_agg = 0;
-    unsigned long long u_final_agg = 0;
+    const double metropolis_condition = dist_(mt_);
 
-    unsigned long long initial_energy[N_];
-    unsigned long long final_energy[N_];
+    const int move_blocks = (N_ + tpb - 1) / tpb;
 
-    gpuErrchk(cudaMemcpyAsync(initial_energy, d_u_before_, N_*sizeof(*d_u_before_), cudaMemcpyDeviceToHost, stream));
-    gpuErrchk(cudaMemcpyAsync(final_energy, d_u_after_, N_*sizeof(*d_u_after_), cudaMemcpyDeviceToHost, stream));
+    k_decide_move<<<move_blocks, tpb, 0, stream>>>(
+        N_,
+        num_molecules,
+        kT,
+        pressure_,
+        metropolis_condition,
+        d_volume_delta_,
+        d_volume_scale_,
+        d_init_u_,
+        d_final_u_,
+        d_du_dx,
+        d_du_dx_after_,
+        d_box,
+        d_box_after_,
+        d_x,
+        d_x_after_,
+        d_num_accepted_,
+        d_num_attempted_
+    );
 
-    gpuErrchk(cudaStreamSynchronize(stream));
-
-    for (int i = 0; i < N_; i++) {
-        u_init_agg += initial_energy[i];
-        u_final_agg += final_energy[i];
-    }
-
-    double u_init = FIXED_TO_FLOAT<double>(u_init_agg);
-    double u_final = FIXED_TO_FLOAT<double>(u_final_agg);
-
-    double w = u_final-u_init + pressure*delta_volume - num_molecules*kT*std::log(new_volume/volume);
-
-    if (w > 0 && dist_(mt_) > std::exp(-w/kT)) {
-        // Reject the step.
-        // Don't modify the coords, keep box the same
-        volume = new_volume;
-    }
-    else {
-        num_accepted_++;
-        // Replace the coords and box if step accepted
-        gpuErrchk(cudaMemcpyAsync(d_x, d_x_after_, N_*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-        gpuErrchk(cudaMemcpyAsync(d_box, d_box_after_, 3*3*sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
-    }
-    num_attempted_++;
-    if (num_attempted_ >= 10) {
-        if (num_accepted_ < 0.25*num_attempted_) {
-            volume_scale_ /= 1.1;
-            this->reset_counters();
-        }
-        else if (num_accepted_ > 0.75*num_attempted_) {
-            volume_scale_ = std::min(volume_scale_*1.1, volume*0.3);
-            this->reset_counters();
-        }
-    }
+    gpuErrchk(cudaPeekAtLastError())
 };
 
 void MonteCarloBarostat::set_interval(const int interval){
