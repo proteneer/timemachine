@@ -14,7 +14,8 @@ public:
         double *d_x_t,
         double *d_v_t,
         unsigned long long *d_du_dx_t,
-        double *d_box_t_
+        double *d_box_t_,
+        cudaStream_t stream
     ) = 0;
 
 };
@@ -49,7 +50,8 @@ public:
         double *d_x_t,
         double *d_v_t,
         unsigned long long *d_du_dx_t,
-        double *d_box_t_
+        double *d_box_t_,
+        cudaStream_t stream
     ) override;
 
 };

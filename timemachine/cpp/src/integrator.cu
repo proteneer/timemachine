@@ -80,7 +80,8 @@ void LangevinIntegrator::step_fwd(
     double *d_x_t,
     double *d_v_t,
     unsigned long long *d_du_dx_t,
-    double *d_box_t_) {
+    double *d_box_t_,
+    cudaStream_t stream) {
 
     const int D = 3;
     size_t tpb = 32;
@@ -89,7 +90,7 @@ void LangevinIntegrator::step_fwd(
 
     curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_*D), 0.0, 1.0));
 
-    update_forward<double><<<dimGrid_dx, tpb>>>(
+    update_forward<double><<<dimGrid_dx, tpb, 0, stream>>>(
         N_,
         D,
         ca_,
