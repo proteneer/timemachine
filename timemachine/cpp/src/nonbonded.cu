@@ -297,6 +297,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     dim3 dimGrid(B, 3, 1);
     // If we have to sort, we also have to rebuild the neighborlist
     if (sort_indices) {
+        // Add in a check that the cutoff * 2 < box_width
         if(!disable_hilbert_) {
             this->hilbert_sort(d_x, d_box, stream);
         } else {

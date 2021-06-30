@@ -116,14 +116,14 @@ def test_barostat_varying_pressure():
     seed = 2021
     np.random.seed(seed)
 
-    box_vol = 7.8336338769085809
-    box_diff = 0.5439182266135552
+    box_vol = 7.584418174042398
+    box_diff = 0.4723854602575077
     lig_charge_vals = np.array([1.4572377542719206, -0.37011462071257184, 1.1478267014520305, -4.920166483601927, 0.16985194917937935])
     if "ubuntu" not in platform_version:
         print("Test expected to run under ubuntu 20.04 or 18.04")
     if "20.04" in platform_version:
-        box_vol = 7.80127358754933
-        box_diff = 1.6621367141041832
+        box_vol = 7.824647141563986
+        box_diff = 0.5287400036790046
         lig_charge_vals[3] = -4.920284514559682
 
     # Start out with a very large pressure
@@ -203,7 +203,7 @@ def test_barostat_varying_pressure():
     # we check against our two most common OS versions, Ubuntu 18.04 and 20.04.
     np.testing.assert_almost_equal(compute_box_volume(atm_box), box_vol, decimal=5)
     # Box will grow thanks to the lower pressure
-    np.testing.assert_almost_equal(np.abs(ten_atm_box_vol - compute_box_volume(atm_box)), box_diff, decimal=5)
+    np.testing.assert_almost_equal(compute_box_volume(atm_box) - ten_atm_box_vol, box_diff, decimal=5)
 
 def test_molecular_ideal_gas():
     """
