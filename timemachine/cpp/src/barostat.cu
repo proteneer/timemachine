@@ -33,6 +33,9 @@ MonteCarloBarostat::MonteCarloBarostat(
     seed_(seed),
     step_(0) {
 
+    // Trigger check that interval is valid
+    this->set_interval(interval_);
+
     // lets not have another facepalm moment again...
     if(temperature < 100.0) {
         std::cout << "warning temperature less than 100K" << std::endl;
@@ -314,6 +317,9 @@ void MonteCarloBarostat::inplace_move(
 };
 
 void MonteCarloBarostat::set_interval(const int interval){
+    if (interval <= 0) {
+        throw std::runtime_error("Barostat interval must be greater than 0");
+    }
     interval_ = interval;
     // Clear the step, to ensure user can expect that in N steps the barostat will trigger
     step_ = 0;
