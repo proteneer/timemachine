@@ -240,8 +240,6 @@ class RelativeModel(ABC):
         unbound_potentials.append(restraint_potential)
         sys_params.append(core_params)
 
-        endpoint_correct = True
-
         # tbd sample from boltzmann distribution later
         v0 = np.zeros_like(x0)
 
@@ -421,3 +419,18 @@ class RelativeHydrationModel(RelativeModel):
 
     def setup_topology(self, mol_a, mol_b):
         return topology.DualTopologyRHFE(mol_a, mol_b, self.ff)
+
+class AbsoluteConversionModel(AbsoluteModel):
+
+    def setup_topology(self, mol):
+        return topology.BaseTopologyConversion(mol, self.ff)
+
+class AbsoluteStandardHydrationModel(AbsoluteModel):
+
+    def setup_topology(self, mol):
+        return topology.BaseTopologyStandardDecoupling(mol, self.ff)
+
+class RelativeBindingModel(RelativeModel):
+
+    def setup_topology(self, mol_a, mol_b):
+        return topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)

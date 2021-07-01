@@ -30,6 +30,37 @@ def get_optimal_rotation(x1, x2):
 
     return rotation
 
+def get_optimal_translation(x1, x2):
+    return np.mean(x2, axis=0) - np.mean(x1, axis=0)
+
+def get_optimal_rotation_and_translation(x1, x2):
+    """
+    Compute the optimal rotation and translation of x2 unto x1.
+
+    Parameters
+    ----------
+    x1: np.array (K,3)
+
+    x2: np.array (K,3)
+
+    Returns
+    -------
+    tuple (np.array, np.array)
+        Rotation translation pair
+    """
+    t = get_optimal_translation(x1, x2)
+    x1 = x1 - np.mean(x1, axis=0)
+    x2 = x2 - np.mean(x2, axis=0)
+    return get_optimal_rotation(x1, x2), t
+
+def apply_rotation_and_translation(x, R, t):
+    """
+    Apply R and t from x.
+    """
+    x_com = np.mean(x, axis=0)
+    aligned_x = (x - x_com)@R - t + x_com
+    return aligned_x
+
 def rmsd_align(x1, x2):
     """
     Optimally align x1 and x2 via rigid translation and rotations.
