@@ -7,10 +7,10 @@ import numpy as np
 import jax
 from jax import numpy as jnp
 
-from fe.free_energy_rabfe import construct_absolute_lambda_schedule, construct_relative_lambda_schedule
+from fe.free_energy_rabfe import construct_absolute_lambda_schedule, construct_relative_lambda_schedule, setup_relative_restraints, get_romol_conf
 from fe.utils import convert_uIC50_to_kJ_per_mole
 from fe import model_rabfe
-from md import builders
+from md import builders, minimizer
 
 from testsystems.relative import hif2a_ligand_pair
 
@@ -113,14 +113,19 @@ if __name__ == "__main__":
 
     print("Reference Molecule:", ref_mol.GetProp("_Name"), Chem.MolToSmiles(ref_mol))
 
+    temperature = 300.0
+    pressure = 1.0
+    dt = 2.5e-3
+
     model_relative = model_rabfe.RelativeHydrationModel(
         client,
         forcefield,
         solvent_system,
-        solvent_coords,
-        solvent_box,
         relative_solvent_schedule,
         solvent_topology,
+        temperature,
+        pressure,
+        dt,
         cmd_args.num_equil_steps,
         cmd_args.num_prod_steps
     )
@@ -129,10 +134,11 @@ if __name__ == "__main__":
         client,
         forcefield,
         solvent_system,
-        solvent_coords,
-        solvent_box,
         absolute_solvent_schedule,
         solvent_topology,
+        temperature,
+        pressure,
+        dt,
         cmd_args.num_equil_steps,
         cmd_args.num_prod_steps
     )
@@ -141,6 +147,27 @@ if __name__ == "__main__":
     ordered_handles = forcefield.get_ordered_handles()
 
     M = len(dataset.data)
+
+    # generate initial coordinates
+    def minimize_absolute(mol):
+        hc = minimizer.minimize_host_4d(
+            [mol],
+            solvent_system,
+            solvent_coords,
+            forcefield,
+            solvent_box
+        )
+        return np.concatenate([hc, get_romol_conf(mol)])
+
+    def minimize_relative(mol_a, mol_b):
+        hc = minimizer.minimize_host_4d(
+            [mol_a, mol_b],
+            solvent_system,
+            solvent_coords,
+            forcefield,
+            solvent_box
+        )
+        return np.concatenate([hc, get_romol_conf(mol_a), get_romol_conf(mol_b)])
 
     for epoch in range(100):
 
@@ -151,15 +178,27 @@ if __name__ == "__main__":
                 mol_a = dataset.data[i]
                 mol_b = dataset.data[j]
 
+                # relative calculation
+                core_idxs = setup_relative_restraints(mol_a, mol_b)
+
+                xab = minimize_relative(mol_a, mol_b)
+
                 ddG_ab, ddG_ab_err = model_relative.predict(
                     ordered_params,
                     mol_a,
                     mol_b,
+                    core_idxs,
+                    x0=xab,
+                    box0=solvent_box,
                     prefix='epoch_'+str(epoch)+'_solvent_relative_'+mol_a.GetProp('_Name')+'_'+mol_b.GetProp('_Name')
                 )
 
-                dG_a, dG_a_err = model_absolute.predict(ordered_params, mol_a, prefix='solvent_absolute_'+mol_a.GetProp('_Name'))
-                dG_b, dG_b_err = model_absolute.predict(ordered_params, mol_b, prefix='solvent_absolute_'+mol_b.GetProp('_Name'))
+                # absolute calculation
+                xa = minimize_absolute(mol_a)
+                xb = minimize_absolute(mol_b)
+
+                dG_a, dG_a_err = model_absolute.predict(ordered_params, mol_a, x0=xa, box0=solvent_box, prefix='solvent_absolute_'+mol_a.GetProp('_Name'))
+                dG_b, dG_b_err = model_absolute.predict(ordered_params, mol_b, x0=xb, box0=solvent_box, prefix='solvent_absolute_'+mol_b.GetProp('_Name'))
                 dG_ab_err = np.sqrt(dG_a_err**2 + dG_b_err**2)
 
                 print(f"mol_i {i} {mol_a.GetProp('_Name')} mol_j {j} {mol_b.GetProp('_Name')} ddG_ab {ddG_ab:.3f} +- {ddG_ab_err:.3f} dG_a-dG_b {dG_a-dG_b:.3f} +- {dG_ab_err:.3f}")

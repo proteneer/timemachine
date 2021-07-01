@@ -1,89 +1,22 @@
 
 from abc import ABC
-import os
-import pickle
 
 import numpy as np
-import jax.numpy as jnp
-import functools
-import tempfile
 import mdtraj
 
 from simtk import openmm
-from simtk.openmm import app
 from rdkit import Chem
 
-from md import minimizer
 from timemachine.lib import potentials
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine import constants
-from timemachine.potentials import rmsd
 from fe import free_energy_rabfe, topology, estimator_abfe, model_utils
 from ff import Forcefield
 
 from parallel.client import AbstractClient
 from typing import Optional
-from functools import partial
-from scipy.optimize import linear_sum_assignment
 
 from md.barostat.utils import get_group_indices, get_bond_list
-
-def get_romol_conf(mol):
-    """Coordinates of mol's 0th conformer, in nanometers"""
-    conformer = mol.GetConformer(0)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    return guest_conf/10 # from angstroms to nm
-
-def setup_relative_restraints(
-    mol_a,
-    mol_b):
-    """
-    Setup restraints between ring atoms in two molecules.
-
-    """
-    # setup relative orientational restraints
-    # rough sketch of algorithm:
-    # find core atoms in mol_a
-    # find core atoms in mol_b
-    # use the hungarian algorithm to assign matching
-
-    ligand_coords_a = get_romol_conf(mol_a)
-    ligand_coords_b = get_romol_conf(mol_b)
-
-    core_idxs_a = []
-    for idx, a in enumerate(mol_a.GetAtoms()):
-        if a.IsInRing():
-            core_idxs_a.append(idx)
-
-    core_idxs_b = []
-    for idx, b in enumerate(mol_b.GetAtoms()):
-        if b.IsInRing():
-            core_idxs_b.append(idx)
-
-    ri = np.expand_dims(ligand_coords_a[core_idxs_a], 1)
-    rj = np.expand_dims(ligand_coords_b[core_idxs_b], 0)
-    rij = np.sqrt(np.sum(np.power(ri-rj, 2), axis=-1))
-
-    row_idxs, col_idxs = linear_sum_assignment(rij)
-
-    core_idxs = []
-
-    for core_a, core_b in zip(row_idxs, col_idxs):
-        core_idxs.append((
-            core_idxs_a[core_a],
-            core_idxs_b[core_b]
-        ))
-
-    core_idxs = np.array(core_idxs, dtype=np.int32)
-
-    return core_idxs
-
-
-def get_romol_conf(mol):
-    """Coordinates of mol's 0th conformer, in nanometers"""
-    conformer = mol.GetConformer(0)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    return guest_conf/10 # from angstroms to nm
 
 class AbsoluteModel(ABC):
 
@@ -92,18 +25,20 @@ class AbsoluteModel(ABC):
         client: AbstractClient or None,
         ff: Forcefield,
         host_system: openmm.System,
-        host_coords: np.ndarray,
-        host_box: np.ndarray,
         host_schedule: np.ndarray,
-        host_topology: np.ndarray,
+        host_topology: openmm.app.Topology,
+        temperature: float,
+        pressure: float,
+        dt: float,
         equil_steps: int,
         prod_steps: int):
 
         self.host_system = host_system
-        self.host_coords = host_coords
-        self.host_box = host_box
         self.host_schedule = host_schedule
         self.host_topology = host_topology
+        self.temperature = temperature
+        self.pressure = pressure
+        self.dt = dt
 
         self.client = client
         self.ff = ff
@@ -116,6 +51,8 @@ class AbsoluteModel(ABC):
     def predict(self,
         ff_params,
         mol,
+        x0,
+        box0,
         prefix):
         """ Compute the absolute free of energy of decoupling mol_a.
 
@@ -129,6 +66,12 @@ class AbsoluteModel(ABC):
 
         mol: Chem.Mol
             Molecule we want to decouple
+
+        x0: np.narray
+            Initial coordinates of the combined system.
+
+        box0: np.narray
+            Initial box vectors of the combined system.
 
         prefix: str
             String to prepend to print out statements
@@ -148,13 +91,6 @@ class AbsoluteModel(ABC):
         """
 
         print(f"Minimizing the host structure to remove clashes.")
-        minimized_host_coords = minimizer.minimize_host_4d(
-            [mol],
-            self.host_system,
-            self.host_coords,
-            self.ff,
-            self.host_box
-        )
 
         top = self.setup_topology(mol)
 
@@ -165,24 +101,17 @@ class AbsoluteModel(ABC):
             self.host_system
         )
 
-
-        ligand_coords = get_romol_conf(mol)
-        combined_coords = np.concatenate([minimized_host_coords, ligand_coords])
-
-        endpoint_correct = False
-
         seed = 0
 
-        temperature = 300.0
-        beta = 1/(constants.BOLTZ*temperature)
+        beta = 1/(constants.BOLTZ*self.temperature)
 
         bond_list = get_bond_list(unbound_potentials[0])
         masses = model_utils.apply_hmr(masses, bond_list)
-
+        friction = 1.0
         integrator = LangevinIntegrator(
-            temperature,
-            2.5e-3,
-            1.0,
+            self.temperature,
+            self.dt,
+            friction,
             masses,
             seed
         )
@@ -190,22 +119,22 @@ class AbsoluteModel(ABC):
         group_indices = get_group_indices(bond_list)
         barostat_interval = 5
         barostat = MonteCarloBarostat(
-            combined_coords.shape[0],
-            1.0,
-            temperature,
+            x0.shape[0],
+            self.pressure,
+            self.temperature,
             group_indices,
             barostat_interval,
             seed
         )
 
-        x0 = combined_coords
-        v0 = np.zeros_like(combined_coords)
+        v0 = np.zeros_like(x0)
 
+        endpoint_correct = False
         model = estimator_abfe.FreeEnergyModel(
             unbound_potentials,
             endpoint_correct,
             self.client,
-            self.host_box,
+            box0,
             x0,
             v0,
             integrator,
@@ -235,10 +164,6 @@ class AbsoluteModel(ABC):
 
         return dG, results
 
-class AbsoluteHydrationModel(AbsoluteModel):
-
-    def setup_topology(self, mol):
-        return topology.BaseTopology(mol, self.ff)
 
 
 class RelativeModel(ABC):
@@ -251,16 +176,18 @@ class RelativeModel(ABC):
         client: Optional[AbstractClient],
         ff: Forcefield,
         host_system: openmm.System,
-        host_coords: np.ndarray,
-        host_box: np.ndarray,
         host_schedule: np.ndarray,
-        host_topology,
+        host_topology: openmm.app.Topology,
+        temperature: float,
+        pressure: float,
+        dt: float,
         equil_steps: int,
         prod_steps: int):
 
         self.host_system = host_system
-        self.host_coords = host_coords
-        self.host_box = host_box
+        self.temperature = temperature
+        self.pressure = pressure
+        self.dt = dt
         self.host_schedule = host_schedule
         self.host_topology = host_topology
         self.client = client
@@ -277,7 +204,8 @@ class RelativeModel(ABC):
         mol_a,
         mol_b,
         core_idxs,
-        combined_coords,
+        x0,
+        box0,
         prefix):
 
         dual_topology = self.setup_topology(mol_a, mol_b)
@@ -288,19 +216,16 @@ class RelativeModel(ABC):
             self.host_system
         )
 
-        # setup restraints and align to the blocker
-        num_host_atoms = len(self.host_coords)
-        combined_topology = model_utils.generate_openmm_topology(
-            [self.host_topology, mol_a, mol_b],
-            self.host_coords,
-            prefix+".pdb"
-        )
-
+        # unused for now, we may re-enable this later on.
+        # combined_topology = model_utils.generate_openmm_topology(
+        #     [self.host_topology, mol_a, mol_b],
+        #     self.host_coords,
+        #     prefix+".pdb"
+        # )
         # generate initial structure
-        coords = combined_coords
-
-        traj = mdtraj.Trajectory([coords], mdtraj.Topology.from_openmm(combined_topology))
-        traj.save_xtc("initial_coords_aligned.xtc")
+        # coords = combined_coords
+        # traj = mdtraj.Trajectory([coords], mdtraj.Topology.from_openmm(combined_topology))
+        # traj.save_xtc("initial_coords_aligned.xtc")
 
         k_core = 75.0
         core_params = np.zeros_like(core_idxs).astype(np.float64)
@@ -318,20 +243,19 @@ class RelativeModel(ABC):
         endpoint_correct = True
 
         # tbd sample from boltzmann distribution later
-        x0 = coords
-        v0 = np.zeros_like(coords)
+        v0 = np.zeros_like(x0)
 
         seed = 0
-        temperature = 300.0
-        beta = 1/(constants.BOLTZ*temperature)
+        beta = 1/(constants.BOLTZ*self.temperature)
 
         bond_list = np.concatenate([unbound_potentials[0].get_idxs(), core_idxs])
         masses = model_utils.apply_hmr(masses, bond_list)
 
+        friction = 1.0
         integrator = LangevinIntegrator(
-            temperature,
-            2.5e-3,
-            1.0,
+            self.temperature,
+            self.dt,
+            friction,
             masses,
             seed
         )
@@ -340,9 +264,9 @@ class RelativeModel(ABC):
         barostat_interval = 5
 
         barostat = MonteCarloBarostat(
-            coords.shape[0],
-            1.0,
-            temperature,
+            x0.shape[0],
+            self.pressure,
+            self.temperature,
             group_indices,
             barostat_interval,
             seed
@@ -353,7 +277,7 @@ class RelativeModel(ABC):
             unbound_potentials,
             endpoint_correct,
             self.client,
-            self.host_box, # important, use equilibrated box.
+            box0, # important, use equilibrated box.
             x0,
             v0,
             integrator,
@@ -376,12 +300,20 @@ class RelativeModel(ABC):
 
         return dG, dG_err, results
 
-    def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, prefix: str):
+    def predict(self,
+        ff_params: list,
+        mol_a: Chem.Mol,
+        mol_b: Chem.Mol,
+        core_idxs: np.array,
+        x0: np.array,
+        box0: np.array,
+        prefix: str):
         """
         Compute the free of energy of converting mol_a into mol_b. The starting state
         has mol_a fully interacting with the environment, mol_b is non-interacting.
         The end state has mol_b fully interacting with the environment, and mol_a is
-        non-interacting.
+        non-interacting. The atom mapping defining the core need be neither
+        bijective nor factorizable.
 
         This function is differentiable w.r.t. ff_params.
 
@@ -397,8 +329,17 @@ class RelativeModel(ABC):
         mol_b: Chem.Mol
             Resulting molecule
 
+        core_idxs: np.array (Nx2), dtype int32
+            Atom mapping defining the core, mapping atoms from mol_a to atoms in mol_b.
+
         prefix: str
             Auxiliary string to prepend print-outs
+
+        x0: np.ndarray
+            Initial coordinates of the combined system.
+
+        box0: np.ndarray
+            Initial box vectors.
 
         Returns
         -------
@@ -413,32 +354,19 @@ class RelativeModel(ABC):
             to compute delta_Us, the BAR estimates themselves become correlated.
 
         """
-
-        host_system = self.host_system
-        host_lambda_schedule = self.host_schedule
-
-        minimized_host_coords = minimizer.minimize_host_4d(
-            [mol_a, mol_b],
-            self.host_system,
-            self.host_coords,
-            self.ff,
-            self.host_box
-        )
-
-        num_host_atoms = self.host_coords.shape[0]
-
-        # generate indices
-        core_idxs = setup_relative_restraints(mol_a, mol_b)
-
-        mol_a_coords = get_romol_conf(mol_a)
-        mol_b_coords = get_romol_conf(mol_b)
+        num_host_atoms = x0.shape[0] - mol_a.GetNumAtoms() - mol_b.GetNumAtoms()
+        host_coords = x0[:num_host_atoms]
+        mol_a_coords = x0[num_host_atoms:num_host_atoms+mol_a.GetNumAtoms()]
+        mol_b_coords = x0[num_host_atoms+mol_a.GetNumAtoms():]
 
         # pull out mol_b from combined state
         combined_core_idxs = np.copy(core_idxs)
         combined_core_idxs[:, 0] += num_host_atoms
         combined_core_idxs[:, 1] += num_host_atoms + mol_a.GetNumAtoms()
+
+        # this is redundant, but thought it best to be explicit about ordering here..
         combined_coords = np.concatenate([
-            minimized_host_coords,
+            host_coords,
             mol_a_coords,
             mol_b_coords
         ])
@@ -448,26 +376,29 @@ class RelativeModel(ABC):
             mol_b,
             combined_core_idxs,
             combined_coords,
+            box0,
             prefix+"_ref_to_mol")
 
         # pull out mol_a from combined state
         combined_core_idxs = np.copy(core_idxs)
-        # swap
+        # swap the ligand coordinates in the reverse direction
         combined_core_idxs[:, 0] = core_idxs[:, 1]
         combined_core_idxs[:, 1] = core_idxs[:, 0]
         combined_core_idxs[:, 0] += num_host_atoms
         combined_core_idxs[:, 1] += num_host_atoms + mol_b.GetNumAtoms()
         combined_coords = np.concatenate([
-            minimized_host_coords,
+            host_coords,
             mol_b_coords,
             mol_a_coords
         ])
+
         dG_1, dG_1_err, results_1 = self._predict_a_to_b(
             ff_params,
             mol_b,
             mol_a,
             combined_core_idxs,
             combined_coords,
+            box0,
             prefix+"_mol_to_ref")
 
         # dG_0 is the free energy of moving X-A-B into X-A+B
@@ -479,6 +410,12 @@ class RelativeModel(ABC):
 
         return -dG_0 + dG_1, dG_err
 
+# subclasses specific for each model
+
+class AbsoluteHydrationModel(AbsoluteModel):
+
+    def setup_topology(self, mol):
+        return topology.BaseTopology(mol, self.ff)
 
 class RelativeHydrationModel(RelativeModel):
 
