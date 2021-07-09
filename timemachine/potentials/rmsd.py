@@ -31,6 +31,9 @@ def get_optimal_rotation(x1, x2):
     return rotation
 
 def get_optimal_translation(x1, x2):
+    """
+    Returns the displacement vector whose tail is at x1 and head its at x2.
+    """
     return np.mean(x2, axis=0) - np.mean(x1, axis=0)
 
 def get_optimal_rotation_and_translation(x1, x2):

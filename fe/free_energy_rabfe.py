@@ -43,7 +43,7 @@ class BaseFreeEnergy():
 # this class is serializable.
 class AbsoluteFreeEnergy(BaseFreeEnergy):
 
-    def __init__(self, mol, ff):
+    def __init__(self, mol, top):
         """
         Compute the absolute free energy of a molecule via 4D decoupling.
 
@@ -52,13 +52,12 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         mol: rdkit mol
             Ligand to be decoupled
 
-        ff: ff.Forcefield
-            Ligand forcefield
+        top: Topology
+            topology.Topology to use
 
         """
         self.mol = mol
-        self.ff = ff
-        self.top = topology.BaseTopologyRHFE(mol, ff)
+        self.top = top
 
     def prepare_host_edge(self, ff_params, host_system):
         """
@@ -140,6 +139,9 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         return final_potentials, final_params, combined_masses
 
+
+def construct_conversion_lambda_schedule(num_windows):
+    return np.linspace(0, 1, num_windows)
 
 def construct_absolute_lambda_schedule(num_windows):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0

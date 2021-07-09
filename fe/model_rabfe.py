@@ -94,7 +94,7 @@ class AbsoluteModel(ABC):
 
         top = self.setup_topology(mol)
 
-        afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, self.ff)
+        afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, top)
 
         unbound_potentials, sys_params, masses = afe.prepare_host_edge(
             ff_params,
@@ -413,7 +413,7 @@ class RelativeModel(ABC):
 class AbsoluteHydrationModel(AbsoluteModel):
 
     def setup_topology(self, mol):
-        return topology.BaseTopology(mol, self.ff)
+        return topology.BaseTopologyRHFE(mol, self.ff)
 
 class RelativeHydrationModel(RelativeModel):
 

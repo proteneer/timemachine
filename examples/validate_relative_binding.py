@@ -15,7 +15,7 @@ import argparse
 import numpy as np
 from jax import numpy as jnp
 
-from fe.free_energy_rabfe import construct_absolute_lambda_schedule, construct_relative_lambda_schedule, get_romol_conf, setup_relative_restraints
+from fe.free_energy_rabfe import construct_absolute_lambda_schedule, construct_conversion_lambda_schedule, get_romol_conf, setup_relative_restraints
 from fe.utils import convert_uIC50_to_kJ_per_mole
 # from fe import model_abfe, model_rabfe, model_conversion
 from fe import model_rabfe
@@ -41,15 +41,12 @@ from rdkit import Chem
 from timemachine.potentials import rmsd
 from md import builders, minimizer
 
-array = Union[np.array, jnp.array]
-Handler = Union[AM1CCCHandler, LennardJonesHandler] # TODO: do these all inherit from a Handler class already?
-
 if __name__ == "__main__":
 
     multiprocessing.set_start_method('spawn')
 
     parser = argparse.ArgumentParser(
-        description="Absolute Binding Free Energy Testing",
+        description="Relatively absolute Binding Free Energy Testing",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -126,7 +123,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_complex_preequil_steps",
         type=int,
-        help="number of production steps for each solvent lambda window",
+        help="number of pre-equilibration steps for each complex lambda window",
         required=True
     )
 
@@ -156,8 +153,8 @@ if __name__ == "__main__":
     dataset = Dataset(mols)
 
     # construct lambda schedules for complex and solvent
-    complex_schedule = construct_absolute_lambda_schedule(cmd_args.num_complex_windows)
-    solvent_schedule = construct_absolute_lambda_schedule(cmd_args.num_solvent_windows)
+    complex_absolute_schedule = construct_absolute_lambda_schedule(cmd_args.num_complex_windows)
+    solvent_absolute_schedule = construct_absolute_lambda_schedule(cmd_args.num_solvent_windows)
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
@@ -194,7 +191,7 @@ if __name__ == "__main__":
     )
 
     # complex models.
-    complex_conversion_schedule = np.linspace(0, 1.0, cmd_args.num_complex_conv_windows)
+    complex_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_complex_conv_windows)
 
     binding_model_complex_conversion = model_rabfe.AbsoluteConversionModel(
         client,
@@ -213,7 +210,7 @@ if __name__ == "__main__":
         client,
         forcefield,
         complex_system,
-        complex_schedule,
+        complex_absolute_schedule,
         complex_topology,
         temperature,
         pressure,
@@ -223,7 +220,7 @@ if __name__ == "__main__":
     )
 
     # solvent models.
-    solvent_conversion_schedule = np.linspace(0, 1.0, cmd_args.num_solvent_conv_windows)
+    solvent_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_solvent_conv_windows)
 
     binding_model_solvent_conversion = model_rabfe.AbsoluteConversionModel(
         client,
@@ -238,12 +235,11 @@ if __name__ == "__main__":
         cmd_args.num_solvent_prod_steps
     )
 
-    # assert 0
     binding_model_solvent_decouple = model_rabfe.AbsoluteStandardHydrationModel(
         client,
         forcefield,
         solvent_system,
-        solvent_schedule,
+        solvent_absolute_schedule,
         solvent_topology,
         temperature,
         pressure,
@@ -285,6 +281,8 @@ if __name__ == "__main__":
             complex_conversion_x0,
             complex_box0,
             prefix='complex_conversion_'+str(epoch))
+
+        return 0
 
         # compute the free energy of swapping an interacting mol with a non-interacting reference mol
         complex_decouple_x0 = minimizer.minimize_host_4d([mol, mol_ref], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords, ref_coords])
