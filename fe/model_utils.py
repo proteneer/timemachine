@@ -2,7 +2,8 @@ import numpy as np
 from simtk.openmm import app
 import tempfile
 from rdkit import Chem
-
+import mdtraj
+from rdkit.Geometry import Point3D
 
 def apply_hmr(masses, bond_list, multiplier=2):
     """
@@ -49,32 +50,78 @@ def apply_hmr(masses, bond_list, multiplier=2):
     return masses
 
 
-def generate_openmm_topology(objs, host_coords, out_filename):
+# def generate_openmm_topology(objs, host_coords, out_filename):
+def generate_openmm_topology(objs, coords, out_filename=None):
     rd_mols = []
-    # super jank
+
+    mol_sizes = []
+    coords = coords*10
     for obj in objs:
         if isinstance(obj, app.Topology):
             with tempfile.NamedTemporaryFile(mode='w') as fp:
                 # write
                 app.PDBFile.writeHeader(obj, fp)
-                app.PDBFile.writeModel(obj, host_coords, fp, 0)
+                app.PDBFile.writeModel(obj, coords[:obj.getNumAtoms()], fp, 0)
                 app.PDBFile.writeFooter(obj, fp)
                 fp.flush()
                 romol = Chem.MolFromPDBFile(fp.name, removeHs=False)
+                assert romol is not None
                 rd_mols.append(romol)
+                mol_sizes.append(obj.getNumAtoms())
 
-        if isinstance(obj, Chem.Mol):
+        elif isinstance(obj, Chem.Mol):
             rd_mols.append(obj)
+            mol_sizes.append(obj.GetNumAtoms())
+        
+        else:
+            assert 0
 
+    # exclusive prefix sum over the size of each object
+    offsets = np.cumsum(mol_sizes) - mol_sizes
     combined_mol = rd_mols[0]
-    for mol in rd_mols[1:]:
-        combined_mol = Chem.CombineMols(combined_mol, mol)
 
-    # with tempfile.NamedTemporaryFile(mode='w') as fp:
-    fp = open(out_filename, "w")
-    # write
-    Chem.MolToPDBFile(combined_mol, out_filename)
-    fp.flush()
-    # read
+    for mol_idx, mol in enumerate(rd_mols[1:]):
+        mol_idx += 1
+
+        mol_copy = Chem.Mol(mol)
+        mol_copy.RemoveAllConformers()
+        mol_conf = Chem.Conformer(mol.GetNumAtoms())
+
+        start_idx = offsets[mol_idx]
+        if mol_idx == len(offsets) - 1:
+            mol_pos = coords[start_idx:]
+        else:
+            end_idx = offsets[mol_idx + 1]
+            mol_pos = coords[start_idx:end_idx]
+
+        assert mol_pos.shape[0] == mol.GetNumAtoms()
+
+        for a_idx, pos in enumerate(mol_pos):
+            mol_conf.SetAtomPosition(a_idx, pos.astype(np.float64))
+        mol_copy.AddConformer(mol_conf)
+        combined_mol = Chem.CombineMols(combined_mol, mol_copy)
+
+    if out_filename is None:
+        fp = tempfile.NamedTemporaryFile(mode='w')
+        out_filename = fp.name
+    
+    Chem.MolToPDBFile(combined_mol, out_filename)       
     combined_pdb = app.PDBFile(out_filename)
     return combined_pdb.topology
+
+def generate_imaged_topology(objs, x0, box0, name):
+    combined_topology_dummy = generate_openmm_topology(
+        objs,
+        x0,
+        out_filename=None
+    )
+    traj_dummy = mdtraj.Trajectory(np.array([x0]), mdtraj.Topology.from_openmm(combined_topology_dummy))
+    traj_dummy.unitcell_vectors = np.array([box0])
+    traj_dummy.image_molecules()
+
+    combined_topology = generate_openmm_topology(
+        objs,
+        traj_dummy.xyz[0],
+        out_filename=name
+    )
+    return combined_topology

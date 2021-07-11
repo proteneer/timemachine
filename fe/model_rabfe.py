@@ -89,9 +89,6 @@ class AbsoluteModel(ABC):
             to compute delta_Us, the BAR estimates themselves become correlated.
 
         """
-
-        print(f"Minimizing the host structure to remove clashes.")
-
         top = self.setup_topology(mol)
 
         afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, top)
@@ -148,6 +145,20 @@ class AbsoluteModel(ABC):
 
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
+        # used only to be able to recenter
+        combined_topology = model_utils.generate_imaged_topology(
+            [self.host_topology, mol],
+            x0,
+            box0,
+            "initial_"+prefix+".pdb"
+        )
+
+        for lambda_idx, res in enumerate(results):
+            traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
+            traj.unitcell_vectors = res.boxes
+            traj.image_molecules()
+            traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
+    
         return dG, dG_err
 
         # disabled since image molecules is broken.
@@ -216,17 +227,6 @@ class RelativeModel(ABC):
             self.host_system
         )
 
-        # unused for now, we may re-enable this later on.
-        # combined_topology = model_utils.generate_openmm_topology(
-        #     [self.host_topology, mol_a, mol_b],
-        #     self.host_coords,
-        #     prefix+".pdb"
-        # )
-        # generate initial structure
-        # coords = combined_coords
-        # traj = mdtraj.Trajectory([coords], mdtraj.Topology.from_openmm(combined_topology))
-        # traj.save_xtc("initial_coords_aligned.xtc")
-
         k_core = 75.0
         core_params = np.zeros_like(core_idxs).astype(np.float64)
         core_params[:, 0] = k_core
@@ -289,12 +289,19 @@ class RelativeModel(ABC):
 
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
-        # disable this for now since image_molecules() is unstable.
-        # for idx, result in enumerate(results):
-        #     traj = mdtraj.Trajectory(result.xs, mdtraj.Topology.from_openmm(combined_topology))
-        #     traj.unitcell_vectors = result.boxes
-        #     traj.image_molecules()
-        #     traj.save_xtc(prefix+"_complex_lambda_"+str(idx)+".xtc")
+        # used only to be able to recenter
+        combined_topology = model_utils.generate_imaged_topology(
+            [self.host_topology, mol_a, mol_b],
+            x0,
+            box0,
+            "initial_"+prefix+".pdb"
+        )
+
+        for lambda_idx, res in enumerate(results):
+            traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
+            traj.unitcell_vectors = res.boxes
+            traj.image_molecules() # don't do this in prod
+            traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
 
         return dG, dG_err, results
 
