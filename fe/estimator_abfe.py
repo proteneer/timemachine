@@ -264,9 +264,9 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     for lamb_idx, lamb in enumerate(model.lambda_schedule):
 
         if model.endpoint_correct and lamb_idx == len(model.lambda_schedule) - 1:
-            x_interval = 200
+            x_interval = 800
         else:
-            x_interval = 200
+            x_interval = 800
 
         if lamb_idx == 0:
             lambda_left = None
@@ -289,7 +289,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.equil_steps,
             model.prod_steps,
             x_interval, # x_interval
-            200,        # du_dl_interval
+            800,        # du_dl_interval
             lambda_left,
             lambda_right,
             model.lambda_schedule
@@ -306,8 +306,8 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.barostat,
             model.equil_steps,
             model.prod_steps,
-            200,       # x_interval
-            200,       # du_dl_interval
+            800,       # x_interval
+            800,       # du_dl_interval
             None, # du
             None, # du
             None # lambda schedule
