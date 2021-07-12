@@ -160,7 +160,6 @@ if __name__ == "__main__":
     complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
         'tests/data/hif2a_nowater_min.pdb')
 
-
     solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
     # pick the largest mol as the blocker
