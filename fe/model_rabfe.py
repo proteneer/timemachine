@@ -1,4 +1,3 @@
-
 from abc import ABC
 
 import numpy as np
@@ -17,6 +16,8 @@ from parallel.client import AbstractClient
 from typing import Optional
 
 from md.barostat.utils import get_group_indices, get_bond_list
+
+import pickle
 
 class AbsoluteModel(ABC):
 
@@ -89,12 +90,9 @@ class AbsoluteModel(ABC):
             to compute delta_Us, the BAR estimates themselves become correlated.
 
         """
-
-        print(f"Minimizing the host structure to remove clashes.")
-
         top = self.setup_topology(mol)
 
-        afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, self.ff)
+        afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, top)
 
         unbound_potentials, sys_params, masses = afe.prepare_host_edge(
             ff_params,
@@ -148,6 +146,25 @@ class AbsoluteModel(ABC):
 
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
+        # uncomment if we want to visualize
+        # combined_topology = model_utils.generate_imaged_topology(
+        #     [self.host_topology, mol],
+        #     x0,
+        #     box0,
+        #     "initial_"+prefix+".pdb"
+        # )
+
+        # for lambda_idx, res in enumerate(results):
+        #     # used for debugging for now, try to reproduce mdtraj error
+        #     outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
+        #     pickle.dump((res.xs, res.boxes, combined_topology), outfile)
+        #     print("dumping", outfile)
+        #     # pickle.dump((res.xs[:100], res.boxes[:100], combined_topology), outfile)
+        #     traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
+        #     traj.unitcell_vectors = res.boxes
+        #     traj.image_molecules()
+        #     traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
+    
         return dG, dG_err
 
         # disabled since image molecules is broken.
@@ -216,17 +233,6 @@ class RelativeModel(ABC):
             self.host_system
         )
 
-        # unused for now, we may re-enable this later on.
-        # combined_topology = model_utils.generate_openmm_topology(
-        #     [self.host_topology, mol_a, mol_b],
-        #     self.host_coords,
-        #     prefix+".pdb"
-        # )
-        # generate initial structure
-        # coords = combined_coords
-        # traj = mdtraj.Trajectory([coords], mdtraj.Topology.from_openmm(combined_topology))
-        # traj.save_xtc("initial_coords_aligned.xtc")
-
         k_core = 75.0
         core_params = np.zeros_like(core_idxs).astype(np.float64)
         core_params[:, 0] = k_core
@@ -239,8 +245,6 @@ class RelativeModel(ABC):
 
         unbound_potentials.append(restraint_potential)
         sys_params.append(core_params)
-
-        endpoint_correct = True
 
         # tbd sample from boltzmann distribution later
         v0 = np.zeros_like(x0)
@@ -291,12 +295,22 @@ class RelativeModel(ABC):
 
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
-        # disable this for now since image_molecules() is unstable.
-        # for idx, result in enumerate(results):
-        #     traj = mdtraj.Trajectory(result.xs, mdtraj.Topology.from_openmm(combined_topology))
-        #     traj.unitcell_vectors = result.boxes
-        #     traj.image_molecules()
-        #     traj.save_xtc(prefix+"_complex_lambda_"+str(idx)+".xtc")
+        # uncomment if we want to visualize.
+        # combined_topology = model_utils.generate_imaged_topology(
+        #     [self.host_topology, mol_a, mol_b],
+        #     x0,
+        #     box0,
+        #     "initial_"+prefix+".pdb"
+        # )
+
+        # for lambda_idx, res in enumerate(results):
+        #     outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
+        #     pickle.dump((res.xs, res.boxes, combined_topology), outfile)
+        #     print("dumping", outfile)
+        #     traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
+        #     traj.unitcell_vectors = res.boxes
+        #     traj.image_molecules() # don't do this in prod
+        #     traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
 
         return dG, dG_err, results
 
@@ -415,9 +429,24 @@ class RelativeModel(ABC):
 class AbsoluteHydrationModel(AbsoluteModel):
 
     def setup_topology(self, mol):
-        return topology.BaseTopology(mol, self.ff)
+        return topology.BaseTopologyRHFE(mol, self.ff)
 
 class RelativeHydrationModel(RelativeModel):
 
     def setup_topology(self, mol_a, mol_b):
         return topology.DualTopologyRHFE(mol_a, mol_b, self.ff)
+
+class AbsoluteConversionModel(AbsoluteModel):
+
+    def setup_topology(self, mol):
+        return topology.BaseTopologyConversion(mol, self.ff)
+
+class AbsoluteStandardHydrationModel(AbsoluteModel):
+
+    def setup_topology(self, mol):
+        return topology.BaseTopologyStandardDecoupling(mol, self.ff)
+
+class RelativeBindingModel(RelativeModel):
+
+    def setup_topology(self, mol_a, mol_b):
+        return topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
