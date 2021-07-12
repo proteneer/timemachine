@@ -1,7 +1,7 @@
-
 from abc import ABC
 
 import numpy as np
+import mdtraj
 
 from simtk import openmm
 from rdkit import Chem
