@@ -2,7 +2,7 @@ import numpy as np
 from simtk.openmm import app
 import tempfile
 from rdkit import Chem
-import mdtraj
+# import mdtraj 
 from rdkit.Geometry import Point3D
 
 def apply_hmr(masses, bond_list, multiplier=2):
