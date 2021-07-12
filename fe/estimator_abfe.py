@@ -26,18 +26,19 @@ class SimulationResult:
    du_dps: np.array
    left_dus: np.array
    right_dus: np.array
+   u_kl: np.array
 
 def flatten(v):
-    return tuple(), (v.xs, v.boxes, v.du_dls, v.du_dps, v.left_dus, v.right_dus)
+    return tuple(), (v.xs, v.boxes, v.du_dls, v.du_dps, v.left_dus, v.right_dus, v.u_kl)
 
 def unflatten(aux_data, children):
-    xs, boxes, du_dls, du_dps, left_dus, right_dus = aux_data
-    return SimulationResult(xs, boxes, du_dls, du_dps, left_dus, right_dus)
+    xs, boxes, du_dls, du_dps, left_dus, right_dus, u_kl = aux_data
+    return SimulationResult(xs, boxes, du_dls, du_dps, left_dus, right_dus, u_kl)
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
 def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_steps, prod_steps,
-    x_interval=50, du_dl_interval=200, lambda_left=None, lambda_right=None):
+    x_interval=50, du_dl_interval=200, lambda_left=None, lambda_right=None, lambda_schedule=None):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
@@ -83,6 +84,9 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
 
     lambda_right: float or None
         rhs lambda value
+
+    lambda_schedule: list of float
+        full lambda schedule
 
     Returns
     -------
@@ -194,13 +198,33 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     else:
         right_dus = None
 
+    u_kl = None
+    
+    if lambda_schedule is not None:
+        u_kl = []
+        for x, b in zip(xs, boxes):
+            energies = []    
+            for lambda_window in lambda_schedule:
+                u = 0
+                for ub, p in zip(unbound_impls, unbound_params):
+                    _, _, _, nrg = ub.execute_selective(x, p, b, lambda_window, False, False, False, True)
+                    u += nrg
+                # guard
+                if np.abs(u) > 1e6 or np.isnan(u):
+                    u = np.inf
+                energies.append(u)
+            u_kl.append(energies)
+
+        u_kl = np.array(u_kl).T
+
     result = SimulationResult(
         xs=xs,
         boxes=boxes,
         du_dls=full_du_dls,
         du_dps=grads,
         left_dus=np.array(left_dus),
-        right_dus=np.array(right_dus)
+        right_dus=np.array(right_dus),
+        u_kl = u_kl
     )
 
     return result
@@ -267,7 +291,8 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             x_interval, # x_interval
             200,        # du_dl_interval
             lambda_left,
-            lambda_right
+            lambda_right,
+            model.lambda_schedule
         ))
 
     if model.endpoint_correct:
@@ -283,8 +308,9 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.prod_steps,
             200,       # x_interval
             200,       # du_dl_interval
-            None,
-            None
+            None, # du
+            None, # du
+            None # lambda schedule
         ))
 
     if model.client is None:
@@ -342,6 +368,13 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
         print(f"{model.prefix}_BAR: lambda {lamb_start:.3f} -> {lamb_end:.3f} dG: {dG_exact/model.beta:.3f} dG_err: {exact_bar_err/model.beta:.3f} overlap: {exact_bar_overlap:.3f}")
 
+    u_kn = [x.u_kl for x in ti_results]
+    u_kn = np.concatenate(u_kn, axis=1)
+    u_kn = u_kn * model.beta
+    N_k = [x.u_kl.shape[-1] for x in ti_results]
+    mbar = pymbar.MBAR(u_kn, N_k)
+    mbar_dG = mbar.f_k[-1]/model.beta
+ 
     bar_dG_err = np.sqrt(bar_dG_err)
 
     dG_ti = np.trapz(mean_du_dls, model.lambda_schedule)
@@ -378,11 +411,11 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         overlap = endpoint_correction.overlap_from_cdf(lhs_du, rhs_du)
         lhs_mean = np.mean(lhs_du)
         rhs_mean = np.mean(rhs_du)
-        print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} dG_endpoint {dG_endpoint:.3f} dG_endpoint_err {endpoint_err:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
+        print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} mbar_dG {mbar_dG:3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} dG_endpoint {dG_endpoint:.3f} dG_endpoint_err {endpoint_err:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
         dG += dG_endpoint + dG_ssc_translation + dG_ssc_rotation
         bar_dG_err = np.sqrt(bar_dG_err**2 + endpoint_err**2)
     else:
-        print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} ")
+        print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} mbar_dG {mbar_dG:3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} ")
 
     return (dG, bar_dG_err, results), dG_grad
 
