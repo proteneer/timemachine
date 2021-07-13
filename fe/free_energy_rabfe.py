@@ -1,3 +1,4 @@
+from rdkit import Chem
 from typing import List
 from jax.config import config; config.update("jax_enable_x64", True)
 
@@ -219,6 +220,53 @@ def setup_relative_restraints(
     for idx, b in enumerate(mol_b.GetAtoms()):
         if b.IsInRing():
             core_idxs_b.append(idx)
+
+    ri = np.expand_dims(ligand_coords_a[core_idxs_a], 1)
+    rj = np.expand_dims(ligand_coords_b[core_idxs_b], 0)
+    rij = np.sqrt(np.sum(np.power(ri-rj, 2), axis=-1))
+
+    row_idxs, col_idxs = linear_sum_assignment(rij)
+
+    core_idxs = []
+
+    for core_a, core_b in zip(row_idxs, col_idxs):
+        core_idxs.append((
+            core_idxs_a[core_a],
+            core_idxs_b[core_b]
+        ))
+
+    core_idxs = np.array(core_idxs, dtype=np.int32)
+
+    return core_idxs
+
+
+
+
+def setup_relative_restraints_using_smarts(
+    mol_a,
+    mol_b,
+    smarts):
+    """
+    Setup restraints between ring atoms in two molecules using
+    a pre-defined SMARTS pattern.
+    """
+
+    # check to ensure the core is connected
+    # technically allow for this but we need to do more validation before
+    # we can be fully comfortable
+    assert "." not in smarts
+
+    core = Chem.MolFromSmarts(smarts)
+    core_idxs_a = mol_a.GetSubstructMatch(core)
+    core_idxs_b = mol_b.GetSubstructMatch(core)
+    # setup relative orientational restraints
+    # rough sketch of algorithm:
+    # find core atoms in mol_a
+    # find core atoms in mol_b
+    # use the hungarian algorithm to assign matching
+
+    ligand_coords_a = get_romol_conf(mol_a)
+    ligand_coords_b = get_romol_conf(mol_b)
 
     ri = np.expand_dims(ligand_coords_a[core_idxs_a], 1)
     rj = np.expand_dims(ligand_coords_b[core_idxs_b], 0)

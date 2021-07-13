@@ -15,7 +15,7 @@ import argparse
 import numpy as np
 from jax import numpy as jnp
 
-from fe.free_energy_rabfe import construct_absolute_lambda_schedule, construct_conversion_lambda_schedule, get_romol_conf, setup_relative_restraints
+from fe.free_energy_rabfe import construct_absolute_lambda_schedule, construct_conversion_lambda_schedule, get_romol_conf, setup_relative_restraints_using_smarts
 from fe.utils import convert_uIC50_to_kJ_per_mole
 # from fe import model_abfe, model_rabfe, model_conversion
 from fe import model_rabfe
@@ -250,10 +250,12 @@ if __name__ == "__main__":
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
 
+    core_smarts = "*1~*~*~*~*~*~1~O~*1~*~*~*~*~*~1"
+
     def pred_fn(params, mol, mol_ref):
 
         # generate the core_idxs
-        core_idxs = setup_relative_restraints(mol, mol_ref)
+        core_idxs = setup_relative_restraints_using_smarts(mol, mol_ref, core_smarts)
         mol_coords = get_romol_conf(mol) # original coords
         
         num_complex_atoms = complex_coords.shape[0]
