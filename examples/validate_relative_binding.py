@@ -281,6 +281,8 @@ if __name__ == "__main__":
             complex_box0,
             prefix='complex_conversion_'+str(epoch))
 
+        return 0.0, 0.0
+
         # compute the free energy of swapping an interacting mol with a non-interacting reference mol
         complex_decouple_x0 = minimizer.minimize_host_4d([mol, mol_ref], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords, ref_coords])
         complex_decouple_x0 = np.concatenate([complex_decouple_x0, aligned_mol_coords, ref_coords])
