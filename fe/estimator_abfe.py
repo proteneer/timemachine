@@ -368,8 +368,9 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
         print(f"{model.prefix}_BAR: lambda {lamb_start:.3f} -> {lamb_end:.3f} dG: {dG_exact/model.beta:.3f} dG_err: {exact_bar_err/model.beta:.3f} overlap: {exact_bar_overlap:.3f}")
 
-    u_kn = [x.u_kl for x in ti_results]
-    u_kn = np.concatenate(u_kn, axis=1)
+    u_kln = [x.u_kl for x in ti_results]
+
+    u_kn = np.concatenate(u_kln, axis=1)
     u_kn = u_kn * model.beta
     N_k = [x.u_kl.shape[-1] for x in ti_results]
     mbar = pymbar.MBAR(u_kn, N_k)

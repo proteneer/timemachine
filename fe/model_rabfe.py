@@ -146,13 +146,35 @@ class AbsoluteModel(ABC):
 
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
+        # identical to the above except client is None
+        model = estimator_abfe.FreeEnergyModel(
+            unbound_potentials,
+            endpoint_correct,
+            None,
+            box0,
+            x0,
+            v0,
+            integrator,
+            barostat,
+            self.host_schedule,
+            self.equil_steps,
+            self.prod_steps,
+            beta,
+            prefix
+        )
+
+        pickle.dump(
+            (model, np.asarray(sys_params), results),
+            open("results_"+model.prefix+".pkl", "wb")
+        )
+
         # uncomment if we want to visualize
-        # combined_topology = model_utils.generate_imaged_topology(
-        #     [self.host_topology, mol],
-        #     x0,
-        #     box0,
-        #     "initial_"+prefix+".pdb"
-        # )
+        combined_topology = model_utils.generate_imaged_topology(
+            [self.host_topology, mol],
+            x0,
+            box0,
+            "initial_"+prefix+".pdb"
+        )
 
         # for lambda_idx, res in enumerate(results):
         #     # used for debugging for now, try to reproduce mdtraj error
