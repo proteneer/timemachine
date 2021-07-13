@@ -342,23 +342,23 @@ class BaseTopologyConversion(BaseTopology):
     FastFindRings or SSSRs (ring basis), of which neither is what we want.
     """
 
-    def parameterize_proper_torsion(self, ff_params):
-        # alchemically turn off proper torsions.
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
-        membership = get_ring_membership(self.mol)
+    # def parameterize_proper_torsion(self, ff_params):
+    #     # alchemically turn off proper torsions.
+    #     torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+    #     membership = get_ring_membership(self.mol)
 
-        num_torsions = torsion_params.shape[0]
+    #     num_torsions = torsion_params.shape[0]
 
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+    #     lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+    #     lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
 
-        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            if membership[b] != membership[c]:
-                lambda_mult_idxs[torsion_idx] = -1
+    #     for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+    #         if membership[b] != membership[c]:
+    #             lambda_mult_idxs[torsion_idx] = -1
 
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+    #     torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
 
-        return torsion_params, torsion_potential
+    #     return torsion_params, torsion_potential
 
 
     def parameterize_nonbonded(self,
