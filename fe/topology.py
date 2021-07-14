@@ -356,9 +356,12 @@ class BaseTopologyConversion(BaseTopology):
         lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
 
         for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+            # skip entirely if we're not in the core
+            if b not in core_idxs or c not in core_idxs:
+                continue
+
             if membership[b] != membership[c]:
-                if b in core_idxs and c in core_idxs:
-                    lambda_mult_idxs[torsion_idx] = -1
+                lambda_mult_idxs[torsion_idx] = -1
 
         torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
 
@@ -405,9 +408,12 @@ class BaseTopologyStandardDecoupling(BaseTopology):
         lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
 
         for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+            # skip entirely if we're not in the core
+            if b not in core_idxs or c not in core_idxs:
+                continue
+
             if membership[b] != membership[c]:
-                if b in core_idxs and c in core_idxs:
-                    lambda_offset_idxs[torsion_idx] = 0
+                lambda_offset_idxs[torsion_idx] = 0
 
         torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
 
@@ -705,7 +711,6 @@ class DualTopologyStandardDecoupling(DualTopology):
 
         torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
 
-        # mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
         membership_a = get_ring_membership(self.mol_a)
         membership_b = get_ring_membership(self.mol_b)
 
@@ -720,11 +725,19 @@ class DualTopologyStandardDecoupling(DualTopology):
 
             # does this torsion belong to mol_a?
             if b < NA and c < NA and i < NA and j < NA:
-                if (membership_a[b] != membership_a[c]) and (b in core_idxs_a and c in core_idxs_a):
+
+                if b not in core_idxs_a or c not in core_idxs_a:
+                    continue
+
+                if membership_a[b] != membership_a[c]:
                     lambda_offset_idxs[torsion_idx] = 0
             # are we in in b?
-            if b > NA and c > NA and i > NA and j > NA:
-                if (membership_b[b] != membership_b[c]) and (b in core_idxs_b and c in core_idxs_b):
+            elif b >= NA and c >= NA and i >= NA and j >= NA:
+
+                if b not in core_idxs_b or c not in core_idxs_b:
+                    continue
+
+                if membership_b[b] != membership_b[c]:
                     lambda_offset_idxs[torsion_idx] = 0
             # we dun goofed, torsion spans two different mols
             else:

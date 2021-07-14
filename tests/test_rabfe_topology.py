@@ -1,4 +1,5 @@
 # test topology classes used in the RABFE protocol.
+import functools
 from jax.config import config; config.update("jax_enable_x64", True)
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -16,23 +17,28 @@ def test_base_topology_conversion_ring_torsion():
 
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
     ff = Forcefield(ff_handlers)
-    mol = Chem.MolFromSmiles("C1CC1C1CC1")
+
+    # note that this molecule "incomplete", as we do not add graphical hydrogens
+    mol = Chem.MolFromSmiles("CCC1CC1C1CC1")
     vanilla_mol_top = topology.BaseTopology(mol, ff)
     vanilla_torsion_params, _ = vanilla_mol_top.parameterize_proper_torsion(ff.pt_handle.params)
 
     mol_top = topology.BaseTopologyConversion(mol, ff)
-    conversion_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params)
+    core_idxs = [2,3,4,5,6,7]
+
+    conversion_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params, core_idxs)
 
     np.testing.assert_array_equal(vanilla_torsion_params, conversion_torsion_params)
 
-    # in the conversion phase, torsions that bridge the two rings should be set to
-    # be alchemically turned off.
-    ring_group = [0,0,0,1,1,1]
+    ring_group = [0,1,2,2,2,3,3,3]
 
     for torsion_idxs, mult, offset in zip(torsion_potential.get_idxs(), torsion_potential.get_lambda_mult(), torsion_potential.get_lambda_offset()):
         _, b, c, _ = torsion_idxs
         assert offset == 1
-        if ring_group[b] != ring_group[c]:
+
+        if b not in core_idxs or c not in core_idxs:
+            assert mult == 0
+        elif ring_group[b] != ring_group[c]:
             assert mult == -1
         else:
             assert mult == 0
@@ -49,14 +55,62 @@ def test_base_topology_conversion_ring_torsion():
     np.testing.assert_array_equal(topology.standard_qlj_typer(mol), dst_qlj_params)
 
 
+    
+
+# def test_base_topology_conversion_ring_torsion():
+
+#     # test that the conversion protocol behaves as intended on a
+#     # simple linked cycle.
+
+#     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
+#     ff = Forcefield(ff_handlers)
+#     mol = Chem.MolFromSmiles("C1CC1C1CC1")
+#     vanilla_mol_top = topology.BaseTopology(mol, ff)
+
+#     vanilla_torsion_params, _ = vanilla_mol_top.parameterize_proper_torsion(ff.pt_handle.params)
+
+#     mol_top = topology.BaseTopologyConversion(mol, ff)
+#     core_idxs = [0,1,2,3,4,5]
+#     conversion_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params, core_idxs)
+
+#     np.testing.assert_array_equal(vanilla_torsion_params, conversion_torsion_params)
+
+#     # in the conversion phase, torsions that bridge the two rings should be set to
+#     # be alchemically turned off.
+#     ring_group = [0,0,0,1,1,1]
+
+#     for torsion_idxs, mult, offset in zip(torsion_potential.get_idxs(), torsion_potential.get_lambda_mult(), torsion_potential.get_lambda_offset()):
+#         _, b, c, _ = torsion_idxs
+#         assert offset == 1
+#         if ring_group[b] != ring_group[c]:
+#             assert mult == -1
+#         else:
+#             assert mult == 0
+
+#     vanilla_qlj_params, _ = vanilla_mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+#     qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+
+#     assert isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
+
+#     src_qlj_params = qlj_params[:len(qlj_params)//2]
+#     dst_qlj_params = qlj_params[len(qlj_params)//2:]
+
+#     np.testing.assert_array_equal(vanilla_qlj_params, src_qlj_params)
+#     np.testing.assert_array_equal(topology.standard_qlj_typer(mol), dst_qlj_params)
+
+
+
 def test_base_topology_conversion_r_group():
 
-    # check that phenol torsions are turned off
+    # check that phenol torsions are turned off if they're defined in the core
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
     ff = Forcefield(ff_handlers)
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
     mol_top = topology.BaseTopologyConversion(mol, ff)
-    result, potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params)
+
+    core_idxs = np.arange(mol.GetNumAtoms())
+
+    result, potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params, core_idxs)
     # in the conversion phase, torsions that bridge the two rings should be set to
     # be alchemically turned off.
     is_in_ring = [1,1,1,1,1,1,0,0]
@@ -77,20 +131,23 @@ def test_base_topology_standard_decoupling():
     # the torsions should be turned off.
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
     ff = Forcefield(ff_handlers)
-    mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
+    mol = Chem.AddHs(Chem.MolFromSmiles("CCc1ccccc1O"))
     vanilla_mol_top = topology.BaseTopology(mol, ff)
     vanilla_torsion_params, _ = vanilla_mol_top.parameterize_proper_torsion(ff.pt_handle.params)
 
+    core_idxs = [2,3,4,5,6,7,8]
+
     mol_top = topology.BaseTopologyStandardDecoupling(mol, ff)
+
+    mol_top.parameterize_proper_torsion = functools.partial(mol_top.parameterize_proper_torsion, core_idxs=core_idxs)
+
     decouple_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params)
 
     np.testing.assert_array_equal(vanilla_torsion_params, decouple_torsion_params)
 
-    # in the conversion phase, torsions that bridge the two rings should be set to
-    # be alchemically turned off.
-    is_in_ring = [1,1,1,1,1,1,0,0]
+    is_in_ring = [0,0,1,1,1,1,1,1,0,0]
 
-    combined_decouple_torsion_params, combined_torsion_potential = mol_top.parameterize_periodic_torsion(
+    _, combined_torsion_potential = mol_top.parameterize_periodic_torsion(
         ff.pt_handle.params,
         ff.it_handle.params
     )
@@ -108,14 +165,19 @@ def test_base_topology_standard_decoupling():
         _, b, c, _ = torsion_idxs
 
         if idx < num_proper_torsions:
+            # proper torsion
             assert mult == 0
-            if is_in_ring[b] != is_in_ring[c]:
-                assert offset == 0
-            else:
+            if b not in core_idxs or c not in core_idxs:
                 assert offset == 1
+            elif is_in_ring[b] and is_in_ring[c]:
+                # ring bond
+                assert offset == 1
+            else:
+                # not ring bond
+                assert offset == 0
         else:
+            # improper torsion
             assert offset == 1
-
 
     qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
 
@@ -136,40 +198,65 @@ def test_dual_topology_standard_decoupling():
 
     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
     ff = Forcefield(ff_handlers)
-    mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
-    mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1F"))
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("FOc1ccccc1O"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("FOc1ccccc1F"))
     mol_c = Chem.CombineMols(mol_a, mol_b)
     mol_top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, ff)
+
+    core_idxs_a = [2,3,4,5,6,7,8]
+    core_idxs_b = [2,3,4,5,6,7]  # note the missing F
+
+    mol_top.parameterize_proper_torsion = functools.partial(mol_top.parameterize_proper_torsion,
+        core_idxs_a=core_idxs_a,
+        core_idxs_b=core_idxs_b
+    )
 
     decouple_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params)
 
     # np.testing.assert_array_equal(vanilla_torsion_params, decouple_torsion_params)
-    #             C C C C C C O H H H H H H  C C C C C C F H H H H H H
-    is_in_ring = [1,1,1,1,1,1,0,0,0,0,0,0,0, 1,1,1,1,1,1,0,0,0,0,0,0,0]
+    #             F O C C C C C C O H H H H H H  F O C C C C C C F H H H H H H
+    is_in_ring = [0,0,1,1,1,1,1,1,0,0,0,0,0,0,0, 0,0,1,1,1,1,1,1,0,0,0,0,0,0,0]
+
 
     combined_decouple_torsion_params, combined_torsion_potential = mol_top.parameterize_periodic_torsion(
         ff.pt_handle.params,
-        ff.it_handle.params
+        ff.it_handle.params,
     )
 
     assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_idxs())
     assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_lambda_offset())
 
-    # impropers should always be turned on.
+    NA = mol_a.GetNumAtoms()
+
+    # impropers should always be turned on. as amides/esters are kept planar with impropers
     num_proper_torsions = len(torsion_potential.get_idxs())
 
     for idx, (torsion_idxs, mult, offset) in enumerate(zip(
         combined_torsion_potential.get_idxs(),
         combined_torsion_potential.get_lambda_mult(),
         combined_torsion_potential.get_lambda_offset())):
-        _, b, c, _ = torsion_idxs
 
         if idx < num_proper_torsions:
-            assert mult == 0
-            if is_in_ring[b] != is_in_ring[c]:
-                assert offset == 0
+
+            _, b, c, _ = torsion_idxs
+
+            if b < NA and c < NA:
+                if b not in core_idxs_a or c not in core_idxs_a:
+                    continue
+            elif b >= NA and c >= NA:
+                if b not in core_idxs_b or c not in core_idxs_b:
+                    continue
             else:
+                # bad torsion
+                assert 0
+
+            # we must now be between two core atoms if we're reached this line.
+
+            assert mult == 0
+            if is_in_ring[b] and is_in_ring[c]:
                 assert offset == 1
+            else:
+                assert offset == 0
 
         else:
             assert offset == 1
