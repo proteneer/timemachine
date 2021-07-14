@@ -103,7 +103,7 @@ def test_barostat_varying_pressure():
     np.random.seed(seed)
 
     box_vol = 7.0866907017
-    box_diff = 0.5439182266135552
+    box_diff = 1.0856025048
     lig_charge_vals = np.array([1.4572377542719206, -0.37011462071257184, 1.1478267014520305, -4.920166483601927, 0.16985194917937935])
     if "ubuntu" not in platform_version:
         print("Test expected to run under ubuntu 20.04 or 18.04")
