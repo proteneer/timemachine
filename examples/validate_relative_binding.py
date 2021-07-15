@@ -284,8 +284,6 @@ if __name__ == "__main__":
             core_idxs=core_idxs[:, 0]
         )
 
-        return 0.0, 0.0
-
         # compute the free energy of swapping an interacting mol with a non-interacting reference mol
         complex_decouple_x0 = minimizer.minimize_host_4d([mol, mol_ref], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords, ref_coords])
         complex_decouple_x0 = np.concatenate([complex_decouple_x0, aligned_mol_coords, ref_coords])
@@ -300,6 +298,8 @@ if __name__ == "__main__":
 
         # effective free energy of removing from complex
         dG_complex = dG_complex_conversion + dG_complex_decouple
+
+        return 0.0, 0.0
 
         # solvent
         min_solvent_coords = minimizer.minimize_host_4d([mol], solvent_system, solvent_coords, forcefield, solvent_box)

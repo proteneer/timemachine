@@ -225,10 +225,16 @@ class RelativeModel(ABC):
         ff_params,
         mol_a,
         mol_b,
-        core_idxs,
+        combined_core_idxs,
         x0,
         box0,
         prefix):
+
+        num_host_atoms = x0.shape[0] - mol_a.GetNumAtoms() - mol_b.GetNumAtoms()
+
+        # (ytz): super ugly, undo combined_core_idxs to get back original idxs
+        core_idxs = combined_core_idxs - num_host_atoms
+        core_idxs[:, 1] -= mol_a.GetNumAtoms()
 
         dual_topology = self.setup_topology(mol_a, mol_b, core_idxs)
         rfe = free_energy_rabfe.RelativeFreeEnergy(dual_topology)
@@ -239,13 +245,13 @@ class RelativeModel(ABC):
         )
 
         k_core = 75.0
-        core_params = np.zeros_like(core_idxs).astype(np.float64)
+        core_params = np.zeros_like(combined_core_idxs).astype(np.float64)
         core_params[:, 0] = k_core
 
-        B = len(core_idxs)
+        B = len(combined_core_idxs)
 
         restraint_potential = potentials.HarmonicBond(
-            core_idxs,
+            combined_core_idxs,
         )
 
         unbound_potentials.append(restraint_potential)

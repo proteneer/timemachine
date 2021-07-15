@@ -346,6 +346,10 @@ class BaseTopologyConversion(BaseTopology):
     def parameterize_proper_torsion(self, ff_params, core_idxs=None):
         if core_idxs is None:
             core_idxs = []
+
+        for idx in core_idxs:
+            assert idx < self.mol.GetNumAtoms()
+
         # alchemically turn off proper torsions.
         torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
         membership = get_ring_membership(self.mol)
@@ -398,8 +402,13 @@ class BaseTopologyStandardDecoupling(BaseTopology):
     lambda=1 fully non-interacting.
     """
     def parameterize_proper_torsion(self, ff_params, core_idxs):
+
         if core_idxs is None:
             core_idxs = []
+
+        for idx in core_idxs:
+            assert idx < self.mol.GetNumAtoms()
+
         torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
         membership = get_ring_membership(self.mol)
 
@@ -617,6 +626,10 @@ class DualTopologyRHFE(DualTopology):
 
     def parameterize_proper_torsion(self, ff_params, core_idxs):
 
+        # this logic is actually wrong, need to copy over the logic from binding version
+
+        assert 0
+
         if core_idxs is None:
             core_idxs = []
 
@@ -717,6 +730,13 @@ class DualTopologyStandardDecoupling(DualTopology):
     def parameterize_proper_torsion(self, ff_params, core_idxs_a, core_idxs_b):
         # (ytz): TBD need to do this for Base Topology as well
 
+        # sanity check
+        for idx in core_idxs_a:
+            assert idx < self.mol_a.GetNumAtoms()
+
+        for idx in core_idxs_b:
+            assert idx < self.mol_b.GetNumAtoms()
+
         torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
 
         membership_a = get_ring_membership(self.mol_a)
@@ -729,6 +749,8 @@ class DualTopologyStandardDecoupling(DualTopology):
 
         NA = self.mol_a.GetNumAtoms()
 
+
+        # offset by an equivalent amount
         for torsion_idx, (i, b, c, j) in enumerate(torsion_potential.get_idxs()):
 
             # does this torsion belong to mol_a?
@@ -738,14 +760,20 @@ class DualTopologyStandardDecoupling(DualTopology):
                     continue
 
                 if membership_a[b] != membership_a[c]:
+                    print("disabling mol_a", b, c)
                     lambda_offset_idxs[torsion_idx] = 0
             # are we in in b?
             elif b >= NA and c >= NA and i >= NA and j >= NA:
 
-                if b not in core_idxs_b or c not in core_idxs_b:
+                # need to compute the old indices since the final torsions have been concatenated.
+                old_b = b - NA
+                old_c = c - NA
+
+                if old_b not in core_idxs_b or old_c not in core_idxs_b:
                     continue
 
-                if membership_b[b] != membership_b[c]:
+                if membership_b[old_b] != membership_b[old_c]:
+                    print("disabling mol_b", b, c)
                     lambda_offset_idxs[torsion_idx] = 0
             # we dun goofed, torsion spans two different mols
             else:
