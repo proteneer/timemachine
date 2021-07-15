@@ -1,3 +1,4 @@
+import os
 import platform
 import numpy as np
 from simtk import unit
@@ -23,6 +24,19 @@ from timemachine.lib import LangevinIntegrator, custom_ops
 from functools import partial
 
 from timemachine.constants import BOLTZ, ENERGY_UNIT, DISTANCE_UNIT
+
+
+def get_platform_version() -> str:
+    release_path = "/etc/os-release"
+    if os.path.isfile(release_path):
+        # AWS Ubuntu 20.04 doesn't have version in uname...
+        with open(release_path, "r") as ifs:
+            for line in ifs.readlines():
+                if line.startswith("PRETTY_NAME="):
+                    platform_version = line.strip()
+    else:
+        platform_version = platform.version()
+    return platform_version.lower()
 
 
 def test_barostat_partial_group_idxs():
@@ -93,7 +107,7 @@ def test_barostat_partial_group_idxs():
     ctxt.multiple_steps(np.ones(1000)*lam)
 
 def test_barostat_varying_pressure():
-    platform_version = platform.version().lower()
+    platform_version = get_platform_version()
     temperature = 300.0 * unit.kelvin
     initial_waterbox_width = 2.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
@@ -108,8 +122,8 @@ def test_barostat_varying_pressure():
     if "ubuntu" not in platform_version:
         print("Test expected to run under ubuntu 20.04 or 18.04")
     if "20.04" in platform_version:
-        box_vol = 7.722300793290474
-        box_diff = 0.23923388075982022
+        box_vol = 7.80127358754933
+        box_diff = 1.6621367141041832
         lig_charge_vals[3] = -4.920284514559682
 
     # Start out with a very large pressure
