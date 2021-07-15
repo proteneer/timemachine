@@ -1,5 +1,6 @@
 from abc import ABC
 
+import functools
 import numpy as np
 import mdtraj
 
@@ -54,7 +55,8 @@ class AbsoluteModel(ABC):
         mol,
         x0,
         box0,
-        prefix):
+        prefix,
+        core_idxs=None):
         """ Compute the absolute free of energy of decoupling mol_a.
 
         This function is differentiable w.r.t. ff_params.
@@ -77,6 +79,9 @@ class AbsoluteModel(ABC):
         prefix: str
             String to prepend to print out statements
 
+        core_idxs: None or list of int
+            List of core_idxs we may wish to turn off.
+
         Returns
         -------
         float
@@ -90,7 +95,7 @@ class AbsoluteModel(ABC):
             to compute delta_Us, the BAR estimates themselves become correlated.
 
         """
-        top = self.setup_topology(mol)
+        top = self.setup_topology(mol, core_idxs)
 
         afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, top)
 
@@ -225,7 +230,7 @@ class RelativeModel(ABC):
         box0,
         prefix):
 
-        dual_topology = self.setup_topology(mol_a, mol_b)
+        dual_topology = self.setup_topology(mol_a, mol_b, core_idxs)
         rfe = free_energy_rabfe.RelativeFreeEnergy(dual_topology)
 
         unbound_potentials, sys_params, masses = rfe.prepare_host_edge(
@@ -428,25 +433,47 @@ class RelativeModel(ABC):
 
 class AbsoluteHydrationModel(AbsoluteModel):
 
-    def setup_topology(self, mol):
+    def setup_topology(self, mol, _):
         return topology.BaseTopologyRHFE(mol, self.ff)
 
 class RelativeHydrationModel(RelativeModel):
 
-    def setup_topology(self, mol_a, mol_b):
-        return topology.DualTopologyRHFE(mol_a, mol_b, self.ff)
+    def setup_topology(self, mol_a, mol_b, core_idxs):
+        top = topology.DualTopologyRHFE(mol_a, mol_b, self.ff)
+        top.parameterize_proper_torsion = functools.partial(
+            top.parameterize_proper_torsion,
+            core_idxs_a=core_idxs[:, 0],
+            core_idxs_b=core_idxs[:, 1]
+        )
+        return top
 
 class AbsoluteConversionModel(AbsoluteModel):
 
-    def setup_topology(self, mol):
-        return topology.BaseTopologyConversion(mol, self.ff)
+    def setup_topology(self, mol, core_idxs):
+        top = topology.BaseTopologyConversion(mol, self.ff)
+        top.parameterize_proper_torsion = functools.partial(
+            top.parameterize_proper_torsion,
+            core_idxs=core_idxs
+        )
+        return top
 
 class AbsoluteStandardHydrationModel(AbsoluteModel):
 
-    def setup_topology(self, mol):
-        return topology.BaseTopologyStandardDecoupling(mol, self.ff)
+    def setup_topology(self, mol, core_idxs):
+        top = topology.BaseTopologyStandardDecoupling(mol, self.ff)
+        top.parameterize_proper_torsion = functools.partial(
+            top.parameterize_proper_torsion,
+            core_idxs=core_idxs
+        )
+        return top
 
 class RelativeBindingModel(RelativeModel):
 
-    def setup_topology(self, mol_a, mol_b):
-        return topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
+    def setup_topology(self, mol_a, mol_b, core_idxs):
+        top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
+        top.parameterize_proper_torsion = functools.partial(
+            top.parameterize_proper_torsion,
+            core_idxs_a=core_idxs[:, 0],
+            core_idxs_b=core_idxs[:, 1]
+        )
+        return top

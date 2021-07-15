@@ -257,8 +257,8 @@ def setup_relative_restraints_using_smarts(
     assert "." not in smarts
 
     core = Chem.MolFromSmarts(smarts)
-    core_idxs_a = mol_a.GetSubstructMatch(core)
-    core_idxs_b = mol_b.GetSubstructMatch(core)
+    core_idxs_a = np.array(mol_a.GetSubstructMatch(core))
+    core_idxs_b = np.array(mol_b.GetSubstructMatch(core))
     # setup relative orientational restraints
     # rough sketch of algorithm:
     # find core atoms in mol_a
@@ -275,6 +275,7 @@ def setup_relative_restraints_using_smarts(
     row_idxs, col_idxs = linear_sum_assignment(rij)
 
     core_idxs = []
+
 
     for core_a, core_b in zip(row_idxs, col_idxs):
         core_idxs.append((

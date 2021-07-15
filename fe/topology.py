@@ -361,6 +361,7 @@ class BaseTopologyConversion(BaseTopology):
                 continue
 
             if membership[b] != membership[c]:
+                print("disabling torsion between", b, c)
                 lambda_mult_idxs[torsion_idx] = -1
 
         torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
@@ -614,7 +615,10 @@ class DualTopologyRHFE(DualTopology):
     have their charges and epsilons reduced by half.
     """
 
-    def parameterize_proper_torsion(self, ff_params):
+    def parameterize_proper_torsion(self, ff_params, core_idxs):
+
+        if core_idxs is None:
+            core_idxs = []
 
         torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
 
@@ -627,6 +631,10 @@ class DualTopologyRHFE(DualTopology):
         lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
 
         for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+            # skip entirely if we're not in the core
+            if b not in core_idxs or c not in core_idxs:
+                continue
+
             if membership[b] != membership[c]:
                 lambda_offset_idxs[torsion_idx] = 0
 
