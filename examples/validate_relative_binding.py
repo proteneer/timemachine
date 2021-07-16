@@ -11,6 +11,8 @@
 # For the solvent setup, we proceed as follows:
 # 1) Conversion of the ligand parameters into a ff-independent state.
 # 2) Run an absolute hydration free energy of the ff-independent state.
+import os
+import pickle
 import argparse
 import numpy as np
 from jax import numpy as jnp
@@ -41,6 +43,13 @@ from rdkit import Chem
 from timemachine.potentials import rmsd
 from md import builders, minimizer
 
+def convert_nMKi_to_kJ_per_mole(amount_in_nM):
+    """
+    TODO: more sig figs
+    """
+    return 0.593 * np.log(amount_in_nM * 1e-9) * 4.18
+
+
 if __name__ == "__main__":
 
     multiprocessing.set_start_method('spawn')
@@ -48,6 +57,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Relatively absolute Binding Free Energy Testing",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    parser.add_argument(
+        "--property_field",
+        help="Property field to convert to kcals/mols"
     )
 
     parser.add_argument(
@@ -199,17 +213,22 @@ if __name__ == "__main__":
 
     # Generate an equilibrated reference structure to use.
     print("Equilibrating reference molecule in the complex.")
-    complex_ref_x0, complex_ref_box0 = minimizer.equilibrate_complex(
-        ref_mol,
-        complex_system,
-        complex_coords,
-        temperature,
-        pressure,
-        forcefield,
-        complex_box,
-        cmd_args.num_complex_preequil_steps
-    )
-
+    if not os.path.exists("equil.pickle"):
+        complex_ref_x0, complex_ref_box0 = minimizer.equilibrate_complex(
+            ref_mol,
+            complex_system,
+            complex_coords,
+            temperature,
+            pressure,
+            forcefield,
+            complex_box,
+            cmd_args.num_complex_preequil_steps
+        )
+        with open("equil.pickle", "wb") as ofs:
+            pickle.dump((complex_ref_x0, complex_ref_box0), ofs)
+    else:
+        with open("equil.pickle", "rb") as ifs:
+            complex_ref_x0, complex_ref_box0 = pickle.load(ifs)
     # complex models.
     complex_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_complex_conv_windows)
 
@@ -296,6 +315,7 @@ if __name__ == "__main__":
         # compute the free energy of conversion in complex
         complex_conversion_x0 = minimizer.minimize_host_4d([mol], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords])
         complex_conversion_x0 = np.concatenate([complex_conversion_x0, aligned_mol_coords])
+        mol_name = mol.GetProp("_Name")
         dG_complex_conversion, dG_complex_conversion_error = binding_model_complex_conversion.predict(
             params,
             mol,
@@ -315,7 +335,7 @@ if __name__ == "__main__":
             core_idxs,
             complex_decouple_x0,
             complex_box0,
-            prefix='complex_decouple_'+str(epoch))
+            prefix='complex_decouple_'+mol_name+"_"+str(epoch))
 
         # effective free energy of removing from complex
         dG_complex = dG_complex_conversion + dG_complex_decouple
@@ -329,20 +349,19 @@ if __name__ == "__main__":
             mol,
             solvent_x0,
             solvent_box0,
-            prefix='solvent_conversion_'+str(epoch)
+            prefix='solvent_conversion_'+mol_name+"_"+str(epoch)
         )
         dG_solvent_decouple, dG_solvent_decouple_error = binding_model_solvent_decouple.predict(
             params,
             mol,
             solvent_x0,
             solvent_box0,
-            prefix='solvent_decouple_'+str(epoch),
+            prefix='solvent_decouple_'+mol_name+"_"+str(epoch),
         )
 
         # effective free energy of removing from solvent
         dG_solvent = dG_solvent_conversion + dG_solvent_decouple
-
-        print("stage summary for mol:", mol.GetProp("_Name"),
+        print("stage summary for mol:", mol_name,
             "dG_complex_conversion", dG_complex_conversion,
             "dG_complex_decouple", dG_complex_decouple,
             "dG_solvent_conversion", dG_solvent_conversion,
@@ -361,13 +380,11 @@ if __name__ == "__main__":
         epoch_params = serialize_handlers(ordered_handles)
         # dataset.shuffle()
         for mol in dataset.data:
-
-            if mol.GetProp("_Name") != '254':
-                continue
-
-            label_dG = convert_uIC50_to_kJ_per_mole(float(mol.GetProp("IC50[uM](SPA)")))
+            kcals_per_mol = float(mol.GetProp(cmd_args.property_field))
+            label_dG = convert_nMKi_to_kJ_per_mole(kcals_per_mol)
 
             print("processing mol", mol.GetProp("_Name"), "with binding dG", label_dG, "SMILES", Chem.MolToSmiles(mol))
 
             pred_dG = pred_fn(ordered_params, mol, ref_mol)
             print("epoch", epoch, "mol", mol.GetProp("_Name"), "pred", pred_dG, "label", label_dG)
+            break
