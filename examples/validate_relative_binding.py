@@ -17,7 +17,7 @@ import argparse
 import numpy as np
 from jax import numpy as jnp
 
-from fe.free_energy_rabfe import construct_absolute_lambda_schedule, construct_conversion_lambda_schedule, get_romol_conf, setup_relative_restraints_using_smarts
+from fe.free_energy_rabfe import construct_absolute_lambda_schedule_complex, construct_absolute_lambda_schedule_solvent, construct_conversion_lambda_schedule, get_romol_conf, setup_relative_restraints_using_smarts
 from fe.utils import convert_uIC50_to_kJ_per_mole
 # from fe import model_abfe, model_rabfe, model_conversion
 from fe import model_rabfe
@@ -61,7 +61,8 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--property_field",
-        help="Property field to convert to kcals/mols"
+        help="Property field to convert to kcals/mols",
+        required=True
     )
 
     parser.add_argument(
@@ -188,8 +189,8 @@ if __name__ == "__main__":
     dataset = Dataset(mols)
 
     # construct lambda schedules for complex and solvent
-    complex_absolute_schedule = construct_absolute_lambda_schedule(cmd_args.num_complex_windows)
-    solvent_absolute_schedule = construct_absolute_lambda_schedule(cmd_args.num_solvent_windows)
+    complex_absolute_schedule = construct_absolute_lambda_schedule_complex(cmd_args.num_complex_windows)
+    solvent_absolute_schedule = construct_absolute_lambda_schedule_solvent(cmd_args.num_solvent_windows)
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(

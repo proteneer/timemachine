@@ -145,7 +145,32 @@ def construct_conversion_lambda_schedule(num_windows):
     return np.linspace(0, 1, num_windows)
 
 
-def construct_absolute_lambda_schedule(num_windows):
+def construct_absolute_lambda_schedule_complex(num_windows):
+    """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
+
+    Notes
+    -----
+    manually optimized by YTZ
+    """
+
+    A = int(.20 * num_windows)
+    B = int(.66 * num_windows)
+    C = num_windows - A - B
+
+    # optimizing the overlap based on eyeballing absolute hydration free energies
+    # there's probably some better way to deal with this by inspecting the curvature
+    lambda_schedule = np.concatenate([
+        np.linspace(0.0,  0.10, A, endpoint=False),
+        np.linspace(0.10, 0.40, B, endpoint=False),
+        np.linspace(0.40, 1.0,  C, endpoint=True)
+    ])
+
+    assert len(lambda_schedule) == num_windows
+
+    return lambda_schedule
+
+
+def construct_absolute_lambda_schedule_solvent(num_windows):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
 
     Notes
@@ -163,7 +188,7 @@ def construct_absolute_lambda_schedule(num_windows):
     lambda_schedule = np.concatenate([
         np.linspace(0.0,  0.08,  A, endpoint=False),
         np.linspace(0.08,  0.27, B, endpoint=False),
-        np.linspace(0.27, 0.6,  C, endpoint=True),
+        np.linspace(0.27, 0.50,  C, endpoint=True),
         [1.0],
     ])
 
