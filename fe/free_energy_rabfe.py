@@ -144,6 +144,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 def construct_conversion_lambda_schedule(num_windows):
     return np.linspace(0, 1, num_windows)
 
+
 def construct_absolute_lambda_schedule(num_windows):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
 
@@ -162,7 +163,7 @@ def construct_absolute_lambda_schedule(num_windows):
     lambda_schedule = np.concatenate([
         np.linspace(0.0,  0.08,  A, endpoint=False),
         np.linspace(0.08,  0.27, B, endpoint=False),
-        np.linspace(0.27, 0.46,  C, endpoint=True),
+        np.linspace(0.27, 0.6,  C, endpoint=True),
         [1.0],
     ])
 
@@ -240,8 +241,6 @@ def setup_relative_restraints(
     return core_idxs
 
 
-
-
 def setup_relative_restraints_using_smarts(
     mol_a,
     mol_b,
@@ -275,7 +274,6 @@ def setup_relative_restraints_using_smarts(
     row_idxs, col_idxs = linear_sum_assignment(rij)
 
     core_idxs = []
-
 
     for core_a, core_b in zip(row_idxs, col_idxs):
         core_idxs.append((

@@ -365,7 +365,6 @@ class BaseTopologyConversion(BaseTopology):
                 continue
 
             if membership[b] != membership[c]:
-                print("disabling torsion between", b, c)
                 lambda_mult_idxs[torsion_idx] = -1
 
         torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
@@ -401,7 +400,7 @@ class BaseTopologyStandardDecoupling(BaseTopology):
     lambda=0 fully interacting
     lambda=1 fully non-interacting.
     """
-    def parameterize_proper_torsion(self, ff_params, core_idxs):
+    def parameterize_proper_torsion(self, ff_params, core_idxs=None):
 
         if core_idxs is None:
             core_idxs = []
@@ -594,11 +593,14 @@ class DualTopology(ABC):
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
 
-# (ytz): for hydration free energy tests, we turn off the torsions between non-ring atoms to improve
-# sampling.
+
+
+# non-ring torsions are just always turned off at the end-states in the hydration
+# free energy test
 class BaseTopologyRHFE(BaseTopology):
 
     def parameterize_proper_torsion(self, ff_params):
+
         # alchemically turn off proper torsions.
         torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
         membership = get_ring_membership(self.mol)
@@ -616,7 +618,8 @@ class BaseTopologyRHFE(BaseTopology):
 
         return torsion_params, torsion_potential
 
-
+# non-ring torsions are just always turned off at the end-states in the hydration
+# free energy test
 class DualTopologyRHFE(DualTopology):
     """
     Utility class used for relative hydration free energies. Ligand B is decoupled as lambda goes
@@ -624,14 +627,7 @@ class DualTopologyRHFE(DualTopology):
     have their charges and epsilons reduced by half.
     """
 
-    def parameterize_proper_torsion(self, ff_params, core_idxs):
-
-        # this logic is actually wrong, need to copy over the logic from binding version
-
-        assert 0
-
-        if core_idxs is None:
-            core_idxs = []
+    def parameterize_proper_torsion(self, ff_params):
 
         torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
 
@@ -644,10 +640,6 @@ class DualTopologyRHFE(DualTopology):
         lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
 
         for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            # skip entirely if we're not in the core
-            if b not in core_idxs or c not in core_idxs:
-                continue
-
             if membership[b] != membership[c]:
                 lambda_offset_idxs[torsion_idx] = 0
 
@@ -775,9 +767,8 @@ class DualTopologyStandardDecoupling(DualTopology):
                 if membership_b[old_b] != membership_b[old_c]:
                     print("disabling mol_b", b, c)
                     lambda_offset_idxs[torsion_idx] = 0
-            # we dun goofed, torsion spans two different mols
             else:
-                assert 0
+                assert 0, "torsion spans two different mols"
 
         torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
 

@@ -444,14 +444,8 @@ class AbsoluteHydrationModel(AbsoluteModel):
 
 class RelativeHydrationModel(RelativeModel):
 
-    def setup_topology(self, mol_a, mol_b, core_idxs):
-        top = topology.DualTopologyRHFE(mol_a, mol_b, self.ff)
-        top.parameterize_proper_torsion = functools.partial(
-            top.parameterize_proper_torsion,
-            core_idxs_a=core_idxs[:, 0],
-            core_idxs_b=core_idxs[:, 1]
-        )
-        return top
+    def setup_topology(self, mol_a, mol_b, _):
+        return topology.DualTopologyRHFE(mol_a, mol_b, self.ff)
 
 class AbsoluteConversionModel(AbsoluteModel):
 
