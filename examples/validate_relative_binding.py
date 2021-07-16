@@ -299,26 +299,24 @@ if __name__ == "__main__":
         # effective free energy of removing from complex
         dG_complex = dG_complex_conversion + dG_complex_decouple
 
-        return 0.0, 0.0
-
         # solvent
-        # min_solvent_coords = minimizer.minimize_host_4d([mol], solvent_system, solvent_coords, forcefield, solvent_box)
-        # solvent_x0 = np.concatenate([min_solvent_coords, mol_coords])
-        # solvent_box0 = solvent_box
-        # dG_solvent_conversion, dG_solvent_conversion_error = binding_model_solvent_conversion.predict(
-        #     params,
-        #     mol,
-        #     solvent_x0,
-        #     solvent_box0,
-        #     prefix='solvent_conversion_'+str(epoch)
-        # )
-        # dG_solvent_decouple, dG_solvent_decouple_error = binding_model_solvent_decouple.predict(
-        #     params,
-        #     mol,
-        #     solvent_x0,
-        #     solvent_box0,
-        #     prefix='solvent_decouple_'+str(epoch),
-        # )
+        min_solvent_coords = minimizer.minimize_host_4d([mol], solvent_system, solvent_coords, forcefield, solvent_box)
+        solvent_x0 = np.concatenate([min_solvent_coords, mol_coords])
+        solvent_box0 = solvent_box
+        dG_solvent_conversion, dG_solvent_conversion_error = binding_model_solvent_conversion.predict(
+            params,
+            mol,
+            solvent_x0,
+            solvent_box0,
+            prefix='solvent_conversion_'+str(epoch)
+        )
+        dG_solvent_decouple, dG_solvent_decouple_error = binding_model_solvent_decouple.predict(
+            params,
+            mol,
+            solvent_x0,
+            solvent_box0,
+            prefix='solvent_decouple_'+str(epoch),
+        )
 
         # effective free energy of removing from solvent
         dG_solvent = dG_solvent_conversion + dG_solvent_decouple
