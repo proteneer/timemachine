@@ -127,6 +127,27 @@ if __name__ == "__main__":
         required=True
     )
 
+    parser.add_argument(
+        "--core_smarts",
+        type=str,
+        help='Smarts pattern to use for the core',
+        required=True
+    )
+
+    parser.add_argument(
+        "--protein_pdb",
+        type=str,
+        help="Path to the target pdb",
+        required=True
+    )
+
+    parser.add_argument(
+        "--ligand_sdf",
+        type=str,
+        help="Path to the ligand's sdf",
+        required=True
+    )
+
     cmd_args = parser.parse_args()
 
     print("cmd_args", cmd_args)
@@ -141,7 +162,7 @@ if __name__ == "__main__":
         client = GRPCClient(hosts=cmd_args.hosts)
     client.verify()
 
-    path_to_ligand = 'tests/data/ligands_40.sdf'
+    path_to_ligand =  cmd_args.ligand_sdf
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
 
     with open('ff/params/smirnoff_1_1_0_ccc.py') as f:
@@ -158,7 +179,7 @@ if __name__ == "__main__":
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
-        'tests/data/hif2a_nowater_min.pdb')
+        cmd_args.protein_pdb)
 
     solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
@@ -250,7 +271,7 @@ if __name__ == "__main__":
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
 
-    core_smarts = "*1~*~*~*~*~*~1~O~*1~*~*~*~*~*~1"
+    core_smarts = cmd_args.core_smarts
 
     def pred_fn(params, mol, mol_ref):
 
@@ -320,6 +341,13 @@ if __name__ == "__main__":
 
         # effective free energy of removing from solvent
         dG_solvent = dG_solvent_conversion + dG_solvent_decouple
+
+        print("stage summary for mol:", mol.GetProp("_Name"),
+            "dG_complex_conversion", dG_complex_conversion,
+            "dG_complex_decouple", dG_complex_decouple,
+            "dG_solvent_conversion", dG_solvent_conversion,
+            "dG_solvent_decouple", dG_solvent_decouple
+        )
 
         dG_err = np.sqrt(dG_complex_conversion_error**2 + dG_complex_decouple_error**2 + dG_solvent_conversion_error**2 + dG_solvent_decouple_error**2)
 

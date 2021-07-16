@@ -54,52 +54,7 @@ def test_base_topology_conversion_ring_torsion():
     np.testing.assert_array_equal(vanilla_qlj_params, src_qlj_params)
     np.testing.assert_array_equal(topology.standard_qlj_typer(mol), dst_qlj_params)
 
-
     
-
-# def test_base_topology_conversion_ring_torsion():
-
-#     # test that the conversion protocol behaves as intended on a
-#     # simple linked cycle.
-
-#     ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
-#     ff = Forcefield(ff_handlers)
-#     mol = Chem.MolFromSmiles("C1CC1C1CC1")
-#     vanilla_mol_top = topology.BaseTopology(mol, ff)
-
-#     vanilla_torsion_params, _ = vanilla_mol_top.parameterize_proper_torsion(ff.pt_handle.params)
-
-#     mol_top = topology.BaseTopologyConversion(mol, ff)
-#     core_idxs = [0,1,2,3,4,5]
-#     conversion_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params, core_idxs)
-
-#     np.testing.assert_array_equal(vanilla_torsion_params, conversion_torsion_params)
-
-#     # in the conversion phase, torsions that bridge the two rings should be set to
-#     # be alchemically turned off.
-#     ring_group = [0,0,0,1,1,1]
-
-#     for torsion_idxs, mult, offset in zip(torsion_potential.get_idxs(), torsion_potential.get_lambda_mult(), torsion_potential.get_lambda_offset()):
-#         _, b, c, _ = torsion_idxs
-#         assert offset == 1
-#         if ring_group[b] != ring_group[c]:
-#             assert mult == -1
-#         else:
-#             assert mult == 0
-
-#     vanilla_qlj_params, _ = vanilla_mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
-#     qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
-
-#     assert isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
-
-#     src_qlj_params = qlj_params[:len(qlj_params)//2]
-#     dst_qlj_params = qlj_params[len(qlj_params)//2:]
-
-#     np.testing.assert_array_equal(vanilla_qlj_params, src_qlj_params)
-#     np.testing.assert_array_equal(topology.standard_qlj_typer(mol), dst_qlj_params)
-
-
-
 def test_base_topology_conversion_r_group():
 
     # check that phenol torsions are turned off if they're defined in the core
