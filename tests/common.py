@@ -217,7 +217,8 @@ def prepare_water_system(
         beta=beta,
         cutoff=cutoff,
         lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs
+        lambda_offset_idxs=lambda_offset_idxs,
+        runtime_validate=False,
     )
 
     return params, ref_total_energy, test_potential
@@ -278,7 +279,8 @@ def prepare_nb_system(
         beta=beta,
         cutoff=cutoff,
         lambda_plane_idxs=lambda_plane_idxs,
-        lambda_offset_idxs=lambda_offset_idxs
+        lambda_offset_idxs=lambda_offset_idxs,
+        runtime_validate=False
     )
 
     return params, ref_total_energy, test_potential

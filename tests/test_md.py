@@ -1,18 +1,15 @@
-import functools
 import unittest
 
 import numpy as np
 
 from jax.config import config; config.update("jax_enable_x64", True)
 import jax
-import jax.numpy as jnp
 
 
 from timemachine.lib import custom_ops, potentials
+from timemachine.integrator import langevin_coefficients
 
-from timemachine.potentials import bonded, nonbonded
-
-from common import GradientTest, prepare_nb_system
+from common import prepare_nb_system
 
 class TestContext(unittest.TestCase):
 
@@ -48,23 +45,18 @@ class TestContext(unittest.TestCase):
         masses = np.random.rand(N)
 
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
-        N = len(masses)
 
         num_steps = 5
-        lambda_schedule = np.random.rand(num_steps)
-        ca = np.random.rand()
-        cbs = -np.random.rand(len(masses))/1
-        ccs = np.zeros_like(cbs)
-
+        temperature = 300
         dt = 2e-3
+        friction = 0.0
+        ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
+
+        # not convenient to simulate identical trajectories otherwise
+        assert (ccs == 0).all()
+
         lamb = np.random.rand()
 
-        def loss_fn(du_dls):
-            return jnp.sum(du_dls*du_dls)/du_dls.shape[0]
-
-        def sum_loss_fn(du_dls):
-            du_dls = np.sum(du_dls, axis=0)
-            return jnp.sum(du_dls*du_dls)/du_dls.shape[0]
 
         def integrate_once_through(
             x_t,
@@ -91,8 +83,13 @@ class TestContext(unittest.TestCase):
                 du_dx = dU_dx_fn(x_t, params, box, lamb)[0]
                 all_du_dxs.append(du_dx)
                 all_xs.append(x_t)
-                v_t = ca*v_t + np.expand_dims(cbs, axis=-1)*du_dx
-                x_t = x_t + v_t*dt
+
+                noise = np.random.randn(*v_t.shape)
+
+                v_mid = v_t + np.expand_dims(cbs, axis=-1) * du_dx
+
+                v_t = ca * v_mid + np.expand_dims(ccs, axis=-1) * noise
+                x_t += 0.5 * dt * (v_mid + v_t)
 
                 # note that we do not calculate the du_dl of the last frame.
 
@@ -160,12 +157,8 @@ class TestContext(unittest.TestCase):
             np.testing.assert_allclose(test_du_dx_t, ref_all_du_dxs[step])
 
 
-        ref_avg_du_dls = np.mean(ref_all_du_dls, axis=0)
-        ref_avg_du_dls_f2 = np.mean(ref_all_du_dls[::2], axis=0)
-
         ref_avg_du_dps = np.mean(ref_all_du_dps, axis=0)
         ref_std_du_dps = np.std(ref_all_du_dps, axis=0)
-        ref_avg_du_dps_f2 = np.mean(ref_all_du_dps[::2], axis=0)
 
         # the fixed point accumulator makes it hard to converge some of these
         # if the derivative is super small - in which case they probably don't matter
@@ -179,14 +172,6 @@ class TestContext(unittest.TestCase):
         np.testing.assert_allclose(test_obs.std_du_dp()[:, 2], ref_std_du_dps[:, 2], 5e-5)
 
         # test the multiple_steps method
-        intg_2 = custom_ops.LangevinIntegrator(
-            dt,
-            ca,
-            cbs,
-            ccs,
-            1234
-        )
-
         ctxt_2 = custom_ops.Context(
             x0,
             v0,

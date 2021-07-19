@@ -13,8 +13,8 @@ private:
     int *d_group_a_idxs_;
     int *d_group_b_idxs_;
 
-    RealType * d_centroid_a_;
-    RealType * d_centroid_b_;
+    unsigned long long * d_centroid_a_;
+    unsigned long long * d_centroid_b_;
 
     int N_A_;
     int N_B_;

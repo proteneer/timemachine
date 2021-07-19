@@ -1,3 +1,4 @@
+from typing import List
 from jax.config import config; config.update("jax_enable_x64", True)
 
 import jax
@@ -5,10 +6,11 @@ import numpy as np
 
 from fe import topology
 
-from timemachine.lib import potentials, custom_ops
-from timemachine.lib import LangevinIntegrator
+from timemachine.lib import potentials, custom_ops, LangevinIntegrator
 
 from ff.handlers import openmm_deserializer
+
+from rdkit.Chem import MolToSmiles
 
 def get_romol_conf(mol):
     """Coordinates of mol's 0th conformer, in nanometers"""
@@ -53,6 +55,29 @@ class BaseFreeEnergy():
             final_params.append(combined_params)
 
         return final_params, final_potentials
+
+    def prepare_host_edge(self, ff_params, host_system, host_coords):
+        """
+        Prepares the host-edge system
+
+        Parameters
+        ----------
+        ff_params: tuple of np.array
+            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+
+        host_system: openmm.System
+            openmm System object to be deserialized
+
+        host_coords: np.array
+            Nx3 array of atomic coordinates
+
+        Returns
+        -------
+        4 tuple
+            unbound_potentials, system_params, combined_masses, combined_coords
+
+        """
+        raise NotImplementedError("Not implemented")
 
 # this class is serializable.
 class AbsoluteFreeEnergy(BaseFreeEnergy):
@@ -154,17 +179,14 @@ class RelativeFreeEnergy(BaseFreeEnergy):
     def prepare_vacuum_edge(self, ff_params):
         """
         Prepares the vacuum system.
-
         Parameters
         ----------
         ff_params: tuple of np.array
             Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
-
         Returns
         -------
         4 tuple
             unbound_potentials, system_parameters, combined_masses, combined_coords
-
         """
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
         ligand_masses_b = [b.GetMass() for b in self.mol_b.GetAtoms()]
@@ -182,23 +204,18 @@ class RelativeFreeEnergy(BaseFreeEnergy):
     def prepare_host_edge(self, ff_params, host_system, host_coords):
         """
         Prepares the host-edge system
-
         Parameters
         ----------
         ff_params: tuple of np.array
             Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
-
         host_system: openmm.System
             openmm System object to be deserialized
-
         host_coords: np.array
             Nx3 array of atomic coordinates
-
         Returns
         -------
         4 tuple
             unbound_potentials, system_params, combined_masses, combined_coords
-
         """
 
         ligand_masses_a = [a.GetMass() for a in self.mol_a.GetAtoms()]
@@ -214,11 +231,42 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         hgt = topology.HostGuestTopology(host_bps, self.top)
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
-
-        combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
-        combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
+        if isinstance(self.top, topology.SingleTopology):
+            combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
+            combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
+        else:
+            combined_masses = np.concatenate([host_masses, ligand_masses_a, ligand_masses_b])
+            combined_coords = np.concatenate([host_coords, ligand_coords_a, ligand_coords_b])
 
         return final_potentials, final_params, combined_masses, combined_coords
+
+
+class RBFETransformIndex:
+    """Builds an index of relative free energy transformations to use
+    with construct_mle_layer
+    """
+
+    def __len__(self):
+        return len(self._indices)
+
+    def __init__(self):
+        self._indices = {}
+
+    def build(self, refs: List[RelativeFreeEnergy]):
+        for ref in refs:
+            self.get_transform_indices(ref)
+
+    def get_transform_indices(self, ref: RelativeFreeEnergy) -> List[int]:
+        return self.get_mol_idx(ref.mol_a), self.get_mol_idx(ref.mol_b)
+
+    def get_mol_idx(self, mol):
+        hashed = self._mol_hash(mol)
+        if hashed not in self._indices:
+            self._indices[hashed] = len(self._indices)
+        return self._indices[hashed]
+
+    def _mol_hash(self, mol):
+        return MolToSmiles(mol)
 
 
 def construct_lambda_schedule(num_windows):
