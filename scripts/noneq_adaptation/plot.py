@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 from fe.free_energy import construct_lambda_schedule
-from deploy import interpolate_lambda_schedule
+from optimize.protocol import interpolate_lambda_schedule
 
 hist_kwargs = dict(density=True, alpha=0.5)
 

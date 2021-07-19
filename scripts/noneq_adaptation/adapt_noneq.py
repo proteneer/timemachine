@@ -1,149 +1,173 @@
 from md.thermostat.utils import sample_velocities
 from md.thermostat.moves import UnadjustedLangevinMove
+
+
+from md.builders import build_water_system
+from md.minimizer import minimize_host_4d
+from md.ensembles import PotentialEnergyModel, NVTEnsemble
+from timemachine.lib import LangevinIntegrator
+from fe.free_energy import AbsoluteFreeEnergy
 from md.states import CoordsVelBox
-import os
+
+from testsystems.relative import hif2a_ligand_pair
+
 from simtk import unit
 import numpy as np
-from scipy.optimize import root_scalar
 
-from tqdm import tqdm
-from typing import List
+temperature = 300 * unit.kelvin
+initial_waterbox_width = 3.0 * unit.nanometer
+timestep = 1.5 * unit.femtosecond
+collision_rate = 1.0 / unit.picosecond
+seed = 2021
 
-from testsystem import (
-    temperature, timestep,
-    integrator_impl, ensemble, potential_energy_model,
-    coords, masses, complex_box,
+mol_a, _, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
+complex_system, complex_coords, complex_box, complex_top = build_water_system(
+    initial_waterbox_width.value_in_unit(unit.nanometer))
+
+min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
+afe = AbsoluteFreeEnergy(mol_a, ff)
+
+unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
+    ff.get_ordered_params(), complex_system, min_complex_coords
 )
 
-# paths where we'll later save results
-work_increments_path = os.path.join(os.path.dirname(__file__), 'results/works_via_potential_increments.npy')
-optimized_lam_trajs_path = os.path.join(os.path.dirname(__file__), 'results/optimized_lam_trajs.npz')
+potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials, precision=np.float32)
+integrator = LangevinIntegrator(
+    temperature.value_in_unit(unit.kelvin),
+    timestep.value_in_unit(unit.picosecond),
+    collision_rate.value_in_unit(unit.picosecond ** -1),
+    masses,
+    seed
+)
+integrator_impl = integrator.impl()
+bound_impls = potential_energy_model.all_impls
 
-# equilibrium options
-n_equil_steps = 10000
-n_samples = 100
+ensemble = NVTEnsemble(potential_energy_model, temperature)
 
-# adaptation options
-n_md_steps_per_increment = 100  # number of MD steps run at fixed lambda, between lambda increments
+def noneq_du_dl(x: CoordsVelBox, lambda_schedule: np.array) -> np.array:
+    """Compute du_dl per step along nonequilibrium trajectory"""
+    ctxt = custom_ops.Context(x.coords, x.velocities, x.box, integrator_impl, potential_energy_model.all_impls)
 
+    # arguments: lambda_schedule, du_dl_interval, x_interval
+    du_dl_traj, _ = ctxt.multiple_steps(lambda_schedule, 1, 0)
 
-def u(state: CoordsVelBox, lam: float) -> float:
-    """compute reduced potential"""
-    energy, gradient = ensemble.reduced_potential_and_gradient(state.coords, state.box, lam)
-    return energy
-
-
-def u_vec(states: List[CoordsVelBox], lam: float) -> np.array:
-    """compute reduced potential on list of states"""
-    return np.array([u(state, lam) for state in states])
-
-
-def sample_at_equilibrium(initial_state: CoordsVelBox, lam: float = 0.0, thinning: int = 1000, n_samples: int = 100) -> \
-        List[CoordsVelBox]:
-    """run MD"""
-
-    thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=thinning)
-
-    samples = [initial_state]
-    for _ in tqdm(range(n_samples)):
-        samples.append(thermostat.move(samples[-1]))
-
-    return samples[1:]
+    return du_dl_traj
 
 
-def propagate(states: List[CoordsVelBox], lam: float = 0.0, n_steps: float = 500) -> List[CoordsVelBox]:
-    thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=n_steps)
-
-    print(f'propagating {len(states)} systems by {n_steps * timestep.value_in_unit(unit.picosecond)}ps each...')
-    updated_states = []
-    for state in tqdm(states):  # TODO: loop could be paralllelized (e.g. on CUDAPoolClient)
-        updated_states.append(thermostat.move(state))
-
-    return updated_states
-
-
-def find_next_increment(
-        samples: List[CoordsVelBox], lam_initial: float,
-        max_increment_size: float = 0.1, incremental_stddev_threshold: float = 0.1, xtol: float = 1e-5
-) -> float:
-    u_s = u_vec(samples, lam_initial)
-
-    def work_increment_stddev(lam_increment: float) -> float:
-        """stddev(u(samples, lam + lam_increment) - u(samples, lam))"""
-        lam = lam_initial + lam_increment
-        u_trial = u_vec(samples, lam)
-        stddev = np.std(u_trial - u_s)
-
-        # root-finder needs to check sign of stddev
-        return np.nan_to_num(stddev, nan=+np.inf)
-
-    def f(lam_increment: float) -> float:
-        """find the zero of this function to get a lambda increment
-        that controls the stddev of work accumulated this step"""
-        return work_increment_stddev(lam_increment) - incremental_stddev_threshold
-
-    # try-except to catch rootfinding ValueError: f(a) and f(b) must have different signs
-    #   which occurs when jumping all the way to lam=1.0 is still less than threshold
-    try:
-        result = root_scalar(f, bracket=(0, max_increment_size), xtol=xtol)
-        lam_increment = result.root
-    except ValueError as e:
-        print(f'root finding error: {e}')
-        lam_increment = max_increment_size
-
-    return lam_increment
-
-
-def adaptive_noneq(samples_0: List[CoordsVelBox], n_md_steps_per_increment=100, incremental_stddev_threshold=0.5):
-    """Generate lam=0 -> lam=1 trajectories by a scheme that makes adaptively sized lambda increments.
-
-        Alternates between the following two steps:
-        * Select the next lambda increment by finding the root of
-            f(increment) = stddev(u(samples, lam + increment) - u(samples, lam)) - incremental_stddev_threshold
-        * Propagate all samples for n_md_steps_per_increment
-            (n_md_steps_per_increment can be << equilibration time)
-
-    Notes
-    -----
-    * TODO: be able to run this also in reverse -- currently hard-codes lam=0 -> lam=1
-
-    References
-    ----------
-    * Based on description of an adaptive SMC approach that appeared in
-        Section 2.4.2. of https://arxiv.org/abs/1612.06468,
-        which references Del Moral et al., 2012 and Zhou et al., 2015
-        introducing and refining the approach.
-        * OpenMM implementation with optional resampling https://gist.github.com/maxentile/be328e929abf4a92bee7d26967277f54
-            with the threshold defined using a different criterion ("conditional effective sample size") vs. stddev(w)
-        * More sophisticated implementation of adaptive SMC in perses
-            https://github.com/choderalab/perses/blob/18ec8b9d69afeb6128b251cf1d1b89ac7801ed68/perses/app/relative_setup.py#L1378-L1838
-    * A closely related approach "thermodynamic trailblazing" is developed in Andrea Rizzi's thesis
-        https://search.proquest.com/openview/0f0bda7dc135aad7216b6acecb815d3c/1.pdf?pq-origsite=gscholar&cbl=18750&diss=y
-        and implemented in Yank
-        https://github.com/choderalab/yank/blob/59fc6313b3b7d82966afc539604c36f4db9b952c/Yank/pipeline.py#L1983-L2648
-        Differences compared with trailblazing include that here the samples are not in equilibrium after
-        step 0, and here optimization only uses information in one direction.
-    """
-
-    sample_traj = [samples_0]
-    lam_traj = [0.0]
-
-    while lam_traj[-1] < 1.0:
-        samples, lam = sample_traj[-1], lam_traj[-1]
-
-        options = dict(max_increment_size=1.0 - lam, incremental_stddev_threshold=incremental_stddev_threshold)
-        updated_lam = lam + find_next_increment(samples, lam, **options)
-        lam_traj.append(updated_lam)
-        print(f'next lambda={updated_lam:.6f}')
-
-        if updated_lam < 1.0:
-            updated_samples = propagate(samples, updated_lam, n_steps=n_md_steps_per_increment)
-            sample_traj.append(updated_samples)
-
-    return sample_traj, np.array(lam_traj)
 
 
 if __name__ == '__main__':
+
+    # paths where we'll later save results
+    work_increments_path = os.path.join(os.path.dirname(__file__), 'results/works_via_potential_increments.npy')
+    optimized_lam_trajs_path = os.path.join(os.path.dirname(__file__), 'results/optimized_lam_trajs.npz')
+
+    # equilibrium options
+    n_equil_steps = 10000
+    n_samples = 100
+
+    # adaptation options
+    n_md_steps_per_increment = 100  # number of MD steps run at fixed lambda, between lambda increments
+
+    # load results from adaptive lambda spacing
+    lambda_spacing_results = np.load(optimized_lam_trajs_path)
+    incremental_stddev_thresholds = lambda_spacing_results['incremental_stddev_thresholds']
+
+    # generate end-state samples
+    n_equil_steps = 10000
+    n_samples = 100
+
+    v_0 = sample_velocities(masses * unit.amu, temperature)
+    initial_state = CoordsVelBox(coords, v_0, complex_box)
+    print('equilibrating...')
+    thermostat_0 = UnadjustedLangevinMove(
+        integrator_impl, potential_energy_model.all_impls,
+        lam=0.0, n_steps=n_equil_steps
+    )
+    equilibrated_0 = thermostat_0.move(initial_state)
+
+    print(f'collecting {n_samples} samples from lam=0...')
+    samples_0 = sample_at_equilibrium(equilibrated_0, lam=0.0, n_samples=n_samples)
+
+    # will run at the same total number of MD steps as each corresponding protocol optimization
+    keys = list(lambda_spacing_results.keys())
+    keys.remove('incremental_stddev_thresholds')
+    available_thresholds = [incremental_stddev_thresholds[int(i)] for i in keys]
+    print('running noneq MD at protocols computed with the following incremental_stddev_thresholds')
+    print(available_thresholds)
+
+    # construct interpolated versions of the adapted schedule, rather than doing cycles of
+    #   lambda increment <-> MD propagation
+
+    # dicts, for later dumping into .npz files since they'll have different shapes depending on
+    #   total_md_steps
+    du_dl_trajs_default = dict()
+    du_dl_trajs_optimized = dict()
+
+    # lists are fine for these, since we can stack them into flat arrays...
+    works_default = []
+    works_optimized = []
+
+    total_md_step_range = []
+
+    for key in keys:
+        lam_traj = lambda_spacing_results[key]
+        ind = int(key)
+        threshold = incremental_stddev_thresholds[ind]
+        total_md_steps = len(lam_traj) * n_md_steps_per_increment
+        total_md_step_range.append(total_md_steps)
+
+        print(f'using the protocol optimized with an incremental stddev threshold of {threshold:.3f}')
+        print(f'running default and optimized protocols at # MD steps = {total_md_steps}...')
+        # TODO: reduce the 2x code duplications here...
+        default_schedule = construct_lambda_schedule(total_md_steps)
+        optimized_schedule = interpolate_lambda_schedule(lam_traj, total_md_steps)
+
+        default_noneq_mover = partial(noneq_du_dl, lambda_schedule=default_schedule)
+        optimized_noneq_mover = partial(noneq_du_dl, lambda_schedule=optimized_schedule)
+
+        du_dl_default = ensemble.reduce(np.array([default_noneq_mover(x) for x in tqdm(samples_0)]))
+        du_dl_optimized = ensemble.reduce(np.array([optimized_noneq_mover(x) for x in tqdm(samples_0)]))
+
+        key = str(total_md_steps)
+        du_dl_trajs_default[key] = du_dl_default
+        du_dl_trajs_optimized[key] = du_dl_optimized
+
+        works_default.append(np.trapz(du_dl_default, default_schedule, axis=1))
+        works_optimized.append(np.trapz(du_dl_optimized, optimized_schedule, axis=1))
+
+        def describe(works):
+            print(f'\tmean(w_f): {np.mean(works):.3f} kBT')
+            print(f'\tstddev(w_f): {np.std(works):.3f} kBT')
+            print(f'\tmin(w_f): {np.min(works):.3f} kBT')
+            print(f'\tmax(w_f): {np.max(works):.3f} kBT')
+            print(f'\tEXP(w_f): {EXP(works)[0]:.3f} kBT')
+
+        print(f'default:')
+        describe(works_default[-1])
+        print('optimized:')
+        describe(works_optimized[-1])
+
+        # overwrite results at each iteration
+        results = dict(
+            total_md_step_range=total_md_step_range,
+            works_default=np.array(works_default),
+            works_optimized=np.array(works_optimized),
+        )
+        works_path = os.path.join(os.path.dirname(__file__), 'results/works_via_du_dl.npz')
+
+        print(f'saving results to {works_path}')
+        np.savez(works_path, **results)
+
+        du_dl_trajs_default_path = os.path.join(os.path.dirname(__file__), 'results/du_dl_trajs_default.npz')
+        du_dl_trajs_optimized_path = os.path.join(os.path.dirname(__file__), 'results/du_dl_trajs_optimized.npz')
+
+        print(f'saving results to {du_dl_trajs_default_path}')
+        np.savez(du_dl_trajs_default_path, **du_dl_trajs_default)
+
+        print(f'saving results to {du_dl_trajs_optimized_path}')
+        np.savez(du_dl_trajs_optimized_path, **du_dl_trajs_optimized)
+
 
     # collect endstate samples
     v_0 = sample_velocities(masses * unit.amu, temperature)
