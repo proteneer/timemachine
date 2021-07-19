@@ -1,18 +1,28 @@
+from simtk import unit
+import numpy as np
+import os
+from tqdm import tqdm
+from pymbar import EXP
+from functools import partial
+
+from timemachine.lib import custom_ops, LangevinIntegrator
+
+from fe.free_energy import AbsoluteFreeEnergy, construct_lambda_schedule
+
+from md.states import CoordsVelBox
 from md.thermostat.utils import sample_velocities
 from md.thermostat.moves import UnadjustedLangevinMove
-
-
 from md.builders import build_water_system
 from md.minimizer import minimize_host_4d
 from md.ensembles import PotentialEnergyModel, NVTEnsemble
-from timemachine.lib import LangevinIntegrator
-from fe.free_energy import AbsoluteFreeEnergy
-from md.states import CoordsVelBox
 
 from testsystems.relative import hif2a_ligand_pair
 
-from simtk import unit
-import numpy as np
+from optimize.protocol import (
+    construct_potential_wrappers, construct_md_wrappers,
+    interpolate_lambda_schedule, adaptive_noneq
+)
+
 
 temperature = 300 * unit.kelvin
 initial_waterbox_width = 3.0 * unit.nanometer
@@ -44,6 +54,10 @@ bound_impls = potential_energy_model.all_impls
 
 ensemble = NVTEnsemble(potential_energy_model, temperature)
 
+u, u_vec = construct_potential_wrappers(ensemble)
+sample_at_equilibrium, propagate = construct_md_wrappers(ensemble, integrator_impl)
+
+
 def noneq_du_dl(x: CoordsVelBox, lambda_schedule: np.array) -> np.array:
     """Compute du_dl per step along nonequilibrium trajectory"""
     ctxt = custom_ops.Context(x.coords, x.velocities, x.box, integrator_impl, potential_energy_model.all_impls)
@@ -52,8 +66,6 @@ def noneq_du_dl(x: CoordsVelBox, lambda_schedule: np.array) -> np.array:
     du_dl_traj, _ = ctxt.multiple_steps(lambda_schedule, 1, 0)
 
     return du_dl_traj
-
-
 
 
 if __name__ == '__main__':
@@ -74,8 +86,6 @@ if __name__ == '__main__':
     incremental_stddev_thresholds = lambda_spacing_results['incremental_stddev_thresholds']
 
     # generate end-state samples
-    n_equil_steps = 10000
-    n_samples = 100
 
     v_0 = sample_velocities(masses * unit.amu, temperature)
     initial_state = CoordsVelBox(coords, v_0, complex_box)
@@ -136,12 +146,14 @@ if __name__ == '__main__':
         works_default.append(np.trapz(du_dl_default, default_schedule, axis=1))
         works_optimized.append(np.trapz(du_dl_optimized, optimized_schedule, axis=1))
 
+
         def describe(works):
             print(f'\tmean(w_f): {np.mean(works):.3f} kBT')
             print(f'\tstddev(w_f): {np.std(works):.3f} kBT')
             print(f'\tmin(w_f): {np.min(works):.3f} kBT')
             print(f'\tmax(w_f): {np.max(works):.3f} kBT')
             print(f'\tEXP(w_f): {EXP(works)[0]:.3f} kBT')
+
 
         print(f'default:')
         describe(works_default[-1])
@@ -168,7 +180,6 @@ if __name__ == '__main__':
         print(f'saving results to {du_dl_trajs_optimized_path}')
         np.savez(du_dl_trajs_optimized_path, **du_dl_trajs_optimized)
 
-
     # collect endstate samples
     v_0 = sample_velocities(masses * unit.amu, temperature)
     initial_state = CoordsVelBox(coords, v_0, complex_box)
@@ -184,12 +195,16 @@ if __name__ == '__main__':
     results = dict()
     results['incremental_stddev_thresholds'] = incremental_stddev_thresholds
 
+    propagate_n_steps = partial(propagate, n_steps=n_md_steps_per_increment)
+
     for i, incremental_stddev_threshold in enumerate(incremental_stddev_thresholds):
         # run switching with adaptive lambda steps
-        print(f'running adaptive noneq switching with {n_samples} trajectories and a threshold of {incremental_stddev_threshold}')
+        print(
+            f'running adaptive noneq switching with {n_samples} trajectories and a threshold of {incremental_stddev_threshold}')
         sample_traj, lam_traj = adaptive_noneq(
             samples_0,
-            n_md_steps_per_increment=n_md_steps_per_increment,
+            u_vec,
+            propagate_n_steps,
             incremental_stddev_threshold=incremental_stddev_threshold,
         )
         results[str(i)] = lam_traj

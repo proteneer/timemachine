@@ -64,8 +64,8 @@ def construct_md_wrappers(ensemble, integrator_impl, timestep=2.0 * unit.femtose
 
 
 def find_next_increment(
-        u_vec: VectorizedPotentialEnergy,
         samples: List[CoordsVelBox],
+        u_vec: VectorizedPotentialEnergy,
         lam_initial: float,
         max_increment_size: float = 0.1,
         incremental_stddev_threshold: float = 0.1,
@@ -104,7 +104,6 @@ def adaptive_noneq(
         samples_0: List[CoordsVelBox],
         u_vec: VectorizedPotentialEnergy,
         propagate: VectorizedPropagator,
-        n_md_steps_per_increment=100,
         incremental_stddev_threshold=0.5
 ):
     """Generate lam=0 -> lam=1 trajectories by a scheme that makes adaptively sized lambda increments.
@@ -112,8 +111,7 @@ def adaptive_noneq(
         Alternates between the following two steps:
         * Select the next lambda increment by finding the root of
             f(increment) = stddev(u(samples, lam + increment) - u(samples, lam)) - incremental_stddev_threshold
-        * Propagate all samples for n_md_steps_per_increment
-            (n_md_steps_per_increment can be << equilibration time)
+        * Propagate all samples for some small number of MD/MCMC steps
 
     Notes
     -----
@@ -144,12 +142,12 @@ def adaptive_noneq(
         samples, lam = sample_traj[-1], lam_traj[-1]
 
         options = dict(max_increment_size=1.0 - lam, incremental_stddev_threshold=incremental_stddev_threshold)
-        updated_lam = lam + find_next_increment(u_vec, samples, lam, **options)
+        updated_lam = lam + find_next_increment(samples, u_vec, lam, **options)
         lam_traj.append(updated_lam)
         print(f'next lambda={updated_lam:.6f}')
 
         if updated_lam < 1.0:
-            updated_samples = propagate(samples, updated_lam, n_steps=n_md_steps_per_increment)
+            updated_samples = propagate(samples, updated_lam)
             sample_traj.append(updated_samples)
 
     return sample_traj, np.array(lam_traj)
