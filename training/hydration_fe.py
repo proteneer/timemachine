@@ -229,7 +229,7 @@ if __name__ == "__main__":
 
                     epoch_params = serialize_handlers(ff_handlers)
 
-                    # write parameters after each traning molecule
+                    # write parameters after each training molecule
                     with open(os.path.join(epoch_dir, "checkpoint_params_idx_"+str(idx)+"_mol_"+mol.GetProp("_Name")+".py"), 'w') as fh:
                         fh.write(epoch_params)
 

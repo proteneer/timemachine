@@ -91,7 +91,7 @@ def test_deadlock_triangle(verbose=True):
     if verbose:
         print(f'sum((edge_predictions - edge_labels)^2) after optimization: {corrected_relative_loss(result.x):.20f}')
 
-    assert result.fun < 1e-16
+    assert result.fun < 1e-12
 
 
 def test_optimization_with_cycle_closure(n_nodes=10, verbose=True):
@@ -128,7 +128,7 @@ def test_optimization_with_cycle_closure(n_nodes=10, verbose=True):
     if verbose:
         print(f'sum((free_energies - true_free_energies)^2) after optimization: {L(result.x):.20f}')
 
-    assert result.fun < 1e-16
+    assert result.fun < 1e-12
 
 
 def test_grad_cycle_closure(n_nodes=5, tol=1e-3, verbose=True):

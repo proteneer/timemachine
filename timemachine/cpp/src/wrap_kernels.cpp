@@ -25,7 +25,7 @@
 // #include "observable.hpp"
 #include "neighborlist.hpp"
 // #include "shape.hpp"
-
+#include "barostat.hpp"
 
 #include <iostream>
 
@@ -114,7 +114,8 @@ void declare_context(py::module &m) {
         const py::array_t<double, py::array::c_style> &v0,
         const py::array_t<double, py::array::c_style> &box0,
         timemachine::Integrator *intg,
-        std::vector<timemachine::BoundPotential *> bps) {
+        std::vector<timemachine::BoundPotential *> bps,
+        std::optional<timemachine::MonteCarloBarostat *> barostat) {
         // std::vector<timemachine::Observable *> obs) {
 
         int N = x0.shape()[0];
@@ -134,11 +135,14 @@ void declare_context(py::module &m) {
             v0.data(),
             box0.data(),
             intg,
-            bps
+            bps,
+            barostat.has_value() ? barostat.value() : nullptr
             // obs
         );
 
-    }))
+    }),
+    py::arg("x0"), py::arg("v0"), py::arg("box"), py::arg("integrator"), py::arg("bps"), py::arg("barostat") = py::none()
+	)
     .def("add_observable", &timemachine::Context::add_observable)
     .def("step", &timemachine::Context::step)
     .def("multiple_steps", [](timemachine::Context &ctxt,
@@ -152,7 +156,7 @@ void declare_context(py::module &m) {
         int du_dl_interval = (store_du_dl_interval <= 0) ? lambda_schedule.size() : store_du_dl_interval;
         int x_interval = (store_x_interval <= 0) ? lambda_schedule.size() : store_x_interval;
 
-        std::array<std::vector<double>, 2> result = ctxt.multiple_steps(vec_lambda_schedule, du_dl_interval, x_interval);
+        std::array<std::vector<double>, 3> result = ctxt.multiple_steps(vec_lambda_schedule, du_dl_interval, x_interval);
 
         py::array_t<double, py::array::c_style> out_du_dl_buffer(result[0].size());
         std::memcpy(out_du_dl_buffer.mutable_data(), result[0].data(), result[0].size()*sizeof(double));
@@ -163,7 +167,10 @@ void declare_context(py::module &m) {
         py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
         std::memcpy(out_x_buffer.mutable_data(), result[1].data(), result[1].size()*sizeof(double));
 
-        return py::make_tuple(out_du_dl_buffer, out_x_buffer);
+        py::array_t<double, py::array::c_style> box_buffer({F, D, D});
+        std::memcpy(box_buffer.mutable_data(), result[2].data(), result[2].size()*sizeof(double));
+
+        return py::make_tuple(out_du_dl_buffer, out_x_buffer, box_buffer);
     }, py::arg("lambda_schedule"), py::arg("store_du_dl_interval") = 0, py::arg("store_x_interval") = 0)
     // .def("multiple_steps", &timemachine::Context::multiple_steps)
     .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
@@ -180,6 +187,12 @@ void declare_context(py::module &m) {
         ctxt.get_v_t(buffer.mutable_data());
         return buffer;
     })
+    .def("get_box", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+        unsigned int D = 3;
+        py::array_t<double, py::array::c_style> buffer({D, D});
+        ctxt.get_box(buffer.mutable_data());
+        return buffer;
+    })
     .def("_get_du_dx_t_minus_1", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         PyErr_WarnEx(PyExc_DeprecationWarning,
             "_get_du_dx_t_minus_1() should only be used for testing. It will be removed in a future release.",
@@ -190,7 +203,7 @@ void declare_context(py::module &m) {
         ctxt.get_du_dx_t_minus_1(&du_dx[0]);
         py::array_t<double, py::array::c_style> py_du_dx({N, D});
         for(int i=0; i < du_dx.size(); i++) {
-            py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+            py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
         }
         return py_du_dx;
     });
@@ -281,7 +294,9 @@ void declare_langevin_integrator(py::module &m) {
         );
 
     }
-    ));
+    ),
+    py::arg("dt"), py::arg("ca"),  py::arg("cbs"), py::arg("ccs"), py::arg("seed")
+    );
 
 }
 
@@ -342,7 +357,9 @@ void declare_potential(py::module &m) {
 
             return py::make_tuple(py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
 
-    })
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam")
+    )
     .def("execute_selective", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
@@ -378,7 +395,7 @@ void declare_potential(py::module &m) {
 
             py::array_t<double, py::array::c_style> py_du_dx({N, D});
             for(int i=0; i < du_dx.size(); i++) {
-                py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+                py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
             }
 
             std::vector<ssize_t> pshape(params.shape(), params.shape()+params.ndim());
@@ -412,7 +429,10 @@ void declare_potential(py::module &m) {
             }
 
             return result;
-    })
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam"),
+    py::arg("compute_du_dx"), py::arg("compute_du_dp"), py::arg("compute_du_dl"), py::arg("compute_u")
+    )
     .def("execute_du_dx", [](timemachine::Potential &pot,
         const py::array_t<double, py::array::c_style> &coords,
         const py::array_t<double, py::array::c_style> &params,
@@ -437,11 +457,13 @@ void declare_potential(py::module &m) {
 
             py::array_t<double, py::array::c_style> py_du_dx({N, D});
             for(int i=0; i < du_dx.size(); i++) {
-                py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
+                py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
             }
 
             return py_du_dx;
-    });
+    },
+    py::arg("coords"), py::arg("params"), py::arg("box"), py::arg("lam")
+    );
 
 }
 
@@ -468,7 +490,9 @@ void declare_bound_potential(py::module &m) {
             params.data()
         );
     }
-    ))
+    ),
+    py::arg("potential"), py::arg("params")
+    )
     .def("size", &timemachine::BoundPotential::size)
     .def("execute", [](timemachine::BoundPotential &bp,
         const py::array_t<double, py::array::c_style> &coords,
@@ -501,7 +525,9 @@ void declare_bound_potential(py::module &m) {
             unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
 
             return py::make_tuple(py_du_dx, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
-    });
+    },
+    py::arg("coords"), py::arg("box"), py::arg("lam")
+    );
 
 }
 
@@ -939,7 +965,44 @@ void declare_nonbonded(py::module &m, const char *typestr) {
 
 }
 
+void declare_barostat(py::module &m) {
+
+    using Class = timemachine::MonteCarloBarostat;
+    std::string pyclass_name = std::string("MonteCarloBarostat");
+    py::class_<Class>(
+        m,
+        pyclass_name.c_str(),
+        py::buffer_protocol(),
+        py::dynamic_attr()
+    )
+    .def(py::init([](
+		const int N,
+		const double pressure,
+		const double temperature,
+        std::vector<std::vector<int> > group_idxs,
+        const int frequency,
+        std::vector<timemachine::BoundPotential *> bps,
+		const int seed) {
+        return new timemachine::MonteCarloBarostat(
+			N,
+			pressure,
+			temperature,
+			group_idxs,
+			frequency,
+			bps,
+			seed
+        );
+    })
+	)
+    .def("set_interval", &timemachine::MonteCarloBarostat::set_interval)
+    .def("get_interval", &timemachine::MonteCarloBarostat::get_interval)
+    .def("set_pressure", &timemachine::MonteCarloBarostat::set_pressure)
+	;
+}
+
 PYBIND11_MODULE(custom_ops, m) {
+
+	declare_barostat(m);
 
     declare_integrator(m);
     declare_langevin_integrator(m);

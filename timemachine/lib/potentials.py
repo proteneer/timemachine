@@ -132,6 +132,13 @@ class BondedWrapper(CustomOpWrapper):
         else:
             return None
 
+    def set_lambda_mult_and_offset(self, mult, offset):
+        if len(self.args) > 1:
+            self.args[1] = mult
+            self.args[2] = offset
+        else:
+            self.args.append(mult)
+            self.args.append(offset)
 
 class HarmonicBond(BondedWrapper):
     pass
@@ -226,6 +233,19 @@ class Nonbonded(CustomOpWrapper):
 
     def get_cutoff(self):
         return self.args[-1]
+
+    def interpolate(self):
+        """
+        Return an interpolated variant of this potential
+        """
+        return NonbondedInterpolated(
+            self.get_exclusion_idxs(),
+            self.get_scale_factors(),
+            self.get_lambda_plane_idxs(),
+            self.get_lambda_offset_idxs(),
+            self.get_beta(),
+            self.get_cutoff()
+        )
 
 class NonbondedInterpolated(Nonbonded):
 

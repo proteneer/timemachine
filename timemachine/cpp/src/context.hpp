@@ -1,10 +1,9 @@
-#pragma once
-
 #include <array>
 #include <vector>
 #include "integrator.hpp"
 #include "bound_potential.hpp"
 #include "observable.hpp"
+#include "barostat.hpp"
 
 namespace timemachine {
 
@@ -18,7 +17,8 @@ public:
         const double *v_0,
         const double *box_0,
         Integrator *intg,
-        std::vector<BoundPotential *> bps
+        std::vector<BoundPotential *> bps,
+        MonteCarloBarostat *barostat=nullptr
     );
 
     ~Context();
@@ -27,11 +27,10 @@ public:
 
     void step(double lambda);
 
-    std::array<std::vector<double>, 2> multiple_steps(
+    std::array<std::vector<double>, 3> multiple_steps(
         const std::vector<double> &lambda_schedule,
         int store_du_dl_interval,
-        int store_x_interval
-    );
+        int store_x_interval);
 
     int num_atoms() const;
 
@@ -41,7 +40,11 @@ public:
 
     void get_v_t(double *out_buffer) const;
 
+    void get_box(double *out_buffer) const;
+
 private:
+
+    MonteCarloBarostat *barostat_;
 
     void _step(double lambda, unsigned long long *du_dl_out);
 

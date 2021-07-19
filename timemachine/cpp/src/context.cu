@@ -1,5 +1,3 @@
-
-
 #include "context.hpp"
 #include "gpu_utils.cuh"
 #include "fixed_point.hpp"
@@ -9,19 +7,23 @@
 
 namespace timemachine {
 
+
+
 Context::Context(
     int N,
     const double *x_0,
     const double *v_0,
     const double *box_0,
     Integrator* intg,
-    std::vector<BoundPotential *> bps) :
+    std::vector<BoundPotential *> bps,
+    MonteCarloBarostat* barostat) :
     N_(N),
     intg_(intg),
     bps_(bps),
     step_(0),
     d_sum_storage_(nullptr),
-    d_sum_storage_bytes_(0) {
+    d_sum_storage_bytes_(0),
+    barostat_(barostat) {
 
     d_x_t_ = gpuErrchkCudaMallocAndCopy(x_0, N*3);
     d_v_t_ = gpuErrchkCudaMallocAndCopy(v_0, N*3);
@@ -63,11 +65,12 @@ void Context::add_observable(Observable *obs) {
     this->observables_.push_back(obs);
 }
 
-std::array<std::vector<double>, 2> Context::multiple_steps(
+std::array<std::vector<double>, 3> Context::multiple_steps(
     const std::vector<double> &lambda_schedule,
     int store_du_dl_interval,
     int store_x_interval) {
     unsigned long long *d_du_dl_buffer = nullptr;
+    double *d_box_buffer = nullptr;
     // try catch block is to deal with leaks in d_du_dl_buffer
     if(store_du_dl_interval <= 0) {
         throw std::runtime_error("store_du_dl_interval <= 0");
@@ -77,10 +80,12 @@ std::array<std::vector<double>, 2> Context::multiple_steps(
     }
     int du_dl_buffer_size = (lambda_schedule.size() + store_du_dl_interval - 1) / store_du_dl_interval;
     int x_buffer_size = (lambda_schedule.size() + store_x_interval - 1) / store_x_interval;
+    int box_buffer_size = x_buffer_size*3*3;
 
     std::vector<double> h_x_buffer(x_buffer_size*N_*3);
 
     try {
+        gpuErrchk(cudaMalloc(&d_box_buffer, box_buffer_size*sizeof(*d_box_buffer)));
         // indicator so we can set it to a default arg.
         gpuErrchk(cudaMalloc(&d_du_dl_buffer, du_dl_buffer_size*sizeof(*d_du_dl_buffer)));
         gpuErrchk(cudaMemset(d_du_dl_buffer, 0, du_dl_buffer_size*sizeof(*d_du_dl_buffer)));
@@ -100,6 +105,7 @@ std::array<std::vector<double>, 2> Context::multiple_steps(
                     N_*3*sizeof(double),
                     cudaMemcpyDeviceToHost)
                 );
+                gpuErrchk(cudaMemcpy(&d_box_buffer[0] + (i / store_x_interval)*3*3, d_box_t_, 3*3*sizeof(*d_box_buffer), cudaMemcpyDeviceToDevice));
             }
 
             double lambda = lambda_schedule[i];
@@ -120,12 +126,16 @@ std::array<std::vector<double>, 2> Context::multiple_steps(
         for(int i=0; i < h_du_dl_buffer_ull.size(); i++) {
             h_du_dl_buffer_double[i] = FIXED_TO_FLOAT<double>(h_du_dl_buffer_ull[i]);
         }
+        std::vector<double> h_box_buffer(box_buffer_size);
+        gpuErrchk(cudaMemcpy(&h_box_buffer[0], d_box_buffer, box_buffer_size*sizeof(*d_box_buffer), cudaMemcpyDeviceToHost));
 
         gpuErrchk(cudaFree(d_du_dl_buffer));
-        return std::array<std::vector<double>, 2>({h_du_dl_buffer_double, h_x_buffer});
+        gpuErrchk(cudaFree(d_box_buffer));
+        return std::array<std::vector<double>, 3>({h_du_dl_buffer_double, h_x_buffer, h_box_buffer});
 
     } catch(...) {
         gpuErrchk(cudaFree(d_du_dl_buffer));
+        gpuErrchk(cudaFree(d_box_buffer));
         throw;
     }
 
@@ -200,6 +210,12 @@ void Context::_step(double lambda, unsigned long long *du_dl_out) {
         d_box_t_
     );
 
+    if(barostat_) {
+        // May modify coords and box size
+        barostat_->inplace_move(d_x_t_, d_box_t_, lambda);
+    }
+
+
     step_ += 1;
 
 };
@@ -219,6 +235,10 @@ void Context::get_x_t(double *out_buffer) const {
 
 void Context::get_v_t(double *out_buffer) const {
     gpuErrchk(cudaMemcpy(out_buffer, d_v_t_, N_*3*sizeof(*out_buffer), cudaMemcpyDeviceToHost));
+}
+
+void Context::get_box(double *out_buffer) const {
+    gpuErrchk(cudaMemcpy(out_buffer, d_box_t_, 3*3*sizeof(*out_buffer), cudaMemcpyDeviceToHost));
 }
 
 }

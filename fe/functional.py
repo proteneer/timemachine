@@ -37,7 +37,7 @@ def wrap_impl(impl):
     return U
 
 
-def construct_differentiable_interface(unbound_potentials, precision=np.float64):
+def construct_differentiable_interface(unbound_potentials, precision=np.float32):
     """Construct a differentiable function U(x, params, box, lam) -> float
 
     >>> U = construct_differentiable_interface(unbound_potentials)

@@ -22,7 +22,7 @@ class UnadjustedLangevinMove(MonteCarloMove):
         )
 
         # arguments: lambda_schedule, du_dl_interval, x_interval
-        _, _ = ctxt.multiple_steps(self.lam * np.ones(self.n_steps), 0, 0)
+        _ = ctxt.multiple_steps(self.lam * np.ones(self.n_steps), 0, 0)
         x_t = ctxt.get_x_t()
         v_t = ctxt.get_v_t()
 

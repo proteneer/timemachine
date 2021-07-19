@@ -18,6 +18,9 @@
 #include <fstream>
 #include <streambuf>
 
+#define NONBONDED_KERNEL_BLOCKS 8192
+#define HILBERT_SORT_INTERVAL 100
+
 namespace timemachine {
 
 template <typename RealType, bool Interpolated>
@@ -38,6 +41,7 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     E_(exclusion_idxs.size()/2),
     nblist_(lambda_offset_idxs.size()),
     beta_(beta),
+    cur_step_(0),
     d_sort_storage_(nullptr),
     d_sort_storage_bytes_(0),
     nblist_padding_(0.1),
@@ -111,14 +115,11 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     gpuErrchk(cudaMalloc(&d_scales_, E_*2*sizeof(*d_scales_)));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], E_*2*sizeof(*d_scales_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMallocHost(&p_ixn_count_, 1*sizeof(*p_ixn_count_)));
-
     gpuErrchk(cudaMalloc(&d_nblist_x_, N_*3*sizeof(*d_nblist_x_)));
     gpuErrchk(cudaMemset(d_nblist_x_, 0, N_*3*sizeof(*d_nblist_x_))); // set non-sensical positions
     gpuErrchk(cudaMalloc(&d_nblist_box_, 3*3*sizeof(*d_nblist_x_)));
     gpuErrchk(cudaMemset(d_nblist_box_, 0, 3*3*sizeof(*d_nblist_x_)));
     gpuErrchk(cudaMalloc(&d_rebuild_nblist_, 1*sizeof(*d_rebuild_nblist_)));
-    gpuErrchk(cudaMallocHost(&p_rebuild_nblist_, 1*sizeof(*p_rebuild_nblist_)));
 
     gpuErrchk(cudaMalloc(&d_sort_keys_in_, N_*sizeof(d_sort_keys_in_)));
     gpuErrchk(cudaMalloc(&d_sort_keys_out_, N_*sizeof(d_sort_keys_out_)));
@@ -190,12 +191,9 @@ Nonbonded<RealType, Interpolated>::~Nonbonded() {
     gpuErrchk(cudaFree(d_sort_vals_in_));
     gpuErrchk(cudaFree(d_sort_storage_));
 
-    gpuErrchk(cudaFreeHost(p_ixn_count_));
-
     gpuErrchk(cudaFree(d_nblist_x_));
     gpuErrchk(cudaFree(d_nblist_box_));
     gpuErrchk(cudaFree(d_rebuild_nblist_));
-    gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
 };
 
 
@@ -216,8 +214,8 @@ void Nonbonded<RealType, Interpolated>::hilbert_sort(
     const double *d_box,
     cudaStream_t stream) {
 
-    const int B = (N_+32-1)/32;
     const int tpb = 32;
+    const int B = (N_+tpb-1)/tpb;
 
     k_coords_to_kv<<<B, tpb, 0, stream>>>(N_, d_coords, d_box, d_bin_to_idx_, d_sort_keys_in_, d_sort_vals_in_);
 
@@ -282,8 +280,9 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         std::cout << N << " " << N_ << std::endl;
         throw std::runtime_error("Nonbonded::execute_device() N != N_");
     }
-
-    const int M = Interpolated? 2 : 1;
+    bool sort_indices = cur_step_ == 0;
+    cur_step_ = (cur_step_ + 1) % HILBERT_SORT_INTERVAL; // How often to sort
+    const int M = Interpolated ? 2 : 1;
 
     if(P != M*N_*3) {
         std::cout << P << " " << N_ << std::endl;
@@ -292,64 +291,55 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     // identify which tiles contain interpolated parameters
 
-    const int B = (N+32-1)/32;
     const int tpb = 32;
+    const int B = (N+tpb-1)/tpb;
 
     dim3 dimGrid(B, 3, 1);
-
-    // (ytz) see if we need to rebuild the neighborlist.
-    // (ytz + jfass): note that this logic needs to change if we use NPT later on since a resize in the box
-    // can introduce new interactions.
-    k_check_rebuild_coords_and_box<RealType><<<B, tpb, 0, stream>>>(
-        N,
-        d_x,
-        d_nblist_x_,
-        d_box,
-        d_nblist_box_,
-        nblist_padding_,
-        d_rebuild_nblist_
-    );
-    gpuErrchk(cudaPeekAtLastError());
-
-    // we can optimize this away by doing the check on the GPU directly.
-    gpuErrchk(cudaMemcpyAsync(p_rebuild_nblist_, d_rebuild_nblist_, 1*sizeof(*p_rebuild_nblist_), cudaMemcpyDeviceToHost, stream));
-    gpuErrchk(cudaStreamSynchronize(stream)); // slow!
-
-    if(p_rebuild_nblist_[0] > 0) {
-
-        // (ytz): update the permutation index before building neighborlist, as the neighborlist is tied
-        // to a particular sort order
+    // If we have to sort, we also have to rebuild the neighborlist
+    if (sort_indices) {
         if(!disable_hilbert_) {
             this->hilbert_sort(d_x, d_box, stream);
         } else {
-            k_arange<<<B, 32, 0, stream>>>(N, d_perm_);
+            k_arange<<<B, tpb, 0, stream>>>(N, d_perm_);
             gpuErrchk(cudaPeekAtLastError());
         }
-
-        // compute new coordinates, new lambda_idxs, new_plane_idxs
-        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
-        gpuErrchk(cudaPeekAtLastError());
-        nblist_.build_nblist_device(
-            N,
-            d_sorted_x_,
-            d_box,
-            cutoff_+nblist_padding_,
-            stream
-        );
-        gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
-        gpuErrchk(cudaMemcpyAsync(p_ixn_count_, nblist_.get_ixn_count(), 1*sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
-        gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-        gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
-        gpuErrchk(cudaStreamSynchronize(stream));
-
+        // Indicate that the neighborlist must be rebuilt
+        gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1*sizeof(*d_rebuild_nblist_), stream));
     } else {
-        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+        // (ytz) see if we need to rebuild the neighborlist.
+        // (ytz + jfass): note that this logic could be optimized when using NPT is
+        // enabled since a resize in the box can introduce new interactions.
+        k_check_rebuild_coords_and_box<RealType><<<B, tpb, 0, stream>>>(
+            N,
+            d_x,
+            d_nblist_x_,
+            d_box,
+            d_nblist_box_,
+            nblist_padding_,
+            d_rebuild_nblist_
+        );
         gpuErrchk(cudaPeekAtLastError());
     }
 
+    // compute new coordinates, new lambda_idxs, new_plane_idxs
+    k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+    gpuErrchk(cudaPeekAtLastError());
+    nblist_.build_nblist_device(
+        N,
+        d_sorted_x_,
+        d_box,
+        cutoff_+nblist_padding_,
+        d_rebuild_nblist_,
+        stream
+    );
+
+    gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
+    gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
+    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
+
     // do parameter interpolation here
     if(Interpolated) {
-        CUresult result = compute_permute_interpolated_.configure(dimGrid, 32, 0, stream)
+        CUresult result = compute_permute_interpolated_.configure(dimGrid, tpb, 0, stream)
         .launch(
             lambda,
             N,
@@ -367,7 +357,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_sorted_dp_dl_, 0, N*3*sizeof(*d_sorted_dp_dl_), stream))
     }
 
-    // this stream needs to be synchronized so we can be sure that p_ixn_count_ is properly set.
     // reset buffers and sorted accumulators
     if(d_du_dx) {
 	    gpuErrchk(cudaMemsetAsync(d_sorted_du_dx_, 0, N*3*sizeof(*d_sorted_du_dx_), stream))
@@ -393,9 +382,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     }
 
     gpuErrchk(cudaPeekAtLastError());
-    k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_sorted_w_);
-    gpuErrchk(cudaPeekAtLastError());
-    k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_dw_dl_, d_sorted_dw_dl_);
+    k_permute_2x<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_dw_dl_, d_sorted_w_, d_sorted_dw_dl_);
     gpuErrchk(cudaPeekAtLastError());
 
     // look up which kernel we need for this computation
@@ -404,8 +391,8 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     kernel_idx |= d_du_dl ? 1 << 1 : 0;
     kernel_idx |= d_du_dx ? 1 << 2 : 0;
     kernel_idx |= d_u ? 1 << 3 : 0;
-
-    kernel_ptrs_[kernel_idx]<<<p_ixn_count_[0], 32, 0, stream>>>(
+    kernel_ptrs_[kernel_idx]<<<NONBONDED_KERNEL_BLOCKS, tpb, 0, stream>>>(
+        nblist_.get_ixn_count(),
         N,
         d_sorted_x_,
         d_sorted_p_,
@@ -433,7 +420,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     }
 
     // params are N,3
-    // this needs to be an accumlated permute
+    // this needs to be an accumulated permute
     if(d_du_dp) {
         k_inv_permute_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
@@ -442,7 +429,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     // exclusions use the non-sorted version
     if(E_ > 0) {
 
-        const int tpb = 32;
         dim3 dimGridExclusions((E_+tpb-1)/tpb, 1, 1);
 
         if(Interpolated) {

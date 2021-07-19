@@ -1,4 +1,4 @@
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union
 import numpy as np
 import time
 
@@ -20,7 +20,7 @@ import os
 
 class AbstractClient():
 
-    def submit(self, task_fn, *args):
+    def submit(self, task_fn, *args, **kwargs):
         """
         Submit is an asynchronous method that will launch task_fn whose 
         results will be collected at a later point in time. The input task_fn
@@ -69,6 +69,23 @@ class AbstractClient():
         raise NotImplementedError()
 
 
+class _MockFuture:
+
+    __slots__ = ("val",)
+
+    def __init__(self, val):
+        self.val = val
+
+    def result(self):
+        return self.val
+
+class SerialClient(AbstractClient):
+
+    def submit(self, task_fn, *args, **kwargs):
+        return _MockFuture(task_fn(*args, **kwargs))
+
+    def verify(self):
+        return
 
 class ProcessPoolClient(AbstractClient):
 
@@ -92,7 +109,7 @@ class ProcessPoolClient(AbstractClient):
         self.max_workers = max_workers
         self._idx = 0
 
-    def submit(self, task_fn, *args):
+    def submit(self, task_fn, *args, **kwargs):
         """
         See abstract class for documentation.
         """
@@ -120,7 +137,7 @@ class CUDAPoolClient(ProcessPoolClient):
         os.environ['CUDA_VISIBLE_DEVICES'] = str(idx)
         return fn(*args)
 
-    def submit(self, task_fn, *args):
+    def submit(self, task_fn, *args, **kwargs):
         """
         See abstract class for documentation.
         """
@@ -148,7 +165,7 @@ class BinaryFutureWrapper():
 
 class GRPCClient(AbstractClient):
 
-    def __init__(self, hosts: List[str], options: Optional[List[Any]] = None):
+    def __init__(self, hosts: Union[str, List[str]], options: Optional[List[Any]] = None, default_port: int = 8888):
         """
         GRPCClient is meant for distributed use. The GRPC workers must
         be launched prior to starting the client. The worker version should be compatible
@@ -157,20 +174,22 @@ class GRPCClient(AbstractClient):
 
         Parameters
         ----------
-        hosts: list
-            List of hosts to use as GRPC workers.
+        hosts: str or list
+            List of hosts to use as GRPC workers or a line delimited file with hosts.
         options: list
             List of options to configure GRPC connections
+        default_port: int
+            Default port to expect client running on, if none provided
 
         """
-        self.hosts = hosts
+        self.hosts = self._prepare_hosts(hosts, default_port)
         self.stubs = []
         if options is None:
             options = [
                 ('grpc.max_send_message_length', 500 * 1024 * 1024),
                 ('grpc.max_receive_message_length', 500 * 1024 * 1024)
             ]
-        for host in hosts:
+        for host in self.hosts:
             channel = grpc.insecure_channel(
                 host,
                 options=options,
@@ -178,11 +197,26 @@ class GRPCClient(AbstractClient):
             self.stubs.append(service_pb2_grpc.WorkerStub(channel))
         self._idx = 0
 
-    def submit(self, task_fn, *args):
+    def _prepare_hosts(self, hosts: Union[str, List[str]], default_port: int):
+        if isinstance(hosts, str):
+            assert os.path.isfile(hosts), f"{hosts} is not a file or a list of hosts"
+            new_hosts = []
+            with open(hosts, "r") as ifs:
+                for line in ifs.readlines():
+                    new_hosts.append(line.strip())
+            hosts = new_hosts
+        modded_hosts = []
+        for host in hosts:
+            if ":" not in host:
+                host = f"{host}:{default_port}"
+            modded_hosts.append(host)
+        return modded_hosts
+
+    def submit(self, task_fn, *args, **kwargs):
         """
         See abstract class for documentation.
         """
-        binary = pickle.dumps((task_fn, args))
+        binary = pickle.dumps((task_fn, args, kwargs))
         request = service_pb2.PickleData(binary=binary)
         future = self.stubs[self._idx].Submit.future(request)
         self._idx = (self._idx + 1) % len(self.stubs)

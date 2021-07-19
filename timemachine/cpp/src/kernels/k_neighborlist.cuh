@@ -4,6 +4,7 @@
 #define TILESIZE 32
 #define WARPSIZE 32
 
+
 template<typename RealType>
 void __global__ k_find_block_bounds(
     const int N, // Number of atoms
@@ -12,12 +13,16 @@ void __global__ k_find_block_bounds(
     const double * __restrict__ coords, // [N*3]
     const double * __restrict__ box, // [D*3]
     double *block_bounds_ctr, // [T*3]
-    double *block_bounds_ext // [T*3]
+    double *block_bounds_ext, // [T*3]
+    unsigned int * __restrict__ ixn_count, // [1] set to zero if rebuild
+    const int * __restrict__ rebuild // [1]
 ) {
 
+    if (rebuild[0] <= 0) {
+        return;
+    }
     // Algorithm taken from https://github.com/openmm/openmm/blob/master/platforms/cuda/src/kernels/findInteractingBlocks.cu#L7
     // Computes smaller bounding boxes than simpler form by accounting for periodic box conditions
-
     // each thread processes one tile
     const int index = blockIdx.x*blockDim.x+threadIdx.x;
     if(index >= T) {
@@ -75,6 +80,9 @@ void __global__ k_find_block_bounds(
     block_bounds_ext[index*3+0] = static_cast<RealType>(0.5)*(maxPos_x-minPos_x);
     block_bounds_ext[index*3+1] = static_cast<RealType>(0.5)*(maxPos_y-minPos_y);
     block_bounds_ext[index*3+2] = static_cast<RealType>(0.5)*(maxPos_z-minPos_z);
+
+    // A safe race condition
+    ixn_count[0] = 0;
 }
 
 void __global__ k_compact_trim_atoms(
@@ -83,8 +91,13 @@ void __global__ k_compact_trim_atoms(
     unsigned int* __restrict__ trim_atoms,
     unsigned int* __restrict__ interactionCount,
     int* __restrict__ interactingTiles,
-    unsigned int* __restrict__ interactingAtoms) {
+    unsigned int* __restrict__ interactingAtoms,
+    const int * __restrict__ rebuild // [1]
+) {
 
+    if (rebuild[0] <= 0) {
+        return;
+    }
     __shared__ int ixn_j_buffer[64]; // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
     ixn_j_buffer[threadIdx.x] = N;
     ixn_j_buffer[WARPSIZE+threadIdx.x] = N;
@@ -166,8 +179,12 @@ void __global__ k_find_blocks_with_ixns(
     int* __restrict__ interactingTiles, // the row block idx of the tile that is interacting
     unsigned int* __restrict__ interactingAtoms, // the col block of the atoms that are interacting
     unsigned int* __restrict__ trim_atoms, // the left-over trims that will later be compacted
-    const double cutoff) {
-
+    const double cutoff,
+    const int * __restrict__ rebuild // [1]
+) {
+    if (rebuild[0] <= 0) {
+        return;
+    }
     const int indexInWarp = threadIdx.x%WARPSIZE;
     const int warpMask = (1<<indexInWarp)-1;
 
