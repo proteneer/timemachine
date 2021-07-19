@@ -4,6 +4,7 @@
 MKFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CPP_DIR := $(MKFILE_DIR)timemachine/cpp/
 INSTALL_PREFIX := $(MKFILE_DIR)timemachine/
+PYTEST_CI_ARGS := --cov=. --cov-report=term-missing
 
 NPROCS = `nproc`
 
@@ -19,4 +20,6 @@ clean:
 	cd $(CPP_DIR) && rm -rf build/ | true
 
 ci:
-	export PYTHONPATH=$(MKFILE_DIR) && cuda-memcheck pytest tests/ && pytest slow_tests/
+	export PYTHONPATH=$(MKFILE_DIR) && \
+	cuda-memcheck pytest $(PYTEST_CI_ARGS) tests/ && \
+	pytest $(PYTEST_CI_ARGS) slow_tests/
