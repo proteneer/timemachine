@@ -16,13 +16,10 @@ array = Union[np.array, jnp.array]
 
 
 def _taylor_first_order(x: array, f_x: float, grad: array) -> callable:
-    """
-
-    Notes:
-        TODO: is it preferable to use jax linearize? https://jax.readthedocs.io/en/latest/jax.html#jax.linearize
-    """
+    """Construct first-order taylor approximation to a function"""
 
     def f_prime(y: array) -> float:
+        """f(y) \approx f(x) + dot(grad(f)(x), y - x)"""
         return f_x + np.dot(grad, y - x)
 
     return f_prime
