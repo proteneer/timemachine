@@ -12,7 +12,13 @@ from typing import Tuple, List, Any
 import dataclasses
 import jax.numpy as jnp
 
+from fe.topology import BaseTopology, SingleTopology
+from fe.free_energy import BaseFreeEnergy
 from parallel.client import SerialClient
+from md import minimizer
+from md.states import CoordsVelBox
+from md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 
 @dataclasses.dataclass
 class SimulationResult:
@@ -29,8 +35,43 @@ def unflatten(aux_data, children):
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
+
+def equilibrate(integrator, barostat, potentials, coords, box, lamb, equil_steps) -> Tuple:
+    all_impls = []
+    v0 = np.zeros_like(coords)
+
+    for bp in potentials:
+        impl = bp.bound_impl(np.float32)
+        all_impls.append(impl)
+
+    if integrator.seed == 0:
+        integrator = copy.deepcopy(integrator)
+        integrator.seed = np.random.randint(np.iinfo(np.int32).max)
+
+    if barostat.seed == 0:
+        barostat = copy.deepcopy(barostat)
+        barostat.seed = np.random.randint(np.iinfo(np.int32).max)
+
+    intg_impl = integrator.impl()
+    baro_impl = barostat.impl(all_impls)
+    # context components: positions, velocities, box, integrator, energy fxns
+    ctxt = custom_ops.Context(
+        coords,
+        v0,
+        box,
+        intg_impl,
+        all_impls,
+        barostat=baro_impl,
+    )
+
+    # equilibration
+    equil_schedule = np.ones(equil_steps)*lamb
+    ctxt.multiple_steps(equil_schedule)
+    return CoordsVelBox(coords=ctxt.get_x_t(), velocities=ctxt.get_v_t(), box=ctxt.get_box())
+
+
 def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps, barostat,
-    x_interval=1000, du_dl_interval=5):
+    x_interval=1000, du_dl_interval=5) -> SimulationResult:
     """
     Run a simulation and collect relevant statistics for this simulation.
 

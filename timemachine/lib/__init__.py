@@ -28,8 +28,8 @@ class MonteCarloBarostat():
 
     def __init__(self, N, pressure, temperature, group_idxs, interval, seed):
         self.N = N
-        self.temperature = temperature
         self.pressure = pressure
+        self.temperature = temperature
         self.group_idxs = group_idxs
         self.interval = interval
         self.seed = seed

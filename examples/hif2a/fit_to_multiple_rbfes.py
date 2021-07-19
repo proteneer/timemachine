@@ -15,9 +15,14 @@ from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
 # free energy classes
-from fe.free_energy import RelativeFreeEnergy, construct_lambda_schedule
+from fe.free_energy import (
+    RelativeFreeEnergy,
+    construct_lambda_schedule,
+    RBFETransformIndex,
+)
 from fe.estimator import SimulationResult
 from fe.model import RBFEModel
+from fe.cycles import construct_mle_layer, DisconnectedEdgesError
 from fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 
 # MD initialization
@@ -27,13 +32,13 @@ from md import builders
 from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
 
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 
 from pickle import load, dump
 
 from optimize.step import truncated_step
 
-from typing import Tuple, Dict, List, Union
+from typing import Tuple, Dict, List, Union, Any
 
 from pathlib import Path
 from time import time
@@ -120,9 +125,33 @@ def _blew_up(results: List[SimulationResult]) -> bool:
     # TODO: adjust this threshold a bit, move reliability calculations into fe/estimator.py or fe/model.py
     return np.isnan(du_dls).any() or (du_dls.std(1).max() > 1000)
 
-def loss_fxn(model, ff_params, mol_a, mol_b, core, label_ddG):
-    pred_ddG, stage_results = model.predict(ff_params, mol_a, mol_b, core)
-    return pseudo_huber_loss(pred_ddG - label_ddG), stage_results
+
+def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
+    index = RBFETransformIndex()
+    index.build([edge[0] for edge in batch])
+    indices = []
+    all_results = []
+    preds = []
+    for rfe, model in batch:
+        indices.append(list(index.get_transform_indices(rfe)))
+        pred_ddG, stage_results = model.predict(ff_params, rfe.mol_a, rfe.mol_b, rfe.core)
+        all_results.extend(list(stage_results))
+        preds.append(pred_ddG)
+    # If the edges in the batch are within a cycle, correct the ddGs
+    indices = jnp.asarray(indices)
+    ind_l, ind_r = indices.T
+    try:
+        layer = construct_mle_layer(len(index), indices)
+        corrected_dg = layer(jnp.asarray(preds))
+        cycle_corrected_rbfes = corrected_dg[ind_r] - corrected_dg[ind_l]
+    except DisconnectedEdgesError:
+        # Provided non connected graph, use the ddGs directly
+        cycle_corrected_rbfes = jnp.asarray(preds)
+    labels = jnp.asarray([rfe.label for rfe, _ in batch])
+    loss = pseudo_huber_loss(cycle_corrected_rbfes - labels)
+    # Aggregate the pseudo huber loss using mean
+    loss = jnp.mean(loss)
+    return loss, (cycle_corrected_rbfes, all_results)
 
 # TODO: move flatten into optimize.utils
 def flatten(params, handles) -> Tuple[np.array, callable]:
@@ -164,9 +193,12 @@ def flatten(params, handles) -> Tuple[np.array, callable]:
     return theta, unflatten
 
 
-def run_validation_edges(validation: Dataset, params, systems, epoch):
+def run_validation_edges(validation: Dataset, params, systems, epoch, inference: bool = False):
     if len(validation) <= 0:
         return
+    message_prefix = "Validation"
+    if inference:
+        message_prefix = "Inference"
     val_loss = np.zeros(len(validation))
     for i, rfe in enumerate(validation.data):
         if getattr(rfe, "complex_path", None) is not None:
@@ -175,16 +207,9 @@ def run_validation_edges(validation: Dataset, params, systems, epoch):
             model = systems[protein_path]
         start = time()
 
-        loss, stage_results = loss_fxn(
-            model,
-            params,
-            rfe.mol_a,
-            rfe.mol_b,
-            rfe.core,
-            rfe.label
-        )
+        loss, (preds, stage_results) = loss_fxn(params, [(rfe, model)])
         elapsed = time() - start
-        print(f"Validation edge {i}: time={elapsed:.2f}s, loss={loss:.2f}")
+        print(f"{message_prefix} edge {i}: time={elapsed:.2f}s, loss={loss:.2f}")
         du_dls_dict = {stage: _results_to_arrays(results)[1] for stage, results in stage_results}
         np.savez(output_path.joinpath(f"validation_du_dls_snapshot_{epoch}_{i}.npz"), **du_dls_dict)
         val_loss[i] = loss
@@ -192,6 +217,18 @@ def run_validation_edges(validation: Dataset, params, systems, epoch):
         output_path.joinpath(f"validation_edge_losses_{epoch}.npz"),
         loss=val_loss
     )
+
+def equilibrate_edges(datasets: List[Dataset], systems: List[Dict[str, Any]], num_steps: int, cache_path: str):
+    model_set = defaultdict(list)
+    for dataset in datasets:
+        for rfe in dataset.data:
+            if getattr(rfe, "complex_path", None) is not None:
+                model_set[rfe.complex_path].append(rfe)
+            else:
+                model_set[protein_path].append(rfe)
+    for path, edges in model_set.items():
+        model = systems[path]
+        model.equilibrate_edges([(edge.mol_a, edge.mol_b, edge.core) for edge in edges], equilibration_steps=num_steps, cache_path=cache_path)
 
 
 if __name__ == "__main__":
@@ -203,13 +240,21 @@ if __name__ == "__main__":
     parser.add_argument("--param_updates", default=1000, type=int, help="Number of updates for parameters")
     parser.add_argument("--seed", default=2021, type=int, help="Seed for shuffling ordering of transformations")
     parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
+    parser.add_argument("--batch_size", default=1, type=int, help="Number of items to batch together for training")
 
     parser.add_argument("--path_to_ff", default=str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py')))
     parser.add_argument("--path_to_edges", default=["relative_transformations.pkl"], nargs="+",
                         help="Path to pickle file containing list of RelativeFreeEnergy objects")
     parser.add_argument("--split", action="store_true", help="Split edges into train and validation set")
+    parser.add_argument(
+        "--pre_equil",
+        default=None,
+        help="Number of pre equilibration steps or path to cached equilibrated edges, if not provided no pre equilibration performed"
+    )
+    parser.add_argument("--hmr", action="store_true", help="Enable HMR")
     parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
     parser.add_argument("--protein_path", default=None, help="Path to protein if edges don't provide protein")
+    parser.add_argument("--inference_only", action="store_true", help="Disable training, run all edges as validation edges")
     # TODO: also make configurable: forces_to_refit, optimizer params, path_to_protein, path_to_protein_ff, ...
     args = parser.parse_args()
     protein_path = None
@@ -276,13 +321,19 @@ if __name__ == "__main__":
     print(f'Storing results in {output_path}')
 
     dataset = Dataset(relative_transformations)
-    if args.split:
-        # TODO: More physically meaningful split
-        # 80, 20 split on transformations
-        training, validation = dataset.random_split(0.8)
+    if not args.inference_only:
+        if args.split:
+            # TODO: More physically meaningful split
+            # 80, 20 split on transformations
+            training, validation = dataset.random_split(0.8)
+        else:
+            validation = Dataset([])
+            training = dataset
     else:
-        validation = Dataset([])
-        training = dataset
+        validation = dataset
+        training = Dataset([])
+
+
 
     with open(output_path.joinpath("training_edges.pk"), "wb") as ofs:
         dump(training.data, ofs)
@@ -313,6 +364,8 @@ if __name__ == "__main__":
             solvent_schedule=construct_lambda_schedule(configuration.num_solvent_windows),
             equil_steps=configuration.num_equil_steps,
             prod_steps=configuration.num_prod_steps,
+            pre_equilibrate=args.pre_equil is not None,
+            hmr=args.hmr,
         )
 
     # TODO: how to get intermediate results from the computational pipeline encapsulated in binding_model.loss ?
@@ -330,40 +383,56 @@ if __name__ == "__main__":
     num_epochs = int(np.ceil(args.param_updates / len(relative_transformations)))
     np.random.seed(args.seed)
 
+    batch_size = args.batch_size
     step_inds = []
     for epoch in range(num_epochs):
         inds = np.arange(len(training.data))
         np.random.shuffle(inds)
-        step_inds.append(inds)
+        batched_inds = []
+        num_steps = (len(inds) + batch_size - 1) // batch_size
+        for i in range(num_steps):
+            offset = i * batch_size
+            batched_inds.append(inds[offset:offset+batch_size])
+        step_inds.append(np.asarray(batched_inds, dtype=object))
 
     np.save(output_path.joinpath('step_indices.npy'), np.hstack(step_inds)[:args.param_updates])
 
+    pre_equil = args.pre_equil
+    if pre_equil is not None:
+        steps = 0
+        cache_path = output_path.joinpath("equilibration_cache.pkl")
+        if pre_equil.isdigit():
+            steps = int(pre_equil)
+        elif Path(pre_equil).is_file():
+            cache_path = pre_equil
+        else:
+            print(f"Must provide either an integer or a valid path for --pre_equil, got {pre_equil}")
+            sys.exit(1)
+
+        equilibrate_edges([training, validation], systems, steps, cache_path)
+
     step = 0
-    epoch = 0
     # in each optimizer step, look at one transformation from relative_transformations
-    for steps in step_inds:
+    for epoch in range(num_epochs):
         # Run Validation edges at start of epoch. Unlike NNs we have a reasonable starting
         # point that is worth knowing
-        run_validation_edges(validation, ordered_params, systems, epoch)
-        epoch += 1
-        print(f"Epoch: {epoch}")
-        for i in steps:
-            rfe = training.data[i]
-            if getattr(rfe, "complex_path", None):
-                model = systems[rfe.complex_path]
-            else:
-                model = systems[protein_path]
-            # compute a step, measuring total wall-time
+        run_validation_edges(validation, ordered_params, systems, epoch+1, inference=args.inference_only)
+        print(f"Epoch: {epoch+1}/{num_epochs}")
+        for batch in step_inds[epoch]:
+            batch_data = []
+            for i in batch:
+                rfe = training.data[i]
+                if getattr(rfe, "complex_path", None):
+                    model = systems[rfe.complex_path]
+                else:
+                    model = systems[protein_path]
+                batch_data.append((rfe, model))
+            # compute a batch, measuring total wall-time
             t0 = time()
 
-            # TODO: perhaps update this to accept an rfe argument, instead of all of rfe's attributes as arguments
-            (loss, stage_results), loss_grads = jax.value_and_grad(loss_fxn, argnums=1, has_aux=True)(
-                model,
+            (loss, (predictions, stage_results)), loss_grads = jax.value_and_grad(loss_fxn, argnums=0, has_aux=True)(
                 ordered_params,
-                rfe.mol_a,
-                rfe.mol_b,
-                rfe.core,
-                rfe.label
+                batch_data
             )
 
             results_this_step = {stage: result for stage, result in stage_results}
@@ -439,4 +508,5 @@ if __name__ == "__main__":
             step += 1
             if step >= args.param_updates:
                 break
-    run_validation_edges(validation, ordered_params, systems, epoch)
+    if not args.inference_only:
+        run_validation_edges(validation, ordered_params, systems, epoch+1)

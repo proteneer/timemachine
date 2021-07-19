@@ -10,10 +10,10 @@ non_unitted = Union[float, np.ndarray, jnp.ndarray]  # raw value without simtk u
 
 
 class PotentialEnergyModel:
-    def __init__(self, sys_params, unbound_potentials, precision=np.float64, guard_threshold=1e6):
+    def __init__(self, sys_params, unbound_potentials, precision=np.float32, guard_threshold=1e6):
         self.sys_params = sys_params
         self.unbound_potentials = unbound_potentials
-        self.bp_cache = dict()
+        self.all_impls = []
         self.precision = precision
         self._initialize()
 
@@ -21,22 +21,15 @@ class PotentialEnergyModel:
         self.guard_threshold = guard_threshold
 
     def _initialize(self):
+        assert len(self.all_impls) == 0
         for component_params, unbound_pot in zip(self.sys_params, self.unbound_potentials):
-            key = unbound_pot
-
-            if key not in self.bp_cache:
-                impl = unbound_pot.bind(np.asarray(component_params)).bound_impl(self.precision)
-                self.bp_cache[key] = impl
-
-    @property
-    def all_impls(self):
-        """List of impl, e.g. as required by context constructor"""
-        return [self.bp_cache[key] for key in self.unbound_potentials]
+            impl = unbound_pot.bind(np.asarray(component_params)).bound_impl(self.precision)
+            self.all_impls.append(impl)
 
     def energy_and_gradient(self, x, box, lam):
         Us, dU_dxs = [], []
-        for key in self.unbound_potentials:
-            dU_dx, dU_dl, U = self.bp_cache[key].execute(x, box, lam)
+        for impl in self.all_impls:
+            dU_dx, dU_dl, U = impl.execute(x, box, lam)
 
             Us.append(U)
             dU_dxs.append(dU_dx)

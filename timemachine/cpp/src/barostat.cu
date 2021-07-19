@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <set>
 
+#include "kernels/k_fixed_point.cuh"
+
 #define AVOGADRO 6.0221367e23
 #define BOLTZ 0.008314462618
 
@@ -30,6 +32,9 @@ MonteCarloBarostat::MonteCarloBarostat(
     num_accepted_(0),
     seed_(seed),
     step_(0) {
+
+    // Trigger check that interval is valid
+    this->set_interval(interval_);
 
     // lets not have another facepalm moment again...
     if(temperature < 100.0) {
@@ -119,7 +124,7 @@ void __global__ rescale_positions(
     const int * __restrict__ atom_idxs, // [N]
     const int * __restrict__ mol_idxs, // [N]
     const int * __restrict__ mol_offsets, // [N]
-    const double * __restrict__ centroids // [N*3]
+    const unsigned long long * __restrict__ centroids // [N*3]
 ) {
     const int idx = blockIdx.x*blockDim.x + threadIdx.x;
     if (idx >= N) {
@@ -134,9 +139,9 @@ void __global__ rescale_positions(
 
     const double num_atoms = static_cast<double>(mol_offsets[mol_idx+1] - mol_offsets[mol_idx]);
 
-    const double centroid_x = centroids[mol_idx*3+0] / num_atoms;
-    const double centroid_y = centroids[mol_idx*3+1] / num_atoms;
-    const double centroid_z = centroids[mol_idx*3+2] / num_atoms;
+    const double centroid_x = FIXED_TO_FLOAT<double>(centroids[mol_idx*3+0]) / num_atoms;
+    const double centroid_y = FIXED_TO_FLOAT<double>(centroids[mol_idx*3+1]) / num_atoms;
+    const double centroid_z = FIXED_TO_FLOAT<double>(centroids[mol_idx*3+2]) / num_atoms;
 
     const double displacement_x = ((centroid_x - center_x) * length_scale) + center_x - centroid_x;
     const double displacement_y = ((centroid_y - center_y) * length_scale) + center_y - centroid_y;
@@ -157,7 +162,7 @@ void __global__ find_group_centroids(
     const double * __restrict__ coords, // Coordinates
     const int * __restrict__ atom_idxs, // [N]
     const int * __restrict__ mol_idxs, // [N]
-    double * __restrict__ centroids // [num_molecules * 3]
+    unsigned long long * __restrict__ centroids // [num_molecules * 3]
 ) {
     const int idx = blockIdx.x*blockDim.x + threadIdx.x;
     if (idx >= N) {
@@ -165,9 +170,9 @@ void __global__ find_group_centroids(
     }
     const int atom_idx = atom_idxs[idx];
     const int mol_idx = mol_idxs[idx];
-    atomicAdd(centroids + mol_idx*3+0, coords[atom_idx*3+0]);
-    atomicAdd(centroids + mol_idx*3+1, coords[atom_idx*3+2]);
-    atomicAdd(centroids + mol_idx*3+2, coords[atom_idx*3+2]);
+    atomicAdd(centroids + mol_idx*3+0, FLOAT_TO_FIXED<double>(coords[atom_idx*3+0]));
+    atomicAdd(centroids + mol_idx*3+1, FLOAT_TO_FIXED<double>(coords[atom_idx*3+1]));
+    atomicAdd(centroids + mol_idx*3+2, FLOAT_TO_FIXED<double>(coords[atom_idx*3+2]));
 }
 
 void MonteCarloBarostat::reset_counters() {
@@ -312,6 +317,9 @@ void MonteCarloBarostat::inplace_move(
 };
 
 void MonteCarloBarostat::set_interval(const int interval){
+    if (interval <= 0) {
+        throw std::runtime_error("Barostat interval must be greater than 0");
+    }
     interval_ = interval;
     // Clear the step, to ensure user can expect that in N steps the barostat will trigger
     step_ = 0;

@@ -13,6 +13,10 @@ from fe.utils import validate_map
 from typing import Optional
 
 
+class DisconnectedEdgesError(Exception):
+    pass
+
+
 def construct_mle_layer(n_nodes: int,
                         rbfe_inds: np.array, rbfe_sigmas: Optional[np.array] = None,
                         abfe_inds: Optional[np.array] = None, abfe_sigmas: Optional[np.array] = None) -> callable:
@@ -110,7 +114,7 @@ def construct_mle_layer(n_nodes: int,
     # check that the "map" is connected
     valid = validate_map(n_nodes, relative_inds=rbfe_inds, absolute_inds=abfe_inds)
     if not valid:
-        raise AssertionError(f'invalid map -- disconnected!')
+        raise DisconnectedEdgesError(f'invalid map -- disconnected!')
 
     # parameters that define the optimization problem: simulated_rbfes and simulated_abfes
     simulated_rbfes = cp.Parameter(n_rbfes)
