@@ -63,7 +63,7 @@ def noneq_du_dl(x: CoordsVelBox, lambda_schedule: np.array) -> np.array:
     ctxt = custom_ops.Context(x.coords, x.velocities, x.box, integrator_impl, potential_energy_model.all_impls)
 
     # arguments: lambda_schedule, du_dl_interval, x_interval
-    du_dl_traj, _ = ctxt.multiple_steps(lambda_schedule, 1, 0)
+    du_dl_traj, _, _ = ctxt.multiple_steps(lambda_schedule, 1, 0)
 
     return du_dl_traj
 
