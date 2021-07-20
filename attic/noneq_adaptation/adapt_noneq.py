@@ -81,12 +81,7 @@ if __name__ == '__main__':
     # adaptation options
     n_md_steps_per_increment = 100  # number of MD steps run at fixed lambda, between lambda increments
 
-    # load results from adaptive lambda spacing
-    lambda_spacing_results = np.load(optimized_lam_trajs_path)
-    incremental_stddev_thresholds = lambda_spacing_results['incremental_stddev_thresholds']
-
     # generate end-state samples
-
     v_0 = sample_velocities(masses * unit.amu, temperature)
     initial_state = CoordsVelBox(coords, v_0, complex_box)
     print('equilibrating...')
@@ -98,6 +93,31 @@ if __name__ == '__main__':
 
     print(f'collecting {n_samples} samples from lam=0...')
     samples_0 = sample_at_equilibrium(equilibrated_0, lam=0.0, n_samples=n_samples)
+
+    incremental_stddev_thresholds = np.logspace(0, -1, 5)
+    results = dict()
+    results['incremental_stddev_thresholds'] = incremental_stddev_thresholds
+
+    propagate_n_steps = partial(propagate, n_steps=n_md_steps_per_increment)
+
+    for i, incremental_stddev_threshold in enumerate(incremental_stddev_thresholds):
+        # run switching with adaptive lambda steps
+        print(
+            f'running adaptive noneq switching with {n_samples} trajectories and a threshold of {incremental_stddev_threshold}')
+        sample_traj, lam_traj = adaptive_noneq(
+            samples_0,
+            u_vec,
+            propagate_n_steps,
+            incremental_stddev_threshold=incremental_stddev_threshold,
+        )
+        results[str(i)] = lam_traj
+
+        print(f'saving optimized lambda schedules to {optimized_lam_trajs_path}')
+        np.savez(optimized_lam_trajs_path, **results)
+
+    # load results from adaptive lambda spacing
+    lambda_spacing_results = np.load(optimized_lam_trajs_path)
+    incremental_stddev_thresholds = lambda_spacing_results['incremental_stddev_thresholds']
 
     # will run at the same total number of MD steps as each corresponding protocol optimization
     keys = list(lambda_spacing_results.keys())
@@ -179,35 +199,3 @@ if __name__ == '__main__':
 
         print(f'saving results to {du_dl_trajs_optimized_path}')
         np.savez(du_dl_trajs_optimized_path, **du_dl_trajs_optimized)
-
-    # collect endstate samples
-    v_0 = sample_velocities(masses * unit.amu, temperature)
-    initial_state = CoordsVelBox(coords, v_0, complex_box)
-    print('equilibrating...')
-    thermostat = UnadjustedLangevinMove(
-        integrator_impl, potential_energy_model.all_impls, lam=0.0, n_steps=n_equil_steps)
-    equilibrated = thermostat.move(initial_state)
-
-    print(f'collecting {n_samples} samples from lam=0...')
-    samples_0 = sample_at_equilibrium(equilibrated, lam=0.0, n_samples=n_samples)
-
-    incremental_stddev_thresholds = np.logspace(0, -1, 5)
-    results = dict()
-    results['incremental_stddev_thresholds'] = incremental_stddev_thresholds
-
-    propagate_n_steps = partial(propagate, n_steps=n_md_steps_per_increment)
-
-    for i, incremental_stddev_threshold in enumerate(incremental_stddev_thresholds):
-        # run switching with adaptive lambda steps
-        print(
-            f'running adaptive noneq switching with {n_samples} trajectories and a threshold of {incremental_stddev_threshold}')
-        sample_traj, lam_traj = adaptive_noneq(
-            samples_0,
-            u_vec,
-            propagate_n_steps,
-            incremental_stddev_threshold=incremental_stddev_threshold,
-        )
-        results[str(i)] = lam_traj
-
-        print(f'saving optimized lambda schedules to {optimized_lam_trajs_path}')
-        np.savez(optimized_lam_trajs_path, **results)
