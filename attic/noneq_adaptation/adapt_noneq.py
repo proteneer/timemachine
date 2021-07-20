@@ -70,6 +70,10 @@ def noneq_du_dl(x: CoordsVelBox, lambda_schedule: np.array) -> np.array:
 
 if __name__ == '__main__':
 
+    results_path = os.path.join(os.path.dirname(__file__), 'results/')
+    if not os.path.exists(results_path):
+        os.mkdir(results_path)
+
     # paths where we'll later save results
     work_increments_path = os.path.join(os.path.dirname(__file__), 'results/works_via_potential_increments.npy')
     optimized_lam_trajs_path = os.path.join(os.path.dirname(__file__), 'results/optimized_lam_trajs.npz')
