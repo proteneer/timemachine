@@ -42,7 +42,7 @@ def construct_md_wrappers(ensemble, integrator_impl, timestep=2.0 * unit.femtose
             lam: float = 0.0, thinning: int = 1000, n_samples: int = 100) -> List[CoordsVelBox]:
         """run MD"""
 
-        thermostat = UnadjustedLangevinMove(integrator_impl, ensemble.potential.all_impls, lam, n_steps=thinning)
+        thermostat = UnadjustedLangevinMove(integrator_impl, ensemble.potential_energy.all_impls, lam, n_steps=thinning)
 
         samples = [initial_state]
         for _ in tqdm(range(n_samples)):
@@ -51,7 +51,7 @@ def construct_md_wrappers(ensemble, integrator_impl, timestep=2.0 * unit.femtose
         return samples[1:]
 
     def propagate(states: List[CoordsVelBox], lam: float = 0.0, n_steps: float = 500) -> List[CoordsVelBox]:
-        thermostat = UnadjustedLangevinMove(integrator_impl, ensemble.potential.all_impls, lam, n_steps=n_steps)
+        thermostat = UnadjustedLangevinMove(integrator_impl, ensemble.potential_energy.all_impls, lam, n_steps=n_steps)
 
         print(f'propagating {len(states)} systems by {n_steps * timestep.value_in_unit(unit.picosecond)}ps each...')
         updated_states = []
