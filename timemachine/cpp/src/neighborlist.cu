@@ -41,28 +41,8 @@ Neighborlist<RealType>::~Neighborlist() {
 
     gpuErrchk(cudaFree(d_block_bounds_ctr_));
     gpuErrchk(cudaFree(d_block_bounds_ext_));
-
 }
 
-
-bool is_pow_2(int x) {
-    return (x & (x - 1)) == 0;
-}
-
-int log2_int(int v) {
-    int bits = 0;
-    while (v >>= 1) ++bits;
-    return bits;
-}
-
-int pow_int(int x, int p) {
-  if (p == 0) return 1;
-  if (p == 1) return x;
-
-  int tmp = pow_int(x, p/2);
-  if (p%2 == 0) return tmp * tmp;
-  else return x * tmp * tmp;
-}
 
 template<typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_host(
