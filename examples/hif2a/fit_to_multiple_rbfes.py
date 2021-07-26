@@ -419,23 +419,22 @@ if __name__ == "__main__":
             param_increments = unflatten(theta_increment)
 
             # for any parameter handler types being updated, update in place
-            for handle in ordered_handles:
+            for (handle, increment) in zip(ordered_handles, param_increments):
                 handle_type = type(handle)
-                if handle_type in param_increments:
+                if handle_type in forces_to_refit:
 
                     # TODO: careful -- this must be a "+=" or "-=" not an "="!
-                    handle.params += param_increments[handle_type]
+                    handle.params += increment
 
-                    increment = param_increments[handle_type]
-                    increment = increment[increment != 0]
+                    nonzero_increments = increment[increment != 0]
                     min_update = 0.0
                     max_update = 0.0
-                    if len(increment):
-                        min_update = np.min(increment)
-                        max_update = np.max(increment)
+                    if len(nonzero_increments):
+                        min_update = np.min(nonzero_increments)
+                        max_update = np.max(nonzero_increments)
                     # TODO: replace with a function that knows what to report about each handle type
                     print(
-                        f'updated {len(increment)} {handle_type.__name__} params by between {min_update:.4f} and {max_update:.4f}')
+                        f'updated {len(nonzero_increments)} {handle_type.__name__} params by between {min_update:.4f} and {max_update:.4f}')
 
             t1 = time()
             elapsed = t1 - t0
