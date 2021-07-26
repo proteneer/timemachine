@@ -37,6 +37,7 @@ from collections import namedtuple, defaultdict
 from pickle import load, dump
 
 from optimize.step import truncated_step
+from optimize.utils import flatten_and_unflatten
 
 from typing import Tuple, Dict, List, Union, Any
 
@@ -152,46 +153,6 @@ def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
     # Aggregate the pseudo huber loss using mean
     loss = jnp.mean(loss)
     return loss, (cycle_corrected_rbfes, all_results)
-
-# TODO: move flatten into optimize.utils
-def flatten(params, handles) -> Tuple[np.array, callable]:
-    """Turn params dict into flat array, with an accompanying unflatten function
-
-    TODO: note that the result is going to be in the order given by ordered_handles (filtered by presence in handle_types)
-        rather than in the order they appear in forces_to_refit
-
-    TODO: maybe leave out the reference to handle_types_being optimized altogether
-
-    TODO: does Jax have a pytree-based flatten / unflatten utility?
-    """
-
-    theta_list = []
-    _shapes = dict()
-    _handle_types = []
-
-    for param, handle in zip(params, handles):
-        assert handle.params.shape == param.shape
-        key = type(handle)
-
-        if key in forces_to_refit:
-            theta_list.append(param.flatten())
-            _shapes[key] = param.shape
-            _handle_types.append(key)
-
-    theta = np.hstack(theta_list)
-
-    def unflatten(theta: array) -> Dict[Handler, array]:
-        params = dict()
-        i = 0
-        for key in _handle_types:
-            shape = _shapes[key]
-            num_params = int(np.prod(shape))
-            params[key] = np.array(theta[i: i + num_params]).reshape(shape)
-            i += num_params
-        return params
-
-    return theta, unflatten
-
 
 def run_validation_edges(validation: Dataset, params, systems, epoch, inference: bool = False):
     if len(validation) <= 0:
@@ -411,6 +372,8 @@ if __name__ == "__main__":
 
         equilibrate_edges([training, validation], systems, steps, cache_path)
 
+    flatten, unflatten = flatten_and_unflatten(ordered_params)
+
     step = 0
     # in each optimizer step, look at one transformation from relative_transformations
     for epoch in range(num_epochs):
@@ -447,14 +410,13 @@ if __name__ == "__main__":
                     blown_up = True
                     print(f"step {step} blew up in {stage} stage")
 
-            # note: unflatten_grad and unflatten_theta have identical definitions for now
-            flat_loss_grad, unflatten_grad = flatten(loss_grads, ordered_handles)
-            flat_theta, unflatten_theta = flatten(ordered_params, ordered_handles)
+            flat_loss_grad = flatten(loss_grads)
+            flat_theta = flatten(ordered_params)
 
             # based on current estimate of (loss, grad, and simulation stability), return a conservative step to take in parameter space
             theta_increment = truncated_step(flat_theta, loss, flat_loss_grad,
                                              step_lower_bound=_compute_step_lower_bound(loss, blown_up))
-            param_increments = unflatten_theta(theta_increment)
+            param_increments = unflatten(theta_increment)
 
             # for any parameter handler types being updated, update in place
             for handle in ordered_handles:
