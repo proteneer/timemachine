@@ -1,11 +1,66 @@
+import timemachine
+
 from optimize.step import truncated_step
+from optimize.utils import flatten_and_unflatten
+
+from ff import Forcefield
+from ff.handlers.deserialize import deserialize_handlers
+
+from pathlib import Path
 
 import numpy as onp
 
-from jax import numpy as jnp
-from jax import grad
-from jax.config import config
+from jax import tree_util, grad, config, numpy as jnp
+
 config.update("jax_enable_x64", True)
+
+
+def check_flatten_and_unflatten_roundtrip(example_pytree):
+    """assert that structures with array-valued leaves can be successfully
+    flattened and unflattened"""
+
+    flatten, unflatten = flatten_and_unflatten(example_pytree)
+
+    original_vector = flatten(example_pytree)
+    roundtripped_vector = flatten(unflatten(original_vector))
+
+    assert (original_vector == roundtripped_vector).all()
+
+    original_structure = tree_util.tree_structure(example_pytree)
+    roundtripped_structure = tree_util.tree_structure(unflatten(flatten(example_pytree)))
+
+    assert original_structure == roundtripped_structure
+
+
+def test_flatten_and_unflatten_dict():
+    """flatten/unflatten a nested object with array-valued leaves"""
+
+    example_pytree = dict(
+        Bonds=onp.random.randn(50, 2),
+        Angles=onp.random.randn(60, 3),
+        Extras=dict(
+            GlobalVars=[
+                jnp.arange(70),
+                onp.random.randn(80, 4)
+            ]
+        )
+    )
+
+    check_flatten_and_unflatten_roundtrip(example_pytree)
+
+
+def test_flatten_and_unflatten_ordered_params():
+    """flatten/unflatten a Forcefield(ff_handlers).get_ordered_params()"""
+
+    root = Path(timemachine.__file__).parent.parent
+    path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
+
+    with open(path_to_ff) as f:
+        ff_handlers = deserialize_handlers(f.read())
+
+    ordered_params = Forcefield(ff_handlers).get_ordered_params()
+
+    check_flatten_and_unflatten_roundtrip(ordered_params)
 
 
 def test_truncated_step():
