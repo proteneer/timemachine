@@ -167,10 +167,10 @@ def construct_absolute_lambda_schedule_complex(num_windows):
 
     # assert len(lambda_schedule) == num_windows
 
-    lambda_schedule = np.concatenate([
-        np.linspace(0.15, 0.20, num_windows-1, endpoint=False),
-        np.array([1.0])
-    ])
+    # lambda_schedule = np.concatenate([
+        # np.linspace(0.15, 0.20, num_windows-1, endpoint=False),
+        # np.array([1.0])
+    # ])
 
 
     return lambda_schedule
