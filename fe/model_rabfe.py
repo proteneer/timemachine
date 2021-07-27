@@ -315,7 +315,6 @@ class RelativeModel(ABC):
         for lambda_idx, res in enumerate(results):
             outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
             pickle.dump((res.xs, res.boxes, combined_topology), outfile)
-            print("dumping", outfile)
             traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
             traj.unitcell_vectors = res.boxes
             traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
@@ -401,6 +400,8 @@ class RelativeModel(ABC):
             box0,
             prefix+"_ref_to_mol")
 
+        return dG_0, dG_0_err
+
         # pull out mol_a from combined state
         combined_core_idxs = np.copy(core_idxs)
         # swap the ligand coordinates in the reverse direction
@@ -448,29 +449,29 @@ class AbsoluteConversionModel(AbsoluteModel):
 
     def setup_topology(self, mol, core_idxs):
         top = topology.BaseTopologyConversion(mol, self.ff)
-        top.parameterize_proper_torsion = functools.partial(
-            top.parameterize_proper_torsion,
-            core_idxs=core_idxs
-        )
+        # top.parameterize_proper_torsion = functools.partial(
+        #     top.parameterize_proper_torsion,
+        #     core_idxs=core_idxs
+        # )
         return top
 
 class AbsoluteStandardHydrationModel(AbsoluteModel):
 
     def setup_topology(self, mol, core_idxs):
         top = topology.BaseTopologyStandardDecoupling(mol, self.ff)
-        top.parameterize_proper_torsion = functools.partial(
-            top.parameterize_proper_torsion,
-            core_idxs=core_idxs
-        )
+        # top.parameterize_proper_torsion = functools.partial(
+        #     top.parameterize_proper_torsion,
+        #     core_idxs=core_idxs
+        # )
         return top
 
 class RelativeBindingModel(RelativeModel):
 
     def setup_topology(self, mol_a, mol_b, core_idxs):
         top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
-        top.parameterize_proper_torsion = functools.partial(
-            top.parameterize_proper_torsion,
-            core_idxs_a=core_idxs[:, 0],
-            core_idxs_b=core_idxs[:, 1]
-        )
+        # top.parameterize_proper_torsion = functools.partial(
+        #     top.parameterize_proper_torsion,
+        #     core_idxs_a=core_idxs[:, 0],
+        #     core_idxs_b=core_idxs[:, 1]
+        # )
         return top

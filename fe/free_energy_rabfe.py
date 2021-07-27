@@ -281,31 +281,62 @@ def setup_relative_restraints_using_smarts(
     assert "." not in smarts
 
     core = Chem.MolFromSmarts(smarts)
-    core_idxs_a = np.array(mol_a.GetSubstructMatch(core))
-    core_idxs_b = np.array(mol_b.GetSubstructMatch(core))
-    # setup relative orientational restraints
-    # rough sketch of algorithm:
-    # find core atoms in mol_a
-    # find core atoms in mol_b
-    # use the hungarian algorithm to assign matching
+    all_core_idxs_a = np.array(mol_a.GetSubstructMatches(core, uniquify=False))
+    all_core_idxs_b = np.array(mol_b.GetSubstructMatches(core, uniquify=False))
+    best_rmsd = np.inf
+    best_core_idxs_a = None
+    best_core_idxs_b = None
 
     ligand_coords_a = get_romol_conf(mol_a)
     ligand_coords_b = get_romol_conf(mol_b)
 
-    ri = np.expand_dims(ligand_coords_a[core_idxs_a], 1)
-    rj = np.expand_dims(ligand_coords_b[core_idxs_b], 0)
-    rij = np.sqrt(np.sum(np.power(ri-rj, 2), axis=-1))
+    # setup relative orientational restraints
+    # rough sketch of algorithm:
+    # find core atoms in mol_a
+    # find core atoms in mol_b
+    # for all matches in mol_a
+    #    for all matches in mol_b
+    #       use the hungarian algorithm to assign matching
+    #       if sum is smaller than best, then store.
 
-    row_idxs, col_idxs = linear_sum_assignment(rij)
+    for core_idxs_a in all_core_idxs_a:
+        for core_idxs_b in all_core_idxs_b:
+            # print("A", core_idxs_a)
+            # print("B", core_idxs_b)
 
-    core_idxs = []
+            ri = np.expand_dims(ligand_coords_a[core_idxs_a], 1)
+            rj = np.expand_dims(ligand_coords_b[core_idxs_b], 0)
+            rij = np.sqrt(np.sum(np.power(ri-rj, 2), axis=-1))
 
-    for core_a, core_b in zip(row_idxs, col_idxs):
-        core_idxs.append((
-            core_idxs_a[core_a],
-            core_idxs_b[core_b]
-        ))
+            row_idxs, col_idxs = linear_sum_assignment(rij)
 
-    core_idxs = np.array(core_idxs, dtype=np.int32)
+            rmsd = np.linalg.norm(ligand_coords_a[core_idxs_a[row_idxs]] - ligand_coords_b[core_idxs_b[col_idxs]])
+
+            if rmsd < best_rmsd:
+                best_rmsd = rmsd
+                print("best rmsd:", rmsd)
+                best_core_idxs_a = core_idxs_a
+                best_core_idxs_b = core_idxs_b
+
+    core_idxs = np.stack([best_core_idxs_a, best_core_idxs_b], axis=1).astype(np.int32)
+
+    # print(core_idxs)
+
+    # assert 0
+
+    # core_idxs_a = best_core_idxs_a
+    # core_idxs_b = best_core_idxs_b
+
+    # # assert 0
+
+    # core_idxs = []
+
+    # for core_a, core_b in zip(row_idxs, col_idxs):
+    #     core_idxs.append((
+    #         core_idxs_a[core_a],
+    #         core_idxs_b[core_b]
+    #     ))
+
+    # core_idxs = np.array(core_idxs, dtype=np.int32)
 
     return core_idxs

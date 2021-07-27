@@ -43,6 +43,8 @@ from rdkit import Chem
 from timemachine.potentials import rmsd
 from md import builders, minimizer
 
+from rdkit.Chem import rdFMCS
+
 def convert_nMKi_to_kJ_per_mole(amount_in_nM):
     """
     TODO: more sig figs
@@ -142,12 +144,12 @@ if __name__ == "__main__":
         required=True
     )
 
-    parser.add_argument(
-        "--core_smarts",
-        type=str,
-        help='Smarts pattern to use for the core',
-        required=True
-    )
+    # parser.add_argument(
+    #     "--core_smarts",
+    #     type=str,
+    #     help='Smarts pattern to use for the core',
+    #     required=True
+    # )
 
     parser.add_argument(
         "--protein_pdb",
@@ -291,10 +293,21 @@ if __name__ == "__main__":
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
 
-    core_smarts = cmd_args.core_smarts
-
     def pred_fn(params, mol, mol_ref):
 
+        # core_smarts = cmd_args.core_smarts
+
+        result = rdFMCS.FindMCS(
+            [mol, mol_ref],
+            ringMatchesRingOnly=True,
+            completeRingsOnly=True,
+            matchChiralTag=True,
+            atomCompare=rdFMCS.AtomCompare.CompareAny,
+            bondCompare=rdFMCS.BondCompare.CompareAny
+        )
+
+        core_smarts = result.smartsString
+        
         # generate the core_idxs
         core_idxs = setup_relative_restraints_using_smarts(mol, mol_ref, core_smarts)
         mol_coords = get_romol_conf(mol) # original coords
@@ -313,18 +326,19 @@ if __name__ == "__main__":
         complex_host_coords = complex_ref_x0[:num_complex_atoms]
         complex_box0 = complex_ref_box0
 
-        # compute the free energy of conversion in complex
-        complex_conversion_x0 = minimizer.minimize_host_4d([mol], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords])
-        complex_conversion_x0 = np.concatenate([complex_conversion_x0, aligned_mol_coords])
         mol_name = mol.GetProp("_Name")
-        dG_complex_conversion, dG_complex_conversion_error = binding_model_complex_conversion.predict(
-            params,
-            mol,
-            complex_conversion_x0,
-            complex_box0,
-            prefix='complex_conversion_'+str(epoch),
-            core_idxs=core_idxs[:, 0]
-        )
+
+        # compute the free energy of conversion in complex
+        # complex_conversion_x0 = minimizer.minimize_host_4d([mol], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords])
+        # complex_conversion_x0 = np.concatenate([complex_conversion_x0, aligned_mol_coords])
+        # dG_complex_conversion, dG_complex_conversion_error = binding_model_complex_conversion.predict(
+        #     params,
+        #     mol,
+        #     complex_conversion_x0,
+        #     complex_box0,
+        #     prefix='complex_conversion_'+str(epoch),
+        #     core_idxs=core_idxs[:, 0]
+        # )
 
         # compute the free energy of swapping an interacting mol with a non-interacting reference mol
         complex_decouple_x0 = minimizer.minimize_host_4d([mol, mol_ref], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords, ref_coords])
@@ -337,6 +351,8 @@ if __name__ == "__main__":
             complex_decouple_x0,
             complex_box0,
             prefix='complex_decouple_'+mol_name+"_"+str(epoch))
+
+        return 0.0, 0.0
 
         # effective free energy of removing from complex
         dG_complex = dG_complex_conversion + dG_complex_decouple

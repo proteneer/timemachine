@@ -343,33 +343,33 @@ class BaseTopologyConversion(BaseTopology):
     FastFindRings or SSSRs (ring basis), of which neither is what we want.
     """
 
-    def parameterize_proper_torsion(self, ff_params, core_idxs=None):
-        if core_idxs is None:
-            core_idxs = []
+    # def parameterize_proper_torsion(self, ff_params, core_idxs=None):
+    #     if core_idxs is None:
+    #         core_idxs = []
 
-        for idx in core_idxs:
-            assert idx < self.mol.GetNumAtoms()
+    #     for idx in core_idxs:
+    #         assert idx < self.mol.GetNumAtoms()
 
-        # alchemically turn off proper torsions.
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
-        membership = get_ring_membership(self.mol)
+    #     # alchemically turn off proper torsions.
+    #     torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+    #     membership = get_ring_membership(self.mol)
 
-        num_torsions = torsion_params.shape[0]
+    #     num_torsions = torsion_params.shape[0]
 
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+    #     lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+    #     lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
 
-        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            # skip entirely if we're not in the core
-            if b not in core_idxs or c not in core_idxs:
-                continue
+    #     for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+    #         # skip entirely if we're not in the core
+    #         if b not in core_idxs or c not in core_idxs:
+    #             continue
 
-            if membership[b] != membership[c]:
-                lambda_mult_idxs[torsion_idx] = -1
+    #         if membership[b] != membership[c]:
+    #             lambda_mult_idxs[torsion_idx] = -1
 
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+    #     torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
 
-        return torsion_params, torsion_potential
+    #     return torsion_params, torsion_potential
 
 
     def parameterize_nonbonded(self,
@@ -400,33 +400,33 @@ class BaseTopologyStandardDecoupling(BaseTopology):
     lambda=0 fully interacting
     lambda=1 fully non-interacting.
     """
-    def parameterize_proper_torsion(self, ff_params, core_idxs=None):
+    # def parameterize_proper_torsion(self, ff_params, core_idxs=None):
 
-        if core_idxs is None:
-            core_idxs = []
+    #     if core_idxs is None:
+    #         core_idxs = []
 
-        for idx in core_idxs:
-            assert idx < self.mol.GetNumAtoms()
+    #     for idx in core_idxs:
+    #         assert idx < self.mol.GetNumAtoms()
 
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
-        membership = get_ring_membership(self.mol)
+    #     torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+    #     membership = get_ring_membership(self.mol)
 
-        num_torsions = torsion_params.shape[0]
+    #     num_torsions = torsion_params.shape[0]
 
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+    #     lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+    #     lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
 
-        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            # skip entirely if we're not in the core
-            if b not in core_idxs or c not in core_idxs:
-                continue
+    #     for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+    #         # skip entirely if we're not in the core
+    #         if b not in core_idxs or c not in core_idxs:
+    #             continue
 
-            if membership[b] != membership[c]:
-                lambda_offset_idxs[torsion_idx] = 0
+    #         if membership[b] != membership[c]:
+    #             lambda_offset_idxs[torsion_idx] = 0
 
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+    #     torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
 
-        return torsion_params, torsion_potential
+    #     return torsion_params, torsion_potential
 
     def parameterize_nonbonded(self,
         ff_q_params,
@@ -599,53 +599,55 @@ class DualTopology(ABC):
 # free energy test
 class BaseTopologyRHFE(BaseTopology):
 
-    def parameterize_proper_torsion(self, ff_params):
+    pass 
+    # def parameterize_proper_torsion(self, ff_params):
 
-        # alchemically turn off proper torsions.
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
-        membership = get_ring_membership(self.mol)
+    #     # alchemically turn off proper torsions.
+    #     torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+    #     membership = get_ring_membership(self.mol)
 
-        num_torsions = torsion_params.shape[0]
+    #     num_torsions = torsion_params.shape[0]
 
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+    #     lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+    #     lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
 
-        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            if membership[b] != membership[c]:
-                lambda_offset_idxs[torsion_idx] = 0
+    #     for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+    #         if membership[b] != membership[c]:
+    #             lambda_offset_idxs[torsion_idx] = 0
 
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+    #     torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
 
-        return torsion_params, torsion_potential
+    #     return torsion_params, torsion_potential
 
 # non-ring torsions are just always turned off at the end-states in the hydration
 # free energy test
 class DualTopologyRHFE(DualTopology):
+
     """
     Utility class used for relative hydration free energies. Ligand B is decoupled as lambda goes
     from 0 to 1, while ligand A is fully coupled. At the same time, at lambda=0, ligand B and ligand A
     have their charges and epsilons reduced by half.
     """
 
-    def parameterize_proper_torsion(self, ff_params):
+    # def parameterize_proper_torsion(self, ff_params):
 
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+    #     torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
 
-        mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
-        membership = get_ring_membership(mol_c)
+    #     mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
+    #     membership = get_ring_membership(mol_c)
 
-        num_torsions = torsion_params.shape[0]
+    #     num_torsions = torsion_params.shape[0]
 
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+    #     lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+    #     lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
 
-        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            if membership[b] != membership[c]:
-                lambda_offset_idxs[torsion_idx] = 0
+    #     for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
+    #         if membership[b] != membership[c]:
+    #             lambda_offset_idxs[torsion_idx] = 0
 
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+    #     torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
 
-        return torsion_params, torsion_potential
+    #     return torsion_params, torsion_potential
 
 
     def parameterize_nonbonded(self,
@@ -719,60 +721,60 @@ class DualTopologyStandardDecoupling(DualTopology):
     Blocker molecule has all of its torsions turned off throughout
 
     """
-    def parameterize_proper_torsion(self, ff_params, core_idxs_a, core_idxs_b):
-        # (ytz): TBD need to do this for Base Topology as well
+    # def parameterize_proper_torsion(self, ff_params, core_idxs_a, core_idxs_b):
+    #     # (ytz): TBD need to do this for Base Topology as well
 
-        # sanity check
-        for idx in core_idxs_a:
-            assert idx < self.mol_a.GetNumAtoms()
+    #     # sanity check
+    #     for idx in core_idxs_a:
+    #         assert idx < self.mol_a.GetNumAtoms()
 
-        for idx in core_idxs_b:
-            assert idx < self.mol_b.GetNumAtoms()
+    #     for idx in core_idxs_b:
+    #         assert idx < self.mol_b.GetNumAtoms()
 
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
+    #     torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
 
-        membership_a = get_ring_membership(self.mol_a)
-        membership_b = get_ring_membership(self.mol_b)
+    #     membership_a = get_ring_membership(self.mol_a)
+    #     membership_b = get_ring_membership(self.mol_b)
 
-        num_torsions = torsion_params.shape[0]
+    #     num_torsions = torsion_params.shape[0]
 
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
+    #     lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
+    #     lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
 
-        NA = self.mol_a.GetNumAtoms()
+    #     NA = self.mol_a.GetNumAtoms()
 
 
-        # offset by an equivalent amount
-        for torsion_idx, (i, b, c, j) in enumerate(torsion_potential.get_idxs()):
+    #     # offset by an equivalent amount
+    #     for torsion_idx, (i, b, c, j) in enumerate(torsion_potential.get_idxs()):
 
-            # does this torsion belong to mol_a?
-            if b < NA and c < NA and i < NA and j < NA:
+    #         # does this torsion belong to mol_a?
+    #         if b < NA and c < NA and i < NA and j < NA:
 
-                if b not in core_idxs_a or c not in core_idxs_a:
-                    continue
+    #             if b not in core_idxs_a or c not in core_idxs_a:
+    #                 continue
 
-                if membership_a[b] != membership_a[c]:
-                    print("disabling mol_a", b, c)
-                    lambda_offset_idxs[torsion_idx] = 0
-            # are we in in b?
-            elif b >= NA and c >= NA and i >= NA and j >= NA:
+    #             if membership_a[b] != membership_a[c]:
+    #                 print("disabling mol_a", b, c)
+    #                 lambda_offset_idxs[torsion_idx] = 0
+    #         # are we in in b?
+    #         elif b >= NA and c >= NA and i >= NA and j >= NA:
 
-                # need to compute the old indices since the final torsions have been concatenated.
-                old_b = b - NA
-                old_c = c - NA
+    #             # need to compute the old indices since the final torsions have been concatenated.
+    #             old_b = b - NA
+    #             old_c = c - NA
 
-                if old_b not in core_idxs_b or old_c not in core_idxs_b:
-                    continue
+    #             if old_b not in core_idxs_b or old_c not in core_idxs_b:
+    #                 continue
 
-                if membership_b[old_b] != membership_b[old_c]:
-                    print("disabling mol_b", b, c)
-                    lambda_offset_idxs[torsion_idx] = 0
-            else:
-                assert 0, "torsion spans two different mols"
+    #             if membership_b[old_b] != membership_b[old_c]:
+    #                 print("disabling mol_b", b, c)
+    #                 lambda_offset_idxs[torsion_idx] = 0
+    #         else:
+    #             assert 0, "torsion spans two different mols"
 
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
+    #     torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
 
-        return torsion_params, torsion_potential
+    #     return torsion_params, torsion_potential
 
     def parameterize_nonbonded(
         self,
