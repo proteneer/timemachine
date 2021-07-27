@@ -242,7 +242,7 @@ class RelativeModel(ABC):
             self.host_system
         )
 
-        k_core = 75.0
+        k_core = 30.0
         core_params = np.zeros_like(combined_core_idxs).astype(np.float64)
         core_params[:, 0] = k_core
 
