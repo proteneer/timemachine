@@ -79,7 +79,7 @@ void __global__ k_check_rebuild_coords_and_box(
     const double *old_coords,
     const double *new_box,
     const double *old_box,
-    double padding,
+    const double padding,
     int *rebuild) {
 
     const int idx = blockIdx.x*blockDim.x + threadIdx.x;
@@ -701,6 +701,8 @@ void __device__ v_nonbonded_unified(
 }
 
 
+// IF YOU CHANGE THIS SIGNATURE, CHANGE CORRESPONDING DEFINITION IN
+// nonbonded.hpp
 template <
     typename RealType,
     bool COMPUTE_U,
@@ -772,7 +774,6 @@ void __global__ k_nonbonded_unified(
                 lambda,
                 beta,
                 cutoff,
-                // ixn_count,
                 ixn_tiles,
                 ixn_atoms,
                 du_dx,
@@ -793,7 +794,6 @@ void __global__ k_nonbonded_unified(
                 lambda,
                 beta,
                 cutoff,
-                // ixn_count,
                 ixn_tiles,
                 ixn_atoms,
                 du_dx,

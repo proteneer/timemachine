@@ -109,7 +109,7 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_host(
 
     cudaStreamSynchronize(stream);
 
-    const int B = this->B(); //(N+32-1)/32;
+    const int B = this->B(); // (N+32-1)/32;
 
     unsigned long long MAX_TILE_BUFFER = B*B;
     unsigned long long MAX_ATOM_BUFFER = B*B*32;

@@ -73,9 +73,9 @@ void __global__ k_find_block_bounds(
         maxPos_z = max(maxPos_z,pos_z);
     }
 
-    block_bounds_ctr[index*3+0]  = static_cast<RealType>(0.5)*(maxPos_x+minPos_x);
-    block_bounds_ctr[index*3+1]  = static_cast<RealType>(0.5)*(maxPos_y+minPos_y);
-    block_bounds_ctr[index*3+2]  = static_cast<RealType>(0.5)*(maxPos_z+minPos_z);
+    block_bounds_ctr[index*3+0] = static_cast<RealType>(0.5)*(maxPos_x+minPos_x);
+    block_bounds_ctr[index*3+1] = static_cast<RealType>(0.5)*(maxPos_y+minPos_y);
+    block_bounds_ctr[index*3+2] = static_cast<RealType>(0.5)*(maxPos_z+minPos_z);
 
     block_bounds_ext[index*3+0] = static_cast<RealType>(0.5)*(maxPos_x-minPos_x);
     block_bounds_ext[index*3+1] = static_cast<RealType>(0.5)*(maxPos_y-minPos_y);
@@ -173,8 +173,8 @@ void __global__ k_find_blocks_with_ixns(
     const int N,
     const double * __restrict__ bb_ctr, // [N * 3]
     const double * __restrict__ bb_ext, // [N * 3]
-    const double* __restrict__ coords, //TBD make float32 version
-    const double* __restrict__ box,
+    const double* __restrict__ coords, // [N * 3] TBD make float32 version
+    const double* __restrict__ box, // [3*3]
     unsigned int* __restrict__ interactionCount, // number of tiles that have interactions
     int* __restrict__ interactingTiles, // the row block idx of the tile that is interacting
     unsigned int* __restrict__ interactingAtoms, // the col block of the atoms that are interacting
@@ -249,6 +249,7 @@ void __global__ k_find_blocks_with_ixns(
     int col_block_idx = col_block_base+indexInWarp;
     bool include_col_block = (col_block_idx < NUM_BLOCKS) && (col_block_idx >= row_block_idx);
 
+    // Verify that the boxes of the row box and the column overlap
     if (include_col_block) {
 
         // Compute center of column box and extent coords.
@@ -323,7 +324,7 @@ void __global__ k_find_blocks_with_ixns(
         // Find rows where the row atom and column boxes are within cutoff
         bool interacts = false;
         unsigned atomFlags = __ballot_sync(FULL_MASK, atom_box_dx*atom_box_dx + atom_box_dy*atom_box_dy + atom_box_dz*atom_box_dz < cutoff_squared);
-        int atom_j_idx = col_block*WARPSIZE+threadIdx.x; // each thread loads a different atom
+        const int atom_j_idx = col_block*WARPSIZE+threadIdx.x; // each thread loads a different atom
 
         //       threadIdx
         //      0 1 2 3 4 5
@@ -354,6 +355,8 @@ void __global__ k_find_blocks_with_ixns(
 
 
         unsigned includeAtomFlags = 0;
+        // Iterate over the different row atoms within the warp, checking for overlap to the column atom
+        // Swaps rows as only column indices are stored in the output of the neighborlist, row indices are implict
         while(atomFlags) {
             const int row_atom = __ffs(atomFlags)-1;
             atomFlags &= atomFlags-1;
@@ -400,8 +403,9 @@ void __global__ k_find_blocks_with_ixns(
             }
             __syncwarp();
             interactingTiles[sync_start[0]] = row_block_idx;
+            // The row indices are implicit, storing the column indices that correspond to a row.
             interactingAtoms[sync_start[0]*WARPSIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
-
+            // Shuffle buffered data forward forward by warp size to be handled next iteration
             ixn_j_buffer[threadIdx.x] = ixn_j_buffer[WARPSIZE+threadIdx.x];
             ixn_j_buffer[WARPSIZE+threadIdx.x] = N; // reset old values
             neighborsInBuffer -= WARPSIZE;
