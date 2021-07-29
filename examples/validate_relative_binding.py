@@ -299,9 +299,9 @@ if __name__ == "__main__":
 
         result = rdFMCS.FindMCS(
             [mol, mol_ref],
-            ringMatchesRingOnly=True,
-            completeRingsOnly=True,
-            matchChiralTag=True,
+            ringMatchesRingOnly=False,
+            completeRingsOnly=False,
+            matchChiralTag=False,
             atomCompare=rdFMCS.AtomCompare.CompareAny,
             bondCompare=rdFMCS.BondCompare.CompareAny
         )

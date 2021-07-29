@@ -307,8 +307,6 @@ def setup_relative_restraints_using_smarts(
 
     for core_idxs_a in all_core_idxs_a:
         for core_idxs_b in all_core_idxs_b:
-            # print("A", core_idxs_a)
-            # print("B", core_idxs_b)
 
             ri = np.expand_dims(ligand_coords_a[core_idxs_a], 1)
             rj = np.expand_dims(ligand_coords_b[core_idxs_b], 0)
@@ -325,24 +323,5 @@ def setup_relative_restraints_using_smarts(
                 best_core_idxs_b = core_idxs_b
 
     core_idxs = np.stack([best_core_idxs_a, best_core_idxs_b], axis=1).astype(np.int32)
-
-    # print(core_idxs)
-
-    # assert 0
-
-    # core_idxs_a = best_core_idxs_a
-    # core_idxs_b = best_core_idxs_b
-
-    # # assert 0
-
-    # core_idxs = []
-
-    # for core_a, core_b in zip(row_idxs, col_idxs):
-    #     core_idxs.append((
-    #         core_idxs_a[core_a],
-    #         core_idxs_b[core_b]
-    #     ))
-
-    # core_idxs = np.array(core_idxs, dtype=np.int32)
 
     return core_idxs
