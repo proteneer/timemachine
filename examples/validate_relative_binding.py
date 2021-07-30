@@ -18,7 +18,7 @@ import numpy as np
 from jax import numpy as jnp
 
 from fe.free_energy_rabfe import construct_absolute_lambda_schedule_complex, construct_absolute_lambda_schedule_solvent, construct_conversion_lambda_schedule, get_romol_conf, setup_relative_restraints_using_smarts
-from fe.utils import convert_uIC50_to_kJ_per_mole
+from fe.utils import convert_uM_to_kJ_per_mole
 # from fe import model_abfe, model_rabfe, model_conversion
 from fe import model_rabfe
 from md import builders
@@ -45,11 +45,11 @@ from md import builders, minimizer
 
 from rdkit.Chem import rdFMCS
 
-def convert_nMKi_to_kJ_per_mole(amount_in_nM):
-    """
-    TODO: more sig figs
-    """
-    return 0.593 * np.log(amount_in_nM * 1e-9) * 4.18
+# def convert_nMKi_to_kJ_per_mole(amount_in_nM):
+#     """
+#     TODO: more sig figs
+#     """
+#     return 0.593 * np.log(amount_in_nM * 1e-9) * 4.18
 
 class CompareDist(rdFMCS.MCSAtomCompare):
 
@@ -82,6 +82,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--property_field",
         help="Property field to convert to kcals/mols",
+        required=True
+    )
+
+    parser.add_argument(
+        "--property_units",
+        help="must be either nM or uM",
         required=True
     )
 
@@ -418,8 +424,14 @@ if __name__ == "__main__":
         epoch_params = serialize_handlers(ordered_handles)
         # dataset.shuffle()
         for mol in dataset.data:
-            kcals_per_mol = float(mol.GetProp(cmd_args.property_field))
-            label_dG = convert_nMKi_to_kJ_per_mole(kcals_per_mol)
+            concentration = float(mol.GetProp(cmd_args.property_field))
+
+            if cmd_args.property_units == 'uM':
+                label_dG = convert_uM_to_kJ_per_mole(concentration)
+            elif cmd_args.property_units == 'nM':
+                label_dG = convert_uM_to_kJ_per_mole(concentration/1000)
+            else:
+                assert 0, "Unknown property units"
 
             print("processing mol", mol.GetProp("_Name"), "with binding dG", label_dG, "SMILES", Chem.MolToSmiles(mol))
 

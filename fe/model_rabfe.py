@@ -95,7 +95,7 @@ class AbsoluteModel(ABC):
             to compute delta_Us, the BAR estimates themselves become correlated.
 
         """
-        top = self.setup_topology(mol, core_idxs)
+        top = self.setup_topology(mol)
 
         afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, top)
 
@@ -234,7 +234,7 @@ class RelativeModel(ABC):
         core_idxs = combined_core_idxs - num_host_atoms
         core_idxs[:, 1] -= mol_a.GetNumAtoms()
 
-        dual_topology = self.setup_topology(mol_a, mol_b, core_idxs)
+        dual_topology = self.setup_topology(mol_a, mol_b)
         rfe = free_energy_rabfe.RelativeFreeEnergy(dual_topology)
 
         unbound_potentials, sys_params, masses = rfe.prepare_host_edge(
@@ -438,28 +438,28 @@ class RelativeModel(ABC):
 
 class AbsoluteHydrationModel(AbsoluteModel):
 
-    def setup_topology(self, mol, _):
+    def setup_topology(self, mol):
         return topology.BaseTopologyRHFE(mol, self.ff)
 
 class RelativeHydrationModel(RelativeModel):
 
-    def setup_topology(self, mol_a, mol_b, _):
+    def setup_topology(self, mol_a, mol_b):
         return topology.DualTopologyRHFE(mol_a, mol_b, self.ff)
 
 class AbsoluteConversionModel(AbsoluteModel):
 
-    def setup_topology(self, mol, core_idxs):
+    def setup_topology(self, mol):
         top = topology.BaseTopologyConversion(mol, self.ff)
         return top
 
 class AbsoluteStandardHydrationModel(AbsoluteModel):
 
-    def setup_topology(self, mol, core_idxs):
+    def setup_topology(self, mol):
         top = topology.BaseTopologyStandardDecoupling(mol, self.ff)
         return top
 
 class RelativeBindingModel(RelativeModel):
 
-    def setup_topology(self, mol_a, mol_b, core_idxs):
+    def setup_topology(self, mol_a, mol_b):
         top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
         return top

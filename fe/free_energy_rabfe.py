@@ -313,7 +313,8 @@ def setup_relative_restraints_using_smarts(
                 best_core_idxs_a = core_idxs_a
                 best_core_idxs_b = core_idxs_b
 
-    print("core_idxs", core_idxs, "rmsd", best_rmsd)
+
     core_idxs = np.stack([best_core_idxs_a, best_core_idxs_b], axis=1).astype(np.int32)
+    print("core_idxs", core_idxs, "rmsd", best_rmsd)
 
     return core_idxs

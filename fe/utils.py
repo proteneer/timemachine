@@ -47,6 +47,8 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     """
     return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
 
+def convert_uM_to_kJ_per_mole(amount_in_uM):
+    return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
 
 from scipy.spatial.distance import cdist
 import networkx as nx

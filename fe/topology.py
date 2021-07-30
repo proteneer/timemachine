@@ -53,8 +53,11 @@ def standard_qlj_typer(mol):
             val = (0.0, 0.37, 0.9)
         elif a_num == 16:
             val = (0.0, 0.35, 1.0)
+        elif a_num == 17:
+            val = (0.0, 0.35, 1.0)
         else:
-            assert 0
+            # print("Unknown a_num", a_num)
+            assert 0, "Unknown a_num "+str(a_num)
 
         # sigmas need to be halved
         standard_qlj.append((val[0], val[1]/2, val[2]))
