@@ -52,6 +52,25 @@ def convert_nMKi_to_kJ_per_mole(amount_in_nM):
     return 0.593 * np.log(amount_in_nM * 1e-9) * 4.18
 
 
+class CompareDist(rdFMCS.MCSAtomCompare):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def compare(self, p, mol1, atom1, mol2, atom2):
+
+        if mol1.GetAtomWithIdx(atom1).GetDegree() == 1:
+            return False
+        if mol2.GetAtomWithIdx(atom2).GetDegree() == 1:
+            return False
+    
+        x_i = mol1.GetConformer(0).GetPositions()[atom1]
+        x_j = mol2.GetConformer(0).GetPositions()[atom2]
+        if np.linalg.norm(x_i-x_j) > 1.0: # angstroms
+            return False
+        else:
+            return True
+
 if __name__ == "__main__":
 
     multiprocessing.set_start_method('spawn')
@@ -144,12 +163,12 @@ if __name__ == "__main__":
         required=True
     )
 
-    # parser.add_argument(
-    #     "--core_smarts",
-    #     type=str,
-    #     help='Smarts pattern to use for the core',
-    #     required=True
-    # )
+    parser.add_argument(
+        "--blocker_name",
+        type=str,
+        help='Smarts pattern to use for the core',
+        required=True
+    )
 
     parser.add_argument(
         "--protein_pdb",
@@ -202,13 +221,17 @@ if __name__ == "__main__":
 
     # pick the largest mol as the blocker
     largest_size = 0
-    ref_mol = None
-    for mol in mols:
-        if mol.GetNumAtoms() > largest_size:
-            largest_size = mol.GetNumAtoms()
-            ref_mol = mol
+    blocker_mol = None
 
-    print("Reference Molecule:", ref_mol.GetProp("_Name"), Chem.MolToSmiles(ref_mol))
+    for mol in mols:
+        if mol.GetProp("_Name") == cmd_args.blocker_name:
+            # we should only have one copy.
+            assert blocker_mol is None
+            blocker_mol = mol
+
+    assert blocker_mol is not None
+
+    print("Reference Molecule:", blocker_mol.GetProp("_Name"), Chem.MolToSmiles(blocker_mol))
 
     temperature = 300.0
     pressure = 1.0
@@ -218,7 +241,7 @@ if __name__ == "__main__":
     print("Equilibrating reference molecule in the complex.")
     if not os.path.exists("equil.pickle"):
         complex_ref_x0, complex_ref_box0 = minimizer.equilibrate_complex(
-            ref_mol,
+            blocker_mol,
             complex_system,
             complex_coords,
             temperature,
@@ -293,21 +316,21 @@ if __name__ == "__main__":
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
 
-    def pred_fn(params, mol, mol_ref):
+    mcs_params = rdFMCS.MCSParameters()
+    mcs_params.AtomTyper = CompareDist()
+    mcs_params.BondTyper = rdFMCS.BondCompare.CompareAny
 
-        # core_smarts = cmd_args.core_smarts
+    def pred_fn(params, mol, mol_ref):
 
         result = rdFMCS.FindMCS(
             [mol, mol_ref],
-            ringMatchesRingOnly=False,
-            completeRingsOnly=False,
-            matchChiralTag=False,
-            atomCompare=rdFMCS.AtomCompare.CompareAny,
-            bondCompare=rdFMCS.BondCompare.CompareAny
+            mcs_params
         )
 
         core_smarts = result.smartsString
         
+        print("core_smarts", core_smarts)
+
         # generate the core_idxs
         core_idxs = setup_relative_restraints_using_smarts(mol, mol_ref, core_smarts)
         mol_coords = get_romol_conf(mol) # original coords
@@ -402,6 +425,6 @@ if __name__ == "__main__":
 
             print("processing mol", mol.GetProp("_Name"), "with binding dG", label_dG, "SMILES", Chem.MolToSmiles(mol))
 
-            pred_dG = pred_fn(ordered_params, mol, ref_mol)
+            pred_dG = pred_fn(ordered_params, mol, blocker_mol)
             print("epoch", epoch, "mol", mol.GetProp("_Name"), "pred", pred_dG, "label", label_dG)
             break
