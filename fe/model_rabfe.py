@@ -161,9 +161,8 @@ class AbsoluteModel(ABC):
 
         for lambda_idx, res in enumerate(results):
             # used for debugging for now, try to reproduce mdtraj error
-            outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
-            pickle.dump((res.xs, res.boxes, combined_topology), outfile)
-            # pickle.dump((res.xs[:100], res.boxes[:100], combined_topology), outfile)
+            # outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
+            # pickle.dump((res.xs, res.boxes, combined_topology), outfile)
             traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
             traj.unitcell_vectors = res.boxes
             traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
@@ -314,8 +313,8 @@ class RelativeModel(ABC):
         )
 
         for lambda_idx, res in enumerate(results):
-            outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
-            pickle.dump((res.xs, res.boxes, combined_topology), outfile)
+            # outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
+            # pickle.dump((res.xs, res.boxes, combined_topology), outfile)
             traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
             traj.unitcell_vectors = res.boxes
             traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
