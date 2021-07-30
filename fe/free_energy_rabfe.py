@@ -277,6 +277,8 @@ def setup_relative_restraints_using_smarts(
     assert "." not in smarts
 
     core = Chem.MolFromSmarts(smarts)
+
+    # we want *all* possible combinations.
     all_core_idxs_a = np.array(mol_a.GetSubstructMatches(core, uniquify=False))
     all_core_idxs_b = np.array(mol_b.GetSubstructMatches(core, uniquify=False))
     best_rmsd = np.inf
@@ -308,10 +310,10 @@ def setup_relative_restraints_using_smarts(
 
             if rmsd < best_rmsd:
                 best_rmsd = rmsd
-                print("best rmsd:", rmsd)
                 best_core_idxs_a = core_idxs_a
                 best_core_idxs_b = core_idxs_b
 
+    print("core_idxs", core_idxs, "rmsd", best_rmsd)
     core_idxs = np.stack([best_core_idxs_a, best_core_idxs_b], axis=1).astype(np.int32)
 
     return core_idxs

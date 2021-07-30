@@ -51,7 +51,6 @@ def convert_nMKi_to_kJ_per_mole(amount_in_nM):
     """
     return 0.593 * np.log(amount_in_nM * 1e-9) * 4.18
 
-
 class CompareDist(rdFMCS.MCSAtomCompare):
 
     def __init__(self, *args, **kwargs):
@@ -253,6 +252,7 @@ if __name__ == "__main__":
         with open("equil.pickle", "wb") as ofs:
             pickle.dump((complex_ref_x0, complex_ref_box0), ofs)
     else:
+        print("Loading existing pickle from cache")
         with open("equil.pickle", "rb") as ifs:
             complex_ref_x0, complex_ref_box0 = pickle.load(ifs)
     # complex models.

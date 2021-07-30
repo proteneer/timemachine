@@ -450,29 +450,16 @@ class AbsoluteConversionModel(AbsoluteModel):
 
     def setup_topology(self, mol, core_idxs):
         top = topology.BaseTopologyConversion(mol, self.ff)
-        # top.parameterize_proper_torsion = functools.partial(
-        #     top.parameterize_proper_torsion,
-        #     core_idxs=core_idxs
-        # )
         return top
 
 class AbsoluteStandardHydrationModel(AbsoluteModel):
 
     def setup_topology(self, mol, core_idxs):
         top = topology.BaseTopologyStandardDecoupling(mol, self.ff)
-        # top.parameterize_proper_torsion = functools.partial(
-        #     top.parameterize_proper_torsion,
-        #     core_idxs=core_idxs
-        # )
         return top
 
 class RelativeBindingModel(RelativeModel):
 
     def setup_topology(self, mol_a, mol_b, core_idxs):
         top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
-        # top.parameterize_proper_torsion = functools.partial(
-        #     top.parameterize_proper_torsion,
-        #     core_idxs_a=core_idxs[:, 0],
-        #     core_idxs_b=core_idxs[:, 1]
-        # )
         return top
