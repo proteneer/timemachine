@@ -25,23 +25,8 @@ def test_base_topology_conversion_ring_torsion():
 
     np.testing.assert_array_equal(vanilla_torsion_params, conversion_torsion_params)
 
-    # in the conversion phase, torsions that bridge the two rings should be set to
-    # be alchemically turned off.
-
-    # assert torsion_potential.get_idxs() 
     assert torsion_potential.get_lambda_mult() is None
     assert torsion_potential.get_lambda_offset() is None
-    # ring_group = [0,0,0,1,1,1]
-
-
-
-    # for torsion_idxs, mult, offset in zip(torsion_potential.get_idxs(), torsion_potential.get_lambda_mult(), torsion_potential.get_lambda_offset()):
-    #     _, b, c, _ = torsion_idxs
-    #     assert offset == 1
-    #     if ring_group[b] != ring_group[c]:
-    #         assert mult == -1
-    #     else:
-    #         assert mult == 0
 
     vanilla_qlj_params, _ = vanilla_mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
     qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
@@ -127,10 +112,6 @@ def test_dual_topology_standard_decoupling():
     mol_top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, ff)
 
     decouple_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params)
-
-    # np.testing.assert_array_equal(vanilla_torsion_params, decouple_torsion_params)
-    #             C C C C C C O H H H H H H  C C C C C C F H H H H H H
-    is_in_ring = [1,1,1,1,1,1,0,0,0,0,0,0,0, 1,1,1,1,1,1,0,0,0,0,0,0,0]
 
     combined_decouple_torsion_params, combined_torsion_potential = mol_top.parameterize_periodic_torsion(
         ff.pt_handle.params,

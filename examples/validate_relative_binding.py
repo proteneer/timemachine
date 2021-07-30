@@ -45,12 +45,6 @@ from md import builders, minimizer
 
 from rdkit.Chem import rdFMCS
 
-# def convert_nMKi_to_kJ_per_mole(amount_in_nM):
-#     """
-#     TODO: more sig figs
-#     """
-#     return 0.593 * np.log(amount_in_nM * 1e-9) * 4.18
-
 class CompareDist(rdFMCS.MCSAtomCompare):
 
     def __init__(self, *args, **kwargs):
