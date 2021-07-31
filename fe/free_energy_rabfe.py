@@ -267,8 +267,25 @@ def setup_relative_restraints_using_smarts(
     mol_b,
     smarts):
     """
-    Setup restraints between ring atoms in two molecules using
+    Setup restraints between atoms in two molecules using
     a pre-defined SMARTS pattern.
+
+    Parameters
+    ----------
+    mol_a: Chem.Mol
+        First molecule
+
+    mol_b: Chem.Mol
+        Second molecule
+
+    smarts: string
+        Smarts pattern defining the common core.
+
+    Returns
+    -------
+    np.array (N, 2)
+        Atom mapping between atoms in mol_a to atoms in mol_b.
+
     """
 
     # check to ensure the core is connected
@@ -279,8 +296,13 @@ def setup_relative_restraints_using_smarts(
     core = Chem.MolFromSmarts(smarts)
 
     # we want *all* possible combinations.
-    all_core_idxs_a = np.array(mol_a.GetSubstructMatches(core, uniquify=False))
-    all_core_idxs_b = np.array(mol_b.GetSubstructMatches(core, uniquify=False))
+    limit = 1000
+    all_core_idxs_a = np.array(mol_a.GetSubstructMatches(core, uniquify=False, maxMatches=limit))
+    all_core_idxs_b = np.array(mol_b.GetSubstructMatches(core, uniquify=False, maxMatches=limit))
+
+    assert len(all_core_idxs_a) < limit
+    assert len(all_core_idxs_b) < limit
+
     best_rmsd = np.inf
     best_core_idxs_a = None
     best_core_idxs_b = None

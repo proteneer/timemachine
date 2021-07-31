@@ -47,6 +47,13 @@ from rdkit.Chem import rdFMCS
 
 class CompareDist(rdFMCS.MCSAtomCompare):
 
+    """
+    Custom comparator used in the FMCS code.
+    This allows two atoms to match if:
+        1. Neither atom is a terminal atom (H, F, Cl, Halogens etc.)
+        2. They are within 1 angstrom of each other.
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -165,7 +172,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--blocker_name",
         type=str,
-        help='Smarts pattern to use for the core',
+        help='Name of the ligand the sdf file to be used as a blocker',
         required=True
     )
 
