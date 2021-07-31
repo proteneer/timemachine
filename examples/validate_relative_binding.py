@@ -438,4 +438,5 @@ if __name__ == "__main__":
 
             pred_dG = pred_fn(ordered_params, mol, blocker_mol)
             print("epoch", epoch, "mol", mol.GetProp("_Name"), "pred", pred_dG, "label", label_dG)
-            break
+
+            # break
