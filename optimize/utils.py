@@ -12,7 +12,7 @@ def get_shape(x):
 
 def reshape(x, shape):
     """assume x is scalar if shape is None"""
-    return float(x) if shape is None else x.reshape(shape)
+    return float(x) if shape is None else np.reshape(x, shape)
 
 
 def num_elements(shape):
