@@ -41,9 +41,11 @@ def test_flatten_and_unflatten_dict():
         Extras=dict(
             GlobalVars=[
                 jnp.arange(70),
-                onp.random.randn(80, 4)
+                onp.random.randn(80, 4),
             ]
-        )
+        ),
+        Bias=onp.array([1.2]),
+        Multiplier=onp.array([2.5]),
     )
 
     check_flatten_and_unflatten_roundtrip(example_pytree)
