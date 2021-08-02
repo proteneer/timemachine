@@ -419,7 +419,7 @@ if __name__ == "__main__":
             param_increments = unflatten(theta_increment)
 
             # for any parameter handler types being updated, update in place
-            for (handle, increment) in zip(ordered_handles, param_increments):
+            for handle, increment in zip(ordered_handles, param_increments):
                 handle_type = type(handle)
                 if handle_type in forces_to_refit:
 
