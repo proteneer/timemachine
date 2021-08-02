@@ -400,8 +400,6 @@ class RelativeModel(ABC):
             box0,
             prefix+"_ref_to_mol")
 
-        return dG_0, dG_0_err
-
         # pull out mol_a from combined state
         combined_core_idxs = np.copy(core_idxs)
         # swap the ligand coordinates in the reverse direction
