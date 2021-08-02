@@ -7,31 +7,17 @@ def get_shape(x):
     """safe to call on floats and arrays
     get_shape(1) -> None, get_shape(ones(2)) -> (2,)"""
 
-    try:
-        return x.shape
-    except AttributeError:
-        try:
-            _ = float(x)
-            return None
-        except:
-            raise ValueError("x doesn't appear to be an array or a float")
+    return None if np.isscalar(x) else x.shape
 
 
 def reshape(x, shape):
     """assume x is scalar if shape is None"""
-    if shape is None:
-        return float(x)
-    else:
-        return x.reshape(shape)
+    return float(x) if shape is None else x.reshape(shape)
 
 
 def num_elements(shape):
     """floats (indicated by None) have 1 element"""
-    if shape is None:
-        return 1
-    else:
-        # note: length-zero arrays are fine in this branch: onp.prod(()) == 1.0
-        return int(onp.prod(shape))
+    return 1 if shape is None else int(onp.prod(shape))
 
 
 def flatten_and_unflatten(input_tree) -> Tuple[Callable, Callable]:
