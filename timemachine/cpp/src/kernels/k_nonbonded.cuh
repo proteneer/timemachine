@@ -411,6 +411,7 @@ void __device__ __forceinline__ compute_lj(
 // ALCHEMICAL == false guarantees that the tile's atoms are such that
 // 1. src_param and dst_params are equal for every i in R and j in C
 // 2. w_i and w_j are identical for every (i,j) in (RxC)
+// ---COMMENT BELOW SEEMS IRRELEVANT??---
 // DU_DL_DEPENDS_ON_DU_DP indicates whether or not to compute DU_DP when
 // COMPUTE_DU_DL is requested (needed for interpolated potentials)
 template <
@@ -700,6 +701,22 @@ void __device__ v_nonbonded_unified(
 
 }
 
+template <typename T>
+void __global__ k_add_arrays(
+    const int N,
+    const T * __restrict__ alchemical_buffer,
+    const T * __restrict__ chemical_buffer,
+    T * __restrict__ output_buffer
+) {
+    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int stride = gridDim.y;
+    int stride_idx = blockIdx.y;
+    if (idx >= N) {
+        return;
+    }
+    output_buffer[idx*stride+stride_idx] += alchemical_buffer[idx*stride+stride_idx] + chemical_buffer[idx*stride+stride_idx];
+}
+
 
 // IF YOU CHANGE THIS SIGNATURE, CHANGE CORRESPONDING DEFINITION IN
 // nonbonded.hpp
@@ -711,8 +728,11 @@ template <
     bool COMPUTE_DU_DP
 >
 void __global__ k_nonbonded_unified(
-    const unsigned int * ixn_count,
     const int N,
+    const unsigned int * ixn_count,
+    const int * __restrict__ tile_idxs,
+    const int * __restrict__ ixn_tiles,
+    const unsigned int * __restrict__ ixn_atoms,
     const double * __restrict__ coords,
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
@@ -722,48 +742,30 @@ void __global__ k_nonbonded_unified(
     const double lambda,
     const double beta,
     const double cutoff,
-    const int * __restrict__ ixn_tiles,
-    const unsigned int * __restrict__ ixn_atoms,
-    unsigned long long * __restrict__ du_dx,
-    unsigned long long * __restrict__ du_dp,
-    unsigned long long * __restrict__ du_dl_buffer,
-    unsigned long long * __restrict__ u_buffer
+    const char * __restrict__ tile_mask, // 1s indicate alchemical, 0s vanilla
+    unsigned long long * __restrict__ alchemical_du_dx,
+    unsigned long long * __restrict__ vanilla_du_dx,
+    unsigned long long * __restrict__ alchemical_du_dp,
+    unsigned long long * __restrict__ vanilla_du_dp,
+    unsigned long long * __restrict__ alchemical_du_dl_buffer,
+    unsigned long long * __restrict__ vanilla_du_dl_buffer,
+    unsigned long long * __restrict__ alchemical_u_buffer,
+    unsigned long long * __restrict__ vanilla_u_buffer,
+    const int * __restrict__ run_vanilla
 ) {
     const int stride = gridDim.x;
     int tile_idx = blockIdx.x;
     const unsigned int interactions = ixn_count[0];
+    const bool alchemical_only = run_vanilla[0] == 0;
     while (tile_idx < interactions) {
-        int row_block_idx = ixn_tiles[tile_idx];
-        int atom_i_idx = row_block_idx*32 + threadIdx.x;
 
-        RealType dq_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+0] : 0;
-        RealType dsig_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+1] : 0;
-        RealType deps_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+2] : 0;
-        RealType cw_i = atom_i_idx < N ? coords_w[atom_i_idx] : 0;
-
-        int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
-
-        RealType dq_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+0] : 0;
-        RealType dsig_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+1] : 0;
-        RealType deps_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+2] : 0;
-        RealType cw_j = atom_j_idx < N ? coords_w[atom_j_idx] : 0;
-
-        int is_vanilla = (
-            cw_i == 0 &&
-            dq_dl_i == 0 &&
-            dsig_dl_i == 0 &&
-            deps_dl_i == 0 &&
-            cw_j == 0 &&
-            dq_dl_j == 0 &&
-            dsig_dl_j == 0 &&
-            deps_dl_j == 0
-        );
-
-        bool tile_is_vanilla = __all_sync(0xffffffff, is_vanilla);
+        // If it is alchemical only, we have compacted the neighborlist tiles
+        // so as to all be alchemical, thus no tiles are vanilla
+        bool tile_is_vanilla = !alchemical_only && tile_mask[tile_idx] == 0;
 
         if(tile_is_vanilla) {
             v_nonbonded_unified<RealType, 0, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DL, COMPUTE_DU_DP>(
-                tile_idx,
+                tile_idxs[tile_idx],
                 N,
                 coords,
                 params,
@@ -776,14 +778,14 @@ void __global__ k_nonbonded_unified(
                 cutoff,
                 ixn_tiles,
                 ixn_atoms,
-                du_dx,
-                du_dp,
-                du_dl_buffer,
-                u_buffer
+                vanilla_du_dx,
+                vanilla_du_dp,
+                vanilla_du_dl_buffer,
+                vanilla_u_buffer
             );
         } else {
             v_nonbonded_unified<RealType, 1, COMPUTE_U, COMPUTE_DU_DX, COMPUTE_DU_DL, COMPUTE_DU_DP>(
-                tile_idx,
+                tile_idxs[tile_idx],
                 N,
                 coords,
                 params,
@@ -796,16 +798,14 @@ void __global__ k_nonbonded_unified(
                 cutoff,
                 ixn_tiles,
                 ixn_atoms,
-                du_dx,
-                du_dp,
-                du_dl_buffer,
-                u_buffer
+                alchemical_du_dx,
+                alchemical_du_dp,
+                alchemical_du_dl_buffer,
+                alchemical_u_buffer
             );
         };
         tile_idx += stride;
     }
-
-
 }
 
 // tbd add restrict
@@ -1026,4 +1026,145 @@ void __global__ k_nonbonded_exclusions(
 
     }
 
+}
+
+void __global__ k_check_rebuild_tiles_mask(
+    const int N,
+    int * __restrict__ rebuild, // [1] Rebuild tile mask
+    const double * __restrict__ d_box,
+    const double * __restrict__ d_x, // [N * 3]
+    const double * __restrict__ d_p, // [N * 3] interpolated p
+    const double * __restrict__ d_x_last, // [N * 3]
+    const double * __restrict__ d_p_last, // [N * 3]
+    const double * __restrict__ d_box_last // [3 * 3]
+) {
+    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= N) {
+        return;
+    }
+    if (idx < 9) {
+        if (d_box[idx] != d_box_last[idx]) {
+            rebuild[0] = 1;
+        }
+    }
+    #pragma unroll
+    for (int i = 0; i < 3; i++){
+        if (d_x[idx*3+i] != d_x_last[idx*3+i]) {
+            rebuild[0] = 1;
+        }
+        // Check that that that iterpolation
+        if (d_p[idx*3+i] != d_p_last[idx*3+i]) {
+            rebuild[0] = 1;
+        }
+    }
+}
+
+void __global__ k_reset_buffers(
+    const int N,
+    const int * __restrict__ rebuild, // [1] Reset chemical energies,
+    unsigned long long * __restrict__ alchemical_buffer,
+    unsigned long long * __restrict__ vanilla_buffer
+) {
+    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    int stride = gridDim.y;
+    int stride_idx = blockIdx.y;
+    if (idx >= N) {
+        return;
+    }
+    alchemical_buffer[idx*stride+stride_idx] = 0;
+    if (rebuild[0] != 0) {
+        vanilla_buffer[idx*stride+stride_idx] = 0;
+    }
+}
+
+
+template<typename RealType, bool Interpolated>
+void __global__ k_generate_alchemical_tile_mask(
+    const int N,
+    const int * __restrict__ rebuild_mask, // [1]
+    const unsigned int * __restrict__ ixn_count, // [1]
+    const int * __restrict__ ixn_tiles,
+    const unsigned int * __restrict__ ixn_atoms,
+    const double * __restrict__ dp_dl, // [N * 3] Will be swapped for params when TI is gone
+    const int * __restrict__ lambda_offset, // [N]
+    char * __restrict__ tile_mask
+) {
+    if (rebuild_mask[0] == 0) {
+        return;
+    }
+    const int stride = gridDim.x;
+    int tile_idx = blockIdx.x;
+    const unsigned int interactions = ixn_count[0];
+    while (tile_idx < interactions) {
+        if (threadIdx.x == 0) {
+            tile_mask[tile_idx] = 0; // Clear tile mask;
+        }
+        int row_block_idx = ixn_tiles[tile_idx];
+        int atom_i_idx = row_block_idx*32 + threadIdx.x;
+
+        RealType dq_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+0] : 0;
+        RealType dsig_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+1] : 0;
+        RealType deps_dl_i = atom_i_idx < N ? dp_dl[atom_i_idx*3+2] : 0;
+        int cw_i = atom_i_idx < N ? lambda_offset[atom_i_idx] : 0;
+
+        int atom_j_idx = ixn_atoms[tile_idx*32 + threadIdx.x];
+
+        RealType dq_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+0] : 0;
+        RealType dsig_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+1] : 0;
+        RealType deps_dl_j = atom_j_idx < N ? dp_dl[atom_j_idx*3+2] : 0;
+        int cw_j = atom_j_idx < N ? lambda_offset[atom_j_idx] : 0;
+
+        int is_vanilla = (
+            cw_i == 0 &&
+            dq_dl_i == 0 &&
+            dsig_dl_i == 0 &&
+            deps_dl_i == 0 &&
+            cw_j == 0 &&
+            dq_dl_j == 0 &&
+            dsig_dl_j == 0 &&
+            deps_dl_j == 0
+        );
+
+        bool tile_is_vanilla = __all_sync(0xffffffff, is_vanilla);
+        // If the tile is not vanilla mark tile idx accordingly
+        if (threadIdx.x == 0 && !tile_is_vanilla) {
+            // Safe race condition
+            tile_mask[tile_idx] = 1;
+        }
+        tile_idx += stride;
+    }
+}
+
+void __global__ k_update_default_masks(
+    const int N,
+    const int * __restrict__ nblist_rebuild,
+    const unsigned int * __restrict__ ixn_count,
+    char * __restrict__ tile_mask,
+    char * __restrict__ alchemical_tile_mask
+) {
+    if (nblist_rebuild[0] == 0) {
+        return;
+    }
+    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= N) {
+        return;
+    }
+    const unsigned int interactions = ixn_count[0];
+    tile_mask[idx] = idx < interactions ? 1 : 0;
+    alchemical_tile_mask[idx] = 0;
+}
+
+void __global__ k_optional_copy_mask(
+    const int N,
+    const int * __restrict__ vanilla_tiles, // [1]
+    const char * all_mask, // [N]
+    const char * alchemical_mask, // [N]
+    char * output // [N]
+) {
+    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if (idx >= N) {
+        return;
+    }
+    const bool write_alchemical_mask = vanilla_tiles[0] == 0;
+    output[idx] = write_alchemical_mask ? alchemical_mask[idx] : all_mask[idx];
 }

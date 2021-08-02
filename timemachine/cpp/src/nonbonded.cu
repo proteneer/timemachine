@@ -23,6 +23,15 @@
 
 namespace timemachine {
 
+template <typename T>
+void __global__ k_arange(int N, T *arr) {
+    const int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
+    if(atom_idx >= N) {
+        return;
+    }
+    arr[atom_idx] = atom_idx;
+}
+
 template <typename RealType, bool Interpolated>
 Nonbonded<RealType, Interpolated>::Nonbonded(
     const std::vector<int> &exclusion_idxs, // [E,2]
@@ -42,8 +51,11 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     nblist_(lambda_offset_idxs.size()),
     beta_(beta),
     cur_step_(0),
+    last_kernel_(0),
     d_sort_storage_(nullptr),
     d_sort_storage_bytes_(0),
+    d_partition_storage_(nullptr),
+    d_partition_storage_bytes_(0),
     nblist_padding_(0.1),
     disable_hilbert_(false),
     kernel_ptrs_({
@@ -92,6 +104,8 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_, N_*sizeof(*d_lambda_offset_idxs_)));
     gpuErrchk(cudaMemcpy(d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_*sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
 
+    gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_sorted_, N_*sizeof(*d_lambda_offset_idxs_sorted_)));
+
     gpuErrchk(cudaMalloc(&d_perm_, N_*sizeof(*d_perm_)));
 
     gpuErrchk(cudaMalloc(&d_sorted_x_, N_*3*sizeof(*d_sorted_x_)));
@@ -117,13 +131,49 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
 
     gpuErrchk(cudaMalloc(&d_nblist_x_, N_*3*sizeof(*d_nblist_x_)));
     gpuErrchk(cudaMemset(d_nblist_x_, 0, N_*3*sizeof(*d_nblist_x_))); // set non-sensical positions
-    gpuErrchk(cudaMalloc(&d_nblist_box_, 3*3*sizeof(*d_nblist_x_)));
-    gpuErrchk(cudaMemset(d_nblist_box_, 0, 3*3*sizeof(*d_nblist_x_)));
+    gpuErrchk(cudaMalloc(&d_nblist_box_, 3*3*sizeof(*d_nblist_box_)));
+    gpuErrchk(cudaMemset(d_nblist_box_, 0, 3*3*sizeof(*d_nblist_box_)));
     gpuErrchk(cudaMalloc(&d_rebuild_nblist_, 1*sizeof(*d_rebuild_nblist_)));
 
     gpuErrchk(cudaMalloc(&d_sort_keys_in_, N_*sizeof(d_sort_keys_in_)));
     gpuErrchk(cudaMalloc(&d_sort_keys_out_, N_*sizeof(d_sort_keys_out_)));
     gpuErrchk(cudaMalloc(&d_sort_vals_in_, N_*sizeof(d_sort_vals_in_)));
+
+    const int tpb = 32;
+    unsigned int MAX_TILES = nblist_.B()*nblist_.B();
+    const int X = (MAX_TILES+tpb-1)/tpb;
+
+    gpuErrchk(cudaMalloc(&d_x_last_, N_*3*sizeof(*d_x_last_)));
+    gpuErrchk(cudaMalloc(&d_p_last_, N_*3*sizeof(*d_p_last_)));
+
+    gpuErrchk(cudaMalloc(&d_compaction_mask_, MAX_TILES*sizeof(*d_compaction_mask_)));
+    gpuErrchk(cudaMalloc(&d_tile_mask_, MAX_TILES*sizeof(*d_tile_mask_)));
+    gpuErrchk(cudaMalloc(&d_tile_idxs_, MAX_TILES*sizeof(*d_tile_idxs_)));
+    gpuErrchk(cudaMalloc(&d_nblist_tiles_, MAX_TILES*sizeof(*d_nblist_tiles_)));
+    gpuErrchk(cudaMalloc(&d_default_tile_mask_, MAX_TILES*sizeof(*d_default_tile_mask_)));
+    gpuErrchk(cudaMemset(d_default_tile_mask_, 0, MAX_TILES*sizeof(*d_default_tile_mask_)));
+
+    gpuErrchk(cudaMalloc(&d_compacted_ixn_count_, 1*sizeof(*d_compacted_ixn_count_)));
+    gpuErrchk(cudaMemset(d_compacted_ixn_count_, 0, 1*sizeof(*d_compacted_ixn_count_)));
+
+    gpuErrchk(cudaMalloc(&d_alchemical_u_, N_*sizeof(*d_alchemical_u_)));
+    gpuErrchk(cudaMalloc(&d_vanilla_u_, N_*sizeof(*d_vanilla_u_)));
+
+    gpuErrchk(cudaMalloc(&d_alchemical_du_dx_, 3*N_*sizeof(*d_alchemical_du_dx_)));
+    gpuErrchk(cudaMalloc(&d_vanilla_du_dx_, 3*N_*sizeof(*d_vanilla_du_dx_)));
+
+    gpuErrchk(cudaMalloc(&d_alchemical_du_dp_, 3*N_*sizeof(*d_alchemical_du_dp_)));
+    gpuErrchk(cudaMalloc(&d_vanilla_du_dp_, 3*N_*sizeof(*d_vanilla_du_dp_)));
+
+    gpuErrchk(cudaMalloc(&d_alchemical_du_dl_, N_*sizeof(*d_alchemical_du_dl_)));
+    gpuErrchk(cudaMalloc(&d_vanilla_du_dl_, N_*sizeof(*d_vanilla_du_dl_)));
+
+    gpuErrchk(cudaMalloc(&d_run_vanilla_tiles_, 1*sizeof(*d_run_vanilla_tiles_)));
+    gpuErrchk(cudaMemset(d_run_vanilla_tiles_, 0, 1*sizeof(*d_run_vanilla_tiles_)));
+
+
+    k_arange<<<X, tpb>>>(MAX_TILES, d_tile_idxs_);
+    gpuErrchk(cudaPeekAtLastError());
 
     // initialize hilbert curve
     std::vector<unsigned int> bin_to_idx(256*256*256);
@@ -160,6 +210,19 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
 
+    // Calculate size needed to perform compaction of tiles
+    cub::DevicePartition::Flagged(
+        d_partition_storage_,
+        d_partition_storage_bytes_,
+        d_tile_idxs_,
+        d_default_tile_mask_,
+        d_nblist_tiles_,
+        d_compacted_ixn_count_,
+        MAX_TILES
+    );
+    gpuErrchk(cudaPeekAtLastError());
+    gpuErrchk(cudaMalloc(&d_partition_storage_, d_partition_storage_bytes_));
+
 };
 
 template <typename RealType, bool Interpolated>
@@ -194,6 +257,25 @@ Nonbonded<RealType, Interpolated>::~Nonbonded() {
     gpuErrchk(cudaFree(d_nblist_x_));
     gpuErrchk(cudaFree(d_nblist_box_));
     gpuErrchk(cudaFree(d_rebuild_nblist_));
+
+    gpuErrchk(cudaFree(d_alchemical_u_));
+    gpuErrchk(cudaFree(d_vanilla_u_));
+    gpuErrchk(cudaFree(d_alchemical_du_dx_));
+    gpuErrchk(cudaFree(d_vanilla_du_dx_));
+    gpuErrchk(cudaFree(d_alchemical_du_dp_));
+    gpuErrchk(cudaFree(d_vanilla_du_dp_));
+    gpuErrchk(cudaFree(d_alchemical_du_dl_));
+    gpuErrchk(cudaFree(d_vanilla_du_dl_));
+    gpuErrchk(cudaFree(d_run_vanilla_tiles_));
+
+    gpuErrchk(cudaFree(d_partition_storage_));
+    gpuErrchk(cudaFree(d_nblist_tiles_));
+    gpuErrchk(cudaFree(d_default_tile_mask_));
+    gpuErrchk(cudaFree(d_tile_mask_));
+    gpuErrchk(cudaFree(d_compaction_mask_));
+    gpuErrchk(cudaFree(d_x_last_));
+    gpuErrchk(cudaFree(d_p_last_));
+    gpuErrchk(cudaFree(d_tile_idxs_));
 };
 
 
@@ -238,27 +320,19 @@ void Nonbonded<RealType, Interpolated>::hilbert_sort(
 
 }
 
-void __global__ k_arange(int N, unsigned int *arr) {
-    const int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
-    if(atom_idx >= N) {
-        return;
-    }
-    arr[atom_idx] = atom_idx;
-}
-
 template <typename RealType, bool Interpolated>
 void Nonbonded<RealType, Interpolated>::execute_device(
-        const int N,
-        const int P,
-        const double *d_x,
-        const double *d_p, // 2 * N * 3
-        const double *d_box, // 3 * 3
-        const double lambda,
-        unsigned long long *d_du_dx,
-        double *d_du_dp,
-        unsigned long long *d_du_dl,
-        unsigned long long *d_u,
-        cudaStream_t stream) {
+    const int N,
+    const int P,
+    const double *d_x, // [N * 3]
+    const double *d_p, // [N * 3]
+    const double *d_box, // [3 * 3]
+    const double lambda,
+    unsigned long long *d_du_dx,
+    double *d_du_dp,
+    unsigned long long *d_du_dl,
+    unsigned long long *d_u,
+    cudaStream_t stream) {
 
     // (ytz) the nonbonded algorithm proceeds as follows:
 
@@ -293,7 +367,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     const int tpb = 32;
     const int B = (N+tpb-1)/tpb;
-
+    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
     dim3 dimGrid(B, 3, 1);
     // If we have to sort, we also have to rebuild the neighborlist
     if (sort_indices) {
@@ -324,6 +398,8 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     // compute new coordinates, new lambda_idxs, new_plane_idxs
     k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
     gpuErrchk(cudaPeekAtLastError());
+    k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_lambda_offset_idxs_, d_lambda_offset_idxs_sorted_);
+    gpuErrchk(cudaPeekAtLastError());
     nblist_.build_nblist_device(
         N,
         d_sorted_x_,
@@ -332,10 +408,15 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         d_rebuild_nblist_,
         stream
     );
-
+    gpuErrchk(cudaPeekAtLastError());
+    const unsigned int MAX_TILES = nblist_.B()*nblist_.B();
+    const int X = (MAX_TILES + tpb - 1) / tpb;
+    // Every time we rebuild the neighborlist, need to create a new 'default' mask that is used
+    // in compacting the tiles that have ixns. At the same time, zero out the alchemical tile list
+    k_update_default_masks<<<X, tpb, 0, stream>>>(MAX_TILES, d_rebuild_nblist_, nblist_.get_ixn_count(), d_default_tile_mask_, d_tile_mask_);
+    gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
     gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
-    gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
 
     // do parameter interpolation here
     if(Interpolated) {
@@ -356,6 +437,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaPeekAtLastError());
         gpuErrchk(cudaMemsetAsync(d_sorted_dp_dl_, 0, N*3*sizeof(*d_sorted_dp_dl_), stream))
     }
+
 
     // reset buffers and sorted accumulators
     if(d_du_dx) {
@@ -384,16 +466,87 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     gpuErrchk(cudaPeekAtLastError());
     k_permute_2x<<<B, tpb, 0, stream>>>(N, d_perm_, d_w_, d_dw_dl_, d_sorted_w_, d_sorted_dw_dl_);
     gpuErrchk(cudaPeekAtLastError());
-
     // look up which kernel we need for this computation
     int kernel_idx = 0;
     kernel_idx |= d_du_dp ? 1 << 0 : 0;
     kernel_idx |= d_du_dl ? 1 << 1 : 0;
     kernel_idx |= d_du_dx ? 1 << 2 : 0;
     kernel_idx |= d_u ? 1 << 3 : 0;
-    kernel_ptrs_[kernel_idx]<<<NONBONDED_KERNEL_BLOCKS, tpb, 0, stream>>>(
-        nblist_.get_ixn_count(),
+    // We can only reuse cached portions if we run with the same kernel flags, else have to rest the caches
+    if (last_kernel_ != kernel_idx) {
+        last_kernel_ = kernel_idx;
+        gpuErrchk(cudaMemsetAsync(d_run_vanilla_tiles_, 1, 1*sizeof(*d_run_vanilla_tiles_), stream));
+        gpuErrchk(cudaMemsetAsync(d_x_last_, 0, N*3*sizeof(*d_x_last_), stream));
+        gpuErrchk(cudaMemsetAsync(d_p_last_, 0, N*3*sizeof(*d_p_last_), stream));
+    } else {
+        gpuErrchk(cudaMemsetAsync(d_run_vanilla_tiles_, 0, 1*sizeof(*d_run_vanilla_tiles_), stream));
+        k_check_rebuild_tiles_mask<<<B, tpb, 0, stream>>>(
+            N,
+            d_run_vanilla_tiles_, // [1] Rebuild tile mask
+            d_box,
+            d_sorted_x_,
+            d_sorted_p_,
+            d_x_last_,
+            d_p_last_,
+            d_nblist_box_
+        );
+        gpuErrchk(cudaPeekAtLastError());
+        // Store the last d_x/d_p
+        gpuErrchk(cudaMemcpyAsync(d_x_last_, d_sorted_x_, N*3*sizeof(*d_x_last_), cudaMemcpyDeviceToDevice, stream));
+        gpuErrchk(cudaMemcpyAsync(d_p_last_, d_sorted_p_, N*3*sizeof(*d_p_last_), cudaMemcpyDeviceToDevice, stream));
+    }
+    if (d_u) {
+        k_reset_buffers<<<B, tpb, 0, stream>>>(N, d_run_vanilla_tiles_, d_alchemical_u_, d_vanilla_u_);
+        gpuErrchk(cudaPeekAtLastError());
+    }
+    if (d_du_dl) {
+        k_reset_buffers<<<B, tpb, 0, stream>>>(N, d_run_vanilla_tiles_, d_alchemical_du_dl_, d_vanilla_du_dl_);
+        gpuErrchk(cudaPeekAtLastError());
+    }
+    if (d_du_dx) {
+        k_reset_buffers<<<dimGrid, tpb, 0, stream>>>(N, d_run_vanilla_tiles_, d_alchemical_du_dx_, d_vanilla_du_dx_);
+        gpuErrchk(cudaPeekAtLastError());
+    }
+
+    if (d_du_dp) {
+        k_reset_buffers<<<dimGrid, tpb, 0, stream>>>(N, d_run_vanilla_tiles_, d_alchemical_du_dp_, d_vanilla_du_dp_);
+        gpuErrchk(cudaPeekAtLastError());
+    }
+    k_generate_alchemical_tile_mask<RealType, Interpolated><<<NONBONDED_KERNEL_BLOCKS, tpb, 0, stream>>>(
         N,
+        d_rebuild_nblist_,
+        nblist_.get_ixn_count(),
+        nblist_.get_ixn_tiles(),
+        nblist_.get_ixn_atoms(),
+        d_sorted_dp_dl_,
+        d_lambda_offset_idxs_sorted_,
+        d_tile_mask_
+    );
+    gpuErrchk(cudaPeekAtLastError());
+    // If we are only running the alchemical, swap in the alchemical tile mask for the default
+    k_optional_copy_mask<<<X, tpb, 0, stream>>>(MAX_TILES, d_run_vanilla_tiles_, d_default_tile_mask_, d_tile_mask_, d_compaction_mask_);
+    gpuErrchk(cudaPeekAtLastError());
+
+    gpuErrchk(cudaMemsetAsync(d_compacted_ixn_count_, 0, 1*sizeof(*d_compacted_ixn_count_), stream));
+    gpuErrchk(cudaMemsetAsync(d_nblist_tiles_, 0, MAX_TILES*sizeof(*d_nblist_tiles_), stream));
+    cub::DevicePartition::Flagged(
+        d_partition_storage_,
+        d_partition_storage_bytes_,
+        d_tile_idxs_,
+        d_compaction_mask_,
+        d_nblist_tiles_,
+        d_compacted_ixn_count_,
+        MAX_TILES,
+        stream
+    );
+    gpuErrchk(cudaPeekAtLastError());
+
+    kernel_ptrs_[kernel_idx]<<<NONBONDED_KERNEL_BLOCKS, tpb, 0, stream>>>(
+        N,
+        d_compacted_ixn_count_,
+        d_nblist_tiles_,
+        nblist_.get_ixn_tiles(),
+        nblist_.get_ixn_atoms(),
         d_sorted_x_,
         d_sorted_p_,
         d_box,
@@ -403,18 +556,36 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         lambda,
         beta_,
         cutoff_,
-        nblist_.get_ixn_tiles(),
-        nblist_.get_ixn_atoms(),
-        d_sorted_du_dx_,
-        d_sorted_du_dp_,
-        d_du_dl, // switch to nullptr if we don't request du_dl
-        d_u // switch to nullptr if we don't request energies
+        d_tile_mask_,
+        d_alchemical_du_dx_,
+        d_vanilla_du_dx_,
+        d_alchemical_du_dp_,
+        d_vanilla_du_dp_,
+        d_alchemical_du_dl_,
+        d_vanilla_du_dl_, // switch to nullptr if we don't request du_dl
+        d_alchemical_u_, // Buffer to store alchemical energies
+        d_vanilla_u_,
+        d_run_vanilla_tiles_
     );
 
     gpuErrchk(cudaPeekAtLastError());
 
+    if (d_u) {
+        // If a rebuild of the energy cache is necessary, copy current energy to cache.
+        k_add_arrays<<<B, tpb, 0, stream>>>(N, d_alchemical_u_, d_vanilla_u_, d_u);
+        gpuErrchk(cudaPeekAtLastError());
+    }
+
+    if (d_du_dl) {
+        // If a rebuild of the energy cache is necessary, copy current energy to cache.
+        k_add_arrays<<<B, tpb, 0, stream>>>(N, d_alchemical_du_dl_, d_vanilla_du_dl_, d_du_dl);
+        gpuErrchk(cudaPeekAtLastError());
+    }
+
     // coords are N,3
     if(d_du_dx) {
+        k_add_arrays<<<dimGrid, tpb, 0, stream>>>(N, d_alchemical_du_dx_, d_vanilla_du_dx_, d_sorted_du_dx_);
+        gpuErrchk(cudaPeekAtLastError());
         k_inv_permute_accum<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dx_, d_du_dx);
         gpuErrchk(cudaPeekAtLastError());
     }
@@ -422,6 +593,8 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     // params are N,3
     // this needs to be an accumulated permute
     if(d_du_dp) {
+        k_add_arrays<<<dimGrid, tpb, 0, stream>>>(N, d_alchemical_du_dp_, d_vanilla_du_dp_, d_sorted_du_dp_);
+        gpuErrchk(cudaPeekAtLastError());
         k_inv_permute_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
         gpuErrchk(cudaPeekAtLastError());
     }

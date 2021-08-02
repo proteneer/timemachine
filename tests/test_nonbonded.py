@@ -13,12 +13,11 @@ import numpy as np
 import functools
 import itertools
 
-from common import GradientTest
-from common import prepare_water_system, prepare_reference_nonbonded
+from common import GradientTest, prepare_water_system, prepare_reference_nonbonded
 
 from timemachine.potentials import nonbonded
-from timemachine.lib import potentials
-from md import builders
+from timemachine.lib import potentials, custom_ops
+from md import builders, minimizer
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 from fe.utils import to_md_units
@@ -223,7 +222,6 @@ class TestNonbondedDHFR(GradientTest):
             )
 
             for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
-
                 self.compare_forces(
                     test_conf,
                     test_params,
@@ -330,7 +328,6 @@ class TestNonbondedWater(GradientTest):
                     rtol,
                     precision=precision
                 )
-
 
 
 class TestNonbonded(GradientTest):
