@@ -3,7 +3,7 @@ import numpy as onp
 from typing import Tuple, Callable
 
 
-def flatten_and_unflatten(example_tree) -> Tuple[Callable, Callable]:
+def flatten_and_unflatten(input_tree) -> Tuple[Callable, Callable]:
     """Make a pair of functions flatten(tree) -> x, unflatten(x) -> tree
 
     Intended usage:
@@ -18,8 +18,8 @@ def flatten_and_unflatten(example_tree) -> Tuple[Callable, Callable]:
         flatten(value) -> flat_value, unflatten_fxn
     """
 
-    tree_structure = tree_util.tree_structure(example_tree)
-    leaf_shapes = [leaf.shape for leaf in tree_util.tree_leaves(example_tree)]
+    tree_structure = tree_util.tree_structure(input_tree)
+    leaf_shapes = [leaf.shape for leaf in tree_util.tree_leaves(input_tree)]
 
     def flatten(tree):
         leaves = tree_util.tree_leaves(tree)
