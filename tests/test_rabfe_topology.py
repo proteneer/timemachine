@@ -25,17 +25,8 @@ def test_base_topology_conversion_ring_torsion():
 
     np.testing.assert_array_equal(vanilla_torsion_params, conversion_torsion_params)
 
-    # in the conversion phase, torsions that bridge the two rings should be set to
-    # be alchemically turned off.
-    ring_group = [0,0,0,1,1,1]
-
-    for torsion_idxs, mult, offset in zip(torsion_potential.get_idxs(), torsion_potential.get_lambda_mult(), torsion_potential.get_lambda_offset()):
-        _, b, c, _ = torsion_idxs
-        assert offset == 1
-        if ring_group[b] != ring_group[c]:
-            assert mult == -1
-        else:
-            assert mult == 0
+    assert torsion_potential.get_lambda_mult() is None
+    assert torsion_potential.get_lambda_offset() is None
 
     vanilla_qlj_params, _ = vanilla_mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
     qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
@@ -59,16 +50,8 @@ def test_base_topology_conversion_r_group():
     result, potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params)
     # in the conversion phase, torsions that bridge the two rings should be set to
     # be alchemically turned off.
-    is_in_ring = [1,1,1,1,1,1,0,0]
-
-    for torsion_idxs, mult, offset in zip(potential.get_idxs(), potential.get_lambda_mult(), potential.get_lambda_offset()):
-        _, b, c, _ = torsion_idxs
-        assert offset == 1
-        if is_in_ring[b] and is_in_ring[c]:
-            # should be always turned on
-            assert mult == 0
-        elif (not is_in_ring[b]) or (not is_in_ring[c]):
-            assert mult == -1
+    assert potential.get_lambda_mult() is None
+    assert potential.get_lambda_offset() is None
 
 def test_base_topology_standard_decoupling():
 
@@ -101,21 +84,8 @@ def test_base_topology_standard_decoupling():
     # impropers should always be turned on.
     num_proper_torsions = len(torsion_potential.get_idxs())
 
-    for idx, (torsion_idxs, mult, offset) in enumerate(zip(
-        combined_torsion_potential.get_idxs(),
-        combined_torsion_potential.get_lambda_mult(),
-        combined_torsion_potential.get_lambda_offset())):
-        _, b, c, _ = torsion_idxs
-
-        if idx < num_proper_torsions:
-            assert mult == 0
-            if is_in_ring[b] != is_in_ring[c]:
-                assert offset == 0
-            else:
-                assert offset == 1
-        else:
-            assert offset == 1
-
+    assert np.all(combined_torsion_potential.get_lambda_mult() == 0)
+    assert np.all(combined_torsion_potential.get_lambda_offset() == 1)
 
     qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
 
@@ -143,10 +113,6 @@ def test_dual_topology_standard_decoupling():
 
     decouple_torsion_params, torsion_potential = mol_top.parameterize_proper_torsion(ff.pt_handle.params)
 
-    # np.testing.assert_array_equal(vanilla_torsion_params, decouple_torsion_params)
-    #             C C C C C C O H H H H H H  C C C C C C F H H H H H H
-    is_in_ring = [1,1,1,1,1,1,0,0,0,0,0,0,0, 1,1,1,1,1,1,0,0,0,0,0,0,0]
-
     combined_decouple_torsion_params, combined_torsion_potential = mol_top.parameterize_periodic_torsion(
         ff.pt_handle.params,
         ff.it_handle.params
@@ -158,21 +124,8 @@ def test_dual_topology_standard_decoupling():
     # impropers should always be turned on.
     num_proper_torsions = len(torsion_potential.get_idxs())
 
-    for idx, (torsion_idxs, mult, offset) in enumerate(zip(
-        combined_torsion_potential.get_idxs(),
-        combined_torsion_potential.get_lambda_mult(),
-        combined_torsion_potential.get_lambda_offset())):
-        _, b, c, _ = torsion_idxs
-
-        if idx < num_proper_torsions:
-            assert mult == 0
-            if is_in_ring[b] != is_in_ring[c]:
-                assert offset == 0
-            else:
-                assert offset == 1
-
-        else:
-            assert offset == 1
+    assert np.all(combined_torsion_potential.get_lambda_mult() == 0)
+    assert np.all(combined_torsion_potential.get_lambda_offset() == 1)
 
     qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
 

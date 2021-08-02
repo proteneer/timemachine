@@ -240,9 +240,9 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     for lamb_idx, lamb in enumerate(model.lambda_schedule):
 
         if model.endpoint_correct and lamb_idx == len(model.lambda_schedule) - 1:
-            x_interval = 200
+            x_interval = 1000
         else:
-            x_interval = 200
+            x_interval = 1000
 
         if lamb_idx == 0:
             lambda_left = None
@@ -265,7 +265,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.equil_steps,
             model.prod_steps,
             x_interval, # x_interval
-            200,        # du_dl_interval
+            1000,        # du_dl_interval
             lambda_left,
             lambda_right
         ))
@@ -281,8 +281,8 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.barostat,
             model.equil_steps,
             model.prod_steps,
-            200,       # x_interval
-            200,       # du_dl_interval
+            1000,       # x_interval
+            1000,       # du_dl_interval
             None,
             None
         ))
@@ -378,11 +378,11 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         overlap = endpoint_correction.overlap_from_cdf(lhs_du, rhs_du)
         lhs_mean = np.mean(lhs_du)
         rhs_mean = np.mean(rhs_du)
-        print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} dG_endpoint {dG_endpoint:.3f} dG_endpoint_err {endpoint_err:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
+        print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} exact_bar (A) {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} dG_endpoint (E) {dG_endpoint:.3f} dG_endpoint_err {endpoint_err:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
         dG += dG_endpoint + dG_ssc_translation + dG_ssc_rotation
         bar_dG_err = np.sqrt(bar_dG_err**2 + endpoint_err**2)
     else:
-        print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} ")
+        print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} exact_bar (A) {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} ")
 
     return (dG, bar_dG_err, results), dG_grad
 
