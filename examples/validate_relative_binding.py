@@ -407,10 +407,10 @@ if __name__ == "__main__":
         # effective free energy of removing from solvent
         dG_solvent = dG_solvent_conversion + dG_solvent_decouple
         print("stage summary for mol:", mol_name,
-            "dG_complex_conversion", dG_complex_conversion,
-            "dG_complex_decouple", dG_complex_decouple,
-            "dG_solvent_conversion", dG_solvent_conversion,
-            "dG_solvent_decouple", dG_solvent_decouple
+            "dG_complex_conversion (K complex)", dG_complex_conversion,
+            "dG_complex_decouple (E0 + A0 + A1 + E1)", dG_complex_decouple,
+            "dG_solvent_conversion (K complex)", dG_solvent_conversion,
+            "dG_solvent_decouple (D)", dG_solvent_decouple
         )
 
         dG_err = np.sqrt(dG_complex_conversion_error**2 + dG_complex_decouple_error**2 + dG_solvent_conversion_error**2 + dG_solvent_decouple_error**2)
