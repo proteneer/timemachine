@@ -53,8 +53,11 @@ def standard_qlj_typer(mol):
             val = (0.0, 0.37, 0.9)
         elif a_num == 16:
             val = (0.0, 0.35, 1.0)
+        elif a_num == 17:
+            val = (0.0, 0.35, 1.0)
         else:
-            assert 0
+            # print("Unknown a_num", a_num)
+            assert 0, "Unknown a_num "+str(a_num)
 
         # sigmas need to be halved
         standard_qlj.append((val[0], val[1]/2, val[2]))
@@ -333,33 +336,9 @@ class BaseTopologyConversion(BaseTopology):
     """
     Converts a single ligand into a standard, forcefield independent state. The ligand has its 4D
     coordinate set to zero at all times, so that it will be fully interacting with the host. The
-    ligand is converted to a chargeless state, with torsions between non-ring atoms fully disabled.
-
-    lambda=0 forcefield dependent state
-    lambda=1 forcefield independent state
-
-    (ytz): Note that rdkit's RingInfo does something totally different. It is populated by either
-    FastFindRings or SSSRs (ring basis), of which neither is what we want.
+    ligand's nonbonded parameters are interpolated such that the charges goto zero, and the lennard
+    jones parameters goto a standard, forcefield independent state.
     """
-
-    def parameterize_proper_torsion(self, ff_params):
-        # alchemically turn off proper torsions.
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
-        membership = get_ring_membership(self.mol)
-
-        num_torsions = torsion_params.shape[0]
-
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
-
-        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            if membership[b] != membership[c]:
-                lambda_mult_idxs[torsion_idx] = -1
-
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
-
-        return torsion_params, torsion_potential
-
 
     def parameterize_nonbonded(self,
         ff_q_params,
@@ -382,30 +361,11 @@ class BaseTopologyConversion(BaseTopology):
 
 class BaseTopologyStandardDecoupling(BaseTopology):
     """
-    Decouple a standardize ligand from the environment. The ligand's non-ring
-    torsions will be disabled at both end-states. In addition, the charges will be
-    removed and Lennard-Jones terms will be standardized.
+    Decouple a standard ligand from the environment. 
 
-    lambda=0 fully interacting
-    lambda=1 fully non-interacting.
+    lambda=0 is the fully interacting state.
+    lambda=1 is the non-interacting state.
     """
-    def parameterize_proper_torsion(self, ff_params):
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
-        membership = get_ring_membership(self.mol)
-
-        num_torsions = torsion_params.shape[0]
-
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
-
-        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            if membership[b] != membership[c]:
-                lambda_offset_idxs[torsion_idx] = 0
-
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
-
-        return torsion_params, torsion_potential
-
     def parameterize_nonbonded(self,
         ff_q_params,
         ff_lj_params):
@@ -571,56 +531,19 @@ class DualTopology(ABC):
     def parameterize_improper_torsion(self, ff_params):
         return self._parameterize_bonded_term(ff_params, self.ff.it_handle, potentials.PeriodicTorsion)
 
-# (ytz): for hydration free energy tests, we turn off the torsions between non-ring atoms to improve
-# sampling.
+
 class BaseTopologyRHFE(BaseTopology):
+    pass 
 
-    def parameterize_proper_torsion(self, ff_params):
-        # alchemically turn off proper torsions.
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
-        membership = get_ring_membership(self.mol)
-
-        num_torsions = torsion_params.shape[0]
-
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
-
-        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            if membership[b] != membership[c]:
-                lambda_offset_idxs[torsion_idx] = 0
-
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
-
-        return torsion_params, torsion_potential
-
-
+# non-ring torsions are just always turned off at the end-states in the hydration
+# free energy test
 class DualTopologyRHFE(DualTopology):
+
     """
     Utility class used for relative hydration free energies. Ligand B is decoupled as lambda goes
     from 0 to 1, while ligand A is fully coupled. At the same time, at lambda=0, ligand B and ligand A
     have their charges and epsilons reduced by half.
     """
-
-    def parameterize_proper_torsion(self, ff_params):
-
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
-
-        mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
-        membership = get_ring_membership(mol_c)
-
-        num_torsions = torsion_params.shape[0]
-
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
-
-        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            if membership[b] != membership[c]:
-                lambda_offset_idxs[torsion_idx] = 0
-
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
-
-        return torsion_params, torsion_potential
-
 
     def parameterize_nonbonded(self,
         ff_q_params,
@@ -652,66 +575,15 @@ class DualTopologyRHFE(DualTopology):
         return combined_qlj_params, nb_potential.interpolate()
 
 
-def get_ring_membership(mol):
-    """
-    Get the membership of each atom in the mol. The algorithm
-    finds islands that are formed connected by bond bridges.
-
-    Let N = mol.GetNumAtoms()
-
-    The returned array is of length N, where each atom is marked
-    by a membership class K such that 0 < K < N.
-    """
-
-    g = networkx.Graph()
-    for bond in mol.GetBonds():
-        g.add_edge(bond.GetBeginAtomIdx(), bond.GetEndAtomIdx())
-
-    # find bridges and remove them to form islands
-    for bridge in networkx.bridges(g):
-        g.remove_edge(*bridge)
-
-    # find connected components after bridge removal
-    membership = np.zeros(mol.GetNumAtoms(), dtype=np.int32)
-    for group_idx, atom_list in enumerate(networkx.connected_components(g)):
-        for atom_idx in atom_list:
-            membership[atom_idx] = group_idx
-
-    return membership
-
-
 class DualTopologyStandardDecoupling(DualTopology):
     """
     Standardized variant, where both ligands A and B have their charges, sigmas, and epsilons set
-    to standard, forcefield-independent values. There is no parameter interpolation. lambda=0 has both
-    ligand A and B fully in the pocket. lambda=1 has ligand B fully decoupled, while ligand A is kept
-    in place.
-
-    Furthermore, the ligand's non-ring torsions are turned off at the standard state to improve
-    sampling.
+    to standard, forcefield-independent values. There is no parameter interpolation.
+    
+    lambda=0 has both ligand A and B fully in the pocket.
+    lambda=1 has ligand B fully decoupled, while ligand A is fully interacting.
 
     """
-    def parameterize_proper_torsion(self, ff_params):
-        # (ytz): TBD need to do this for Base Topology as well
-
-        torsion_params, torsion_potential = super().parameterize_proper_torsion(ff_params)
-
-        mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
-        membership = get_ring_membership(mol_c)
-
-        num_torsions = torsion_params.shape[0]
-
-        lambda_mult_idxs = np.zeros(num_torsions, dtype=np.int32)
-        lambda_offset_idxs = np.ones(num_torsions, dtype=np.int32)
-
-        for torsion_idx, (_, b, c, _) in enumerate(torsion_potential.get_idxs()):
-            if membership[b] != membership[c]:
-                lambda_offset_idxs[torsion_idx] = 0
-
-        torsion_potential.set_lambda_mult_and_offset(lambda_mult_idxs, lambda_offset_idxs)
-
-        return torsion_params, torsion_potential
-
     def parameterize_nonbonded(
         self,
         ff_q_params,
@@ -719,7 +591,6 @@ class DualTopologyStandardDecoupling(DualTopology):
 
         # both mol_a and mol_b are standardized.
         _, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
-        # qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], _STANDARD_CHARGE)
         mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
         qlj_params = standard_qlj_typer(mol_c)
 
