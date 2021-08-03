@@ -180,6 +180,61 @@ void declare_context(py::module &m) {
         ctxt.get_x_t(buffer.mutable_data());
         return buffer;
     })
+    .def("multiple_steps_delta_U", [](timemachine::Context &ctxt,
+        const double lambda,
+        const int n_steps,
+        const py::array_t<double, py::array::c_style> &lambda_windows,
+        int store_u_interval,
+        int store_x_interval) -> py::tuple {
+        // (ytz): Collect energies across multiple snapshots.
+
+        // Let lambda_windows have shape [K].
+        // The return'd U matrix has F rows and K states. Where F == ceil(n_steps/store_u_interval).
+        // We are guaranteed that for any row U[i, :], the energies are correct up to a constant.
+        // Terms that depend on lambda will always be computed. For example, we may choose to omit
+        // the bonded energies that are independent of lambda from this calculation.
+
+        // Currently however, the energies just so happen to be exact, but this is not
+        // strictly guaranteed. So you should avoid comparing energies down the columns U[:, i].
+    
+        std::vector<double> vec_lambda_windows(lambda_windows.size());
+        std::memcpy(vec_lambda_windows.data(), lambda_windows.data(), vec_lambda_windows.size()*sizeof(double));
+
+        int u_interval = (store_u_interval <= 0) ? lambda_windows.size() : store_u_interval;
+        int x_interval = (store_x_interval <= 0) ? lambda_windows.size() : store_x_interval;
+
+        std::array<std::vector<double>, 3> result = ctxt.multiple_steps_delta_U(
+            lambda,
+            n_steps,
+            vec_lambda_windows,
+            u_interval,
+            x_interval
+        );
+
+        int UF = result[0].size()/lambda_windows.size();
+        int UW = lambda_windows.size();
+
+        py::array_t<double, py::array::c_style> out_u_buffer({UF, UW});
+        std::memcpy(out_u_buffer.mutable_data(), result[0].data(), result[0].size()*sizeof(double));
+
+        int N = ctxt.num_atoms();
+        int D = 3;
+        int F = (n_steps + x_interval - 1) / x_interval;
+        py::array_t<double, py::array::c_style> out_x_buffer({F, N, D});
+        std::memcpy(out_x_buffer.mutable_data(), result[1].data(), result[1].size()*sizeof(double));
+
+        py::array_t<double, py::array::c_style> box_buffer({F, D, D});
+        std::memcpy(box_buffer.mutable_data(), result[2].data(), result[2].size()*sizeof(double));
+
+        return py::make_tuple(out_u_buffer, out_x_buffer, box_buffer);
+    })
+    .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
+        unsigned int N = ctxt.num_atoms();
+        unsigned int D = 3;
+        py::array_t<double, py::array::c_style> buffer({N, D});
+        ctxt.get_x_t(buffer.mutable_data());
+        return buffer;
+    })
     .def("get_v_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();
         unsigned int D = 3;
