@@ -89,7 +89,7 @@ class TestContext(unittest.TestCase):
                 lus = []
                 for lamb_u in lambda_windows:
                     lus.append(ref_nrg_fn(x_t, params, box, lamb_u))
-                print("LUS", lus)
+
                 all_lambda_us.append(lus)
                 noise = np.random.randn(*v_t.shape)
 
@@ -110,8 +110,6 @@ class TestContext(unittest.TestCase):
             box,
             params
         )
-
-
 
         intg = custom_ops.LangevinIntegrator(
             dt,
@@ -233,6 +231,11 @@ class TestContext(unittest.TestCase):
         np.testing.assert_array_almost_equal(
             ref_all_lambda_us[::u_interval],
             test_us
+        )
+
+        np.testing.assert_array_almost_equal(
+            ref_all_xs[::x_interval],
+            test_xs
         )
 
 class TestObservable(unittest.TestCase):
