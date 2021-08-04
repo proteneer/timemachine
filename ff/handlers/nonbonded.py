@@ -32,6 +32,23 @@ def convert_to_nx(mol):
     return g
 
 
+def convert_to_oe(mol):
+    """Convert an ROMol into an OEMol"""
+
+    # optional import
+    from openeye import oechem
+
+    mb = Chem.MolToMolBlock(mol)
+    ims = oechem.oemolistream()
+    ims.SetFormat(oechem.OEFormat_SDF)
+    ims.openstring(mb)
+
+    for buf_mol in ims.GetOEMols():
+        oemol = oechem.OEMol(buf_mol)
+
+    return oemol
+
+
 def generate_exclusion_idxs(mol, scale12, scale13, scale14):
     """ 
     Generate exclusions for a mol based on the all pairs shortest path.
@@ -223,17 +240,10 @@ class AM1Handler(SerializableMixIn):
             molecule to be parameterized.
 
         """
+        oemol = convert_to_oe(mol)
+
         # imported here for optional dependency
-        from openeye import oechem
         from openeye import oequacpac
-
-        mb = Chem.MolToMolBlock(mol)
-        ims = oechem.oemolistream()
-        ims.SetFormat(oechem.OEFormat_SDF)
-        ims.openstring(mb)
-
-        for buf_mol in ims.GetOEMols():
-            oemol = oechem.OEMol(buf_mol)
 
         result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1Charges(symmetrize=True))
 
@@ -275,16 +285,8 @@ class AM1BCCHandler(SerializableMixIn):
 
         """
         # imported here for optional dependency
-        from openeye import oechem
+        oemol = convert_to_oe(mol)
         from openeye import oequacpac
-
-        mb = Chem.MolToMolBlock(mol)
-        ims = oechem.oemolistream()
-        ims.SetFormat(oechem.OEFormat_SDF)
-        ims.openstring(mb)
-
-        for buf_mol in ims.GetOEMols():
-            oemol = oechem.OEMol(buf_mol)
 
         result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1BCCELF10Charges())
 
@@ -340,19 +342,9 @@ class AM1CCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
+        oemol = convert_to_oe(mol)
         # imported here for optional dependency
-        from openeye import oechem
-        from openeye import oequacpac
-
-        mb = Chem.MolToMolBlock(mol)
-        ims = oechem.oemolistream()
-        ims.SetFormat(oechem.OEFormat_SDF)
-        ims.openstring(mb)
-
-        for buf_mol in ims.GetOEMols():
-            oemol = oechem.OEMol(buf_mol)
-            # AromaticityModel.assign(oe_molecule, bcc_collection.aromaticity_model)
-            AromaticityModel.assign(oemol)
+        from openeye import oequacpac, oechem
 
         # check for cache
         cache_key = 'AM1Cache'
