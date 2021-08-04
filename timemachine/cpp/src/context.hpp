@@ -32,7 +32,7 @@ public:
         int store_du_dl_interval,
         int store_x_interval);
 
-    std::array<std::vector<double>, 3> multiple_steps_delta_U(
+    std::array<std::vector<double>, 3> multiple_steps_U(
         const double lambda,
         const int n_steps,
         const std::vector<double> &lambda_windows, // which lambda windows we want to evaluate U at
@@ -72,7 +72,7 @@ private:
 
     unsigned long long *d_du_dx_t_; // du/dx [N,3]
     unsigned long long *d_du_dl_buffer_; // du/dl [N]
-    unsigned long long *d_u_buffer_; // du/dl [N]
+    unsigned long long *d_u_buffer_; // u [N]
     double *d_sum_storage_;
     size_t d_sum_storage_bytes_;
 

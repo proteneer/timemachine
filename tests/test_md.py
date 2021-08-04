@@ -212,7 +212,7 @@ class TestContext(unittest.TestCase):
         self.assertEqual(test_boxes.shape[1], D)
         self.assertEqual(test_boxes.shape[2], test_xs.shape[2])
 
-        # test the multiple_steps_delta_U method
+        # test the multiple_steps_U method
         ctxt_3 = custom_ops.Context(
             x0,
             v0,
@@ -223,7 +223,7 @@ class TestContext(unittest.TestCase):
 
         u_interval = 3
  
-        test_us, test_xs, test_boxes = ctxt_3.multiple_steps_delta_U(
+        test_us, test_xs, test_boxes = ctxt_3.multiple_steps_U(
             lamb,
             num_steps,
             lambda_windows,

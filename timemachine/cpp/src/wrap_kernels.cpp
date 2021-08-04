@@ -180,30 +180,20 @@ void declare_context(py::module &m) {
         ctxt.get_x_t(buffer.mutable_data());
         return buffer;
     })
-    .def("multiple_steps_delta_U", [](timemachine::Context &ctxt,
+    .def("multiple_steps_U", [](timemachine::Context &ctxt,
         const double lambda,
         const int n_steps,
         const py::array_t<double, py::array::c_style> &lambda_windows,
         int store_u_interval,
         int store_x_interval) -> py::tuple {
-        // (ytz): Collect energies across multiple snapshots.
-
-        // Let lambda_windows have shape [K].
-        // The return'd U matrix has F rows and K states. Where F == ceil(n_steps/store_u_interval).
-        // We are guaranteed that for any row U[i, :], the energies are correct up to a constant.
-        // Terms that depend on lambda will always be computed. For example, we may choose to omit
-        // the bonded energies that are independent of lambda from this calculation.
-
-        // Currently however, the energies just so happen to be exact, but this is not
-        // strictly guaranteed. So you should avoid comparing energies down the columns U[:, i].
-    
+   
         std::vector<double> vec_lambda_windows(lambda_windows.size());
         std::memcpy(vec_lambda_windows.data(), lambda_windows.data(), vec_lambda_windows.size()*sizeof(double));
 
         int u_interval = (store_u_interval <= 0) ? lambda_windows.size() : store_u_interval;
         int x_interval = (store_x_interval <= 0) ? lambda_windows.size() : store_x_interval;
 
-        std::array<std::vector<double>, 3> result = ctxt.multiple_steps_delta_U(
+        std::array<std::vector<double>, 3> result = ctxt.multiple_steps_U(
             lambda,
             n_steps,
             vec_lambda_windows,
@@ -227,7 +217,40 @@ void declare_context(py::module &m) {
         std::memcpy(box_buffer.mutable_data(), result[2].data(), result[2].size()*sizeof(double));
 
         return py::make_tuple(out_u_buffer, out_x_buffer, box_buffer);
-    })
+    }, R"pbdoc(
+        Compute energies across multiple lambda windows while simulating
+        at a single fixed lambda window.
+        
+        Let lambda_windows have shape [K].
+        F = ceil(n_steps/store_u_interval).
+        
+        The returned U matrix has F rows and K columns.
+
+        Parameters
+        ----------
+        lambda: float
+            Lambda window we run the simulation at
+
+        n_steps: int
+            Number of steps to run.
+
+        lambda_windows: np.array, of shape K
+            Lambda values to evaluate energies at
+
+        store_u_interval: int
+            How often we store the energies
+
+        store_x_interval: int
+            How often we store the frames
+
+        Returns
+        -------
+        3-tuple of energies, coordinates, boxes
+            Energies have shape (ceil(n_steps/store_u_interval), K)
+            Coordinates have shape (ceil(n_steps/store_x_interval), N, 3)
+            Boxes have shape (ceil(n_steps/store_x_interval), 3, 3)
+
+    )pbdoc")
     .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();
         unsigned int D = 3;

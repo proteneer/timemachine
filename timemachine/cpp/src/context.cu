@@ -142,7 +142,7 @@ std::array<std::vector<double>, 3> Context::multiple_steps(
 
 }
 
-std::array<std::vector<double>, 3> Context::multiple_steps_delta_U(
+std::array<std::vector<double>, 3> Context::multiple_steps_U(
     const double lambda, // which lambda window we run the integrator over
     const int n_steps,
     const std::vector<double> &lambda_windows, // which lambda windows we wish to evaluate U at
