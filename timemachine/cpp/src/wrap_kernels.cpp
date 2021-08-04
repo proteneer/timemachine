@@ -246,9 +246,9 @@ void declare_context(py::module &m) {
         Returns
         -------
         3-tuple of energies, coordinates, boxes
-            Energies have shape (ceil(n_steps/store_u_interval), K)
-            Coordinates have shape (ceil(n_steps/store_x_interval), N, 3)
-            Boxes have shape (ceil(n_steps/store_x_interval), 3, 3)
+            Energies have shape (F, K)
+            Coordinates have shape (F, N, 3)
+            Boxes have shape (F, 3, 3)
 
     )pbdoc")
     .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
