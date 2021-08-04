@@ -20,12 +20,8 @@ from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 from parallel.client import CUDAPoolClient
 from parallel.utils import get_gpu_count
 
-from typing import Union, Optional, Iterable, Any, Tuple, Dict
-
 from optimize.step import truncated_step
-
-array = Union[np.array, jnp.array]
-Handler = Union[AM1CCCHandler, LennardJonesHandler] # TODO: do these all inherit from a Handler class already?
+from optimize.utils import flatten_and_unflatten
 
 if __name__ == "__main__":
 
@@ -120,46 +116,9 @@ if __name__ == "__main__":
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
 
+    flatten, unflatten = flatten_and_unflatten(ordered_params)
+
     handle_types_being_optimized = [AM1CCCHandler, LennardJonesHandler]
-
-    def flatten(params) -> Tuple[np.array, callable]:
-        """Turn params dict into flat array, with an accompanying unflatten function
-
-        TODO: note that the result is going to be in the order given by ordered_handles (filtered by presence in handle_types)
-            rather than in the order they appear in handle_types_being_optimized
-
-        TODO: maybe leave out the reference to handle_types_being optimized altogether
-
-        TODO: does Jax have a pytree-based flatten / unflatten utility?
-        """
-
-        theta_list = []
-        _shapes = dict()
-        _handle_types = []
-
-        for param, handle in zip(params, ordered_handles):
-            assert handle.params.shape == param.shape
-            key = type(handle)
-
-            if key in handle_types_being_optimized:
-                theta_list.append(param.flatten())
-                _shapes[key] = param.shape
-                _handle_types.append(key)
-
-        theta = np.hstack(theta_list)
-
-        def unflatten(theta: array) -> Dict[Handler, array]:
-            params = dict()
-            i = 0
-            for key in _handle_types:
-                shape = _shapes[key]
-                num_params = int(np.prod(shape))
-                params[key] = np.array(theta[i: i + num_params]).reshape(shape)
-                i += num_params
-            return params
-
-        return theta, unflatten
-
 
     # in each optimization step, don't step so far that you think you're jumping to
     #   loss_next = relative_improvement_bound * loss_current
@@ -177,23 +136,21 @@ if __name__ == "__main__":
         (loss, aux), loss_grad = vg_fn(ordered_params, mol_a, mol_b, core, label_ddG)
 
         print("epoch", epoch, "loss", loss)
-
-        # note: unflatten_grad and unflatten_theta have identical definitions for now
-        flat_loss_grad, unflatten_grad = flatten(loss_grad)
-        flat_theta, unflatten_theta = flatten(ordered_params)
+        flat_loss_grad = flatten(loss_grad)
+        flat_theta = flatten(ordered_params)
 
         step_lower_bound = loss * relative_improvement_bound
         theta_increment = truncated_step(flat_theta, loss, flat_loss_grad, step_lower_bound=step_lower_bound)
-        param_increments= unflatten_theta(theta_increment)
+        param_increments = unflatten(theta_increment)
 
         # for any parameter handler types being updated, update in place
-        for handle in ordered_handles:
+        for handle, increment in zip(ordered_handles, param_increments):
             handle_type = type(handle)
-            if handle_type in param_increments:
+            if handle_type in handle_types_being_optimized:
                 print(f'updating {handle_type.__name__}')
 
                 print(f'\tbefore update: {handle.params}')
-                handle.params += param_increments[handle_type] # TODO: careful -- this must be a "+=" or "-=" not an "="!
+                handle.params += increment # TODO: careful -- this must be a "+=" or "-=" not an "="!
                 print(f'\tafter update:  {handle.params}')
 
                 # useful for debugging to dump out the grads
