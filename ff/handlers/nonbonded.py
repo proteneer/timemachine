@@ -49,7 +49,6 @@ def convert_to_oe(mol):
     return oemol
 
 
-
 def oe_assign_charges(mol, charge_model='AM1BCCELF10'):
     """assign partial charges, then premultiply by sqrt(ONE_4PI_EPS0)
     as an optimization"""
@@ -342,9 +341,11 @@ class AM1CCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        oemol = convert_to_oe(mol)
         # imported here for optional dependency
         from openeye import oechem
+
+        oemol = convert_to_oe(mol)
+        AromaticityModel.assign(oemol)
 
         # check for cache
         cache_key = 'AM1Cache'
