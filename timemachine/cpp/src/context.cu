@@ -189,7 +189,7 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
 
             for(int i=0; i < observables_.size(); i++) {
                 observables_[i]->observe(
-                    step_,
+                    step,
                     N_,
                     d_x_t_,
                     d_box_t_,
@@ -245,10 +245,6 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
                 }
 
             }
-
-            // for(int i=0; i < streams_.size(); i++) {
-                // gpuErrchk(cudaStreamSynchronize(streams_[i]));
-            // }
 
             intg_->step_fwd(
                 d_x_t_,
