@@ -35,7 +35,7 @@ def convert_to_nx(mol):
 def convert_to_oe(mol):
     """Convert an ROMol into an OEMol"""
 
-    # optional import
+    # imported here for optional dependency
     from openeye import oechem
 
     mb = Chem.MolToMolBlock(mol)
@@ -47,6 +47,35 @@ def convert_to_oe(mol):
         oemol = oechem.OEMol(buf_mol)
 
     return oemol
+
+
+
+def oe_assign_charges(mol, charge_model='AM1BCCELF10'):
+    """assign partial charges, then premultiply by sqrt(ONE_4PI_EPS0)
+    as an optimization"""
+
+    # imported here for optional dependency
+    from openeye import oequacpac
+
+    charge_engines = {
+        'AM1': oequacpac.OEAM1Charges(symmetrize=True),
+        'AM1BCC': oequacpac.OEAM1BCCCharges(symmetrize=True),
+        'AM1BCCELF10':  oequacpac.OEAM1BCCELF10Charges(),
+    }
+    charge_engine = charge_engines[charge_model]
+
+    oemol = convert_to_oe(mol)
+    result = oequacpac.OEAssignCharges(oemol, charge_engine)
+    if result is False:
+        raise Exception('Unable to assign charges')
+
+    partial_charges = np.array([atom.GetPartialCharge() for atom in oemol.GetAtoms()])
+
+    # https://github.com/proteneer/timemachine#forcefield-gotchas
+    # "The charges have been multiplied by sqrt(ONE_4PI_EPS0) as an optimization."
+    inlined_constant = np.sqrt(constants.ONE_4PI_EPS0)
+
+    return inlined_constant * partial_charges
 
 
 def generate_exclusion_idxs(mol, scale12, scale13, scale14):
@@ -240,22 +269,7 @@ class AM1Handler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        oemol = convert_to_oe(mol)
-
-        # imported here for optional dependency
-        from openeye import oequacpac
-
-        result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1Charges(symmetrize=True))
-
-        if result is False:
-            raise Exception('Unable to assign charges')
-
-        charges = [] 
-        for index, atom in enumerate(oemol.GetAtoms()):
-            q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
-            charges.append(q)
-
-        return np.array(charges, dtype=np.float64)
+        return oe_assign_charges(mol, 'AM1')
 
 
 class AM1BCCHandler(SerializableMixIn):
@@ -284,21 +298,7 @@ class AM1BCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        # imported here for optional dependency
-        oemol = convert_to_oe(mol)
-        from openeye import oequacpac
-
-        result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1BCCELF10Charges())
-
-        if result is False:
-            raise Exception('Unable to assign charges')
-
-        charges = [] 
-        for index, atom in enumerate(oemol.GetAtoms()):
-            q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
-            charges.append(q)
-
-        return np.array(charges)
+        return oe_assign_charges(mol, 'AM1BCCELF10')
 
 
 class AM1CCCHandler(SerializableMixIn):
@@ -344,23 +344,16 @@ class AM1CCCHandler(SerializableMixIn):
         """
         oemol = convert_to_oe(mol)
         # imported here for optional dependency
-        from openeye import oequacpac, oechem
+        from openeye import oechem
 
         # check for cache
         cache_key = 'AM1Cache'
         if not mol.HasProp(cache_key):
-            result = oequacpac.OEAssignCharges(oemol, oequacpac.OEAM1Charges(symmetrize=True))
-            if result is False:
-                raise Exception('Unable to assign charges')
-
             # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
             # to be an issue that the atom ordering modifies the return values as well. A follow up
             # with OpenEye is in order
             # https://github.com/openforcefield/openff-toolkit/issues/983
-            am1_charges = [] 
-            for index, atom in enumerate(oemol.GetAtoms()):
-                q = atom.GetPartialCharge()*np.sqrt(constants.ONE_4PI_EPS0)
-                am1_charges.append(q)
+            am1_charges = list(oe_assign_charges(mol, 'AM1'))
 
             mol.SetProp(cache_key, base64.b64encode(pickle.dumps(am1_charges)))
 
