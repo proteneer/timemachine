@@ -379,13 +379,19 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         }
         // Indicate that the neighborlist must be rebuilt
         gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1*sizeof(*d_rebuild_nblist_), stream));
+        k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_lambda_offset_idxs_, d_lambda_offset_idxs_sorted_);
+        gpuErrchk(cudaPeekAtLastError());
+        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+        gpuErrchk(cudaPeekAtLastError());
     } else {
+        k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
+        gpuErrchk(cudaPeekAtLastError());
         // (ytz) see if we need to rebuild the neighborlist.
         // (ytz + jfass): note that this logic could be optimized when using NPT is
         // enabled since a resize in the box can introduce new interactions.
         k_check_rebuild_coords_and_box<RealType><<<B, tpb, 0, stream>>>(
             N,
-            d_x,
+            d_sorted_x_,
             d_nblist_x_,
             d_box,
             d_nblist_box_,
@@ -396,10 +402,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     }
 
     // compute new coordinates, new lambda_idxs, new_plane_idxs
-    k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
-    gpuErrchk(cudaPeekAtLastError());
-    k_permute<<<B, tpb, 0, stream>>>(N, d_perm_, d_lambda_offset_idxs_, d_lambda_offset_idxs_sorted_);
-    gpuErrchk(cudaPeekAtLastError());
     nblist_.build_nblist_device(
         N,
         d_sorted_x_,
@@ -415,7 +417,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     // in compacting the tiles that have ixns. At the same time, zero out the alchemical tile list
     k_update_default_masks<<<X, tpb, 0, stream>>>(MAX_TILES, d_rebuild_nblist_, nblist_.get_ixn_count(), d_default_tile_mask_, d_tile_mask_);
     gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
     gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
 
     // do parameter interpolation here
@@ -476,7 +477,8 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     if (last_kernel_ != kernel_idx) {
         last_kernel_ = kernel_idx;
         gpuErrchk(cudaMemsetAsync(d_run_vanilla_tiles_, 1, 1*sizeof(*d_run_vanilla_tiles_), stream));
-        gpuErrchk(cudaMemsetAsync(d_x_last_, 0, N*3*sizeof(*d_x_last_), stream));
+        // gpuErrchk(cudaMemsetAsync(d_x_last_, 0, N*3*sizeof(*d_x_last_), stream));
+        // Don't have to memset the whole array, since we check parity across all array
         gpuErrchk(cudaMemsetAsync(d_p_last_, 0, N*3*sizeof(*d_p_last_), stream));
     } else {
         gpuErrchk(cudaMemsetAsync(d_run_vanilla_tiles_, 0, 1*sizeof(*d_run_vanilla_tiles_), stream));
@@ -486,15 +488,16 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             d_box,
             d_sorted_x_,
             d_sorted_p_,
-            d_x_last_,
+            d_nblist_x_,
             d_p_last_,
             d_nblist_box_
         );
         gpuErrchk(cudaPeekAtLastError());
         // Store the last d_x/d_p
-        gpuErrchk(cudaMemcpyAsync(d_x_last_, d_sorted_x_, N*3*sizeof(*d_x_last_), cudaMemcpyDeviceToDevice, stream));
+        // gpuErrchk(cudaMemcpyAsync(d_x_last_, d_sorted_x_, N*3*sizeof(*d_x_last_), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_p_last_, d_sorted_p_, N*3*sizeof(*d_p_last_), cudaMemcpyDeviceToDevice, stream));
     }
+    gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_sorted_x_, N*3*sizeof(*d_sorted_x_), cudaMemcpyDeviceToDevice, stream));
     if (d_u) {
         k_reset_buffers<<<B, tpb, 0, stream>>>(N, d_run_vanilla_tiles_, d_alchemical_u_, d_vanilla_u_);
         gpuErrchk(cudaPeekAtLastError());
