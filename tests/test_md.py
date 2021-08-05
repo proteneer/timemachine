@@ -56,7 +56,8 @@ class TestContext(unittest.TestCase):
         assert (ccs == 0).all()
 
         lamb = np.random.rand()
-
+        lambda_us = []
+        lambda_windows = np.array([lamb+0.05, lamb, lamb-0.05])
 
         def integrate_once_through(
             x_t,
@@ -73,6 +74,7 @@ class TestContext(unittest.TestCase):
             all_xs = []
             all_du_dxs = []
             all_us = []
+            all_lambda_us = []
             for step in range(num_steps):
                 u = ref_nrg_fn(x_t, params, box, lamb)
                 all_us.append(u)
@@ -84,6 +86,11 @@ class TestContext(unittest.TestCase):
                 all_du_dxs.append(du_dx)
                 all_xs.append(x_t)
 
+                lus = []
+                for lamb_u in lambda_windows:
+                    lus.append(ref_nrg_fn(x_t, params, box, lamb_u))
+
+                all_lambda_us.append(lus)
                 noise = np.random.randn(*v_t.shape)
 
                 v_mid = v_t + np.expand_dims(cbs, axis=-1) * du_dx
@@ -92,13 +99,12 @@ class TestContext(unittest.TestCase):
                 x_t += 0.5 * dt * (v_mid + v_t)
 
                 # note that we do not calculate the du_dl of the last frame.
-
-            return all_xs, all_du_dxs, all_du_dps, all_du_dls, all_us
+            return all_xs, all_du_dxs, all_du_dps, all_du_dls, all_us, all_lambda_us
 
         box = np.eye(3)*1.5
 
         # when we have multiple parameters, we need to set this up correctly
-        ref_all_xs, ref_all_du_dxs, ref_all_du_dps, ref_all_du_dls, ref_all_us = integrate_once_through(
+        ref_all_xs, ref_all_du_dxs, ref_all_du_dps, ref_all_du_dls, ref_all_us, ref_all_lambda_us = integrate_once_through(
             x0,
             v0,
             box,
@@ -204,6 +210,33 @@ class TestContext(unittest.TestCase):
         self.assertEqual(test_boxes.shape[1], D)
         self.assertEqual(test_boxes.shape[2], test_xs.shape[2])
 
+        # test the multiple_steps_U method
+        ctxt_3 = custom_ops.Context(
+            x0,
+            v0,
+            box,
+            intg,
+            bps
+        )
+
+        u_interval = 3
+ 
+        test_us, test_xs, test_boxes = ctxt_3.multiple_steps_U(
+            lamb,
+            num_steps,
+            lambda_windows,
+            u_interval,
+            x_interval)
+
+        np.testing.assert_array_almost_equal(
+            ref_all_lambda_us[::u_interval],
+            test_us
+        )
+
+        np.testing.assert_array_almost_equal(
+            ref_all_xs[::x_interval],
+            test_xs
+        )
 
 class TestObservable(unittest.TestCase):
 
