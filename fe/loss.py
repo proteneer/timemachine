@@ -96,6 +96,23 @@ def EXP_loss(
     return loss
 
 
+def _scalar_compute_residual(prediction, label, reliable_interval=(-jnp.inf, +jnp.inf)):
+    """prediction - label if label is in the reliable interval"""
+
+    lower, upper = reliable_interval
+
+    if (label >= lower) and (label <= upper):
+        residual = prediction - label
+    elif label < lower:
+        residual = max(0, prediction - lower)
+    elif label > upper:
+        residual = min(0, prediction - upper)
+    else:
+        raise (RuntimeError('unsatisfiable reliable_range'))
+
+    return residual
+
+
 def l1_loss(residual):
     """loss = abs(residual)"""
     return jnp.abs(residual)
