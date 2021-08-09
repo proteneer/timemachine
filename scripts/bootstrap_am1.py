@@ -7,6 +7,7 @@ from rdkit import Chem
 from openeye import oechem
 from openeye import oequacpac
 from openeye import oeomega
+from ff.handlers.nonbonded import convert_to_oe
 
 ONE_4PI_EPS0 = 138.935456
 
@@ -163,14 +164,7 @@ def score(stds):
 
 
 def prep_structure(rdmol):
-    mb = Chem.MolToMolBlock(rdmol)
-    ims = oechem.oemolistream()
-    ims.SetFormat(oechem.OEFormat_SDF)
-    ims.openstring(mb)
-
-    for buf_mol in ims.GetOEMols():
-        oemol = oechem.OEMol(buf_mol)
-
+    oemol = convert_to_oe(rdmol)
     omega = oeomega.OEOmega()
     # omega.SetIncludeInput(True)
     omega.SetMaxSearchTime(30)
