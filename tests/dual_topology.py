@@ -14,17 +14,13 @@ from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
 
 from fe import pdb_writer
+from fe.utils import get_romol_conf
 from fe import rbfe
 from md import Recipe
 from md import builders
 
 from multiprocessing import Pool
 
-def get_romol_conf(mol):
-    conformer = mol.GetConformer(0)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    guest_conf = guest_conf/10 # from angstroms to nm
-    return np.array(guest_conf, dtype=np.float64)
 
 def run(args):
 
