@@ -28,6 +28,31 @@ class CompareDist(rdFMCS.MCSAtomCompare):
         return bool(np.linalg.norm(x_i - x_j) <= self.threshold)  # must convert from np.bool_ to Python bool!
 
 
+class CompareDistNonterminal(rdFMCS.MCSAtomCompare):
+    """
+    Custom comparator used in the FMCS code.
+    This allows two atoms to match if:
+        1. Neither atom is a terminal atom (H, F, Cl, Halogens etc.)
+        2. They are within 1 angstrom of each other.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def compare(self, p, mol1, atom1, mol2, atom2):
+
+        if mol1.GetAtomWithIdx(atom1).GetDegree() == 1:
+            return False
+        if mol2.GetAtomWithIdx(atom2).GetDegree() == 1:
+            return False
+
+        x_i = mol1.GetConformer(0).GetPositions()[atom1]
+        x_j = mol2.GetConformer(0).GetPositions()[atom2]
+        if np.linalg.norm(x_i - x_j) > 1.0:  # angstroms
+            return False
+        else:
+            return True
+
 def mcs_map(a, b, threshold: float = 0.5, timeout: int = 5, smarts: Optional[str] = None):
     """Find the MCS map of going from A to B"""
     params = rdFMCS.MCSParameters()

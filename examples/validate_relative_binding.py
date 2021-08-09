@@ -15,26 +15,16 @@ import os
 import pickle
 import argparse
 import numpy as np
-from jax import numpy as jnp
 
 from fe.free_energy_rabfe import construct_absolute_lambda_schedule_complex, construct_absolute_lambda_schedule_solvent, construct_conversion_lambda_schedule, get_romol_conf, setup_relative_restraints_using_smarts
 from fe.utils import convert_uM_to_kJ_per_mole
-# from fe import model_abfe, model_rabfe, model_conversion
 from fe import model_rabfe
-from md import builders
-
-from testsystems.relative import hif2a_ligand_pair
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers.serialize import serialize_handlers
-from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
-
-from typing import Union, Optional, Iterable, Any, Tuple, Dict
-
-from optimize.step import truncated_step
 
 import multiprocessing
 from training.dataset import Dataset
@@ -42,34 +32,8 @@ from rdkit import Chem
 
 from timemachine.potentials import rmsd
 from md import builders, minimizer
-
 from rdkit.Chem import rdFMCS
-
-class CompareDist(rdFMCS.MCSAtomCompare):
-
-    """
-    Custom comparator used in the FMCS code.
-    This allows two atoms to match if:
-        1. Neither atom is a terminal atom (H, F, Cl, Halogens etc.)
-        2. They are within 1 angstrom of each other.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def compare(self, p, mol1, atom1, mol2, atom2):
-
-        if mol1.GetAtomWithIdx(atom1).GetDegree() == 1:
-            return False
-        if mol2.GetAtomWithIdx(atom2).GetDegree() == 1:
-            return False
-    
-        x_i = mol1.GetConformer(0).GetPositions()[atom1]
-        x_j = mol2.GetConformer(0).GetPositions()[atom2]
-        if np.linalg.norm(x_i-x_j) > 1.0: # angstroms
-            return False
-        else:
-            return True
+from fe.atom_mapping import CompareDistNonterminal
 
 if __name__ == "__main__":
 
@@ -324,7 +288,7 @@ if __name__ == "__main__":
     ordered_handles = forcefield.get_ordered_handles()
 
     mcs_params = rdFMCS.MCSParameters()
-    mcs_params.AtomTyper = CompareDist()
+    mcs_params.AtomTyper = CompareDistNonterminal()
     mcs_params.BondTyper = rdFMCS.BondCompare.CompareAny
 
     def pred_fn(params, mol, mol_ref):
@@ -438,5 +402,3 @@ if __name__ == "__main__":
 
             pred_dG = pred_fn(ordered_params, mol, blocker_mol)
             print("epoch", epoch, "mol", mol.GetProp("_Name"), "pred", pred_dG, "label", label_dG)
-
-            # break
