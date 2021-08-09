@@ -60,13 +60,6 @@ class RABFEResult():
         from the solvent into the complex"""
         return self.dG_solvent - self.dG_complex
 
-    #@property
-    #def dG_err(self):
-    #    stage_errors = np.array([
-    #        self.dG_complex_conversion_error, self.dG_complex_decouple_error,
-    #        self.dG_solvent_conversion_error, self.dG_solvent_decouple_error])
-    #    return np.sqrt(stage_errors**2)
-
 
 class UnsupportedTopology(Exception):
     pass
