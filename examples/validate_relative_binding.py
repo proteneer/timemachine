@@ -19,6 +19,7 @@ import numpy as np
 from fe.free_energy_rabfe import construct_absolute_lambda_schedule_complex, construct_absolute_lambda_schedule_solvent, construct_conversion_lambda_schedule, get_romol_conf, setup_relative_restraints_using_smarts
 from fe.utils import convert_uM_to_kJ_per_mole
 from fe import model_rabfe
+from fe.free_energy_rabfe import RABFEResult
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -346,9 +347,6 @@ if __name__ == "__main__":
             complex_box0,
             prefix='complex_decouple_'+mol_name+"_"+str(epoch))
 
-        # effective free energy of removing from complex
-        dG_complex = dG_complex_conversion + dG_complex_decouple
-
         # solvent
         min_solvent_coords = minimizer.minimize_host_4d([mol], solvent_system, solvent_coords, forcefield, solvent_box)
         solvent_x0 = np.concatenate([min_solvent_coords, mol_coords])
@@ -368,21 +366,18 @@ if __name__ == "__main__":
             prefix='solvent_decouple_'+mol_name+"_"+str(epoch),
         )
 
-        # effective free energy of removing from solvent
-        dG_solvent = dG_solvent_conversion + dG_solvent_decouple
-        print("stage summary for mol:", mol_name,
-            "dG_complex_conversion (K complex)", dG_complex_conversion,
-            "dG_complex_decouple (E0 + A0 + A1 + E1)", dG_complex_decouple,
-            "dG_solvent_conversion (K complex)", dG_solvent_conversion,
-            "dG_solvent_decouple (D)", dG_solvent_decouple
+        rabfe_result = RABFEResult(
+            mol_name=mol_name,
+            dG_complex_conversion=dG_complex_conversion,
+            dG_complex_decouple=dG_complex_decouple,
+            dG_solvent_conversion=dG_solvent_conversion,
+            dG_solvent_decouple=dG_solvent_decouple,
         )
+        rabfe_result.log()
 
         dG_err = np.sqrt(dG_complex_conversion_error**2 + dG_complex_decouple_error**2 + dG_solvent_conversion_error**2 + dG_solvent_decouple_error**2)
 
-        # the final value we seek is the free energy of moving
-        # from the solvent into the complex.
-
-        return dG_solvent - dG_complex, dG_err
+        return rabfe_result.dG_bind, dG_err
 
 
     for epoch in range(10):

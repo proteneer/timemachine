@@ -1,5 +1,5 @@
 from rdkit import Chem
-from typing import List
+from collections import namedtuple
 from jax.config import config; config.update("jax_enable_x64", True)
 
 import numpy as np
@@ -15,6 +15,58 @@ def get_romol_conf(mol):
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
     return guest_conf/10 # from angstroms to nm
+
+from dataclasses import dataclass
+
+@dataclass
+class RABFEResult():
+    mol_name: str
+    dG_complex_conversion: float
+    dG_complex_decouple: float
+    dG_solvent_conversion: float
+    dG_solvent_decouple: float
+
+    def log(self):
+        """print stage summary"""
+        print("stage summary for mol:", self.mol_name,
+              "dG_complex_conversion (K complex)", self.dG_complex_conversion,
+              "dG_complex_decouple (E0 + A0 + A1 + E1)", self.dG_complex_decouple,
+              "dG_solvent_conversion (K complex)", self.dG_solvent_conversion,
+              "dG_solvent_decouple (D)", self.dG_solvent_decouple
+              )
+
+    @classmethod
+    def from_log(cls, log_line):
+        """parse log line"""
+        mol_name, rest = log_line.split('stage summary for mol: ')[-1].split(' dG_complex_conversion (K complex) ')
+        tokens = rest.split()
+        value_strings = tokens[0], tokens[9], tokens[13], tokens[16]
+        values = list(map(float, value_strings))
+        return RABFEResult(mol_name, *values)
+
+    @property
+    def dG_complex(self):
+        """effective free energy of removing from complex"""
+        return self.dG_complex_conversion + self.dG_complex_decouple
+
+    @property
+    def dG_solvent(self):
+        """effective free energy of removing from solvent"""
+        return self.dG_solvent_conversion + self.dG_solvent_decouple
+
+    @property
+    def dG_bind(self):
+        """the final value we seek is the free energy of moving
+        from the solvent into the complex"""
+        return self.dG_solvent - self.dG_complex
+
+    #@property
+    #def dG_err(self):
+    #    stage_errors = np.array([
+    #        self.dG_complex_conversion_error, self.dG_complex_decouple_error,
+    #        self.dG_solvent_conversion_error, self.dG_solvent_decouple_error])
+    #    return np.sqrt(stage_errors**2)
+
 
 class UnsupportedTopology(Exception):
     pass
