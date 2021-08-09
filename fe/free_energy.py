@@ -5,18 +5,12 @@ import jax
 import numpy as np
 
 from fe import topology
-
+from fe.utils import get_romol_conf
 from timemachine.lib import potentials, custom_ops, LangevinIntegrator
 
 from ff.handlers import openmm_deserializer
 
 from rdkit.Chem import MolToSmiles
-
-def get_romol_conf(mol):
-    """Coordinates of mol's 0th conformer, in nanometers"""
-    conformer = mol.GetConformer(0)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    return guest_conf/10 # from angstroms to nm
 
 class BaseFreeEnergy():
 

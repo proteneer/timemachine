@@ -256,3 +256,10 @@ def validate_map(n_nodes: int, relative_inds: np.array, absolute_inds: np.array)
 
     components = get_connected_components(list(range(n_nodes)), relative_inds, absolute_inds)
     return len(components) == 1
+
+
+def get_romol_conf(mol):
+    """Coordinates of mol's 0th conformer, in nanometers"""
+    conformer = mol.GetConformer(0)
+    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+    return guest_conf/10 # from angstroms to nm
