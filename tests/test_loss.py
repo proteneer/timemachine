@@ -1,5 +1,6 @@
 import numpy as np
 from fe.loss import l1_loss, pseudo_huber_loss, flat_bottom_loss, truncated_residuals
+np.random.seed(2021)
 
 
 def _assert_nonnegative_loss(loss_fxn: callable):
