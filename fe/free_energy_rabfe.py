@@ -27,7 +27,7 @@ class RABFEResult():
         print("stage summary for mol:", self.mol_name,
               "dG_complex_conversion (K complex)", self.dG_complex_conversion,
               "dG_complex_decouple (E0 + A0 + A1 + E1)", self.dG_complex_decouple,
-              "dG_solvent_conversion (K complex)", self.dG_solvent_conversion,
+              "dG_solvent_conversion (K solvent)", self.dG_solvent_conversion,
               "dG_solvent_decouple (D)", self.dG_solvent_decouple
               )
 
