@@ -73,3 +73,17 @@ def test_compute_residuals_infinite_interval():
     reliable_interval = (-np.inf, +np.inf)
 
     assert_consistency_with_scalar_version(predictions, labels, reliable_interval)
+
+
+def test_compute_residuals_sanity_check():
+    reliable_interval = (-10, +np.inf)
+    predictions = np.array([-100.0, 0.0])
+
+    # assays bottom'd out
+    labels = np.array([-15, -15])
+
+    # if we predict -100, but our label of -15 bottomed out at -10, residual should be 0
+    # if we predict    0, and our label of -15 bottomed out at -10, residual should be >=10
+    expected_residual = np.array([0, 10])
+    test_residual = truncated_residuals(predictions, labels, reliable_interval)
+    np.testing.assert_array_equal(expected_residual, test_residual)  # passes
