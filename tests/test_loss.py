@@ -45,12 +45,7 @@ def _scalar_truncated_residual(prediction, label, reliable_interval):
     return residual
 
 
-def test_compute_residuals():
-    predictions = np.random.rand(10000) * 4 - 2
-    labels = np.random.rand(10000) * 4 - 2
-
-    reliable_interval = (-1, +1)
-
+def assert_consistency_with_scalar_version(predictions, labels, reliable_interval):
     ref = np.array([
         _scalar_truncated_residual(p, l, reliable_interval)
         for (p, l) in zip(predictions, labels)
@@ -59,3 +54,21 @@ def test_compute_residuals():
     test = truncated_residuals(predictions, labels, reliable_interval)
 
     np.testing.assert_allclose(ref, test)
+
+
+def test_compute_residuals_finite_interval():
+    predictions = np.random.rand(10000) * 4 - 2
+    labels = np.random.rand(10000) * 4 - 2
+
+    reliable_interval = (-1, +1)
+
+    assert_consistency_with_scalar_version(predictions, labels, reliable_interval)
+
+
+def test_compute_residuals_infinite_interval():
+    predictions = np.random.rand(10000) * 4 - 2
+    labels = np.random.rand(10000) * 4 - 2
+
+    reliable_interval = (-np.inf, +np.inf)
+
+    assert_consistency_with_scalar_version(predictions, labels, reliable_interval)
