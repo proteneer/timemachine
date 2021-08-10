@@ -7,18 +7,13 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from ff.handlers import openmm_deserializer
 from ff import Forcefield
 from fe import model_utils
+from fe.utils import get_romol_conf
 from md.barostat.utils import get_group_indices, get_bond_list
 
 from rdkit import Chem
 from simtk import openmm
 
 from md.fire import fire_descent
-
-def get_romol_conf(mol):
-    """Coordinates of mol's 0th conformer, in nanometers"""
-    conformer = mol.GetConformer(0)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    return guest_conf/10 # from angstroms to nm
 
 def bind_potentials(topo, ff):
     # setup the parameter handlers for the ligand
