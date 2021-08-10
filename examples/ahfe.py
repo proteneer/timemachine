@@ -6,6 +6,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from fe import pdb_writer
 from fe import topology
+from fe.utils import get_romol_conf
 from md import builders
 
 from timemachine.lib import potentials, custom_ops
@@ -23,12 +24,6 @@ from ff.handlers.deserialize import deserialize_handlers
 # 1. build water box
 # 2. build ligand
 # 3. convert to recipe
-
-def get_romol_conf(mol):
-    """Coordinates of mol's 0th conformer, in nanometers"""
-    conformer = mol.GetConformer(0)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    return guest_conf/10 # from angstroms to nm
 
 # construct an RDKit molecule of aspirin
 # note: not using OpenFF Molecule because want to avoid the dependency (YTZ?)

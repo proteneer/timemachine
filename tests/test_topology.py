@@ -6,21 +6,13 @@ import numpy as np
 from fe import topology
 
 from rdkit import Chem
-from rdkit.Chem import AllChem
-from rdkit.Chem import rdFMCS
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
-
+from fe.utils import get_romol_conf
 import jax
 
 from timemachine.lib import potentials
-
-def get_romol_conf(mol):
-    """Coordinates of mol's 0th conformer, in nanometers"""
-    conformer = mol.GetConformer(0)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    return guest_conf/10 # from angstroms to nm
 
 
 class BenzenePhenolSparseTest(unittest.TestCase):

@@ -5,18 +5,14 @@ from jax.config import config; config.update("jax_enable_x64", True)
 import numpy as np
 
 from fe import topology
+from fe.utils import get_romol_conf
 
 from ff.handlers import openmm_deserializer
 
 from scipy.optimize import linear_sum_assignment
 
-def get_romol_conf(mol):
-    """Coordinates of mol's 0th conformer, in nanometers"""
-    conformer = mol.GetConformer(0)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    return guest_conf/10 # from angstroms to nm
-
 from dataclasses import dataclass
+
 
 @dataclass
 class RABFEResult():
