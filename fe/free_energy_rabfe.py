@@ -204,6 +204,10 @@ def construct_absolute_lambda_schedule_complex(num_windows):
         np.linspace(0.3, 1.0, C, endpoint=True)
     ])
 
+
+    # (ytz): remove me
+    return np.linspace(0, 1.0, num_windows)
+
     return lambda_schedule
 
 

@@ -155,7 +155,6 @@ void declare_context(py::module &m) {
 
         int du_dl_interval = (store_du_dl_interval <= 0) ? lambda_schedule.size() : store_du_dl_interval;
         int x_interval = (store_x_interval <= 0) ? lambda_schedule.size() : store_x_interval;
-
         std::array<std::vector<double>, 3> result = ctxt.multiple_steps(vec_lambda_schedule, du_dl_interval, x_interval);
 
         py::array_t<double, py::array::c_style> out_du_dl_buffer(result[0].size());
@@ -201,7 +200,7 @@ void declare_context(py::module &m) {
             x_interval
         );
 
-        int UF = result[0].size()/lambda_windows.size();
+        int UF = (n_steps + u_interval - 1) / u_interval;
         int UW = lambda_windows.size();
 
         py::array_t<double, py::array::c_style> out_u_buffer({UF, UW});
