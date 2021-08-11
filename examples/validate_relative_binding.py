@@ -167,7 +167,6 @@ if __name__ == "__main__":
         # Setup GRPC client
         print("Connecting to GRPC workers...")
         client = GRPCClient(hosts=cmd_args.hosts)
-
     client.verify()
 
     path_to_ligand =  cmd_args.ligand_sdf

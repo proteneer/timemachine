@@ -43,7 +43,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     Parameters
     ----------
     lamb: float
-        lambda parameter we run the simulation at
+        lambda value used for the equilibrium simulation
 
     box: np.array
         3x3 numpy array of the box, dtype should be np.float64
@@ -70,12 +70,12 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
         number of production steps
 
     x_interval: int
-        how often we store coordinates. if x_interval == 0 then
+        how often we store coordinates. If x_interval == 0 then
         no frames are returned.
 
     u_interval: int
-        how often we store us. if u_interval == 0 then
-        no us are returned
+        how often we store energies. If u_interval == 0 then
+        no energies are returned
 
     lambda_windows: list of float
         lambda windows we evaluate energies at.
@@ -142,10 +142,6 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
         u_interval,
         x_interval
     )
-
-    # if len(lambda_windows) > 0:
-        # lamb_idx = np.argwhere(lambda_windows == lamb)[0][0]
-        # full_us = sanitize_energies(full_us, lamb_idx)
 
     # keep the structure of grads the same as that of final_potentials so we can properly
     # form their vjps.
@@ -229,7 +225,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.prod_steps,
             subsample_interval,
             subsample_interval, 
-            [] # no need to evaluate Us
+            [] # no need to evaluate Us for the endpoint correction
         ))
 
     if model.client is None:
