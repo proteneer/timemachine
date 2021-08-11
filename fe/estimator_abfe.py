@@ -287,11 +287,11 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     K = len(model.lambda_schedule)
     cleans_U_knks = np.array(cleans_U_knks) # [K, F, K]
     U_kn = np.reshape(cleans_U_knks, (-1, K)).transpose() # [K, F*K]
-    U_kn = U_kn*model.beta
+    u_kn = U_kn*model.beta
 
     np.save(model.prefix+"_U_kn.npy", U_kn)
 
-    mbar = pymbar.MBAR(U_kn, N_k)
+    mbar = pymbar.MBAR(u_kn, N_k)
     differences, error_estimates = mbar.getFreeEnergyDifferences()
     f_k, error_k = differences[0], error_estimates[0]
     mbar_dG = f_k[-1]/model.beta
