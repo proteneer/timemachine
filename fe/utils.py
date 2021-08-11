@@ -321,10 +321,6 @@ def extract_delta_Us_from_U_knk(U_knk):
 
     assert U_knk.shape[0] == U_knk.shape[-1]
 
-    # bar_dG = 0
-    # bar_dG_err = 0
-    # overlap = 0
-
     K = U_knk.shape[0]
 
     def delta_U(from_idx, to_idx):
@@ -340,7 +336,7 @@ def extract_delta_Us_from_U_knk(U_knk):
     delta_Us = []
 
     for lambda_idx in range(K-1):
-        # lambda_us have shape F, K
+        # lambda_us have shape (F, K)
         fwd_delta_U = delta_U(lambda_idx, lambda_idx+1)
         rev_delta_U = delta_U(lambda_idx+1, lambda_idx)
         delta_Us.append((fwd_delta_U, rev_delta_U))
