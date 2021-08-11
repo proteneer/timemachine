@@ -36,7 +36,7 @@ def unflatten(aux_data, children):
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
 def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_steps, prod_steps,
-    x_interval=50, u_interval=200, lambda_windows=None):
+    x_interval, u_interval, lambda_windows):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
@@ -61,7 +61,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
         integrator to be used for dynamics
 
     barostat: timemachine.Barostat
-        barostat to be used for dynamics
+        barostat to be used for equilibration
 
     equil_steps: int
         number of equilibration steps
@@ -95,7 +95,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     for bp in final_potentials:
         impl = bp.bound_impl(np.float32)
         all_impls.append(impl)
-        du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 5))
+        du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 25))
 
     # fire minimize once again, needed for parameter interpolation
     x0 = minimizer.fire_minimize(x0, all_impls, box, np.ones(100, dtype=np.float64)*lamb)
@@ -131,6 +131,10 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     # equilibration
     equil_schedule = np.ones(equil_steps)*lamb
     ctxt.multiple_steps(equil_schedule)
+
+    # (ytz): intentionally hard-coded, I'd rather the end-user *not*
+    # muck with this unless they have a good reason to.
+    barostat_impl.set_interval(25)
 
     for obs in du_dp_obs:
         ctxt.add_observable(obs)
@@ -241,8 +245,6 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         for future in futures:
             results.append(future.result())
 
-    all_grads = []
-
     if model.endpoint_correct:
         sim_results = results[:-1]
     else:
@@ -253,7 +255,6 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     for lambda_idx, (lambda_window, result) in enumerate(zip(model.lambda_schedule, sim_results)):
         U_knk.append(result.lambda_us)
         N_k.append(len(result.lambda_us)) # number of frames
-        all_grads.append(result.du_dps)
 
     U_knk = np.array(U_knk)
 
@@ -301,10 +302,8 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     dG = bar_dG # use the exact answer
     dG_grad = []
-
-    # (ytz) this is buggy, wrong all_grads being used for this computation if we have 
-    # endpoint correction turned on. Fix coming in separate PR.
-    for rhs, lhs in zip(all_grads[-1], all_grads[0]):
+    # note this uses the full results, and not just sim_results
+    for rhs, lhs in zip(result.du_dps[-1], result.du_dps[0]):
         dG_grad.append(rhs - lhs)
 
     if model.endpoint_correct:
