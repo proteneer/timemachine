@@ -302,8 +302,9 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     dG = bar_dG # use the exact answer
     dG_grad = []
+
     # note this uses the full results, and not just sim_results
-    for rhs, lhs in zip(result.du_dps[-1], result.du_dps[0]):
+    for rhs, lhs in zip(results[-1].du_dps, results[0].du_dps):
         dG_grad.append(rhs - lhs)
 
     if model.endpoint_correct:
