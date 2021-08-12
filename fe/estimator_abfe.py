@@ -281,13 +281,15 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         print(f"{model.prefix}_BAR: lambda {lamb_start:.3f} -> {lamb_end:.3f} dG: {dG_exact/model.beta:.3f} dG_err: {exact_bar_err/model.beta:.3f} overlap: {exact_bar_overlap:.3f}")
 
     # for MBAR we need to sanitize the energies
-    cleans_U_knks = [] # [K, F, K]
+    clean_U_knks = [] # [K, F, K]
     for lambda_idx, full_us in enumerate(U_knk):
-        cleans_U_knks.append(sanitize_energies(full_us, lambda_idx))
+        clean_U_knks.append(sanitize_energies(full_us, lambda_idx))
+
+    print(model.prefix, " MBAR: amin", np.amin(clean_U_knks), "median", np.median(clean_U_knks), "max", np.amax(clean_U_knks))
 
     K = len(model.lambda_schedule)
-    cleans_U_knks = np.array(cleans_U_knks) # [K, F, K]
-    U_kn = np.reshape(cleans_U_knks, (-1, K)).transpose() # [K, F*K]
+    clean_U_knks = np.array(clean_U_knks) # [K, F, K]
+    U_kn = np.reshape(clean_U_knks, (-1, K)).transpose() # [K, F*K]
     u_kn = U_kn*model.beta
 
     np.save(model.prefix+"_U_kn.npy", U_kn)
@@ -303,9 +305,14 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     dG = bar_dG # use the exact answer
     dG_grad = []
 
-    # note this uses the full results, and not just sim_results
     for rhs, lhs in zip(results[-1].du_dps, results[0].du_dps):
         dG_grad.append(rhs - lhs)
+
+    if model.endpoint_correct:
+        # if we're doing endpoint correction, we need to fill in
+        # missing derivatives since zip() from above loops over
+        # the shorter array.
+        dG_grad.append(-results[0].du_dps[-1])
 
     if model.endpoint_correct:
         core_restr = bound_potentials[-1]
@@ -354,7 +361,7 @@ def deltaG_fwd(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 def deltaG_bwd(model, residual, grad) -> Tuple[np.array]:
     """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!
     """
-    # residual are the partial dG / partial dparams for each term
+     # residual are the partial dG / partial dparams for each term
     # grad[0] is the adjoint of dG w.r.t. loss: partial L/partial dG
     # grad[1] is the adjoint of dG_err w.r.t. loss: which we don't use
     # grad[2] is the adjoint of simulation results w.r.t. loss: which we don't use
