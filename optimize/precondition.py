@@ -19,10 +19,11 @@ def learning_rates_like_params(
 
     ordered_learning_rates = []
     for handle, params in zip(ordered_handles, ordered_params):
-        lr_row = learning_rates[handle.__class__]
+        key = handle.__class__
+        lr_row = learning_rates[key]
         lr_array = np.array([lr_row] * len(params))
 
-        if handle == AM1CCCHandler:
+        if key == AM1CCCHandler:
             # outlier: not in shape (n_types, params_per_type)
             lr_array = lr_array.flatten()
 
