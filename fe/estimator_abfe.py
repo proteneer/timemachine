@@ -305,16 +305,31 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     dG = bar_dG # use the exact answer
     dG_grad = []
 
+    # (ytz): results[-1].du_dps contain system parameter derivatives for the
+    # independent, gas phase simulation. They're usually ordered as:
+    # [Bonds, Angles, Torsions, Nonbonded]
+    #
+    # results[0].du_dps contain system parameter derivatives for the core
+    # restrained state. If we're doing the endpoint correction during
+    # decoupling stages, the derivatives are ordered as:
+
+    # [Bonds, Angles, Torsions, Nonbonded, RestraintBonds]
+    # Otherwise, in stages like conversion where the endpoint correction
+    # is turned off, the derivatives are ordered as :
+    # [Bonds, Angles, Torsions, Nonbonded]
+
+    # Note that this zip will always loop over only the
+    # [Bonds, Angles, Torsions, Nonbonded] terms, since it only
+    # enumerates over the smaller of the two lists.
     for rhs, lhs in zip(results[-1].du_dps, results[0].du_dps):
         dG_grad.append(rhs - lhs)
 
     if model.endpoint_correct:
-        # if we're doing endpoint correction, we need to fill in
-        # missing derivatives since zip() from above loops over
-        # the shorter array.
+        # (ytz): Fill in missing derivatives since zip() from above loops
+        # over the shorter array. The "rhs" from results[-1] is identically
+        # zero as the energies do not depend the core restraints.
         dG_grad.append(-results[0].du_dps[-1])
 
-    if model.endpoint_correct:
         core_restr = bound_potentials[-1]
         # (ytz): tbd, automatically find optimal k_translation/k_rotation such that
         # standard deviation and/or overlap is maximized

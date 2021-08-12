@@ -218,3 +218,4 @@ def test_free_energy_estimator_with_endpoint_correction():
         assert len(grad) == 3
         assert grad[0].shape == sys_params[0].shape
         assert grad[1].shape == sys_params[1].shape
+        assert grad[2].shape == sys_params[2].shape
