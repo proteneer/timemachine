@@ -326,9 +326,10 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     if model.endpoint_correct:
         # (ytz): Fill in missing derivatives since zip() from above loops
-        # over the shorter array. The "rhs" from results[-1] is identically
-        # zero as the energies do not depend the core restraints.
-        dG_grad.append(-results[0].du_dps[-1])
+        # over the shorter array.
+        lhs = results[0].du_dps[-1]
+        rhs = 0 # zero as the energies do not depend the core restraints.
+        dG_grad.append(rhs - lhs)
 
         core_restr = bound_potentials[-1]
         # (ytz): tbd, automatically find optimal k_translation/k_rotation such that
