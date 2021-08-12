@@ -361,7 +361,7 @@ def deltaG_fwd(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 def deltaG_bwd(model, residual, grad) -> Tuple[np.array]:
     """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!
     """
-     # residual are the partial dG / partial dparams for each term
+    # residual are the partial dG / partial dparams for each term
     # grad[0] is the adjoint of dG w.r.t. loss: partial L/partial dG
     # grad[1] is the adjoint of dG_err w.r.t. loss: which we don't use
     # grad[2] is the adjoint of simulation results w.r.t. loss: which we don't use
