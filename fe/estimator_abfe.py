@@ -281,13 +281,15 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         print(f"{model.prefix}_BAR: lambda {lamb_start:.3f} -> {lamb_end:.3f} dG: {dG_exact/model.beta:.3f} dG_err: {exact_bar_err/model.beta:.3f} overlap: {exact_bar_overlap:.3f}")
 
     # for MBAR we need to sanitize the energies
-    cleans_U_knks = [] # [K, F, K]
+    clean_U_knks = [] # [K, F, K]
     for lambda_idx, full_us in enumerate(U_knk):
-        cleans_U_knks.append(sanitize_energies(full_us, lambda_idx))
+        clean_U_knks.append(sanitize_energies(full_us, lambda_idx))
+
+    print(model.prefix, " MBAR: amin", np.amin(clean_U_knks), "median", np.median(clean_U_knks), "max", np.amax(clean_U_knks))
 
     K = len(model.lambda_schedule)
-    cleans_U_knks = np.array(cleans_U_knks) # [K, F, K]
-    U_kn = np.reshape(cleans_U_knks, (-1, K)).transpose() # [K, F*K]
+    clean_U_knks = np.array(clean_U_knks) # [K, F, K]
+    U_kn = np.reshape(clean_U_knks, (-1, K)).transpose() # [K, F*K]
     u_kn = U_kn*model.beta
 
     np.save(model.prefix+"_U_kn.npy", U_kn)
@@ -303,11 +305,33 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     dG = bar_dG # use the exact answer
     dG_grad = []
 
-    # note this uses the full results, and not just sim_results
+    # (ytz): results[-1].du_dps contain system parameter derivatives for the
+    # independent, gas phase simulation. They're usually ordered as:
+    # [Bonds, Angles, Torsions, Nonbonded]
+    #
+    # results[0].du_dps contain system parameter derivatives for the core
+    # restrained state. If we're doing the endpoint correction during
+    # decoupling stages, the derivatives are ordered as:
+
+    # [Bonds, Angles, Torsions, Nonbonded, RestraintBonds]
+    # Otherwise, in stages like conversion where the endpoint correction
+    # is turned off, the derivatives are ordered as :
+    # [Bonds, Angles, Torsions, Nonbonded]
+
+    # Note that this zip will always loop over only the
+    # [Bonds, Angles, Torsions, Nonbonded] terms, since it only
+    # enumerates over the smaller of the two lists.
     for rhs, lhs in zip(results[-1].du_dps, results[0].du_dps):
         dG_grad.append(rhs - lhs)
 
     if model.endpoint_correct:
+        assert len(results[0].du_dps) - len(results[-1].du_dps) == 1
+        # (ytz): Fill in missing derivatives since zip() from above loops
+        # over the shorter array.
+        lhs = results[0].du_dps[-1]
+        rhs = 0 # zero as the energies do not depend the core restraints.
+        dG_grad.append(rhs - lhs)
+
         core_restr = bound_potentials[-1]
         # (ytz): tbd, automatically find optimal k_translation/k_rotation such that
         # standard deviation and/or overlap is maximized
