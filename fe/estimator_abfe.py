@@ -325,6 +325,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         dG_grad.append(rhs - lhs)
 
     if model.endpoint_correct:
+        assert len(results[0].du_dps) - len(results[-1].du_dps) == 1
         # (ytz): Fill in missing derivatives since zip() from above loops
         # over the shorter array.
         lhs = results[0].du_dps[-1]
