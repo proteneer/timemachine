@@ -135,6 +135,12 @@ def test_free_energy_estimator():
 
 
 def test_free_energy_estimator_with_endpoint_correction():
+    """
+    Test that we generate correctly shaped derivatives in the estimator code
+    when the endpoint correction is turned on. We expected that f([a,b,c,...])
+    to generate derivatives df/da, df/db, df/dc, df/d... such that
+    df/da.shape == a.shape, df/db.shape == b.shape, df/dc == c.shape, and etc.
+    """
 
     n_atoms = 15
     x0 = np.random.rand(n_atoms, 3)
