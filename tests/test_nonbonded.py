@@ -515,6 +515,47 @@ class TestNonbonded(GradientTest):
                             precision=precision
                         )
 
+    def test_nonbonded_with_box_smaller_than_cutoff(self):
+
+        np.random.seed(4321)
+        D = 3
+
+        for size in [33]:
+
+            _, coords, box, _ = builders.build_water_system(6.2)
+            coords = coords/coords.unit
+            coords = coords[:size]
+
+            N = coords.shape[0]
+
+            lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+            lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+
+            for precision, rtol in [(np.float32, 1e-4)]:
+
+                for cutoff in [1.0]:
+                    # Down shift box size to be only a portion of the cutoff
+                    box = np.ones_like(box) * (0.2 * cutoff)
+                    charge_params, ref_potential, test_potential = prepare_water_system(
+                        coords,
+                        lambda_plane_idxs,
+                        lambda_offset_idxs,
+                        p_scale=1.0,
+                        cutoff=cutoff
+                    )
+
+                    with self.assertRaises(RuntimeError):
+                        self.compare_forces(
+                            coords,
+                            charge_params,
+                            box,
+                            0.0,
+                            ref_potential,
+                            test_potential,
+                            rtol,
+                            precision=precision
+                        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -303,6 +303,17 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             k_arange<<<B, tpb, 0, stream>>>(N, d_perm_);
             gpuErrchk(cudaPeekAtLastError());
         }
+
+        std::vector<double> h_box(9);
+        double min_width = DBL_MAX;
+        gpuErrchk(cudaMemcpy(&h_box[0], d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToHost));
+        for (int i = 0; i < 3; i++) {
+            min_width = min(min_width, h_box[i*3+i]);
+        }
+        if (cutoff_ * 2 > min_width) {
+            throw std::runtime_error("Box width is smaller than the cutoff, neighborlist is no longer valid");
+        }
+
         // Indicate that the neighborlist must be rebuilt
         gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1*sizeof(*d_rebuild_nblist_), stream));
     } else {
