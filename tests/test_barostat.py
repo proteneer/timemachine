@@ -30,7 +30,7 @@ from timemachine.constants import BOLTZ, ENERGY_UNIT, DISTANCE_UNIT
 def test_barostat_zero_interval():
     pressure = 1. * unit.atmosphere
     temperature = 300.0 * unit.kelvin
-    initial_waterbox_width = 2.0 * unit.nanometer
+    initial_waterbox_width = 2.5 * unit.nanometer
     barostat_interval = 0
     seed = 2021
     np.random.seed(seed)
@@ -40,19 +40,16 @@ def test_barostat_zero_interval():
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
         initial_waterbox_width.value_in_unit(unit.nanometer))
 
-    min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
     afe = AbsoluteFreeEnergy(mol_a, ff)
 
     unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-        ff.get_ordered_params(), complex_system, min_complex_coords
+        ff.get_ordered_params(), complex_system, complex_coords
     )
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list)
-
-    lam = 1.0
 
     bound_potentials = []
     for params, unbound_pot in zip(sys_params, unbound_potentials):
@@ -105,7 +102,7 @@ def test_barostat_partial_group_idxs():
     """Verify that the barostat can handle a subset of the molecules
     rather than all of them. This test only verify that it runs, not the behavior"""
     temperature = 300.0 * unit.kelvin
-    initial_waterbox_width = 2.0 * unit.nanometer
+    initial_waterbox_width = 3.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     barostat_interval = 3
     collision_rate = 1.0 / unit.picosecond
@@ -177,7 +174,7 @@ def test_barostat_is_deterministic():
     platform_version = get_platform_version()
     lam = 1.0
     temperature = 300.0 * unit.kelvin
-    initial_waterbox_width = 2.0 * unit.nanometer
+    initial_waterbox_width = 3.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     barostat_interval = 3
     collision_rate = 1.0 / unit.picosecond
@@ -186,12 +183,12 @@ def test_barostat_is_deterministic():
 
     # OpenEye's AM1 Charging values are OS platform dependent. To ensure that we have deterministic values
     # we check against our two most common OS versions, Ubuntu 18.04 and 20.04.
-    box_vol = 8.01086504373106
+    box_vol = 26.711716908713402
     lig_charge_vals = np.array([1.4572377542719206, -0.37011462071257184, 1.1478267014520305, -4.920166483601927, 0.16985194917937935])
     if "ubuntu" not in platform_version:
         print(f"Test expected to run under ubuntu 20.04 or 18.04, got {platform_version}")
     if "20.04" in platform_version:
-        box_vol = 7.864905556101201
+        box_vol = 26.869380588831582
         lig_charge_vals[3] = -4.920284514559682
 
     pressure = 1. * unit.atmosphere
@@ -251,7 +248,7 @@ def test_barostat_is_deterministic():
 
 def test_barostat_varying_pressure():
     temperature = 300.0 * unit.kelvin
-    initial_waterbox_width = 2.0 * unit.nanometer
+    initial_waterbox_width = 3.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     barostat_interval = 3
     collision_rate = 1.0 / unit.picosecond
@@ -334,7 +331,7 @@ def test_molecular_ideal_gas():
     """
 
     # simulation parameters
-    initial_waterbox_width = 2.0 * unit.nanometer
+    initial_waterbox_width = 3.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
     collision_rate = 1.0 / unit.picosecond
     n_moves = 10000

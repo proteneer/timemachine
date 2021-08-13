@@ -336,12 +336,28 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             cutoff_+nblist_padding_,
             stream
         );
-        gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
         gpuErrchk(cudaMemcpyAsync(p_ixn_count_, nblist_.get_ixn_count(), 1*sizeof(*p_ixn_count_), cudaMemcpyDeviceToHost, stream));
+
+        std::vector<double> h_box(9);
+        gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
+        // Verify that the cutoff and box size are valid together. If cutoff is greater than half the box
+        // then a particle can interact with multiple periodic copies.
+        const double db_cutoff = (cutoff_+nblist_padding_) * 2;
+        cudaStreamSynchronize(stream);
+        // Verify that box is orthogonal and the width of the box in all dimensions is greater than twice the cutoff
+        for (int i = 0; i < 9; i++) {
+            if (i == 0 || i == 4 || i == 8) {
+                if (h_box[i] < db_cutoff) {
+                    throw std::runtime_error("Cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
+                }
+            } else if (h_box[i] != 0.0) {
+                throw std::runtime_error("Provided non-ortholinear box, unable to compute nonbonded energy");
+            }
+        }
+
+        gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
         gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
-        gpuErrchk(cudaStreamSynchronize(stream));
-
     } else {
         k_permute<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_x, d_sorted_x_);
         gpuErrchk(cudaPeekAtLastError());

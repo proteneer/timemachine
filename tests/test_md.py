@@ -39,7 +39,7 @@ class TestContext(unittest.TestCase):
             lambda_offset_idxs,
             p_scale=3.0,
             # cutoff=0.5,
-            cutoff=1.5
+            cutoff=1.0
         )
 
         masses = np.random.rand(N)
@@ -101,7 +101,7 @@ class TestContext(unittest.TestCase):
                 # note that we do not calculate the du_dl of the last frame.
             return all_xs, all_du_dxs, all_du_dps, all_du_dls, all_us, all_lambda_us
 
-        box = np.eye(3)*1.5
+        box = np.eye(3)*3.0
 
         # when we have multiple parameters, we need to set this up correctly
         ref_all_xs, ref_all_du_dxs, ref_all_du_dps, ref_all_du_dls, ref_all_us, ref_all_lambda_us = integrate_once_through(
