@@ -7,7 +7,7 @@ default_learning_rates = {
     HarmonicAngleHandler:   np.zeros(2),    # k, angle
     ProperTorsionHandler:   np.zeros(3),    # k, phase, periodicity
     ImproperTorsionHandler: np.zeros(3),    # k, phase, periodicity
-    AM1CCCHandler:          np.ones(1),     # charge increment
+    AM1CCCHandler:          1.0,            # charge increment
     LennardJonesHandler:  np.array([1, 0]), # sigma, epsilon
 }
 
@@ -22,10 +22,6 @@ def learning_rates_like_params(
         key = handle.__class__
         lr_row = learning_rates[key]
         lr_array = np.array([lr_row] * len(params))
-
-        if key == AM1CCCHandler:
-            # outlier: not in shape (n_types, params_per_type)
-            lr_array = lr_array.flatten()
 
         assert lr_array.shape == params.shape, f"{lr_array.shape}, {params.shape}"
         ordered_learning_rates.append(lr_array)
