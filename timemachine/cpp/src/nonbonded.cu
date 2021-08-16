@@ -307,15 +307,18 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         // Verify that the cutoff and box size are valid together. If cutoff is greater than half the box
         // then a particle can interact with multiple periodic copies.
         std::vector<double> h_box(9);
-        double min_width = DBL_MAX;
-        gpuErrchk(cudaMemcpy(&h_box[0], d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
+        const double twice_sq_cutoff = 2 * ((cutoff_+nblist_padding_) * (cutoff_+nblist_padding_));
+
+        cudaStreamSynchronize(stream);
+        // Use l2 norm on each row to determine if cutoff is too small
         for (int i = 0; i < 3; i++) {
-            min_width = min(min_width, h_box[i*3+i]);
+            double row_norm_sq = h_box[i*3+0]*h_box[i*3+0] + h_box[i*3+1]*h_box[i*3+1] + h_box[i*3+2]*h_box[i*3+2];
+            if (twice_sq_cutoff > row_norm_sq) {
+                throw std::runtime_error("Cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
+            }
         }
 
-        if ((cutoff_+nblist_padding_) * 2 > min_width) {
-            throw std::runtime_error("Cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
-        }
 
         // Indicate that the neighborlist must be rebuilt
         gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 1, 1*sizeof(*d_rebuild_nblist_), stream));
