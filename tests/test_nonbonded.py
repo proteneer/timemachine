@@ -281,11 +281,11 @@ class TestNonbondedWater(GradientTest):
         # test that running the coordinates under two different boxes produces correct results
         # since we should be rebuilding the nblist when the box sizes change.
 
-        host_system, host_coords, box, _ = builders.build_water_system(2.0)
+        host_system, host_coords, box, _ = builders.build_water_system(3.0)
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(
             host_system,
-            cutoff=0.5
+            cutoff=1.0
         )
 
         for f in host_fns:
@@ -388,9 +388,7 @@ class TestNonbonded(GradientTest):
         water_coords = self.get_water_coords(3, sort=False)
         test_system = water_coords[:126] # multiple of 3
         padding = 0.2
-        diag = np.amax(test_system, axis=0) - np.amin(test_system, axis=0) + padding
-        box = np.eye(3)
-        np.fill_diagonal(box, diag)
+        box = np.eye(3) * 3
 
         N = test_system.shape[0]
 
@@ -420,7 +418,7 @@ class TestNonbonded(GradientTest):
         lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
-        cutoff = 0.25
+        cutoff = 1.0
 
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
