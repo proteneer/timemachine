@@ -8,7 +8,7 @@ default_learning_rates = {
     ProperTorsionHandler:   np.zeros(3),    # k, phase, periodicity
     ImproperTorsionHandler: np.zeros(3),    # k, phase, periodicity
     AM1CCCHandler:          np.ones(1),     # charge increment
-    LennardJonesHandler:  np.array([0, 1]), # sigma, epsilon
+    LennardJonesHandler:  np.array([1, 0]), # sigma, epsilon
 }
 
 def learning_rates_like_params(
