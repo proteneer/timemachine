@@ -285,7 +285,7 @@ class TestNonbondedWater(GradientTest):
 
         host_fns, host_masses = openmm_deserializer.deserialize_system(
             host_system,
-            cutoff=1.0
+            cutoff=0.5
         )
 
         for f in host_fns:
@@ -420,7 +420,7 @@ class TestNonbonded(GradientTest):
         lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
         lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
 
-        cutoff = 1.0
+        cutoff = 0.25
 
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 

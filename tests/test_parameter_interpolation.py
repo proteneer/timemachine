@@ -28,7 +28,7 @@ class TestInterpolatedPotential(GradientTest):
         np.random.seed(4321)
         D = 3
 
-        cutoff = 1.0
+        cutoff = 0.25
         size = 36
 
         water_coords = self.get_water_coords(D, sort=False)
@@ -96,7 +96,7 @@ class TestInterpolatedPotential(GradientTest):
         np.random.seed(4321)
         D = 3
 
-        cutoff = 1.0
+        cutoff = 0.25
         size = 36
 
         water_coords = self.get_water_coords(D, sort=False)

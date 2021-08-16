@@ -304,14 +304,17 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             gpuErrchk(cudaPeekAtLastError());
         }
 
+        // Verify that the cutoff and box size are valid together. If cutoff is greater than half the box
+        // then a particle can interact with multiple periodic copies.
         std::vector<double> h_box(9);
         double min_width = DBL_MAX;
         gpuErrchk(cudaMemcpy(&h_box[0], d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToHost));
         for (int i = 0; i < 3; i++) {
             min_width = min(min_width, h_box[i*3+i]);
         }
-        if (cutoff_ * 2 > min_width) {
-            throw std::runtime_error("Box width is smaller than the cutoff, neighborlist is no longer valid");
+
+        if ((cutoff_+nblist_padding_) * 2 > min_width) {
+            throw std::runtime_error("Cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
         }
 
         // Indicate that the neighborlist must be rebuilt
