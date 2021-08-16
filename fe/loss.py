@@ -96,6 +96,35 @@ def EXP_loss(
     return loss
 
 
+def truncated_residuals(predictions, labels, reliable_interval=(-jnp.inf, +jnp.inf)):
+    """Adapt "predictions - labels" for cases where labels are only reliable
+    within some interval (e.g. when fitting to a "bottomed-out" assay).
+
+    Example
+    -------
+    >>> labels = jnp.array([0.5, 0.5, 0.5, -6, -6, -6])
+    >>> predictions = jnp.array([-10, 0, +10, -10, 0, +10])
+    >>> reliable_interval = (-5, +1)
+    >>> print(truncated_residuals(predictions, labels, reliable_interval))
+    [-10.5  -0.5   9.5   0.    5.   15. ]
+    """
+
+    lower, upper = reliable_interval
+
+    residuals = predictions - labels
+    residuals = jnp.where(
+        labels < lower,
+        jnp.maximum(0, predictions - lower),
+        residuals
+    )
+    residuals = jnp.where(
+        labels > upper,
+        jnp.minimum(0, predictions - upper),
+        residuals
+    )
+    return residuals
+
+
 def l1_loss(residual):
     """loss = abs(residual)"""
     return jnp.abs(residual)

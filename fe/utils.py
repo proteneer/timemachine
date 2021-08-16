@@ -256,3 +256,89 @@ def validate_map(n_nodes: int, relative_inds: np.array, absolute_inds: np.array)
 
     components = get_connected_components(list(range(n_nodes)), relative_inds, absolute_inds)
     return len(components) == 1
+
+def get_romol_conf(mol):
+    """Coordinates of mol's 0th conformer, in nanometers"""
+    conformer = mol.GetConformer(0)
+    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
+    return guest_conf/10 # from angstroms to nm
+
+def sanitize_energies(full_us, lamb_idx, cutoff=10000):
+    """
+    Given a matrix with F rows and K columns,
+    we sanitize entries that differ by more than cutoff.
+
+    That is, given full_us:
+    [
+        [15000.0, -5081923.0, 1598, 1.5, -23.0],
+        [-423581.0, np.nan, -238, 13.5,  23.0]
+    ]
+    And lamb_idx 3 and cutoff of 10000,
+    full_us is sanitized to:
+
+    [
+        [inf, inf, 1598, 1.5, -23.0],
+        [inf, inf, -238, 13.5,  23.0]
+    ]
+
+    Parameters
+    ----------
+    full_us: np.array of shape (F, K)
+        Matrix of full energies
+
+    lamb_idx: int
+        Which of the K windows to serve as the reference energy
+    
+    cutoff: float
+        Used to determine the threshold for a "good" energy
+
+    Returns
+    -------
+    np.array of shape (F,K)
+        Sanitized energies
+
+    """
+    ref_us = np.expand_dims(full_us[:, lamb_idx], axis=1)
+    abs_us = np.abs(full_us - ref_us)
+    return np.where(abs_us < cutoff, full_us, np.inf)
+
+def extract_delta_Us_from_U_knk(U_knk):
+    """
+    Generate delta_Us from the U_knk matrix for use with BAR.
+
+    Parameters
+    ----------
+    U_knk: np.array of shape (K, N, K)
+        Energies matrix, K simulations ran with N frames with
+        energies evaluated at K states
+
+    Returns
+    -------
+    np.array of shape (K-1, 2, N)
+        Returns the delta_Us of the fwd and rev processes
+
+    """
+
+    assert U_knk.shape[0] == U_knk.shape[-1]
+
+    K = U_knk.shape[0]
+
+    def delta_U(from_idx, to_idx):
+        """
+        Computes [U(x, to_idx) - U(x, from_idx) for x in xs]
+        where xs are simulated at from_idx
+        """
+        current = U_knk[from_idx]
+        current_energies = current[:, from_idx]
+        perturbed_energies = current[:, to_idx]
+        return perturbed_energies - current_energies
+
+    delta_Us = []
+
+    for lambda_idx in range(K-1):
+        # lambda_us have shape (F, K)
+        fwd_delta_U = delta_U(lambda_idx, lambda_idx+1)
+        rev_delta_U = delta_U(lambda_idx+1, lambda_idx)
+        delta_Us.append((fwd_delta_U, rev_delta_U))
+
+    return np.array(delta_Us)

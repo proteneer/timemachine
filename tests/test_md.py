@@ -238,6 +238,16 @@ class TestContext(unittest.TestCase):
             test_xs
         )
 
+        test_us, test_xs, test_boxes = ctxt_3.multiple_steps_U(
+            lamb,
+            num_steps,
+            np.array([], dtype=np.float64),
+            u_interval,
+            x_interval
+        )
+
+        assert test_us.shape == (2, 0)
+
 class TestObservable(unittest.TestCase):
 
     def test_avg_potential_param_sizes_is_zero(self):
