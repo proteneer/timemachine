@@ -2,6 +2,7 @@ import timemachine
 
 from optimize.step import truncated_step
 from optimize.utils import flatten_and_unflatten
+from optimize.precondition import learning_rates_like_params
 
 from common import get_default_ff
 
@@ -55,6 +56,19 @@ def test_flatten_and_unflatten_ordered_params():
     ordered_params = forcefield.get_ordered_params()
 
     check_flatten_and_unflatten_roundtrip(ordered_params)
+
+
+def test_learning_rates_like_params():
+    """assert shape compatibility btwn ordered params and ordered learning rates"""
+
+    forcefield = get_default_ff()
+    ordered_handles = forcefield.get_ordered_handles()
+    ordered_params = forcefield.get_ordered_params()
+
+    ordered_lr = learning_rates_like_params(ordered_handles, ordered_params)
+
+    for (p, l) in zip(ordered_params, ordered_lr):
+        assert p.shape == l.shape
 
 
 def test_truncated_step():
