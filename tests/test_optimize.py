@@ -4,7 +4,7 @@ from optimize.step import truncated_step
 from optimize.utils import flatten_and_unflatten
 from optimize.precondition import learning_rates_like_params
 
-from common import get_default_ff
+from common import get_110_ccc_ff
 
 import numpy as onp
 
@@ -52,7 +52,7 @@ def test_flatten_and_unflatten_dict():
 def test_flatten_and_unflatten_ordered_params():
     """flatten/unflatten a Forcefield(ff_handlers).get_ordered_params()"""
 
-    forcefield = get_default_ff()
+    forcefield = get_110_ccc_ff()
     ordered_params = forcefield.get_ordered_params()
 
     check_flatten_and_unflatten_roundtrip(ordered_params)
@@ -61,7 +61,7 @@ def test_flatten_and_unflatten_ordered_params():
 def test_learning_rates_like_params():
     """assert shape compatibility btwn ordered params and ordered learning rates"""
 
-    forcefield = get_default_ff()
+    forcefield = get_110_ccc_ff()
     ordered_handles = forcefield.get_ordered_handles()
     ordered_params = forcefield.get_ordered_params()
 
