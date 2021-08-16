@@ -1,8 +1,14 @@
 # converts smirnoff xmls into python dictionaries.
+import ast
+import operator as op
+import pprint
+from argparse import ArgumentParser
 
 from simtk import unit
 from xml.dom import minidom
-xmldoc = minidom.parse('ff/smirnoff_1.1.0.xml')
+import numpy as np
+
+from ff.charges import AM1CCC_CHARGES
 
 # (ytz): lol i think i wrote this originally
 def _ast_eval(node):
@@ -12,8 +18,6 @@ def _ast_eval(node):
     ----------
     node : An ast parsing tree node
     """
-    import ast
-    import operator as op
 
     operators = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul,
         ast.Div: op.truediv, ast.Pow: op.pow, ast.BitXor: op.xor,
@@ -55,7 +59,6 @@ def string_to_unit(unit_string):
         The deserialized unit from the string
 
     """
-    import ast
     output_unit = _ast_eval(ast.parse(unit_string, mode='eval').body)
     return output_unit
 
@@ -85,95 +88,109 @@ tags = [
     VDW_TAG
 ]
 
-forcefield = {}
 
-for tag in tags:
-    itemlist = xmldoc.getElementsByTagName(tag)
-    if tag == BOND_TAG:
-        params = []
-        for s in itemlist:
-            patt = s.attributes['smirks'].value
-            b0 = parse_quantity(s.attributes['length'].value)
-            kb = parse_quantity(s.attributes['k'].value)
-            params.append([patt, kb, b0])
-        bonds = {
-            "params": params,
-        }
-        forcefield[tag] = bonds
+if __name__ == "__main__":
+    parser = ArgumentParser(description="Convert an openforcefield XML FF to a timemachine FF")
+    parser.add_argument("input_path", help="Path to XML ff")
+    parser.add_argument("--add_am1ccc_charges", default=False, action="store_true")
+    parser.add_argument("--output_path", help="Path to write FF file", default=None)
+    args = parser.parse_args()
 
-    elif tag == ANGLE_TAG:
-        params = []
-        for s in itemlist:
-            patt = s.attributes['smirks'].value
-            a0 = parse_quantity(s.attributes['angle'].value)
-            ka = parse_quantity(s.attributes['k'].value)
-            params.append([patt, ka, a0])
-        angles = {
-            "params": params,
-        }
-        forcefield[tag] = angles
-    elif tag == PROPER_TAG:
-        params = []
-        for s in itemlist:
-            patt = s.attributes['smirks'].value
-            counter = 1
-            components = []
-            while True:
-                try:
-                    k = parse_quantity(s.attributes['k'+str(counter)].value)
-                    phase = parse_quantity(s.attributes['phase'+str(counter)].value)
-                    period = float(s.attributes['periodicity'+str(counter)].value)
-                    idivf = float(s.attributes['idivf'+str(counter)].value)
-                    k = k/idivf
-                    components.append([k, phase, period])
-                    counter += 1
-                except KeyError:
-                    break
-            params.append([patt, components])
-        torsions = {
-            "params": params,
-        }
-        forcefield[tag] = torsions
-    elif tag == IMPROPER_TAG:
-        params = []
-        for s in itemlist:
-            patt = s.attributes['smirks'].value
-            impdivf = 3
-            k = parse_quantity(s.attributes['k1'].value)/impdivf
-            phase = parse_quantity(s.attributes['phase1'].value)
-            period = float(s.attributes['periodicity1'].value)
-            params.append([patt, k, phase, period])
-        impropers = {
-            "params": params
-        }
-        forcefield[tag] = impropers
-    elif tag == VDW_TAG:
-        params = []
-        for s in itemlist:
-            patt = s.attributes['smirks'].value
-            epsilon = parse_quantity(s.attributes['epsilon'].value)
-            rmin_half = parse_quantity(s.attributes['rmin_half'].value)
-            sigma = 2. * rmin_half / (2.**(1. / 6.))
-            params.append([patt, sigma, epsilon])
-        vdws = {
-            "params": params,
-            "props": {}
-        }
-        for key, val in xmldoc.getElementsByTagName("vdW")[0].attributes.items():
-            if key == 'cutoff':
-                # we don't do cuttoffs.
-                continue
-            elif 'scale' in key:
-                val = float(val)
-            elif key == 'switch_width':
-                continue
-            if key == "version":
-                continue
-            vdws["props"][key] = val 
-        forcefield['vdW'] = vdws
+    xmldoc = minidom.parse(args.input_path)
+    forcefield = {}
 
+    for tag in tags:
+        itemlist = xmldoc.getElementsByTagName(tag)
+        if tag == BOND_TAG:
+            params = []
+            for s in itemlist:
+                patt = s.attributes['smirks'].value
+                b0 = parse_quantity(s.attributes['length'].value)
+                kb = parse_quantity(s.attributes['k'].value)
+                params.append([patt, kb, b0])
+            bonds = {
+                "patterns": params,
+            }
+            forcefield["HarmonicBond"] = bonds
 
-import pprint
-pp = pprint.PrettyPrinter(width=500, compact=False)
-pp._sorted = lambda x:x
-pp.pprint(forcefield)
+        elif tag == ANGLE_TAG:
+            params = []
+            for s in itemlist:
+                patt = s.attributes['smirks'].value
+                a0 = parse_quantity(s.attributes['angle'].value)
+                ka = parse_quantity(s.attributes['k'].value)
+                params.append([patt, ka, a0])
+            angles = {
+                "patterns": params,
+            }
+            forcefield["HarmonicAngle"] = angles
+        elif tag == PROPER_TAG:
+            params = []
+            for s in itemlist:
+                patt = s.attributes['smirks'].value
+                counter = 1
+                components = []
+                while True:
+                    try:
+                        k = parse_quantity(s.attributes['k'+str(counter)].value)
+                        phase = parse_quantity(s.attributes['phase'+str(counter)].value)
+                        period = float(s.attributes['periodicity'+str(counter)].value)
+                        idivf = float(s.attributes['idivf'+str(counter)].value)
+                        k = k/idivf
+                        components.append([k, phase, period])
+                        counter += 1
+                    except KeyError:
+                        break
+                params.append([patt, components])
+            torsions = {
+                "patterns": params,
+            }
+            forcefield["ProperTorsion"] = torsions
+        elif tag == IMPROPER_TAG:
+            params = []
+            for s in itemlist:
+                patt = s.attributes['smirks'].value
+                impdivf = 3
+                k = parse_quantity(s.attributes['k1'].value)/impdivf
+                phase = parse_quantity(s.attributes['phase1'].value)
+                period = float(s.attributes['periodicity1'].value)
+                params.append([patt, k, phase, period])
+            impropers = {
+                "patterns": params
+            }
+            forcefield["ImproperTorsion"] = impropers
+        elif tag == VDW_TAG:
+            params = []
+            for s in itemlist:
+                patt = s.attributes['smirks'].value
+                epsilon = parse_quantity(s.attributes['epsilon'].value)
+                if "rmin_half" in s.attributes:
+                    rmin_half = parse_quantity(s.attributes['rmin_half'].value)
+                    sigma = 2. * rmin_half / (2.**(1. / 6.))
+                else:
+                    sigma = parse_quantity(s.attributes['sigma'].value)
+                # Take sqrt of epislon to avoid singularity in backprop
+                params.append([patt, sigma, np.sqrt(epsilon)])
+            vdws = {
+                "patterns": params,
+                "props": {}
+            }
+            for key, val in xmldoc.getElementsByTagName("vdW")[0].attributes.items():
+                if key == 'cutoff':
+                    # we don't do cuttoffs.
+                    continue
+                elif 'scale' in key:
+                    val = float(val)
+                elif key == 'switch_width':
+                    continue
+                if key == "version":
+                    continue
+                vdws["props"][key] = val
+            forcefield['LennardJones'] = vdws
+    if args.add_am1ccc_charges:
+        forcefield["AM1CCC"] = AM1CCC_CHARGES
+    stream = None
+    if args.output_path is not None:
+        stream = open(args.output_path, "w")
+    pp = pprint.PrettyPrinter(width=500, compact=False, stream=stream, indent=2)
+    pp.pprint(forcefield)
