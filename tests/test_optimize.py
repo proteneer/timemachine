@@ -2,11 +2,9 @@ import timemachine
 
 from optimize.step import truncated_step
 from optimize.utils import flatten_and_unflatten
+from optimize.precondition import learning_rates_like_params
 
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
-
-from pathlib import Path
+from common import get_110_ccc_ff
 
 import numpy as onp
 
@@ -54,15 +52,23 @@ def test_flatten_and_unflatten_dict():
 def test_flatten_and_unflatten_ordered_params():
     """flatten/unflatten a Forcefield(ff_handlers).get_ordered_params()"""
 
-    root = Path(timemachine.__file__).parent.parent
-    path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
-
-    with open(path_to_ff) as f:
-        ff_handlers = deserialize_handlers(f.read())
-
-    ordered_params = Forcefield(ff_handlers).get_ordered_params()
+    forcefield = get_110_ccc_ff()
+    ordered_params = forcefield.get_ordered_params()
 
     check_flatten_and_unflatten_roundtrip(ordered_params)
+
+
+def test_learning_rates_like_params():
+    """assert shape compatibility btwn ordered params and ordered learning rates"""
+
+    forcefield = get_110_ccc_ff()
+    ordered_handles = forcefield.get_ordered_handles()
+    ordered_params = forcefield.get_ordered_params()
+
+    ordered_lr = learning_rates_like_params(ordered_handles, ordered_params)
+
+    for (p, l) in zip(ordered_params, ordered_lr):
+        assert p.shape == l.shape
 
 
 def test_truncated_step():
