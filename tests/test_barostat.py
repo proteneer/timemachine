@@ -183,7 +183,7 @@ def test_barostat_is_deterministic():
 
     # OpenEye's AM1 Charging values are OS platform dependent. To ensure that we have deterministic values
     # we check against our two most common OS versions, Ubuntu 18.04 and 20.04.
-    box_vol = 8.01086504373106
+    box_vol = 26.748034673811226
     lig_charge_vals = np.array([1.4572377542719206, -0.37011462071257184, 1.1478267014520305, -4.920166483601927, 0.16985194917937935])
     if "ubuntu" not in platform_version:
         print(f"Test expected to run under ubuntu 20.04 or 18.04, got {platform_version}")
