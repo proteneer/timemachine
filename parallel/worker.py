@@ -35,8 +35,8 @@ def serve(args):
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1),
         options = [
-            ('grpc.max_send_message_length', 500 * 1024 * 1024),
-            ('grpc.max_receive_message_length', 500 * 1024 * 1024)
+            ('grpc.max_send_message_length', 1024 * 1024 * 1024),
+            ('grpc.max_receive_message_length', 1024 * 1024 * 1024)
         ]
     )
     service_pb2_grpc.add_WorkerServicer_to_server(Worker(), server)
