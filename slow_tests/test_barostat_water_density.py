@@ -24,53 +24,52 @@ from timemachine.lib import LangevinIntegrator
 
 from functools import partial
 
-# simulation parameters
-n_replicates = 10
-initial_waterbox_width = 3.0 * unit.nanometer
-timestep = 1.5 * unit.femtosecond
-collision_rate = 1.0 / unit.picosecond
-n_moves = 2000
-barostat_interval = 5
-seed = 2021
-
-# thermodynamic parameters
-temperature = 300 * unit.kelvin
-pressure = 1.013 * unit.bar
-
-# generate an alchemical system of a waterbox + alchemical ligand:
-# effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
-mol_a, _, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
-complex_system, complex_coords, complex_box, complex_top = build_water_system(
-    initial_waterbox_width.value_in_unit(unit.nanometer))
-
-min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
-afe = AbsoluteFreeEnergy(mol_a, ff)
-
-unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
-    ff.get_ordered_params(), complex_system, min_complex_coords
-)
-
-# define NPT ensemble
-potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
-ensemble = NPTEnsemble(potential_energy_model, temperature, pressure)
-
-# define a thermostat
-integrator = LangevinIntegrator(
-    temperature.value_in_unit(unit.kelvin),
-    timestep.value_in_unit(unit.picosecond),
-    collision_rate.value_in_unit(unit.picosecond**-1),
-    masses,
-    seed
-)
-integrator_impl = integrator.impl()
-
-
-def reduced_potential_fxn(x, box, lam):
-    u, du_dx = ensemble.reduced_potential_and_gradient(x, box, lam)
-    return u
-
 
 if __name__ == '__main__':
+    # simulation parameters
+    n_replicates = 10
+    initial_waterbox_width = 3.0 * unit.nanometer
+    timestep = 1.5 * unit.femtosecond
+    collision_rate = 1.0 / unit.picosecond
+    n_moves = 2000
+    barostat_interval = 5
+    seed = 2021
+
+    # thermodynamic parameters
+    temperature = 300 * unit.kelvin
+    pressure = 1.013 * unit.bar
+
+    # generate an alchemical system of a waterbox + alchemical ligand:
+    # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
+    mol_a, _, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
+    complex_system, complex_coords, complex_box, complex_top = build_water_system(
+        initial_waterbox_width.value_in_unit(unit.nanometer))
+
+    min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
+    afe = AbsoluteFreeEnergy(mol_a, ff)
+
+    unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
+        ff.get_ordered_params(), complex_system, min_complex_coords
+    )
+
+    # define NPT ensemble
+    potential_energy_model = PotentialEnergyModel(sys_params, unbound_potentials)
+    ensemble = NPTEnsemble(potential_energy_model, temperature, pressure)
+
+    # define a thermostat
+    integrator = LangevinIntegrator(
+        temperature.value_in_unit(unit.kelvin),
+        timestep.value_in_unit(unit.picosecond),
+        collision_rate.value_in_unit(unit.picosecond**-1),
+        masses,
+        seed
+    )
+    integrator_impl = integrator.impl()
+
+
+    def reduced_potential_fxn(x, box, lam):
+        u, du_dx = ensemble.reduced_potential_and_gradient(x, box, lam)
+        return u
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
