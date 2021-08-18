@@ -1,4 +1,5 @@
 import pymbar
+from tempfile import NamedTemporaryFile
 from fe import endpoint_correction
 from collections import namedtuple
 import pickle
@@ -11,32 +12,35 @@ import jax
 import numpy as np
 from md import minimizer
 
+import mdtraj
+
 from typing import Tuple, List, Any
 import os
 
 from fe import standard_state
+from fe.model_utils import generate_imaged_topology
 from fe.utils import sanitize_energies, extract_delta_Us_from_U_knk
 
 from timemachine.lib import potentials, custom_ops
 
+
 @dataclasses.dataclass
 class SimulationResult:
-   xs: np.array
-   boxes: np.array
+   frames: bytes
    du_dps: np.array
    lambda_us: np.array
 
 def flatten(v):
-    return tuple(), (v.xs, v.boxes, v.du_dps, v.lambda_us)
+    return tuple(), (v.frames, v.du_dps, v.lambda_us)
 
 def unflatten(aux_data, children):
-    xs, boxes, du_dps, lambda_us = aux_data
-    return SimulationResult(xs, boxes, du_dps, lambda_us)
+    frames, du_dps, lambda_us = aux_data
+    return SimulationResult(frames, du_dps, lambda_us)
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
 def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_steps, prod_steps,
-    x_interval, u_interval, lambda_windows):
+    x_interval, u_interval, lambda_windows, openmm_topo):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
@@ -79,6 +83,9 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
 
     lambda_windows: list of float
         lambda windows we evaluate energies at.
+
+    openmm_topo: openmm.app.Topology
+        Combined topology with mol to build XTCs from
 
     Returns
     -------
@@ -153,13 +160,16 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     for obs in du_dp_obs:
         grads.append(obs.avg_du_dp())
 
-    result = SimulationResult(
-        xs=xs,
-        boxes=boxes,
-        du_dps=grads,
-        lambda_us=full_us,
-    )
-
+    with NamedTemporaryFile(suffix=".xtc") as temp:
+        traj = mdtraj.Trajectory(xs, mdtraj.Topology.from_openmm(openmm_topo))
+        traj.unitcell_vectors = boxes
+        traj.save_xtc(temp.name)
+        with open(temp.name, "rb") as ifs:
+            result = SimulationResult(
+                frames=ifs.read(),
+                du_dps=grads,
+                lambda_us=full_us,
+            )
     return result
 
 
@@ -179,6 +189,7 @@ FreeEnergyModel = namedtuple(
      "prod_steps",
      "beta",
      "prefix",
+     "openmm_topo",
     ]
 )
 
@@ -210,7 +221,8 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.prod_steps,
             subsample_interval,
             subsample_interval, 
-            model.lambda_schedule
+            model.lambda_schedule,
+            model.openmm_topo,
         ))
 
     if model.endpoint_correct:
@@ -229,7 +241,8 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.prod_steps,
             subsample_interval,
             subsample_interval, 
-            [] # no need to evaluate Us for the endpoint correction
+            [], # no need to evaluate Us for the endpoint correction,
+            model.openmm_topo,
         ))
 
     if model.client is None:
@@ -338,14 +351,26 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         k_translation = 200.0
         k_rotation = 100.0
         start = time.time()
+        md_topo = mdtraj.Topology.from_openmm(model.openmm_topo)
+        with NamedTemporaryFile(suffix=".xtc") as temp:
+            with open(temp.name, "wb") as ofs:
+                ofs.write(results[-2].frames)
+            frames = mdtraj.load_xtc(temp.name, top=md_topo)
+            lhs_xs = frames.xyz
+        with NamedTemporaryFile(suffix=".xtc") as temp:
+            with open(temp.name, "wb") as ofs:
+                ofs.write(results[-1].frames)
+            frames = mdtraj.load_xtc(temp.name, top=md_topo)
+            rhs_xs = frames.xyz
+
         lhs_du, rhs_du, rotation_samples, translation_samples = endpoint_correction.estimate_delta_us(
             k_translation=k_translation,
             k_rotation=k_rotation,
             core_idxs=core_restr.get_idxs(),
             core_params=core_restr.params.reshape((-1,2)),
             beta=model.beta,
-            lhs_xs=results[-2].xs,
-            rhs_xs=results[-1].xs
+            lhs_xs=lhs_xs,
+            rhs_xs=rhs_xs
         )
         dG_endpoint, endpoint_err = pymbar.BAR(model.beta*lhs_du, model.beta*np.array(rhs_du))
         dG_endpoint = dG_endpoint/model.beta

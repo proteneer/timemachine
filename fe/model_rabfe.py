@@ -132,6 +132,13 @@ class AbsoluteModel(ABC):
 
         v0 = np.zeros_like(x0)
 
+        combined_topology = model_utils.generate_imaged_topology(
+            [self.host_topology, mol],
+            x0,
+            box0,
+            "initial_"+prefix+".pdb"
+        )
+
         endpoint_correct = False
         model = estimator_abfe.FreeEnergyModel(
             unbound_potentials,
@@ -146,26 +153,18 @@ class AbsoluteModel(ABC):
             self.equil_steps,
             self.prod_steps,
             beta,
-            prefix
+            prefix,
+            combined_topology,
         )
 
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
-
-        # uncomment if we want to visualize
-        combined_topology = model_utils.generate_imaged_topology(
-            [self.host_topology, mol],
-            x0,
-            box0,
-            "initial_"+prefix+".pdb"
-        )
 
         for lambda_idx, res in enumerate(results):
             # used for debugging for now, try to reproduce mdtraj error
             # outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
             # pickle.dump((res.xs, res.boxes, combined_topology), outfile)
-            traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
-            traj.unitcell_vectors = res.boxes
-            traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
+            with open("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc", "wb") as ofs:
+                ofs.write(res.frames)
     
         return dG, dG_err
 
@@ -285,6 +284,14 @@ class RelativeModel(ABC):
             seed
         )
 
+        # uncomment if we want to visualize.
+        combined_topology = model_utils.generate_imaged_topology(
+            [self.host_topology, mol_a, mol_b],
+            x0,
+            box0,
+            "initial_"+prefix+".pdb"
+        )
+
         endpoint_correct = True
         model = estimator_abfe.FreeEnergyModel(
             unbound_potentials,
@@ -299,25 +306,15 @@ class RelativeModel(ABC):
             self.equil_steps,
             self.prod_steps,
             beta,
-            prefix
+            prefix,
+            combined_topology,
         )
 
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
-        # uncomment if we want to visualize.
-        combined_topology = model_utils.generate_imaged_topology(
-            [self.host_topology, mol_a, mol_b],
-            x0,
-            box0,
-            "initial_"+prefix+".pdb"
-        )
-
         for lambda_idx, res in enumerate(results):
-            # outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
-            # pickle.dump((res.xs, res.boxes, combined_topology), outfile)
-            traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
-            traj.unitcell_vectors = res.boxes
-            traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
+            with open("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc", "wb") as ofs:
+                ofs.write(res.frames)
 
         return dG, dG_err, results
 

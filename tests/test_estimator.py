@@ -7,7 +7,7 @@ from fe import estimator_abfe
 from timemachine.lib import LangevinIntegrator, potentials, MonteCarloBarostat
 from parallel.client import CUDAPoolClient
 from md.barostat.utils import get_bond_list, get_group_indices
-
+from md import builders
 
 def get_harmonic_bond(n_atoms, n_bonds):
     atom_idxs = np.arange(n_atoms)
@@ -52,9 +52,10 @@ def get_harmonic_restraints(n_atoms, n_restraints):
 
 def test_free_energy_estimator():
 
-    n_atoms = 5
-    x0 = np.random.rand(n_atoms, 3)
+    _, x0, box, omm_topology = builders.build_water_system(1.0)
+    x0 = np.asarray(x0)
     v0 = np.zeros_like(x0)
+    n_atoms = x0.shape[0]
 
     n_bonds = 3
     n_angles = 4
@@ -113,7 +114,8 @@ def test_free_energy_estimator():
             100,
             100,
             beta,
-            "test"
+            "test",
+            omm_topology,
         )
 
         dG, bar_dG_err, results = estimator_abfe.deltaG(mdl, sys_params)
@@ -142,13 +144,14 @@ def test_free_energy_estimator_with_endpoint_correction():
     df/da.shape == a.shape, df/db.shape == b.shape, df/dc == c.shape, and etc.
     """
 
-    n_atoms = 15
-    x0 = np.random.rand(n_atoms, 3)
+    _, x0, box, omm_topology = builders.build_water_system(1.0)
+    x0 = np.asarray(x0)
     v0 = np.zeros_like(x0)
+    n_atoms = x0.shape[0]
 
     n_bonds = 3
     n_angles = 4
-    n_restraints = 5
+    n_restraints = n_atoms // 3
 
     hb_pot, hb_params = get_harmonic_bond(n_atoms, n_bonds)
     ha_pot, ha_params = get_harmonic_angle(n_atoms, n_angles)
@@ -205,7 +208,8 @@ def test_free_energy_estimator_with_endpoint_correction():
             100,
             100,
             beta,
-            "test"
+            "test",
+            omm_topology,
         )
 
         dG, bar_dG_err, results = estimator_abfe.deltaG(mdl, sys_params)
