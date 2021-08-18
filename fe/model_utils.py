@@ -29,6 +29,8 @@ def apply_hmr(masses, bond_list, multiplier=2):
 
     """
 
+    masses = np.array(masses) # make a copy
+
     def is_hydrogen(i):
         return np.abs(masses[i] - 1.00794) < 1e-3
 
