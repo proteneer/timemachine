@@ -8,9 +8,9 @@ import logging
 import pickle
 from concurrent import futures
 
-from parallel import service_pb2
-from parallel import service_pb2_grpc
+from parallel import service_pb2, service_pb2_grpc
 from parallel.utils import get_worker_status
+from parallel.constants import DEFAULT_GRPC_OPTIONS
 
 import grpc
 
@@ -33,12 +33,7 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
 def serve(args):
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1),
-        options = [
-            ('grpc.max_send_message_length', 1024 * 1024 * 1024),
-            ('grpc.max_receive_message_length', 1024 * 1024 * 1024)
-        ]
-    )
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1), options=DEFAULT_GRPC_OPTIONS)
     service_pb2_grpc.add_WorkerServicer_to_server(Worker(), server)
     server.add_insecure_port('[::]:'+str(args.port))
     server.start()
