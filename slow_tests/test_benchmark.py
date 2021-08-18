@@ -14,6 +14,7 @@ from simtk.openmm import app
 from timemachine.lib import custom_ops, LangevinIntegrator, MonteCarloBarostat
 
 from fe.utils import to_md_units
+from fe.model_utils import apply_hmr
 from fe import free_energy
 from fe.topology import SingleTopology
 
@@ -43,6 +44,7 @@ def benchmark(
     v0,
     box,
     bound_potentials,
+    hmr=False,
     verbose=True,
     num_batches=100,
     steps_per_batch=1000,
@@ -61,6 +63,11 @@ def benchmark(
     pressure = 1.0
     seconds_per_day = 86400
 
+    harmonic_bond_potential = bound_potentials[0]
+    bond_list = get_bond_list(harmonic_bond_potential)
+    if hmr:
+        dt = 2.5e-3
+        masses = apply_hmr(masses, bond_list)
     intg = LangevinIntegrator(
         temperature,
         dt,
@@ -76,8 +83,6 @@ def benchmark(
 
     baro_impl = None
     if barostat_interval > 0:
-        harmonic_bond_potential = bound_potentials[0]
-        bond_list = get_bond_list(harmonic_bond_potential)
         group_idxs = get_group_indices(bond_list)
         baro = MonteCarloBarostat(
             x0.shape[0],
@@ -174,8 +179,9 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
     x0 = host_conf
     v0 = np.zeros_like(host_conf)
 
-    benchmark("dhfr-apo", host_masses, 0.0, x0, v0, box, host_fns, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
-    benchmark("dhfr-apo-barostat-interval-25", host_masses, 0.0, x0, v0, box, host_fns, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch, barostat_interval=25)
+    benchmark("dhfr-apo", host_masses, 0.0, x0, v0, box, host_fns, verbose=verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
+    benchmark("dhfr-apo-barostat-interval-25", host_masses, 0.0, x0, v0, box, host_fns, verbose=verbose, num_batches=num_batches, steps_per_batch=steps_per_batch, barostat_interval=25)
+    benchmark("dhfr-apo-hmr-barostat-interval-25", host_masses, 0.0, x0, v0, box, host_fns, verbose=verbose, hmr=True, num_batches=num_batches, steps_per_batch=steps_per_batch, barostat_interval=25)
 
 def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
@@ -213,8 +219,8 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         v0 = np.zeros_like(x0)
 
         # lamb = 0.0
-        benchmark(stage+"-apo", host_masses, 0.0, x0, v0, host_box, host_fns, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
-        benchmark(stage+"-apo-barostat-interval-25", host_masses, 0.0, x0, v0, host_box, host_fns, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch, barostat_interval=25)
+        benchmark(stage+"-apo", host_masses, 0.0, x0, v0, host_box, host_fns, verbose=verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
+        benchmark(stage+"-apo-barostat-interval-25", host_masses, 0.0, x0, v0, host_box, host_fns, verbose=verbose, num_batches=num_batches, steps_per_batch=steps_per_batch, barostat_interval=25)
 
         # RBFE
         unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, x0)
@@ -225,7 +231,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
         v0 = np.zeros_like(x0)
 
         # lamb = 0.5
-        benchmark(stage+'-rbfe-with-du-dp', masses, 0.5, x0, v0, host_box, bound_potentials, verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
+        benchmark(stage+'-rbfe-with-du-dp', masses, 0.5, x0, v0, host_box, bound_potentials, verbose=verbose, num_batches=num_batches, steps_per_batch=steps_per_batch)
 
         for du_dl_interval in [0,1,5]:
             benchmark(
@@ -235,7 +241,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
                 v0,
                 host_box,
                 bound_potentials,
-                verbose,
+                verbose=verbose,
                 num_batches=num_batches,
                 steps_per_batch=steps_per_batch,
                 compute_du_dp_interval=0,
