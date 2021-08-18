@@ -9,6 +9,7 @@ import grpc
 
 from parallel import service_pb2_grpc, service_pb2
 from parallel.utils import get_gpu_count
+from parallel.constants import DEFAULT_GRPC_OPTIONS
 
 from concurrent import futures
 
@@ -185,10 +186,7 @@ class GRPCClient(AbstractClient):
         self.hosts = self._prepare_hosts(hosts, default_port)
         self.stubs = []
         if options is None:
-            options = [
-                ('grpc.max_send_message_length', 1024 * 1024 * 1024),
-                ('grpc.max_receive_message_length', 1024 * 1024 * 1024)
-            ]
+            options = DEFAULT_GRPC_OPTIONS
         for host in self.hosts:
             channel = grpc.insecure_channel(
                 host,
