@@ -40,7 +40,7 @@ def unflatten(aux_data, children):
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
 def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_steps, prod_steps,
-    x_interval, u_interval, lambda_windows, openmm_topo):
+    x_interval, u_interval, lambda_windows):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
@@ -83,9 +83,6 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
 
     lambda_windows: list of float
         lambda windows we evaluate energies at.
-
-    openmm_topo: openmm.app.Topology
-        Combined topology with mol to build XTCs from
 
     Returns
     -------
@@ -161,7 +158,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
         grads.append(obs.avg_du_dp())
 
     with NamedTemporaryFile(suffix=".xtc") as temp:
-        traj = mdtraj.Trajectory(xs, mdtraj.Topology.from_openmm(openmm_topo))
+        traj = mdtraj.Trajectory(xs, topology=None)
         traj.unitcell_vectors = boxes
         traj.save_xtc(temp.name)
         with open(temp.name, "rb") as ifs:
@@ -222,7 +219,6 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             subsample_interval,
             subsample_interval, 
             model.lambda_schedule,
-            model.openmm_topo,
         ))
 
     if model.endpoint_correct:
@@ -242,7 +238,6 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             subsample_interval,
             subsample_interval, 
             [], # no need to evaluate Us for the endpoint correction,
-            model.openmm_topo,
         ))
 
     if model.client is None:
