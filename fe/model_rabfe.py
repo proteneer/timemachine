@@ -284,7 +284,6 @@ class RelativeModel(ABC):
             seed
         )
 
-        # uncomment if we want to visualize.
         combined_topology = model_utils.generate_imaged_topology(
             [self.host_topology, mol_a, mol_b],
             x0,
