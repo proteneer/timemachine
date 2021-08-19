@@ -14,13 +14,8 @@ import numpy as np
 from pathlib import Path
 from ff.handlers.deserialize import deserialize_handlers
 from ff import Forcefield
+from fe.utils import get_romol_conf
 
-
-def get_romol_conf(mol):
-    """Coordinates of mol's 0th conformer, in nanometers"""
-    conformer = mol.GetConformer(0)
-    guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    return guest_conf/10 # from angstroms to nm
 
 def setup_system():
 

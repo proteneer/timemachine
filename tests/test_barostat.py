@@ -1,3 +1,4 @@
+import os
 import platform
 import numpy as np
 from simtk import unit
@@ -87,6 +88,19 @@ def test_barostat_zero_interval():
     with pytest.raises(RuntimeError):
         baro.set_interval(0)
 
+def get_platform_version() -> str:
+    release_path = "/etc/os-release"
+    if os.path.isfile(release_path):
+        # AWS Ubuntu 20.04 doesn't have version in uname...
+        with open(release_path, "r") as ifs:
+            for line in ifs.readlines():
+                if line.startswith("PRETTY_NAME="):
+                    platform_version = line.strip()
+    else:
+        platform_version = platform.version()
+    return platform_version.lower()
+
+
 def test_barostat_partial_group_idxs():
     """Verify that the barostat can handle a subset of the molecules
     rather than all of them. This test only verify that it runs, not the behavior"""
@@ -154,8 +168,14 @@ def test_barostat_partial_group_idxs():
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
     ctxt.multiple_steps(np.ones(1000)*lam)
 
-def test_barostat_varying_pressure():
-    platform_version = platform.version().lower()
+
+def test_barostat_is_deterministic():
+    """Verify that the barostat results in the same box size shift after 1000
+    steps. This is important to debugging as well as providing the ability to replicate
+    simulations
+    """
+    platform_version = get_platform_version()
+    lam = 1.0
     temperature = 300.0 * unit.kelvin
     initial_waterbox_width = 2.0 * unit.nanometer
     timestep = 1.5 * unit.femtosecond
@@ -164,18 +184,18 @@ def test_barostat_varying_pressure():
     seed = 2021
     np.random.seed(seed)
 
-    box_vol = 7.8336338769085809
-    box_diff = 0.5439182266135552
+    # OpenEye's AM1 Charging values are OS platform dependent. To ensure that we have deterministic values
+    # we check against our two most common OS versions, Ubuntu 18.04 and 20.04.
+    box_vol = 8.01086504373106
     lig_charge_vals = np.array([1.4572377542719206, -0.37011462071257184, 1.1478267014520305, -4.920166483601927, 0.16985194917937935])
     if "ubuntu" not in platform_version:
-        print("Test expected to run under ubuntu 20.04 or 18.04")
+        print(f"Test expected to run under ubuntu 20.04 or 18.04, got {platform_version}")
     if "20.04" in platform_version:
-        box_vol = 7.722300793290474
-        box_diff = 0.23923388075982022
+        box_vol = 7.864905556101201
         lig_charge_vals[3] = -4.920284514559682
 
-    # Start out with a very large pressure
-    pressure = 1000. * unit.atmosphere
+    pressure = 1. * unit.atmosphere
+
     mol_a = hif2a_ligand_pair.mol_a
     ff = hif2a_ligand_pair.ff
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
@@ -188,27 +208,17 @@ def test_barostat_varying_pressure():
         ff.get_ordered_params(), complex_system, min_complex_coords
     )
 
-
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
     bond_list = get_bond_list(harmonic_bond_potential)
     group_indices = get_group_indices(bond_list)
 
-    trajs = []
-    volume_trajs = []
-
-    lam = 1.0
-
-    bound_potentials = []
+    u_impls = []
     # Look at the first five atoms and their assigned charges
     ligand_charges = sys_params[-1][:, 0][len(min_complex_coords):][:5]
     np.testing.assert_array_almost_equal(lig_charge_vals, ligand_charges, decimal=5)
     for params, unbound_pot in zip(sys_params, unbound_potentials):
         bp = unbound_pot.bind(np.asarray(params))
-        bound_potentials.append(bp)
-
-    u_impls = []
-    for bp in bound_potentials:
         bp_impl = bp.bound_impl(precision=np.float32)
         u_impls.append(bp_impl)
 
@@ -234,24 +244,84 @@ def test_barostat_varying_pressure():
     )
 
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
-    ctxt.multiple_steps(np.ones(2000)*lam)
+    ctxt.multiple_steps(np.ones(1000)*lam)
+    atm_box = ctxt.get_box()
+    np.testing.assert_almost_equal(compute_box_volume(atm_box), box_vol, decimal=5)
+
+
+def test_barostat_varying_pressure():
+    temperature = 300.0 * unit.kelvin
+    initial_waterbox_width = 2.0 * unit.nanometer
+    timestep = 1.5 * unit.femtosecond
+    barostat_interval = 3
+    collision_rate = 1.0 / unit.picosecond
+    seed = 2021
+    np.random.seed(seed)
+
+    # Start out with a very large pressure
+    pressure = 1000. * unit.atmosphere
+    mol_a = hif2a_ligand_pair.mol_a
+    ff = hif2a_ligand_pair.ff
+    complex_system, complex_coords, complex_box, complex_top = build_water_system(
+        initial_waterbox_width.value_in_unit(unit.nanometer))
+
+    min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
+    afe = AbsoluteFreeEnergy(mol_a, ff)
+
+    unbound_potentials, sys_params, masses, coords = afe.prepare_host_edge(
+        ff.get_ordered_params(), complex_system, min_complex_coords
+    )
+
+    # get list of molecules for barostat by looking at bond table
+    harmonic_bond_potential = unbound_potentials[0]
+    bond_list = get_bond_list(harmonic_bond_potential)
+    group_indices = get_group_indices(bond_list)
+
+    lam = 1.0
+
+    u_impls = []
+    for params, unbound_pot in zip(sys_params, unbound_potentials):
+        bp = unbound_pot.bind(np.asarray(params))
+        bp_impl = bp.bound_impl(precision=np.float32)
+        u_impls.append(bp_impl)
+
+    integrator = LangevinIntegrator(
+        temperature.value_in_unit(unit.kelvin),
+        timestep.value_in_unit(unit.picosecond),
+        collision_rate.value_in_unit(unit.picosecond**-1),
+        masses,
+        seed
+    )
+    integrator_impl = integrator.impl()
+
+    v_0 = sample_velocities(masses * unit.amu, temperature)
+
+    baro = custom_ops.MonteCarloBarostat(
+        coords.shape[0],
+        pressure.value_in_unit(unit.bar),
+        temperature.value_in_unit(unit.kelvin),
+        group_indices,
+        barostat_interval,
+        u_impls,
+        seed
+    )
+
+    ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
+    ctxt.multiple_steps(np.ones(1000)*lam)
     ten_atm_box = ctxt.get_box()
     ten_atm_box_vol = compute_box_volume(ten_atm_box)
     # Expect the box to shrink thanks to the barostat
-    assert ten_atm_box_vol < compute_box_volume(complex_box)
+    assert compute_box_volume(complex_box) - ten_atm_box_vol > 0.4
 
     # Set the pressure to 1 bar
     baro.set_pressure((1 * unit.atmosphere).value_in_unit(unit.bar))
     # Changing the barostat interval resets the barostat step.
     baro.set_interval(2)
 
-    ctxt.multiple_steps(np.ones(5000)*lam)
+    ctxt.multiple_steps(np.ones(2000)*lam)
     atm_box = ctxt.get_box()
-    # OpenEye's AM1 Charging values are OS platform dependent. To ensure that we have deterministic values
-    # we check against our two most common OS versions, Ubuntu 18.04 and 20.04.
-    np.testing.assert_almost_equal(compute_box_volume(atm_box), box_vol, decimal=5)
     # Box will grow thanks to the lower pressure
-    np.testing.assert_almost_equal(np.abs(ten_atm_box_vol - compute_box_volume(atm_box)), box_diff, decimal=5)
+    assert compute_box_volume(atm_box) > ten_atm_box_vol
 
 def test_molecular_ideal_gas():
     """

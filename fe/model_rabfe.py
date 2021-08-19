@@ -1,5 +1,6 @@
 from abc import ABC
 
+import functools
 import numpy as np
 import mdtraj
 
@@ -54,7 +55,8 @@ class AbsoluteModel(ABC):
         mol,
         x0,
         box0,
-        prefix):
+        prefix,
+        core_idxs=None):
         """ Compute the absolute free of energy of decoupling mol_a.
 
         This function is differentiable w.r.t. ff_params.
@@ -76,6 +78,9 @@ class AbsoluteModel(ABC):
 
         prefix: str
             String to prepend to print out statements
+
+        core_idxs: None or list of int
+            List of core_idxs we may wish to turn off.
 
         Returns
         -------
@@ -147,23 +152,20 @@ class AbsoluteModel(ABC):
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
         # uncomment if we want to visualize
-        # combined_topology = model_utils.generate_imaged_topology(
-        #     [self.host_topology, mol],
-        #     x0,
-        #     box0,
-        #     "initial_"+prefix+".pdb"
-        # )
+        combined_topology = model_utils.generate_imaged_topology(
+            [self.host_topology, mol],
+            x0,
+            box0,
+            "initial_"+prefix+".pdb"
+        )
 
-        # for lambda_idx, res in enumerate(results):
-        #     # used for debugging for now, try to reproduce mdtraj error
-        #     outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
-        #     pickle.dump((res.xs, res.boxes, combined_topology), outfile)
-        #     print("dumping", outfile)
-        #     # pickle.dump((res.xs[:100], res.boxes[:100], combined_topology), outfile)
-        #     traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
-        #     traj.unitcell_vectors = res.boxes
-        #     traj.image_molecules()
-        #     traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
+        for lambda_idx, res in enumerate(results):
+            # used for debugging for now, try to reproduce mdtraj error
+            # outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
+            # pickle.dump((res.xs, res.boxes, combined_topology), outfile)
+            traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
+            traj.unitcell_vectors = res.boxes
+            traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
     
         return dG, dG_err
 
@@ -220,10 +222,16 @@ class RelativeModel(ABC):
         ff_params,
         mol_a,
         mol_b,
-        core_idxs,
+        combined_core_idxs,
         x0,
         box0,
         prefix):
+
+        num_host_atoms = x0.shape[0] - mol_a.GetNumAtoms() - mol_b.GetNumAtoms()
+
+        # (ytz): super ugly, undo combined_core_idxs to get back original idxs
+        core_idxs = combined_core_idxs - num_host_atoms
+        core_idxs[:, 1] -= mol_a.GetNumAtoms()
 
         dual_topology = self.setup_topology(mol_a, mol_b)
         rfe = free_energy_rabfe.RelativeFreeEnergy(dual_topology)
@@ -233,14 +241,15 @@ class RelativeModel(ABC):
             self.host_system
         )
 
-        k_core = 75.0
-        core_params = np.zeros_like(core_idxs).astype(np.float64)
+        k_core = 30.0
+
+        core_params = np.zeros_like(combined_core_idxs).astype(np.float64)
         core_params[:, 0] = k_core
 
-        B = len(core_idxs)
+        B = len(combined_core_idxs)
 
         restraint_potential = potentials.HarmonicBond(
-            core_idxs,
+            combined_core_idxs,
         )
 
         unbound_potentials.append(restraint_potential)
@@ -296,21 +305,19 @@ class RelativeModel(ABC):
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
         # uncomment if we want to visualize.
-        # combined_topology = model_utils.generate_imaged_topology(
-        #     [self.host_topology, mol_a, mol_b],
-        #     x0,
-        #     box0,
-        #     "initial_"+prefix+".pdb"
-        # )
+        combined_topology = model_utils.generate_imaged_topology(
+            [self.host_topology, mol_a, mol_b],
+            x0,
+            box0,
+            "initial_"+prefix+".pdb"
+        )
 
-        # for lambda_idx, res in enumerate(results):
-        #     outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
-        #     pickle.dump((res.xs, res.boxes, combined_topology), outfile)
-        #     print("dumping", outfile)
-        #     traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
-        #     traj.unitcell_vectors = res.boxes
-        #     traj.image_molecules() # don't do this in prod
-        #     traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
+        for lambda_idx, res in enumerate(results):
+            # outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
+            # pickle.dump((res.xs, res.boxes, combined_topology), outfile)
+            traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
+            traj.unitcell_vectors = res.boxes
+            traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
 
         return dG, dG_err, results
 
@@ -439,14 +446,17 @@ class RelativeHydrationModel(RelativeModel):
 class AbsoluteConversionModel(AbsoluteModel):
 
     def setup_topology(self, mol):
-        return topology.BaseTopologyConversion(mol, self.ff)
+        top = topology.BaseTopologyConversion(mol, self.ff)
+        return top
 
 class AbsoluteStandardHydrationModel(AbsoluteModel):
 
     def setup_topology(self, mol):
-        return topology.BaseTopologyStandardDecoupling(mol, self.ff)
+        top = topology.BaseTopologyStandardDecoupling(mol, self.ff)
+        return top
 
 class RelativeBindingModel(RelativeModel):
 
     def setup_topology(self, mol_a, mol_b):
-        return topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
+        top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
+        return top

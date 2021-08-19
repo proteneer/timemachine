@@ -1,4 +1,5 @@
 pytest
+pytest-cov
 bootstrapped==0.0.2
 grpcio==1.30.0
 grpcio-tools==1.30.0

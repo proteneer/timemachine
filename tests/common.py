@@ -4,6 +4,10 @@ import jax
 import jax.numpy as jnp
 import functools
 from timemachine.constants import ONE_4PI_EPS0
+import timemachine
+from pathlib import Path
+from ff.handlers.deserialize import deserialize_handlers
+from ff import Forcefield
 
 from timemachine.potentials import bonded, nonbonded, gbsa
 from timemachine.lib import potentials, custom_ops
@@ -12,6 +16,17 @@ from hilbertcurve.hilbertcurve import HilbertCurve
 
 import itertools
 
+
+def get_110_ccc_ff():
+    root = Path(timemachine.__file__).parent.parent
+    path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
+
+    with open(path_to_ff) as f:
+        ff_handlers = deserialize_handlers(f.read())
+
+    forcefield = Forcefield(ff_handlers)
+
+    return forcefield
 
 
 def prepare_lj_system(

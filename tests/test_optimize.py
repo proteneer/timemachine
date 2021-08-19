@@ -1,11 +1,74 @@
+import timemachine
+
 from optimize.step import truncated_step
+from optimize.utils import flatten_and_unflatten
+from optimize.precondition import learning_rates_like_params
+
+from common import get_110_ccc_ff
 
 import numpy as onp
 
-from jax import numpy as jnp
-from jax import grad
-from jax.config import config
+from jax import tree_util, grad, config, numpy as jnp
+
 config.update("jax_enable_x64", True)
+
+
+def check_flatten_and_unflatten_roundtrip(example_pytree):
+    """assert that structures with array-valued leaves can be successfully
+    flattened and unflattened"""
+
+    flatten, unflatten = flatten_and_unflatten(example_pytree)
+
+    original_vector = flatten(example_pytree)
+    roundtripped_vector = flatten(unflatten(original_vector))
+
+    assert (original_vector == roundtripped_vector).all()
+
+    original_structure = tree_util.tree_structure(example_pytree)
+    roundtripped_structure = tree_util.tree_structure(unflatten(flatten(example_pytree)))
+
+    assert original_structure == roundtripped_structure
+
+
+def test_flatten_and_unflatten_dict():
+    """flatten/unflatten a nested object with array-valued leaves"""
+
+    example_pytree = dict(
+        Bonds=onp.random.randn(50, 2),
+        Angles=onp.random.randn(60, 3),
+        Extras=dict(
+            GlobalVars=[
+                jnp.arange(70),
+                onp.random.randn(80, 4),
+            ]
+        ),
+        Bias=1.2,
+        Multiplier=onp.array(2.5),
+    )
+
+    check_flatten_and_unflatten_roundtrip(example_pytree)
+
+
+def test_flatten_and_unflatten_ordered_params():
+    """flatten/unflatten a Forcefield(ff_handlers).get_ordered_params()"""
+
+    forcefield = get_110_ccc_ff()
+    ordered_params = forcefield.get_ordered_params()
+
+    check_flatten_and_unflatten_roundtrip(ordered_params)
+
+
+def test_learning_rates_like_params():
+    """assert shape compatibility btwn ordered params and ordered learning rates"""
+
+    forcefield = get_110_ccc_ff()
+    ordered_handles = forcefield.get_ordered_handles()
+    ordered_params = forcefield.get_ordered_params()
+
+    ordered_lr = learning_rates_like_params(ordered_handles, ordered_params)
+
+    for (p, l) in zip(ordered_params, ordered_lr):
+        assert p.shape == l.shape
 
 
 def test_truncated_step():

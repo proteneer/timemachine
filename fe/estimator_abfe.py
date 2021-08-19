@@ -15,6 +15,7 @@ from typing import Tuple, List, Any
 import os
 
 from fe import standard_state
+from fe.utils import sanitize_energies, extract_delta_Us_from_U_knk
 
 from timemachine.lib import potentials, custom_ops
 
@@ -22,29 +23,27 @@ from timemachine.lib import potentials, custom_ops
 class SimulationResult:
    xs: np.array
    boxes: np.array
-   du_dls: np.array
    du_dps: np.array
-   left_dus: np.array
-   right_dus: np.array
+   lambda_us: np.array
 
 def flatten(v):
-    return tuple(), (v.xs, v.boxes, v.du_dls, v.du_dps, v.left_dus, v.right_dus)
+    return tuple(), (v.xs, v.boxes, v.du_dps, v.lambda_us)
 
 def unflatten(aux_data, children):
-    xs, boxes, du_dls, du_dps, left_dus, right_dus = aux_data
-    return SimulationResult(xs, boxes, du_dls, du_dps, left_dus, right_dus)
+    xs, boxes, du_dps, lambda_us = aux_data
+    return SimulationResult(xs, boxes, du_dps, lambda_us)
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
 def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_steps, prod_steps,
-    x_interval=50, du_dl_interval=200, lambda_left=None, lambda_right=None):
+    x_interval, u_interval, lambda_windows):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
     Parameters
     ----------
     lamb: float
-        lambda parameter
+        lambda value used for the equilibrium simulation
 
     box: np.array
         3x3 numpy array of the box, dtype should be np.float64
@@ -62,7 +61,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
         integrator to be used for dynamics
 
     barostat: timemachine.Barostat
-        barostat to be used for dynamics
+        barostat to be used for equilibration
 
     equil_steps: int
         number of equilibration steps
@@ -71,18 +70,15 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
         number of production steps
 
     x_interval: int
-        how often we store coordinates. if x_interval == 0 then
+        how often we store coordinates. If x_interval == 0 then
         no frames are returned.
 
-    du_dl_interval: int
-        how often we store du_dls. if du_dl_interval == 0 then
-        no du_dls are returned
+    u_interval: int
+        how often we store energies. If u_interval == 0 then
+        no energies are returned
 
-    lambda_left: float or None
-        lhs lambda value
-
-    lambda_right: float or None
-        rhs lambda value
+    lambda_windows: list of float
+        lambda windows we evaluate energies at.
 
     Returns
     -------
@@ -99,7 +95,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     for bp in final_potentials:
         impl = bp.bound_impl(np.float32)
         all_impls.append(impl)
-        du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 5))
+        du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 25))
 
     # fire minimize once again, needed for parameter interpolation
     x0 = minimizer.fire_minimize(x0, all_impls, box, np.ones(100, dtype=np.float64)*lamb)
@@ -136,12 +132,20 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     equil_schedule = np.ones(equil_steps)*lamb
     ctxt.multiple_steps(equil_schedule)
 
+    # (ytz): intentionally hard-coded, I'd rather the end-user *not*
+    # muck with this unless they have a good reason to.
+    barostat_impl.set_interval(25)
+
     for obs in du_dp_obs:
         ctxt.add_observable(obs)
 
-    prod_schedule = np.ones(prod_steps)*lamb
-
-    full_du_dls, xs, boxes, = ctxt.multiple_steps(prod_schedule, du_dl_interval, x_interval)
+    full_us, xs, boxes = ctxt.multiple_steps_U(
+        lamb,
+        prod_steps,
+        np.array(lambda_windows),
+        u_interval,
+        x_interval
+    )
 
     # keep the structure of grads the same as that of final_potentials so we can properly
     # form their vjps.
@@ -149,58 +153,11 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     for obs in du_dp_obs:
         grads.append(obs.avg_du_dp())
 
-    # gather delta_Us
-    unbound_impls = []
-    unbound_params = []
-    for bp in final_potentials:
-        impl = bp.unbound_impl(np.float32)
-        unbound_impls.append(impl)
-        unbound_params.append(bp.params)
-
-    if lambda_left is not None or lambda_right is not None:
-        center_Us = []
-        for x, b in zip(xs, boxes):
-            u = 0
-            for ub, p in zip(unbound_impls, unbound_params):
-                _, _, _, nrg = ub.execute_selective(x, p, b, lamb, False, False, False, True)
-                u += nrg
-            center_Us.append(u)
-
-    if lambda_left is not None:
-        left_Us = []
-        for x, b in zip(xs, boxes):
-            u = 0
-            for ub, p in zip(unbound_impls, unbound_params):
-                _, _, _, nrg = ub.execute_selective(x, p, b, lambda_left, False, False, False, True)
-                u += nrg
-            left_Us.append(u)
-        left_dus = []
-        for lu, cu in zip(left_Us, center_Us):
-            left_dus.append(lu - cu)
-    else:
-        left_dus = None
-
-    if lambda_right is not None:
-        right_Us = []
-        for x, b in zip(xs, boxes):
-            u = 0
-            for ub, p in zip(unbound_impls, unbound_params):
-                _, _, _, nrg = ub.execute_selective(x, p, b, lambda_right, False, False, False, True)
-                u += nrg
-            right_Us.append(u)
-        right_dus = []
-        for ru, cu in zip(right_Us, center_Us):
-            right_dus.append(ru - cu)
-    else:
-        right_dus = None
-
     result = SimulationResult(
         xs=xs,
         boxes=boxes,
-        du_dls=full_du_dls,
         du_dps=grads,
-        left_dus=np.array(left_dus),
-        right_dus=np.array(right_dus)
+        lambda_us=full_us,
     )
 
     return result
@@ -239,20 +196,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     all_args = []
     for lamb_idx, lamb in enumerate(model.lambda_schedule):
 
-        if model.endpoint_correct and lamb_idx == len(model.lambda_schedule) - 1:
-            x_interval = 200
-        else:
-            x_interval = 200
-
-        if lamb_idx == 0:
-            lambda_left = None
-        else:
-            lambda_left = model.lambda_schedule[lamb_idx-1]
-
-        if lamb_idx == len(model.lambda_schedule) - 1:
-            lambda_right = None
-        else:
-            lambda_right = model.lambda_schedule[lamb_idx+1]
+        subsample_interval = 1000
 
         all_args.append((
             lamb,
@@ -264,27 +208,28 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             model.barostat,
             model.equil_steps,
             model.prod_steps,
-            x_interval, # x_interval
-            200,        # du_dl_interval
-            lambda_left,
-            lambda_right
+            subsample_interval,
+            subsample_interval, 
+            model.lambda_schedule
         ))
 
     if model.endpoint_correct:
+
+        assert isinstance(bound_potentials[-1], potentials.HarmonicBond)
+
         all_args.append((
             1.0,
             model.box,
             model.x0,
             model.v0,
-            bound_potentials[:-1],
+            bound_potentials[:-1], # strip out the restraints
             model.integrator,
             model.barostat,
             model.equil_steps,
             model.prod_steps,
-            200,       # x_interval
-            200,       # du_dl_interval
-            None,
-            None
+            subsample_interval,
+            subsample_interval, 
+            [] # no need to evaluate Us for the endpoint correction
         ))
 
     if model.client is None:
@@ -300,57 +245,93 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         for future in futures:
             results.append(future.result())
 
-    mean_du_dls = []
-    all_grads = []
-
     if model.endpoint_correct:
-        ti_results = results[:-1]
+        sim_results = results[:-1]
     else:
-        ti_results = results
+        sim_results = results
 
-    for lambda_idx, (lambda_window, result) in enumerate(zip(model.lambda_schedule, ti_results)):
-        # (ytz): figure out what to do with stddev(du_dl) later
-        # print(f"{model.prefix} index {lambda_idx} lambda {lambda_window:.5f} <du/dl> {np.mean(result.du_dls):.5f} med(du/dl) {np.median(result.du_dls):.5f}  o(du/dl) {np.std(result.du_dls):.5f}")
-        mean_du_dls.append(np.mean(result.du_dls))
-        all_grads.append(result.du_dps)
+    U_knk = []
+    N_k = []
+    for lambda_idx, (lambda_window, result) in enumerate(zip(model.lambda_schedule, sim_results)):
+        U_knk.append(result.lambda_us)
+        N_k.append(len(result.lambda_us)) # number of frames
 
-    tibar_dG = 0
+    U_knk = np.array(U_knk)
+
     bar_dG = 0
     bar_dG_err = 0
 
+    delta_Us = extract_delta_Us_from_U_knk(U_knk)
+
     for lambda_idx in range(len(model.lambda_schedule) - 1):
-        # tibar
+
+        fwd_delta_u = model.beta*delta_Us[lambda_idx][0]
+        rev_delta_u = model.beta*delta_Us[lambda_idx][1]
+
+        dG_exact, exact_bar_err = pymbar.BAR(fwd_delta_u, rev_delta_u)
+        bar_dG += dG_exact/model.beta
+        exact_bar_overlap = endpoint_correction.overlap_from_cdf(fwd_delta_u, rev_delta_u)
+
+        # probably off by a factor of two since we re-use samples.
+        bar_dG_err += (exact_bar_err/model.beta)**2
+
         lamb_start = model.lambda_schedule[lambda_idx]
         lamb_end = model.lambda_schedule[lambda_idx+1]
-        delta_lamb = lamb_end - lamb_start
-        fwd_work_approx = ti_results[lambda_idx].du_dls*delta_lamb
-        rev_work_approx = -ti_results[lambda_idx+1].du_dls*delta_lamb
-        tibar, ti_bar_err = pymbar.BAR(model.beta*fwd_work_approx, model.beta*rev_work_approx)
-        tibar_overlap = endpoint_correction.overlap_from_cdf(fwd_work_approx, rev_work_approx)
-        tibar_dG += tibar/model.beta
-
-        # exact_bar
-        fwd_work_exact = model.beta*ti_results[lambda_idx].right_dus
-        rev_work_exact = model.beta*ti_results[lambda_idx+1].left_dus
-
-        dG_exact, exact_bar_err = pymbar.BAR(fwd_work_exact, rev_work_exact)
-        bar_dG += dG_exact/model.beta
-        exact_bar_overlap = endpoint_correction.overlap_from_cdf(fwd_work_exact, rev_work_exact)
-
-        # probably off by a factor of two
-        bar_dG_err += (exact_bar_err/model.beta)**2
 
         print(f"{model.prefix}_BAR: lambda {lamb_start:.3f} -> {lamb_end:.3f} dG: {dG_exact/model.beta:.3f} dG_err: {exact_bar_err/model.beta:.3f} overlap: {exact_bar_overlap:.3f}")
 
+    # for MBAR we need to sanitize the energies
+    clean_U_knks = [] # [K, F, K]
+    for lambda_idx, full_us in enumerate(U_knk):
+        clean_U_knks.append(sanitize_energies(full_us, lambda_idx))
+
+    print(model.prefix, " MBAR: amin", np.amin(clean_U_knks), "median", np.median(clean_U_knks), "max", np.amax(clean_U_knks))
+
+    K = len(model.lambda_schedule)
+    clean_U_knks = np.array(clean_U_knks) # [K, F, K]
+    U_kn = np.reshape(clean_U_knks, (-1, K)).transpose() # [K, F*K]
+    u_kn = U_kn*model.beta
+
+    np.save(model.prefix+"_U_kn.npy", U_kn)
+
+    mbar = pymbar.MBAR(u_kn, N_k)
+    differences, error_estimates = mbar.getFreeEnergyDifferences()
+    f_k, error_k = differences[0], error_estimates[0]
+    mbar_dG = f_k[-1]/model.beta
+    mbar_dG_err = error_k[-1]/model.beta
+
     bar_dG_err = np.sqrt(bar_dG_err)
 
-    dG_ti = np.trapz(mean_du_dls, model.lambda_schedule)
     dG = bar_dG # use the exact answer
     dG_grad = []
-    for rhs, lhs in zip(all_grads[-1], all_grads[0]):
+
+    # (ytz): results[-1].du_dps contain system parameter derivatives for the
+    # independent, gas phase simulation. They're usually ordered as:
+    # [Bonds, Angles, Torsions, Nonbonded]
+    #
+    # results[0].du_dps contain system parameter derivatives for the core
+    # restrained state. If we're doing the endpoint correction during
+    # decoupling stages, the derivatives are ordered as:
+
+    # [Bonds, Angles, Torsions, Nonbonded, RestraintBonds]
+    # Otherwise, in stages like conversion where the endpoint correction
+    # is turned off, the derivatives are ordered as :
+    # [Bonds, Angles, Torsions, Nonbonded]
+
+    # Note that this zip will always loop over only the
+    # [Bonds, Angles, Torsions, Nonbonded] terms, since it only
+    # enumerates over the smaller of the two lists.
+    for rhs, lhs in zip(results[-1].du_dps, results[0].du_dps):
         dG_grad.append(rhs - lhs)
 
     if model.endpoint_correct:
+        assert len(results[0].du_dps) - len(results[-1].du_dps) == 1
+        # (ytz): Fill in missing derivatives since zip() from above loops
+        # over the shorter array.
+        lhs = results[0].du_dps[-1]
+        rhs = 0 # zero as the energies do not depend the core restraints.
+        dG_grad.append(rhs - lhs)
+
         core_restr = bound_potentials[-1]
         # (ytz): tbd, automatically find optimal k_translation/k_rotation such that
         # standard deviation and/or overlap is maximized
@@ -378,11 +359,11 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         overlap = endpoint_correction.overlap_from_cdf(lhs_du, rhs_du)
         lhs_mean = np.mean(lhs_du)
         rhs_mean = np.mean(rhs_du)
-        print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} dG_endpoint {dG_endpoint:.3f} dG_endpoint_err {endpoint_err:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
+        print(f"{model.prefix} bar (A) {bar_dG:.3f} bar_err {bar_dG_err:.3f} mbar (A) {mbar_dG:.3f} mbar_err {mbar_dG_err:.3f} dG_endpoint (E) {dG_endpoint:.3f} dG_endpoint_err {endpoint_err:.3f} dG_ssc_translation {dG_ssc_translation:.3f} dG_ssc_rotation {dG_ssc_rotation:.3f} overlap {overlap:.3f} lhs_mean {lhs_mean:.3f} rhs_mean {rhs_mean:.3f} lhs_n {len(lhs_du)} rhs_n {len(rhs_du)} | time: {time.time()-start:.3f}s")
         dG += dG_endpoint + dG_ssc_translation + dG_ssc_rotation
         bar_dG_err = np.sqrt(bar_dG_err**2 + endpoint_err**2)
     else:
-        print(f"{model.prefix} dG_tibar {tibar_dG:.3f} dG_ti {dG_ti:.3f} exact_bar {bar_dG:.3f} exact_bar_err {bar_dG_err:.3f} ")
+        print(f"{model.prefix} bar (A) {bar_dG:.3f} bar_err {bar_dG_err:.3f} mbar (A) {mbar_dG:.3f} mbar_err {mbar_dG_err:.3f} ")
 
     return (dG, bar_dG_err, results), dG_grad
 
