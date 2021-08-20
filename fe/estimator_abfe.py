@@ -40,7 +40,7 @@ def unflatten(aux_data, children):
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
 def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_steps, prod_steps,
-    x_interval, u_interval, lambda_windows):
+    x_interval, u_interval, lambda_windows, openmm_topo):
     """
     Run a simulation and collect relevant statistics for this simulation.
 
@@ -219,6 +219,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             subsample_interval,
             subsample_interval, 
             model.lambda_schedule,
+            model.openmm_topo,
         ))
 
     if model.endpoint_correct:
@@ -238,6 +239,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
             subsample_interval,
             subsample_interval, 
             [], # no need to evaluate Us for the endpoint correction,
+            model.openmm_topo,
         ))
 
     if model.client is None:
