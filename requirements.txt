@@ -13,3 +13,4 @@ hilbertcurve==1.0.5
 networkx==2.5
 cvxpylayers==0.1.5 # this depends on jax -- upgrade when jax / jaxlib are upgraded
 mdtraj==1.9.6
+tables==3.6.1  # Required to write hdf5

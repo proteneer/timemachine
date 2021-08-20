@@ -163,7 +163,7 @@ class AbsoluteModel(ABC):
             # used for debugging for now, try to reproduce mdtraj error
             # outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
             # pickle.dump((res.xs, res.boxes, combined_topology), outfile)
-            with open("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc", "wb") as ofs:
+            with open("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".h5", "wb") as ofs:
                 ofs.write(res.frames)
     
         return dG, dG_err

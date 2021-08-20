@@ -157,10 +157,10 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     for obs in du_dp_obs:
         grads.append(obs.avg_du_dp())
 
-    with NamedTemporaryFile(suffix=".xtc") as temp:
-        traj = mdtraj.Trajectory(xs, topology=None)
+    with NamedTemporaryFile(suffix=".h5") as temp:
+        traj = mdtraj.Trajectory(xs, topology=openmm_topo)
         traj.unitcell_vectors = boxes
-        traj.save_xtc(temp.name)
+        traj.save_hdf5(temp.name)
         with open(temp.name, "rb") as ifs:
             result = SimulationResult(
                 frames=ifs.read(),
@@ -346,16 +346,16 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         k_translation = 200.0
         k_rotation = 100.0
         start = time.time()
-        md_topo = mdtraj.Topology.from_openmm(model.openmm_topo)
-        with NamedTemporaryFile(suffix=".xtc") as temp:
+        # md_topo = mdtraj.Topology.from_openmm(model.openmm_topo)
+        with NamedTemporaryFile(suffix=".h5") as temp:
             with open(temp.name, "wb") as ofs:
                 ofs.write(results[-2].frames)
-            frames = mdtraj.load_xtc(temp.name, top=md_topo)
+            frames = mdtraj.load_hdf5(temp.name)
             lhs_xs = frames.xyz
-        with NamedTemporaryFile(suffix=".xtc") as temp:
+        with NamedTemporaryFile(suffix=".h5") as temp:
             with open(temp.name, "wb") as ofs:
                 ofs.write(results[-1].frames)
-            frames = mdtraj.load_xtc(temp.name, top=md_topo)
+            frames = mdtraj.load_hdf5(temp.name)
             rhs_xs = frames.xyz
 
         lhs_du, rhs_du, rotation_samples, translation_samples = endpoint_correction.estimate_delta_us(
