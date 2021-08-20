@@ -308,14 +308,16 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         // then a particle can interact with multiple periodic copies.
         std::vector<double> h_box(9);
         gpuErrchk(cudaMemcpyAsync(&h_box[0], d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToHost, stream));
-        const double twice_sq_cutoff = 2 * ((cutoff_+nblist_padding_) * (cutoff_+nblist_padding_));
-
+        const double db_cutoff = (cutoff_+nblist_padding_) * 2;
         cudaStreamSynchronize(stream);
-        // Use l2 norm on each row to determine if cutoff is too small
-        for (int i = 0; i < 3; i++) {
-            double row_norm_sq = h_box[i*3+0]*h_box[i*3+0] + h_box[i*3+1]*h_box[i*3+1] + h_box[i*3+2]*h_box[i*3+2];
-            if (twice_sq_cutoff > row_norm_sq) {
-                throw std::runtime_error("Cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
+        // Verify that box is ortholinear and the width of the box in all dimensions is greater than twice the cutoff
+        for (int i = 0; i < 9; i++) {
+            if (i == 0 || i == 4 || i == 8) {
+                if (h_box[i] < db_cutoff) {
+                    throw std::runtime_error("Cutoff with padding is more than half of the box width, neighborlist is no longer reliable");
+                }
+            } else if (h_box[i] != 0.0) {
+                throw std::runtime_error("Provided non-ortholinear box, unable to compute nonbonded energy");
             }
         }
 

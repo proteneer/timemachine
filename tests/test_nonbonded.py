@@ -518,41 +518,72 @@ class TestNonbonded(GradientTest):
         np.random.seed(4321)
         D = 3
 
-        for size in [33]:
+        precision = np.float32
+        rtol = 1e-4
+        cutoff = 1
+        size = 33
+        padding = 0.1
 
-            _, coords, box, _ = builders.build_water_system(6.2)
-            coords = coords/coords.unit
-            coords = coords[:size]
+        _, coords, box, _ = builders.build_water_system(6.2)
+        coords = coords/coords.unit
+        coords = coords[:size]
 
-            N = coords.shape[0]
+        N = coords.shape[0]
 
-            lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
-            lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+        lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
+        lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
-            for precision, rtol in [(np.float32, 1e-4)]:
+        # Down shift box size to be only a portion of the cutoff
+        charge_params, ref_potential, test_potential = prepare_water_system(
+            coords,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            p_scale=1.0,
+            cutoff=cutoff
+        )
 
-                for cutoff in [1.0]:
-                    # Down shift box size to be only a portion of the cutoff
-                    box = np.ones_like(box) * (0.2 * cutoff)
-                    charge_params, ref_potential, test_potential = prepare_water_system(
-                        coords,
-                        lambda_plane_idxs,
-                        lambda_offset_idxs,
-                        p_scale=1.0,
-                        cutoff=cutoff
-                    )
+        def run_nonbonded(precision, potential, x, box, params, lamb, steps=100):
+            test_impl = test_potential.unbound_impl(precision)
 
-                    with self.assertRaises(RuntimeError):
-                        self.compare_forces(
-                            coords,
-                            charge_params,
-                            box,
-                            0.0,
-                            ref_potential,
-                            test_potential,
-                            rtol,
-                            precision=precision
-                        )
+            x = (x.astype(np.float32)).astype(np.float64)
+            params = (params.astype(np.float32)).astype(np.float64)
+
+            N = x.shape[0]
+            D = x.shape[1]
+
+            assert x.dtype == np.float64
+            assert params.dtype == np.float64
+            for _ in range(steps):
+                _ = test_impl.execute_selective(
+                    x,
+                    params,
+                    box,
+                    lamb,
+                    True,
+                    True,
+                    True,
+                    True
+                )
+
+        # With the default box, all is well
+        run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0, steps=2)
+
+        db_cutoff = (cutoff+padding) * 2
+
+        # Make box with diagonals right at the limit
+        box = np.eye(3) * db_cutoff
+        run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0)
+
+        # Non Orth Box, should fail
+        box = np.ones_like(box) * (db_cutoff ** 2)
+        with self.assertRaises(RuntimeError) as raised:
+            run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0)
+        assert "non-ortholinear box" in str(raised.exception)
+        # Only populate the diag with values that are too low
+        box = np.eye(3) * (db_cutoff * 0.3)
+        with self.assertRaises(RuntimeError) as raised:
+            run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0)
+        assert "more than half" in str(raised.exception)
 
 
 if __name__ == "__main__":
