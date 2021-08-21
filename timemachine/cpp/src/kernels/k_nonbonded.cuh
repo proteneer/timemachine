@@ -75,11 +75,11 @@ void __global__ k_check_rebuild_box(
 template <typename RealType>
 void __global__ k_check_rebuild_coords_and_box(
     const int N,
-    const double *new_coords,
-    const double *old_coords,
-    const double *new_box,
-    const double *old_box,
-    double padding,
+    const double * __restrict__ new_coords,
+    const double * __restrict__ old_coords,
+    const double * __restrict__ new_box,
+    const double * __restrict__ old_box,
+    const double padding,
     int *rebuild) {
 
     const int idx = blockIdx.x*blockDim.x + threadIdx.x;
@@ -115,7 +115,32 @@ void __global__ k_check_rebuild_coords_and_box(
         rebuild[0] = 1;
     }
 
+}
 
+template<typename RealType>
+void __global__ k_copy_nblist_coords_and_box(
+    const int N,
+    const int * __restrict__ rebuild,
+    const double * __restrict__ new_coords,
+    const double * __restrict__ new_box,
+    double * __restrict__ nblist_coords,
+    double * __restrict__ nblist_box
+) {
+    if (rebuild[0] <= 0) {
+        return;
+    }
+    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
+
+    if(idx >= N) {
+        return;
+    }
+    if(idx < 9) {
+        nblist_box[idx] = new_box[idx];
+    }
+    #pragma unroll 3
+    for(int i = 0; i < 3; i++) {
+        nblist_coords[idx*3+i] = new_coords[idx*3+i];
+    }
 }
 
 template <typename RealType>

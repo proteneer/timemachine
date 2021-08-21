@@ -332,9 +332,16 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         d_rebuild_nblist_,
         stream
     );
-
-    gpuErrchk(cudaMemcpyAsync(d_nblist_x_, d_x, N*3*sizeof(*d_x), cudaMemcpyDeviceToDevice, stream));
-    gpuErrchk(cudaMemcpyAsync(d_nblist_box_, d_box, 3*3*sizeof(*d_box), cudaMemcpyDeviceToDevice, stream));
+    // Cache the nblist coords/box if rebuilt
+    k_copy_nblist_coords_and_box<RealType><<<B, tpb, 0, stream>>>(
+        N,
+        d_rebuild_nblist_,
+        d_x,
+        d_box,
+        d_nblist_x_,
+        d_nblist_box_
+    );
+    gpuErrchk(cudaPeekAtLastError());
     gpuErrchk(cudaMemsetAsync(d_rebuild_nblist_, 0, sizeof(*d_rebuild_nblist_), stream));
 
     // do parameter interpolation here
