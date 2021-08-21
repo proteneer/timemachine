@@ -59,7 +59,7 @@ def benchmark(
 
     seed = 1234
     dt = 1.5e-3
-    temperature =300
+    temperature = 300
     pressure = 1.0
     seconds_per_day = 86400
 
