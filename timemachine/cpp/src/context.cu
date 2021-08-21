@@ -220,7 +220,8 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
                 for(int w=0; w < n_windows; w++) {
                     // reset buffers on each pass.
                     gpuErrchk(cudaMemsetAsync(d_u_buffer_, 0, N_*sizeof(*d_u_buffer_), stream));
-                    for(int i=0; i < bps_.size(); i++) {
+                    // for(int i=0; i < bps_.size(); i++) {
+                    for(int i=3; i < 4; i++) {
                         bps_[i]->execute_device(
                             N_,
                             d_x_t_,

@@ -1,3 +1,4 @@
+
 """Run vanilla "apo" MD on DHFR and HIF2A test systems,
 and running an intermediate lambda window "rbfe" MD for a
 relative binding free energy edge from the HIF2A test system"""
@@ -100,7 +101,7 @@ def benchmark(
         box,
         intg,
         bps,
-        barostat=baro_impl,
+        # barostat=baro_impl,
     )
 
     # initialize observables
@@ -113,10 +114,10 @@ def benchmark(
 
     batch_times = []
 
-    lambda_schedule = np.ones(steps_per_batch)*lamb
+    # lambda_schedule = np.ones(steps_per_batch)*lamb
 
     # run once before timer starts
-    ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
+    # ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
 
     start = time.time()
 
@@ -124,7 +125,38 @@ def benchmark(
 
         # time the current batch
         batch_start = time.time()
-        du_dls, _, _ = ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
+        # du_dls, _, _ = ctxt.multiple_steps(lambda_schedule, compute_du_dl_interval)
+        us, xs, boxes = ctxt.multiple_steps_U(
+            lamb,
+            steps_per_batch,
+            np.array([lamb]),
+            100,
+            100
+        )
+
+        print(len(us), len(xs), len(boxes))
+
+# template<typename RealType>
+# RealType __host__ __device__ __forceinline__ FIXED_TO_FLOAT(unsigned long long v) {
+    # return static_cast<RealType>(static_cast<long long>(v))/FIXED_EXPONENT;
+# }
+        def FIXED_TO_FLOAT(v):
+            FIXED_EXPONENT = 0x1000000000
+            # print(v, type(v))
+            return np.float64(np.int64(v))/FIXED_EXPONENT
+
+        for ref_U, x, b in zip(us, xs, boxes):
+            test_U = 0
+            test_U_fixed = np.uint64(0)
+            for bp in bps[3:4]:
+                _, _, U = bp.execute(x, b, lamb)
+                test_U += U
+                U_fixed = bp.execute_fixed(x, b, lamb)
+                # print(type(U_fixed[0]), U_fixed[0])
+                test_U_fixed += U_fixed
+            print(ref_U[0], FIXED_TO_FLOAT(test_U_fixed), np.abs(ref_U[0] - FIXED_TO_FLOAT(test_U_fixed)), test_U)
+
+        assert 0
         batch_end = time.time()
 
         delta = batch_end - batch_start
@@ -259,5 +291,5 @@ def test_hif2a():
 
 if __name__ == "__main__":
 
-    benchmark_dhfr(verbose=False, num_batches=100)
-    benchmark_hif2a(verbose=False, num_batches=100)
+    benchmark_dhfr(verbose=False, num_batches=2, steps_per_batch=10000)
+    # benchmark_hif2a(verbose=False, num_batches=100)

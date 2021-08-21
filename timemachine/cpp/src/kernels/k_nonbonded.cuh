@@ -46,7 +46,7 @@ void __global__ k_coords_to_kv(
 
     keys[atom_idx] = bin_to_idx[bin_x*256*256+bin_y*256+bin_z];
     // uncomment below if you want to preserve the atom ordering
-    // keys[atom_idx] = atom_idx;
+    keys[atom_idx] = atom_idx;
     vals[atom_idx] = atom_idx;
 
 }
@@ -82,6 +82,8 @@ void __global__ k_check_rebuild_coords_and_box(
     double padding,
     int *rebuild) {
 
+    rebuild[0] = 1;
+
     const int idx = blockIdx.x*blockDim.x + threadIdx.x;
 
     if(idx < 9) {
@@ -114,6 +116,8 @@ void __global__ k_check_rebuild_coords_and_box(
         // (ytz): this is *safe* but technically is a race condition
         rebuild[0] = 1;
     }
+
+
 
 
 }

@@ -604,6 +604,41 @@ void declare_bound_potential(py::module &m) {
             return py::make_tuple(py_du_dx, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
     },
     py::arg("coords"), py::arg("box"), py::arg("lam")
+    )
+    .def("execute_fixed", [](timemachine::BoundPotential &bp,
+        const py::array_t<double, py::array::c_style> &coords,
+        const py::array_t<double, py::array::c_style> &box,
+        double lambda) -> const py::array_t<uint64_t, py::array::c_style> {
+
+            const long unsigned int N = coords.shape()[0];
+            const long unsigned int D = coords.shape()[1];
+
+            std::vector<unsigned long long> du_dx(N*D);
+            std::vector<unsigned long long> du_dl(N, 0);
+            std::vector<unsigned long long> u(N, 0);
+
+            bp.execute_host(
+                N,
+                coords.data(),
+                box.data(),
+                lambda,
+                &du_dx[0],
+                &du_dl[0],
+                &u[0]
+            );
+
+            py::array_t<unsigned long long, py::array::c_style> py_du_dx({N, D});
+            for(int i=0; i < du_dx.size(); i++) {
+                py_du_dx.mutable_data()[i] = du_dx[i];
+            }
+
+            unsigned long long du_dl_sum = std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
+            uint64_t u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
+            py::array_t<uint64_t, py::array::c_style> py_u(1);
+            py_u.mutable_data()[0] = u_sum;
+            return py_u;
+    },
+    py::arg("coords"), py::arg("box"), py::arg("lam")
     );
 
 }
