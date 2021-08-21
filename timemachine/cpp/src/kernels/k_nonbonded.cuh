@@ -82,7 +82,7 @@ void __global__ k_check_rebuild_coords_and_box(
     double padding,
     int *rebuild) {
 
-    rebuild[0] = 1;
+    // rebuild[0] = 1;
 
     const int idx = blockIdx.x*blockDim.x + threadIdx.x;
 

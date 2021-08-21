@@ -154,7 +154,7 @@ def benchmark(
                 U_fixed = bp.execute_fixed(x, b, lamb)
                 # print(type(U_fixed[0]), U_fixed[0])
                 test_U_fixed += U_fixed
-            print(ref_U[0], FIXED_TO_FLOAT(test_U_fixed), np.abs(ref_U[0] - FIXED_TO_FLOAT(test_U_fixed)), test_U)
+            print(ref_U[0], FIXED_TO_FLOAT(test_U_fixed), np.abs(ref_U[0] - FIXED_TO_FLOAT(test_U_fixed)))
 
         assert 0
         batch_end = time.time()
@@ -291,5 +291,5 @@ def test_hif2a():
 
 if __name__ == "__main__":
 
-    benchmark_dhfr(verbose=False, num_batches=2, steps_per_batch=10000)
+    benchmark_dhfr(verbose=False, num_batches=2, steps_per_batch=1000)
     # benchmark_hif2a(verbose=False, num_batches=100)
