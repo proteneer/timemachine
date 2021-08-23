@@ -8,9 +8,7 @@
 
 namespace timemachine {
 
-typedef void (*k_nonbonded_fn)(
-    const unsigned int * ixn_count,
-    const int N,
+typedef void (*k_nonbonded_fn)(const int N,
     const double * __restrict__ coords,
     const double * __restrict__ params, // [N]
     const double * __restrict__ box,
@@ -38,10 +36,10 @@ private:
     double *d_scales_; // [E, 2]
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
+    int *p_ixn_count_; // pinned memory
 
     double beta_;
     double cutoff_;
-    unsigned int cur_step_;
     Neighborlist<RealType> nblist_;
 
     const int E_;
@@ -51,6 +49,7 @@ private:
     double *d_nblist_x_; // coords which were used to compute the nblist
     double *d_nblist_box_; // box which was used to rebuild the nblist
     int *d_rebuild_nblist_; // whether or not we have to rebuild the nblist
+    int *p_rebuild_nblist_; // pinned
 
     unsigned int *d_perm_; // hilbert curve permutation
 
