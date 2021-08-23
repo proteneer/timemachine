@@ -76,29 +76,24 @@ void Neighborlist<RealType>::compute_block_bounds_host(
 
     assert(N == N_);
     assert(D == 3);
-    int h_rebuild = 1;
 
     double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*3*sizeof(double));
-    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));
-    int *d_rebuild = gpuErrchkCudaMallocAndCopy(&h_rebuild, 1*sizeof(int));
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
+    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));  
+   
     this->compute_block_bounds_device(
         N,
         D,
         d_coords,
         d_box,
-        d_rebuild,
-        stream
+        static_cast<cudaStream_t>(0)
     );
-
-    cudaStreamSynchronize(stream);
+    gpuErrchk(cudaDeviceSynchronize());
 
     gpuErrchk(cudaMemcpy(h_bb_ctrs, d_block_bounds_ctr_, this->B()*3*sizeof(*d_block_bounds_ctr_), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(h_bb_exts, d_block_bounds_ext_, this->B()*3*sizeof(*d_block_bounds_ext_), cudaMemcpyDeviceToHost));
 
     gpuErrchk(cudaFree(d_coords));
     gpuErrchk(cudaFree(d_box));
-    gpuErrchk(cudaFree(d_rebuild));
 
 }
 
@@ -111,33 +106,27 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_host(
 
     // assert(N==N_);
 
-    int h_rebuild = 1;
-
     double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*3*sizeof(double));
-    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));
-    int *d_rebuild = gpuErrchkCudaMallocAndCopy(&h_rebuild, 1*sizeof(int));
+    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));    
 
-    cudaStream_t stream = static_cast<cudaStream_t>(0);
     this->build_nblist_device(
         N,
         d_coords,
         d_box,
         cutoff,
-        d_rebuild,
-        stream
+        static_cast<cudaStream_t>(0)
     );
 
-    cudaStreamSynchronize(stream);
-
+    cudaDeviceSynchronize();
     const int B = this->B(); //(N+32-1)/32;
 
     unsigned long long MAX_TILE_BUFFER = B*B;
     unsigned long long MAX_ATOM_BUFFER = B*B*32;
 
     unsigned int h_ixn_count;
+    gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count_, 1*sizeof(*d_ixn_count_), cudaMemcpyDeviceToHost));
     std::vector<int> h_ixn_tiles(MAX_TILE_BUFFER);
     std::vector<unsigned int> h_ixn_atoms(MAX_ATOM_BUFFER);
-    gpuErrchk(cudaMemcpy(&h_ixn_count, d_ixn_count_, 1*sizeof(*d_ixn_count_), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(&h_ixn_tiles[0], d_ixn_tiles_, MAX_TILE_BUFFER*sizeof(int), cudaMemcpyDeviceToHost));
     gpuErrchk(cudaMemcpy(&h_ixn_atoms[0], d_ixn_atoms_, MAX_ATOM_BUFFER*sizeof(unsigned int), cudaMemcpyDeviceToHost));
 
@@ -155,7 +144,6 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_host(
 
     gpuErrchk(cudaFree(d_coords));
     gpuErrchk(cudaFree(d_box));
-    gpuErrchk(cudaFree(d_rebuild));
 
     return ixn_list;
 
@@ -167,10 +155,12 @@ void Neighborlist<RealType>::build_nblist_device(
     const double *d_coords,
     const double *d_box,
     const double cutoff,
-    int *d_rebuild_nblist,
     cudaStream_t stream) {
 
     // assert(N == N_);
+
+    // reset the interaction count
+    gpuErrchk(cudaMemsetAsync(d_ixn_count_, 0, 1*sizeof(*d_ixn_count_), stream));
 
     const int D = 3;
     this->compute_block_bounds_device(
@@ -178,11 +168,10 @@ void Neighborlist<RealType>::build_nblist_device(
         D,
         d_coords,
         d_box,
-        d_rebuild_nblist,
         stream
     );
 
-    const int tpb = 32;
+    int tpb = 32;
     const int B = this->B(); // (N+32-1)/32;
     const int Y = this->Y(); // (B+32-1)/32;
 
@@ -199,8 +188,7 @@ void Neighborlist<RealType>::build_nblist_device(
         d_ixn_tiles_,
         d_ixn_atoms_,
         d_trim_atoms_,
-        cutoff,
-        d_rebuild_nblist
+        cutoff
     );
 
     gpuErrchk(cudaPeekAtLastError());
@@ -211,8 +199,7 @@ void Neighborlist<RealType>::build_nblist_device(
         d_trim_atoms_,
         d_ixn_count_,
         d_ixn_tiles_,
-        d_ixn_atoms_,
-        d_rebuild_nblist
+        d_ixn_atoms_
     );
 
     gpuErrchk(cudaPeekAtLastError());
@@ -225,7 +212,6 @@ void Neighborlist<RealType>::compute_block_bounds_device(
     const int D, // Box dimensions
     const double *d_coords, // [N*3]
     const double *d_box, // [D*3]
-    const int * d_rebuild_nblist,
     cudaStream_t stream) {
 
     assert(N == N_);
@@ -241,10 +227,8 @@ void Neighborlist<RealType>::compute_block_bounds_device(
         d_coords,
         d_box,
         d_block_bounds_ctr_,
-        d_block_bounds_ext_,
-        d_ixn_count_,
-        d_rebuild_nblist
-    );	
+        d_block_bounds_ext_
+    );
 
     gpuErrchk(cudaPeekAtLastError());
 

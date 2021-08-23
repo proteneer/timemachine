@@ -41,7 +41,6 @@ public:
         const double *d_coords,
         const double *d_box,
         const double cutoff,
-        int *d_rebuild_nblist,
         cudaStream_t stream
     );
 
@@ -83,9 +82,9 @@ private:
         int D,
         const double *coords,
         const double *box,
-        const int *rebuild,
         cudaStream_t stream
     );
+
 
 };
 
