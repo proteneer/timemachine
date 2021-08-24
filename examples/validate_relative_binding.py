@@ -16,6 +16,8 @@ import pickle
 import argparse
 import numpy as np
 
+from pathlib import Path
+
 from fe.free_energy_rabfe import construct_absolute_lambda_schedule_complex, construct_absolute_lambda_schedule_solvent, construct_conversion_lambda_schedule, get_romol_conf, setup_relative_restraints_using_smarts
 from fe.utils import convert_uM_to_kJ_per_mole
 from fe import model_rabfe
@@ -31,6 +33,7 @@ import multiprocessing
 from training.dataset import Dataset
 from rdkit import Chem
 
+import timemachine
 from timemachine.potentials import rmsd
 from md import builders, minimizer
 from rdkit.Chem import rdFMCS
@@ -43,6 +46,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Relatively absolute Binding Free Energy Testing",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+
+    parser.add_argument(
+        "--epochs",
+        default=1,
+        help="Number of Epochs",
+        type=int
     )
 
     parser.add_argument(
@@ -171,8 +181,9 @@ if __name__ == "__main__":
 
     path_to_ligand =  cmd_args.ligand_sdf
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
+    root = Path(timemachine.__file__).parent.parent
 
-    with open('ff/params/smirnoff_1_1_0_ccc.py') as f:
+    with open(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py')) as f:
         ff_handlers = deserialize_handlers(f.read())
 
     forcefield = Forcefield(ff_handlers)
@@ -380,7 +391,7 @@ if __name__ == "__main__":
         return rabfe_result.dG_bind, dG_err
 
 
-    for epoch in range(10):
+    for epoch in range(cmd_args.epochs):
         epoch_params = serialize_handlers(ordered_handles)
         # dataset.shuffle()
         for mol in dataset.data:
