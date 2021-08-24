@@ -176,7 +176,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     for obs in du_dp_obs:
         grads.append(obs.avg_du_dp())
 
-    result = SimulationResult(xs=xs, du_dls=full_du_dls, du_dps=grads)
+    result = SimulationResult(xs=xs.astype("float32"), du_dls=full_du_dls, du_dps=grads)
     return result
 
 

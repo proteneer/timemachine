@@ -154,8 +154,8 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
         grads.append(obs.avg_du_dp())
 
     result = SimulationResult(
-        xs=xs,
-        boxes=boxes,
+        xs=xs.astype("float32"),
+        boxes=boxes.astype("float32"),
         du_dps=grads,
         lambda_us=full_us,
     )
