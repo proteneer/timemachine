@@ -33,7 +33,11 @@ class Worker(service_pb2_grpc.WorkerServicer):
 
 def serve(args):
 
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=1), options=DEFAULT_GRPC_OPTIONS)
+    server = grpc.server(
+        futures.ThreadPoolExecutor(max_workers=1),
+        options=DEFAULT_GRPC_OPTIONS,
+        maximum_concurrent_rpcs=1
+    )
     service_pb2_grpc.add_WorkerServicer_to_server(Worker(), server)
     server.add_insecure_port('[::]:'+str(args.port))
     server.start()
