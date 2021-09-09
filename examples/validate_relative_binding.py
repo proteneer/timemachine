@@ -56,13 +56,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--property_field",
         help="Property field to convert to kcals/mols",
-        required=True
+        default=None,
     )
 
     parser.add_argument(
         "--property_units",
         help="must be either nM or uM",
-        required=True
+        required=True,
+        choices=["nM", "uM"],
     )
 
     parser.add_argument(
@@ -392,14 +393,16 @@ if __name__ == "__main__":
     for epoch in range(cmd_args.epochs):
         # dataset.shuffle()
         for mol in dataset.data:
-            concentration = float(mol.GetProp(cmd_args.property_field))
+            label_dG = "'N/A'"
+            if cmd_args.property_field is not None:
+                concentration = float(mol.GetProp(cmd_args.property_field))
 
-            if cmd_args.property_units == 'uM':
-                label_dG = convert_uM_to_kJ_per_mole(concentration)
-            elif cmd_args.property_units == 'nM':
-                label_dG = convert_uM_to_kJ_per_mole(concentration/1000)
-            else:
-                assert 0, "Unknown property units"
+                if cmd_args.property_units == 'uM':
+                    label_dG = convert_uM_to_kJ_per_mole(concentration)
+                elif cmd_args.property_units == 'nM':
+                    label_dG = convert_uM_to_kJ_per_mole(concentration/1000)
+                else:
+                    assert 0, "Unknown property units"
 
             print("processing mol", mol.GetProp("_Name"), "with binding dG", label_dG, "SMILES", Chem.MolToSmiles(mol))
 
