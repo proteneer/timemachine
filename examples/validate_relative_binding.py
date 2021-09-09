@@ -164,6 +164,12 @@ if __name__ == "__main__":
         required=True
     )
 
+    parser.add_argument(
+        "--shuffle",
+        action="store_true",
+        help="Shuffle ligand order"
+    )
+
     cmd_args = parser.parse_args()
 
     print("cmd_args", cmd_args)
@@ -391,7 +397,8 @@ if __name__ == "__main__":
 
 
     for epoch in range(cmd_args.epochs):
-        # dataset.shuffle()
+        if cmd_args.shuffle:
+            dataset.shuffle()
         for mol in dataset.data:
             label_dG = "'N/A'"
             if cmd_args.property_field is not None:
