@@ -22,6 +22,7 @@ from fe.free_energy_rabfe import construct_absolute_lambda_schedule_complex, con
 from fe.utils import convert_uM_to_kJ_per_mole
 from fe import model_rabfe
 from fe.free_energy_rabfe import RABFEResult
+from fe.atom_mapping import CompareDistNonterminal
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -29,7 +30,7 @@ from ff.handlers.serialize import serialize_handlers
 from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
 
-import multiprocessing
+
 from training.dataset import Dataset
 from rdkit import Chem
 
@@ -37,11 +38,8 @@ import timemachine
 from timemachine.potentials import rmsd
 from md import builders, minimizer
 from rdkit.Chem import rdFMCS
-from fe.atom_mapping import CompareDistNonterminal
 
 if __name__ == "__main__":
-
-    multiprocessing.set_start_method('spawn')
 
     parser = argparse.ArgumentParser(
         description="Relatively absolute Binding Free Energy Testing",
@@ -220,8 +218,8 @@ if __name__ == "__main__":
     dt = 2.5e-3
 
     # Generate an equilibrated reference structure to use.
-    print("Equilibrating reference molecule in the complex.")
     if not os.path.exists("equil.pickle"):
+        print("Equilibrating reference molecule in the complex.")
         complex_ref_x0, complex_ref_box0 = minimizer.equilibrate_complex(
             blocker_mol,
             complex_system,
@@ -342,7 +340,7 @@ if __name__ == "__main__":
             mol,
             complex_conversion_x0,
             complex_box0,
-            prefix='complex_conversion_'+str(epoch),
+            prefix='complex_conversion_'+mol_name+"_"+str(epoch),
             core_idxs=core_idxs[:, 0]
         )
 
@@ -392,7 +390,6 @@ if __name__ == "__main__":
 
 
     for epoch in range(cmd_args.epochs):
-        epoch_params = serialize_handlers(ordered_handles)
         # dataset.shuffle()
         for mol in dataset.data:
             concentration = float(mol.GetProp(cmd_args.property_field))
