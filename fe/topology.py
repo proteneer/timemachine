@@ -21,6 +21,12 @@ def standard_qlj_typer(mol):
     in a relatively simple and forcefield independent way. The
     parameters here roughly follow the Smirnoff 1.1.0 Lennard Jones
     types.
+
+    These values are taken from ff/params/smirnoff_1_1_0_cc.py, rounding down
+    to two decimal places for sigma and one decimal place for epsilon.
+
+    returns:
+        list of tuples containing (charge, sigma, epsilon)
     """
 
     standard_qlj = []
@@ -55,6 +61,8 @@ def standard_qlj_typer(mol):
             val = (0.0, 0.35, 1.0)
         elif a_num == 17:
             val = (0.0, 0.35, 1.0)
+        elif a_num == 35:
+            val = (0.0, 0.39, 1.1)
         else:
             # print("Unknown a_num", a_num)
             assert 0, "Unknown a_num "+str(a_num)

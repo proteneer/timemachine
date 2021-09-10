@@ -330,3 +330,10 @@ class TestFactorizability(unittest.TestCase):
         _ = jax.vjp(st.parameterize_harmonic_angle, ff.ha_handle.params, has_aux=True)
         _ = jax.vjp(st.parameterize_periodic_torsion, ff.pt_handle.params, ff.it_handle.params, has_aux=True)
         _ = jax.vjp(st.parameterize_nonbonded, ff.q_handle.params, ff.lj_handle.params, has_aux=True)
+
+class StandardQLJTyperTestCase(unittest.TestCase):
+
+    def test_bromine_in_mol(self):
+        romol = Chem.AddHs(Chem.MolFromSmiles("O=C1N(Br)C(=O)CC1"))
+        qlj_types = topology.standard_qlj_typer(romol)
+        assert len(qlj_types) == romol.GetNumAtoms()
