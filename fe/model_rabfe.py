@@ -151,37 +151,24 @@ class AbsoluteModel(ABC):
 
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
-        # uncomment if we want to visualize
+        # Save out the pdb
         combined_topology = model_utils.generate_imaged_topology(
             [self.host_topology, mol],
             x0,
             box0,
-            "initial_"+prefix+".pdb"
+            f"initial_{prefix}.pdb"
         )
 
         for lambda_idx, res in enumerate(results):
-            # used for debugging for now, try to reproduce mdtraj error
-            # outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
-            # pickle.dump((res.xs, res.boxes, combined_topology), outfile)
-            traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
-            traj.unitcell_vectors = res.boxes
-            traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
+            np.savez(
+                f"initial_{prefix}_lambda_idx_{lambda_idx}.npz",
+                xs=res.xs,
+                boxes=res.boxes,
+                du_dps=res.du_dps,
+                lambda_us=res.lambda_us,
+            )
     
         return dG, dG_err
-
-        # disabled since image molecules is broken.
-        for idx, result in enumerate(results):
-            traj = mdtraj.Trajectory(result.xs, mdtraj.Topology.from_openmm(combined_topology))
-            unit_cell = np.repeat(self.host_box[None, :], len(result.xs), axis=0)
-            traj.unitcell_vectors = unit_cell
-            traj.image_molecules()
-            traj.save_xtc("complex_lambda_"+str(idx)+".xtc")
-
-        np.savez("results.npz", results=results)
-
-        assert 0
-
-        return dG, results
 
 
 
@@ -304,20 +291,22 @@ class RelativeModel(ABC):
 
         dG, dG_err, results = estimator_abfe.deltaG(model, sys_params)
 
-        # uncomment if we want to visualize.
+        # Save out the pdb
         combined_topology = model_utils.generate_imaged_topology(
             [self.host_topology, mol_a, mol_b],
             x0,
             box0,
-            "initial_"+prefix+".pdb"
+            f"initial_{prefix}.pdb"
         )
 
         for lambda_idx, res in enumerate(results):
-            # outfile = open("pickle_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".pkl", "wb")
-            # pickle.dump((res.xs, res.boxes, combined_topology), outfile)
-            traj = mdtraj.Trajectory(res.xs, mdtraj.Topology.from_openmm(combined_topology))
-            traj.unitcell_vectors = res.boxes
-            traj.save_xtc("initial_"+prefix+"_lambda_idx_" + str(lambda_idx) + ".xtc")
+            np.savez(
+                f"initial_{prefix}_lambda_idx_{lambda_idx}.npz",
+                xs=res.xs,
+                boxes=res.boxes,
+                du_dps=res.du_dps,
+                lambda_us=res.lambda_us,
+            )
 
         return dG, dG_err, results
 
