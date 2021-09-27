@@ -1,8 +1,11 @@
+import os
 import unittest
 import numpy as np
 import jax
 import jax.numpy as jnp
 import functools
+import contextlib
+from tempfile import TemporaryDirectory
 from timemachine.constants import ONE_4PI_EPS0
 import timemachine
 from pathlib import Path
@@ -16,6 +19,16 @@ from hilbertcurve.hilbertcurve import HilbertCurve
 
 import itertools
 
+
+@contextlib.contextmanager
+def temporary_working_dir():
+    init_dir = os.getcwd()
+    with TemporaryDirectory() as temp:
+        try:
+            os.chdir(temp)
+            yield temp
+        finally:
+            os.chdir(init_dir)
 
 def get_110_ccc_ff():
     root = Path(timemachine.__file__).parent.parent
