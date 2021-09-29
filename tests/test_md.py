@@ -53,6 +53,9 @@ class TestContext(unittest.TestCase):
         dt = 2e-3
         friction = 0.0
         ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
+        # this returns a positive coefficient, flip to -1 for consistency
+        # and correctness
+        cbs = cbs*-1
 
         # not convenient to simulate identical trajectories otherwise
         assert (ccs == 0).all()
