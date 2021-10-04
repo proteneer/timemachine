@@ -65,6 +65,25 @@ def apply_rotation_and_translation(x, R, t):
     return aligned_x
 
 def align_x2_unto_x1(x1, x2):
+    """
+    Optimally align x2 unto x1. In particular, x2 is shifted so that its centroid is placed
+    at the same position as the of x1's centroid. x2 is also rotated so that the RMSD
+    is minimized.
+
+    Parameters
+    ----------
+    x1: np.ndarray of shape (N,3)
+        Coordinates of the first conformation
+
+    x2: np.ndarray of shape (N,3)
+        Coordinates of the second conformation
+
+    Returns
+    -------
+    np.ndarray of shape (N,3)
+        Optimally aligned x2
+
+    """
     com1 = np.mean(x1, axis=0)
     com2 = np.mean(x2, axis=0)
     t = com2 - com1

@@ -69,6 +69,3 @@ void rmsd_align_cpu(
 
 
 }
-// todo:
-// implement rmsd_align function
-// reset buffers and re-align
