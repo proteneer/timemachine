@@ -64,6 +64,17 @@ def apply_rotation_and_translation(x, R, t):
     aligned_x = (x - x_com)@R - t + x_com
     return aligned_x
 
+def align_x2_unto_x1(x1, x2):
+    com1 = np.mean(x1, axis=0)
+    com2 = np.mean(x2, axis=0)
+    t = com2 - com1
+    x1_centered = x1 - com1
+    x2_centered = x2 - com2
+
+    R = get_optimal_rotation(x1_centered, x2_centered)
+
+    return x2_centered@R + com2 - t
+
 def rmsd_align(x1, x2):
     """
     Optimally align x1 and x2 via rigid translation and rotations.

@@ -52,6 +52,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/integrator.cu
   src/context.cu
   src/barostat.cu
+  src/rmsd_align.cpp
 )
 
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
