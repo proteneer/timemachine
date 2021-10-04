@@ -34,5 +34,5 @@ def test_rmsd_align():
 
         assert np.linalg.norm(x2_aligned_test - x1) < 1e-6
 
-        # np.testing.assert_almost_equal(x2_aligned_custom_op, x2_aligned)
+        np.testing.assert_almost_equal(x2_aligned_reference, x2_aligned_test)
 
