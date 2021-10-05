@@ -9,6 +9,9 @@ from scipy.stats import special_ortho_group
 
 
 def test_rmsd_align():
+    """Assert that the same optimal alignment is recovered by both
+    reference (`rmsd.align_x2_unto_x1`) and CPU (`custom_ops.rmsd_align`),
+    for cases where `x1` and `x2` differ by a rigid transformation"""
 
     N = 25
 
