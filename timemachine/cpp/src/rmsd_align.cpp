@@ -50,7 +50,9 @@ void rmsd_align_cpu(
 
     bool is_reflection = u.determinant() * v_t.determinant() < 0.0;
     if(is_reflection) {
-        v_t = -v_t;
+        for(int i=0; i < 3; i++) {
+            u(i, 2) = -u(i, 2);
+        }
     }
 
     Eigen::MatrixXd rotation = u * v_t;
