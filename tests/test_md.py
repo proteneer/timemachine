@@ -395,7 +395,7 @@ def test_reference_langevin_integrator_with_custom_ops():
         return np.linalg.norm(force(coords))
 
     # define a few integrators
-    dt, temperature, friction = 2.5e-3, 300.0, 10.0
+    dt, temperature, friction = 1.5e-3, 300.0, 10.0
 
     # zero temperature, infinite friction
     # (gradient descent, with no momentum)
