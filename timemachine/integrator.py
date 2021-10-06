@@ -64,3 +64,20 @@ class Integrator:
 
         return np.array(xs), np.array(vs)
 
+
+class LangevinIntegrator(Integrator):
+    def __init__(self, force_fxn, masses, temperature, dt, friction):
+        """BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep"""
+        self.dt = dt
+        self.masses = masses
+        self.ca, self.cb, self.cc = langevin_coefficients(temperature, dt, friction, masses)
+        self.force_fxn = force_fxn
+
+    def step(self, x, v):
+        """Intended to match https://github.com/proteneer/timemachine/blob/37e60205b3ae3358d9bb0967d03278ed184b8976/timemachine/cpp/src/integrator.cu#L71-L74"""
+        v_mid = v + self.cb * self.force_fxn(x)
+
+        new_v = (self.ca * v_mid) + (self.cc * np.random.randn(*x.shape))
+        new_x = x + 0.5 * self.dt * (v_mid + new_v)
+
+        return new_x, new_v
