@@ -4,6 +4,7 @@
 #include <numeric>
 #include <regex>
 
+#include "rmsd_align.hpp"
 #include "context.hpp"
 #include "potential.hpp"
 #include "bound_potential.hpp"
@@ -1112,7 +1113,39 @@ void declare_barostat(py::module &m) {
 	;
 }
 
+const py::array_t<double, py::array::c_style> py_rmsd_align(
+    const py::array_t<double, py::array::c_style> &x1,
+    const py::array_t<double, py::array::c_style> &x2) {
+
+    int N1 = x1.shape()[0];
+    int N2 = x2.shape()[0];
+
+    int D1 = x1.shape()[1];
+    int D2 = x2.shape()[1];
+
+    if(N1 != N2) {
+        throw std::runtime_error("N1 != N2");
+    }
+
+    if(D1 != 3) {
+        throw std::runtime_error("D1 != 3");
+    }
+
+    if(D2 != 3) {
+        throw std::runtime_error("D2 != 3");
+    }
+
+    py::array_t<double, py::array::c_style> py_x2_aligned({N1, D1});
+
+    timemachine::rmsd_align_cpu(N1, x1.data(), x2.data(), py_x2_aligned.mutable_data());  
+
+    return py_x2_aligned;
+
+}
+
 PYBIND11_MODULE(custom_ops, m) {
+
+    m.def("rmsd_align", &py_rmsd_align, "RMSD align two molecules");
 
 	declare_barostat(m);
 
