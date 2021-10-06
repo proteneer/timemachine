@@ -1,13 +1,14 @@
 import unittest
+from itertools import product
 
 import numpy as np
 
 from jax.config import config; config.update("jax_enable_x64", True)
 import jax
 
-
+from timemachine.constants import BOLTZ
 from timemachine.lib import custom_ops, potentials
-from timemachine.integrator import langevin_coefficients
+from timemachine.integrator import langevin_coefficients, LangevinIntegrator
 
 from common import prepare_nb_system
 
@@ -315,6 +316,47 @@ class TestObservable(unittest.TestCase):
 
             ctxt.step(lamb)
 
+
+def test_reference_langevin_integrator(threshold=1e-4):
+    """Assert approximately canonical sampling of e^{-x^4 / kBT},
+    for various settings of temperature, friction, timestep, and mass"""
+
+    np.random.seed(2021)
+
+    potential_fxn = lambda x: x ** 4
+    force_fxn = lambda x: - 4 * x ** 3
+
+    # loop over settings
+    temperatures = [200, 300]
+    frictions = [0.1, +np.inf]
+    dts = [0.1, 0.15]
+    masses = [1.0, 2.0]
+
+    settings = list(product(temperatures, frictions, dts, masses))
+    print(f'testing reference integrator for {len(settings)} combinations of settings:')
+    print('(temperature, friction, dt, mass) -> histogram_mse')
+
+    for (temperature, friction, dt, mass) in settings:
+        # generate n_production_steps * n_copies samples
+        n_copies = 10000
+        langevin = LangevinIntegrator(force_fxn, mass, temperature, dt, friction)
+
+        x0, v0 = 0.1 * np.ones((2, n_copies))
+        xs, vs = langevin.multiple_steps(x0, v0, n_steps=5000)
+        samples = xs[10:].flatten()
+
+        # summarize using histogram
+        y_empirical, edges = np.histogram(samples, bins=100, range=(-2, +2), density=True)
+        x_grid = (edges[1:] + edges[:-1]) / 2
+
+        # compare with e^{-U(x) / kB T} / Z
+        y = np.exp(-potential_fxn(x_grid) / (BOLTZ * temperature))
+        y_ref = y / np.trapz(y, x_grid)
+
+        histogram_mse = np.mean((y_ref - y_empirical) ** 2)
+        print(f'{(temperature, friction, dt, mass)}'.ljust(33), '->', histogram_mse)
+
+        assert histogram_mse < threshold
 
 
 if __name__ == "__main__":
