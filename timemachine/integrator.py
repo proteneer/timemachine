@@ -52,7 +52,7 @@ class Integrator:
         """Return copies x and v, updated by a single timestep"""
         raise NotImplementedError
 
-    def multiple_steps(self, x, v, n_steps=1):
+    def multiple_steps(self, x, v, n_steps=1000):
         """Return trajectories of x and v, advanced by n_steps"""
         xs, vs = [x], [v]
 
