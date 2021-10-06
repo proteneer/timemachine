@@ -35,6 +35,66 @@ def unflatten(aux_data, children):
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
+def run_model_simulations(model, sys_params):
+    assert len(sys_params) == len(model.unbound_potentials)
+
+    bound_potentials = []
+    for params, unbound_pot in zip(sys_params, model.unbound_potentials):
+        bp = unbound_pot.bind(np.asarray(params))
+        bound_potentials.append(bp)
+
+    all_args = []
+    for lamb_idx, lamb in enumerate(model.lambda_schedule):
+
+        subsample_interval = 1000
+
+        all_args.append((
+            lamb,
+            model.box,
+            model.x0,
+            model.v0,
+            bound_potentials,
+            model.integrator,
+            model.barostat,
+            model.equil_steps,
+            model.prod_steps,
+            subsample_interval,
+            subsample_interval,
+            model.lambda_schedule
+        ))
+
+    if model.endpoint_correct:
+
+        assert isinstance(bound_potentials[-1], potentials.HarmonicBond)
+
+        all_args.append((
+            1.0,
+            model.box,
+            model.x0,
+            model.v0,
+            bound_potentials[:-1], # strip out the restraints
+            model.integrator,
+            model.barostat,
+            model.equil_steps,
+            model.prod_steps,
+            subsample_interval,
+            subsample_interval,
+            [] # no need to evaluate Us for the endpoint correction
+        ))
+
+    results = []
+    if model.client is None:
+        for args in all_args:
+            results.append(simulate(*args))
+    else:
+        futures = []
+        for args in all_args:
+            futures.append(model.client.submit(simulate, *args))
+
+        for future in futures:
+            results.append(future.result())
+    return results
+
 def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_steps, prod_steps,
     x_interval, u_interval, lambda_windows):
     """
@@ -183,7 +243,7 @@ FreeEnergyModel = namedtuple(
 
 gradient = List[Any] # TODO: make this more descriptive of dG_grad structure
 
-def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
+def _deltaG_from_results(model, results, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     assert len(sys_params) == len(model.unbound_potentials)
 
@@ -192,58 +252,6 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
         bp = unbound_pot.bind(np.asarray(params))
         bound_potentials.append(bp)
 
-    all_args = []
-    for lamb_idx, lamb in enumerate(model.lambda_schedule):
-
-        subsample_interval = 1000
-
-        all_args.append((
-            lamb,
-            model.box,
-            model.x0,
-            model.v0,
-            bound_potentials,
-            model.integrator,
-            model.barostat,
-            model.equil_steps,
-            model.prod_steps,
-            subsample_interval,
-            subsample_interval, 
-            model.lambda_schedule
-        ))
-
-    if model.endpoint_correct:
-
-        assert isinstance(bound_potentials[-1], potentials.HarmonicBond)
-
-        all_args.append((
-            1.0,
-            model.box,
-            model.x0,
-            model.v0,
-            bound_potentials[:-1], # strip out the restraints
-            model.integrator,
-            model.barostat,
-            model.equil_steps,
-            model.prod_steps,
-            subsample_interval,
-            subsample_interval, 
-            [] # no need to evaluate Us for the endpoint correction
-        ))
-
-    if model.client is None:
-        results = []
-        for args in all_args:
-            results.append(simulate(*args))
-    else:
-        futures = []
-        for args in all_args:
-            futures.append(model.client.submit(simulate, *args))
-
-        results = []
-        for future in futures:
-            results.append(future.result())
-
     if model.endpoint_correct:
         sim_results = results[:-1]
     else:
@@ -251,7 +259,7 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     U_knk = []
     N_k = []
-    for lambda_idx, (lambda_window, result) in enumerate(zip(model.lambda_schedule, sim_results)):
+    for result in sim_results:
         U_knk.append(result.lambda_us)
         N_k.append(len(result.lambda_us)) # number of frames
 
@@ -366,13 +374,32 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     return (dG, bar_dG_err, results), dG_grad
 
+@functools.partial(jax.custom_vjp, nondiff_argnums=(0, 1,))
+def deltaG_from_results(model, results, sys_params) -> Tuple[float, List]:
+    return _deltaG_from_results(model=model, results=results, sys_params=sys_params)[0]
+
+def deltaG_from_results_fwd(model, results, sys_params) -> Tuple[Tuple[float, List], np.array]:
+    """same signature as DeltaG_from_results, but returns the full tuple"""
+    return _deltaG_from_results(model=model, results=results, sys_params=sys_params)
+
+def deltaG_from_results_bwd(model, results, residual, grad) -> Tuple[np.array]:
+    """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!
+    """
+    # residual are the partial dG / partial dparams for each term
+    # grad[0] is the adjoint of dG w.r.t. loss: partial L/partial dG
+    # grad[1] is the adjoint of dG_err w.r.t. loss: which we don't use
+    # grad[2] is the adjoint of simulation results w.r.t. loss: which we don't use
+    return ([grad[0]*r for r in residual],)
+
 @functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
 def deltaG(model, sys_params) -> Tuple[float, List]:
-    return _deltaG(model=model, sys_params=sys_params)[0]
+    results = run_model_simulations(model, sys_params)
+    return _deltaG_from_results(model=model, results=results, sys_params=sys_params)[0]
 
 def deltaG_fwd(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
-    """same signature as DeltaG, but returns the full tuple"""
-    return _deltaG(model=model, sys_params=sys_params)
+    """same signature as DeltaG_from_results, but returns the full tuple"""
+    results = run_model_simulations(model, sys_params)
+    return _deltaG_from_results(model=model, results=results, sys_params=sys_params)
 
 def deltaG_bwd(model, residual, grad) -> Tuple[np.array]:
     """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!
@@ -383,4 +410,5 @@ def deltaG_bwd(model, residual, grad) -> Tuple[np.array]:
     # grad[2] is the adjoint of simulation results w.r.t. loss: which we don't use
     return ([grad[0]*r for r in residual],)
 
+deltaG_from_results.defvjp(deltaG_from_results_fwd, deltaG_from_results_bwd)
 deltaG.defvjp(deltaG_fwd, deltaG_bwd)
