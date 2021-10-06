@@ -416,13 +416,13 @@ def test_reference_langevin_integrator_with_custom_ops():
     # assert gradient descent doesn't go far, but makes force norm much smaller
     xs, vs = descender.multiple_steps(x_0, v_0, n_steps=1000)
     force_reduction_factor = F_norm(xs[0]) / F_norm(xs[-1])
-    assert force_reduction_factor > 100
+    assert force_reduction_factor > 50
     assert np.abs(xs[-1] - xs[0]).max() < 0.1
 
     # assert *inertial* gradient descent doesn't go far, but makes force norm much smaller
     xs, vs = dissipator.multiple_steps(x_0, v_0, n_steps=1000)
     force_reduction_factor = F_norm(xs[0]) / F_norm(xs[-1])
-    assert force_reduction_factor > 100
+    assert force_reduction_factor > 50
     assert np.abs(xs[-1] - xs[0]).max() < 1
 
     x_min = xs[-1]
