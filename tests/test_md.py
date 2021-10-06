@@ -371,7 +371,7 @@ def test_reference_langevin_integrator_with_custom_ops():
 
     from testsystems.relative import hif2a_ligand_pair
     ff_params = hif2a_ligand_pair.ff.get_ordered_params()
-    unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
+    unbound_potentials, sys_params, masses, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
     bound_potentials = [ubp.bind(params).bound_impl(np.float32) for (ubp, params) in
                         zip(unbound_potentials, sys_params)]
     box = 100 * np.eye(3)
@@ -395,19 +395,19 @@ def test_reference_langevin_integrator_with_custom_ops():
         return np.linalg.norm(force(coords))
 
     # define a few integrators
-    mass, dt, temperature, friction = 10.0, 2.5e-3, 300.0, 10.0
+    dt, temperature, friction = 2.5e-3, 300.0, 10.0
 
     # zero temperature, infinite friction
     # (gradient descent, with no momentum)
-    descender = LangevinIntegrator(force, mass, 0.0, dt, np.inf)
+    descender = LangevinIntegrator(force, masses, 0.0, dt, np.inf)
 
     # zero temperature, finite friction
     # (gradient descent, with momentum)
-    dissipator = LangevinIntegrator(force, mass, 0.0, dt, friction)
+    dissipator = LangevinIntegrator(force, masses, 0.0, dt, friction)
 
     # finite temperature, finite friction
     # (Langevin, with momentum)
-    sampler = LangevinIntegrator(force, mass, temperature, dt, friction)
+    sampler = LangevinIntegrator(force, masses, temperature, dt, friction)
 
     # apply them
     x_0 = np.array(coords)
@@ -435,8 +435,6 @@ def test_reference_langevin_integrator_with_custom_ops():
     assert F_norm(xs[-1]) / len(coords) < 1e3
     assert F_norm(xs[-1]) > F_norm(xs[0])
     assert np.abs(xs[-1] - xs[0]).max() < 1
-
-    # TODO: convenience function + test for masses shape compatibility, (N,) -> (N,3)
 
 
 if __name__ == "__main__":

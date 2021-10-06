@@ -71,7 +71,11 @@ class LangevinIntegrator(Integrator):
         self.dt = dt
         self.masses = masses
         self.ca, self.cb, self.cc = langevin_coefficients(temperature, dt, friction, masses)
+        ca, cb, cc = langevin_coefficients(temperature, dt, friction, masses)
         self.force_fxn = force_fxn
+
+        # make masses, frictions, etc. (scalar or (N,)) shape-compatible with coordinates (vector or (N,3))
+        self.ca, self.cb, self.cc = np.expand_dims(ca, -1), np.expand_dims(cb, -1), np.expand_dims(cc, -1)
 
     def step(self, x, v):
         """Intended to match https://github.com/proteneer/timemachine/blob/37e60205b3ae3358d9bb0967d03278ed184b8976/timemachine/cpp/src/integrator.cu#L71-L74"""
