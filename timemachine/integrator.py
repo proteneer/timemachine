@@ -44,3 +44,23 @@ def langevin_coefficients(
     cc = np.sqrt(1 - np.exp(-2 * friction * dt)) * nscale
 
     return ca, cb, cc
+
+
+class Integrator:
+
+    def step(self, x, v):
+        """Return copies x and v, updated by a single timestep"""
+        raise NotImplementedError
+
+    def multiple_steps(self, x, v, n_steps=1):
+        """Return trajectories of x and v, advanced by n_steps"""
+        xs, vs = [x], [v]
+
+        for _ in range(n_steps):
+            new_x, new_v = self.step(xs[-1], vs[-1])
+
+            xs.append(new_x)
+            vs.append(new_v)
+
+        return np.array(xs), np.array(vs)
+
