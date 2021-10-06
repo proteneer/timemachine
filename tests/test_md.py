@@ -5,6 +5,7 @@ import numpy as np
 
 from jax.config import config; config.update("jax_enable_x64", True)
 import jax
+from jax import grad, numpy as jnp, jit
 
 from timemachine.constants import BOLTZ
 from timemachine.lib import custom_ops, potentials
@@ -364,16 +365,31 @@ def test_reference_langevin_integrator_with_custom_ops():
     * assert minimizer-like behavior when run at 0 temperature,
     * assert stability when run at room temperature"""
 
-    # get a force fxn using custom_ops
+    np.random.seed(2021)
+
+    # define a force fxn using a mix of optimized custom_ops and prototype-friendly Jax
+
     from testsystems.relative import hif2a_ligand_pair
     ff_params = hif2a_ligand_pair.ff.get_ordered_params()
     unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
     bound_potentials = [ubp.bind(params).bound_impl(np.float32) for (ubp, params) in
                         zip(unbound_potentials, sys_params)]
-    box = 10.0 * np.eye(3)
-    def force(coords):
+    box = 100 * np.eye(3)
+
+    def custom_op_force_component(coords):
         du_dxs = np.array([bp.execute(coords, box, 0.5)[0] for bp in bound_potentials])
         return - np.sum(du_dxs, 0)
+
+    def jax_restraint(coords):
+        center = jnp.mean(coords, 0)
+        return jnp.sum(center ** 4)
+
+    @jit
+    def jax_force_component(coords):
+        return - grad(jax_restraint)(coords)
+
+    def force(coords):
+        return custom_op_force_component(coords) + jax_force_component(coords)
 
     def F_norm(coords):
         return np.linalg.norm(force(coords))
@@ -416,9 +432,9 @@ def test_reference_langevin_integrator_with_custom_ops():
     # (2) goes uphill
     # (3) doesn't go very far
     xs, vs = sampler.multiple_steps(x_min, v_0, n_steps=1000)
-    assert F_norm(xs[-1]) < 1e7
+    assert F_norm(xs[-1]) / len(coords) < 1e3
     assert F_norm(xs[-1]) > F_norm(xs[0])
-    assert np.abs(xs[-1] - xs[0]).max() < 10
+    assert np.abs(xs[-1] - xs[0]).max() < 1
 
     # TODO: convenience function + test for masses shape compatibility, (N,) -> (N,3)
 
