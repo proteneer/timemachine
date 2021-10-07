@@ -1,3 +1,4 @@
+from copy import deepcopy
 from typing import Tuple, Any, List
 
 import numpy as np
@@ -8,7 +9,7 @@ class Dataset():
     """
 
     def __init__(self, data: List[Any]):
-        self.data = data
+        self.data = deepcopy(data)
 
     def num_batches(self, batch_size: int):
         return np.math.ceil(len(self.data) / batch_size)
