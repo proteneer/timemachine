@@ -104,8 +104,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, barostat, equil_st
     for bp in all_impls:
         du_dx, du_dl, u = bp.execute(x0, box, lamb)
         norm_forces = np.linalg.norm(du_dx, axis=1)
-        assert np.all(norm_forces < 25000)
-
+        assert np.all(norm_forces < 25000), "Forces much greater than expected after minimization"
     if integrator.seed == 0:
         # this deepcopy is needed if we're running if client == None
         integrator = copy.deepcopy(integrator)
