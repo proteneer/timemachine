@@ -4,8 +4,11 @@ import numpy as np
 
 from training.dataset import Dataset
 
+from testsystems.relative import hif2a_ligand_pair
+
 
 class TestDataset(unittest.TestCase):
+
     def test_split(self):
         ds = Dataset(list(range(100)))
         count = len(ds)
@@ -73,3 +76,10 @@ class TestDataset(unittest.TestCase):
         lhs, rhs = ds.indices_split(left, right)
         self.assertEqual(len(lhs), len(left))
         self.assertEqual(len(rhs), len(rhs))
+
+    def test_dataset_data_is_a_copy(self):
+        data = [hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b]
+        ds = Dataset(data)
+        data.pop(0)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(len(ds.data), 2)
