@@ -74,6 +74,7 @@ class LangevinIntegrator(Integrator):
         self.force_fxn = force_fxn
 
         # make masses, frictions, etc. (scalar or (N,)) shape-compatible with coordinates (vector or (N,3))
+        # note: per-atom frictions allowed
         self.ca, self.cb, self.cc = np.expand_dims(ca, -1), np.expand_dims(cb, -1), np.expand_dims(cc, -1)
 
     def step(self, x, v):
