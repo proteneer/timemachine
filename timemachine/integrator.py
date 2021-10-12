@@ -44,3 +44,44 @@ def langevin_coefficients(
     cc = np.sqrt(1 - np.exp(-2 * friction * dt)) * nscale
 
     return ca, cb, cc
+
+
+class Integrator:
+
+    def step(self, x, v):
+        """Return copies x and v, updated by a single timestep"""
+        raise NotImplementedError
+
+    def multiple_steps(self, x, v, n_steps=1000):
+        """Return trajectories of x and v, advanced by n_steps"""
+        xs, vs = [x], [v]
+
+        for _ in range(n_steps):
+            new_x, new_v = self.step(xs[-1], vs[-1])
+
+            xs.append(new_x)
+            vs.append(new_v)
+
+        return np.array(xs), np.array(vs)
+
+
+class LangevinIntegrator(Integrator):
+    def __init__(self, force_fxn, masses, temperature, dt, friction):
+        """BAOAB (https://arxiv.org/abs/1203.5428), rotated by half a timestep"""
+        self.dt = dt
+        self.masses = masses
+        ca, cb, cc = langevin_coefficients(temperature, dt, friction, masses)
+        self.force_fxn = force_fxn
+
+        # make masses, frictions, etc. (scalar or (N,)) shape-compatible with coordinates (vector or (N,3))
+        # note: per-atom frictions allowed
+        self.ca, self.cb, self.cc = np.expand_dims(ca, -1), np.expand_dims(cb, -1), np.expand_dims(cc, -1)
+
+    def step(self, x, v):
+        """Intended to match https://github.com/proteneer/timemachine/blob/37e60205b3ae3358d9bb0967d03278ed184b8976/timemachine/cpp/src/integrator.cu#L71-L74"""
+        v_mid = v + self.cb * self.force_fxn(x)
+
+        new_v = (self.ca * v_mid) + (self.cc * np.random.randn(*x.shape))
+        new_x = x + 0.5 * self.dt * (v_mid + new_v)
+
+        return new_x, new_v
