@@ -146,7 +146,7 @@ def test_gas_phase():
     sample_size = len(weights)*10
     idxs = np.random.choice(np.arange(len(weights)), size=sample_size, p=weights)
     unique_samples = len(set(idxs.tolist()))
-    print("unique samples", len(unique_samples), "ratio", len(sample_size)/len(unique_samples))
+    print("unique samples", unique_samples, "ratio", unique_samples/sample_size)
 
     torsions_reweight = torsions_easy[idxs]
 
