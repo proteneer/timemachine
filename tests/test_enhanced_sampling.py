@@ -81,8 +81,8 @@ def test_gas_phase():
 
     #              xx x x <-- torsion indices
     #          01 23456 7 8 9
-    # mol = Chem.MolFromMolBlock(MOL_SDF, removeHs=False)
-    # torsion_idxs = np.array([5,6,7,8])
+    mol = Chem.MolFromMolBlock(MOL_SDF, removeHs=False)
+    torsion_idxs = np.array([5,6,7,8])
 
     # this is broken
     #      0  12 3 4 5  6  7 8 | torsions are 2,3,6,7
