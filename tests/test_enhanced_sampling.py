@@ -150,19 +150,32 @@ def align_sample(x_gas, x_solvent):
     xb_new = rmsd.align_x2_unto_x1(xb, xa)
     return xb_new
 
-    # for each xs_solvent
-    # draw 100 random samples from xs_gas and reweight
 
-def generate_gas_phase_samples(mol, ff):
+def generate_gas_phase_samples(
+    mol,
+    ff,
+    temperature,
+    steps_per_batch=500,
+    num_batches=2000):
+    """
+    Generate a set of gas-phase samples by running steps_per_batch * num_batches steps
 
+    Parameters
+    ----------
+    mol: Chem.Mol
+    
+    ff: forcefield
+
+    temperature: float
+
+    Returns
+    -------
+    3-tuple
+        Return counts, samples, energies
+    """
     masses = np.array([a.GetMass() for a in mol.GetAtoms()])
     x0 = get_romol_conf(mol)
 
-    steps_per_batch = 100
-    # num_batches = 20000
-    num_batches = 2000
-
-    temperature = 300
     kT = temperature*BOLTZ
     masses = np.array([a.GetMass() for a in mol.GetAtoms()])
     num_workers = jax.device_count()
@@ -201,17 +214,33 @@ def generate_gas_phase_samples(mol, ff):
     # sample from weights
     sample_size = len(weights)
     idxs = np.random.choice(np.arange(len(weights)), size=sample_size, p=weights)
-    unique_samples = len(set(idxs.tolist()))
+
+    unique_decharged_kv = {}
+    for i in idxs:
+        if i not in unique_decharged_kv:
+            unique_decharged_kv[i] = 0
+        unique_decharged_kv[i] += 1
+
+    # keys() and values() will always return in the same order in python3
+    unique_decharged_idxs = np.array(list(unique_decharged_kv.keys()))
+    unique_decharged_counts = np.array(list(unique_decharged_kv.values()))
+
+    Us_decharged_unique = Us_decharged[unique_decharged_idxs]
+    xs_decharged_unique = xs_easy.reshape(-1, num_atoms, 3)[unique_decharged_idxs]
+    # decharged_counts =  
 
     Us_decharged = Us_decharged.reshape(-1)[idxs]
     xs_decharged = xs_easy.reshape(-1, num_atoms, 3)[idxs]
 
     assert len(Us_decharged) == len(xs_decharged)
 
-    # return xs_decharged, Us_decharged
-    return xs_easy, Us_easy, idxs
+    return unique_decharged_counts, xs_decharged_unique, Us_decharged_unique
 
-def generate_solvent_phase_samples(mol, ff):
+
+    # return xs_decharged, Us_decharged
+    # return xs_easy, Us_easy, idxs
+
+def generate_solvent_phase_samples(mol, ff, temperature):
 
     x0 = get_romol_conf(mol)
 
@@ -224,7 +253,6 @@ def generate_solvent_phase_samples(mol, ff):
     ff_params = ff.get_ordered_params()
     ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
 
-    temperature = 300
     dt = 1.5e-3
     friction = 1.0
     intg = lib.LangevinIntegrator(temperature, dt, friction, masses, 2021)
@@ -292,18 +320,10 @@ def test_condensed_phase():
     # generate gas-phase xs, with LJ terms only turned on
     # generate condensed-phase xs, batch RMSD align and re-weight
 
-
     #              xx x x <-- torsion indices
     #          01 23456 7 8 9
     mol = Chem.MolFromMolBlock(MOL_SDF, removeHs=False)
     # torsion_idxs = np.array([5,6,7,8])
-
-    # this is broken
-    #      0  12 3 4 5  6  7 8 | torsions are 2,3,6,7
-    # smi = "C1=CC=C(C=C1)C(=O)O"
-    # mol = Chem.AddHs(Chem.MolFromSmiles(smi))
-    # AllChem.EmbedMolecule(mol)
-    # torsion_idxs = np.array([2,3,6,7])
 
     masses = np.array([a.GetMass() for a in mol.GetAtoms()])
     num_ligand_atoms = len(masses)
@@ -313,20 +333,21 @@ def test_condensed_phase():
 
     cache_path = "cache.pkl"
 
+    temperature = 300.0
+
     if not os.path.exists(cache_path):
         print("Generating cache")
-        xs_easy, Us_easy, decharged_idxs = generate_gas_phase_samples(mol, ff)
-        # there are duplicate samples here since xs_gas is re-weighted
-        xs_solvent, boxes_solvent, Us_full, nb_params = generate_solvent_phase_samples(mol, ff)
+        # Us_decharged_unique is un-used
+        decharged_counts, xs_decharged_unique, Us_decharged_unique = generate_gas_phase_samples(mol, ff, temperature)
+        xs_solvent, boxes_solvent, Us_full, nb_params = generate_solvent_phase_samples(mol, ff, temperature)
         with open(cache_path, "wb") as fh:
-            pickle.dump((xs_easy, Us_easy, decharged_idxs, xs_solvent, boxes_solvent, Us_full, nb_params), fh)
-        print("Exiting..., please re-run")
+            pickle.dump((decharged_counts, xs_decharged_unique, Us_decharged_unique, xs_solvent, boxes_solvent, Us_full, nb_params), fh)
         # assert 0
 
     with open(cache_path, "rb") as fh:
-        xs_easy, Us_easy, decharged_idxs, xs_solvent, boxes_solvent, Us_full, nb_params = pickle.load(fh)
+        decharged_counts, xs_decharged_unique, Us_decharged_unique, xs_solvent, boxes_solvent, Us_full, nb_params = pickle.load(fh)
 
-    xs_easy = xs_easy.reshape(-1, num_ligand_atoms, 3)
+    # xs_easy = xs_easy.reshape(-1, num_ligand_atoms, 3)
 
     log_numerator = []
     log_denominator = []
@@ -341,174 +362,41 @@ def test_condensed_phase():
 
     batch_before_nrg_fn = jax.jit(jax.vmap(before_nrg))
     nrgs = batch_before_nrg_fn(xs_solvent, boxes_solvent)
-    print(nrgs)
 
     def align_and_eval_delta_U(x_gas, x_solvent, box_solvent):
-        x_gas_aligned = align_sample(x_gas, x_solvent) # replacement ligand coords
+        x_gas_aligned = align_sample(x_gas, x_solvent) # align gas phase conformer
         x_water = x_solvent[:-num_ligand_atoms] # water coords
         return nonbonded.nonbonded_off_diagonal(x_gas_aligned, x_water, box_solvent, params_i, params_j)
 
     batch_after_nrg_fn = jax.jit(jax.vmap(align_and_eval_delta_U, in_axes=(0, None, None)))
 
-    temperature = 300.0
     kT = temperature*BOLTZ
 
-    # YTZ: don't use Us_easy.... probably not the term we want to use when we reweight to a different U_b
-
-    # (ytz): optimization, compute energies only on the unique samples
-    unique_decharged_kv = {}
-    for i in decharged_idxs:
-        if i not in unique_decharged_kv:
-            unique_decharged_kv[i] = 0
-        unique_decharged_kv[i] += 1
-
-    unique_decharged_idxs = list(unique_decharged_kv.keys())
-    unique_decharged_counts = list(unique_decharged_kv.values())
-    unique_xs_decharged = xs_easy[unique_decharged_idxs]
-
-    print(unique_xs_decharged.shape, "unique samples out of", len(decharged_idxs), "total samples")
+    print(xs_decharged_unique.shape, "unique samples out of", np.sum(decharged_counts), "total samples")
 
     all_delta_us_unique = []
 
     for idx, (x_solvent, box_solvent) in enumerate(zip(xs_solvent, boxes_solvent)):
         print("before_nrgs", nrgs[idx], "frame", idx)
-        delta_us = (batch_after_nrg_fn(unique_xs_decharged, x_solvent, box_solvent)- nrgs[idx])/kT
+        delta_us = (batch_after_nrg_fn(xs_decharged_unique, x_solvent, box_solvent)- nrgs[idx])/kT
         all_delta_us_unique.append(delta_us)
         bins = 100
-        plt.hist(np.exp(-delta_us), bins, density=True, alpha=0.2, label="frame_"+str(idx), weights=unique_decharged_counts)
+        plt.hist(np.exp(-delta_us), bins, density=True, alpha=0.2, label="frame_"+str(idx), weights=decharged_counts)
 
-
-    prefactor = np.sum(unique_decharged_counts)*len(all_delta_us_unique)
-    unique_decharged_counts = np.array(unique_decharged_counts)
+    # given K streams and N samples per stream with different counts
+    # compute 1/(total_counts_per_stream*number_of_streams) * sum_s^K sum_i^N c_i exp(-delta_u_i)
+    prefactor = np.sum(decharged_counts)*len(all_delta_us_unique)
+    decharged_counts = np.array(decharged_counts)
     all_delta_us_unique = np.array(all_delta_us_unique)
-    # print("!!!", np.sum(all_delta_us_unique*unique_decharged_counts)
-    # ratio = np.sum(np.exp(-all_delta_us_unique)*unique_decharged_counts)/prefactor
-    # print("Ratio:", ratio)
-    ratio = np.mean(np.average(np.exp(-all_delta_us_unique), axis=1, weights=unique_decharged_counts))
-
-    print("Ratio:", ratio)
-
-    assert 0
-    print(all_delta_us_unique.shape)
-
-    print((np.exp(-np.sum(all_delta_us_unique, axis=0))).shape)
-
-    print("sum of nrgs", -np.sum(all_delta_us_unique, axis=0))
-    assert 0
-    print("before pow", np.exp(-np.sum(all_delta_us_unique, axis=0)))
-    print("after pow", np.power(np.exp(-np.sum(all_delta_us_unique, axis=0)), unique_decharged_counts))
-    # print("prod", np.prod(np.power(np.exp(-np.sum(all_delta_us_unique, axis=0)), unique_decharged_counts)))
-
-
-    ratio = (1/prefactor)*np.prod(np.power(np.exp(-np.sum(all_delta_us_unique, axis=0)), unique_decharged_counts))  # sum along x0, y0, etc
-
-
-    # let a, b be weights of two samples, and (x0, y0), (x1, y1), (x2, y2) be two samples
-    # each drawn from three independent streams, weighted according to (a, b):
-    # we wish to compute the mean: 1/(a+b+a+b+a+b) * a*exp(-x0)+b*exp(-y0)+a*x1+b*y1+a*x2+b*y2))
-    # = 1/prefactor * exp(-(a*(x0+x1+x2)+b*(y0+y1+y2)))
-    # = 1/prefactor * exp(-a*(x0+x1+x2))*exp(-b*(y0+y1+y2))
-    # = 1/prefactor * exp(-(x0+x1+x2))^a * exp(-(y0+y1+y2)^b
-
-    # let a, b be weights of two samples, and (x0, y0), (x1, y1), (x2, y2) be two samples
-    # each drawn from three independent streams, weighted according to (a, b):
-    # we wish to compute the mean: 1/(a+b+a+b+a+b) * exp(-(a*x0+b*y0+a*x1+b*y1+a*x2+b*y2))
-    # = 1/prefactor * exp(-(a*(x0+x1+x2)+b*(y0+y1+y2)))
-    # = 1/prefactor * exp(-a*(x0+x1+x2))*exp(-b*(y0+y1+y2))
-    # = 1/prefactor * exp(-(x0+x1+x2))^a * exp(-(y0+y1+y2)^b
-
-    # avg_delta_us = np.average(all_delta_us_unique, weights=unique_decharged_counts)
-
-    # all_delta_us_unique = np.concatenate(all_delta_us_unique)
+    ratio = np.mean(np.average(np.exp(-all_delta_us_unique), axis=1, weights=decharged_counts))
 
     print("ratio of Z_e/Z_f, computed by np.mean(np.exp(-delta_us)):", ratio)
-    print(all_delta_us.shape)
 
     plt.xlabel("exp(-delta_u)")
     plt.ylabel("density")
 
     plt.show()
-        # print("after_nrgs", batch_after_nrg(xs_gas, x_solvent, box_solvent).shape)
 
-        # assert 0
-
-        # for x_gas in xs_gas:
-
-
-
-        #     x_gas_aligned = align_sample(x_gas, x_solvent) # replacement ligand coords
-        #     nrg_after = nonbonded.nonbonded_off_diagonal(x_gas_aligned, x_water, box, params_i, params_j)
-
-        #     print("Delta_U", nrg_after-nrg_before)
-            # assert 0
-            # print(nrg)
-            # evaluate energy difference
-
-    print(xs_gas.shape)
-    print(xs_solvent.shape)
-
-
-
-    # generate a rand
-
-    assert 0
-
-    x0 = get_romol_conf(mol)
-
-    steps_per_batch = 100
-    # num_batches = 20000
-    num_batches = 2000
-
-    temperature = 300
-    kT = temperature*BOLTZ
-    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
-    num_workers = jax.device_count()
-
-    state = enhanced_sampling.EnhancedState(mol, ff)
-
-    # xs_easy = enhanced_sampling.generate_samples(
-    #     masses,
-    #     x0,
-    #     state.U_easy,
-    #     temperature,
-    #     steps_per_batch,
-    #     num_batches,
-    #     num_workers
-    # )
-
-    # writer = Chem.SDWriter("results.sdf")
-    # num_atoms = mol.GetNumAtoms()
-    # torsions = []
-
-    # # discard first few batches for burn-in and reshape into a single flat array
-    # xs_easy = xs_easy[:, 1000:, :, :]
-
-    # batch_U_easy_fn = jax.pmap(jax.vmap(state.U_easy))
-    # batch_U_decharged_fn = jax.pmap(jax.vmap(state.U_decharged))
-
-    # Us_decharged = batch_U_decharged_fn(xs_easy)
-    # Us_easy = batch_U_easy_fn(xs_easy)
-
-    # log_numerator = -Us_decharged.reshape(-1)/kT
-    # log_denominator = -Us_easy.reshape(-1)/kT
-
-    # log_weights = log_numerator - log_denominator
-    # weights = np.exp(log_weights - logsumexp(log_weights))
-
-    # # sample from weights
-    # sample_size = len(weights)
-    # idxs = np.random.choice(np.arange(len(weights)), size=sample_size, p=weights)
-    # unique_samples = len(set(idxs.tolist()))
-
-    # Us_decharged = Us_decharged.reshape(-1)[idxs]
-    # xs_decharged = xs_easy.reshape(-1, num_atoms, 3)[idxs]
-    
-    # assert len(Us_decharged) == len(xs_decharged)
-
-    xs, boxes, us = generate_condensed_phase_samples(mol, ff)
-
-    # generate samples in the solvent phase.
-    # xs_solvent = 
 
 def test_gas_phase():
     """

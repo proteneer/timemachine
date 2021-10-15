@@ -52,17 +52,17 @@ def nonbonded_off_diagonal(
     return np.sum(lennard_jones(dij, sig_ij, eps_ij))
 
 def nonbonded_v3(
-        conf,
-        params,
-        box,
-        lamb,
-        charge_rescale_mask,
-        lj_rescale_mask,
-        beta,
-        cutoff,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
-        runtime_validate=True,
+    conf,
+    params,
+    box,
+    lamb,
+    charge_rescale_mask,
+    lj_rescale_mask,
+    beta,
+    cutoff,
+    lambda_plane_idxs,
+    lambda_offset_idxs,
+    runtime_validate=True,
 ):
     """Lennard-Jones + Coulomb, with a few important twists:
     * distances are computed in 4D, controlled by lambda, lambda_plane_idxs, lambda_offset_idxs
