@@ -1,7 +1,7 @@
 import jax.numpy as np
 from jax.scipy.special import erfc
 from jax.ops import index_update, index
-from timemachine.potentials.jax_utils import distance_on_pairs, distance, convert_to_4d
+from timemachine.potentials.jax_utils import distance_on_pairs, distance, convert_to_4d, delta_r
 
 
 def switch_fn(dij, cutoff):
@@ -29,6 +29,27 @@ def direct_space_pme(dij, qij, beta):
     """
     return qij * erfc(beta * dij) / dij
 
+def nonbonded_off_diagonal(
+    xi,
+    xj,
+    box,
+    params_i,
+    params_j):
+
+    ri = np.expand_dims(xi, axis=1)
+    rj = np.expand_dims(xj, axis=0)
+    d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
+    dij = np.sqrt(d2ij)
+    sig_i = np.expand_dims(params_i[:, 1], axis=1)
+    sig_j = np.expand_dims(params_j[:, 1], axis=0)
+    eps_i = np.expand_dims(params_i[:, 2], axis=1)
+    eps_j = np.expand_dims(params_j[:, 2], axis=0)
+
+    sig_ij = sig_i*sig_j
+    eps_ij = eps_i*eps_j
+
+    # tbd electrostatics
+    return np.sum(lennard_jones(dij, sig_ij, eps_ij))
 
 def nonbonded_v3(
         conf,

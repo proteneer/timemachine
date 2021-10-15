@@ -157,3 +157,4 @@ def distance(x, box):
     d2ij = np.where(np.eye(N), 0, d2ij)
     dij = np.where(np.eye(N), 0, np.sqrt(d2ij))
     return dij
+

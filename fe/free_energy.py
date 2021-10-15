@@ -76,7 +76,7 @@ class BaseFreeEnergy():
 # this class is serializable.
 class AbsoluteFreeEnergy(BaseFreeEnergy):
 
-    def __init__(self, mol, ff):
+    def __init__(self, mol, ff, decharge=False):
         """
         Compute the absolute free energy of a molecule via 4D decoupling.
 
@@ -91,8 +91,7 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         """
         self.mol = mol
         self.ff = ff
-        self.top = topology.BaseTopology(mol, ff)
-
+        self.top = topology.BaseTopology(mol, ff, decharge)
 
     def prepare_host_edge(self, ff_params, host_system, host_coords):
         """
