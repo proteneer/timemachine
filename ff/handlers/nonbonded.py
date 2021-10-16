@@ -209,6 +209,27 @@ class NonbondedHandler(SerializableMixIn):
 
 class SimpleChargeHandler(NonbondedHandler):
     pass
+    # @staticmethod
+    # def static_parameterize(params, smirks, mol):
+    #     """
+    #     Carry out parameterization of given molecule, with an option to attach additional parameters
+    #     via concatenation. Typically aux_params are protein charges etc.
+
+    #     Parameters
+    #     ----------
+    #     params: np.array, (P, k)
+    #         parameters associated with each SMIRKS pattern
+
+    #     smirks: list of str (P,)
+    #         SMIRKS patterns
+
+    #     mol: Chem.ROMol
+    #         rdkit molecule, should have hydrogens pre-added
+
+    #     """
+    #     assert (len(smirks) == len(params))
+    #     param_idxs = generate_nonbonded_idxs(mol, smirks)
+    #     return params[param_idxs]
 
 class LennardJonesHandler(NonbondedHandler):
 
@@ -411,5 +432,7 @@ class AM1CCCHandler(SerializableMixIn):
 
         q_params = decremented
         assert (q_params.shape[0] == mol.GetNumAtoms()) # check that return shape is consistent with input mol
+
+        q_params = np.zeros_like(q_params)
 
         return q_params

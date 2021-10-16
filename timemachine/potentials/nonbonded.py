@@ -34,7 +34,9 @@ def nonbonded_off_diagonal(
     xj,
     box,
     params_i,
-    params_j):
+    params_j,
+    beta=2.0,
+    cutoff=1.2):
 
     ri = np.expand_dims(xi, axis=1)
     rj = np.expand_dims(xj, axis=0)
@@ -45,11 +47,19 @@ def nonbonded_off_diagonal(
     eps_i = np.expand_dims(params_i[:, 2], axis=1)
     eps_j = np.expand_dims(params_j[:, 2], axis=0)
 
-    sig_ij = sig_i*sig_j
+    sig_ij = sig_i+sig_j
     eps_ij = eps_i*eps_j
 
-    # tbd electrostatics
-    return np.sum(lennard_jones(dij, sig_ij, eps_ij))
+    qi = np.expand_dims(params_i[:, 0], axis=1)
+    qj = np.expand_dims(params_j[:, 0], axis=0)
+
+    qij = np.multiply(qi, qj)
+
+    es = direct_space_pme(dij, qij, beta)
+    lj = lennard_jones(dij, sig_ij, eps_ij)
+
+    nrg = np.where(dij > cutoff, 0, es+lj)
+    return np.sum(nrg)
 
 def nonbonded_v3(
     conf,
