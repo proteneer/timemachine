@@ -333,7 +333,13 @@ class TestFactorizability(unittest.TestCase):
 
 class StandardQLJTyperTestCase(unittest.TestCase):
 
-    def test_bromine_in_mol(self):
-        romol = Chem.AddHs(Chem.MolFromSmiles("O=C1N(Br)C(=O)CC1"))
+    def verify_smiles_typing(self, smi):
+        romol = Chem.AddHs(Chem.MolFromSmiles(smi))
         qlj_types = topology.standard_qlj_typer(romol)
         assert len(qlj_types) == romol.GetNumAtoms()
+
+    def test_bromine_in_mol(self):
+        self.verify_smiles_typing("O=C1N(Br)C(=O)CC1")
+
+    def test_iodine_in_mol(self):
+        self.verify_smiles_typing("O=I(=O)OI(=O)=O")
