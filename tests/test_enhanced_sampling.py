@@ -201,36 +201,36 @@ $$$$"""
 # $$$$"""
 
 # Why doesn't benzene work? probably bad-bond lengths->instant blowup
-MOL_SDF = """
-  Mrv2115 10152122132D          
+# MOL_SDF = """
+#   Mrv2115 10152122132D          
 
- 12 12  0  0  0  0            999 V2000
-   -0.3669    0.6543    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.1224    0.6543    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.5002    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.1224   -0.6543    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.3669   -0.6543    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-    0.0109    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.0166    1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-    0.7114    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.0166   -1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.4727   -1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-   -2.2007    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.4727    1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  2  0  0  0  0
-  2  3  1  0  0  0  0
-  3  4  2  0  0  0  0
-  4  5  1  0  0  0  0
-  5  6  2  0  0  0  0
-  6  1  1  0  0  0  0
-  1  7  1  0  0  0  0
-  6  8  1  0  0  0  0
-  5  9  1  0  0  0  0
-  4 10  1  0  0  0  0
-  3 11  1  0  0  0  0
-  2 12  1  0  0  0  0
-M  END
-$$$$"""
+#  12 12  0  0  0  0            999 V2000
+#    -0.3669    0.6543    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+#    -1.1224    0.6543    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+#    -1.5002    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+#    -1.1224   -0.6543    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+#    -0.3669   -0.6543    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+#     0.0109    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+#    -0.0166    1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+#     0.7114    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+#    -0.0166   -1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+#    -1.4727   -1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+#    -2.2007    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+#    -1.4727    1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+#   1  2  2  0  0  0  0
+#   2  3  1  0  0  0  0
+#   3  4  2  0  0  0  0
+#   4  5  1  0  0  0  0
+#   5  6  2  0  0  0  0
+#   6  1  1  0  0  0  0
+#   1  7  1  0  0  0  0
+#   6  8  1  0  0  0  0
+#   5  9  1  0  0  0  0
+#   4 10  1  0  0  0  0
+#   3 11  1  0  0  0  0
+#   2 12  1  0  0  0  0
+# M  END
+# $$$$"""
 
 # (ytz): do not remove, useful for visualization in pymol
 def make_conformer(mol, conf):
@@ -238,8 +238,6 @@ def make_conformer(mol, conf):
     mol.RemoveAllConformers()
     cc = Chem.Conformer(mol.GetNumAtoms())
     conf = conf*10
-    # conf *= 10  # convert from nm to A
-    # print("WRITING CONF", conf)
     for idx, pos in enumerate(np.asarray(conf)):
         cc.SetAtomPosition(idx, (float(pos[0]), float(pos[1]), float(pos[2])))
     mol.AddConformer(cc)
@@ -266,7 +264,7 @@ def generate_gas_phase_samples(
     temperature,
     U_target,
     steps_per_batch=250,
-    num_batches=5000):
+    num_batches=10000):
     """
     Generate a set of gas-phase samples by running steps_per_batch * num_batches steps
 
@@ -418,7 +416,7 @@ def generate_solvent_phase_samples(mol, ff, temperature):
     )
 
     lamb = 0.0
-    num_steps = 100000
+    num_steps = 800000
     # num_steps = 100
     # num_steps = 20000
     lambda_windows = np.array([0.0])
@@ -433,16 +431,7 @@ def generate_solvent_phase_samples(mol, ff, temperature):
         x_interval
     )
 
-    print(full_us)
-
-    # print(boxes)
-    # assert 0
-
-    # return xs[10:], boxes[10:], full_us[10:], bps[-1], params[-1]
-
     return xs[50:], boxes[50:], full_us[50:], bps[-1], params[-1]
-
-    # return xs, boxes, full_us, bps[-1], params[-1]
 
 def test_condensed_phase():
     
@@ -531,8 +520,6 @@ def test_condensed_phase():
     all_delta_us_unique = []
 
     writer = Chem.SDWriter("test2.sdf")
-
-    print("kT", kT)
 
     for idx, (x_solvent, box_solvent) in enumerate(zip(xs_solvent, boxes_solvent)):
 
