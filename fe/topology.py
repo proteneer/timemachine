@@ -63,6 +63,8 @@ def standard_qlj_typer(mol):
             val = (0.0, 0.35, 1.0)
         elif a_num == 35:
             val = (0.0, 0.39, 1.1)
+        elif a_num == 53:
+            val = (0.0, 0.41, 1.2)
         else:
             # print("Unknown a_num", a_num)
             assert 0, "Unknown a_num "+str(a_num)
