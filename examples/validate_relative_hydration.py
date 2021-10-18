@@ -4,11 +4,13 @@
 
 import argparse
 import numpy as np
-import jax
-from jax import numpy as jnp
 
-from fe.free_energy_rabfe import construct_absolute_lambda_schedule, construct_relative_lambda_schedule, setup_relative_restraints, get_romol_conf
-from fe.utils import convert_uIC50_to_kJ_per_mole
+from fe.free_energy_rabfe import (
+    construct_absolute_lambda_schedule_solvent,
+    construct_relative_lambda_schedule,
+    setup_relative_restraints_by_distance,
+    get_romol_conf,
+)
 from fe import model_rabfe
 from md import builders, minimizer
 
@@ -16,21 +18,12 @@ from testsystems.relative import hif2a_ligand_pair
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
-from ff.handlers.serialize import serialize_handlers
-from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
-
-from typing import Union, Optional, Iterable, Any, Tuple, Dict
-
-from optimize.step import truncated_step
 
 import multiprocessing
 from training.dataset import Dataset
 from rdkit import Chem
-
-array = Union[np.array, jnp.array]
-Handler = Union[AM1CCCHandler, LennardJonesHandler] # TODO: do these all inherit from a Handler class already?
 
 if __name__ == "__main__":
 
@@ -99,7 +92,7 @@ if __name__ == "__main__":
 
     dataset = Dataset(mols)
 
-    absolute_solvent_schedule = construct_absolute_lambda_schedule(cmd_args.num_windows)
+    absolute_solvent_schedule = construct_absolute_lambda_schedule_solvent(cmd_args.num_windows)
     relative_solvent_schedule = construct_relative_lambda_schedule(cmd_args.num_windows-1)
     solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
@@ -179,10 +172,9 @@ if __name__ == "__main__":
                 mol_b = dataset.data[j]
 
                 # relative calculation
-                core_idxs = setup_relative_restraints(mol_a, mol_b)
+                core_idxs = setup_relative_restraints_by_distance(mol_a, mol_b)
 
                 xab = minimize_relative(mol_a, mol_b)
-
                 ddG_ab, ddG_ab_err = model_relative.predict(
                     ordered_params,
                     mol_a,

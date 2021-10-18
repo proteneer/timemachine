@@ -258,51 +258,6 @@ def construct_relative_lambda_schedule(num_windows):
 
     return lambda_schedule
 
-
-def setup_relative_restraints(
-    mol_a,
-    mol_b):
-    """
-    Setup restraints between ring atoms in two molecules.
-
-    """
-    # setup relative orientational restraints
-    # rough sketch of algorithm:
-    # find core atoms in mol_a
-    # find core atoms in mol_b
-    # use the hungarian algorithm to assign matching
-
-    ligand_coords_a = get_romol_conf(mol_a)
-    ligand_coords_b = get_romol_conf(mol_b)
-
-    core_idxs_a = []
-    for idx, a in enumerate(mol_a.GetAtoms()):
-        if a.IsInRing():
-            core_idxs_a.append(idx)
-
-    core_idxs_b = []
-    for idx, b in enumerate(mol_b.GetAtoms()):
-        if b.IsInRing():
-            core_idxs_b.append(idx)
-
-    ri = np.expand_dims(ligand_coords_a[core_idxs_a], 1)
-    rj = np.expand_dims(ligand_coords_b[core_idxs_b], 0)
-    rij = np.sqrt(np.sum(np.power(ri-rj, 2), axis=-1))
-
-    row_idxs, col_idxs = linear_sum_assignment(rij)
-
-    core_idxs = []
-
-    for core_a, core_b in zip(row_idxs, col_idxs):
-        core_idxs.append((
-            core_idxs_a[core_a],
-            core_idxs_b[core_b]
-        ))
-
-    core_idxs = np.array(core_idxs, dtype=np.int32)
-
-    return core_idxs
-
 def setup_relative_restraints_by_distance(
     mol_a: Chem.Mol,
     mol_b: Chem.Mol,
