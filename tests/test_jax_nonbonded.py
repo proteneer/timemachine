@@ -70,6 +70,34 @@ def resolve_clashes(x0, box0, min_dist=0.1):
         return x0, box0
 
 
+def generate_easy_random_inputs(n_atoms, dim) -> NonbondedArgs:
+    box = np.eye(dim)
+    assert box.shape == (dim, dim)
+
+    conf = rand(n_atoms, dim)
+
+    conf, box = resolve_clashes(conf, box, min_dist=0.1)
+
+    charges = np.zeros(n_atoms)
+    sig = 0.2 * np.ones(n_atoms)
+    eps = 1.0 * np.ones(n_atoms)
+    params = np.array([charges, sig, eps]).T
+
+    lamb = 0.5
+    charge_rescale_mask = onp.ones((n_atoms, n_atoms))
+    lj_rescale_mask = onp.ones((n_atoms, n_atoms))
+
+    beta = 1.2
+    cutoff = 1.0
+
+    lambda_plane_idxs = np.zeros(n_atoms, dtype=int)
+    lambda_offset_idxs = np.zeros(n_atoms, dtype=int)
+
+    args = conf, params, box, lamb, charge_rescale_mask, lj_rescale_mask, beta, cutoff, lambda_plane_idxs, lambda_offset_idxs
+
+    return args
+
+
 
 def generate_random_inputs(n_atoms: int, dim: int = 3, min_dist=0.1) -> NonbondedArgs:
     box = 1 + np.diag(rand(dim))  # each side length ~ Unif([1, 2])
@@ -162,7 +190,7 @@ def _nonbonded_v3_clone(
     return np.sum(eij_total)
 
 
-def test_jax_nonbonded(n_instances=10):
+def run_randomized_tests_of_jax_nonbonded(instance_generator=generate_random_inputs, n_instances=10):
     """Assert that nonbonded_v3 and _nonbonded_v3 agree on several random instances"""
     jittable_nonbonded_v3 = partial(nonbonded_v3, runtime_validate=False)
     u_a, u_b = jit(jittable_nonbonded_v3), jit(_nonbonded_v3_clone)
@@ -173,8 +201,17 @@ def test_jax_nonbonded(n_instances=10):
     dims = onp.random.randint(3, 5, n_instances)
 
     for n_atoms, dim in zip(random_sizes, dims):
-        args = generate_random_inputs(n_atoms, dim)
+        args = instance_generator(n_atoms, dim)
         compare_two_potentials(u_a, u_b, args)
+
+
+def test_jax_nonbonded(n_instances=10):
+    run_randomized_tests_of_jax_nonbonded(generate_random_inputs, n_instances)
+
+
+def test_jax_nonbonded_easy(n_instances=10):
+    run_randomized_tests_of_jax_nonbonded(generate_easy_random_inputs, n_instances)
+
 
 def test_vmap():
     """Can call jit(vmap(nonbonded_v3_on_specific_pairs))"""
