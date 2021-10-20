@@ -79,8 +79,11 @@ def generate_random_inputs(n_atoms: int, dim: int = 3, min_dist=0.1) -> Nonbonde
 
     conf, box = resolve_clashes(conf, box, min_dist)
 
-    params = rand(n_atoms, 3)
-    params[:, 0] -= np.mean(params[:, 0])
+    # charges ~ Normal(0,1), sigmas ~ Unif([min_dist, 1 + min_dist]), eps ~ Unif([0,1])
+    charges = randn(n_atoms)
+    sig = rand(n_atoms) + min_dist # sig ~= 0 would be bad
+    eps = rand(n_atoms)
+    params = np.array([charges, sig, eps]).T
 
     lamb = rand()
 
