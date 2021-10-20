@@ -130,8 +130,8 @@ def generate_random_inputs(n_atoms: int, dim: int = 3, min_dist=0.1) -> Nonbonde
     lj_rescale_mask = onp.ones((n_atoms, n_atoms))
     for _ in range(n_atoms):
         i, j = randint(n_atoms, size=2)
-        charge_rescale_mask[i, j] = 0.0
-        lj_rescale_mask[i, j] = 0.0
+        charge_rescale_mask[i, j] = charge_rescale_mask[j, i] = 0.0
+        lj_rescale_mask[i, j] = lj_rescale_mask[j, i] = 0.0
 
     beta = rand() + 1
     cutoff = rand() + 0.5
