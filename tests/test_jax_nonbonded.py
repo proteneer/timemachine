@@ -26,7 +26,7 @@ def generate_random_inputs(n_atoms: int, dim: int = 3) -> NonbondedArgs:
     box = 1 + np.diag(rand(3))  # each side length ~ Unif([1, 2])
     assert box.shape == (dim, dim)
 
-    conf = rand(5 * n_atoms, 3) * 5  # trigger periodic wrapping behavior
+    conf = rand(n_atoms, 3) * 5  # trigger periodic wrapping behavior
 
     params = rand(n_atoms, 3)
     params[:, 0] -= np.mean(params[:, 0])
