@@ -5,6 +5,8 @@ import numpy as onp
 from numpy.random import randn, rand, randint, seed
 seed(2021)
 
+from scipy.optimize import minimize
+
 from jax import numpy as np, value_and_grad, jit, vmap
 
 from jax.ops import index_update, index
@@ -40,7 +42,6 @@ def resolve_clashes(x0, box0, min_dist=0.1):
         print(f'before optimization: min(dij) = {np.min(dij)} < min_dist threshold ({min_dist})')
         # print('smallest few distances', sorted(dij)[:10])
 
-        from scipy.optimize import minimize
         def unflatten(xbox):
             n = x_shape[0] * x_shape[1]
             x = xbox[:n].reshape(x_shape)
