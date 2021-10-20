@@ -33,9 +33,9 @@ def resolve_clashes(x0, box0, min_dist=0.1):
     box_shape = box0.shape
 
     if np.min(dij) < min_dist:
-        print('some distances too small')
+        #print('some distances too small')
         print(f'before optimization: min(dij) = {np.min(dij)} < min_dist threshold ({min_dist})')
-        print('smallest few distances', sorted(dij)[:10])
+        #print('smallest few distances', sorted(dij)[:10])
 
         from scipy.optimize import minimize
         def unflatten(xbox):
@@ -54,9 +54,9 @@ def resolve_clashes(x0, box0, min_dist=0.1):
             return float(v), onp.array(g, onp.float64)
 
         initial_state = np.hstack([x0.flatten(), box0.flatten()])
-        print(f'repulsive energy before: {U_repulse(initial_state)}')
+        #print(f'penalty before: {U_repulse(initial_state)}')
         result = minimize(fun, initial_state, jac=True, method='L-BFGS-B')
-        print(f'repulsive energy after minimization: {U_repulse(result.x)}')
+        #print(f'penalty after minimization: {U_repulse(result.x)}')
 
 
         x, box = unflatten(result.x)
