@@ -23,7 +23,11 @@ NonbondedFxn = Callable[[*nonbonded_args], Energy]
 
 
 def resolve_clashes(x0, box0, min_dist=0.1):
-    urt = lambda x, box : np.triu(distance(x, box), k=1).flatten()
+    def urt(x, box):
+        distance_matrix = distance(x, box)
+        i, j = np.triu_indices(len(distance_matrix), k=1)
+        return distance_matrix[i, j]
+    
     dij = urt(x0, box0)
     x_shape = x0.shape
     box_shape = box0.shape
