@@ -22,13 +22,14 @@ NonbondedArgs = Tuple[nonbonded_args]
 NonbondedFxn = Callable[[*nonbonded_args], Energy]
 
 
-def resolve_clashes(x0, box0, min_dist=0.05):
+def resolve_clashes(x0, box0, min_dist=0.1):
     dij = distance(x0, box0)
     x_shape = x0.shape
     box_shape = box0.shape
 
     if np.min(dij) < min_dist:
-        print(f'some distances too small ({np.min(dij) < min_dist})')
+        print('some distances too small')
+        print(f'before optimization: min(dij) = {np.min(dij)} < min_dist threshold ({min_dist})')
 
         from scipy.optimize import minimize
         def unflatten(xbox):
@@ -48,14 +49,19 @@ def resolve_clashes(x0, box0, min_dist=0.05):
 
         result = minimize(fun, np.hstack([x0.flatten(), box0.flatten()]), jac=True)
 
-        return unflatten(result.x)
+        x, box = unflatten(result.x)
+        dij = distance(x, box)
+
+        print(f'after optimization: min(dij) = {np.min(dij)}')
+
+        return x, box
 
     else:
         return x0, box0
 
 
 
-def generate_random_inputs(n_atoms: int, dim: int = 3, min_dist=0.05) -> NonbondedArgs:
+def generate_random_inputs(n_atoms: int, dim: int = 3, min_dist=0.1) -> NonbondedArgs:
     box = 1 + np.diag(rand(3))  # each side length ~ Unif([1, 2])
     assert box.shape == (dim, dim)
 
