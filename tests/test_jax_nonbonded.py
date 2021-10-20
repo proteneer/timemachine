@@ -72,10 +72,10 @@ def resolve_clashes(x0, box0, min_dist=0.1):
 
 
 def generate_random_inputs(n_atoms: int, dim: int = 3, min_dist=0.1) -> NonbondedArgs:
-    box = 1 + np.diag(rand(3))  # each side length ~ Unif([1, 2])
+    box = 1 + np.diag(rand(dim))  # each side length ~ Unif([1, 2])
     assert box.shape == (dim, dim)
 
-    conf = rand(n_atoms, 3) * 5 - 1  # trigger periodic wrapping behavior
+    conf = rand(n_atoms, dim) * 5 - 1  # trigger periodic wrapping behavior
 
     conf, box = resolve_clashes(conf, box, min_dist)
 
