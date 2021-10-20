@@ -139,7 +139,6 @@ def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: Nonbonded
     energy_a, gradients_a = value_and_grads(u_a)(*args)
     energy_b, gradients_b = value_and_grads(u_b)(*args)
 
-    assert energy_a == energy_b
     onp.testing.assert_almost_equal(energy_a, energy_b)
     for (g_a, g_b) in zip(gradients_a, gradients_b):
         onp.testing.assert_allclose(g_a, g_b)
