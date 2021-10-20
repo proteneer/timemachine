@@ -71,6 +71,17 @@ def resolve_clashes(x0, box0, min_dist=0.1):
 
 
 def generate_easy_random_inputs(n_atoms, dim) -> NonbondedArgs:
+    """Random conf only
+
+    TODO: toggle the following
+      * conf that triggers periodic boundary conditions
+      * random nb params
+      * random lamb
+      * random charge_rescale_mask
+      * random lj_rescale_mask
+      * random lambda_plane_idxs
+      * random lambda_offset_idxs
+    """
     box = np.eye(dim)
     assert box.shape == (dim, dim)
 
