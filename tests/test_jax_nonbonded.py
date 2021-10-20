@@ -226,14 +226,15 @@ def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
         compare_two_potentials(u_a, u_b, args)
 
 
+def test_jax_nonbonded_easy(n_instances=10):
+    instance_generator = partial(generate_random_inputs, instance_flags=easy_instance_flags)
+    run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances)
+
+
 def test_jax_nonbonded(n_instances=10):
     instance_generator = partial(generate_random_inputs, instance_flags=difficult_instance_flags)
     run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances)
 
-
-def test_jax_nonbonded_easy(n_instances=10):
-    instance_generator = partial(generate_random_inputs, instance_flags=easy_instance_flags)
-    run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances)
 
 
 def test_vmap():
