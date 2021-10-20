@@ -114,7 +114,7 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
 
     params = np.array([charges, sig, eps]).T
 
-    lamb = 0.5
+    lamb = 0.0
     if instance_flags['randomize_lamb']:
         lamb = rand()
     charge_rescale_mask = onp.ones((n_atoms, n_atoms))
@@ -130,10 +130,10 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     if instance_flags['randomize_charge_rescale_mask']:
         charge_rescale_mask
 
-    beta = 1.2
+    beta = 2.0
     if instance_flags['randomize_beta']:
         beta += rand()
-    cutoff = 1.0
+    cutoff = 1.2
     if instance_flags['randomize_cutoff']:
         cutoff += rand()
 
