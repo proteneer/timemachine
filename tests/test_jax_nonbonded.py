@@ -49,7 +49,7 @@ def resolve_clashes(x0, box0, min_dist=0.1):
 
         initial_state = np.hstack([x0.flatten(), box0.flatten()])
         print(f'repulsive energy before: {U_repulse(initial_state)}')
-        result = minimize(fun, initial_state, jac=True)
+        result = minimize(fun, initial_state, jac=True, method='L-BFGS-B')
         print(f'repulsive energy after minimization: {U_repulse(result.x)}')
 
 
