@@ -10,6 +10,9 @@ from jax import numpy as np, value_and_grad, jit, vmap
 from jax.ops import index_update, index
 from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded_v3_on_specific_pairs
 from timemachine.potentials.jax_utils import convert_to_4d, get_all_pairs_indices, get_group_group_indices, distance
+from md import builders
+from ff.handlers import openmm_deserializer
+from simtk import unit
 
 from functools import partial
 from typing import Tuple, Callable
@@ -85,6 +88,29 @@ easy_instance_flags = dict(
 )
 
 difficult_instance_flags = {key: True for key in easy_instance_flags}
+
+def generate_waterbox_nb_args() -> NonbondedArgs:
+
+    system, positions, box, _ = builders.build_water_system(3.0)
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    nb = bps[-1]
+    params = nb.params
+
+    conf = positions.value_in_unit(unit.nanometer)
+
+    N = conf.shape[0]
+    beta = nb.get_beta()
+    cutoff = nb.get_cutoff()
+
+    lamb = 0.0
+    charge_rescale_mask = onp.ones((N, N))
+    lj_rescale_mask = onp.ones((N, N))
+    lambda_plane_idxs = np.zeros(N, dtype=int)
+    lambda_offset_idxs = np.zeros(N, dtype=int)
+
+    args = conf, params, box, lamb, charge_rescale_mask, lj_rescale_mask, beta, cutoff, lambda_plane_idxs, lambda_offset_idxs
+
+    return args
 
 
 def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags) -> NonbondedArgs:
@@ -223,6 +249,12 @@ def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
     for n_atoms, dim in zip(random_sizes, dims):
         args = instance_generator(n_atoms, dim)
         compare_two_potentials(u_a, u_b, args)
+
+
+def test_jax_nonbonded_waterbox():
+    jittable_nonbonded_v3 = partial(nonbonded_v3, runtime_validate=False)
+    u_a, u_b = jit(jittable_nonbonded_v3), jit(_nonbonded_v3_clone)
+    compare_two_potentials(u_a, u_b, generate_waterbox_nb_args())
 
 
 def test_jax_nonbonded_easy(n_instances=10):
