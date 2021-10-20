@@ -105,11 +105,11 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     sig = 0.2 * np.ones(n_atoms)
     eps = 1.0 * np.ones(n_atoms)
     if instance_flags['randomize_charges']:
-        charges += randn(n_atoms)
+        charges = randn(n_atoms)
     if instance_flags['randomize_sigma']:
-        sig += rand(n_atoms)
+        sig = 0.2 * rand(n_atoms)
     if instance_flags['randomize_epsilon']:
-        eps += rand(n_atoms)
+        eps = rand(n_atoms)
 
     params = np.array([charges, sig, eps]).T
 
