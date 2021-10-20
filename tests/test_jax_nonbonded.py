@@ -30,6 +30,7 @@ def resolve_clashes(x0, box0, min_dist=0.1):
     if np.min(dij) < min_dist:
         print('some distances too small')
         print(f'before optimization: min(dij) = {np.min(dij)} < min_dist threshold ({min_dist})')
+        print('smallest few distances', sorted(dij.flatten())[:10])
 
         from scipy.optimize import minimize
         def unflatten(xbox):
