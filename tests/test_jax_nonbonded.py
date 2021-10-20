@@ -33,9 +33,9 @@ def resolve_clashes(x0, box0, min_dist=0.1):
     box_shape = box0.shape
 
     if np.min(dij) < min_dist:
-        #print('some distances too small')
+        # print('some distances too small')
         print(f'before optimization: min(dij) = {np.min(dij)} < min_dist threshold ({min_dist})')
-        #print('smallest few distances', sorted(dij)[:10])
+        # print('smallest few distances', sorted(dij)[:10])
 
         from scipy.optimize import minimize
         def unflatten(xbox):
@@ -47,17 +47,16 @@ def resolve_clashes(x0, box0, min_dist=0.1):
         def U_repulse(xbox):
             x, box = unflatten(xbox)
             dij = urt(x, box)
-            return np.sum(np.where(dij < min_dist, (dij - min_dist)**2, 0))
+            return np.sum(np.where(dij < min_dist, (dij - min_dist) ** 2, 0))
 
         def fun(xbox):
             v, g = value_and_grad(U_repulse)(xbox)
             return float(v), onp.array(g, onp.float64)
 
         initial_state = np.hstack([x0.flatten(), box0.flatten()])
-        #print(f'penalty before: {U_repulse(initial_state)}')
+        # print(f'penalty before: {U_repulse(initial_state)}')
         result = minimize(fun, initial_state, jac=True, method='L-BFGS-B')
-        #print(f'penalty after minimization: {U_repulse(result.x)}')
-
+        # print(f'penalty after minimization: {U_repulse(result.x)}')
 
         x, box = unflatten(result.x)
         dij = urt(x, box)
@@ -68,7 +67,6 @@ def resolve_clashes(x0, box0, min_dist=0.1):
 
     else:
         return x0, box0
-
 
 
 easy_instance_flags = dict(
@@ -236,7 +234,6 @@ def test_jax_nonbonded(n_instances=10):
     run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances)
 
 
-
 def test_vmap():
     """Can call jit(vmap(nonbonded_v3_on_specific_pairs))"""
 
@@ -254,7 +251,7 @@ def test_vmap():
     # signature: conf -> ljs, coulombs, where ljs.shape == (n_interactions, )
     u_pairs = partial(nonbonded_v3_on_specific_pairs, **fixed_kwargs)
     ljs, coulombs = u_pairs(conf)
-    assert ljs.shape == (n_interactions, )
+    assert ljs.shape == (n_interactions,)
 
     def u(conf):
         ljs, coulombs = u_pairs(conf)
@@ -265,4 +262,4 @@ def test_vmap():
     n_snapshots = 100
     confs = onp.random.randn(n_snapshots, n_total, 3)
     us = vmapped(confs)
-    assert us.shape == (n_snapshots, )
+    assert us.shape == (n_snapshots,)
