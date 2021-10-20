@@ -23,22 +23,13 @@ NonbondedFxn = Callable[[*nonbonded_args], Energy]
 
 
 def generate_random_inputs(n_atoms: int, dim: int = 3) -> NonbondedArgs:
-    # distribute somewhat sparsely within box by:
-    #   * generating evenly spaced points along each axis
-    #   * shuffling independently along each axis
-    #   * adding small Gaussian noise
-    # so that it's unlikely that two points will be right on top of each other
-    offsets = onp.array([onp.arange(n_atoms)] * dim).T
-    assert (offsets.shape == (n_atoms, dim))
-    for i in range(dim):
-        onp.random.shuffle(offsets[:, i])
-    conf = (0.5 * randn(n_atoms, dim) + offsets)
-    conf += conf.min()
+    box = 1 + np.diag(rand(3))  # each side length ~ Unif([1, 2])
+    assert box.shape == (dim, dim)
+
+    conf = rand(5 * n_atoms, 3) * 5  # trigger periodic wrapping behavior
+
     params = rand(n_atoms, 3)
     params[:, 0] -= np.mean(params[:, 0])
-
-    box = np.diag(np.max(conf, axis=0)) + 0.1
-    assert box.shape == (dim, dim)
 
     lamb = rand()
 
