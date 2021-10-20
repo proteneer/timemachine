@@ -23,14 +23,15 @@ NonbondedFxn = Callable[[*nonbonded_args], Energy]
 
 
 def resolve_clashes(x0, box0, min_dist=0.1):
-    dij = distance(x0, box0)
+    urt = lambda x, box : np.triu(distance(x, box), k=1).flatten()
+    dij = urt(x0, box0)
     x_shape = x0.shape
     box_shape = box0.shape
 
     if np.min(dij) < min_dist:
         print('some distances too small')
         print(f'before optimization: min(dij) = {np.min(dij)} < min_dist threshold ({min_dist})')
-        print('smallest few distances', sorted(dij.flatten())[:10])
+        print('smallest few distances', sorted(dij)[:10])
 
         from scipy.optimize import minimize
         def unflatten(xbox):
@@ -41,7 +42,7 @@ def resolve_clashes(x0, box0, min_dist=0.1):
 
         def U_repulse(xbox):
             x, box = unflatten(xbox)
-            dij = distance(x, box)
+            dij = urt(x, box)
             return np.sum(np.where(dij < min_dist, (dij - min_dist)**2, 0))
 
         def fun(xbox):
