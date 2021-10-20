@@ -99,15 +99,16 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
         conf *= 5
         conf -= 2.5
 
-    conf, box = resolve_clashes(conf, box, min_dist=0.1)
+    min_dist = 0.1
+    conf, box = resolve_clashes(conf, box, min_dist=min_dist)
 
     charges = np.zeros(n_atoms)
-    sig = 0.2 * np.ones(n_atoms)
-    eps = 1.0 * np.ones(n_atoms)
+    sig = min_dist * np.ones(n_atoms)
+    eps = np.ones(n_atoms)
     if instance_flags['randomize_charges']:
         charges = randn(n_atoms)
     if instance_flags['randomize_sigma']:
-        sig = 0.2 * rand(n_atoms)
+        sig = min_dist * rand(n_atoms)
     if instance_flags['randomize_epsilon']:
         eps = rand(n_atoms)
 
