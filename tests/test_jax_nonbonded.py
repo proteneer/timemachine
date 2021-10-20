@@ -9,7 +9,7 @@ from jax import numpy as np, value_and_grad, jit, vmap
 
 from jax.ops import index_update, index
 from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded_v3_on_specific_pairs
-from timemachine.potentials.jax_utils import convert_to_4d, get_all_pairs_indices, get_group_group_indices
+from timemachine.potentials.jax_utils import convert_to_4d, get_all_pairs_indices, get_group_group_indices, distance
 
 from functools import partial
 from typing import Tuple, Callable
@@ -22,11 +22,46 @@ NonbondedArgs = Tuple[nonbonded_args]
 NonbondedFxn = Callable[[*nonbonded_args], Energy]
 
 
-def generate_random_inputs(n_atoms: int, dim: int = 3) -> NonbondedArgs:
+def resolve_clashes(x0, box0, min_dist=0.05):
+    dij = distance(x0, box0)
+    x_shape = x0.shape
+    box_shape = box0.shape
+
+    if np.min(dij) < min_dist:
+        print(f'some distances too small ({np.min(dij) < min_dist})')
+
+        from scipy.optimize import minimize
+        def unflatten(xbox):
+            n = x_shape[0] * x_shape[1]
+            x = xbox[:n].reshape(x_shape)
+            box = xbox[n:].reshape(box_shape)
+            return x, box
+
+        def U_repulse(xbox):
+            x, box = unflatten(xbox)
+            dij = distance(x, box)
+            return np.sum(np.where(dij < min_dist, (dij - min_dist)**2, 0))
+
+        def fun(xbox):
+            v, g = value_and_grad(U_repulse)(xbox)
+            return float(v), onp.array(g, onp.float64)
+
+        result = minimize(fun, np.hstack([x0, box0]), jac=True)
+
+        return unflatten(result.x)
+
+    else:
+        return x0, box0
+
+
+
+def generate_random_inputs(n_atoms: int, dim: int = 3, min_dist=0.05) -> NonbondedArgs:
     box = 1 + np.diag(rand(3))  # each side length ~ Unif([1, 2])
     assert box.shape == (dim, dim)
 
-    conf = rand(n_atoms, 3) * 5  # trigger periodic wrapping behavior
+    conf = rand(n_atoms, 3) * 5 - 1  # trigger periodic wrapping behavior
+
+    conf, box = resolve_clashes(conf, box, min_dist)
 
     params = rand(n_atoms, 3)
     params[:, 0] -= np.mean(params[:, 0])
