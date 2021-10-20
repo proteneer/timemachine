@@ -46,7 +46,7 @@ def resolve_clashes(x0, box0, min_dist=0.05):
             v, g = value_and_grad(U_repulse)(xbox)
             return float(v), onp.array(g, onp.float64)
 
-        result = minimize(fun, np.hstack([x0, box0]), jac=True)
+        result = minimize(fun, np.hstack([x0.flatten(), box0.flatten()]), jac=True)
 
         return unflatten(result.x)
 
