@@ -70,74 +70,82 @@ def resolve_clashes(x0, box0, min_dist=0.1):
         return x0, box0
 
 
-def generate_easy_random_inputs(n_atoms, dim) -> NonbondedArgs:
-    """Random conf only
 
-    TODO: toggle the following
-      * conf that triggers periodic boundary conditions
-      * random nb params
-      * random lamb
-      * random charge_rescale_mask
-      * random lj_rescale_mask
-      * random lambda_plane_idxs
-      * random lambda_offset_idxs
-    """
+easy_instance_flags = dict(
+    trigger_pbc=False,
+    randomize_box=False,
+    randomize_charges=False,
+    randomize_sigma=False,
+    randomize_epsilon=False,
+    randomize_lamb=False,
+    randomize_charge_rescale_mask=False,
+    randomize_lj_rescale_mask=False,
+    randomize_lambda_plane_idxs=False,
+    randomize_lambda_offset_idxs=False,
+    randomize_beta=False,
+    randomize_cutoff=False,
+)
+
+difficult_instance_flags = {key: True for key in easy_instance_flags}
+
+
+def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags) -> NonbondedArgs:
+    """Can toggle randomization of each argument using instance_flags"""
     box = np.eye(dim)
+    if instance_flags['randomize_box']:
+        box += np.diag(rand(dim))
     assert box.shape == (dim, dim)
 
     conf = rand(n_atoms, dim)
+    if instance_flags['trigger_pbc']:
+        conf *= 5
+        conf -= 2.5
 
     conf, box = resolve_clashes(conf, box, min_dist=0.1)
 
     charges = np.zeros(n_atoms)
     sig = 0.2 * np.ones(n_atoms)
     eps = 1.0 * np.ones(n_atoms)
+    if instance_flags['randomize_charges']:
+        charges += randn(n_atoms)
+    if instance_flags['randomize_sigma']:
+        sig += rand(n_atoms)
+    if instance_flags['randomize_epsilon']:
+        eps += rand(n_atoms)
+
     params = np.array([charges, sig, eps]).T
 
     lamb = 0.5
+    if instance_flags['randomize_lamb']:
+        lamb = rand()
     charge_rescale_mask = onp.ones((n_atoms, n_atoms))
     lj_rescale_mask = onp.ones((n_atoms, n_atoms))
 
+    for _ in range(n_atoms):
+        i, j = randint(n_atoms, size=2)
+        if instance_flags['randomize_charge_rescale_mask']:
+            charge_rescale_mask[i, j] = charge_rescale_mask[j, i] = 0.0
+        if instance_flags['randomize_lj_rescale_mask']:
+            lj_rescale_mask[i, j] = lj_rescale_mask[j, i] = 0.0
+
+    if instance_flags['randomize_charge_rescale_mask']:
+        charge_rescale_mask
+
     beta = 1.2
+    if instance_flags['randomize_beta']:
+        beta += rand()
     cutoff = 1.0
+    if instance_flags['randomize_cutoff']:
+        cutoff += rand()
 
     lambda_plane_idxs = np.zeros(n_atoms, dtype=int)
     lambda_offset_idxs = np.zeros(n_atoms, dtype=int)
 
-    args = conf, params, box, lamb, charge_rescale_mask, lj_rescale_mask, beta, cutoff, lambda_plane_idxs, lambda_offset_idxs
+    if instance_flags['randomize_lambda_plane_idxs']:
+        lambda_plane_idxs = randint(low=-2, high=2, size=n_atoms)
 
-    return args
-
-
-
-def generate_random_inputs(n_atoms: int, dim: int = 3, min_dist=0.1) -> NonbondedArgs:
-    box = 1 + np.diag(rand(dim))  # each side length ~ Unif([1, 2])
-    assert box.shape == (dim, dim)
-
-    conf = rand(n_atoms, dim) * 5 - 1  # trigger periodic wrapping behavior
-
-    conf, box = resolve_clashes(conf, box, min_dist)
-
-    # charges ~ Normal(0,1), sigmas ~ Unif([min_dist, 1 + min_dist]), eps ~ Unif([0,1])
-    charges = randn(n_atoms)
-    sig = rand(n_atoms) + min_dist # sig ~= 0 would be bad
-    eps = rand(n_atoms)
-    params = np.array([charges, sig, eps]).T
-
-    lamb = rand()
-
-    charge_rescale_mask = onp.ones((n_atoms, n_atoms))
-    lj_rescale_mask = onp.ones((n_atoms, n_atoms))
-    for _ in range(n_atoms):
-        i, j = randint(n_atoms, size=2)
-        charge_rescale_mask[i, j] = charge_rescale_mask[j, i] = 0.0
-        lj_rescale_mask[i, j] = lj_rescale_mask[j, i] = 0.0
-
-    beta = rand() + 1
-    cutoff = rand() + 0.5
-
-    lambda_plane_idxs = randint(low=-2, high=2, size=n_atoms)
-    lambda_offset_idxs = randint(low=-2, high=2, size=n_atoms)
+    if instance_flags['randomize_lambda_offset_idxs']:
+        lambda_offset_idxs = randint(low=-2, high=2, size=n_atoms)
 
     args = conf, params, box, lamb, charge_rescale_mask, lj_rescale_mask, beta, cutoff, lambda_plane_idxs, lambda_offset_idxs
 
@@ -200,8 +208,11 @@ def _nonbonded_v3_clone(
     return np.sum(eij_total)
 
 
-def run_randomized_tests_of_jax_nonbonded(instance_generator=generate_random_inputs, n_instances=10):
-    """Assert that nonbonded_v3 and _nonbonded_v3 agree on several random instances"""
+def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
+    """Assert that nonbonded_v3 and _nonbonded_v3 agree on several random instances
+
+    instance_generator(n_atoms, dim) -> NonbondedArgs
+    """
     jittable_nonbonded_v3 = partial(nonbonded_v3, runtime_validate=False)
     u_a, u_b = jit(jittable_nonbonded_v3), jit(_nonbonded_v3_clone)
 
@@ -216,11 +227,13 @@ def run_randomized_tests_of_jax_nonbonded(instance_generator=generate_random_inp
 
 
 def test_jax_nonbonded(n_instances=10):
-    run_randomized_tests_of_jax_nonbonded(generate_random_inputs, n_instances)
+    instance_generator = partial(generate_random_inputs, instance_flags=difficult_instance_flags)
+    run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances)
 
 
 def test_jax_nonbonded_easy(n_instances=10):
-    run_randomized_tests_of_jax_nonbonded(generate_easy_random_inputs, n_instances)
+    instance_generator = partial(generate_random_inputs, instance_flags=easy_instance_flags)
+    run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances)
 
 
 def test_vmap():
