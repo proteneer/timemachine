@@ -229,12 +229,12 @@ def _nonbonded_v3_clone(
 
     lj, coulomb = nonbonded_v3_on_specific_pairs(conf, params, box, inds_i, inds_j, beta, cutoff)
 
-    eij_total = lj * lj_rescale_mask[inds_i, inds_j] + coulomb * charge_rescale_mask[inds_i, inds_j]
-
     # keep only eps > 0
     eps = params[:, 2]
-    eij_total = np.where(eps[inds_i] > 0, eij_total, 0)
-    eij_total = np.where(eps[inds_j] > 0, eij_total, 0)
+    lj = np.where(eps[inds_i] > 0, lj, 0)
+    lj = np.where(eps[inds_j] > 0, lj, 0)
+
+    eij_total = lj * lj_rescale_mask[inds_i, inds_j] + coulomb * charge_rescale_mask[inds_i, inds_j]
 
     return np.sum(eij_total)
 
