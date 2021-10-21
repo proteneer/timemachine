@@ -87,6 +87,9 @@ def nonbonded_v3(
     systems" https://aip.scitation.org/doi/abs/10.1063/1.470117
         * Coulomb interactions are treated using the direct-space contribution from eq 2
     """
+    if runtime_validate:
+        assert (charge_rescale_mask == charge_rescale_mask.T).all()
+        assert (lj_rescale_mask == lj_rescale_mask.T).all()
 
     N = conf.shape[0]
 
