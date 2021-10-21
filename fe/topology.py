@@ -201,6 +201,7 @@ class HostGuestTopology():
 
         hg_exclusion_idxs = np.concatenate([self.host_nonbonded.get_exclusion_idxs(), guest_p.get_exclusion_idxs() + self.num_host_atoms])
         hg_scale_factors = np.concatenate([self.host_nonbonded.get_scale_factors(), guest_p.get_scale_factors()])
+
         hg_lambda_offset_idxs = np.concatenate([self.host_nonbonded.get_lambda_offset_idxs(), guest_p.get_lambda_offset_idxs()])
         hg_lambda_plane_idxs = np.concatenate([self.host_nonbonded.get_lambda_plane_idxs(), guest_p.get_lambda_plane_idxs()])
 
@@ -584,6 +585,48 @@ class DualTopologyRHFE(DualTopology):
             np.zeros(self.mol_a.GetNumAtoms(), dtype=np.int32),
             np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)
         ])
+
+        nb_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
+        nb_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)
+
+        return combined_qlj_params, nb_potential.interpolate()
+
+# non-ring torsions are just always turned off at the end-states in the hydration
+# free energy test
+class DualTopologySpecial(DualTopology):
+
+    """
+    Utility class used for relative hydration free energies. Ligand B is decoupled as lambda goes
+    from 0 to 1, while ligand A is fully coupled. At the same time, at lambda=0, ligand B and ligand A
+    have their charges and epsilons reduced by half.
+    """
+
+    def parameterize_nonbonded(self,
+        ff_q_params,
+        ff_lj_params):
+
+        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
+
+        # halve the strength of the charge and the epsilon parameters
+        src_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 0], qlj_params[:, 0])
+        src_qlj_params = jax.ops.index_update(src_qlj_params, jax.ops.index[:, 2], qlj_params[:, 2])
+        dst_qlj_params = qlj_params
+        combined_qlj_params = jnp.concatenate([
+            src_qlj_params,
+            dst_qlj_params
+        ])
+
+        combined_lambda_plane_idxs = np.concatenate([
+            np.zeros(self.mol_a.GetNumAtoms(), dtype=np.int32), # 0
+            -np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)  # -1
+        ])
+        combined_lambda_offset_idxs = np.concatenate([
+            np.ones(self.mol_a.GetNumAtoms(), dtype=np.int32), #
+            np.ones(self.mol_b.GetNumAtoms(), dtype=np.int32)  # 
+        ])
+
+        print(combined_lambda_plane_idxs)
+        print(combined_lambda_offset_idxs)
 
         nb_potential.set_lambda_plane_idxs(combined_lambda_plane_idxs)
         nb_potential.set_lambda_offset_idxs(combined_lambda_offset_idxs)

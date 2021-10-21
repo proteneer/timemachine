@@ -203,6 +203,7 @@ class Nonbonded(CustomOpWrapper):
         assert len(exclusion_set) == exclusion_idxs.shape[0]
 
         super(Nonbonded, self).__init__(*args)
+        print("beta/cutoff", self.get_beta(), self.get_cutoff())
 
     def set_exclusion_idxs(self, x):
         self.args[0] = x

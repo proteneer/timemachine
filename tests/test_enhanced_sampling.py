@@ -32,6 +32,10 @@ import matplotlib.pyplot as plt
 from md import enhanced_sampling
 
 from scipy.special import logsumexp
+from fe.pdb_writer import PDBWriter
+from fe import model_utils
+
+import mdtraj
 
 
 MOL_SDF = """
@@ -200,7 +204,6 @@ $$$$"""
 # M  END
 # $$$$"""
 
-# Why doesn't benzene work? probably bad-bond lengths->instant blowup
 # MOL_SDF = """
 #   Mrv2115 10152122132D          
 
@@ -211,12 +214,12 @@ $$$$"""
 #    -1.1224   -0.6543    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
 #    -0.3669   -0.6543    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
 #     0.0109    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
-#    -0.0166    1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-#     0.7114    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-#    -0.0166   -1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-#    -1.4727   -1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-#    -2.2007    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
-#    -1.4727    1.2610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+#    -0.0166    1.2610    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+#     0.7114    0.0000    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+#    -0.0166   -1.2610    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+#    -1.4727   -1.2610    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+#    -2.2007    0.0000    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+#    -1.4727    1.2610    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
 #   1  2  2  0  0  0  0
 #   2  3  1  0  0  0  0
 #   3  4  2  0  0  0  0
@@ -343,6 +346,69 @@ def generate_gas_phase_samples(
     return unique_target_counts, xs_target_unique, Us_target_unique
 
 
+
+# generate directly with U_target for MD
+def generate_full_gas_phase_samples(
+    mol,
+    ff,
+    temperature,
+    U_target,
+    steps_per_batch=250,
+    num_batches=10000):
+    """
+    Generate a set of gas-phase samples by running steps_per_batch * num_batches steps
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+    
+    ff: forcefield
+
+    temperature: float
+
+    U_target: fn
+        Potential energy function we wish to re-weight into
+
+    Returns
+    -------
+    3-tuple
+        Return counts, samples, energies
+    """
+    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+    x0 = get_romol_conf(mol)
+
+    kT = temperature*BOLTZ
+    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+    num_workers = jax.device_count()
+
+    state = enhanced_sampling.EnhancedState(mol, ff)
+
+    xs_target = enhanced_sampling.generate_samples(
+        masses,
+        x0,
+        U_target,
+        temperature,
+        steps_per_batch,
+        num_batches,
+        num_workers
+    )
+
+    num_atoms = mol.GetNumAtoms()
+
+    # discard first few batches for burn-in and reshape into a single flat array
+    xs_target = xs_target[:, 1000:, :, :]
+
+    batch_U_target_fn = jax.pmap(jax.vmap(U_target))
+
+    Us_target = batch_U_target_fn(xs_target)
+
+    Us_target = Us_target.reshape(-1)
+    xs_target = xs_target.reshape(-1, num_atoms, 3)
+
+    return np.ones_like(Us_target), xs_target, Us_target
+
+
+
 def generate_solvent_phase_samples(mol, ff, temperature):
 
     x0 = get_romol_conf(mol)
@@ -351,28 +417,17 @@ def generate_solvent_phase_samples(mol, ff, temperature):
     num_workers = jax.device_count()
     state = enhanced_sampling.EnhancedState(mol, ff)
     water_system, water_coords, water_box, water_topology = builders.build_water_system(3.0)
+    water_box = water_box + np.eye(3)*0.5 # add a small margin around the box for stability
     num_water_atoms = len(water_coords)
     afe = free_energy.AbsoluteFreeEnergy(mol, ff, decharge=False)
     ff_params = ff.get_ordered_params()
     ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
 
-    dt = 1.5e-3
+    dt = 1.25e-3
     friction = 1.0
-    intg = lib.LangevinIntegrator(temperature, dt, friction, masses, 2021)
     
     pressure = 1.0
     interval = 5
-    bond_list = get_bond_list(ubps[0])
-    group_idxs = get_group_indices(bond_list)
-
-    barostat = lib.MonteCarloBarostat(
-        len(masses),
-        pressure,
-        temperature,
-        group_idxs,
-        interval,
-        2022
-    )
 
     box = water_box
     host_coords = coords[:num_water_atoms]
@@ -384,12 +439,13 @@ def generate_solvent_phase_samples(mol, ff, temperature):
         bps.append(bp.bind(p))
 
     all_impls = [bp.bound_impl(np.float32) for bp in bps]
-    intg_impl = intg.impl()
-    barostat_impl = barostat.impl(all_impls)
+
+
 
     intg_equil = lib.LangevinIntegrator(temperature, 1e-4, friction, masses, 2021)
     intg_equil_impl = intg_equil.impl()
 
+    # equilibration/minimization doesn't need a barostat
     equil_ctxt = custom_ops.Context(
         coords,
         np.zeros_like(coords),
@@ -400,11 +456,34 @@ def generate_solvent_phase_samples(mol, ff, temperature):
     )
 
     lamb = 0.0
-    equil_schedule = np.ones(5000)*lamb
+    equil_schedule = np.ones(50000)*lamb
     equil_ctxt.multiple_steps(equil_schedule)
 
     x0 = equil_ctxt.get_x_t()
     v0 = np.zeros_like(x0)
+
+
+    # production
+
+    intg = lib.LangevinIntegrator(temperature, dt, friction, masses, 2021)
+    intg_impl = intg.impl()
+
+    # reset impls
+    all_impls = [bp.bound_impl(np.float32) for bp in bps]
+
+    bond_list = get_bond_list(ubps[0])
+    group_idxs = get_group_indices(bond_list)
+
+    barostat = lib.MonteCarloBarostat(
+        len(masses),
+        pressure,
+        temperature,
+        group_idxs,
+        interval,
+        2022
+    )
+    barostat_impl = barostat.impl(all_impls)
+    # barostat_impl = None
 
     ctxt = custom_ops.Context(
         x0,
@@ -416,7 +495,7 @@ def generate_solvent_phase_samples(mol, ff, temperature):
     )
 
     lamb = 0.0
-    num_steps = 800000
+    num_steps = 10000000
     # num_steps = 100
     # num_steps = 20000
     lambda_windows = np.array([0.0])
@@ -431,7 +510,13 @@ def generate_solvent_phase_samples(mol, ff, temperature):
         x_interval
     )
 
-    return xs[50:], boxes[50:], full_us[50:], bps[-1], params[-1]
+    # pdb_writer = PDBWriter([water_topology, mol], "solvent.pdb")
+    # pdb_writer.write_frame(xs[0]*10)
+    # pdb_writer.write_frame(xs[-1]*10)
+    # pdb_writer.close()
+
+    return xs[20:], boxes[20:], full_us[20:], bps[-1], params[-1], [water_topology, mol]
+    # return xs[50:], boxes[50:], full_us[50:], bps[-1], params[-1], [water_topology, mol]
 
 def test_condensed_phase():
     
@@ -461,15 +546,21 @@ def test_condensed_phase():
         print("Generating cache")
 
         # generate samples in some target state
-        target_counts, xs_target_unique, Us_target_unique = generate_gas_phase_samples(mol, ff, temperature, U_target)
-        xs_solvent, boxes_solvent, Us_full, nb_bp, nb_params = generate_solvent_phase_samples(mol, ff, temperature)
+        target_counts, xs_target_unique, Us_target_unique = generate_full_gas_phase_samples(mol, ff, temperature, U_target)
+        xs_solvent, boxes_solvent, Us_full, nb_bp, nb_params, topology_objs = generate_solvent_phase_samples(mol, ff, temperature)
+        # target_counts, xs_target_unique, Us_target_unique = generate_gas_phase_samples(mol, ff, temperature, U_target)
         with open(cache_path, "wb") as fh:
-            pickle.dump((target_counts, xs_target_unique, Us_target_unique, xs_solvent, boxes_solvent, Us_full, nb_bp, nb_params), fh)
+            pickle.dump((target_counts, xs_target_unique, Us_target_unique, xs_solvent, boxes_solvent, Us_full, nb_bp, nb_params, topology_objs), fh)
 
     with open(cache_path, "rb") as fh:
-        target_counts, xs_target_unique, Us_target_unique, xs_solvent, boxes_solvent, Us_full, nb_bp, nb_params = pickle.load(fh)
+        target_counts, xs_target_unique, Us_target_unique, xs_solvent, boxes_solvent, Us_full, nb_bp, nb_params, topology_objs = pickle.load(fh)
 
-    # xs_easy = xs_easy.reshape(-1, num_ligand_atoms, 3)
+    combined_topology = model_utils.generate_imaged_topology(
+        topology_objs,
+        xs_solvent[0],
+        boxes_solvent[0],
+        f"solvent_debug.pdb"
+    )
 
     log_numerator = []
     log_denominator = []
@@ -494,11 +585,10 @@ def test_condensed_phase():
     def U_a(x):
         return state.U_full(x)
 
-    # we know what the energy is actually, no need to compute it
+    # (note): we know what the energy is actually, no need to compute it
     @jax.jit
     def U_b(x):
         return U_target(x)
-        # state.U_decharged(x)
 
     batch_before_U_k_fn = jax.jit(jax.vmap(before_U_k))
     batch_U_a_fn = jax.jit(jax.vmap(U_a))
@@ -512,6 +602,7 @@ def test_condensed_phase():
         return U_k
     
     batch_after_U_k_fn = jax.jit(jax.vmap(after_U_k, in_axes=(0, None, None)))
+    batch_align = jax.jit(jax.vmap(align_sample, in_axes=(0, None)))
 
     kT = temperature*BOLTZ
 
@@ -538,7 +629,6 @@ def test_condensed_phase():
         # before_U_a_sample = U_a(x_solvent[-num_ligand_atoms:])
         # before_U_b_samples = batch_U_b_fn(xs_target_unique)
         # before_U_samples = before_U_k_sample + before_U_a_sample + before_U_b_samples
-
         after_U_k_samples = batch_after_U_k_fn(xs_target_unique, x_solvent, box_solvent)
         # after_U_a_samples = batch_U_a_fn(xs_target_unique)
         # after_U_b_sample = U_b(x_solvent[-num_ligand_atoms:])
@@ -560,7 +650,71 @@ def test_condensed_phase():
         # for this to be accurate, we need to do weighted sum!
         # print("after < before count", np.sum(delta_us < 0), "before > after count", np.sum(delta_us > 0))
         weights = np.exp(-delta_us) # un normalized
-        print("iteration", idx, "before_U_k_sample", before_U_k_sample, "unique_weights", "max", np.amax(weights), "min", np.amin(weights))
+        
+
+        # start debug
+        if 0:
+            ordering = np.argsort(delta_us)[:5] # most improved to least improved energies
+            print("most favorable energy shifts", np.sort(delta_us)[:5]*kT, " kJ/mols")
+            aligned_xs_target = batch_align(xs_target_unique, x_solvent)
+            aligned_xs_target = aligned_xs_target[ordering]
+    
+            # inital frame
+            solvent_aligned = [x_solvent]
+            boxes_aligned = [box_solvent]
+
+            before_matrix = nonbonded.nonbonded_off_diagonal_matrix(
+                x_solvent[-num_ligand_atoms:], # ligand
+                x_solvent[:-num_ligand_atoms], # water
+                box_solvent,
+                params_i,
+                params_j
+            )
+
+            for x_gas in aligned_xs_target:
+                x_copy = np.array(x_solvent)
+                x_copy[-num_ligand_atoms:] = x_gas
+                solvent_aligned.append(x_copy)
+                boxes_aligned.append(box_solvent)
+
+            after_matrix = nonbonded.nonbonded_off_diagonal_matrix(
+                aligned_xs_target[0], # ligand
+                x_solvent[:-num_ligand_atoms], # water
+                box_solvent,
+                params_i,
+                params_j
+            )
+
+            diff_matrix = after_matrix-before_matrix
+
+            print("diff", np.min(diff_matrix, axis=1).tolist())
+            print("diff idxs", np.argmin(diff_matrix, axis=1).tolist())
+
+            print(diff_matrix.shape)
+            print(diff_matrix[:, 888])
+            print("before", before_matrix[:, 888])
+            print("after", after_matrix[:, 888])
+
+            traj = mdtraj.Trajectory(solvent_aligned, mdtraj.Topology.from_openmm(combined_topology))
+            traj.unitcell_vectors = np.array(boxes_aligned)
+            traj.image_molecules()
+            traj.save_xtc("solvent_aligned_"+str(idx)+".xtc")
+
+            if idx == 4:
+                assert 0
+
+        # end debug
+        
+        tmp = np.array(all_delta_us_unique).reshape(-1)
+        ratio_estimate = np.mean(np.exp(-tmp))
+        dG_estimate = kT*(logsumexp(-tmp) - np.log(len(tmp)))
+        print("iteration", idx, "before_U_k_sample", before_U_k_sample, "unique_weights", "max", np.amax(weights), "min", np.amin(weights), "ratio estimate:", ratio_estimate, "dG_estimate", dG_estimate)
+
+        
+
+        # assert 0
+
+
         # plt.hist(delta_us, bins, density=True, alpha=0.2, label="frame_"+str(idx), weights=target_counts)
         plt.hist(np.exp(-delta_us), bins, density=True, alpha=0.2, label="frame_"+str(idx), weights=target_counts)
         # plt.show()

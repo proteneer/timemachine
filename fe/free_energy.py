@@ -73,6 +73,64 @@ class BaseFreeEnergy():
         """
         raise NotImplementedError("Not implemented")
 
+
+# this class is serializable.
+class AbsoluteReplacementFreeEnergy(BaseFreeEnergy):
+
+    def __init__(self, mol, ff, decharge=False):
+        """
+        Compute the absolute free energy of a molecule via 4D decoupling.
+
+        Parameters
+        ----------
+        mol: rdkit mol
+            Ligand to be decoupled
+
+        ff: ff.Forcefield
+            Ligand forcefield
+
+        """
+        self.mol = mol
+        self.ff = ff
+        self.top = topology.BaseTopology(mol, ff, decharge)
+
+    def prepare_host_edge(self, ff_params, host_system, host_coords):
+        """
+        Prepares the host-edge system
+
+        Parameters
+        ----------
+        ff_params: tuple of np.array
+            Exactly equal to bond_params, angle_params, proper_params, improper_params, charge_params, lj_params
+
+        host_system: openmm.System
+            openmm System object to be deserialized
+
+        host_coords: np.array
+            Nx3 array of atomic coordinates
+
+        Returns
+        -------
+        4 tuple
+            unbound_potentials, system_params, combined_masses, combined_coords
+
+        """
+        ligand_masses = [a.GetMass() for a in self.mol.GetAtoms()]
+        ligand_coords = get_romol_conf(self.mol)
+
+        host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
+        num_host_atoms = host_coords.shape[0]
+
+        dt = topology.DualTopologySpecial(self.mol, self.mol, self.ff)
+        hgt = topology.HostGuestTopology(host_bps, dt)
+
+        final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
+
+        combined_masses = np.concatenate([host_masses, ligand_masses, ligand_masses])
+        combined_coords = np.concatenate([host_coords, ligand_coords, ligand_coords])
+
+        return final_potentials, final_params, combined_masses, combined_coords
+
 # this class is serializable.
 class AbsoluteFreeEnergy(BaseFreeEnergy):
 

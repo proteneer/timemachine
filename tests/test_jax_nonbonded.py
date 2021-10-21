@@ -8,11 +8,15 @@ seed(2021)
 from jax import numpy as np, value_and_grad, jit, vmap
 
 from jax.ops import index_update, index
-from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded_v3_on_specific_pairs
+from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded_v3_on_specific_pairs, nonbonded_off_diagonal
 from timemachine.potentials.jax_utils import convert_to_4d, get_all_pairs_indices, get_group_group_indices
 
 from functools import partial
 from typing import Tuple, Callable
+
+from md import builders
+from ff.handlers import openmm_deserializer
+from simtk import unit
 
 Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = np.array
 Lamb = Beta = Cutoff = Energy = float
@@ -130,6 +134,55 @@ def test_jax_nonbonded(n_instances=10):
     for n_atoms, dim in zip(random_sizes, dims):
         args = generate_random_inputs(n_atoms, dim)
         compare_two_potentials(u_a, u_b, args)
+
+
+def test_jax_nonbonded_off_diagonal(n_instances=10):
+    """Assert that nonbonded_v3 and _nonbonded_v3 agree on several random instances"""
+    # jittable_nonbonded_v3 = partial(nonbonded_v3, runtime_validate=False)
+    system, positions, box, _ = builders.build_water_system(3.0)
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    nb = bps[-1]
+    params = nb.params
+
+    conf = positions.value_in_unit(unit.nanometer)
+
+    N = conf.shape[0]
+    beta = nb.get_beta()
+    cutoff = nb.get_cutoff()
+
+    split = 70
+
+    def u_a(x, box, params):
+        xi = x[:split]
+        xj = x[split:]
+        pi = params[:split]
+        pj = params[split:]
+
+        return nonbonded_off_diagonal(xi, xj, box, pi, pj, beta, cutoff)
+
+    indices_left= []
+    indices_right = []
+
+    for i in range(split):
+        for j in range(split, N):
+            indices_left.append(i)
+            indices_right.append(j)
+
+    def u_b(x, box, params):
+        vdw, es = nonbonded_v3_on_specific_pairs(
+            x,
+            params,
+            box,
+            indices_left,
+            indices_right,
+            beta,
+            cutoff
+        )
+
+        return np.sum(vdw+es)
+
+    onp.testing.assert_almost_equal(u_a(conf, box, params), u_b(conf, box, params))
+
 
 def test_vmap():
     """Can call jit(vmap(nonbonded_v3_on_specific_pairs))"""

@@ -139,6 +139,7 @@ class ProperTorsionHandler():
             # if k == 0.0:
                 # print("WARNING: zero force constant torsion generated.")
 
+
         scatter_idxs = np.array(scatter_idxs)
 
         return params[scatter_idxs], np.repeat(torsion_idxs, repeats, axis=0).astype(np.int32)
