@@ -231,7 +231,9 @@ def _nonbonded_v3_clone(
 
     eij_total = lj * lj_rescale_mask[inds_i, inds_j] + coulomb * charge_rescale_mask[inds_i, inds_j]
 
-    return np.sum(eij_total)
+    eps = params[:,2]
+    keep_mask = (eps[inds_i] > 0) * (eps[inds_j] > 0)
+    return np.sum(eij_total[keep_mask])
 
 
 def run_randomized_tests_of_jax_nonbonded(instance_generator, n_instances=10):
