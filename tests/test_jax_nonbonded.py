@@ -154,9 +154,6 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
         if instance_flags['randomize_lj_rescale_mask']:
             lj_rescale_mask[i, j] = lj_rescale_mask[j, i] = 0.0
 
-    if instance_flags['randomize_charge_rescale_mask']:
-        charge_rescale_mask
-
     beta = 2.0
     if instance_flags['randomize_beta']:
         beta += rand()
