@@ -548,7 +548,7 @@ def test_condensed_phase():
         # generate samples in some target state
         target_counts, xs_target_unique, Us_target_unique = generate_full_gas_phase_samples(mol, ff, temperature, U_target)
         xs_solvent, boxes_solvent, Us_full, nb_bp, nb_params, topology_objs = generate_solvent_phase_samples(mol, ff, temperature)
-        # target_counts, xs_target_unique, Us_target_unique = generate_gas_phase_samples(mol, ff, temperature, U_target)
+
         with open(cache_path, "wb") as fh:
             pickle.dump((target_counts, xs_target_unique, Us_target_unique, xs_solvent, boxes_solvent, Us_full, nb_bp, nb_params, topology_objs), fh)
 
@@ -697,7 +697,7 @@ def test_condensed_phase():
 
             traj = mdtraj.Trajectory(solvent_aligned, mdtraj.Topology.from_openmm(combined_topology))
             traj.unitcell_vectors = np.array(boxes_aligned)
-            traj.image_molecules()
+            traj.image_molecules()g
             traj.save_xtc("solvent_aligned_"+str(idx)+".xtc")
 
             if idx == 4:
