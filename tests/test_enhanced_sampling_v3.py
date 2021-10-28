@@ -666,12 +666,15 @@ def test_adaptive_condensed_phase():
     # (ytz):
     gas_weights = gas_counts / np.sum(gas_counts)
 
-    K = 1000
+    K = 100
+    num_accept = 0
+    num_reject = 0
     for iteration in range(num_batches):
         # kick off
         # print("SENDING", next_x)
         x_solvent, box_solvent = sample_generator.send(next_x)
         before_U_k_sample = before_U_k(x_solvent, box_solvent)
+        log_pi_x = -before_U_k_sample / kT
         pi_x = np.exp(-before_U_k_sample / kT)
 
         # writer.write(make_conformer(mol, x_solvent[-num_ligand_atoms:]))
@@ -693,8 +696,11 @@ def test_adaptive_condensed_phase():
 
         after_U_y_i_samples = batch_after_U_k_fn(gas_samples_yi, x_solvent, box_solvent)
 
-        pi_yi = np.exp(-after_U_y_i_samples / kT)
-        normalized_pi_yi = pi_yi / np.sum(pi_yi)
+        log_pi_yi = -after_U_y_i_samples / kT
+        normalized_pi_yi = np.exp(log_pi_yi - logsumexp(log_pi_yi))
+
+        # pi_yi = np.exp(-after_U_y_i_samples / kT)
+        # normalized_pi_yi = pi_yi / np.sum(pi_yi)
         new_y = gas_samples_yi[np.random.choice(np.arange(K), p=normalized_pi_yi)]
 
         # log_pi_yi = -after_U_y_i_samples / kT
@@ -714,21 +720,34 @@ def test_adaptive_condensed_phase():
             gas_samples_x_i_sub_1, x_solvent_new_y, box_solvent
         )
 
-        pi_x_i_sub_1 = np.exp(-after_U_x_i_samples / kT)
-        pi_x_combined = np.concatenate([pi_x_i_sub_1, pi_x])
-
-        print(np.sum(pi_yi), np.sum(pi_x_combined))
-
-        ratio = np.sum(pi_yi) / np.sum(pi_x_combined)
+        log_pi_x_i_sub_1 = -after_U_x_i_samples / kT
+        log_pi_xi_combined = np.concatenate([log_pi_x_i_sub_1, [log_pi_x]])
+        log_ratio = logsumexp(log_pi_yi) - logsumexp(log_pi_xi_combined)
+        ratio = np.exp(log_ratio)
 
         if np.random.rand() < ratio:
             # accept
-            print("accept")
+            # print("accept")
+            num_accept += 1
             next_x = x_solvent_new_y
         else:
             # reject
-            print("reject")
+            # print("reject")
+            num_reject += 1
             next_x = x_solvent
+
+        print(
+            f"ratio",
+            ratio,
+            "log_ratio",
+            log_ratio,
+            "accepts",
+            num_accept,
+            "rejects",
+            num_reject,
+            "solvent_torsion",
+            solvent_torsion,
+        )
 
         continue
 
