@@ -1,5 +1,6 @@
 # Test enhanced sampling protocols
 
+from math import pi
 import os
 import pickle
 
@@ -661,11 +662,17 @@ def test_adaptive_condensed_phase():
     torsion_angles = []
 
     next_x = None
+
+    # (ytz):
+    gas_weights = gas_counts / np.sum(gas_counts)
+
+    K = 1000
     for iteration in range(num_batches):
         # kick off
         # print("SENDING", next_x)
         x_solvent, box_solvent = sample_generator.send(next_x)
         before_U_k_sample = before_U_k(x_solvent, box_solvent)
+        pi_x = np.exp(-before_U_k_sample / kT)
 
         # writer.write(make_conformer(mol, x_solvent[-num_ligand_atoms:]))
         # for x_g in xs_gas_unique[:100]:
@@ -679,7 +686,55 @@ def test_adaptive_condensed_phase():
 
         solvent_torsion = get_torsion(x_solvent[-num_ligand_atoms:])
         solvent_torsions.append(solvent_torsion)
-        after_U_k_samples = batch_after_U_k_fn(xs_gas_unique, x_solvent, box_solvent)
+
+        gas_samples_yi = xs_gas_unique[
+            np.random.choice(np.arange(len(xs_gas_unique)), size=K, p=gas_weights)
+        ]
+
+        after_U_y_i_samples = batch_after_U_k_fn(gas_samples_yi, x_solvent, box_solvent)
+
+        pi_yi = np.exp(-after_U_y_i_samples / kT)
+        normalized_pi_yi = pi_yi / np.sum(pi_yi)
+        new_y = gas_samples_yi[np.random.choice(np.arange(K), p=normalized_pi_yi)]
+
+        # log_pi_yi = -after_U_y_i_samples / kT
+        # normalized_pi_yi = np.exp(log_pi_yi - logsusum(pi_yi)
+        # new_y = gas_samples_yi[np.random.choice(np.arange(K), p=normalized_pi_yi)]
+
+        gas_samples_x_i_sub_1 = xs_gas_unique[
+            np.random.choice(np.arange(len(xs_gas_unique)), size=K - 1, p=gas_weights)
+        ]
+
+        # align new_y unto the ligand present in x_solvent and returns an aligned new_y
+        new_y_aligned = align_sample(new_y, x_solvent)
+        x_solvent_new_y = np.copy(x_solvent)
+        x_solvent_new_y[-num_ligand_atoms:] = new_y_aligned
+
+        after_U_x_i_samples = batch_after_U_k_fn(
+            gas_samples_x_i_sub_1, x_solvent_new_y, box_solvent
+        )
+
+        pi_x_i_sub_1 = np.exp(-after_U_x_i_samples / kT)
+        pi_x_combined = np.concatenate([pi_x_i_sub_1, pi_x])
+
+        print(np.sum(pi_yi), np.sum(pi_x_combined))
+
+        ratio = np.sum(pi_yi) / np.sum(pi_x_combined)
+
+        if np.random.rand() < ratio:
+            # accept
+            print("accept")
+            next_x = x_solvent_new_y
+        else:
+            # reject
+            print("reject")
+            next_x = x_solvent
+
+        continue
+
+        # weights_yi/np.sum(weights_yi)
+
+        # numerator
 
         delta_us = (after_U_k_samples - before_U_k_sample) / kT
 
