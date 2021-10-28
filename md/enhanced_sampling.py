@@ -424,8 +424,39 @@ def generate_gas_phase_samples(
     return unique_target_counts, xs_target_unique, Us_target_unique
 
 
+def get_solvent_phase_system(mol, ff):
+    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+    water_system, water_coords, water_box, water_topology = builders.build_water_system(
+        3.0
+    )
+    water_box = (
+        water_box + np.eye(3) * 0.5
+    )  # add a small margin around the box for stability
+    num_water_atoms = len(water_coords)
+    afe = free_energy.AbsoluteFreeEnergy(mol, ff, decharge=False)
+    ff_params = ff.get_ordered_params()
+    ubps, params, masses, coords = afe.prepare_host_edge(
+        ff_params, water_system, water_coords
+    )
+
+    host_coords = coords[:num_water_atoms]
+    new_host_coords = minimizer.minimize_host_4d(
+        [mol], water_system, host_coords, ff, water_box
+    )
+    coords[:num_water_atoms] = new_host_coords
+
+    return ubps, params, masses, coords, water_box
+
+
 def generate_solvent_phase_samples(
-    mol, ff, temperature, steps_per_batch=250, num_batches=5000
+    ubps,
+    params,
+    masses,
+    coords,  # minimized_coords
+    box,
+    temperature,
+    steps_per_batch=500,
+    num_batches=10000,
 ):
     """
     Generate samples in the solvent phase.
@@ -447,33 +478,33 @@ def generate_solvent_phase_samples(
 
     """
 
-    x0 = get_romol_conf(mol)
+    # x0 = get_romol_conf(mol)
 
-    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(
-        3.0
-    )
-    water_box = (
-        water_box + np.eye(3) * 0.5
-    )  # add a small margin around the box for stability
-    num_water_atoms = len(water_coords)
-    afe = free_energy.AbsoluteFreeEnergy(mol, ff, decharge=False)
-    ff_params = ff.get_ordered_params()
-    ubps, params, masses, coords = afe.prepare_host_edge(
-        ff_params, water_system, water_coords
-    )
+    # masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+    # water_system, water_coords, water_box, water_topology = builders.build_water_system(
+    # 3.0
+    # )
+    # water_box = (
+    # water_box + np.eye(3) * 0.5
+    # )  # add a small margin around the box for stability
+    # num_water_atoms = len(water_coords)
+    # afe = free_energy.AbsoluteFreeEnergy(mol, ff, decharge=False)
+    # ff_params = ff.get_ordered_params()
+    # ubps, params, masses, coords = afe.prepare_host_edge(
+    # ff_params, water_system, water_coords
+    # )
 
     dt = 1.5e-3
     friction = 1.0
     pressure = 1.0
     interval = 5
 
-    box = water_box
-    host_coords = coords[:num_water_atoms]
-    new_host_coords = minimizer.minimize_host_4d(
-        [mol], water_system, host_coords, ff, water_box
-    )
-    coords[:num_water_atoms] = new_host_coords
+    # box = water_box
+    # host_coords = coords[:num_water_atoms]
+    # new_host_coords = minimizer.minimize_host_4d(
+    # [mol], water_system, host_coords, ff, water_box
+    # )
+    # coords[:num_water_atoms] = new_host_coords
 
     bps = []
     for p, bp in zip(params, ubps):
@@ -513,29 +544,41 @@ def generate_solvent_phase_samples(
 
     ctxt = custom_ops.Context(x0, v0, box, intg_impl, all_impls, barostat_impl)
 
-    num_steps = steps_per_batch * num_batches
-
     lamb = 0.0
     lambda_windows = np.array([0.0])
 
+    burn_in = 10000
+    # burn_in = 50000
+
+    ctxt.multiple_steps_U(lamb, burn_in, lambda_windows, 0, 0)
+
+    num_steps = steps_per_batch
+    # num_steps  * num_batches
+
     u_interval = steps_per_batch
     x_interval = steps_per_batch
-    full_us, xs, boxes = ctxt.multiple_steps_U(
-        lamb, num_steps, lambda_windows, u_interval, x_interval
-    )
+
+    for i in range(num_batches):
+        _, _, _ = ctxt.multiple_steps_U(
+            lamb, num_steps, lambda_windows, u_interval, x_interval
+        )
+        new_xs = yield ctxt.get_x_t(), ctxt.get_box()
+        assert new_xs is not None
+        if new_xs is not None:
+            ctxt.set_x_t(new_xs)
 
     # pdb_writer = PDBWriter([water_topology, mol], "solvent.pdb")
     # pdb_writer.write_frame(xs[0]*10)
     # pdb_writer.write_frame(xs[-1]*10)
     # pdb_writer.close()
 
-    burn_in = int(0.85 * num_batches)
+    # burn_in = int(0.85 * num_batches)
 
-    return (
-        xs[burn_in:],
-        boxes[burn_in:],
-        full_us[burn_in:],
-        bps[-1],
-        params[-1],
-        [water_topology, mol],
-    )
+    # return (
+    #     xs[burn_in:],
+    #     boxes[burn_in:],
+    #     full_us[burn_in:],
+    #     bps[-1],
+    #     params[-1],
+    #     [water_topology, mol],
+    # )

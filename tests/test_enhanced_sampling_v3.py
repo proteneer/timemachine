@@ -285,14 +285,13 @@ def test_condensed_phase():
             Us_gas_unique,
         ) = enhanced_sampling.generate_gas_phase_samples(mol, ff, temperature, U_gas)
 
-        (
-            xs_solvent,
-            boxes_solvent,
-            Us_full,
-            nb_bp,
-            nb_params,
-            topology_objs,
-        ) = enhanced_sampling.generate_solvent_phase_samples(mol, ff, temperature)
+        # (
+        #     xs_solvent,
+        #     boxes_solvent,
+        #     Us_full,
+        #     nb_params,
+        #     topology_objs,
+        # ) = enhanced_sampling.generate_solvent_phase_samples(mol, ff, temperature)
         # gas_counts, xs_gas_unique, Us_gas_unique = generate_gas_phase_samples(mol, ff, temperature, U_gas)
         with open(cache_path, "wb") as fh:
             pickle.dump(
@@ -300,12 +299,11 @@ def test_condensed_phase():
                     gas_counts,
                     xs_gas_unique,
                     Us_gas_unique,
-                    xs_solvent,
-                    boxes_solvent,
-                    Us_full,
-                    nb_bp,
-                    nb_params,
-                    topology_objs,
+                    # xs_solvent,
+                    # boxes_solvent,
+                    # Us_full,
+                    # nb_params,
+                    # topology_objs,
                 ),
                 fh,
             )
@@ -315,19 +313,39 @@ def test_condensed_phase():
             gas_counts,
             xs_gas_unique,
             Us_gas_unique,
-            xs_solvent,
-            boxes_solvent,
-            Us_full,
-            nb_bp,
-            nb_params,
-            topology_objs,
+            # xs_solvent,
+            # boxes_solvent,
+            # Us_full,
+            # nb_params,
+            # topology_objs,
         ) = pickle.load(fh)
+
+    ubps, params, masses, coords, box = enhanced_sampling.get_solvent_phase_system(
+        mol, ff
+    )
+
+    xs_solvent = []
+    boxes_solvent = []
+
+    for _, x, b in enhanced_sampling.generate_solvent_phase_samples(
+        ubps, params, masses, coords, box, temperature
+    ):
+        xs_solvent.append(x)
+        boxes_solvent.append(b)
+
+    xs_solvent = np.array(xs_solvent)
+    boxes_solvent = np.array(boxes_solvent)
+
+    print(xs_solvent.shape)
+    print(boxes_solvent.shape)
+
+    nb_params = params[-1]
 
     gas_counts = np.array(gas_counts)
 
-    model_utils.generate_imaged_topology(
-        topology_objs, xs_solvent[0], boxes_solvent[0], f"solvent_debug.pdb"
-    )
+    # model_utils.generate_imaged_topology(
+    # topology_objs, xs_solvent[0], boxes_solvent[0], f"solvent_debug.pdb"
+    # )
 
     params_i = nb_params[-num_ligand_atoms:]  # ligand params
     params_j = nb_params[:-num_ligand_atoms]  # water params
@@ -509,5 +527,270 @@ def test_condensed_phase():
     assert (np.sum(normalized_weights) - 1) < 1e-6
 
 
+def test_adaptive_condensed_phase():
+
+    mol = Chem.MolFromMolBlock(MOL_SDF, removeHs=False)
+    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+    num_ligand_atoms = len(masses)
+
+    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff = Forcefield(ff_handlers)
+
+    cache_path = "cache.pkl"
+
+    temperature = 300.0
+
+    state = enhanced_sampling.EnhancedState(mol, ff)
+
+    U_gas = state.U_full
+
+    if not os.path.exists(cache_path):
+        print("Generating cache")
+
+        # generate samples in some target state
+        (
+            gas_counts,
+            xs_gas_unique,
+            Us_gas_unique,
+        ) = enhanced_sampling.generate_gas_phase_samples(mol, ff, temperature, U_gas)
+
+        with open(cache_path, "wb") as fh:
+            pickle.dump(
+                (
+                    gas_counts,
+                    xs_gas_unique,
+                    Us_gas_unique,
+                ),
+                fh,
+            )
+
+    with open(cache_path, "rb") as fh:
+        (gas_counts, xs_gas_unique, Us_gas_unique) = pickle.load(fh)
+
+    ubps, params, masses, coords, box = enhanced_sampling.get_solvent_phase_system(
+        mol, ff
+    )
+
+    # print(xs_solvent.shape)
+    # print(boxes_solvent.shape)
+
+    nb_params = params[-1]
+
+    gas_counts = np.array(gas_counts)
+
+    params_i = nb_params[-num_ligand_atoms:]  # ligand params
+    params_j = nb_params[:-num_ligand_atoms]  # water params
+
+    state = enhanced_sampling.EnhancedState(mol, ff)
+
+    print("params_i", params_i)
+    print("params_j", params_j)
+
+    @jax.jit
+    def before_U_k(x_solvent, box_solvent):
+        x_water = x_solvent[:-num_ligand_atoms]  # water coords
+        x_original = x_solvent[-num_ligand_atoms:]  # ligand coords
+        U_k = nonbonded.nonbonded_off_diagonal(
+            x_original, x_water, box_solvent, params_i, params_j
+        )
+        return U_k
+
+    @jax.jit
+    def U_a(x):
+        return state.U_full(x)
+
+    # (note): we know what the energy is actually, no need to compute it
+    @jax.jit
+    def U_b(x):
+        return U_gas(x)
+
+    batch_before_U_k_fn = jax.jit(jax.vmap(before_U_k))
+    batch_U_a_fn = jax.jit(jax.vmap(U_a))
+    batch_U_b_fn = jax.jit(jax.vmap(U_b))
+    # before_U_k_nrgs = batch_before_U_k_fn(xs_solvent, boxes_solvent)
+
+    def after_U_k(x_gas, x_solvent, box_solvent):
+        x_gas_aligned = align_sample(x_gas, x_solvent)  # align gas phase conformer
+        x_water = x_solvent[:-num_ligand_atoms]  # water coords
+        U_k = nonbonded.nonbonded_off_diagonal(
+            x_gas_aligned, x_water, box_solvent, params_i, params_j
+        )
+        return U_k
+
+    batch_after_U_k_fn = jax.jit(jax.vmap(after_U_k, in_axes=(0, None, None)))
+    kT = temperature * BOLTZ
+
+    print(
+        f"{xs_gas_unique.shape} unique samples out of {np.sum(gas_counts)} total samples"
+    )
+
+    all_delta_us_unique = []
+
+    # writer = Chem.SDWriter("test2.sdf")
+
+    torsion_idxs = np.array([5, 6, 7, 8])
+
+    @jax.jit
+    def get_torsion(x_t):
+        cijkl = x_t[torsion_idxs]
+        return bonded.signed_torsion_angle(*cijkl)
+
+    batch_get_torsion = jax.jit(jax.vmap(get_torsion))
+    gas_torsions = batch_get_torsion(xs_gas_unique)
+
+    # verify that these are both bimodal
+    # plt.hist(gas_torsions, density=True, weights=gas_counts, bins=50)
+    # plt.show()
+
+    assert np.abs(np.average(gas_torsions, weights=gas_counts)) < 0.1
+
+    all_ratios = []
+    all_torsions = []
+    solvent_torsions = []
+
+    # print(f"{len(xs_solvent)} solvent frames")
+
+    all_weights = []
+
+    num_batches = 2000
+    sample_generator = enhanced_sampling.generate_solvent_phase_samples(
+        ubps, params, masses, coords, box, temperature, num_batches=num_batches
+    )
+
+    torsion_weights = []
+    torsion_angles = []
+
+    next_x = None
+    for iteration in range(num_batches):
+        # kick off
+        # print("SENDING", next_x)
+        x_solvent, box_solvent = sample_generator.send(next_x)
+        before_U_k_sample = before_U_k(x_solvent, box_solvent)
+
+        # writer.write(make_conformer(mol, x_solvent[-num_ligand_atoms:]))
+        # for x_g in xs_gas_unique[:100]:
+        #     x_gas_aligned = align_sample(x_g, x_solvent) # align gas phase conformer
+        #     new_mol = make_conformer(mol, np.asarray(x_gas_aligned))
+        #     print("rmsd after alignment", np.linalg.norm(x_gas_aligned - x_solvent[-num_ligand_atoms:]))
+        #     writer.write(new_mol)
+
+        # writer.flush()
+        # writer.close()
+
+        solvent_torsion = get_torsion(x_solvent[-num_ligand_atoms:])
+        solvent_torsions.append(solvent_torsion)
+        after_U_k_samples = batch_after_U_k_fn(xs_gas_unique, x_solvent, box_solvent)
+
+        delta_us = (after_U_k_samples - before_U_k_sample) / kT
+
+        weights = gas_counts * np.exp(-delta_us)
+        sum_of_weights = np.sum(weights)
+        normalized_weights = weights / sum_of_weights
+
+        max_weight_arg = np.argmax(weights)
+        max_weight = np.amax(weights)
+        min_weight = np.amin(weights)
+        max_torsion = gas_torsions[max_weight_arg]
+
+        print(
+            f"solvent_torsion {solvent_torsion} max_torsion {max_torsion} max_weight: {max_weight} min_weight: {min_weight}"
+        )
+
+        # plt.hist(
+        #     gas_torsions,
+        #     bins=np.linspace(-np.pi, np.pi, 100),
+        #     density=True,
+        #     alpha=0.5,
+        #     weights=weights / np.sum(weights),
+        # )
+        # plt.show()
+
+        all_delta_us_unique.append(delta_us)
+        all_torsions.append(gas_torsions)
+
+        # draw a new sample random
+
+        choice_idx = np.random.choice(
+            np.arange(len(xs_gas_unique)), p=normalized_weights
+        )
+        aligned_x_gas = align_sample(xs_gas_unique[choice_idx], x_solvent)
+
+        new_x_solvent = np.asarray(x_solvent)
+        new_x_solvent[-num_ligand_atoms:] = aligned_x_gas
+
+        torsion_weights.append(normalized_weights)
+        torsion_angles.append(gas_torsions)
+
+        # sample_generator.send(new_x_solvent)
+        next_x = new_x_solvent
+
+        # print(
+        #     f"iteration {idx} before_U_k_sample {before_U_k_sample} unique_weights, max {np.amax(weights)} min {np.amin(weights)} ratio estimate: {ratio_estimate} dG_estimate {dG_estimate} torsion_estimate {np.mean(all_torsions)}"
+        # )
+
+        tmp_torsion_weights = np.array(torsion_weights).reshape(-1)
+        tmp_torsion_angles = np.array(torsion_angles).reshape(-1)
+
+        plt.clf()
+        plt.hist(
+            tmp_torsion_angles,
+            bins=np.linspace(-np.pi, np.pi, 100),
+            density=True,
+            weights=tmp_torsion_weights,
+        )
+        plt.title(f"iteration {iteration}")
+        plt.savefig("enhanced_sampling.png")
+
+        # plt.show()
+
+    # given K streams and N samples per stream with different counts
+    # compute 1/(total_counts_per_stream*number_of_streams) * sum_j^K sum_i^N c_i exp(-delta_u_ij)
+    all_delta_us_unique = np.array(all_delta_us_unique)
+    total_counts = len(all_delta_us_unique) * np.sum(gas_counts)
+    ratio = (all_delta_us_unique * np.expand_dims(gas_counts, axis=0)) / total_counts
+
+    print("ratio", ratio)
+    ratio = np.mean(
+        np.average(np.exp(-all_delta_us_unique), axis=1, weights=gas_counts)
+    )
+    print("ratio", ratio)
+
+    all_weights = np.array(all_weights).reshape(-1)
+    sum_of_weights = np.sum(all_weights)
+    normalized_weights = all_weights / sum_of_weights
+
+    all_torsions = np.asarray(all_torsions).reshape(-1)
+
+    assert all_torsions.shape == normalized_weights.shape
+
+    print("ratio of Z_e/Z_f, computed by np.mean(np.exp(-delta_us)):", ratio)
+    print("avg_torsion", np.average(all_torsions, weights=normalized_weights))
+
+    # plt.xlabel("exp(-delta_u)")
+    # plt.ylabel("density")
+
+    plt.hist(
+        all_torsions,
+        bins=np.linspace(-np.pi, np.pi, 100),
+        density=True,
+        alpha=0.5,
+        weights=normalized_weights,
+    )
+    plt.savefig("enhanced_torsions.png")
+
+    plt.clf()
+
+    solvent_torsions = np.asarray(solvent_torsions)
+
+    plt.hist(
+        solvent_torsions, bins=np.linspace(-np.pi, np.pi, 100), density=True, alpha=0.5
+    )
+
+    plt.savefig("solvent_torsions.png")
+
+    assert (np.sum(normalized_weights) - 1) < 1e-6
+
+
 if __name__ == "__main__":
-    test_condensed_phase()
+    # test_condensed_phase()
+    test_adaptive_condensed_phase()
