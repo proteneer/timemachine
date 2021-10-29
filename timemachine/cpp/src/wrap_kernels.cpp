@@ -180,6 +180,10 @@ void declare_context(py::module &m) {
         ctxt.get_x_t(buffer.mutable_data());
         return buffer;
     })
+    .def("set_x_t", [](timemachine::Context &ctxt,
+        const py::array_t<double, py::array::c_style> new_x_t) {
+        ctxt.set_x_t(new_x_t.data());
+    })
     .def("multiple_steps_U", [](timemachine::Context &ctxt,
         const double lambda,
         const int n_steps,
