@@ -9,8 +9,10 @@ import logging
 
 T = TypeVar("T")
 
+
 class RechargeException(BaseException):
     pass
+
 
 class InvalidSmirksError(RechargeException):
     """An exception raised when an invalid smirks pattern is provided."""
@@ -26,11 +28,12 @@ class InvalidSmirksError(RechargeException):
         super(InvalidSmirksError, self).__init__(*args, **kwargs)
         self.smirks = smirks
 
+
 def call_openeye(
     oe_callable: Callable[[T], bool],
     *args: T,
     exception_type: Type[RechargeException] = RuntimeError,
-    exception_kwargs: Dict[str, Any] = None
+    exception_kwargs: Dict[str, Any] = None,
 ):
     """Wraps a call to an OpenEye function, either capturing the output in an
     exception if the function does not complete successfully, or redirecting it
@@ -75,9 +78,7 @@ def call_openeye(
         logging.debug(output_string)
 
 
-def match_smirks(
-    smirks: str, oe_molecule: oechem.OEMol, unique: bool = False
-) -> List[Dict[int, int]]:
+def match_smirks(smirks: str, oe_molecule: oechem.OEMol, unique: bool = False) -> List[Dict[int, int]]:
     """Attempt to find the indices (optionally unique) of all atoms which
     match a particular SMIRKS pattern.
     Parameters
@@ -121,15 +122,12 @@ def match_smirks(
     return matches
 
 
-
 class AromaticityModel:
     """A class which will assign aromatic flags to a molecule based upon
     a specified aromatic model."""
 
     @classmethod
-    def _set_aromatic(
-        cls, ring_matches: List[Dict[int, int]], oe_molecule: oechem.OEMol
-    ):
+    def _set_aromatic(cls, ring_matches: List[Dict[int, int]], oe_molecule: oechem.OEMol):
         """Flag all specified ring atoms and all ring bonds between those atoms
         as being aromatic.
 
@@ -142,10 +140,7 @@ class AromaticityModel:
         """
 
         atoms = {atom.GetIdx(): atom for atom in oe_molecule.GetAtoms()}
-        bonds = {
-            tuple(sorted((bond.GetBgnIdx(), bond.GetEndIdx()))): bond
-            for bond in oe_molecule.GetBonds()
-        }
+        bonds = {tuple(sorted((bond.GetBgnIdx(), bond.GetEndIdx()))): bond for bond in oe_molecule.GetBonds()}
 
         for ring_match in ring_matches:
 
@@ -198,9 +193,7 @@ class AromaticityModel:
         )
 
         case_1_matches = match_smirks(case_1_smirks, oe_molecule, unique=True)
-        case_1_atoms = {
-            match for matches in case_1_matches for match in matches.values()
-        }
+        case_1_atoms = {match for matches in case_1_matches for match in matches.values()}
 
         cls._set_aromatic(case_1_matches, oe_molecule)
 
@@ -229,14 +222,11 @@ class AromaticityModel:
             case_2_matches = [
                 case_2_match
                 for case_2_match in case_2_matches
-                if case_2_match[4] in ar6_assignments
-                and case_2_match[5] in ar6_assignments
+                if case_2_match[4] in ar6_assignments and case_2_match[5] in ar6_assignments
             ]
 
             previous_case_2_atoms = case_2_atoms
-            case_2_atoms = {
-                match for matches in case_2_matches for match in matches.values()
-            }
+            case_2_atoms = {match for matches in case_2_matches for match in matches.values()}
 
             ar6_assignments.update(case_2_atoms)
             cls._set_aromatic(case_2_matches, oe_molecule)
@@ -269,9 +259,7 @@ class AromaticityModel:
             ]
 
             previous_case_3_atoms = case_3_atoms
-            case_3_atoms = {
-                match for matches in case_3_matches for match in matches.values()
-            }
+            case_3_atoms = {match for matches in case_3_matches for match in matches.values()}
 
             ar6_assignments.update(case_3_atoms)
 
@@ -289,9 +277,7 @@ class AromaticityModel:
         )
 
         case_4_matches = match_smirks(case_4_smirks, oe_molecule, unique=True)
-        case_4_atoms = {
-            match for matches in case_4_matches for match in matches.values()
-        }
+        case_4_atoms = {match for matches in case_4_matches for match in matches.values()}
 
         cls._set_aromatic(case_4_matches, oe_molecule)
 
@@ -315,8 +301,7 @@ class AromaticityModel:
         case_5_matches = [
             matches
             for matches in case_5_matches
-            if matches[1] not in ar_6_ar_7_matches
-            and matches[2] not in ar_6_ar_7_matches
+            if matches[1] not in ar_6_ar_7_matches and matches[2] not in ar_6_ar_7_matches
         ]
 
         cls._set_aromatic(case_5_matches, oe_molecule)

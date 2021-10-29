@@ -51,7 +51,7 @@ def flatten_and_unflatten(input_tree) -> Tuple[Callable, Callable]:
         i = 0
         for shape in leaf_shapes:
             n = num_elements(shape)
-            leaves.append(reshape(x[i:i + n], shape))
+            leaves.append(reshape(x[i : i + n], shape))
             i += n
         tree = tree_util.tree_unflatten(tree_structure, leaves)
         return tree

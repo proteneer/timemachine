@@ -4,6 +4,7 @@ import numpy as np
 from ff.handlers import bonded, nonbonded
 from ff.handlers.suffix import _SUFFIX
 
+
 def deserialize_handlers(obj):
     """
     Parameters
@@ -22,7 +23,7 @@ def deserialize_handlers(obj):
 
     for k, v in obj_dict.items():
 
-        cls_name = k+_SUFFIX
+        cls_name = k + _SUFFIX
 
         ctor = None
 
@@ -39,7 +40,7 @@ def deserialize_handlers(obj):
         if ctor is None:
             raise Exception("Unknown handler:", k)
 
-        patterns = v['patterns']
+        patterns = v["patterns"]
         smirks = []
         params = []
 
@@ -50,7 +51,7 @@ def deserialize_handlers(obj):
             else:
                 params.append(elems[1:])
 
-        props = v.get('props')
+        props = v.get("props")
 
         handlers.append(ctor(smirks, params, props))
 

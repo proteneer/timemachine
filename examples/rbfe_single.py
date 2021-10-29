@@ -30,39 +30,18 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
+    parser.add_argument("--num_gpus", type=int, help="number of gpus", default=get_gpu_count())
+
+    parser.add_argument("--num_complex_windows", type=int, help="number of vacuum lambda windows", required=True)
+
+    parser.add_argument("--num_solvent_windows", type=int, help="number of solvent lambda windows", required=True)
+
     parser.add_argument(
-        "--num_gpus",
-        type=int,
-        help="number of gpus",
-        default=get_gpu_count()
+        "--num_equil_steps", type=int, help="number of equilibration steps for each lambda window", required=True
     )
 
     parser.add_argument(
-        "--num_complex_windows",
-        type=int,
-        help="number of vacuum lambda windows",
-        required=True
-    )
-
-    parser.add_argument(
-        "--num_solvent_windows",
-        type=int,
-        help="number of solvent lambda windows",
-        required=True
-    )
-
-    parser.add_argument(
-        "--num_equil_steps",
-        type=int,
-        help="number of equilibration steps for each lambda window",
-        required=True
-    )
-
-    parser.add_argument(
-        "--num_prod_steps",
-        type=int,
-        help="number of production steps for each lambda window",
-        required=True
+        "--num_prod_steps", type=int, help="number of production steps for each lambda window", required=True
     )
 
     cmd_args = parser.parse_args()
@@ -91,7 +70,8 @@ if __name__ == "__main__":
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
-        'tests/data/hif2a_nowater_min.pdb')
+        "tests/data/hif2a_nowater_min.pdb"
+    )
 
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
@@ -108,10 +88,8 @@ if __name__ == "__main__":
         solvent_box,
         solvent_schedule,
         cmd_args.num_equil_steps,
-        cmd_args.num_prod_steps
+        cmd_args.num_prod_steps,
     )
-
-
 
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
@@ -147,33 +125,33 @@ if __name__ == "__main__":
         for handle, increment in zip(ordered_handles, param_increments):
             handle_type = type(handle)
             if handle_type in handle_types_being_optimized:
-                print(f'updating {handle_type.__name__}')
+                print(f"updating {handle_type.__name__}")
 
-                print(f'\tbefore update: {handle.params}')
-                handle.params += increment # TODO: careful -- this must be a "+=" or "-=" not an "="!
-                print(f'\tafter update:  {handle.params}')
+                print(f"\tbefore update: {handle.params}")
+                handle.params += increment  # TODO: careful -- this must be a "+=" or "-=" not an "="!
+                print(f"\tafter update:  {handle.params}")
 
                 # useful for debugging to dump out the grads
                 # for smirks, dp in zip(handle.smirks, loss_grad):
-                    # if np.any(dp) > 0:
-                        # print(smirks, dp)
+                # if np.any(dp) > 0:
+                # print(smirks, dp)
 
         # checkpoint results to npz (overwrite
         flat_theta_traj.append(np.array(flat_theta))
         flat_grad_traj.append(flat_loss_grad)
         loss_traj.append(loss)
 
-        path_to_npz = 'results_checkpoint.npz'
-        print(f'saving theta, grad, loss trajs to {path_to_npz}')
+        path_to_npz = "results_checkpoint.npz"
+        print(f"saving theta, grad, loss trajs to {path_to_npz}")
         np.savez(
             path_to_npz,
             theta_traj=np.array(flat_theta_traj),
             grad_traj=np.array(flat_grad_traj),
-            loss_traj=np.array(loss_traj)
+            loss_traj=np.array(loss_traj),
         )
 
         # write ff parameters after each epoch
         path_to_ff_checkpoint = f"checkpoint_{epoch}.py"
-        print(f'saving force field parameter checkpoint to {path_to_ff_checkpoint}')
-        with open(path_to_ff_checkpoint, 'w') as fh:
+        print(f"saving force field parameter checkpoint to {path_to_ff_checkpoint}")
+        with open(path_to_ff_checkpoint, "w") as fh:
             fh.write(epoch_params)

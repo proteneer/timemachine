@@ -23,7 +23,7 @@ def test_transformation_size():
 def test_compute_all_pairs_mcs():
     mols = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b
     mcs_s = compute_all_pairs_mcs(mols)
-    assert (mcs_s.shape == (len(mols), len(mols)))
+    assert mcs_s.shape == (len(mols), len(mols))
 
 
 def test_compute_transformation_size_matrix():
@@ -33,7 +33,7 @@ def test_compute_transformation_size_matrix():
     transformation_sizes = compute_transformation_size_matrix(mols, mcs_s)
 
     assert (transformation_sizes >= 0).all()
-    assert (transformation_sizes.shape == (len(mols), len(mols)))
+    assert transformation_sizes.shape == (len(mols), len(mols))
 
 
 def test_get_core_by_mcs():

@@ -27,46 +27,28 @@ from rdkit import Chem
 
 if __name__ == "__main__":
 
-    multiprocessing.set_start_method('spawn')
+    multiprocessing.set_start_method("spawn")
 
     parser = argparse.ArgumentParser(
         description="Absolute Hydration Free Energy Testing",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    parser.add_argument(
-        "--hosts",
-        nargs="*",
-        default=None,
-        help="Hosts running GRPC worker to use for compute"
-    )
+    parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
 
-    parser.add_argument(
-        "--num_gpus",
-        type=int,
-        help="number of gpus",
-        default=get_gpu_count()
-    )
+    parser.add_argument("--num_gpus", type=int, help="number of gpus", default=get_gpu_count())
 
-    parser.add_argument(
-        "--num_windows",
-        type=int,
-        help="number of solvent lambda windows",
-        required=True
-    )
+    parser.add_argument("--num_windows", type=int, help="number of solvent lambda windows", required=True)
 
     parser.add_argument(
         "--num_equil_steps",
         type=int,
         help="number of equilibration steps for each solvent lambda window",
-        required=True
+        required=True,
     )
 
     parser.add_argument(
-        "--num_prod_steps",
-        type=int,
-        help="number of production steps for each solvent lambda window",
-        required=True
+        "--num_prod_steps", type=int, help="number of production steps for each solvent lambda window", required=True
     )
 
     cmd_args = parser.parse_args()
@@ -81,10 +63,10 @@ if __name__ == "__main__":
         client = GRPCClient(hosts=cmd_args.hosts)
     client.verify()
 
-    path_to_ligand = 'tests/data/ligands_40.sdf'
+    path_to_ligand = "tests/data/ligands_40.sdf"
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
 
-    with open('ff/params/smirnoff_1_1_0_ccc.py') as f:
+    with open("ff/params/smirnoff_1_1_0_ccc.py") as f:
         ff_handlers = deserialize_handlers(f.read())
 
     forcefield = Forcefield(ff_handlers)
@@ -93,7 +75,7 @@ if __name__ == "__main__":
     dataset = Dataset(mols)
 
     absolute_solvent_schedule = construct_absolute_lambda_schedule_solvent(cmd_args.num_windows)
-    relative_solvent_schedule = construct_relative_lambda_schedule(cmd_args.num_windows-1)
+    relative_solvent_schedule = construct_relative_lambda_schedule(cmd_args.num_windows - 1)
     solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
     # pick the largest mol as the blocker
@@ -120,7 +102,7 @@ if __name__ == "__main__":
         pressure,
         dt,
         cmd_args.num_equil_steps,
-        cmd_args.num_prod_steps
+        cmd_args.num_prod_steps,
     )
 
     model_absolute = model_rabfe.AbsoluteHydrationModel(
@@ -133,7 +115,7 @@ if __name__ == "__main__":
         pressure,
         dt,
         cmd_args.num_equil_steps,
-        cmd_args.num_prod_steps
+        cmd_args.num_prod_steps,
     )
 
     ordered_params = forcefield.get_ordered_params()
@@ -143,30 +125,18 @@ if __name__ == "__main__":
 
     # generate initial coordinates
     def minimize_absolute(mol):
-        hc = minimizer.minimize_host_4d(
-            [mol],
-            solvent_system,
-            solvent_coords,
-            forcefield,
-            solvent_box
-        )
+        hc = minimizer.minimize_host_4d([mol], solvent_system, solvent_coords, forcefield, solvent_box)
         return np.concatenate([hc, get_romol_conf(mol)])
 
     def minimize_relative(mol_a, mol_b):
-        hc = minimizer.minimize_host_4d(
-            [mol_a, mol_b],
-            solvent_system,
-            solvent_coords,
-            forcefield,
-            solvent_box
-        )
+        hc = minimizer.minimize_host_4d([mol_a, mol_b], solvent_system, solvent_coords, forcefield, solvent_box)
         return np.concatenate([hc, get_romol_conf(mol_a), get_romol_conf(mol_b)])
 
     for epoch in range(100):
 
         for i in range(M):
 
-            for j in range(i+1, M):
+            for j in range(i + 1, M):
 
                 mol_a = dataset.data[i]
                 mol_b = dataset.data[j]
@@ -182,15 +152,26 @@ if __name__ == "__main__":
                     core_idxs,
                     x0=xab,
                     box0=solvent_box,
-                    prefix='epoch_'+str(epoch)+'_solvent_relative_'+mol_a.GetProp('_Name')+'_'+mol_b.GetProp('_Name')
+                    prefix="epoch_"
+                    + str(epoch)
+                    + "_solvent_relative_"
+                    + mol_a.GetProp("_Name")
+                    + "_"
+                    + mol_b.GetProp("_Name"),
                 )
 
                 # absolute calculation
                 xa = minimize_absolute(mol_a)
                 xb = minimize_absolute(mol_b)
 
-                dG_a, dG_a_err = model_absolute.predict(ordered_params, mol_a, x0=xa, box0=solvent_box, prefix='solvent_absolute_'+mol_a.GetProp('_Name'))
-                dG_b, dG_b_err = model_absolute.predict(ordered_params, mol_b, x0=xb, box0=solvent_box, prefix='solvent_absolute_'+mol_b.GetProp('_Name'))
-                dG_ab_err = np.sqrt(dG_a_err**2 + dG_b_err**2)
+                dG_a, dG_a_err = model_absolute.predict(
+                    ordered_params, mol_a, x0=xa, box0=solvent_box, prefix="solvent_absolute_" + mol_a.GetProp("_Name")
+                )
+                dG_b, dG_b_err = model_absolute.predict(
+                    ordered_params, mol_b, x0=xb, box0=solvent_box, prefix="solvent_absolute_" + mol_b.GetProp("_Name")
+                )
+                dG_ab_err = np.sqrt(dG_a_err ** 2 + dG_b_err ** 2)
 
-                print(f"mol_i {i} {mol_a.GetProp('_Name')} mol_j {j} {mol_b.GetProp('_Name')} ddG_ab {ddG_ab:.3f} +- {ddG_ab_err:.3f} dG_a-dG_b {dG_a-dG_b:.3f} +- {dG_ab_err:.3f}")
+                print(
+                    f"mol_i {i} {mol_a.GetProp('_Name')} mol_j {j} {mol_b.GetProp('_Name')} ddG_ab {ddG_ab:.3f} +- {ddG_ab_err:.3f} dG_a-dG_b {dG_a-dG_b:.3f} +- {dG_ab_err:.3f}"
+                )

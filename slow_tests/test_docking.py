@@ -12,14 +12,9 @@ class TestDocking(unittest.TestCase):
     def test_pose_dock(self):
         """Tests basic functionality of pose_dock"""
         guests_sdfile = str(
-            Path(__file__)
-            .resolve()
-            .parent.parent.joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
+            Path(__file__).resolve().parent.parent.joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
         )
-        host_pdbfile = str(
-            Path(__file__).resolve()
-            .parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb")
-        )
+        host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
         transition_type = "insertion"
         n_steps = 1001
         transition_steps = 500
@@ -48,20 +43,11 @@ class TestDocking(unittest.TestCase):
             for f in expected_output:
                 self.assertTrue(Path(f).exists())
 
-
     def test_dock_and_equilibrate(self):
         """Tests basic functionality of dock_and_equilibrate"""
-        host_pdbfile = str(
-            Path(__file__).resolve()
-            .parent
-            .parent.joinpath("tests", "data", "hif2a_nowater_min.pdb")
-        )
+        host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
         guests_sdfile = str(
-            Path(__file__)
-            .resolve()
-            .parent
-            .parent
-            .joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
+            Path(__file__).resolve().parent.parent.joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
         )
         max_lambda = 0.25
         insertion_steps = 501
@@ -84,20 +70,11 @@ class TestDocking(unittest.TestCase):
             for f in expected_output:
                 self.assertTrue(Path(f).exists())
 
-
     def test_rigorous_work(self):
         """Tests basic functionality of rigorous_work"""
-        host_pdbfile = str(
-            Path(__file__).resolve()
-            .parent
-            .parent.joinpath("tests", "data", "hif2a_nowater_min.pdb")
-        )
+        host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
         guests_sdfile = str(
-            Path(__file__)
-            .resolve()
-            .parent
-            .parent
-            .joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
+            Path(__file__).resolve().parent.parent.joinpath("tests", "data", "ligands_40__first-two-ligs.sdf")
         )
         num_deletions = 10
         deletion_steps = 501
@@ -125,7 +102,6 @@ class TestDocking(unittest.TestCase):
             for f in expected_output:
                 self.assertTrue(Path(f).exists())
 
-
     def test_relative_docking(self):
         """Tests basic functionality of relative_docking"""
         # fetch mol_a, mol_b, core, forcefield from testsystem
@@ -134,17 +110,10 @@ class TestDocking(unittest.TestCase):
             hif2a_ligand_pair.mol_b,
             hif2a_ligand_pair.core,
         )
-        host_pdbfile = str(
-            Path(__file__).resolve()
-            .parent
-            .parent
-            .joinpath("tests", "data", "hif2a_nowater_min.pdb")
-        )
+        host_pdbfile = str(Path(__file__).resolve().parent.parent.joinpath("tests", "data", "hif2a_nowater_min.pdb"))
         num_switches = 10
         transition_steps = 501
-        works = relative_docking.do_relative_docking(
-            host_pdbfile, mol_a, mol_b, core, num_switches, transition_steps
-        )
+        works = relative_docking.do_relative_docking(host_pdbfile, mol_a, mol_b, core, num_switches, transition_steps)
         self.assertTrue("protein" in works)
         self.assertTrue("solvent" in works)
         self.assertEqual(len(works["protein"]), num_switches)

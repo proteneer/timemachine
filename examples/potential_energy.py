@@ -12,7 +12,7 @@ lam = 0.5
 U(coords, sys_params, box, lam)
 
 # can call grad(U)
-grad(U, argnums=(0,1,3))(coords, sys_params, box, lam)
+grad(U, argnums=(0, 1, 3))(coords, sys_params, box, lam)
 
 # can call value_and_grad(U)
-value_and_grad(U, argnums=(0,1,3))(coords, sys_params, box, lam)
+value_and_grad(U, argnums=(0, 1, 3))(coords, sys_params, box, lam)

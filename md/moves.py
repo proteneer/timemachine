@@ -8,7 +8,7 @@ class MonteCarloMove:
     n_accepted: int = 0
 
     def propose(self, x: CoordsVelBox) -> Tuple[CoordsVelBox, float]:
-        """ return proposed state and log acceptance probability """
+        """return proposed state and log acceptance probability"""
         raise NotImplementedError
 
     def move(self, x: CoordsVelBox) -> CoordsVelBox:

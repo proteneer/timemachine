@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from parallel import service_pb2 as parallel_dot_service__pb2
+from parallel.grpc import service_pb2 as parallel_dot_service__pb2
 
 
 class WorkerStub(object):

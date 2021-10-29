@@ -19,8 +19,8 @@ from md.barostat.utils import get_group_indices, get_bond_list
 
 import pickle
 
-class AbsoluteModel(ABC):
 
+class AbsoluteModel(ABC):
     def __init__(
         self,
         client: AbstractClient or None,
@@ -32,7 +32,8 @@ class AbsoluteModel(ABC):
         pressure: float,
         dt: float,
         equil_steps: int,
-        prod_steps: int):
+        prod_steps: int,
+    ):
 
         self.host_system = host_system
         self.host_schedule = host_schedule
@@ -49,40 +50,28 @@ class AbsoluteModel(ABC):
     def setup_topology(self, mol):
         raise NotImplementedError()
 
-    def simulate_futures(self, ff_params, mol, x0, box0, prefix, core_idxs=None) -> Tuple[List[Any], estimator_abfe.FreeEnergyModel, List[Any]]:
+    def simulate_futures(
+        self, ff_params, mol, x0, box0, prefix, core_idxs=None
+    ) -> Tuple[List[Any], estimator_abfe.FreeEnergyModel, List[Any]]:
         top = self.setup_topology(mol)
 
         afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, top)
 
-        unbound_potentials, sys_params, masses = afe.prepare_host_edge(
-            ff_params,
-            self.host_system
-        )
+        unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff_params, self.host_system)
 
         seed = 0
 
-        beta = 1/(constants.BOLTZ*self.temperature)
+        beta = 1 / (constants.BOLTZ * self.temperature)
 
         bond_list = get_bond_list(unbound_potentials[0])
         masses = model_utils.apply_hmr(masses, bond_list)
         friction = 1.0
-        integrator = LangevinIntegrator(
-            self.temperature,
-            self.dt,
-            friction,
-            masses,
-            seed
-        )
+        integrator = LangevinIntegrator(self.temperature, self.dt, friction, masses, seed)
 
         group_indices = get_group_indices(bond_list)
         barostat_interval = 5
         barostat = MonteCarloBarostat(
-            x0.shape[0],
-            self.pressure,
-            self.temperature,
-            group_indices,
-            barostat_interval,
-            seed
+            x0.shape[0], self.pressure, self.temperature, group_indices, barostat_interval, seed
         )
 
         v0 = np.zeros_like(x0)
@@ -113,39 +102,43 @@ class AbsoluteModel(ABC):
 
             subsample_interval = 1000
 
-            all_args.append((
-                lamb,
-                model.box,
-                model.x0,
-                model.v0,
-                bound_potentials,
-                model.integrator,
-                model.barostat,
-                model.equil_steps,
-                model.prod_steps,
-                subsample_interval,
-                subsample_interval,
-                model.lambda_schedule
-            ))
+            all_args.append(
+                (
+                    lamb,
+                    model.box,
+                    model.x0,
+                    model.v0,
+                    bound_potentials,
+                    model.integrator,
+                    model.barostat,
+                    model.equil_steps,
+                    model.prod_steps,
+                    subsample_interval,
+                    subsample_interval,
+                    model.lambda_schedule,
+                )
+            )
 
         if endpoint_correct:
 
             assert isinstance(bound_potentials[-1], potentials.HarmonicBond)
 
-            all_args.append((
-                1.0,
-                model.box,
-                model.x0,
-                model.v0,
-                bound_potentials[:-1], # strip out the restraints
-                model.integrator,
-                model.barostat,
-                model.equil_steps,
-                model.prod_steps,
-                subsample_interval,
-                subsample_interval,
-                [] # no need to evaluate Us for the endpoint correction
-            ))
+            all_args.append(
+                (
+                    1.0,
+                    model.box,
+                    model.x0,
+                    model.v0,
+                    bound_potentials[:-1],  # strip out the restraints
+                    model.integrator,
+                    model.barostat,
+                    model.equil_steps,
+                    model.prod_steps,
+                    subsample_interval,
+                    subsample_interval,
+                    [],  # no need to evaluate Us for the endpoint correction
+                )
+            )
 
         futures = []
         if self.client is None:
@@ -162,10 +155,7 @@ class AbsoluteModel(ABC):
 
         # uncomment if we want to visualize
         combined_topology = model_utils.generate_imaged_topology(
-            [self.host_topology, mol],
-            model.x0,
-            model.box,
-            "initial_"+model.prefix+".pdb"
+            [self.host_topology, mol], model.x0, model.box, "initial_" + model.prefix + ".pdb"
         )
 
         for lambda_idx, res in enumerate(results):
@@ -179,14 +169,8 @@ class AbsoluteModel(ABC):
 
         return dG, dG_err
 
-    def predict(self,
-        ff_params,
-        mol,
-        x0,
-        box0,
-        prefix,
-        core_idxs=None):
-        """ Compute the absolute free of energy of decoupling mol_a.
+    def predict(self, ff_params, mol, x0, box0, prefix, core_idxs=None):
+        """Compute the absolute free of energy of decoupling mol_a.
 
         This function is differentiable w.r.t. ff_params.
 
@@ -227,9 +211,8 @@ class AbsoluteModel(ABC):
         sys_params, model, futures = self.simulate_futures(ff_params, mol, x0, box0, prefix, core_idxs=core_idxs)
 
         dG, dG_err = self.predict_from_futures(sys_params, mol, model, futures)
-    
-        return dG, dG_err
 
+        return dG, dG_err
 
 
 class RelativeModel(ABC):
@@ -248,7 +231,8 @@ class RelativeModel(ABC):
         pressure: float,
         dt: float,
         equil_steps: int,
-        prod_steps: int):
+        prod_steps: int,
+    ):
 
         self.host_system = host_system
         self.temperature = temperature
@@ -264,15 +248,7 @@ class RelativeModel(ABC):
     def setup_topology(self, mol_a, mol_b):
         raise NotImplementedError()
 
-    def _futures_a_to_b(
-        self,
-        ff_params,
-        mol_a,
-        mol_b,
-        combined_core_idxs,
-        x0,
-        box0,
-        prefix):
+    def _futures_a_to_b(self, ff_params, mol_a, mol_b, combined_core_idxs, x0, box0, prefix):
 
         num_host_atoms = x0.shape[0] - mol_a.GetNumAtoms() - mol_b.GetNumAtoms()
 
@@ -283,10 +259,7 @@ class RelativeModel(ABC):
         dual_topology = self.setup_topology(mol_a, mol_b)
         rfe = free_energy_rabfe.RelativeFreeEnergy(dual_topology)
 
-        unbound_potentials, sys_params, masses = rfe.prepare_host_edge(
-            ff_params,
-            self.host_system
-        )
+        unbound_potentials, sys_params, masses = rfe.prepare_host_edge(ff_params, self.host_system)
 
         k_core = 30.0
 
@@ -306,30 +279,19 @@ class RelativeModel(ABC):
         v0 = np.zeros_like(x0)
 
         seed = 0
-        beta = 1/(constants.BOLTZ*self.temperature)
+        beta = 1 / (constants.BOLTZ * self.temperature)
 
         bond_list = np.concatenate([unbound_potentials[0].get_idxs(), core_idxs])
         masses = model_utils.apply_hmr(masses, bond_list)
 
         friction = 1.0
-        integrator = LangevinIntegrator(
-            self.temperature,
-            self.dt,
-            friction,
-            masses,
-            seed
-        )
+        integrator = LangevinIntegrator(self.temperature, self.dt, friction, masses, seed)
         bond_list = list(map(tuple, bond_list))
         group_indices = get_group_indices(bond_list)
         barostat_interval = 5
 
         barostat = MonteCarloBarostat(
-            x0.shape[0],
-            self.pressure,
-            self.temperature,
-            group_indices,
-            barostat_interval,
-            seed
+            x0.shape[0], self.pressure, self.temperature, group_indices, barostat_interval, seed
         )
 
         endpoint_correct = True
@@ -337,7 +299,7 @@ class RelativeModel(ABC):
             unbound_potentials,
             endpoint_correct,
             self.client,
-            box0, # important, use equilibrated box.
+            box0,  # important, use equilibrated box.
             x0,
             v0,
             integrator,
@@ -346,7 +308,7 @@ class RelativeModel(ABC):
             self.equil_steps,
             self.prod_steps,
             beta,
-            prefix
+            prefix,
         )
 
         bound_potentials = []
@@ -359,39 +321,43 @@ class RelativeModel(ABC):
 
             subsample_interval = 1000
 
-            all_args.append((
-                lamb,
-                model.box,
-                model.x0,
-                model.v0,
-                bound_potentials,
-                model.integrator,
-                model.barostat,
-                model.equil_steps,
-                model.prod_steps,
-                subsample_interval,
-                subsample_interval,
-                model.lambda_schedule
-            ))
+            all_args.append(
+                (
+                    lamb,
+                    model.box,
+                    model.x0,
+                    model.v0,
+                    bound_potentials,
+                    model.integrator,
+                    model.barostat,
+                    model.equil_steps,
+                    model.prod_steps,
+                    subsample_interval,
+                    subsample_interval,
+                    model.lambda_schedule,
+                )
+            )
 
         if endpoint_correct:
 
             assert isinstance(bound_potentials[-1], potentials.HarmonicBond)
 
-            all_args.append((
-                1.0,
-                model.box,
-                model.x0,
-                model.v0,
-                bound_potentials[:-1], # strip out the restraints
-                model.integrator,
-                model.barostat,
-                model.equil_steps,
-                model.prod_steps,
-                subsample_interval,
-                subsample_interval,
-                [] # no need to evaluate Us for the endpoint correction
-            ))
+            all_args.append(
+                (
+                    1.0,
+                    model.box,
+                    model.x0,
+                    model.v0,
+                    bound_potentials[:-1],  # strip out the restraints
+                    model.integrator,
+                    model.barostat,
+                    model.equil_steps,
+                    model.prod_steps,
+                    subsample_interval,
+                    subsample_interval,
+                    [],  # no need to evaluate Us for the endpoint correction
+                )
+            )
 
         futures = []
         if self.client is None:
@@ -403,23 +369,21 @@ class RelativeModel(ABC):
 
         return sys_params, model, futures
 
-    def simulate_futures(self, ff_params, mol_a, mol_b, core, x0, box0, prefix) -> Tuple[List[Any], List[estimator_abfe.FreeEnergyModel], List[List[Any]]]:
+    def simulate_futures(
+        self, ff_params, mol_a, mol_b, core, x0, box0, prefix
+    ) -> Tuple[List[Any], List[estimator_abfe.FreeEnergyModel], List[List[Any]]]:
 
         num_host_atoms = x0.shape[0] - mol_a.GetNumAtoms() - mol_b.GetNumAtoms()
         host_coords = x0[:num_host_atoms]
-        mol_a_coords = x0[num_host_atoms:num_host_atoms+mol_a.GetNumAtoms()]
-        mol_b_coords = x0[num_host_atoms+mol_a.GetNumAtoms():]
+        mol_a_coords = x0[num_host_atoms : num_host_atoms + mol_a.GetNumAtoms()]
+        mol_b_coords = x0[num_host_atoms + mol_a.GetNumAtoms() :]
 
         # pull out mol_b from combined state
         combined_core_idxs = np.copy(core)
         combined_core_idxs[:, 0] += num_host_atoms
         combined_core_idxs[:, 1] += num_host_atoms + mol_a.GetNumAtoms()
         # this is redundant, but thought it best to be explicit about ordering here..
-        combined_coords = np.concatenate([
-            host_coords,
-            mol_a_coords,
-            mol_b_coords
-        ])
+        combined_coords = np.concatenate([host_coords, mol_a_coords, mol_b_coords])
 
         all_sys = []
         models = []
@@ -431,7 +395,7 @@ class RelativeModel(ABC):
             combined_core_idxs,
             combined_coords,
             box0,
-            prefix+"_ref_to_mol",
+            prefix + "_ref_to_mol",
         )
 
         all_sys.append(sys_params)
@@ -445,11 +409,7 @@ class RelativeModel(ABC):
         combined_core_idxs[:, 1] = core[:, 0]
         combined_core_idxs[:, 0] += num_host_atoms
         combined_core_idxs[:, 1] += num_host_atoms + mol_b.GetNumAtoms()
-        combined_coords = np.concatenate([
-            host_coords,
-            mol_b_coords,
-            mol_a_coords
-        ])
+        combined_coords = np.concatenate([host_coords, mol_b_coords, mol_a_coords])
         sys_params, model, futures = self._futures_a_to_b(
             ff_params,
             mol_b,
@@ -457,7 +417,7 @@ class RelativeModel(ABC):
             combined_core_idxs,
             combined_coords,
             box0,
-            prefix+"_mol_to_ref",
+            prefix + "_mol_to_ref",
         )
 
         all_sys.append(sys_params)
@@ -466,7 +426,9 @@ class RelativeModel(ABC):
 
         return all_sys, models, all_futures
 
-    def predict_from_futures(self, sys_params, mol_a, mol_b, models: List[estimator_abfe.FreeEnergyModel], futures: List[List[Any]]):
+    def predict_from_futures(
+        self, sys_params, mol_a, mol_b, models: List[estimator_abfe.FreeEnergyModel], futures: List[List[Any]]
+    ):
         assert len(futures) == 2
         assert len(models) == 2
         assert len(sys_params) == 2
@@ -479,10 +441,7 @@ class RelativeModel(ABC):
 
             # Save out the pdb
             combined_topology = model_utils.generate_imaged_topology(
-                [self.host_topology, mol_a, mol_b],
-                model.x0,
-                model.box,
-                f"initial_{model.prefix}.pdb"
+                [self.host_topology, mol_a, mol_b], model.x0, model.box, f"initial_{model.prefix}.pdb"
             )
 
             for lambda_idx, res in enumerate(results):
@@ -513,7 +472,8 @@ class RelativeModel(ABC):
         core_idxs: np.array,
         x0: np.array,
         box0: np.array,
-        prefix: str):
+        prefix: str,
+    ):
         """
         Compute the free of energy of converting mol_a into mol_b. The starting state
         has mol_a fully interacting with the environment, mol_b is non-interacting.
@@ -580,32 +540,33 @@ class RelativeModel(ABC):
 
         return dG, dG_err
 
+
 # subclasses specific for each model
 
-class AbsoluteHydrationModel(AbsoluteModel):
 
+class AbsoluteHydrationModel(AbsoluteModel):
     def setup_topology(self, mol):
         return topology.BaseTopologyRHFE(mol, self.ff)
 
-class RelativeHydrationModel(RelativeModel):
 
+class RelativeHydrationModel(RelativeModel):
     def setup_topology(self, mol_a, mol_b):
         return topology.DualTopologyRHFE(mol_a, mol_b, self.ff)
 
-class AbsoluteConversionModel(AbsoluteModel):
 
+class AbsoluteConversionModel(AbsoluteModel):
     def setup_topology(self, mol):
         top = topology.BaseTopologyConversion(mol, self.ff)
         return top
 
-class AbsoluteStandardHydrationModel(AbsoluteModel):
 
+class AbsoluteStandardHydrationModel(AbsoluteModel):
     def setup_topology(self, mol):
         top = topology.BaseTopologyStandardDecoupling(mol, self.ff)
         return top
 
-class RelativeBindingModel(RelativeModel):
 
+class RelativeBindingModel(RelativeModel):
     def setup_topology(self, mol_a, mol_b):
         top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
         return top

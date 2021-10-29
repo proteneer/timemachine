@@ -106,9 +106,7 @@ def fire_descent(
         V = np.zeros_like(R)
         n_pos = np.zeros((), np.int32)
         F = force(R, **kwargs)
-        return FireDescentState(
-            R, V, F, dt_start, alpha_start, n_pos
-        )  # pytype: disable=wrong-arg-count
+        return FireDescentState(R, V, F, dt_start, alpha_start, n_pos)  # pytype: disable=wrong-arg-count
 
     def apply_fn(state: FireDescentState, **kwargs) -> FireDescentState:
         R, V, F_old, dt, alpha, n_pos = dataclasses.astuple(state)
@@ -133,14 +131,10 @@ def fire_descent(
         dt_choice = np.array([dt * f_inc, dt_max])
         dt = np.where(P > 0, np.where(n_pos > n_min, np.min(dt_choice), dt), dt)
         dt = np.where(P < 0, dt * f_dec, dt)
-        alpha = np.where(
-            P > 0, np.where(n_pos > n_min, alpha * f_alpha, alpha), alpha
-        )
+        alpha = np.where(P > 0, np.where(n_pos > n_min, alpha * f_alpha, alpha), alpha)
         alpha = np.where(P < 0, alpha_start, alpha)
         V = (P < 0) * np.zeros_like(V) + (P >= 0) * V
 
-        return FireDescentState(
-            R, V, F, dt, alpha, n_pos
-        )  # pytype: disable=wrong-arg-count
+        return FireDescentState(R, V, F, dt, alpha, n_pos)  # pytype: disable=wrong-arg-count
 
     return init_fn, apply_fn

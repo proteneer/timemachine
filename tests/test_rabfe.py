@@ -21,7 +21,6 @@ NUM_GPUS = get_gpu_count()
 
 
 class TestRABFEModels(TestCase):
-
     def test_predict_complex_decouple(self):
         """Just to verify that we can handle the most basic complex decoupling RABFE prediction"""
         complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
@@ -55,12 +54,12 @@ class TestRABFEModels(TestCase):
         core_idxs = setup_relative_restraints_by_distance(mol_a, mol_b)
 
         ref_coords = get_romol_conf(mol_a)
-        mol_coords = get_romol_conf(mol_b) # original coords
+        mol_coords = get_romol_conf(mol_b)  # original coords
 
         # Align using core_idxs
         R, t = rmsd.get_optimal_rotation_and_translation(
-            x1=ref_coords[core_idxs[:, 1]], # reference core atoms
-            x2=mol_coords[core_idxs[:, 0]], # mol core atoms
+            x1=ref_coords[core_idxs[:, 1]],  # reference core atoms
+            x2=mol_coords[core_idxs[:, 0]],  # mol core atoms
         )
 
         aligned_mol_coords = rmsd.apply_rotation_and_translation(mol_coords, R, t)
@@ -70,7 +69,7 @@ class TestRABFEModels(TestCase):
             complex_coords,
             hif2a_ligand_pair.ff,
             complex_box,
-            [ref_coords, aligned_mol_coords]
+            [ref_coords, aligned_mol_coords],
         )
         complex_x0 = np.concatenate([complex_coords, ref_coords, aligned_mol_coords])
 
@@ -119,28 +118,25 @@ class TestRABFEModels(TestCase):
         core_idxs = setup_relative_restraints_by_distance(mol_a, mol_b)
 
         ref_coords = get_romol_conf(mol_a)
-        mol_coords = get_romol_conf(mol_b) # original coords
+        mol_coords = get_romol_conf(mol_b)  # original coords
 
         # Use core_idxs to generate
         R, t = rmsd.get_optimal_rotation_and_translation(
-            x1=ref_coords[core_idxs[:, 1]], # reference core atoms
-            x2=mol_coords[core_idxs[:, 0]], # mol core atoms
+            x1=ref_coords[core_idxs[:, 1]],  # reference core atoms
+            x2=mol_coords[core_idxs[:, 0]],  # mol core atoms
         )
 
         aligned_mol_coords = rmsd.apply_rotation_and_translation(mol_coords, R, t)
         complex_coords = minimizer.minimize_host_4d(
-            [mol_b],
-            complex_system,
-            complex_coords,
-            hif2a_ligand_pair.ff,
-            complex_box,
-            [aligned_mol_coords]
+            [mol_b], complex_system, complex_coords, hif2a_ligand_pair.ff, complex_box, [aligned_mol_coords]
         )
         complex_x0 = np.concatenate([complex_coords, aligned_mol_coords])
 
         ordered_params = hif2a_ligand_pair.ff.get_ordered_params()
         with temporary_working_dir() as temp_dir:
-            dG, dG_err = model.predict(ordered_params, mol_b, complex_x0, complex_box, "prefix", core_idxs=core_idxs[:, 0])
+            dG, dG_err = model.predict(
+                ordered_params, mol_b, complex_x0, complex_box, "prefix", core_idxs=core_idxs[:, 0]
+            )
             self.assertIsInstance(dG, float)
             self.assertIsInstance(dG_err, float)
             created_files = os.listdir(temp_dir)

@@ -17,8 +17,7 @@ from parallel.client import AbstractClient, SerialClient
 from typing import Optional, List, Tuple
 
 
-class RBFEModel():
-
+class RBFEModel:
     def __init__(
         self,
         client: Optional[AbstractClient],
@@ -35,7 +34,8 @@ class RBFEModel():
         prod_steps: int,
         barostat_interval: int = 25,
         pre_equilibrate: bool = False,
-        hmr: bool = False):
+        hmr: bool = False,
+    ):
 
         self.complex_system = complex_system
         self.complex_coords = complex_coords
@@ -68,7 +68,7 @@ class RBFEModel():
         lamb: float = 0.0,
         barostat_interval: int = 10,
         equilibration_steps: int = 100000,
-        cache_path: str = "equilibration_cache.pkl"
+        cache_path: str = "equilibration_cache.pkl",
     ):
         """
         edges: List of tuples with mol_a, mol_b, core
@@ -106,14 +106,17 @@ class RBFEModel():
 
         for stage, host_system, host_coords, host_box in [
             ("complex", self.complex_system, self.complex_coords, self.complex_box),
-            ("solvent", self.solvent_system, self.solvent_coords, self.solvent_box)]:
+            ("solvent", self.solvent_system, self.solvent_coords, self.solvent_box),
+        ]:
             # Run all complex legs first then solvent, as they will likely take longer than then solvent leg
             for mol_a, mol_b, core in edges:
                 # Use DualTopology to ensure mols exist in the same space.
                 topo = topology.DualTopologyMinimization(mol_a, mol_b, self.ff)
                 rfe = free_energy.RelativeFreeEnergy(topo)
                 min_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, self.ff, host_box)
-                unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ordered_params, host_system, min_coords)
+                unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(
+                    ordered_params, host_system, min_coords
+                )
                 num_host_coords = len(host_coords)
                 # masses[num_host_coords:] *= 1000000 # Lets see if masses are the difference
                 harmonic_bond_potential = unbound_potentials[0]
@@ -123,25 +126,14 @@ class RBFEModel():
                 if self.hmr:
                     masses = apply_hmr(masses, bond_list)
                     time_step = 2.5e-3
-                integrator = LangevinIntegrator(
-                    temperature,
-                    time_step,
-                    1.0,
-                    masses,
-                    0
-                )
-                barostat = MonteCarloBarostat(
-                    coords.shape[0],
-                    pressure,
-                    temperature,
-                    group_idxs,
-                    barostat_interval,
-                    0
-                )
+                integrator = LangevinIntegrator(temperature, time_step, 1.0, masses, 0)
+                barostat = MonteCarloBarostat(coords.shape[0], pressure, temperature, group_idxs, barostat_interval, 0)
                 pots = []
                 for bp, params in zip(unbound_potentials, sys_params):
                     pots.append(bp.bind(np.asarray(params)))
-                future = self.client.submit(estimator.equilibrate, *[integrator, barostat, pots, coords, host_box, lamb, equilibration_steps])
+                future = self.client.submit(
+                    estimator.equilibrate, *[integrator, barostat, pots, coords, host_box, lamb, equilibration_steps]
+                )
                 futures.append((stage, (mol_a, mol_b, core), future))
         num_equil = len(futures)
         for i, (stage, edge, future) in enumerate(futures):
@@ -154,7 +146,6 @@ class RBFEModel():
             with open(cache_path, "wb") as ofs:
                 dump(self._equil_cache, ofs)
             print(f"Saved equilibration_cache to {cache_path}")
-
 
     def predict(self, ff_params: list, mol_a: Chem.Mol, mol_b: Chem.Mol, core: np.ndarray):
         """
@@ -188,7 +179,8 @@ class RBFEModel():
 
         for stage, host_system, host_coords, host_box, lambda_schedule in [
             ("complex", self.complex_system, self.complex_coords, self.complex_box, self.complex_schedule),
-            ("solvent", self.solvent_system, self.solvent_coords, self.solvent_box, self.solvent_schedule)]:
+            ("solvent", self.solvent_system, self.solvent_coords, self.solvent_box, self.solvent_schedule),
+        ]:
             single_topology = topology.SingleTopology(mol_a, mol_b, core, self.ff)
             rfe = free_energy.RelativeFreeEnergy(single_topology)
             edge_hash = self._edge_hash(stage, mol_a, mol_b, core)
@@ -206,11 +198,10 @@ class RBFEModel():
                         x0[:num_host_coords],
                         np.mean(
                             single_topology.interpolate_params(
-                                x0[num_host_coords:num_host_coords+mol_a_size],
-                                x0[num_host_coords+mol_a_size:]
+                                x0[num_host_coords : num_host_coords + mol_a_size], x0[num_host_coords + mol_a_size :]
                             ),
-                            axis=0
-                        )
+                            axis=0,
+                        ),
                     ]
                 )
             else:
@@ -220,13 +211,16 @@ class RBFEModel():
                 # (ytz): this isn't strictly symmetric, and we should modify minimize later on remove
                 # the hysteresis by jointly minimizing against a and b at the same time. We may also want
                 # to remove the randomness completely from the minimization.
-                min_host_coords = minimizer.minimize_host_4d([mol_a, mol_b], host_system, host_coords, self.ff, host_box)
+                min_host_coords = minimizer.minimize_host_4d(
+                    [mol_a, mol_b], host_system, host_coords, self.ff, host_box
+                )
 
-                unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(ff_params, host_system, min_host_coords)
+                unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(
+                    ff_params, host_system, min_host_coords
+                )
 
                 x0 = coords
             v0 = np.zeros_like(x0)
-
 
             time_step = 1.5e-3
 
@@ -242,22 +236,9 @@ class RBFEModel():
             temperature = 300.0
             pressure = 1.0
 
-            integrator = LangevinIntegrator(
-                temperature,
-                time_step,
-                1.0,
-                masses,
-                seed
-            )
+            integrator = LangevinIntegrator(temperature, time_step, 1.0, masses, seed)
 
-            barostat = MonteCarloBarostat(
-                x0.shape[0],
-                pressure,
-                temperature,
-                group_idxs,
-                self.barostat_interval,
-                seed
-            )
+            barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, self.barostat_interval, seed)
 
             model = estimator.FreeEnergyModel(
                 unbound_potentials,

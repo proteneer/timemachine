@@ -4,7 +4,6 @@ import ast
 from argparse import ArgumentParser
 
 
-
 if __name__ == "__main__":
     parser = ArgumentParser(description="Compare Timemachine FFs")
     parser.add_argument("reference_ff")
@@ -36,7 +35,9 @@ if __name__ == "__main__":
                 for dict_key, val in ref_ff[key][subkey].items():
                     comp_val = comp_ff[key][subkey].get(dict_key, None)
                     if val != comp_val:
-                        print(f"Difference in {subkey} value for {dict_key}: Reference value {val} New Value {comp_val}")
+                        print(
+                            f"Difference in {subkey} value for {dict_key}: Reference value {val} New Value {comp_val}"
+                        )
             elif isinstance(ref_ff[key][subkey], (list, tuple)):
                 for pattern in ref_ff[key][subkey]:
                     found = False
@@ -56,5 +57,6 @@ if __name__ == "__main__":
                         print(f"Comp FF has no pattern {smirks}")
             else:
                 if ref_ff[key][subkey] != comp_ff[key][subkey]:
-                    print(f"Difference in {subkey} value: Reference value {ref_ff[key][subkey]} New Value {comp_ff[key][subkey]}")
-
+                    print(
+                        f"Difference in {subkey} value: Reference value {ref_ff[key][subkey]} New Value {comp_ff[key][subkey]}"
+                    )

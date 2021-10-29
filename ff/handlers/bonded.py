@@ -1,4 +1,3 @@
-
 import functools
 import numpy as np
 
@@ -7,6 +6,7 @@ import jax
 from ff.handlers.utils import match_smirks, sort_tuple
 from ff.handlers.serialize import SerializableMixIn, bin_to_str
 from ff.handlers.suffix import _SUFFIX
+
 
 def generate_vd_idxs(mol, smirks):
     """
@@ -28,12 +28,13 @@ def generate_vd_idxs(mol, smirks):
 
     return bond_idxs, param_idxs
 
+
 def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
+
 # its trivial to re-use this for everything except the ImproperTorsions
 class ReversibleBondHandler(SerializableMixIn):
-
     def __init__(self, smirks, params, props):
         """ "Reversible" here means that bond energy is symmetric to index reversal
         u_bond(x[i], x[j]) = u_bond(x[j], x[i])"""
@@ -73,15 +74,17 @@ class ReversibleBondHandler(SerializableMixIn):
         bond_idxs, param_idxs = generate_vd_idxs(mol, smirks)
         return params[param_idxs], bond_idxs
 
+
 # we need to subclass to get the names backout
 class HarmonicBondHandler(ReversibleBondHandler):
     pass
 
+
 class HarmonicAngleHandler(ReversibleBondHandler):
     pass
 
-class ProperTorsionHandler():
 
+class ProperTorsionHandler:
     def __init__(self, smirks, params, props):
         """
         Parameters
@@ -95,7 +98,7 @@ class ProperTorsionHandler():
         """
         # self.smirks = smirks
 
-        # raw_params = params # internals is a 
+        # raw_params = params # internals is a
         self.counts = []
         self.smirks = []
         self.params = []
@@ -104,9 +107,9 @@ class ProperTorsionHandler():
             self.counts.append(len(terms))
             for term in terms:
                 self.params.append(term)
-        
+
         self.counts = np.array(self.counts, dtype=np.int32)
- 
+
         self.params = np.array(self.params, dtype=np.float64)
         self.props = props
 
@@ -116,7 +119,6 @@ class ProperTorsionHandler():
     def partial_parameterize(self, params, mol):
         return self.static_parameterize(params, self.smirks, self.counts, mol)
 
-
     @staticmethod
     def static_parameterize(params, smirks, counts, mol):
         torsion_idxs, param_idxs = generate_vd_idxs(mol, smirks)
@@ -124,20 +126,20 @@ class ProperTorsionHandler():
         assert len(torsion_idxs) == len(param_idxs)
 
         scatter_idxs = []
-        n_smirks = len(counts) # number of patterns
+        n_smirks = len(counts)  # number of patterns
         repeats = []
 
         # prefix sum of size + 1
-        pfxsum = np.concatenate([[0], np.cumsum(counts)]) 
+        pfxsum = np.concatenate([[0], np.cumsum(counts)])
         for p_idx in param_idxs:
             start = pfxsum[p_idx]
-            end = pfxsum[p_idx+1]
+            end = pfxsum[p_idx + 1]
             scatter_idxs.extend((range(start, end)))
             repeats.append(counts[p_idx])
 
         # for k, _, _ in params[scatter_idxs]:
-            # if k == 0.0:
-                # print("WARNING: zero force constant torsion generated.")
+        # if k == 0.0:
+        # print("WARNING: zero force constant torsion generated.")
 
         scatter_idxs = np.array(scatter_idxs)
 
@@ -153,18 +155,18 @@ class ProperTorsionHandler():
                 counter += 1
             list_params.append(t_params)
 
-        key = type(self).__name__[:-len(_SUFFIX)]
+        key = type(self).__name__[: -len(_SUFFIX)]
         patterns = []
         for smi, p in zip(self.smirks, list_params):
             patterns.append((smi, p))
 
-        body = {'patterns': patterns}
+        body = {"patterns": patterns}
         result = {key: body}
 
         return result
 
-class ImproperTorsionHandler(SerializableMixIn):
 
+class ImproperTorsionHandler(SerializableMixIn):
     def __init__(self, smirks, params, props):
         self.smirks = smirks
         self.params = np.array(params, dtype=np.float64)
@@ -177,7 +179,6 @@ class ImproperTorsionHandler(SerializableMixIn):
 
     def parameterize(self, mol):
         return self.static_parameterize(self.params, self.smirks, mol)
-
 
     @staticmethod
     def static_parameterize(params, smirks, mol):

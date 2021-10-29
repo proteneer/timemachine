@@ -38,9 +38,9 @@ from time import time
 from pathlib import Path
 
 root = Path(__file__).parent.parent
-path_to_ligand = str(root.joinpath('tests/data/ligands_40.sdf'))
-path_to_protein = str(root.joinpath('tests/data/hif2a_nowater_min.pdb'))
-path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
+path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))
+path_to_protein = str(root.joinpath("tests/data/hif2a_nowater_min.pdb"))
+path_to_ff = str(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py"))
 
 
 def wrap_method(args, fxn):
@@ -52,14 +52,14 @@ from collections import namedtuple
 RelativeTransformation = namedtuple("RelativeTransformation", ["ff", "mol_a", "mol_b", "core"])
 
 
-def estimate_dG(transformation: RelativeTransformation,
-                num_lambdas: int,
-                num_steps_per_lambda: int,
-                num_equil_steps: int,
-                ):
+def estimate_dG(
+    transformation: RelativeTransformation,
+    num_lambdas: int,
+    num_steps_per_lambda: int,
+    num_equil_steps: int,
+):
     # build the protein system.
-    complex_system, complex_coords, _, _, complex_box = builders.build_protein_system(
-        path_to_protein)
+    complex_system, complex_coords, _, _, complex_box = builders.build_protein_system(path_to_protein)
 
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
@@ -76,7 +76,8 @@ def estimate_dG(transformation: RelativeTransformation,
 
     for stage, host_system, host_coords, host_box in [
         ("complex", complex_system, complex_coords, complex_box),
-        ("solvent", solvent_system, solvent_coords, solvent_box)]:
+        ("solvent", solvent_system, solvent_coords, solvent_box),
+    ]:
 
         print("Minimizing the host structure to remove clashes.")
         minimized_host_coords = minimizer.minimize_host_4d(mol_a, host_system, host_coords, ff, host_box)
@@ -88,11 +89,12 @@ def estimate_dG(transformation: RelativeTransformation,
         host_args = []
         for lambda_idx, lamb in enumerate(lambda_schedule):
             gpu_idx = lambda_idx % num_gpus
-            host_args.append((gpu_idx, lamb, host_system, minimized_host_coords,
-                              host_box, num_equil_steps, num_steps_per_lambda))
+            host_args.append(
+                (gpu_idx, lamb, host_system, minimized_host_coords, host_box, num_equil_steps, num_steps_per_lambda)
+            )
 
         # one GPU job per lambda window
-        print('submitting tasks to client!')
+        print("submitting tasks to client!")
         do_work = partial(wrap_method, fxn=rfe.host_edge)
         futures = []
         for lambda_idx, lamb in enumerate(lambda_schedule):
@@ -139,37 +141,40 @@ if __name__ == "__main__":
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
-    core = np.array([[0, 0],
-                     [2, 2],
-                     [1, 1],
-                     [6, 6],
-                     [5, 5],
-                     [4, 4],
-                     [3, 3],
-                     [15, 16],
-                     [16, 17],
-                     [17, 18],
-                     [18, 19],
-                     [19, 20],
-                     [20, 21],
-                     [32, 30],
-                     [26, 25],
-                     [27, 26],
-                     [7, 7],
-                     [8, 8],
-                     [9, 9],
-                     [10, 10],
-                     [29, 11],
-                     [11, 12],
-                     [12, 13],
-                     [14, 15],
-                     [31, 29],
-                     [13, 14],
-                     [23, 24],
-                     [30, 28],
-                     [28, 27],
-                     [21, 22]]
-                    )
+    core = np.array(
+        [
+            [0, 0],
+            [2, 2],
+            [1, 1],
+            [6, 6],
+            [5, 5],
+            [4, 4],
+            [3, 3],
+            [15, 16],
+            [16, 17],
+            [17, 18],
+            [18, 19],
+            [19, 20],
+            [20, 21],
+            [32, 30],
+            [26, 25],
+            [27, 26],
+            [7, 7],
+            [8, 8],
+            [9, 9],
+            [10, 10],
+            [29, 11],
+            [11, 12],
+            [12, 13],
+            [14, 15],
+            [31, 29],
+            [13, 14],
+            [23, 24],
+            [30, 28],
+            [28, 27],
+            [21, 22],
+        ]
+    )
     with open(path_to_ff) as f:
         ff_handlers = deserialize_handlers(f.read())
 
@@ -183,30 +188,30 @@ if __name__ == "__main__":
         num_equil_steps=1000,
     )
 
-    num_steps_grid = [10,20,30,40,50,100,250,500,750,1000,2500,5000,10000,50000]
+    num_steps_grid = [10, 20, 30, 40, 50, 100, 250, 500, 750, 1000, 2500, 5000, 10000, 50000]
 
     results = dict()
     times = dict()
 
     for num_steps in num_steps_grid:
-        arguments['num_steps_per_lambda'] = num_steps
-        arguments['num_equil_steps'] = num_steps
+        arguments["num_steps_per_lambda"] = num_steps
+        arguments["num_equil_steps"] = num_steps
 
         results[str(num_steps)] = np.zeros(num_repeats)
         times[str(num_steps)] = np.zeros(num_repeats)
 
         for i in range(num_repeats):
-            print(f'starting trial #{i + 1}...')
+            print(f"starting trial #{i + 1}...")
             t0 = time()
             dG = estimate_dG(transformation, **arguments)
             results[str(num_steps)][i] = dG
             t1 = time()
             elapsed = t1 - t0
             times[str(num_steps)][i] = elapsed
-            print(f'\tdG_estimate = {dG:.3f}\n\t(wall time: {elapsed:.3f} s)')
+            print(f"\tdG_estimate = {dG:.3f}\n\t(wall time: {elapsed:.3f} s)")
 
-        np.savez('estimator_variance_results.npz', **results)
-        np.savez('estimator_variance_timings.npz', **times)
+        np.savez("estimator_variance_results.npz", **results)
+        np.savez("estimator_variance_timings.npz", **times)
 
     # TODO: also loop over num_lambdas from 2 up to 1000 or something...
 

@@ -21,8 +21,8 @@ from ff.handlers import bonded, nonbonded
 
 import time
 
-class Timer():
 
+class Timer:
     def __init__(self):
         self.start_time = time.time()
         self.last_time = time.time()
@@ -35,6 +35,7 @@ class Timer():
     def total(self):
         print("total", time.time() - start_time)
 
+
 def compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff):
     stage_dGs = []
     for stage_du_dls, ti_lambdas in zip(all_du_dls, lambda_schedules):
@@ -46,6 +47,7 @@ def compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff):
         stage_dGs.append(dG)
 
     return stage_dGs
+
 
 def dG_TI(all_du_dls, ssc, lambda_schedules, du_dl_cutoff):
     stage_dGs = compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff)
@@ -72,7 +74,7 @@ def loss_fn(all_du_dls, ssc, lambda_schedules, expected_dG, du_dl_cutoff):
 
     du_dl_cutoff: int
         number of frames in the equilibration phase.
-    
+
 
     """
     pred_dG = dG_TI(all_du_dls, ssc, lambda_schedules, du_dl_cutoff)
@@ -82,24 +84,25 @@ def loss_fn(all_du_dls, ssc, lambda_schedules, expected_dG, du_dl_cutoff):
 loss_fn_grad = jax.grad(loss_fn, argnums=(0,))
 
 
-class Trainer():
-
-    def __init__(self,
-            host_pdbfile,
-            stubs,
-            stub_hosts,
-            ff_handlers,
-            lambda_schedule,
-            du_dl_cutoff,
-            restr_search_radius,
-            restr_force_constant,
-            n_frames,
-            intg_steps,
-            intg_dt,
-            intg_temperature,
-            intg_friction,
-            learning_rates,
-            precision):
+class Trainer:
+    def __init__(
+        self,
+        host_pdbfile,
+        stubs,
+        stub_hosts,
+        ff_handlers,
+        lambda_schedule,
+        du_dl_cutoff,
+        restr_search_radius,
+        restr_force_constant,
+        n_frames,
+        intg_steps,
+        intg_dt,
+        intg_temperature,
+        intg_friction,
+        learning_rates,
+        precision,
+    ):
         """
         Parameters
         ----------
@@ -151,7 +154,6 @@ class Trainer():
 
         """
 
-
         self.du_dl_cutoff = du_dl_cutoff
         self.host_pdbfile = host_pdbfile
         self.stubs = stubs
@@ -159,7 +161,7 @@ class Trainer():
         self.ff_handlers = ff_handlers
         self.lambda_schedule = lambda_schedule
         self.restr_search_radius = restr_search_radius
-        self.restr_force_constant= restr_force_constant
+        self.restr_force_constant = restr_force_constant
         self.n_frames = n_frames
         self.intg_steps = intg_steps
         self.intg_dt = intg_dt
@@ -167,7 +169,6 @@ class Trainer():
         self.intg_friction = intg_friction
         self.learning_rates = learning_rates
         self.precision = precision
-
 
         futures = []
         print("resetting state on workers...")
@@ -179,7 +180,6 @@ class Trainer():
 
         for fut in futures:
             fut.result()
-
 
     def run_mol(self, mol, inference, run_dir, experiment_dG):
         """
@@ -226,7 +226,7 @@ class Trainer():
         for stage, ti_lambdas in self.lambda_schedule.items():
 
             # print("---Starting stage", stage, '---')
-            stage_dir = os.path.join(run_dir, "stage_"+str(stage))
+            stage_dir = os.path.join(run_dir, "stage_" + str(stage))
 
             if not os.path.exists(stage_dir):
                 os.makedirs(stage_dir)
@@ -238,7 +238,7 @@ class Trainer():
                 self.restr_search_radius,
                 self.restr_force_constant,
                 self.intg_temperature,
-                stage
+                stage,
             )
 
             forward_futures = []
@@ -250,29 +250,24 @@ class Trainer():
                     steps=self.intg_steps,
                     dt=self.intg_dt,
                     temperature=self.intg_temperature,
-                    friction=self.intg_friction,  
+                    friction=self.intg_friction,
                     masses=combined_masses,
                     lamb=lamb,
-                    seed=np.random.randint(np.iinfo(np.int32).max)
+                    seed=np.random.randint(np.iinfo(np.int32).max),
                 )
 
-                complex_system = system.System(
-                    x0,
-                    np.zeros_like(x0),
-                    final_gradients,
-                    intg
-                )
+                complex_system = system.System(x0, np.zeros_like(x0), final_gradients, intg)
 
                 # this key is used for us to chase down the forward-mode coordinates
                 # when we compute derivatives in backwards mode.
-                key = str(stage)+"_"+str(lamb_idx)
+                key = str(stage) + "_" + str(lamb_idx)
 
                 request = service_pb2.ForwardRequest(
                     inference=inference,
                     system=pickle.dumps(complex_system),
                     precision=self.precision,
                     n_frames=self.n_frames,
-                    key=key
+                    key=key,
                 )
 
                 stub = stubs[stub_idx % len(stubs)]
@@ -292,7 +287,7 @@ class Trainer():
 
         for stage, stage_futures in stage_forward_futures:
 
-            stage_dir = os.path.join(run_dir, "stage_"+str(stage))
+            stage_dir = os.path.join(run_dir, "stage_" + str(stage))
             stage_du_dls = []
 
             for lamb_idx, (future, lamb) in enumerate(zip(stage_futures, lambda_schedule[stage])):
@@ -315,13 +310,13 @@ class Trainer():
 
                 if self.n_frames > 0:
                     frames = pickle.loads(response.frames)
-                    out_file = os.path.join(stage_dir, "frames_"+str(lamb_idx)+".pdb")
+                    out_file = os.path.join(stage_dir, "frames_" + str(lamb_idx) + ".pdb")
                     # make sure we do StringIO here as it's single-pass.
                     combined_pdb_str = StringIO(Chem.MolToPDBBlock(combined_pdb))
                     pdb_writer = PDBWriter(combined_pdb_str, out_file)
                     pdb_writer.write_header()
                     for frame_idx, x in enumerate(frames):
-                        pdb_writer.write(x*10)
+                        pdb_writer.write(x * 10)
                     pdb_writer.close()
 
                     assert full_du_dls is not None
@@ -354,13 +349,39 @@ class Trainer():
                 for f, du_dls in zip(final_gradients, equil_du_dls):
                     if np.any(np.abs(du_dls) > 0):
                         fname = f[0]
-                        print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t median {:8.2f}".format(np.median(du_dls)), "\t mean", "{:8.2f}".format(np.mean(du_dls)), "+-", "{:7.2f}".format(np.std(du_dls)), "\t <-", fname)
+                        print(
+                            "mol",
+                            mol.GetProp("_Name"),
+                            "stage:",
+                            stage,
+                            "lambda:",
+                            "{:.3f}".format(lamb),
+                            "\t median {:8.2f}".format(np.median(du_dls)),
+                            "\t mean",
+                            "{:8.2f}".format(np.mean(du_dls)),
+                            "+-",
+                            "{:7.2f}".format(np.std(du_dls)),
+                            "\t <-",
+                            fname,
+                        )
 
-                total_equil_du_dls = np.sum(equil_du_dls, axis=0) # [1, T]
-                print("mol", mol.GetProp("_Name"), "stage:", stage, "lambda:", "{:.3f}".format(lamb), "\t mean", "{:8.2f}".format(np.mean(total_equil_du_dls)), "+-", "{:7.2f}".format(np.std(total_equil_du_dls)), "\t <- Total")
+                total_equil_du_dls = np.sum(equil_du_dls, axis=0)  # [1, T]
+                print(
+                    "mol",
+                    mol.GetProp("_Name"),
+                    "stage:",
+                    stage,
+                    "lambda:",
+                    "{:.3f}".format(lamb),
+                    "\t mean",
+                    "{:8.2f}".format(np.mean(total_equil_du_dls)),
+                    "+-",
+                    "{:7.2f}".format(np.std(total_equil_du_dls)),
+                    "\t <- Total",
+                )
                 stage_du_dls.append(full_du_dls)
 
-            sum_du_dls = np.sum(stage_du_dls, axis=1) # [L,F,T], lambda windows, num forces, num frames
+            sum_du_dls = np.sum(stage_du_dls, axis=1)  # [L,F,T], lambda windows, num forces, num frames
 
             ti_lambdas = lambda_schedule[stage]
             plt.boxplot(sum_du_dls[:, du_dl_cutoff:].tolist(), positions=ti_lambdas)
@@ -378,12 +399,13 @@ class Trainer():
             all_du_dls.append(stage_du_dls)
             all_lambdas.append(ti_lambdas)
 
-
         pred_dG = dG_TI(all_du_dls, ssc, all_lambdas, du_dl_cutoff)
         ci = bootstrap.ti_ci(all_du_dls, ssc, all_lambdas, du_dl_cutoff)
         loss = loss_fn(all_du_dls, ssc, all_lambdas, experiment_dG, du_dl_cutoff)
 
-        print("mol", mol.GetProp("_Name"), "stage dGs:", compute_dGs(all_du_dls, all_lambdas, du_dl_cutoff), "ssc:", ssc)
+        print(
+            "mol", mol.GetProp("_Name"), "stage dGs:", compute_dGs(all_du_dls, all_lambdas, du_dl_cutoff), "ssc:", ssc
+        )
 
         if not inference:
 
@@ -423,16 +445,15 @@ class Trainer():
                     for g, dl_dp in zip(final_gradients, dl_dps):
 
                         # train charges only
-                        if g[0] == 'Nonbonded':
+                        if g[0] == "Nonbonded":
                             # 0 is for charges
                             # 1 is for lj terms
                             raw_charge_derivs.append(dl_dp[0])
                             raw_lj_derivs.append(dl_dp[1])
-                        elif g[0] == 'GBSA':
+                        elif g[0] == "GBSA":
                             # 0 is for charges
                             # 1 is for gb terms
                             raw_charge_derivs.append(dl_dp[0])
-
 
             sum_charge_derivs = np.sum(raw_charge_derivs, axis=0)
             sum_lj_derivs = np.sum(raw_lj_derivs, axis=0)
@@ -445,23 +466,30 @@ class Trainer():
                 if isinstance(h, nonbonded.SimpleChargeHandler):
                     # disable training to SimpleCharges
                     assert 0
-                    h.params -= charge_gradients*self.learning_rates['charge']
+                    h.params -= charge_gradients * self.learning_rates["charge"]
                 elif isinstance(h, nonbonded.AM1CCCHandler):
                     charge_gradients = vjp_fn(sum_charge_derivs)
-                    if np.any(np.isnan(charge_gradients)) or np.any(np.isinf(charge_gradients)) or np.any(np.amax(np.abs(charge_gradients)) > 10000.0):
+                    if (
+                        np.any(np.isnan(charge_gradients))
+                        or np.any(np.isinf(charge_gradients))
+                        or np.any(np.amax(np.abs(charge_gradients)) > 10000.0)
+                    ):
                         print("Skipping Fatal Charge Derivatives:", charge_gradients)
                     else:
-                        charge_scale_factor = np.amax(np.abs(charge_gradients))/self.learning_rates['charge']
-                        h.params -= charge_gradients/charge_scale_factor
+                        charge_scale_factor = np.amax(np.abs(charge_gradients)) / self.learning_rates["charge"]
+                        h.params -= charge_gradients / charge_scale_factor
                 elif isinstance(h, nonbonded.LennardJonesHandler):
                     lj_gradients = vjp_fn(sum_lj_derivs)
-                    if np.any(np.isnan(lj_gradients)) or np.any(np.isinf(lj_gradients)) or np.any(np.amax(np.abs(lj_gradients)) > 10000.0):
+                    if (
+                        np.any(np.isnan(lj_gradients))
+                        or np.any(np.isinf(lj_gradients))
+                        or np.any(np.amax(np.abs(lj_gradients)) > 10000.0)
+                    ):
                         print("Skipping Fatal LJ Derivatives:", lj_gradients)
                     else:
-                        lj_sig_scale = np.amax(np.abs(lj_gradients[:, 0]))/self.learning_rates['lj'][0]
-                        lj_eps_scale = np.amax(np.abs(lj_gradients[:, 1]))/self.learning_rates['lj'][1]
+                        lj_sig_scale = np.amax(np.abs(lj_gradients[:, 0])) / self.learning_rates["lj"][0]
+                        lj_eps_scale = np.amax(np.abs(lj_gradients[:, 1])) / self.learning_rates["lj"][1]
                         lj_scale_factor = np.array([lj_sig_scale, lj_eps_scale])
-                        h.params -= lj_gradients/lj_scale_factor
+                        h.params -= lj_gradients / lj_scale_factor
 
         return pred_dG, ci, loss
-

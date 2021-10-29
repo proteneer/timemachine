@@ -1,5 +1,6 @@
 import jax
 from jax import grad, value_and_grad, config, jacfwd, jacrev
+
 config.update("jax_enable_x64", True)
 
 import numpy as np
@@ -26,16 +27,18 @@ from testsystems.relative import hif2a_ligand_pair
 
 def test_absolute_free_energy():
 
-    suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
+    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
     all_mols = [x for x in suppl]
     mol = all_mols[1]
 
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
+    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+        "tests/data/hif2a_nowater_min.pdb"
+    )
 
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
 
-    ff = Forcefield(deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read()))
+    ff = Forcefield(deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read()))
 
     ff_params = ff.get_ordered_params()
     ff_handles = ff.get_ordered_handles()
@@ -54,7 +57,8 @@ def test_absolute_free_energy():
 
         for host_system, host_coords, host_box in [
             (complex_system, complex_coords, complex_box),
-            (solvent_system, solvent_coords, solvent_box)]:
+            (solvent_system, solvent_coords, solvent_box),
+        ]:
 
             # minimize the host to avoid clashes
             host_coords = minimizer.minimize_host_4d([mol], host_system, host_coords, ff, host_box)
@@ -70,22 +74,9 @@ def test_absolute_free_energy():
             temperature = 300.0
             pressure = 1.0
 
-            integrator = LangevinIntegrator(
-                temperature,
-                1.5e-3,
-                1.0,
-                masses,
-                seed
-            )
+            integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
-            barostat = MonteCarloBarostat(
-                x0.shape[0],
-                pressure,
-                temperature,
-                group_idxs,
-                25,
-                seed
-            )
+            barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, 25, seed)
 
             model = estimator.FreeEnergyModel(
                 unbound_potentials,
@@ -97,73 +88,77 @@ def test_absolute_free_energy():
                 lambda_schedule,
                 equil_steps,
                 prod_steps,
-                barostat
+                barostat,
             )
 
             dG, _ = estimator.deltaG(model, sys_params)
             dGs.append(dG)
 
-
         return dGs[0] - dGs[1]
 
     # automatic chaining of vjps
     vg_fn = jax.value_and_grad(absolute_model)
-    dG, ff_grads = vg_fn(ff_params) # dG and ff_params_grad
+    dG, ff_grads = vg_fn(ff_params)  # dG and ff_params_grad
     for g, h in zip(ff_grads, ff_handles):
         assert g.shape == h.params.shape
         assert np.all(np.abs(g) < 10000)
 
     assert np.abs(dG) < 1000.0
 
+
 def test_relative_free_energy():
     # test that we can properly build a single topology host guest system and
     # that we can run a few steps in a stable way. This tests runs both the complex
     # and the solvent stages.
 
-    suppl = Chem.SDMolSupplier('tests/data/ligands_40.sdf', removeHs=False)
+    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
     all_mols = [x for x in suppl]
     mol_a = all_mols[1]
     mol_b = all_mols[4]
 
-    core = np.array([
-        [ 0,  0],
-        [ 2,  2],
-        [ 1,  1],
-        [ 6,  6],
-        [ 5,  5],
-        [ 4,  4],
-        [ 3,  3],
-        [15, 16],
-        [16, 17],
-        [17, 18],
-        [18, 19],
-        [19, 20],
-        [20, 21],
-        [32, 30],
-        [26, 25],
-        [27, 26],
-        [ 7,  7],
-        [ 8,  8],
-        [ 9,  9],
-        [10, 10],
-        [29, 11],
-        [11, 12],
-        [12, 13],
-        [14, 15],
-        [31, 29],
-        [13, 14],
-        [23, 24],
-        [30, 28],
-        [28, 27],
-        [21, 22]
-    ])
+    core = np.array(
+        [
+            [0, 0],
+            [2, 2],
+            [1, 1],
+            [6, 6],
+            [5, 5],
+            [4, 4],
+            [3, 3],
+            [15, 16],
+            [16, 17],
+            [17, 18],
+            [18, 19],
+            [19, 20],
+            [20, 21],
+            [32, 30],
+            [26, 25],
+            [27, 26],
+            [7, 7],
+            [8, 8],
+            [9, 9],
+            [10, 10],
+            [29, 11],
+            [11, 12],
+            [12, 13],
+            [14, 15],
+            [31, 29],
+            [13, 14],
+            [23, 24],
+            [30, 28],
+            [28, 27],
+            [21, 22],
+        ]
+    )
 
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
+    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+        "tests/data/hif2a_nowater_min.pdb"
+    )
 
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
 
-    ff = Forcefield(deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read()))
+    ff = Forcefield(deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read()))
 
     ff_params = ff.get_ordered_params()
     ff_handles = ff.get_ordered_handles()
@@ -184,7 +179,7 @@ def test_relative_free_energy():
         x0 = coords
         v0 = np.zeros_like(coords)
         client = CUDAPoolClient(1)
-        box = np.eye(3, dtype=np.float64)*100
+        box = np.eye(3, dtype=np.float64) * 100
 
         harmonic_bond_potential = unbound_potentials[0]
         group_idxs = get_group_indices(get_bond_list(harmonic_bond_potential))
@@ -195,44 +190,21 @@ def test_relative_free_energy():
         temperature = 300.0
         pressure = 1.0
 
-        integrator = LangevinIntegrator(
-            temperature,
-            1.5e-3,
-            1.0,
-            masses,
-            seed
-        )
+        integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
-        barostat = MonteCarloBarostat(
-            x0.shape[0],
-            pressure,
-            temperature,
-            group_idxs,
-            25,
-            seed
-        )
+        barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, 25, seed)
         model = estimator.FreeEnergyModel(
-            unbound_potentials,
-            client,
-            box,
-            x0,
-            v0,
-            integrator,
-            lambda_schedule,
-            equil_steps,
-            prod_steps,
-            barostat
+            unbound_potentials, client, box, x0, v0, integrator, lambda_schedule, equil_steps, prod_steps, barostat
         )
 
         return estimator.deltaG(model, sys_params)[0]
 
     vg_fn = jax.value_and_grad(vacuum_model)
-    dG, ff_grads = vg_fn(ff_params) # dG and ff_params_grad
+    dG, ff_grads = vg_fn(ff_params)  # dG and ff_params_grad
     for g, h in zip(ff_grads, ff_handles):
         assert g.shape == h.params.shape
         assert np.all(np.abs(g) < 10000)
     assert np.abs(dG) < 1000.0
-
 
     def binding_model(ff_params):
 
@@ -240,7 +212,8 @@ def test_relative_free_energy():
 
         for host_system, host_coords, host_box in [
             (complex_system, complex_coords, complex_box),
-            (solvent_system, solvent_coords, solvent_box)]:
+            (solvent_system, solvent_coords, solvent_box),
+        ]:
 
             # minimize the host to avoid clashes
             host_coords = minimizer.minimize_host_4d([mol_a], host_system, host_coords, ff, host_box)
@@ -257,22 +230,9 @@ def test_relative_free_energy():
             temperature = 300.0
             pressure = 1.0
 
-            integrator = LangevinIntegrator(
-                temperature,
-                1.5e-3,
-                1.0,
-                masses,
-                seed
-            )
+            integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
-            barostat = MonteCarloBarostat(
-                x0.shape[0],
-                pressure,
-                temperature,
-                group_idxs,
-                25,
-                seed
-            )
+            barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, 25, seed)
 
             model = estimator.FreeEnergyModel(
                 unbound_potentials,
@@ -284,7 +244,7 @@ def test_relative_free_energy():
                 lambda_schedule,
                 equil_steps,
                 prod_steps,
-                barostat
+                barostat,
             )
 
             dG, _ = estimator.deltaG(model, sys_params)
@@ -294,7 +254,7 @@ def test_relative_free_energy():
 
     # automatic chaining of vjps
     vg_fn = jax.value_and_grad(binding_model)
-    dG, ff_grads = vg_fn(ff_params) # dG and ff_params_grad
+    dG, ff_grads = vg_fn(ff_params)  # dG and ff_params_grad
     for g, h in zip(ff_grads, ff_handles):
         assert g.shape == h.params.shape
         assert np.all(np.abs(g) < 10000)
@@ -341,10 +301,11 @@ def assert_no_second_derivative(f, x):
         problem = e
     assert type(problem) == TypeError
 
+
 def assert_ff_optimizable(U, coords, sys_params, box, lam):
     """define a differentiable loss function in terms of U, assert it can be minimized,
     and return initial params, optimized params, and the loss function"""
-    
+
     nb_params = sys_params[-1]
     nb_params_shape = nb_params.shape
 
@@ -400,6 +361,7 @@ def test_functional():
 
         # check grad by comparison to forward finite-difference
         if precision == np.float64:
+
             def low_dim_f(perturb: float) -> float:
                 """low-dimensional input so that finite-difference isn't too expensive"""
 

@@ -109,9 +109,7 @@ def pose_dock(
 
         afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
 
-        ups, sys_params, masses, _ = afe.prepare_host_edge(
-            ff.get_ordered_params(), host_system, host_conf
-        )
+        ups, sys_params, masses, _ = afe.prepare_host_edge(ff.get_ordered_params(), host_system, host_conf)
 
         bps = []
         for up, sp in zip(ups, sys_params):
@@ -161,11 +159,7 @@ def pose_dock(
                 ]
             )
         else:
-            raise (
-                RuntimeError(
-                    'invalid `transition_type` (must be one of ["insertion", "deletion"])'
-                )
-            )
+            raise (RuntimeError('invalid `transition_type` (must be one of ["insertion", "deletion"])'))
 
         calc_work = True
 
@@ -173,15 +167,11 @@ def pose_dock(
         # collect a du_dl calculation every step
         subsample_du_dl_interval = 1
 
-        full_du_dls, _, _ = ctxt.multiple_steps(
-            new_lambda_schedule, subsample_du_dl_interval
-        )
+        full_du_dls, _, _ = ctxt.multiple_steps(new_lambda_schedule, subsample_du_dl_interval)
 
         step = len(new_lambda_schedule) - 1
         final_lamb = new_lambda_schedule[-1]
-        report.report_step(
-            ctxt, step, final_lamb, box, bps, impls, guest_name, n_steps, "pose_dock"
-        )
+        report.report_step(ctxt, step, final_lamb, box, bps, impls, guest_name, n_steps, "pose_dock")
         host_coords = ctxt.get_x_t()[: len(host_conf)] * 10
         guest_coords = ctxt.get_x_t()[len(host_conf) :] * 10
         report.write_frame(
@@ -206,9 +196,7 @@ def pose_dock(
             calc_work = False
 
         if calc_work:
-            work = np.trapz(
-                full_du_dls, new_lambda_schedule[::subsample_du_dl_interval]
-            )
+            work = np.trapz(full_du_dls, new_lambda_schedule[::subsample_du_dl_interval])
             print(f"guest_name: {guest_name}\twork: {work:.2f}")
         end_time = time.time()
         print(f"{guest_name} took {(end_time - start_time):.2f} seconds")
@@ -234,9 +222,7 @@ if __name__ == "__main__":
         default="tests/data/ligands_40.sdf",
         help="guests to pose",
     )
-    parser.add_argument(
-        "-t", "--transition_type", help="'insertion' or 'deletion'", default="insertion"
-    )
+    parser.add_argument("-t", "--transition_type", help="'insertion' or 'deletion'", default="insertion")
     parser.add_argument(
         "--n_steps",
         type=int,
@@ -258,9 +244,7 @@ if __name__ == "__main__":
             "(must be =1 for the work calculation to be applicable)"
         ),
     )
-    parser.add_argument(
-        "-o", "--outdir", default="pose_dock_outdir", help="where to write output"
-    )
+    parser.add_argument("-o", "--outdir", default="pose_dock_outdir", help="where to write output")
     parser.add_argument(
         "--random_rotation",
         action="store_true",

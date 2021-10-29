@@ -20,6 +20,7 @@ def get_harmonic_bond(n_atoms, n_bonds):
     lamb_offset = np.random.randint(-5, 5, size=n_bonds, dtype=np.int32)
     return potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset), params
 
+
 def get_harmonic_angle(n_atoms, n_bonds):
     atom_idxs = np.arange(n_atoms)
     params = np.random.rand(n_bonds, 2).astype(np.float64)
@@ -33,14 +34,14 @@ def get_harmonic_angle(n_atoms, n_bonds):
 
 
 def get_harmonic_restraints(n_atoms, n_restraints):
-    assert n_restraints*2 <= n_atoms
+    assert n_restraints * 2 <= n_atoms
     params = np.random.rand(n_restraints, 2).astype(np.float64)
     bond_idxs_src = []
     bond_idxs_dst = []
 
-    atom_idxs_src = np.arange(n_atoms//2)
-    atom_idxs_dst = np.arange(n_atoms//2) + n_atoms//2
-    
+    atom_idxs_src = np.arange(n_atoms // 2)
+    atom_idxs_dst = np.arange(n_atoms // 2) + n_atoms // 2
+
     bond_idxs_src = np.random.choice(atom_idxs_src, size=n_restraints, replace=False)
     bond_idxs_dst = np.random.choice(atom_idxs_dst, size=n_restraints, replace=False)
 
@@ -76,22 +77,9 @@ def test_free_energy_estimator():
     temperature = 300.0
     pressure = 1.0
 
-    integrator = LangevinIntegrator(
-        temperature,
-        1.5e-3,
-        1.0,
-        masses,
-        seed
-    )
+    integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
-    barostat = MonteCarloBarostat(
-        x0.shape[0],
-        pressure,
-        temperature,
-        group_idxs,
-        25,
-        seed
-    )
+    barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, 25, seed)
 
     beta = 0.125
 
@@ -113,18 +101,17 @@ def test_free_energy_estimator():
             100,
             100,
             beta,
-            "test"
+            "test",
         )
 
         dG, bar_dG_err, results = estimator_abfe.deltaG(mdl, sys_params)
 
-        return dG**2
-
+        return dG ** 2
 
     for client in [None, CUDAPoolClient(1)]:
-        
+
         value_and_grad_fn = jax.value_and_grad(loss_fn)
-        dG, sys_grad = value_and_grad_fn(sys_params) # run fwd, store result, and run bwd
+        dG, sys_grad = value_and_grad_fn(sys_params)  # run fwd, store result, and run bwd
 
         grad_fn = jax.grad(loss_fn)
         grad = grad_fn(sys_params)
@@ -168,22 +155,9 @@ def test_free_energy_estimator_with_endpoint_correction():
     temperature = 300.0
     pressure = 1.0
 
-    integrator = LangevinIntegrator(
-        temperature,
-        1.5e-3,
-        1.0,
-        masses,
-        seed
-    )
+    integrator = LangevinIntegrator(temperature, 1.5e-3, 1.0, masses, seed)
 
-    barostat = MonteCarloBarostat(
-        x0.shape[0],
-        pressure,
-        temperature,
-        group_idxs,
-        25,
-        seed
-    )
+    barostat = MonteCarloBarostat(x0.shape[0], pressure, temperature, group_idxs, 25, seed)
 
     beta = 0.125
 
@@ -205,18 +179,17 @@ def test_free_energy_estimator_with_endpoint_correction():
             100,
             100,
             beta,
-            "test"
+            "test",
         )
 
         dG, bar_dG_err, results = estimator_abfe.deltaG(mdl, sys_params)
 
-        return dG**2
-
+        return dG ** 2
 
     for client in [None, CUDAPoolClient(1)]:
-        
+
         value_and_grad_fn = jax.value_and_grad(loss_fn)
-        dG, sys_grad = value_and_grad_fn(sys_params) # run fwd, store result, and run bwd
+        dG, sys_grad = value_and_grad_fn(sys_params)  # run fwd, store result, and run bwd
 
         grad_fn = jax.grad(loss_fn)
         grad = grad_fn(sys_params)

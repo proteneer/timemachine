@@ -8,7 +8,8 @@ try:
     from scipy.optimize import root_scalar
 except ImportError as error:
     import scipy
-    print(f'scipy version is {scipy.__version__}, but `scipy.optimize.root_scalar` was added in 1.2')
+
+    print(f"scipy version is {scipy.__version__}, but `scipy.optimize.root_scalar` was added in 1.2")
     raise error
 
 
@@ -29,11 +30,14 @@ def _taylor_first_order(x: array, f_x: float, grad: array) -> callable:
 
 
 def truncated_step(
-        x: array, f_x: float, grad: array,
-        step_size: float = 0.1, search_direction: Optional[array] = None,
-        step_lower_bound: float = 0.0,
+    x: array,
+    f_x: float,
+    grad: array,
+    step_size: float = 0.1,
+    search_direction: Optional[array] = None,
+    step_lower_bound: float = 0.0,
 ):
-    """ Motivated by https://arxiv.org/abs/1903.08619 , use knowledge of a lower-bound on f_x
+    """Motivated by https://arxiv.org/abs/1903.08619 , use knowledge of a lower-bound on f_x
     to prevent from taking a step too large
 
     TODO: consider further damping?
@@ -71,8 +75,8 @@ def truncated_step(
 
     # default search direction: SGD
     if search_direction is None:
-        search_direction = - grad
-    assert (np.linalg.norm(search_direction) > 0) # if this vector is all zeros, doesn't make sense to proceed
+        search_direction = -grad
+    assert np.linalg.norm(search_direction) > 0  # if this vector is all zeros, doesn't make sense to proceed
 
     # default local surrogate model: linear
     f_prime = _taylor_first_order(x, f_x, grad)
@@ -105,7 +109,6 @@ def truncated_step(
     return x_increment
 
 
-
 # TODO: define more flexible update rules here, rather than update parameters
 step_sizes = {
     nonbonded.AM1CCCHandler: 1e-3,
@@ -132,4 +135,4 @@ def _clipped_update(gradient, step_size, clip_threshold):
 
     TODO: menu of other, fancier update functions
     """
-    return - np.clip(step_size * gradient, -clip_threshold, clip_threshold)
+    return -np.clip(step_size * gradient, -clip_threshold, clip_threshold)

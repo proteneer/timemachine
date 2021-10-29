@@ -5,9 +5,11 @@ import jax.numpy as np
 from jax import grad, jit
 from timemachine.potentials.jax_utils import delta_r, distance, convert_to_4d
 
+
 def step(x):
     # return (x > 0)
     return 1.0 * (x >= 0)
+
 
 def gbsa_obc(
     coords,
@@ -30,7 +32,8 @@ def gbsa_obc(
     surface_tension=28.3919551,
     solute_dielectric=1.0,
     solvent_dielectric=78.5,
-    probe_radius=0.14):
+    probe_radius=0.14,
+):
 
     box = None
 
@@ -50,7 +53,7 @@ def gbsa_obc(
 
     eye = np.eye(N, dtype=dij.dtype)
 
-    r = dij + eye # so I don't have divide-by-zero nonsense
+    r = dij + eye  # so I don't have divide-by-zero nonsense
     or1 = radii.reshape((N, 1)) - dielectric_offset
     or2 = radii.reshape((1, N)) - dielectric_offset
     sr2 = scales.reshape((1, N)) * or2
@@ -58,11 +61,10 @@ def gbsa_obc(
     L = np.maximum(or1, abs(r - sr2))
     U = r + sr2
 
-    I = 1 / L - 1 / U + 0.25 * (r - sr2 ** 2 / r) * (1 / (U ** 2) - 1 / (L ** 2)) + 0.5 * np.log(
-        L / U) / r
+    I = 1 / L - 1 / U + 0.25 * (r - sr2 ** 2 / r) * (1 / (U ** 2) - 1 / (L ** 2)) + 0.5 * np.log(L / U) / r
     # handle the interior case
-    I = np.where(or1 < (sr2 - r), I + 2*(1/or1 - 1/L), I)
-    I = step(r + sr2 - or1) * 0.5 * I # note the extra 0.5 here
+    I = np.where(or1 < (sr2 - r), I + 2 * (1 / or1 - 1 / L), I)
+    I = step(r + sr2 - or1) * 0.5 * I  # note the extra 0.5 here
     I -= np.diag(np.diag(I))
 
     # switch I only for now
@@ -97,10 +99,10 @@ def gbsa_obc(
     E += np.sum(-0.5 * (1 / solute_dielectric - 1 / solvent_dielectric) * charges ** 2 / B)
 
     # particle pair
-    f = np.sqrt(r ** 2 + np.outer(B, B) * np.exp(-r ** 2 / (4 * np.outer(B, B))))
+    f = np.sqrt(r ** 2 + np.outer(B, B) * np.exp(-(r ** 2) / (4 * np.outer(B, B))))
     charge_products = np.outer(charges, charges)
 
-    ixns = - (1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
+    ixns = -(1 / solute_dielectric - 1 / solvent_dielectric) * charge_products / f
 
     # sw = np.power(np.cos((np.pi*dij)/(2*cutoff_radii)), 2)
     # ixns = ixns*sw

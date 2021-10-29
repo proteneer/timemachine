@@ -53,6 +53,7 @@ class CompareDistNonterminal(rdFMCS.MCSAtomCompare):
         else:
             return True
 
+
 def mcs_map(a, b, threshold: float = 0.5, timeout: int = 5, smarts: Optional[str] = None):
     """Find the MCS map of going from A to B"""
     params = rdFMCS.MCSParameters()
@@ -68,17 +69,17 @@ def mcs_map(a, b, threshold: float = 0.5, timeout: int = 5, smarts: Optional[str
 
 def transformation_size(n_A, n_B, n_MCS):
     """Heuristic size of transformation in terms of
-	the number of atoms in A, B, and MCS(A, B)
+        the number of atoms in A, B, and MCS(A, B)
 
     Notes
     -----
     * YTZ suggests (2021/01/26)
         (n_A + n_B) - n_MCS
-	which is size-extensive
+        which is size-extensive
 
     * JF modified (2021/01/27)
         (n_A - n_MCS) + (n_B - n_MCS)
-	which is 0 when A = B
+        which is 0 when A = B
 
     * Alternatives considered but not tried:
         * min(n_A, n_B) - n_MCS
@@ -201,12 +202,12 @@ def _assert_core_reasonableness(mol_a, mol_b, core):
     # TODO move any useful run-time assertions from this script into tests/
 
     # bounds
-    assert (max(core[:, 0]) < mol_a.GetNumAtoms())
-    assert (max(core[:, 1]) < mol_b.GetNumAtoms())
+    assert max(core[:, 0]) < mol_a.GetNumAtoms()
+    assert max(core[:, 1]) < mol_b.GetNumAtoms()
 
     # uniqueness
-    assert (len(set(core[:, 0])) == len(core))
-    assert (len(set(core[:, 1])) == len(core))
+    assert len(set(core[:, 0])) == len(core)
+    assert len(set(core[:, 1])) == len(core)
 
 
 def get_core_by_matching(mol_a, mol_b, threshold=1.0):
@@ -245,6 +246,7 @@ def get_core_by_smarts(mol_a, mol_b, core_smarts):
 
 # 3.1. Define a custom maximum common substructure search method
 
+
 def _identify_hub(transformation_sizes):
     return int(np.argmin(transformation_sizes.sum(0)))
 
@@ -265,8 +267,8 @@ def get_star_map(mols, threshold: float = 0.5):
 
 def plot_transformation_sizes(transformation_sizes):
     plt.imshow(transformation_sizes)
-    plt.xlabel('molecule index')
-    plt.ylabel('molecule index')
+    plt.xlabel("molecule index")
+    plt.ylabel("molecule index")
     plt.title('"size of transformation"\n$(n_A - n_{MCS}) + (n_B - n_{MCS})$')
 
     plt.tight_layout()

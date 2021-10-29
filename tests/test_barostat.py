@@ -27,8 +27,9 @@ from functools import partial
 
 from timemachine.constants import BOLTZ, ENERGY_UNIT, DISTANCE_UNIT
 
+
 def test_barostat_zero_interval():
-    pressure = 1. * unit.atmosphere
+    pressure = 1.0 * unit.atmosphere
     temperature = 300.0 * unit.kelvin
     initial_waterbox_width = 2.5 * unit.nanometer
     barostat_interval = 0
@@ -38,7 +39,8 @@ def test_barostat_zero_interval():
     mol_a = hif2a_ligand_pair.mol_a
     ff = hif2a_ligand_pair.ff
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer))
+        initial_waterbox_width.value_in_unit(unit.nanometer)
+    )
 
     afe = AbsoluteFreeEnergy(mol_a, ff)
 
@@ -69,7 +71,7 @@ def test_barostat_zero_interval():
             group_indices,
             0,
             u_impls,
-            seed
+            seed,
         )
     # Setting it to 1 should be valid.
     baro = custom_ops.MonteCarloBarostat(
@@ -79,11 +81,12 @@ def test_barostat_zero_interval():
         group_indices,
         1,
         u_impls,
-        seed
+        seed,
     )
     # Setting back to 0 should raise another error
     with pytest.raises(RuntimeError):
         baro.set_interval(0)
+
 
 def get_platform_version() -> str:
     release_path = "/etc/os-release"
@@ -109,11 +112,12 @@ def test_barostat_partial_group_idxs():
     seed = 2021
     np.random.seed(seed)
 
-    pressure = 1. * unit.atmosphere
+    pressure = 1.0 * unit.atmosphere
     mol_a = hif2a_ligand_pair.mol_a
     ff = hif2a_ligand_pair.ff
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer))
+        initial_waterbox_width.value_in_unit(unit.nanometer)
+    )
 
     min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
     afe = AbsoluteFreeEnergy(mol_a, ff)
@@ -128,7 +132,7 @@ def test_barostat_partial_group_idxs():
     group_indices = get_group_indices(bond_list)
 
     # Cut the number of groups in half
-    group_indices = group_indices[len(group_indices)//2:]
+    group_indices = group_indices[len(group_indices) // 2 :]
     lam = 1.0
 
     bound_potentials = []
@@ -144,9 +148,9 @@ def test_barostat_partial_group_idxs():
     integrator = LangevinIntegrator(
         temperature.value_in_unit(unit.kelvin),
         timestep.value_in_unit(unit.picosecond),
-        collision_rate.value_in_unit(unit.picosecond**-1),
+        collision_rate.value_in_unit(unit.picosecond ** -1),
         masses,
-        seed
+        seed,
     )
     integrator_impl = integrator.impl()
 
@@ -159,11 +163,11 @@ def test_barostat_partial_group_idxs():
         group_indices,
         barostat_interval,
         u_impls,
-        seed
+        seed,
     )
 
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
-    ctxt.multiple_steps(np.ones(1000)*lam)
+    ctxt.multiple_steps(np.ones(1000) * lam)
 
 
 def test_barostat_is_deterministic():
@@ -184,19 +188,22 @@ def test_barostat_is_deterministic():
     # OpenEye's AM1 Charging values are OS platform dependent. To ensure that we have deterministic values
     # we check against our two most common OS versions, Ubuntu 18.04 and 20.04.
     box_vol = 26.711716908713402
-    lig_charge_vals = np.array([1.4572377542719206, -0.37011462071257184, 1.1478267014520305, -4.920166483601927, 0.16985194917937935])
+    lig_charge_vals = np.array(
+        [1.4572377542719206, -0.37011462071257184, 1.1478267014520305, -4.920166483601927, 0.16985194917937935]
+    )
     if "ubuntu" not in platform_version:
         print(f"Test expected to run under ubuntu 20.04 or 18.04, got {platform_version}")
     if "20.04" in platform_version:
         box_vol = 26.869380588831582
         lig_charge_vals[3] = -4.920284514559682
 
-    pressure = 1. * unit.atmosphere
+    pressure = 1.0 * unit.atmosphere
 
     mol_a = hif2a_ligand_pair.mol_a
     ff = hif2a_ligand_pair.ff
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer))
+        initial_waterbox_width.value_in_unit(unit.nanometer)
+    )
 
     min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
     afe = AbsoluteFreeEnergy(mol_a, ff)
@@ -212,7 +219,7 @@ def test_barostat_is_deterministic():
 
     u_impls = []
     # Look at the first five atoms and their assigned charges
-    ligand_charges = sys_params[-1][:, 0][len(min_complex_coords):][:5]
+    ligand_charges = sys_params[-1][:, 0][len(min_complex_coords) :][:5]
     np.testing.assert_array_almost_equal(lig_charge_vals, ligand_charges, decimal=5)
     for params, unbound_pot in zip(sys_params, unbound_potentials):
         bp = unbound_pot.bind(np.asarray(params))
@@ -222,9 +229,9 @@ def test_barostat_is_deterministic():
     integrator = LangevinIntegrator(
         temperature.value_in_unit(unit.kelvin),
         timestep.value_in_unit(unit.picosecond),
-        collision_rate.value_in_unit(unit.picosecond**-1),
+        collision_rate.value_in_unit(unit.picosecond ** -1),
         masses,
-        seed
+        seed,
     )
     integrator_impl = integrator.impl()
 
@@ -237,11 +244,11 @@ def test_barostat_is_deterministic():
         group_indices,
         barostat_interval,
         u_impls,
-        seed
+        seed,
     )
 
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
-    ctxt.multiple_steps(np.ones(1000)*lam)
+    ctxt.multiple_steps(np.ones(1000) * lam)
     atm_box = ctxt.get_box()
     np.testing.assert_almost_equal(compute_box_volume(atm_box), box_vol, decimal=5)
 
@@ -256,11 +263,12 @@ def test_barostat_varying_pressure():
     np.random.seed(seed)
 
     # Start out with a very large pressure
-    pressure = 1000. * unit.atmosphere
+    pressure = 1000.0 * unit.atmosphere
     mol_a = hif2a_ligand_pair.mol_a
     ff = hif2a_ligand_pair.ff
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer))
+        initial_waterbox_width.value_in_unit(unit.nanometer)
+    )
 
     min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
     afe = AbsoluteFreeEnergy(mol_a, ff)
@@ -285,9 +293,9 @@ def test_barostat_varying_pressure():
     integrator = LangevinIntegrator(
         temperature.value_in_unit(unit.kelvin),
         timestep.value_in_unit(unit.picosecond),
-        collision_rate.value_in_unit(unit.picosecond**-1),
+        collision_rate.value_in_unit(unit.picosecond ** -1),
         masses,
-        seed
+        seed,
     )
     integrator_impl = integrator.impl()
 
@@ -300,11 +308,11 @@ def test_barostat_varying_pressure():
         group_indices,
         barostat_interval,
         u_impls,
-        seed
+        seed,
     )
 
     ctxt = custom_ops.Context(coords, v_0, complex_box, integrator_impl, u_impls, barostat=baro)
-    ctxt.multiple_steps(np.ones(1000)*lam)
+    ctxt.multiple_steps(np.ones(1000) * lam)
     ten_atm_box = ctxt.get_box()
     ten_atm_box_vol = compute_box_volume(ten_atm_box)
     # Expect the box to shrink thanks to the barostat
@@ -315,10 +323,11 @@ def test_barostat_varying_pressure():
     # Changing the barostat interval resets the barostat step.
     baro.set_interval(2)
 
-    ctxt.multiple_steps(np.ones(2000)*lam)
+    ctxt.multiple_steps(np.ones(2000) * lam)
     atm_box = ctxt.get_box()
     # Box will grow thanks to the lower pressure
     assert compute_box_volume(atm_box) > ten_atm_box_vol
+
 
 def test_molecular_ideal_gas():
     """
@@ -340,14 +349,15 @@ def test_molecular_ideal_gas():
 
     # thermodynamic parameters
     temperatures = np.array([300, 600, 1000]) * unit.kelvin
-    pressure = 100. * unit.bar # very high pressure, to keep the expected volume small
+    pressure = 100.0 * unit.bar  # very high pressure, to keep the expected volume small
 
     # generate an alchemical system of a waterbox + alchemical ligand:
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
     mol_a = hif2a_ligand_pair.mol_a
     ff = hif2a_ligand_pair.ff
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer))
+        initial_waterbox_width.value_in_unit(unit.nanometer)
+    )
 
     min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
     afe = AbsoluteFreeEnergy(mol_a, ff)
@@ -389,16 +399,15 @@ def test_molecular_ideal_gas():
     pressure_in_md = (pressure * unit.AVOGADRO_CONSTANT_NA).value_in_unit(md_pressure_unit)
     expected_volume_in_md = (n_molecules + 1) * BOLTZ * temperatures.value_in_unit(unit.kelvin) / pressure_in_md
 
-
     for i, temperature in enumerate(temperatures):
 
         # define a thermostat
         integrator = LangevinIntegrator(
             temperature.value_in_unit(unit.kelvin),
             timestep.value_in_unit(unit.picosecond),
-            collision_rate.value_in_unit(unit.picosecond**-1),
+            collision_rate.value_in_unit(unit.picosecond ** -1),
             masses,
-            seed
+            seed,
         )
         integrator_impl = integrator.impl()
 
@@ -408,7 +417,9 @@ def test_molecular_ideal_gas():
         rescaler = CentroidRescaler(group_indices)
         initial_volume = compute_box_volume(complex_box)
         initial_center = compute_box_center(complex_box)
-        length_scale = ((1 + initial_relative_box_perturbation) * expected_volume_in_md[i] / initial_volume) ** (1. / 3)
+        length_scale = ((1 + initial_relative_box_perturbation) * expected_volume_in_md[i] / initial_volume) ** (
+            1.0 / 3
+        )
         new_coords = rescaler.scale_centroids(coords, initial_center, length_scale)
         new_box = complex_box * length_scale
 
@@ -419,7 +430,7 @@ def test_molecular_ideal_gas():
             group_indices,
             barostat_interval,
             u_impls,
-            seed
+            seed,
         )
 
         ctxt = custom_ops.Context(new_coords, v_0, new_box, integrator_impl, u_impls, barostat=baro)

@@ -1,4 +1,6 @@
-from jax.config import config; config.update("jax_enable_x64", True)
+from jax.config import config
+
+config.update("jax_enable_x64", True)
 import jax
 
 import copy
@@ -20,8 +22,8 @@ from fe.utils import get_romol_conf
 def setup_system():
 
     root = Path(__file__).parent.parent
-    path_to_ligand = str(root.joinpath('tests/data/ligands_40.sdf'))
-    path_to_ff = str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py'))
+    path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))
+    path_to_ff = str(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py"))
 
     with open(path_to_ff) as f:
         ff_handlers = deserialize_handlers(f.read())
@@ -30,7 +32,6 @@ def setup_system():
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
     all_mols = [x for x in suppl]
     mol_a = copy.deepcopy(all_mols[1])
-
 
     # test identity transformation
     # mol_a, _, _, forcefield = relative.hif2a_ligand_pair
@@ -43,22 +44,22 @@ def setup_system():
     bond_params_b, bond_idxs_b = forcefield.hb_handle.parameterize(mol_b)
     angle_params_b, angle_idxs_b = forcefield.ha_handle.parameterize(mol_b)
 
-    box = np.eye(3)*100.0
+    box = np.eye(3) * 100.0
 
     bond_fn = functools.partial(
         bonded.harmonic_bond,
-        bond_idxs=np.concatenate([bond_idxs_a, bond_idxs_b+mol_a.GetNumAtoms()]),
+        bond_idxs=np.concatenate([bond_idxs_a, bond_idxs_b + mol_a.GetNumAtoms()]),
         params=np.concatenate([bond_params_a, bond_params_b]),
         box=box,
-        lamb=None
+        lamb=None,
     )
 
     angle_fn = functools.partial(
         bonded.harmonic_angle,
-        angle_idxs=np.concatenate([angle_idxs_a, angle_idxs_b+mol_a.GetNumAtoms()]),
+        angle_idxs=np.concatenate([angle_idxs_a, angle_idxs_b + mol_a.GetNumAtoms()]),
         params=np.concatenate([angle_params_a, angle_params_b]),
         box=box,
-        lamb=None
+        lamb=None,
     )
 
     core_idxs = []
@@ -74,13 +75,7 @@ def setup_system():
     core_idxs = np.array(core_idxs, dtype=np.int32)
     core_params = np.array(core_params, dtype=np.float64)
 
-    core_restr = functools.partial(
-        bonded.harmonic_bond,
-        bond_idxs=core_idxs,
-        params=core_params,
-        box=box,
-        lamb=None
-    )
+    core_restr = functools.partial(bonded.harmonic_bond, bond_idxs=core_idxs, params=core_params, box=box, lamb=None)
 
     # left hand state has intractable restraints turned on.
     def u_lhs_fn(x_t):
@@ -121,25 +116,19 @@ def test_endpoint_correction():
     # this PR tests that endpoint correction for two molecules generates a correct, overlapping distribution.
     u_lhs_fn, u_rhs_fn, core_idxs, core_params, mol_a, mol_b = setup_system()
 
-    combined_mass = np.concatenate([
-        [a.GetMass() for a in mol_a.GetAtoms()],
-        [b.GetMass() for b in mol_b.GetAtoms()]
-    ])
+    combined_mass = np.concatenate([[a.GetMass() for a in mol_a.GetAtoms()], [b.GetMass() for b in mol_b.GetAtoms()]])
 
-    combined_conf = np.concatenate([
-        get_romol_conf(mol_a),
-        get_romol_conf(mol_b)
-    ])
+    combined_conf = np.concatenate([get_romol_conf(mol_a), get_romol_conf(mol_b)])
 
     dt = 1.5e-3
     friction = 1.0
 
     temperature = 300.0
 
-    beta = 1/(constants.BOLTZ*temperature)
+    beta = 1 / (constants.BOLTZ * temperature)
 
     ca, cb, cc = langevin_coefficients(temperature, dt, friction, combined_mass)
-    cb = -1*np.expand_dims(cb, axis=-1)
+    cb = -1 * np.expand_dims(cb, axis=-1)
     cc = np.expand_dims(cc, axis=-1)
 
     x_t = combined_conf
@@ -149,7 +138,6 @@ def test_endpoint_correction():
     equilibrium_steps = 5000
     sampling_frequency = 100
 
-
     # n_steps = 5000
     # equilibrium_steps = 500
     # sampling_frequency = 100
@@ -158,8 +146,8 @@ def test_endpoint_correction():
     lhs_du_dx_fn = jax.jit(jax.grad(u_lhs_fn))
     for step in range(n_steps):
         du_dx = lhs_du_dx_fn(x_t)
-        v_t = ca*v_t + cb*du_dx + cc*np.random.normal(size=x_t.shape)
-        x_t = x_t + v_t*dt
+        v_t = ca * v_t + cb * du_dx + cc * np.random.normal(size=x_t.shape)
+        x_t = x_t + v_t * dt
         if step % sampling_frequency == 0 and step > equilibrium_steps:
             lhs_xs.append(x_t)
 
@@ -171,8 +159,8 @@ def test_endpoint_correction():
     rhs_du_dx_fn = jax.jit(jax.grad(u_rhs_fn))
     for step in range(n_steps):
         du_dx = rhs_du_dx_fn(x_t)
-        v_t = ca*v_t + cb*du_dx + cc*np.random.normal(size=x_t.shape)
-        x_t = x_t + v_t*dt
+        v_t = ca * v_t + cb * du_dx + cc * np.random.normal(size=x_t.shape)
+        x_t = x_t + v_t * dt
         if step % sampling_frequency == 0 and step > equilibrium_steps:
             rhs_xs.append(x_t)
 
@@ -185,13 +173,7 @@ def test_endpoint_correction():
     for k_rotation in [0.0, 50.0, 1000.0]:
 
         lhs_du, rhs_du, rotations, translations = endpoint_correction.estimate_delta_us(
-            k_translation,
-            k_rotation,
-            core_idxs,
-            core_params,
-            beta,
-            lhs_xs,
-            rhs_xs
+            k_translation, k_rotation, core_idxs, core_params, beta, lhs_xs, rhs_xs
         )
 
         overlap = endpoint_correction.overlap_from_cdf(lhs_du, rhs_du)
@@ -207,8 +189,7 @@ def test_endpoint_correction():
     # assert overlaps[3] > 0.45
     # assert overlaps[-1] < 0.2
 
-        # print(k_rotation, overlap)
-
+    # print(k_rotation, overlap)
 
     # print("trial", trial, "lhs amin amax", np.amin(lhs_du), np.amax(lhs_du))
     # print("trial", trial, "rhs amin amax", np.amin(rhs_du), np.amax(rhs_du))

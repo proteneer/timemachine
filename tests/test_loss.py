@@ -1,5 +1,6 @@
 import numpy as np
 from fe.loss import l1_loss, pseudo_huber_loss, flat_bottom_loss, truncated_residuals
+
 np.random.seed(2021)
 
 
@@ -41,16 +42,13 @@ def _scalar_truncated_residual(prediction, label, reliable_interval):
     elif label > upper:
         residual = min(0, prediction - upper)
     else:
-        raise (RuntimeError('unsatisfiable reliable_range'))
+        raise (RuntimeError("unsatisfiable reliable_range"))
 
     return residual
 
 
 def assert_consistency_with_scalar_version(predictions, labels, reliable_interval):
-    ref = np.array([
-        _scalar_truncated_residual(p, l, reliable_interval)
-        for (p, l) in zip(predictions, labels)
-    ])
+    ref = np.array([_scalar_truncated_residual(p, l, reliable_interval) for (p, l) in zip(predictions, labels)])
 
     test = truncated_residuals(predictions, labels, reliable_interval)
 

@@ -11,7 +11,9 @@ from md.barostat.moves import MonteCarloBarostat
 from md.barostat.utils import compute_box_volume
 
 
-def simulate_npt_traj(thermostat: UnadjustedLangevinMove, barostat: MonteCarloBarostat, initial_state: CoordsVelBox, n_moves=1000) -> Tuple[List[CoordsVelBox], Dict]:
+def simulate_npt_traj(
+    thermostat: UnadjustedLangevinMove, barostat: MonteCarloBarostat, initial_state: CoordsVelBox, n_moves=1000
+) -> Tuple[List[CoordsVelBox], Dict]:
     barostat.reset()
 
     # alternate between thermostat moves and barostat moves

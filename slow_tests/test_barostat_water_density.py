@@ -25,7 +25,7 @@ from timemachine.lib import LangevinIntegrator
 from functools import partial
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # simulation parameters
     n_replicates = 10
     initial_waterbox_width = 3.0 * unit.nanometer
@@ -43,7 +43,8 @@ if __name__ == '__main__':
     # effectively discard ligands by running in AbsoluteFreeEnergy mode at lambda = 1.0
     mol_a, _, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
     complex_system, complex_coords, complex_box, complex_top = build_water_system(
-        initial_waterbox_width.value_in_unit(unit.nanometer))
+        initial_waterbox_width.value_in_unit(unit.nanometer)
+    )
 
     min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
     afe = AbsoluteFreeEnergy(mol_a, ff)
@@ -60,12 +61,11 @@ if __name__ == '__main__':
     integrator = LangevinIntegrator(
         temperature.value_in_unit(unit.kelvin),
         timestep.value_in_unit(unit.picosecond),
-        collision_rate.value_in_unit(unit.picosecond**-1),
+        collision_rate.value_in_unit(unit.picosecond ** -1),
         masses,
-        seed
+        seed,
     )
     integrator_impl = integrator.impl()
-
 
     def reduced_potential_fxn(x, box, lam):
         u, du_dx = ensemble.reduced_potential_and_gradient(x, box, lam)
@@ -83,7 +83,9 @@ if __name__ == '__main__':
     lambdas = np.ones(n_replicates)
 
     for lam in lambdas:
-        thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=barostat_interval)
+        thermostat = UnadjustedLangevinMove(
+            integrator_impl, potential_energy_model.all_impls, lam, n_steps=barostat_interval
+        )
         barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
 
         v_0 = sample_velocities(masses * unit.amu, temperature)
@@ -92,7 +94,7 @@ if __name__ == '__main__':
         traj, extras = simulate_npt_traj(thermostat, barostat, initial_state, n_moves=n_moves)
 
         trajs.append(traj)
-        volume_trajs.append(extras['volume_traj'])
+        volume_trajs.append(extras["volume_traj"])
 
     equil_time = n_moves // 2  # TODO: don't hard-code this?
     final_volumes = np.array([np.mean(volume_traj[equil_time:]) for volume_traj in volume_trajs])

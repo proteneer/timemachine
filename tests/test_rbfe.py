@@ -14,10 +14,11 @@ NUM_GPUS = get_gpu_count()
 
 
 class TestRBFEModel(TestCase):
-
     def test_predict(self):
         """Just to verify that we can handle the most basic RBFE prediction"""
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(os.path.join(DATA_DIR, "hif2a_nowater_min.pdb"))
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+            os.path.join(DATA_DIR, "hif2a_nowater_min.pdb")
+        )
 
         # build the water system
         solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
@@ -50,7 +51,9 @@ class TestRBFEModel(TestCase):
 
     def test_pre_equilibration(self):
         """Verify that equilibration of edges up front functions as expected"""
-        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(os.path.join(DATA_DIR, "hif2a_nowater_min.pdb"))
+        complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+            os.path.join(DATA_DIR, "hif2a_nowater_min.pdb")
+        )
 
         # build the water system
         solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)

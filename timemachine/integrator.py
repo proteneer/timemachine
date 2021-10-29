@@ -2,11 +2,7 @@ from timemachine.constants import BOLTZ
 import numpy as np
 
 
-def langevin_coefficients(
-    temperature,
-    dt,
-    friction,
-    masses):
+def langevin_coefficients(temperature, dt, friction, masses):
     """
     Compute coefficients for langevin dynamics
 
@@ -47,7 +43,6 @@ def langevin_coefficients(
 
 
 class Integrator:
-
     def step(self, x, v):
         """Return copies x and v, updated by a single timestep"""
         raise NotImplementedError

@@ -5,8 +5,8 @@ from timemachine.integrator import langevin_coefficients
 
 # safe to pickle!
 
-class LangevinIntegrator():
 
+class LangevinIntegrator:
     def __init__(self, temperature, dt, friction, masses, seed):
 
         self.dt = dt
@@ -22,7 +22,7 @@ class LangevinIntegrator():
         return custom_ops.LangevinIntegrator(self.dt, self.ca, self.cbs, self.ccs, self.seed)
 
 
-class MonteCarloBarostat():
+class MonteCarloBarostat:
 
     __slots__ = ("N", "temperature", "pressure", "group_idxs", "interval", "seed")
 
@@ -35,4 +35,6 @@ class MonteCarloBarostat():
         self.seed = seed
 
     def impl(self, bound_potentials):
-        return custom_ops.MonteCarloBarostat(self.N, self.pressure, self.temperature, self.group_idxs, self.interval, bound_potentials, self.seed)
+        return custom_ops.MonteCarloBarostat(
+            self.N, self.pressure, self.temperature, self.group_idxs, self.interval, bound_potentials, self.seed
+        )

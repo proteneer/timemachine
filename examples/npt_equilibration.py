@@ -44,7 +44,8 @@ lambdas = construct_lambda_schedule(n_lambdas)
 # build a pair of alchemical ligands in a water box
 mol_a, mol_b, core, ff = hif2a_ligand_pair.mol_a, hif2a_ligand_pair.mol_b, hif2a_ligand_pair.core, hif2a_ligand_pair.ff
 complex_system, complex_coords, complex_box, complex_top = build_water_system(
-    initial_waterbox_width.value_in_unit(unit.nanometer))
+    initial_waterbox_width.value_in_unit(unit.nanometer)
+)
 
 min_complex_coords = minimize_host_4d([mol_a], complex_system, complex_coords, ff, complex_box)
 afe = AbsoluteFreeEnergy(mol_a, ff)
@@ -61,9 +62,9 @@ ensemble = NPTEnsemble(potential_energy_model, temperature, pressure)
 integrator = LangevinIntegrator(
     temperature.value_in_unit(unit.kelvin),
     timestep.value_in_unit(unit.picosecond),
-    collision_rate.value_in_unit(unit.picosecond**-1),
+    collision_rate.value_in_unit(unit.picosecond ** -1),
     masses,
-    seed
+    seed,
 )
 integrator_impl = integrator.impl()
 
@@ -75,14 +76,14 @@ def reduced_potential_fxn(x, box, lam):
 
 def plot_volume_trajs(volume_trajs):
     n_trajs = len(volume_trajs)
-    cmap = plt.get_cmap('viridis')
-    colors = cmap.colors[::len(cmap.colors) // n_trajs][:n_trajs]
+    cmap = plt.get_cmap("viridis")
+    colors = cmap.colors[:: len(cmap.colors) // n_trajs][:n_trajs]
 
     for i, volume_traj in enumerate(volume_trajs):
         plt.plot(volume_traj, color=colors[i])
-    plt.xlabel('# moves')
-    plt.ylabel('volume (nm$^3$)')
-    plt.savefig('volume_traj.png', dpi=300, bbox_inches='tight')
+    plt.xlabel("# moves")
+    plt.ylabel("volume (nm$^3$)")
+    plt.savefig("volume_traj.png", dpi=300, bbox_inches="tight")
     plt.close()
 
 
@@ -96,13 +97,13 @@ def plot_density(volume_trajs):
     density = n_molecules * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
 
     plt.scatter(lambdas, density.value_in_unit(unit.kilogram / unit.liter))
-    plt.xlabel('$\lambda$')
-    plt.ylabel('density (kg/L)')
-    plt.savefig('density_vs_lambda.png', dpi=300, bbox_inches='tight')
+    plt.xlabel("$\lambda$")
+    plt.ylabel("density (kg/L)")
+    plt.savefig("density_vs_lambda.png", dpi=300, bbox_inches="tight")
     plt.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     # get list of molecules for barostat by looking at bond table
     harmonic_bond_potential = unbound_potentials[0]
@@ -113,7 +114,9 @@ if __name__ == '__main__':
     trajs = []
     volume_trajs = []
     for lam in lambdas:
-        thermostat = UnadjustedLangevinMove(integrator_impl, potential_energy_model.all_impls, lam, n_steps=barostat_interval)
+        thermostat = UnadjustedLangevinMove(
+            integrator_impl, potential_energy_model.all_impls, lam, n_steps=barostat_interval
+        )
         barostat = MonteCarloBarostat(partial(reduced_potential_fxn, lam=lam), group_indices, max_delta_volume=3.0)
 
         v_0 = sample_velocities(masses * unit.amu, temperature)
@@ -122,7 +125,7 @@ if __name__ == '__main__':
         traj, extras = simulate_npt_traj(thermostat, barostat, initial_state, n_moves=n_moves)
 
         trajs.append(traj)
-        volume_trajs.append(extras['volume_traj'])
+        volume_trajs.append(extras["volume_traj"])
 
     # plot volume equilibration, final densities
     plot_volume_trajs(volume_trajs)

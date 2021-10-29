@@ -8,7 +8,6 @@ from testsystems.relative import hif2a_ligand_pair
 
 
 class TestDataset(unittest.TestCase):
-
     def test_split(self):
         ds = Dataset(list(range(100)))
         count = len(ds)
@@ -42,12 +41,11 @@ class TestDataset(unittest.TestCase):
             self.assertAlmostEqual(len(lhs) / count, frac)
             self.assertAlmostEqual(len(rhs) / count, 1.0 - frac)
             if len(lhs) and len(rhs):
-                self.assertNotEqual(lhs.data, ds.data[:len(lhs)])
+                self.assertNotEqual(lhs.data, ds.data[: len(lhs)])
                 self.assertNotEqual(rhs.data[0], ds.data[len(lhs)])
         # Verify that original dataset didn't get shuffled in the process
         for i in range(count):
             self.assertEqual(ds.data[i], i)
-
 
     def test_indices_split(self):
         indices = list(range(100))

@@ -57,8 +57,8 @@ NUM_GPUS = get_gpu_count()
 #   and a "training configuration"
 #       (which describes the overall training loop)
 Configuration = namedtuple(
-    'Configuration',
-    ['num_complex_windows', 'num_solvent_windows', 'num_equil_steps', 'num_prod_steps'])
+    "Configuration", ["num_complex_windows", "num_solvent_windows", "num_equil_steps", "num_prod_steps"]
+)
 
 # define a couple configurations: one for quick tests, and one for production
 production_configuration = Configuration(
@@ -88,7 +88,7 @@ root = Path(timemachine.__file__).parent.parent
 
 
 def _save_forcefield(fname, ff_params):
-    with open(fname, 'w') as fh:
+    with open(fname, "w") as fh:
         fh.write(ff_params)
 
 
@@ -154,6 +154,7 @@ def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
     loss = jnp.mean(loss)
     return loss, (cycle_corrected_rbfes, all_results)
 
+
 def run_validation_edges(validation: Dataset, params, systems, epoch, inference: bool = False):
     if len(validation) <= 0:
         return
@@ -174,10 +175,8 @@ def run_validation_edges(validation: Dataset, params, systems, epoch, inference:
         du_dls_dict = {stage: _results_to_arrays(results)[1] for stage, results in stage_results}
         np.savez(output_path.joinpath(f"validation_du_dls_snapshot_{epoch}_{i}.npz"), **du_dls_dict)
         val_loss[i] = loss
-    np.savez(
-        output_path.joinpath(f"validation_edge_losses_{epoch}.npz"),
-        loss=val_loss
-    )
+    np.savez(output_path.joinpath(f"validation_edge_losses_{epoch}.npz"), loss=val_loss)
+
 
 def equilibrate_edges(datasets: List[Dataset], systems: List[Dict[str, Any]], num_steps: int, cache_path: str):
     model_set = defaultdict(list)
@@ -189,33 +188,47 @@ def equilibrate_edges(datasets: List[Dataset], systems: List[Dict[str, Any]], nu
                 model_set[protein_path].append(rfe)
     for path, edges in model_set.items():
         model = systems[path]
-        model.equilibrate_edges([(edge.mol_a, edge.mol_b, edge.core) for edge in edges], equilibration_steps=num_steps, cache_path=cache_path)
+        model.equilibrate_edges(
+            [(edge.mol_a, edge.mol_b, edge.core) for edge in edges],
+            equilibration_steps=num_steps,
+            cache_path=cache_path,
+        )
 
 
 if __name__ == "__main__":
     default_output_path = f"results_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}"
     parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
-    parser.add_argument("--num_gpus", default=None, type=int,
-                        help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided")
+    parser.add_argument(
+        "--num_gpus",
+        default=None,
+        type=int,
+        help=f"Number of GPUs to run against, defaults to {NUM_GPUS} if no hosts provided",
+    )
     parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
     parser.add_argument("--param_updates", default=1000, type=int, help="Number of updates for parameters")
     parser.add_argument("--seed", default=2021, type=int, help="Seed for shuffling ordering of transformations")
     parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
     parser.add_argument("--batch_size", default=1, type=int, help="Number of items to batch together for training")
 
-    parser.add_argument("--path_to_ff", default=str(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py')))
-    parser.add_argument("--path_to_edges", default=["relative_transformations.pkl"], nargs="+",
-                        help="Path to pickle file containing list of RelativeFreeEnergy objects")
+    parser.add_argument("--path_to_ff", default=str(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py")))
+    parser.add_argument(
+        "--path_to_edges",
+        default=["relative_transformations.pkl"],
+        nargs="+",
+        help="Path to pickle file containing list of RelativeFreeEnergy objects",
+    )
     parser.add_argument("--split", action="store_true", help="Split edges into train and validation set")
     parser.add_argument(
         "--pre_equil",
         default=None,
-        help="Number of pre equilibration steps or path to cached equilibrated edges, if not provided no pre equilibration performed"
+        help="Number of pre equilibration steps or path to cached equilibrated edges, if not provided no pre equilibration performed",
     )
     parser.add_argument("--hmr", action="store_true", help="Enable HMR")
     parser.add_argument("--output_path", default=default_output_path, help="Path to output directory")
     parser.add_argument("--protein_path", default=None, help="Path to protein if edges don't provide protein")
-    parser.add_argument("--inference_only", action="store_true", help="Disable training, run all edges as validation edges")
+    parser.add_argument(
+        "--inference_only", action="store_true", help="Disable training, run all edges as validation edges"
+    )
     # TODO: also make configurable: forces_to_refit, optimizer params, path_to_protein, path_to_protein_ff, ...
     args = parser.parse_args()
     protein_path = None
@@ -255,7 +268,6 @@ if __name__ == "__main__":
         client = GRPCClient(hosts=args.hosts)
     client.verify()
 
-
     # load and construct forcefield
     with open(args.path_to_ff) as f:
         ff_handlers = deserialize_handlers(f.read())
@@ -279,7 +291,7 @@ if __name__ == "__main__":
     # create path if it doesn't exist
     output_path = Path(args.output_path)
     output_path.mkdir(parents=True, exist_ok=True)
-    print(f'Storing results in {output_path}')
+    print(f"Storing results in {output_path}")
 
     dataset = Dataset(relative_transformations)
     if not args.inference_only:
@@ -293,8 +305,6 @@ if __name__ == "__main__":
     else:
         validation = dataset
         training = Dataset([])
-
-
 
     with open(output_path.joinpath("training_edges.pk"), "wb") as ofs:
         dump(training.data, ofs)
@@ -353,10 +363,10 @@ if __name__ == "__main__":
         num_steps = (len(inds) + batch_size - 1) // batch_size
         for i in range(num_steps):
             offset = i * batch_size
-            batched_inds.append(inds[offset:offset+batch_size])
+            batched_inds.append(inds[offset : offset + batch_size])
         step_inds.append(np.asarray(batched_inds, dtype=object))
 
-    np.save(output_path.joinpath('step_indices.npy'), np.hstack(step_inds)[:args.param_updates])
+    np.save(output_path.joinpath("step_indices.npy"), np.hstack(step_inds)[: args.param_updates])
 
     pre_equil = args.pre_equil
     if pre_equil is not None:
@@ -379,7 +389,7 @@ if __name__ == "__main__":
     for epoch in range(num_epochs):
         # Run Validation edges at start of epoch. Unlike NNs we have a reasonable starting
         # point that is worth knowing
-        run_validation_edges(validation, ordered_params, systems, epoch+1, inference=args.inference_only)
+        run_validation_edges(validation, ordered_params, systems, epoch + 1, inference=args.inference_only)
         print(f"Epoch: {epoch+1}/{num_epochs}")
         for batch in step_inds[epoch]:
             batch_data = []
@@ -394,8 +404,7 @@ if __name__ == "__main__":
             t0 = time()
 
             (loss, (predictions, stage_results)), loss_grads = jax.value_and_grad(loss_fxn, argnums=0, has_aux=True)(
-                ordered_params,
-                batch_data
+                ordered_params, batch_data
             )
 
             results_this_step = {stage: result for stage, result in stage_results}
@@ -414,8 +423,9 @@ if __name__ == "__main__":
             flat_theta = flatten(ordered_params)
 
             # based on current estimate of (loss, grad, and simulation stability), return a conservative step to take in parameter space
-            theta_increment = truncated_step(flat_theta, loss, flat_loss_grad,
-                                             step_lower_bound=_compute_step_lower_bound(loss, blown_up))
+            theta_increment = truncated_step(
+                flat_theta, loss, flat_loss_grad, step_lower_bound=_compute_step_lower_bound(loss, blown_up)
+            )
             param_increments = unflatten(theta_increment)
 
             # for any parameter handler types being updated, update in place
@@ -434,16 +444,17 @@ if __name__ == "__main__":
                         max_update = np.max(nonzero_increments)
                     # TODO: replace with a function that knows what to report about each handle type
                     print(
-                        f'updated {len(nonzero_increments)} {handle_type.__name__} params by between {min_update:.4f} and {max_update:.4f}')
+                        f"updated {len(nonzero_increments)} {handle_type.__name__} params by between {min_update:.4f} and {max_update:.4f}"
+                    )
 
             t1 = time()
             elapsed = t1 - t0
 
-            print(f'completed forcefield-updating step {step} in {elapsed:.3f} s !')
+            print(f"completed forcefield-updating step {step} in {elapsed:.3f} s !")
 
             # save du_dls snapshot
-            path_to_du_dls = output_path.joinpath(f'du_dls_snapshot_{step}.npz')
-            print(f'saving du_dl trajs to {path_to_du_dls}')
+            path_to_du_dls = output_path.joinpath(f"du_dls_snapshot_{step}.npz")
+            print(f"saving du_dl trajs to {path_to_du_dls}")
             du_dls_dict = dict()  # keywords here must be strings
             for stage, results in results_this_step.items():
                 du_dls_dict[stage] = _results_to_arrays(results)[1]
@@ -451,14 +462,9 @@ if __name__ == "__main__":
 
             # also save information about this step's parameter gradient and parameter update
             # results to npz
-            path_to_npz = output_path.joinpath(f'theta_grad_loss_snapshot_{step}.npz')
-            print(f'saving theta, grad, loss snapshot to {path_to_npz}')
-            np.savez(
-                path_to_npz,
-                theta=np.array(flat_theta),
-                grad=np.array(flat_loss_grad),
-                loss=loss
-            )
+            path_to_npz = output_path.joinpath(f"theta_grad_loss_snapshot_{step}.npz")
+            print(f"saving theta, grad, loss snapshot to {path_to_npz}")
+            np.savez(path_to_npz, theta=np.array(flat_theta), grad=np.array(flat_loss_grad), loss=loss)
 
             # TODO: same for xs and du_dps snapshots
 
@@ -470,4 +476,4 @@ if __name__ == "__main__":
             if step >= args.param_updates:
                 break
     if not args.inference_only:
-        run_validation_edges(validation, ordered_params, systems, epoch+1)
+        run_validation_edges(validation, ordered_params, systems, epoch + 1)
