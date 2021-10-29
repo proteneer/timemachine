@@ -4,6 +4,7 @@ import jax
 from jax import random as jrandom
 import time
 
+
 def langevin_coefficients(temperature, dt, friction, masses):
     """
     Compute coefficients for langevin dynamics
@@ -99,9 +100,7 @@ def _fori_steps(x0, v0, key0, grad_fn, num_steps, dt, ca, cbs, ccs):
     return jax.lax.fori_loop(0, num_steps, body_fn, (x0, v0, key0))
 
 
-def simulate(
-    x0, U_fn, temperature, masses, steps_per_batch, num_batches, num_workers, seed=None
-):
+def simulate(x0, U_fn, temperature, masses, steps_per_batch, num_batches, num_workers, seed=None):
     """
     Simulate a gas-phase system using a reference jax implementation.
 
@@ -167,4 +166,3 @@ def simulate(
 
     # result has shape [num_workers, num_batches, num_atoms, num_dimensions]
     return np.transpose(np.array(all_xs), axes=[1, 0, 2, 3])
-

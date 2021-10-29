@@ -5,9 +5,11 @@ import os
 # see https://github.com/google/jax/issues/1408 for more information
 # needs to be set before xla/jax is initialized, and is set to a number
 # suitable for running on CI
-os.environ['XLA_FLAGS']  = "--xla_force_host_platform_device_count=6"
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=6"
 
-from jax.config import config; config.update("jax_enable_x64", True)
+from jax.config import config
+
+config.update("jax_enable_x64", True)
 import jax
 
 
@@ -19,10 +21,12 @@ from tests import test_ligands
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
+
 def get_ff():
     ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
     return ff
+
 
 def test_gas_phase_importance_sampling():
     """
@@ -34,9 +38,9 @@ def test_gas_phase_importance_sampling():
     terms.
     """
 
-    mol =  test_ligands.get_benzene()
+    mol = test_ligands.get_benzene()
     ff = get_ff()
-    torsion_idxs = np.array([5,6,7,8])
+    torsion_idxs = np.array([5, 6, 7, 8])
     temperature = 300
 
     state = enhanced.VacuumState(mol, ff)
@@ -49,11 +53,7 @@ def test_gas_phase_importance_sampling():
         state.U_decharged,
     )
 
-    enhanced_samples = enhanced.sample_from_log_weights(
-        weighted_samples,
-        log_weights,
-        100000
-    )
+    enhanced_samples = enhanced.sample_from_log_weights(weighted_samples, log_weights, 100000)
 
     @jax.jit
     def get_torsion(x_t):
@@ -75,24 +75,20 @@ def test_gas_phase_importance_sampling():
     enhanced_torsions_rhs, _ = np.histogram(enhanced_torsions, bins=50, range=(0, np.pi), density=True)
 
     # check for symmetry about theta=0
-    assert np.mean((enhanced_torsions_lhs - enhanced_torsions_rhs[::-1])**2) < 5e-2
+    assert np.mean((enhanced_torsions_lhs - enhanced_torsions_rhs[::-1]) ** 2) < 5e-2
 
     weighted_samples, log_weights = enhanced.generate_log_weighted_samples(
         mol,
         temperature,
         state.U_decharged,
         state.U_decharged,
-        num_batches=5000 # don't need as many batches since we don't have to prune
+        num_batches=5000,  # don't need as many batches since we don't have to prune
     )
 
-    vanilla_samples = enhanced.sample_from_log_weights(
-        weighted_samples,
-        log_weights,
-        100000
-    )
+    vanilla_samples = enhanced.sample_from_log_weights(weighted_samples, log_weights, 100000)
 
     vanilla_torsions = batch_torsion_fn(vanilla_samples)
     vanilla_samples_lhs, _ = np.histogram(vanilla_torsions, bins=50, range=(-np.pi, 0), density=True)
 
-    #check for consistency with vanilla samples
-    assert np.mean((enhanced_torsions_lhs - vanilla_samples_lhs)**2) < 1e-2
+    # check for consistency with vanilla samples
+    assert np.mean((enhanced_torsions_lhs - vanilla_samples_lhs) ** 2) < 1e-2

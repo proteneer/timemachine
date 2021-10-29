@@ -15,6 +15,7 @@ from timemachine.constants import BOLTZ
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 
+
 def identify_rotatable_bonds(mol):
     """
     Identify rotatable bonds in a molecule.
@@ -50,12 +51,11 @@ def identify_rotatable_bonds(mol):
 
 
 class VacuumState:
-
     def __init__(self, mol, ff):
         """
         VacuumState allows us to enable/disable various parts of a forcefield so that
         we can more easily sample across rotational barriers in the vacuum.
-        
+
         Parameters
         ----------
         mol: Chem.ROMol
@@ -67,35 +67,23 @@ class VacuumState:
 
         self.mol = mol
         bt = topology.BaseTopology(mol, ff)
-        self.bond_params, self.hb_potential = bt.parameterize_harmonic_bond(
-            ff.hb_handle.params
-        )
-        self.angle_params, self.ha_potential = bt.parameterize_harmonic_angle(
-            ff.ha_handle.params
-        )
-        self.proper_torsion_params, self.pt_potential = bt.parameterize_proper_torsion(
-            ff.pt_handle.params
-        )
+        self.bond_params, self.hb_potential = bt.parameterize_harmonic_bond(ff.hb_handle.params)
+        self.angle_params, self.ha_potential = bt.parameterize_harmonic_angle(ff.ha_handle.params)
+        self.proper_torsion_params, self.pt_potential = bt.parameterize_proper_torsion(ff.pt_handle.params)
         (
             self.improper_torsion_params,
             self.it_potential,
         ) = bt.parameterize_improper_torsion(ff.it_handle.params)
-        self.nb_params, self.nb_potential = bt.parameterize_nonbonded(
-            ff.q_handle.params, ff.lj_handle.params
-        )
+        self.nb_params, self.nb_potential = bt.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
 
         self.box = None
         self.lamb = 0.0
 
     def _harmonic_bond_nrg(self, x):
-        return bonded.harmonic_bond(
-            x, self.bond_params, self.box, self.lamb, self.hb_potential.get_idxs()
-        )
+        return bonded.harmonic_bond(x, self.bond_params, self.box, self.lamb, self.hb_potential.get_idxs())
 
     def _harmonic_angle_nrg(self, x):
-        return bonded.harmonic_angle(
-            x, self.angle_params, self.box, self.lamb, self.ha_potential.get_idxs()
-        )
+        return bonded.harmonic_angle(x, self.angle_params, self.box, self.lamb, self.ha_potential.get_idxs())
 
     def _proper_torsion_nrg(self, x):
         return bonded.periodic_torsion(
@@ -178,9 +166,7 @@ class VacuumState:
 
         rotatable_bonds = identify_rotatable_bonds(self.mol)
 
-        for idxs, params in zip(
-            self.pt_potential.get_idxs(), self.proper_torsion_params
-        ):
+        for idxs, params in zip(self.pt_potential.get_idxs(), self.proper_torsion_params):
             _, j, k, _ = idxs
             if (j, k) in rotatable_bonds:
                 print("turning off torsion", idxs)
@@ -190,9 +176,7 @@ class VacuumState:
                 easy_proper_torsion_params.append(params)
 
         easy_proper_torsion_idxs = np.array(easy_proper_torsion_idxs, dtype=np.int32)
-        easy_proper_torsion_params = np.array(
-            easy_proper_torsion_params, dtype=np.float64
-        )
+        easy_proper_torsion_params = np.array(easy_proper_torsion_params, dtype=np.float64)
 
         proper_torsion_nrg = bonded.periodic_torsion(
             x, easy_proper_torsion_params, self.box, self.lamb, easy_proper_torsion_idxs
@@ -261,7 +245,8 @@ def generate_log_weighted_samples(
     U_target,
     steps_per_batch=250,
     num_batches=20000,
-    num_workers=None):
+    num_workers=None,
+):
     """
     Generate log_weighted samples from a proposal distribution using U_proposal,
     with log_weights defined by the difference relative to U_target
@@ -314,8 +299,8 @@ def generate_log_weighted_samples(
         temperature,
         masses,
         steps_per_batch,
-        num_batches+burn_in_batches,
-        num_workers
+        num_batches + burn_in_batches,
+        num_workers,
     )
 
     num_atoms = mol.GetNumAtoms()
@@ -334,7 +319,11 @@ def generate_log_weighted_samples(
 
     log_weights = log_numerator - log_denominator
 
-    return xs_proposal.reshape(-1, num_atoms, 3,), log_weights
+    # reshape into flat array by removing num_workers dimension
+    xs_proposal = xs_proposal.reshape(-1, num_atoms, 3)
+
+    return xs_proposal, log_weights
+
 
 def sample_from_log_weights(weighted_samples, log_weights, size):
     """
