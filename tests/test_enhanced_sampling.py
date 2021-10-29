@@ -16,7 +16,7 @@ import jax
 from timemachine.potentials import bonded
 import numpy as np
 from md import enhanced
-from tests import test_ligands
+import test_ligands
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
