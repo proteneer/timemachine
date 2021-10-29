@@ -254,14 +254,7 @@ def align_sample(x_gas, x_solvent):
 
 def test_condensed_phase():
 
-    # generate gas-phase xs, with LJ terms only turned on
-    # generate condensed-phase xs, batch RMSD align and re-weight
-
-    #              xx x x <-- torsion indices
-    #          01 23456 7 8 9
     mol = Chem.MolFromMolBlock(MOL_SDF, removeHs=False)
-    # torsion_idxs = np.array([5,6,7,8])
-
     masses = np.array([a.GetMass() for a in mol.GetAtoms()])
     num_ligand_atoms = len(masses)
 
@@ -286,40 +279,14 @@ def test_condensed_phase():
             Us_gas_unique,
         ) = enhanced_sampling.generate_gas_phase_samples(mol, ff, temperature, U_gas)
 
-        # (
-        #     xs_solvent,
-        #     boxes_solvent,
-        #     Us_full,
-        #     nb_params,
-        #     topology_objs,
-        # ) = enhanced_sampling.generate_solvent_phase_samples(mol, ff, temperature)
-        # gas_counts, xs_gas_unique, Us_gas_unique = generate_gas_phase_samples(mol, ff, temperature, U_gas)
         with open(cache_path, "wb") as fh:
             pickle.dump(
-                (
-                    gas_counts,
-                    xs_gas_unique,
-                    Us_gas_unique,
-                    # xs_solvent,
-                    # boxes_solvent,
-                    # Us_full,
-                    # nb_params,
-                    # topology_objs,
-                ),
+                (gas_counts, xs_gas_unique, Us_gas_unique),
                 fh,
             )
 
     with open(cache_path, "rb") as fh:
-        (
-            gas_counts,
-            xs_gas_unique,
-            Us_gas_unique,
-            # xs_solvent,
-            # boxes_solvent,
-            # Us_full,
-            # nb_params,
-            # topology_objs,
-        ) = pickle.load(fh)
+        (gas_counts, xs_gas_unique, Us_gas_unique) = pickle.load(fh)
 
     ubps, params, masses, coords, box = enhanced_sampling.get_solvent_phase_system(
         mol, ff
