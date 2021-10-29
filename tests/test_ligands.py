@@ -1,5 +1,6 @@
 from rdkit import Chem
 
+
 def get_benzene():
     MOL_SDF = """
   Mrv2115 09292117373D          
