@@ -1,5 +1,3 @@
-pytest
-pytest-cov
 bootstrapped==0.0.2
 grpcio==1.30.0
 grpcio-tools==1.30.0
@@ -13,3 +11,8 @@ hilbertcurve==1.0.5
 networkx==2.5
 cvxpylayers==0.1.5 # this depends on jax -- upgrade when jax / jaxlib are upgraded
 mdtraj==1.9.6
+
+# Development/Testing Reqs
+black
+pytest
+pytest-cov
