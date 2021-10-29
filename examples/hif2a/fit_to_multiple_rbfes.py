@@ -138,7 +138,7 @@ def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
         all_results.extend(list(stage_results))
         preds.append(pred_ddG)
     labels = jnp.asarray([rfe.label for rfe, _ in batch])
-    loss = pseudo_huber_loss(preds - labels)
+    loss = pseudo_huber_loss(jnp.asarray(preds) - labels)
     # Aggregate the pseudo huber loss using mean
     loss = jnp.mean(loss)
     return loss, (preds, all_results)
