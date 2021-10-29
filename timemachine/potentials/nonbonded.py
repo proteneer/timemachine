@@ -59,7 +59,7 @@ def nonbonded_block(
         the charge product q_ij will be multiplied by erfc(beta*d_ij)
     cutoff : Optional float
         a pair of particles (i,j) will be considered non-interacting if the distance d_ij
-        between their 4D coordinates exceeds cutoff
+        between their 3D coordinates exceeds cutoff
 
     Returns
     -------
