@@ -3,7 +3,7 @@ MKFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 CPP_DIR := $(MKFILE_DIR)timemachine/cpp/
 INSTALL_PREFIX := $(MKFILE_DIR)timemachine/
 PYTEST_CI_ARGS := --cov=. --cov-report=term-missing
-BLACK_FLAGS := --line-length 120 .
+BLACK_FLAGS := --extend-exclude 'ff/params/|parallel/grpc/' --line-length 120 .
 
 NPROCS = `nproc`
 

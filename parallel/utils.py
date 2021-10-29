@@ -1,12 +1,12 @@
-import os
 from subprocess import check_output
-from parallel.service_pb2 import StatusResponse
+from parallel.grpc.service_pb2 import StatusResponse
 
 
 def get_gpu_count() -> int:
     output = check_output(["nvidia-smi", "-L"])
     # Expected to return a line delimited summary of each GPU
     return len([x for x in output.split(b"\n") if len(x)])
+
 
 def get_worker_status() -> StatusResponse:
     try:

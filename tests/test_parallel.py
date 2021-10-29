@@ -120,7 +120,7 @@ class TestGRPCClient(unittest.TestCase):
                     ('grpc.max_receive_message_length', 50 * 1024 * 1024)
                 ]
             )
-            parallel.service_pb2_grpc.add_WorkerServicer_to_server(worker.Worker(), server)
+            parallel.grpc.service_pb2_grpc.add_WorkerServicer_to_server(worker.Worker(), server)
             server.add_insecure_port('[::]:'+str(port))
             server.start()
             self.servers.append(server)
@@ -132,10 +132,10 @@ class TestGRPCClient(unittest.TestCase):
     @patch("parallel.worker.get_worker_status")
     def test_checking_host_status(self, mock_status):
         # All the workers return the same thing
-        mock_status.side_effect = [parallel.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers]
+        mock_status.side_effect = [parallel.grpc.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers]
         self.cli.verify()
 
-        mock_status.side_effect = [parallel.service_pb2.StatusResponse(nvidia_driver=f"foo{i}", git_sha=f"bar{i}") for i in range(len(self.servers))]
+        mock_status.side_effect = [parallel.grpc.service_pb2.StatusResponse(nvidia_driver=f"foo{i}", git_sha=f"bar{i}") for i in range(len(self.servers))]
 
         with self.assertRaises(AssertionError):
             self.cli.verify()
@@ -149,7 +149,7 @@ class TestGRPCClient(unittest.TestCase):
         cli = client.GRPCClient(hosts)
 
         # All the workers return the same thing
-        mock_status.side_effect = [parallel.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers]
+        mock_status.side_effect = [parallel.grpc.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers]
 
         with self.assertRaises(AssertionError) as e:
             cli.verify()

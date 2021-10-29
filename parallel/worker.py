@@ -8,7 +8,7 @@ import logging
 import pickle
 from concurrent import futures
 
-from parallel import service_pb2, service_pb2_grpc
+from parallel.grpc import service_pb2, service_pb2_grpc
 from parallel.utils import get_worker_status
 from parallel.constants import DEFAULT_GRPC_OPTIONS
 
