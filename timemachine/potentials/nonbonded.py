@@ -1,7 +1,7 @@
 import jax.numpy as np
 from jax.scipy.special import erfc
 from jax.ops import index_update, index
-from timemachine.potentials.jax_utils import distance_on_pairs, distance, convert_to_4d
+from timemachine.potentials.jax_utils import distance_on_pairs, distance, convert_to_4d, delta_r
 
 
 def switch_fn(dij, cutoff):
@@ -28,6 +28,67 @@ def direct_space_pme(dij, qij, beta):
         https://aip.scitation.org/doi/abs/10.1063/1.470117
     """
     return qij * erfc(beta * dij) / dij
+
+
+def nonbonded_block(
+    xi,
+    xj,
+    box,
+    params_i,
+    params_j,
+    beta,
+    cutoff):
+    """
+    This is a modified version of nonbonded_v3 that computes a block of
+    interactions between two sets of particles x_i and x_j. It is assumed that
+    there are no exclusions between the two particle sets. Typical use cases
+    include computing the interaction energy between the environment and a ligand.
+
+    This is mainly used for testing, as it does not support 4D decoupling or
+    alchemical semantics yet.
+
+    Parameters
+    ----------
+    xi : (N,3) np.ndarray
+        Coordinates
+    xj : (N,3) np.ndarray
+        Coordinates
+    box : Optional 3x3 np.array
+        Periodic boundary conditions
+    beta : float
+        the charge product q_ij will be multiplied by erfc(beta*d_ij)
+    cutoff : Optional float
+        a pair of particles (i,j) will be considered non-interacting if the distance d_ij
+        between their 3D coordinates exceeds cutoff
+
+    Returns
+    -------
+    scalar
+        Interaction energy
+
+    """
+    ri = np.expand_dims(xi, axis=1)
+    rj = np.expand_dims(xj, axis=0)
+    d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)
+    dij = np.sqrt(d2ij)
+    sig_i = np.expand_dims(params_i[:, 1], axis=1)
+    sig_j = np.expand_dims(params_j[:, 1], axis=0)
+    eps_i = np.expand_dims(params_i[:, 2], axis=1)
+    eps_j = np.expand_dims(params_j[:, 2], axis=0)
+
+    sig_ij = sig_i+sig_j
+    eps_ij = eps_i*eps_j
+
+    qi = np.expand_dims(params_i[:, 0], axis=1)
+    qj = np.expand_dims(params_j[:, 0], axis=0)
+
+    qij = np.multiply(qi, qj)
+
+    es = direct_space_pme(dij, qij, beta)
+    lj = lennard_jones(dij, sig_ij, eps_ij)
+
+    nrg = np.where(dij > cutoff, 0, es+lj)
+    return np.sum(nrg)
 
 
 def nonbonded_v3(

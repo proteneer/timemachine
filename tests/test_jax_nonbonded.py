@@ -10,7 +10,7 @@ from scipy.optimize import minimize
 from jax import numpy as np, value_and_grad, jit, vmap
 
 from jax.ops import index_update, index
-from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded_v3_on_specific_pairs
+from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded_v3_on_specific_pairs, nonbonded_block
 from timemachine.potentials.jax_utils import convert_to_4d, get_all_pairs_indices, get_group_group_indices, distance
 from md import builders
 from ff.handlers import openmm_deserializer
@@ -299,3 +299,45 @@ def test_vmap():
     confs = onp.random.randn(n_snapshots, n_total, 3)
     us = vmapped(confs)
     assert us.shape == (n_snapshots,)
+
+
+def test_jax_nonbonded_block():
+    """Assert that nonbonded_block and nonbonded_on_specific_pairs agree"""
+    system, positions, box, _ = builders.build_water_system(3.0)
+    bps, masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
+    nb = bps[-1]
+    params = nb.params
+
+    conf = positions.value_in_unit(unit.nanometer)
+
+    N = conf.shape[0]
+    beta = nb.get_beta()
+    cutoff = nb.get_cutoff()
+
+    split = 70
+
+    def u_a(x, box, params):
+        xi = x[:split]
+        xj = x[split:]
+        pi = params[:split]
+        pj = params[split:]
+        return nonbonded_block(xi, xj, box, pi, pj, beta, cutoff)
+
+    i_s, j_s = np.indices((split, N - split))
+    indices_left = i_s.flatten()
+    indices_right = j_s.flatten() + split
+
+    def u_b(x, box, params):
+        vdw, es = nonbonded_v3_on_specific_pairs(
+            x,
+            params,
+            box,
+            indices_left,
+            indices_right,
+            beta,
+            cutoff
+        )
+
+        return np.sum(vdw+es)
+
+    onp.testing.assert_almost_equal(u_a(conf, box, params), u_b(conf, box, params))
