@@ -323,13 +323,9 @@ def test_jax_nonbonded_block():
         pj = params[split:]
         return nonbonded_block(xi, xj, box, pi, pj, beta, cutoff)
 
-    indices_left= []
-    indices_right = []
-
-    for i in range(split):
-        for j in range(split, N):
-            indices_left.append(i)
-            indices_right.append(j)
+    i_s, j_s = np.indices((split, N - split))
+    indices_left = i_s.flatten()
+    indices_right = j_s.flatten() + split
 
     def u_b(x, box, params):
         vdw, es = nonbonded_v3_on_specific_pairs(
