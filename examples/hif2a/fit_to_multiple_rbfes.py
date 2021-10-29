@@ -22,7 +22,6 @@ from fe.free_energy import (
 )
 from fe.estimator import SimulationResult
 from fe.model import RBFEModel
-from fe.cycles import construct_mle_layer, DisconnectedEdgesError
 from fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 
 # MD initialization
@@ -138,21 +137,11 @@ def loss_fxn(ff_params, batch: List[Tuple[RelativeFreeEnergy, RBFEModel]]):
         pred_ddG, stage_results = model.predict(ff_params, rfe.mol_a, rfe.mol_b, rfe.core)
         all_results.extend(list(stage_results))
         preds.append(pred_ddG)
-    # If the edges in the batch are within a cycle, correct the ddGs
-    indices = jnp.asarray(indices)
-    ind_l, ind_r = indices.T
-    try:
-        layer = construct_mle_layer(len(index), indices)
-        corrected_dg = layer(jnp.asarray(preds))
-        cycle_corrected_rbfes = corrected_dg[ind_r] - corrected_dg[ind_l]
-    except DisconnectedEdgesError:
-        # Provided non connected graph, use the ddGs directly
-        cycle_corrected_rbfes = jnp.asarray(preds)
     labels = jnp.asarray([rfe.label for rfe, _ in batch])
-    loss = pseudo_huber_loss(cycle_corrected_rbfes - labels)
+    loss = pseudo_huber_loss(preds - labels)
     # Aggregate the pseudo huber loss using mean
     loss = jnp.mean(loss)
-    return loss, (cycle_corrected_rbfes, all_results)
+    return loss, (preds, all_results)
 
 
 def run_validation_edges(validation: Dataset, params, systems, epoch, inference: bool = False):
