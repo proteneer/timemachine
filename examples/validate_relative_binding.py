@@ -45,6 +45,47 @@ from timemachine.potentials import rmsd
 from md import builders, minimizer
 from rdkit.Chem import rdFMCS
 
+
+def cache_wrapper(cache_path: str, fxn: callable, overwrite: bool = False) -> callable:
+    """Given a path and a function, will either write the result of the function call
+    to the file or read form the file. The output of the function is expected to be picklable.
+
+    Parameters
+    ----------
+    cache_path: string
+        Path to write pickled results to and to read results from
+
+
+    fxn: callable
+        Function whose result to cache. Used for expensive functions whose results
+        should be stored between runs.
+
+    overwrite: boolean
+        Overwrite the cache if the file already exists. Useful is the cache file was incorrectly
+        generated or the implementation of fxn has changed.
+
+    Returns
+    -------
+
+    wrapped_function: callable
+        A function with the same signature as the original fxn whose results will be stored to
+        the cached file.
+    """
+
+    def fn(*args, **kwargs):
+        if overwrite or not os.path.isfile(cache_path):
+            print(f"Caching {fxn.__name__} result to {cache_path}")
+            val = fxn(*args, **kwargs)
+            with open(cache_path, "wb") as ofs:
+                pickle.dump(val, ofs)
+        else:
+            with open(cache_path, "rb") as ifs:
+                val = pickle.load(ifs)
+        return val
+
+    return fn
+
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
@@ -181,28 +222,24 @@ if __name__ == "__main__":
     pressure = 1.0
     dt = 2.5e-3
 
-    # Generate an equilibrated reference structure to use.
-    if not os.path.exists("equil.pickle"):
-        print("Equilibrating reference molecule in the complex.")
-        complex_ref_x0, complex_ref_box0 = minimizer.equilibrate_complex(
-            blocker_mol,
-            complex_system,
-            complex_coords,
-            temperature,
-            pressure,
-            forcefield,
-            complex_box,
-            cmd_args.num_complex_preequil_steps,
-        )
-        with open("equil.pickle", "wb") as ofs:
-            pickle.dump((complex_ref_x0, complex_ref_box0), ofs)
-    else:
-        print("Loading existing pickle from cache")
-        with open("equil.pickle", "rb") as ifs:
-            complex_ref_x0, complex_ref_box0 = pickle.load(ifs)
-    # complex models.
-    complex_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_complex_conv_windows)
+    cached_equil_path = "equil_{}_blocker_{}.pkl".format(
+        os.path.basename(cmd_args.protein_pdb).split(".")[0], cmd_args.blocker_name
+    ).replace(" ", "_")
 
+    # Generate an equilibrated reference structure to use.
+    complex_ref_x0, complex_ref_box0 = cache_wrapper(cached_equil_path, minimizer.equilibrate_complex)(
+        blocker_mol,
+        complex_system,
+        complex_coords,
+        temperature,
+        pressure,
+        forcefield,
+        complex_box,
+        cmd_args.num_complex_preequil_steps,
+    )
+
+    complex_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_complex_conv_windows)
+    # complex models
     binding_model_complex_conversion = model_rabfe.AbsoluteConversionModel(
         client,
         forcefield,
