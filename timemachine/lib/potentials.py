@@ -4,8 +4,8 @@ from timemachine.lib import custom_ops
 # (ytz): classes in this class wrap custom_ops but have the added benefit
 # of being pickleable.
 
-class CustomOpWrapper():
 
+class CustomOpWrapper:
     def __init__(self, *args):
         # needed in case we need to modify the args.
         self.args = list(args)
@@ -108,12 +108,12 @@ class CustomOpWrapper():
 #     def get_b_idxs(self):
 #         return self.args[2]
 
+
 class RMSDRestraint(CustomOpWrapper):
     pass
 
 
 class BondedWrapper(CustomOpWrapper):
-
     def get_idxs(self):
         return self.args[0]
 
@@ -140,12 +140,13 @@ class BondedWrapper(CustomOpWrapper):
             self.args.append(mult)
             self.args.append(offset)
 
+
 class HarmonicBond(BondedWrapper):
     pass
 
+
 # this is an alias to make type checking easier
 class CoreRestraint(HarmonicBond):
-
     def unbound_impl(self, precision):
         cls_name_base = "HarmonicBond"
         if precision == np.float64:
@@ -157,6 +158,7 @@ class CoreRestraint(HarmonicBond):
 
         return custom_ctor(*self.args)
 
+
 class HarmonicAngle(BondedWrapper):
     pass
 
@@ -164,8 +166,8 @@ class HarmonicAngle(BondedWrapper):
 class PeriodicTorsion(BondedWrapper):
     pass
 
-class InertialRestraint(CustomOpWrapper):
 
+class InertialRestraint(CustomOpWrapper):
     def get_a_idxs(self):
         return self.args[0]
 
@@ -180,7 +182,6 @@ class InertialRestraint(CustomOpWrapper):
 
 
 class CentroidRestraint(CustomOpWrapper):
-
     def get_a_idxs(self):
         return self.args[0]
 
@@ -189,7 +190,6 @@ class CentroidRestraint(CustomOpWrapper):
 
 
 class Nonbonded(CustomOpWrapper):
-
     def __init__(self, *args):
 
         # exclusion_idxs should be unique
@@ -244,11 +244,11 @@ class Nonbonded(CustomOpWrapper):
             self.get_lambda_plane_idxs(),
             self.get_lambda_offset_idxs(),
             self.get_beta(),
-            self.get_cutoff()
+            self.get_cutoff(),
         )
 
-class NonbondedInterpolated(Nonbonded):
 
+class NonbondedInterpolated(Nonbonded):
     def unbound_impl(self, precision):
         cls_name_base = "Nonbonded"
         if precision == np.float64:

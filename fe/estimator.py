@@ -20,18 +20,22 @@ from md.states import CoordsVelBox
 from md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 
+
 @dataclasses.dataclass
 class SimulationResult:
-   xs: np.array
-   du_dls: np.array
-   du_dps: np.array
+    xs: np.array
+    du_dls: np.array
+    du_dps: np.array
+
 
 def flatten(v):
     return tuple(), (v.xs, v.du_dls, v.du_dps)
 
+
 def unflatten(aux_data, children):
     xs, du_dls, du_dps = aux_data
     return SimulationResult(xs, du_dls, du_dps)
+
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
@@ -65,13 +69,24 @@ def equilibrate(integrator, barostat, potentials, coords, box, lamb, equil_steps
     )
 
     # equilibration
-    equil_schedule = np.ones(equil_steps)*lamb
+    equil_schedule = np.ones(equil_steps) * lamb
     ctxt.multiple_steps(equil_schedule)
     return CoordsVelBox(coords=ctxt.get_x_t(), velocities=ctxt.get_v_t(), box=ctxt.get_box())
 
 
-def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_steps, barostat,
-    x_interval=1000, du_dl_interval=5) -> SimulationResult:
+def simulate(
+    lamb,
+    box,
+    x0,
+    v0,
+    final_potentials,
+    integrator,
+    equil_steps,
+    prod_steps,
+    barostat,
+    x_interval=1000,
+    du_dl_interval=5,
+) -> SimulationResult:
     """
     Run a simulation and collect relevant statistics for this simulation.
 
@@ -158,7 +173,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     baro_impl.set_interval(5)
 
     # equilibration
-    equil_schedule = np.ones(equil_steps)*lamb
+    equil_schedule = np.ones(equil_steps) * lamb
     ctxt.multiple_steps(equil_schedule)
 
     baro_impl.set_interval(base_interval)
@@ -166,7 +181,7 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
     for obs in du_dp_obs:
         ctxt.add_observable(obs)
 
-    prod_schedule = np.ones(prod_steps)*lamb
+    prod_schedule = np.ones(prod_steps) * lamb
 
     full_du_dls, xs, _ = ctxt.multiple_steps(prod_schedule, du_dl_interval, x_interval)
 
@@ -182,10 +197,22 @@ def simulate(lamb, box, x0, v0, final_potentials, integrator, equil_steps, prod_
 
 FreeEnergyModel = namedtuple(
     "FreeEnergyModel",
-    ["unbound_potentials", "client", "box", "x0", "v0", "integrator", "lambda_schedule", "equil_steps", "prod_steps", "barostat"]
+    [
+        "unbound_potentials",
+        "client",
+        "box",
+        "x0",
+        "v0",
+        "integrator",
+        "lambda_schedule",
+        "equil_steps",
+        "prod_steps",
+        "barostat",
+    ],
 )
 
-gradient = List[Any] # TODO: make this more descriptive of dG_grad structure
+gradient = List[Any]  # TODO: make this more descriptive of dG_grad structure
+
 
 def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
@@ -203,7 +230,17 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     futures = []
     for lamb in model.lambda_schedule:
-        args = (lamb, model.box, model.x0, model.v0, bound_potentials, model.integrator, model.equil_steps, model.prod_steps, model.barostat)
+        args = (
+            lamb,
+            model.box,
+            model.x0,
+            model.v0,
+            bound_potentials,
+            model.integrator,
+            model.equil_steps,
+            model.prod_steps,
+            model.barostat,
+        )
         kwargs = {}  # Unused for now
         futures.append(client.submit(simulate, *args, **kwargs))
 
@@ -222,20 +259,23 @@ def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     return (dG, results), dG_grad
 
+
 @functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
 def deltaG(model, sys_params) -> Tuple[float, List]:
     return _deltaG(model=model, sys_params=sys_params)[0]
+
 
 def deltaG_fwd(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     """same signature as DeltaG, but returns the full tuple"""
     return _deltaG(model=model, sys_params=sys_params)
 
+
 def deltaG_bwd(model, residual, grad) -> Tuple[np.array]:
-    """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!
-    """
+    """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!"""
     # residual are the partial dG / partial dparams for each term
     # grad[0] is the adjoint of dG w.r.t. loss: partial L/partial dG
     # grad[1] is the adjoint of dG w.r.t. simulation result, which we don't use
-    return ([grad[0]*r for r in residual],)
+    return ([grad[0] * r for r in residual],)
+
 
 deltaG.defvjp(deltaG_fwd, deltaG_bwd)

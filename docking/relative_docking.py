@@ -30,9 +30,7 @@ MAX_LAMBDA = 1.0
 MIN_LAMBDA = 0.0
 
 
-def do_relative_docking(
-    host_pdbfile, mol_a, mol_b, core, num_switches, transition_steps
-):
+def do_relative_docking(host_pdbfile, mol_a, mol_b, core, num_switches, transition_steps):
     """Runs non-equilibrium switching jobs:
     1. Solvates a protein, minimizes w.r.t guest_A, equilibrates & spins off switching jobs
        (deleting guest_A while inserting guest_B) every 1000th step, calculates work.
@@ -317,9 +315,7 @@ def get_core(strategy, mol_a, mol_b, smarts=None):
         "any_mcs": lambda a, b, s: get_core_by_permissive_mcs(a, b),
         "geometry": lambda a, b, s: get_core_by_geometry(a, b, threshold=0.5),
         "smarts": lambda a, b, s: get_core_by_smarts(a, b, core_smarts=s),
-        "smarts_wo_uniqueness": lambda a, b, s: _get_core_by_smarts_wo_checking_uniqueness(
-            a, b, core_smarts=s
-        ),
+        "smarts_wo_uniqueness": lambda a, b, s: _get_core_by_smarts_wo_checking_uniqueness(a, b, core_smarts=s),
     }
     f = core_strategies[strategy]
     core = f(mol_a, mol_b, smarts)
@@ -329,9 +325,7 @@ def get_core(strategy, mol_a, mol_b, smarts=None):
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "-p",
         "--host_pdbfile",

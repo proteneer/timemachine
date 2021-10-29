@@ -38,6 +38,7 @@ import functools
 
 # tbd: chain bootstrapped estimators
 
+
 def bs_integrate(tuples):
     """
     Parameters
@@ -61,6 +62,7 @@ def bs_integrate(tuples):
 
     return np.trapz(du_dls, lambdas)
 
+
 def bs_estimate(tuples):
 
     # Compute the mean
@@ -75,12 +77,14 @@ def bs_estimate(tuples):
 
     return np.array(results)
 
+
 def ti_ci(du_dls, lambda_schedule):
     tuples = []
     for du_dl, lamb in zip(du_dls, lambda_schedule):
         tuples.append((du_dl, lamb))
 
     return bs.bootstrap(np.array(tuples), stat_func=bs_estimate)
+
 
 # def ti_ci(all_du_dls, ssc, stage_lambdas, du_dl_cutoff):
 #     """
@@ -123,4 +127,3 @@ def ti_ci(du_dls, lambda_schedule):
 #     stat_fn = functools.partial(estimate, ssc=ssc)
 
 #     return bs.bootstrap(np.array(triples), stat_func=stat_fn)
-

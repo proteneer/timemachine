@@ -15,6 +15,7 @@ from common import GradientTest
 
 import pytest
 
+
 def recenter(conf):
     """Return copy of conf with mean coordinates subtracted"""
     return conf - np.mean(conf, axis=0)
@@ -53,7 +54,6 @@ def get_heavy_atom_idxs(mol):
 
 
 class TestShape(GradientTest):
-
     def test_volume_range(self):
         """Assert that:
         * normalized overlap for identical configurations = 1
@@ -71,33 +71,29 @@ class TestShape(GradientTest):
         for ligand_a in suppl:
 
             coords_a = get_conf(ligand_a, idx=0) * 10
-            params_a = np.stack([
-                np.zeros(ligand_a.GetNumAtoms()) + alpha,
-                np.zeros(ligand_a.GetNumAtoms()) + prefactor,
-            ], axis=1)
-
-            v = shape.normalized_overlap(
-                coords_a,
-                params_a,
-                coords_a,
-                params_a
+            params_a = np.stack(
+                [
+                    np.zeros(ligand_a.GetNumAtoms()) + alpha,
+                    np.zeros(ligand_a.GetNumAtoms()) + prefactor,
+                ],
+                axis=1,
             )
+
+            v = shape.normalized_overlap(coords_a, params_a, coords_a, params_a)
 
             assert v == 1.0
 
             for ligand_b in suppl:
                 coords_b = get_conf(ligand_b, idx=0) * 10
-                params_b = np.stack([
-                    np.zeros(ligand_b.GetNumAtoms()) + alpha,
-                    np.zeros(ligand_b.GetNumAtoms()) + prefactor,
-                ], axis=1)
-
-                v = shape.normalized_overlap(
-                    coords_a,
-                    params_a,
-                    coords_b,
-                    params_b
+                params_b = np.stack(
+                    [
+                        np.zeros(ligand_b.GetNumAtoms()) + alpha,
+                        np.zeros(ligand_b.GetNumAtoms()) + prefactor,
+                    ],
+                    axis=1,
                 )
+
+                v = shape.normalized_overlap(coords_a, params_a, coords_b, params_b)
 
                 assert v <= 1
                 assert v >= 0.5
@@ -137,13 +133,9 @@ class TestShape(GradientTest):
 
                 k = 195.0
 
-                ref_u = functools.partial(shape.harmonic_overlap,
-                                          alphas=c_alphas,
-                                          weights=c_weights,
-                                          a_idxs=a_idxs,
-                                          b_idxs=b_idxs,
-                                          k=k
-                                          )
+                ref_u = functools.partial(
+                    shape.harmonic_overlap, alphas=c_alphas, weights=c_weights, a_idxs=a_idxs, b_idxs=b_idxs, k=k
+                )
 
                 test_u = potentials.Shape(
                     coords.shape[0],
@@ -151,7 +143,7 @@ class TestShape(GradientTest):
                     b_idxs.astype(np.int32),
                     c_alphas.astype(np.float64),
                     c_weights.astype(np.float64),
-                    k
+                    k,
                 )
 
                 # for identical molecules 32 bit precision is terrible since the overlap is super small
@@ -164,7 +156,7 @@ class TestShape(GradientTest):
                         ref_potential=ref_u,
                         test_potential=test_u,
                         rtol=rtol,
-                        precision=precision
+                        precision=precision,
                     )
 
                 # assert 0

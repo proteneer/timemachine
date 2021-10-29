@@ -6,21 +6,17 @@ from ff.handlers import bonded, nonbonded, openmm_deserializer
 from timemachine.lib import potentials
 
 
-def combine_coordinates(
-    host_coords,
-    guest_mol):
+def combine_coordinates(host_coords, guest_mol):
 
     host_conf = np.array(host_coords)
     conformer = guest_mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    guest_conf = guest_conf/10 # convert to md_units
+    guest_conf = guest_conf / 10  # convert to md_units
 
-    return np.concatenate([host_conf, guest_conf]) # combined geometry
+    return np.concatenate([host_conf, guest_conf])  # combined geometry
 
-def nonbonded_vjps(
-    guest_q, guest_q_vjp_fn,
-    guest_lj, guest_lj_vjp_fn,
-    host_qlj):
+
+def nonbonded_vjps(guest_q, guest_q_vjp_fn, guest_lj, guest_lj_vjp_fn, host_qlj):
     """
     Parameters
     ----------
@@ -38,7 +34,7 @@ def nonbonded_vjps(
 
     host_qlj: [P, 3]
         Host params, each triple is (q, sig, eps)
-    
+
     Returns
     -------
     (P+L, 3)
@@ -47,13 +43,10 @@ def nonbonded_vjps(
     (guest_q_vjp_fn, guest_lj_vjp_fn)
         Chain rule'd vjps to enable combined adjoints to backprop into handler params.
 
-    """ 
+    """
 
     def combine_parameters(guest_q, guest_lj, host_qlj):
-        guest_qlj = jnp.concatenate([
-            jnp.reshape(guest_q, (-1, 1)),
-            jnp.reshape(guest_lj, (-1, 2))
-        ], axis=1)
+        guest_qlj = jnp.concatenate([jnp.reshape(guest_q, (-1, 1)), jnp.reshape(guest_lj, (-1, 2))], axis=1)
 
         return jnp.concatenate([host_qlj, guest_qlj])
 
@@ -75,9 +68,9 @@ def nonbonded_vjps(
 #     Returns the combined parameters p_c, and a vjp_fn that can take in adjoint with shape
 #     of p_c and returns adjoints of primitives of p_a and p_b.
 
-#     i.e. 
-#        vjp_a            
-#     A' -----> A 
+#     i.e.
+#        vjp_a
+#     A' -----> A
 #                 \ vjp_c
 #                  +-----> C
 #        vjp_b    /
@@ -106,11 +99,8 @@ def nonbonded_vjps(
 
 #     return np.asarray(p_c), adjoint_fn
 
-def combine_potentials(
-    ff_handlers,
-    guest_mol,
-    host_system,
-    precision):
+
+def combine_potentials(ff_handlers, guest_mol, host_system, precision):
     """
     This function is responsible for figuring out how to take two separate hamiltonians
     and combining them into one sensible alchemical system.
@@ -138,11 +128,7 @@ def combine_potentials(
 
     """
 
-    host_potentials, host_masses = openmm_deserializer.deserialize_system(
-        host_system,
-        precision,
-        cutoff=1.0
-    )
+    host_potentials, host_masses = openmm_deserializer.deserialize_system(host_system, precision, cutoff=1.0)
 
     host_nb_bp = None
 
@@ -165,7 +151,6 @@ def combine_potentials(
 
     combined_masses = np.concatenate([host_masses, guest_masses])
 
-
     for handle in ff_handlers:
         results = handle.parameterize(guest_mol)
         if isinstance(handle, bonded.HarmonicBondHandler):
@@ -181,12 +166,16 @@ def combine_potentials(
         elif isinstance(handle, bonded.ProperTorsionHandler):
             torsion_idxs, (torsion_params, vjp_fn) = results
             torsion_idxs += num_host_atoms
-            combined_potentials.append(potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind(torsion_params))
+            combined_potentials.append(
+                potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind(torsion_params)
+            )
             combined_vjp_fns.append([(handle, vjp_fn)])
         elif isinstance(handle, bonded.ImproperTorsionHandler):
             torsion_idxs, (torsion_params, vjp_fn) = results
             torsion_idxs += num_host_atoms
-            combined_potentials.append(potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind(torsion_params))
+            combined_potentials.append(
+                potentials.PeriodicTorsion(torsion_idxs, precision=precision).bind(torsion_params)
+            )
             combined_vjp_fns.append([(handle, vjp_fn)])
         elif isinstance(handle, nonbonded.AM1CCCHandler):
             charge_handle = handle
@@ -200,9 +189,7 @@ def combine_potentials(
 
     # process nonbonded terms
     combined_nb_params, (charge_vjp_fn, lj_vjp_fn) = nonbonded_vjps(
-        guest_charge_params, guest_charge_vjp_fn,
-        guest_lj_params, guest_lj_vjp_fn,
-        host_nb_bp.params
+        guest_charge_params, guest_charge_vjp_fn, guest_lj_params, guest_lj_vjp_fn, host_nb_bp.params
     )
 
     # these vjp_fns take in adjoints of combined_params and returns derivatives
@@ -211,15 +198,12 @@ def combine_potentials(
 
     # tbd change scale 14 for electrostatics
     guest_exclusion_idxs, guest_scale_factors = nonbonded.generate_exclusion_idxs(
-        guest_mol,
-        scale12=1.0,
-        scale13=1.0,
-        scale14=0.5
+        guest_mol, scale12=1.0, scale13=1.0, scale14=0.5
     )
 
     # allow the ligand to be alchemically decoupled
     # a value of one indicates that we allow the atom to be adjusted by the lambda value
-    guest_lambda_offset_idxs = np.ones(len(guest_masses), dtype=np.int32) 
+    guest_lambda_offset_idxs = np.ones(len(guest_masses), dtype=np.int32)
 
     # use same scale factors until we modify 1-4s for electrostatics
     guest_scale_factors = np.stack([guest_scale_factors, guest_scale_factors], axis=1)
@@ -229,15 +213,17 @@ def combine_potentials(
     combined_scales = np.concatenate([host_nb_bp.get_scale_factors(), guest_scale_factors])
     combined_beta = 2.0
 
-    combined_cutoff = 1.0 # nonbonded cutoff
+    combined_cutoff = 1.0  # nonbonded cutoff
 
-    combined_potentials.append(potentials.Nonbonded(
-        combined_exclusion_idxs,
-        combined_scales,
-        combined_lambda_offset_idxs,
-        combined_beta,
-        combined_cutoff,
-        precision=precision).bind(combined_nb_params))
-
+    combined_potentials.append(
+        potentials.Nonbonded(
+            combined_exclusion_idxs,
+            combined_scales,
+            combined_lambda_offset_idxs,
+            combined_beta,
+            combined_cutoff,
+            precision=precision,
+        ).bind(combined_nb_params)
+    )
 
     return combined_potentials, combined_masses, combined_vjp_fns

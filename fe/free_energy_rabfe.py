@@ -1,6 +1,8 @@
 from rdkit import Chem
 from collections import namedtuple
-from jax.config import config; config.update("jax_enable_x64", True)
+from jax.config import config
+
+config.update("jax_enable_x64", True)
 
 import numpy as np
 
@@ -16,7 +18,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class RABFEResult():
+class RABFEResult:
     mol_name: str
     dG_complex_conversion: float
     dG_complex_decouple: float
@@ -25,17 +27,23 @@ class RABFEResult():
 
     def log(self):
         """print stage summary"""
-        print("stage summary for mol:", self.mol_name,
-              "dG_complex_conversion (K complex)", self.dG_complex_conversion,
-              "dG_complex_decouple (E0 + A0 + A1 + E1)", self.dG_complex_decouple,
-              "dG_solvent_conversion (K solvent)", self.dG_solvent_conversion,
-              "dG_solvent_decouple (D)", self.dG_solvent_decouple
-              )
+        print(
+            "stage summary for mol:",
+            self.mol_name,
+            "dG_complex_conversion (K complex)",
+            self.dG_complex_conversion,
+            "dG_complex_decouple (E0 + A0 + A1 + E1)",
+            self.dG_complex_decouple,
+            "dG_solvent_conversion (K solvent)",
+            self.dG_solvent_conversion,
+            "dG_solvent_decouple (D)",
+            self.dG_solvent_decouple,
+        )
 
     @classmethod
     def from_log(cls, log_line):
         """parse log line"""
-        mol_name, rest = log_line.split('stage summary for mol: ')[-1].split(' dG_complex_conversion (K complex) ')
+        mol_name, rest = log_line.split("stage summary for mol: ")[-1].split(" dG_complex_conversion (K complex) ")
         tokens = rest.split()
         value_strings = tokens[0], tokens[9], tokens[13], tokens[16]
         values = list(map(float, value_strings))
@@ -61,8 +69,8 @@ class RABFEResult():
 class UnsupportedTopology(Exception):
     pass
 
-class BaseFreeEnergy():
 
+class BaseFreeEnergy:
     @staticmethod
     def _get_system_params_and_potentials(ff_params, topology):
 
@@ -70,7 +78,7 @@ class BaseFreeEnergy():
             [topology.parameterize_harmonic_bond, (ff_params[0],)],
             [topology.parameterize_harmonic_angle, (ff_params[1],)],
             [topology.parameterize_periodic_torsion, (ff_params[2], ff_params[3])],
-            [topology.parameterize_nonbonded, (ff_params[4], ff_params[5])]
+            [topology.parameterize_nonbonded, (ff_params[4], ff_params[5])],
         ]
 
         final_params = []
@@ -83,9 +91,9 @@ class BaseFreeEnergy():
 
         return final_params, final_potentials
 
+
 # this class is serializable.
 class AbsoluteFreeEnergy(BaseFreeEnergy):
-
     def __init__(self, mol, top):
         """
         Compute the absolute free energy of a molecule via 4D decoupling.
@@ -134,7 +142,6 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
 # this class is serializable.
 class RelativeFreeEnergy(BaseFreeEnergy):
-
     def __init__(self, dual_topology: topology.DualTopology, label=None, complex_path=None):
         self.top = dual_topology
         self.label = label
@@ -195,15 +202,17 @@ def construct_absolute_lambda_schedule_complex(num_windows):
     manually optimized by YTZ
     """
 
-    A = int(.20 * num_windows)
-    B = int(.50 * num_windows)
+    A = int(0.20 * num_windows)
+    B = int(0.50 * num_windows)
     C = num_windows - A - B
 
-    lambda_schedule = np.concatenate([
-        np.linspace(0.0, 0.1, A, endpoint=False),
-        np.linspace(0.1, 0.3, B, endpoint=False),
-        np.linspace(0.3, 1.0, C, endpoint=True)
-    ])
+    lambda_schedule = np.concatenate(
+        [
+            np.linspace(0.0, 0.1, A, endpoint=False),
+            np.linspace(0.1, 0.3, B, endpoint=False),
+            np.linspace(0.3, 1.0, C, endpoint=True),
+        ]
+    )
 
     return lambda_schedule
 
@@ -216,23 +225,26 @@ def construct_absolute_lambda_schedule_solvent(num_windows):
     manually optimized by YTZ
     """
 
-    A = int(.20 * num_windows)
-    B = int(.66 * num_windows)
-    D = 1 # need only one window from 0.6 to 1.0
+    A = int(0.20 * num_windows)
+    B = int(0.66 * num_windows)
+    D = 1  # need only one window from 0.6 to 1.0
     C = num_windows - A - B - D
 
     # optimizing the overlap based on eyeballing absolute hydration free energies
     # there's probably some better way to deal with this by inspecting the curvature
-    lambda_schedule = np.concatenate([
-        np.linspace(0.0,  0.08,  A, endpoint=False),
-        np.linspace(0.08,  0.27, B, endpoint=False),
-        np.linspace(0.27, 0.50,  C, endpoint=True),
-        [1.0],
-    ])
+    lambda_schedule = np.concatenate(
+        [
+            np.linspace(0.0, 0.08, A, endpoint=False),
+            np.linspace(0.08, 0.27, B, endpoint=False),
+            np.linspace(0.27, 0.50, C, endpoint=True),
+            [1.0],
+        ]
+    )
 
     assert len(lambda_schedule) == num_windows
 
     return lambda_schedule
+
 
 def construct_relative_lambda_schedule(num_windows):
     """Generate a length-num_windows list of lambda values from 0.0 up to 1.0
@@ -242,27 +254,28 @@ def construct_relative_lambda_schedule(num_windows):
     manually optimized by YTZ
     """
 
-    A = int(.15 * num_windows)
-    B = int(.60 * num_windows)
+    A = int(0.15 * num_windows)
+    B = int(0.60 * num_windows)
     C = num_windows - A - B
 
     # optimizing the overlap based on eyeballing absolute hydration free energies
     # there's probably some better way to deal with this by inspecting the curvature
-    lambda_schedule = np.concatenate([
-        np.linspace(0.00, 0.08, A, endpoint=False),
-        np.linspace(0.08, 0.27, B, endpoint=False),
-        np.linspace(0.27, 1.00, C, endpoint=True)
-    ])
+    lambda_schedule = np.concatenate(
+        [
+            np.linspace(0.00, 0.08, A, endpoint=False),
+            np.linspace(0.08, 0.27, B, endpoint=False),
+            np.linspace(0.27, 1.00, C, endpoint=True),
+        ]
+    )
 
     assert len(lambda_schedule) == num_windows
 
     return lambda_schedule
 
+
 def setup_relative_restraints_by_distance(
-    mol_a: Chem.Mol,
-    mol_b: Chem.Mol,
-    cutoff: float = 0.1,
-    terminal: bool = False):
+    mol_a: Chem.Mol, mol_b: Chem.Mol, cutoff: float = 0.1, terminal: bool = False
+):
     """
     Setup restraints between atoms in two molecules using
     a cutoff distance between atoms
@@ -310,19 +323,14 @@ def setup_relative_restraints_by_distance(
     core_idxs = []
 
     for core_a, core_b in zip(row_idxs, col_idxs):
-        core_idxs.append((
-            core_idxs_a[core_a],
-            core_idxs_b[core_b]
-        ))
+        core_idxs.append((core_idxs_a[core_a], core_idxs_b[core_b]))
 
     core_idxs = np.array(core_idxs, dtype=np.int32)
 
     return core_idxs
 
-def setup_relative_restraints_using_smarts(
-    mol_a,
-    mol_b,
-    smarts):
+
+def setup_relative_restraints_using_smarts(mol_a, mol_b, smarts):
     """
     Setup restraints between atoms in two molecules using
     a pre-defined SMARTS pattern.
@@ -381,7 +389,7 @@ def setup_relative_restraints_using_smarts(
 
             ri = np.expand_dims(ligand_coords_a[core_idxs_a], 1)
             rj = np.expand_dims(ligand_coords_b[core_idxs_b], 0)
-            rij = np.sqrt(np.sum(np.power(ri-rj, 2), axis=-1))
+            rij = np.sqrt(np.sum(np.power(ri - rj, 2), axis=-1))
 
             row_idxs, col_idxs = linear_sum_assignment(rij)
 
@@ -391,7 +399,6 @@ def setup_relative_restraints_using_smarts(
                 best_rmsd = rmsd
                 best_core_idxs_a = core_idxs_a
                 best_core_idxs_b = core_idxs_b
-
 
     core_idxs = np.stack([best_core_idxs_a, best_core_idxs_b], axis=1).astype(np.int32)
     print("core_idxs", core_idxs, "rmsd", best_rmsd)

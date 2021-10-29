@@ -1,5 +1,7 @@
 import jax
-from jax.config import config; config.update("jax_enable_x64", True)
+from jax.config import config
+
+config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from quadpy import quad
@@ -8,29 +10,29 @@ import numpy as np
 import functools
 from timemachine.constants import BOLTZ
 
-BOLTZ = RGAS/1000
+BOLTZ = RGAS / 1000
 
 
-class ThermodynamicEngine():
-
+class ThermodynamicEngine:
     def __init__(self, U_fn, O_fn, temperature):
 
         # self.temperature = temperature
         self.U_fn = U_fn
-        self.O_fn = O_fn # (R^1 -> R^N)        
+        self.O_fn = O_fn  # (R^1 -> R^N)
 
         raw_dU_dp_fn = jax.jit(jax.grad(lennard_jones, argnums=(1,)))
+
         def dU_dp_fn(*args, **kwargs):
             res = raw_dU_dp_fn(*args, **kwargs)[0]
             return res
 
         def O_dot_dU_dp_fn(*args, **kwargs):
-            return O_fn(*args, **kwargs)*dU_dp_fn(*args, **kwargs)
+            return O_fn(*args, **kwargs) * dU_dp_fn(*args, **kwargs)
 
         self.dU_dp_fn = dU_dp_fn
         self.O_dot_dU_dp_fn = O_dot_dU_dp_fn
 
-        self.kT = BOLTZ*temperature
+        self.kT = BOLTZ * temperature
 
         self.int_lower = 0.005
         self.int_upper = 0.995
@@ -42,7 +44,7 @@ class ThermodynamicEngine():
                 xs[1] = x
                 conf = np.expand_dims(xs, axis=1)
                 U = lennard_jones(conf, lj_params)
-                p = rv_fn(conf, lj_params)*np.exp(-U/self.kT)
+                p = rv_fn(conf, lj_params) * np.exp(-U / self.kT)
                 probs.append(p)
 
             probs = np.asarray(probs)
@@ -62,52 +64,35 @@ class ThermodynamicEngine():
 
     def Z(self, params):
 
-        integrand = functools.partial(
-            self.pdf_fn,
-            rv_fn=lambda conf, params: 1.,
-            lj_params=params
-        )
+        integrand = functools.partial(self.pdf_fn, rv_fn=lambda conf, params: 1.0, lj_params=params)
         return self.quad_fn(integrand)
 
     def O_Z(self, params):
 
-        integrand = functools.partial(
-            self.pdf_fn,
-            rv_fn=self.O_fn,
-            lj_params=params
-        )
+        integrand = functools.partial(self.pdf_fn, rv_fn=self.O_fn, lj_params=params)
         # Z = self.Z(params)
         return self.quad_fn(integrand)
 
     def dU_dp_Z(self, params):
 
-        integrand = functools.partial(
-            self.pdf_fn,
-            rv_fn=self.dU_dp_fn,
-            lj_params=params
-        )
+        integrand = functools.partial(self.pdf_fn, rv_fn=self.dU_dp_fn, lj_params=params)
         # Z = self.Z(params)
         return self.quad_fn(integrand)
 
     def O_dot_dU_dp_Z(self, params):
-        integrand = functools.partial(
-            self.pdf_fn,
-            rv_fn=self.O_dot_dU_dp_fn,
-            lj_params=params
-        )
+        integrand = functools.partial(self.pdf_fn, rv_fn=self.O_dot_dU_dp_fn, lj_params=params)
         # Z = self.Z(params)
         return self.quad_fn(integrand)
 
     def O_and_dO_dp(self, params):
         Z = self.Z(params)
-        avg_O = self.O_Z(params)/Z
-        avg_dU_dp = self.dU_dp_Z(params)/Z
-        avg_O_dot_dU_dp = self.O_dot_dU_dp_Z(params)/Z
+        avg_O = self.O_Z(params) / Z
+        avg_dU_dp = self.dU_dp_Z(params) / Z
+        avg_O_dot_dU_dp = self.O_dot_dU_dp_Z(params) / Z
 
-        dO_dp = (avg_O*avg_dU_dp - avg_O_dot_dU_dp)/self.kT
+        dO_dp = (avg_O * avg_dU_dp - avg_O_dot_dU_dp) / self.kT
 
         return avg_O, dO_dp
-
 
 
 U_fn = jax.jit(lennard_jones)
@@ -120,9 +105,11 @@ sigma = [0.1, 0.2, 0.3]
 eps = [1.0, 1.2, 1.3]
 lj_params = np.stack([sigma, eps], axis=1)
 
+
 def loss_fn(O_pred):
     O_true = 0.5
-    return jnp.abs(O_pred-O_true)
+    return jnp.abs(O_pred - O_true)
+
 
 loss_grad_fn = jax.grad(loss_fn)
 
@@ -132,8 +119,7 @@ for epoch in range(10):
     dL_dO = loss_grad_fn(O_pred)
     dL_dp = dL_dO * dO_dp
     print("epoch", epoch, "params", lj_params, "loss", loss, "O", O_pred)
-    lj_params -= 0.1*dL_dp
-
+    lj_params -= 0.1 * dL_dp
 
 
 # print("Z", te.Z(lj_params))

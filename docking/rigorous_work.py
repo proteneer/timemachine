@@ -169,9 +169,7 @@ def calculate_rigorous_work(
             [host_box, water_box],
             ["protein", "solvent"],
         ):
-            minimized_coords = minimizer.minimize_host_4d(
-                [guest_mol], system, coords, ff, box
-            )
+            minimized_coords = minimizer.minimize_host_4d([guest_mol], system, coords, ff, box)
 
             afe = free_energy.AbsoluteFreeEnergy(guest_mol, ff)
             ups, sys_params, combined_masses, combined_coords = afe.prepare_host_edge(
@@ -249,9 +247,7 @@ def run_leg(
     ctxt = custom_ops.Context(x0, v0, host_box, intg, u_impls)
 
     # insert guest
-    insertion_lambda_schedule = np.linspace(
-        insertion_max_lambda, MIN_LAMBDA, insertion_steps
-    )
+    insertion_lambda_schedule = np.linspace(insertion_max_lambda, MIN_LAMBDA, insertion_steps)
 
     ctxt.multiple_steps(insertion_lambda_schedule, 0)  # do not collect du_dls
 
@@ -392,9 +388,7 @@ def do_deletion(
     # du_dl_obs = custom_ops.FullPartialUPartialLambda(u_impls, subsample_freq)
     # ctxt.add_observable(du_dl_obs)
 
-    deletion_lambda_schedule = np.linspace(
-        MIN_LAMBDA, DELETION_MAX_LAMBDA, deletion_steps
-    )
+    deletion_lambda_schedule = np.linspace(MIN_LAMBDA, DELETION_MAX_LAMBDA, deletion_steps)
 
     subsample_freq = 1
     full_du_dls, _, _ = ctxt.multiple_steps(deletion_lambda_schedule, subsample_freq)
@@ -431,9 +425,7 @@ def do_deletion(
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "-p",
         "--host_pdbfile",
@@ -446,36 +438,24 @@ def main():
         default="tests/data/ligands_40__first-two-ligs.sdf",
         help="guests to pose",
     )
-    parser.add_argument(
-        "-o", "--outdir", default="rigorous_work_outdir", help="where to write output"
-    )
-    parser.add_argument(
-        "--num_deletions", type=int, default=10, help="number of deletions to do"
-    )
-    parser.add_argument(
-        "--deletion_steps", type=int, default=501, help="how many steps to delete over"
-    )
+    parser.add_argument("-o", "--outdir", default="rigorous_work_outdir", help="where to write output")
+    parser.add_argument("--num_deletions", type=int, default=10, help="number of deletions to do")
+    parser.add_argument("--deletion_steps", type=int, default=501, help="how many steps to delete over")
     parser.add_argument(
         "--insertion_max_lambda",
         type=float,
         default=0.5,
         help="how far away to insert from (0.0-1.0)",
     )
-    parser.add_argument(
-        "--insertion_steps", type=int, default=501, help="how long to insert over"
-    )
+    parser.add_argument("--insertion_steps", type=int, default=501, help="how long to insert over")
     parser.add_argument(
         "--eq1_steps",
         type=int,
         default=5001,
         help="how long to equilibrate after insertion and before starting the deletions",
     )
-    parser.add_argument(
-        "--fewer_outfiles", action="store_true", help="write fewer output pdb/sdf files"
-    )
-    parser.add_argument(
-        "--no_outfiles", action="store_true", help="write no output pdb/sdf files"
-    )
+    parser.add_argument("--fewer_outfiles", action="store_true", help="write fewer output pdb/sdf files")
+    parser.add_argument("--no_outfiles", action="store_true", help="write no output pdb/sdf files")
     args = parser.parse_args()
 
     calculate_rigorous_work(

@@ -1,5 +1,7 @@
 from typing import List
-from jax.config import config; config.update("jax_enable_x64", True)
+from jax.config import config
+
+config.update("jax_enable_x64", True)
 
 import jax
 import numpy as np
@@ -12,8 +14,8 @@ from ff.handlers import openmm_deserializer
 
 from rdkit.Chem import MolToSmiles
 
-class BaseFreeEnergy():
 
+class BaseFreeEnergy:
     @staticmethod
     def _get_integrator(combined_masses):
         """
@@ -22,13 +24,7 @@ class BaseFreeEnergy():
         """
         seed = np.random.randint(np.iinfo(np.int32).max)
 
-        return LangevinIntegrator(
-            300.0,
-            1.5e-3,
-            1.0,
-            combined_masses,
-            seed
-        )
+        return LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed)
 
     @staticmethod
     def _get_system_params_and_potentials(ff_params, topology):
@@ -37,7 +33,7 @@ class BaseFreeEnergy():
             [topology.parameterize_harmonic_bond, (ff_params[0],)],
             [topology.parameterize_harmonic_angle, (ff_params[1],)],
             [topology.parameterize_periodic_torsion, (ff_params[2], ff_params[3])],
-            [topology.parameterize_nonbonded, (ff_params[4], ff_params[5])]
+            [topology.parameterize_nonbonded, (ff_params[4], ff_params[5])],
         ]
 
         final_params = []
@@ -73,9 +69,9 @@ class BaseFreeEnergy():
         """
         raise NotImplementedError("Not implemented")
 
+
 # this class is serializable.
 class AbsoluteFreeEnergy(BaseFreeEnergy):
-
     def __init__(self, mol, ff):
         """
         Compute the absolute free energy of a molecule via 4D decoupling.
@@ -92,7 +88,6 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         self.mol = mol
         self.ff = ff
         self.top = topology.BaseTopology(mol, ff)
-
 
     def prepare_host_edge(self, ff_params, host_system, host_coords):
         """
@@ -133,7 +128,6 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
 
 # this class is serializable.
 class RelativeFreeEnergy(BaseFreeEnergy):
-
     def __init__(self, single_topology: topology.SingleTopology, label=None, complex_path=None):
         self.top = single_topology
         self.label = label
@@ -162,13 +156,7 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         """
         seed = np.random.randint(np.iinfo(np.int32).max)
 
-        return LangevinIntegrator(
-            300.0,
-            1.5e-3,
-            1.0,
-            combined_masses,
-            seed
-        )
+        return LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed)
 
     def prepare_vacuum_edge(self, ff_params):
         """
@@ -226,8 +214,12 @@ class RelativeFreeEnergy(BaseFreeEnergy):
 
         final_params, final_potentials = self._get_system_params_and_potentials(ff_params, hgt)
         if isinstance(self.top, topology.SingleTopology):
-            combined_masses = np.concatenate([host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)])
-            combined_coords = np.concatenate([host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)])
+            combined_masses = np.concatenate(
+                [host_masses, np.mean(self.top.interpolate_params(ligand_masses_a, ligand_masses_b), axis=0)]
+            )
+            combined_coords = np.concatenate(
+                [host_coords, np.mean(self.top.interpolate_params(ligand_coords_a, ligand_coords_b), axis=0)]
+            )
         else:
             combined_masses = np.concatenate([host_masses, ligand_masses_a, ligand_masses_b])
             combined_coords = np.concatenate([host_coords, ligand_coords_a, ligand_coords_b])
@@ -271,18 +263,20 @@ def construct_lambda_schedule(num_windows):
     manually optimized by YTZ
     """
 
-    A = int(.35 * num_windows)
-    B = int(.30 * num_windows)
+    A = int(0.35 * num_windows)
+    B = int(0.30 * num_windows)
     C = num_windows - A - B
 
     # Empirically, we see the largest variance in std <du/dl> near the endpoints in the nonbonded
     # terms. Bonded terms are roughly linear. So we add more lambda windows at the endpoint to
     # help improve convergence.
-    lambda_schedule = np.concatenate([
-        np.linspace(0.0, 0.25, A, endpoint=False),
-        np.linspace(0.25, 0.75, B, endpoint=False),
-        np.linspace(0.75, 1.0, C, endpoint=True)
-    ])
+    lambda_schedule = np.concatenate(
+        [
+            np.linspace(0.0, 0.25, A, endpoint=False),
+            np.linspace(0.25, 0.75, B, endpoint=False),
+            np.linspace(0.75, 1.0, C, endpoint=True),
+        ]
+    )
 
     assert len(lambda_schedule) == num_windows
 

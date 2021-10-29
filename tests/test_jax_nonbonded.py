@@ -1,8 +1,10 @@
 import jax
+
 jax.config.update("jax_enable_x64", True)
 
 import numpy as onp
 from numpy.random import randn, rand, randint, seed
+
 seed(2021)
 
 from scipy.optimize import minimize
@@ -39,7 +41,7 @@ def resolve_clashes(x0, box0, min_dist=0.1):
 
     if np.min(dij) < min_dist:
         # print('some distances too small')
-        print(f'before optimization: min(dij) = {np.min(dij)} < min_dist threshold ({min_dist})')
+        print(f"before optimization: min(dij) = {np.min(dij)} < min_dist threshold ({min_dist})")
         # print('smallest few distances', sorted(dij)[:10])
 
         def unflatten(xbox):
@@ -59,13 +61,13 @@ def resolve_clashes(x0, box0, min_dist=0.1):
 
         initial_state = np.hstack([x0.flatten(), box0.flatten()])
         # print(f'penalty before: {U_repulse(initial_state)}')
-        result = minimize(fun, initial_state, jac=True, method='L-BFGS-B')
+        result = minimize(fun, initial_state, jac=True, method="L-BFGS-B")
         # print(f'penalty after minimization: {U_repulse(result.x)}')
 
         x, box = unflatten(result.x)
         dij = urt(x, box)
 
-        print(f'after optimization: min(dij) = {np.min(dij)}')
+        print(f"after optimization: min(dij) = {np.min(dij)}")
 
         return x, box
 
@@ -90,6 +92,7 @@ easy_instance_flags = dict(
 
 difficult_instance_flags = {key: True for key in easy_instance_flags}
 
+
 def generate_waterbox_nb_args() -> NonbondedArgs:
 
     system, positions, box, _ = builders.build_water_system(3.0)
@@ -109,7 +112,18 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
     lambda_plane_idxs = np.zeros(N, dtype=int)
     lambda_offset_idxs = np.zeros(N, dtype=int)
 
-    args = conf, params, box, lamb, charge_rescale_mask, lj_rescale_mask, beta, cutoff, lambda_plane_idxs, lambda_offset_idxs
+    args = (
+        conf,
+        params,
+        box,
+        lamb,
+        charge_rescale_mask,
+        lj_rescale_mask,
+        beta,
+        cutoff,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
+    )
 
     return args
 
@@ -117,12 +131,12 @@ def generate_waterbox_nb_args() -> NonbondedArgs:
 def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags) -> NonbondedArgs:
     """Can toggle randomization of each argument using instance_flags"""
     box = np.eye(dim)
-    if instance_flags['randomize_box']:
+    if instance_flags["randomize_box"]:
         box += np.diag(rand(dim))
     assert box.shape == (dim, dim)
 
     conf = rand(n_atoms, dim)
-    if instance_flags['trigger_pbc']:
+    if instance_flags["trigger_pbc"]:
         conf *= 5
         conf -= 2.5
 
@@ -132,45 +146,56 @@ def generate_random_inputs(n_atoms, dim, instance_flags=difficult_instance_flags
     charges = np.zeros(n_atoms)
     sig = min_dist * np.ones(n_atoms)
     eps = np.ones(n_atoms)
-    if instance_flags['randomize_charges']:
+    if instance_flags["randomize_charges"]:
         charges = randn(n_atoms)
-    if instance_flags['randomize_sigma']:
+    if instance_flags["randomize_sigma"]:
         sig = min_dist * rand(n_atoms)
-    if instance_flags['randomize_epsilon']:
+    if instance_flags["randomize_epsilon"]:
         eps = rand(n_atoms)
 
     params = np.array([charges, sig, eps]).T
 
     lamb = 0.0
-    if instance_flags['randomize_lamb']:
+    if instance_flags["randomize_lamb"]:
         lamb = rand()
     charge_rescale_mask = onp.ones((n_atoms, n_atoms))
     lj_rescale_mask = onp.ones((n_atoms, n_atoms))
 
     for _ in range(n_atoms):
         i, j = randint(n_atoms, size=2)
-        if instance_flags['randomize_charge_rescale_mask']:
+        if instance_flags["randomize_charge_rescale_mask"]:
             charge_rescale_mask[i, j] = charge_rescale_mask[j, i] = 0.0
-        if instance_flags['randomize_lj_rescale_mask']:
+        if instance_flags["randomize_lj_rescale_mask"]:
             lj_rescale_mask[i, j] = lj_rescale_mask[j, i] = 0.0
 
     beta = 2.0
-    if instance_flags['randomize_beta']:
+    if instance_flags["randomize_beta"]:
         beta += rand()
     cutoff = 1.2
-    if instance_flags['randomize_cutoff']:
+    if instance_flags["randomize_cutoff"]:
         cutoff += rand()
 
     lambda_plane_idxs = np.zeros(n_atoms, dtype=int)
     lambda_offset_idxs = np.zeros(n_atoms, dtype=int)
 
-    if instance_flags['randomize_lambda_plane_idxs']:
+    if instance_flags["randomize_lambda_plane_idxs"]:
         lambda_plane_idxs = randint(low=-2, high=2, size=n_atoms)
 
-    if instance_flags['randomize_lambda_offset_idxs']:
+    if instance_flags["randomize_lambda_offset_idxs"]:
         lambda_offset_idxs = randint(low=-2, high=2, size=n_atoms)
 
-    args = conf, params, box, lamb, charge_rescale_mask, lj_rescale_mask, beta, cutoff, lambda_plane_idxs, lambda_offset_idxs
+    args = (
+        conf,
+        params,
+        box,
+        lamb,
+        charge_rescale_mask,
+        lj_rescale_mask,
+        beta,
+        cutoff,
+        lambda_plane_idxs,
+        lambda_offset_idxs,
+    )
 
     return args
 
@@ -187,16 +212,16 @@ def compare_two_potentials(u_a: NonbondedFxn, u_b: NonbondedFxn, args: Nonbonded
 
 
 def _nonbonded_v3_clone(
-        conf,
-        params,
-        box,
-        lamb,
-        charge_rescale_mask,
-        lj_rescale_mask,
-        beta,
-        cutoff,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
+    conf,
+    params,
+    box,
+    lamb,
+    charge_rescale_mask,
+    lj_rescale_mask,
+    beta,
+    cutoff,
+    lambda_plane_idxs,
+    lambda_offset_idxs,
 ):
     """See docstring of nonbonded_v3 for more details
 
@@ -328,16 +353,8 @@ def test_jax_nonbonded_block():
     indices_right = j_s.flatten() + split
 
     def u_b(x, box, params):
-        vdw, es = nonbonded_v3_on_specific_pairs(
-            x,
-            params,
-            box,
-            indices_left,
-            indices_right,
-            beta,
-            cutoff
-        )
+        vdw, es = nonbonded_v3_on_specific_pairs(x, params, box, indices_left, indices_right, beta, cutoff)
 
-        return np.sum(vdw+es)
+        return np.sum(vdw + es)
 
     onp.testing.assert_almost_equal(u_a(conf, box, params), u_b(conf, box, params))

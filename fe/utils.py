@@ -5,39 +5,41 @@ import networkx as nx
 
 from typing import List
 
+
 def to_md_units(q):
     return q.value_in_unit_system(simtk.unit.md_unit_system)
+
 
 def write(xyz, masses, recenter=True):
     if recenter:
         xyz = xyz - np.mean(xyz, axis=0, keepdims=True)
-    buf = str(len(masses)) + '\n'
-    buf += 'timemachine\n'
-    for m, (x,y,z) in zip(masses, xyz):
+    buf = str(len(masses)) + "\n"
+    buf += "timemachine\n"
+    for m, (x, y, z) in zip(masses, xyz):
         if int(round(m)) == 12:
-            symbol = 'C'
+            symbol = "C"
         elif int(round(m)) == 14:
-            symbol = 'N'
+            symbol = "N"
         elif int(round(m)) == 16:
-            symbol = 'O'
+            symbol = "O"
         elif int(round(m)) == 32:
-            symbol = 'S'
+            symbol = "S"
         elif int(round(m)) == 35:
-            symbol = 'Cl'
+            symbol = "Cl"
         elif int(round(m)) == 1:
-            symbol = 'H'
+            symbol = "H"
         elif int(round(m)) == 31:
-            symbol = 'P'
+            symbol = "P"
         elif int(round(m)) == 19:
-            symbol = 'F'
+            symbol = "F"
         elif int(round(m)) == 80:
-            symbol = 'Br'
+            symbol = "Br"
         elif int(round(m)) == 127:
-            symbol = 'I'
+            symbol = "I"
         else:
             raise Exception("Unknown mass:" + str(m))
 
-        buf += symbol + ' ' + str(round(x,5)) + ' ' + str(round(y,5)) + ' ' +str(round(z,5)) + '\n'
+        buf += symbol + " " + str(round(x, 5)) + " " + str(round(y, 5)) + " " + str(round(z, 5)) + "\n"
     return buf
 
 
@@ -46,6 +48,7 @@ def convert_uIC50_to_kJ_per_mole(amount_in_uM):
     TODO: more sig figs
     """
     return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
+
 
 def convert_uM_to_kJ_per_mole(amount_in_uM):
     """
@@ -64,8 +67,10 @@ def convert_uM_to_kJ_per_mole(amount_in_uM):
     """
     return 0.593 * np.log(amount_in_uM * 1e-6) * 4.18
 
+
 from scipy.spatial.distance import cdist
 import networkx as nx
+
 
 def _weighted_adjacency_graph(conf_a, conf_b, threshold=1.0):
     """construct a networkx graph with
@@ -81,7 +86,7 @@ def _weighted_adjacency_graph(conf_a, conf_b, threshold=1.0):
     for i in range(len(within_threshold)):
         neighbors_of_i = np.where(within_threshold[i])[0]
         for j in neighbors_of_i:
-            g.add_edge(f'conf_a[{i}]', f'conf_b[{j}]', weight=threshold - distances[i, j])
+            g.add_edge(f"conf_a[{i}]", f"conf_b[{j}]", weight=threshold - distances[i, j])
     return g
 
 
@@ -89,7 +94,7 @@ def _core_from_matching(matching):
     """matching is a set of pairs of node names"""
 
     # 'conf_b[9]' -> 9
-    ind_from_node_name = lambda name: int(name.split('[')[1].split(']')[0])
+    ind_from_node_name = lambda name: int(name.split("[")[1].split("]")[0])
 
     match_list = list(matching)
 
@@ -130,13 +135,15 @@ def simple_geometry_mapping(mol_a, mol_b, threshold=0.5):
     conf_b = mol_b.GetConformer(0).GetPositions()
     # TODO: perform initial alignment
 
-    within_threshold = (cdist(conf_a, conf_b) <= threshold)
+    within_threshold = cdist(conf_a, conf_b) <= threshold
     num_neighbors = within_threshold.sum(1)
     num_mappings_possible = np.prod(num_neighbors[num_neighbors > 0])
 
     if max(num_neighbors) > 1:
-        print(f'Warning! Multiple (~ {num_mappings_possible}) atom-mappings would be possible at threshold={threshold}Å.')
-        print(f'Only mapping atoms that have exactly one neighbor within {threshold}Å.')
+        print(
+            f"Warning! Multiple (~ {num_mappings_possible}) atom-mappings would be possible at threshold={threshold}Å."
+        )
+        print(f"Only mapping atoms that have exactly one neighbor within {threshold}Å.")
         # TODO: print more information about difference between size of set returned and set possible
         # TODO: also assert that only pairs of the same element will be mapped together
 
@@ -155,6 +162,7 @@ def simple_geometry_mapping(mol_a, mol_b, threshold=0.5):
 
 from rdkit.Chem.Draw import rdMolDraw2D
 
+
 def draw_mol(mol, highlightAtoms, highlightColors):
     """from YTZ, Feb 1, 2021"""
     drawer = rdMolDraw2D.MolDraw2DSVG(400, 200)
@@ -164,8 +172,8 @@ def draw_mol(mol, highlightAtoms, highlightColors):
     # TODO: return or save image, for inclusion in a PDF report or similar
 
     # To display in a notebook:
-    #svg = drawer.GetDrawingText().replace('svg:', '')
-    #display(SVG(svg))
+    # svg = drawer.GetDrawingText().replace('svg:', '')
+    # display(SVG(svg))
 
 
 def plot_atom_mapping(mol_a, mol_b, core):
@@ -186,19 +194,19 @@ def plot_atom_mapping(mol_a, mol_b, core):
 def get_connected_components(nodes, relative_inds, absolute_inds) -> List[np.array]:
     """Construct a graph containing (len(nodes) + 1) nodes -- one for each original node, plus a new "reference" node.*
 
-        Add edges
-        * (i, j) in relative_inds,
-        * (i, "reference") for i in absolute_inds
+    Add edges
+    * (i, j) in relative_inds,
+    * (i, "reference") for i in absolute_inds
 
-        And then return the connected components of this graph (omitting the "reference" node we added).*
+    And then return the connected components of this graph (omitting the "reference" node we added).*
 
-        * Unless "nodes" already contained something named "reference"!
+    * Unless "nodes" already contained something named "reference"!
     """
     g = nx.Graph()
     g.add_nodes_from(nodes)
 
-    if 'reference' not in nodes:
-        g.add_node('reference')
+    if "reference" not in nodes:
+        g.add_node("reference")
 
     for (i, j) in relative_inds:
         g.add_edge(i, j)
@@ -207,7 +215,7 @@ def get_connected_components(nodes, relative_inds, absolute_inds) -> List[np.arr
         absolute_inds = [0]
 
     for i in absolute_inds:
-        g.add_edge(i, 'reference')
+        g.add_edge(i, "reference")
 
     # return list of lists of elements of the nodes
     # we will remove the "reference" node we added
@@ -215,14 +223,14 @@ def get_connected_components(nodes, relative_inds, absolute_inds) -> List[np.arr
 
     components = list(map(list, list(nx.connected_components(g))))
 
-    if 'reference' in nodes:
+    if "reference" in nodes:
         return components
     else:
         filtered_components = []
 
         for component in components:
-            if 'reference' in component:
-                component.remove('reference')
+            if "reference" in component:
+                component.remove("reference")
             filtered_components.append(component)
         return filtered_components
 
@@ -257,11 +265,13 @@ def validate_map(n_nodes: int, relative_inds: np.array, absolute_inds: np.array)
     components = get_connected_components(list(range(n_nodes)), relative_inds, absolute_inds)
     return len(components) == 1
 
+
 def get_romol_conf(mol):
     """Coordinates of mol's 0th conformer, in nanometers"""
     conformer = mol.GetConformer(0)
     guest_conf = np.array(conformer.GetPositions(), dtype=np.float64)
-    return guest_conf/10 # from angstroms to nm
+    return guest_conf / 10  # from angstroms to nm
+
 
 def sanitize_energies(full_us, lamb_idx, cutoff=10000):
     """
@@ -288,7 +298,7 @@ def sanitize_energies(full_us, lamb_idx, cutoff=10000):
 
     lamb_idx: int
         Which of the K windows to serve as the reference energy
-    
+
     cutoff: float
         Used to determine the threshold for a "good" energy
 
@@ -301,6 +311,7 @@ def sanitize_energies(full_us, lamb_idx, cutoff=10000):
     ref_us = np.expand_dims(full_us[:, lamb_idx], axis=1)
     abs_us = np.abs(full_us - ref_us)
     return np.where(abs_us < cutoff, full_us, np.inf)
+
 
 def extract_delta_Us_from_U_knk(U_knk):
     """
@@ -335,10 +346,10 @@ def extract_delta_Us_from_U_knk(U_knk):
 
     delta_Us = []
 
-    for lambda_idx in range(K-1):
+    for lambda_idx in range(K - 1):
         # lambda_us have shape (F, K)
-        fwd_delta_U = delta_U(lambda_idx, lambda_idx+1)
-        rev_delta_U = delta_U(lambda_idx+1, lambda_idx)
+        fwd_delta_U = delta_U(lambda_idx, lambda_idx + 1)
+        rev_delta_U = delta_U(lambda_idx + 1, lambda_idx)
         delta_Us.append((fwd_delta_U, rev_delta_U))
 
     return np.array(delta_Us)

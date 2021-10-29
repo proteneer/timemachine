@@ -17,9 +17,13 @@ class DisconnectedEdgesError(Exception):
     pass
 
 
-def construct_mle_layer(n_nodes: int,
-                        rbfe_inds: np.array, rbfe_sigmas: Optional[np.array] = None,
-                        abfe_inds: Optional[np.array] = None, abfe_sigmas: Optional[np.array] = None) -> callable:
+def construct_mle_layer(
+    n_nodes: int,
+    rbfe_inds: np.array,
+    rbfe_sigmas: Optional[np.array] = None,
+    abfe_inds: Optional[np.array] = None,
+    abfe_sigmas: Optional[np.array] = None,
+) -> callable:
     """Construct a differentiable function predict_free_energies(simulated_rbfes, simulated_abfes) -> free_energies
 
     Parameters
@@ -98,7 +102,7 @@ def construct_mle_layer(n_nodes: int,
     n_rbfes = len(rbfe_inds)
     inds_l, inds_r = rbfe_inds.T
     if (inds_l == inds_r).any():
-        raise AssertionError(f'invalid rbfe_inds -- includes self-comparisons: {rbfe_inds[(inds_l == inds_r)]}')
+        raise AssertionError(f"invalid rbfe_inds -- includes self-comparisons: {rbfe_inds[(inds_l == inds_r)]}")
 
     if rbfe_sigmas is None:
         rbfe_sigmas = np.ones(n_rbfes)
@@ -114,7 +118,7 @@ def construct_mle_layer(n_nodes: int,
     # check that the "map" is connected
     valid = validate_map(n_nodes, relative_inds=rbfe_inds, absolute_inds=abfe_inds)
     if not valid:
-        raise DisconnectedEdgesError(f'invalid map -- disconnected!')
+        raise DisconnectedEdgesError(f"invalid map -- disconnected!")
 
     # parameters that define the optimization problem: simulated_rbfes and simulated_abfes
     simulated_rbfes = cp.Parameter(n_rbfes)
@@ -129,18 +133,18 @@ def construct_mle_layer(n_nodes: int,
 
     # gaussian log likelihood of simulated_rbfes, compared with the relative free energies implied by trial_free_energies
     rbfe_residuals = implied_rbfes - simulated_rbfes
-    log_likelihood_rbfes = cp.sum(- (rbfe_residuals / rbfe_sigmas) ** 2 - np.log(rbfe_sigmas * np.sqrt(2 * np.pi)))
+    log_likelihood_rbfes = cp.sum(-((rbfe_residuals / rbfe_sigmas) ** 2) - np.log(rbfe_sigmas * np.sqrt(2 * np.pi)))
 
     # gaussian log likelihood of simulated_abfes, compared with the absolute free energies implied by trial_free_energies
     abfe_residuals = implied_abfes - simulated_abfes
-    log_likelihood_abfes = cp.sum(- (abfe_residuals / abfe_sigmas) ** 2 - np.log(abfe_sigmas * np.sqrt(2 * np.pi)))
+    log_likelihood_abfes = cp.sum(-((abfe_residuals / abfe_sigmas) ** 2) - np.log(abfe_sigmas * np.sqrt(2 * np.pi)))
 
     # likelihood of rbfes and abfes jointly
     log_likelihood = log_likelihood_rbfes + log_likelihood_abfes
 
     # predicted free_energies are obtained by varying trial_free_energies to maximize log_likelihood of
     #   simulated_rbfes and simulated_abfes
-    objective = cp.Minimize(- log_likelihood)
+    objective = cp.Minimize(-log_likelihood)
     problem = cp.Problem(objective)
     assert problem.is_dpp()
 
@@ -150,9 +154,12 @@ def construct_mle_layer(n_nodes: int,
     # for convenience, return the jax array rather than a 1-tuple, and make simulated_abfes argument optional
     #   if no ABFE inds were specified
     if no_abfe:
+
         def predict_free_energies(simulated_rbfes, simulated_abfes=None):
             return cvxpylayer_fxn(simulated_rbfes, np.zeros(1))[0]
+
     else:
+
         def predict_free_energies(simulated_rbfes, simulated_abfes):
             return cvxpylayer_fxn(simulated_rbfes, simulated_abfes)[0]
 

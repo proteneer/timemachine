@@ -22,14 +22,16 @@ import jax.numpy as jnp
 def jax_fn(x):
     return jnp.sqrt(x)
 
-def square(a):
-    return a*a
 
-def mult(x,y):
-    return x*y
+def square(a):
+    return a * a
+
+
+def mult(x, y):
+    return x * y
+
 
 class TestProcessPool(unittest.TestCase):
-
     def setUp(self):
         max_workers = 10
         self.cli = client.ProcessPoolClient(max_workers)
@@ -47,20 +49,21 @@ class TestProcessPool(unittest.TestCase):
         for f in futures:
             test_res.append(f.result())
 
-        np.testing.assert_array_equal(test_res, arr*arr)
+        np.testing.assert_array_equal(test_res, arr * arr)
 
     def test_jax(self):
         # (ytz): test that jax code can be launched via multiprocessing
         # if we didn't set get_context('spawn') earlier then this will hang.
-        x = jnp.array([50., 2.0])
+        x = jnp.array([50.0, 2.0])
         fut = self.cli.submit(jax_fn, x)
         np.testing.assert_almost_equal(fut.result(), np.sqrt(x))
 
+
 def environ_check():
-    return os.environ['CUDA_VISIBLE_DEVICES']
+    return os.environ["CUDA_VISIBLE_DEVICES"]
+
 
 class TestGPUCount(unittest.TestCase):
-
     @patch("parallel.utils.check_output")
     def test_get_gpu_count(self, mock_output):
         mock_output.return_value = b"\n".join([f"GPU #{i}".encode() for i in range(5)])
@@ -73,8 +76,8 @@ class TestGPUCount(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             parallel.utils.get_gpu_count()
 
-class TestCUDAPoolClient(unittest.TestCase):
 
+class TestCUDAPoolClient(unittest.TestCase):
     def setUp(self):
         self.max_workers = get_gpu_count()
         self.cli = client.CUDAPoolClient(self.max_workers)
@@ -94,10 +97,7 @@ class TestCUDAPoolClient(unittest.TestCase):
 
         expected = [str(i % self.max_workers) for i in range(operations)]
 
-        np.testing.assert_array_equal(
-            test_res,
-            expected
-        )
+        np.testing.assert_array_equal(test_res, expected)
 
     def test_too_many_workers(self):
         # I look forward to the day that we have 814 GPUs
@@ -105,8 +105,8 @@ class TestCUDAPoolClient(unittest.TestCase):
         with self.assertRaises(AssertionError):
             cli.verify()
 
-class TestGRPCClient(unittest.TestCase):
 
+class TestGRPCClient(unittest.TestCase):
     def setUp(self):
 
         starting_port = random.randint(2000, 5000)
@@ -114,14 +114,15 @@ class TestGRPCClient(unittest.TestCase):
         self.ports = [starting_port + i for i in range(2)]
         self.servers = []
         for port in self.ports:
-            server = grpc.server(concurrent.futures.ThreadPoolExecutor(max_workers=1),
-                options = [
-                    ('grpc.max_send_message_length', 50 * 1024 * 1024),
-                    ('grpc.max_receive_message_length', 50 * 1024 * 1024)
-                ]
+            server = grpc.server(
+                concurrent.futures.ThreadPoolExecutor(max_workers=1),
+                options=[
+                    ("grpc.max_send_message_length", 50 * 1024 * 1024),
+                    ("grpc.max_receive_message_length", 50 * 1024 * 1024),
+                ],
             )
             parallel.grpc.service_pb2_grpc.add_WorkerServicer_to_server(worker.Worker(), server)
-            server.add_insecure_port('[::]:'+str(port))
+            server.add_insecure_port("[::]:" + str(port))
             server.start()
             self.servers.append(server)
 
@@ -132,10 +133,15 @@ class TestGRPCClient(unittest.TestCase):
     @patch("parallel.worker.get_worker_status")
     def test_checking_host_status(self, mock_status):
         # All the workers return the same thing
-        mock_status.side_effect = [parallel.grpc.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers]
+        mock_status.side_effect = [
+            parallel.grpc.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers
+        ]
         self.cli.verify()
 
-        mock_status.side_effect = [parallel.grpc.service_pb2.StatusResponse(nvidia_driver=f"foo{i}", git_sha=f"bar{i}") for i in range(len(self.servers))]
+        mock_status.side_effect = [
+            parallel.grpc.service_pb2.StatusResponse(nvidia_driver=f"foo{i}", git_sha=f"bar{i}")
+            for i in range(len(self.servers))
+        ]
 
         with self.assertRaises(AssertionError):
             self.cli.verify()
@@ -145,11 +151,13 @@ class TestGRPCClient(unittest.TestCase):
 
         hosts = self.hosts.copy()
         bad_host = "128.128.128.128:8888"
-        hosts.append(bad_host) # Give it a bad connexion, should fail
+        hosts.append(bad_host)  # Give it a bad connexion, should fail
         cli = client.GRPCClient(hosts)
 
         # All the workers return the same thing
-        mock_status.side_effect = [parallel.grpc.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers]
+        mock_status.side_effect = [
+            parallel.grpc.service_pb2.StatusResponse(nvidia_driver="foo", git_sha="bar") for _ in self.servers
+        ]
 
         with self.assertRaises(AssertionError) as e:
             cli.verify()
@@ -186,7 +194,7 @@ class TestGRPCClient(unittest.TestCase):
         for f in futures:
             test_res.append(f.result())
 
-        np.testing.assert_array_equal(test_res, xs*ys)
+        np.testing.assert_array_equal(test_res, xs * ys)
 
     def test_foo_1_arg(self):
         xs = np.linspace(0, 1.0, 5)
@@ -200,7 +208,7 @@ class TestGRPCClient(unittest.TestCase):
         for f in futures:
             test_res.append(f.result())
 
-        np.testing.assert_array_equal(test_res, xs*xs)
+        np.testing.assert_array_equal(test_res, xs * xs)
 
     def tearDown(self):
         for server in self.servers:

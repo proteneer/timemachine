@@ -8,11 +8,7 @@ from training import bootstrap
 import numpy as np
 
 # we want this to work for protein ligand systems as well as solvation free energies
-def simulate(
-    simulation,
-    n_steps,
-    lambda_schedule,
-    stubs):
+def simulate(simulation, n_steps, lambda_schedule, stubs):
     """
     Compute the hydration free energy of a simulation system.
 
@@ -48,10 +44,10 @@ def simulate(
 
         # endpoint lambda
         if lamb_idx == 0 or lamb_idx == len(lambda_schedule) - 1:
-            observe_du_dl_interval = 5000 # this is analytically zero.
+            observe_du_dl_interval = 5000  # this is analytically zero.
             observe_du_dp_interval = 25
         else:
-            observe_du_dl_interval = 25 # this is analytically zero.
+            observe_du_dl_interval = 25  # this is analytically zero.
             observe_du_dp_interval = 0
 
         request = service_pb2.SimulateRequest(
@@ -101,11 +97,9 @@ def simulate(
     pred_dG = np.trapz(du_dls, lambda_schedule)
     pred_dG_err = bootstrap.ti_ci(du_dls, lambda_schedule)
 
-    
     grad_dG = []
 
     for source_grad, target_grad in zip(lambda_0_du_dqs, lambda_1_du_dqs):
         grad_dG.append(target_grad - source_grad)
-
 
     return (pred_dG, pred_dG_err), grad_dG, du_dls

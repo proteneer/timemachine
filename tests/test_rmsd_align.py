@@ -12,7 +12,7 @@ def test_rmsd_align_proper():
     """Assert that the same optimal alignment is recovered by both
     reference (`rmsd.align_x2_unto_x1`) and CPU (`custom_ops.rmsd_align`),
     for cases where `x1` and `x2` differ by a rigid transformation
-    
+
     This is specialized to proper rotations sampled from SO(3)
     """
 
@@ -22,10 +22,10 @@ def test_rmsd_align_proper():
 
     for _ in range(1000):
 
-        x1 = np.random.rand(N,3)
+        x1 = np.random.rand(N, 3)
         random_t = np.random.rand(3)
         random_R = special_ortho_group.rvs(3)
-        x2 = x1@random_R + random_t
+        x2 = x1 @ random_R + random_t
 
         assert np.linalg.norm(x2 - x1) > 1e-6
 
@@ -44,6 +44,7 @@ def test_rmsd_align_proper():
 
         np.testing.assert_almost_equal(x2_aligned_reference, x2_aligned_test)
 
+
 def test_rmsd_align_improper():
     """
     Similar to the _proper() case except that we sample from O(3) and we don't check for exact
@@ -55,10 +56,10 @@ def test_rmsd_align_improper():
 
     for _ in range(1000):
 
-        x1 = np.random.rand(N,3)
+        x1 = np.random.rand(N, 3)
         random_t = np.random.rand(3)
         random_R = ortho_group.rvs(3)
-        x2 = x1@random_R + random_t
+        x2 = x1 @ random_R + random_t
 
         # compute initial rmsd when recentered
 

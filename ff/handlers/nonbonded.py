@@ -17,6 +17,7 @@ from jax import ops
 
 import base64
 
+
 def convert_to_nx(mol):
     """
     Convert an ROMol into a networkx graph.
@@ -49,7 +50,7 @@ def convert_to_oe(mol):
     return oemol
 
 
-def oe_assign_charges(mol, charge_model='AM1BCCELF10'):
+def oe_assign_charges(mol, charge_model="AM1BCCELF10"):
     """assign partial charges, then premultiply by sqrt(ONE_4PI_EPS0)
     as an optimization"""
 
@@ -57,16 +58,16 @@ def oe_assign_charges(mol, charge_model='AM1BCCELF10'):
     from openeye import oequacpac
 
     charge_engines = {
-        'AM1': oequacpac.OEAM1Charges(symmetrize=True),
-        'AM1BCC': oequacpac.OEAM1BCCCharges(symmetrize=True),
-        'AM1BCCELF10':  oequacpac.OEAM1BCCELF10Charges(),
+        "AM1": oequacpac.OEAM1Charges(symmetrize=True),
+        "AM1BCC": oequacpac.OEAM1BCCCharges(symmetrize=True),
+        "AM1BCCELF10": oequacpac.OEAM1BCCELF10Charges(),
     }
     charge_engine = charge_engines[charge_model]
 
     oemol = convert_to_oe(mol)
     result = oequacpac.OEAssignCharges(oemol, charge_engine)
     if result is False:
-        raise Exception('Unable to assign charges')
+        raise Exception("Unable to assign charges")
 
     partial_charges = np.array([atom.GetPartialCharge() for atom in oemol.GetAtoms()])
 
@@ -78,7 +79,7 @@ def oe_assign_charges(mol, charge_model='AM1BCCELF10'):
 
 
 def generate_exclusion_idxs(mol, scale12, scale13, scale14):
-    """ 
+    """
     Generate exclusions for a mol based on the all pairs shortest path.
     We always take the convention that exclusions for smaller distances
     override those of longer distances.
@@ -105,7 +106,7 @@ def generate_exclusion_idxs(mol, scale12, scale13, scale14):
 
     exclusions = {}
 
-    g = convert_to_nx(mol)       
+    g = convert_to_nx(mol)
     for path in nx.all_pairs_shortest_path_length(g, cutoff=3):
         src = path[0]
         for dst, length in path[1].items():
@@ -155,11 +156,12 @@ def generate_nonbonded_idxs(mol, smirks):
 
     return param_idxs
 
+
 def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
-class NonbondedHandler(SerializableMixIn):
 
+class NonbondedHandler(SerializableMixIn):
     def __init__(self, smirks, params, props):
         """
         Parameters
@@ -172,7 +174,7 @@ class NonbondedHandler(SerializableMixIn):
 
         props: any
         """
-        
+
         assert len(smirks) == len(params)
 
         self.smirks = smirks
@@ -203,15 +205,16 @@ class NonbondedHandler(SerializableMixIn):
             rdkit molecule, should have hydrogens pre-added
 
         """
-        assert (len(smirks) == len(params))
+        assert len(smirks) == len(params)
         param_idxs = generate_nonbonded_idxs(mol, smirks)
         return params[param_idxs]
+
 
 class SimpleChargeHandler(NonbondedHandler):
     pass
 
-class LennardJonesHandler(NonbondedHandler):
 
+class LennardJonesHandler(NonbondedHandler):
     @staticmethod
     def static_parameterize(params, smirks, mol):
         """
@@ -239,14 +242,14 @@ class LennardJonesHandler(NonbondedHandler):
         epsilons = params[:, 1]
         # the raw parameters already in sqrt form.
         # sigmas need to be divided by two
-        return jnp.stack([sigmas/2, epsilons], axis=1)
+        return jnp.stack([sigmas / 2, epsilons], axis=1)
+
 
 class GBSAHandler(NonbondedHandler):
     pass
 
 
 class AM1Handler(SerializableMixIn):
-
     def __init__(self, smirks, params, props):
         assert len(smirks) == 0
         assert len(params) == 0
@@ -268,11 +271,10 @@ class AM1Handler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        return oe_assign_charges(mol, 'AM1')
+        return oe_assign_charges(mol, "AM1")
 
 
 class AM1BCCHandler(SerializableMixIn):
-
     def __init__(self, smirks, params, props):
         assert len(smirks) == 0
         assert len(params) == 0
@@ -297,11 +299,10 @@ class AM1BCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        return oe_assign_charges(mol, 'AM1BCCELF10')
+        return oe_assign_charges(mol, "AM1BCCELF10")
 
 
 class AM1CCCHandler(SerializableMixIn):
-
     def __init__(self, smirks, params, props):
         """
         Parameters
@@ -315,7 +316,7 @@ class AM1CCCHandler(SerializableMixIn):
         props: any
 
         """
-        
+
         assert len(smirks) == len(params)
 
         self.smirks = smirks
@@ -348,13 +349,13 @@ class AM1CCCHandler(SerializableMixIn):
         AromaticityModel.assign(oemol)
 
         # check for cache
-        cache_key = 'AM1Cache'
+        cache_key = "AM1Cache"
         if not mol.HasProp(cache_key):
             # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
             # to be an issue that the atom ordering modifies the return values as well. A follow up
             # with OpenEye is in order
             # https://github.com/openforcefield/openff-toolkit/issues/983
-            am1_charges = list(oe_assign_charges(mol, 'AM1'))
+            am1_charges = list(oe_assign_charges(mol, "AM1"))
 
             mol.SetProp(cache_key, base64.b64encode(pickle.dumps(am1_charges)))
 
@@ -365,7 +366,7 @@ class AM1CCCHandler(SerializableMixIn):
         bond_idx_params = []
 
         for index in range(len(smirks)):
-            smirk = smirks[index]  
+            smirk = smirks[index]
             param = params[index]
 
             substructure_search = oechem.OESubSearch(smirk)
@@ -374,13 +375,13 @@ class AM1CCCHandler(SerializableMixIn):
             matched_bonds = []
             matches = []
             for match in substructure_search.Match(oemol):
-                
+
                 matched_indices = {
                     atom_match.pattern.GetMapIdx() - 1: atom_match.target.GetIdx()
                     for atom_match in match.GetAtoms()
                     if atom_match.pattern.GetMapIdx() != 0
                 }
-               
+
                 matches.append(matched_indices)
 
             for matched_indices in matches:
@@ -391,7 +392,7 @@ class AM1CCCHandler(SerializableMixIn):
                 if (
                     forward_matched_bond in matched_bonds
                     or reverse_matched_bond in matched_bonds
-                    or forward_matched_bond in bond_idxs 
+                    or forward_matched_bond in bond_idxs
                     or reverse_matched_bond in bond_idxs
                 ):
                     continue
@@ -399,7 +400,6 @@ class AM1CCCHandler(SerializableMixIn):
                 matched_bonds.append(forward_matched_bond)
                 bond_idxs.append(forward_matched_bond)
                 bond_idx_params.append(index)
-        
 
         am1_charges = np.array(am1_charges)
         bond_idxs = np.array(bond_idxs)
@@ -410,6 +410,6 @@ class AM1CCCHandler(SerializableMixIn):
         decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)
 
         q_params = decremented
-        assert (q_params.shape[0] == mol.GetNumAtoms()) # check that return shape is consistent with input mol
+        assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 
         return q_params

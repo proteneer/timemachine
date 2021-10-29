@@ -52,12 +52,7 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
-    parser.add_argument(
-        "--epochs",
-        default=1,
-        help="Number of Epochs",
-        type=int
-    )
+    parser.add_argument("--epochs", default=1, help="Number of Epochs", type=int)
 
     parser.add_argument(
         "--property_field",
@@ -72,109 +67,66 @@ if __name__ == "__main__":
         choices=["nM", "uM"],
     )
 
-    parser.add_argument(
-        "--hosts",
-        nargs="*",
-        default=None,
-        help="Hosts running GRPC worker to use for compute"
-    )
+    parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
+
+    parser.add_argument("--num_gpus", type=int, help="number of gpus", default=get_gpu_count())
 
     parser.add_argument(
-        "--num_gpus",
-        type=int,
-        help="number of gpus",
-        default=get_gpu_count()
+        "--num_complex_conv_windows", type=int, help="number of lambda windows for complex conversion", required=True
     )
 
-    parser.add_argument(
-        "--num_complex_conv_windows",
-        type=int,
-        help="number of lambda windows for complex conversion",
-        required=True
-    )
+    parser.add_argument("--num_complex_windows", type=int, help="number of vacuum lambda windows", required=True)
 
     parser.add_argument(
-        "--num_complex_windows",
-        type=int,
-        help="number of vacuum lambda windows",
-        required=True
+        "--num_solvent_conv_windows", type=int, help="number of lambda windows for solvent conversion", required=True
     )
 
-    parser.add_argument(
-        "--num_solvent_conv_windows",
-        type=int,
-        help="number of lambda windows for solvent conversion",
-        required=True
-    )
-
-    parser.add_argument(
-        "--num_solvent_windows",
-        type=int,
-        help="number of solvent lambda windows",
-        required=True
-    )
+    parser.add_argument("--num_solvent_windows", type=int, help="number of solvent lambda windows", required=True)
 
     parser.add_argument(
         "--num_complex_equil_steps",
         type=int,
         help="number of equilibration steps for each complex lambda window",
-        required=True
+        required=True,
     )
 
     parser.add_argument(
         "--num_complex_prod_steps",
         type=int,
         help="number of production steps for each complex lambda window",
-        required=True
+        required=True,
     )
 
     parser.add_argument(
         "--num_solvent_equil_steps",
         type=int,
         help="number of equilibration steps for each solvent lambda window",
-        required=True
+        required=True,
     )
 
     parser.add_argument(
         "--num_solvent_prod_steps",
         type=int,
         help="number of production steps for each solvent lambda window",
-        required=True
+        required=True,
     )
 
     parser.add_argument(
         "--num_complex_preequil_steps",
         type=int,
         help="number of pre-equilibration steps for each complex lambda window",
-        required=True
+        required=True,
     )
 
     parser.add_argument(
-        "--blocker_name",
-        type=str,
-        help='Name of the ligand the sdf file to be used as a blocker',
-        required=True
+        "--blocker_name", type=str, help="Name of the ligand the sdf file to be used as a blocker", required=True
     )
 
-    parser.add_argument(
-        "--protein_pdb",
-        type=str,
-        help="Path to the target pdb",
-        required=True
-    )
+    parser.add_argument("--protein_pdb", type=str, help="Path to the target pdb", required=True)
 
-    parser.add_argument(
-        "--ligand_sdf",
-        type=str,
-        help="Path to the ligand's sdf",
-        required=True
-    )
+    parser.add_argument("--ligand_sdf", type=str, help="Path to the ligand's sdf", required=True)
 
-    parser.add_argument(
-        "--shuffle",
-        action="store_true",
-        help="Shuffle ligand order"
-    )
+    parser.add_argument("--shuffle", action="store_true", help="Shuffle ligand order")
 
     cmd_args = parser.parse_args()
 
@@ -190,11 +142,11 @@ if __name__ == "__main__":
         client = GRPCClient(hosts=cmd_args.hosts)
     client.verify()
 
-    path_to_ligand =  cmd_args.ligand_sdf
+    path_to_ligand = cmd_args.ligand_sdf
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
     root = Path(timemachine.__file__).parent.parent
 
-    with open(root.joinpath('ff/params/smirnoff_1_1_0_ccc.py')) as f:
+    with open(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py")) as f:
         ff_handlers = deserialize_handlers(f.read())
 
     forcefield = Forcefield(ff_handlers)
@@ -208,7 +160,8 @@ if __name__ == "__main__":
 
     # build the protein system.
     complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
-        cmd_args.protein_pdb)
+        cmd_args.protein_pdb
+    )
 
     solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
@@ -239,7 +192,7 @@ if __name__ == "__main__":
             pressure,
             forcefield,
             complex_box,
-            cmd_args.num_complex_preequil_steps
+            cmd_args.num_complex_preequil_steps,
         )
         with open("equil.pickle", "wb") as ofs:
             pickle.dump((complex_ref_x0, complex_ref_box0), ofs)
@@ -260,7 +213,7 @@ if __name__ == "__main__":
         pressure,
         dt,
         cmd_args.num_complex_equil_steps,
-        cmd_args.num_complex_prod_steps
+        cmd_args.num_complex_prod_steps,
     )
 
     binding_model_complex_decouple = model_rabfe.RelativeBindingModel(
@@ -273,7 +226,7 @@ if __name__ == "__main__":
         pressure,
         dt,
         cmd_args.num_complex_equil_steps,
-        cmd_args.num_complex_prod_steps
+        cmd_args.num_complex_prod_steps,
     )
 
     # solvent models.
@@ -289,7 +242,7 @@ if __name__ == "__main__":
         pressure,
         dt,
         cmd_args.num_solvent_equil_steps,
-        cmd_args.num_solvent_prod_steps
+        cmd_args.num_solvent_prod_steps,
     )
 
     binding_model_solvent_decouple = model_rabfe.AbsoluteStandardHydrationModel(
@@ -302,7 +255,7 @@ if __name__ == "__main__":
         pressure,
         dt,
         cmd_args.num_solvent_equil_steps,
-        cmd_args.num_solvent_prod_steps
+        cmd_args.num_solvent_prod_steps,
     )
 
     ordered_params = forcefield.get_ordered_params()
@@ -312,22 +265,18 @@ if __name__ == "__main__":
     mcs_params.AtomTyper = CompareDistNonterminal()
     mcs_params.BondTyper = rdFMCS.BondCompare.CompareAny
 
-
     def predict_dG(blocker, mol):
-        result = rdFMCS.FindMCS(
-            [mol, blocker],
-            mcs_params
-        )
+        result = rdFMCS.FindMCS([mol, blocker], mcs_params)
         # generate the core_idxs
         core_idxs = setup_relative_restraints_using_smarts(mol, blocker, result.smartsString)
-        mol_coords = get_romol_conf(mol) # original coords
-        
+        mol_coords = get_romol_conf(mol)  # original coords
+
         num_complex_atoms = complex_coords.shape[0]
 
         # Use core_idxs to generate
         R, t = rmsd.get_optimal_rotation_and_translation(
-            x1=complex_ref_x0[num_complex_atoms:][core_idxs[:, 1]], # reference core atoms
-            x2=mol_coords[core_idxs[:, 0]], # mol core atoms
+            x1=complex_ref_x0[num_complex_atoms:][core_idxs[:, 1]],  # reference core atoms
+            x2=mol_coords[core_idxs[:, 0]],  # mol core atoms
         )
 
         aligned_mol_coords = rmsd.apply_rotation_and_translation(mol_coords, R, t)
@@ -337,49 +286,65 @@ if __name__ == "__main__":
         complex_box0 = complex_ref_box0
 
         # compute the free energy of swapping an interacting mol with a non-interacting reference mol
-        complex_decouple_x0 = minimizer.minimize_host_4d([mol, blocker_mol], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords, ref_coords])
+        complex_decouple_x0 = minimizer.minimize_host_4d(
+            [mol, blocker_mol],
+            complex_system,
+            complex_host_coords,
+            forcefield,
+            complex_box0,
+            [aligned_mol_coords, ref_coords],
+        )
         complex_decouple_x0 = np.concatenate([complex_decouple_x0, aligned_mol_coords, ref_coords])
 
-        complex_decouple_params, dG_complex_decouple_model, dG_complex_decouple_futures = binding_model_complex_decouple.simulate_futures(
+        (
+            complex_decouple_params,
+            dG_complex_decouple_model,
+            dG_complex_decouple_futures,
+        ) = binding_model_complex_decouple.simulate_futures(
             ordered_params,
             mol,
             blocker_mol,
             core_idxs,
             complex_decouple_x0,
             complex_box0,
-            prefix='complex_decouple_'+mol_name+"_"+str(epoch),
+            prefix="complex_decouple_" + mol_name + "_" + str(epoch),
         )
 
         # compute the free energy of conversion in complex
-        complex_conversion_x0 = minimizer.minimize_host_4d([mol], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords])
+        complex_conversion_x0 = minimizer.minimize_host_4d(
+            [mol], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords]
+        )
         complex_conversion_x0 = np.concatenate([complex_conversion_x0, aligned_mol_coords])
-        complex_conversion_params, complex_conversion_model, complex_conversion_futures = binding_model_complex_conversion.simulate_futures(
+        (
+            complex_conversion_params,
+            complex_conversion_model,
+            complex_conversion_futures,
+        ) = binding_model_complex_conversion.simulate_futures(
             ordered_params,
             mol,
             complex_conversion_x0,
             complex_box0,
-            prefix='complex_conversion_'+mol_name+"_"+str(epoch)
+            prefix="complex_conversion_" + mol_name + "_" + str(epoch),
         )
 
         # solvent
         min_solvent_coords = minimizer.minimize_host_4d([mol], solvent_system, solvent_coords, forcefield, solvent_box)
         solvent_x0 = np.concatenate([min_solvent_coords, mol_coords])
         solvent_box0 = solvent_box
-        solvent_conversion_params, solvent_conversion_model, solvent_conversion_futures = binding_model_solvent_conversion.simulate_futures(
-            ordered_params,
-            mol,
-            solvent_x0,
-            solvent_box0,
-            prefix='solvent_conversion_'+mol_name+"_"+str(epoch)
+        (
+            solvent_conversion_params,
+            solvent_conversion_model,
+            solvent_conversion_futures,
+        ) = binding_model_solvent_conversion.simulate_futures(
+            ordered_params, mol, solvent_x0, solvent_box0, prefix="solvent_conversion_" + mol_name + "_" + str(epoch)
         )
-        solvent_decouple_params, solvent_decouple_model, solvent_decouple_futures = binding_model_solvent_decouple.simulate_futures(
-            ordered_params,
-            mol,
-            solvent_x0,
-            solvent_box0,
-            prefix='solvent_decouple_'+mol_name+"_"+str(epoch)
+        (
+            solvent_decouple_params,
+            solvent_decouple_model,
+            solvent_decouple_futures,
+        ) = binding_model_solvent_decouple.simulate_futures(
+            ordered_params, mol, solvent_x0, solvent_box0, prefix="solvent_decouple_" + mol_name + "_" + str(epoch)
         )
-
 
         dG_complex_decouple, dG_complex_decouple_error = binding_model_complex_decouple.predict_from_futures(
             complex_decouple_params,
@@ -417,8 +382,10 @@ if __name__ == "__main__":
         )
         rabfe_result.log()
         dG_err = np.sqrt(
-            dG_complex_conversion_error**2 + dG_complex_decouple_error**2 +
-            dG_solvent_conversion_error**2 + dG_solvent_decouple_error**2
+            dG_complex_conversion_error ** 2
+            + dG_complex_decouple_error ** 2
+            + dG_solvent_conversion_error ** 2
+            + dG_solvent_decouple_error ** 2
         )
 
         return rabfe_result.dG_bind, dG_err
@@ -434,10 +401,10 @@ if __name__ == "__main__":
                 try:
                     concentration = float(mol.GetProp(cmd_args.property_field))
 
-                    if cmd_args.property_units == 'uM':
+                    if cmd_args.property_units == "uM":
                         label_dG = convert_uM_to_kJ_per_mole(concentration)
-                    elif cmd_args.property_units == 'nM':
-                        label_dG = convert_uM_to_kJ_per_mole(concentration/1000)
+                    elif cmd_args.property_units == "nM":
+                        label_dG = convert_uM_to_kJ_per_mole(concentration / 1000)
                     else:
                         assert 0, "Unknown property units"
                 except Exception as e:

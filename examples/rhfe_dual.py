@@ -44,7 +44,7 @@ ligand_coords_b = get_romol_conf(romol_b)
 system, host_coords, box, omm_topology = builders.build_water_system(4.0)
 
 # padding to avoid jank
-box = box + np.eye(3)*0.1
+box = box + np.eye(3) * 0.1
 
 host_bps, host_masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
 
@@ -55,7 +55,7 @@ combined_masses = np.concatenate([host_masses, ligand_masses_a, ligand_masses_b]
 
 # note: .py file rather than .offxml file
 # note: _ccc suffix means "correctable charge corrections"
-ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
+ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
 ff = Forcefield(ff_handlers)
 
 # for RHFE we need to insert the reference ligand first, before inserting the
@@ -105,11 +105,7 @@ restraint_a_idxs = np.arange(romol_a.GetNumAtoms()) + num_host_atoms
 restraint_b_idxs = np.arange(romol_b.GetNumAtoms()) + num_host_atoms + romol_a.GetNumAtoms()
 
 restraint = potentials.CentroidRestraint(
-    restraint_a_idxs.astype(np.int32),
-    restraint_b_idxs.astype(np.int32),
-    combined_masses,
-    100.0,
-    0.0
+    restraint_a_idxs.astype(np.int32), restraint_b_idxs.astype(np.int32), combined_masses, 100.0, 0.0
 ).bind([])
 
 final_potentials.append(restraint)
@@ -118,9 +114,8 @@ final_vjp_and_handles.append(None)
 # note: lambda goes from 0 to 1, 0 being fully-interacting and 1.0 being fully interacting.
 for lamb_idx, final_lamb in enumerate(np.linspace(1, 0, 8)):
 
-
     # write some conformations into this PDB file
-    writer = pdb_writer.PDBWriter([omm_topology, romol_a, romol_b], "debug_"+str(lamb_idx)+".pdb")
+    writer = pdb_writer.PDBWriter([omm_topology, romol_a, romol_b], "debug_" + str(lamb_idx) + ".pdb")
 
     seed = 2020
 
@@ -129,13 +124,7 @@ for lamb_idx, final_lamb in enumerate(np.linspace(1, 0, 8)):
     #   be useful later in timemachine's multi-device parallelization strategy)
     # note: OpenMM unit system used throughout
     #   (temperature: kelvin, timestep: picosecond, collision_rate: picosecond^-1)
-    intg = LangevinIntegrator(
-        300.0,
-        1.5e-3,
-        1.0,
-        combined_masses,
-        seed
-    ).impl()
+    intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
     x0 = combined_coords
     v0 = np.zeros_like(x0)
@@ -146,17 +135,11 @@ for lamb_idx, final_lamb in enumerate(np.linspace(1, 0, 8)):
         u_impls.append(bp.bound_impl(np.float32))
 
     # context components: positions, velocities, box, integrator, energy fxns
-    ctxt = custom_ops.Context(
-        x0,
-        v0,
-        box,
-        intg,
-        u_impls
-    )
+    ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
 
     for step, lamb in enumerate(np.linspace(1.0, final_lamb, 1000)):
         if step % 500 == 0:
-            writer.write_frame(ctxt.get_x_t()*10)
+            writer.write_frame(ctxt.get_x_t() * 10)
         ctxt.step(lamb)
 
     # print("insertion energy", ctxt._get_u_t_minus_1())
@@ -165,7 +148,7 @@ for lamb_idx, final_lamb in enumerate(np.linspace(1, 0, 8)):
     #   "observable" to the context and start running "production"
     for step in range(5000):
         if step % 500 == 0:
-            writer.write_frame(ctxt.get_x_t()*10)
+            writer.write_frame(ctxt.get_x_t() * 10)
         ctxt.step(final_lamb)
 
     # print("equilibrium energy", ctxt._get_u_t_minus_1())
@@ -183,7 +166,7 @@ for lamb_idx, final_lamb in enumerate(np.linspace(1, 0, 8)):
 
     for _ in range(20000):
         if step % 500 == 0:
-            writer.write_frame(ctxt.get_x_t()*10)
+            writer.write_frame(ctxt.get_x_t() * 10)
         ctxt.step(final_lamb)
 
     writer.close()
@@ -196,7 +179,7 @@ for lamb_idx, final_lamb in enumerate(np.linspace(1, 0, 8)):
 
         if vjp_and_handles:
             vjp_fn, handles = vjp_and_handles
-            du_df = vjp_fn(du_dp) # vjp into forcefield derivatives
+            du_df = vjp_fn(du_dp)  # vjp into forcefield derivatives
             for f_grad, h in zip(du_df, handles):
                 print("handle:", type(h).__name__)
                 for s, vv in zip(h.smirks, f_grad):

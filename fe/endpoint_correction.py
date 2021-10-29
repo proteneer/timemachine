@@ -7,10 +7,13 @@ import jax.numpy as jnp
 from timemachine.potentials import bonded, rmsd
 from scipy.stats import special_ortho_group
 
+
 def exp_u(rotation, k, beta):
-    return jnp.exp(-beta*rmsd.psi(rotation, k))
+    return jnp.exp(-beta * rmsd.psi(rotation, k))
+
 
 exp_batch = jax.jit(jax.vmap(exp_u, (0, None, None)))
+
 
 def sample_multiple_rotations(k, beta, size):
     num_batches = 500
@@ -21,7 +24,7 @@ def sample_multiple_rotations(k, beta, size):
     for batch_attempt in range(num_batches):
         Rs = special_ortho_group.rvs(3, size=batch_size)
         tests = np.random.rand(batch_size)
-        M = np.pi**2 # volume of SO(3)
+        M = np.pi ** 2  # volume of SO(3)
 
         # (detailed explanation by jfass re: normalizing comments)
         # In rejection sampling, we need an upper bound M on the ratio q_target(x) / q_proposal(x),
@@ -48,7 +51,7 @@ def sample_multiple_rotations(k, beta, size):
         # Setting M=1 here doesn't change the correctness of the sampler, but increases its acceptance
         # rate relative to that version.
         M = 1
-        acceptance_prob = exp_batch(Rs, k, beta)/M
+        acceptance_prob = exp_batch(Rs, k, beta) / M
         locations = np.argwhere(tests < acceptance_prob).reshape(-1)
 
         samples.append(Rs[locations])
@@ -61,14 +64,7 @@ def sample_multiple_rotations(k, beta, size):
     return result
 
 
-def estimate_delta_us(
-    k_translation,
-    k_rotation,
-    core_idxs,
-    core_params,
-    beta,
-    lhs_xs,
-    rhs_xs):
+def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, lhs_xs, rhs_xs):
     """
     Compute the BAR re-weighted end-point correction of converting an intractable core
     restraint into a tractable RMSD-based orientational restraint.
@@ -107,13 +103,7 @@ def estimate_delta_us(
     """
 
     box = np.eye(3) * 100.0
-    core_restr = functools.partial(
-        bonded.harmonic_bond,
-        bond_idxs=core_idxs,
-        params=core_params,
-        box=box,
-        lamb=None
-    )
+    core_restr = functools.partial(bonded.harmonic_bond, bond_idxs=core_idxs, params=core_params, box=box, lamb=None)
 
     # center of mass translational restraints
     restr_group_idxs_a = core_idxs[:, 0]
@@ -130,7 +120,7 @@ def estimate_delta_us(
         kb=k_translation,
         b0=0.0,
         box=box,
-        lamb=None
+        lamb=None,
     )
 
     rotation_restr = functools.partial(
@@ -140,7 +130,7 @@ def estimate_delta_us(
         group_b_idxs=restr_group_idxs_b,
         k=k_rotation,
         box=box,
-        lamb=None
+        lamb=None,
     )
 
     # (ytz): delta_U is simplified to this expression as the rest of the hamiltonian is unaffected
@@ -164,12 +154,12 @@ def estimate_delta_us(
 
     sample_size = rhs_xs.shape[0]
     rotation_samples = sample_multiple_rotations(k_rotation, beta, sample_size)
-    covariance = np.eye(3)/(2*beta*k_translation)
-    translation_samples = np.random.multivariate_normal((0,0,0), covariance, sample_size)
+    covariance = np.eye(3) / (2 * beta * k_translation)
+    translation_samples = np.random.multivariate_normal((0, 0, 0), covariance, sample_size)
 
     def align(x, r, t):
         x_a, x_b = rmsd.rmsd_align(x[restr_group_idxs_a], x[restr_group_idxs_b])
-        x_b = x_b@r.T + t
+        x_b = x_b @ r.T + t
         x_new = jax.ops.index_update(x, restr_group_idxs_a, x_a)
         x_new = jax.ops.index_update(x_new, restr_group_idxs_b, x_b)
         return x_new
@@ -180,12 +170,14 @@ def estimate_delta_us(
 
     return lhs_du, rhs_du, rotation_samples, translation_samples
 
+
 # courtesy of jfass
 def ecdf(x: np.array) -> Tuple[np.array, np.array]:
-    """ empirical cdf, from https://stackoverflow.com/a/37660583 """
+    """empirical cdf, from https://stackoverflow.com/a/37660583"""
     xs = np.sort(x)
-    ys = np.arange(1, len(xs)+1)/float(len(xs))
+    ys = np.arange(1, len(xs) + 1) / float(len(xs))
     return xs, ys
+
 
 def overlap_from_cdf(w_f, w_r) -> float:
     """Quantify "overlap" between p_f(w) and p_r(-w)

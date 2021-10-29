@@ -14,8 +14,8 @@ from parallel.constants import DEFAULT_GRPC_OPTIONS
 
 import grpc
 
-class Worker(service_pb2_grpc.WorkerServicer):
 
+class Worker(service_pb2_grpc.WorkerServicer):
     def Submit(self, request, context):
         start = datetime.now()
         task_fn, args, kwargs = pickle.loads(request.binary)
@@ -35,18 +35,21 @@ def serve(args):
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=1), options=DEFAULT_GRPC_OPTIONS)
     service_pb2_grpc.add_WorkerServicer_to_server(Worker(), server)
-    server.add_insecure_port('[::]:'+str(args.port))
+    server.add_insecure_port("[::]:" + str(args.port))
     server.start()
     server.wait_for_termination()
 
-if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Worker Server')
-    parser.add_argument('--gpu_idx', type=int, required=True, help='Location of all output files')
-    parser.add_argument('--port', type=int, required=True, help='Either single or double precision. Double is 8x slower.')
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="Worker Server")
+    parser.add_argument("--gpu_idx", type=int, required=True, help="Location of all output files")
+    parser.add_argument(
+        "--port", type=int, required=True, help="Either single or double precision. Double is 8x slower."
+    )
     args = parser.parse_args()
 
-    os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpu_idx)
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_idx)
 
     logging.basicConfig()
     serve(args)

@@ -3,7 +3,8 @@ from typing import Tuple, Any, List
 
 import numpy as np
 
-class Dataset():
+
+class Dataset:
     """Dataset is a utility for training. It provides some utilities to split
     data and create batches of data.
     """
@@ -22,8 +23,8 @@ class Dataset():
 
     def iterbatches(self, batch_size: int) -> List[Any]:
         for batch in range(self.num_batches(batch_size)):
-            start = batch*batch_size
-            end = min((batch+1)*batch_size, len(self.data))
+            start = batch * batch_size
+            end = min((batch + 1) * batch_size, len(self.data))
             yield self.data[start:end]
 
     def split(self, frac: float) -> Tuple["Dataset", "Dataset"]:
@@ -45,7 +46,7 @@ class Dataset():
         """
         if frac > 1.0 or frac < 0.0:
             raise ValueError("frac must be between 0 and 1")
-        split_idx = int(len(self.data)*frac)
+        split_idx = int(len(self.data) * frac)
         train_dataset = self.data[:split_idx]
         test_dataset = self.data[split_idx:]
         return Dataset(train_dataset), Dataset(test_dataset)
@@ -69,7 +70,7 @@ class Dataset():
         """
         inds = np.arange(len(self))
         np.random.shuffle(inds)
-        split_idx = int(len(self.data)*frac)
+        split_idx = int(len(self.data) * frac)
         return self.indices_split(inds[:split_idx], inds[split_idx:])
 
     def indices_split(self, left: List[int], right: List[int]) -> Tuple["Dataset", "Dataset"]:

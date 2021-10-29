@@ -27,7 +27,7 @@ def test_cycle_closure_consistency_triangle():
 
     free_energies = predict_free_energies(simulated_rbfes)
 
-    assert (np.isclose(true_free_energies, free_energies).all())
+    assert np.isclose(true_free_energies, free_energies).all()
 
 
 def test_cycle_closure_consistency_dense(n_nodes=100):
@@ -45,7 +45,7 @@ def test_cycle_closure_consistency_dense(n_nodes=100):
     predict_free_energies = construct_mle_layer(n_nodes, rbfe_inds)
     free_energies = predict_free_energies(simulated_rbfes)
 
-    assert (np.isclose(true_free_energies, free_energies).all())
+    assert np.isclose(true_free_energies, free_energies).all()
 
 
 def test_deadlock_triangle(verbose=True):
@@ -84,12 +84,12 @@ def test_deadlock_triangle(verbose=True):
 
     x0 = simulated_rbfes
     if verbose:
-        print(f'sum((edge_predictions - edge_labels)^2) before optimization: {corrected_relative_loss(x0):.3f}')
+        print(f"sum((edge_predictions - edge_labels)^2) before optimization: {corrected_relative_loss(x0):.3f}")
     assert corrected_relative_loss(x0) > 1
 
     result = minimize(fun, x0=x0, jac=True, tol=0.0)
     if verbose:
-        print(f'sum((edge_predictions - edge_labels)^2) after optimization: {corrected_relative_loss(result.x):.20f}')
+        print(f"sum((edge_predictions - edge_labels)^2) after optimization: {corrected_relative_loss(result.x):.20f}")
 
     assert result.fun < 1e-12
 
@@ -109,9 +109,9 @@ def test_optimization_with_cycle_closure(n_nodes=10, verbose=True):
 
     def L(simulated_rbfes):
         """sum((free_energies - true_free_energies)^2)"""
-        assert (len(simulated_rbfes) == n_rbfes)
+        assert len(simulated_rbfes) == n_rbfes
         free_energies = predict_free_energies(simulated_rbfes)
-        assert (len(free_energies) == n_nodes)
+        assert len(free_energies) == n_nodes
 
         return np.sum((free_energies - true_free_energies) ** 2)
 
@@ -121,12 +121,12 @@ def test_optimization_with_cycle_closure(n_nodes=10, verbose=True):
 
     x0 = onp.random.randn(n_rbfes)
     if verbose:
-        print(f'sum((free_energies - true_free_energies)^2) before optimization: {L(x0):.3f}')
+        print(f"sum((free_energies - true_free_energies)^2) before optimization: {L(x0):.3f}")
     assert L(x0) > 1
 
     result = minimize(fun, x0=x0, jac=True, tol=0.0)
     if verbose:
-        print(f'sum((free_energies - true_free_energies)^2) after optimization: {L(result.x):.20f}')
+        print(f"sum((free_energies - true_free_energies)^2) after optimization: {L(result.x):.20f}")
 
     assert result.fun < 1e-12
 
@@ -150,10 +150,10 @@ def test_grad_cycle_closure(n_nodes=5, tol=1e-3, verbose=True):
 
     def loss_fxn(simulated_rbfes):
         """sum((free_energies - true_free_energies)^2)"""
-        assert (len(simulated_rbfes) == n_rbfes)
+        assert len(simulated_rbfes) == n_rbfes
         free_energies = predict_free_energies(simulated_rbfes)
         free_energies -= free_energies[0]
-        assert (len(free_energies) == n_nodes)
+        assert len(free_energies) == n_nodes
 
         return np.sum((free_energies - true_free_energies) ** 2)
 
@@ -166,7 +166,7 @@ def test_grad_cycle_closure(n_nodes=5, tol=1e-3, verbose=True):
         x /= np.linalg.norm(x)
         c = check_grad(f, g, x)
         if verbose:
-            print('sum((grad(cycle_closure_loss)(x) - finite_difference_grad(cycle_closure_loss)(x))^2) = ', c)
+            print("sum((grad(cycle_closure_loss)(x) - finite_difference_grad(cycle_closure_loss)(x))^2) = ", c)
         assert c < tol
 
     # check on exact rbfes

@@ -2,4 +2,4 @@
 
 from collections import namedtuple
 
-CoordsVelBox = namedtuple('CoordsVelBox', ['coords', 'velocities', 'box'])
+CoordsVelBox = namedtuple("CoordsVelBox", ["coords", "velocities", "box"])

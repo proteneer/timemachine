@@ -10,12 +10,12 @@ from simtk import unit
 from timemachine import constants
 from timemachine.lib import potentials
 
+
 def value(quantity):
     return quantity.value_in_unit_system(unit.md_unit_system)
 
-def deserialize_system(
-    system,
-    cutoff):
+
+def deserialize_system(system, cutoff):
     """
     Deserialize an OpenMM XML file
 
@@ -111,7 +111,7 @@ def deserialize_system(
             for a_idx in range(num_atoms):
 
                 charge, sig, eps = force.getParticleParameters(a_idx)
-                charge = value(charge)*np.sqrt(constants.ONE_4PI_EPS0)
+                charge = value(charge) * np.sqrt(constants.ONE_4PI_EPS0)
 
                 sig = value(sig)
                 eps = value(eps)
@@ -121,8 +121,8 @@ def deserialize_system(
 
                 # this doesn't work for water!
                 # if eps == 0:
-                    # print("Warning: overriding eps by 1e-3 to avoid a singularity")
-                    # eps += 1e-3
+                # print("Warning: overriding eps by 1e-3 to avoid a singularity")
+                # eps += 1e-3
 
                 # charge_params.append(charge_idx)
                 charge_params.append(charge)
@@ -159,8 +159,8 @@ def deserialize_system(
 
                 src_eps = all_eps[src]
                 dst_eps = all_eps[dst]
-                expected_sig = (src_sig + dst_sig)/2
-                expected_eps = np.sqrt(src_eps*dst_eps)
+                expected_sig = (src_sig + dst_sig) / 2
+                expected_eps = np.sqrt(src_eps * dst_eps)
 
                 exclusion_idxs.append([src, dst])
 
@@ -173,7 +173,7 @@ def deserialize_system(
                     else:
                         raise RuntimeError("Divide by zero in epsilon calculation")
                 else:
-                    lj_scale_factor = 1 - new_eps/expected_eps
+                    lj_scale_factor = 1 - new_eps / expected_eps
 
                 scale_factors.append(lj_scale_factor)
 
@@ -188,31 +188,21 @@ def deserialize_system(
 
             # cutoff = 1000.0
 
-            nb_params = np.concatenate([
-                np.expand_dims(charge_params, axis=1),
-                lj_params
-            ], axis=1)
+            nb_params = np.concatenate([np.expand_dims(charge_params, axis=1), lj_params], axis=1)
 
             # optimizations
-            nb_params[:, 1] = nb_params[:, 1]/2
+            nb_params[:, 1] = nb_params[:, 1] / 2
             nb_params[:, 2] = np.sqrt(nb_params[:, 2])
 
-            beta = 2.0 # erfc correction
+            beta = 2.0  # erfc correction
 
             # use the same scale factors for electrostatics and lj
-            scale_factors = np.stack([
-                scale_factors,
-                scale_factors
-            ], axis=1)
+            scale_factors = np.stack([scale_factors, scale_factors], axis=1)
 
-
-            bps.append(potentials.Nonbonded(
-                exclusion_idxs,
-                scale_factors,
-                lambda_plane_idxs,
-                lambda_offset_idxs,
-                beta,
-                cutoff).bind(nb_params)
+            bps.append(
+                potentials.Nonbonded(
+                    exclusion_idxs, scale_factors, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff
+                ).bind(nb_params)
             )
 
             # nrg_fns.append(('Exclusions', (exclusion_idxs, scale_factors, es_scale_factors)))

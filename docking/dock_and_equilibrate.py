@@ -87,7 +87,7 @@ def dock_and_equilibrate(
         solvated_topology,
     ) = builders.build_protein_system(host_pdbfile)
 
-    _, solvated_host_pdb = tempfile.mkstemp(suffix='.pdb', text=True)
+    _, solvated_host_pdb = tempfile.mkstemp(suffix=".pdb", text=True)
     writer = pdb_writer.PDBWriter([solvated_topology], solvated_host_pdb)
     writer.write_frame(solvated_host_coords)
     writer.close()
@@ -153,9 +153,7 @@ def dock_and_equilibrate(
         # collect a du_dl calculation once every other step
         subsample_interval = 1
 
-        full_du_dls, _, _ = ctxt.multiple_steps(
-            insertion_lambda_schedule, subsample_interval
-        )
+        full_du_dls, _, _ = ctxt.multiple_steps(insertion_lambda_schedule, subsample_interval)
         step = len(insertion_lambda_schedule) - 1
         lamb = insertion_lambda_schedule[-1]
         ctxt.step(lamb)
@@ -196,9 +194,7 @@ def dock_and_equilibrate(
             calc_work = False
 
         if calc_work:
-            work = np.trapz(
-                full_du_dls, insertion_lambda_schedule[::subsample_interval]
-            )
+            work = np.trapz(full_du_dls, insertion_lambda_schedule[::subsample_interval])
             print(f"guest_name: {guest_name}\tinsertion_work: {work:.2f}")
 
         # equilibrate
@@ -240,9 +236,7 @@ def dock_and_equilibrate(
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         "-p",
         "--host_pdbfile",
@@ -276,12 +270,8 @@ def main():
         default=15001,
         help="equilibration length (1 step = 1.5 femtoseconds)",
     )
-    parser.add_argument(
-        "-o", "--outdir", default="dock_equil_out", help="where to write output"
-    )
-    parser.add_argument(
-        "--fewer_outfiles", action="store_true", help="write fewer output pdb/sdf files"
-    )
+    parser.add_argument("-o", "--outdir", default="dock_equil_out", help="where to write output")
+    parser.add_argument("--fewer_outfiles", action="store_true", help="write fewer output pdb/sdf files")
     parser.add_argument(
         "-c",
         "--constant_atoms_file",

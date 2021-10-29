@@ -5,6 +5,7 @@ from hilbertcurve.hilbertcurve import HilbertCurve
 
 import time
 
+
 def test_block_bounds():
 
     np.random.seed(2020)
@@ -15,16 +16,16 @@ def test_block_bounds():
         D = 3
 
         coords = np.random.randn(N, D)
-        box_diag = (np.random.rand(3) + 1)
+        box_diag = np.random.rand(3) + 1
         box = np.eye(3) * box_diag
-        num_blocks = (N + block_size - 1)//block_size
-        
+        num_blocks = (N + block_size - 1) // block_size
+
         ref_ctrs = []
         ref_exts = []
 
         for bidx in range(num_blocks):
-            start_idx = bidx*block_size
-            end_idx = min((bidx+1)*block_size, N)
+            start_idx = bidx * block_size
+            end_idx = min((bidx + 1) * block_size, N)
             block_coords = coords[start_idx:end_idx]
             min_coords = block_coords[0]
             max_coords = block_coords[0]
@@ -34,8 +35,8 @@ def test_block_bounds():
                 min_coords = np.minimum(min_coords, new_coords)
                 max_coords = np.maximum(max_coords, new_coords)
 
-            ref_ctrs.append((max_coords + min_coords)/2)
-            ref_exts.append((max_coords - min_coords)/2)
+            ref_ctrs.append((max_coords + min_coords) / 2)
+            ref_exts.append((max_coords - min_coords) / 2)
 
         ref_ctrs = np.array(ref_ctrs)
         ref_exts = np.array(ref_exts)
@@ -49,7 +50,7 @@ def test_block_bounds():
 
 def hilbert_sort(conf, D):
     hc = HilbertCurve(64, D)
-    int_confs = (conf*1000).astype(np.int64)
+    int_confs = (conf * 1000).astype(np.int64)
     dists = []
     for xyz in int_confs.tolist():
         dist = hc.distance_from_coordinates(xyz)
@@ -89,10 +90,10 @@ def test_neighborlist():
 
                 sort = True
                 if sort:
-                    perm = hilbert_sort(coords+np.argmin(coords), D)
+                    perm = hilbert_sort(coords + np.argmin(coords), D)
                     coords = coords[perm]
 
-                num_blocks_of_32 = (N + 32 - 1)//32
+                num_blocks_of_32 = (N + 32 - 1) // 32
                 col_coords = np.expand_dims(coords, axis=0)
 
                 cutoff = 1.0
@@ -106,20 +107,19 @@ def test_neighborlist():
 
                 box_diag = np.diag(box)
                 for rbidx in range(num_blocks_of_32):
-                    row_start = rbidx*32
-                    row_end = min((rbidx+1)*32, N)
+                    row_start = rbidx * 32
+                    row_end = min((rbidx + 1) * 32, N)
                     row_coords = coords[row_start:row_end]
                     row_coords = np.expand_dims(row_coords, axis=1)
 
                     deltas = row_coords - col_coords
-                    deltas -= box_diag*np.floor(deltas/box_diag+0.5)
+                    deltas -= box_diag * np.floor(deltas / box_diag + 0.5)
 
                     # block size x N, tbd make periodic
                     dij = np.linalg.norm(deltas, axis=-1)
-                    dij[:, :row_start] = cutoff # slight hack to discard duplicates
+                    dij[:, :row_start] = cutoff  # slight hack to discard duplicates
                     idxs = np.argwhere(np.any(dij < cutoff, axis=0))
                     ref_ixn_list.append(idxs.reshape(-1).tolist())
-
 
                 assert len(ref_ixn_list) == len(test_ixn_list)
 

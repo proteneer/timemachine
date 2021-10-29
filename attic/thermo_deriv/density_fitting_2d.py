@@ -1,6 +1,8 @@
 # can we optimize an MD engine using the thermodynamic gradient?
 import jax
-from jax.config import config; config.update("jax_enable_x64", True)
+from jax.config import config
+
+config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from quadpy import quad
@@ -17,35 +19,28 @@ def recenter(conf, b):
 
     new_coords = []
 
-    periodicBoxSize = jnp.array([
-        [b, 0.],
-        [0., b]
-    ])
+    periodicBoxSize = jnp.array([[b, 0.0], [0.0, b]])
 
     for atom in conf:
-        diff = jnp.array([0., 0.])
-        diff += periodicBoxSize[1]*jnp.floor(atom[1]/periodicBoxSize[1][1]);
-        diff += periodicBoxSize[0]*jnp.floor((atom[0]-diff[0])/periodicBoxSize[0][0]);
+        diff = jnp.array([0.0, 0.0])
+        diff += periodicBoxSize[1] * jnp.floor(atom[1] / periodicBoxSize[1][1])
+        diff += periodicBoxSize[0] * jnp.floor((atom[0] - diff[0]) / periodicBoxSize[0][0])
         new_coords.append(atom - diff)
 
     return np.array(new_coords)
-
 
 
 U_fn = jax.jit(lennard_jones)
 dU_dV = jax.jit(jax.grad(lennard_jones, argnums=(2,)))
 
 
-class MDEngine():
-
-
+class MDEngine:
     def __init__(self, U_fn, O_fn, temperature):
 
-
-        self.kT = BOLTZ*temperature
+        self.kT = BOLTZ * temperature
         # self.temperature = temperature
-        self.U_fn = U_fn # (x, p) -> R^1
-        self.O_fn = O_fn # (R^1 -> R^N)
+        self.U_fn = U_fn  # (x, p) -> R^1
+        self.O_fn = O_fn  # (R^1 -> R^N)
         self.dO_dp_fn = jax.jit(jax.grad(O_fn, argnums=(1,)))
 
         xs = np.linspace(0, 1.0, 5, endpoint=False)
@@ -59,25 +54,17 @@ class MDEngine():
         masses = np.ones(conf.shape[0])
         dt = 1.5e-3
 
-        ca, cb, cc = langevin_coefficients(
-            temperature=300.0,
-            dt=dt,
-            friction=1.0,
-            masses=masses
-        )
+        ca, cb, cc = langevin_coefficients(temperature=300.0, dt=dt, friction=1.0, masses=masses)
         cb = -np.expand_dims(cb, axis=-1)
         cc = np.expand_dims(cc, axis=-1)
 
         num_steps = 200000
 
-        grad_fn = jax.grad(lennard_jones, argnums=(0,1))
+        grad_fn = jax.grad(lennard_jones, argnums=(0, 1))
         grad_fn = jax.jit(grad_fn)
         nrg_fn = jax.jit(lennard_jones)
 
-        def integrate_once_through(
-            x_t,
-            v_t,
-            lj_params):
+        def integrate_once_through(x_t, v_t, lj_params):
 
             Os = []
             dU_dps = []
@@ -98,7 +85,7 @@ class MDEngine():
                 #     print("step", step, "x_t", x_t)
 
                 if step % 10 == 0 and step > 10000:
-                # if step % 10 == 0:
+                    # if step % 10 == 0:
                     # obs = self.O_fn(x_t, lj_params)
                     obs = self.O_fn(x_t, lj_params, volume)
                     Os.append(obs)
@@ -120,8 +107,8 @@ class MDEngine():
                 #     plt.clf()
 
                 noise = np.random.randn(*x_t.shape)
-                v_t = ca*v_t + cb*dU_dx + cc*noise
-                x_t = x_t + v_t*dt
+                v_t = ca * v_t + cb * dU_dx + cc * noise
+                x_t = x_t + v_t * dt
 
             Os = np.asarray(Os)
             dU_dps = np.asarray(dU_dps)
@@ -140,20 +127,21 @@ class MDEngine():
 
         avg_O, avg_dU_dp, avg_O_dot_dU_dp, avg_dO_dps = self.integrator(x0, v0, params)
 
-        dO_dp = (avg_O*avg_dU_dp - avg_O_dot_dU_dp)/self.kT + avg_dO_dps
+        dO_dp = (avg_O * avg_dU_dp - avg_O_dot_dU_dp) / self.kT + avg_dO_dps
 
         return avg_O, dO_dp
 
 
-
 def O_fn(conf, params, vol):
-    dv = dU_dV(conf, params, vol)[0]/conf.shape[0]
+    dv = dU_dV(conf, params, vol)[0] / conf.shape[0]
     # print(dv)
     # assert 0
     return dv
 
     # u = U_fn(conf, params, vol)
     # return u
+
+
 # O_fn = lambda conf: conf[1][0]
 
 mde = MDEngine(U_fn, O_fn, 300.0)
@@ -162,13 +150,14 @@ mde = MDEngine(U_fn, O_fn, 300.0)
 # sigma = [0.2]*25
 # eps = [1.0]*25
 # lj_params = np.stack([sigma, eps], axis=1)
-lj_params = np.array([0.2/1.122, 1.0])
+lj_params = np.array([0.2 / 1.122, 1.0])
 
 
 def loss_fn(O_pred):
     # return O_pred
     O_true = -20.0
-    return jnp.abs(O_pred-O_true)
+    return jnp.abs(O_pred - O_true)
+
 
 loss_grad_fn = jax.grad(loss_fn)
 
@@ -177,18 +166,18 @@ for epoch in range(100):
     O_pred, dO_dp = mde.O_and_dO_dp(lj_params)
     loss = loss_fn(O_pred)
     dL_dO = loss_grad_fn(O_pred)
-    
+
     dL_dp = dL_dO * dO_dp
     print("dL_dO", dL_dO, "dO_dp", dO_dp, "dL_dp", dL_dp)
     sig_lr = 0.003
     eps_lr = 0.003
 
-    lj_sig_scale = np.amax(np.abs(dL_dp[0]))/sig_lr
-    lj_eps_scale = np.amax(np.abs(dL_dp[1]))/eps_lr
+    lj_sig_scale = np.amax(np.abs(dL_dp[0])) / sig_lr
+    lj_eps_scale = np.amax(np.abs(dL_dp[1])) / eps_lr
     lj_scale_factor = np.array([lj_sig_scale, lj_eps_scale])
     print("dL_dp", dL_dp)
     print("epoch", epoch, "loss", loss, "O", O_pred)
 
     # assert 0
-    lj_params -= dL_dp/lj_scale_factor
+    lj_params -= dL_dp / lj_scale_factor
     # lj_params -= dL_dp*0.00001

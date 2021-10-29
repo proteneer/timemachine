@@ -37,7 +37,7 @@ class PotentialEnergyModel:
         U_ = np.sum(Us)
         F_ = np.sum(dU_dxs, 0)
         if np.abs(U) > self.guard_threshold:
-            return + np.inf, np.nan * F_
+            return +np.inf, np.nan * F_
         else:
             return U_, F_
 
@@ -90,13 +90,12 @@ class NPTEnsemble:
             https://github.com/choderalab/openmmtools/blob/321b998fc5977a1f8893e4ad5700b1b3aef6101c/openmmtools/states.py#L1904-L1912
         """
         potential_energy = U * ENERGY_UNIT
-        volume = volume * DISTANCE_UNIT**3
+        volume = volume * DISTANCE_UNIT ** 3
 
         reduced_u = self.beta * potential_energy
         reduced_pv = self.beta * self.pressure * volume * unit.AVOGADRO_CONSTANT_NA
 
         return reduced_u + reduced_pv
-
 
     def reduced_potential_and_gradient(self, x, box, lam):
         U, dU_dx = self.potential_energy.energy_and_gradient(x, box, lam)

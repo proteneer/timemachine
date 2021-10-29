@@ -6,7 +6,9 @@ import gzip
 
 import pickle
 import unittest
-from jax.config import config; config.update("jax_enable_x64", True)
+from jax.config import config
+
+config.update("jax_enable_x64", True)
 
 import numpy as np
 
@@ -31,7 +33,7 @@ np.set_printoptions(linewidth=500)
 
 def hilbert_sort(conf, D):
     hc = HilbertCurve(64, D)
-    int_confs = (conf*1000).astype(np.int64)
+    int_confs = (conf * 1000).astype(np.int64)
     dists = []
     for xyz in int_confs.tolist():
         dist = hc.distance_from_coordinates(xyz)
@@ -39,37 +41,31 @@ def hilbert_sort(conf, D):
     perm = np.argsort(dists)
     return perm
 
-class TestNonbondedDHFR(GradientTest):
 
+class TestNonbondedDHFR(GradientTest):
     def setUp(self):
         # This test checks hilbert curve re-ordering gives identical results
-        pdb_path = 'tests/data/5dfr_solv_equil.pdb'
+        pdb_path = "tests/data/5dfr_solv_equil.pdb"
         host_pdb = app.PDBFile(pdb_path)
-        protein_ff = app.ForceField('amber99sbildn.xml', 'tip3p.xml')
+        protein_ff = app.ForceField("amber99sbildn.xml", "tip3p.xml")
 
         host_system = protein_ff.createSystem(
-            host_pdb.topology,
-            nonbondedMethod=app.NoCutoff,
-            constraints=None,
-            rigidWater=False
+            host_pdb.topology, nonbondedMethod=app.NoCutoff, constraints=None, rigidWater=False
         )
 
         host_coords = host_pdb.positions
         box = host_pdb.topology.getPeriodicBoxVectors()
-        self.box = np.asarray(box/box.unit)
+        self.box = np.asarray(box / box.unit)
 
-        host_fns, host_masses = openmm_deserializer.deserialize_system(
-            host_system,
-            cutoff=1.0
-        )
+        host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
         for f in host_fns:
             if isinstance(f, potentials.Nonbonded):
                 self.nonbonded_fn = f
 
         host_conf = []
-        for x,y,z in host_coords:
-            host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+        for x, y, z in host_coords:
+            host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
         self.host_conf = np.array(host_conf)
 
         self.beta = 2.0
@@ -94,13 +90,13 @@ class TestNonbondedDHFR(GradientTest):
             test_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(precision)
 
             padding = 0.1
-            deltas = np.random.rand(N,3)-0.5 # [-0.5, +0.5]
-            divisor = 0.5*(2*np.sqrt(3))/padding
+            deltas = np.random.rand(N, 3) - 0.5  # [-0.5, +0.5]
+            divisor = 0.5 * (2 * np.sqrt(3)) / padding
             # if deltas are kept under +- p/(2*sqrt(3)) then no rebuild gets triggered
-            deltas = deltas/divisor # exactly within bounds, and should not trigger a rebuild
+            deltas = deltas / divisor  # exactly within bounds, and should not trigger a rebuild
 
             for d in deltas:
-                assert np.linalg.norm(d) < padding/2
+                assert np.linalg.norm(d) < padding / 2
 
             xs = [self.host_conf, self.host_conf + deltas]
 
@@ -108,8 +104,12 @@ class TestNonbondedDHFR(GradientTest):
             # under pure fixed point accumulation the results should be identical.
             for x_idx, x in enumerate(xs):
 
-                ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
-                test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
+                ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(
+                    x, self.nonbonded_fn.params, self.box, 0.0
+                )
+                test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(
+                    x, self.nonbonded_fn.params, self.box, 0.0
+                )
 
                 np.testing.assert_array_equal(ref_du_dx, test_du_dx)
                 np.testing.assert_array_equal(ref_du_dp, test_du_dp)
@@ -120,7 +120,7 @@ class TestNonbondedDHFR(GradientTest):
                 test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
 
                 for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
-                    if np.linalg.norm(a-b) != 0:
+                    if np.linalg.norm(a - b) != 0:
                         print(idx, a, b)
                         assert 0
                     np.testing.assert_array_equal(a, b)
@@ -138,27 +138,33 @@ class TestNonbondedDHFR(GradientTest):
         np.random.seed(2021)
 
         ref_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
-        ref_nonbonded_impl.set_nblist_padding(0.0) # rebuild with every call
+        ref_nonbonded_impl.set_nblist_padding(0.0)  # rebuild with every call
 
         padding = 0.1
 
         test_nonbonded_impl = copy.copy(self.nonbonded_fn).unbound_impl(np.float64)
-        test_nonbonded_impl.set_nblist_padding(padding) # rebuild only when deltas have moved more than padding/2 angstroms
+        test_nonbonded_impl.set_nblist_padding(
+            padding
+        )  # rebuild only when deltas have moved more than padding/2 angstroms
 
-        deltas = np.random.rand(N,3)-0.5 # [-0.5, +0.5]
-        divisor = 0.5*(2*np.sqrt(3))/padding
+        deltas = np.random.rand(N, 3) - 0.5  # [-0.5, +0.5]
+        divisor = 0.5 * (2 * np.sqrt(3)) / padding
         # if deltas are kept under +- p/(2*sqrt(3)) then no rebuild gets triggered
-        deltas = deltas/divisor # exactly within bounds, and should not trigger a rebuild
+        deltas = deltas / divisor  # exactly within bounds, and should not trigger a rebuild
 
         for d in deltas:
-            assert np.linalg.norm(d) < padding/2
+            assert np.linalg.norm(d) < padding / 2
 
         xs = [self.host_conf, self.host_conf + deltas]
 
         # under pure fixed point accumulation the results should be identical.
         for x_idx, x in enumerate(xs):
-            ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
-            test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(x, self.nonbonded_fn.params, self.box, 0.0)
+            ref_du_dx, ref_du_dp, ref_du_dl, ref_u = ref_nonbonded_impl.execute(
+                x, self.nonbonded_fn.params, self.box, 0.0
+            )
+            test_du_dx, test_du_dp, test_du_dl, test_u = test_nonbonded_impl.execute(
+                x, self.nonbonded_fn.params, self.box, 0.0
+            )
 
             np.testing.assert_array_equal(ref_du_dx, test_du_dx)
             np.testing.assert_array_equal(ref_du_dp, test_du_dp)
@@ -169,7 +175,7 @@ class TestNonbondedDHFR(GradientTest):
             test_du_dx = test_nonbonded_impl.execute_du_dx(x, self.nonbonded_fn.params, self.box, 0.0)
 
             for idx, (a, b) in enumerate(zip(ref_du_dx, test_du_dx)):
-                if np.linalg.norm(a-b) != 0:
+                if np.linalg.norm(a - b) != 0:
                     print(idx, a, b)
                     print(a)
                     print(b)
@@ -194,7 +200,7 @@ class TestNonbondedDHFR(GradientTest):
             test_scales = []
             for (i, j), (sa, sb) in zip(self.nonbonded_fn.get_exclusion_idxs(), self.nonbonded_fn.get_scale_factors()):
                 if i < N and j < N:
-                    test_exclusions.append((i,j))
+                    test_exclusions.append((i, j))
                     test_scales.append((sa, sb))
             test_exclusions = np.array(test_exclusions, dtype=np.int32)
             test_scales = np.array(test_scales, dtype=np.float64)
@@ -204,12 +210,7 @@ class TestNonbondedDHFR(GradientTest):
             test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
             test_nonbonded_fn = potentials.Nonbonded(
-                test_exclusions,
-                test_scales,
-                test_lambda_plane_idxs,
-                test_lambda_offset_idxs,
-                self.beta,
-                self.cutoff
+                test_exclusions, test_scales, test_lambda_plane_idxs, test_lambda_offset_idxs, self.beta, self.cutoff
             )
 
             ref_nonbonded_fn = prepare_reference_nonbonded(
@@ -219,7 +220,7 @@ class TestNonbondedDHFR(GradientTest):
                 test_lambda_plane_idxs,
                 test_lambda_offset_idxs,
                 self.beta,
-                self.cutoff
+                self.cutoff,
             )
 
             for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
@@ -232,7 +233,7 @@ class TestNonbondedDHFR(GradientTest):
                     ref_nonbonded_fn,
                     test_nonbonded_fn,
                     rtol,
-                    precision=precision
+                    precision=precision,
                 )
 
     @unittest.skip("benchmark-only")
@@ -271,30 +272,26 @@ class TestNonbondedDHFR(GradientTest):
                     compute_du_dx,
                     compute_du_dp,
                     compute_du_dl,
-                    compute_u
+                    compute_u,
                 )
 
 
 class TestNonbondedWater(GradientTest):
-
     def test_nblist_box_resize(self):
         # test that running the coordinates under two different boxes produces correct results
         # since we should be rebuilding the nblist when the box sizes change.
 
         host_system, host_coords, box, _ = builders.build_water_system(3.0)
 
-        host_fns, host_masses = openmm_deserializer.deserialize_system(
-            host_system,
-            cutoff=1.0
-        )
+        host_fns, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.0)
 
         for f in host_fns:
             if isinstance(f, potentials.Nonbonded):
                 test_nonbonded_fn = f
 
         host_conf = []
-        for x,y,z in host_coords:
-            host_conf.append([to_md_units(x),to_md_units(y),to_md_units(z)])
+        for x, y, z in host_coords:
+            host_conf.append([to_md_units(x), to_md_units(y), to_md_units(z)])
         host_conf = np.array(host_conf)
 
         lamb = 0.1
@@ -308,10 +305,10 @@ class TestNonbondedWater(GradientTest):
             test_nonbonded_fn.get_lambda_plane_idxs(),
             test_nonbonded_fn.get_lambda_offset_idxs(),
             test_nonbonded_fn.get_beta(),
-            test_nonbonded_fn.get_cutoff()
+            test_nonbonded_fn.get_cutoff(),
         )
 
-        big_box = box + np.eye(3)*1000
+        big_box = box + np.eye(3) * 1000
 
         # print(big_box, small_box)
         # (ytz): note the ordering should be from large box to small box. though in the current code
@@ -328,19 +325,17 @@ class TestNonbondedWater(GradientTest):
                     ref_nonbonded_fn,
                     test_nonbonded_fn,
                     rtol,
-                    precision=precision
+                    precision=precision,
                 )
 
 
-
 class TestNonbonded(GradientTest):
-
     def test_non_zero_du_dl(self):
         # du_dl should be zero for this test case.
-        fp=gzip.open('tests/data/bad_test_547.pkl.gz','rb')
-        x_t, box, lamb, nb_bp =  pickle.load(fp)
+        fp = gzip.open("tests/data/bad_test_547.pkl.gz", "rb")
+        x_t, box, lamb, nb_bp = pickle.load(fp)
 
-        nb_bp.args = nb_bp.args[:-4] # ignore any extra args from future PRs
+        nb_bp.args = nb_bp.args[:-4]  # ignore any extra args from future PRs
 
         for i, j in nb_bp.get_exclusion_idxs():
             assert i < j
@@ -358,7 +353,7 @@ class TestNonbonded(GradientTest):
 
         # this test case deals with a rather annoying fma compiler bug in CUDA.
         # see https://github.com/proteneer/timemachine/issues/386
-        fp=gzip.open('tests/data/repro.pkl.gz','rb') # This assumes that primes.data is already packed with gzip
+        fp = gzip.open("tests/data/repro.pkl.gz", "rb")  # This assumes that primes.data is already packed with gzip
         x_t, box, lamb, nb_bp = pickle.load(fp)
 
         for precision in [np.float32, np.float64]:
@@ -374,7 +369,7 @@ class TestNonbonded(GradientTest):
             np.testing.assert_array_equal(u2, u)
             np.testing.assert_array_equal(du_dx2, du_dx)
             np.testing.assert_array_equal(du_dp2, du_dp)
-            np.testing.assert_array_equal(du_dl2, du_dl) # this one fails without the patch.
+            np.testing.assert_array_equal(du_dl2, du_dl)  # this one fails without the patch.
 
     def test_exclusion(self):
 
@@ -386,7 +381,7 @@ class TestNonbonded(GradientTest):
 
         # water_coords = self.get_water_coords(3, sort=False)
         water_coords = self.get_water_coords(3, sort=False)
-        test_system = water_coords[:126] # multiple of 3
+        test_system = water_coords[:126]  # multiple of 3
         padding = 0.2
         box = np.eye(3) * 3
 
@@ -404,14 +399,14 @@ class TestNonbonded(GradientTest):
         for idx, i in enumerate(exclusion_atoms):
             for jdx, j in enumerate(exclusion_atoms):
                 if jdx > idx:
-                    exclusion_idxs.append((i,j))
+                    exclusion_idxs.append((i, j))
 
         E = len(exclusion_idxs)
         exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
         scales = np.ones((E, 2), dtype=np.float64)
         # perturb the system
         for idx in exclusion_atoms:
-            test_system[idx] = np.zeros(3) + np.random.rand()/1000+2
+            test_system[idx] = np.zeros(3) + np.random.rand() / 1000 + 2
 
         beta = 2.0
 
@@ -422,22 +417,15 @@ class TestNonbonded(GradientTest):
 
         for precision, rtol in [(np.float64, 1e-8), (np.float32, 1e-4)]:
 
-            test_u = potentials.Nonbonded(
-                exclusion_idxs,
-                scales,
-                lambda_plane_idxs,
-                lambda_offset_idxs,
-                beta,
-                cutoff
-            )
+            test_u = potentials.Nonbonded(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
 
             charge_rescale_mask = np.ones((N, N))
-            for (i,j), exc in zip(exclusion_idxs, scales[:, 0]):
+            for (i, j), exc in zip(exclusion_idxs, scales[:, 0]):
                 charge_rescale_mask[i][j] = 1 - exc
                 charge_rescale_mask[j][i] = 1 - exc
 
             lj_rescale_mask = np.ones((N, N))
-            for (i,j), exc in zip(exclusion_idxs, scales[:, 1]):
+            for (i, j), exc in zip(exclusion_idxs, scales[:, 1]):
                 lj_rescale_mask[i][j] = 1 - exc
                 lj_rescale_mask[j][i] = 1 - exc
 
@@ -448,27 +436,21 @@ class TestNonbonded(GradientTest):
                 beta=beta,
                 cutoff=cutoff,
                 lambda_plane_idxs=lambda_plane_idxs,
-                lambda_offset_idxs=lambda_offset_idxs
+                lambda_offset_idxs=lambda_offset_idxs,
             )
 
             lamb = 0.0
 
-            params = np.stack([
-                (np.random.rand(N).astype(np.float64) - 0.5)*np.sqrt(138.935456), # q
-                np.random.rand(N).astype(np.float64)/10.0, # sig
-                np.random.rand(N).astype(np.float64) # eps
-            ], axis=1)
-
-            self.compare_forces(
-                test_system,
-                params,
-                box,
-                lamb,
-                ref_u,
-                test_u,
-                rtol,
-                precision=precision
+            params = np.stack(
+                [
+                    (np.random.rand(N).astype(np.float64) - 0.5) * np.sqrt(138.935456),  # q
+                    np.random.rand(N).astype(np.float64) / 10.0,  # sig
+                    np.random.rand(N).astype(np.float64),  # eps
+                ],
+                axis=1,
             )
+
+            self.compare_forces(test_system, params, box, lamb, ref_u, test_u, rtol, precision=precision)
 
     def test_nonbonded(self):
 
@@ -478,7 +460,7 @@ class TestNonbonded(GradientTest):
         for size in [33, 231, 1050]:
 
             _, coords, box, _ = builders.build_water_system(6.2)
-            coords = coords/coords.unit
+            coords = coords / coords.unit
             coords = coords[:size]
 
             N = coords.shape[0]
@@ -491,11 +473,7 @@ class TestNonbonded(GradientTest):
                 for cutoff in [1.0]:
                     # E = 0 # DEBUG!
                     charge_params, ref_potential, test_potential = prepare_water_system(
-                        coords,
-                        lambda_plane_idxs,
-                        lambda_offset_idxs,
-                        p_scale=1.0,
-                        cutoff=cutoff
+                        coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
                     )
 
                     for lamb in [0.0, 0.1, 0.2]:
@@ -503,14 +481,7 @@ class TestNonbonded(GradientTest):
                         print("lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape)
 
                         self.compare_forces(
-                            coords,
-                            charge_params,
-                            box,
-                            lamb,
-                            ref_potential,
-                            test_potential,
-                            rtol,
-                            precision=precision
+                            coords, charge_params, box, lamb, ref_potential, test_potential, rtol, precision=precision
                         )
 
     def test_nonbonded_with_box_smaller_than_cutoff(self):
@@ -525,7 +496,7 @@ class TestNonbonded(GradientTest):
         padding = 0.1
 
         _, coords, box, _ = builders.build_water_system(6.2)
-        coords = coords/coords.unit
+        coords = coords / coords.unit
         coords = coords[:size]
 
         N = coords.shape[0]
@@ -535,11 +506,7 @@ class TestNonbonded(GradientTest):
 
         # Down shift box size to be only a portion of the cutoff
         charge_params, ref_potential, test_potential = prepare_water_system(
-            coords,
-            lambda_plane_idxs,
-            lambda_offset_idxs,
-            p_scale=1.0,
-            cutoff=cutoff
+            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
         )
 
         def run_nonbonded(precision, potential, x, box, params, lamb, steps=100):
@@ -554,21 +521,12 @@ class TestNonbonded(GradientTest):
             assert x.dtype == np.float64
             assert params.dtype == np.float64
             for _ in range(steps):
-                _ = test_impl.execute_selective(
-                    x,
-                    params,
-                    box,
-                    lamb,
-                    True,
-                    True,
-                    True,
-                    True
-                )
+                _ = test_impl.execute_selective(x, params, box, lamb, True, True, True, True)
 
         # With the default box, all is well
         run_nonbonded(precision, ref_potential, coords, box, charge_params, 0.0, steps=2)
 
-        db_cutoff = (cutoff+padding) * 2
+        db_cutoff = (cutoff + padding) * 2
 
         # Make box with diagonals right at the limit
         box = np.eye(3) * db_cutoff

@@ -4,7 +4,7 @@ from contextlib import redirect_stdout
 from fe.free_energy_rabfe import (
     RABFEResult,
     setup_relative_restraints_by_distance,
-    setup_relative_restraints_using_smarts
+    setup_relative_restraints_using_smarts,
 )
 from fe.atom_mapping import CompareDistNonterminal
 from fe.utils import get_romol_conf
@@ -26,13 +26,14 @@ def capture_print(closure):
 def test_rabfe_result_to_from_log():
     """assert equality after round-trip to/from preferred terminal log format"""
 
-    result = RABFEResult('my mol', 1.0, 2.0, 3.0, 4.0)
+    result = RABFEResult("my mol", 1.0, 2.0, 3.0, 4.0)
 
     printed = capture_print(result.log)
     first_line = printed.splitlines()[0]
 
     reconstructed = RABFEResult.from_log(first_line)
     assert result == reconstructed
+
 
 def test_setting_up_restraints_using_distance():
     seed = 814
@@ -66,6 +67,7 @@ def test_setting_up_restraints_using_distance():
     core = setup_relative_restraints_by_distance(mol_a, mol_b, terminal=True)
     assert core.shape == (12, 2)
 
+
 def test_setting_up_restraints_using_smarts():
     seed = 814
 
@@ -82,10 +84,7 @@ def test_setting_up_restraints_using_smarts():
     for mol in [mol_a, mol_b]:
         AllChem.EmbedMolecule(mol, randomSeed=seed)
 
-    result = rdFMCS.FindMCS(
-        [mol_a, mol_b],
-        mcs_params
-    )
+    result = rdFMCS.FindMCS([mol_a, mol_b], mcs_params)
 
     core = setup_relative_restraints_using_smarts(mol_a, mol_b, result.smartsString)
     assert core.shape == (2, 2)

@@ -40,7 +40,7 @@ def get_mol_id(mol, mol_prop):
 
 
 def _compute_label(mol_a, mol_b, prop_name: str):
-    """ Compute labeled ddg (in kJ/mol) from the experimental IC50 s """
+    """Compute labeled ddg (in kJ/mol) from the experimental IC50 s"""
 
     try:
         label_dG_a = convert_uIC50_to_kJ_per_mole(float(mol_a.GetProp(prop_name)))
@@ -90,6 +90,7 @@ def _get_core_by_smarts_wo_checking_uniqueness(mol_a, mol_b, core_smarts):
 
     return np.array([_get_match(mol_a, query), _get_match(mol_b, query)]).T
 
+
 def _strip_invalid_keys(ref: Dict[Any, Any], keys=List[Any]) -> Dict[Any, Any]:
     output = {}
     for key in keys:
@@ -100,22 +101,24 @@ def _strip_invalid_keys(ref: Dict[Any, Any], keys=List[Any]) -> Dict[Any, Any]:
     return output
 
 
-
 core_strategies = {
-    "mcs": lambda a, b, kwargs: get_core_by_mcs(a, b, mcs_map(a, b, **_strip_invalid_keys(kwargs, ["smarts"])).queryMol),
+    "mcs": lambda a, b, kwargs: get_core_by_mcs(
+        a, b, mcs_map(a, b, **_strip_invalid_keys(kwargs, ["smarts"])).queryMol
+    ),
     "any_mcs": lambda a, b, kwargs: get_core_by_permissive_mcs(a, b),
     "geometry": lambda a, b, kwargs: get_core_by_geometry(a, b, threshold=0.5),
 }
 
 
 def generate_star(
-        hub,
-        spokes,
-        forcefield,
-        transformation_size_threshold: int = 2,
-        core_strategy: str = 'geometry',
-        label_property: str="IC50[uM](SPA)",
-        core_kwargs: Optional[Dict[str, Any]] = None):
+    hub,
+    spokes,
+    forcefield,
+    transformation_size_threshold: int = 2,
+    core_strategy: str = "geometry",
+    label_property: str = "IC50[uM](SPA)",
+    core_kwargs: Optional[Dict[str, Any]] = None,
+):
     if core_kwargs is None:
         core_kwargs = {}
     transformations = []
@@ -135,18 +138,22 @@ def generate_star(
             # https://github.com/proteneer/timemachine/blob/2eb956f9f8ce62287cc531188d1d1481832c5e96/fe/topology.py#L381-L431
             error_transformations.append((hub, spoke, core))
 
-    print(f'total # of edges that encountered atom mapping errors: {len(error_transformations)}')
+    print(f"total # of edges that encountered atom mapping errors: {len(error_transformations)}")
 
     # filter to keep just the edges with very small number of atoms changing
-    easy_transformations = [rfe for rfe in transformations if rbfe_transformation_estimate(rfe) <= transformation_size_threshold]
+    easy_transformations = [
+        rfe for rfe in transformations if rbfe_transformation_estimate(rfe) <= transformation_size_threshold
+    ]
 
     return easy_transformations, error_transformations
+
 
 def mol_matches_core(mol, core_query) -> bool:
     res = mol.GetSubstructMatches(core_query)
     if len(res) > 1:
         print(f"Mol matched core multiple times")
     return len(res) == 1
+
 
 def smarts_comparison(smarts: str):
     core_query = Chem.MolFromSmarts(smarts)
@@ -163,12 +170,14 @@ def smarts_comparison(smarts: str):
             else:
                 leftover.append(mol)
         return matches, leftover
+
     return matching_mols
 
 
 core_generation_methods = {
     "smarts": smarts_comparison,
 }
+
 
 def manual_hub_selection(property: str, value: str):
     def find_hub(mols):
@@ -182,6 +191,7 @@ def manual_hub_selection(property: str, value: str):
         if hub is not None:
             mols.pop(idx)
         return hub, mols
+
     return find_hub
 
 
@@ -254,7 +264,9 @@ if __name__ == "__main__":
         )
         all_edges.extend(edges)
         for hub, spoke, _ in errors:
-            print(f'atom mapping error in transformation {get_mol_id(hub, map_config.identifier)} -> {get_mol_id(spoke, map_config.identifier)}!')
+            print(
+                f"atom mapping error in transformation {get_mol_id(hub, map_config.identifier)} -> {get_mol_id(spoke, map_config.identifier)}!"
+            )
         with open(f"core_{i}_error_transformations.pkl", "wb") as f:
             dump(errors, f)
         print(f"Core {i} had {len(edges)} edges and {len(errors)} errors")
@@ -265,5 +277,5 @@ if __name__ == "__main__":
         for edge in all_edges:
             edge.complex_path = abs_path
     # serialize
-    with open(map_config.output, 'wb') as f:
+    with open(map_config.output, "wb") as f:
         dump(all_edges, f)

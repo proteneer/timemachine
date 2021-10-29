@@ -2,6 +2,7 @@ from glob import glob
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
+
 def test_serialization_of_ffs():
     for path in glob("ff/params/smirnoff_*.py"):
         ff = Forcefield(deserialize_handlers(open(path).read()))

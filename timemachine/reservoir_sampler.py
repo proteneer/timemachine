@@ -1,10 +1,10 @@
 import random
 
-class ReservoirSampler():
 
+class ReservoirSampler:
     def __init__(self, generator, k):
-        self.generator = generator # generator
-        self.k = k # number of samples we want to keep
+        self.generator = generator  # generator
+        self.k = k  # number of samples we want to keep
         self.R = []
         self.count = 0
 

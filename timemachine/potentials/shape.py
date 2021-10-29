@@ -1,8 +1,9 @@
 import jax.numpy as np
 
+
 def squared_distance(ci, cj):
     diff = ci - cj
-    return np.sum(diff*diff, axis=-1)
+    return np.sum(diff * diff, axis=-1)
 
 
 def volume(conf_a, params_a, conf_b, params_b):
@@ -18,7 +19,7 @@ def volume(conf_a, params_a, conf_b, params_b):
         point cloud of coordinates for molecule A
 
     params_a: np.array [A, 2]
-        parameters where [:, 0] are alphas in Grant's paper, and [:, 1] 
+        parameters where [:, 0] are alphas in Grant's paper, and [:, 1]
         are the weights/prefactors outside of the exponential
 
     conf_b: np.array [B, 3]
@@ -28,8 +29,8 @@ def volume(conf_a, params_a, conf_b, params_b):
         identical to params_a in semantics
 
     """
-    ci = np.expand_dims(conf_a, axis=1) # N, 1, 3
-    cj = np.expand_dims(conf_b, axis=0) # 1, N, 3
+    ci = np.expand_dims(conf_a, axis=1)  # N, 1, 3
+    cj = np.expand_dims(conf_b, axis=0)  # 1, N, 3
 
     d2ij = squared_distance(ci, cj)
 
@@ -39,8 +40,8 @@ def volume(conf_a, params_a, conf_b, params_b):
     pi = np.expand_dims(params_a[:, 1], axis=1)
     pj = np.expand_dims(params_b[:, 1], axis=0)
 
-    kij = np.exp(-(ai*aj*d2ij)/(ai+aj))
-    vij = pi*pj*kij*np.power(np.pi/(ai+aj), 3/2)
+    kij = np.exp(-(ai * aj * d2ij) / (ai + aj))
+    vij = pi * pj * kij * np.power(np.pi / (ai + aj), 3 / 2)
 
     return np.sum(vij)
 
@@ -55,7 +56,7 @@ def normalized_overlap(conf_a, params_a, conf_b, params_b):
            int dr rho_A^2 + rho_B^2
 
     Guaranteeing that 0 <= S_AB <= 1. An alternative would be
-    something like the Tanimoto. 
+    something like the Tanimoto.
 
     Parameters
     ----------
@@ -63,7 +64,7 @@ def normalized_overlap(conf_a, params_a, conf_b, params_b):
         point cloud of coordinates for molecule A
 
     params_a: np.array [A, 2]
-        parameters where [:, 0] are alphas in Grant's paper, and [:, 1] 
+        parameters where [:, 0] are alphas in Grant's paper, and [:, 1]
         are the weights/prefactors outside of the exponential
 
     conf_b: np.array [B, 3]
@@ -78,7 +79,7 @@ def normalized_overlap(conf_a, params_a, conf_b, params_b):
     vjj = volume(conf_b, params_b, conf_b, params_b)
 
     # (ytz): try tanimoto etc. later as well
-    return 2*vij/(vii+vjj)
+    return 2 * vij / (vii + vjj)
 
 
 def harmonic_overlap(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k):
@@ -111,4 +112,4 @@ def harmonic_overlap(conf, params, box, lamb, a_idxs, b_idxs, alphas, weights, k
     params_b = params_c[b_idxs]
 
     V = normalized_overlap(conf_a, params_a, conf_b, params_b)
-    return k*(V-1)**2
+    return k * (V - 1) ** 2

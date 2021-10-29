@@ -16,7 +16,7 @@ def _generate_random_instance():
     i = 0
     while i < len(particle_inds):
         j = min(n_particles, i + np.random.randint(1, 10))
-        group_inds.append(np.array(particle_inds[i: j]))
+        group_inds.append(np.array(particle_inds[i:j]))
         i = j
 
     # randomly generate coords

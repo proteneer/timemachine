@@ -28,7 +28,7 @@ def _scatter_inds_from_group_inds(group_inds):
     scatter_inds = onp.zeros(len(all_inds))
 
     # assert group_inds not overlapping
-    assert (len(all_inds) == len(set(all_inds)))
+    assert len(all_inds) == len(set(all_inds))
 
     for i, group in enumerate(group_inds):
         for j in group:
@@ -41,7 +41,7 @@ class CentroidRescaler:
     def __init__(self, group_inds, weights=None):
         self.group_inds = group_inds
         self.group_sizes = jnp.array(list(map(len, self.group_inds)))
-        assert (jnp.min(self.group_sizes) > 0)
+        assert jnp.min(self.group_sizes) > 0
 
         self.scatter_inds = _scatter_inds_from_group_inds(group_inds)
 
@@ -84,12 +84,13 @@ class CentroidRescaler:
 
 
 class MonteCarloBarostat(MonteCarloMove):
-    def __init__(self,  # target_ensemble: NPTEnsemble,
-                 reduced_potential_fxn: callable,
-                 group_indices: List[Iterable[int]],
-                 max_delta_volume: float = 0.05,
-                 adapt_proposal_scale: bool = True,
-                 ):
+    def __init__(
+        self,  # target_ensemble: NPTEnsemble,
+        reduced_potential_fxn: callable,
+        group_indices: List[Iterable[int]],
+        max_delta_volume: float = 0.05,
+        adapt_proposal_scale: bool = True,
+    ):
         """
 
         References
@@ -128,7 +129,7 @@ class MonteCarloBarostat(MonteCarloMove):
         # apply scaling move
         # eq. 4 from Aqvist et al 2004
         proposed_volume = volume + delta_volume
-        length_scale = (proposed_volume / volume) ** (1. / 3)
+        length_scale = (proposed_volume / volume) ** (1.0 / 3)
 
         proposed_coords = self.centroid_rescaler.scale_centroids(x.coords, compute_box_center(x.box), length_scale)
 
@@ -141,7 +142,7 @@ class MonteCarloBarostat(MonteCarloMove):
 
         jacobian_contribution = self.N * jnp.log(proposed_volume / volume)
 
-        log_acceptance_probability = jnp.minimum(0, - (delta_u - jacobian_contribution))
+        log_acceptance_probability = jnp.minimum(0, -(delta_u - jacobian_contribution))
 
         return proposed_state, log_acceptance_probability
 
@@ -164,7 +165,7 @@ class MonteCarloBarostat(MonteCarloMove):
         """
         adaptation_multiplier = 1.1  # multiply/divide by this factor when increasing/decreasing proposal scale
         lower_bound = 1e-3  # don't let self.max_delta_volume drop below lower_bound nm^3
-        upper_bound = 1e+1  # don't let self.max_delta_volume exceed upper_bound nm^3
+        upper_bound = 1e1  # don't let self.max_delta_volume exceed upper_bound nm^3
 
         if self.n_proposed >= 10:
 

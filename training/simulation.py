@@ -1,5 +1,4 @@
-class Simulation():
-
+class Simulation:
     def __init__(self, x, v, box, potentials, integrator):
         self.x = x
         self.v = v

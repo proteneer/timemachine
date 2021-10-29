@@ -48,7 +48,7 @@ def test_npt():
     npt = NPTEnsemble(potential_energy=None, temperature=300 * kelvin, pressure=1 * atmosphere)
 
     U = (-100 * kilojoule_per_mole).value_in_unit(ENERGY_UNIT)
-    volume = (4 * nanometer ** 3).value_in_unit(DISTANCE_UNIT**3)
+    volume = (4 * nanometer ** 3).value_in_unit(DISTANCE_UNIT ** 3)
     u_0 = npt.reduce(U, volume)
 
     # check that reduced potential increases with increasing U or volume
@@ -73,6 +73,6 @@ def test_npt():
     for (U, T, V, P) in zip(potential_energies, temperatures, volumes, pressures):
         ref = _compute_reduced_potential(U, T, V, P)
         npt = NPTEnsemble(potential_energy=None, temperature=T, pressure=P)
-        actual = npt.reduce(U.value_in_unit(ENERGY_UNIT), V.value_in_unit(DISTANCE_UNIT**3))
+        actual = npt.reduce(U.value_in_unit(ENERGY_UNIT), V.value_in_unit(DISTANCE_UNIT ** 3))
 
         np.testing.assert_almost_equal(actual, ref)

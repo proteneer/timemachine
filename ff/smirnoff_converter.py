@@ -19,15 +19,21 @@ def _ast_eval(node):
     node : An ast parsing tree node
     """
 
-    operators = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul,
-        ast.Div: op.truediv, ast.Pow: op.pow, ast.BitXor: op.xor,
-        ast.USub: op.neg}
+    operators = {
+        ast.Add: op.add,
+        ast.Sub: op.sub,
+        ast.Mult: op.mul,
+        ast.Div: op.truediv,
+        ast.Pow: op.pow,
+        ast.BitXor: op.xor,
+        ast.USub: op.neg,
+    }
 
-    if isinstance(node, ast.Num): # <number>
+    if isinstance(node, ast.Num):  # <number>
         return node.n
-    elif isinstance(node, ast.BinOp): # <left> <operator> <right>
+    elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
         return operators[type(node.op)](_ast_eval(node.left), _ast_eval(node.right))
-    elif isinstance(node, ast.UnaryOp): # <operator> <operand> e.g., -1
+    elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
         return operators[type(node.op)](_ast_eval(node.operand))
     elif isinstance(node, ast.Name):
         # see if this is a simtk unit
@@ -42,6 +48,7 @@ def _ast_eval(node):
 
 def to_md_units(q):
     return q.value_in_unit_system(unit.md_unit_system)
+
 
 def string_to_unit(unit_string):
     """
@@ -59,18 +66,19 @@ def string_to_unit(unit_string):
         The deserialized unit from the string
 
     """
-    output_unit = _ast_eval(ast.parse(unit_string, mode='eval').body)
+    output_unit = _ast_eval(ast.parse(unit_string, mode="eval").body)
     return output_unit
+
 
 def parse_quantity(number_string):
     """
     Parse a quantity into MD units.
-    """ 
+    """
     pos = number_string.find("*")
 
     number = float(number_string[:pos])
-    item = number_string[pos+2:]
-    quantity = number*string_to_unit(item)
+    item = number_string[pos + 2 :]
+    quantity = number * string_to_unit(item)
     return to_md_units(quantity)
 
 
@@ -80,13 +88,7 @@ PROPER_TAG = "Proper"
 IMPROPER_TAG = "Improper"
 VDW_TAG = "Atom"
 
-tags = [
-    BOND_TAG,
-    ANGLE_TAG,
-    PROPER_TAG,
-    IMPROPER_TAG,
-    VDW_TAG
-]
+tags = [BOND_TAG, ANGLE_TAG, PROPER_TAG, IMPROPER_TAG, VDW_TAG]
 
 
 if __name__ == "__main__":
@@ -104,9 +106,9 @@ if __name__ == "__main__":
         if tag == BOND_TAG:
             params = []
             for s in itemlist:
-                patt = s.attributes['smirks'].value
-                b0 = parse_quantity(s.attributes['length'].value)
-                kb = parse_quantity(s.attributes['k'].value)
+                patt = s.attributes["smirks"].value
+                b0 = parse_quantity(s.attributes["length"].value)
+                kb = parse_quantity(s.attributes["k"].value)
                 params.append([patt, kb, b0])
             bonds = {
                 "patterns": params,
@@ -116,9 +118,9 @@ if __name__ == "__main__":
         elif tag == ANGLE_TAG:
             params = []
             for s in itemlist:
-                patt = s.attributes['smirks'].value
-                a0 = parse_quantity(s.attributes['angle'].value)
-                ka = parse_quantity(s.attributes['k'].value)
+                patt = s.attributes["smirks"].value
+                a0 = parse_quantity(s.attributes["angle"].value)
+                ka = parse_quantity(s.attributes["k"].value)
                 params.append([patt, ka, a0])
             angles = {
                 "patterns": params,
@@ -127,16 +129,16 @@ if __name__ == "__main__":
         elif tag == PROPER_TAG:
             params = []
             for s in itemlist:
-                patt = s.attributes['smirks'].value
+                patt = s.attributes["smirks"].value
                 counter = 1
                 components = []
                 while True:
                     try:
-                        k = parse_quantity(s.attributes['k'+str(counter)].value)
-                        phase = parse_quantity(s.attributes['phase'+str(counter)].value)
-                        period = float(s.attributes['periodicity'+str(counter)].value)
-                        idivf = float(s.attributes['idivf'+str(counter)].value)
-                        k = k/idivf
+                        k = parse_quantity(s.attributes["k" + str(counter)].value)
+                        phase = parse_quantity(s.attributes["phase" + str(counter)].value)
+                        period = float(s.attributes["periodicity" + str(counter)].value)
+                        idivf = float(s.attributes["idivf" + str(counter)].value)
+                        k = k / idivf
                         components.append([k, phase, period])
                         counter += 1
                     except KeyError:
@@ -149,44 +151,39 @@ if __name__ == "__main__":
         elif tag == IMPROPER_TAG:
             params = []
             for s in itemlist:
-                patt = s.attributes['smirks'].value
+                patt = s.attributes["smirks"].value
                 impdivf = 3
-                k = parse_quantity(s.attributes['k1'].value)/impdivf
-                phase = parse_quantity(s.attributes['phase1'].value)
-                period = float(s.attributes['periodicity1'].value)
+                k = parse_quantity(s.attributes["k1"].value) / impdivf
+                phase = parse_quantity(s.attributes["phase1"].value)
+                period = float(s.attributes["periodicity1"].value)
                 params.append([patt, k, phase, period])
-            impropers = {
-                "patterns": params
-            }
+            impropers = {"patterns": params}
             forcefield["ImproperTorsion"] = impropers
         elif tag == VDW_TAG:
             params = []
             for s in itemlist:
-                patt = s.attributes['smirks'].value
-                epsilon = parse_quantity(s.attributes['epsilon'].value)
+                patt = s.attributes["smirks"].value
+                epsilon = parse_quantity(s.attributes["epsilon"].value)
                 if "rmin_half" in s.attributes:
-                    rmin_half = parse_quantity(s.attributes['rmin_half'].value)
-                    sigma = 2. * rmin_half / (2.**(1. / 6.))
+                    rmin_half = parse_quantity(s.attributes["rmin_half"].value)
+                    sigma = 2.0 * rmin_half / (2.0 ** (1.0 / 6.0))
                 else:
-                    sigma = parse_quantity(s.attributes['sigma'].value)
+                    sigma = parse_quantity(s.attributes["sigma"].value)
                 # Take sqrt of epislon to avoid singularity in backprop
                 params.append([patt, sigma, np.sqrt(epsilon)])
-            vdws = {
-                "patterns": params,
-                "props": {}
-            }
+            vdws = {"patterns": params, "props": {}}
             for key, val in xmldoc.getElementsByTagName("vdW")[0].attributes.items():
-                if key == 'cutoff':
+                if key == "cutoff":
                     # we don't do cuttoffs.
                     continue
-                elif 'scale' in key:
+                elif "scale" in key:
                     val = float(val)
-                elif key == 'switch_width':
+                elif key == "switch_width":
                     continue
                 if key == "version":
                     continue
                 vdws["props"][key] = val
-            forcefield['LennardJones'] = vdws
+            forcefield["LennardJones"] = vdws
     if args.add_am1ccc_charges:
         forcefield["AM1CCC"] = AM1CCC_CHARGES
     stream = None

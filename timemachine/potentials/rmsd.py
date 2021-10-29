@@ -1,16 +1,19 @@
 import jax
 import jax.numpy as np
 
+
 def psi(rotation, k):
-    cos_theta = (np.trace(rotation) - 1)/2
+    cos_theta = (np.trace(rotation) - 1) / 2
     return cos_angle_u(cos_theta, k)
+
 
 def angle_u(theta, k):
     return cos_angle_u(np.cos(theta), k)
 
+
 def cos_angle_u(cos_theta, k):
     term = cos_theta - 1
-    nrg = k*term*term
+    nrg = k * term * term
     return nrg
 
 
@@ -22,19 +25,18 @@ def get_optimal_rotation(x1, x2):
     correlation_matrix = np.dot(x2.T, x1)
     U, S, V_tr = np.linalg.svd(correlation_matrix, full_matrices=False)
     is_reflection = (np.linalg.det(U) * np.linalg.det(V_tr)) < 0.0
-    U = jax.ops.index_update(U,
-        jax.ops.index[:, -1],
-        np.where(is_reflection, -U[:, -1], U[:, -1])
-    )
+    U = jax.ops.index_update(U, jax.ops.index[:, -1], np.where(is_reflection, -U[:, -1], U[:, -1]))
     rotation = np.dot(U, V_tr)
 
     return rotation
+
 
 def get_optimal_translation(x1, x2):
     """
     Returns the displacement vector whose tail is at x1 and head its at x2.
     """
     return np.mean(x2, axis=0) - np.mean(x1, axis=0)
+
 
 def get_optimal_rotation_and_translation(x1, x2):
     """
@@ -56,13 +58,15 @@ def get_optimal_rotation_and_translation(x1, x2):
     x2 = x2 - np.mean(x2, axis=0)
     return get_optimal_rotation(x1, x2), t
 
+
 def apply_rotation_and_translation(x, R, t):
     """
     Apply R and t from x.
     """
     x_com = np.mean(x, axis=0)
-    aligned_x = (x - x_com)@R - t + x_com
+    aligned_x = (x - x_com) @ R - t + x_com
     return aligned_x
+
 
 def align_x2_unto_x1(x1, x2):
     """
@@ -92,7 +96,8 @@ def align_x2_unto_x1(x1, x2):
 
     R = get_optimal_rotation(x1_centered, x2_centered)
 
-    return x2_centered@R + com2 - t
+    return x2_centered @ R + com2 - t
+
 
 def rmsd_align(x1, x2):
     """
@@ -127,7 +132,7 @@ def rmsd_align(x1, x2):
     rotation = get_optimal_rotation(x1, x2)
 
     xa = x1
-    xb = x2@rotation
+    xb = x2 @ rotation
 
     return xa, xb
 

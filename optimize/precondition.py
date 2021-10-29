@@ -3,17 +3,16 @@ from ff.handlers.bonded import HarmonicAngleHandler, HarmonicBondHandler, Improp
 from ff.handlers.nonbonded import LennardJonesHandler, AM1CCCHandler
 
 default_learning_rates = {
-    HarmonicBondHandler:    np.zeros(2),    # k, length
-    HarmonicAngleHandler:   np.zeros(2),    # k, angle
-    ProperTorsionHandler:   np.zeros(3),    # k, phase, periodicity
-    ImproperTorsionHandler: np.zeros(3),    # k, phase, periodicity
-    AM1CCCHandler:          1.0,            # charge increment
-    LennardJonesHandler:  np.array([1, 0]), # sigma, epsilon
+    HarmonicBondHandler: np.zeros(2),  # k, length
+    HarmonicAngleHandler: np.zeros(2),  # k, angle
+    ProperTorsionHandler: np.zeros(3),  # k, phase, periodicity
+    ImproperTorsionHandler: np.zeros(3),  # k, phase, periodicity
+    AM1CCCHandler: 1.0,  # charge increment
+    LennardJonesHandler: np.array([1, 0]),  # sigma, epsilon
 }
 
-def learning_rates_like_params(
-        ordered_handles, ordered_params, learning_rates=default_learning_rates
-):
+
+def learning_rates_like_params(ordered_handles, ordered_params, learning_rates=default_learning_rates):
     """Get a list of arrays of same shape as ordered_params, but containing
     learning rates"""
 

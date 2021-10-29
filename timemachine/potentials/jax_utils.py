@@ -5,6 +5,7 @@ from jax.ops import index_update
 from jax import vmap
 
 from typing import Tuple
+
 Array = onp.array
 
 
@@ -29,8 +30,6 @@ def get_group_group_indices(n: int, m: int) -> Tuple[Array, Array]:
     assert len(inds_i) == n_interactions
 
     return inds_i, inds_j
-
-
 
 
 def compute_lifting_parameter(lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
@@ -71,32 +70,29 @@ def convert_to_4d(x3, lamb, lambda_plane_idxs, lambda_offset_idxs, cutoff):
     return augment_dim(x3, w)
 
 
-def rescale_coordinates(
-    conf,
-    indices,
-    box,
-    scales):
+def rescale_coordinates(conf, indices, box, scales):
     """Note: scales unused"""
 
     mol_sizes = np.expand_dims(onp.bincount(indices), axis=1)
-    mol_centers = jax.ops.segment_sum(conf, indices)/mol_sizes
+    mol_centers = jax.ops.segment_sum(conf, indices) / mol_sizes
 
-    new_centers = mol_centers - box[2]*np.floor(np.expand_dims(mol_centers[...,2], axis=-1)/box[2][2])
-    new_centers -= box[1]*np.floor(np.expand_dims(new_centers[...,1], axis=-1)/box[1][1])
-    new_centers -= box[0]*np.floor(np.expand_dims(new_centers[...,0], axis=-1)/box[0][0])
+    new_centers = mol_centers - box[2] * np.floor(np.expand_dims(mol_centers[..., 2], axis=-1) / box[2][2])
+    new_centers -= box[1] * np.floor(np.expand_dims(new_centers[..., 1], axis=-1) / box[1][1])
+    new_centers -= box[0] * np.floor(np.expand_dims(new_centers[..., 0], axis=-1) / box[0][0])
 
     offset = new_centers - mol_centers
 
     return conf + offset[indices]
 
+
 def delta_r(ri, rj, box=None):
-    diff = ri - rj # this can be either N,N,3 or B,3
+    diff = ri - rj  # this can be either N,N,3 or B,3
     dims = ri.shape[-1]
 
     # box is None for harmonic bonds, not None for nonbonded terms
     if box is not None:
         for d in range(dims):
-            diff -= box[d]*np.floor(np.expand_dims(diff[...,d], axis=-1)/box[d][d]+0.5)
+            diff -= box[d] * np.floor(np.expand_dims(diff[..., d], axis=-1) / box[d][d] + 0.5)
 
     return diff
 
@@ -125,7 +121,7 @@ def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
         for later XLA steps
     """
     assert len(confs.shape) == 3
-    distances = vmap(distance_on_pairs)(confs[:,inds_l], confs[:, inds_r], boxes)
+    distances = vmap(distance_on_pairs)(confs[:, inds_l], confs[:, inds_r], boxes)
     assert distances.shape == (len(confs), len(inds_l))
 
     neighbor_masks = distances < cutoff
@@ -149,7 +145,7 @@ def batched_neighbor_inds(confs, inds_l, inds_r, cutoff, boxes):
 
 def distance(x, box):
     # nonbonded distances require the periodic box
-    assert x.shape[1] == 3 or x.shape[1] == 4 # 3d or 4d
+    assert x.shape[1] == 3 or x.shape[1] == 4  # 3d or 4d
     ri = np.expand_dims(x, 0)
     rj = np.expand_dims(x, 1)
     d2ij = np.sum(np.power(delta_r(ri, rj, box), 2), axis=-1)

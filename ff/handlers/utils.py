@@ -14,6 +14,7 @@ def sort_tuple(arr):
     else:
         return arr
 
+
 def match_smirks(mol, smirks):
     """
     Notes
@@ -22,15 +23,15 @@ def match_smirks(mol, smirks):
         * bootstrap_am1.py, which is identical
         * bcc_aromaticity.py, which uses OpenEye instead of RDKit
     """
-    
+
     # Make a copy of the molecule
     rdmol = Chem.Mol(mol)
     # Use designated aromaticity model
     Chem.SanitizeMol(rdmol, Chem.SANITIZE_ALL ^ Chem.SANITIZE_SETAROMATICITY)
     Chem.SetAromaticity(rdmol, Chem.AromaticityModel.AROMATICITY_MDL)
-    
+
     # Set up query.
-    qmol = Chem.MolFromSmarts(smirks)  #cannot catch the error
+    qmol = Chem.MolFromSmarts(smirks)  # cannot catch the error
     if qmol is None:
         raise ValueError('RDKit could not parse the SMIRKS string "{}"'.format(smirks))
 

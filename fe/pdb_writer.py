@@ -13,7 +13,7 @@ from simtk.openmm.app import PDBFile, Topology
 
 #     def write_header(self, box=None):
 #         """
-#         Confusingly this initializes writer as well because 
+#         Confusingly this initializes writer as well because
 #         """
 #         outfile = open(self.out_filepath, 'w')
 #         self.outfile = outfile
@@ -28,7 +28,7 @@ from simtk.openmm.app import PDBFile, Topology
 #         if self.outfile is None:
 #             raise ValueError("remember to call write_header first")
 #         self.frame_idx += 1
-    
+
 #         PDBFile.writeModel(self.topology, x, self.outfile, self.frame_idx)
 
 #     def close(self):
@@ -66,9 +66,9 @@ def convert_single_topology_mols(coords: np.ndarray, topo: "SingleTopology") -> 
         xb[b_idx] = coords[c_idx]
     return np.concatenate((xa, xb), axis=0)
 
-class PDBWriter():
 
-    def __init__(self, objs, out_filepath): 
+class PDBWriter:
+    def __init__(self, objs, out_filepath):
         """
         This class writes frames out in the PDBFormat. It supports both OpenMM topology
         formats and RDKit ROMol types. The molecules are ordered sequentially by the order
@@ -102,7 +102,7 @@ class PDBWriter():
         # super jank
         for obj in objs:
             if isinstance(obj, app.Topology):
-                with tempfile.NamedTemporaryFile(mode='w') as fp:
+                with tempfile.NamedTemporaryFile(mode="w") as fp:
                     # write
                     PDBFile.writeHeader(obj, fp)
                     PDBFile.writeModel(obj, np.zeros((obj.getNumAtoms(), 3)), fp, 0)
@@ -118,7 +118,7 @@ class PDBWriter():
         for mol in rd_mols[1:]:
             combined_mol = Chem.CombineMols(combined_mol, mol)
 
-        with tempfile.NamedTemporaryFile(mode='w') as fp:
+        with tempfile.NamedTemporaryFile(mode="w") as fp:
             # write
             Chem.MolToPDBFile(combined_mol, fp.name)
             fp.flush()
@@ -142,7 +142,7 @@ class PDBWriter():
 
         """
         # if self.outfile is None:
-            # raise ValueError("remember to call write_header first")
+        # raise ValueError("remember to call write_header first")
         self.frame_idx += 1
         PDBFile.writeModel(self.topology, x, self.out_handle, self.frame_idx)
 

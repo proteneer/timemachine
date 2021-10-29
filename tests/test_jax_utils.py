@@ -8,8 +8,13 @@ import numpy as onp
 onp.random.seed(2021)
 
 from timemachine.potentials.jax_utils import (
-    delta_r, distance_on_pairs, get_all_pairs_indices, get_group_group_indices,
-    compute_lifting_parameter, augment_dim, batched_neighbor_inds,
+    delta_r,
+    distance_on_pairs,
+    get_all_pairs_indices,
+    get_group_group_indices,
+    compute_lifting_parameter,
+    augment_dim,
+    batched_neighbor_inds,
 )
 
 

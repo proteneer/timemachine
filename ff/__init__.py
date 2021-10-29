@@ -1,9 +1,11 @@
 from ff.handlers import nonbonded, bonded
 
-class Forcefield():
+
+class Forcefield:
     """
     Utility class for wrapping around a list of ff_handlers
     """
+
     def __init__(self, ff_handlers):
         self.hb_handle = None
         self.ha_handle = None
@@ -53,11 +55,4 @@ class Forcefield():
         list of np.ndarray
             Return a flat, pre-determined ordering of the handlers
         """
-        return [
-            self.hb_handle,
-            self.ha_handle,
-            self.pt_handle,
-            self.it_handle,
-            self.q_handle,
-            self.lj_handle
-        ]
+        return [self.hb_handle, self.ha_handle, self.pt_handle, self.it_handle, self.q_handle, self.lj_handle]

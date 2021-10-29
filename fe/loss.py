@@ -20,33 +20,35 @@ def mybar_impl(w):
     A, _ = pymbar.BAR(w[0], w[1])
     return A
 
+
 def mybar_vjp(g, w):
-    return g*tmbar.dG_dw(w)
+    return g * tmbar.dG_dw(w)
+
 
 def mybar(x):
     return mybar_p.bind(x)
 
-mybar_p = core.Primitive('mybar')
+
+mybar_p = core.Primitive("mybar")
 mybar_p.def_impl(mybar_impl)
 ad.defvjp(mybar_p, mybar_vjp)
 
 
-def BAR_leg(
-    insertion_du_dls,
-    deletion_du_dls,
-    lambda_schedule):
+def BAR_leg(insertion_du_dls, deletion_du_dls, lambda_schedule):
     insertion_W = math_utils.trapz(insertion_du_dls, lambda_schedule)
     deletion_W = math_utils.trapz(deletion_du_dls, lambda_schedule)
 
     return mybar(jnp.stack([insertion_W, deletion_W]))
-   
+
+
 def BAR_loss(
-    complex_insertion_du_dls, # [C, N]
+    complex_insertion_du_dls,  # [C, N]
     complex_deletion_du_dls,  # [C, N]
-    solvent_insertion_du_dls, # [C, N]
+    solvent_insertion_du_dls,  # [C, N]
     solvent_deletion_du_dls,  # [C, N]
     lambda_schedule,
-    true_dG):
+    true_dG,
+):
 
     complex_dG = BAR_leg(complex_insertion_du_dls, complex_deletion_du_dls, lambda_schedule)
     solvent_dG = BAR_leg(solvent_insertion_du_dls, solvent_deletion_du_dls, lambda_schedule)
@@ -56,10 +58,8 @@ def BAR_loss(
 
     return loss
 
-def EXP_from_du_dls(
-    all_du_dls,
-    lambda_schedule,
-    kT):
+
+def EXP_from_du_dls(all_du_dls, lambda_schedule, kT):
     """
     Run exponential averaging on a list of du_dls that may contain None elements.
 
@@ -74,16 +74,14 @@ def EXP_from_du_dls(
     proper_du_dls = jnp.array(proper_du_dls)
 
     work_array = math_utils.trapz(proper_du_dls, lambda_schedule)
-    work_array = work_array/kT
+    work_array = work_array / kT
 
-    return tmbar.EXP(work_array)*kT
-   
+    return tmbar.EXP(work_array) * kT
+
+
 def EXP_loss(
-    complex_du_dls, # [C, N]
-    solvent_du_dls, # [C, N]
-    lambda_schedule,
-    true_dG,
-    temperature=300 * unit.kelvin):
+    complex_du_dls, solvent_du_dls, lambda_schedule, true_dG, temperature=300 * unit.kelvin  # [C, N]  # [C, N]
+):
 
     kT = kB * temperature
 
@@ -112,16 +110,8 @@ def truncated_residuals(predictions, labels, reliable_interval=(-jnp.inf, +jnp.i
     lower, upper = reliable_interval
 
     residuals = predictions - labels
-    residuals = jnp.where(
-        labels < lower,
-        jnp.maximum(0, predictions - lower),
-        residuals
-    )
-    residuals = jnp.where(
-        labels > upper,
-        jnp.minimum(0, predictions - upper),
-        residuals
-    )
+    residuals = jnp.where(labels < lower, jnp.maximum(0, predictions - lower), residuals)
+    residuals = jnp.where(labels > upper, jnp.minimum(0, predictions - upper), residuals)
     return residuals
 
 

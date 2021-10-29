@@ -23,21 +23,14 @@ def lennard_jones(dij, sig_ij, eps_ij):
 
 def direct_space_pme(dij, qij, beta):
     """Direct-space contribution from eq 2 of:
-        Darden, York, Pedersen, 1993, J. Chem. Phys.
-        "Particle mesh Ewald: An N log(N) method for Ewald sums in large systems"
-        https://aip.scitation.org/doi/abs/10.1063/1.470117
+    Darden, York, Pedersen, 1993, J. Chem. Phys.
+    "Particle mesh Ewald: An N log(N) method for Ewald sums in large systems"
+    https://aip.scitation.org/doi/abs/10.1063/1.470117
     """
     return qij * erfc(beta * dij) / dij
 
 
-def nonbonded_block(
-    xi,
-    xj,
-    box,
-    params_i,
-    params_j,
-    beta,
-    cutoff):
+def nonbonded_block(xi, xj, box, params_i, params_j, beta, cutoff):
     """
     This is a modified version of nonbonded_v3 that computes a block of
     interactions between two sets of particles x_i and x_j. It is assumed that
@@ -76,8 +69,8 @@ def nonbonded_block(
     eps_i = np.expand_dims(params_i[:, 2], axis=1)
     eps_j = np.expand_dims(params_j[:, 2], axis=0)
 
-    sig_ij = sig_i+sig_j
-    eps_ij = eps_i*eps_j
+    sig_ij = sig_i + sig_j
+    eps_ij = eps_i * eps_j
 
     qi = np.expand_dims(params_i[:, 0], axis=1)
     qj = np.expand_dims(params_j[:, 0], axis=0)
@@ -87,22 +80,22 @@ def nonbonded_block(
     es = direct_space_pme(dij, qij, beta)
     lj = lennard_jones(dij, sig_ij, eps_ij)
 
-    nrg = np.where(dij > cutoff, 0, es+lj)
+    nrg = np.where(dij > cutoff, 0, es + lj)
     return np.sum(nrg)
 
 
 def nonbonded_v3(
-        conf,
-        params,
-        box,
-        lamb,
-        charge_rescale_mask,
-        lj_rescale_mask,
-        beta,
-        cutoff,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
-        runtime_validate=True,
+    conf,
+    params,
+    box,
+    lamb,
+    charge_rescale_mask,
+    lj_rescale_mask,
+    beta,
+    cutoff,
+    lambda_plane_idxs,
+    lambda_offset_idxs,
+    runtime_validate=True,
 ):
     """Lennard-Jones + Coulomb, with a few important twists:
     * distances are computed in 4D, controlled by lambda, lambda_plane_idxs, lambda_offset_idxs
@@ -220,7 +213,7 @@ def nonbonded_v3(
     if cutoff is not None:
         eij_charge = np.where(dij > cutoff, 0, eij_charge)
 
-    eij_total = (eij_lj * lj_rescale_mask + eij_charge * charge_rescale_mask)
+    eij_total = eij_lj * lj_rescale_mask + eij_charge * charge_rescale_mask
 
     return np.sum(eij_total / 2)
 

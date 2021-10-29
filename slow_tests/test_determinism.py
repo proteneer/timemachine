@@ -13,9 +13,11 @@ from md import builders, minimizer
 from md.barostat.utils import get_bond_list, get_group_indices
 from testsystems.relative import hif2a_ligand_pair as testsystem
 
+
 def FIXED_TO_FLOAT(v):
     FIXED_EXPONENT = 0x1000000000
-    return np.float64(np.int64(v))/FIXED_EXPONENT
+    return np.float64(np.int64(v)) / FIXED_EXPONENT
+
 
 def test_deterministic_energies():
     """Verify that recomputing the energies of frames that have already had energies computed
@@ -28,7 +30,7 @@ def test_deterministic_energies():
     barostat_interval = 25
     mol_a, mol_b, core = testsystem.mol_a, testsystem.mol_b, testsystem.core
 
-    ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_sc.py').read())
+    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)
@@ -37,12 +39,10 @@ def test_deterministic_energies():
     ff_params = ff.get_ordered_params()
 
     # build the protein system.
-    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system('tests/data/hif2a_nowater_min.pdb')
-    host_fns, host_masses = openmm_deserializer.deserialize_system(
-        complex_system,
-        cutoff=1.0
+    complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(
+        "tests/data/hif2a_nowater_min.pdb"
     )
-
+    host_fns, host_masses = openmm_deserializer.deserialize_system(complex_system, cutoff=1.0)
 
     # resolve host clashes
     min_coords = minimizer.minimize_host_4d([mol_a, mol_b], complex_system, complex_coords, ff, complex_box)
@@ -62,39 +62,20 @@ def test_deterministic_energies():
         seed,
     )
 
-    intg = LangevinIntegrator(
-        temperature,
-        dt,
-        1.0,
-        np.array(host_masses),
-        seed
-    ).impl()
+    intg = LangevinIntegrator(temperature, dt, 1.0, np.array(host_masses), seed).impl()
 
     for precision, decimals in [(np.float32, 4), (np.float64, 8)]:
         bps = []
         unbound_bps = []
 
         for potential in host_fns:
-            bps.append(potential.bound_impl(precision=precision)) # get the bound implementation
+            bps.append(potential.bound_impl(precision=precision))  # get the bound implementation
             unbound_bps.append(potential.unbound_impl(precision))
 
         for barostat in [None, baro.impl(bps)]:
-            ctxt = custom_ops.Context(
-                x0,
-                v0,
-                complex_box,
-                intg,
-                bps,
-                barostat=barostat
-            )
+            ctxt = custom_ops.Context(x0, v0, complex_box, intg, bps, barostat=barostat)
             for lamb in [0.0, 0.4, 1.0]:
-                us, xs, boxes = ctxt.multiple_steps_U(
-                    lamb,
-                    200,
-                    np.array([lamb]),
-                    10,
-                    10
-                )
+                us, xs, boxes = ctxt.multiple_steps_U(lamb, 200, np.array([lamb]), 10, 10)
 
                 for ref_U, x, b in zip(us, xs, boxes):
                     test_u = 0.0
@@ -105,7 +86,9 @@ def test_deterministic_energies():
                         test_U_fixed += U_fixed
                         _, _, U = bp.execute(x, b, lamb)
                         test_u += U
-                        _, _, _, U_selective = unbound.execute_selective(x, fn.params, b, lamb, False, False, False, True)
+                        _, _, _, U_selective = unbound.execute_selective(
+                            x, fn.params, b, lamb, False, False, False, True
+                        )
                         test_u_selective += U_selective
                     assert ref_U == FIXED_TO_FLOAT(test_U_fixed)
                     assert test_u == test_u_selective

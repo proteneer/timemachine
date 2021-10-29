@@ -56,7 +56,7 @@ num_host_atoms = host_coords.shape[0]
 
 # note: .py file rather than .offxml file
 # note: _ccc suffix means "correctable charge corrections"
-ff_handlers = deserialize_handlers(open('ff/params/smirnoff_1_1_0_ccc.py').read())
+ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
 
 final_potentials = []
 final_vjp_and_handles = []
@@ -99,13 +99,7 @@ for final_lamb in np.linspace(0, 1, 8):
     #   be useful later in timemachine's multi-device parallelization strategy)
     # note: OpenMM unit system used throughout
     #   (temperature: kelvin, timestep: picosecond, collision_rate: picosecond^-1)
-    intg = LangevinIntegrator(
-        300.0,
-        1.5e-3,
-        1.0,
-        combined_masses,
-        seed
-    ).impl()
+    intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
     x0 = combined_coords
     v0 = np.zeros_like(x0)
@@ -129,13 +123,7 @@ for final_lamb in np.linspace(0, 1, 8):
         u_impls.append(fn)
 
     # context components: positions, velocities, box, integrator, energy fxns
-    ctxt = custom_ops.Context(
-        x0,
-        v0,
-        box,
-        intg,
-        u_impls
-    )
+    ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
 
     # initial insertion step to remove clashes, note that for production we probably
     # want to adjust the box size slighty to accomodate for a uniform water density
@@ -144,7 +132,6 @@ for final_lamb in np.linspace(0, 1, 8):
         # note: unlike in OpenMM, .step() accepts a float (for lambda) and does
         #   not accept an integer (for n_steps) -- .step() takes 1 step at a time
         ctxt.step(lamb)
-
 
     # print("insertion energy", ctxt._get_u_t_minus_1())
 
@@ -177,7 +164,7 @@ for final_lamb in np.linspace(0, 1, 8):
 
         if vjp_and_handles:
             vjp_fn, handles = vjp_and_handles
-            du_df = vjp_fn(du_dp) # vjp into forcefield derivatives
+            du_df = vjp_fn(du_dp)  # vjp into forcefield derivatives
             for f_grad, h in zip(du_df, handles):
                 print("handle:", type(h).__name__)
                 for s, vv in zip(h.smirks, f_grad):

@@ -1,5 +1,7 @@
 import unittest
-from jax.config import config; config.update("jax_enable_x64", True)
+from jax.config import config
+
+config.update("jax_enable_x64", True)
 
 import functools
 import numpy as np
@@ -24,11 +26,10 @@ def lambda_potential(conf, params, box, lamb, multiplier, offset, u_fn):
 
     # lamb appears twice as the potential itself may be a function
     # of lambda (eg. if we use softcores)
-    return (multiplier*lamb + offset)*u_fn(conf, params, box, lamb)
+    return (multiplier * lamb + offset) * u_fn(conf, params, box, lamb)
 
 
 class TestLambdaPotential(GradientTest):
-
     @unittest.skip("not supported")
     def test_nonbonded(self):
 
@@ -57,20 +58,27 @@ class TestLambdaPotential(GradientTest):
 
                         # E = 0 # DEBUG!
                         params, ref_potential, test_potential = prepare_water_system(
-                            coords,
-                            lambda_plane_idxs,
-                            lambda_offset_idxs,
-                            p_scale=1.0,
-                            cutoff=cutoff
+                            coords, lambda_plane_idxs, lambda_offset_idxs, p_scale=1.0, cutoff=cutoff
                         )
 
-                        print("multiplier", multiplier, "lambda", lamb, "cutoff", cutoff, "precision", precision, "xshape", coords.shape ,"offset",offset)
+                        print(
+                            "multiplier",
+                            multiplier,
+                            "lambda",
+                            lamb,
+                            "cutoff",
+                            cutoff,
+                            "precision",
+                            precision,
+                            "xshape",
+                            coords.shape,
+                            "offset",
+                            offset,
+                        )
 
                         ref_potential = functools.partial(
-                            lambda_potential,
-                            multiplier=multiplier,
-                            offset=offset,
-                            u_fn=ref_potential)
+                            lambda_potential, multiplier=multiplier, offset=offset, u_fn=ref_potential
+                        )
 
                         test_potential = potentials.LambdaPotential(
                             test_potential,
@@ -81,12 +89,5 @@ class TestLambdaPotential(GradientTest):
                         )
 
                         self.compare_forces(
-                            coords,
-                            params,
-                            box,
-                            lamb,
-                            ref_potential,
-                            test_potential,
-                            rtol,
-                            precision=precision
+                            coords, params, box, lamb, ref_potential, test_potential, rtol, precision=precision
                         )
