@@ -251,6 +251,10 @@ void declare_context(py::module &m) {
             Boxes have shape (F, 3, 3)
 
     )pbdoc")
+    .def("set_x_t", [](timemachine::Context &ctxt,
+        const py::array_t<double, py::array::c_style> new_x_t) {
+        ctxt.set_x_t(new_x_t.data());
+    })
     .def("get_x_t", [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
         unsigned int N = ctxt.num_atoms();
         unsigned int D = 3;

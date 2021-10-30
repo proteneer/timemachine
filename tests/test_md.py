@@ -17,6 +17,57 @@ from common import prepare_nb_system
 
 
 class TestContext(unittest.TestCase):
+    def test_set_and_get(self):
+        """
+        This test the setters and getters in the context.
+        """
+
+        np.random.seed(4321)
+
+        N = 8
+        D = 3
+
+        x0 = np.random.rand(N, D).astype(dtype=np.float64) * 2
+
+        E = 2
+
+        lambda_plane_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+        lambda_offset_idxs = np.random.randint(low=0, high=2, size=N, dtype=np.int32)
+
+        params, _, test_nrg = prepare_nb_system(
+            x0,
+            E,
+            lambda_plane_idxs,
+            lambda_offset_idxs,
+            p_scale=3.0,
+            cutoff=1.0,
+        )
+
+        masses = np.random.rand(N)
+        v0 = np.random.rand(x0.shape[0], x0.shape[1])
+
+        temperature = 300
+        dt = 2e-3
+        friction = 0.0
+        ca, cbs, ccs = langevin_coefficients(temperature, dt, friction, masses)
+
+        box = np.eye(3) * 3.0
+        intg = custom_ops.LangevinIntegrator(dt, ca, cbs, ccs, 1234)
+
+        bp = test_nrg.bind(params).bound_impl(precision=np.float64)
+        bps = [bp]
+
+        ctxt = custom_ops.Context(x0, v0, box, intg, bps)
+
+        np.testing.assert_equal(ctxt.get_x_t(), x0)
+        np.testing.assert_equal(ctxt.get_v_t(), v0)
+        np.testing.assert_equal(ctxt.get_box(), box)
+
+        new_x = np.random.rand(N, 3)
+        ctxt.set_x_t(new_x)
+
+        np.testing.assert_equal(ctxt.get_x_t(), new_x)
+
     def test_fwd_mode(self):
         """
         This test ensures that we can reverse-mode differentiate
