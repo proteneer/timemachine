@@ -13,6 +13,7 @@ config.update("jax_enable_x64", True)
 import jax
 
 
+from md.moves import MultipleTryMetropolis
 from timemachine.potentials import bonded, nonbonded, rmsd
 from timemachine.constants import BOLTZ
 import numpy as np
@@ -34,7 +35,7 @@ def get_ff_simple_charge():
 
 
 def get_ff_decharged():
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_dc.py").read())
+    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_test_sampling.py").read())
     ff = Forcefield(ff_handlers)
     return ff
 
@@ -120,6 +121,45 @@ def align_sample(x_gas, x_solvent):
     return xb_new
 
 
+from typing import List
+from md.states import CoordsVelBox
+
+
+class AlignedMover(MultipleTryMetropolis):
+    def __init__(self, K, vacuum_samples, vacuum_log_weights, log_prob_fn):
+
+        self.vacuum_samples = vacuum_samples
+        self.vacuum_log_weights = vacuum_log_weights
+        self.batch_log_prob_fn = jax.vmap(log_prob_fn)
+
+        super().__init__(K)
+
+    def batch_propose(self, x: CoordsVelBox) -> List[CoordsVelBox]:
+
+        ligand_samples = enhanced.sample_from_log_weights(self.vacuum_samples, self.vacuum_log_weights, self.K)
+
+        x_solvent = x.coords
+        v_solvent = x.velocities
+        b_solvent = x.box
+
+        new_xvbs = []
+
+        # modify only ligand coordinates in the proposal
+        for x_l in ligand_samples:
+            x_l_aligned = align_sample(x_l, x_solvent)
+            x_solvent_copy = x_solvent.copy()
+            num_ligand_atoms = len(x_l)
+            x_solvent_copy[-num_ligand_atoms:] = x_l_aligned
+            new_xvbs.append(CoordsVelBox(x_solvent_copy, v_solvent, b_solvent))
+
+        return new_xvbs
+
+    def batch_log_prob(self, xvbs: List[CoordsVelBox]) -> List[float]:
+        batch_coords = np.array([xvb.coords for xvb in xvbs])
+        batch_boxes = np.array([xvb.box for xvb in xvbs])
+        return self.batch_log_prob_fn(batch_coords, batch_boxes)
+
+
 def test_condensed_phase_mtm():
     """
     Tests multiple-try metropolis in the condensed phase.
@@ -140,7 +180,7 @@ def test_condensed_phase_mtm():
     if not os.path.exists(cache_path):
         print("Generating cache")
 
-        weighted_vacuum_samples, log_weights = enhanced.generate_log_weighted_samples(
+        vacuum_samples, vacuum_log_weights = enhanced.generate_log_weighted_samples(
             mol,
             temperature,
             state.U_easy,
@@ -148,10 +188,10 @@ def test_condensed_phase_mtm():
         )
 
         with open(cache_path, "wb") as fh:
-            pickle.dump([weighted_vacuum_samples, log_weights], fh)
+            pickle.dump([vacuum_samples, vacuum_log_weights], fh)
 
     with open(cache_path, "rb") as fh:
-        weighted_vacuum_samples, log_weights = pickle.load(fh)
+        vacuum_samples, vacuum_log_weights = pickle.load(fh)
 
     ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
 
@@ -166,25 +206,15 @@ def test_condensed_phase_mtm():
     # sanity check that charges on ligand is zero
     assert np.all(params_i[:, 0] == 0.0)
 
+    kT = temperature * BOLTZ
+
+    # (ytz): This only works for the decharged case since samples are generated from a decharged state.
     @jax.jit
-    def before_U_k(x_solvent, box_solvent):
+    def log_prob_fn(x_solvent, box_solvent):
         x_water = x_solvent[:-num_ligand_atoms]  # water coords
         x_original = x_solvent[-num_ligand_atoms:]  # ligand coords
         U_k = nonbonded.nonbonded_block(x_original, x_water, box_solvent, params_i, params_j, beta, cutoff)
-        return U_k
-
-    # batch align a set of gas molecules to the coordinates of the ligand in solvent
-    # then compute the energy
-    def after_U_k(x_gas, x_solvent, box_solvent):
-        x_gas_aligned = align_sample(x_gas, x_solvent)  # align gas phase conformer
-        x_water = x_solvent[:-num_ligand_atoms]  # water coords
-        U_k = nonbonded.nonbonded_block(x_gas_aligned, x_water, box_solvent, params_i, params_j, beta, cutoff)
-        return U_k
-
-    batch_after_U_k_fn = jax.jit(jax.vmap(after_U_k, in_axes=(0, None, None)))
-    kT = temperature * BOLTZ
-
-    all_delta_us_unique = []
+        return -U_k / kT
 
     @jax.jit
     def get_torsion(x_t):
@@ -193,9 +223,9 @@ def test_condensed_phase_mtm():
         return bonded.signed_torsion_angle(*cijkl)
 
     batch_get_torsion = jax.jit(jax.vmap(get_torsion))
-    vacuum_weights = np.exp(log_weights - logsumexp(log_weights))
+    vacuum_weights = np.exp(vacuum_log_weights - logsumexp(vacuum_log_weights))
     assert np.abs(np.sum(vacuum_weights) - 1) < 1e-5
-    vacuum_torsions = batch_get_torsion(weighted_vacuum_samples)
+    vacuum_torsions = batch_get_torsion(vacuum_samples)
 
     # verify that these are both bimodal
     # plt.hist(vacuum_torsions, density=True, weights=vacuum_weights, bins=50)
@@ -203,84 +233,47 @@ def test_condensed_phase_mtm():
 
     assert np.abs(np.average(vacuum_torsions, weights=vacuum_weights)) < 0.1
 
-    all_weights = []
+    num_batches = 10000
 
-    num_batches = 2000
-    sample_generator = enhanced.generate_solvent_phase_samples(
-        ubps, params, masses, coords, box, temperature, num_batches=num_batches
-    )
+    frozen_masses = np.copy(masses)
+    frozen_masses[-num_ligand_atoms:] = np.inf
 
-    next_x = None
+    all_torsions = []
 
-    K = 100
-    num_accept = 0
-    num_reject = 0
+    # test with both frozen masses and free masses
+    for test_masses in [frozen_masses, masses]:
 
-    enhanced_torsions = []
-    for iteration in range(num_batches):
-
-        x_solvent, box_solvent = sample_generator.send(next_x)
-        before_U_k_sample = before_U_k(x_solvent, box_solvent)
-        log_pi_x = -before_U_k_sample / kT
-
-        solvent_torsion = get_torsion(x_solvent[-num_ligand_atoms:])
-        enhanced_torsions.append(solvent_torsion)
-
-        # Multiple Try Metropolis (MTM) on K samples
-
-        # 1) generate K samples from vacuum
-        gas_samples_yi = enhanced.sample_from_log_weights(weighted_vacuum_samples, log_weights, K)
-        # gas_samples_yi = weighted_vacuum_samples[
-        # np.random.choice(np.arange(num_vacuum_samples), size=K, p=vacuum_weights)
-        # ]
-        # 2) compute energies of vacuum solvents aligned to ligand in x_solvent
-        after_U_y_i_samples = batch_after_U_k_fn(gas_samples_yi, x_solvent, box_solvent)
-
-        # 3) compute log weights of the numerator
-        log_pi_yi = -after_U_y_i_samples / kT
-        normalized_pi_yi = np.exp(log_pi_yi - logsumexp(log_pi_yi))
-
-        # 4) using log weights, pick one of the yi as the candidate
-        new_y = gas_samples_yi[np.random.choice(np.arange(K), p=normalized_pi_yi)]
-
-        # 5) let y_solvent be replacement of x_solvent ligand with new_y
-        new_y_aligned = align_sample(new_y, x_solvent)
-        y_solvent = np.copy(x_solvent)
-        y_solvent[-num_ligand_atoms:] = new_y_aligned
-
-        # 6) Generate another random set of samples from vacuum_samples
-        gas_samples_x_i_sub_1 = enhanced.sample_from_log_weights(weighted_vacuum_samples, log_weights, K - 1)
-
-        # 7) Compute log weights for the denominator
-        after_U_x_i_samples = batch_after_U_k_fn(gas_samples_x_i_sub_1, y_solvent, box_solvent)
-        log_pi_x_i_sub_1 = -after_U_x_i_samples / kT
-        log_pi_xi_combined = np.concatenate([log_pi_x_i_sub_1, [log_pi_x]])
-
-        # 8) Compute the log ratio
-        log_ratio = logsumexp(log_pi_yi) - logsumexp(log_pi_xi_combined)
-        ratio = np.exp(log_ratio)
-
-        # decide if we accept or reject
-        if np.random.rand() < ratio:
-            num_accept += 1
-            # use new frame
-            next_x = y_solvent
-        else:
-            num_reject += 1
-            # use old frame
-            next_x = x_solvent
-
-        print(
-            f"frame {iteration} ratio {ratio} log_ratio {log_ratio} accepts {num_accept} rejects {num_reject} solvent_torsion {solvent_torsion}"
+        sample_generator = enhanced.generate_solvent_phase_samples(
+            ubps, params, test_masses, coords, box, temperature, num_batches=num_batches
         )
 
-    enhanced_torsions = np.asarray(enhanced_torsions)
+        next_x = None
+
+        K = 200
+
+        mover = AlignedMover(K, vacuum_samples, vacuum_weights, log_prob_fn)
+
+        enhanced_torsions = []
+        for iteration in range(num_batches):
+
+            x_solvent, v_solvent, box_solvent = sample_generator.send(next_x)
+            solvent_torsion = get_torsion(x_solvent[-num_ligand_atoms:])
+            enhanced_torsions.append(solvent_torsion)
+
+            next_x = mover.move(CoordsVelBox(x_solvent, v_solvent, box_solvent))
+
+            print(
+                f"frame {iteration} accepted {mover.n_accepted} proposed {mover.n_proposed} solvent_torsion {solvent_torsion}"
+            )
+
+        all_torsions.append(enhanced_torsions)
+
+    all_torsions = np.asarray(all_torsions)
 
     # (ytz): useful for visualization, so please leave this comment here.
-    # from matplotlib import pyplot as plt
+    from matplotlib import pyplot as plt
+
     # plt.hist(vanilla_solvent_torsions, bins=np.linspace(-np.pi, np.pi, 100), density=True, alpha=0.5)
-    # plt.hist(mtm_solvent_torsions, bins=np.linspace(-np.pi, np.pi, 100), density=True, alpha=0.5)
-    # plt.show()
 
     enhanced_torsions_lhs, _ = np.histogram(enhanced_torsions, bins=50, range=(-np.pi, 0), density=True)
     enhanced_torsions_rhs, _ = np.histogram(enhanced_torsions, bins=50, range=(0, np.pi), density=True)
@@ -298,7 +291,19 @@ def test_condensed_phase_mtm():
 
     vanilla_torsions = np.asarray(vanilla_torsions)
 
+    plt.hist(all_torsions[0], bins=np.linspace(-np.pi, np.pi, 100), density=True, alpha=0.5, label="enhanced_frozen")
+    plt.hist(all_torsions[1], bins=np.linspace(-np.pi, np.pi, 100), density=True, alpha=0.5, label="enhanced_free")
+    plt.hist(vanilla_torsions, bins=np.linspace(-np.pi, np.pi, 100), density=True, alpha=0.25, label="vanilla")
+    plt.legend()
+    plt.xlabel("torsion angle")
+    plt.ylabel("density")
+    plt.show()
+
     vanilla_samples_lhs, _ = np.histogram(vanilla_torsions, bins=50, range=(-np.pi, 0), density=True)
 
     # check for consistency with vanilla samples
     assert np.mean((enhanced_torsions_lhs - vanilla_samples_lhs) ** 2) < 5e-2
+
+
+if __name__ == "__main__":
+    test_condensed_phase_mtm()

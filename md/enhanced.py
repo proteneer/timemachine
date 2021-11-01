@@ -443,6 +443,12 @@ def generate_solvent_phase_samples(
 
     for _ in range(num_batches):
         _, _, _ = ctxt.multiple_steps_U(lamb, num_steps, lambda_windows, u_interval, x_interval)
-        new_xs = yield ctxt.get_x_t(), ctxt.get_box()
-        if new_xs is not None:
-            ctxt.set_x_t(new_xs)
+        old_x_t = ctxt.get_x_t()
+        old_v_t = ctxt.get_v_t()
+        old_box = ctxt.get_box()
+        new_xvb = yield ctxt.get_x_t(), ctxt.get_v_t(), ctxt.get_box()
+        if new_xvb is not None:
+            # tbd fix later
+            np.testing.assert_array_equal(old_v_t, new_xvb.velocities)
+            np.testing.assert_array_equal(old_box, new_xvb.box)
+            ctxt.set_x_t(new_xvb.coords)
