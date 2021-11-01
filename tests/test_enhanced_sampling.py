@@ -193,7 +193,7 @@ def test_condensed_phase_mtm():
 
     assert np.abs(np.average(vacuum_torsions, weights=vacuum_weights)) < 0.1
 
-    num_batches = 10000
+    num_batches = 2000
 
     frozen_masses = np.copy(masses)
     frozen_masses[-num_ligand_atoms:] = np.inf

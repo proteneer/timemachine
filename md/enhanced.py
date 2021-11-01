@@ -448,7 +448,7 @@ def generate_solvent_phase_samples(
         old_x_t = ctxt.get_x_t()
         old_v_t = ctxt.get_v_t()
         old_box = ctxt.get_box()
-        new_xvb = yield ctxt.get_x_t(), ctxt.get_v_t(), ctxt.get_box()
+        new_xvb = yield old_x_t, old_v_t, old_box
         if new_xvb is not None:
             # tbd fix later
             np.testing.assert_array_equal(old_v_t, new_xvb.velocities)
@@ -456,14 +456,14 @@ def generate_solvent_phase_samples(
             ctxt.set_x_t(new_xvb.coords)
 
 
-def align_sample(x_gas, x_solvent):
+def align_sample(x_vacuum, x_solvent):
     """
-    Return a rigidly transformed x_gas that is maximally aligned to x_solvent.
+    Return a rigidly transformed x_vacuum that is maximally aligned to x_solvent.
     """
-    num_atoms = len(x_gas)
+    num_atoms = len(x_vacuum)
 
     xa = x_solvent[-num_atoms:]
-    xb = x_gas
+    xb = x_vacuum
 
     assert xa.shape == xb.shape
 
@@ -471,21 +471,28 @@ def align_sample(x_gas, x_solvent):
     return xb_new
 
 
+def align_and_replace(x_vacuum, x_solvent):
+    num_ligand_atoms = len(x_vacuum)
+    aligned_x_vacuum = align_sample(x_vacuum, x_solvent)
+    return jax.ops.index_update(x_solvent, jax.ops.index[-num_ligand_atoms:], aligned_x_vacuum)
+
+
+batch_align_and_replace = jax.jit(jax.vmap(align_and_replace, in_axes=(0, None)))
+
+
 def aligned_batch_propose(xvb, K, vacuum_samples, vacuum_log_weights):
-    ligand_samples = sample_from_log_weights(vacuum_samples, vacuum_log_weights, K)
+    vacuum_samples = sample_from_log_weights(vacuum_samples, vacuum_log_weights, K)
 
     x_solvent = xvb.coords
     v_solvent = xvb.velocities
     b_solvent = xvb.box
 
+    replaced_samples = batch_align_and_replace(vacuum_samples, x_solvent)
+
     new_xvbs = []
 
     # modify only ligand coordinates in the proposal
-    for x_l in ligand_samples:
-        x_l_aligned = align_sample(x_l, x_solvent)
-        x_solvent_copy = x_solvent.copy()
-        num_ligand_atoms = len(x_l)
-        x_solvent_copy[-num_ligand_atoms:] = x_l_aligned
-        new_xvbs.append(CoordsVelBox(x_solvent_copy, v_solvent, b_solvent))
+    for x_r in replaced_samples:
+        new_xvbs.append(CoordsVelBox(x_r, v_solvent, b_solvent))
 
     return new_xvbs
