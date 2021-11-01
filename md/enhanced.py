@@ -385,6 +385,8 @@ def generate_solvent_phase_samples(
     coords,  # minimized_coords
     box,
     temperature,
+    mc_mover,
+    observable_fn,
     pressure=1.0,
     steps_per_batch=500,
     num_batches=10000,
@@ -443,17 +445,23 @@ def generate_solvent_phase_samples(
     u_interval = steps_per_batch
     x_interval = steps_per_batch
 
-    for _ in range(num_batches):
+    all_xs = []
+
+    for iteration in range(num_batches):
         _, _, _ = ctxt.multiple_steps_U(lamb, num_steps, lambda_windows, u_interval, x_interval)
-        old_x_t = ctxt.get_x_t()
-        old_v_t = ctxt.get_v_t()
-        old_box = ctxt.get_box()
-        new_xvb = yield old_x_t, old_v_t, old_box
-        if new_xvb is not None:
-            # tbd fix later
-            np.testing.assert_array_equal(old_v_t, new_xvb.velocities)
-            np.testing.assert_array_equal(old_box, new_xvb.box)
-            ctxt.set_x_t(new_xvb.coords)
+        x_t = ctxt.get_x_t()
+        observable_fn(iteration, x_t)
+        v_t = ctxt.get_v_t()
+        box = ctxt.get_box()
+        all_xs.append(x_t)
+        if mc_mover is not None:
+            xvb = mc_mover.move(CoordsVelBox(x_t, v_t, box))
+            ctxt.set_x_t(xvb.coords)
+            # don't have setters for x_t and box right now
+            np.testing.assert_array_equal(xvb.velocities, v_t)
+            np.testing.assert_array_equal(xvb.box, box)
+
+    return np.ndarray(all_xs)
 
 
 def align_sample(x_vacuum, x_solvent):

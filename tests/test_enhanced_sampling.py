@@ -31,6 +31,9 @@ from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 import pickle
 
+# (ytz): useful for visualization, so please leave this comment here!
+from matplotlib import pyplot as plt
+
 
 def get_ff_simple_charge():
     ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
@@ -200,19 +203,15 @@ def test_condensed_phase_mtm():
 
     all_torsions = []
 
-    batch_proposal_fn = functools.partial(
-        enhanced.aligned_batch_propose, vacuum_samples=vacuum_samples, vacuum_log_weights=vacuum_log_weights
-    )
     # test with both frozen masses and free masses
     for test_masses in [frozen_masses, masses]:
 
-        sample_generator = enhanced.generate_solvent_phase_samples(
-            ubps, params, test_masses, coords, box, temperature, num_batches=num_batches, seed=seed
+        batch_proposal_fn = functools.partial(
+            enhanced.aligned_batch_propose, vacuum_samples=vacuum_samples, vacuum_log_weights=vacuum_log_weights
         )
 
-        next_x = None
-
         K = 200
+
         mover = MultipleTryMetropolis(
             K,
             batch_proposal_fn,
@@ -220,24 +219,31 @@ def test_condensed_phase_mtm():
         )
 
         enhanced_torsions = []
-        for iteration in range(num_batches):
 
-            x_solvent, v_solvent, box_solvent = sample_generator.send(next_x)
+        # warning: closure around locally defined mover, do not move outside of loop
+        def observable_fn(iteration, x_solvent):
             solvent_torsion = get_torsion(x_solvent[-num_ligand_atoms:])
             enhanced_torsions.append(solvent_torsion)
-
-            next_x = mover.move(CoordsVelBox(x_solvent, v_solvent, box_solvent))
-
             print(
                 f"frame {iteration} accepted {mover.n_accepted} proposed {mover.n_proposed} solvent_torsion {solvent_torsion}"
             )
 
+        enhanced.generate_solvent_phase_samples(
+            ubps,
+            params,
+            test_masses,
+            coords,
+            box,
+            temperature,
+            mover,
+            observable_fn,
+            num_batches=num_batches,
+            seed=seed,
+        )
+
         all_torsions.append(enhanced_torsions)
 
     all_torsions = np.asarray(all_torsions)
-
-    # (ytz): useful for visualization, so please leave this comment here.
-    from matplotlib import pyplot as plt
 
     # plt.hist(vanilla_solvent_torsions, bins=np.linspace(-np.pi, np.pi, 100), density=True, alpha=0.5)
 
