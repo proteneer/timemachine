@@ -220,26 +220,23 @@ def test_condensed_phase_mtm():
 
         enhanced_torsions = []
 
-        # warning: closure around locally defined mover, do not move outside of loop
-        def observable_fn(iteration, x_solvent):
-            solvent_torsion = get_torsion(x_solvent[-num_ligand_atoms:])
-            enhanced_torsions.append(solvent_torsion)
-            print(
-                f"frame {iteration} accepted {mover.n_accepted} proposed {mover.n_proposed} solvent_torsion {solvent_torsion}"
-            )
 
-        enhanced.generate_solvent_phase_samples(
+        stepper = enhanced.generate_solvent_phase_samples(
             ubps,
             params,
             test_masses,
             coords,
             box,
             temperature,
-            mover,
-            observable_fn,
-            num_batches=num_batches,
             seed=seed,
         )
+        for i in range(num_batches):
+            x_solvent, v_solv, box_solv = stepper(mover)
+            solvent_torsion = get_torsion(x_solvent[-num_ligand_atoms:])
+            enhanced_torsions.append(solvent_torsion)
+            print(
+                f"frame {i} accepted {mover.n_accepted} proposed {mover.n_proposed} solvent_torsion {solvent_torsion}"
+            )
 
         all_torsions.append(enhanced_torsions)
 

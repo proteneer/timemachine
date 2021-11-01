@@ -385,11 +385,8 @@ def generate_solvent_phase_samples(
     coords,  # minimized_coords
     box,
     temperature,
-    mc_mover,
-    observable_fn,
     pressure=1.0,
     steps_per_batch=500,
-    num_batches=10000,
     seed=None,
 ):
     """
@@ -445,23 +442,29 @@ def generate_solvent_phase_samples(
     u_interval = steps_per_batch
     x_interval = steps_per_batch
 
-    all_xs = []
 
-    for iteration in range(num_batches):
-        _, _, _ = ctxt.multiple_steps_U(lamb, num_steps, lambda_windows, u_interval, x_interval)
-        x_t = ctxt.get_x_t()
-        observable_fn(iteration, x_t)
-        v_t = ctxt.get_v_t()
-        box = ctxt.get_box()
-        all_xs.append(x_t)
-        if mc_mover is not None:
-            xvb = mc_mover.move(CoordsVelBox(x_t, v_t, box))
-            ctxt.set_x_t(xvb.coords)
-            # don't have setters for x_t and box right now
-            np.testing.assert_array_equal(xvb.velocities, v_t)
-            np.testing.assert_array_equal(xvb.box, box)
+    class Hackery:
 
-    return np.ndarray(all_xs)
+        def __init__(self, ctxt, impls, intg_impl, barostat_impl):
+            self.ctxt = ctxt
+            self.impls = impls
+            self.barostat_impl = barostat_impl
+            self.intg_impl = intg_impl
+
+        def __call__(self, mover):
+
+            _, _, _ = self.ctxt.multiple_steps_U(lamb, num_steps, lambda_windows, u_interval, x_interval)
+            x_t = self.ctxt.get_x_t()
+            v_t = self.ctxt.get_v_t()
+            box = self.ctxt.get_box()
+            if mover is not None:
+                next_coords = mover.move(CoordsVelBox(x_t, v_t, box))
+                self.ctxt.set_x_t(next_coords.coords)
+                np.testing.assert_array_equal(next_coords.velocities, v_t)
+                np.testing.assert_array_equal(next_coords.box, box)
+            return x_t, v_t, box
+
+    return Hackery(ctxt, all_impls, intg_impl, barostat_impl)
 
 
 def align_sample(x_vacuum, x_solvent):
