@@ -2,15 +2,24 @@
 
 # This file contains utility functions to generate samples in the gas-phase.
 
+import jax
 import numpy as np
+from scipy.special import logsumexp
+
 from fe import topology
 from fe.utils import get_romol_conf
-import jax
+from fe import free_energy
 
-from scipy.special import logsumexp
 from timemachine.integrator import simulate
-from timemachine.potentials import bonded, nonbonded
+from timemachine.potentials import bonded, nonbonded, rmsd
 from timemachine.constants import BOLTZ
+from timemachine import lib
+from timemachine.lib import custom_ops
+
+from md.states import CoordsVelBox
+from md import minimizer
+from md import builders
+from md.barostat.utils import get_group_indices, get_bond_list
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
@@ -353,14 +362,6 @@ def sample_from_log_weights(weighted_samples, log_weights, size):
     return weighted_samples[idxs]
 
 
-from fe import free_energy
-from md import minimizer
-from timemachine import lib
-from timemachine.lib import custom_ops
-from md import builders
-from md.barostat.utils import get_group_indices, get_bond_list
-
-
 def get_solvent_phase_system(mol, ff):
     masses = np.array([a.GetMass() for a in mol.GetAtoms()])
     water_system, water_coords, water_box, water_topology = builders.build_water_system(3.0)
@@ -387,6 +388,7 @@ def generate_solvent_phase_samples(
     pressure=1.0,
     steps_per_batch=500,
     num_batches=10000,
+    seed=None,
 ):
     """
     Generate samples in the solvent phase.
@@ -402,7 +404,7 @@ def generate_solvent_phase_samples(
 
     all_impls = [bp.bound_impl(np.float32) for bp in bps]
 
-    intg_equil = lib.LangevinIntegrator(temperature, 1e-4, friction, masses, 2021)
+    intg_equil = lib.LangevinIntegrator(temperature, 1e-4, friction, masses, seed)
     intg_equil_impl = intg_equil.impl()
 
     # equilibration/minimization doesn't need a barostat
@@ -416,7 +418,7 @@ def generate_solvent_phase_samples(
     v0 = np.zeros_like(x0)
 
     # production
-    intg = lib.LangevinIntegrator(temperature, dt, friction, masses, 2021)
+    intg = lib.LangevinIntegrator(temperature, dt, friction, masses, seed)
     intg_impl = intg.impl()
 
     # reset impls
@@ -425,7 +427,7 @@ def generate_solvent_phase_samples(
     bond_list = get_bond_list(ubps[0])
     group_idxs = get_group_indices(bond_list)
 
-    barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, interval, 2022)
+    barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, interval, seed + 1)
     barostat_impl = barostat.impl(all_impls)
 
     ctxt = custom_ops.Context(x0, v0, box, intg_impl, all_impls, barostat_impl)
@@ -452,3 +454,38 @@ def generate_solvent_phase_samples(
             np.testing.assert_array_equal(old_v_t, new_xvb.velocities)
             np.testing.assert_array_equal(old_box, new_xvb.box)
             ctxt.set_x_t(new_xvb.coords)
+
+
+def align_sample(x_gas, x_solvent):
+    """
+    Return a rigidly transformed x_gas that is maximally aligned to x_solvent.
+    """
+    num_atoms = len(x_gas)
+
+    xa = x_solvent[-num_atoms:]
+    xb = x_gas
+
+    assert xa.shape == xb.shape
+
+    xb_new = rmsd.align_x2_unto_x1(xa, xb)
+    return xb_new
+
+
+def aligned_batch_propose(xvb, K, vacuum_samples, vacuum_log_weights):
+    ligand_samples = sample_from_log_weights(vacuum_samples, vacuum_log_weights, K)
+
+    x_solvent = xvb.coords
+    v_solvent = xvb.velocities
+    b_solvent = xvb.box
+
+    new_xvbs = []
+
+    # modify only ligand coordinates in the proposal
+    for x_l in ligand_samples:
+        x_l_aligned = align_sample(x_l, x_solvent)
+        x_solvent_copy = x_solvent.copy()
+        num_ligand_atoms = len(x_l)
+        x_solvent_copy[-num_ligand_atoms:] = x_l_aligned
+        new_xvbs.append(CoordsVelBox(x_solvent_copy, v_solvent, b_solvent))
+
+    return new_xvbs

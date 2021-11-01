@@ -11,21 +11,25 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 import jax
+from scipy.special import logsumexp
 
+from typing import List
 
-from md.moves import MultipleTryMetropolis
-from timemachine.potentials import bonded, nonbonded, rmsd
-from timemachine.constants import BOLTZ
-import numpy as np
+from md.states import CoordsVelBox
 from md import enhanced
+from md.moves import MultipleTryMetropolis
+
+import functools
+
+from timemachine.potentials import bonded, nonbonded
+from timemachine.constants import BOLTZ
+
+import numpy as np
 import test_ligands
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 import pickle
-
-
-from scipy.special import logsumexp
 
 
 def get_ff_simple_charge():
@@ -106,64 +110,13 @@ def test_gas_phase_importance_sampling():
     assert np.mean((enhanced_torsions_lhs - vanilla_samples_lhs) ** 2) < 5e-2
 
 
-def align_sample(x_gas, x_solvent):
-    """
-    Return a rigidly transformed x_gas that is maximally aligned to x_solvent.
-    """
-    num_atoms = len(x_gas)
-
-    xa = x_solvent[-num_atoms:]
-    xb = x_gas
-
-    assert xa.shape == xb.shape
-
-    xb_new = rmsd.align_x2_unto_x1(xa, xb)
-    return xb_new
-
-
-from typing import List
-from md.states import CoordsVelBox
-
-
-class AlignedMover(MultipleTryMetropolis):
-    def __init__(self, K, vacuum_samples, vacuum_log_weights, log_prob_fn):
-
-        self.vacuum_samples = vacuum_samples
-        self.vacuum_log_weights = vacuum_log_weights
-        self.batch_log_prob_fn = jax.vmap(log_prob_fn)
-
-        super().__init__(K)
-
-    def batch_propose(self, x: CoordsVelBox) -> List[CoordsVelBox]:
-
-        ligand_samples = enhanced.sample_from_log_weights(self.vacuum_samples, self.vacuum_log_weights, self.K)
-
-        x_solvent = x.coords
-        v_solvent = x.velocities
-        b_solvent = x.box
-
-        new_xvbs = []
-
-        # modify only ligand coordinates in the proposal
-        for x_l in ligand_samples:
-            x_l_aligned = align_sample(x_l, x_solvent)
-            x_solvent_copy = x_solvent.copy()
-            num_ligand_atoms = len(x_l)
-            x_solvent_copy[-num_ligand_atoms:] = x_l_aligned
-            new_xvbs.append(CoordsVelBox(x_solvent_copy, v_solvent, b_solvent))
-
-        return new_xvbs
-
-    def batch_log_prob(self, xvbs: List[CoordsVelBox]) -> List[float]:
-        batch_coords = np.array([xvb.coords for xvb in xvbs])
-        batch_boxes = np.array([xvb.box for xvb in xvbs])
-        return self.batch_log_prob_fn(batch_coords, batch_boxes)
-
-
 def test_condensed_phase_mtm():
     """
     Tests multiple-try metropolis in the condensed phase.
     """
+
+    seed = 2021
+    np.random.seed(seed)
 
     mol = test_ligands.get_benzene()
     ff = get_ff_decharged()
@@ -209,12 +162,19 @@ def test_condensed_phase_mtm():
     kT = temperature * BOLTZ
 
     # (ytz): This only works for the decharged case since samples are generated from a decharged state.
-    @jax.jit
     def log_prob_fn(x_solvent, box_solvent):
         x_water = x_solvent[:-num_ligand_atoms]  # water coords
         x_original = x_solvent[-num_ligand_atoms:]  # ligand coords
         U_k = nonbonded.nonbonded_block(x_original, x_water, box_solvent, params_i, params_j, beta, cutoff)
         return -U_k / kT
+
+    batch_log_prob_fn = jax.vmap(log_prob_fn)
+
+    # do not take velocities into account when evaluating log probabilities
+    def batch_log_prob_wrapper(xvbs: List[CoordsVelBox]) -> List[float]:
+        batch_coords = np.array([xvb.coords for xvb in xvbs])
+        batch_boxes = np.array([xvb.box for xvb in xvbs])
+        return batch_log_prob_fn(batch_coords, batch_boxes)
 
     @jax.jit
     def get_torsion(x_t):
@@ -240,18 +200,24 @@ def test_condensed_phase_mtm():
 
     all_torsions = []
 
+    batch_proposal_fn = functools.partial(
+        enhanced.aligned_batch_propose, vacuum_samples=vacuum_samples, vacuum_log_weights=vacuum_log_weights
+    )
     # test with both frozen masses and free masses
     for test_masses in [frozen_masses, masses]:
 
         sample_generator = enhanced.generate_solvent_phase_samples(
-            ubps, params, test_masses, coords, box, temperature, num_batches=num_batches
+            ubps, params, test_masses, coords, box, temperature, num_batches=num_batches, seed=seed
         )
 
         next_x = None
 
         K = 200
-
-        mover = AlignedMover(K, vacuum_samples, vacuum_weights, log_prob_fn)
+        mover = MultipleTryMetropolis(
+            K,
+            batch_proposal_fn,
+            batch_log_prob_wrapper,
+        )
 
         enhanced_torsions = []
         for iteration in range(num_batches):
