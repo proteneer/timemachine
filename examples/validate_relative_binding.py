@@ -23,12 +23,11 @@ from fe.free_energy_rabfe import (
     construct_absolute_lambda_schedule_solvent,
     construct_conversion_lambda_schedule,
     get_romol_conf,
-    setup_relative_restraints_using_smarts,
+    setup_relative_restraints_by_distance,
     RABFEResult,
 )
 from fe.utils import convert_uM_to_kJ_per_mole
 from fe import model_rabfe
-from fe.atom_mapping import CompareDistNonterminal
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -42,7 +41,6 @@ from rdkit import Chem
 import timemachine
 from timemachine.potentials import rmsd
 from md import builders, minimizer
-from rdkit.Chem import rdFMCS
 
 
 def cache_wrapper(cache_path: str, fxn: callable, overwrite: bool = False) -> callable:
@@ -297,16 +295,11 @@ if __name__ == "__main__":
     ordered_params = forcefield.get_ordered_params()
     ordered_handles = forcefield.get_ordered_handles()
 
-    mcs_params = rdFMCS.MCSParameters()
-    mcs_params.AtomTyper = CompareDistNonterminal()
-    mcs_params.BondTyper = rdFMCS.BondCompare.CompareAny
-
-    def simulate_pair(epoch: int, blocker, mol):
+    def simulate_pair(epoch: int, blocker: Chem.Mol, mol: Chem.Mol):
         mol_name = mol.GetProp("_Name")
-        result = rdFMCS.FindMCS([mol, blocker], mcs_params)
 
         # generate the core_idxs
-        core_idxs = setup_relative_restraints_using_smarts(mol, blocker, result.smartsString)
+        core_idxs = setup_relative_restraints_by_distance(mol, blocker)
         mol_coords = get_romol_conf(mol)  # original coords
 
         num_complex_atoms = complex_coords.shape[0]
