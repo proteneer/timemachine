@@ -24,15 +24,14 @@ from fe.free_energy_rabfe import (
     construct_conversion_lambda_schedule,
     get_romol_conf,
     setup_relative_restraints_using_smarts,
+    RABFEResult,
 )
 from fe.utils import convert_uM_to_kJ_per_mole
 from fe import model_rabfe
-from fe.free_energy_rabfe import RABFEResult
 from fe.atom_mapping import CompareDistNonterminal
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
-from ff.handlers.serialize import serialize_handlers
 from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
 
@@ -302,8 +301,10 @@ if __name__ == "__main__":
     mcs_params.AtomTyper = CompareDistNonterminal()
     mcs_params.BondTyper = rdFMCS.BondCompare.CompareAny
 
-    def predict_dG(blocker, mol):
+    def simulate_pair(epoch: int, blocker, mol):
+        mol_name = mol.GetProp("_Name")
         result = rdFMCS.FindMCS([mol, blocker], mcs_params)
+
         # generate the core_idxs
         core_idxs = setup_relative_restraints_using_smarts(mol, blocker, result.smartsString)
         mol_coords = get_romol_conf(mol)  # original coords
@@ -333,81 +334,85 @@ if __name__ == "__main__":
         )
         complex_decouple_x0 = np.concatenate([complex_decouple_x0, aligned_mol_coords, ref_coords])
 
-        (
-            complex_decouple_params,
-            dG_complex_decouple_model,
-            dG_complex_decouple_futures,
-        ) = binding_model_complex_decouple.simulate_futures(
-            ordered_params,
-            mol,
-            blocker_mol,
-            core_idxs,
-            complex_decouple_x0,
-            complex_box0,
-            prefix="complex_decouple_" + mol_name + "_" + str(epoch),
-        )
-
         # compute the free energy of conversion in complex
         complex_conversion_x0 = minimizer.minimize_host_4d(
-            [mol], complex_system, complex_host_coords, forcefield, complex_box0, [aligned_mol_coords]
+            [mol],
+            complex_system,
+            complex_host_coords,
+            forcefield,
+            complex_box0,
+            [aligned_mol_coords],
         )
         complex_conversion_x0 = np.concatenate([complex_conversion_x0, aligned_mol_coords])
-        (
-            complex_conversion_params,
-            complex_conversion_model,
-            complex_conversion_futures,
-        ) = binding_model_complex_conversion.simulate_futures(
-            ordered_params,
-            mol,
-            complex_conversion_x0,
-            complex_box0,
-            prefix="complex_conversion_" + mol_name + "_" + str(epoch),
-        )
 
-        # solvent
         min_solvent_coords = minimizer.minimize_host_4d([mol], solvent_system, solvent_coords, forcefield, solvent_box)
         solvent_x0 = np.concatenate([min_solvent_coords, mol_coords])
         solvent_box0 = solvent_box
-        (
-            solvent_conversion_params,
-            solvent_conversion_model,
-            solvent_conversion_futures,
-        ) = binding_model_solvent_conversion.simulate_futures(
-            ordered_params, mol, solvent_x0, solvent_box0, prefix="solvent_conversion_" + mol_name + "_" + str(epoch)
-        )
-        (
-            solvent_decouple_params,
-            solvent_decouple_model,
-            solvent_decouple_futures,
-        ) = binding_model_solvent_decouple.simulate_futures(
-            ordered_params, mol, solvent_x0, solvent_box0, prefix="solvent_decouple_" + mol_name + "_" + str(epoch)
-        )
 
+        suffix = f"{mol_name}_{epoch}"
+
+        return {
+            "solvent_decouple": binding_model_solvent_decouple.simulate_futures(
+                ordered_params,
+                mol,
+                solvent_x0,
+                solvent_box0,
+                prefix="solvent_decouple_" + suffix,
+            ),
+            "solvent_conversion": binding_model_solvent_conversion.simulate_futures(
+                ordered_params,
+                mol,
+                solvent_x0,
+                solvent_box0,
+                prefix="solvent_conversion_" + suffix,
+            ),
+            "complex_conversion": binding_model_complex_conversion.simulate_futures(
+                ordered_params,
+                mol,
+                complex_conversion_x0,
+                complex_box0,
+                prefix="complex_conversion_" + suffix,
+            ),
+            "complex_decouple": binding_model_complex_decouple.simulate_futures(
+                ordered_params,
+                mol,
+                blocker_mol,
+                core_idxs,
+                complex_decouple_x0,
+                complex_box0,
+                prefix="complex_decouple_" + suffix,
+            ),
+            "mol": mol,
+            "blocker": blocker,
+            "epoch": epoch,
+        }
+
+    def predict_dG(results: dict):
         dG_complex_decouple, dG_complex_decouple_error = binding_model_complex_decouple.predict_from_futures(
-            complex_decouple_params,
-            mol,
-            blocker_mol,
-            dG_complex_decouple_model,
-            dG_complex_decouple_futures,
+            results["complex_decouple"][0],
+            results["mol"],
+            results["blocker"],
+            results["complex_decouple"][1],
+            results["complex_decouple"][2],
         )
         dG_complex_conversion, dG_complex_conversion_error = binding_model_complex_conversion.predict_from_futures(
-            complex_conversion_params,
-            mol,
-            complex_conversion_model,
-            complex_conversion_futures,
+            results["complex_conversion"][0],
+            results["mol"],
+            results["complex_conversion"][1],
+            results["complex_conversion"][2],
         )
         dG_solvent_decouple, dG_solvent_decouple_error = binding_model_solvent_decouple.predict_from_futures(
-            solvent_decouple_params,
-            mol,
-            solvent_decouple_model,
-            solvent_decouple_futures,
+            results["solvent_decouple"][0],
+            results["mol"],
+            results["solvent_decouple"][1],
+            results["solvent_decouple"][2],
         )
 
         dG_solvent_conversion, dG_solvent_conversion_error = binding_model_solvent_conversion.predict_from_futures(
-            solvent_conversion_params,
-            mol,
-            solvent_conversion_model,
-            solvent_conversion_futures,
+            results["solvent_conversion"][0],
+            results["mol"],
+            results["solvent_conversion"][1],
+            results["solvent_conversion"][2],
         )
 
         rabfe_result = RABFEResult(
@@ -427,25 +432,39 @@ if __name__ == "__main__":
 
         return rabfe_result.dG_bind, dG_err
 
+    runs = []
     for epoch in range(cmd_args.epochs):
         if cmd_args.shuffle:
             dataset.shuffle()
         for mol in dataset.data:
-            mol_name = mol.GetProp("_Name")
+            try:
+                runs.append(simulate_pair(epoch, blocker_mol, mol))
+            except Exception as e:
+                mol_name = mol.GetProp("_Name")
+                print(f"Error simulating Mol: {mol_name}: {e}")
+    for i in range(len(runs)):
+        # Pop off futures to avoid accumulating memory.
+        run = runs.pop(0)
+        mol = run["mol"]
+        epoch = run["epoch"]
+        mol_name = mol.GetProp("_Name")
 
-            label_dG = "'N/A'"
-            if cmd_args.property_field is not None:
-                try:
-                    concentration = float(mol.GetProp(cmd_args.property_field))
+        label_dG = "'N/A'"
+        if cmd_args.property_field is not None:
+            try:
+                concentration = float(mol.GetProp(cmd_args.property_field))
 
-                    if cmd_args.property_units == "uM":
-                        label_dG = convert_uM_to_kJ_per_mole(concentration)
-                    elif cmd_args.property_units == "nM":
-                        label_dG = convert_uM_to_kJ_per_mole(concentration / 1000)
-                    else:
-                        assert 0, "Unknown property units"
-                except Exception as e:
-                    print(f"Unable to find property {cmd_args.property_field}: {e}")
-            print(f"Processing Mol: {mol_name}, Label: {label_dG}")
-            dG, dG_err = predict_dG(blocker_mol, mol)
-            print(f"Epoch: {epoch}, Mol: {mol_name}, Predicted dG: {dG}, dG Err: {dG_err}, Label: {label_dG}")
+                if cmd_args.property_units == "uM":
+                    label_dG = convert_uM_to_kJ_per_mole(concentration)
+                elif cmd_args.property_units == "nM":
+                    label_dG = convert_uM_to_kJ_per_mole(concentration / 1000)
+                else:
+                    assert 0, "Unknown property units"
+            except Exception as e:
+                print(f"Unable to find property {cmd_args.property_field}: {e}")
+        print(f"Epoch: {epoch}, Processing Mol: {mol_name}, Label: {label_dG}")
+        try:
+            dG, dG_err = predict_dG(run)
+            print(f"Epoch: {epoch}, Mol: {mol_name}, Predicted dG: {dG}, dG Err:" f" {dG_err}, Label: {label_dG}")
+        except Exception as e:
+            print(f"Error processing Mol: {mol_name}: {e}")
