@@ -12,8 +12,8 @@ def make_dummy_sim_result(val):
         lambda_us=[val],
     )
 
-class FrameFiltersTestCase(TestCase):
 
+class FrameFiltersTestCase(TestCase):
     def test_endpoint_only_filter(self):
 
         res = list(endpoint_frames_only([]))
@@ -46,9 +46,3 @@ class FrameFiltersTestCase(TestCase):
         assert res[0] == (0, mock_sims[0])
         assert res[1] == (1, mock_sims[1])
         assert res[2] == (2, mock_sims[2])
-
-
-
-
-
-

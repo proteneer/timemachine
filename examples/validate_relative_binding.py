@@ -28,6 +28,7 @@ from fe.free_energy_rabfe import (
 )
 from fe.utils import convert_uM_to_kJ_per_mole
 from fe import model_rabfe
+from fe.frames import endpoint_frames_only, all_frames
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -41,6 +42,9 @@ from rdkit import Chem
 import timemachine
 from timemachine.potentials import rmsd
 from md import builders, minimizer
+
+ALL_FRAMES = "all"
+ENDPOINTS_ONLY = "endpoints"
 
 
 def cache_wrapper(cache_path: str, fxn: callable, overwrite: bool = False) -> callable:
@@ -159,6 +163,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--blocker_name", type=str, help="Name of the ligand the sdf file to be used as a blocker", required=True
     )
+    parser.add_argument("--frames_written", choices=[ALL_FRAMES, ENDPOINTS_ONLY], default=ENDPOINTS_ONLY)
 
     parser.add_argument("--protein_pdb", type=str, help="Path to the target pdb", required=True)
 
@@ -213,6 +218,13 @@ if __name__ == "__main__":
 
     assert blocker_mol is not None
 
+    frame_filter = None
+    if cmd_args.frames_written == ALL_FRAMES:
+        frame_filter = all_frames
+    elif cmd_args.frames_written == ENDPOINTS_ONLY:
+        frame_filter = endpoint_frames_only
+    assert frame_filter is not None, f"Unknown frame writing mode: {cmd_args.frames_written}"
+
     print("Reference Molecule:", blocker_mol.GetProp("_Name"), Chem.MolToSmiles(blocker_mol))
 
     temperature = 300.0
@@ -248,6 +260,7 @@ if __name__ == "__main__":
         dt,
         cmd_args.num_complex_equil_steps,
         cmd_args.num_complex_prod_steps,
+        frame_filter=frame_filter,
     )
 
     binding_model_complex_decouple = model_rabfe.RelativeBindingModel(
@@ -261,6 +274,7 @@ if __name__ == "__main__":
         dt,
         cmd_args.num_complex_equil_steps,
         cmd_args.num_complex_prod_steps,
+        frame_filter=frame_filter,
     )
 
     # solvent models.
@@ -277,6 +291,7 @@ if __name__ == "__main__":
         dt,
         cmd_args.num_solvent_equil_steps,
         cmd_args.num_solvent_prod_steps,
+        frame_filter=frame_filter,
     )
 
     binding_model_solvent_decouple = model_rabfe.AbsoluteStandardHydrationModel(
@@ -290,6 +305,7 @@ if __name__ == "__main__":
         dt,
         cmd_args.num_solvent_equil_steps,
         cmd_args.num_solvent_prod_steps,
+        frame_filter=frame_filter,
     )
 
     ordered_params = forcefield.get_ordered_params()
