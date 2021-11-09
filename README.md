@@ -52,16 +52,15 @@ make CUDA_ARCH=sm_70 build
 
 ## Running Tests
 
-Note: we currently only support and test on python 3.7, use other versions at your own peril.
+Note that `PYTHONPATH` must be set to include the `timemachine` repo root. To run tests that use `openeye`, ensure that either `OE_LICENSE` or `OE_DIR` are set appropriately.
 
-```
-pytest -xsv tests/
-```
+For example, starting from a clean environment with the openeye license file in `~/.openeye`:
 
-Note: `PYTHONPATH` must include the `timemachine` repo root. To run tests that use `openeye`, ensure that either `OE_LICENSE` or `OE_DIR` are set. For example, starting from a clean environment with the openeye license file in `~/.openeye`:
 ```
 OE_DIR=~/.openeye PYTHONPATH=. pytest -xsv tests/
 ```
+
+Note: we currently only support and test on python 3.7, use other versions at your own peril.
 
 # Free Energy Methods
 
