@@ -18,12 +18,11 @@ exp_batch = jax.jit(jax.vmap(exp_u, (0, None, None)))
 def sample_multiple_rotations(k, beta, size):
     num_batches = 500
     batch_size = 10000
-
+    state = np.random.RandomState(2021)
     samples = []
-
     for batch_attempt in range(num_batches):
-        Rs = special_ortho_group.rvs(3, size=batch_size)
-        tests = np.random.rand(batch_size)
+        Rs = special_ortho_group.rvs(3, size=batch_size, random_state=state)
+        tests = state.rand(batch_size)
         M = np.pi ** 2  # volume of SO(3)
 
         # (detailed explanation by jfass re: normalizing comments)
@@ -101,7 +100,8 @@ def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, l
         U_lhs - U_rhs, using samples from rhs_xs.
 
     """
-
+    # Setup a random state to ensure deterministic outputs
+    state = np.random.RandomState(2021)
     box = np.eye(3) * 100.0
     core_restr = functools.partial(bonded.harmonic_bond, bond_idxs=core_idxs, params=core_params, box=box, lamb=None)
 
@@ -155,7 +155,7 @@ def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, l
     sample_size = rhs_xs.shape[0]
     rotation_samples = sample_multiple_rotations(k_rotation, beta, sample_size)
     covariance = np.eye(3) / (2 * beta * k_translation)
-    translation_samples = np.random.multivariate_normal((0, 0, 0), covariance, sample_size)
+    translation_samples = state.multivariate_normal((0, 0, 0), covariance, sample_size)
 
     def align(x, r, t):
         x_a, x_b = rmsd.rmsd_align(x[restr_group_idxs_a], x[restr_group_idxs_b])

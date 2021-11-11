@@ -170,11 +170,21 @@ def test_endpoint_correction():
     k_translation = 200.0
 
     results = []
-    for k_rotation in [0.0, 50.0, 1000.0]:
+    for i, k_rotation in enumerate([0.0, 50.0, 1000.0]):
 
         lhs_du, rhs_du, rotations, translations = endpoint_correction.estimate_delta_us(
             k_translation, k_rotation, core_idxs, core_params, beta, lhs_xs, rhs_xs
         )
+        if i == 0:
+            # Verify that output is deterministic
+            test_lhs_du, test_rhs_du, test_rotations, test_translations = endpoint_correction.estimate_delta_us(
+                k_translation, k_rotation, core_idxs, core_params, beta, lhs_xs, rhs_xs
+            )
+
+            np.testing.assert_array_equal(lhs_du, test_lhs_du)
+            np.testing.assert_array_equal(rhs_du, test_rhs_du)
+            np.testing.assert_array_equal(rotations, test_rotations)
+            np.testing.assert_array_equal(translations, test_translations)
 
         overlap = endpoint_correction.overlap_from_cdf(lhs_du, rhs_du)
         results.append(overlap)
