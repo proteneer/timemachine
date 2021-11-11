@@ -110,8 +110,8 @@ def make_conformer(mol_a, mol_b, conf_c):
 
 
 def test_endpoint_correction():
-
-    np.random.seed(2021)
+    seed = 2021
+    np.random.seed(seed)
 
     # this PR tests that endpoint correction for two molecules generates a correct, overlapping distribution.
     u_lhs_fn, u_rhs_fn, core_idxs, core_params, mol_a, mol_b = setup_system()
@@ -170,11 +170,21 @@ def test_endpoint_correction():
     k_translation = 200.0
 
     results = []
-    for k_rotation in [0.0, 50.0, 1000.0]:
+    for i, k_rotation in enumerate([0.0, 50.0, 1000.0]):
 
         lhs_du, rhs_du, rotations, translations = endpoint_correction.estimate_delta_us(
-            k_translation, k_rotation, core_idxs, core_params, beta, lhs_xs, rhs_xs
+            k_translation, k_rotation, core_idxs, core_params, beta, lhs_xs, rhs_xs, seed=seed
         )
+        # Verify that output is deterministic, only done for first iteration to reduce time of the test
+        if i == 0:
+            test_lhs_du, test_rhs_du, test_rotations, test_translations = endpoint_correction.estimate_delta_us(
+                k_translation, k_rotation, core_idxs, core_params, beta, lhs_xs, rhs_xs, seed=seed
+            )
+
+            np.testing.assert_array_equal(lhs_du, test_lhs_du)
+            np.testing.assert_array_equal(rhs_du, test_rhs_du)
+            np.testing.assert_array_equal(rotations, test_rotations)
+            np.testing.assert_array_equal(translations, test_translations)
 
         overlap = endpoint_correction.overlap_from_cdf(lhs_du, rhs_du)
         results.append(overlap)

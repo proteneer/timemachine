@@ -15,15 +15,16 @@ def exp_u(rotation, k, beta):
 exp_batch = jax.jit(jax.vmap(exp_u, (0, None, None)))
 
 
-def sample_multiple_rotations(k, beta, size):
+def sample_multiple_rotations(k: float, beta: float, size: int, seed: int = 0):
     num_batches = 500
     batch_size = 10000
-
+    if seed == 0:
+        seed = np.random.randint(np.iinfo(np.int32).max)
+    state = np.random.RandomState(seed)
     samples = []
-
     for batch_attempt in range(num_batches):
-        Rs = special_ortho_group.rvs(3, size=batch_size)
-        tests = np.random.rand(batch_size)
+        Rs = special_ortho_group.rvs(3, size=batch_size, random_state=state)
+        tests = state.rand(batch_size)
         M = np.pi ** 2  # volume of SO(3)
 
         # (detailed explanation by jfass re: normalizing comments)
@@ -64,7 +65,7 @@ def sample_multiple_rotations(k, beta, size):
     return result
 
 
-def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, lhs_xs, rhs_xs):
+def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, lhs_xs, rhs_xs, seed: int = 0):
     """
     Compute the BAR re-weighted end-point correction of converting an intractable core
     restraint into a tractable RMSD-based orientational restraint.
@@ -101,7 +102,10 @@ def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, l
         U_lhs - U_rhs, using samples from rhs_xs.
 
     """
-
+    # Setup a random state to ensure deterministic outputs
+    if seed == 0:
+        seed = np.random.randint(np.iinfo(np.int32).max)
+    state = np.random.RandomState(seed)
     box = np.eye(3) * 100.0
     core_restr = functools.partial(bonded.harmonic_bond, bond_idxs=core_idxs, params=core_params, box=box, lamb=None)
 
@@ -153,9 +157,9 @@ def estimate_delta_us(k_translation, k_rotation, core_idxs, core_params, beta, l
     lhs_du = delta_u_fwd_batch(lhs_xs)
 
     sample_size = rhs_xs.shape[0]
-    rotation_samples = sample_multiple_rotations(k_rotation, beta, sample_size)
+    rotation_samples = sample_multiple_rotations(k_rotation, beta, sample_size, seed=seed)
     covariance = np.eye(3) / (2 * beta * k_translation)
-    translation_samples = np.random.multivariate_normal((0, 0, 0), covariance, sample_size)
+    translation_samples = state.multivariate_normal((0, 0, 0), covariance, sample_size)
 
     def align(x, r, t):
         x_a, x_b = rmsd.rmsd_align(x[restr_group_idxs_a], x[restr_group_idxs_b])
