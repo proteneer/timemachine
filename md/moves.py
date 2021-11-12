@@ -1,18 +1,16 @@
-from math import pi
-from re import L
 from md.states import CoordsVelBox
 from typing import List, Tuple
 import numpy as np
 from scipy.special import logsumexp
 
 from jax.scipy.special import logsumexp as jlogsumexp
-
-
 from timemachine.lib import custom_ops
-
 from md.barostat.utils import get_group_indices, get_bond_list
-
 from timemachine import lib
+import jax
+import jax.numpy as jnp
+import jax.random as jrandom
+from functools import partial
 
 
 class MonteCarloMove:
@@ -79,10 +77,10 @@ class NPTMove(MonteCarloMove):
         temperature,
         pressure,
         n_steps,
+        seed,
         dt=1.5e-3,
         friction=1.0,
         barostat_interval=5,
-        seed=None,
     ):
 
         intg = lib.LangevinIntegrator(temperature, dt, friction, masses, seed)
@@ -120,13 +118,24 @@ class NPTMove(MonteCarloMove):
         return after_npt
 
 
-import jax
-import jax.numpy as jnp
-import jax.random as jrandom
-from functools import partial
+class DeterministicMTMMove:
+    def move(self, xvb: CoordsVelBox) -> CoordsVelBox:
+        self.n_proposed += 1
+        y_proposed, acceptance_probability, key = self.acceptance_probability(xvb.coords, xvb.box, self.rng_key)
+        # this may not be strictly necessary since the acceptance_probability should split the keys internally
+        # but it never hurts to do an extra split.
+        _, key = jrandom.split(key)
+        alpha = jrandom.uniform(key)
+        _, key = jrandom.split(key)
+        self.rng_key = key
+        if alpha < acceptance_probability:
+            self.n_accepted += 1
+            return CoordsVelBox(y_proposed, xvb.velocities, xvb.box)
+        else:
+            return xvb
 
 
-class OptimizedMTMMove:
+class OptimizedMTMMove(DeterministicMTMMove):
     def __init__(self, K, batch_proposal_fn, batched_log_weights_fn, seed):
         """
         This is an optimized variant of the MTMMove, using a specialized choice lambda,
@@ -142,6 +151,9 @@ class OptimizedMTMMove:
 
         batch_log_weights_fn: Callable(xs: List[np.array], box: np.array(3,3)) -> List[float]
             Return log weights given a list
+
+        seed: int
+            Seed to be used with jrandom.PRNGKey
 
         Returns
         -------
@@ -182,19 +194,8 @@ class OptimizedMTMMove:
 
         return y_proposed, jnp.exp(log_ratio), key
 
-    def move(self, xvb: CoordsVelBox) -> CoordsVelBox:
-        self.n_proposed += 1
-        y_proposed, acceptance_probability, sub_key = self.acceptance_probability(xvb.coords, xvb.box, self.rng_key)
-        self.rng_key = sub_key
-        alpha = np.random.rand()
-        if alpha < acceptance_probability:
-            self.n_accepted += 1
-            return CoordsVelBox(y_proposed, xvb.velocities, xvb.box)
-        else:
-            return xvb
 
-
-class ReferenceMTMMove(MonteCarloMove):
+class ReferenceMTMMove(DeterministicMTMMove):
     def __init__(self, K, batch_proposal_fn, batch_log_Q_fn, batch_log_pi_fn, batch_log_lambda_a_b_fn, seed):
         """
         The recipe here roughly follows:
@@ -266,17 +267,3 @@ class ReferenceMTMMove(MonteCarloMove):
         log_ratio = logsumexp(log_weights_yj) - logsumexp(log_weights_xi)
 
         return y_proposed, np.exp(log_ratio), key
-        # return acceptance_probability
-
-    def move(self, xvb: CoordsVelBox) -> CoordsVelBox:
-        self.n_proposed += 1
-
-        alpha = np.random.rand()
-        y_proposed, acceptance_probability, new_key = self.acceptance_probability(xvb, self.rng_key)
-        self.rng_key = new_key
-
-        if alpha < acceptance_probability:
-            self.n_accepted += 1
-            return y_proposed
-        else:
-            return xvb

@@ -27,8 +27,8 @@ from ff.handlers.deserialize import deserialize_handlers
 from matplotlib import pyplot as plt
 
 
-def get_ff_simple_charge():
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+def get_ff_am1cc():
+    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
     ff = Forcefield(ff_handlers)
     return ff
 
@@ -41,8 +41,8 @@ def test_condensed_phase_mtm():
     seed = 2021
     np.random.seed(seed)
 
-    mol = test_ligands.get_benzene()
-    ff = get_ff_simple_charge()
+    mol, torsion_idxs = test_ligands.get_biphenyl()
+    ff = get_ff_am1cc()
 
     masses = np.array([a.GetMass() for a in mol.GetAtoms()])
     num_ligand_atoms = len(masses)
@@ -58,8 +58,9 @@ def test_condensed_phase_mtm():
     cache_path = "cache.pkl"
     if not os.path.exists(cache_path):
         print("Generating cache")
+        num_batches = 30000
         vacuum_samples, vacuum_log_weights = enhanced.generate_log_weighted_samples(
-            mol, temperature, state.U_easy, proposal_U, seed
+            mol, temperature, state.U_easy, proposal_U, num_batches=num_batches, seed=seed
         )
 
         with open(cache_path, "wb") as fh:
@@ -95,15 +96,22 @@ def test_condensed_phase_mtm():
     batch_log_weights_fn = jax.jit(jax.vmap(log_weights_fn, in_axes=(0, None)))
 
     @jax.jit
-    def get_torsion(x_t):
-        torsion_idxs = np.array([5, 6, 7, 8])
-        cijkl = x_t[torsion_idxs]
-        return bonded.signed_torsion_angle(*cijkl)
+    def get_torsion(x_l):
+        ci = x_l[torsion_idxs[:, 0]]
+        cj = x_l[torsion_idxs[:, 1]]
+        ck = x_l[torsion_idxs[:, 2]]
+        cl = x_l[torsion_idxs[:, 3]]
+        return bonded.signed_torsion_angle(ci, cj, ck, cl)
 
     batch_get_torsion = jax.jit(jax.vmap(get_torsion))
     vacuum_weights = np.exp(vacuum_log_weights - logsumexp(vacuum_log_weights))
     assert np.abs(np.sum(vacuum_weights) - 1) < 1e-5
-    vacuum_torsions = batch_get_torsion(vacuum_samples)
+    vacuum_torsions = batch_get_torsion(vacuum_samples).reshape(-1)
+
+    import matplotlib.pyplot as plt
+
+    plt.hist(vacuum_torsions, bins=50, density=True, weights=vacuum_weights)
+    plt.show()
 
     assert np.abs(np.average(vacuum_torsions, weights=vacuum_weights)) < 0.1
 
@@ -159,7 +167,8 @@ def test_condensed_phase_mtm():
 
         all_torsions.append(np.asarray(enhanced_torsions))
 
-    all_torsions = np.asarray(all_torsions)
+    # for biphenyl, reshape into -1
+    all_torsions = np.asarray(all_torsions).reshape(-1)
 
     enhanced_torsions_lhs, _ = np.histogram(enhanced_torsions, bins=50, range=(-np.pi, 0), density=True)
     enhanced_torsions_rhs, _ = np.histogram(enhanced_torsions, bins=50, range=(0, np.pi), density=True)

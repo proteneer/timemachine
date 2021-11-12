@@ -2,7 +2,10 @@
 
 # This file contains utility functions to generate samples in the gas-phase.
 
+import os
 import jax
+
+import multiprocessing
 import numpy as np
 from scipy.special import logsumexp
 from jax.scipy.special import logsumexp as jlogsumexp
@@ -155,7 +158,7 @@ class VacuumState:
 
     def U_easy(self, x):
         """
-        Gas-phase potential energy function typically used for the proposal distribution.
+        Vacuum potential energy function typically used for the proposal distribution.
         This state has rotatable torsions fully turned off, and nonbonded terms completely
         disabled. Note that this may at times cross atropisomerism barriers in unphysical ways.
 
@@ -200,7 +203,7 @@ class VacuumState:
 
     def U_full(self, x):
         """
-        Fully interacting gas-phase potential energy.
+        Fully interacting vacuum potential energy.
 
         Parameters
         ----------
@@ -223,7 +226,7 @@ class VacuumState:
 
     def U_decharged(self, x):
         """
-        Fully interacting, but decharged, gas-phase potential energy. Samples from distributions
+        Fully interacting, but decharged, vacuum potential energy. Samples from distributions
         under this potential energy tend to have better phase space overlap with condensed
         states.
 
@@ -247,60 +250,39 @@ class VacuumState:
         )
 
 
-def generate_log_weighted_samples(
-    mol, temperature, U_proposal, U_target, steps_per_batch=250, num_batches=20000, num_workers=None, seed=None
-):
-    """
-    Generate log_weighted samples from a proposal distribution using U_proposal,
-    with log_weights defined by the difference relative to U_target
+# (ytz): in order for XLA's pmap to properly parallelize over multiple CPU devices, we need to
+# set this explicitly via a magical command line arg. This should be ran in a subprocess
+def _wrap_simulate(args):
+    print("IN WRAP SIMULATE")
+    (
+        mol,
+        U_proposal,
+        U_target,
+        temperature,
+        masses,
+        steps_per_batch,
+        batches_per_worker,
+        burn_in_batches,
+        num_workers,
+        seed,
+    ) = args
 
-    Parameters
-    ----------
-    mol: Chem.Mol
-
-    temperature: float
-        Temperature in Kelvin
-
-    U_proposal: fn
-        Potential energy function for the proposal distribution
-
-    U_target: fn
-        Potential energy function for the target distribution
-
-    size: int
-        Number of samples return
-
-    steps_per_batch: int
-        Number of steps per batch
-
-    num_batches: int
-        Number of batches
-
-    num_workers: int
-        Number of parallel computations
-
-    seed: int
-        Random number seed
-
-    Returns
-    -------
-    (num_batches*num_workers, num_atoms, 3) np.ndarray
-        Samples generated from p_target
-
-    """
-    x0 = get_romol_conf(mol)
+    # wraps a callable fn so it runs in a subprocess with the device_count set explicitly
+    assert multiprocessing.get_start_method() == "spawn"
+    os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=" + str(num_workers)
 
     kT = temperature * BOLTZ
-    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
 
-    if num_workers is None:
-        num_workers = jax.device_count()
-
-    burn_in_batches = 1000
-
-    # xs_proposal has shape [num_workers, num_batches+burn_in_batches, num_atoms, 3]
+    x0 = get_romol_conf(mol)
     xs_proposal = simulate(
-        x0, U_proposal, temperature, masses, steps_per_batch, num_batches + burn_in_batches, num_workers, seed
+        x0,
+        U_proposal,
+        temperature,
+        masses,
+        steps_per_batch,
+        batches_per_worker + burn_in_batches,
+        num_workers,
+        seed,
     )
 
     num_atoms = mol.GetNumAtoms()
@@ -323,6 +305,75 @@ def generate_log_weighted_samples(
     xs_proposal = xs_proposal.reshape(-1, num_atoms, 3)
 
     return xs_proposal, log_weights
+
+
+def generate_log_weighted_samples(
+    mol, temperature, U_proposal, U_target, seed, steps_per_batch=250, num_batches=24000, num_workers=None
+):
+    """
+    Generate log_weighted samples from a proposal distribution using U_proposal,
+    with log_weights defined by the difference relative to U_target
+
+    Parameters
+    ----------
+    mol: Chem.Mol
+
+    temperature: float
+        Temperature in Kelvin
+
+    U_proposal: fn
+        Potential energy function for the proposal distribution
+
+    U_target: fn
+        Potential energy function for the target distribution
+
+    seed: int
+        Random number seed
+
+    steps_per_batch: int
+        Number of steps per batch.
+
+    num_batches: int
+        Number of batches
+
+    num_workers: Optional, int
+        Number of parallel computations
+
+    Returns
+    -------
+    (num_batches*num_workers, num_atoms, 3) np.ndarray
+        Samples generated from p_target
+
+    """
+    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+
+    if num_workers is None:
+        num_workers = os.cpu_count()
+
+    assert num_batches % num_workers == 0
+
+    batches_per_worker = num_batches // num_workers
+    burn_in_batches = 1000
+
+    with multiprocessing.get_context("spawn").Pool(1) as pool:
+        args = (
+            mol,
+            U_proposal,
+            U_target,
+            temperature,
+            masses,
+            steps_per_batch,
+            batches_per_worker,
+            burn_in_batches,
+            num_workers,
+            seed,
+        )
+        xs_proposal, log_weights = pool.map(_wrap_simulate, (args,))[0]
+
+        assert xs_proposal.shape[0] == num_batches
+        assert log_weights.shape[0] == num_batches
+
+        return xs_proposal, log_weights
 
 
 def sample_from_log_weights(weighted_samples, log_weights, size):
@@ -449,9 +500,7 @@ def equilibrate_solvent_phase(
 
     # (ytz): This has to be zeros_like for now since if we freeze ligand
     # coordinates it would start to move during rejected moves.
-    # v0 = np.zeros_like(x0)
-    v0 = equil_ctxt.get_v_t()
-    v0[-15:] = 0
+    v0 = np.zeros_like(x0)
 
     return CoordsVelBox(x0, v0, equil_ctxt.get_box())
 
@@ -478,24 +527,6 @@ def align_and_replace(x_vacuum, x_solvent):
 
 
 batch_align_and_replace = jax.jit(jax.vmap(align_and_replace, in_axes=(0, None)))
-
-
-# def aligned_batch_propose(xvb, K, vacuum_samples, vacuum_log_weights):
-#     vacuum_samples = sample_from_log_weights(vacuum_samples, vacuum_log_weights, K)
-
-#     x_solvent = xvb.coords
-#     v_solvent = xvb.velocities
-#     b_solvent = xvb.box
-
-#     replaced_samples = batch_align_and_replace(vacuum_samples, x_solvent)
-
-#     new_xvbs = []
-
-#     # modify only ligand coordinates in the proposal
-#     for x_r in replaced_samples:
-#         new_xvbs.append(CoordsVelBox(x_r, v_solvent, b_solvent))
-
-#     return new_xvbs
 
 
 def aligned_batch_propose(xvb, K, key, vacuum_samples, vacuum_log_weights):
