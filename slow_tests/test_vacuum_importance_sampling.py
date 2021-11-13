@@ -19,6 +19,8 @@ from timemachine.potentials import bonded
 from tests import test_ligands
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
+import matplotlib.pyplot as plt
+import pytest
 
 
 def get_ff_am1ccc():
@@ -27,9 +29,7 @@ def get_ff_am1ccc():
     return ff
 
 
-import matplotlib.pyplot as plt
-
-
+@pytest.mark.skip(reason="This takes too long to run on CI")
 def test_vacuum():
     """
     This tests importance sampling in the gas-phase, where samples generated

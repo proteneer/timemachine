@@ -26,6 +26,8 @@ from ff.handlers.deserialize import deserialize_handlers
 # (ytz): useful for visualization, so please leave this comment here!
 from matplotlib import pyplot as plt
 
+import pytest
+
 
 def get_ff_am1cc():
     ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
@@ -33,6 +35,7 @@ def get_ff_am1cc():
     return ff
 
 
+@pytest.mark.skip(reason="This takes too long to run on CI")
 def test_condensed_phase_mtm():
     """
     Tests multiple-try metropolis in the condensed phase.
