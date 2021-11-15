@@ -22,12 +22,12 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Call
         return vmap(u_interp, (1, None))(u_kn, lam)
 
     @jit
-    def delta_u(from_lam: Float, to_lam: Float) -> Array:
+    def vec_delta_u(from_lam: Float, to_lam: Float) -> Array:
         """+inf minus +inf -> 0, rather than +inf minus +inf -> nan"""
         raw_delta_u = vec_u_interp(to_lam) - vec_u_interp(from_lam)
         return np.nan_to_num(raw_delta_u)
 
-    return u_interp, vec_u_interp, delta_u
+    return u_interp, vec_u_interp, vec_delta_u
 
 
 def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
@@ -39,7 +39,7 @@ def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
         (where samples xs = concatenation of all samples, in any order,
         and len(xs) == N = sum(N_k))
 
-    interpret the collection of N = sumk N_k samples as coming from a
+    interpret the collection of N = \sum_k N_k samples as coming from a
     mixture of states p(x) = (1 / K) \sum_k e^-u_k / Z_k
 
     """
@@ -51,20 +51,23 @@ def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
 
 def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array) -> Float:
     """Compute reweighted estimate of
-    stddev(f(x)) under x ~ p_target(x)
-    based on samples x_n ~ p_source(x)
+    stddev(f(x)) under x ~ p_target
+    based on samples   x ~ p_source
 
     where
-        p_target(x) \propto exp(target_logpdf(x))
+        p_target(x) = exp(target_logpdf(x)) / Z_target
 
     using samples from a different source
         x_n ~ p_source
         where
-        p_source(x) \propto exp(source_logpdf(x))
+        p_source(x) = exp(source_logpdf(x)) / Z_source
 
-    f_n = [f(x_n) for x_n in samples]
-    target_logpdf_n = [target_logpdf(x_n) for x_n in samples]
-    source_logpdf_n = [source_logpdf(x_n) for x_n in samples]
+    The inputs are arrays "{fxn_name}_n" containing the result of
+    calling each fxn on a fixed array of samples:
+
+    * f_n = [f(x_n) for x_n in samples]
+    * target_logpdf_n = [target_logpdf(x_n) for x_n in samples]
+    * source_logpdf_n = [source_logpdf(x_n) for x_n in samples]
     """
 
     log_weights_n = target_logpdf_n - source_logpdf_n
