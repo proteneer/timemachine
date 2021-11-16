@@ -5,9 +5,15 @@ from unittest import TestCase
 import numpy as np
 
 from md import builders, minimizer
-from fe.model_rabfe import RelativeBindingModel, AbsoluteConversionModel
+from fe.model_rabfe import RelativeBindingModel, AbsoluteConversionModel, RABFEModel
 from fe.free_energy import construct_lambda_schedule
-from fe.free_energy_rabfe import setup_relative_restraints_by_distance, get_romol_conf
+from fe.free_energy_rabfe import (
+    setup_relative_restraints_by_distance,
+    get_romol_conf,
+    construct_absolute_lambda_schedule_complex,
+    construct_absolute_lambda_schedule_solvent,
+    construct_conversion_lambda_schedule,
+)
 from fe.frames import all_frames
 from timemachine.potentials import rmsd
 from testsystems.relative import hif2a_ligand_pair
@@ -22,14 +28,77 @@ NUM_GPUS = get_gpu_count()
 
 
 class TestRABFEModels(TestCase):
-    def test_predict_complex_decouple(self):
-        """Just to verify that we can handle the most basic complex decoupling RABFE prediction"""
+    def test_predict_rabfe_model(self):
         complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
             os.path.join(DATA_DIR, "hif2a_nowater_min.pdb")
         )
 
         # build the water system
-        solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
+        solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
+
+        temperature = 300.0
+        pressure = 1.0
+        dt = 2.5e-3
+
+        client = CUDAPoolClient(NUM_GPUS)
+
+        mol_a = hif2a_ligand_pair.mol_a
+        mol_b = hif2a_ligand_pair.mol_b
+
+        # Add the 'blocker' to the complex
+        complex_coords = np.concatenate([complex_coords, get_romol_conf(mol_a)])
+
+        seed = 2021
+        np.random.seed(seed)
+        model = RABFEModel(
+            client,
+            hif2a_ligand_pair.ff,
+            mol_a,
+            complex_system,
+            complex_topology,
+            solvent_system,
+            solvent_topology,
+            temperature,
+            pressure,
+            dt,
+            complex_coords,
+            complex_box,
+            solvent_coords,
+            solvent_box,
+        )
+
+        # Setup Complex Windows
+        model.set_complex_conversion_schedule(construct_conversion_lambda_schedule(2))
+        model.set_complex_decouple_schedule(construct_absolute_lambda_schedule_complex(2))
+
+        # Setup Solvent Windows
+        model.set_solvent_conversion_schedule(construct_conversion_lambda_schedule(2))
+        model.set_solvent_decouple_schedule(construct_absolute_lambda_schedule_solvent(2))
+
+        num_steps = 5
+        model.set_complex_decouple_equil_steps(num_steps)
+        model.set_complex_decouple_prod_steps(num_steps)
+        model.set_complex_conversion_equil_steps(num_steps)
+        model.set_complex_conversion_prod_steps(num_steps)
+
+        model.set_solvent_decouple_equil_steps(num_steps)
+        model.set_solvent_decouple_prod_steps(num_steps)
+        model.set_solvent_conversion_equil_steps(num_steps)
+        model.set_solvent_conversion_prod_steps(num_steps)
+
+        core_idxs = setup_relative_restraints_by_distance(mol_a, mol_b)
+        ordered_params = hif2a_ligand_pair.ff.get_ordered_params()
+        with temporary_working_dir() as temp_dir:
+            dG, dG_err = model.predict(ordered_params, mol_b, core_idxs, "suffix")
+            np.testing.assert_almost_equal(dG, 572.3966117085292)
+            assert np.isnan(dG_err)
+
+    def test_predict_complex_decouple(self):
+        """Just to verify that we can handle the most basic complex decoupling RABFE prediction"""
+        # build the water system
+        complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
+            os.path.join(DATA_DIR, "hif2a_nowater_min.pdb")
+        )
 
         temperature = 300.0
         pressure = 1.0
@@ -87,14 +156,9 @@ class TestRABFEModels(TestCase):
             self.assertEqual(len([x for x in created_files if x.endswith(".npy")]), 2)
             self.assertEqual(len([x for x in created_files if x.endswith(".npz")]), 6)
 
-    def test_predict_complex_conversion(self):
+    def test_predict_solvent_conversion(self):
         """Just to verify that we can handle the most basic complex conversion RABFE prediction"""
-        complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
-            os.path.join(DATA_DIR, "hif2a_nowater_min.pdb")
-        )
-
-        # build the water system
-        solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
+        solvent_system, solvent_coords, solvent_box, solvent_topology = builders.build_water_system(4.0)
 
         temperature = 300.0
         pressure = 1.0
@@ -105,9 +169,9 @@ class TestRABFEModels(TestCase):
         model = AbsoluteConversionModel(
             client,
             hif2a_ligand_pair.ff,
-            complex_system,
+            solvent_system,
             construct_lambda_schedule(2),
-            complex_topology,
+            solvent_topology,
             temperature,
             pressure,
             dt,
@@ -130,15 +194,15 @@ class TestRABFEModels(TestCase):
         )
 
         aligned_mol_coords = rmsd.apply_rotation_and_translation(mol_coords, R, t)
-        complex_coords = minimizer.minimize_host_4d(
-            [mol_b], complex_system, complex_coords, hif2a_ligand_pair.ff, complex_box, [aligned_mol_coords]
+        solvent_coords = minimizer.minimize_host_4d(
+            [mol_b], solvent_system, solvent_coords, hif2a_ligand_pair.ff, solvent_box, [aligned_mol_coords]
         )
-        complex_x0 = np.concatenate([complex_coords, aligned_mol_coords])
+        solvent_x0 = np.concatenate([solvent_coords, aligned_mol_coords])
 
         ordered_params = hif2a_ligand_pair.ff.get_ordered_params()
         with temporary_working_dir() as temp_dir:
             dG, dG_err = model.predict(
-                ordered_params, mol_b, complex_x0, complex_box, "prefix", core_idxs=core_idxs[:, 0]
+                ordered_params, mol_b, solvent_x0, solvent_box, "prefix", core_idxs=core_idxs[:, 0]
             )
             self.assertIsInstance(dG, float)
             self.assertIsInstance(dG_err, float)

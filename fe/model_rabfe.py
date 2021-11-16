@@ -2,23 +2,32 @@ from abc import ABC
 
 import functools
 import numpy as np
-import mdtraj
+import dataclasses
+from typing import Optional, Tuple, Any, List
 
 from simtk import openmm
 from rdkit import Chem
 
 from timemachine.lib import potentials, LangevinIntegrator, MonteCarloBarostat
 from timemachine import constants
+from timemachine.potentials import rmsd
+
 from fe.frames import endpoint_frames_only
 from fe import free_energy_rabfe, topology, estimator_abfe, model_utils
 from ff import Forcefield
 
+from fe.free_energy_rabfe import (
+    construct_absolute_lambda_schedule_complex,
+    construct_absolute_lambda_schedule_solvent,
+    construct_conversion_lambda_schedule,
+    RABFEResult,
+    get_romol_conf,
+)
+
 from parallel.client import AbstractClient, _MockFuture
-from typing import Optional, Tuple, Any, List
 
+from md import minimizer
 from md.barostat.utils import get_group_indices, get_bond_list
-
-import pickle
 
 
 class AbsoluteModel(ABC):
@@ -56,15 +65,20 @@ class AbsoluteModel(ABC):
         raise NotImplementedError()
 
     def simulate_futures(
-        self, ff_params, mol, x0, box0, prefix, core_idxs=None
+        self,
+        ff_params,
+        mol,
+        x0,
+        box0,
+        prefix,
+        core_idxs=None,
+        seed=0,
     ) -> Tuple[List[Any], estimator_abfe.FreeEnergyModel, List[Any]]:
         top = self.setup_topology(mol)
 
         afe = free_energy_rabfe.AbsoluteFreeEnergy(mol, top)
 
         unbound_potentials, sys_params, masses = afe.prepare_host_edge(ff_params, self.host_system)
-
-        seed = 0
 
         beta = 1 / (constants.BOLTZ * self.temperature)
 
@@ -174,7 +188,7 @@ class AbsoluteModel(ABC):
 
         return dG, dG_err
 
-    def predict(self, ff_params, mol, x0, box0, prefix, core_idxs=None):
+    def predict(self, ff_params, mol, x0, box0, prefix, core_idxs=None, seed=0):
         """Compute the absolute free of energy of decoupling mol_a.
 
         This function is differentiable w.r.t. ff_params.
@@ -213,7 +227,9 @@ class AbsoluteModel(ABC):
             to compute delta_Us, the BAR estimates themselves become correlated.
 
         """
-        sys_params, model, futures = self.simulate_futures(ff_params, mol, x0, box0, prefix, core_idxs=core_idxs)
+        sys_params, model, futures = self.simulate_futures(
+            ff_params, mol, x0, box0, prefix, core_idxs=core_idxs, seed=seed
+        )
 
         dG, dG_err = self.predict_from_futures(sys_params, mol, model, futures)
 
@@ -257,7 +273,7 @@ class RelativeModel(ABC):
     def setup_topology(self, mol_a, mol_b):
         raise NotImplementedError()
 
-    def _futures_a_to_b(self, ff_params, mol_a, mol_b, combined_core_idxs, x0, box0, prefix):
+    def _futures_a_to_b(self, ff_params, mol_a, mol_b, combined_core_idxs, x0, box0, prefix, seed):
 
         num_host_atoms = x0.shape[0] - mol_a.GetNumAtoms() - mol_b.GetNumAtoms()
 
@@ -287,7 +303,6 @@ class RelativeModel(ABC):
         # tbd sample from boltzmann distribution later
         v0 = np.zeros_like(x0)
 
-        seed = 0
         beta = 1 / (constants.BOLTZ * self.temperature)
 
         bond_list = np.concatenate([unbound_potentials[0].get_idxs(), core_idxs])
@@ -379,7 +394,15 @@ class RelativeModel(ABC):
         return sys_params, model, futures
 
     def simulate_futures(
-        self, ff_params, mol_a, mol_b, core, x0, box0, prefix
+        self,
+        ff_params,
+        mol_a,
+        mol_b,
+        core,
+        x0,
+        box0,
+        prefix,
+        seed=0,
     ) -> Tuple[List[Any], List[estimator_abfe.FreeEnergyModel], List[List[Any]]]:
 
         num_host_atoms = x0.shape[0] - mol_a.GetNumAtoms() - mol_b.GetNumAtoms()
@@ -405,6 +428,7 @@ class RelativeModel(ABC):
             combined_coords,
             box0,
             prefix + "_ref_to_mol",
+            seed,
         )
 
         all_sys.append(sys_params)
@@ -427,6 +451,7 @@ class RelativeModel(ABC):
             combined_coords,
             box0,
             prefix + "_mol_to_ref",
+            seed,
         )
 
         all_sys.append(sys_params)
@@ -482,6 +507,7 @@ class RelativeModel(ABC):
         x0: np.array,
         box0: np.array,
         prefix: str,
+        seed=0,
     ):
         """
         Compute the free of energy of converting mol_a into mol_b. The starting state
@@ -538,6 +564,7 @@ class RelativeModel(ABC):
             x0,
             box0,
             prefix,
+            seed=seed,
         )
         dG, dG_err = self.predict_from_futures(
             sys_params,
@@ -579,3 +606,326 @@ class RelativeBindingModel(RelativeModel):
     def setup_topology(self, mol_a, mol_b):
         top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
         return top
+
+
+@dataclasses.dataclass
+class RABFESimulationFutures:
+    complex_decouple: None
+    complex_conversion: None
+    solvent_decouple: None
+    solvent_conversion: None
+    mol: None
+    blocker: None
+    seed: 0
+
+
+class RABFEModel:
+    def __init__(
+        self,
+        client: AbstractClient,
+        forcefield,
+        blocker: Chem.Mol,
+        complex_system,
+        complex_topology,
+        solvent_system,
+        solvent_topology,
+        temperature: float,
+        pressure: float,
+        dt: float,
+        complex_coords: np.ndarray,
+        complex_box: np.ndarray,
+        solvent_coords: np.ndarray,
+        solvent_box: np.ndarray,
+        frame_filter=None,
+    ):
+        self.client = client
+        self.forcefield = forcefield
+        self.blocker = blocker
+        self.complex_system = complex_system
+        self.complex_topology = complex_topology
+        self.solvent_system = solvent_system
+        self.solvent_topology = solvent_topology
+        self.pressure = pressure
+        self.dt = dt
+        self.temperature = temperature
+
+        self.complex_coords = complex_coords
+        self.complex_box = complex_box
+
+        self.solvent_coords = solvent_coords
+        self.solvent_box = solvent_box
+
+        if frame_filter is None:
+            frame_filter = endpoint_frames_only
+        self.frame_filter = frame_filter
+
+        # Setup Complex Schedules
+        self.complex_conversion_schedule = construct_conversion_lambda_schedule(64)
+        self.complex_decouple_schedule = construct_absolute_lambda_schedule_complex(
+            63
+        )  # 1 less for endpoint correction
+
+        # Setup Solvent Schedules
+        self.solvent_conversion_schedule = construct_conversion_lambda_schedule(64)
+        self.solvent_decouple_schedule = construct_absolute_lambda_schedule_solvent(64)
+
+        # Setup Complex Steps
+        self.complex_decouple_equil_steps = 200, 000
+        self.complex_decouple_prod_steps = 800, 000
+        self.complex_conversion_equil_steps = 200, 000
+        self.complex_conversion_prod_steps = 800, 000
+
+        self.solvent_decouple_equil_steps = 200, 000
+        self.solvent_decouple_prod_steps = 800, 000
+        self.solvent_conversion_equil_steps = 200, 000
+        self.solvent_conversion_prod_steps = 800, 000
+
+        # Will load these later to ensure user has configured all options
+        self.solvent_conversion_model = None
+        self.solvent_decouple_model = None
+
+        self.complex_conversion_model = None
+        self.complex_decouple_model = None
+
+        self._models_loaded = False
+
+    def load_models(self, force: bool = False):
+        if not force and self._models_loaded:
+            return
+
+        self.complex_conversion_model = AbsoluteConversionModel(
+            self.client,
+            self.forcefield,
+            self.complex_system,
+            self.complex_conversion_schedule,
+            self.complex_topology,
+            self.temperature,
+            self.pressure,
+            self.dt,
+            self.complex_conversion_equil_steps,
+            self.complex_conversion_prod_steps,
+            frame_filter=self.frame_filter,
+        )
+
+        self.complex_decouple_model = RelativeBindingModel(
+            self.client,
+            self.forcefield,
+            self.complex_system,
+            self.complex_decouple_schedule,
+            self.complex_topology,
+            self.temperature,
+            self.pressure,
+            self.dt,
+            self.complex_decouple_equil_steps,
+            self.complex_decouple_prod_steps,
+            frame_filter=self.frame_filter,
+        )
+
+        self.solvent_conversion_model = AbsoluteConversionModel(
+            self.client,
+            self.forcefield,
+            self.solvent_system,
+            self.solvent_conversion_schedule,
+            self.solvent_topology,
+            self.temperature,
+            self.pressure,
+            self.dt,
+            self.solvent_conversion_equil_steps,
+            self.solvent_conversion_prod_steps,
+            frame_filter=self.frame_filter,
+        )
+
+        self.solvent_decouple_model = AbsoluteStandardHydrationModel(
+            self.client,
+            self.forcefield,
+            self.solvent_system,
+            self.solvent_decouple_schedule,
+            self.solvent_topology,
+            self.temperature,
+            self.pressure,
+            self.dt,
+            self.solvent_decouple_equil_steps,
+            self.solvent_decouple_prod_steps,
+            frame_filter=self.frame_filter,
+        )
+
+    def simulate_futures(
+        self,
+        ff_params: np.ndarray,
+        mol: Chem.Mol,
+        core_idxs: np.ndarray,
+        suffix: str,
+        seed: int = 0,
+    ) -> RABFESimulationFutures:
+        # Ensure that the relevant models are constructed
+        self.load_models()
+
+        if seed == 0:
+            seed = np.random.randint(np.iinfo(np.int32).max)
+
+        mol_coords = get_romol_conf(mol)  # original coords
+        num_complex_atoms = self.complex_coords.shape[0] - self.blocker.GetNumAtoms()
+        R, t = rmsd.get_optimal_rotation_and_translation(
+            # Assumes complex coords have blocker already contained
+            x1=self.complex_coords[num_complex_atoms:][core_idxs[:, 1]],  # reference core atoms
+            x2=mol_coords[core_idxs[:, 0]],  # mol core atoms
+        )
+
+        aligned_mol_coords = rmsd.apply_rotation_and_translation(mol_coords, R, t)
+
+        blocker_coords = self.complex_coords[num_complex_atoms:]
+        complex_host_coords = self.complex_coords[:num_complex_atoms]
+        complex_box0 = self.complex_box
+
+        complex_decouple_x0 = minimizer.minimize_host_4d(
+            [mol, self.blocker],
+            self.complex_system,
+            complex_host_coords,
+            self.forcefield,
+            complex_box0,
+            [aligned_mol_coords, blocker_coords],
+        )
+        complex_decouple_x0 = np.concatenate([complex_decouple_x0, aligned_mol_coords, blocker_coords])
+
+        # compute the free energy of conversion in complex
+        complex_conversion_x0 = minimizer.minimize_host_4d(
+            [mol],
+            self.complex_system,
+            complex_host_coords,
+            self.forcefield,
+            complex_box0,
+            [aligned_mol_coords],
+        )
+        complex_conversion_x0 = np.concatenate([complex_conversion_x0, aligned_mol_coords])
+
+        solvent_box0 = self.solvent_box
+        min_solvent_coords = minimizer.minimize_host_4d(
+            [mol], self.solvent_system, self.solvent_coords, self.forcefield, solvent_box0
+        )
+        solvent_x0 = np.concatenate([min_solvent_coords, mol_coords])
+
+        futures = RABFESimulationFutures(
+            complex_decouple=self.complex_decouple_model.simulate_futures(
+                ff_params,
+                mol,
+                self.blocker,
+                core_idxs,
+                complex_decouple_x0,
+                complex_box0,
+                prefix="complex_decouple_" + suffix,
+                seed=seed,
+            ),
+            complex_conversion=self.complex_conversion_model.simulate_futures(
+                ff_params,
+                mol,
+                complex_conversion_x0,
+                complex_box0,
+                prefix="complex_conversion_" + suffix,
+                seed=seed,
+            ),
+            solvent_decouple=self.solvent_decouple_model.simulate_futures(
+                ff_params,
+                mol,
+                solvent_x0,
+                solvent_box0,
+                prefix="solvent_decouple_" + suffix,
+                seed=seed,
+            ),
+            solvent_conversion=self.solvent_conversion_model.simulate_futures(
+                ff_params,
+                mol,
+                solvent_x0,
+                solvent_box0,
+                prefix="solvent_conversion_" + suffix,
+                seed=seed,
+            ),
+            mol=mol,
+            blocker=self.blocker,
+            seed=seed,
+        )
+        return futures
+
+    def predict_from_futures(self, futures: RABFESimulationFutures) -> Tuple[float, float]:
+        dG_complex_decouple, dG_complex_decouple_error = self.complex_decouple_model.predict_from_futures(
+            futures.complex_decouple[0],
+            futures.mol,
+            futures.blocker,
+            futures.complex_decouple[1],
+            futures.complex_decouple[2],
+        )
+        dG_complex_conversion, dG_complex_conversion_error = self.complex_conversion_model.predict_from_futures(
+            futures.complex_conversion[0],
+            futures.mol,
+            futures.complex_conversion[1],
+            futures.complex_conversion[2],
+        )
+        dG_solvent_decouple, dG_solvent_decouple_error = self.solvent_decouple_model.predict_from_futures(
+            futures.solvent_decouple[0],
+            futures.mol,
+            futures.solvent_decouple[1],
+            futures.solvent_decouple[2],
+        )
+        dG_solvent_conversion, dG_solvent_conversion_error = self.solvent_conversion_model.predict_from_futures(
+            futures.solvent_conversion[0],
+            futures.mol,
+            futures.solvent_conversion[1],
+            futures.solvent_conversion[2],
+        )
+
+        rabfe_result = RABFEResult(
+            mol_name=futures.mol.GetProp("_Name"),
+            dG_complex_conversion=dG_complex_conversion,
+            dG_complex_decouple=dG_complex_decouple,
+            dG_solvent_conversion=dG_solvent_conversion,
+            dG_solvent_decouple=dG_solvent_decouple,
+        )
+        rabfe_result.log()
+        dG_err = np.sqrt(
+            dG_complex_conversion_error ** 2
+            + dG_complex_decouple_error ** 2
+            + dG_solvent_conversion_error ** 2
+            + dG_solvent_decouple_error ** 2
+        )
+
+        return rabfe_result.dG_bind, dG_err
+
+    def predict(self, ff_params, mol, core_idxs, suffix) -> Tuple[float, float]:
+        futures = self.simulate_futures(ff_params, mol, core_idxs, suffix)
+        results = self.predict_from_futures(futures)
+        return results
+
+    def set_complex_conversion_schedule(self, schedule: List[int]):
+        self.complex_conversion_schedule = schedule
+
+    def set_complex_decouple_schedule(self, schedule: List[int]):
+        self.complex_decouple_schedule = schedule
+
+    def set_solvent_conversion_schedule(self, schedule: List[int]):
+        self.solvent_conversion_schedule = schedule
+
+    def set_solvent_decouple_schedule(self, schedule: List[int]):
+        self.solvent_decouple_schedule = schedule
+
+    def set_complex_decouple_equil_steps(self, steps: int):
+        self.complex_decouple_equil_steps = steps
+
+    def set_complex_decouple_prod_steps(self, steps: int):
+        self.complex_decouple_prod_steps = steps
+
+    def set_complex_conversion_equil_steps(self, steps: int):
+        self.complex_conversion_equil_steps = steps
+
+    def set_complex_conversion_prod_steps(self, steps: int):
+        self.complex_conversion_prod_steps = steps
+
+    def set_solvent_decouple_equil_steps(self, steps: int):
+        self.solvent_decouple_equil_steps = steps
+
+    def set_solvent_decouple_prod_steps(self, steps: int):
+        self.solvent_decouple_prod_steps = steps
+
+    def set_solvent_conversion_equil_steps(self, steps: int):
+        self.solvent_conversion_equil_steps = steps
+
+    def set_solvent_conversion_prod_steps(self, steps: int):
+        self.solvent_conversion_prod_steps = steps

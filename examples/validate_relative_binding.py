@@ -22,9 +22,7 @@ from fe.free_energy_rabfe import (
     construct_absolute_lambda_schedule_complex,
     construct_absolute_lambda_schedule_solvent,
     construct_conversion_lambda_schedule,
-    get_romol_conf,
     setup_relative_restraints_by_distance,
-    RABFEResult,
 )
 from fe.utils import convert_uM_to_kJ_per_mole
 from fe import model_rabfe
@@ -40,7 +38,6 @@ from training.dataset import Dataset
 from rdkit import Chem
 
 import timemachine
-from timemachine.potentials import rmsd
 from md import builders, minimizer
 
 ALL_FRAMES = "all"
@@ -247,199 +244,61 @@ if __name__ == "__main__":
         cmd_args.num_complex_preequil_steps,
     )
 
-    complex_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_complex_conv_windows)
-    # complex models
-    binding_model_complex_conversion = model_rabfe.AbsoluteConversionModel(
+
+    rabfe_model = model_rabfe.RABFEModel(
         client,
         forcefield,
+        blocker_mol,
         complex_system,
-        complex_conversion_schedule,
         complex_topology,
-        temperature,
-        pressure,
-        dt,
-        cmd_args.num_complex_equil_steps,
-        cmd_args.num_complex_prod_steps,
-        frame_filter=frame_filter,
-    )
-
-    binding_model_complex_decouple = model_rabfe.RelativeBindingModel(
-        client,
-        forcefield,
-        complex_system,
-        complex_absolute_schedule,
-        complex_topology,
-        temperature,
-        pressure,
-        dt,
-        cmd_args.num_complex_equil_steps,
-        cmd_args.num_complex_prod_steps,
-        frame_filter=frame_filter,
-    )
-
-    # solvent models.
-    solvent_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_solvent_conv_windows)
-
-    binding_model_solvent_conversion = model_rabfe.AbsoluteConversionModel(
-        client,
-        forcefield,
         solvent_system,
-        solvent_conversion_schedule,
         solvent_topology,
         temperature,
         pressure,
         dt,
-        cmd_args.num_solvent_equil_steps,
-        cmd_args.num_solvent_prod_steps,
+        complex_ref_x0,
+        complex_ref_box0,
+        solvent_coords,
+        solvent_box,
         frame_filter=frame_filter,
     )
 
-    binding_model_solvent_decouple = model_rabfe.AbsoluteStandardHydrationModel(
-        client,
-        forcefield,
-        solvent_system,
-        solvent_absolute_schedule,
-        solvent_topology,
-        temperature,
-        pressure,
-        dt,
-        cmd_args.num_solvent_equil_steps,
-        cmd_args.num_solvent_prod_steps,
-        frame_filter=frame_filter,
-    )
+    # Setup Complex Windows
+    rabfe_model.set_complex_conversion_schedule(construct_conversion_lambda_schedule(cmd_args.num_complex_conv_windows))
+    rabfe_model.set_complex_decouple_schedule(construct_absolute_lambda_schedule_complex(cmd_args.num_complex_windows))
+
+    # Setup Solvent Windows
+    rabfe_model.set_solvent_conversion_schedule(construct_conversion_lambda_schedule(cmd_args.num_solvent_conv_windows))
+    rabfe_model.set_solvent_decouple_schedule(construct_absolute_lambda_schedule_solvent(cmd_args.num_solvent_windows))
+
+    # Setup Complex Steps
+    rabfe_model.set_complex_decouple_equil_steps(cmd_args.num_complex_equil_steps)
+    rabfe_model.set_complex_decouple_prod_steps(cmd_args.num_complex_prod_steps)
+    rabfe_model.set_complex_conversion_equil_steps(cmd_args.num_complex_equil_steps)
+    rabfe_model.set_complex_conversion_prod_steps(cmd_args.num_complex_prod_steps)
+
+    rabfe_model.set_solvent_decouple_equil_steps(cmd_args.num_solvent_equil_steps)
+    rabfe_model.set_solvent_decouple_prod_steps(cmd_args.num_solvent_prod_steps)
+    rabfe_model.set_solvent_conversion_equil_steps(cmd_args.num_solvent_equil_steps)
+    rabfe_model.set_solvent_conversion_prod_steps(cmd_args.num_solvent_prod_steps)
 
     ordered_params = forcefield.get_ordered_params()
-    ordered_handles = forcefield.get_ordered_handles()
 
     def simulate_pair(epoch: int, blocker: Chem.Mol, mol: Chem.Mol):
         mol_name = mol.GetProp("_Name")
 
-        # generate the core_idxs
-        core_idxs = setup_relative_restraints_by_distance(mol, blocker)
-        mol_coords = get_romol_conf(mol)  # original coords
-
-        num_complex_atoms = complex_coords.shape[0]
-
-        # Use core_idxs to generate
-        R, t = rmsd.get_optimal_rotation_and_translation(
-            x1=complex_ref_x0[num_complex_atoms:][core_idxs[:, 1]],  # reference core atoms
-            x2=mol_coords[core_idxs[:, 0]],  # mol core atoms
-        )
-
-        aligned_mol_coords = rmsd.apply_rotation_and_translation(mol_coords, R, t)
-
-        ref_coords = complex_ref_x0[num_complex_atoms:]
-        complex_host_coords = complex_ref_x0[:num_complex_atoms]
-        complex_box0 = complex_ref_box0
-
-        # compute the free energy of swapping an interacting mol with a non-interacting reference mol
-        complex_decouple_x0 = minimizer.minimize_host_4d(
-            [mol, blocker_mol],
-            complex_system,
-            complex_host_coords,
-            forcefield,
-            complex_box0,
-            [aligned_mol_coords, ref_coords],
-        )
-        complex_decouple_x0 = np.concatenate([complex_decouple_x0, aligned_mol_coords, ref_coords])
-
-        # compute the free energy of conversion in complex
-        complex_conversion_x0 = minimizer.minimize_host_4d(
-            [mol],
-            complex_system,
-            complex_host_coords,
-            forcefield,
-            complex_box0,
-            [aligned_mol_coords],
-        )
-        complex_conversion_x0 = np.concatenate([complex_conversion_x0, aligned_mol_coords])
-
-        min_solvent_coords = minimizer.minimize_host_4d([mol], solvent_system, solvent_coords, forcefield, solvent_box)
-        solvent_x0 = np.concatenate([min_solvent_coords, mol_coords])
-        solvent_box0 = solvent_box
-
         suffix = f"{mol_name}_{epoch}"
 
-        return {
-            "solvent_decouple": binding_model_solvent_decouple.simulate_futures(
-                ordered_params,
-                mol,
-                solvent_x0,
-                solvent_box0,
-                prefix="solvent_decouple_" + suffix,
-            ),
-            "solvent_conversion": binding_model_solvent_conversion.simulate_futures(
-                ordered_params,
-                mol,
-                solvent_x0,
-                solvent_box0,
-                prefix="solvent_conversion_" + suffix,
-            ),
-            "complex_conversion": binding_model_complex_conversion.simulate_futures(
-                ordered_params,
-                mol,
-                complex_conversion_x0,
-                complex_box0,
-                prefix="complex_conversion_" + suffix,
-            ),
-            "complex_decouple": binding_model_complex_decouple.simulate_futures(
-                ordered_params,
-                mol,
-                blocker_mol,
-                core_idxs,
-                complex_decouple_x0,
-                complex_box0,
-                prefix="complex_decouple_" + suffix,
-            ),
-            "mol": mol,
-            "blocker": blocker,
-            "epoch": epoch,
-        }
-
-    def predict_dG(results: dict):
-        dG_complex_decouple, dG_complex_decouple_error = binding_model_complex_decouple.predict_from_futures(
-            results["complex_decouple"][0],
-            results["mol"],
-            results["blocker"],
-            results["complex_decouple"][1],
-            results["complex_decouple"][2],
+        # generate the core_idxs
+        core_idxs = setup_relative_restraints_by_distance(mol, blocker)
+        results = rabfe_model.simulate_futures(
+            ordered_params,
+            mol,
+            core_idxs,
+            suffix,
         )
-        dG_complex_conversion, dG_complex_conversion_error = binding_model_complex_conversion.predict_from_futures(
-            results["complex_conversion"][0],
-            results["mol"],
-            results["complex_conversion"][1],
-            results["complex_conversion"][2],
-        )
-        dG_solvent_decouple, dG_solvent_decouple_error = binding_model_solvent_decouple.predict_from_futures(
-            results["solvent_decouple"][0],
-            results["mol"],
-            results["solvent_decouple"][1],
-            results["solvent_decouple"][2],
-        )
-
-        dG_solvent_conversion, dG_solvent_conversion_error = binding_model_solvent_conversion.predict_from_futures(
-            results["solvent_conversion"][0],
-            results["mol"],
-            results["solvent_conversion"][1],
-            results["solvent_conversion"][2],
-        )
-
-        rabfe_result = RABFEResult(
-            mol_name=mol_name,
-            dG_complex_conversion=dG_complex_conversion,
-            dG_complex_decouple=dG_complex_decouple,
-            dG_solvent_conversion=dG_solvent_conversion,
-            dG_solvent_decouple=dG_solvent_decouple,
-        )
-        rabfe_result.log()
-        dG_err = np.sqrt(
-            dG_complex_conversion_error ** 2
-            + dG_complex_decouple_error ** 2
-            + dG_solvent_conversion_error ** 2
-            + dG_solvent_decouple_error ** 2
-        )
-
-        return rabfe_result.dG_bind, dG_err
+        # ff_params, mol, core_idxs, complex_coords, complex_box, solvent_coords, solvent_box, suffix
+        return results
 
     runs = []
     for epoch in range(cmd_args.epochs):
@@ -447,15 +306,14 @@ if __name__ == "__main__":
             dataset.shuffle()
         for mol in dataset.data:
             try:
-                runs.append(simulate_pair(epoch, blocker_mol, mol))
+                runs.append((epoch, simulate_pair(epoch, blocker_mol, mol)))
             except Exception as e:
                 mol_name = mol.GetProp("_Name")
                 print(f"Error simulating Mol: {mol_name}: {e}")
     for i in range(len(runs)):
         # Pop off futures to avoid accumulating memory.
-        run = runs.pop(0)
-        mol = run["mol"]
-        epoch = run["epoch"]
+        epoch, rabfe_future = runs.pop(0)
+        mol = rabfe_future.mol
         mol_name = mol.GetProp("_Name")
 
         label_dG = "'N/A'"
@@ -471,9 +329,9 @@ if __name__ == "__main__":
                     assert 0, "Unknown property units"
             except Exception as e:
                 print(f"Unable to find property {cmd_args.property_field}: {e}")
-        print(f"Epoch: {epoch}, Processing Mol: {mol_name}, Label: {label_dG}")
+        print(f"Epoch: {epoch}, Processing Mol: {mol_name}, Label: {label_dG}, Seed {rabfe_future.seed}")
         try:
-            dG, dG_err = predict_dG(run)
+            dG, dG_err = rabfe_model.predict_from_futures(rabfe_future)
             print(f"Epoch: {epoch}, Mol: {mol_name}, Predicted dG: {dG}, dG Err:" f" {dG_err}, Label: {label_dG}")
         except Exception as e:
             print(f"Error processing Mol: {mol_name}: {e}")
