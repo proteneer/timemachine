@@ -234,7 +234,7 @@ void __global__ k_find_blocks_with_ixns(
 
     if (include_col_block) {
 
-        // Compute center of column box and extent coords.
+        // Compute center of column block and extent coords.
         RealType col_bb_ctr_x = bb_ctr[col_block_idx*3+0];
         RealType col_bb_ctr_y = bb_ctr[col_block_idx*3+1];
         RealType col_bb_ctr_z = bb_ctr[col_block_idx*3+2];
@@ -243,17 +243,17 @@ void __global__ k_find_blocks_with_ixns(
         RealType col_bb_ext_y = bb_ext[col_block_idx*3+1];
         RealType col_bb_ext_z = bb_ext[col_block_idx*3+2];
 
-        // Find delta between boxes
+        // Find delta between blocks
         RealType box_box_dx = row_bb_ctr_x - col_bb_ctr_x;
         RealType box_box_dy = row_bb_ctr_y - col_bb_ctr_y;
         RealType box_box_dz = row_bb_ctr_z - col_bb_ctr_z;
 
-        // Recenter delta box
+        // Recenter delta block
         box_box_dx -= bx*nearbyint(box_box_dx*inv_bx);
         box_box_dy -= by*nearbyint(box_box_dy*inv_by);
         box_box_dz -= bz*nearbyint(box_box_dz*inv_bz);
 
-        // If boxes overlap, treat distance as 0
+        // If blocks overlap, treat distance as 0
         box_box_dx = max(static_cast<RealType>(0.0), fabs(box_box_dx) - row_bb_ext_x - col_bb_ext_x);
         box_box_dy = max(static_cast<RealType>(0.0), fabs(box_box_dy) - row_bb_ext_y - col_bb_ext_y);
         box_box_dz = max(static_cast<RealType>(0.0), fabs(box_box_dz) - row_bb_ext_z - col_bb_ext_z);
