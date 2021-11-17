@@ -1,5 +1,5 @@
 #include <stdexcept>
-#include <iostream> 
+#include <iostream>
 #include "../fixed_point.hpp"
 #include "surreal.cuh"
 #include "kernel_utils.cuh"
@@ -29,7 +29,7 @@ __global__ void k_compute_born_radii(
     const double *block_bounds_ext,
     unsigned long long* born_psi) {
 
-    RealType block_d2ij = 0; 
+    RealType block_d2ij = 0;
     for(int d=0; d < 3; d++) {
         RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
         RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
@@ -74,7 +74,7 @@ __global__ void k_compute_born_radii(
 
     // *always* accumulate in 64 bit.
     double sum = 0;
- 
+
     RealType cj[3];
     for(int d=0; d < 3; d++) {
         cj[d] = atom_j_idx < N ? coords[atom_j_idx*3+d] : 0;
@@ -86,7 +86,7 @@ __global__ void k_compute_born_radii(
     RealType radiusJ = atom_j_idx < N ? gb_params[radii_param_idx_j] : 0;
     RealType scaleFactorJ = atom_j_idx < N ? gb_params[scale_param_idx_j] : 0;
 
-    RealType offsetRadiusJ = radiusJ - dielectric_offset; 
+    RealType offsetRadiusJ = radiusJ - dielectric_offset;
     RealType scaledRadiusJ = offsetRadiusJ*scaleFactorJ;
 
     for(int round = 0; round < 32; round++) {
@@ -158,7 +158,7 @@ __global__ void k_compute_born_radii(
         lambda_offset_j = __shfl_sync(0xffffffff, lambda_offset_j, srcLane);
 
     }
-    
+
     if(atom_i_idx < N) {
         atomicAdd(born_psi + atom_i_idx, static_cast<unsigned long long>((long long) (sum*FIXED_BORN_PSI)));
     }
@@ -189,7 +189,7 @@ void __global__ k_compute_born_first_loop_gpu(
         return;
     }
 
-    RealType block_d2ij = 0; 
+    RealType block_d2ij = 0;
     for(int d=0; d < 3; d++) {
         RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
         RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
@@ -268,12 +268,12 @@ void __global__ k_compute_born_first_loop_gpu(
             RealType alpha2_ij          = born_radii_i*born_radii_j;
             RealType D_ij               = r2/(4*alpha2_ij);
             RealType expTerm            = exp(-D_ij);
-            RealType denominator2       = r2 + alpha2_ij*expTerm; 
+            RealType denominator2       = r2 + alpha2_ij*expTerm;
             RealType denominator        = sqrt(denominator2);
-            RealType Gpol               = (prefactor*qi*qj)/denominator; 
-            RealType dGpol_dr           = -Gpol*(1 - expTerm/4)/denominator2;  
+            RealType Gpol               = (prefactor*qi*qj)/denominator;
+            RealType dGpol_dr           = -Gpol*(1 - expTerm/4)/denominator2;
             RealType dGpol_dalpha2_ij   = -(Gpol/2)*expTerm*(1 + D_ij)/denominator2;
-        
+
             RealType energy = Gpol;
 
             // RealType inner = (PI*pow(r,8))/(BOXSIZE);
@@ -288,7 +288,7 @@ void __global__ k_compute_born_first_loop_gpu(
 
 
             if (atom_i_idx != atom_j_idx) {
-                
+
                 energy = sw*energy;
 
                 born_force_j_accum += sw*dGpol_dalpha2_ij*born_radii_i;
@@ -454,7 +454,7 @@ __global__ void k_compute_born_energy_and_forces(
     unsigned long long* out_forces,
     double *du_dl) {
 
-    RealType block_d2ij = 0; 
+    RealType block_d2ij = 0;
     for(int d=0; d < 3; d++) {
         RealType block_row_ctr = block_bounds_ctr[blockIdx.x*3+d];
         RealType block_col_ctr = block_bounds_ctr[blockIdx.y*3+d];
@@ -529,7 +529,7 @@ __global__ void k_compute_born_energy_and_forces(
         // RealType delta_lambda = lambda_i - lambda_j;
         RealType delta_lambda = (lambda_plane_i - lambda_plane_j)*cutoff + (lambda_offset_i - lambda_offset_j)*lambda;
 
-        dxs[3] = delta_lambda; 
+        dxs[3] = delta_lambda;
         RealType r = fast_vec_norm<RealType, 4>(dxs);
 
         if (atom_j_idx != atom_i_idx && r < cutoff && atom_j_idx < N && atom_i_idx < N) {
@@ -547,7 +547,7 @@ __global__ void k_compute_born_energy_and_forces(
                 //        l_ij          = 1.0/l_ij;
                 // RealType u_ij          = 1.0/rScaledRadiusJ;
                 // RealType l_ij2         = l_ij*l_ij;
-                // RealType u_ij2         = u_ij*u_ij; 
+                // RealType u_ij2         = u_ij*u_ij;
                 // RealType rInverse      = 1.0/r;
                 // RealType r2Inverse     = rInverse*rInverse;
                 // RealType t3            = 0.125*(1.0 + scaledRadiusJ2*r2Inverse)*(l_ij2 - u_ij2) + 0.25*log(u_ij/l_ij)*r2Inverse;

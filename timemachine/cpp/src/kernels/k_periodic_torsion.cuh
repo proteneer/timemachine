@@ -144,4 +144,3 @@ void __global__ k_periodic_torsion(
     }
 
 }
-

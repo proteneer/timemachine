@@ -5,11 +5,9 @@
 
 namespace timemachine {
 
-template<typename RealType>
-class PeriodicTorsion : public Potential {
+template <typename RealType> class PeriodicTorsion : public Potential {
 
 private:
-
     int *d_torsion_idxs_;
     int *d_lambda_mult_;
     int *d_lambda_offset_;
@@ -17,16 +15,12 @@ private:
     const int T_;
 
 public:
-
-    int num_torsions() const {
-        return T_;
-    }
+    int num_torsions() const { return T_; }
 
     PeriodicTorsion(
         const std::vector<int> &torsion_idxs,
         const std::vector<int> &lambda_mult,
-        const std::vector<int> &lambda_offset
-    );
+        const std::vector<int> &lambda_offset);
 
     ~PeriodicTorsion();
 
@@ -41,10 +35,7 @@ public:
         double *d_du_dp,
         unsigned long long *d_du_dl,
         unsigned long long *d_u,
-        cudaStream_t stream
-    ) override;
-
+        cudaStream_t stream) override;
 };
 
-
-}
+} // namespace timemachine

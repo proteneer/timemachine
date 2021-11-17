@@ -1,17 +1,15 @@
 #pragma once
 
-#include "neighborlist.hpp"
 #include "gradient.hpp"
+#include "neighborlist.hpp"
 #include "surreal.cuh"
 #include <vector>
 
 namespace timemachine {
 
-template<typename RealType>
-class GBSA : public Gradient {
+template <typename RealType> class GBSA : public Gradient {
 
 private:
-
     double *d_charge_params_;
     double *d_gb_params_;
 
@@ -51,11 +49,10 @@ private:
     const int N_;
 
 public:
-
     GBSA(
         const std::vector<double> &charge_params,
         const std::vector<double> &gb_params,
-        const std::vector<int> &lambda_plane_idxs, // N
+        const std::vector<int> &lambda_plane_idxs,  // N
         const std::vector<int> &lambda_offset_idxs, // N
         double alpha,
         double beta,
@@ -66,14 +63,11 @@ public:
         double solvent_dielectric,
         double probe_radius,
         double cutoff_radii,
-        double cutoff_force
-    );
+        double cutoff_force);
 
     ~GBSA();
 
-    int num_atoms() const {
-        return N_;
-    }
+    int num_atoms() const { return N_; }
 
     void get_du_dcharge_primals(double *buf);
     void get_du_dcharge_tangents(double *buf);
@@ -88,8 +82,7 @@ public:
         unsigned long long *d_out_coords_primals,
         double *d_out_lambda_primals,
         double *d_out_energy_primal,
-        cudaStream_t stream
-    ) override;
+        cudaStream_t stream) override;
 
     virtual void execute_lambda_jvp_device(
         const int N,
@@ -99,9 +92,7 @@ public:
         const double lambda_tangent,
         double *d_out_coords_primals,
         double *d_out_coords_tangents,
-        cudaStream_t stream
-    ) override;
+        cudaStream_t stream) override;
 };
 
-
-}
+} // namespace timemachine

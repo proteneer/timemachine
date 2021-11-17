@@ -6,15 +6,13 @@
 
 namespace timemachine {
 
-template<typename RealType>
-class LennardJones : public Potential {
+template <typename RealType> class LennardJones : public Potential {
 
 private:
-
     double *d_lj_params_; // [N, 2]
 
     int *d_exclusion_idxs_; // [E,2]
-    double *d_lj_scales_; // [E]
+    double *d_lj_scales_;   // [E]
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
 
@@ -27,14 +25,12 @@ private:
     const int N_;
 
 public:
-
     LennardJones(
-        const std::vector<int> &exclusion_idxs, // [E,2]
-        const std::vector<double> &lj_scales, // [E]
-        const std::vector<int> &lambda_plane_idxs, // N
+        const std::vector<int> &exclusion_idxs,     // [E,2]
+        const std::vector<double> &lj_scales,       // [E]
+        const std::vector<int> &lambda_plane_idxs,  // N
         const std::vector<int> &lambda_offset_idxs, // N
-        double cutoff
-    );
+        double cutoff);
 
     ~LennardJones();
 
@@ -49,11 +45,7 @@ public:
         double *d_du_dp,
         double *d_du_dl,
         double *d_u,
-        cudaStream_t stream
-    ) override;
-
-
+        cudaStream_t stream) override;
 };
 
-
-}
+} // namespace timemachine

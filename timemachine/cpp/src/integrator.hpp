@@ -7,23 +7,15 @@ namespace timemachine {
 class Integrator {
 
 public:
+    virtual ~Integrator(){};
 
-    virtual ~Integrator() {};
-
-    virtual void step_fwd(
-        double *d_x_t,
-        double *d_v_t,
-        unsigned long long *d_du_dx_t,
-        double *d_box_t_,
-        cudaStream_t stream
-    ) = 0;
-
+    virtual void
+    step_fwd(double *d_x_t, double *d_v_t, unsigned long long *d_du_dx_t, double *d_box_t_, cudaStream_t stream) = 0;
 };
 
 class LangevinIntegrator : public Integrator {
 
 private:
-
     double dt_;
     double N_;
     double ca_;
@@ -31,29 +23,15 @@ private:
     double *d_ccs_;
     double *d_noise_;
 
-    curandGenerator_t  cr_rng_;
+    curandGenerator_t cr_rng_;
 
 public:
-
-    LangevinIntegrator(
-        int N,
-        double dt,
-        double ca,
-        const double *h_cbs,
-        const double *h_ccs,
-        int seed
-    );
+    LangevinIntegrator(int N, double dt, double ca, const double *h_cbs, const double *h_ccs, int seed);
 
     virtual ~LangevinIntegrator();
 
     virtual void step_fwd(
-        double *d_x_t,
-        double *d_v_t,
-        unsigned long long *d_du_dx_t,
-        double *d_box_t_,
-        cudaStream_t stream
-    ) override;
-
+        double *d_x_t, double *d_v_t, unsigned long long *d_du_dx_t, double *d_box_t_, cudaStream_t stream) override;
 };
 
 // template<typename RealType>

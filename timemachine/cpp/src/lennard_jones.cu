@@ -106,7 +106,7 @@ void LennardJones<RealType>::execute_device(
 
         gpuErrchk(cudaMalloc(&d_perm_, N_*sizeof(*d_perm_)));
 
-        std::vector<double> lj_params(N*2);      
+        std::vector<double> lj_params(N*2);
         gpuErrchk(cudaMemcpy(&lj_params[0], d_p, N*2*sizeof(*d_p), cudaMemcpyDeviceToHost));
         std::vector<double> eps_params(N);
         for(int i=0; i < N; i++) {

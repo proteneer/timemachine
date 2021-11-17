@@ -9,7 +9,7 @@ namespace timemachine {
 
 Stepper::Stepper(int F) : streams_(F) {
     for(int i=0; i < F; i++) {
-        gpuErrchk(cudaStreamCreate(&streams_[i]));        
+        gpuErrchk(cudaStreamCreate(&streams_[i]));
     }
 
 }

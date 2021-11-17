@@ -1,6 +1,6 @@
 #pragma once
 
-template<typename RealType, int D>
+template <typename RealType, int D>
 void fast_nonbonded_normal(
     const RealType *coords,
     const RealType *coords_tangents,

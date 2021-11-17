@@ -6,12 +6,10 @@
 
 namespace timemachine {
 
-template<typename RealType>
-class Electrostatics : public Potential {
+template <typename RealType> class Electrostatics : public Potential {
 
 private:
-
-    int *d_exclusion_idxs_; // [E,2]
+    int *d_exclusion_idxs_;   // [E,2]
     double *d_charge_scales_; // [E]
 
     int *d_lambda_offset_idxs_;
@@ -25,16 +23,13 @@ private:
     const int E_;
     const int N_;
 
-
 public:
-
     Electrostatics(
-        const std::vector<int> &exclusion_idxs, // [E,2]
-        const std::vector<double> &charge_scales, // [E]
+        const std::vector<int> &exclusion_idxs,     // [E,2]
+        const std::vector<double> &charge_scales,   // [E]
         const std::vector<int> &lambda_offset_idxs, // N
-        double beta, // decay in erfc
-        double cutoff
-    );
+        double beta,                                // decay in erfc
+        double cutoff);
 
     ~Electrostatics();
 
@@ -49,11 +44,7 @@ public:
         double *d_du_dp,
         double *d_du_dl,
         double *d_u,
-        cudaStream_t stream
-    ) override;
-
-
+        cudaStream_t stream) override;
 };
 
-
-}
+} // namespace timemachine
