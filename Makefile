@@ -18,7 +18,7 @@ clean:
 	cd $(CPP_DIR) && rm -rf build/ | true
 
 ci:
-	pre-commit run --all-files && \
+	pre-commit run --all-files --show-diff-on-failure && \
 	export PYTHONPATH=$(MKFILE_DIR) && \
 	cuda-memcheck pytest $(PYTEST_CI_ARGS) tests/ && \
 	pytest $(PYTEST_CI_ARGS) slow_tests/
