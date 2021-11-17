@@ -18,4 +18,4 @@ repos:
     -   id: clang-format
         files: '^timemachine/cpp/src/'
 
-exclude: '\.pdb$|\.sdf$|\.proto$|\.xml$|^ff/params/|^parallel/grpc/'
+exclude: '\.pdb$|\.sdf$|\.proto$|\.xml$|/vendored/|^ff/params/|^parallel/grpc/'

@@ -6,7 +6,7 @@
 #include <numeric>
 #include <algorithm>
 
-#include "hilbert.h"
+#include "vendored/hilbert.h"
 #include "electrostatics.hpp"
 #include "gpu_utils.cuh"
 

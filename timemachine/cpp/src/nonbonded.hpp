@@ -1,6 +1,6 @@
 #pragma once
 
-#include "jitify.hpp"
+#include "vendored/jitify.hpp"
 #include "neighborlist.hpp"
 #include "potential.hpp"
 #include <vector>
