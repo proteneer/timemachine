@@ -6,7 +6,7 @@ from timemachine.lib import custom_ops
 
 
 class CustomOpWrapper:
-    def  __init__(self, *args):
+    def __init__(self, *args):
         # needed in case we need to modify the args.
         self.args = list(args)
         self.params = None
