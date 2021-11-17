@@ -34,7 +34,7 @@ namespace py = pybind11;
 
 template <typename RealType> void declare_neighborlist(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Neighborlist<RealType>;
+    using Class  = timemachine::Neighborlist<RealType>;
     std::string pyclass_name = std::string("Neighborlist_") + typestr;
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(py::init([](int N) { return new timemachine::Neighborlist<RealType>(N); }))
