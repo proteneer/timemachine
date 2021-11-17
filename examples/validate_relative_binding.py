@@ -297,7 +297,6 @@ if __name__ == "__main__":
             core_idxs,
             suffix,
         )
-        # ff_params, mol, core_idxs, complex_coords, complex_box, solvent_coords, solvent_box, suffix
         return results
 
     runs = []
