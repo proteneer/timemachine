@@ -1,10 +1,4 @@
-#include "gpu_utils.cuh"
-#include "k_harmonic_bond.cuh"
 #include "summed_potential.hpp"
-#include <chrono>
-#include <complex>
-#include <iostream>
-#include <vector>
 
 namespace timemachine {
 
