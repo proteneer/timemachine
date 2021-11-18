@@ -3,7 +3,7 @@
 
 namespace timemachine {
 
-template<typename RealType> 
+template<typename RealType>
 void Optimizer<RealType>::step_host(
         const int N,
         const int D,

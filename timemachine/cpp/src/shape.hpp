@@ -5,11 +5,9 @@
 
 namespace timemachine {
 
-template<typename RealType>
-class Shape : public Potential {
+template <typename RealType> class Shape : public Potential {
 
 private:
-
     const int A_;
     const int B_;
     const int N_;
@@ -31,15 +29,13 @@ private:
     double k_;
 
 public:
-
     Shape(
         const int N,
         const std::vector<int> &a_idxs,
         const std::vector<int> &b_idxs,
         const std::vector<double> &alphas,
         const std::vector<double> &weights,
-        double k
-    );
+        double k);
 
     ~Shape();
 
@@ -54,10 +50,7 @@ public:
         double *d_du_dp,
         double *d_du_dl,
         double *d_u,
-        cudaStream_t stream
-    ) override;
-
+        cudaStream_t stream) override;
 };
 
-
-}
+} // namespace timemachine

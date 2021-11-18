@@ -66,7 +66,7 @@ LambdaPotential::LambdaPotential(
     int N,
     int P,
     double multiplier,
-    double offset) : 
+    double offset) :
         u_(u), multiplier_(multiplier), offset_(offset) {
 
     gpuErrchk(cudaMalloc(&d_du_dx_buffer_, N*3*sizeof(*d_du_dx_buffer_)));

@@ -23,7 +23,7 @@ Restraint<RealType>::Restraint(
     if(params.size() % 3 != 0) {
         throw std::runtime_error("params.size() must be exactly 3*B");
     }
-    
+
     if(params.size()/3 != B_) {
         throw std::runtime_error("params.size() must be equal to B*3");
     }

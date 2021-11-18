@@ -10,7 +10,6 @@ namespace timemachine {
 class InterpolatedPotential : public Potential {
 
 private:
-
     std::shared_ptr<Potential> u_;
 
     double *d_p_interpolated_;
@@ -22,13 +21,8 @@ private:
     double *d_du_dp_buffer_;
     double *d_du_dl_buffer_;
 
-public: 
-
-    InterpolatedPotential(
-        std::shared_ptr<Potential> u,
-        int N,
-        int P
-    );
+public:
+    InterpolatedPotential(std::shared_ptr<Potential> u, int N, int P);
 
     ~InterpolatedPotential();
 
@@ -43,9 +37,7 @@ public:
         double *d_du_dp,
         double *d_du_dl,
         double *d_u,
-        cudaStream_t stream
-    ) override;
-
+        cudaStream_t stream) override;
 };
 
-}
+} // namespace timemachine

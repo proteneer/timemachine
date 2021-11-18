@@ -5,11 +5,9 @@
 namespace timemachine {
 
 // enable 64bit stuff later
-template<typename RealType>
-class Neighborlist {
+template <typename RealType> class Neighborlist {
 
 private:
-
     const int N_;
 
     double *d_block_bounds_ctr_;
@@ -21,28 +19,16 @@ private:
     unsigned int *d_trim_atoms_;
 
 public:
-
     // N - number of atoms
-    Neighborlist(
-        int N
-    );
+    Neighborlist(int N);
 
     ~Neighborlist();
 
-    std::vector<std::vector<int> > get_nblist_host(
-        int N,
-        const double *h_coords,
-        const double *h_box,
-        const double cutoff
-    );
+    std::vector<std::vector<int>>
+    get_nblist_host(int N, const double *h_coords, const double *h_box, const double cutoff);
 
     void build_nblist_device(
-        const int N,
-        const double *d_coords,
-        const double *d_box,
-        const double cutoff,
-        cudaStream_t stream
-    );
+        const int N, const double *d_coords, const double *d_box, const double cutoff, cudaStream_t stream);
 
     void compute_block_bounds_host(
         const int N,
@@ -51,41 +37,21 @@ public:
         const double *h_coords,
         const double *h_box,
         double *h_bb_ctrs,
-        double *h_bb_exts
-    );
+        double *h_bb_exts);
 
-    unsigned int* get_ixn_atoms() {
-        return d_ixn_atoms_;
-    }
+    unsigned int *get_ixn_atoms() { return d_ixn_atoms_; }
 
-    int* get_ixn_tiles() {
-        return d_ixn_tiles_;
-    }
+    int *get_ixn_tiles() { return d_ixn_tiles_; }
 
-    unsigned int* get_ixn_count() {
-        return d_ixn_count_;
-    }
+    unsigned int *get_ixn_count() { return d_ixn_count_; }
 
     // get max number of blocks
-    int B() const {
-        return (N_+32-1)/32;
-    }
+    int B() const { return (N_ + 32 - 1) / 32; }
 
 private:
+    int Y() const { return (this->B() + 32 - 1) / 32; }
 
-    int Y() const {
-        return (this->B()+32-1)/32;
-    }
-
-    void compute_block_bounds_device(
-        int N,
-        int D,
-        const double *coords,
-        const double *box,
-        cudaStream_t stream
-    );
-
-
+    void compute_block_bounds_device(int N, int D, const double *coords, const double *box, cudaStream_t stream);
 };
 
-}
+} // namespace timemachine

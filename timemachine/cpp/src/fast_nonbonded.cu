@@ -99,7 +99,7 @@ void fast_nonbonded_normal(
         for(int i=0; i<h_host_coords.size(); i++) {
             out_coords[i] = static_cast<RealType>(static_cast<signed long long>(h_host_coords[i]))/0x100000000;;
         }
-        
+
     } else {
 
         assert(out_coords == nullptr);

@@ -5,11 +5,9 @@
 
 namespace timemachine {
 
-template<typename RealType>
-class Restraint : public Gradient {
+template <typename RealType> class Restraint : public Gradient {
 
 private:
-
     int *d_bond_idxs_;
 
     int *d_lambda_flags_;
@@ -22,7 +20,6 @@ private:
     const int B_;
 
 public:
-
     Restraint(
         const std::vector<int> &bond_idxs, // [b, 2]
         const std::vector<double> &params,
@@ -30,10 +27,7 @@ public:
 
     ~Restraint();
 
-    int num_bonds() const {
-        return B_;
-    }
-
+    int num_bonds() const { return B_; }
 
     void get_du_dp_primals(double *buf);
 
@@ -46,9 +40,7 @@ public:
         unsigned long long *d_out_coords_primals,
         double *d_out_lambda_primals,
         double *d_out_energy_primal,
-        cudaStream_t stream
-    ) override;
-
+        cudaStream_t stream) override;
 
     virtual void execute_lambda_jvp_device(
         const int N,
@@ -58,10 +50,7 @@ public:
         const double lambda_tangent,
         double *d_out_coords_primals,
         double *d_out_coords_tangents,
-        cudaStream_t stream
-    ) override;
-
+        cudaStream_t stream) override;
 };
 
-
-}
+} // namespace timemachine

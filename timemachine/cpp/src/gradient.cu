@@ -45,7 +45,7 @@ void Potential::execute_host(
 
     this->execute_device(
         N,
-        d_x, 
+        d_x,
         lambda,
         d_du_dx,
         d_du_dl,
@@ -96,7 +96,7 @@ void Potential::execute_host(
 
 //     this->execute_lambda_jvp_device(
 //         N,
-//         d_in_coords_primals, 
+//         d_in_coords_primals,
 //         d_in_coords_tangents,
 //         lambda_primal,
 //         lambda_tangent,
@@ -117,4 +117,3 @@ void Potential::execute_host(
 // };
 
 }
-

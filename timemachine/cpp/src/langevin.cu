@@ -60,7 +60,7 @@
 //     const RealType coeff_a,
 //     const RealType *coeff_bs, // shape N
 //     const RealType coeff_d,
-//     const RealType *d2E_dxdp, 
+//     const RealType *d2E_dxdp,
 //     const RealType dt,
 //     const int N,
 //     const int D,
@@ -91,7 +91,7 @@
 // namespace timemachine {
 
 
-// template<typename RealType> 
+// template<typename RealType>
 // LangevinOptimizer<RealType>::LangevinOptimizer(
 //     RealType dt,
 //     const int num_dims,
@@ -126,7 +126,7 @@
 // }
 
 
-// template<typename RealType> 
+// template<typename RealType>
 // LangevinOptimizer<RealType>::~LangevinOptimizer() {
 //     gpuErrchk(cudaFree(d_coeff_bs_));
 //     gpuErrchk(cudaFree(d_coeff_cs_));
@@ -136,12 +136,12 @@
 //     curandErrchk(curandDestroyGenerator(cr_rng_));
 // }
 
-// template<typename RealType> 
+// template<typename RealType>
 // RealType LangevinOptimizer<RealType>::get_dt() const {
 //     return dt_;
 // }
 
-// template<typename RealType> 
+// template<typename RealType>
 // void LangevinOptimizer<RealType>::step(
 //     const int N,
 //     const int D,
@@ -209,7 +209,7 @@
 
 // }
 
-// template<typename RealType> 
+// template<typename RealType>
 // void LangevinOptimizer<RealType>::hessian_vector_product(
 //     const int N,
 //     const int D,
@@ -297,25 +297,25 @@
 
 //         // cusparseErrchk(cusparseDense2csr(handle, ND, ND, descr_A, d_A, ND, d_A_nnz_per_row,
 //             // d_sparse_A, d_sparse_A_rowptr, d_sparse_A_colptr));
- 
 
-//         auto start4 = std::chrono::high_resolution_clock::now(); 
+
+//         auto start4 = std::chrono::high_resolution_clock::now();
 //         cusparseErrchk(cusparseDense2csr(handle, N_offset, N_offset, descr_A, d_A, ND, d_A_nnz_per_row,
 //             d_sparse_A, d_sparse_A_rowptr, d_sparse_A_colptr));
 
 
 //         cudaDeviceSynchronize();
-//         auto stop4 = std::chrono::high_resolution_clock::now(); 
-//         auto duration4 = std::chrono::duration_cast<std::chrono::microseconds>(stop4 - start4); 
+//         auto stop4 = std::chrono::high_resolution_clock::now();
+//         auto duration4 = std::chrono::duration_cast<std::chrono::microseconds>(stop4 - start4);
 //         // std::cout << "dense hessian to sparse duration for hessians: " << duration4.count() << std::endl;
 
-//         auto start3 = std::chrono::high_resolution_clock::now(); 
+//         auto start3 = std::chrono::high_resolution_clock::now();
 //         cusparseErrchk(cusparseDense2csr(handle, N_offset, DP, descr_B, d_B, ND, d_B_nnz_per_row,
 //             d_sparse_B, d_sparse_B_rowptr, d_sparse_B_colptr));
 
 //         cudaDeviceSynchronize();
-//         auto stop3 = std::chrono::high_resolution_clock::now(); 
-//         auto duration3 = std::chrono::duration_cast<std::chrono::microseconds>(stop3 - start3); 
+//         auto stop3 = std::chrono::high_resolution_clock::now();
+//         auto duration3 = std::chrono::duration_cast<std::chrono::microseconds>(stop3 - start3);
 //         // std::cout << "dense hessian to sparse duration for PN3: " << duration3.count() << std::endl;
 
 //         // std::cout << "A" << std::endl;
@@ -354,26 +354,26 @@
 //         gpuErrchk(cudaMalloc((void**)&d_sparse_C_colptr, sizeof(int)*nnzC));
 //         gpuErrchk(cudaMalloc((void**)&d_sparse_C, sizeof(RealType)*nnzC));
 
-//         auto start = std::chrono::high_resolution_clock::now(); 
+//         auto start = std::chrono::high_resolution_clock::now();
 //         cusparseErrchk(cusparseCsrgemm(handle2, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, ND, DP, ND,
 //                 descr_A, total_A, d_sparse_A, d_sparse_A_rowptr, d_sparse_A_colptr,
 //                 descr_B, total_B, d_sparse_B, d_sparse_B_rowptr, d_sparse_B_colptr,
 //                 descr_C, d_sparse_C, d_sparse_C_rowptr, d_sparse_C_colptr));
 
 //         cudaDeviceSynchronize();
-//         auto stop = std::chrono::high_resolution_clock::now(); 
-//         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start); 
+//         auto stop = std::chrono::high_resolution_clock::now();
+//         auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start);
 //         std::cout << "sparse duration: " << duration.count() << std::endl;
 //         throw std::runtime_error("Debug");
 
 //     }
 
 //     RealType alpha = 1.0;
-//     RealType beta  = 1.0;   
+//     RealType beta  = 1.0;
 //     // this is set to UPPER because of fortran ordering
 //     // furthermore, we assume the atoms are compacted with ligands at the front, such that we do a subset
 //     // where N_offset = (NUM_ATOMS*3)+(NUM_LIGAND_ATOMS)
-//     auto start2 = std::chrono::high_resolution_clock::now(); 
+//     auto start2 = std::chrono::high_resolution_clock::now();
 //     cublasErrchk(templateSymm(cb_handle_,
 //         CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_UPPER,
 //         N_offset, DP,
@@ -385,7 +385,7 @@
 
 //     cudaDeviceSynchronize();
 //     auto stop2 = std::chrono::high_resolution_clock::now();
-//     auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(stop2 - start2); 
+//     auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(stop2 - start2);
 //     // std::cout << "dense duration: " << duration2.count() << std::endl;
 // }
 

@@ -1,0 +1,8 @@
+BasedOnStyle: LLVM
+ColumnLimit: 120
+IndentWidth: 4
+AlignAfterOpenBracket: AlwaysBreak
+BinPackArguments: false
+BinPackParameters: false
+AccessModifierOffset: -4
+ReflowComments: false

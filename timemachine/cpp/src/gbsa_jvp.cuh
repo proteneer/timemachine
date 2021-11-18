@@ -1,5 +1,5 @@
 #include <stdexcept>
-#include <iostream> 
+#include <iostream>
 #include "fixed_point.hpp"
 #include "surreal.cuh"
 #include "kernel_utils.cuh"
@@ -38,7 +38,7 @@ double reduce_born_forces_jvp(
             Surreal<double> ar4          = ar2*ar2;
             Surreal<double> ratio6          = ar4*ar2;
             Surreal<double> saTerm       = surface_tension*r*r*ratio6;
-            bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI]; 
+            bornForces[atomI]  -= 6.0*saTerm/born_radii[atomI];
             Surreal<double> br2 = born_radii[atomI]*born_radii[atomI];
             Surreal<double> br4 = br2*br2;
             Surreal<double> br6 = br4*br2;
@@ -76,7 +76,7 @@ void compute_born_radii_jvp(
     }
 
     for (int i_idx = 0; i_idx < numberOfAtoms; i_idx++) {
-      
+
        double radiusI         = params[atomic_radii_idxs[i_idx]];
        double offsetRadiusI   = radiusI - dielectric_offset;
        double radiusIInverse  = 1.0/offsetRadiusI;
@@ -94,7 +94,7 @@ void compute_born_radii_jvp(
              }
              r = sqrt(r);
 
-             double offsetRadiusJ   = params[atomic_radii_idxs[j_idx]] - dielectric_offset; 
+             double offsetRadiusJ   = params[atomic_radii_idxs[j_idx]] - dielectric_offset;
              double scaledRadiusJ   = offsetRadiusJ*params[scale_factor_idxs[j_idx]];
              Surreal<double> rScaledRadiusJ  = r + scaledRadiusJ;
              Surreal<double> rSubScaledRadiusJ =  r - scaledRadiusJ;
@@ -115,7 +115,7 @@ void compute_born_radii_jvp(
 
                 Surreal<double> l_ij2    = l_ij*l_ij;
                 Surreal<double> u_ij2    = u_ij*u_ij;
- 
+
                 Surreal<double> ratio    = log((u_ij/l_ij));
                 Surreal<double> term     = l_ij - u_ij + 0.25*r*(u_ij2 - l_ij2)  + (0.5*rInverse*ratio) + (0.25*scaledRadiusJ*scaledRadiusJ*rInverse)*(l_ij2 - u_ij2);
 
@@ -134,14 +134,14 @@ void compute_born_radii_jvp(
        Surreal<double> sum2       = sum*sum;
        Surreal<double> sum3       = sum*sum2;
        Surreal<double> tanhSum    = tanh(alpha_obc*sum - beta_obc*sum2 + gamma_obc*sum3);
- 
-       born_radii[i_idx]      = 1.0/(1.0/offsetRadiusI - tanhSum/radiusI); 
+
+       born_radii[i_idx]      = 1.0/(1.0/offsetRadiusI - tanhSum/radiusI);
 
        // dRi/dPsi
        obc_chain[i_idx]       = (alpha_obc - 2.0*beta_obc*sum + 3.0*gamma_obc*sum2); // !@#$ why did you move it here!
        obc_chain[i_idx]       = (1.0 - tanhSum*tanhSum)*obc_chain[i_idx]/radiusI; // this takes care of the radiusI prefactor
        obc_chain[i_idx]      *= born_radii[i_idx]*born_radii[i_idx];
-       
+
        // dRi/dri
        obc_chain_ri[i_idx]    = 1.0/(offsetRadiusI*offsetRadiusI) - tanhSum/(radiusI*radiusI);
        obc_chain_ri[i_idx]   *= born_radii[i_idx]*born_radii[i_idx];
@@ -171,7 +171,7 @@ double compute_born_first_loop_jvp(
     // double preFactor;
 
     // if (soluteDielectric != 0.0 && solventDielectric != 0.0) {
-    //     preFactor = -screening*((1.0/soluteDielectric) - (1.0/solventDielectric));    
+    //     preFactor = -screening*((1.0/soluteDielectric) - (1.0/solventDielectric));
     // } else {
     //     preFactor = 0.0;
     // }
@@ -179,7 +179,7 @@ double compute_born_first_loop_jvp(
     std::vector<Surreal<double> > charge_derivs(N, Surreal<double>(0, 0));
 
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
- 
+
         double partialChargeI = params[charge_param_idxs[atomI]];
         for (int atomJ = atomI; atomJ < numberOfAtoms; atomJ++) {
 
@@ -195,13 +195,13 @@ double compute_born_first_loop_jvp(
             Surreal<double> D_ij               = r2/(4.0*alpha2_ij);
 
             Surreal<double> expTerm            = exp(-D_ij);
-            Surreal<double> denominator2       = r2 + alpha2_ij*expTerm; 
+            Surreal<double> denominator2       = r2 + alpha2_ij*expTerm;
             Surreal<double> denominator        = sqrt(denominator2);
 
             double partialChargeJ     = params[charge_param_idxs[atomJ]];
-            Surreal<double> Gpol               = (prefactor*partialChargeI*partialChargeJ)/denominator; 
+            Surreal<double> Gpol               = (prefactor*partialChargeI*partialChargeJ)/denominator;
 
-            Surreal<double> dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;  
+            Surreal<double> dGpol_dr           = -Gpol*(1.0 - 0.25*expTerm)/denominator2;
             Surreal<double> dGpol_dalpha2_ij   = -0.5*Gpol*expTerm*(1.0 + D_ij)/denominator2;
 
             // printf("%d %d dGpol_dalpha2_ij %f\n", atomI, atomJ, dGpol_dalpha2_ij);
@@ -275,7 +275,7 @@ double compute_born_energy_and_forces_jvp(
     std::vector<Surreal<double> > dPsi_dsi(N, Surreal<double>(0, 0));
 
     for (int atomI = 0; atomI < numberOfAtoms; atomI++) {
- 
+
        // radius w/ dielectric offset applied
 
        double radiusI        = params[atomic_radii_idxs[atomI]];
@@ -320,7 +320,7 @@ double compute_born_energy_and_forces_jvp(
                 //        l_ij          = 1.0/l_ij;
                 // double u_ij          = 1.0/rScaledRadiusJ;
                 // double l_ij2         = l_ij*l_ij;
-                // double u_ij2         = u_ij*u_ij; 
+                // double u_ij2         = u_ij*u_ij;
                 // double rInverse      = 1.0/r;
                 // double r2Inverse     = rInverse*rInverse;
                 // double t3            = 0.125*(1.0 + scaledRadiusJ2*r2Inverse)*(l_ij2 - u_ij2) + 0.25*log(u_ij/l_ij)*r2Inverse;
@@ -426,4 +426,3 @@ double compute_born_energy_and_forces_jvp(
 
 
 }
-

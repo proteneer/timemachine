@@ -6,7 +6,7 @@ map_generation:
   forcefield: ff/params/smirnoff_1_1_0_ccc.py
   ligands:
     - datasets/fep-benchmark/hif2a/ligands.sdf
-  # Cores and hubs must be in the same order. 
+  # Cores and hubs must be in the same order.
   cores:
     - method: smarts
       smarts: "[*]~1~[*]~[*]~2~[*]~[*]~[*]~[*](~[#8]~[*]~3~[*]~[*]~[*]~[*]~[*]~3)~[*]~2~[*]~1"

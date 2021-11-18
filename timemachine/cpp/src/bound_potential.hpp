@@ -14,8 +14,7 @@ struct BoundPotential {
         // Potential *potential,
         std::shared_ptr<Potential> potential,
         std::vector<int> shape,
-        const double *h_p
-    );
+        const double *h_p);
 
     ~BoundPotential();
 
@@ -32,8 +31,7 @@ struct BoundPotential {
         const double lambda, // lambda
         unsigned long long *h_du_dx,
         unsigned long long *h_du_dl,
-        unsigned long long *h_u
-    );
+        unsigned long long *h_u);
 
     void execute_device(
         const int N,
@@ -46,21 +44,8 @@ struct BoundPotential {
         unsigned long long *d_u,
         cudaStream_t stream) {
         this->potential->execute_device(
-            N,
-            this->size(),
-            d_x,
-            this->d_p,
-            d_box,
-            lambda,
-            d_du_dx,
-            d_du_dp,
-            d_du_dl,
-            d_u,
-            stream
-        );
+            N, this->size(), d_x, this->d_p, d_box, lambda, d_du_dx, d_du_dp, d_du_dl, d_u, stream);
     }
-
 };
-
 
 } // namespace timemachine

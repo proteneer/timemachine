@@ -59,7 +59,7 @@ void __global__ k_reduce_vol_buffer(
 
     if(threadIdx.x > 0) {
         return;
-    } 
+    }
 
     if(u) {
         double v = 2*f_buf[0]/(g_buf[0] + h_buf[0]);

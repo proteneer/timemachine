@@ -239,7 +239,7 @@ void grad_eigh(
 
     Reference implementation of the vector jacobian product of the derivative of column
     eigenvectors with respect to the input matrix. This code is derived from perturbation theory,
-    and originally ported over from autograd in a long series of conversions. 
+    and originally ported over from autograd in a long series of conversions.
     */
 
     double off_diag[3][3] = {
@@ -323,7 +323,7 @@ void InertialRestraint<RealType>::execute_device(
     // (ytz): This function proceeds as follows:
     // 0. (GPU) Gather a subset of the coordinates that will be used
     // 1. (GPU->CPU) Copy only coordinates for atoms in c_idxs
-    // 2. (CPU) Scatter gathered coordinates 
+    // 2. (CPU) Scatter gathered coordinates
     // 3. (CPU) Compute the 3x3 inertia tensor (real and symmetric) for each set of indices..
     // 4. (CPU) Solve for the eigenvalues and eigenvector analytically. Sorted in ascending order.
     // 5. (CPU) Compute the energy function function using the paired column eigenvectors.
@@ -339,7 +339,7 @@ void InertialRestraint<RealType>::execute_device(
 
     k_gather_x<<<dimGather, tpb>>>(d_x, N_C_, d_c_idxs_, d_x_memcpy_buf_);
     gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaMemcpy(h_x_memcpy_buf_pinned_, d_x_memcpy_buf_, N_C_*3*sizeof(*d_x_memcpy_buf_), cudaMemcpyDeviceToHost));    
+    gpuErrchk(cudaMemcpy(h_x_memcpy_buf_pinned_, d_x_memcpy_buf_, N_C_*3*sizeof(*d_x_memcpy_buf_), cudaMemcpyDeviceToHost));
 
     std::vector<double> &h_x_in = h_x_buffer_;
     for(int i=0; i < h_c_idxs_.size(); i++) {
@@ -418,7 +418,7 @@ void InertialRestraint<RealType>::execute_device(
     gpuErrchk(cudaMemcpy(d_x_memcpy_buf_, h_x_memcpy_buf_pinned_, N_C_*3*sizeof(*d_x_memcpy_buf_), cudaMemcpyHostToDevice));
 
     if(d_u) {
-        k_atomic_add<<<1, 1, 0>>>(d_u, loss*k_);        
+        k_atomic_add<<<1, 1, 0>>>(d_u, loss*k_);
         gpuErrchk(cudaPeekAtLastError());
     }
 

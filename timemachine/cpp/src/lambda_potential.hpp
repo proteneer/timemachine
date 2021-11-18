@@ -10,7 +10,6 @@ namespace timemachine {
 class LambdaPotential : public Potential {
 
 private:
-
     std::shared_ptr<Potential> u_;
 
     unsigned long long *d_du_dx_buffer_;
@@ -22,14 +21,7 @@ private:
     double offset_;
 
 public:
-
-    LambdaPotential(
-        std::shared_ptr<Potential> u,
-        int N,
-        int P,
-        double multiplier,
-        double offset
-    );
+    LambdaPotential(std::shared_ptr<Potential> u, int N, int P, double multiplier, double offset);
 
     ~LambdaPotential();
 
@@ -44,9 +36,7 @@ public:
         double *d_du_dp,
         double *d_du_dl,
         double *d_u,
-        cudaStream_t stream
-    ) override;
-
+        cudaStream_t stream) override;
 };
 
-}
+} // namespace timemachine

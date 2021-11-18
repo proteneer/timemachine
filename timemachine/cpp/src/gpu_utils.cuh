@@ -5,13 +5,13 @@
 #include "curand.h"
 
 curandStatus_t templateCurandNormal(
-    curandGenerator_t generator, 
-    float *outputPtr, size_t n, 
+    curandGenerator_t generator,
+    float *outputPtr, size_t n,
     float mean, float stddev);
 
 curandStatus_t templateCurandNormal(
-    curandGenerator_t generator, 
-    double *outputPtr, size_t n, 
+    curandGenerator_t generator,
+    double *outputPtr, size_t n,
     double mean, double stddev);
 
 
@@ -21,7 +21,7 @@ curandStatus_t templateCurandNormal(
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
-   if (code != cudaSuccess) 
+   if (code != cudaSuccess)
    {
       fprintf(stderr,"GPUassert: %s %s %d\n", cudaGetErrorString(code), file, line);
       if (abort) exit(code);
@@ -31,7 +31,7 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 #define curandErrchk(ans) { curandAssert((ans), __FILE__, __LINE__); }
 inline void curandAssert(curandStatus_t code, const char *file, int line, bool abort=true)
 {
-   if (code != CURAND_STATUS_SUCCESS) 
+   if (code != CURAND_STATUS_SUCCESS)
    {
       fprintf(stderr,"curand failure, code: %d %s %d\n", code, file, line);
       if (abort) exit(code);

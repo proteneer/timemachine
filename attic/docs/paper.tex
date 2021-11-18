@@ -84,7 +84,7 @@ $S_n^a$ is the geometric series of $n$ terms of $a$. Observe that we only need t
 D_{\theta} \grad E(\bm{x}_0)(1+a+a^2+...+a^t) \approx D_{\theta} \grad E(\bm{x}_0)(1+a+a^2+...+a^{t-1})
 \end{equation}
 
-Suppose it takes $k$ steps for the geometric series converge to numerical accuracy. This allows us to maintain a rolling window of only size $O(k)$ for unconverged $\zeta$ values. The converged $\zeta$ terms can be reduced and thus require only $O(1)$ extra space. In practice, $k \approx 4000$, so the over all algorithm becomes becomes $O(1)$ in memory and $O(t)$ in time. 
+Suppose it takes $k$ steps for the geometric series converge to numerical accuracy. This allows us to maintain a rolling window of only size $O(k)$ for unconverged $\zeta$ values. The converged $\zeta$ terms can be reduced and thus require only $O(1)$ extra space. In practice, $k \approx 4000$, so the over all algorithm becomes becomes $O(1)$ in memory and $O(t)$ in time.
 
 % With this machinery in place, we can now use some additional tricks to regularize the fitting process, such as enforcing that for all ergodic systems, the time averaged observable must be equal to the ensemble averaged observable. The exact method is that we use reservoir sampling to draw from the time average, and the last time slice of a replica simulation to generate the ensemble average.
 

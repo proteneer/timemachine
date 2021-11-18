@@ -4,7 +4,6 @@
 
 // namespace timemachine {
 
-
 // // immutable, stateless class with only const methods
 // template <typename RealType>
 // class LangevinOptimizer : public Optimizer<RealType> {

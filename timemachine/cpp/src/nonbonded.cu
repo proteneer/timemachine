@@ -6,10 +6,10 @@
 #include <complex>
 #include <cstdlib>
 #include <cub/cub.cuh>
-#include "jitify.hpp"
+#include "vendored/jitify.hpp"
 
 #include "nonbonded.hpp"
-#include "hilbert.h"
+#include "vendored/hilbert.h"
 #include "gpu_utils.cuh"
 
 #include "k_nonbonded.cuh"

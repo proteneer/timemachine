@@ -83,4 +83,3 @@ template<typename RealType>
 unsigned long long __device__ __forceinline__ FLOAT_TO_FIXED_BONDED(RealType v) {
     return static_cast<unsigned long long>(real_to_int64(v*FIXED_EXPONENT));
 }
-
