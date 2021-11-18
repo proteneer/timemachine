@@ -2,8 +2,10 @@
 
 from jax import jit, vmap, numpy as np
 from jax.scipy.special import logsumexp
+from scipy.optimize import bisect
 
 from typing import Tuple, Callable
+
 Float = float
 Array = np.array
 
@@ -14,6 +16,7 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Call
     produce linear interpolated estimates of u(xs[n], lam)
     at arbitrary new values lam
     """
+
     def u_interp(u_n: Array, lam: Float) -> Float:
         return np.nan_to_num(np.interp(lam, lambdas, u_n), nan=+np.inf, posinf=+np.inf)
 
@@ -82,3 +85,43 @@ def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array
     stddev = np.sqrt(np.sum(sanitized))
 
     return stddev
+
+
+StepAssessor = Callable[[Float, Float], Float]
+
+
+def greedily_optimize_protocol(assess_lambda_pair: StepAssessor, max_iterations=1000) -> Array:
+    """Optimize a lambda protocol from "left to right"
+
+    Sequentially pick next_lam so that
+    assess_lambda_pair(prev_lam, next_lam) ~= 0
+
+    assess_lambda_pair(prev_lam, next_lam) might compute
+    some measure of distance between p(x | prev_lam) and p(x | next_lam)
+    and compare that distance to a desired spacing `distance - target_distance`
+        (returning a negative number if too close, a positive number if too far)
+    """
+    protocol = [0.0]
+
+    for t in range(max_iterations):
+        prev_lam = protocol[-1]
+
+        # can we directly jump to the end?
+        if assess_lambda_pair(prev_lam, 1.0) < 0:
+            break
+
+        # otherwise, binary search for next
+        next_lam = bisect(
+            f=lambda trial_lam: assess_lambda_pair(prev_lam, trial_lam),
+            a=prev_lam,
+            b=1.0,
+        )
+        protocol.append(next_lam)
+
+        if t == max_iterations - 1:
+            print(UserWarning('Exceeded max_iterations!'))
+
+    if protocol[-1] != 1.0:
+        protocol.append(1.0)
+
+    return np.array(protocol)
