@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bound_potential.hpp"
 #include "potential.hpp"
 
 namespace timemachine {
@@ -7,12 +8,10 @@ namespace timemachine {
 class SummedPotential : public Potential {
 
 private:
-    Potential &u_a;
-    Potential &u_b;
-    int P_a; // number of parameters for first potential
+    const std::vector<BoundPotential *> bps_;
 
 public:
-    SummedPotential(Potential &u_a, Potential &u_b, const int P_a);
+    SummedPotential(const std::vector<BoundPotential *> bps);
 
     virtual void execute_device(
         const int N,

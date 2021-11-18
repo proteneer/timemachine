@@ -10,6 +10,7 @@
 #include "harmonic_bond.hpp"
 #include "potential.hpp"
 #include "rmsd_align.hpp"
+#include "summed_potential.hpp"
 // #include "lambda_potential.hpp"
 // #include "interpolated_potential.hpp"
 // #include "restraint.hpp"
@@ -940,6 +941,18 @@ void declare_barostat(py::module &m) {
         .def("set_pressure", &timemachine::MonteCarloBarostat::set_pressure);
 }
 
+void declare_summed_potential(py::module &m) {
+
+    using Class = timemachine::SummedPotential;
+    std::string pyclass_name = std::string("SummedPotential");
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init(
+                [](std::vector<timemachine::BoundPotential *> bps) { return new timemachine::SummedPotential(bps); }),
+            py::arg("bound_potentials"));
+}
+
 const py::array_t<double, py::array::c_style>
 py_rmsd_align(const py::array_t<double, py::array::c_style> &x1, const py::array_t<double, py::array::c_style> &x2) {
 
@@ -984,6 +997,7 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_potential(m);
     declare_bound_potential(m);
+    declare_summed_potential(m);
     // declare_lambda_potential(m);
     // declare_interpolated_potential(m);
 
