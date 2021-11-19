@@ -5,12 +5,15 @@ from fe.free_energy_rabfe import (
     RABFEResult,
     setup_relative_restraints_by_distance,
     setup_relative_restraints_using_smarts,
+    validate_lambda_schedule,
 )
 from fe.atom_mapping import CompareDistNonterminal
 from fe.utils import get_romol_conf
 
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdFMCS
+
+import pytest
 
 
 def capture_print(closure):
@@ -88,3 +91,22 @@ def test_setting_up_restraints_using_smarts():
 
     core = setup_relative_restraints_using_smarts(mol_a, mol_b, result.smartsString)
     assert core.shape == (2, 2)
+
+
+def test_validate_lambda_schedule():
+    """check that assertions fail when they should"""
+    for K in [50, 64]:
+        good_lambda_schedule = np.linspace(0, 1, K)
+        reversed_schedule = good_lambda_schedule[::-1]
+        truncated_schedule = good_lambda_schedule[1:]
+
+        validate_lambda_schedule(good_lambda_schedule, K)
+
+        with pytest.raises(AssertionError):
+            validate_lambda_schedule(reversed_schedule, K)
+
+        with pytest.raises(AssertionError):
+            validate_lambda_schedule(truncated_schedule, K - 1)
+
+        with pytest.raises(AssertionError):
+            validate_lambda_schedule(truncated_schedule, K)
