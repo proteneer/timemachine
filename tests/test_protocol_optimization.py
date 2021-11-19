@@ -23,7 +23,7 @@ def test_rebalance_initial_protocol():
         mbar.f_k,
         mbar.u_kn,
         mbar.N_k,
-        work_stddev_threshold=0.5,
+        work_stddev_threshold=0.25,
     )
 
     # for a fair comparison, re-run initial protocol with same number of lambda windows as new_protocol
