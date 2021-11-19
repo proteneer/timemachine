@@ -1,4 +1,45 @@
-"""Protocol optimization"""
+"""Offline protocol optimization
+
+Setting
+-------
+Given simulation results from an initial alchemical protocol, we would like to construct a new protocol
+whose intermediates are more "evenly spaced" according to something like "thermodynamic distance".
+
+Approach
+--------
+* Define a "thermodynamic distance" between two values of lambda in terms of work standard deviation:
+    "thermodynamic_distance(prev_lam, next_lam) = max(forward_work_stddev, reverse_work_stddev)"
+* Compute a deterministic approximation of this distance by reweighting initial samples,
+    and make this reweighting approximation extremely cheap by linearly interpolating previously computed energies.
+* Build a protocol "left to right" by repeatedly using bisection to place the next lambda window at a fixed
+    "thermodynamic distance" away from the previous window.
+
+References
+----------
+1. The approach is directly inspired by "thermodynamic trailblazing," developed in Andrea Rizzi's thesis
+    https://search.proquest.com/openview/0f0bda7dc135aad7216b6acecb815d3c/1.pdf?pq-origsite=gscholar&cbl=18750&diss=y
+    and implemented in Yank
+    https://github.com/choderalab/yank/blob/59fc6313b3b7d82966afc539604c36f4db9b952c/Yank/pipeline.py#L1983-L2648
+    * Similarities:
+        * Overall problem framing
+        * Notion of thermodynamic distance in terms of work standard deviation
+        * Sequential search strategy
+    * Differences:
+        * Offline rather than online
+        * "Lighter weight."
+            Requires no new simulations, requires no new calls to the potential energy function, and
+            doesn't even require to look at the stored samples.
+
+2. This implementation grew out of previous protocol optimization approaches considered in timemachine:
+    * https://github.com/proteneer/timemachine/pull/442
+        Variant of "trailblazing", greedily constructing a protocol where
+        forward work_stddev(i -> i+1) is intended to be ~ constant for all i, and where
+        approximate samples from each lambda window are generated on the fly using short simulations
+        initialized with samples from the previous lambda window.
+    * https://github.com/proteneer/timemachine/pull/437
+        Gradient-based optimization of high-dimensional protocols, using a reweighting-based estimate of a
+        a T.I.-tailored objective, stddev(du/dlambda).
+"""
 
 from jax import jit, vmap, numpy as np
 from jax.scipy.special import logsumexp
@@ -198,11 +239,13 @@ def rebalance_initial_protocol(
     # linearly interpolate previous energies
     _, vec_u_interp, vec_delta_u_interp = linear_u_kn_interpolant(lambdas_k, u_kn)
 
-    #
+    # construct function needed to place the next lambda window given the location of the previous window
     work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp, vec_delta_u_interp)
     assess_lambda_pair = partial(
         construct_heuristic_lambda_pair_assessor(work_stddev_estimator),
         desired_stddev=work_stddev_threshold,
     )
+
+    # build the protocol
     optimized_protocol = greedily_optimize_protocol(assess_lambda_pair)
     return optimized_protocol
