@@ -1,17 +1,18 @@
 #pragma once
 
-#include "bound_potential.hpp"
 #include "potential.hpp"
+#include <vector>
 
 namespace timemachine {
 
 class SummedPotential : public Potential {
 
 private:
-    const std::vector<BoundPotential *> bps_;
+    const std::vector<Potential *> potentials_;
+    const std::vector<int> param_sizes_;
 
 public:
-    SummedPotential(const std::vector<BoundPotential *> bps);
+    SummedPotential(std::vector<Potential *> potentials, std::vector<int> param_sizes);
 
     virtual void execute_device(
         const int N,

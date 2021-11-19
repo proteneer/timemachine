@@ -948,9 +948,11 @@ void declare_summed_potential(py::module &m) {
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init(
-                [](std::vector<timemachine::BoundPotential *> bps) { return new timemachine::SummedPotential(bps); }),
-            py::arg("bound_potentials"));
+            py::init([](std::vector<timemachine::Potential *> potentials, std::vector<int> param_sizes) {
+                return new timemachine::SummedPotential(potentials, param_sizes);
+            }),
+            py::arg("potentials"),
+            py::arg("param_sizes"));
 }
 
 const py::array_t<double, py::array::c_style>
