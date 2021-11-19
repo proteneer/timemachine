@@ -50,8 +50,8 @@ def test_rebalance_initial_protocol():
 
 def test_log_weights_from_mixture():
     """Assert self-consistency between
-    (1) free energy difference mbar.f_k[-1] - mbar.f_k[0] and
-    (2) free energy difference comparing endpoints to mixture"""
+    (1) delta_f from mbar.f_k[-1] - mbar.f_k[0] and
+    (2) delta_f from comparing endpoints to mixture"""
     mbar = simulate_protocol(np.linspace(0, 1, 32), seed=2021)
     source_delta_f = mbar.f_k[-1] - mbar.f_k[0]
 

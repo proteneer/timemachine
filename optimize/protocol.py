@@ -26,7 +26,7 @@ References
         * Sequential search strategy
     * Differences:
         * Offline rather than online
-        * "Lighter weight."
+        * "Lighter weight"
             Requires no new simulations, requires no new calls to the potential energy function, and
             doesn't even require to look at the stored samples.
 
