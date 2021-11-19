@@ -50,9 +50,10 @@ from scipy.optimize import bisect
 
 from functools import partial
 from typing import List, Tuple, Callable
+from numpy.typing import ArrayLike
 
 Float = float
-Array = np.array
+Array = ArrayLike
 WorkStddevEstimator = StepAssessor = Callable[[Float, Float], Float]
 
 
@@ -160,16 +161,6 @@ def construct_work_stddev_estimator(
         return stddev_estimate
 
     return work_stddev_estimator
-
-
-def construct_aggregate_work_stddev_estimator(work_stddev_estimators: List[WorkStddevEstimator]) -> WorkStddevEstimator:
-    """Given a collection of estimators, take the max estimate"""
-
-    def aggregate_work_stddev_estimator(prev_lam: Float, next_lam: Float) -> Float:
-        w_sigmas = [w_hat(prev_lam, next_lam) for w_hat in work_stddev_estimators]
-        return np.max(np.array(w_sigmas))
-
-    return aggregate_work_stddev_estimator
 
 
 def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array) -> Float:
