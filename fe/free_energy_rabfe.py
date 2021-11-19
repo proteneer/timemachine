@@ -190,8 +190,18 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         return final_potentials, final_params, combined_masses
 
 
+def validate_lambda_schedule(lambda_schedule, num_windows):
+    """Go monotonically from 0 to 1 in num_windows steps """
+    assert lambda_schedule[0] == 0.0
+    assert lambda_schedule[-1] == 1.0
+    assert len(lambda_schedule) == num_windows
+    assert ((lambda_schedule[1:] - lambda_schedule[:-1]) >= 0).all()
+
+
 def construct_conversion_lambda_schedule(num_windows):
-    return np.linspace(0, 1, num_windows)
+    lambda_schedule = np.linspace(0, 1, num_windows)
+    validate_lambda_schedule(lambda_schedule, num_windows)
+    return lambda_schedule
 
 
 def construct_absolute_lambda_schedule_complex(num_windows):
@@ -213,6 +223,8 @@ def construct_absolute_lambda_schedule_complex(num_windows):
             np.linspace(0.3, 1.0, C, endpoint=True),
         ]
     )
+
+    validate_lambda_schedule(lambda_schedule, num_windows)
 
     return lambda_schedule
 
@@ -241,7 +253,7 @@ def construct_absolute_lambda_schedule_solvent(num_windows):
         ]
     )
 
-    assert len(lambda_schedule) == num_windows
+    validate_lambda_schedule(lambda_schedule, num_windows)
 
     return lambda_schedule
 
@@ -268,7 +280,7 @@ def construct_relative_lambda_schedule(num_windows):
         ]
     )
 
-    assert len(lambda_schedule) == num_windows
+    validate_lambda_schedule(lambda_schedule, num_windows)
 
     return lambda_schedule
 
