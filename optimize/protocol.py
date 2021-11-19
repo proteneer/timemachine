@@ -4,6 +4,7 @@ from jax import jit, vmap, numpy as np
 from jax.scipy.special import logsumexp
 from scipy.optimize import bisect
 
+from functools import partial
 from typing import Tuple, Callable
 
 Float = float
@@ -11,11 +12,8 @@ Array = np.array
 
 
 def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Callable, Callable]:
-    """given a matrix u_kn[k, n] = u(xs[n], lambdas[k])
-
-    produce linear interpolated estimates of u(xs[n], lam)
-    at arbitrary new values lam
-    """
+    """Given a matrix u_kn[k, n] = u(xs[n], lambdas[k]) produce linear interpolated estimates of u(xs[n], lam)
+    at arbitrary new values lam"""
 
     def u_interp(u_n: Array, lam: Float) -> Float:
         return np.nan_to_num(np.interp(lam, lambdas, u_n), nan=+np.inf, posinf=+np.inf)
@@ -34,7 +32,7 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Call
 
 
 def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
-    """assume
+    """Assuming
     * K energy functions u_k
     * N_k samples from each state e^{-u_k} / Z_k
     * free energy estimates f_k ~= - log Z_k
@@ -44,7 +42,6 @@ def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
 
     interpret the collection of N = \sum_k N_k samples as coming from a
     mixture of states p(x) = (1 / K) \sum_k e^-u_k / Z_k
-
     """
     log_q_k = f_k - u_kn.T
     N_k = np.array(N_k, dtype=np.float64)  # may be ints, or in a list...
@@ -87,7 +84,48 @@ def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array
     return stddev
 
 
-StepAssessor = Callable[[Float, Float], Float]
+WorkStddevEstimator = StepAssessor = Callable[[Float, Float], Float]
+
+
+def construct_work_stddev_estimator(
+        reference_log_weights_n: Array,
+        vec_u: Callable,
+        vec_delta_u: Callable) -> WorkStddevEstimator:
+    """Construct reweighted estimator for stddev from a collection of reference samples"""
+
+    def work_stddev_estimator(prev_lam: Float, next_lam: Float) -> Float:
+        target_logpdf_n = - vec_u(prev_lam)
+        delta_us = vec_delta_u(prev_lam, next_lam)
+
+        stddev_estimate = reweighted_stddev(
+            f_n=delta_us,
+            target_logpdf_n=target_logpdf_n,
+            source_logpdf_n=reference_log_weights_n,
+        )
+
+        return stddev_estimate
+
+    return work_stddev_estimator
+
+
+def construct_heuristic_lambda_pair_assessor(work_stddev_estimator) -> StepAssessor:
+    """Construct a function f(prev_lam, trial_next_lam) where bisection search on second argument
+    can be used to select next_lam so that p(x|next_lam) is a specified "distance" from p(x|prev_lam)"""
+
+    def assess_lambda_pair(prev_lam, next_lam, desired_stddev=1.0, max_step=0.25):
+        """if (next_lam - prev_lam <= max_step), compute (max(forward_stddev, reverse_stddev) - desired_stddev)"""
+        too_far = next_lam - prev_lam > max_step
+        if too_far:
+            return + np.inf
+
+        # compute max of forward, reverse work stddevs
+        forward_stddev = work_stddev_estimator(prev_lam, next_lam)
+        reverse_stddev = work_stddev_estimator(next_lam, prev_lam)
+        higher_stddev = max(forward_stddev, reverse_stddev)
+
+        return higher_stddev - desired_stddev
+
+    return assess_lambda_pair
 
 
 def greedily_optimize_protocol(assess_lambda_pair: StepAssessor, max_iterations=1000) -> Array:
@@ -125,3 +163,46 @@ def greedily_optimize_protocol(assess_lambda_pair: StepAssessor, max_iterations=
         protocol.append(1.0)
 
     return np.array(protocol)
+
+
+def rebalance_initial_protocol(
+        lambdas_k: Array,
+        f_k: Array,
+        u_kn: Array,
+        N_k: Array,
+        work_stddev_threshold: Float = 1.0,
+) -> Array:
+    """Given simulation results from an initial protocol,
+    return a new protocol satisfying the heuristic
+        work_stddev(i -> i+1) <= work_stddev_threshold,
+        work_stddev(i+1 -> i) <= work_stddev_threshold
+        for all i
+
+    Parameters
+    ----------
+    lambdas_k : monotonic sequence starting at 0 and ending at 1
+    f_k : estimated reduced free energies of initial lambda windows
+    u_kn : reduced potential energies of initial samples in all initial lambda windows
+    N_k : number of samples from each initial lambda window
+    work_stddev_threshold : controls spacing of new lambda windows (smaller threshold -> tighter spacing)
+
+    Notes
+    -----
+    Applies the following approximations:
+    * u(x_n, lam) for new trial values of lam can be well-approximated by linear interpolation of u_kn
+    * stddev(prev_lam, next_lam) can be well-approximated by reweighting samples from initial protocol
+    """
+    # aggregate all samples from initial protocol
+    reference_log_weights_n = log_weights_from_mixture(u_kn, f_k, N_k)
+
+    # linearly interpolate previous energies
+    _, vec_u_interp, vec_delta_u_interp = linear_u_kn_interpolant(lambdas_k, u_kn)
+
+    #
+    work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp, vec_delta_u_interp)
+    assess_lambda_pair = partial(
+        construct_heuristic_lambda_pair_assessor(work_stddev_estimator),
+        desired_stddev=work_stddev_threshold,
+    )
+    optimized_protocol = greedily_optimize_protocol(assess_lambda_pair)
+    return optimized_protocol
