@@ -50,26 +50,52 @@ from typing import Tuple, Callable
 
 Float = float
 Array = np.array
+WorkStddevEstimator = StepAssessor = Callable[[Float, Float], Float]
 
 
-def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Callable, Callable]:
-    """Given a matrix u_kn[k, n] = u(xs[n], lambdas[k]) produce linear interpolated estimates of u(xs[n], lam)
-    at arbitrary new values lam"""
+def rebalance_initial_protocol(
+        lambdas_k: Array,
+        f_k: Array,
+        u_kn: Array,
+        N_k: Array,
+        work_stddev_threshold: Float = 1.0,
+) -> Array:
+    """Given simulation results from an initial protocol,
+    return a new protocol satisfying the heuristic
+        work_stddev(i -> i+1) <= work_stddev_threshold,
+        work_stddev(i+1 -> i) <= work_stddev_threshold
+        for all i
 
-    def u_interp(u_n: Array, lam: Float) -> Float:
-        return np.nan_to_num(np.interp(lam, lambdas, u_n), nan=+np.inf, posinf=+np.inf)
+    Parameters
+    ----------
+    lambdas_k : monotonic sequence starting at 0 and ending at 1
+    f_k : estimated reduced free energies of initial lambda windows
+    u_kn : reduced potential energies of initial samples in all initial lambda windows
+    N_k : number of samples from each initial lambda window
+    work_stddev_threshold : controls spacing of new lambda windows (smaller threshold -> tighter spacing)
 
-    @jit
-    def vec_u_interp(lam: Float) -> Array:
-        return vmap(u_interp, (1, None))(u_kn, lam)
+    Notes
+    -----
+    Applies the following approximations:
+    * u(x_n, lam) for new trial values of lam can be well-approximated by linear interpolation of u_kn
+    * stddev(prev_lam, next_lam) can be well-approximated by reweighting samples from initial protocol
+    """
+    # aggregate all samples from initial protocol
+    reference_log_weights_n = log_weights_from_mixture(u_kn, f_k, N_k)
 
-    @jit
-    def vec_delta_u(from_lam: Float, to_lam: Float) -> Array:
-        """+inf minus +inf -> 0, rather than +inf minus +inf -> nan"""
-        raw_delta_u = vec_u_interp(to_lam) - vec_u_interp(from_lam)
-        return np.nan_to_num(raw_delta_u)
+    # linearly interpolate initial energies
+    _, vec_u_interp, vec_delta_u_interp = linear_u_kn_interpolant(lambdas_k, u_kn)
 
-    return u_interp, vec_u_interp, vec_delta_u
+    # construct function needed to place the next lambda window given the location of the previous window
+    work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp, vec_delta_u_interp)
+    assess_lambda_pair = partial(
+        construct_heuristic_lambda_pair_assessor(work_stddev_estimator),
+        desired_stddev=work_stddev_threshold,
+    )
+
+    # build a new protocol one state at a time
+    optimized_protocol = greedily_optimize_protocol(assess_lambda_pair)
+    return optimized_protocol
 
 
 def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
@@ -90,42 +116,24 @@ def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
     return log_weights
 
 
-def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array) -> Float:
-    """Compute reweighted estimate of
-    stddev(f(x)) under x ~ p_target
-    based on samples   x ~ p_source
+def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Callable, Callable]:
+    """Given a matrix u_kn[k, n] = u(xs[n], lambdas[k]) produce linear interpolated estimates of u(xs[n], lam)
+    at arbitrary new values lam"""
 
-    where
-        p_target(x) = exp(target_logpdf(x)) / Z_target
+    def u_interp(u_n: Array, lam: Float) -> Float:
+        return np.nan_to_num(np.interp(lam, lambdas, u_n), nan=+np.inf, posinf=+np.inf)
 
-    using samples from a different source
-        x_n ~ p_source
-        where
-        p_source(x) = exp(source_logpdf(x)) / Z_source
+    @jit
+    def vec_u_interp(lam: Float) -> Array:
+        return vmap(u_interp, (1, None))(u_kn, lam)
 
-    The inputs are arrays "{fxn_name}_n" containing the result of
-    calling each fxn on a fixed array of samples:
+    @jit
+    def vec_delta_u(from_lam: Float, to_lam: Float) -> Array:
+        """+inf minus +inf -> 0, rather than +inf minus +inf -> nan"""
+        raw_delta_u = vec_u_interp(to_lam) - vec_u_interp(from_lam)
+        return np.nan_to_num(raw_delta_u)
 
-    * f_n = [f(x_n) for x_n in samples]
-    * target_logpdf_n = [target_logpdf(x_n) for x_n in samples]
-    * source_logpdf_n = [source_logpdf(x_n) for x_n in samples]
-    """
-
-    log_weights_n = target_logpdf_n - source_logpdf_n
-    weights = np.exp(log_weights_n - logsumexp(log_weights_n)).flatten()
-
-    f_mean = np.sum(weights * f_n)
-    squared_deviations = (f_n - f_mean) ** 2
-
-    # sanitize 0 * inf -> 0 (instead of nan)
-    weighted_squared_deviations = weights * squared_deviations
-    sanitized = np.nan_to_num(weighted_squared_deviations, nan=0)
-    stddev = np.sqrt(np.sum(sanitized))
-
-    return stddev
-
-
-WorkStddevEstimator = StepAssessor = Callable[[Float, Float], Float]
+    return u_interp, vec_u_interp, vec_delta_u
 
 
 def construct_work_stddev_estimator(
@@ -206,46 +214,36 @@ def greedily_optimize_protocol(assess_lambda_pair: StepAssessor, max_iterations=
     return np.array(protocol)
 
 
-def rebalance_initial_protocol(
-        lambdas_k: Array,
-        f_k: Array,
-        u_kn: Array,
-        N_k: Array,
-        work_stddev_threshold: Float = 1.0,
-) -> Array:
-    """Given simulation results from an initial protocol,
-    return a new protocol satisfying the heuristic
-        work_stddev(i -> i+1) <= work_stddev_threshold,
-        work_stddev(i+1 -> i) <= work_stddev_threshold
-        for all i
+def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array) -> Float:
+    """Compute reweighted estimate of
+    stddev(f(x)) under x ~ p_target
+    based on samples   x ~ p_source
 
-    Parameters
-    ----------
-    lambdas_k : monotonic sequence starting at 0 and ending at 1
-    f_k : estimated reduced free energies of initial lambda windows
-    u_kn : reduced potential energies of initial samples in all initial lambda windows
-    N_k : number of samples from each initial lambda window
-    work_stddev_threshold : controls spacing of new lambda windows (smaller threshold -> tighter spacing)
+    where
+        p_target(x) = exp(target_logpdf(x)) / Z_target
 
-    Notes
-    -----
-    Applies the following approximations:
-    * u(x_n, lam) for new trial values of lam can be well-approximated by linear interpolation of u_kn
-    * stddev(prev_lam, next_lam) can be well-approximated by reweighting samples from initial protocol
+    using samples from a different source
+        x_n ~ p_source
+        where
+        p_source(x) = exp(source_logpdf(x)) / Z_source
+
+    The inputs are arrays "{fxn_name}_n" containing the result of
+    calling each fxn on a fixed array of samples:
+
+    * f_n = [f(x_n) for x_n in samples]
+    * target_logpdf_n = [target_logpdf(x_n) for x_n in samples]
+    * source_logpdf_n = [source_logpdf(x_n) for x_n in samples]
     """
-    # aggregate all samples from initial protocol
-    reference_log_weights_n = log_weights_from_mixture(u_kn, f_k, N_k)
 
-    # linearly interpolate previous energies
-    _, vec_u_interp, vec_delta_u_interp = linear_u_kn_interpolant(lambdas_k, u_kn)
+    log_weights_n = target_logpdf_n - source_logpdf_n
+    weights = np.exp(log_weights_n - logsumexp(log_weights_n)).flatten()
 
-    # construct function needed to place the next lambda window given the location of the previous window
-    work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp, vec_delta_u_interp)
-    assess_lambda_pair = partial(
-        construct_heuristic_lambda_pair_assessor(work_stddev_estimator),
-        desired_stddev=work_stddev_threshold,
-    )
+    f_mean = np.sum(weights * f_n)
+    squared_deviations = (f_n - f_mean) ** 2
 
-    # build the protocol
-    optimized_protocol = greedily_optimize_protocol(assess_lambda_pair)
-    return optimized_protocol
+    # sanitize 0 * inf -> 0 (instead of nan)
+    weighted_squared_deviations = weights * squared_deviations
+    sanitized = np.nan_to_num(weighted_squared_deviations, nan=0)
+    stddev = np.sqrt(np.sum(sanitized))
+
+    return stddev
