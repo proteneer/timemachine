@@ -7,6 +7,7 @@ from fe.free_energy_rabfe import (
     setup_relative_restraints_using_smarts,
     validate_lambda_schedule,
     interpolate_pre_optimized_protocol,
+    construct_pre_optimized_absolute_lambda_schedule_solvent,
 )
 from fe.atom_mapping import CompareDistNonterminal
 from fe.utils import get_romol_conf
@@ -126,3 +127,9 @@ def test_interpolate_pre_optimized_protocol():
         # produce valid protocols when downsampling
         reduced = interpolate_pre_optimized_protocol(sched, K // 2)
         validate_lambda_schedule(reduced, K // 2)
+
+
+def test_pre_optimized_solvent_decoupling_schedule():
+    for K in [10, 50, 64, 128]:
+        sched = construct_pre_optimized_absolute_lambda_schedule_solvent(K)
+        validate_lambda_schedule(sched, K)
