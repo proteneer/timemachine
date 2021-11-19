@@ -150,4 +150,3 @@ void Potential::execute_host_du_dx(
 };
 
 }
-

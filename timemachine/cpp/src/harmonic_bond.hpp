@@ -5,11 +5,9 @@
 
 namespace timemachine {
 
-template<typename RealType>
-class HarmonicBond : public Potential {
+template <typename RealType> class HarmonicBond : public Potential {
 
 private:
-
     int *d_bond_idxs_;
     int *d_lambda_mult_;
     int *d_lambda_offset_;
@@ -17,14 +15,11 @@ private:
     const int B_;
 
 public:
-
-    int num_bonds() const {
-        return B_;
-    }
+    int num_bonds() const { return B_; }
 
     HarmonicBond(
-        const std::vector<int> &bond_idxs, // [B, 2]
-        const std::vector<int> &lambda_mult, // [B]
+        const std::vector<int> &bond_idxs,    // [B, 2]
+        const std::vector<int> &lambda_mult,  // [B]
         const std::vector<int> &lambda_offset // [B]
     );
 
@@ -39,12 +34,9 @@ public:
         const double lambda,
         unsigned long long *d_du_dx, // buffered
         double *d_du_dp,
-        unsigned long long *d_du_dl,  // buffered
-        unsigned long long *d_u,  // buffered
-        cudaStream_t stream
-    ) override;
-
+        unsigned long long *d_du_dl, // buffered
+        unsigned long long *d_u,     // buffered
+        cudaStream_t stream) override;
 };
 
-
-}
+} // namespace timemachine

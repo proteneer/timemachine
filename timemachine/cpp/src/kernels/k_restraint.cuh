@@ -74,8 +74,8 @@ void __global__ k_restraint_inference(
 template<typename RealType>
 void __global__ k_restraint_jvp(
     const int B,     // number of bonds
-    const double *coords,  
-    const double *coords_tangent,  
+    const double *coords,
+    const double *coords_tangent,
     const double *params,  // [p,]
     const double lambda_primal,
     const double lambda_tangent,

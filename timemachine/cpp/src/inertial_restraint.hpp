@@ -5,11 +5,9 @@
 
 namespace timemachine {
 
-template<typename RealType>
-class InertialRestraint : public Potential {
+template <typename RealType> class InertialRestraint : public Potential {
 
 private:
-
     int N_;
     int N_A_;
     int N_B_;
@@ -32,13 +30,11 @@ private:
     double k_; // force constant
 
 public:
-
     InertialRestraint(
         const std::vector<int> &group_a_idxs,
         const std::vector<int> &group_b_idxs,
         const std::vector<double> &masses,
-        const double k
-    );
+        const double k);
 
     ~InertialRestraint();
 
@@ -53,10 +49,7 @@ public:
         double *d_du_dp,
         double *d_du_dl,
         double *d_u,
-        cudaStream_t stream
-    ) override;
-
+        cudaStream_t stream) override;
 };
 
-
-}
+} // namespace timemachine

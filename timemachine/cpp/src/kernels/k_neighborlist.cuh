@@ -178,7 +178,7 @@ void __global__ k_find_blocks_with_ixns(
     ixn_j_buffer[WARPSIZE+threadIdx.x] = N;
 
     __shared__ volatile int sync_start[1];
-    
+
     const int row_block_idx = blockIdx.x;
 
     // Retrieve the center coords of row's box and outer limits of row box.
@@ -310,10 +310,10 @@ void __global__ k_find_blocks_with_ixns(
 
         //       threadIdx
         //      0 1 2 3 4 5
-        //   0  0 0 0 0 0 0 
+        //   0  0 0 0 0 0 0
         // a 1  0 1 0 1 1 0  row_atom
         // t 0  0 0 0 0 0 0
-        // o 0  0 0 0 0 0 0 
+        // o 0  0 0 0 0 0 0
         // m 0  0 0 0 0 0 0
         // f 1  1 0 0 0 1 1  row_atom
         // l 0  0 0 0 0 0 0
@@ -367,7 +367,7 @@ void __global__ k_find_blocks_with_ixns(
                 break;
             }
         }
-        
+
         // Add any interacting atoms to the buffer.
         if (interacts) {
             int index = neighborsInBuffer+__popc(includeAtomFlags & warpMask); // where to store this in shared memory
@@ -390,7 +390,7 @@ void __global__ k_find_blocks_with_ixns(
             neighborsInBuffer -= WARPSIZE;
         }
     }
-    
+
     // store trim
     const int Y = gridDim.y;
     trim_atoms[blockIdx.x*Y*WARPSIZE+blockIdx.y*WARPSIZE+threadIdx.x] = ixn_j_buffer[threadIdx.x];

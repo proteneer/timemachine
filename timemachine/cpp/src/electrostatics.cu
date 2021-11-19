@@ -6,7 +6,7 @@
 #include <numeric>
 #include <algorithm>
 
-#include "hilbert.h"
+#include "vendored/hilbert.h"
 #include "electrostatics.hpp"
 #include "gpu_utils.cuh"
 
@@ -121,7 +121,7 @@ void Electrostatics<RealType>::execute_device(
     // 1. copy over coordinates
     std::vector<double> coords(N_*3);
     gpuErrchk(cudaMemcpy(&coords[0], d_x, N_*3*sizeof(double), cudaMemcpyDeviceToHost));
- 
+
     // nblist_.build_nblist_cpu(
     //     N,
     //     D,
@@ -151,7 +151,7 @@ void Electrostatics<RealType>::execute_device(
             centered_coords[i*3+1] = y;
             centered_coords[i*3+2] = z;
         }
-        
+
         // 3. build the hilbert curve
         // if periodic
         // double minx = 0.0;
@@ -238,7 +238,7 @@ void Electrostatics<RealType>::execute_device(
 
         double vol = 1;
 
-        for(int d=0; d < 3; d++) {   
+        for(int d=0; d < 3; d++) {
             double block_row_ext = bb_ext[x*3+d];
             vol *= 2*block_row_ext*2*block_row_ext;
         }
@@ -267,7 +267,7 @@ void Electrostatics<RealType>::execute_device(
             }
 
             double block_d2ij = 0;
- 
+
             for(int d=0; d < 3; d++) {
                 double block_row_ctr = bb_ctr[x*3+d];
                 double block_row_ext = bb_ext[x*3+d];
@@ -277,7 +277,7 @@ void Electrostatics<RealType>::execute_device(
                 double dx = block_row_ctr - block_col_ctr;
                 dx -= bx[d]*floor(dx/bx[d]+static_cast<double>(0.5));
                 dx = max(static_cast<double>(0.0), fabs(dx) - (block_row_ext + block_col_ext));
-                block_d2ij += dx*dx;                
+                block_d2ij += dx*dx;
             }
 
             if(block_d2ij < cutoff_*cutoff_) {
@@ -336,7 +336,7 @@ void Electrostatics<RealType>::execute_device(
                 for(int d=0; d < 3; d++) {
                     double delta = ci[d] - cj[d];
                     delta -= box[d*3+d]*floor(delta/box[d*3+d]+0.5);
-                    dij += delta*delta;                
+                    dij += delta*delta;
                 }
 
                 dij = sqrt(dij);
@@ -373,7 +373,7 @@ void Electrostatics<RealType>::execute_device(
         //     std::sort(interacting_y_counts.begin(), interacting_y_counts.end());
 
         //     for(int q=0; q < interacting_y_counts.size(); q++) {
-        //         std::cout << "q: " << interacting_y_counts[q] << std::endl; 
+        //         std::cout << "q: " << interacting_y_counts[q] << std::endl;
         //     }
 
         //     throw std::runtime_error("debug");
@@ -382,7 +382,7 @@ void Electrostatics<RealType>::execute_device(
 
     }
 
-    std::cout << "compact tile size: " << compact_tile_size << std::endl; 
+    std::cout << "compact tile size: " << compact_tile_size << std::endl;
     // throw std::runtime_error("debug");
 
 
@@ -444,7 +444,7 @@ void Electrostatics<RealType>::execute_device(
 
     std::cout << "total ixns: " << *total_ixns << "/" << TILES*(32*32) << std::endl;
 
-    std::cout << "compact ixns: " << *total_ixns << "/" << compact_tile_size*32*32 << std::endl; 
+    std::cout << "compact ixns: " << *total_ixns << "/" << compact_tile_size*32*32 << std::endl;
 
     std::cout << "total empty tiles: " << *total_empty_tiles << "/" << tiles_x.size() << std::endl;
 

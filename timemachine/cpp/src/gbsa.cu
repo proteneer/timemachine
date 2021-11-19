@@ -1,5 +1,5 @@
 #include <stdexcept>
-#include <iostream> 
+#include <iostream>
 #include <chrono>
 #include "fixed_point.hpp"
 #include "gbsa.hpp"
@@ -405,4 +405,3 @@ template class GBSA<float>;
 
 
 }
-

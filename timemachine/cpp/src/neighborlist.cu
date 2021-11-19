@@ -78,8 +78,8 @@ void Neighborlist<RealType>::compute_block_bounds_host(
     assert(D == 3);
 
     double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*3*sizeof(double));
-    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));  
-   
+    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));
+
     this->compute_block_bounds_device(
         N,
         D,
@@ -107,7 +107,7 @@ std::vector<std::vector<int> > Neighborlist<RealType>::get_nblist_host(
     // assert(N==N_);
 
     double *d_coords = gpuErrchkCudaMallocAndCopy(h_coords, N*3*sizeof(double));
-    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));    
+    double *d_box = gpuErrchkCudaMallocAndCopy(h_box, 3*3*sizeof(double));
 
     this->build_nblist_device(
         N,

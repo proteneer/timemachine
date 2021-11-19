@@ -100,7 +100,7 @@ def truncated_step(
         using default step size {step_size:.5f}
         is lower than step_lower_bound = {step_lower_bound:.5f}
 
-        truncating step size to {alpha:.5f}, 
+        truncating step size to {alpha:.5f},
         so that the predicted f_prime(x_next) = {f_prime(x_next):.5f}"""
         print(message)
 

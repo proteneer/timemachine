@@ -5,16 +5,14 @@
 
 namespace timemachine {
 
-template<typename RealType>
-class CentroidRestraint : public Potential {
+template <typename RealType> class CentroidRestraint : public Potential {
 
 private:
-
     int *d_group_a_idxs_;
     int *d_group_b_idxs_;
 
-    unsigned long long * d_centroid_a_;
-    unsigned long long * d_centroid_b_;
+    unsigned long long *d_centroid_a_;
+    unsigned long long *d_centroid_b_;
 
     int N_A_;
     int N_B_;
@@ -23,13 +21,8 @@ private:
     double b0_;
 
 public:
-
     CentroidRestraint(
-        const std::vector<int> &group_a_idxs,
-        const std::vector<int> &group_b_idxs,
-        const double kb,
-        const double b0
-    );
+        const std::vector<int> &group_a_idxs, const std::vector<int> &group_b_idxs, const double kb, const double b0);
 
     ~CentroidRestraint();
 
@@ -44,10 +37,7 @@ public:
         double *d_du_dp,
         unsigned long long *d_du_dl,
         unsigned long long *d_u,
-        cudaStream_t stream
-    ) override;
-
+        cudaStream_t stream) override;
 };
 
-
-}
+} // namespace timemachine

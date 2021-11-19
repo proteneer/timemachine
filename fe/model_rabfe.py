@@ -9,6 +9,7 @@ from rdkit import Chem
 
 from timemachine.lib import potentials, LangevinIntegrator, MonteCarloBarostat
 from timemachine import constants
+from fe.frames import endpoint_frames_only
 from fe import free_energy_rabfe, topology, estimator_abfe, model_utils
 from ff import Forcefield
 
@@ -33,6 +34,7 @@ class AbsoluteModel(ABC):
         dt: float,
         equil_steps: int,
         prod_steps: int,
+        frame_filter: Optional[callable] = None,
     ):
 
         self.host_system = host_system
@@ -46,6 +48,9 @@ class AbsoluteModel(ABC):
         self.ff = ff
         self.equil_steps = equil_steps
         self.prod_steps = prod_steps
+        if frame_filter is None:
+            frame_filter = endpoint_frames_only
+        self.frame_filter = frame_filter
 
     def setup_topology(self, mol):
         raise NotImplementedError()
@@ -158,7 +163,7 @@ class AbsoluteModel(ABC):
             [self.host_topology, mol], model.x0, model.box, "initial_" + model.prefix + ".pdb"
         )
 
-        for lambda_idx, res in enumerate(results):
+        for lambda_idx, res in self.frame_filter(results):
             np.savez(
                 f"initial_{model.prefix}_lambda_idx_{lambda_idx}.npz",
                 xs=res.xs,
@@ -232,6 +237,7 @@ class RelativeModel(ABC):
         dt: float,
         equil_steps: int,
         prod_steps: int,
+        frame_filter: Optional[callable] = None,
     ):
 
         self.host_system = host_system
@@ -244,6 +250,9 @@ class RelativeModel(ABC):
         self.ff = ff
         self.equil_steps = equil_steps
         self.prod_steps = prod_steps
+        if frame_filter is None:
+            frame_filter = endpoint_frames_only
+        self.frame_filter = frame_filter
 
     def setup_topology(self, mol_a, mol_b):
         raise NotImplementedError()
@@ -444,7 +453,7 @@ class RelativeModel(ABC):
                 [self.host_topology, mol_a, mol_b], model.x0, model.box, f"initial_{model.prefix}.pdb"
             )
 
-            for lambda_idx, res in enumerate(results):
+            for lambda_idx, res in self.frame_filter(results):
                 np.savez(
                     f"initial_{model.prefix}_lambda_idx_{lambda_idx}.npz",
                     xs=res.xs,

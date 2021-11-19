@@ -8,8 +8,7 @@ namespace timemachine {
 class Potential {
 
 public:
-
-    virtual ~Potential() {};
+    virtual ~Potential(){};
 
     void execute_host(
         const int N,
@@ -21,8 +20,7 @@ public:
         unsigned long long *h_du_dx,
         double *h_du_dp,
         unsigned long long *h_du_dl,
-        unsigned long long *h_u
-    );
+        unsigned long long *h_u);
 
     void execute_host_du_dx(
         const int N,
@@ -31,8 +29,7 @@ public:
         const double *h_p,
         const double *h_box,
         const double lambda, // lambda
-        unsigned long long *h_du_dx
-    );
+        unsigned long long *h_du_dx);
 
     virtual void execute_device(
         const int N,
@@ -45,9 +42,7 @@ public:
         double *d_du_dp,
         unsigned long long *d_du_dl,
         unsigned long long *d_u,
-        cudaStream_t stream
-    ) = 0;
-
+        cudaStream_t stream) = 0;
 };
 
-}
+} // namespace timemachine

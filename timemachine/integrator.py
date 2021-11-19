@@ -21,7 +21,8 @@ def langevin_coefficients(temperature, dt, friction, masses):
         collision rate in 1 / picoseconds
 
     masses: array
-        mass of each atom in standard mass units
+        mass of each atom in standard mass units. np.inf masses will
+        effectively freeze the particles.
 
     Returns
     -------

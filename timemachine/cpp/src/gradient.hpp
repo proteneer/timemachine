@@ -24,7 +24,7 @@
 
 // class Potential {
 
-// public: 
+// public:
 
 //     virtual ~Gradient(parameters);
 
@@ -51,8 +51,6 @@
 //         double *d_du_dl,
 //         double *d_u
 //     ) = 0;
-
-
 
 //     // void execute_lambda_jvp_host(
 //     //     const int N,
@@ -84,8 +82,6 @@
 //     //     double *d_out_coords_tangents,
 //     //     cudaStream_t stream
 //     // ) = 0;
-
-
 
 // };
 
