@@ -114,6 +114,6 @@ def simulate_protocol(lambdas_k, n_samples_per_window=100):
     O_k, K_k = poorly_spaced_path(lambdas_k)
     testsystem = HarmonicOscillatorsTestCase(O_k, K_k)
     N_k = [n_samples_per_window] * len(O_k)
-    xs, u_kn, N_k, s_n = testsystem.sample(N_k)
+    xs, u_kn, N_k, s_n = testsystem.sample(N_k, seed=2021)
     mbar = MBAR(u_kn, N_k)
     return mbar
