@@ -50,11 +50,10 @@ from jax.scipy.special import logsumexp
 from scipy.optimize import bisect
 
 from functools import partial
-from typing import List, Tuple, Callable
-from numpy.typing import ArrayLike
+from typing import Tuple, Callable
 
 Float = float
-Array = ArrayLike
+Array = np.array
 WorkStddevEstimator = StepAssessor = Callable[[Float, Float], Float]
 
 
