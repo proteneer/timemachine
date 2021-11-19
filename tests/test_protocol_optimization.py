@@ -41,9 +41,9 @@ def test_rebalance_initial_protocol():
     old_stddev = np.std([mbar.f_k[-1] for mbar in old_mbars])
     new_stddev = np.std([mbar.f_k[-1] for mbar in new_mbars])
 
-    print(f'empirical free energy estimate stddev across {n_replicates} replicates, with # of lambda windows = {new_K}')
-    print(f'\told stddev: {old_stddev:.3f}')
-    print(f'\tnew stddev: {new_stddev:.3f}')
+    print(f"empirical free energy estimate stddev across {n_replicates} replicates, with # of lambda windows = {new_K}")
+    print(f"\told stddev: {old_stddev:.3f}")
+    print(f"\tnew stddev: {new_stddev:.3f}")
 
     assert new_stddev < old_stddev
 
@@ -57,12 +57,12 @@ def test_log_weights_from_mixture():
 
     # reconstruct by comparing endpoints to mixture
     log_weights_n = log_weights_from_mixture(mbar.u_kn, mbar.f_k, mbar.N_k)
-    logpdf_0_n = - mbar.u_kn[0]
-    logpdf_1_n = - mbar.u_kn[-1]
+    logpdf_0_n = -mbar.u_kn[0]
+    logpdf_1_n = -mbar.u_kn[-1]
 
     N = np.sum(mbar.N_k)
-    f_0 = - (logsumexp(logpdf_0_n - log_weights_n) - np.log(N))
-    f_1 = - (logsumexp(logpdf_1_n - log_weights_n) - np.log(N))
+    f_0 = -(logsumexp(logpdf_0_n - log_weights_n) - np.log(N))
+    f_1 = -(logsumexp(logpdf_1_n - log_weights_n) - np.log(N))
     recons_delta_f = f_1 - f_0
 
     np.testing.assert_almost_equal(source_delta_f, recons_delta_f)

@@ -42,6 +42,7 @@ References
 """
 
 import jax
+
 jax.config.update("jax_enable_x64", True)
 
 from jax import jit, vmap, numpy as np
@@ -58,11 +59,11 @@ WorkStddevEstimator = StepAssessor = Callable[[Float, Float], Float]
 
 
 def rebalance_initial_protocol(
-        lambdas_k: Array,
-        f_k: Array,
-        u_kn: Array,
-        N_k: Array,
-        work_stddev_threshold: Float = 1.0,
+    lambdas_k: Array,
+    f_k: Array,
+    u_kn: Array,
+    N_k: Array,
+    work_stddev_threshold: Float = 1.0,
 ) -> Array:
     """Given simulation results from an initial protocol,
     return a new protocol satisfying the heuristic
@@ -143,13 +144,12 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Call
 
 
 def construct_work_stddev_estimator(
-        reference_log_weights_n: Array,
-        vec_u: Callable,
-        vec_delta_u: Callable) -> WorkStddevEstimator:
+    reference_log_weights_n: Array, vec_u: Callable, vec_delta_u: Callable
+) -> WorkStddevEstimator:
     """Construct reweighted estimator for stddev from a collection of reference samples"""
 
     def work_stddev_estimator(prev_lam: Float, next_lam: Float) -> Float:
-        target_logpdf_n = - vec_u(prev_lam)
+        target_logpdf_n = -vec_u(prev_lam)
         delta_us = vec_delta_u(prev_lam, next_lam)
 
         stddev_estimate = reweighted_stddev(
@@ -206,7 +206,7 @@ def construct_heuristic_lambda_pair_assessor(work_stddev_estimator) -> StepAsses
         """if (next_lam - prev_lam <= max_step), compute (max(forward_stddev, reverse_stddev) - desired_stddev)"""
         too_far = next_lam - prev_lam > max_step
         if too_far:
-            return + np.inf
+            return +np.inf
 
         # compute max of forward, reverse work stddevs
         forward_stddev = work_stddev_estimator(prev_lam, next_lam)
@@ -247,7 +247,7 @@ def greedily_optimize_protocol(assess_lambda_pair: StepAssessor, max_iterations=
         protocol.append(next_lam)
 
         if t == max_iterations - 1:
-            print(UserWarning('Exceeded max_iterations!'))
+            print(UserWarning("Exceeded max_iterations!"))
 
     if protocol[-1] != 1.0:
         protocol.append(1.0)
