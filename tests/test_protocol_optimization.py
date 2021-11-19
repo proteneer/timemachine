@@ -1,6 +1,7 @@
 from optimize.protocol import (
     rebalance_initial_protocol,
     log_weights_from_mixture,
+    linear_u_kn_interpolant,
 )
 
 from pymbar import MBAR
@@ -64,6 +65,18 @@ def test_log_weights_from_mixture():
     recons_delta_f = f_1 - f_0
 
     np.testing.assert_almost_equal(source_delta_f, recons_delta_f)
+
+
+def test_linear_u_kn_interpolant():
+    """Assert self-consistency with input"""
+    lambdas = np.linspace(0, 1, 64)
+    mbar = simulate_protocol(lambdas)
+    u_interp, vec_u_interp, vec_delta_u = linear_u_kn_interpolant(lambdas, mbar.u_kn)
+
+    for _ in range(10):
+        i, j, k = np.random.randint(0, len(lambdas), 3)
+        np.testing.assert_allclose(mbar.u_kn[k], vec_u_interp(lambdas[k]))
+        np.testing.assert_allclose(mbar.u_kn[j] - mbar.u_kn[i], vec_delta_u(lambdas[i], lambdas[j]))
 
 
 def poorly_spaced_path(lam):
