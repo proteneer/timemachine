@@ -17,7 +17,7 @@ np.random.seed(2021)
 def test_rebalance_initial_protocol():
     """Integration test: assert that protocol optimization improves run-to-run variance in free energy estimates"""
     initial_protocol = np.linspace(0, 1, 64)
-    mbar = simulate_protocol(initial_protocol)
+    mbar = simulate_protocol(initial_protocol, seed=2021)
     new_protocol = rebalance_initial_protocol(
         initial_protocol,
         mbar.f_k,
@@ -34,9 +34,9 @@ def test_rebalance_initial_protocol():
     n_replicates = 10
     old_mbars = []
     new_mbars = []
-    for _ in range(n_replicates):
-        old_mbars.append(simulate_protocol(old_protocol))
-        new_mbars.append(simulate_protocol(new_protocol))
+    for i in range(n_replicates):
+        old_mbars.append(simulate_protocol(old_protocol, seed=i))
+        new_mbars.append(simulate_protocol(new_protocol, seed=i))
 
     old_stddev = np.std([mbar.f_k[-1] for mbar in old_mbars])
     new_stddev = np.std([mbar.f_k[-1] for mbar in new_mbars])
@@ -52,7 +52,7 @@ def test_log_weights_from_mixture():
     """Assert self-consistency between
     (1) free energy difference mbar.f_k[-1] - mbar.f_k[0] and
     (2) free energy difference comparing endpoints to mixture"""
-    mbar = simulate_protocol(np.linspace(0, 1, 32))
+    mbar = simulate_protocol(np.linspace(0, 1, 32), seed=2021)
     source_delta_f = mbar.f_k[-1] - mbar.f_k[0]
 
     # reconstruct by comparing endpoints to mixture
@@ -71,7 +71,7 @@ def test_log_weights_from_mixture():
 def test_linear_u_kn_interpolant():
     """Assert self-consistency with input"""
     lambdas = np.linspace(0, 1, 64)
-    mbar = simulate_protocol(lambdas)
+    mbar = simulate_protocol(lambdas, seed=2021)
     u_interp, vec_u_interp, vec_delta_u = linear_u_kn_interpolant(lambdas, mbar.u_kn)
 
     for _ in range(10):
@@ -109,11 +109,11 @@ def poorly_spaced_path(lam):
     return offset, force_constant
 
 
-def simulate_protocol(lambdas_k, n_samples_per_window=100):
+def simulate_protocol(lambdas_k, n_samples_per_window=100, seed=None):
     """Generate samples from each lambda window, plug into MBAR"""
     O_k, K_k = poorly_spaced_path(lambdas_k)
     testsystem = HarmonicOscillatorsTestCase(O_k, K_k)
     N_k = [n_samples_per_window] * len(O_k)
-    xs, u_kn, N_k, s_n = testsystem.sample(N_k, seed=2021)
+    xs, u_kn, N_k, s_n = testsystem.sample(N_k, seed=seed)
     mbar = MBAR(u_kn, N_k)
     return mbar
