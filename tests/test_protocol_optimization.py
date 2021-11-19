@@ -1,9 +1,13 @@
-from optimize.protocol import rebalance_initial_protocol
+from optimize.protocol import (
+    rebalance_initial_protocol,
+    log_weights_from_mixture,
+)
 
 from pymbar import MBAR
 from pymbar.testsystems import HarmonicOscillatorsTestCase
 
 import numpy as np
+from scipy.special import logsumexp
 
 np.random.seed(2021)
 
@@ -40,6 +44,26 @@ def test_rebalance_initial_protocol():
     print(f'\tnew stddev: {new_stddev:.3f}')
 
     assert new_stddev < old_stddev
+
+
+def test_log_weights_from_mixture():
+    """Assert self-consistency between
+    (1) free energy difference mbar.f_k[-1] - mbar.f_k[0] and
+    (2) free energy difference comparing endpoints to mixture"""
+    mbar = simulate_protocol(np.linspace(0, 1, 32))
+    source_delta_f = mbar.f_k[-1] - mbar.f_k[0]
+
+    # reconstruct by comparing endpoints to mixture
+    log_weights_n = log_weights_from_mixture(mbar.u_kn, mbar.f_k, mbar.N_k)
+    logpdf_0_n = - mbar.u_kn[0]
+    logpdf_1_n = - mbar.u_kn[-1]
+
+    N = np.sum(mbar.N_k)
+    f_0 = - (logsumexp(logpdf_0_n - log_weights_n) - np.log(N))
+    f_1 = - (logsumexp(logpdf_1_n - log_weights_n) - np.log(N))
+    recons_delta_f = f_1 - f_0
+
+    np.testing.assert_almost_equal(source_delta_f, recons_delta_f)
 
 
 def poorly_spaced_path(lam):
