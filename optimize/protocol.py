@@ -46,7 +46,7 @@ from jax.scipy.special import logsumexp
 from scipy.optimize import bisect
 
 from functools import partial
-from typing import Tuple, Callable
+from typing import List, Tuple, Callable
 
 Float = float
 Array = np.array
@@ -78,7 +78,7 @@ def rebalance_initial_protocol(
     -----
     Applies the following approximations:
     * u(x_n, lam) for new trial values of lam can be well-approximated by linear interpolation of u_kn
-    * stddev(prev_lam, next_lam) can be well-approximated by reweighting samples from initial protocol
+    * work_stddev(prev_lam, next_lam) can be well-approximated by reweighting samples from initial protocol
     """
     # aggregate all samples from initial protocol
     reference_log_weights_n = log_weights_from_mixture(u_kn, f_k, N_k)
@@ -86,8 +86,10 @@ def rebalance_initial_protocol(
     # linearly interpolate initial energies
     _, vec_u_interp, vec_delta_u_interp = linear_u_kn_interpolant(lambdas_k, u_kn)
 
-    # construct function needed to place the next lambda window given the location of the previous window
+    # function to estimate work_stddev(prev_lam, next_lam)
     work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp, vec_delta_u_interp)
+
+    # function needed to place the next lambda window given the location of the previous window
     assess_lambda_pair = partial(
         construct_heuristic_lambda_pair_assessor(work_stddev_estimator),
         desired_stddev=work_stddev_threshold,
@@ -155,6 +157,16 @@ def construct_work_stddev_estimator(
         return stddev_estimate
 
     return work_stddev_estimator
+
+
+def construct_aggregate_work_stddev_estimator(work_stddev_estimators: List[WorkStddevEstimator]) -> WorkStddevEstimator:
+    """Given a collection of estimators, take the max estimate"""
+
+    def aggregate_work_stddev_estimator(prev_lam: Float, next_lam: Float) -> Float:
+        w_sigmas = [w_hat(prev_lam, next_lam) for w_hat in work_stddev_estimators]
+        return np.max(np.array(w_sigmas))
+
+    return aggregate_work_stddev_estimator
 
 
 def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array) -> Float:
