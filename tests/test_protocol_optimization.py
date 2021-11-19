@@ -93,8 +93,9 @@ def test_work_stddev_estimator():
         assert work_stddev_estimator(prev_lam, next_lam) > 0
 
     for _ in range(10):
-        prev_lam = np.random.rand()
-        next_lams = np.linspace(prev_lam, 1.0, 5)
+        prev_lam = np.random.rand()             # random starting point
+        destination_lam = np.random.randint(2)  # randomly go towards 0 or 1
+        next_lams = np.linspace(prev_lam, destination_lam, 5)
         next_stddevs = [work_stddev_estimator(prev_lam, next_lam) for next_lam in next_lams]
         assert (np.diff(next_stddevs) > 0).all()
 
