@@ -2,6 +2,7 @@ from optimize.protocol import (
     rebalance_initial_protocol,
     log_weights_from_mixture,
     linear_u_kn_interpolant,
+    construct_work_stddev_estimator,
 )
 
 from pymbar import MBAR
@@ -77,6 +78,25 @@ def test_linear_u_kn_interpolant():
         i, j, k = np.random.randint(0, len(lambdas), 3)
         np.testing.assert_allclose(mbar.u_kn[k], vec_u_interp(lambdas[k]))
         np.testing.assert_allclose(mbar.u_kn[j] - mbar.u_kn[i], vec_delta_u(lambdas[i], lambdas[j]))
+
+
+def test_work_stddev_estimator():
+    """Assert nonegative, assert bigger estimates for more distant pairs"""
+    lambdas = np.linspace(0, 1, 64)
+    mbar = simulate_protocol(lambdas)
+    reference_log_weights_n = log_weights_from_mixture(mbar.u_kn, mbar.f_k, mbar.N_k)
+    u_interp, vec_u_interp, vec_delta_u = linear_u_kn_interpolant(lambdas, mbar.u_kn)
+    work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp, vec_delta_u)
+
+    for _ in range(10):
+        prev_lam, next_lam = np.random.rand(2)
+        assert work_stddev_estimator(prev_lam, next_lam) > 0
+
+    for _ in range(10):
+        prev_lam = np.random.rand()
+        next_lams = np.linspace(prev_lam, 1.0, 5)
+        next_stddevs = [work_stddev_estimator(prev_lam, next_lam) for next_lam in next_lams]
+        assert (np.diff(next_stddevs) > 0).all()
 
 
 def poorly_spaced_path(lam):
