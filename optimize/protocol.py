@@ -41,6 +41,9 @@ References
         a T.I.-tailored objective, stddev(du/dlambda).
 """
 
+import jax
+jax.config.update("jax_enable_x64", True)
+
 from jax import jit, vmap, numpy as np
 from jax.scipy.special import logsumexp
 from scipy.optimize import bisect
