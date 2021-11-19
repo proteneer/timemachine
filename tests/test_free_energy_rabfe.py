@@ -6,6 +6,7 @@ from fe.free_energy_rabfe import (
     setup_relative_restraints_by_distance,
     setup_relative_restraints_using_smarts,
     validate_lambda_schedule,
+    interpolate_pre_optimized_protocol,
 )
 from fe.atom_mapping import CompareDistNonterminal
 from fe.utils import get_romol_conf
@@ -110,3 +111,18 @@ def test_validate_lambda_schedule():
 
         with pytest.raises(AssertionError):
             validate_lambda_schedule(truncated_schedule, K)
+
+
+def test_interpolate_pre_optimized_protocol():
+    linear = np.linspace(0, 1, 50)
+    nonlinear = np.linspace(0, 1, 64) ** 2
+
+    for sched in [linear, nonlinear]:
+        # recover ~exactly the initial schedule
+        K = len(sched)
+        sched_prime = interpolate_pre_optimized_protocol(sched, K)
+        assert np.allclose(sched, sched_prime)
+
+        # produce valid protocols when downsampling
+        reduced = interpolate_pre_optimized_protocol(sched, K // 2)
+        validate_lambda_schedule(reduced, K // 2)
