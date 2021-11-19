@@ -157,6 +157,41 @@ def construct_work_stddev_estimator(
     return work_stddev_estimator
 
 
+def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array) -> Float:
+    """Compute reweighted estimate of
+    stddev(f(x)) under x ~ p_target
+    based on samples   x ~ p_source
+
+    where
+        p_target(x) = exp(target_logpdf(x)) / Z_target
+
+    using samples from a different source
+        x_n ~ p_source
+        where
+        p_source(x) = exp(source_logpdf(x)) / Z_source
+
+    The inputs are arrays "{fxn_name}_n" containing the result of
+    calling each fxn on a fixed array of samples:
+
+    * f_n = [f(x_n) for x_n in samples]
+    * target_logpdf_n = [target_logpdf(x_n) for x_n in samples]
+    * source_logpdf_n = [source_logpdf(x_n) for x_n in samples]
+    """
+
+    log_weights_n = target_logpdf_n - source_logpdf_n
+    weights = np.exp(log_weights_n - logsumexp(log_weights_n)).flatten()
+
+    f_mean = np.sum(weights * f_n)
+    squared_deviations = (f_n - f_mean) ** 2
+
+    # sanitize 0 * inf -> 0 (instead of nan)
+    weighted_squared_deviations = weights * squared_deviations
+    sanitized = np.nan_to_num(weighted_squared_deviations, nan=0)
+    stddev = np.sqrt(np.sum(sanitized))
+
+    return stddev
+
+
 def construct_heuristic_lambda_pair_assessor(work_stddev_estimator) -> StepAssessor:
     """Construct a function f(prev_lam, trial_next_lam) where bisection search on second argument
     can be used to select next_lam so that p(x|next_lam) is a specified "distance" from p(x|prev_lam)"""
@@ -212,38 +247,3 @@ def greedily_optimize_protocol(assess_lambda_pair: StepAssessor, max_iterations=
         protocol.append(1.0)
 
     return np.array(protocol)
-
-
-def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array) -> Float:
-    """Compute reweighted estimate of
-    stddev(f(x)) under x ~ p_target
-    based on samples   x ~ p_source
-
-    where
-        p_target(x) = exp(target_logpdf(x)) / Z_target
-
-    using samples from a different source
-        x_n ~ p_source
-        where
-        p_source(x) = exp(source_logpdf(x)) / Z_source
-
-    The inputs are arrays "{fxn_name}_n" containing the result of
-    calling each fxn on a fixed array of samples:
-
-    * f_n = [f(x_n) for x_n in samples]
-    * target_logpdf_n = [target_logpdf(x_n) for x_n in samples]
-    * source_logpdf_n = [source_logpdf(x_n) for x_n in samples]
-    """
-
-    log_weights_n = target_logpdf_n - source_logpdf_n
-    weights = np.exp(log_weights_n - logsumexp(log_weights_n)).flatten()
-
-    f_mean = np.sum(weights * f_n)
-    squared_deviations = (f_n - f_mean) ** 2
-
-    # sanitize 0 * inf -> 0 (instead of nan)
-    weighted_squared_deviations = weights * squared_deviations
-    sanitized = np.nan_to_num(weighted_squared_deviations, nan=0)
-    stddev = np.sqrt(np.sum(sanitized))
-
-    return stddev
