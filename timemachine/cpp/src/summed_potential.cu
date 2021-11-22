@@ -3,10 +3,10 @@
 
 namespace timemachine {
 
-SummedPotential::SummedPotential(std::vector<Potential *> potentials, std::vector<int> param_sizes)
-    : potentials_(potentials), param_sizes_(param_sizes) {
-    if (potentials_.size() != param_sizes_.size()) {
-        throw std::runtime_error("number of potentials != number of parameter sets");
+SummedPotential::SummedPotential(std::vector<Potential *> potentials, std::vector<int> params_sizes)
+    : potentials_(potentials), params_sizes_(params_sizes) {
+    if (potentials_.size() != params_sizes_.size()) {
+        throw std::runtime_error("number of potentials != number of parameter sizes");
     }
 };
 
@@ -29,7 +29,7 @@ void SummedPotential::execute_device(
 
         potentials_[i]->execute_device(
             N,
-            param_sizes_[i],
+            params_sizes_[i],
             d_x,
             d_p + offset,
             d_box,
@@ -40,7 +40,7 @@ void SummedPotential::execute_device(
             d_u,
             stream);
 
-        offset += param_sizes_[i];
+        offset += params_sizes_[i];
     }
 };
 

@@ -9,10 +9,10 @@ class SummedPotential : public Potential {
 
 private:
     const std::vector<Potential *> potentials_;
-    const std::vector<int> param_sizes_;
+    const std::vector<int> params_sizes_;
 
 public:
-    SummedPotential(std::vector<Potential *> potentials, std::vector<int> param_sizes);
+    SummedPotential(std::vector<Potential *> potentials, std::vector<int> params_sizes);
 
     virtual void execute_device(
         const int N,
