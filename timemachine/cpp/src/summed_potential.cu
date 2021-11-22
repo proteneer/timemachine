@@ -35,7 +35,7 @@ void SummedPotential::execute_device(
             d_box,
             lambda,
             d_du_dx,
-            d_du_dp == nullptr ? d_du_dp : d_du_dp + offset,
+            d_du_dp == nullptr ? nullptr : d_du_dp + offset,
             d_du_dl,
             d_u,
             stream);
