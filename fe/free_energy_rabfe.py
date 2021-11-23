@@ -195,7 +195,7 @@ def validate_lambda_schedule(lambda_schedule, num_windows):
     assert lambda_schedule[0] == 0.0
     assert lambda_schedule[-1] == 1.0
     assert len(lambda_schedule) == num_windows
-    assert ((lambda_schedule[1:] - lambda_schedule[:-1]) >= 0).all()
+    assert ((lambda_schedule[1:] - lambda_schedule[:-1]) > 0).all()
 
 
 def interpolate_pre_optimized_protocol(pre_optimized_protocol, num_windows):
