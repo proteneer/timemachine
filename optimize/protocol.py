@@ -88,7 +88,7 @@ def rebalance_initial_protocol(
     reference_log_weights_n = log_weights_from_mixture(u_kn, f_k, N_k)
 
     # linearly interpolate initial energies
-    _, vec_u_interp, vec_delta_u_interp = linear_u_kn_interpolant(lambdas_k, u_kn)
+    vec_u_interp, vec_delta_u_interp = linear_u_kn_interpolant(lambdas_k, u_kn)
 
     # function to estimate work_stddev(prev_lam, next_lam)
     work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp, vec_delta_u_interp)
@@ -122,7 +122,7 @@ def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
     return log_weights
 
 
-def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Callable, Callable]:
+def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Callable]:
     """Given a matrix u_kn[k, n] = u(xs[n], lambdas[k]) produce linear interpolated estimates of u(xs[n], lam)
     at arbitrary new values lam"""
 
@@ -139,7 +139,7 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Call
         raw_delta_u = vec_u_interp(to_lam) - vec_u_interp(from_lam)
         return np.nan_to_num(raw_delta_u)
 
-    return u_interp, vec_u_interp, vec_delta_u
+    return vec_u_interp, vec_delta_u
 
 
 def construct_work_stddev_estimator(
