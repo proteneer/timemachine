@@ -389,7 +389,8 @@ def test_construct_differentiable_interface_fast():
         U_ref = construct_differentiable_interface(unbound_potentials, precision)
         U = construct_differentiable_interface_fast(unbound_potentials, sys_params, precision)
         args = (coords, sys_params, box, lam)
-        np.testing.assert_array_equal(U(*args), U_ref(*args))
+
+        assert U(*args) == U_ref(*args)
 
         argnums = (0, 1, 3)
         grad_U_ref = grad(U_ref, argnums=argnums)(*args)
@@ -400,4 +401,4 @@ def test_construct_differentiable_interface_fast():
         for dU_dp, dU_dp_ref in zip(grad_U[1], grad_U_ref[1]):
             np.testing.assert_array_equal(dU_dp, dU_dp_ref)
 
-        np.testing.assert_array_equal(grad_U[2], grad_U_ref[2])
+        assert grad_U[2] == grad_U_ref[2]
