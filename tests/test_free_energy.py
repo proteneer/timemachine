@@ -375,7 +375,7 @@ def test_functional():
                 assert abs_err < 1e-3
 
 
-def test_consruct_differentiable_interface_cpp():
+def test_construct_differentiable_interface_cpp():
     """Assert that the computation of U and its derivatives using the
     C++ code path produces equivalent results to the doing the
     summation in Python"""
