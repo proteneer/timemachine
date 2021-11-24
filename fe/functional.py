@@ -64,7 +64,7 @@ def construct_differentiable_interface_cpp(unbound_potentials, params, precision
     """Construct a differentiable function U(x, params, box, lam) -> float
     from a collection of unbound potentials
 
-    >>> U = construct_differentiable_interface(unbound_potentials)
+    >>> U = construct_differentiable_interface(unbound_potentials, params)
     >>> _ = grad(U, (0,1,3))(coords, sys_params, box, lam)
 
     This implementation computes the sum of the component potentials in C++ using the SummedPotential custom op
