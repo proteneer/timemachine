@@ -87,10 +87,10 @@ def rebalance_initial_protocol(
     reference_log_weights_n = log_weights_from_mixture(u_kn, f_k, N_k)
 
     # linearly interpolate initial energies
-    vec_u_interp, vec_delta_u_interp = linear_u_kn_interpolant(lambdas_k, u_kn)
+    vec_u_interp = linear_u_kn_interpolant(lambdas_k, u_kn)
 
     # function to estimate work_stddev(prev_lam, next_lam)
-    work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp, vec_delta_u_interp)
+    work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp)
 
     # function needed to place the next lambda window given the location of the previous window
     distance_fxn = construct_max_work_stddev_distance(work_stddev_estimator)
@@ -118,7 +118,7 @@ def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
     return log_weights
 
 
-def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Callable]:
+def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Callable:
     """Given a matrix u_kn[k, n] = u(xs[n], lambdas[k]) produce linear interpolated estimates of u(xs[n], lam)
     at arbitrary new values lam"""
 
@@ -129,23 +129,17 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Tuple[Callable, Call
     def vec_u_interp(lam: Float) -> Array:
         return vmap(u_interp, (1, None))(u_kn, lam)
 
-    @jit
-    def vec_delta_u(from_lam: Float, to_lam: Float) -> Array:
-        """+inf minus +inf -> 0, rather than +inf minus +inf -> nan"""
-        raw_delta_u = vec_u_interp(to_lam) - vec_u_interp(from_lam)
-        return np.nan_to_num(raw_delta_u)
-
-    return vec_u_interp, vec_delta_u
+    return vec_u_interp
 
 
 def construct_work_stddev_estimator(
-    reference_log_weights_n: Array, vec_u: Callable, vec_delta_u: Callable
+    reference_log_weights_n: Array, vec_u: Callable
 ) -> WorkStddevEstimator:
     """Construct reweighted estimator for stddev from a collection of reference samples"""
 
     def work_stddev_estimator(prev_lam: Float, next_lam: Float) -> Float:
         target_logpdf_n = -vec_u(prev_lam)
-        delta_us = vec_delta_u(prev_lam, next_lam)
+        delta_us = vec_u(next_lam) - vec_u(prev_lam)
 
         stddev_estimate = reweighted_stddev(
             f_n=delta_us,

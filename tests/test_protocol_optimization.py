@@ -72,12 +72,11 @@ def test_linear_u_kn_interpolant():
     """Assert self-consistency with input"""
     lambdas = np.linspace(0, 1, 64)
     mbar = simulate_protocol(lambdas, seed=2021)
-    vec_u_interp, vec_delta_u = linear_u_kn_interpolant(lambdas, mbar.u_kn)
+    vec_u_interp = linear_u_kn_interpolant(lambdas, mbar.u_kn)
 
     for _ in range(10):
-        i, j, k = np.random.randint(0, len(lambdas), 3)
+        k = np.random.randint(len(lambdas))
         np.testing.assert_allclose(mbar.u_kn[k], vec_u_interp(lambdas[k]))
-        np.testing.assert_allclose(mbar.u_kn[j] - mbar.u_kn[i], vec_delta_u(lambdas[i], lambdas[j]))
 
 
 def test_work_stddev_estimator():
@@ -85,8 +84,8 @@ def test_work_stddev_estimator():
     lambdas = np.linspace(0, 1, 64)
     mbar = simulate_protocol(lambdas)
     reference_log_weights_n = log_weights_from_mixture(mbar.u_kn, mbar.f_k, mbar.N_k)
-    vec_u_interp, vec_delta_u = linear_u_kn_interpolant(lambdas, mbar.u_kn)
-    work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp, vec_delta_u)
+    vec_u_interp = linear_u_kn_interpolant(lambdas, mbar.u_kn)
+    work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp)
 
     for _ in range(10):
         prev_lam, next_lam = np.random.rand(2)
