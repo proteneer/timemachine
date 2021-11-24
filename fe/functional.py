@@ -11,18 +11,10 @@ def _make_selection_mask(compute_du_dx=False, compute_du_dp=False, compute_du_dl
     return (compute_du_dx, compute_du_dp, compute_du_dl, compute_u)
 
 
-def construct_differentiable_interface(unbound_potentials, params, precision=np.float32):
+def wrap_impl(impl, pack=lambda x: x):
     """Construct a differentiable function U(x, params, box, lam) -> float
-
-    >>> U = construct_differentiable_interface(unbound_potentials)
-    >>> _ = grad(U, (0,1,3))(coords, sys_params, box, lam)
+    from a single unbound potential
     """
-    impls = [ubp.unbound_impl(precision) for ubp in unbound_potentials]
-    sizes = [ps.size for ps in params]
-    impl = SummedPotential(impls, sizes)
-
-    def pack(params):
-        return np.concatenate([ps.reshape(-1) for ps in params])
 
     @custom_jvp
     def U(coords, params, box, lam):
@@ -46,5 +38,44 @@ def construct_differentiable_interface(unbound_potentials, params, precision=np.
         return np.sum(lam_dot * result_tuple[2])
 
     U.defjvps(U_jvp_x, U_jvp_params, None, U_jvp_lam)
+
+    return U
+
+
+def construct_differentiable_interface(unbound_potentials, precision=np.float32):
+    """Construct a differentiable function U(x, params, box, lam) -> float
+    from a collection of unbound potentials
+
+    >>> U = construct_differentiable_interface(unbound_potentials)
+    >>> _ = grad(U, (0,1,3))(coords, sys_params, box, lam)
+
+    This implementation computes the sum of the component potentials in Python
+    """
+    impls = [ubp.unbound_impl(precision) for ubp in unbound_potentials]
+    U_s = [wrap_impl(impl) for impl in impls]
+
+    def U(coords, params, box, lam):
+        return np.sum(np.array([U_i(coords, p_i, box, lam) for (U_i, p_i) in zip(U_s, params)]))
+
+    return U
+
+
+def construct_differentiable_interface_cpp(unbound_potentials, params, precision=np.float32):
+    """Construct a differentiable function U(x, params, box, lam) -> float
+    from a collection of unbound potentials
+
+    >>> U = construct_differentiable_interface(unbound_potentials)
+    >>> _ = grad(U, (0,1,3))(coords, sys_params, box, lam)
+
+    This implementation computes the sum of the component potentials in C++ using the SummedPotential custom op
+    """
+    impls = [ubp.unbound_impl(precision) for ubp in unbound_potentials]
+    sizes = [ps.size for ps in params]
+    impl = SummedPotential(impls, sizes)
+
+    def pack(params):
+        return np.concatenate([ps.reshape(-1) for ps in params])
+
+    U = wrap_impl(impl, pack)
 
     return U
