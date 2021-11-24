@@ -259,3 +259,16 @@ class NonbondedInterpolated(Nonbonded):
         custom_ctor = getattr(custom_ops, cls_name_base)
 
         return custom_ctor(*self.args)
+
+
+class SummedPotential:
+    def __init__(self, potentials, params):
+        self._impl = custom_ops.SummedPotential(potentials, params)
+
+        # NOTE: the following is necessary to ensure that we maintain
+        # a reference to the wrapped Potential objects on the Python
+        # side; otherwise they may be freed prematurely
+        self._potentials = potentials
+
+    def __getattr__(self, attr):
+        return getattr(self._impl, attr)

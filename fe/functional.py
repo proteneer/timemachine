@@ -4,7 +4,7 @@ config.update("jax_enable_x64", True)
 
 from jax import custom_jvp, numpy as np
 
-from timemachine.lib import custom_ops
+from timemachine.lib.potentials import SummedPotential
 
 
 def _make_selection_mask(compute_du_dx=False, compute_du_dp=False, compute_du_dl=False, compute_u=False):
@@ -19,7 +19,7 @@ def construct_differentiable_interface(unbound_potentials, params, precision=np.
     """
     impls = [ubp.unbound_impl(precision) for ubp in unbound_potentials]
     sizes = [ps.size for ps in params]
-    impl = custom_ops.SummedPotential(impls, sizes)
+    impl = SummedPotential(impls, sizes)
 
     def pack(params):
         return np.concatenate([ps.reshape(-1) for ps in params])
