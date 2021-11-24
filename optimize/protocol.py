@@ -49,12 +49,11 @@ from jax import jit, vmap, numpy as np
 from jax.scipy.special import logsumexp
 from scipy.optimize import bisect
 
-from functools import partial
 from typing import Tuple, Callable
 
 Float = float
 Array = np.array
-WorkStddevEstimator = StepAssessor = Callable[[Float, Float], Float]
+WorkStddevEstimator = DistanceFxn = Callable[[Float, Float], Float]
 
 
 def rebalance_initial_protocol(
@@ -94,13 +93,10 @@ def rebalance_initial_protocol(
     work_stddev_estimator = construct_work_stddev_estimator(reference_log_weights_n, vec_u_interp, vec_delta_u_interp)
 
     # function needed to place the next lambda window given the location of the previous window
-    assess_lambda_pair = partial(
-        construct_heuristic_lambda_pair_assessor(work_stddev_estimator),
-        desired_stddev=work_stddev_threshold,
-    )
+    distance_fxn = construct_max_work_stddev_distance(work_stddev_estimator)
 
     # build a new protocol one state at a time
-    optimized_protocol = greedily_optimize_protocol(assess_lambda_pair)
+    optimized_protocol = greedily_optimize_protocol(distance_fxn, target_distance=work_stddev_threshold)
     return optimized_protocol
 
 
@@ -197,12 +193,13 @@ def reweighted_stddev(f_n: Array, target_logpdf_n: Array, source_logpdf_n: Array
     return stddev
 
 
-def construct_heuristic_lambda_pair_assessor(work_stddev_estimator) -> StepAssessor:
-    """Construct a function f(prev_lam, trial_next_lam) where bisection search on second argument
-    can be used to select next_lam so that p(x|next_lam) is a specified "distance" from p(x|prev_lam)"""
+def construct_max_work_stddev_distance(work_stddev_estimator) -> DistanceFxn:
+    """Construct a distance function `distance(prev_lam, trial_lam)` where bisection search
+    on `f(trial_lam) = distance(prev_lam, trial_lam) - target_distance`
+    can be used to select next_lam"""
 
-    def assess_lambda_pair(prev_lam, next_lam, desired_stddev=1.0, max_step=0.25):
-        """if (next_lam - prev_lam <= max_step), compute (max(forward_stddev, reverse_stddev) - desired_stddev)"""
+    def max_work_stddev_distance(prev_lam, next_lam, max_step=0.25):
+        """if (next_lam - prev_lam <= max_step), compute max(forward_stddev, reverse_stddev)"""
         too_far = next_lam - prev_lam > max_step
         if too_far:
             return +np.inf
@@ -210,14 +207,13 @@ def construct_heuristic_lambda_pair_assessor(work_stddev_estimator) -> StepAsses
         # compute max of forward, reverse work stddevs
         forward_stddev = work_stddev_estimator(prev_lam, next_lam)
         reverse_stddev = work_stddev_estimator(next_lam, prev_lam)
-        higher_stddev = max(forward_stddev, reverse_stddev)
 
-        return higher_stddev - desired_stddev
+        return max(forward_stddev, reverse_stddev)
 
-    return assess_lambda_pair
+    return max_work_stddev_distance
 
 
-def greedily_optimize_protocol(assess_lambda_pair: StepAssessor, max_iterations=1000) -> Array:
+def greedily_optimize_protocol(distance_fxn: DistanceFxn, target_distance=0.5, max_iterations=1000) -> Array:
     """Optimize a lambda protocol from "left to right"
 
     Sequentially pick next_lam so that
@@ -234,12 +230,12 @@ def greedily_optimize_protocol(assess_lambda_pair: StepAssessor, max_iterations=
         prev_lam = protocol[-1]
 
         # can we directly jump to the end?
-        if assess_lambda_pair(prev_lam, 1.0) < 0:
+        if distance_fxn(prev_lam, 1.0) < target_distance:
             break
 
         # otherwise, binary search for next
         next_lam = bisect(
-            f=lambda trial_lam: assess_lambda_pair(prev_lam, trial_lam),
+            f=lambda trial_lam: distance_fxn(prev_lam, trial_lam) - target_distance,
             a=prev_lam,
             b=1.0,
         )
