@@ -211,12 +211,7 @@ def greedily_optimize_protocol(distance_fxn: DistanceFxn, target_distance=0.5, m
     """Optimize a lambda protocol from "left to right"
 
     Sequentially pick next_lam so that
-    assess_lambda_pair(prev_lam, next_lam) ~= 0
-
-    assess_lambda_pair(prev_lam, next_lam) might compute
-    some measure of distance between p(x | prev_lam) and p(x | next_lam)
-    and compare that distance to a desired spacing `distance - target_distance`
-        (returning a negative number if too close, a positive number if too far)
+    distance_fxn(prev_lam, next_lam) ~= target_distance
     """
     protocol = [0.0]
 
