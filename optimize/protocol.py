@@ -132,9 +132,7 @@ def linear_u_kn_interpolant(lambdas: Array, u_kn: Array) -> Callable:
     return vec_u_interp
 
 
-def construct_work_stddev_estimator(
-    reference_log_weights_n: Array, vec_u: Callable
-) -> WorkStddevEstimator:
+def construct_work_stddev_estimator(reference_log_weights_n: Array, vec_u: Callable) -> WorkStddevEstimator:
     """Construct reweighted estimator for stddev from a collection of reference samples"""
 
     def work_stddev_estimator(prev_lam: Float, next_lam: Float) -> Float:
