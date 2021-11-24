@@ -21,7 +21,7 @@ def mybar_impl(w):
     return A
 
 
-def mybar_vjp(g, w):
+def mybar_jvp(g, w):
     return g * tmbar.dG_dw(w)
 
 
@@ -31,7 +31,7 @@ def mybar(x):
 
 mybar_p = core.Primitive("mybar")
 mybar_p.def_impl(mybar_impl)
-ad.defvjp(mybar_p, mybar_vjp)
+ad.defjvp(mybar_p, mybar_jvp)
 
 
 def BAR_leg(insertion_du_dls, deletion_du_dls, lambda_schedule):

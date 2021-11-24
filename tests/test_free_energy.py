@@ -20,7 +20,7 @@ from md import builders, minimizer
 
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 
-from fe.functional import construct_differentiable_interface, construct_differentiable_interface_cpp
+from fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from md.barostat.utils import get_bond_list, get_group_indices
 from testsystems.relative import hif2a_ligand_pair
 
@@ -375,7 +375,7 @@ def test_functional():
                 assert abs_err < 1e-3
 
 
-def test_construct_differentiable_interface_cpp():
+def test_construct_differentiable_interface_fast():
     """Assert that the computation of U and its derivatives using the
     C++ code path produces equivalent results to the doing the
     summation in Python"""
@@ -386,18 +386,18 @@ def test_construct_differentiable_interface_cpp():
     lam = 0.5
 
     for precision in [np.float32, np.float64]:
-        U = construct_differentiable_interface(unbound_potentials, precision)
-        U_cpp = construct_differentiable_interface_cpp(unbound_potentials, sys_params, precision)
+        U_ref = construct_differentiable_interface(unbound_potentials, precision)
+        U = construct_differentiable_interface_fast(unbound_potentials, sys_params, precision)
         args = (coords, sys_params, box, lam)
-        assert np.allclose(U(*args), U_cpp(*args), rtol=1e-6)
+        assert np.allclose(U(*args), U_ref(*args), rtol=1e-6)
 
         argnums = (0, 1, 3)
+        grad_U_ref = grad(U_ref, argnums=argnums)(*args)
         grad_U = grad(U, argnums=argnums)(*args)
-        grad_U_cpp = grad(U_cpp, argnums=argnums)(*args)
 
-        assert np.allclose(grad_U[0], grad_U_cpp[0], rtol=1e-6)
+        assert np.allclose(grad_U[0], grad_U_ref[0], rtol=1e-6)
 
-        for dU_dp, dU_dp_cpp in zip(grad_U[1], grad_U_cpp[1]):
-            assert np.allclose(dU_dp, dU_dp_cpp, rtol=1e-6)
+        for dU_dp, dU_dp_ref in zip(grad_U[1], grad_U_ref[1]):
+            assert np.allclose(dU_dp, dU_dp_ref, rtol=1e-6)
 
-        assert np.allclose(grad_U[2], grad_U_cpp[2], rtol=1e-6)
+        assert np.allclose(grad_U[2], grad_U_ref[2], rtol=1e-6)

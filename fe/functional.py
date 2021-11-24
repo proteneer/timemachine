@@ -60,7 +60,7 @@ def construct_differentiable_interface(unbound_potentials, precision=np.float32)
     return U
 
 
-def construct_differentiable_interface_cpp(unbound_potentials, params, precision=np.float32):
+def construct_differentiable_interface_fast(unbound_potentials, params, precision=np.float32):
     """Construct a differentiable function U(x, params, box, lam) -> float
     from a collection of unbound potentials
 
