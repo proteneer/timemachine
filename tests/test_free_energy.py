@@ -397,6 +397,7 @@ def test_construct_differentiable_interface_fast():
 
         np.testing.assert_array_equal(grad_U[0], grad_U_ref[0])
 
+        assert len(grad_U[1]) == len(grad_U_ref[1])
         for dU_dp, dU_dp_ref in zip(grad_U[1], grad_U_ref[1]):
             np.testing.assert_array_equal(dU_dp, dU_dp_ref)
 
