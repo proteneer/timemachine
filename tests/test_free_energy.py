@@ -377,7 +377,7 @@ def test_functional():
 
 def test_construct_differentiable_interface_fast():
     """Assert that the computation of U and its derivatives using the
-    C++ code path produces equivalent results to the doing the
+    C++ code path produces equivalent results to doing the
     summation in Python"""
 
     ff_params = hif2a_ligand_pair.ff.get_ordered_params()
