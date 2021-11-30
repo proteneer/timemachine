@@ -1,25 +1,19 @@
-#include "observable.hpp"
 #include "gpu_utils.cuh"
+#include "observable.hpp"
 #include <iostream>
-
 
 namespace timemachine {
 
-void __global__ k_compute_variance(
-    const int N,
-    const int k,
-    const double * __restrict__ d_du_dp,
-    double *d_m,
-    double *d_s
-    ) {
+void __global__
+k_compute_variance(const int N, const int k, const double *__restrict__ d_du_dp, double *d_m, double *d_s) {
 
-    const int idx = blockIdx.x*blockDim.x + threadIdx.x;
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if(idx >= N) {
+    if (idx >= N) {
         return;
     }
 
-    if(d_du_dp) {
+    if (d_du_dp) {
         // Taken from https://www.johndcook.com/blog/standard_deviation/
         double x = d_du_dp[idx];
         if (k == 1) {
@@ -34,12 +28,12 @@ void __global__ k_compute_variance(
     }
 }
 
-AvgPartialUPartialParam::AvgPartialUPartialParam(
-    BoundPotential *bp, int interval) : bp_(bp), count_(0), interval_(interval) {
+AvgPartialUPartialParam::AvgPartialUPartialParam(BoundPotential *bp, int interval)
+    : bp_(bp), count_(0), interval_(interval) {
     int P = bp_->size();
-    gpuErrchk(cudaMalloc(&d_du_dp_, P*sizeof(*d_du_dp_)));
-    gpuErrchk(cudaMalloc(&d_m_, P*sizeof(*d_m_)));
-    gpuErrchk(cudaMalloc(&d_s_, P*sizeof(*d_s_)));
+    gpuErrchk(cudaMalloc(&d_du_dp_, P * sizeof(*d_du_dp_)));
+    gpuErrchk(cudaMalloc(&d_m_, P * sizeof(*d_m_)));
+    gpuErrchk(cudaMalloc(&d_s_, P * sizeof(*d_s_)));
 }
 
 AvgPartialUPartialParam::~AvgPartialUPartialParam() {
@@ -48,19 +42,14 @@ AvgPartialUPartialParam::~AvgPartialUPartialParam() {
     gpuErrchk(cudaFree(d_s_));
 }
 
-void AvgPartialUPartialParam::observe(
-    int step,
-    int N,
-    double *d_x_t,
-    double *d_box_t,
-    double lambda) {
+void AvgPartialUPartialParam::observe(int step, int N, double *d_x_t, double *d_box_t, double lambda) {
 
     const int size = bp_->size();
     // If size == 0 then no reason to execute the bound potential
-    if(size != 0 && step % interval_ == 0) {
+    if (size != 0 && step % interval_ == 0) {
         cudaStream_t stream = static_cast<cudaStream_t>(0);
         // Need the latest du_dp, so reset to zero each round
-        gpuErrchk(cudaMemsetAsync(d_du_dp_, 0, size*sizeof(*d_du_dp_), stream));
+        gpuErrchk(cudaMemsetAsync(d_du_dp_, 0, size * sizeof(*d_du_dp_), stream));
         bp_->execute_device(
             N,
             d_x_t,
@@ -74,26 +63,19 @@ void AvgPartialUPartialParam::observe(
         );
         count_++;
         const int tpb = 32;
-        const int blocks = (size+tpb-1)/tpb;
-        k_compute_variance<<<blocks, tpb, 0, stream>>>(
-            size,
-            count_,
-            d_du_dp_,
-            d_m_,
-            d_s_
-        );
+        const int blocks = (size + tpb - 1) / tpb;
+        k_compute_variance<<<blocks, tpb, 0, stream>>>(size, count_, d_du_dp_, d_m_, d_s_);
 
         gpuErrchk(cudaPeekAtLastError());
     }
-
 }
 
 void AvgPartialUPartialParam::std_du_dp(double *h_buf) const {
     // Copying is only necessary if there is a variance to return
     if (count_ > 1) {
-        gpuErrchk(cudaMemcpy(h_buf, d_s_, this->bp_->size()*sizeof(*h_buf), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(h_buf, d_s_, this->bp_->size() * sizeof(*h_buf), cudaMemcpyDeviceToHost));
     }
-    for(int i=0; i < this->bp_->size(); i++) {
+    for (int i = 0; i < this->bp_->size(); i++) {
         if (count_ <= 1) {
             h_buf[i] = 0.0;
         } else {
@@ -105,13 +87,12 @@ void AvgPartialUPartialParam::std_du_dp(double *h_buf) const {
 
 void AvgPartialUPartialParam::avg_du_dp(double *h_buf) const {
     if (count_ > 0) {
-        gpuErrchk(cudaMemcpy(h_buf, d_m_, this->bp_->size()*sizeof(*h_buf), cudaMemcpyDeviceToHost));
+        gpuErrchk(cudaMemcpy(h_buf, d_m_, this->bp_->size() * sizeof(*h_buf), cudaMemcpyDeviceToHost));
         return;
     }
-    for(int i=0; i < this->bp_->size(); i++) {
+    for (int i = 0; i < this->bp_->size(); i++) {
         h_buf[i] = 0.0;
     }
 }
 
-
-}
+} // namespace timemachine

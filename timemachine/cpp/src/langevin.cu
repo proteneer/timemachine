@@ -11,8 +11,6 @@
 // #include "langevin.hpp"
 // #include "gpu_utils.cuh"
 
-
-
 // template <typename RealType>
 // __global__ void update_positions(
 //     const RealType *noise,
@@ -28,14 +26,12 @@
 //     RealType *x_t,
 //     RealType *v_t) {
 
-
 //     int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
 //     if(atom_idx >= N) {
 //         return;
 //     }
 
 //     int d_idx = blockIdx.y;
-
 
 //     int local_idx = atom_idx*D + d_idx;
 //     // only integrate first three dimensions
@@ -46,14 +42,12 @@
 //         return;
 //     }
 
-
 //     // truncated noise
 //     auto n = noise[local_idx];
 //     v_t[local_idx] = coeff_a*v_t[local_idx] - coeff_bs[atom_idx]*dE_dx[local_idx] + coeff_cs[atom_idx]*n;
 //     x_t[local_idx] = (1 - coeff_d*coeff_bs[atom_idx]*dt)*x_t[local_idx] + v_t[local_idx]*dt;
 
 // }
-
 
 // template<typename RealType>
 // __global__ void update_derivatives(
@@ -87,9 +81,7 @@
 
 // }
 
-
 // namespace timemachine {
-
 
 // template<typename RealType>
 // LangevinOptimizer<RealType>::LangevinOptimizer(
@@ -124,7 +116,6 @@
 //     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
 
 // }
-
 
 // template<typename RealType>
 // LangevinOptimizer<RealType>::~LangevinOptimizer() {
@@ -298,11 +289,9 @@
 //         // cusparseErrchk(cusparseDense2csr(handle, ND, ND, descr_A, d_A, ND, d_A_nnz_per_row,
 //             // d_sparse_A, d_sparse_A_rowptr, d_sparse_A_colptr));
 
-
 //         auto start4 = std::chrono::high_resolution_clock::now();
 //         cusparseErrchk(cusparseDense2csr(handle, N_offset, N_offset, descr_A, d_A, ND, d_A_nnz_per_row,
 //             d_sparse_A, d_sparse_A_rowptr, d_sparse_A_colptr));
-
 
 //         cudaDeviceSynchronize();
 //         auto stop4 = std::chrono::high_resolution_clock::now();

@@ -16,6 +16,7 @@ repos:
     rev: v13.0.0
     hooks:
     -   id: clang-format
+        types_or: [c, c++, cuda]
         files: '^timemachine/cpp/src/'
 
 exclude: '\.pdb$|\.sdf$|\.proto$|\.xml$|/vendored/|^ff/params/|^parallel/grpc/'
