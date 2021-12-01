@@ -160,5 +160,4 @@ def test_smc():
 
         # compare delta_Us when coords/box change (this will large and size extensive, probably not useful)
         print(U_fn(xvb_new.coords, params, xvb_new.box, npt_lamb) - U_fn(xvb.coords, params, xvb.box, npt_lamb))
-        # compare delta_Us when lambda changes
         print(U_fn(xi, params, bi, 0.9) - U_fn(xi, params, bi, 1.0))
