@@ -763,7 +763,6 @@ void __global__ k_nonbonded_exclusions(
     const double *__restrict__ dp_dl,
     const double *__restrict__ coords_w, // 4D coords
     const double *__restrict__ dw_dl,    // 4D derivatives
-    const double lambda,
     const int *__restrict__ exclusion_idxs, // [E, 2] pair-list of atoms to be excluded
     const double *__restrict__ scales,      // [E]
     const double beta,
@@ -841,7 +840,6 @@ void __global__ k_nonbonded_exclusions(
     unsigned long long g_sigj = 0;
     unsigned long long g_epsj = 0;
 
-    RealType real_lambda = static_cast<RealType>(lambda);
     RealType real_beta = static_cast<RealType>(beta);
 
     RealType real_cutoff = static_cast<RealType>(cutoff);

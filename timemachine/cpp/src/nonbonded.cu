@@ -427,7 +427,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             Interpolated ? d_unsorted_dp_dl_ : d_sorted_dp_dl_,
             d_w_,
             d_dw_dl_,
-            lambda,
             d_exclusion_idxs_,
             d_scales_,
             beta_,
