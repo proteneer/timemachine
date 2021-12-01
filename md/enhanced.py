@@ -273,7 +273,7 @@ def _wrap_simulate(args):
     kT = temperature * BOLTZ
 
     x0 = get_romol_conf(mol)
-    xs_proposal = simulate(
+    xs_proposal, vs_proposal = simulate(
         x0,
         U_proposal,
         temperature,
@@ -288,6 +288,7 @@ def _wrap_simulate(args):
 
     # discard burn-in batches and reshape into a single flat array
     xs_proposal = xs_proposal[:, burn_in_batches:, :, :]
+    vs_proposal = vs_proposal[:, burn_in_batches:, :, :]
 
     batch_U_proposal_fn = jax.pmap(jax.vmap(U_proposal))
     batch_U_target_fn = jax.pmap(jax.vmap(U_target))
@@ -302,8 +303,11 @@ def _wrap_simulate(args):
 
     # reshape into flat array by removing num_workers dimension
     xs_proposal = xs_proposal.reshape(-1, num_atoms, 3)
+    vs_proposal = vs_proposal.reshape(-1, num_atoms, 3)
 
-    return xs_proposal, log_weights
+    xvs_proposal = np.stack([xs_proposal, vs_proposal], axis=1)
+
+    return xvs_proposal, log_weights
 
 
 def generate_log_weighted_samples(
@@ -367,12 +371,14 @@ def generate_log_weighted_samples(
             num_workers,
             seed,
         )
-        xs_proposal, log_weights = pool.map(_wrap_simulate, (args,))[0]
+        xvs_proposal, log_weights = pool.map(_wrap_simulate, (args,))[0]
 
-        assert xs_proposal.shape[0] == num_batches
+        assert xvs_proposal.shape[1] == 2
+
+        assert xvs_proposal.shape[0] == num_batches
         assert log_weights.shape[0] == num_batches
 
-        return xs_proposal, log_weights
+        return xvs_proposal, log_weights
 
 
 def sample_from_log_weights(weighted_samples, log_weights, size):

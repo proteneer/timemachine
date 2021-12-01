@@ -58,15 +58,19 @@ def generate_ligand_samples(num_batches, mol, ff, temperature, seed):
 
 
 def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, ligand_log_weights, num_ligand_atoms):
-    all_xbs = []
+    all_xvbs = []
     for _ in range(num_samples):
         choice_idx = np.random.choice(np.arange(len(solvent_samples)))
         solvent_x = solvent_samples[choice_idx].coords
-        ligand_x = enhanced.sample_from_log_weights(ligand_samples, ligand_log_weights, size=1)[0]
+        solvent_v = solvent_samples[choice_idx].velocities
+        ligand_xv = enhanced.sample_from_log_weights(ligand_samples, ligand_log_weights, size=1)[0]
+        ligand_x = ligand_xv[0]
+        ligand_v = ligand_xv[1]
         combined_x = np.concatenate([solvent_x[:-num_ligand_atoms], ligand_x], axis=0)
+        combined_v = np.concatenate([solvent_v[:-num_ligand_atoms], ligand_v], axis=0)
         combined_box = solvent_samples[choice_idx].box
-        all_xbs.append((combined_x, combined_box))
-    return all_xbs
+        all_xvbs.append((combined_x, combined_v, combined_box))
+    return all_xvbs
 
 
 def test_smc():
@@ -120,14 +124,14 @@ def test_smc():
         solvent_xvbs, ligand_samples, ligand_log_weights = pickle.load(fh)
 
     n_endstate_samples = 5000
-    all_xbs = generate_endstate_samples(
+    all_xvbs = generate_endstate_samples(
         n_endstate_samples, solvent_xvbs, ligand_samples, ligand_log_weights, num_ligand_atoms
     )
 
     # plot torsions at the end-states
     end_state_torsions = []
-    for xb in all_xbs:
-        x = xb[0]
+    for xvb in all_xvbs:
+        x = xvb[0]
         x_l = x[:-num_ligand_atoms]
         end_state_torsions.append(get_torsion(x_l))
 
@@ -149,16 +153,12 @@ def test_smc():
 
     U_fn = functional.construct_differentiable_interface_fast(ubps, params)
 
-    for xi, bi in all_xbs:
+    for xi, vi, bi in all_xvbs:
         # (ytz): note to jfass, change v0 to not zeros_like
-        xvb = CoordsVelBox(xi, np.zeros_like(xi), bi)
+        xvb = CoordsVelBox(xi, vi, bi)
         xvb_new = mover.move(xvb)
 
         # compare delta_Us when coords/box change (this will large and size extensive, probably not useful)
         print(U_fn(xvb_new.coords, params, xvb_new.box, npt_lamb) - U_fn(xvb.coords, params, xvb.box, npt_lamb))
-
-    # or, compare delta_Us when lambda changes
-
-    U_fn = functional.construct_differentiable_interface_fast(ubps, params)
-    for xi, bi in all_xbs:
+        # compare delta_Us when lambda changes
         print(U_fn(xi, params, bi, 0.9) - U_fn(xi, params, bi, 1.0))
