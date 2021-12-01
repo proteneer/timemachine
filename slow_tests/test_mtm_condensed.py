@@ -58,7 +58,7 @@ def test_condensed_phase_mtm():
     proposal_U = state.U_decharged
     seed = 2021
 
-    cache_path = "cache.pkl"
+    cache_path = "test_mtm_condensed_cache.pkl"
     if not os.path.exists(cache_path):
         print("Generating cache")
         num_batches = 30000

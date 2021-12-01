@@ -253,7 +253,6 @@ class VacuumState:
 # (ytz): in order for XLA's pmap to properly parallelize over multiple CPU devices, we need to
 # set this explicitly via a magical command line arg. This should be ran in a subprocess
 def _wrap_simulate(args):
-    print("IN WRAP SIMULATE")
     (
         mol,
         U_proposal,
