@@ -159,6 +159,5 @@ def test_smc():
 
     # or, compare delta_Us when lambda changes
 
-    U_fn = functional.construct_differentiable_interface_fast(ubps, params)
     for xi, bi in all_xbs:
         print(U_fn(xi, params, bi, 0.9) - U_fn(xi, params, bi, 1.0))
