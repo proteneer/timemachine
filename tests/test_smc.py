@@ -145,8 +145,6 @@ def test_smc():
     npt_lamb = 1.0
     seed = int(time.time())
 
-    print(seed)
-
     mover = NPTMove(ubps, npt_lamb, masses, temperature, pressure, n_steps, seed)
 
     U_fn = functional.construct_differentiable_interface_fast(ubps, params)
@@ -156,8 +154,8 @@ def test_smc():
         xvb = CoordsVelBox(xi, np.zeros_like(xi), bi)
         xvb_new = mover.move(xvb)
 
-        # compare delta_Us when coords change
-        print(U_fn(xvb_new.coords, params, xvb_new.box, npt_lamb) - U_fn(xvb.coords, params, bi, npt_lamb))
+        # compare delta_Us when coords/box change (this will large and size extensive, probably not useful)
+        print(U_fn(xvb_new.coords, params, xvb_new.box, npt_lamb) - U_fn(xvb.coords, params, xvb.box, npt_lamb))
 
     # or, compare delta_Us when lambda changes
 
