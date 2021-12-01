@@ -761,8 +761,8 @@ void __global__ k_nonbonded_exclusions(
     const double *__restrict__ params,
     const double *__restrict__ box,
     const double *__restrict__ dp_dl,
-    const double *__restrict__ coords_w, // 4D coords
-    const double *__restrict__ dw_dl,    // 4D derivatives
+    const double *__restrict__ coords_w,    // 4D coords
+    const double *__restrict__ dw_dl,       // 4D derivatives
     const int *__restrict__ exclusion_idxs, // [E, 2] pair-list of atoms to be excluded
     const double *__restrict__ scales,      // [E]
     const double beta,
