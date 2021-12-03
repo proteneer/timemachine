@@ -78,7 +78,7 @@ void __global__ k_find_block_bounds(
 }
 
 void __global__ k_compact_trim_atoms(
-    const int N,
+    const int NC,
     const int Y,
     unsigned int *__restrict__ trim_atoms,
     unsigned int *__restrict__ interactionCount,
@@ -87,8 +87,8 @@ void __global__ k_compact_trim_atoms(
 
     __shared__ int ixn_j_buffer
         [64]; // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
-    ixn_j_buffer[threadIdx.x] = N;
-    ixn_j_buffer[WARPSIZE + threadIdx.x] = N;
+    ixn_j_buffer[threadIdx.x] = NC;
+    ixn_j_buffer[WARPSIZE + threadIdx.x] = NC;
 
     const int indexInWarp = threadIdx.x % WARPSIZE;
     const int warpMask = (1 << indexInWarp) - 1;
@@ -100,7 +100,7 @@ void __global__ k_compact_trim_atoms(
     for (int trim_block_idx = 0; trim_block_idx < Y; trim_block_idx++) {
 
         int atom_j_idx = trim_atoms[row_block_idx * Y * WARPSIZE + trim_block_idx * WARPSIZE + threadIdx.x];
-        bool interacts = atom_j_idx < N;
+        bool interacts = atom_j_idx < NC;
 
         int includeAtomFlags = __ballot_sync(FULL_MASK, interacts);
 
@@ -121,7 +121,7 @@ void __global__ k_compact_trim_atoms(
             interactingAtoms[sync_start[0] * WARPSIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
             ixn_j_buffer[threadIdx.x] = ixn_j_buffer[WARPSIZE + threadIdx.x];
-            ixn_j_buffer[WARPSIZE + threadIdx.x] = N; // reset old values
+            ixn_j_buffer[WARPSIZE + threadIdx.x] = NC; // reset old values
             neighborsInBuffer -= WARPSIZE;
         }
     }
@@ -154,12 +154,16 @@ Each block proceeds as follows:
 
 */
 
-template <typename RealType>
+template <typename RealType, bool UPPER_TRIAG>
 void __global__ k_find_blocks_with_ixns(
-    const int N,
-    const double *__restrict__ bb_ctr, // [N * 3]
-    const double *__restrict__ bb_ext, // [N * 3]
-    const double *__restrict__ coords, //TBD make float32 version
+    const int NC,                          // Number of atoms in columns
+    const int NR,                          // Number of atoms in rows
+    const double *__restrict__ col_bb_ctr, // [NC * 3] column block centers
+    const double *__restrict__ col_bb_ext, // [NC * 3] column block extants
+    const double *__restrict__ row_bb_ctr, // [NR * 3] row block centers
+    const double *__restrict__ row_bb_ext, // [NR * 3] row block extants
+    const double *__restrict__ col_coords, //TBD make float32 version
+    const double *__restrict__ row_coords, //TBD make float32 version
     const double *__restrict__ box,
     unsigned int *__restrict__ interactionCount, // number of tiles that have interactions
     int *__restrict__ interactingTiles,          // the row block idx of the tile that is interacting
@@ -174,31 +178,31 @@ void __global__ k_find_blocks_with_ixns(
         [64]; // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
 
     // initialize
-    ixn_j_buffer[threadIdx.x] = N;
-    ixn_j_buffer[WARPSIZE + threadIdx.x] = N;
+    ixn_j_buffer[threadIdx.x] = NC;
+    ixn_j_buffer[WARPSIZE + threadIdx.x] = NC;
 
     __shared__ volatile int sync_start[1];
 
     const int row_block_idx = blockIdx.x;
 
     // Retrieve the center coords of row's box and outer limits of row box.
-    RealType row_bb_ctr_x = bb_ctr[row_block_idx * 3 + 0];
-    RealType row_bb_ctr_y = bb_ctr[row_block_idx * 3 + 1];
-    RealType row_bb_ctr_z = bb_ctr[row_block_idx * 3 + 2];
+    RealType row_bb_ctr_x = row_bb_ctr[row_block_idx * 3 + 0];
+    RealType row_bb_ctr_y = row_bb_ctr[row_block_idx * 3 + 1];
+    RealType row_bb_ctr_z = row_bb_ctr[row_block_idx * 3 + 2];
 
-    RealType row_bb_ext_x = bb_ext[row_block_idx * 3 + 0];
-    RealType row_bb_ext_y = bb_ext[row_block_idx * 3 + 1];
-    RealType row_bb_ext_z = bb_ext[row_block_idx * 3 + 2];
+    RealType row_bb_ext_x = row_bb_ext[row_block_idx * 3 + 0];
+    RealType row_bb_ext_y = row_bb_ext[row_block_idx * 3 + 1];
+    RealType row_bb_ext_z = row_bb_ext[row_block_idx * 3 + 2];
 
     int neighborsInBuffer = 0;
 
     const unsigned int atom_i_idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    RealType pos_i_x = atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0;
-    RealType pos_i_y = atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0;
-    RealType pos_i_z = atom_i_idx < N ? coords[atom_i_idx * 3 + 2] : 0;
+    RealType pos_i_x = atom_i_idx < NR ? row_coords[atom_i_idx * 3 + 0] : 0;
+    RealType pos_i_y = atom_i_idx < NR ? row_coords[atom_i_idx * 3 + 1] : 0;
+    RealType pos_i_z = atom_i_idx < NR ? row_coords[atom_i_idx * 3 + 2] : 0;
 
-    const int NUM_BLOCKS = (N + TILESIZE - 1) / TILESIZE;
+    const int NUM_COL_BLOCKS = (NC + TILESIZE - 1) / TILESIZE;
 
     RealType bx = box[0 * 3 + 0];
     RealType by = box[1 * 3 + 1];
@@ -230,18 +234,18 @@ void __global__ k_find_blocks_with_ixns(
     int col_block_base = blockIdx.y * TILESIZE;
 
     int col_block_idx = col_block_base + indexInWarp;
-    bool include_col_block = (col_block_idx < NUM_BLOCKS) && (col_block_idx >= row_block_idx);
+    bool include_col_block = (col_block_idx < NUM_COL_BLOCKS) && (!UPPER_TRIAG || col_block_idx >= row_block_idx);
 
     if (include_col_block) {
 
         // Compute center of column box and extent coords.
-        RealType col_bb_ctr_x = bb_ctr[col_block_idx * 3 + 0];
-        RealType col_bb_ctr_y = bb_ctr[col_block_idx * 3 + 1];
-        RealType col_bb_ctr_z = bb_ctr[col_block_idx * 3 + 2];
+        RealType col_bb_ctr_x = col_bb_ctr[col_block_idx * 3 + 0];
+        RealType col_bb_ctr_y = col_bb_ctr[col_block_idx * 3 + 1];
+        RealType col_bb_ctr_z = col_bb_ctr[col_block_idx * 3 + 2];
 
-        RealType col_bb_ext_x = bb_ext[col_block_idx * 3 + 0];
-        RealType col_bb_ext_y = bb_ext[col_block_idx * 3 + 1];
-        RealType col_bb_ext_z = bb_ext[col_block_idx * 3 + 2];
+        RealType col_bb_ext_x = col_bb_ext[col_block_idx * 3 + 0];
+        RealType col_bb_ext_y = col_bb_ext[col_block_idx * 3 + 1];
+        RealType col_bb_ext_z = col_bb_ext[col_block_idx * 3 + 2];
 
         // Find delta between boxes
         RealType box_box_dx = row_bb_ctr_x - col_bb_ctr_x;
@@ -278,22 +282,24 @@ void __global__ k_find_blocks_with_ixns(
         // ffs(2^31) == 32
 
         int offset = __ffs(includeBlockFlags) - 1;
-
         includeBlockFlags &= includeBlockFlags - 1;
+
         int col_block = col_block_base + offset;
+        int atom_j_idx = col_block * WARPSIZE + threadIdx.x; // each thread loads a different atom
+
         // Compute overlap between column bounding box and row atom
-        RealType col_bb_ctr_x = bb_ctr[col_block * 3 + 0];
-        RealType col_bb_ctr_y = bb_ctr[col_block * 3 + 1];
-        RealType col_bb_ctr_z = bb_ctr[col_block * 3 + 2];
+        RealType col_bb_ctr_x = col_bb_ctr[col_block * 3 + 0];
+        RealType col_bb_ctr_y = col_bb_ctr[col_block * 3 + 1];
+        RealType col_bb_ctr_z = col_bb_ctr[col_block * 3 + 2];
 
-        RealType col_bb_ext_x = bb_ext[col_block * 3 + 0];
-        RealType col_bb_ext_y = bb_ext[col_block * 3 + 1];
-        RealType col_bb_ext_z = bb_ext[col_block * 3 + 2];
+        RealType col_bb_ext_x = col_bb_ext[col_block * 3 + 0];
+        RealType col_bb_ext_y = col_bb_ext[col_block * 3 + 1];
+        RealType col_bb_ext_z = col_bb_ext[col_block * 3 + 2];
 
-        // Don't use pos_i_* here, as might have been shifted to center
-        RealType atom_box_dx = (atom_i_idx < N ? coords[atom_i_idx * 3 + 0] : 0) - col_bb_ctr_x;
-        RealType atom_box_dy = (atom_i_idx < N ? coords[atom_i_idx * 3 + 1] : 0) - col_bb_ctr_y;
-        RealType atom_box_dz = (atom_i_idx < N ? coords[atom_i_idx * 3 + 2] : 0) - col_bb_ctr_z;
+        // Don't use pos_i_* here, as might have been shifted to center of row box
+        RealType atom_box_dx = (atom_i_idx < NR ? row_coords[atom_i_idx * 3 + 0] : 0) - col_bb_ctr_x;
+        RealType atom_box_dy = (atom_i_idx < NR ? row_coords[atom_i_idx * 3 + 1] : 0) - col_bb_ctr_y;
+        RealType atom_box_dz = (atom_i_idx < NR ? row_coords[atom_i_idx * 3 + 2] : 0) - col_bb_ctr_z;
 
         atom_box_dx -= bx * nearbyint(atom_box_dx * inv_bx);
         atom_box_dy -= by * nearbyint(atom_box_dy * inv_by);
@@ -303,12 +309,12 @@ void __global__ k_find_blocks_with_ixns(
         atom_box_dy = max(static_cast<RealType>(0.0), fabs(atom_box_dy) - col_bb_ext_y);
         atom_box_dz = max(static_cast<RealType>(0.0), fabs(atom_box_dz) - col_bb_ext_z);
 
+        bool check_column_atoms =
+            atom_i_idx < NR &&
+            atom_box_dx * atom_box_dx + atom_box_dy * atom_box_dy + atom_box_dz * atom_box_dz < cutoff_squared;
         // Find rows where the row atom and column boxes are within cutoff
+        unsigned atomFlags = __ballot_sync(FULL_MASK, check_column_atoms);
         bool interacts = false;
-        unsigned atomFlags = __ballot_sync(
-            FULL_MASK,
-            atom_box_dx * atom_box_dx + atom_box_dy * atom_box_dy + atom_box_dz * atom_box_dz < cutoff_squared);
-        int atom_j_idx = col_block * WARPSIZE + threadIdx.x; // each thread loads a different atom
 
         //       threadIdx
         //      0 1 2 3 4 5
@@ -324,9 +330,9 @@ void __global__ k_find_blocks_with_ixns(
         // s 0  0 0 0 0 0 0
         //   0  0 0 0 0 0 0
 
-        RealType pos_j_x = atom_j_idx < N ? coords[atom_j_idx * 3 + 0] : 0;
-        RealType pos_j_y = atom_j_idx < N ? coords[atom_j_idx * 3 + 1] : 0;
-        RealType pos_j_z = atom_j_idx < N ? coords[atom_j_idx * 3 + 2] : 0;
+        RealType pos_j_x = atom_j_idx < NC ? col_coords[atom_j_idx * 3 + 0] : 0;
+        RealType pos_j_y = atom_j_idx < NC ? col_coords[atom_j_idx * 3 + 1] : 0;
+        RealType pos_j_z = atom_j_idx < NC ? col_coords[atom_j_idx * 3 + 2] : 0;
 
         if (single_periodic_box) {
             // Recenter using **row** box center
@@ -345,6 +351,7 @@ void __global__ k_find_blocks_with_ixns(
             RealType row_i_x = __shfl_sync(FULL_MASK, pos_i_x, row_atom);
             RealType row_i_y = __shfl_sync(FULL_MASK, pos_i_y, row_atom);
             RealType row_i_z = __shfl_sync(FULL_MASK, pos_i_z, row_atom);
+
             if (!single_periodic_box) {
                 RealType atom_atom_dx = row_i_x - pos_j_x;
                 RealType atom_atom_dy = row_i_y - pos_j_y;
@@ -390,7 +397,7 @@ void __global__ k_find_blocks_with_ixns(
             interactingAtoms[sync_start[0] * WARPSIZE + threadIdx.x] = ixn_j_buffer[threadIdx.x];
 
             ixn_j_buffer[threadIdx.x] = ixn_j_buffer[WARPSIZE + threadIdx.x];
-            ixn_j_buffer[WARPSIZE + threadIdx.x] = N; // reset old values
+            ixn_j_buffer[WARPSIZE + threadIdx.x] = NC; // reset old values
             neighborsInBuffer -= WARPSIZE;
         }
     }
