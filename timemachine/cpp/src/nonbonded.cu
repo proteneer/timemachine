@@ -383,7 +383,6 @@ void Nonbonded<RealType, Interpolated>::execute_device(
         d_sorted_dp_dl_,
         d_sorted_w_,
         d_sorted_dw_dl_,
-        lambda,
         beta_,
         cutoff_,
         nblist_.get_ixn_tiles(),

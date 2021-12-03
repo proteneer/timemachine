@@ -16,7 +16,6 @@ typedef void (*k_nonbonded_fn)(
     const double *__restrict__ dl_dp,
     const double *__restrict__ coords_w, // 4D coords
     const double *__restrict__ dw_dl,    // 4D derivatives
-    const double lambda,
     const double beta,
     const double cutoff,
     const int *__restrict__ ixn_tiles,

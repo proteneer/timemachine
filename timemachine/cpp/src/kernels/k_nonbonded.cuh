@@ -415,7 +415,6 @@ void __device__ v_nonbonded_unified(
     const double *__restrict__ dp_dl,
     const double *__restrict__ coords_w, // 4D coords
     const double *__restrict__ dw_dl,    // 4D derivatives
-    const double lambda,
     // const int * __restrict__ lambda_plane_idxs, // 0 or 1, shift
     // const int * __restrict__ lambda_offset_idxs, // 0 or 1, how much we offset from the plane by cutoff
     const double beta,
@@ -506,7 +505,6 @@ void __device__ v_nonbonded_unified(
 
     unsigned long long energy = 0;
 
-    RealType real_lambda = static_cast<RealType>(lambda);
     RealType real_beta = static_cast<RealType>(beta);
 
     const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
@@ -682,7 +680,6 @@ void __global__ k_nonbonded_unified(
     const double *__restrict__ dp_dl,
     const double *__restrict__ coords_w, // 4D coords
     const double *__restrict__ dw_dl,    // 4D derivatives
-    const double lambda,
     const double beta,
     const double cutoff,
     const int *__restrict__ ixn_tiles,
@@ -723,7 +720,6 @@ void __global__ k_nonbonded_unified(
             dp_dl,
             coords_w,
             dw_dl,
-            lambda,
             beta,
             cutoff,
             ixn_tiles,
@@ -741,7 +737,6 @@ void __global__ k_nonbonded_unified(
             dp_dl,
             coords_w,
             dw_dl,
-            lambda,
             beta,
             cutoff,
             ixn_tiles,
