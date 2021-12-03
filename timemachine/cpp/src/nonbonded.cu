@@ -13,6 +13,7 @@
 #include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"
+#include "k_nonbonded_pairs.cuh"
 
 #include <fstream>
 #include <streambuf>
@@ -419,7 +420,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
             gpuErrchk(cudaPeekAtLastError());
         }
 
-        k_nonbonded_exclusions<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
+        k_nonbonded_pairs<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
             E_,
             d_x,
             Interpolated ? d_unsorted_p_ : d_p,
