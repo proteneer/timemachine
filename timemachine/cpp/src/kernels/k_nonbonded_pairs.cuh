@@ -1,3 +1,5 @@
+#pragma once
+
 #include "../fixed_point.hpp"
 #include "k_fixed_point.cuh"
 
