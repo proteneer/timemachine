@@ -25,8 +25,8 @@ private:
 
 public:
     NonbondedPairs(
-        const std::vector<int> &pair_idxs,          // [M, 2]
-        const std::vector<double> &scales,          // [M, 2]
+        const std::vector<int> &pair_idxs, // [M, 2]
+        const std::vector<double> &scales, // [M, 2]
         const double beta,
         const double cutoff);
 
