@@ -939,10 +939,13 @@ template <typename RealType> void declare_nonbonded_pairs(py::module &m, const c
 
                 std::vector<double> scales(scales_i.size());
                 std::memcpy(scales.data(), scales_i.data(), scales_i.size() * sizeof(double));
+
+                return new timemachine::NonbondedPairs<RealType>(pair_idxs, scales, beta, cutoff);
             }),
-            py::arg("exclusion_i"),
-            py::arg("scales_i"));
-    ;
+            py::arg("pair_i"),
+            py::arg("scales_i"),
+            py::arg("beta"),
+            py::arg("cutoff"));
 }
 
 void declare_barostat(py::module &m) {
@@ -1055,6 +1058,9 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_nonbonded<double, false>(m, "f64");
     declare_nonbonded<float, false>(m, "f32");
+
+    declare_nonbonded_pairs<double>(m, "f64");
+    declare_nonbonded_pairs<float>(m, "f32");
 
     // declare_gbsa<double>(m, "f64");
     // declare_gbsa<float>(m, "f32");
