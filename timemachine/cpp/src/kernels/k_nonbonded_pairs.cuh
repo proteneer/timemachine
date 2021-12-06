@@ -1,5 +1,10 @@
 #pragma once
 
+// NOTE: The order of associative operations performed by this kernel
+// should be identical to that of k_nonbonded. This is to ensure that
+// we get exact cancellation when subtracting exclusions computed
+// using this kernel.
+
 #include "../fixed_point.hpp"
 #include "k_fixed_point.cuh"
 
