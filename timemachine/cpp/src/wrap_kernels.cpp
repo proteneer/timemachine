@@ -17,6 +17,7 @@
 // #include "inertial_restraint.hpp"
 #include "centroid_restraint.hpp"
 #include "nonbonded.hpp"
+#include "nonbonded_pairs.hpp"
 #include "periodic_torsion.hpp"
 #include "rmsd_restraint.hpp"
 // #include "lennard_jones.hpp"
@@ -920,6 +921,28 @@ template <typename RealType, bool Interpolated> void declare_nonbonded(py::modul
             py::arg("transform_lambda_sigma") = "lambda",
             py::arg("transform_lambda_epsilon") = "lambda",
             py::arg("transform_lambda_w") = "lambda");
+}
+
+template <typename RealType> void declare_nonbonded_pairs(py::module &m, const char *typestr) {
+
+    using Class = timemachine::NonbondedPairs<RealType>;
+    std::string pyclass_name = std::string("NonbondedPairs_") + typestr;
+    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
+        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
+        .def(
+            py::init([](const py::array_t<int, py::array::c_style> &pair_i,      // [M, 2] atom indices
+                        const py::array_t<double, py::array::c_style> &scales_i, // [M, 2]
+                        const double beta,
+                        const double cutoff) {
+                std::vector<int> pair_idxs(pair_i.size());
+                std::memcpy(pair_idxs.data(), pair_i.data(), pair_i.size() * sizeof(int));
+
+                std::vector<double> scales(scales_i.size());
+                std::memcpy(scales.data(), scales_i.data(), scales_i.size() * sizeof(double));
+            }),
+            py::arg("exclusion_i"),
+            py::arg("scales_i"));
+    ;
 }
 
 void declare_barostat(py::module &m) {
