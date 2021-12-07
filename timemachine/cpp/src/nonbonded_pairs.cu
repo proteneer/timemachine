@@ -6,13 +6,19 @@
 
 namespace timemachine {
 
-template <typename RealType>
-NonbondedPairs<RealType>::NonbondedPairs(
-    const std::vector<int> &pair_idxs, // [M, 2]
-    const std::vector<double> &scales, // [M, 2]
+template <typename RealType, bool Interpolated>
+NonbondedPairs<RealType, Interpolated>::NonbondedPairs(
+    const std::vector<int> &pair_idxs,          // [M, 2]
+    const std::vector<double> &scales,          // [M, 2]
+    const std::vector<int> &lambda_plane_idxs,  // [N]
+    const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
-    const double cutoff)
-    : M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff) {
+    const double cutoff,
+    const std::string &kernel_src)
+    : N_(lambda_offset_idxs.size()), M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff),
+      compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
+      compute_permute_interpolated_(
+          kernel_cache_.program(kernel_src.c_str()).kernel("k_permute_interpolated").instantiate()) {
 
     if (pair_idxs.size() % 2 != 0) {
         throw std::runtime_error("pair_idxs.size() must be exactly 2*M");
@@ -26,21 +32,54 @@ NonbondedPairs<RealType>::NonbondedPairs(
         }
     }
 
-    gpuErrchk(cudaMalloc(&d_pair_idxs_, M_ * 2 * sizeof(*d_pair_idxs_)));
-    gpuErrchk(cudaMemcpy(d_pair_idxs_, &pair_idxs[0], M_ * 2 * sizeof(*d_pair_idxs_), cudaMemcpyHostToDevice));
-
     if (scales.size() / 2 != M_) {
         throw std::runtime_error("bad scales size!");
     }
 
+    gpuErrchk(cudaMalloc(&d_pair_idxs_, M_ * 2 * sizeof(*d_pair_idxs_)));
+    gpuErrchk(cudaMemcpy(d_pair_idxs_, &pair_idxs[0], M_ * 2 * sizeof(*d_pair_idxs_), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_ * sizeof(*d_lambda_plane_idxs_)));
+    gpuErrchk(cudaMemcpy(
+        d_lambda_plane_idxs_, &lambda_plane_idxs[0], N_ * sizeof(*d_lambda_plane_idxs_), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMalloc(&d_lambda_offset_idxs_, N_ * sizeof(*d_lambda_offset_idxs_)));
+    gpuErrchk(cudaMemcpy(
+        d_lambda_offset_idxs_, &lambda_offset_idxs[0], N_ * sizeof(*d_lambda_offset_idxs_), cudaMemcpyHostToDevice));
+
+    gpuErrchk(cudaMalloc(&d_w_, N_ * sizeof(*d_w_)));
+    gpuErrchk(cudaMalloc(&d_dw_dl_, N_ * sizeof(*d_dw_dl_)));
+    gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * 3 * sizeof(*d_du_dp_buffer_)));
+
+    gpuErrchk(cudaMalloc(&d_dp_dl_, N_ * 3 * sizeof(*d_dp_dl_)));
+
     gpuErrchk(cudaMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_)));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
+
+    // construct identity permutation
+    if (Interpolated) {
+        gpuErrchk(cudaMalloc(&d_perm_, N_ * sizeof(*d_perm_)));
+        gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
+
+        for (int i = 0; i < N_; i++) {
+            d_perm_[i] = i;
+        }
+    }
 };
 
-template <typename RealType> NonbondedPairs<RealType>::~NonbondedPairs() { gpuErrchk(cudaFree(d_pair_idxs_)); };
+template <typename RealType, bool Interpolated> NonbondedPairs<RealType, Interpolated>::~NonbondedPairs() {
+    gpuErrchk(cudaFree(d_pair_idxs_));
+    gpuErrchk(cudaFree(d_scales_));
+    gpuErrchk(cudaFree(d_lambda_plane_idxs_));
+    gpuErrchk(cudaFree(d_lambda_offset_idxs_));
+    gpuErrchk(cudaFree(d_du_dp_buffer_));
+    gpuErrchk(cudaFree(d_w_));
+    gpuErrchk(cudaFree(d_dw_dl_));
+    gpuErrchk(cudaFree(d_dp_dl_));
+};
 
-template <typename RealType>
-void NonbondedPairs<RealType>::execute_device(
+template <typename RealType, bool Interpolated>
+void NonbondedPairs<RealType, Interpolated>::execute_device(
     const int N,
     const int P,
     const double *d_x,
@@ -55,9 +94,25 @@ void NonbondedPairs<RealType>::execute_device(
 
     const int tpb = 32;
 
-    dim3 dimGridExclusions((M_ + tpb - 1) / tpb, 1, 1);
+    dim3 dimGrid((M_ + tpb - 1) / tpb, 1, 1);
 
-    k_nonbonded_pairs<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
+    CUresult result = compute_w_coords_instance_.configure(M_, tpb, 0, stream)
+                          .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
+    if (result != 0) {
+        throw std::runtime_error("Driver call to k_compute_w_coords");
+    }
+
+    if (Interpolated) {
+        CUresult result = compute_permute_interpolated_.configure(dimGrid, tpb, 0, stream)
+                              .launch(lambda, N, d_perm_, d_p, d_p, d_dp_dl_);
+        if (result != 0) {
+            throw std::runtime_error("Driver call to k_permute_interpolated failed");
+        }
+    } else {
+        gpuErrchk(cudaMemsetAsync(d_dp_dl_, 0, N * 3 * sizeof(*d_dp_dl_), stream))
+    }
+
+    k_nonbonded_pairs<RealType><<<dimGrid, tpb, 0, stream>>>(
         M_,
         d_x,
         d_p,
@@ -77,7 +132,10 @@ void NonbondedPairs<RealType>::execute_device(
     gpuErrchk(cudaPeekAtLastError());
 }
 
-template class NonbondedPairs<double>;
-template class NonbondedPairs<float>;
+template class NonbondedPairs<double, true>;
+template class NonbondedPairs<float, true>;
+
+template class NonbondedPairs<double, false>;
+template class NonbondedPairs<float, false>;
 
 } // namespace timemachine
