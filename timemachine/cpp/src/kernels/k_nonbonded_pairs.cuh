@@ -7,6 +7,7 @@
 
 #include "../fixed_point.hpp"
 #include "k_fixed_point.cuh"
+#include "nonbonded_common.cuh"
 
 template <typename RealType>
 void __global__ k_nonbonded_pairs(
