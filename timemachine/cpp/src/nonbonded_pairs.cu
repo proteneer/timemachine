@@ -74,6 +74,10 @@ template <typename RealType, bool Interpolated> NonbondedPairs<RealType, Interpo
     gpuErrchk(cudaFree(d_w_));
     gpuErrchk(cudaFree(d_dw_dl_));
     gpuErrchk(cudaFree(d_dp_dl_));
+
+    if (Interpolated) {
+        gpuErrchk(cudaFree(d_perm_));
+    }
 };
 
 template <typename RealType, bool Interpolated>
