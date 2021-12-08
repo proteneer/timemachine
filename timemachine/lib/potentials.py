@@ -36,25 +36,15 @@ class CustomOpWrapper:
         return custom_ops.BoundPotential(self.unbound_impl(precision), self.params)
 
 
-class SummedPotential:
+class SummedPotential(CustomOpWrapper):
     def __init__(self, potentials: List[CustomOpWrapper], params_init: List[NDArray]):
         self._potentials = potentials
         self._sizes = [ps.size for ps in params_init]
         self.params = None
 
-    def bind(self, params: List[NDArray]) -> "SummedPotential":
-        self.params = params
-        return self
-
-    def unbound_impl(self, precision: str) -> custom_ops.SummedPotential:
+    def unbound_impl(self, precision: str):
         impls = [p.unbound_impl(precision) for p in self._potentials]
         return custom_ops.SummedPotential(impls, self._sizes)
-
-    def bound_impl(self, precision: str) -> custom_ops.BoundPotential:
-        if self.params is None:
-            raise ValueError("This op has not been bound to parameters.")
-
-        return custom_ops.BoundPotential(self.unbound_impl(precision), self.params)
 
 
 # should not be used for Nonbonded Potentials
