@@ -1,4 +1,4 @@
-from md.states import CoordsVelBox
+from md.states import CoordsVelBox, get_coords_vel_box, set_coords_vel_box
 from typing import List, Tuple
 import numpy as np
 from scipy.special import logsumexp
@@ -97,20 +97,20 @@ class NPTMove(MonteCarloMove):
         self.barostat_impl = barostat_impl
         self.lamb = lamb
         self.n_steps = n_steps
+        self.ctxt = None
 
     def move(self, x: CoordsVelBox):
-        # note: context creation overhead here is actually very small!
-        ctxt = custom_ops.Context(
-            x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls, self.barostat_impl
-        )
+        if self.ctxt is None:
+            # note: context creation overhead here is actually very small!
+            self.ctxt = custom_ops.Context(
+                x.coords, x.velocities, x.box, self.integrator_impl, self.bound_impls, self.barostat_impl
+            )
+        else:
+            set_coords_vel_box(self.ctxt, x)
 
         # arguments: lambda_schedule, du_dl_interval, x_interval
-        _ = ctxt.multiple_steps(self.lamb * np.ones(self.n_steps), 0, 0)
-        x_t = ctxt.get_x_t()
-        v_t = ctxt.get_v_t()
-        box = ctxt.get_box()
-
-        after_npt = CoordsVelBox(x_t, v_t, box)
+        _ = self.ctxt.multiple_steps(self.lamb * np.ones(self.n_steps), 0, 0)
+        after_npt = get_coords_vel_box(self.ctxt)
 
         self.n_proposed += 1
         self.n_accepted += 1

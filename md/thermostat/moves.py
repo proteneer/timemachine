@@ -1,5 +1,5 @@
 from md.moves import MonteCarloMove
-from md.states import CoordsVelBox
+from md.states import CoordsVelBox, get_coords_vel_box, set_coords_vel_box
 from timemachine.lib import custom_ops
 import numpy as np
 
@@ -10,23 +10,24 @@ class UnadjustedLangevinMove(MonteCarloMove):
         self.bound_impls = bound_impls
         self.lam = lam
         self.n_steps = n_steps
+        self.ctxt = None
 
     def move(self, x: CoordsVelBox):
-        # note: context creation overhead here is actually very small!
-        ctxt = custom_ops.Context(
-            x.coords,
-            x.velocities,
-            x.box,
-            self.integrator_impl,
-            self.bound_impls,
-        )
+        if self.ctxt is None:
+            # note: context creation overhead here is actually very small!
+            self.ctxt = custom_ops.Context(
+                x.coords,
+                x.velocities,
+                x.box,
+                self.integrator_impl,
+                self.bound_impls,
+            )
+        else:
+            set_coords_vel_box(self.ctxt, x)
 
         # arguments: lambda_schedule, du_dl_interval, x_interval
-        _ = ctxt.multiple_steps(self.lam * np.ones(self.n_steps), 0, 0)
-        x_t = ctxt.get_x_t()
-        v_t = ctxt.get_v_t()
-
-        after_nvt = CoordsVelBox(x_t, v_t, x.box.copy())
+        _ = self.ctxt.multiple_steps(self.lam * np.ones(self.n_steps), 0, 0)
+        after_nvt = get_coords_vel_box(self.ctxt)
 
         self.n_proposed += 1
         self.n_accepted += 1
