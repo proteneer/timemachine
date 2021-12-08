@@ -42,7 +42,7 @@ class SummedPotential(CustomOpWrapper):
         self._sizes = [ps.size for ps in params_init]
         self.params = None
 
-    def unbound_impl(self, precision: str):
+    def unbound_impl(self, precision):
         impls = [p.unbound_impl(precision) for p in self._potentials]
         return custom_ops.SummedPotential(impls, self._sizes)
 
