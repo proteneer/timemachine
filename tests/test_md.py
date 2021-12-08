@@ -70,11 +70,9 @@ class TestContext(unittest.TestCase):
         ctxt.set_v_t(new_v)
         ctxt.set_box(new_box)
 
-
         np.testing.assert_equal(ctxt.get_x_t(), new_x)
         np.testing.assert_equal(ctxt.get_v_t(), new_v)
         np.testing.assert_equal(ctxt.get_box(), new_box)
-
 
     def test_fwd_mode(self):
         """
