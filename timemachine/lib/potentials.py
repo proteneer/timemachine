@@ -44,7 +44,7 @@ class SummedPotential:
 
     def bind(self, params: List[NDArray]) -> "SummedPotential":
         self.params = params
-        pass
+        return self
 
     def unbound_impl(self, precision: str) -> custom_ops.SummedPotential:
         impls = [p.unbound_impl(precision) for p in self._potentials]
