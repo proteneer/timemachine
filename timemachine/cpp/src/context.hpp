@@ -41,6 +41,10 @@ public:
 
     void set_x_t(const double *in_buffer);
 
+    void set_v_t(const double *in_buffer);
+
+    void set_box(const double *in_buffer);
+
     void get_x_t(double *out_buffer) const;
 
     void get_v_t(double *out_buffer) const;

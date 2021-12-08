@@ -232,6 +232,16 @@ void declare_context(py::module &m) {
                 ctxt.set_x_t(new_x_t.data());
             })
         .def(
+            "set_v_t",
+            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_v_t) {
+                ctxt.set_v_t(new_v_t.data());
+            })
+        .def(
+            "set_box",
+            [](timemachine::Context &ctxt, const py::array_t<double, py::array::c_style> new_box) {
+                ctxt.set_box(new_box.data());
+            })
+        .def(
             "get_x_t",
             [](timemachine::Context &ctxt) -> py::array_t<double, py::array::c_style> {
                 unsigned int N = ctxt.num_atoms();
