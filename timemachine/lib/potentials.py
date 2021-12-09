@@ -1,5 +1,7 @@
 import numpy as np
 from timemachine.lib import custom_ops
+from typing import List
+from numpy.typing import NDArray
 
 # (ytz): classes in this class wrap custom_ops but have the added benefit
 # of being pickleable.
@@ -32,6 +34,21 @@ class CustomOpWrapper:
             raise ValueError("This op has not been bound to parameters.")
 
         return custom_ops.BoundPotential(self.unbound_impl(precision), self.params)
+
+
+class SummedPotential(CustomOpWrapper):
+    def __init__(self, potentials: List[CustomOpWrapper], params_init: List[NDArray]):
+
+        if len(potentials) != len(params_init):
+            raise ValueError("number of potentials != number of parameter arrays")
+
+        self._potentials = potentials
+        self._sizes = [ps.size for ps in params_init]
+        self.params = None
+
+    def unbound_impl(self, precision):
+        impls = [p.unbound_impl(precision) for p in self._potentials]
+        return custom_ops.SummedPotential(impls, self._sizes)
 
 
 # should not be used for Nonbonded Potentials
@@ -259,13 +276,3 @@ class NonbondedInterpolated(Nonbonded):
         custom_ctor = getattr(custom_ops, cls_name_base)
 
         return custom_ctor(*self.args)
-
-
-class SummedPotential(custom_ops.SummedPotential):
-    def __init__(self, potentials, params):
-        super().__init__(potentials, params)
-
-        # NOTE: the following is necessary to ensure that we maintain
-        # a reference to the wrapped Potential objects on the Python
-        # side; otherwise they may be freed prematurely
-        self._potentials = potentials
