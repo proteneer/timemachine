@@ -38,6 +38,10 @@ class CustomOpWrapper:
 
 class SummedPotential(CustomOpWrapper):
     def __init__(self, potentials: List[CustomOpWrapper], params_init: List[NDArray]):
+
+        if len(potentials) != len(params_init):
+            raise ValueError("number of potentials != number of parameter arrays")
+
         self._potentials = potentials
         self._sizes = [ps.size for ps in params_init]
         self.params = None
