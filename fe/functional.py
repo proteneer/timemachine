@@ -69,9 +69,7 @@ def construct_differentiable_interface_fast(unbound_potentials, params, precisio
 
     This implementation computes the sum of the component potentials in C++ using the SummedPotential custom op
     """
-    impls = [ubp.unbound_impl(precision) for ubp in unbound_potentials]
-    sizes = [ps.size for ps in params]
-    impl = SummedPotential(impls, sizes)
+    impl = SummedPotential(unbound_potentials, params).unbound_impl(precision)
 
     def pack(params):
         return np.concatenate([ps.reshape(-1) for ps in params])

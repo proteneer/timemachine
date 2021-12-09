@@ -1013,7 +1013,8 @@ void declare_summed_potential(py::module &m) {
                 return new timemachine::SummedPotential(potentials, params_sizes);
             }),
             py::arg("potentials"),
-            py::arg("params_sizes"));
+            py::arg("params_sizes"),
+            py::keep_alive<1, 2>());
 }
 
 const py::array_t<double, py::array::c_style>
