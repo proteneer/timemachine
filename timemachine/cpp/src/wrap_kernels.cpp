@@ -39,13 +39,18 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
     using Class = timemachine::Neighborlist<RealType>;
     std::string pyclass_name = std::string("Neighborlist_") + typestr;
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](int N) { return new timemachine::Neighborlist<RealType>(N); }))
+        .def(
+            py::init([](int NC, std::optional<int> NR) {
+                return new timemachine::Neighborlist<RealType>(NC, NR.has_value() ? NR.value() : 0);
+            }),
+            py::arg("NC"),
+            py::arg("NR") = py::none())
         .def(
             "compute_block_bounds",
             [](timemachine::Neighborlist<RealType> &nblist,
                const py::array_t<double, py::array::c_style> &coords,
                const py::array_t<double, py::array::c_style> &box,
-               int block_size) -> py::tuple {
+               const int block_size) -> py::tuple {
                 if (block_size != 32) {
                     throw std::runtime_error("Block size must be 32.");
                 }
@@ -72,6 +77,22 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
                 int D = coords.shape()[1];
 
                 std::vector<std::vector<int>> ixn_list = nblist.get_nblist_host(N, coords.data(), box.data(), cutoff);
+
+                return ixn_list;
+            })
+        .def(
+            "get_nblist_host_ligand",
+            [](timemachine::Neighborlist<RealType> &nblist,
+               const py::array_t<double, py::array::c_style> &coords,
+               const py::array_t<double, py::array::c_style> &row_coords,
+               const py::array_t<double, py::array::c_style> &box,
+               const double cutoff) -> std::vector<std::vector<int>> {
+                const int N = coords.shape()[0];
+                const int K = row_coords.shape()[0];
+                const int D = coords.shape()[1];
+
+                std::vector<std::vector<int>> ixn_list =
+                    nblist.get_nblist_host(N, K, coords.data(), row_coords.data(), box.data(), cutoff);
 
                 return ixn_list;
             });

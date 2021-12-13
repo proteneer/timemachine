@@ -1,9 +1,11 @@
+import pytest
 import numpy as np
+
 from timemachine.lib import custom_ops
-
+from md.builders import build_water_system
+from fe.utils import get_romol_conf
 from hilbertcurve.hilbertcurve import HilbertCurve
-
-import time
+from testsystems.relative import hif2a_ligand_pair
 
 
 def test_block_bounds():
@@ -17,7 +19,7 @@ def test_block_bounds():
 
         coords = np.random.randn(N, D)
         box_diag = np.random.rand(3) + 1
-        box = np.eye(3) * box_diag
+        box = np.diag(box_diag)
         num_blocks = (N + block_size - 1) // block_size
 
         ref_ctrs = []
@@ -81,8 +83,7 @@ def test_neighborlist():
                 coords = water_coords[atom_idxs]
                 padding = 0.1
                 diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
-                box = np.eye(3)
-                np.fill_diagonal(box, diag)
+                box = np.diag(diag)
 
                 N = coords.shape[0]
                 np.random.seed(1234)
@@ -128,9 +129,94 @@ def test_neighborlist():
                         print("TESTING bidx", bidx)
                         print(sorted(a))
                         print(sorted(b))
-                    # print(a, b)
                     np.testing.assert_equal(sorted(a), sorted(b))
 
-                # np.testing.assert_equal(ref_ixn_list, test_ixn_list)
 
-                # output is a group of 32
+def test_neighborlist_ligand_host_invalid_parameters():
+    cols = 10
+    rows = 5
+    box = np.diag(np.ones(3))
+    cutoff = 1.0
+
+    # Constructing NBlist with rows > cols is invalid
+    with pytest.raises(RuntimeError) as e:
+        custom_ops.Neighborlist_f32(rows, cols)
+    assert "NR is greater than NC" in str(e.value)
+
+    # Verify that the sizes of the rows and columns match how the NBlist was constructed
+    for nblist in (
+        custom_ops.Neighborlist_f32(cols, rows),
+        custom_ops.Neighborlist_f64(cols, rows),
+    ):
+        with pytest.raises(RuntimeError) as e:
+            # Flip the order of rows and columns
+            nblist.get_nblist_host_ligand(
+                np.random.rand(rows, 3),
+                np.random.rand(cols, 3),
+                box,
+                cutoff,
+            )
+            assert "NC != NC_" in str(e.value)
+
+
+def test_neighborlist_ligand_host():
+    ligand = hif2a_ligand_pair.mol_a
+    ligand_coords = get_romol_conf(ligand)
+
+    system, host_coords, box, top = build_water_system(4.0)
+    num_host_atoms = host_coords.shape[0]
+    host_coords = np.array(host_coords)
+
+    coords = np.concatenate([host_coords, ligand_coords])
+
+    N = coords.shape[0]
+    D = 3
+    cutoff = 1.0
+    block_size = 32
+    padding = 0.1
+
+    np.random.seed(1234)
+    diag = np.amax(coords, axis=0) - np.amin(coords, axis=0) + padding
+    box = np.diag(diag)
+
+    # Can only sort the host coords, but not the row/ligand
+    sort = True
+    if sort:
+        perm = hilbert_sort(coords[:num_host_atoms] + np.argmin(coords[:num_host_atoms]), D)
+        coords[:num_host_atoms] = coords[:num_host_atoms][perm]
+
+    col_coords = np.expand_dims(coords[:num_host_atoms], axis=0)
+    # Compute the reference interactions of the ligand
+    ref_ixn_list = []
+    num_ligand_atoms = coords[num_host_atoms:].shape[0]
+    num_blocks_of_32 = (num_ligand_atoms + block_size - 1) // block_size
+    box_diag = np.diag(box)
+    for rbidx in range(num_blocks_of_32):
+        row_start = num_host_atoms + (rbidx * block_size)
+        row_end = min(num_host_atoms + ((rbidx + 1) * block_size), N)
+        row_coords = coords[row_start:row_end]
+        row_coords = np.expand_dims(row_coords, axis=1)
+        deltas = row_coords - col_coords
+        deltas -= box_diag * np.floor(deltas / box_diag + 0.5)
+
+        dij = np.linalg.norm(deltas, axis=-1)
+        # Since the row and columns are unique, don't need to handle duplicates
+        idxs = np.argwhere(np.any(dij < cutoff, axis=0))
+        ref_ixn_list.append(idxs.reshape(-1).tolist())
+
+    for nblist in (
+        custom_ops.Neighborlist_f32(num_host_atoms, num_ligand_atoms),
+        custom_ops.Neighborlist_f64(num_host_atoms, num_ligand_atoms),
+    ):
+        for _ in range(2):
+
+            test_ixn_list = nblist.get_nblist_host_ligand(coords[:num_host_atoms], coords[num_host_atoms:], box, cutoff)
+            # compute the sparsity of the tile
+            assert len(ref_ixn_list) == len(test_ixn_list), "Number of blocks with interactions don't agree"
+
+            for bidx, (a, b) in enumerate(zip(ref_ixn_list, test_ixn_list)):
+                if sorted(a) != sorted(b):
+                    print("TESTING bidx", bidx)
+                    print(sorted(a))
+                    print(sorted(b))
+                np.testing.assert_equal(sorted(a), sorted(b))
