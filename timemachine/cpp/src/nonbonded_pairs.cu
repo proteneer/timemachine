@@ -1,5 +1,6 @@
 #include "gpu_utils.cuh"
 #include "k_nonbonded_pairs.cuh"
+#include "math_utils.cuh"
 #include "nonbonded_pairs.hpp"
 #include <stdexcept>
 #include <vector>
@@ -102,7 +103,7 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
 
     const int tpb = 32;
 
-    dim3 dimGrid((M_ + tpb - 1) / tpb, 1, 1);
+    int num_blocks = ceil_divide(M_, tpb);
 
     CUresult result = compute_w_coords_instance_.configure(M_, tpb, 0, stream)
                           .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
@@ -111,7 +112,7 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
     }
 
     if (Interpolated) {
-        CUresult result = compute_permute_interpolated_.configure(dimGrid, tpb, 0, stream)
+        CUresult result = compute_permute_interpolated_.configure(num_blocks, tpb, 0, stream)
                               .launch(lambda, N, d_perm_, d_p, d_p, d_dp_dl_);
         if (result != 0) {
             throw std::runtime_error("Driver call to k_permute_interpolated failed");
@@ -120,7 +121,7 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_dp_dl_, 0, N * 3 * sizeof(*d_dp_dl_), stream))
     }
 
-    k_nonbonded_pairs<RealType><<<dimGrid, tpb, 0, stream>>>(
+    k_nonbonded_pairs<RealType><<<num_blocks, tpb, 0, stream>>>(
         M_,
         d_x,
         d_p,
