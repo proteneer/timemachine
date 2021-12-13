@@ -373,6 +373,7 @@ def _deltaG_from_results(model, results, sys_params) -> Tuple[Tuple[float, List]
             beta=model.beta,
             lhs_xs=results[-2].xs,
             rhs_xs=results[-1].xs,
+            seed=2021,
         )
         dG_endpoint, endpoint_err = pymbar.BAR(model.beta * lhs_du, model.beta * np.array(rhs_du))
         dG_endpoint = dG_endpoint / model.beta
