@@ -64,7 +64,7 @@ NonbondedPairs<RealType, Interpolated>::NonbondedPairs(
         // construct identity permutation
         int *perm = static_cast<int *>(malloc(N_ * sizeof(int)));
         for (int i = 0; i < N_; i++) {
-            perm_[i] = i;
+            perm[i] = i;
         }
         gpuErrchk(cudaMalloc(&d_perm_, N_ * sizeof(*d_perm_)));
         gpuErrchk(cudaMemcpy(d_perm_, &perm[0], N_ * sizeof(*d_perm_), cudaMemcpyHostToDevice));
