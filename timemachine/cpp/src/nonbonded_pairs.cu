@@ -56,12 +56,18 @@ NonbondedPairs<RealType, Interpolated>::NonbondedPairs(
     gpuErrchk(cudaMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_)));
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
 
-    // construct identity permutation
     if (Interpolated) {
-        gpuErrchk(cudaMalloc(&d_perm_, N_ * sizeof(*d_perm_)));
+
+        gpuErrchk(cudaMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_)));
+        gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
+
+        // construct identity permutation
+        int *perm = static_cast<int *>(malloc(N_ * sizeof(int)));
         for (int i = 0; i < N_; i++) {
-            d_perm_[i] = i;
+            perm_[i] = i;
         }
+        gpuErrchk(cudaMalloc(&d_perm_, N_ * sizeof(*d_perm_)));
+        gpuErrchk(cudaMemcpy(d_perm_, &perm[0], N_ * sizeof(*d_perm_), cudaMemcpyHostToDevice));
     }
 };
 
