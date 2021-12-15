@@ -9,10 +9,10 @@
 #include <vector>
 
 #include "gpu_utils.cuh"
-#include "nonbonded.hpp"
+#include "nonbonded_dense.hpp"
 #include "vendored/hilbert.h"
 
-#include "k_nonbonded.cuh"
+#include "k_nonbonded_dense.cuh"
 #include "k_nonbonded_pairs.cuh"
 
 #include <fstream>

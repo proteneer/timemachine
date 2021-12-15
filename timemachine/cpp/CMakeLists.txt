@@ -43,7 +43,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/gpu_utils.cu
   src/observable.cu
   src/vendored/hilbert.cpp
-  src/nonbonded.cu
+  src/nonbonded_dense.cu
   src/nonbonded_pairs.cu
   src/neighborlist.cu
   src/harmonic_bond.cu

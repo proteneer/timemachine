@@ -16,7 +16,7 @@
 // #include "restraint.hpp"
 // #include "inertial_restraint.hpp"
 #include "centroid_restraint.hpp"
-#include "nonbonded.hpp"
+#include "nonbonded_dense.hpp"
 #include "nonbonded_pairs.hpp"
 #include "periodic_torsion.hpp"
 #include "rmsd_restraint.hpp"
