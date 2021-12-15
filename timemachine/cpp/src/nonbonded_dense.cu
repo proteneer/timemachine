@@ -22,7 +22,7 @@
 namespace timemachine {
 
 template <typename RealType, bool Interpolated>
-Nonbonded<RealType, Interpolated>::Nonbonded(
+NonbondedDense<RealType, Interpolated>::NonbondedDense(
     const std::vector<int> &exclusion_idxs,     // [E,2]
     const std::vector<double> &scales,          // [E, 2]
     const std::vector<int> &lambda_plane_idxs,  // [N]
@@ -151,7 +151,7 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
 };
 
-template <typename RealType, bool Interpolated> Nonbonded<RealType, Interpolated>::~Nonbonded() {
+template <typename RealType, bool Interpolated> NonbondedDense<RealType, Interpolated>::~NonbondedDense() {
 
     gpuErrchk(cudaFree(d_exclusion_idxs_));
     gpuErrchk(cudaFree(d_scales_));
@@ -187,16 +187,16 @@ template <typename RealType, bool Interpolated> Nonbonded<RealType, Interpolated
     gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
 };
 
-template <typename RealType, bool Interpolated> void Nonbonded<RealType, Interpolated>::set_nblist_padding(double val) {
+template <typename RealType, bool Interpolated> void NonbondedDense<RealType, Interpolated>::set_nblist_padding(double val) {
     nblist_padding_ = val;
 }
 
-template <typename RealType, bool Interpolated> void Nonbonded<RealType, Interpolated>::disable_hilbert_sort() {
+template <typename RealType, bool Interpolated> void NonbondedDense<RealType, Interpolated>::disable_hilbert_sort() {
     disable_hilbert_ = true;
 }
 
 template <typename RealType, bool Interpolated>
-void Nonbonded<RealType, Interpolated>::hilbert_sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
+void NonbondedDense<RealType, Interpolated>::hilbert_sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
 
     const int tpb = 32;
     const int B = (N_ + tpb - 1) / tpb;
@@ -230,7 +230,7 @@ void __global__ k_arange(int N, unsigned int *arr) {
 }
 
 template <typename RealType, bool Interpolated>
-void Nonbonded<RealType, Interpolated>::execute_device(
+void NonbondedDense<RealType, Interpolated>::execute_device(
     const int N,
     const int P,
     const double *d_x,
@@ -261,14 +261,14 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     if (N != N_) {
         std::cout << N << " " << N_ << std::endl;
-        throw std::runtime_error("Nonbonded::execute_device() N != N_");
+        throw std::runtime_error("NonbondedDense::execute_device() N != N_");
     }
 
     const int M = Interpolated ? 2 : 1;
 
     if (P != M * N_ * 3) {
         std::cout << P << " " << N_ << std::endl;
-        throw std::runtime_error("Nonbonded::execute_device() P != M*N_*3");
+        throw std::runtime_error("NonbondedDense::execute_device() P != M*N_*3");
     }
 
     // identify which tiles contain interpolated parameters
@@ -452,9 +452,9 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     }
 }
 
-template class Nonbonded<double, true>;
-template class Nonbonded<float, true>;
-template class Nonbonded<double, false>;
-template class Nonbonded<float, false>;
+template class NonbondedDense<double, true>;
+template class NonbondedDense<float, true>;
+template class NonbondedDense<double, false>;
+template class NonbondedDense<float, false>;
 
 } // namespace timemachine

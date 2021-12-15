@@ -882,14 +882,14 @@ std::string dirname(const std::string &fname) {
     return (std::string::npos == pos) ? "" : fname.substr(0, pos);
 }
 
-template <typename RealType, bool Interpolated> void declare_nonbonded(py::module &m, const char *typestr) {
+template <typename RealType, bool Interpolated> void declare_nonbonded_dense(py::module &m, const char *typestr) {
 
-    using Class = timemachine::Nonbonded<RealType, Interpolated>;
-    std::string pyclass_name = std::string("Nonbonded_") + typestr;
+    using Class = timemachine::NonbondedDense<RealType, Interpolated>;
+    std::string pyclass_name = std::string("NonbondedDense_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def("set_nblist_padding", &timemachine::Nonbonded<RealType, Interpolated>::set_nblist_padding)
-        .def("disable_hilbert_sort", &timemachine::Nonbonded<RealType, Interpolated>::disable_hilbert_sort)
+        .def("set_nblist_padding", &timemachine::NonbondedDense<RealType, Interpolated>::set_nblist_padding)
+        .def("disable_hilbert_sort", &timemachine::NonbondedDense<RealType, Interpolated>::disable_hilbert_sort)
         .def(
             py::init([](const py::array_t<int, py::array::c_style> &exclusion_i, // [E, 2] comprised of elements from N
                         const py::array_t<double, py::array::c_style> &scales_i, // [E, 2]
@@ -929,7 +929,7 @@ template <typename RealType, bool Interpolated> void declare_nonbonded(py::modul
                     std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_EPSILON"), transform_lambda_epsilon);
                 source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_W"), transform_lambda_w);
 
-                return new timemachine::Nonbonded<RealType, Interpolated>(
+                return new timemachine::NonbondedDense<RealType, Interpolated>(
                     exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, source_str);
             }),
             py::arg("exclusion_i"),
@@ -1110,11 +1110,11 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_periodic_torsion<double>(m, "f64");
     declare_periodic_torsion<float>(m, "f32");
 
-    declare_nonbonded<double, true>(m, "f64_interpolated");
-    declare_nonbonded<float, true>(m, "f32_interpolated");
+    declare_nonbonded_dense<double, true>(m, "f64_interpolated");
+    declare_nonbonded_dense<float, true>(m, "f32_interpolated");
 
-    declare_nonbonded<double, false>(m, "f64");
-    declare_nonbonded<float, false>(m, "f32");
+    declare_nonbonded_dense<double, false>(m, "f64");
+    declare_nonbonded_dense<float, false>(m, "f32");
 
     declare_nonbonded_pairs<double, true>(m, "f64_interpolated");
     declare_nonbonded_pairs<float, true>(m, "f32_interpolated");
