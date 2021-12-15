@@ -23,8 +23,6 @@ namespace timemachine {
 
 template <typename RealType, bool Interpolated>
 NonbondedDense<RealType, Interpolated>::NonbondedDense(
-    const std::vector<int> &exclusion_idxs,     // [E,2]
-    const std::vector<double> &scales,          // [E, 2]
     const std::vector<int> &lambda_plane_idxs,  // [N]
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
@@ -35,8 +33,8 @@ NonbondedDense<RealType, Interpolated>::NonbondedDense(
     // const std::string &transform_lambda_epsilon,
     // const std::string &transform_lambda_w
     )
-    : N_(lambda_offset_idxs.size()), cutoff_(cutoff), E_(exclusion_idxs.size() / 2), nblist_(lambda_offset_idxs.size()),
-      beta_(beta), d_sort_storage_(nullptr), d_sort_storage_bytes_(0), nblist_padding_(0.1), disable_hilbert_(false),
+    : N_(lambda_offset_idxs.size()), cutoff_(cutoff), nblist_(lambda_offset_idxs.size()), beta_(beta),
+      d_sort_storage_(nullptr), d_sort_storage_bytes_(0), nblist_padding_(0.1), disable_hilbert_(false),
       kernel_ptrs_({// enumerate over every possible kernel combination
                     // U: Compute U
                     // X: Compute DU_DL
@@ -73,10 +71,6 @@ NonbondedDense<RealType, Interpolated>::NonbondedDense(
         throw std::runtime_error("lambda offset idxs and plane idxs need to be equivalent");
     }
 
-    if (scales.size() / 2 != E_) {
-        throw std::runtime_error("bad scales size!");
-    }
-
     gpuErrchk(cudaMalloc(&d_lambda_plane_idxs_, N_ * sizeof(*d_lambda_plane_idxs_)));
     gpuErrchk(cudaMemcpy(
         d_lambda_plane_idxs_, &lambda_plane_idxs[0], N_ * sizeof(*d_lambda_plane_idxs_), cudaMemcpyHostToDevice));
@@ -101,13 +95,6 @@ NonbondedDense<RealType, Interpolated>::NonbondedDense(
     gpuErrchk(cudaMalloc(&d_sorted_du_dx_, N_ * 3 * sizeof(*d_sorted_du_dx_)));
     gpuErrchk(cudaMalloc(&d_sorted_du_dp_, N_ * 3 * sizeof(*d_sorted_du_dp_)));
     gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * 3 * sizeof(*d_du_dp_buffer_)));
-
-    gpuErrchk(cudaMalloc(&d_exclusion_idxs_, E_ * 2 * sizeof(*d_exclusion_idxs_)));
-    gpuErrchk(
-        cudaMemcpy(d_exclusion_idxs_, &exclusion_idxs[0], E_ * 2 * sizeof(*d_exclusion_idxs_), cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&d_scales_, E_ * 2 * sizeof(*d_scales_)));
-    gpuErrchk(cudaMemcpy(d_scales_, &scales[0], E_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
 
     gpuErrchk(cudaMallocHost(&p_ixn_count_, 1 * sizeof(*p_ixn_count_)));
 
@@ -153,8 +140,6 @@ NonbondedDense<RealType, Interpolated>::NonbondedDense(
 
 template <typename RealType, bool Interpolated> NonbondedDense<RealType, Interpolated>::~NonbondedDense() {
 
-    gpuErrchk(cudaFree(d_exclusion_idxs_));
-    gpuErrchk(cudaFree(d_scales_));
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
     gpuErrchk(cudaFree(d_du_dp_buffer_));
@@ -187,7 +172,8 @@ template <typename RealType, bool Interpolated> NonbondedDense<RealType, Interpo
     gpuErrchk(cudaFreeHost(p_rebuild_nblist_));
 };
 
-template <typename RealType, bool Interpolated> void NonbondedDense<RealType, Interpolated>::set_nblist_padding(double val) {
+template <typename RealType, bool Interpolated>
+void NonbondedDense<RealType, Interpolated>::set_nblist_padding(double val) {
     nblist_padding_ = val;
 }
 
@@ -196,7 +182,8 @@ template <typename RealType, bool Interpolated> void NonbondedDense<RealType, In
 }
 
 template <typename RealType, bool Interpolated>
-void NonbondedDense<RealType, Interpolated>::hilbert_sort(const double *d_coords, const double *d_box, cudaStream_t stream) {
+void NonbondedDense<RealType, Interpolated>::hilbert_sort(
+    const double *d_coords, const double *d_box, cudaStream_t stream) {
 
     const int tpb = 32;
     const int B = (N_ + tpb - 1) / tpb;
@@ -405,36 +392,6 @@ void NonbondedDense<RealType, Interpolated>::execute_device(
     // this needs to be an accumulated permute
     if (d_du_dp) {
         k_inv_permute_assign<<<dimGrid, tpb, 0, stream>>>(N, d_perm_, d_sorted_du_dp_, d_du_dp_buffer_);
-        gpuErrchk(cudaPeekAtLastError());
-    }
-
-    // exclusions use the non-sorted version
-    if (E_ > 0) {
-
-        dim3 dimGridExclusions((E_ + tpb - 1) / tpb, 1, 1);
-
-        if (Interpolated) {
-            k_inv_permute_assign_2x<<<dimGrid, tpb, 0, stream>>>(
-                N, d_perm_, d_sorted_p_, d_sorted_dp_dl_, d_unsorted_p_, d_unsorted_dp_dl_);
-            gpuErrchk(cudaPeekAtLastError());
-        }
-
-        k_nonbonded_pairs<RealType><<<dimGridExclusions, tpb, 0, stream>>>(
-            E_,
-            d_x,
-            Interpolated ? d_unsorted_p_ : d_p,
-            d_box,
-            Interpolated ? d_unsorted_dp_dl_ : d_sorted_dp_dl_,
-            d_w_,
-            d_dw_dl_,
-            d_exclusion_idxs_,
-            d_scales_,
-            beta_,
-            cutoff_,
-            d_du_dx,
-            d_du_dp_buffer_,
-            d_du_dl,
-            d_u);
         gpuErrchk(cudaPeekAtLastError());
     }
 

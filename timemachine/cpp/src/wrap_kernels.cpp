@@ -891,9 +891,7 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_dense(py:
         .def("set_nblist_padding", &timemachine::NonbondedDense<RealType, Interpolated>::set_nblist_padding)
         .def("disable_hilbert_sort", &timemachine::NonbondedDense<RealType, Interpolated>::disable_hilbert_sort)
         .def(
-            py::init([](const py::array_t<int, py::array::c_style> &exclusion_i, // [E, 2] comprised of elements from N
-                        const py::array_t<double, py::array::c_style> &scales_i, // [E, 2]
-                        const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
+            py::init([](const py::array_t<int, py::array::c_style> &lambda_plane_idxs_i,  //
                         const py::array_t<int, py::array::c_style> &lambda_offset_idxs_i, //
                         const double beta,
                         const double cutoff,
@@ -901,12 +899,6 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_dense(py:
                         const std::string &transform_lambda_sigma = "lambda",
                         const std::string &transform_lambda_epsilon = "lambda",
                         const std::string &transform_lambda_w = "lambda") {
-                std::vector<int> exclusion_idxs(exclusion_i.size());
-                std::memcpy(exclusion_idxs.data(), exclusion_i.data(), exclusion_i.size() * sizeof(int));
-
-                std::vector<double> scales(scales_i.size());
-                std::memcpy(scales.data(), scales_i.data(), scales_i.size() * sizeof(double));
-
                 std::vector<int> lambda_plane_idxs(lambda_plane_idxs_i.size());
                 std::memcpy(
                     lambda_plane_idxs.data(), lambda_plane_idxs_i.data(), lambda_plane_idxs_i.size() * sizeof(int));
@@ -930,10 +922,8 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_dense(py:
                 source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_W"), transform_lambda_w);
 
                 return new timemachine::NonbondedDense<RealType, Interpolated>(
-                    exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, source_str);
+                    lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, source_str);
             }),
-            py::arg("exclusion_i"),
-            py::arg("scales_i"),
             py::arg("lambda_plane_idxs_i"),
             py::arg("lambda_offset_idxs_i"),
             py::arg("beta"),

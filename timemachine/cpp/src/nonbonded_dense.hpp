@@ -30,8 +30,6 @@ template <typename RealType, bool Interpolated> class NonbondedDense : public Po
 private:
     std::array<k_nonbonded_fn, 16> kernel_ptrs_;
 
-    int *d_exclusion_idxs_; // [E,2]
-    double *d_scales_;      // [E, 2]
     int *d_lambda_plane_idxs_;
     int *d_lambda_offset_idxs_;
     int *p_ixn_count_; // pinned memory
@@ -40,7 +38,6 @@ private:
     double cutoff_;
     Neighborlist<RealType> nblist_;
 
-    const int E_;
     const int N_;
 
     double nblist_padding_;
@@ -87,8 +84,6 @@ public:
     void disable_hilbert_sort();
 
     NonbondedDense(
-        const std::vector<int> &exclusion_idxs,     // [E,2]
-        const std::vector<double> &scales,          // [E, 2]
         const std::vector<int> &lambda_plane_idxs,  // N
         const std::vector<int> &lambda_offset_idxs, // N
         const double beta,
