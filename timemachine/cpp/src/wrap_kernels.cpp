@@ -523,6 +523,7 @@ void declare_bound_potential(py::module &m) {
             }),
             py::arg("potential"),
             py::arg("params"))
+        .def("get_potential", [](const timemachine::BoundPotential &bp) { return bp.potential; })
         .def("size", &timemachine::BoundPotential::size)
         .def(
             "execute",
