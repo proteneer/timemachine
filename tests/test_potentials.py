@@ -6,7 +6,7 @@ from timemachine.lib import custom_ops, potentials
 
 @pytest.fixture
 def harmonic_bond():
-    bond_idxs = np.array([[0, 1], [0, 2]], np.int32)
+    bond_idxs = np.array([[0, 1], [0, 2]], dtype=np.int32)
     params = np.array([[1, 0], [0, 1]], dtype=np.float32)
     return potentials.HarmonicBond(bond_idxs).bind(params)
 
