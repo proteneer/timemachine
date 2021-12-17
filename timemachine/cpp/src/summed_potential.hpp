@@ -1,7 +1,6 @@
 #pragma once
 
 #include "potential.hpp"
-#include <memory>
 #include <vector>
 
 namespace timemachine {
@@ -9,11 +8,11 @@ namespace timemachine {
 class SummedPotential : public Potential {
 
 private:
-    const std::vector<std::shared_ptr<Potential>> potentials_;
+    const std::vector<Potential *> potentials_;
     const std::vector<int> params_sizes_;
 
 public:
-    SummedPotential(std::vector<std::shared_ptr<Potential>> potentials, std::vector<int> params_sizes);
+    SummedPotential(std::vector<Potential *> potentials, std::vector<int> params_sizes);
 
     virtual void execute_device(
         const int N,
