@@ -1,9 +1,10 @@
 #include "summed_potential.hpp"
+#include <memory>
 #include <stdexcept>
 
 namespace timemachine {
 
-SummedPotential::SummedPotential(std::vector<Potential *> potentials, std::vector<int> params_sizes)
+SummedPotential::SummedPotential(std::vector<std::shared_ptr<Potential>> potentials, std::vector<int> params_sizes)
     : potentials_(potentials), params_sizes_(params_sizes) {
     if (potentials_.size() != params_sizes_.size()) {
         throw std::runtime_error("number of potentials != number of parameter sizes");
