@@ -11,9 +11,7 @@ SummedPotential::SummedPotential(std::vector<std::shared_ptr<Potential>> potenti
     }
 };
 
-const std::vector<std::shared_ptr<Potential>>& SummedPotential::get_potentials() {
-  return potentials_;
-}
+const std::vector<std::shared_ptr<Potential>> &SummedPotential::get_potentials() { return potentials_; }
 
 void SummedPotential::execute_device(
     const int N,
