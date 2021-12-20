@@ -3,7 +3,7 @@
 
 namespace timemachine {
 
-BoundPotential::BoundPotential(Potential* potential, std::vector<int> shape, const double *h_p)
+BoundPotential::BoundPotential(std::shared_ptr<Potential> potential, std::vector<int> shape, const double *h_p)
     : potential(potential), shape(shape) {
 
     int P = this->size();

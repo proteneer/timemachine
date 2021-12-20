@@ -515,7 +515,8 @@ void declare_bound_potential(py::module &m) {
     std::string pyclass_name = std::string("BoundPotential");
     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](timemachine::Potential *potential, const py::array_t<double, py::array::c_style> &params) {
+            py::init([](std::shared_ptr<timemachine::Potential> potential,
+                        const py::array_t<double, py::array::c_style> &params) {
                 std::vector<int> pshape(params.shape(), params.shape() + params.ndim());
 
                 return new timemachine::BoundPotential(potential, pshape, params.data());

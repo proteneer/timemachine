@@ -12,14 +12,14 @@ struct BoundPotential {
 
     BoundPotential(
         // Potential *potential,
-        Potential* potential,
+        std::shared_ptr<Potential> potential,
         std::vector<int> shape,
         const double *h_p);
 
     ~BoundPotential();
 
     double *d_p;
-    Potential* potential;
+    std::shared_ptr<Potential> potential;
     std::vector<int> shape;
 
     int size() const;
