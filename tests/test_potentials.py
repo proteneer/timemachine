@@ -11,15 +11,18 @@ def harmonic_bond():
     return potentials.HarmonicBond(bond_idxs).bind(params)
 
 
-def test_bound_potential_keeps_referenced_potential_alive(harmonic_bond):
-    bp = custom_ops.BoundPotential(harmonic_bond.unbound_impl(np.float32), harmonic_bond.params)
-
+def execute_bound_impl(bp):
     coords = np.zeros(shape=(3, 3), dtype=np.float32)
     box = np.diag(np.ones(3))
     lam = 1
+    bp.execute(coords, box, lam)
+
+
+def test_bound_potential_keeps_referenced_potential_alive(harmonic_bond):
+    bp = harmonic_bond.bound_impl(np.float32)
 
     # segfaults if referenced potential has been deallocated prematurely
-    bp.execute(coords, box, lam)
+    execute_bound_impl(bp)
 
 
 def test_bound_potential_get_potential(harmonic_bond):
@@ -38,12 +41,8 @@ def test_summed_potential_raises_on_inconsistent_lengths(harmonic_bond):
 def test_summed_potential_keeps_referenced_potentials_alive(harmonic_bond):
     sp = potentials.SummedPotential([harmonic_bond], [harmonic_bond.params]).bind(harmonic_bond.params)
 
-    coords = np.zeros(shape=(3, 3), dtype=np.float32)
-    box = np.diag(np.ones(3))
-    lam = 1
-
     # segfaults if referenced potentials have been deallocated prematurely
-    sp.bound_impl(np.float32).execute(coords, box, lam)
+    execute_bound_impl(sp.bound_impl(np.float32))
 
 
 def test_summed_potential_get_potentials(harmonic_bond):
