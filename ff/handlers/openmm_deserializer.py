@@ -201,7 +201,7 @@ def deserialize_system(system, cutoff):
 
             bps.append(
                 potentials.Nonbonded(
-                    exclusion_idxs, scale_factors, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff
+                    exclusion_idxs, scale_factors, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, nb_params
                 ).bind(nb_params)
             )
 
