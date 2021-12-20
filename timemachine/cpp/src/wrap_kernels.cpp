@@ -1030,12 +1030,12 @@ void declare_summed_potential(py::module &m) {
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](std::vector<timemachine::Potential *> potentials, std::vector<int> params_sizes) {
-                return new timemachine::SummedPotential(potentials, params_sizes);
-            }),
+            py::init(
+                [](std::vector<std::shared_ptr<timemachine::Potential>> potentials, std::vector<int> params_sizes) {
+                    return new timemachine::SummedPotential(potentials, params_sizes);
+                }),
             py::arg("potentials"),
-            py::arg("params_sizes"),
-            py::keep_alive<1, 2>());
+            py::arg("params_sizes"));
 }
 
 const py::array_t<double, py::array::c_style>
