@@ -974,8 +974,10 @@ void declare_summed_potential(py::module &m) {
                 [](std::vector<std::shared_ptr<timemachine::Potential>> potentials, std::vector<int> params_sizes) {
                     return new timemachine::SummedPotential(potentials, params_sizes);
                 }),
+
             py::arg("potentials"),
-            py::arg("params_sizes"));
+            py::arg("params_sizes"))
+        .def("get_potentials", &timemachine::SummedPotential::get_potentials);
 }
 
 const py::array_t<double, py::array::c_style>

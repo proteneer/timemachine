@@ -15,6 +15,8 @@ private:
 public:
     SummedPotential(std::vector<std::shared_ptr<Potential>> potentials, std::vector<int> params_sizes);
 
+    const std::vector<std::shared_ptr<Potential>> &get_potentials();
+
     virtual void execute_device(
         const int N,
         const int P,
