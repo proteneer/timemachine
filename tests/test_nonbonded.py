@@ -206,6 +206,9 @@ class TestNonbondedDHFR(GradientTest):
             test_scales = np.array(test_scales, dtype=np.float64)
             test_params = self.nonbonded_fn.params[:N, :]
 
+            test_exclusions = np.zeros((0, 2), dtype=np.int32)
+            test_scales = np.zeros((0, 2))
+
             test_lambda_plane_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
             test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
