@@ -1,5 +1,9 @@
-from fe import utils
 import numpy as np
+
+from fe import utils
+from fe.model_utils import image_molecule
+
+from rdkit import Chem
 
 
 def test_sanitize_energies():
@@ -32,3 +36,37 @@ def test_extract_delta_Us_from_U_knk():
     )
 
     np.testing.assert_almost_equal(expected_delta_Us, test_delta_Us)
+
+
+def test_image_molecules():
+    suppl = Chem.SDMolSupplier("tests/data/benzene_fluorinated.sdf", removeHs=False)
+    all_mols = [x for x in suppl]
+    mol = all_mols[0]
+    mol_coords = utils.get_romol_conf(mol)
+
+    np.random.seed(2022)
+    # Shift the mol so that all coords are 0 or positive
+    mol_coords += np.abs(np.min(mol_coords, axis=0))
+    # Get the max dimensions of the mol to construct the box
+    max_dimensions = np.max(mol_coords, axis=0)
+
+    # Add a random buffer to the dimensions of the box
+    box = np.eye(3) * (max_dimensions + np.random.random(max_dimensions.shape))
+
+    # If the mol is already in the box, the coordinates will be the same
+    np.testing.assert_array_equal(mol_coords, image_molecule(mol_coords, box))
+    box_diag = np.diagonal(box)
+
+    for _ in range(1000):
+        # shift each direction randomly, need to go beyond one image since waters can float very far away
+        x_shift = np.random.randint(-5, 5)
+        y_shift = np.random.randint(-5, 5)
+        z_shift = np.random.randint(-5, 5)
+
+        offset = np.array([x_shift * box_diag[0], y_shift * box_diag[1], z_shift * box_diag[2]])
+        offset = np.expand_dims(offset, axis=0)  # make this broad castable to [N,3]
+        new_mol_conf = mol_coords + offset
+
+        imaged_mol = image_molecule(new_mol_conf, box)
+
+        np.testing.assert_array_almost_equal(imaged_mol, mol_coords)
