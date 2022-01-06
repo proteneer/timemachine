@@ -40,4 +40,9 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     exclusions_.execute_device(N, P, d_x, d_p, d_box, lambda, d_du_dx, d_du_dp, d_du_dl, d_u, stream);
 };
 
+template class Nonbonded<double, true>;
+template class Nonbonded<float, true>;
+template class Nonbonded<double, false>;
+template class Nonbonded<float, false>;
+
 } // namespace timemachine
