@@ -226,7 +226,6 @@ class HostGuestTopology:
                 hg_lambda_offset_idxs,
                 guest_p.get_beta(),
                 guest_p.get_cutoff(),
-                hg_nb_params,
             )
 
             return hg_nb_params, nb
@@ -241,7 +240,6 @@ class HostGuestTopology:
                 hg_lambda_offset_idxs,
                 guest_p.get_beta(),
                 guest_p.get_cutoff(),
-                hg_nb_params,
             )
 
 
@@ -283,11 +281,9 @@ class BaseTopology:
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
 
-        params = jnp.concatenate([jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2))], axis=1)
+        nb = potentials.Nonbonded(exclusion_idxs, scale_factors, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff)
 
-        nb = potentials.Nonbonded(
-            exclusion_idxs, scale_factors, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, params
-        )
+        params = jnp.concatenate([jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2))], axis=1)
 
         return params, nb
 
@@ -915,15 +911,14 @@ class SingleTopology:
         beta = _BETA
         cutoff = _CUTOFF  # solve for this analytically later
 
-        nb = potentials.Nonbonded(
+        nb = potentials.NonbondedInterpolated(
             combined_exclusion_idxs,
             combined_scale_factors,
             combined_lambda_plane_idxs,
             combined_lambda_offset_idxs,
             beta,
             cutoff,
-            qlj_params,
-        ).interpolate()
+        )
 
         return qlj_params, nb
 
