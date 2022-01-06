@@ -206,139 +206,73 @@ class CentroidRestraint(CustomOpWrapper):
         return self.args[1]
 
 
-class NonbondedPairs(CustomOpWrapper):
+class Nonbonded(CustomOpWrapper):
     def __init__(self, *args):
 
-        # pair_idxs should be unique
-        pair_idxs = args[0]
-        pair_set = set()
+        # exclusion_idxs should be unique
+        exclusion_idxs = args[0]
+        exclusion_set = set()
 
-        for src, dst in pair_idxs:
+        for src, dst in exclusion_idxs:
             src, dst = sorted((src, dst))
-            pair_set.add((src, dst))
+            exclusion_set.add((src, dst))
 
-        assert len(pair_set) == pair_idxs.shape[0]
+        assert len(exclusion_set) == exclusion_idxs.shape[0]
 
-        super().__init__(*args)
-
-    def interpolate(self):
-        """
-        Return an interpolated variant of this potential
-        """
-        return NonbondedPairsInterpolated(*self.args)
-
-
-class NonbondedPairsInterpolated(NonbondedPairs):
-    def unbound_impl(self, precision):
-        cls_name_base = "NonbondedPairs"
-        if precision == np.float64:
-            cls_name_base += "_f64_interpolated"
-        else:
-            cls_name_base += "_f32_interpolated"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        return custom_ctor(*self.args)
-
-
-class NonbondedDense(CustomOpWrapper):
-    def interpolate(self):
-        """
-        Return an interpolated variant of this potential
-        """
-
-        return NonbondedDenseInterpolated(*self.args)
-
-
-class NonbondedDenseInterpolated(NonbondedDense):
-    def unbound_impl(self, precision):
-        cls_name_base = "NonbondedDense"
-        if precision == np.float64:
-            cls_name_base += "_f64_interpolated"
-        else:
-            cls_name_base += "_f32_interpolated"
-
-        custom_ctor = getattr(custom_ops, cls_name_base)
-
-        return custom_ctor(*self.args)
-
-
-class Nonbonded(SummedPotential):
-    def __init__(
-        self,
-        exclusion_idxs,
-        scale_factors,
-        lambda_plane_idxs,
-        lambda_offset_idxs,
-        beta,
-        cutoff,
-        params_init,
-        transform_lambda_charge="lambda",
-        transform_lambda_sigma="lambda",
-        transform_lambda_epsilon="lambda",
-        transform_lambda_w="lambda",
-    ):
-        common_args = (
-            lambda_plane_idxs,
-            lambda_offset_idxs,
-            beta,
-            cutoff,
-            transform_lambda_charge,
-            transform_lambda_sigma,
-            transform_lambda_epsilon,
-            transform_lambda_w,
-        )
-
-        self._dense = NonbondedDense(*common_args)
-        self._exclusions = NonbondedPairs(exclusion_idxs, scale_factors, *common_args)
-
-        self._exclusion_idxs = exclusion_idxs
-        self._scale_factors = scale_factors
-        self._lambda_plane_idxs = lambda_plane_idxs
-        self._lambda_offset_idxs = lambda_offset_idxs
-        self._beta = beta
-        self._cutoff = cutoff
-        self._params_init = params_init
-
-        super().__init__([self._dense, self._exclusions], [params_init, params_init])
+        super(Nonbonded, self).__init__(*args)
 
     def set_exclusion_idxs(self, x):
-        self._exclusion_idxs = x
+        self.args[0] = x
 
     def get_exclusion_idxs(self):
-        return self._exclusion_idxs
+        return self.args[0]
 
     def set_scale_factors(self, x):
-        self._scale_factors = x
+        self.args[1] = x
 
     def get_scale_factors(self):
-        return self._scale_factors
+        return self.args[1]
 
     def get_lambda_plane_idxs(self):
-        return self._lambda_plane_idxs
+        return self.args[2]
 
     def get_lambda_offset_idxs(self):
-        return self._lambda_offset_idxs
+        return self.args[3]
 
     def set_lambda_plane_idxs(self, val):
-        self._lambda_plane_idxs = val
+        self.args[2] = val
 
     def set_lambda_offset_idxs(self, val):
-        self._lambda_offset_idxs = val
+        self.args[3] = val
 
     def get_beta(self):
-        return self._beta
+        return self.args[4]
 
     def get_cutoff(self):
-        return self._cutoff
+        return self.args[-1]
 
     def interpolate(self):
         """
         Return an interpolated variant of this potential
         """
+        return NonbondedInterpolated(
+            self.get_exclusion_idxs(),
+            self.get_scale_factors(),
+            self.get_lambda_plane_idxs(),
+            self.get_lambda_offset_idxs(),
+            self.get_beta(),
+            self.get_cutoff(),
+        )
 
-        NonbondedInterpolated([self._dense.interpolate(), self._exclusions.interpolate()], self._params_init)
 
+class NonbondedInterpolated(Nonbonded):
+    def unbound_impl(self, precision):
+        cls_name_base = "Nonbonded"
+        if precision == np.float64:
+            cls_name_base += "_f64_interpolated"
+        else:
+            cls_name_base += "_f32_interpolated"
 
-class NonbondedInterpolated(SummedPotential):
-    pass
+        custom_ctor = getattr(custom_ops, cls_name_base)
+
+        return custom_ctor(*self.args)
