@@ -210,13 +210,7 @@ class TestNonbondedDHFR(GradientTest):
             test_lambda_offset_idxs = np.random.randint(low=-2, high=2, size=N, dtype=np.int32)
 
             test_nonbonded_fn = potentials.Nonbonded(
-                test_exclusions,
-                test_scales,
-                test_lambda_plane_idxs,
-                test_lambda_offset_idxs,
-                self.beta,
-                self.cutoff,
-                test_params,
+                test_exclusions, test_scales, test_lambda_plane_idxs, test_lambda_offset_idxs, self.beta, self.cutoff
             )
 
             ref_nonbonded_fn = prepare_reference_nonbonded(
