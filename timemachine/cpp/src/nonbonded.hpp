@@ -19,8 +19,8 @@ public:
     void disable_hilbert_sort();
 
     Nonbonded(
-        const std::vector<int> &exclusion_idxs,     // [M, 2]
-        const std::vector<double> &scales,          // [M, 2]
+        const std::vector<int> &exclusion_idxs,     // [E, 2]
+        const std::vector<double> &scales,          // [E, 2]
         const std::vector<int> &lambda_plane_idxs,  // N
         const std::vector<int> &lambda_offset_idxs, // N
         const double beta,
