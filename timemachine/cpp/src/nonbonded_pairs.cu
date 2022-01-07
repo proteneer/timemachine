@@ -105,7 +105,7 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
 
     const int tpb = 32;
 
-    int num_blocks = ceil_divide(M_, tpb);
+    int num_blocks = ceil_divide(N, tpb);
 
     CUresult result = compute_w_coords_instance_.configure(num_blocks, tpb, 0, stream)
                           .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
@@ -127,7 +127,9 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N * 3 * sizeof(*d_du_dp_buffer_), stream))
     }
 
-    k_nonbonded_pairs<RealType><<<num_blocks, tpb, 0, stream>>>(
+    int num_blocks_exclusions = ceil_divide(M_, tpb);
+
+    k_nonbonded_pairs<RealType><<<num_blocks_exclusions, tpb, 0, stream>>>(
         M_,
         d_x,
         d_p,
