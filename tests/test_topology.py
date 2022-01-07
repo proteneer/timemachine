@@ -328,3 +328,17 @@ class StandardQLJTyperTestCase(unittest.TestCase):
 
     def test_iodine_in_mol(self):
         self.verify_smiles_typing("O=I(=O)OI(=O)=O")
+
+    def verify_charge(self, smi, formal_charge):
+        romol = Chem.AddHs(Chem.MolFromSmiles(smi))
+        qlj_types = topology.standard_qlj_typer(romol)
+        test_charges = qlj_types[:, 0]
+        np.testing.assert_array_equal(test_charges, formal_charge / romol.GetNumAtoms())
+
+    def test_charge_correctness(self):
+        # test that charges are correct on various molecules based on formal charge
+        self.verify_charge("CCC([O-])=O", -1)
+        self.verify_charge("[O-]C1CCC([O-])CC1", -2)
+        self.verify_charge("c1ccccc1", 0)
+        self.verify_charge("N[NH2++]", 2)
+        self.verify_charge("[NH3+][O-]", 0)  # zwitterion
