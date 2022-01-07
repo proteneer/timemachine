@@ -386,7 +386,17 @@ void declare_potential(py::module &m) {
                 double du_dl_sum;
                 double u_sum;
 
-                pot.fixed_to_float(N, P, &du_dx[0], &du_dp[0], &du_dl[0], &u[0], py_du_dx.mutable_data(), py_du_dp.mutable_data(), &du_dl_sum, &u_sum);
+                pot.fixed_to_float(
+                    N,
+                    P,
+                    &du_dx[0],
+                    &du_dp[0],
+                    &du_dl[0],
+                    &u[0],
+                    py_du_dx.mutable_data(),
+                    py_du_dp.mutable_data(),
+                    &du_dl_sum,
+                    &u_sum);
 
                 return py::make_tuple(py_du_dx, py_du_dp, du_dl_sum, u_sum);
             },
