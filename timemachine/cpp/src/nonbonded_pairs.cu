@@ -107,7 +107,7 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
 
     int num_blocks = ceil_divide(M_, tpb);
 
-    CUresult result = compute_w_coords_instance_.configure(M_, tpb, 0, stream)
+    CUresult result = compute_w_coords_instance_.configure(num_blocks, tpb, 0, stream)
                           .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
     if (result != 0) {
         throw std::runtime_error("Driver call to k_compute_w_coords");
