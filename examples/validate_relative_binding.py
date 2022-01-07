@@ -28,6 +28,7 @@ from fe.free_energy_rabfe import (
 )
 from fe.utils import convert_uM_to_kJ_per_mole
 from fe import model_rabfe
+from fe.model_utils import verify_rabfe_pair
 from fe.frames import endpoint_frames_only, all_frames
 
 from ff import Forcefield
@@ -312,6 +313,7 @@ if __name__ == "__main__":
     ordered_handles = forcefield.get_ordered_handles()
 
     def simulate_pair(epoch: int, blocker: Chem.Mol, mol: Chem.Mol):
+        verify_rabfe_pair(mol, blocker)
         mol_name = mol.GetProp("_Name")
 
         # generate the core_idxs

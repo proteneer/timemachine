@@ -4,7 +4,20 @@ import numpy as np
 
 from simtk.openmm import app
 from rdkit import Chem
-from rdkit.Geometry import Point3D
+
+
+def assert_mol_has_all_hydrogens(mol: Chem.Mol):
+    atoms = mol.GetNumAtoms()
+    mol_copy = Chem.AddHs(mol)
+    assert atoms == mol_copy.GetNumAtoms(), "Hydrogens missing for mol"
+
+
+def verify_rabfe_pair(mol: Chem.Mol, blocker: Chem.Mol):
+    assert_mol_has_all_hydrogens(mol)
+    assert_mol_has_all_hydrogens(blocker)
+    mol_charge = Chem.GetFormalCharge(mol)
+    blocker_charge = Chem.GetFormalCharge(blocker)
+    assert mol_charge == blocker_charge, f"Formal charge disagrees: blocker: {blocker_charge:d} ligand: {mol_charge:d}"
 
 
 def apply_hmr(masses, bond_list, multiplier=2):

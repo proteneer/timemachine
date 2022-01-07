@@ -1,4 +1,8 @@
 import numpy as np
+import pytest
+
+from rdkit import Chem
+from fe.model_utils import verify_rabfe_pair
 
 from fe import utils
 from fe.model_utils import image_molecule
@@ -70,3 +74,27 @@ def test_image_molecules():
         imaged_mol = image_molecule(new_mol_conf, box)
 
         np.testing.assert_array_almost_equal(imaged_mol, mol_coords)
+
+
+def test_verify_rabfe_pair():
+    hydrogen_less_mol = Chem.MolFromSmiles("c1ccccc1")
+    blocker_mol = Chem.AddHs(hydrogen_less_mol)
+
+    with pytest.raises(AssertionError) as e:
+        verify_rabfe_pair(hydrogen_less_mol, blocker_mol)
+    assert "Hydrogens missing for mol" in str(e.value)
+
+    # Verify ordering doesn't matter to pick up missing hydrogens
+    with pytest.raises(AssertionError) as e:
+        verify_rabfe_pair(blocker_mol, hydrogen_less_mol)
+    assert "Hydrogens missing for mol" in str(e.value)
+
+    ligand = Chem.AddHs(hydrogen_less_mol)
+    verify_rabfe_pair(ligand, blocker_mol)
+
+    charged_ligand = Chem.AddHs(Chem.MolFromSmiles("C[n+]1cc[nH]c1"))
+    with pytest.raises(AssertionError) as e:
+        verify_rabfe_pair(charged_ligand, blocker_mol)
+    err_msg = str(e.value)
+    assert err_msg.startswith("Formal charge disagrees:")
+    assert "ligand: 1" in err_msg
