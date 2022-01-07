@@ -34,7 +34,7 @@ def standard_qlj_typer(mol):
 
     Returns
     -------
-    list of tuples containing (charge, sigma, epsilon)
+    [N,3] array containing (charge, sigma, epsilon)
 
     """
 
