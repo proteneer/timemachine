@@ -1,6 +1,6 @@
-import networkx
 from abc import ABC
 from rdkit import Chem
+from rdkit.Chem import rdmolops
 
 import numpy as np
 import jax
@@ -26,11 +26,24 @@ def standard_qlj_typer(mol):
     These values are taken from ff/params/smirnoff_1_1_0_cc.py, rounding down
     to two decimal places for sigma and one decimal place for epsilon.
 
-    returns:
-        list of tuples containing (charge, sigma, epsilon)
+    Note that charges are set to net_formal_charge(mol)/num_atoms.
+
+    Parameters
+    ----------
+    mol: RDKit.ROMol
+        RDKit molecule
+
+    Returns
+    -------
+    list of tuples containing (charge, sigma, epsilon)
+
     """
 
     standard_qlj = []
+
+    # for charged ligands, we don't want to remove the charge fully as it will
+    # introduce large variance in the resulting estimator
+    standard_charge = float(rdmolops.GetFormalCharge(mol)) / mol.GetNumAtoms()
 
     for atom in mol.GetAtoms():
         a_num = atom.GetAtomicNum()
@@ -39,33 +52,33 @@ def standard_qlj_typer(mol):
             neighbor = atom.GetNeighbors()[0]
             b_num = neighbor.GetAtomicNum()
             if b_num == 6:
-                val = (0.0, 0.25, 0.25)
+                val = (standard_charge, 0.25, 0.25)
             elif b_num == 7:
-                val = (0.0, 0.10, 0.25)
+                val = (standard_charge, 0.10, 0.25)
             elif b_num == 8:
-                val = (0.0, 0.05, 0.02)
+                val = (standard_charge, 0.05, 0.02)
             elif b_num == 16:
-                val = (0.0, 0.10, 0.25)
+                val = (standard_charge, 0.10, 0.25)
             else:
-                val = (0.0, 0.10, 0.25)
+                val = (standard_charge, 0.10, 0.25)
         elif a_num == 6:
-            val = (0.0, 0.34, 0.6)
+            val = (standard_charge, 0.34, 0.6)
         elif a_num == 7:
-            val = (0.0, 0.32, 0.8)
+            val = (standard_charge, 0.32, 0.8)
         elif a_num == 8:
-            val = (0.0, 0.30, 0.9)
+            val = (standard_charge, 0.30, 0.9)
         elif a_num == 9:
-            val = (0.0, 0.3, 0.5)
+            val = (standard_charge, 0.3, 0.5)
         elif a_num == 15:
-            val = (0.0, 0.37, 0.9)
+            val = (standard_charge, 0.37, 0.9)
         elif a_num == 16:
-            val = (0.0, 0.35, 1.0)
+            val = (standard_charge, 0.35, 1.0)
         elif a_num == 17:
-            val = (0.0, 0.35, 1.0)
+            val = (standard_charge, 0.35, 1.0)
         elif a_num == 35:
-            val = (0.0, 0.39, 1.1)
+            val = (standard_charge, 0.39, 1.1)
         elif a_num == 53:
-            val = (0.0, 0.41, 1.2)
+            val = (standard_charge, 0.41, 1.2)
         else:
             # print("Unknown a_num", a_num)
             assert 0, "Unknown a_num " + str(a_num)
