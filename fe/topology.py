@@ -20,8 +20,7 @@ def standard_qlj_typer(mol):
     """
     This function parameterizes the nonbonded terms of a molecule
     in a relatively simple and forcefield independent way. The
-    parameters here roughly follow the Smirnoff 1.1.0 Lennard Jones
-    types.
+    parameters here roughly follow the Smirnoff 1.1.0 Lennard Jones types.
 
     These values are taken from ff/params/smirnoff_1_1_0_cc.py, rounding down
     to two decimal places for sigma and one decimal place for epsilon.
