@@ -6,7 +6,6 @@
 // using this kernel.
 
 #include "../fixed_point.hpp"
-#include "k_fixed_point.cuh"
 #include "nonbonded_common.cuh"
 
 template <typename RealType>

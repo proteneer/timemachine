@@ -1,5 +1,7 @@
 #pragma once
 
+#include "k_fixed_point.cuh"
+
 #define PI 3.141592653589793115997963468544185161
 #define TWO_OVER_SQRT_PI 1.128379167095512595889238330988549829708
 
@@ -88,6 +90,31 @@ void __device__ __forceinline__ compute_lj(
 
     sig_grad = lj_scale * 24 * eps_ij * sig5_inv_d6ij * (2 * sig6_inv_d6ij - 1);
     eps_grad = lj_scale * 4 * (sig6_inv_d6ij - 1) * sig6_inv_d6ij;
+}
+
+template <typename RealType>
+void __global__
+k_add_ull_to_real(const int N, const unsigned long long *__restrict__ ull_array, RealType *__restrict__ real_array) {
+
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = gridDim.y;
+    int stride_idx = blockIdx.y;
+
+    if (idx >= N) {
+        return;
+    }
+
+    // handle charges, sigmas, epsilons with different exponents
+    if (stride_idx == 0) {
+        real_array[idx * stride + stride_idx] +=
+            FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(ull_array[idx * stride + stride_idx]);
+    } else if (stride_idx == 1) {
+        real_array[idx * stride + stride_idx] +=
+            FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(ull_array[idx * stride + stride_idx]);
+    } else if (stride_idx == 2) {
+        real_array[idx * stride + stride_idx] +=
+            FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(ull_array[idx * stride + stride_idx]);
+    }
 }
 
 // These are two lines of code are to deal with the formation of a non-commutative fma.

@@ -19,7 +19,9 @@ NonbondedPairs<RealType, Interpolated>::NonbondedPairs(
     : N_(lambda_offset_idxs.size()), M_(pair_idxs.size() / 2), beta_(beta), cutoff_(cutoff),
       compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
       compute_permute_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_permute_interpolated").instantiate()) {
+          kernel_cache_.program(kernel_src.c_str()).kernel("k_permute_interpolated").instantiate()),
+      compute_add_ull_to_real_interpolated_(
+          kernel_cache_.program(kernel_src.c_str()).kernel("k_add_ull_to_real_interpolated").instantiate()) {
 
     if (pair_idxs.size() % 2 != 0) {
         throw std::runtime_error("pair_idxs.size() must be exactly 2*M");
@@ -62,7 +64,7 @@ NonbondedPairs<RealType, Interpolated>::NonbondedPairs(
         gpuErrchk(cudaMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_)));
         gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
 
-        // construct identity permutation
+        // initialize identity permutation
         std::vector<int> perm = std::vector<int>(N_);
         for (int i = 0; i < N_; i++) {
             perm[i] = i;
@@ -121,6 +123,10 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_dp_dl_, 0, N * 3 * sizeof(*d_dp_dl_), stream))
     }
 
+    if (d_du_dp) {
+        gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N * 3 * sizeof(*d_du_dp_buffer_), stream))
+    }
+
     k_nonbonded_pairs<RealType><<<num_blocks, tpb, 0, stream>>>(
         M_,
         d_x,
@@ -139,6 +145,19 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
         d_u);
 
     gpuErrchk(cudaPeekAtLastError());
+
+    if (d_du_dp) {
+        if (Interpolated) {
+            CUresult result = compute_add_ull_to_real_interpolated_.configure(num_blocks, tpb, 0, stream)
+                                  .launch(lambda, N, d_du_dp_buffer_, d_du_dp);
+            if (result != 0) {
+                throw std::runtime_error("Driver call to k_add_ull_to_real_interpolated failed");
+            }
+        } else {
+            k_add_ull_to_real<<<num_blocks, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+        }
+        gpuErrchk(cudaPeekAtLastError());
+    }
 }
 
 template class NonbondedPairs<double, true>;
