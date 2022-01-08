@@ -139,16 +139,16 @@ void Potential::fixed_to_float(
         du_dp_out[i] = du_dp[i]; // TODO: just a pass-thru for now; update when du_dp is fixed-point
     }
 
-    unsigned long long du_dl_sum_ull = 0;
+    unsigned long long du_dl_sum_fixed = 0;
     for (int i = 0; i < N; i++) {
-        du_dl_sum_ull += du_dl[i];
+        du_dl_sum_fixed += du_dl[i];
     }
-    *du_dl_sum = FIXED_TO_FLOAT<double>(du_dl_sum_ull);
+    *du_dl_sum = FIXED_TO_FLOAT<double>(du_dl_sum_fixed);
 
-    unsigned long long u_sum_ull = 0;
+    unsigned long long u_sum_fixed = 0;
     for (int i = 0; i < N; i++) {
-        u_sum_ull += u[i];
+        u_sum_fixed += u[i];
     }
-    *u_sum = FIXED_TO_FLOAT<double>(u_sum_ull);
+    *u_sum = FIXED_TO_FLOAT<double>(u_sum_fixed);
 }
 } // namespace timemachine
