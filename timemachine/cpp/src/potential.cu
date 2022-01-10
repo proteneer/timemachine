@@ -19,6 +19,8 @@ void Potential::execute_host(
     unsigned long long *h_du_dl, //
     unsigned long long *h_u) {
 
+    const int &D = Potential::D;
+
     double *d_x;
     double *d_p;
     double *d_box;
@@ -90,6 +92,8 @@ void Potential::execute_host_du_dx(
     const double lambda, // [1]
     unsigned long long *h_du_dx) {
 
+    const int &D = Potential::D;
+
     double *d_x;
     double *d_p;
     double *d_box;
@@ -130,6 +134,8 @@ void Potential::fixed_to_float(
     double *du_dp_out,
     double *du_dl_sum,
     double *u_sum) {
+
+    const int &D = Potential::D;
 
     for (int i = 0; i < N * D; i++) {
         du_dx_out[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
