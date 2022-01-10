@@ -10,7 +10,6 @@ jax==0.2.9
 jaxlib==0.1.61
 hilbertcurve==1.0.5
 networkx==2.5
-mdtraj==1.9.6
 
 # Development/Testing Reqs
 black
