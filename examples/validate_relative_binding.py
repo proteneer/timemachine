@@ -119,50 +119,50 @@ if __name__ == "__main__":
     parser.add_argument("--num_gpus", type=int, help="number of gpus", default=get_gpu_count())
 
     parser.add_argument(
-        "--num_complex_conv_windows", type=int, help="number of lambda windows for complex conversion", required=True
+        "--num_complex_conv_windows", type=int, help="number of lambda windows for complex conversion", default=64
     )
 
-    parser.add_argument("--num_complex_windows", type=int, help="number of vacuum lambda windows", required=True)
+    parser.add_argument("--num_complex_windows", type=int, help="number of vacuum lambda windows", default=63)
 
     parser.add_argument(
-        "--num_solvent_conv_windows", type=int, help="number of lambda windows for solvent conversion", required=True
+        "--num_solvent_conv_windows", type=int, help="number of lambda windows for solvent conversion", default=64
     )
 
-    parser.add_argument("--num_solvent_windows", type=int, help="number of solvent lambda windows", required=True)
+    parser.add_argument("--num_solvent_windows", type=int, help="number of solvent lambda windows", default=64)
 
     parser.add_argument(
         "--num_complex_equil_steps",
         type=int,
         help="number of equilibration steps for each complex lambda window",
-        required=True,
+        default=50000,
     )
 
     parser.add_argument(
         "--num_complex_prod_steps",
         type=int,
         help="number of production steps for each complex lambda window",
-        required=True,
+        default=800000,
     )
 
     parser.add_argument(
         "--num_solvent_equil_steps",
         type=int,
         help="number of equilibration steps for each solvent lambda window",
-        required=True,
+        default=200000,
     )
 
     parser.add_argument(
         "--num_solvent_prod_steps",
         type=int,
         help="number of production steps for each solvent lambda window",
-        required=True,
+        default=800000,
     )
 
     parser.add_argument(
         "--num_complex_preequil_steps",
         type=int,
         help="number of pre-equilibration steps for each complex lambda window",
-        required=True,
+        default=200000,
     )
 
     parser.add_argument(
