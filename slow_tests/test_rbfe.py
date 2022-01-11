@@ -9,7 +9,7 @@ from testsystems.relative import hif2a_ligand_pair
 from parallel.client import CUDAPoolClient
 from parallel.utils import get_gpu_count
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "tests", "data")
 NUM_GPUS = get_gpu_count()
 
 
