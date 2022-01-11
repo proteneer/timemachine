@@ -21,6 +21,8 @@ from fe.topology import SingleTopology
 from md import builders, minimizer
 from md.barostat.utils import get_bond_list, get_group_indices
 
+import pytest
+
 
 def recenter(conf, box):
 
@@ -313,10 +315,12 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
             )
 
 
+@pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
 def test_dhfr():
     benchmark_dhfr(verbose=True, num_batches=2, steps_per_batch=100)
 
 
+@pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
 def test_hif2a():
     benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
 

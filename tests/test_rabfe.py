@@ -1,6 +1,7 @@
 import os
 from tempfile import TemporaryDirectory
 from unittest import TestCase
+import pytest
 
 import numpy as np
 
@@ -22,6 +23,7 @@ NUM_GPUS = get_gpu_count()
 
 
 class TestRABFEModels(TestCase):
+    @pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
     def test_predict_complex_decouple(self):
         """Just to verify that we can handle the most basic complex decoupling RABFE prediction"""
         complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(
@@ -87,6 +89,7 @@ class TestRABFEModels(TestCase):
             self.assertEqual(len([x for x in created_files if x.endswith(".npy")]), 2)
             self.assertEqual(len([x for x in created_files if x.endswith(".npz")]), 6)
 
+    @pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
     def test_predict_complex_conversion(self):
         """Just to verify that we can handle the most basic complex conversion RABFE prediction"""
         complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(

@@ -1,4 +1,5 @@
 import unittest
+import pytest
 from itertools import product
 
 import numpy as np
@@ -68,6 +69,7 @@ class TestContext(unittest.TestCase):
 
         np.testing.assert_equal(ctxt.get_x_t(), new_x)
 
+    @pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
     def test_fwd_mode(self):
         """
         This test ensures that we can reverse-mode differentiate
@@ -257,6 +259,7 @@ class TestContext(unittest.TestCase):
 
 
 class TestObservable(unittest.TestCase):
+    @pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
     def test_avg_potential_param_sizes_is_zero(self):
         np.random.seed(814)
 

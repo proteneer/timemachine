@@ -1,5 +1,6 @@
 import jax
 from jax import grad, value_and_grad, config, jacfwd, jacrev
+import pytest
 
 config.update("jax_enable_x64", True)
 
@@ -25,6 +26,7 @@ from md.barostat.utils import get_bond_list, get_group_indices
 from testsystems.relative import hif2a_ligand_pair
 
 
+@pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
 def test_absolute_free_energy():
 
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
@@ -106,6 +108,7 @@ def test_absolute_free_energy():
     assert np.abs(dG) < 1000.0
 
 
+@pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
 def test_relative_free_energy():
     # test that we can properly build a single topology host guest system and
     # that we can run a few steps in a stable way. This tests runs both the complex

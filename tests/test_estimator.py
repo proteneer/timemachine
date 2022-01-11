@@ -1,6 +1,7 @@
 import unittest
 import jax
 import numpy as np
+import pytest
 
 
 from fe import estimator_abfe
@@ -51,6 +52,7 @@ def get_harmonic_restraints(n_atoms, n_restraints):
     return potentials.HarmonicBond(bond_idxs, lamb_mult, lamb_offset), params
 
 
+@pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
 def test_free_energy_estimator():
 
     n_atoms = 5
@@ -121,6 +123,7 @@ def test_free_energy_estimator():
         assert grad[1].shape == sys_params[1].shape
 
 
+@pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
 def test_free_energy_estimator_with_endpoint_correction():
     """
     Test that we generate correctly shaped derivatives in the estimator code
