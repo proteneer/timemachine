@@ -47,4 +47,15 @@ void SummedPotential::execute_device(
     }
 };
 
+void SummedPotential::du_dp_fixed_to_float(
+    const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
+
+    int offset = 0;
+
+    for (int i = 0; i < potentials_.size(); i++) {
+        potentials_[i]->du_dp_fixed_to_float(N, params_sizes_[i], du_dp + offset, du_dp_float + offset);
+        offset += params_sizes_[i];
+    }
+}
+
 } // namespace timemachine
