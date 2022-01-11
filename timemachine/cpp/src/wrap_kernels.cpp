@@ -374,7 +374,7 @@ void declare_potential(py::module &m) {
 
                 // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
                 std::vector<unsigned long long> du_dx(N * D, 9999);
-                std::vector<double> du_dp(P, 9999.0);
+                std::vector<unsigned long long> du_dp(P, 9999);
                 std::vector<unsigned long long> du_dl(N, 9999);
                 std::vector<unsigned long long> u(N, 9999);
 
@@ -390,9 +390,7 @@ void declare_potential(py::module &m) {
                 std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
 
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
-                for (int i = 0; i < du_dp.size(); i++) {
-                    py_du_dp.mutable_data()[i] = du_dp[i];
-                }
+                pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
 
                 unsigned long long du_dl_sum =
                     std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
@@ -421,7 +419,7 @@ void declare_potential(py::module &m) {
                 const long unsigned int P = params.size();
 
                 std::vector<unsigned long long> du_dx(N * D);
-                std::vector<double> du_dp(P);
+                std::vector<unsigned long long> du_dp(P);
 
                 std::vector<unsigned long long> du_dl(N, 0);
                 std::vector<unsigned long long> u(N, 0);
@@ -446,9 +444,7 @@ void declare_potential(py::module &m) {
                 std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
 
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
-                for (int i = 0; i < du_dp.size(); i++) {
-                    py_du_dp.mutable_data()[i] = du_dp[i];
-                }
+                pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
 
                 unsigned long long du_dl_sum =
                     std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));

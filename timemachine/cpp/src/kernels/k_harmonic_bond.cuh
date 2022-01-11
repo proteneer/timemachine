@@ -11,7 +11,7 @@ void __global__ k_harmonic_bond(
     const int *__restrict__ lambda_offset,
     const int *__restrict__ bond_idxs, // [b, 2]
     unsigned long long *__restrict__ du_dx,
-    double *__restrict__ du_dp,
+    unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ du_dl,
     unsigned long long *__restrict__ u) {
 
@@ -57,8 +57,8 @@ void __global__ k_harmonic_bond(
     }
 
     if (du_dp) {
-        atomicAdd(du_dp + kb_idx, 0.5 * db * db * prefactor);
-        atomicAdd(du_dp + b0_idx, -kb * db * prefactor);
+        atomicAdd(du_dp + kb_idx, FLOAT_TO_FIXED_BONDED(0.5 * db * db * prefactor));
+        atomicAdd(du_dp + b0_idx, FLOAT_TO_FIXED_BONDED(-kb * db * prefactor));
     }
 
     if (u) {

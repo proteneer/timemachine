@@ -11,7 +11,7 @@ void __global__ k_harmonic_angle_inference(
     const int *__restrict__ lambda_offset,
     const int *__restrict__ angle_idxs, // [A, 3]
     unsigned long long *__restrict__ du_dx,
-    double *__restrict__ du_dp,
+    unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ du_dl,
     unsigned long long *__restrict__ u) {
 
@@ -77,9 +77,9 @@ void __global__ k_harmonic_angle_inference(
 
     if (du_dp) {
         RealType dka_grad = delta * delta / 2;
-        atomicAdd(du_dp + ka_idx, dka_grad * prefactor);
+        atomicAdd(du_dp + ka_idx, FLOAT_TO_FIXED_BONDED(dka_grad * prefactor));
         RealType da0_grad = delta * ka * sin(a0);
-        atomicAdd(du_dp + a0_idx, da0_grad * prefactor);
+        atomicAdd(du_dp + a0_idx, FLOAT_TO_FIXED_BONDED(da0_grad * prefactor));
     }
 
     if (u) {
