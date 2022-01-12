@@ -293,7 +293,6 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
                 verbose=verbose,
                 num_batches=num_batches,
                 steps_per_batch=steps_per_batch,
-                compute_du_dp_interval=0,
                 compute_du_dl_interval=du_dl_interval,
             )
 
