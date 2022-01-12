@@ -8,7 +8,6 @@ def make_dummy_sim_result(val):
     return SimulationResult(
         xs=[val],
         boxes=[val],
-        du_dps=[val],
         lambda_us=[val],
     )
 
