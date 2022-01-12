@@ -197,7 +197,7 @@ FreeEnergyModel = namedtuple(
 )
 
 
-def _deltaG(model, sys_params) -> Tuple[float, List]:
+def deltaG(model, sys_params) -> Tuple[float, List]:
 
     assert len(sys_params) == len(model.unbound_potentials)
 
@@ -238,7 +238,3 @@ def _deltaG(model, sys_params) -> Tuple[float, List]:
     dG = np.trapz(mean_du_dls, model.lambda_schedule)
 
     return dG, results
-
-
-def deltaG(model, sys_params) -> Tuple[float, List]:
-    return _deltaG(model=model, sys_params=sys_params)
