@@ -1,7 +1,6 @@
 import os
 from tempfile import TemporaryDirectory
 from unittest import TestCase
-import pytest
 
 from md import builders
 from fe.model import RBFEModel
