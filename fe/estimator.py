@@ -196,8 +196,6 @@ FreeEnergyModel = namedtuple(
     ],
 )
 
-gradient = List[Any]  # TODO: make this more descriptive of dG_grad structure
-
 
 def _deltaG(model, sys_params) -> Tuple[float, List]:
 
