@@ -1,23 +1,16 @@
 from collections import namedtuple
 
 import copy
-import jax
 import numpy as np
 
 from timemachine.lib import potentials, custom_ops
 
-from typing import Tuple, List, Any
+from typing import Tuple, List
 
 import dataclasses
-import jax.numpy as jnp
 
-from fe.topology import BaseTopology, SingleTopology
-from fe.free_energy import BaseFreeEnergy
 from parallel.client import SerialClient
-from md import minimizer
 from md.states import CoordsVelBox
-from md.barostat.utils import get_bond_list, get_group_indices
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 
 
 @dataclasses.dataclass

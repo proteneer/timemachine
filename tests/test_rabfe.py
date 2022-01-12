@@ -1,7 +1,5 @@
 import os
-from tempfile import TemporaryDirectory
 from unittest import TestCase
-import pytest
 
 import numpy as np
 

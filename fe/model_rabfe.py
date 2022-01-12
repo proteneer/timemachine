@@ -1,6 +1,5 @@
 from abc import ABC
 
-import functools
 import numpy as np
 
 from simtk import openmm
@@ -16,8 +15,6 @@ from parallel.client import AbstractClient, _MockFuture
 from typing import Optional, Tuple, Any, List
 
 from md.barostat.utils import get_group_indices, get_bond_list
-
-import pickle
 
 
 class AbsoluteModel(ABC):
