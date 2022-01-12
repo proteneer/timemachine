@@ -167,7 +167,6 @@ class AbsoluteModel(ABC):
                 f"initial_{model.prefix}_lambda_idx_{lambda_idx}.npz",
                 xs=res.xs,
                 boxes=res.boxes,
-                du_dps=res.du_dps,
                 lambda_us=res.lambda_us,
             )
 
@@ -457,7 +456,6 @@ class RelativeModel(ABC):
                     f"initial_{model.prefix}_lambda_idx_{lambda_idx}.npz",
                     xs=res.xs,
                     boxes=res.boxes,
-                    du_dps=res.du_dps,
                     lambda_us=res.lambda_us,
                 )
             # fwd_dG is the free energy of moving X-A-B into X-A+B
