@@ -25,15 +25,16 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 class SimulationResult:
     xs: np.array
     du_dls: np.array
+    du_dps: np.array
 
 
 def flatten(v):
-    return tuple(), (v.xs, v.du_dls)
+    return tuple(), (v.xs, v.du_dls, v.du_dps)
 
 
 def unflatten(aux_data, children):
-    xs, du_dls = aux_data
-    return SimulationResult(xs, du_dls)
+    xs, du_dls, du_dps = aux_data
+    return SimulationResult(xs, du_dls, du_dps)
 
 
 jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
@@ -136,6 +137,9 @@ def simulate(
     bonded_impls = []
     nonbonded_impls = []
 
+    # set up observables for du_dps here as well.
+    du_dp_obs = []
+
     for bp in final_potentials:
         impl = bp.bound_impl(np.float32)
         if isinstance(bp, potentials.Nonbonded):
@@ -143,6 +147,7 @@ def simulate(
         else:
             bonded_impls.append(impl)
         all_impls.append(impl)
+        du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 5))
 
     if integrator.seed == 0:
         integrator = copy.deepcopy(integrator)
@@ -173,11 +178,20 @@ def simulate(
 
     baro_impl.set_interval(base_interval)
 
+    for obs in du_dp_obs:
+        ctxt.add_observable(obs)
+
     prod_schedule = np.ones(prod_steps) * lamb
 
     full_du_dls, xs, _ = ctxt.multiple_steps(prod_schedule, du_dl_interval, x_interval)
 
-    result = SimulationResult(xs=xs.astype("float32"), du_dls=full_du_dls)
+    # keep the structure of grads the same as that of final_potentials so we can properly
+    # form their vjps.
+    grads = []
+    for obs in du_dp_obs:
+        grads.append(obs.avg_du_dp())
+
+    result = SimulationResult(xs=xs.astype("float32"), du_dls=full_du_dls, du_dps=grads)
     return result
 
 
@@ -200,7 +214,7 @@ FreeEnergyModel = namedtuple(
 gradient = List[Any]  # TODO: make this more descriptive of dG_grad structure
 
 
-def _deltaG(model, sys_params) -> Tuple[float, List]:
+def _deltaG(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
 
     assert len(sys_params) == len(model.unbound_potentials)
 
@@ -239,16 +253,19 @@ def _deltaG(model, sys_params) -> Tuple[float, List]:
         mean_du_dls.append(np.mean(result.du_dls))
 
     dG = np.trapz(mean_du_dls, model.lambda_schedule)
+    dG_grad = []
+    for rhs, lhs in zip(results[-1].du_dps, results[0].du_dps):
+        dG_grad.append(rhs - lhs)
 
-    return dG, results
+    return (dG, results), dG_grad
 
 
 @functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
 def deltaG(model, sys_params) -> Tuple[float, List]:
-    return _deltaG(model=model, sys_params=sys_params)
+    return _deltaG(model=model, sys_params=sys_params)[0]
 
 
-def deltaG_fwd(model, sys_params) -> Tuple[float, List]:
+def deltaG_fwd(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
     """same signature as DeltaG, but returns the full tuple"""
     return _deltaG(model=model, sys_params=sys_params)
 

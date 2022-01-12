@@ -15,6 +15,7 @@ NUM_GPUS = get_gpu_count()
 
 
 class TestRBFEModel(TestCase):
+    @pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
     def test_predict(self):
         """Just to verify that we can handle the most basic RBFE prediction"""
         complex_system, complex_coords, _, _, complex_box, _ = builders.build_protein_system(

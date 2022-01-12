@@ -21,6 +21,8 @@ from fe.topology import SingleTopology
 from md import builders, minimizer
 from md.barostat.utils import get_bond_list, get_group_indices
 
+import pytest
+
 
 def recenter(conf, box):
 
@@ -98,6 +100,14 @@ def benchmark(
         barostat=baro_impl,
     )
 
+    # initialize observables
+    if compute_du_dp_interval > 0:
+        obs = []
+        for bp in bps:
+            du_dp_obs = custom_ops.AvgPartialUPartialParam(bp, compute_du_dp_interval)
+            ctxt.add_observable(du_dp_obs)
+            obs.append(du_dp_obs)
+
     batch_times = []
 
     lambda_schedule = np.ones(steps_per_batch) * lamb
@@ -133,6 +143,12 @@ def benchmark(
     print(
         f"{label}: N={x0.shape[0]} speed: {ns_per_day:.2f}ns/day dt: {dt*1e3}fs (ran {steps_per_batch * num_batches} steps in {(time.time() - start):.2f}s)"
     )
+
+    # bond angle torsions nonbonded
+    if verbose and compute_du_dp_interval > 0:
+        for potential, du_dp_obs in zip(bound_potentials, obs):
+            dp = du_dp_obs.avg_du_dp()
+            dp_std = du_dp_obs.std_du_dp()
 
 
 def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
@@ -299,10 +315,12 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
             )
 
 
+@pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
 def test_dhfr():
     benchmark_dhfr(verbose=True, num_batches=2, steps_per_batch=100)
 
 
+@pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
 def test_hif2a():
     benchmark_hif2a(verbose=True, num_batches=2, steps_per_batch=100)
 
