@@ -1,6 +1,4 @@
-import jax
 from jax import grad, value_and_grad, config, jacfwd, jacrev
-import pytest
 
 config.update("jax_enable_x64", True)
 
@@ -26,7 +24,6 @@ from md.barostat.utils import get_bond_list, get_group_indices
 from testsystems.relative import hif2a_ligand_pair
 
 
-@pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
 def test_absolute_free_energy():
 
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
@@ -43,7 +40,6 @@ def test_absolute_free_energy():
     ff = Forcefield(deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read()))
 
     ff_params = ff.get_ordered_params()
-    ff_handles = ff.get_ordered_handles()
 
     seed = 2021
 
@@ -98,17 +94,10 @@ def test_absolute_free_energy():
 
         return dGs[0] - dGs[1]
 
-    # automatic chaining of vjps
-    vg_fn = jax.value_and_grad(absolute_model)
-    dG, ff_grads = vg_fn(ff_params)  # dG and ff_params_grad
-    for g, h in zip(ff_grads, ff_handles):
-        assert g.shape == h.params.shape
-        assert np.all(np.abs(g) < 10000)
-
+    dG = absolute_model(ff_params)
     assert np.abs(dG) < 1000.0
 
 
-@pytest.mark.skip("Uses deprecated AvgPartialUPartialParam")
 def test_relative_free_energy():
     # test that we can properly build a single topology host guest system and
     # that we can run a few steps in a stable way. This tests runs both the complex
@@ -164,7 +153,6 @@ def test_relative_free_energy():
     ff = Forcefield(deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read()))
 
     ff_params = ff.get_ordered_params()
-    ff_handles = ff.get_ordered_handles()
 
     seed = 2021
 
@@ -202,11 +190,7 @@ def test_relative_free_energy():
 
         return estimator.deltaG(model, sys_params)[0]
 
-    vg_fn = jax.value_and_grad(vacuum_model)
-    dG, ff_grads = vg_fn(ff_params)  # dG and ff_params_grad
-    for g, h in zip(ff_grads, ff_handles):
-        assert g.shape == h.params.shape
-        assert np.all(np.abs(g) < 10000)
+    dG = vacuum_model(ff_params)
     assert np.abs(dG) < 1000.0
 
     def binding_model(ff_params):
@@ -255,13 +239,7 @@ def test_relative_free_energy():
 
         return dGs[0] - dGs[1]
 
-    # automatic chaining of vjps
-    vg_fn = jax.value_and_grad(binding_model)
-    dG, ff_grads = vg_fn(ff_params)  # dG and ff_params_grad
-    for g, h in zip(ff_grads, ff_handles):
-        assert g.shape == h.params.shape
-        assert np.all(np.abs(g) < 10000)
-
+    dG = binding_model(ff_params)
     assert np.abs(dG) < 1000.0
 
 
