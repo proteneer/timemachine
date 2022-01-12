@@ -2,7 +2,6 @@ from abc import ABC
 
 import functools
 import numpy as np
-import mdtraj
 
 from simtk import openmm
 from rdkit import Chem
@@ -159,8 +158,8 @@ class AbsoluteModel(ABC):
         dG, dG_err, results = estimator_abfe.deltaG_from_results(model, results, sys_params)
 
         # uncomment if we want to visualize
-        combined_topology = model_utils.generate_imaged_topology(
-            [self.host_topology, mol], model.x0, model.box, "initial_" + model.prefix + ".pdb"
+        combined_topology = model_utils.generate_openmm_topology(
+            [self.host_topology, mol], model.x0, box=model.box, out_filename="initial_" + model.prefix + ".pdb"
         )
 
         for lambda_idx, res in self.frame_filter(results):
@@ -449,8 +448,8 @@ class RelativeModel(ABC):
             dG, dG_err, results = estimator_abfe.deltaG_from_results(model, results, params)
 
             # Save out the pdb
-            combined_topology = model_utils.generate_imaged_topology(
-                [self.host_topology, mol_a, mol_b], model.x0, model.box, f"initial_{model.prefix}.pdb"
+            combined_topology = model_utils.generate_openmm_topology(
+                [self.host_topology, mol_a, mol_b], model.x0, box=model.box, out_filename=f"initial_{model.prefix}.pdb"
             )
 
             for lambda_idx, res in self.frame_filter(results):

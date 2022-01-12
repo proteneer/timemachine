@@ -372,35 +372,34 @@ void declare_potential(py::module &m) {
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
 
-                std::vector<unsigned long long> du_dx(N * D);
-                std::vector<double> du_dp(P);
-
-                // initialize to zero for the accumulator
-                std::vector<unsigned long long> du_dl(N, 0);
-                std::vector<unsigned long long> u(N, 0);
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
+                std::vector<unsigned long long> du_dx(N * D, 9999);
+                std::vector<double> du_dp(P, 9999.0);
+                std::vector<unsigned long long> du_dl(N, 9999);
+                std::vector<unsigned long long> u(N, 9999);
 
                 pot.execute_host(
                     N, P, coords.data(), params.data(), box.data(), lambda, &du_dx[0], &du_dp[0], &du_dl[0], &u[0]);
 
                 py::array_t<double, py::array::c_style> py_du_dx({N, D});
-                for (int i = 0; i < du_dx.size(); i++) {
-                    // py_du_dx.mutable_data()[i] = static_cast<double>(static_cast<long long>(du_dx[i]))/FIXED_EXPONENT;
-                    py_du_dx.mutable_data()[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
-                }
-
                 std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
-
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
-                for (int i = 0; i < du_dp.size(); i++) {
-                    py_du_dp.mutable_data()[i] = du_dp[i];
-                }
+                double du_dl_sum;
+                double u_sum;
 
-                unsigned long long du_dl_sum =
-                    std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
-                unsigned long long u_sum = std::accumulate(u.begin(), u.end(), decltype(u)::value_type(0));
+                pot.fixed_to_float(
+                    N,
+                    P,
+                    &du_dx[0],
+                    &du_dp[0],
+                    &du_dl[0],
+                    &u[0],
+                    py_du_dx.mutable_data(),
+                    py_du_dp.mutable_data(),
+                    &du_dl_sum,
+                    &u_sum);
 
-                return py::make_tuple(
-                    py_du_dx, py_du_dp, FIXED_TO_FLOAT<double>(du_dl_sum), FIXED_TO_FLOAT<double>(u_sum));
+                return py::make_tuple(py_du_dx, py_du_dp, du_dl_sum, u_sum);
             },
             py::arg("coords"),
             py::arg("params"),
@@ -523,6 +522,7 @@ void declare_bound_potential(py::module &m) {
             }),
             py::arg("potential"),
             py::arg("params"))
+        .def("get_potential", [](const timemachine::BoundPotential &bp) { return bp.potential; })
         .def("size", &timemachine::BoundPotential::size)
         .def(
             "execute",
@@ -969,12 +969,14 @@ void declare_summed_potential(py::module &m) {
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
         .def(
-            py::init([](std::vector<timemachine::Potential *> potentials, std::vector<int> params_sizes) {
-                return new timemachine::SummedPotential(potentials, params_sizes);
-            }),
+            py::init(
+                [](std::vector<std::shared_ptr<timemachine::Potential>> potentials, std::vector<int> params_sizes) {
+                    return new timemachine::SummedPotential(potentials, params_sizes);
+                }),
+
             py::arg("potentials"),
-            py::arg("params_sizes"),
-            py::keep_alive<1, 2>());
+            py::arg("params_sizes"))
+        .def("get_potentials", &timemachine::SummedPotential::get_potentials);
 }
 
 const py::array_t<double, py::array::c_style>

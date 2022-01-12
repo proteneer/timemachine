@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "potential.hpp"
 #include "surreal.cuh"
@@ -18,11 +19,11 @@ void Potential::execute_host(
     unsigned long long *h_du_dl, //
     unsigned long long *h_u) {
 
+    const int &D = Potential::D;
+
     double *d_x;
     double *d_p;
     double *d_box;
-
-    const int D = 3;
 
     gpuErrchk(cudaMalloc(&d_x, N * D * sizeof(double)));
     gpuErrchk(cudaMemcpy(d_x, h_x, N * D * sizeof(double), cudaMemcpyHostToDevice));
@@ -91,11 +92,11 @@ void Potential::execute_host_du_dx(
     const double lambda, // [1]
     unsigned long long *h_du_dx) {
 
+    const int &D = Potential::D;
+
     double *d_x;
     double *d_p;
     double *d_box;
-
-    const int D = 3;
 
     gpuErrchk(cudaMalloc(&d_x, N * D * sizeof(double)));
     gpuErrchk(cudaMemcpy(d_x, h_x, N * D * sizeof(double), cudaMemcpyHostToDevice));
@@ -122,4 +123,38 @@ void Potential::execute_host_du_dx(
     gpuErrchk(cudaFree(d_box));
 };
 
+void Potential::fixed_to_float(
+    const int N,
+    const int P,
+    const unsigned long long *du_dx,
+    const double *du_dp,
+    const unsigned long long *du_dl,
+    const unsigned long long *u,
+    double *du_dx_out,
+    double *du_dp_out,
+    double *du_dl_sum,
+    double *u_sum) {
+
+    const int &D = Potential::D;
+
+    for (int i = 0; i < N * D; i++) {
+        du_dx_out[i] = FIXED_TO_FLOAT<double>(du_dx[i]);
+    }
+
+    for (int i = 0; i < P; i++) {
+        du_dp_out[i] = du_dp[i]; // TODO: just a pass-thru for now; update when du_dp is fixed-point
+    }
+
+    unsigned long long du_dl_sum_fixed = 0;
+    for (int i = 0; i < N; i++) {
+        du_dl_sum_fixed += du_dl[i];
+    }
+    *du_dl_sum = FIXED_TO_FLOAT<double>(du_dl_sum_fixed);
+
+    unsigned long long u_sum_fixed = 0;
+    for (int i = 0; i < N; i++) {
+        u_sum_fixed += u[i];
+    }
+    *u_sum = FIXED_TO_FLOAT<double>(u_sum_fixed);
+}
 } // namespace timemachine
