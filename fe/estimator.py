@@ -1,6 +1,5 @@
 from collections import namedtuple
 
-import functools
 import copy
 import jax
 import numpy as np
@@ -243,22 +242,5 @@ def _deltaG(model, sys_params) -> Tuple[float, List]:
     return dG, results
 
 
-@functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
 def deltaG(model, sys_params) -> Tuple[float, List]:
     return _deltaG(model=model, sys_params=sys_params)
-
-
-def deltaG_fwd(model, sys_params) -> Tuple[float, List]:
-    """same signature as DeltaG, but returns the full tuple"""
-    return _deltaG(model=model, sys_params=sys_params)
-
-
-def deltaG_bwd(model, residual, grad) -> Tuple[np.array]:
-    """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!"""
-    # residual are the partial dG / partial dparams for each term
-    # grad[0] is the adjoint of dG w.r.t. loss: partial L/partial dG
-    # grad[1] is the adjoint of dG w.r.t. simulation result, which we don't use
-    return ([grad[0] * r for r in residual],)
-
-
-deltaG.defvjp(deltaG_fwd, deltaG_bwd)
