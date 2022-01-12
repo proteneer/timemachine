@@ -15,7 +15,7 @@ from timemachine.potentials import nonbonded
 from timemachine.constants import BOLTZ
 
 import numpy as np
-import test_ligands
+from tests import test_ligands
 import copy
 
 from ff import Forcefield

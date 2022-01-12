@@ -1,35 +1,28 @@
 #include <cstdio>
 
-#include "integrator.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
+#include "integrator.hpp"
 
 namespace timemachine {
 
 int round_up_even(int count) {
-    if(count % 2 == 1) {
+    if (count % 2 == 1) {
         return count += 1;
     } else {
         return count;
     }
 }
 
-LangevinIntegrator::LangevinIntegrator(
-    int N,
-    double dt,
-    double ca,
-    const double *h_cbs,
-    const double *h_ccs,
-    int seed
-) : N_(N), dt_(dt), ca_(ca) {
+LangevinIntegrator::LangevinIntegrator(int N, double dt, double ca, const double *h_cbs, const double *h_ccs, int seed)
+    : N_(N), dt_(dt), ca_(ca) {
 
     d_cbs_ = gpuErrchkCudaMallocAndCopy(h_cbs, N);
     d_ccs_ = gpuErrchkCudaMallocAndCopy(h_ccs, N);
 
     curandErrchk(curandCreateGenerator(&cr_rng_, CURAND_RNG_PSEUDO_DEFAULT));
-    gpuErrchk(cudaMalloc((void**)&d_noise_, round_up_even(N*3)*sizeof(double)));
+    gpuErrchk(cudaMalloc((void **)&d_noise_, round_up_even(N * 3) * sizeof(double)));
     curandErrchk(curandSetPseudoRandomGeneratorSeed(cr_rng_, seed));
-
 }
 
 LangevinIntegrator::~LangevinIntegrator() {
@@ -38,7 +31,6 @@ LangevinIntegrator::~LangevinIntegrator() {
     gpuErrchk(cudaFree(d_noise_));
     curandErrchk(curandDestroyGenerator(cr_rng_));
 }
-
 
 template <typename RealType>
 __global__ void update_forward(
@@ -53,13 +45,13 @@ __global__ void update_forward(
     const unsigned long long *du_dx,
     const RealType dt) {
 
-    int atom_idx = blockIdx.x*blockDim.x + threadIdx.x;
-    if(atom_idx >= N) {
+    int atom_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (atom_idx >= N) {
         return;
     }
 
     int d_idx = blockIdx.y;
-    int local_idx = atom_idx*D + d_idx;
+    int local_idx = atom_idx * D + d_idx;
 
     RealType force = FIXED_TO_FLOAT<RealType>(du_dx[local_idx]);
 
@@ -72,39 +64,22 @@ __global__ void update_forward(
 
     v_t[local_idx] = ca * v_mid + ccs[atom_idx] * noise[local_idx];
     x_t[local_idx] += 0.5 * dt * (v_mid + v_t[local_idx]);
-
 };
 
-
 void LangevinIntegrator::step_fwd(
-    double *d_x_t,
-    double *d_v_t,
-    unsigned long long *d_du_dx_t,
-    double *d_box_t_,
-    cudaStream_t stream) {
+    double *d_x_t, double *d_v_t, unsigned long long *d_du_dx_t, double *d_box_t_, cudaStream_t stream) {
 
     const int D = 3;
     size_t tpb = 32;
-    size_t n_blocks = (N_*D + tpb - 1) / tpb;
+    size_t n_blocks = (N_ * D + tpb - 1) / tpb;
     dim3 dimGrid_dx(n_blocks, D);
 
-    curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_*D), 0.0, 1.0));
+    curandErrchk(templateCurandNormal(cr_rng_, d_noise_, round_up_even(N_ * D), 0.0, 1.0));
 
-    update_forward<double><<<dimGrid_dx, tpb, 0, stream>>>(
-        N_,
-        D,
-        ca_,
-        d_cbs_,
-        d_ccs_,
-        d_noise_,
-        d_x_t,
-        d_v_t,
-        d_du_dx_t,
-        dt_
-    );
+    update_forward<double>
+        <<<dimGrid_dx, tpb, 0, stream>>>(N_, D, ca_, d_cbs_, d_ccs_, d_noise_, d_x_t, d_v_t, d_du_dx_t, dt_);
 
     gpuErrchk(cudaPeekAtLastError());
-
 }
 
 } // end namespace timemachine

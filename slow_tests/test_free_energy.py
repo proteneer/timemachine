@@ -20,7 +20,7 @@ from md import builders, minimizer
 
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 
-from fe.functional import construct_differentiable_interface
+from fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from md.barostat.utils import get_bond_list, get_group_indices
 from testsystems.relative import hif2a_ligand_pair
 
@@ -373,3 +373,32 @@ def test_functional():
             for perturb in perturbations:
                 abs_err = check_grad(low_dim_f, grad(low_dim_f), perturb, epsilon=1e-4)
                 assert abs_err < 1e-3
+
+
+def test_construct_differentiable_interface_fast():
+    """Assert that the computation of U and its derivatives using the
+    C++ code path produces equivalent results to doing the
+    summation in Python"""
+
+    ff_params = hif2a_ligand_pair.ff.get_ordered_params()
+    unbound_potentials, sys_params, _, coords = hif2a_ligand_pair.prepare_vacuum_edge(ff_params)
+    box = np.eye(3) * 100
+    lam = 0.5
+
+    for precision in [np.float32, np.float64]:
+        U_ref = construct_differentiable_interface(unbound_potentials, precision)
+        U = construct_differentiable_interface_fast(unbound_potentials, sys_params, precision)
+        args = (coords, sys_params, box, lam)
+        np.testing.assert_array_equal(U(*args), U_ref(*args))
+
+        argnums = (0, 1, 3)
+        grad_U_ref = grad(U_ref, argnums=argnums)(*args)
+        grad_U = grad(U, argnums=argnums)(*args)
+
+        np.testing.assert_array_equal(grad_U[0], grad_U_ref[0])
+
+        assert len(grad_U[1]) == len(grad_U_ref[1])
+        for dU_dp, dU_dp_ref in zip(grad_U[1], grad_U_ref[1]):
+            np.testing.assert_array_equal(dU_dp, dU_dp_ref)
+
+        np.testing.assert_array_equal(grad_U[2], grad_U_ref[2])

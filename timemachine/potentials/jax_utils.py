@@ -87,13 +87,11 @@ def rescale_coordinates(conf, indices, box, scales):
 
 def delta_r(ri, rj, box=None):
     diff = ri - rj  # this can be either N,N,3 or B,3
-    dims = ri.shape[-1]
 
     # box is None for harmonic bonds, not None for nonbonded terms
     if box is not None:
-        for d in range(dims):
-            diff -= box[d] * np.floor(np.expand_dims(diff[..., d], axis=-1) / box[d][d] + 0.5)
-
+        box_diag = np.diag(box)
+        diff -= box_diag * np.floor(diff / box_diag + 0.5)
     return diff
 
 

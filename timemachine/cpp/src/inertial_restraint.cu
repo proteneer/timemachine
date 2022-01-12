@@ -1,12 +1,12 @@
+#include "../fixed_point.hpp"
+#include "gpu_utils.cuh"
+#include "inertial_restraint.hpp"
+#include "solver.hpp"
 #include <chrono>
 #include <iostream>
-#include <vector>
-#include <string>
 #include <set>
-#include "inertial_restraint.hpp"
-#include "gpu_utils.cuh"
-#include "solver.hpp"
-#include "../fixed_point.hpp"
+#include <string>
+#include <vector>
 
 namespace timemachine {
 
@@ -15,25 +15,19 @@ InertialRestraint<RealType>::InertialRestraint(
     const std::vector<int> &group_a_idxs,
     const std::vector<int> &group_b_idxs,
     const std::vector<double> &masses,
-    const double k) : N_(masses.size()),
-    N_A_(group_a_idxs.size()),
-    N_B_(group_b_idxs.size()),
-    k_(k),
-    h_a_idxs_(group_a_idxs),
-    h_b_idxs_(group_b_idxs),
-    h_masses_(masses),
-    h_x_buffer_(N_*3),
-    h_conf_adjoint_(N_*3) {
+    const double k)
+    : N_(masses.size()), N_A_(group_a_idxs.size()), N_B_(group_b_idxs.size()), k_(k), h_a_idxs_(group_a_idxs),
+      h_b_idxs_(group_b_idxs), h_masses_(masses), h_x_buffer_(N_ * 3), h_conf_adjoint_(N_ * 3) {
 
-    for(int i=0; i < group_a_idxs.size(); i++) {
-        if(group_a_idxs[i] >= N_ || group_a_idxs[i] < 0) {
+    for (int i = 0; i < group_a_idxs.size(); i++) {
+        if (group_a_idxs[i] >= N_ || group_a_idxs[i] < 0) {
             throw std::runtime_error("Invalid group_a_idx!");
         }
         h_c_idxs_.push_back(group_a_idxs[i]);
     }
 
-    for(int i=0; i < group_b_idxs.size(); i++) {
-        if(group_b_idxs[i] >= N_ || group_b_idxs[i] < 0) {
+    for (int i = 0; i < group_b_idxs.size(); i++) {
+        if (group_b_idxs[i] >= N_ || group_b_idxs[i] < 0) {
             throw std::runtime_error("Invalid group_a_idx!");
         }
         h_c_idxs_.push_back(group_b_idxs[i]);
@@ -43,43 +37,36 @@ InertialRestraint<RealType>::InertialRestraint(
     // are not disjoint
     std::set<int> c_set(h_c_idxs_.begin(), h_c_idxs_.end());
     h_c_idxs_.clear();
-    for(auto idx : c_set) {
+    for (auto idx : c_set) {
         h_c_idxs_.push_back(idx);
     }
 
     N_C_ = h_c_idxs_.size();
 
-    gpuErrchk(cudaMalloc(&d_c_idxs_, N_C_*sizeof(*d_c_idxs_)));
-    gpuErrchk(cudaMemcpy(d_c_idxs_, &h_c_idxs_[0], N_C_*sizeof(*d_c_idxs_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMalloc(&d_c_idxs_, N_C_ * sizeof(*d_c_idxs_)));
+    gpuErrchk(cudaMemcpy(d_c_idxs_, &h_c_idxs_[0], N_C_ * sizeof(*d_c_idxs_), cudaMemcpyHostToDevice));
 
-    gpuErrchk(cudaMallocHost(&h_x_memcpy_buf_pinned_, N_C_*3*sizeof(*h_x_memcpy_buf_pinned_)));
-    gpuErrchk(cudaMalloc(&d_x_memcpy_buf_, N_C_*3*sizeof(*d_x_memcpy_buf_)));
-
+    gpuErrchk(cudaMallocHost(&h_x_memcpy_buf_pinned_, N_C_ * 3 * sizeof(*h_x_memcpy_buf_pinned_)));
+    gpuErrchk(cudaMalloc(&d_x_memcpy_buf_, N_C_ * 3 * sizeof(*d_x_memcpy_buf_)));
 };
 
-template <typename RealType>
-InertialRestraint<RealType>::~InertialRestraint() {
+template <typename RealType> InertialRestraint<RealType>::~InertialRestraint() {
     gpuErrchk(cudaFree(d_c_idxs_));
     gpuErrchk(cudaFree(d_x_memcpy_buf_));
     gpuErrchk(cudaFreeHost(h_x_memcpy_buf_pinned_));
 };
 
 // center of mass inertia tensor
-void inertia_tensor(
-    const int NX,
-    const int *h_idxs,
-    const double *h_masses,
-    const double *h_x_in,
-    double *out_tensor) {
+void inertia_tensor(const int NX, const int *h_idxs, const double *h_masses, const double *h_x_in, double *out_tensor) {
 
     double centroid[3] = {0};
     double sum = 0;
 
-    for(int i=0; i < NX; i++) {
+    for (int i = 0; i < NX; i++) {
         int atom_idx = h_idxs[i];
         double mass = h_masses[atom_idx];
-        for(int d=0; d < 3; d++) {
-            centroid[d] += mass*h_x_in[atom_idx*3+d];
+        for (int d = 0; d < 3; d++) {
+            centroid[d] += mass * h_x_in[atom_idx * 3 + d];
         }
         sum += mass;
     }
@@ -95,12 +82,12 @@ void inertia_tensor(
     double yz = 0;
     double zz = 0;
 
-    for(int i=0; i < NX; i++) {
+    for (int i = 0; i < NX; i++) {
         int atom_idx = h_idxs[i];
         double mass = h_masses[atom_idx];
         double ci[3];
-        for(int d=0; d < 3; d++) {
-            ci[d] = h_x_in[atom_idx*3+d] - centroid[d];
+        for (int d = 0; d < 3; d++) {
+            ci[d] = h_x_in[atom_idx * 3 + d] - centroid[d];
         }
         xx += mass * (ci[1] * ci[1] + ci[2] * ci[2]);
         yy += mass * (ci[0] * ci[0] + ci[2] * ci[2]);
@@ -110,71 +97,53 @@ void inertia_tensor(
         yz -= mass * ci[2] * ci[1];
     }
 
-    out_tensor[0*3+0] = xx/sum;
-    out_tensor[0*3+1] = xy/sum;
-    out_tensor[0*3+2] = xz/sum;
-    out_tensor[1*3+0] = xy/sum;
-    out_tensor[1*3+1] = yy/sum;
-    out_tensor[1*3+2] = yz/sum;
-    out_tensor[2*3+0] = xz/sum;
-    out_tensor[2*3+1] = yz/sum;
-    out_tensor[2*3+2] = zz/sum;
-
-
+    out_tensor[0 * 3 + 0] = xx / sum;
+    out_tensor[0 * 3 + 1] = xy / sum;
+    out_tensor[0 * 3 + 2] = xz / sum;
+    out_tensor[1 * 3 + 0] = xy / sum;
+    out_tensor[1 * 3 + 1] = yy / sum;
+    out_tensor[1 * 3 + 2] = yz / sum;
+    out_tensor[2 * 3 + 0] = xz / sum;
+    out_tensor[2 * 3 + 1] = yz / sum;
+    out_tensor[2 * 3 + 2] = zz / sum;
 }
 
-__global__ void k_atomic_add(double *addr, double var) {
-    atomicAdd(addr, var);
-}
+__global__ void k_atomic_add(double *addr, double var) { atomicAdd(addr, var); }
 
-__global__ void k_gather_x(
-    const double *src,
-    const int C,
-    const int *c_idxs,
-    double *dst) {
+__global__ void k_gather_x(const double *src, const int C, const int *c_idxs, double *dst) {
 
-    const int tid = blockIdx.x*blockDim.x + threadIdx.x;
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if(tid >= C) {
+    if (tid >= C) {
         return;
     }
 
     const int dim = blockIdx.y;
 
-    dst[tid*3+dim] = src[c_idxs[tid]*3+dim];
-
+    dst[tid * 3 + dim] = src[c_idxs[tid] * 3 + dim];
 }
 
-__global__ void k_accumulate_scatter(
-    const int C,
-    const int *c_idxs,
-    const double *src,
-    unsigned long long *dst) {
-    const int tid = blockIdx.x*blockDim.x + threadIdx.x;
-    if(tid >= C) {
+__global__ void k_accumulate_scatter(const int C, const int *c_idxs, const double *src, unsigned long long *dst) {
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= C) {
         return;
     }
     const int dim = blockIdx.y;
-    atomicAdd(dst + c_idxs[tid]*3 + dim, static_cast<unsigned long long>((long long) (src[tid*3 + dim]*FIXED_EXPONENT)));
-
+    atomicAdd(
+        dst + c_idxs[tid] * 3 + dim, static_cast<unsigned long long>((long long)(src[tid * 3 + dim] * FIXED_EXPONENT)));
 }
 
-
-template <typename T> int sgn(T val) {
-    return (T(0) < val) - (val < T(0));
-}
-
+template <typename T> int sgn(T val) { return (T(0) < val) - (val < T(0)); }
 
 void print_matrix(double x[3][3], std::string name) {
 
     std::cout << "matrix: " << name << std::endl;
-    for(int i=0; i < 3; i++) {
-        for(int j=0; j < 3; j++) {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
             std::cout << x[i][j] << " ";
         }
         std::cout << std::endl;
     }
-
 }
 
 void grad_inertia_tensor(
@@ -188,11 +157,11 @@ void grad_inertia_tensor(
     double centroid[3] = {0};
     double sum = 0;
 
-    for(int i=0; i < N; i++) {
+    for (int i = 0; i < N; i++) {
         int atom_idx = idxs[i];
         double mass = masses[atom_idx];
-        for(int d=0; d < 3; d++) {
-            centroid[d] += mass*conf[atom_idx*3+d];
+        for (int d = 0; d < 3; d++) {
+            centroid[d] += mass * conf[atom_idx * 3 + d];
         }
         sum += mass;
     }
@@ -209,30 +178,31 @@ void grad_inertia_tensor(
     double dzz = adjoint_tensor[2][2];
 
     double mass_sum = 0;
-    for(int i=0; i < N; i++) {
+    for (int i = 0; i < N; i++) {
         mass_sum += masses[idxs[i]];
     }
 
-    for(int i=0; i < N; i++) {
+    for (int i = 0; i < N; i++) {
         int a_idx = idxs[i];
         double mass = masses[a_idx];
-        double xs = conf[a_idx*3+0] - centroid[0];
-        double ys = conf[a_idx*3+1] - centroid[1];
-        double zs = conf[a_idx*3+2] - centroid[2];
-        conf_adjoint[a_idx*3+0] += (dyy*2*xs + dzz*2*xs + -dxy*2*ys + -dxz*2*zs)*(mass/mass_sum);
-        conf_adjoint[a_idx*3+1] += (dzz*2*ys + dxx*2*ys + -dxy*2*xs + -dyz*2*zs)*(mass/mass_sum);
-        conf_adjoint[a_idx*3+2] += (dxx*2*zs + dyy*2*zs + -dxz*2*xs + -dyz*2*ys)*(mass/mass_sum);
+        double xs = conf[a_idx * 3 + 0] - centroid[0];
+        double ys = conf[a_idx * 3 + 1] - centroid[1];
+        double zs = conf[a_idx * 3 + 2] - centroid[2];
+        conf_adjoint[a_idx * 3 + 0] +=
+            (dyy * 2 * xs + dzz * 2 * xs + -dxy * 2 * ys + -dxz * 2 * zs) * (mass / mass_sum);
+        conf_adjoint[a_idx * 3 + 1] +=
+            (dzz * 2 * ys + dxx * 2 * ys + -dxy * 2 * xs + -dyz * 2 * zs) * (mass / mass_sum);
+        conf_adjoint[a_idx * 3 + 2] +=
+            (dxx * 2 * zs + dyy * 2 * zs + -dxz * 2 * xs + -dyz * 2 * ys) * (mass / mass_sum);
     }
-
-
 }
 
 void grad_eigh(
-    const double w[3],       // eigenvalues
-    const double v[3][3],    // eigenvectors
-    const double vg[3][3],   // eigenvector adjoints
-    double a_adjoint[3][3]   // input array adjoints
-    ) {
+    const double w[3],     // eigenvalues
+    const double v[3][3],  // eigenvectors
+    const double vg[3][3], // eigenvector adjoints
+    double a_adjoint[3][3] // input array adjoints
+) {
     /*
     (ytz): I really hate this code. See timemachine.lib.pmi.grad_eigh for a slightly more
     readable python implementation.
@@ -250,31 +220,30 @@ void grad_eigh(
 
     double F[3][3];
 
-    for(int i=0; i < 3; i++) {
-        for(int j=0; j < 3; j++) {
-            F[i][j] = off_diag[i][j] / (w[j] - w[i] + (1-off_diag[i][j]));
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            F[i][j] = off_diag[i][j] / (w[j] - w[i] + (1 - off_diag[i][j]));
         }
     }
 
     double C[3][3] = {0};
 
-    for(int i=0; i < 3; i++) {
-        for(int j=0; j < 3; j++) {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
             double sum = 0;
-            for(int k=0; k < 3; k++) {
-                sum += v[k][i]*vg[k][j];
+            for (int k = 0; k < 3; k++) {
+                sum += v[k][i] * vg[k][j];
             }
-            C[i][j] = sum*F[i][j];
+            C[i][j] = sum * F[i][j];
         }
     }
 
-
     double D[3][3] = {0};
-    for(int i=0; i < 3; i++) {
-        for(int j=0; j < 3; j++) {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
             double sum = 0;
-            for(int k=0; k < 3; k++) {
-                sum += v[i][k]*C[k][j];
+            for (int k = 0; k < 3; k++) {
+                sum += v[i][k] * C[k][j];
             }
             D[i][j] = sum;
         }
@@ -282,26 +251,25 @@ void grad_eigh(
 
     double vjp_temp[3][3] = {0};
 
-    for(int i=0; i < 3; i++) {
-        for(int j=0; j < 3; j++) {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
             double sum = 0;
-            for(int k=0; k < 3; k++) {
-                sum += D[i][k]*v[j][k];
+            for (int k = 0; k < 3; k++) {
+                sum += D[i][k] * v[j][k];
             }
             vjp_temp[i][j] = sum;
         }
     }
 
-    for(int i=0; i < 3; i++) {
-        for(int j=0; j < 3; j++) {
-            if(i == j) {
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (i == j) {
                 a_adjoint[i][j] = vjp_temp[i][j];
             } else {
-                a_adjoint[i][j] = (vjp_temp[i][j] + vjp_temp[j][i])/2;
+                a_adjoint[i][j] = (vjp_temp[i][j] + vjp_temp[j][i]) / 2;
             }
         }
     }
-
 }
 
 template <typename RealType>
@@ -335,16 +303,17 @@ void InertialRestraint<RealType>::execute_device(
     // cudaDeviceSynchronize();
     // auto start = std::chrono::high_resolution_clock::now();
 
-    dim3 dimGather((N_C_+tpb-1)/tpb, 3, 1);
+    dim3 dimGather((N_C_ + tpb - 1) / tpb, 3, 1);
 
     k_gather_x<<<dimGather, tpb>>>(d_x, N_C_, d_c_idxs_, d_x_memcpy_buf_);
     gpuErrchk(cudaPeekAtLastError());
-    gpuErrchk(cudaMemcpy(h_x_memcpy_buf_pinned_, d_x_memcpy_buf_, N_C_*3*sizeof(*d_x_memcpy_buf_), cudaMemcpyDeviceToHost));
+    gpuErrchk(cudaMemcpy(
+        h_x_memcpy_buf_pinned_, d_x_memcpy_buf_, N_C_ * 3 * sizeof(*d_x_memcpy_buf_), cudaMemcpyDeviceToHost));
 
     std::vector<double> &h_x_in = h_x_buffer_;
-    for(int i=0; i < h_c_idxs_.size(); i++) {
-        for(int d=0; d < 3; d++) {
-            h_x_in[h_c_idxs_[i]*3+d] = h_x_memcpy_buf_pinned_[i*3+d];
+    for (int i = 0; i < h_c_idxs_.size(); i++) {
+        for (int d = 0; d < 3; d++) {
+            h_x_in[h_c_idxs_[i] * 3 + d] = h_x_memcpy_buf_pinned_[i * 3 + d];
         }
     }
 
@@ -352,20 +321,20 @@ void InertialRestraint<RealType>::execute_device(
     const std::vector<int> &h_a_idxs = h_a_idxs_;
     const std::vector<int> &h_b_idxs = h_b_idxs_;
 
-    std::vector<double> a_tensor(3*3);
-    std::vector<double> b_tensor(3*3);
+    std::vector<double> a_tensor(3 * 3);
+    std::vector<double> b_tensor(3 * 3);
 
     inertia_tensor(N_A_, &h_a_idxs[0], &h_masses[0], &h_x_in[0], &a_tensor[0]);
     inertia_tensor(N_B_, &h_b_idxs[0], &h_masses[0], &h_x_in[0], &b_tensor[0]);
 
-    double (&a_array)[3][3] = *reinterpret_cast<double (*)[3][3]>(&a_tensor[0]);
-    double a_w[3]; // eigenvalues
+    double(&a_array)[3][3] = *reinterpret_cast<double(*)[3][3]>(&a_tensor[0]);
+    double a_w[3];    // eigenvalues
     double a_v[3][3]; // eigenvectors
 
     dsyevv3(a_array, a_v, a_w);
 
-    double (&b_array)[3][3] = *reinterpret_cast<double (*)[3][3]>(&b_tensor[0]);
-    double b_w[3]; // eigenvalues
+    double(&b_array)[3][3] = *reinterpret_cast<double(*)[3][3]>(&b_tensor[0]);
+    double b_w[3];    // eigenvalues
     double b_v[3][3]; // eigenvectors
 
     dsyevv3(b_array, b_v, b_w);
@@ -379,18 +348,18 @@ void InertialRestraint<RealType>::execute_device(
     double dl_da_v[3][3]; // derivatives of loss wrt. a's eigenvectors
     double dl_db_v[3][3]; // derivatives of loss wrt. b's eigenvectors
 
-    for(int j=0; j < 3; j++) {
+    for (int j = 0; j < 3; j++) {
         double dot_prod = 0;
-        for(int i=0; i < 3; i++) {
+        for (int i = 0; i < 3; i++) {
             dot_prod += a_v[i][j] * b_v[i][j];
         }
 
         double delta = 1 - abs(dot_prod);
-        loss += delta*delta;
-        double prefactor = -sgn(dot_prod)*2*delta*k_;
-        for(int i=0; i < 3; i++) {
-            dl_da_v[i][j] = prefactor*b_v[i][j];
-            dl_db_v[i][j] = prefactor*a_v[i][j];
+        loss += delta * delta;
+        double prefactor = -sgn(dot_prod) * 2 * delta * k_;
+        for (int i = 0; i < 3; i++) {
+            dl_da_v[i][j] = prefactor * b_v[i][j];
+            dl_db_v[i][j] = prefactor * a_v[i][j];
         }
     }
 
@@ -400,40 +369,36 @@ void InertialRestraint<RealType>::execute_device(
     grad_eigh(a_w, a_v, dl_da_v, dl_da_tensor);
     grad_eigh(b_w, b_v, dl_db_v, dl_db_tensor);
 
-    for(int i=0; i < h_c_idxs_.size(); i++) {
-        for(int d=0; d < 3; d++) {
-            h_conf_adjoint_[h_c_idxs_[i]*3+d] = 0;
+    for (int i = 0; i < h_c_idxs_.size(); i++) {
+        for (int d = 0; d < 3; d++) {
+            h_conf_adjoint_[h_c_idxs_[i] * 3 + d] = 0;
         }
     }
 
     grad_inertia_tensor(N_A_, &h_a_idxs[0], &h_masses[0], &h_x_in[0], dl_da_tensor, &h_conf_adjoint_[0]);
     grad_inertia_tensor(N_B_, &h_b_idxs[0], &h_masses[0], &h_x_in[0], dl_db_tensor, &h_conf_adjoint_[0]);
 
-    for(int i=0; i < h_c_idxs_.size(); i++) {
-        for(int d=0; d < 3; d++) {
-            h_x_memcpy_buf_pinned_[i*3+d] = h_conf_adjoint_[h_c_idxs_[i]*3+d];
+    for (int i = 0; i < h_c_idxs_.size(); i++) {
+        for (int d = 0; d < 3; d++) {
+            h_x_memcpy_buf_pinned_[i * 3 + d] = h_conf_adjoint_[h_c_idxs_[i] * 3 + d];
         }
     }
 
-    gpuErrchk(cudaMemcpy(d_x_memcpy_buf_, h_x_memcpy_buf_pinned_, N_C_*3*sizeof(*d_x_memcpy_buf_), cudaMemcpyHostToDevice));
+    gpuErrchk(cudaMemcpy(
+        d_x_memcpy_buf_, h_x_memcpy_buf_pinned_, N_C_ * 3 * sizeof(*d_x_memcpy_buf_), cudaMemcpyHostToDevice));
 
-    if(d_u) {
-        k_atomic_add<<<1, 1, 0>>>(d_u, loss*k_);
+    if (d_u) {
+        k_atomic_add<<<1, 1, 0>>>(d_u, loss * k_);
         gpuErrchk(cudaPeekAtLastError());
     }
 
-    const int B = (N+tpb-1)/tpb;
+    const int B = (N + tpb - 1) / tpb;
     dim3 dimGrid(B, 3, 1);
 
     gpuErrchk(cudaPeekAtLastError());
 
-    if(d_du_dx) {
-        k_accumulate_scatter<<<dimGrid, tpb, 0>>>(
-            N_C_,
-            d_c_idxs_,
-            d_x_memcpy_buf_,
-            d_du_dx
-        );
+    if (d_du_dx) {
+        k_accumulate_scatter<<<dimGrid, tpb, 0>>>(N_C_, d_c_idxs_, d_x_memcpy_buf_, d_du_dx);
         gpuErrchk(cudaPeekAtLastError());
     }
 
@@ -441,7 +406,6 @@ void InertialRestraint<RealType>::execute_device(
     // auto end = std::chrono::high_resolution_clock::now();
     // std::cout << "total: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << "us" << std::endl;;
     gpuErrchk(cudaPeekAtLastError());
-
 };
 
 template class InertialRestraint<double>;

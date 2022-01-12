@@ -4,7 +4,6 @@
 
 // #define BOXSIZE 100*cutoff
 
-
 // template<typename T>
 // __device__ T apply_delta(T delta, double box) {
 //     return delta;

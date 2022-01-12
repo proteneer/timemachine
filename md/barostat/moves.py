@@ -46,7 +46,7 @@ class CentroidRescaler:
         self.scatter_inds = _scatter_inds_from_group_inds(group_inds)
 
         if weights is not None:
-            raise (NotImplementedError)
+            raise NotImplementedError("Weights are not implemented yet")
 
     def rescale(self, coords, center, scale=1.0):
         """scale distances of coords to center"""
