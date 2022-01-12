@@ -24,7 +24,6 @@
 // #include "gbsa.hpp"
 #include "fixed_point.hpp"
 #include "integrator.hpp"
-// #include "observable.hpp"
 #include "neighborlist.hpp"
 // #include "shape.hpp"
 #include "barostat.hpp"
@@ -109,8 +108,6 @@ void declare_context(py::module &m) {
                         timemachine::Integrator *intg,
                         std::vector<timemachine::BoundPotential *> bps,
                         std::optional<timemachine::MonteCarloBarostat *> barostat) {
-                // std::vector<timemachine::Observable *> obs) {
-
                 int N = x0.shape()[0];
                 int D = x0.shape()[1];
 
@@ -133,7 +130,6 @@ void declare_context(py::module &m) {
             py::arg("integrator"),
             py::arg("bps"),
             py::arg("barostat") = py::none())
-        .def("add_observable", &timemachine::Context::add_observable)
         .def("step", &timemachine::Context::step)
         .def(
             "multiple_steps",
@@ -295,40 +291,6 @@ void declare_context(py::module &m) {
         });
 }
 
-// void declare_observable(py::module &m) {
-
-//     using Class = timemachine::Observable;
-//     std::string pyclass_name = std::string("Observable");
-//     py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr());
-// }
-
-// void declare_avg_partial_u_partial_param(py::module &m) {
-
-//     using Class = timemachine::AvgPartialUPartialParam;
-//     std::string pyclass_name = std::string("AvgPartialUPartialParam");
-//     py::class_<Class, timemachine::Observable>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-//         .def(py::init([](timemachine::BoundPotential *bp, int interval) {
-//             return new timemachine::AvgPartialUPartialParam(bp, interval);
-//         }))
-//         .def(
-//             "avg_du_dp",
-//             [](timemachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
-//                 std::vector<int> shape = obj.shape();
-//                 py::array_t<double, py::array::c_style> buffer(shape);
-
-//                 obj.avg_du_dp(buffer.mutable_data());
-
-//                 return buffer;
-//             })
-//         .def("std_du_dp", [](timemachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
-//             std::vector<int> shape = obj.shape();
-//             py::array_t<double, py::array::c_style> buffer(shape);
-
-//             obj.std_du_dp(buffer.mutable_data());
-
-//             return buffer;
-//         });
-// }
 void declare_integrator(py::module &m) {
 
     using Class = timemachine::Integrator;
@@ -1011,11 +973,6 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_integrator(m);
     declare_langevin_integrator(m);
-
-    // declare_observable(m);
-    // declare_avg_partial_u_partial_param(m);
-    // declare_avg_partial_u_partial_lambda(m);
-    // declare_full_partial_u_partial_lambda(m);
 
     declare_potential(m);
     declare_bound_potential(m);
