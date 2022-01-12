@@ -31,7 +31,7 @@ We currently support the following functional forms. Parameters that can be opti
 * OpenEye Toolkits
 * OpenMM
 * Cuda 11.0+
-* CMake 3.21 (newer versions may vary in the CMAKE_INSTALL_PREFIX and CUDA flags)
+* CMake 3.21.2 (newer versions may vary in the CMAKE_INSTALL_PREFIX and CUDA flags)
 
 ### Setup using Anaconda
 
