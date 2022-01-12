@@ -50,7 +50,6 @@ def benchmark(
     verbose=True,
     num_batches=100,
     steps_per_batch=1000,
-    compute_du_dp_interval=100,
     compute_du_dl_interval=0,
     barostat_interval=0,
 ):
