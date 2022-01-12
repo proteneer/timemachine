@@ -26,18 +26,6 @@ class SimulationResult:
     du_dls: np.array
 
 
-def flatten(v):
-    return tuple(), (v.xs, v.du_dls)
-
-
-def unflatten(aux_data, children):
-    xs, du_dls = aux_data
-    return SimulationResult(xs, du_dls)
-
-
-jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
-
-
 def equilibrate(integrator, barostat, potentials, coords, box, lamb, equil_steps) -> Tuple:
     all_impls = []
     v0 = np.zeros_like(coords)

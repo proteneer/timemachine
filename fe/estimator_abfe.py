@@ -27,18 +27,6 @@ class SimulationResult:
     lambda_us: np.array
 
 
-def flatten(v):
-    return tuple(), (v.xs, v.boxes, v.lambda_us)
-
-
-def unflatten(aux_data, children):
-    xs, boxes, lambda_us = aux_data
-    return SimulationResult(xs, boxes, lambda_us)
-
-
-jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
-
-
 def run_model_simulations(model, sys_params):
     assert len(sys_params) == len(model.unbound_potentials)
 
