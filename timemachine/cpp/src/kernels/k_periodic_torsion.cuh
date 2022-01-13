@@ -24,7 +24,7 @@ void __global__ k_periodic_torsion(
     const int *__restrict__ lambda_offset,
     const int *__restrict__ torsion_idxs, // [b, 4]
     unsigned long long *__restrict__ du_dx,
-    double *__restrict__ du_dp,
+    unsigned long long *__restrict__ du_dp,
     unsigned long long *__restrict__ du_dl,
     unsigned long long *__restrict__ u) {
 
@@ -126,9 +126,9 @@ void __global__ k_periodic_torsion(
         RealType du_dphase = kt * sin(period * angle - phase);
         RealType du_dperiod = -kt * sin(period * angle - phase) * angle;
 
-        atomicAdd(du_dp + kt_idx, du_dkt * lambda_prefactor);
-        atomicAdd(du_dp + phase_idx, du_dphase * lambda_prefactor);
-        atomicAdd(du_dp + period_idx, du_dperiod * lambda_prefactor);
+        atomicAdd(du_dp + kt_idx, FLOAT_TO_FIXED_BONDED(du_dkt * lambda_prefactor));
+        atomicAdd(du_dp + phase_idx, FLOAT_TO_FIXED_BONDED(du_dphase * lambda_prefactor));
+        atomicAdd(du_dp + period_idx, FLOAT_TO_FIXED_BONDED(du_dperiod * lambda_prefactor));
     }
 
     if (u) {

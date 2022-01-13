@@ -1,4 +1,3 @@
-import jax
 from jax import grad, value_and_grad, config, jacfwd, jacrev
 
 config.update("jax_enable_x64", True)
@@ -41,7 +40,6 @@ def test_absolute_free_energy():
     ff = Forcefield(deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read()))
 
     ff_params = ff.get_ordered_params()
-    ff_handles = ff.get_ordered_handles()
 
     seed = 2021
 
@@ -96,13 +94,7 @@ def test_absolute_free_energy():
 
         return dGs[0] - dGs[1]
 
-    # automatic chaining of vjps
-    vg_fn = jax.value_and_grad(absolute_model)
-    dG, ff_grads = vg_fn(ff_params)  # dG and ff_params_grad
-    for g, h in zip(ff_grads, ff_handles):
-        assert g.shape == h.params.shape
-        assert np.all(np.abs(g) < 10000)
-
+    dG = absolute_model(ff_params)
     assert np.abs(dG) < 1000.0
 
 
@@ -161,7 +153,6 @@ def test_relative_free_energy():
     ff = Forcefield(deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read()))
 
     ff_params = ff.get_ordered_params()
-    ff_handles = ff.get_ordered_handles()
 
     seed = 2021
 
@@ -199,11 +190,7 @@ def test_relative_free_energy():
 
         return estimator.deltaG(model, sys_params)[0]
 
-    vg_fn = jax.value_and_grad(vacuum_model)
-    dG, ff_grads = vg_fn(ff_params)  # dG and ff_params_grad
-    for g, h in zip(ff_grads, ff_handles):
-        assert g.shape == h.params.shape
-        assert np.all(np.abs(g) < 10000)
+    dG = vacuum_model(ff_params)
     assert np.abs(dG) < 1000.0
 
     def binding_model(ff_params):
@@ -252,13 +239,7 @@ def test_relative_free_energy():
 
         return dGs[0] - dGs[1]
 
-    # automatic chaining of vjps
-    vg_fn = jax.value_and_grad(binding_model)
-    dG, ff_grads = vg_fn(ff_params)  # dG and ff_params_grad
-    for g, h in zip(ff_grads, ff_handles):
-        assert g.shape == h.params.shape
-        assert np.all(np.abs(g) < 10000)
-
+    dG = binding_model(ff_params)
     assert np.abs(dG) < 1000.0
 
 

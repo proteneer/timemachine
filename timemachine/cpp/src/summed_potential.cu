@@ -21,7 +21,7 @@ void SummedPotential::execute_device(
     const double *d_box,
     const double lambda,
     unsigned long long *d_du_dx,
-    double *d_du_dp,
+    unsigned long long *d_du_dp,
     unsigned long long *d_du_dl,
     unsigned long long *d_u,
     cudaStream_t stream) {
@@ -46,5 +46,16 @@ void SummedPotential::execute_device(
         offset += params_sizes_[i];
     }
 };
+
+void SummedPotential::du_dp_fixed_to_float(
+    const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
+
+    int offset = 0;
+
+    for (int i = 0; i < potentials_.size(); i++) {
+        potentials_[i]->du_dp_fixed_to_float(N, params_sizes_[i], du_dp + offset, du_dp_float + offset);
+        offset += params_sizes_[i];
+    }
+}
 
 } // namespace timemachine

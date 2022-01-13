@@ -1,7 +1,6 @@
 #include "barostat.hpp"
 #include "bound_potential.hpp"
 #include "integrator.hpp"
-#include "observable.hpp"
 #include <array>
 #include <vector>
 
@@ -20,8 +19,6 @@ public:
         MonteCarloBarostat *barostat = nullptr);
 
     ~Context();
-
-    void add_observable(Observable *obs); // tbd: shared_ptr
 
     void step(double lambda);
 
@@ -68,7 +65,6 @@ private:
     size_t d_sum_storage_bytes_;
 
     Integrator *intg_;
-    std::vector<Observable *> observables_;
     std::vector<BoundPotential *> bps_;
 };
 

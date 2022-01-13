@@ -52,8 +52,6 @@ Context::~Context() {
     // }
 };
 
-void Context::add_observable(Observable *obs) { this->observables_.push_back(obs); }
-
 std::array<std::vector<double>, 3>
 Context::multiple_steps(const std::vector<double> &lambda_schedule, int store_du_dl_interval, int store_x_interval) {
     unsigned long long *d_du_dl_buffer = nullptr;
@@ -178,10 +176,6 @@ std::array<std::vector<double>, 3> Context::multiple_steps_U(
 
             cudaStream_t stream = static_cast<cudaStream_t>(0);
 
-            for (int i = 0; i < observables_.size(); i++) {
-                observables_[i]->observe(step, N_, d_x_t_, d_box_t_, lambda);
-            }
-
             gpuErrchk(cudaMemsetAsync(d_du_dx_t_, 0, N_ * 3 * sizeof(*d_du_dx_t_), stream));
 
             // first pass generate the forces
@@ -251,14 +245,7 @@ void Context::step(double lambda) {
 
 void Context::_step(double lambda, unsigned long long *du_dl_out) {
 
-    // the observables decide on whether or not to act on given
-    // data (cheap pointers in any case)
-
     cudaStream_t stream = static_cast<cudaStream_t>(0);
-
-    for (int i = 0; i < observables_.size(); i++) {
-        observables_[i]->observe(step_, N_, d_x_t_, d_box_t_, lambda);
-    }
 
     gpuErrchk(cudaMemsetAsync(d_du_dx_t_, 0, N_ * 3 * sizeof(*d_du_dx_t_), stream));
 
