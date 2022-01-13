@@ -1,5 +1,3 @@
-import unittest
-import jax
 import numpy as np
 
 
@@ -109,16 +107,7 @@ def test_free_energy_estimator():
         return dG ** 2
 
     for client in [None, CUDAPoolClient(1)]:
-
-        value_and_grad_fn = jax.value_and_grad(loss_fn)
-        dG, sys_grad = value_and_grad_fn(sys_params)  # run fwd, store result, and run bwd
-
-        grad_fn = jax.grad(loss_fn)
-        grad = grad_fn(sys_params)
-
-        assert len(grad) == 2
-        assert grad[0].shape == sys_params[0].shape
-        assert grad[1].shape == sys_params[1].shape
+        dG = loss_fn(sys_params)
 
 
 def test_free_energy_estimator_with_endpoint_correction():
@@ -187,14 +176,4 @@ def test_free_energy_estimator_with_endpoint_correction():
         return dG ** 2
 
     for client in [None, CUDAPoolClient(1)]:
-
-        value_and_grad_fn = jax.value_and_grad(loss_fn)
-        dG, sys_grad = value_and_grad_fn(sys_params)  # run fwd, store result, and run bwd
-
-        grad_fn = jax.grad(loss_fn)
-        grad = grad_fn(sys_params)
-
-        assert len(grad) == 3
-        assert grad[0].shape == sys_params[0].shape
-        assert grad[1].shape == sys_params[1].shape
-        assert grad[2].shape == sys_params[2].shape
+        dG = loss_fn(sys_params)

@@ -1,18 +1,14 @@
 import pymbar
 from fe import endpoint_correction
 from collections import namedtuple
-import pickle
 
 import dataclasses
 import time
-import functools
 import copy
-import jax
 import numpy as np
 from md import minimizer
 
-from typing import Tuple, List, Any
-import os
+from typing import Tuple, List
 
 from fe import standard_state
 from fe.utils import sanitize_energies, extract_delta_Us_from_U_knk
@@ -24,20 +20,7 @@ from timemachine.lib import potentials, custom_ops
 class SimulationResult:
     xs: np.array
     boxes: np.array
-    du_dps: np.array
     lambda_us: np.array
-
-
-def flatten(v):
-    return tuple(), (v.xs, v.boxes, v.du_dps, v.lambda_us)
-
-
-def unflatten(aux_data, children):
-    xs, boxes, du_dps, lambda_us = aux_data
-    return SimulationResult(xs, boxes, du_dps, lambda_us)
-
-
-jax.tree_util.register_pytree_node(SimulationResult, flatten, unflatten)
 
 
 def run_model_simulations(model, sys_params):
@@ -171,13 +154,9 @@ def simulate(
 
     all_impls = []
 
-    # set up observables for du_dps here as well.
-    du_dp_obs = []
-
     for bp in final_potentials:
         impl = bp.bound_impl(np.float32)
         all_impls.append(impl)
-        du_dp_obs.append(custom_ops.AvgPartialUPartialParam(impl, 25))
 
     # fire minimize once again, needed for parameter interpolation
     x0 = minimizer.fire_minimize(x0, all_impls, box, np.ones(100, dtype=np.float64) * lamb)
@@ -210,21 +189,11 @@ def simulate(
     # muck with this unless they have a good reason to.
     barostat_impl.set_interval(25)
 
-    for obs in du_dp_obs:
-        ctxt.add_observable(obs)
-
     full_us, xs, boxes = ctxt.multiple_steps_U(lamb, prod_steps, np.array(lambda_windows), u_interval, x_interval)
-
-    # keep the structure of grads the same as that of final_potentials so we can properly
-    # form their vjps.
-    grads = []
-    for obs in du_dp_obs:
-        grads.append(obs.avg_du_dp())
 
     result = SimulationResult(
         xs=xs.astype("float32"),
         boxes=boxes.astype("float32"),
-        du_dps=grads,
         lambda_us=full_us,
     )
 
@@ -250,10 +219,8 @@ FreeEnergyModel = namedtuple(
     ],
 )
 
-gradient = List[Any]  # TODO: make this more descriptive of dG_grad structure
 
-
-def _deltaG_from_results(model, results, sys_params) -> Tuple[Tuple[float, List], np.array]:
+def deltaG_from_results(model, results, sys_params) -> Tuple[float, float, List]:
 
     assert len(sys_params) == len(model.unbound_potentials)
 
@@ -330,35 +297,8 @@ def _deltaG_from_results(model, results, sys_params) -> Tuple[Tuple[float, List]
     bar_dG_err = np.sqrt(bar_dG_err)
 
     dG = bar_dG  # use the exact answer
-    dG_grad = []
-
-    # (ytz): results[-1].du_dps contain system parameter derivatives for the
-    # independent, gas phase simulation. They're usually ordered as:
-    # [Bonds, Angles, Torsions, Nonbonded]
-    #
-    # results[0].du_dps contain system parameter derivatives for the core
-    # restrained state. If we're doing the endpoint correction during
-    # decoupling stages, the derivatives are ordered as:
-
-    # [Bonds, Angles, Torsions, Nonbonded, RestraintBonds]
-    # Otherwise, in stages like conversion where the endpoint correction
-    # is turned off, the derivatives are ordered as :
-    # [Bonds, Angles, Torsions, Nonbonded]
-
-    # Note that this zip will always loop over only the
-    # [Bonds, Angles, Torsions, Nonbonded] terms, since it only
-    # enumerates over the smaller of the two lists.
-    for rhs, lhs in zip(results[-1].du_dps, results[0].du_dps):
-        dG_grad.append(rhs - lhs)
 
     if model.endpoint_correct:
-        assert len(results[0].du_dps) - len(results[-1].du_dps) == 1
-        # (ytz): Fill in missing derivatives since zip() from above loops
-        # over the shorter array.
-        lhs = results[0].du_dps[-1]
-        rhs = 0  # zero as the energies do not depend the core restraints.
-        dG_grad.append(rhs - lhs)
-
         core_restr = bound_potentials[-1]
         # (ytz): tbd, automatically find optimal k_translation/k_rotation such that
         # standard deviation and/or overlap is maximized
@@ -395,54 +335,9 @@ def _deltaG_from_results(model, results, sys_params) -> Tuple[Tuple[float, List]
             f"{model.prefix} bar (A) {bar_dG:.3f} bar_err {bar_dG_err:.3f} mbar (A) {mbar_dG:.3f} mbar_err {mbar_dG_err:.3f} "
         )
 
-    return (dG, bar_dG_err, results), dG_grad
+    return dG, bar_dG_err, results
 
 
-@functools.partial(
-    jax.custom_vjp,
-    nondiff_argnums=(
-        0,
-        1,
-    ),
-)
-def deltaG_from_results(model, results, sys_params) -> Tuple[float, List]:
-    return _deltaG_from_results(model=model, results=results, sys_params=sys_params)[0]
-
-
-def deltaG_from_results_fwd(model, results, sys_params) -> Tuple[Tuple[float, List], np.array]:
-    """same signature as DeltaG_from_results, but returns the full tuple"""
-    return _deltaG_from_results(model=model, results=results, sys_params=sys_params)
-
-
-def deltaG_from_results_bwd(model, results, residual, grad) -> Tuple[np.array]:
-    """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!"""
-    # residual are the partial dG / partial dparams for each term
-    # grad[0] is the adjoint of dG w.r.t. loss: partial L/partial dG
-    # grad[1] is the adjoint of dG_err w.r.t. loss: which we don't use
-    # grad[2] is the adjoint of simulation results w.r.t. loss: which we don't use
-    return ([grad[0] * r for r in residual],)
-
-
-@functools.partial(jax.custom_vjp, nondiff_argnums=(0,))
-def deltaG(model, sys_params) -> Tuple[float, List]:
+def deltaG(model, sys_params) -> Tuple[float, float, List]:
     results = run_model_simulations(model, sys_params)
-    return _deltaG_from_results(model=model, results=results, sys_params=sys_params)[0]
-
-
-def deltaG_fwd(model, sys_params) -> Tuple[Tuple[float, List], np.array]:
-    """same signature as DeltaG_from_results, but returns the full tuple"""
-    results = run_model_simulations(model, sys_params)
-    return _deltaG_from_results(model=model, results=results, sys_params=sys_params)
-
-
-def deltaG_bwd(model, residual, grad) -> Tuple[np.array]:
-    """Note: nondiff args must appear first here, even though one of them appears last in the original function's signature!"""
-    # residual are the partial dG / partial dparams for each term
-    # grad[0] is the adjoint of dG w.r.t. loss: partial L/partial dG
-    # grad[1] is the adjoint of dG_err w.r.t. loss: which we don't use
-    # grad[2] is the adjoint of simulation results w.r.t. loss: which we don't use
-    return ([grad[0] * r for r in residual],)
-
-
-deltaG_from_results.defvjp(deltaG_from_results_fwd, deltaG_from_results_bwd)
-deltaG.defvjp(deltaG_fwd, deltaG_bwd)
+    return deltaG_from_results(model=model, results=results, sys_params=sys_params)

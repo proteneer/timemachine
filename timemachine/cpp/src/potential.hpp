@@ -20,7 +20,7 @@ public:
         const double *h_box,
         const double lambda, // lambda
         unsigned long long *h_du_dx,
-        double *h_du_dp,
+        unsigned long long *h_du_dp,
         unsigned long long *h_du_dl,
         unsigned long long *h_u);
 
@@ -41,22 +41,12 @@ public:
         const double *d_box,
         const double lambda,
         unsigned long long *d_du_dx,
-        double *d_du_dp,
+        unsigned long long *d_du_dp,
         unsigned long long *d_du_dl,
         unsigned long long *d_u,
         cudaStream_t stream) = 0;
 
-    virtual void fixed_to_float(
-        const int N,
-        const int P,
-        const unsigned long long *du_dx,
-        const double *du_dp,
-        const unsigned long long *du_dl,
-        const unsigned long long *u,
-        double *du_dx_out,
-        double *du_dp_out,
-        double *du_dl_sum,
-        double *u_sum);
+    virtual void du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float);
 };
 
 } // namespace timemachine

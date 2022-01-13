@@ -98,11 +98,11 @@ void __global__ k_permute_interpolated(
     d_sorted_dp_dl[source_idx] = f_lambda_grad * (d_p[size + target_idx] - d_p[target_idx]);
 }
 
-void __global__ k_add_ull_to_real_interpolated(
+void __global__ k_add_du_dp_interpolated(
     const double lambda,
     const int N,
-    const unsigned long long *__restrict__ ull_array,
-    double *__restrict__ real_array) {
+    const unsigned long long *__restrict__ src,
+    unsigned long long *__restrict__ dest) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = gridDim.y;
@@ -118,21 +118,21 @@ void __global__ k_add_ull_to_real_interpolated(
     // handle charges, sigmas, epsilons with different exponents
     if (stride_idx == 0) {
         double f_lambda = transform_lambda_charge(lambda);
-        real_array[target_idx] +=
-            (1 - f_lambda) * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(ull_array[target_idx]);
-        real_array[size + target_idx] +=
-            f_lambda * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(ull_array[target_idx]);
+        dest[target_idx] += FLOAT_TO_FIXED_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(
+            (1 - f_lambda) * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(src[target_idx]));
+        dest[size + target_idx] += FLOAT_TO_FIXED_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(
+            f_lambda * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(src[target_idx]));
     } else if (stride_idx == 1) {
         double f_lambda = transform_lambda_sigma(lambda);
-        real_array[target_idx] +=
-            (1 - f_lambda) * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(ull_array[target_idx]);
-        real_array[size + target_idx] +=
-            f_lambda * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(ull_array[target_idx]);
+        dest[target_idx] += FLOAT_TO_FIXED_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(
+            (1 - f_lambda) * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(src[target_idx]));
+        dest[size + target_idx] += FLOAT_TO_FIXED_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(
+            f_lambda * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(src[target_idx]));
     } else if (stride_idx == 2) {
         double f_lambda = transform_lambda_epsilon(lambda);
-        real_array[target_idx] +=
-            (1 - f_lambda) * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(ull_array[target_idx]);
-        real_array[size + target_idx] +=
-            f_lambda * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(ull_array[target_idx]);
+        dest[target_idx] += FLOAT_TO_FIXED_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(
+            (1 - f_lambda) * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(src[target_idx]));
+        dest[size + target_idx] += FLOAT_TO_FIXED_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(
+            f_lambda * FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(src[target_idx]));
     }
 }

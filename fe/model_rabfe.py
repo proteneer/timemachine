@@ -1,6 +1,5 @@
 from abc import ABC
 
-import functools
 import numpy as np
 
 from simtk import openmm
@@ -16,8 +15,6 @@ from parallel.client import AbstractClient, _MockFuture
 from typing import Optional, Tuple, Any, List
 
 from md.barostat.utils import get_group_indices, get_bond_list
-
-import pickle
 
 
 class AbsoluteModel(ABC):
@@ -167,7 +164,6 @@ class AbsoluteModel(ABC):
                 f"initial_{model.prefix}_lambda_idx_{lambda_idx}.npz",
                 xs=res.xs,
                 boxes=res.boxes,
-                du_dps=res.du_dps,
                 lambda_us=res.lambda_us,
             )
 
@@ -457,7 +453,6 @@ class RelativeModel(ABC):
                     f"initial_{model.prefix}_lambda_idx_{lambda_idx}.npz",
                     xs=res.xs,
                     boxes=res.boxes,
-                    du_dps=res.du_dps,
                     lambda_us=res.lambda_us,
                 )
             # fwd_dG is the free energy of moving X-A-B into X-A+B
