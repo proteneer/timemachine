@@ -41,7 +41,6 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/bound_potential.cu
   src/centroid_restraint.cu
   src/gpu_utils.cu
-  src/observable.cu
   src/vendored/hilbert.cpp
   src/nonbonded.cu
   src/neighborlist.cu

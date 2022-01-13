@@ -229,9 +229,8 @@ void __global__ k_inv_permute_assign_2x(
     array_2[perm[idx] * stride + stride_idx] = sorted_array_2[idx * stride + stride_idx];
 }
 
-template <typename RealType>
 void __global__
-k_add_ull_to_real(const int N, const unsigned long long *__restrict__ ull_array, RealType *__restrict__ real_array) {
+k_add_ull_to_ull(const int N, const unsigned long long *__restrict__ src, unsigned long long *__restrict__ dest) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = gridDim.y;
@@ -241,17 +240,7 @@ k_add_ull_to_real(const int N, const unsigned long long *__restrict__ ull_array,
         return;
     }
 
-    // handle charges, sigmas, epsilons with different exponents
-    if (stride_idx == 0) {
-        real_array[idx * stride + stride_idx] +=
-            FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(ull_array[idx * stride + stride_idx]);
-    } else if (stride_idx == 1) {
-        real_array[idx * stride + stride_idx] +=
-            FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(ull_array[idx * stride + stride_idx]);
-    } else if (stride_idx == 2) {
-        real_array[idx * stride + stride_idx] +=
-            FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(ull_array[idx * stride + stride_idx]);
-    }
+    dest[idx * stride + stride_idx] += src[idx * stride + stride_idx];
 }
 
 template <typename RealType> void __global__ k_reduce_buffer(int N, RealType *d_buffer, RealType *d_sum) {

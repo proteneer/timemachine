@@ -8,6 +8,7 @@
 #include <iostream>
 #include <vector>
 
+#include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "nonbonded.hpp"
 #include "vendored/hilbert.h"
@@ -61,8 +62,8 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
       compute_w_coords_instance_(kernel_cache_.program(kernel_src.c_str()).kernel("k_compute_w_coords").instantiate()),
       compute_permute_interpolated_(
           kernel_cache_.program(kernel_src.c_str()).kernel("k_permute_interpolated").instantiate()),
-      compute_add_ull_to_real_interpolated_(
-          kernel_cache_.program(kernel_src.c_str()).kernel("k_add_ull_to_real_interpolated").instantiate()) {
+      compute_add_du_dp_interpolated_(
+          kernel_cache_.program(kernel_src.c_str()).kernel("k_add_du_dp_interpolated").instantiate()) {
 
     if (lambda_offset_idxs.size() != N_) {
         throw std::runtime_error("lambda offset idxs need to have size N");
@@ -237,7 +238,7 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     const double *d_box, // 3 * 3
     const double lambda,
     unsigned long long *d_du_dx,
-    double *d_du_dp,
+    unsigned long long *d_du_dp,
     unsigned long long *d_du_dl,
     unsigned long long *d_u,
     cudaStream_t stream) {
@@ -441,15 +442,30 @@ void Nonbonded<RealType, Interpolated>::execute_device(
 
     if (d_du_dp) {
         if (Interpolated) {
-            CUresult result = compute_add_ull_to_real_interpolated_.configure(dimGrid, tpb, 0, stream)
+            CUresult result = compute_add_du_dp_interpolated_.configure(dimGrid, tpb, 0, stream)
                                   .launch(lambda, N, d_du_dp_buffer_, d_du_dp);
             if (result != 0) {
-                throw std::runtime_error("Driver call to k_add_ull_to_real_interpolated failed");
+                throw std::runtime_error("Driver call to k_add_du_dp_interpolated failed");
             }
         } else {
-            k_add_ull_to_real<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+            k_add_ull_to_ull<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
         }
         gpuErrchk(cudaPeekAtLastError());
+    }
+}
+
+template <typename RealType, bool Interpolated>
+void Nonbonded<RealType, Interpolated>::du_dp_fixed_to_float(
+    const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
+
+    // In the interpolated case we have derivatives for the initial and final parameters
+    const int num_tuples = Interpolated ? N * 2 : N;
+
+    for (int i = 0; i < num_tuples; i++) {
+        const int idx_charge = i * 3 + 0, idx_sig = i * 3 + 1, idx_eps = i * 3 + 2;
+        du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
+        du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
+        du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);
     }
 }
 
