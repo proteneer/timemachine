@@ -14,6 +14,7 @@
 import os
 import pickle
 import argparse
+import logging
 import numpy as np
 
 from pathlib import Path
@@ -28,6 +29,7 @@ from fe.free_energy_rabfe import (
 )
 from fe.utils import convert_uM_to_kJ_per_mole
 from fe import model_rabfe
+from fe.model_utils import verify_rabfe_pair
 from fe.frames import endpoint_frames_only, all_frames
 
 from ff import Forcefield
@@ -45,6 +47,9 @@ from md import builders, minimizer
 
 ALL_FRAMES = "all"
 ENDPOINTS_ONLY = "endpoints"
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__file__)
 
 
 def cache_wrapper(cache_path: str, fxn: callable, overwrite: bool = False) -> callable:
@@ -312,6 +317,7 @@ if __name__ == "__main__":
     ordered_handles = forcefield.get_ordered_handles()
 
     def simulate_pair(epoch: int, blocker: Chem.Mol, mol: Chem.Mol):
+        verify_rabfe_pair(mol, blocker)
         mol_name = mol.GetProp("_Name")
 
         # generate the core_idxs
@@ -450,7 +456,7 @@ if __name__ == "__main__":
                 runs.append(simulate_pair(epoch, blocker_mol, mol))
             except Exception as e:
                 mol_name = mol.GetProp("_Name")
-                print(f"Error simulating Mol: {mol_name}: {e}")
+                logger.exception(f"Error simulating Mol: {mol_name}")
     for i in range(len(runs)):
         # Pop off futures to avoid accumulating memory.
         run = runs.pop(0)
@@ -475,5 +481,5 @@ if __name__ == "__main__":
         try:
             dG, dG_err = predict_dG(run)
             print(f"Epoch: {epoch}, Mol: {mol_name}, Predicted dG: {dG}, dG Err:" f" {dG_err}, Label: {label_dG}")
-        except Exception as e:
-            print(f"Error processing Mol: {mol_name}: {e}")
+        except Exception:
+            logger.exception(f"Error processing Mol: {mol_name}")

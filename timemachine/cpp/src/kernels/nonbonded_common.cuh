@@ -92,9 +92,8 @@ void __device__ __forceinline__ compute_lj(
     eps_grad = lj_scale * 4 * (sig6_inv_d6ij - 1) * sig6_inv_d6ij;
 }
 
-template <typename RealType>
 void __global__
-k_add_ull_to_real(const int N, const unsigned long long *__restrict__ ull_array, RealType *__restrict__ real_array) {
+k_add_ull_to_ull(const int N, const unsigned long long *__restrict__ src, unsigned long long *__restrict__ dest) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     int stride = gridDim.y;
@@ -104,17 +103,7 @@ k_add_ull_to_real(const int N, const unsigned long long *__restrict__ ull_array,
         return;
     }
 
-    // handle charges, sigmas, epsilons with different exponents
-    if (stride_idx == 0) {
-        real_array[idx * stride + stride_idx] +=
-            FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(ull_array[idx * stride + stride_idx]);
-    } else if (stride_idx == 1) {
-        real_array[idx * stride + stride_idx] +=
-            FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DSIG>(ull_array[idx * stride + stride_idx]);
-    } else if (stride_idx == 2) {
-        real_array[idx * stride + stride_idx] +=
-            FIXED_TO_FLOAT_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(ull_array[idx * stride + stride_idx]);
-    }
+    dest[idx * stride + stride_idx] += src[idx * stride + stride_idx];
 }
 
 // These are two lines of code are to deal with the formation of a non-commutative fma.

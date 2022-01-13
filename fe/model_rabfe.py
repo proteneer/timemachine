@@ -1,8 +1,6 @@
 from abc import ABC
 
-import functools
 import numpy as np
-import mdtraj
 
 from simtk import openmm
 from rdkit import Chem
@@ -17,8 +15,6 @@ from parallel.client import AbstractClient, _MockFuture
 from typing import Optional, Tuple, Any, List
 
 from md.barostat.utils import get_group_indices, get_bond_list
-
-import pickle
 
 
 class AbsoluteModel(ABC):
@@ -159,8 +155,8 @@ class AbsoluteModel(ABC):
         dG, dG_err, results = estimator_abfe.deltaG_from_results(model, results, sys_params)
 
         # uncomment if we want to visualize
-        combined_topology = model_utils.generate_imaged_topology(
-            [self.host_topology, mol], model.x0, model.box, "initial_" + model.prefix + ".pdb"
+        combined_topology = model_utils.generate_openmm_topology(
+            [self.host_topology, mol], model.x0, box=model.box, out_filename="initial_" + model.prefix + ".pdb"
         )
 
         for lambda_idx, res in self.frame_filter(results):
@@ -168,7 +164,6 @@ class AbsoluteModel(ABC):
                 f"initial_{model.prefix}_lambda_idx_{lambda_idx}.npz",
                 xs=res.xs,
                 boxes=res.boxes,
-                du_dps=res.du_dps,
                 lambda_us=res.lambda_us,
             )
 
@@ -449,8 +444,8 @@ class RelativeModel(ABC):
             dG, dG_err, results = estimator_abfe.deltaG_from_results(model, results, params)
 
             # Save out the pdb
-            combined_topology = model_utils.generate_imaged_topology(
-                [self.host_topology, mol_a, mol_b], model.x0, model.box, f"initial_{model.prefix}.pdb"
+            combined_topology = model_utils.generate_openmm_topology(
+                [self.host_topology, mol_a, mol_b], model.x0, box=model.box, out_filename=f"initial_{model.prefix}.pdb"
             )
 
             for lambda_idx, res in self.frame_filter(results):
@@ -458,7 +453,6 @@ class RelativeModel(ABC):
                     f"initial_{model.prefix}_lambda_idx_{lambda_idx}.npz",
                     xs=res.xs,
                     boxes=res.boxes,
-                    du_dps=res.du_dps,
                     lambda_us=res.lambda_us,
                 )
             # fwd_dG is the free energy of moving X-A-B into X-A+B

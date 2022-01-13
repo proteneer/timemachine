@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "potential.hpp"
 #include "surreal.cuh"
@@ -14,15 +15,15 @@ void Potential::execute_host(
     const double *h_box,         // [3, 3]
     const double lambda,         // [1]
     unsigned long long *h_du_dx, // [N,3]
-    double *h_du_dp,             // [P]
+    unsigned long long *h_du_dp, // [P]
     unsigned long long *h_du_dl, //
     unsigned long long *h_u) {
+
+    const int &D = Potential::D;
 
     double *d_x;
     double *d_p;
     double *d_box;
-
-    const int D = 3;
 
     gpuErrchk(cudaMalloc(&d_x, N * D * sizeof(double)));
     gpuErrchk(cudaMemcpy(d_x, h_x, N * D * sizeof(double), cudaMemcpyHostToDevice));
@@ -34,7 +35,7 @@ void Potential::execute_host(
     gpuErrchk(cudaMemcpy(d_box, h_box, D * D * sizeof(double), cudaMemcpyHostToDevice));
 
     unsigned long long *d_du_dx = nullptr;
-    double *d_du_dp = nullptr;
+    unsigned long long *d_du_dp = nullptr;
     unsigned long long *d_du_dl = nullptr;
     unsigned long long *d_u = nullptr;
 
@@ -91,11 +92,11 @@ void Potential::execute_host_du_dx(
     const double lambda, // [1]
     unsigned long long *h_du_dx) {
 
+    const int &D = Potential::D;
+
     double *d_x;
     double *d_p;
     double *d_box;
-
-    const int D = 3;
 
     gpuErrchk(cudaMalloc(&d_x, N * D * sizeof(double)));
     gpuErrchk(cudaMemcpy(d_x, h_x, N * D * sizeof(double), cudaMemcpyHostToDevice));
@@ -121,5 +122,11 @@ void Potential::execute_host_du_dx(
     gpuErrchk(cudaFree(d_p));
     gpuErrchk(cudaFree(d_box));
 };
+
+void Potential::du_dp_fixed_to_float(const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
+    for (int i = 0; i < P; i++) {
+        du_dp_float[i] = FIXED_TO_FLOAT<double>(du_dp[i]);
+    }
+}
 
 } // namespace timemachine

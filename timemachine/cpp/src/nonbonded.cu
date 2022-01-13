@@ -1,4 +1,5 @@
 #include "nonbonded.hpp"
+#include <vector>
 
 namespace timemachine {
 
@@ -31,13 +32,27 @@ void Nonbonded<RealType, Interpolated>::execute_device(
     const double *d_box,
     const double lambda,
     unsigned long long *d_du_dx,
-    double *d_du_dp,
+    unsigned long long *d_du_dp,
     unsigned long long *d_du_dl,
     unsigned long long *d_u,
     cudaStream_t stream) {
     dense_.execute_device(N, P, d_x, d_p, d_box, lambda, d_du_dx, d_du_dp, d_du_dl, d_u, stream);
     exclusions_.execute_device(N, P, d_x, d_p, d_box, lambda, d_du_dx, d_du_dp, d_du_dl, d_u, stream);
 };
+
+template <typename RealType, bool Interpolated>
+void Nonbonded<RealType, Interpolated>::du_dp_fixed_to_float(
+    const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
+
+    dense_.du_dp_fixed_to_float(N, P, du_dp, du_dp_float);
+
+    std::vector<double> du_dp_float_buffer(P);
+    exclusions_.du_dp_fixed_to_float(N, P, du_dp, &du_dp_float_buffer[0]);
+
+    for (int i = 0; i < P; i++) {
+        du_dp_float[i] += du_dp_float_buffer[i];
+    }
+}
 
 template class Nonbonded<double, true>;
 template class Nonbonded<float, true>;

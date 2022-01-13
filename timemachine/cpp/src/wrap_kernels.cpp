@@ -26,7 +26,6 @@
 // #include "gbsa.hpp"
 #include "fixed_point.hpp"
 #include "integrator.hpp"
-// #include "observable.hpp"
 #include "neighborlist.hpp"
 // #include "shape.hpp"
 #include "barostat.hpp"
@@ -111,8 +110,6 @@ void declare_context(py::module &m) {
                         timemachine::Integrator *intg,
                         std::vector<timemachine::BoundPotential *> bps,
                         std::optional<timemachine::MonteCarloBarostat *> barostat) {
-                // std::vector<timemachine::Observable *> obs) {
-
                 int N = x0.shape()[0];
                 int D = x0.shape()[1];
 
@@ -135,7 +132,6 @@ void declare_context(py::module &m) {
             py::arg("integrator"),
             py::arg("bps"),
             py::arg("barostat") = py::none())
-        .def("add_observable", &timemachine::Context::add_observable)
         .def("step", &timemachine::Context::step)
         .def(
             "multiple_steps",
@@ -297,40 +293,6 @@ void declare_context(py::module &m) {
         });
 }
 
-void declare_observable(py::module &m) {
-
-    using Class = timemachine::Observable;
-    std::string pyclass_name = std::string("Observable");
-    py::class_<Class>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr());
-}
-
-void declare_avg_partial_u_partial_param(py::module &m) {
-
-    using Class = timemachine::AvgPartialUPartialParam;
-    std::string pyclass_name = std::string("AvgPartialUPartialParam");
-    py::class_<Class, timemachine::Observable>(m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](timemachine::BoundPotential *bp, int interval) {
-            return new timemachine::AvgPartialUPartialParam(bp, interval);
-        }))
-        .def(
-            "avg_du_dp",
-            [](timemachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
-                std::vector<int> shape = obj.shape();
-                py::array_t<double, py::array::c_style> buffer(shape);
-
-                obj.avg_du_dp(buffer.mutable_data());
-
-                return buffer;
-            })
-        .def("std_du_dp", [](timemachine::AvgPartialUPartialParam &obj) -> py::array_t<double, py::array::c_style> {
-            std::vector<int> shape = obj.shape();
-            py::array_t<double, py::array::c_style> buffer(shape);
-
-            obj.std_du_dp(buffer.mutable_data());
-
-            return buffer;
-        });
-}
 void declare_integrator(py::module &m) {
 
     using Class = timemachine::Integrator;
@@ -374,12 +336,11 @@ void declare_potential(py::module &m) {
                 const long unsigned int D = coords.shape()[1];
                 const long unsigned int P = params.size();
 
-                std::vector<unsigned long long> du_dx(N * D);
-                std::vector<double> du_dp(P);
-
-                // initialize to zero for the accumulator
-                std::vector<unsigned long long> du_dl(N, 0);
-                std::vector<unsigned long long> u(N, 0);
+                // initialize with fixed garbage values for debugging convenience (these should be overwritten by `execute_host`)
+                std::vector<unsigned long long> du_dx(N * D, 9999);
+                std::vector<unsigned long long> du_dp(P, 9999);
+                std::vector<unsigned long long> du_dl(N, 9999);
+                std::vector<unsigned long long> u(N, 9999);
 
                 pot.execute_host(
                     N, P, coords.data(), params.data(), box.data(), lambda, &du_dx[0], &du_dp[0], &du_dl[0], &u[0]);
@@ -393,9 +354,7 @@ void declare_potential(py::module &m) {
                 std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
 
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
-                for (int i = 0; i < du_dp.size(); i++) {
-                    py_du_dp.mutable_data()[i] = du_dp[i];
-                }
+                pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
 
                 unsigned long long du_dl_sum =
                     std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
@@ -424,7 +383,7 @@ void declare_potential(py::module &m) {
                 const long unsigned int P = params.size();
 
                 std::vector<unsigned long long> du_dx(N * D);
-                std::vector<double> du_dp(P);
+                std::vector<unsigned long long> du_dp(P);
 
                 std::vector<unsigned long long> du_dl(N, 0);
                 std::vector<unsigned long long> u(N, 0);
@@ -449,9 +408,7 @@ void declare_potential(py::module &m) {
                 std::vector<ssize_t> pshape(params.shape(), params.shape() + params.ndim());
 
                 py::array_t<double, py::array::c_style> py_du_dp(pshape);
-                for (int i = 0; i < du_dp.size(); i++) {
-                    py_du_dp.mutable_data()[i] = du_dp[i];
-                }
+                pot.du_dp_fixed_to_float(N, P, &du_dp[0], py_du_dp.mutable_data());
 
                 unsigned long long du_dl_sum =
                     std::accumulate(du_dl.begin(), du_dl.end(), decltype(du_dl)::value_type(0));
@@ -1130,11 +1087,6 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_integrator(m);
     declare_langevin_integrator(m);
-
-    declare_observable(m);
-    declare_avg_partial_u_partial_param(m);
-    // declare_avg_partial_u_partial_lambda(m);
-    // declare_full_partial_u_partial_lambda(m);
 
     declare_potential(m);
     declare_bound_potential(m);
