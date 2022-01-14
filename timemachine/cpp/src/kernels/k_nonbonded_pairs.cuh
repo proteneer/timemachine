@@ -123,6 +123,9 @@ void __global__ k_nonbonded_pairs(
 
     unsigned long long energy = 0;
 
+    // `is_vanilla = true` means no parameter interpolation and 4D
+    // coordinates are all zero. In this case we can use a more
+    // efficient kernel.
     int is_vanilla =
         (ci_w == 0 && dq_dl_i == 0 && dsig_dl_i == 0 && deps_dl_i == 0 && cj_w == 0 && dq_dl_j == 0 && dsig_dl_j == 0 &&
          deps_dl_j == 0);
