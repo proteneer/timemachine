@@ -13,7 +13,17 @@ Nonbonded<RealType, Interpolated>::Nonbonded(
     const double cutoff,
     const std::string &kernel_src)
     : dense_(lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, kernel_src),
-      exclusions_(exclusion_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, kernel_src) {}
+      exclusions_(
+          exclusion_idxs, negate_scales_(scales), lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, kernel_src) {}
+
+template <typename RealType, bool Interpolated>
+std::vector<double> Nonbonded<RealType, Interpolated>::negate_scales_(const std::vector<double> &scales) {
+    std::vector<double> negated(scales.size());
+    for (int i = 0; i < negated.size(); i++) {
+        negated[i] = -scales[i];
+    }
+    return negated;
+}
 
 template <typename RealType, bool Interpolated> void Nonbonded<RealType, Interpolated>::set_nblist_padding(double val) {
     dense_.set_nblist_padding(val);
