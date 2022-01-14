@@ -92,7 +92,7 @@ void __device__ __forceinline__ compute_lj(
     eps_grad = lj_scale * 4 * (sig6_inv_d6ij - 1) * sig6_inv_d6ij;
 }
 
-static void __global__
+void __global__
 k_add_ull_to_ull(const int N, const unsigned long long *__restrict__ src, unsigned long long *__restrict__ dest) {
 
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
