@@ -54,6 +54,7 @@ NonbondedPairs<RealType, Interpolated>::NonbondedPairs(
     gpuErrchk(cudaMalloc(&d_dw_dl_, N_ * sizeof(*d_dw_dl_)));
     gpuErrchk(cudaMalloc(&d_du_dp_buffer_, N_ * 3 * sizeof(*d_du_dp_buffer_)));
 
+    gpuErrchk(cudaMalloc(&d_p_interp_, N_ * 3 * sizeof(*d_p_interp_)));
     gpuErrchk(cudaMalloc(&d_dp_dl_, N_ * 3 * sizeof(*d_dp_dl_)));
 
     gpuErrchk(cudaMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_)));
@@ -82,6 +83,7 @@ template <typename RealType, bool Interpolated> NonbondedPairs<RealType, Interpo
     gpuErrchk(cudaFree(d_du_dp_buffer_));
     gpuErrchk(cudaFree(d_w_));
     gpuErrchk(cudaFree(d_dw_dl_));
+    gpuErrchk(cudaFree(d_p_interp_));
     gpuErrchk(cudaFree(d_dp_dl_));
 
     if (Interpolated) {
@@ -115,7 +117,7 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
 
     if (Interpolated) {
         CUresult result = compute_permute_interpolated_.configure(num_blocks, tpb, 0, stream)
-                              .launch(lambda, N, d_perm_, d_p, d_p, d_dp_dl_);
+                              .launch(lambda, N, d_perm_, d_p, d_p_interp_, d_dp_dl_);
         if (result != 0) {
             throw std::runtime_error("Driver call to k_permute_interpolated failed");
         }
@@ -132,7 +134,7 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
     k_nonbonded_pairs<RealType><<<num_blocks_exclusions, tpb, 0, stream>>>(
         M_,
         d_x,
-        d_p,
+        Interpolated ? d_p_interp_ : d_p,
         d_box,
         d_dp_dl_,
         d_w_,

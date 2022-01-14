@@ -23,6 +23,7 @@ private:
     double *d_w_;
     double *d_dw_dl_;
 
+    double *d_p_interp_;
     double *d_dp_dl_;
 
     int *d_perm_;
