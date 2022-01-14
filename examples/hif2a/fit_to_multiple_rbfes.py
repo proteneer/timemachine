@@ -185,7 +185,7 @@ def equilibrate_edges(datasets: List[Dataset], systems: List[Dict[str, Any]], nu
 
 
 if __name__ == "__main__":
-    default_output_path = f"results_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}"
+    default_output_path = f"results_{datetime.datetime.utcnow().isoformat(timespec='seconds').replace(':', '_')}"
     parser = ArgumentParser(description="Fit Forcefield parameters to hif2a")
     parser.add_argument(
         "--num_gpus",

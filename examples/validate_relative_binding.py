@@ -94,7 +94,7 @@ def cache_wrapper(cache_path: str, fxn: callable, overwrite: bool = False) -> ca
 
 
 if __name__ == "__main__":
-    default_output_path = f"rabfe_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.sdf"
+    default_output_path = f"rabfe_{datetime.datetime.utcnow().isoformat(timespec='seconds').replace(':', '_')}.sdf"
 
     parser = argparse.ArgumentParser(
         description="Relatively absolute Binding Free Energy Testing",
