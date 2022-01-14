@@ -129,9 +129,9 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
         gpuErrchk(cudaMemsetAsync(d_du_dp_buffer_, 0, N * 3 * sizeof(*d_du_dp_buffer_), stream))
     }
 
-    int num_blocks_exclusions = ceil_divide(M_, tpb);
+    int num_blocks_pairs = ceil_divide(M_, tpb);
 
-    k_nonbonded_pairs<RealType><<<num_blocks_exclusions, tpb, 0, stream>>>(
+    k_nonbonded_pairs<RealType><<<num_blocks_pairs, tpb, 0, stream>>>(
         M_,
         d_x,
         Interpolated ? d_p_interp_ : d_p,
