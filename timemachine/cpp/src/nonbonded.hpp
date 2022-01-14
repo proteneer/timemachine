@@ -13,8 +13,6 @@ private:
     NonbondedDense<RealType, Interpolated> dense_;
     NonbondedPairs<RealType, Interpolated> exclusions_;
 
-    std::vector<double> negate_scales_(const std::vector<double> &scales);
-
 public:
     // these are marked public but really only intended for testing.
     void set_nblist_padding(double val);
