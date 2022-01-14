@@ -957,7 +957,7 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_dense(py:
 
 template <typename RealType, bool Interpolated> void declare_nonbonded_pairs(py::module &m, const char *typestr) {
 
-    using Class = timemachine::NonbondedPairs<RealType, Interpolated>;
+    using Class = timemachine::NonbondedPairs<RealType, false, Interpolated>;
     std::string pyclass_name = std::string("NonbondedPairs_") + typestr;
     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
         m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
@@ -1000,7 +1000,7 @@ template <typename RealType, bool Interpolated> void declare_nonbonded_pairs(py:
                     std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_EPSILON"), transform_lambda_epsilon);
                 source_str = std::regex_replace(source_str, std::regex("CUSTOM_EXPRESSION_W"), transform_lambda_w);
 
-                return new timemachine::NonbondedPairs<RealType, Interpolated>(
+                return new timemachine::NonbondedPairs<RealType, false, Interpolated>(
                     pair_idxs, scales, lambda_plane_idxs, lambda_offset_idxs, beta, cutoff, source_str);
             }),
             py::arg("pair_i"),

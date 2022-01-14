@@ -6,7 +6,7 @@
 
 namespace timemachine {
 
-template <typename RealType, bool Interpolated> class NonbondedPairs : public Potential {
+template <typename RealType, bool Negated, bool Interpolated> class NonbondedPairs : public Potential {
 
 private:
     int *d_pair_idxs_; // [M, 2]

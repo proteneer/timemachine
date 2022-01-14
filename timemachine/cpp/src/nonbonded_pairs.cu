@@ -7,8 +7,8 @@
 
 namespace timemachine {
 
-template <typename RealType, bool Interpolated>
-NonbondedPairs<RealType, Interpolated>::NonbondedPairs(
+template <typename RealType, bool Negated, bool Interpolated>
+NonbondedPairs<RealType, Negated, Interpolated>::NonbondedPairs(
     const std::vector<int> &pair_idxs,          // [M, 2]
     const std::vector<double> &scales,          // [M, 2]
     const std::vector<int> &lambda_plane_idxs,  // [N]
@@ -75,7 +75,8 @@ NonbondedPairs<RealType, Interpolated>::NonbondedPairs(
     }
 };
 
-template <typename RealType, bool Interpolated> NonbondedPairs<RealType, Interpolated>::~NonbondedPairs() {
+template <typename RealType, bool Negated, bool Interpolated>
+NonbondedPairs<RealType, Negated, Interpolated>::~NonbondedPairs() {
     gpuErrchk(cudaFree(d_pair_idxs_));
     gpuErrchk(cudaFree(d_scales_));
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
@@ -91,8 +92,8 @@ template <typename RealType, bool Interpolated> NonbondedPairs<RealType, Interpo
     }
 };
 
-template <typename RealType, bool Interpolated>
-void NonbondedPairs<RealType, Interpolated>::execute_device(
+template <typename RealType, bool Negated, bool Interpolated>
+void NonbondedPairs<RealType, Negated, Interpolated>::execute_device(
     const int N,
     const int P,
     const double *d_x,
@@ -132,7 +133,7 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
 
     int num_blocks_pairs = ceil_divide(M_, tpb);
 
-    k_nonbonded_pairs<RealType><<<num_blocks_pairs, tpb, 0, stream>>>(
+    k_nonbonded_pairs<RealType, Negated><<<num_blocks_pairs, tpb, 0, stream>>>(
         M_,
         d_x,
         Interpolated ? d_p_interp_ : d_p,
@@ -166,8 +167,8 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
 }
 
 // TODO: this implementation is duplicated from NonbondedDense. Worth adding NonbondedBase?
-template <typename RealType, bool Interpolated>
-void NonbondedPairs<RealType, Interpolated>::du_dp_fixed_to_float(
+template <typename RealType, bool Negated, bool Interpolated>
+void NonbondedPairs<RealType, Negated, Interpolated>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     // In the interpolated case we have derivatives for the initial and final parameters
@@ -181,10 +182,16 @@ void NonbondedPairs<RealType, Interpolated>::du_dp_fixed_to_float(
     }
 }
 
-template class NonbondedPairs<double, true>;
-template class NonbondedPairs<float, true>;
+template class NonbondedPairs<double, true, true>;
+template class NonbondedPairs<float, true, true>;
 
-template class NonbondedPairs<double, false>;
-template class NonbondedPairs<float, false>;
+template class NonbondedPairs<double, false, true>;
+template class NonbondedPairs<float, false, true>;
+
+template class NonbondedPairs<double, true, false>;
+template class NonbondedPairs<float, true, false>;
+
+template class NonbondedPairs<double, false, false>;
+template class NonbondedPairs<float, false, false>;
 
 } // namespace timemachine
