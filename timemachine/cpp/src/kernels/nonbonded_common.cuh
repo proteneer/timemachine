@@ -93,18 +93,7 @@ void __device__ __forceinline__ compute_lj(
 }
 
 void __global__
-k_add_ull_to_ull(const int N, const unsigned long long *__restrict__ src, unsigned long long *__restrict__ dest) {
-
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int stride = gridDim.y;
-    int stride_idx = blockIdx.y;
-
-    if (idx >= N) {
-        return;
-    }
-
-    dest[idx * stride + stride_idx] += src[idx * stride + stride_idx];
-}
+k_add_ull_to_ull(const int N, const unsigned long long *__restrict__ src, unsigned long long *__restrict__ dest);
 
 // These are two lines of code are to deal with the formation of a non-commutative fma.
 // For more information, see: https://github.com/proteneer/timemachine/issues/386
