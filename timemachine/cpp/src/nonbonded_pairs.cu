@@ -108,15 +108,16 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
     const int tpb = 32;
 
     int num_blocks = ceil_divide(N, tpb);
+    dim3 dimGrid(num_blocks, 3, 1);
 
-    CUresult result = compute_w_coords_instance_.configure(num_blocks, tpb, 0, stream)
+    CUresult result = compute_w_coords_instance_.configure(dimGrid, tpb, 0, stream)
                           .launch(N, lambda, cutoff_, d_lambda_plane_idxs_, d_lambda_offset_idxs_, d_w_, d_dw_dl_);
     if (result != 0) {
         throw std::runtime_error("Driver call to k_compute_w_coords");
     }
 
     if (Interpolated) {
-        CUresult result = compute_permute_interpolated_.configure(num_blocks, tpb, 0, stream)
+        CUresult result = compute_permute_interpolated_.configure(dimGrid, tpb, 0, stream)
                               .launch(lambda, N, d_perm_, d_p, d_p_interp_, d_dp_dl_);
         if (result != 0) {
             throw std::runtime_error("Driver call to k_permute_interpolated failed");
@@ -152,13 +153,13 @@ void NonbondedPairs<RealType, Interpolated>::execute_device(
 
     if (d_du_dp) {
         if (Interpolated) {
-            CUresult result = compute_add_du_dp_interpolated_.configure(num_blocks, tpb, 0, stream)
+            CUresult result = compute_add_du_dp_interpolated_.configure(dimGrid, tpb, 0, stream)
                                   .launch(lambda, N, d_du_dp_buffer_, d_du_dp);
             if (result != 0) {
                 throw std::runtime_error("Driver call to k_add_du_dp_interpolated failed");
             }
         } else {
-            k_add_ull_to_ull<<<num_blocks, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
+            k_add_ull_to_ull<<<dimGrid, tpb, 0, stream>>>(N, d_du_dp_buffer_, d_du_dp);
         }
         gpuErrchk(cudaPeekAtLastError());
     }
