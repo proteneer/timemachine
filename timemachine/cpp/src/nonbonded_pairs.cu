@@ -175,7 +175,9 @@ void NonbondedPairs<RealType, Negated, Interpolated>::du_dp_fixed_to_float(
     const int num_tuples = Interpolated ? N * 2 : N;
 
     for (int i = 0; i < num_tuples; i++) {
-        const int idx_charge = i * 3 + 0, idx_sig = i * 3 + 1, idx_eps = i * 3 + 2;
+        const int idx_charge = i * 3 + 0;
+        const int idx_sig = i * 3 + 1;
+        const int idx_eps = i * 3 + 2;
         du_dp_float[idx_charge] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DCHARGE>(du_dp[idx_charge]);
         du_dp_float[idx_sig] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DSIG>(du_dp[idx_sig]);
         du_dp_float[idx_eps] = FIXED_TO_FLOAT_DU_DP<double, FIXED_EXPONENT_DU_DEPS>(du_dp[idx_eps]);
