@@ -11,7 +11,9 @@ template <typename RealType, bool Interpolated> class Nonbonded : public Potenti
 
 private:
     NonbondedDense<RealType, Interpolated> dense_;
-    NonbondedPairs<RealType, true, Interpolated> exclusions_; // implement exclusions as negated NonbondedPairs
+
+    static const bool Negated = true;
+    NonbondedPairs<RealType, Negated, Interpolated> exclusions_; // implement exclusions as negated NonbondedPairs
 
 public:
     // these are marked public but really only intended for testing.
