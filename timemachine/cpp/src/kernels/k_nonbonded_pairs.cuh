@@ -8,6 +8,11 @@
 #include "../fixed_point.hpp"
 #include "nonbonded_common.cuh"
 
+template <bool Negated>
+void __device__ __forceinline__ accumulate(unsigned long long *__restrict acc, unsigned long long val) {
+    atomicAdd(acc, Negated ? -val : val);
+}
+
 template <typename RealType, bool Negated>
 void __global__ k_nonbonded_pairs(
     const int M, // number of pairs
@@ -37,8 +42,6 @@ void __global__ k_nonbonded_pairs(
     if (pair_idx >= M) {
         return;
     }
-
-    const int sign = Negated ? -1 : 1;
 
     int atom_i_idx = pair_idxs[pair_idx * 2 + 0];
 
@@ -158,55 +161,55 @@ void __global__ k_nonbonded_pairs(
             g_epsi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(-eps_grad * eps_j);
             g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(-eps_grad * eps_i);
 
-            real_du_dl += sign * sig_grad * (dsig_dl_i + dsig_dl_j);
+            real_du_dl += sig_grad * (dsig_dl_i + dsig_dl_j);
             RealType term = eps_grad * fix_nvidia_fmad(eps_j, deps_dl_i, eps_i, deps_dl_j);
-            real_du_dl += sign * term;
+            real_du_dl += term;
         }
 
-        gi_x += sign * FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_x);
-        gi_y += sign * FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_y);
-        gi_z += sign * FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_z);
+        gi_x += FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_x);
+        gi_y += FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_y);
+        gi_z += FLOAT_TO_FIXED_NONBONDED(delta_prefactor * delta_z);
 
-        gj_x += sign * FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_x);
-        gj_y += sign * FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_y);
-        gj_z += sign * FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_z);
+        gj_x += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_x);
+        gj_y += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_y);
+        gj_z += FLOAT_TO_FIXED_NONBONDED(-delta_prefactor * delta_z);
 
         // energy is size extensive so this may not be a good idea
-        energy += sign * FLOAT_TO_FIXED_NONBONDED(u);
+        energy += FLOAT_TO_FIXED_NONBONDED(u);
 
-        g_qi += sign * FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qj * inv_dij * ebd);
-        g_qj += sign * FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qi * inv_dij * ebd);
+        g_qi += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qj * inv_dij * ebd);
+        g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qi * inv_dij * ebd);
 
-        real_du_dl += sign * delta_w * delta_prefactor * (dw_dl_i - dw_dl_j);
-        real_du_dl += sign * charge_scale * inv_dij * ebd * fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
+        real_du_dl += delta_w * delta_prefactor * (dw_dl_i - dw_dl_j);
+        real_du_dl += charge_scale * inv_dij * ebd * fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
 
         if (du_dx) {
-            atomicAdd(du_dx + atom_i_idx * 3 + 0, gi_x);
-            atomicAdd(du_dx + atom_i_idx * 3 + 1, gi_y);
-            atomicAdd(du_dx + atom_i_idx * 3 + 2, gi_z);
+            accumulate<Negated>(du_dx + atom_i_idx * 3 + 0, gi_x);
+            accumulate<Negated>(du_dx + atom_i_idx * 3 + 1, gi_y);
+            accumulate<Negated>(du_dx + atom_i_idx * 3 + 2, gi_z);
 
-            atomicAdd(du_dx + atom_j_idx * 3 + 0, gj_x);
-            atomicAdd(du_dx + atom_j_idx * 3 + 1, gj_y);
-            atomicAdd(du_dx + atom_j_idx * 3 + 2, gj_z);
+            accumulate<Negated>(du_dx + atom_j_idx * 3 + 0, gj_x);
+            accumulate<Negated>(du_dx + atom_j_idx * 3 + 1, gj_y);
+            accumulate<Negated>(du_dx + atom_j_idx * 3 + 2, gj_z);
         }
 
         if (du_dp) {
-            atomicAdd(du_dp + charge_param_idx_i, g_qi);
-            atomicAdd(du_dp + charge_param_idx_j, g_qj);
+            accumulate<Negated>(du_dp + charge_param_idx_i, g_qi);
+            accumulate<Negated>(du_dp + charge_param_idx_j, g_qj);
 
-            atomicAdd(du_dp + lj_param_idx_sig_i, g_sigi);
-            atomicAdd(du_dp + lj_param_idx_eps_i, g_epsi);
+            accumulate<Negated>(du_dp + lj_param_idx_sig_i, g_sigi);
+            accumulate<Negated>(du_dp + lj_param_idx_eps_i, g_epsi);
 
-            atomicAdd(du_dp + lj_param_idx_sig_j, g_sigj);
-            atomicAdd(du_dp + lj_param_idx_eps_j, g_epsj);
+            accumulate<Negated>(du_dp + lj_param_idx_sig_j, g_sigj);
+            accumulate<Negated>(du_dp + lj_param_idx_eps_j, g_epsj);
         }
 
         if (du_dl_buffer && !is_vanilla) {
-            atomicAdd(du_dl_buffer + atom_i_idx, FLOAT_TO_FIXED_NONBONDED(real_du_dl));
+            accumulate<Negated>(du_dl_buffer + atom_i_idx, FLOAT_TO_FIXED_NONBONDED(real_du_dl));
         }
 
         if (u_buffer) {
-            atomicAdd(u_buffer + atom_i_idx, energy);
+            accumulate<Negated>(u_buffer + atom_i_idx, energy);
         }
     }
 }
