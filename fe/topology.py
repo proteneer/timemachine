@@ -590,8 +590,6 @@ class DualTopologyStandardDecoupling(DualTopology):
         src_qlj_params_b = jax.ops.index_update(src_qlj_params_b, jax.ops.index[:, 2], src_qlj_params_b[:, 2] * 0.5)
         dst_qlj_params_b = qlj_params_b
 
-        qlj_params_b = standard_qlj_typer(self.mol_b)
-
         src_qlj_params = jnp.concatenate([src_qlj_params_a, src_qlj_params_b])
         dst_qlj_params = jnp.concatenate([dst_qlj_params_a, dst_qlj_params_b])
 
