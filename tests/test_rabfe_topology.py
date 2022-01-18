@@ -162,6 +162,46 @@ def test_dual_topology_standard_decoupling():
     np.testing.assert_array_equal(combined_lambda_offset_idxs[A:], np.ones(B))
 
 
+def test_dual_topology_standard_decoupling_charged():
+
+    # special test case for charged molecules, we expect the charges to be rescaled
+    # based on each individual molecule's charge, as opposed to based on the sum
+    # of the charges.
+
+    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff = Forcefield(ff_handlers)
+
+    mol_a = Chem.AddHs(Chem.MolFromSmiles("C1CC1[O-]"))
+    mol_b = Chem.AddHs(Chem.MolFromSmiles("C1[O+]CCCCC1"))
+    mol_c = Chem.CombineMols(mol_a, mol_b)
+    mol_top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, ff)
+
+    qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
+
+    assert isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
+
+    expected_qlj = topology.standard_qlj_typer(mol_c)
+    expected_qlj = np.array(expected_qlj)
+
+    N_A = mol_a.GetNumAtoms()
+    N_B = mol_b.GetNumAtoms()
+
+    expected_qlj[:N_A, 0] = -1.0 / N_A
+    expected_qlj[N_A:, 0] = 1.0 / N_B
+    expected_qlj[:, 2] = expected_qlj[:, 2]  # eps should be halved
+
+    src_qlj_params = qlj_params[: len(qlj_params) // 2]
+    dst_qlj_params = qlj_params[len(qlj_params) // 2 :]
+
+    np.testing.assert_array_equal(dst_qlj_params, expected_qlj)
+
+    expected_qlj[:N_A, 0] /= 2
+    expected_qlj[N_A:, 0] /= 2
+    expected_qlj[:, 2] /= 2  # eps should be halved
+
+    np.testing.assert_array_equal(src_qlj_params[:, 0], expected_qlj[:, 0])
+
+
 def test_dual_topology_minimization():
 
     # Identical to the vanilla Dual Topology class, except that both ligands are

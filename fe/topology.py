@@ -578,12 +578,22 @@ class DualTopologyStandardDecoupling(DualTopology):
 
         # both mol_a and mol_b are standardized.
         _, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
-        mol_c = Chem.CombineMols(self.mol_a, self.mol_b)
-        qlj_params = standard_qlj_typer(mol_c)
 
-        # ligand is already decharged, and super-ligand state should have half the epsilons
-        src_qlj_params = jax.ops.index_update(qlj_params, jax.ops.index[:, 2], qlj_params[:, 2] * 0.5)
-        dst_qlj_params = qlj_params
+        qlj_params_a = standard_qlj_typer(self.mol_a)
+
+        src_qlj_params_a = jax.ops.index_update(qlj_params_a, jax.ops.index[:, 0], qlj_params_a[:, 0] * 0.5)
+        src_qlj_params_a = jax.ops.index_update(src_qlj_params_a, jax.ops.index[:, 2], src_qlj_params_a[:, 2] * 0.5)
+        dst_qlj_params_a = qlj_params_a
+
+        qlj_params_b = standard_qlj_typer(self.mol_b)
+        src_qlj_params_b = jax.ops.index_update(qlj_params_b, jax.ops.index[:, 0], qlj_params_b[:, 0] * 0.5)
+        src_qlj_params_b = jax.ops.index_update(src_qlj_params_b, jax.ops.index[:, 2], src_qlj_params_b[:, 2] * 0.5)
+        dst_qlj_params_b = qlj_params_b
+
+        qlj_params_b = standard_qlj_typer(self.mol_b)
+
+        src_qlj_params = jnp.concatenate([src_qlj_params_a, src_qlj_params_b])
+        dst_qlj_params = jnp.concatenate([dst_qlj_params_a, dst_qlj_params_b])
 
         combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
 
