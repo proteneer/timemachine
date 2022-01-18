@@ -581,6 +581,11 @@ class DualTopologyStandardDecoupling(DualTopology):
 
         qlj_params_a = standard_qlj_typer(self.mol_a)
 
+        # src_qlj_params corresponds to the super state where both ligands are interacting with the environment
+        # we scale down the charges and epsilons to half their values so as to roughly mimic net one molecule's
+        # worth of nonbonded interactions.
+
+        # dst_qlj_params corresponds to the end-state where only one of the molecule interacts with the binding pocket.
         src_qlj_params_a = jax.ops.index_update(qlj_params_a, jax.ops.index[:, 0], qlj_params_a[:, 0] * 0.5)
         src_qlj_params_a = jax.ops.index_update(src_qlj_params_a, jax.ops.index[:, 2], src_qlj_params_a[:, 2] * 0.5)
         dst_qlj_params_a = qlj_params_a
