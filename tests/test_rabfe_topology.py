@@ -173,16 +173,16 @@ def test_dual_topology_standard_decoupling_charged():
 
     mol_a = Chem.AddHs(Chem.MolFromSmiles("C1CC1[O-]"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("C1[O+]CCCCC1"))
-    mol_c = Chem.CombineMols(mol_a, mol_b)
+
     mol_top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, ff)
 
     qlj_params, nonbonded_potential = mol_top.parameterize_nonbonded(ff.q_handle.params, ff.lj_handle.params)
 
     assert isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
 
-    expected_qlj = topology.standard_qlj_typer(mol_c)
-    expected_qlj = np.array(expected_qlj)
+    expected_qlj = np.concatenate([topology.standard_qlj_typer(mol_a), topology.standard_qlj_typer(mol_b)])
 
+    # need to set the charges correctly, and manually
     N_A = mol_a.GetNumAtoms()
     N_B = mol_b.GetNumAtoms()
 
