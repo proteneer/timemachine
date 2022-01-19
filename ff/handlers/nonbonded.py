@@ -179,7 +179,7 @@ def compute_or_load_am1_charges(mol):
     else:
         am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_key)))
 
-    return am1_charges
+    return np.array(am1_charges)
 
 
 def apply_bond_charge_corrections(initial_charges, bonds, deltas):
