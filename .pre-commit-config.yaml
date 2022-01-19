@@ -19,9 +19,4 @@ repos:
         types_or: [c, c++, cuda]
         files: '^timemachine/cpp/src/'
 
--   repo: https://github.com/hadolint/hadolint
-    rev: v2.8.0
-    hooks:
-    -   id: hadolint
-
 exclude: '\.pdb$|\.sdf$|\.proto$|\.xml$|/vendored/|^ff/params/|^parallel/grpc/'
