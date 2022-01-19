@@ -182,19 +182,21 @@ def compute_or_load_am1_charges(mol):
     return np.array(am1_charges)
 
 
-def apply_bond_charge_corrections(initial_charges, bonds, deltas):
-    """for each (atom_a, atom_b, delta), atom_a += delta, atom_b -= delta
+def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
+    """For an arbitrary collection of ordered bonds and associated increments `(a, b, delta)`,
+    update `charges` by `charges[a] += delta`, `charges[b] -= delta`
 
-    Note: preserves charge sum
+    Notes
+    -----
+    * preserves sum(initial_charges)
+    * arbitrary values of bond_idxs or deltas are valid"""
+    num_bonds = len(bond_idxs)
 
-    TODO: more descriptive name than deltas
-    """
+    assert bond_idxs.shape[1] == 2
+    assert len(deltas) == num_bonds
 
-    assert bonds.shape[1] == 2
-    assert bonds.shape[0] == len(deltas)
-
-    incremented = ops.index_add(initial_charges, bonds[:, 0], +deltas)
-    decremented = ops.index_add(incremented, bonds[:, 1], -deltas)
+    incremented = ops.index_add(initial_charges, bond_idxs[:, 0], +deltas)
+    decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)
 
     final_charges = decremented
 
