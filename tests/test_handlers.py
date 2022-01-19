@@ -277,27 +277,6 @@ def test_am1_bcc():
     # assert vjp_fn(charges_adjoints) == None
 
 
-def test_apply_bond_charge_corrections():
-    """assert that net charge is preserved when applying random bond charge corrections"""
-
-    np.random.seed(0)
-
-    for _ in range(100):
-        n_atoms = np.random.randint(10, 50)
-        initial_charges = np.random.randn(n_atoms)
-        initial_net_charge = np.sum(initial_charges)
-
-        # arbitrary: duplicates okay, reversals okay, symmetry not required
-        n_directed_bonds = np.random.randint(50, 100)
-        bonds = np.random.randint(0, n_atoms, size=(n_directed_bonds, 2))
-        deltas = np.random.randn(n_directed_bonds)
-
-        final_charges = nonbonded.apply_bond_charge_corrections(initial_charges, bonds, deltas)
-        final_net_charge = np.sum(final_charges)
-
-        np.testing.assert_almost_equal(final_net_charge, initial_net_charge)
-
-
 def test_am1_ccc():
 
     patterns = [
@@ -584,6 +563,33 @@ def test_am1_differences():
             assert 0
 
 
+def test_compute_or_load_am1_charges():
+    """Loop over test ligands, asserting that charges are stored in expected property and that the same charges are
+    returned on repeated calls"""
+
+    # get some molecules
+    cache_key = "AM1Cache"
+    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    all_mols = [mol for mol in suppl]
+    all_mols = all_mols[:5]  # truncate so that whole test is ~ 10 seconds
+
+    # don't expect AM1 cache yet
+    for mol in all_mols:
+        assert not mol.HasProp(cache_key)
+
+    # compute charges once
+    fresh_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+
+    # expect each mol to have AM1 cache now
+    for mol in all_mols:
+        assert mol.HasProp(cache_key)
+
+    # expect the same charges as the first time around
+    cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+    for (fresh, cached) in zip(fresh_am1_charges, cached_am1_charges):
+        np.testing.assert_allclose(fresh, cached)
+
+
 def test_bond_smirks_matches():
     """Loop over test ligands, asserting that returned indices are in bounds"""
     # get some molecules
@@ -610,31 +616,25 @@ def test_bond_smirks_matches():
             assert tuple(bond) in bonds
 
 
-def test_compute_or_load_am1_charges():
-    """Loop over test ligands, asserting that charges are stored in expected property and that the same charges are
-    returned on repeated calls"""
+def test_apply_bond_charge_corrections():
+    """assert that net charge is preserved when applying random bond charge corrections"""
 
-    # get some molecules
-    cache_key = "AM1Cache"
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
-    all_mols = [mol for mol in suppl]
-    all_mols = all_mols[:5]  # truncate so that whole test is ~ 10 seconds
+    np.random.seed(0)
 
-    # don't expect AM1 cache yet
-    for mol in all_mols:
-        assert not mol.HasProp(cache_key)
+    for _ in range(100):
+        n_atoms = np.random.randint(10, 50)
+        initial_charges = np.random.randn(n_atoms)
+        initial_net_charge = np.sum(initial_charges)
 
-    # compute charges once
-    fresh_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+        # arbitrary: duplicates okay, reversals okay, symmetry not required
+        n_directed_bonds = np.random.randint(50, 100)
+        bonds = np.random.randint(0, n_atoms, size=(n_directed_bonds, 2))
+        deltas = np.random.randn(n_directed_bonds)
 
-    # expect each mol to have AM1 cache now
-    for mol in all_mols:
-        assert mol.HasProp(cache_key)
+        final_charges = nonbonded.apply_bond_charge_corrections(initial_charges, bonds, deltas)
+        final_net_charge = np.sum(final_charges)
 
-    # expect the same charges as the first time around
-    cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
-    for (fresh, cached) in zip(fresh_am1_charges, cached_am1_charges):
-        np.testing.assert_allclose(fresh, cached)
+        np.testing.assert_almost_equal(final_net_charge, initial_net_charge)
 
 
 def test_lennard_jones_handler():
