@@ -1,3 +1,4 @@
+import math
 from rdkit import Chem
 from collections import namedtuple
 from jax.config import config
@@ -14,16 +15,20 @@ from ff.handlers import openmm_deserializer
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, asdict
 
 
-@dataclass
+@dataclass(eq=False)
 class RABFEResult:
     mol_name: str
     dG_complex_conversion: float
+    dG_complex_conversion_error: float
     dG_complex_decouple: float
+    dG_complex_decouple_error: float
     dG_solvent_conversion: float
+    dG_solvent_conversion_error: float
     dG_solvent_decouple: float
+    dG_solvent_decouple_error: float
 
     def log(self):
         """print stage summary"""
@@ -32,22 +37,66 @@ class RABFEResult:
             self.mol_name,
             "dG_complex_conversion (K complex)",
             self.dG_complex_conversion,
+            "dG_complex_conversion_err",
+            self.dG_complex_conversion_error,
             "dG_complex_decouple (E0 + A0 + A1 + E1)",
             self.dG_complex_decouple,
+            "dG_complex_decouple_err",
+            self.dG_complex_decouple_error,
             "dG_solvent_conversion (K solvent)",
             self.dG_solvent_conversion,
+            "dG_solvent_conversion_err",
+            self.dG_solvent_conversion_error,
             "dG_solvent_decouple (D)",
             self.dG_solvent_decouple,
+            "dG_solvent_decouple_err",
+            self.dG_solvent_decouple_error,
         )
 
+    def __eq__(self, other: "RABFEResult") -> bool:
+        if not isinstance(other, RABFEResult):
+            return NotImplemented
+        equal = True
+        for field in fields(self):
+            self_val = getattr(self, field.name)
+            other_val = getattr(other, field.name)
+            # Python doesn't consider nan == nan to be true
+            if field.type is float and math.isnan(self_val) and math.isnan(other_val):
+                continue
+            equal &= self_val == other_val
+        return equal
+
     @classmethod
-    def from_log(cls, log_line):
-        """parse log line"""
-        mol_name, rest = log_line.split("stage summary for mol: ")[-1].split(" dG_complex_conversion (K complex) ")
-        tokens = rest.split()
-        value_strings = tokens[0], tokens[9], tokens[13], tokens[16]
-        values = list(map(float, value_strings))
-        return RABFEResult(mol_name, *values)
+    def _convert_field_to_sdf_field(cls, field_name: str) -> str:
+        if field_name == "mol_name":
+            cleaned_name = "_Name"
+        else:
+            cleaned_name = field_name.replace("_", " ")
+        return cleaned_name
+
+    @classmethod
+    def from_mol(cls, mol: Chem.Mol):
+        field_names = fields(cls)
+
+        kwargs = {}
+        for field in field_names:
+            field_name = cls._convert_field_to_sdf_field(field.name)
+            val = mol.GetProp(field_name)
+            val = field.type(val)
+            kwargs[field.name] = val
+        return RABFEResult(**kwargs)
+
+    def apply_to_mol(self, mol: Chem.Mol):
+        results_dict = asdict(self)
+        results_dict.update(
+            {
+                "dG_bind": self.dG_bind,
+                "dG_bind_err": self.dG_bind_err,
+            }
+        )
+        for field, val in results_dict.items():
+            field_name = self._convert_field_to_sdf_field(field)
+            mol.SetProp(field_name, str(val))
 
     @property
     def dG_complex(self):
@@ -64,6 +113,18 @@ class RABFEResult:
         """the final value we seek is the free energy of moving
         from the solvent into the complex"""
         return self.dG_solvent - self.dG_complex
+
+    @property
+    def dG_bind_err(self):
+        errors = np.asarray(
+            [
+                self.dG_complex_conversion_error,
+                self.dG_complex_decouple_error,
+                self.dG_solvent_conversion_error,
+                self.dG_solvent_decouple_error,
+            ]
+        )
+        return np.sqrt(np.sum(errors ** 2))
 
 
 class UnsupportedTopology(Exception):
