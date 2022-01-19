@@ -223,8 +223,9 @@ def bond_smirks_matches(mol, smirks_list):
         matches = oe_match_smirks(smirks, oemol)
 
         for matched_indices in matches:
-            forward_matched_bond = [matched_indices[0], matched_indices[1]]
-            reverse_matched_bond = [matched_indices[1], matched_indices[0]]
+            a, b = matched_indices[0], matched_indices[1]
+            forward_matched_bond = [a, b]
+            reverse_matched_bond = [b, a]
 
             already_matched = forward_matched_bond in matched_bonds or reverse_matched_bond in matched_bonds
             already_assigned = forward_matched_bond in bond_idxs or reverse_matched_bond in bond_idxs
