@@ -366,9 +366,6 @@ class AM1CCCHandler(SerializableMixIn):
         # imported here for optional dependency
         from openeye import oechem
 
-        oemol = convert_to_oe(mol)
-        AromaticityModel.assign(oemol)
-
         # check for cache
         cache_key = "AM1Cache"
         if not mol.HasProp(cache_key):
@@ -382,6 +379,10 @@ class AM1CCCHandler(SerializableMixIn):
 
         else:
             am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_key)))
+
+
+        oemol = convert_to_oe(mol)
+        AromaticityModel.assign(oemol)
 
         bond_idxs = []
         bond_idx_params = []
