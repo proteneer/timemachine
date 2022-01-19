@@ -198,8 +198,6 @@ def apply_bond_charge_corrections(initial_charges, bonds, deltas):
 
     final_charges = decremented
 
-    assert np.isclose(np.sum(final_charges), np.sum(initial_charges))
-
     return final_charges
 
 
