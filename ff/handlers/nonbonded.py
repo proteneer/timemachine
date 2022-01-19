@@ -203,7 +203,13 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
 
 
 def bond_smirks_matches(mol, smirks_list):
-    """Return an array of ordered bonds and an array of their assigned types"""
+    """Return an array of ordered bonds and an array of their assigned types
+
+    Notes
+    -----
+    * Uses OpenEye for substructure searches
+    * "First match wins" -- e.g. if bond (a,b) can be matched by smirks_list[2], smirks_list[5], ..., only return 2
+    """
 
     # imported here for optional dependency
     from openeye import oechem
