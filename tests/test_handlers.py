@@ -276,6 +276,27 @@ def test_am1_bcc():
     # assert vjp_fn(charges_adjoints) == None
 
 
+def test_apply_bond_charge_corrections():
+    """assert that net charge is preserved when applying random bond charge corrections"""
+
+    np.random.seed(0)
+
+    for _ in range(100):
+        n_atoms = np.random.randint(10, 50)
+        initial_charges = np.random.randn(n_atoms)
+        initial_net_charge = np.sum(initial_charges)
+
+        # arbitrary: duplicates okay, reversals okay, symmetry not required
+        n_directed_bonds = np.random.randint(50, 100)
+        bonds = np.random.randint(0, n_atoms, size=(n_directed_bonds, 2))
+        deltas = np.random.randn(n_directed_bonds)
+
+        final_charges = nonbonded.apply_bond_charge_corrections(initial_charges, bonds, deltas)
+        final_net_charge = np.sum(final_charges)
+
+        np.testing.assert_almost_equal(final_net_charge, initial_net_charge)
+
+
 def test_am1_ccc():
 
     patterns = [
