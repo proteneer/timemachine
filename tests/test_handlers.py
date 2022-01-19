@@ -618,6 +618,7 @@ def test_compute_or_load_am1_charges():
     cache_key = "AM1Cache"
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
     all_mols = [mol for mol in suppl]
+    all_mols = all_mols[:5]  # truncate so that whole test is ~ 10 seconds
 
     # don't expect AM1 cache yet
     for mol in all_mols:
