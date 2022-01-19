@@ -162,8 +162,7 @@ def parameterize_ligand(params, param_idxs):
 
 
 def compute_or_load_am1_charges(mol):
-    """use partial charges in mol's AM1Cache property, if available,
-    otherwise write to this property"""
+    """Unless already cached in mol's "AM1Cache" property, use OpenEye to compute AM1 partial charges."""
 
     # check for cache
     cache_key = "AM1Cache"
