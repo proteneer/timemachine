@@ -14,6 +14,7 @@
 import os
 import pickle
 import argparse
+import datetime
 import logging
 import numpy as np
 
@@ -93,11 +94,14 @@ def cache_wrapper(cache_path: str, fxn: callable, overwrite: bool = False) -> ca
 
 
 if __name__ == "__main__":
+    default_output_path = f"rabfe_{datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.sdf"
 
     parser = argparse.ArgumentParser(
         description="Relatively absolute Binding Free Energy Testing",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+
+    parser.add_argument("--output_path", default=default_output_path, help="Path to write out SDF")
 
     parser.add_argument("--epochs", default=1, help="Number of Epochs", type=int)
 
@@ -454,32 +458,42 @@ if __name__ == "__main__":
             except Exception as e:
                 mol_name = mol.GetProp("_Name")
                 logger.exception(f"Error simulating Mol: {mol_name}")
-    for i in range(len(runs)):
-        # Pop off futures to avoid accumulating memory.
-        run = runs.pop(0)
-        mol = run["mol"]
-        epoch = run["epoch"]
-        mol_name = mol.GetProp("_Name")
+    with Chem.SDWriter(cmd_args.output_path) as writer:
+        for i in range(len(runs)):
+            # Pop off futures to avoid accumulating memory.
+            run = runs.pop(0)
+            mol = run["mol"]
+            epoch = run["epoch"]
+            mol_name = mol.GetProp("_Name")
 
-        label_dG = "'N/A'"
-        if cmd_args.property_field is not None:
+            label_dG = "'N/A'"
+            if cmd_args.property_field is not None:
+                try:
+                    concentration = float(mol.GetProp(cmd_args.property_field))
+
+                    if cmd_args.property_units == "uM":
+                        label_dG = convert_uM_to_kJ_per_mole(concentration)
+                    elif cmd_args.property_units == "nM":
+                        label_dG = convert_uM_to_kJ_per_mole(concentration / 1000)
+                    else:
+                        assert 0, "Unknown property units"
+                except Exception as e:
+                    print(f"Unable to find property {cmd_args.property_field}: {e}")
+            print(f"Epoch: {epoch}, Processing Mol: {mol_name}, Label: {label_dG}")
             try:
-                concentration = float(mol.GetProp(cmd_args.property_field))
-
-                if cmd_args.property_units == "uM":
-                    label_dG = convert_uM_to_kJ_per_mole(concentration)
-                elif cmd_args.property_units == "nM":
-                    label_dG = convert_uM_to_kJ_per_mole(concentration / 1000)
-                else:
-                    assert 0, "Unknown property units"
-            except Exception as e:
-                print(f"Unable to find property {cmd_args.property_field}: {e}")
-        print(f"Epoch: {epoch}, Processing Mol: {mol_name}, Label: {label_dG}")
-        try:
-            result = predict_dG(run)
-            print(
-                f"Epoch: {epoch}, Mol: {mol_name}, Predicted dG: {result.dG_bind}, dG Err:"
-                f" {result.dG_bind_err}, Label: {label_dG}"
-            )
-        except Exception:
-            logger.exception(f"Error processing Mol: {mol_name}")
+                result = predict_dG(run)
+                print(
+                    f"Epoch: {epoch}, Mol: {mol_name}, Predicted dG: {result.dG_bind}, dG Err:"
+                    f" {result.dG_bind_err}, Label: {label_dG}"
+                )
+            except Exception:
+                logger.exception(f"Error processing Mol: {mol_name}")
+                continue
+            try:
+                result.apply_to_mol(mol)
+                mol.SetProp("Epoch", str(epoch))
+                writer.write(mol)
+                # Flush so that if the script fails, we still get mols
+                writer.flush()
+            except Exception:
+                logger.exception("Failed to write mol")

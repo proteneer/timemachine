@@ -16,6 +16,28 @@ from rdkit.Chem import AllChem, rdFMCS
 import pytest
 
 
+def test_rabfe_result_to_from_mol():
+    """assert equality after round-trip to/from Mol SDF format"""
+    mol = Chem.MolFromSmiles("CCCONNN")
+
+    result = RABFEResult(
+        "my mol",
+        1.0,
+        float("nan"),
+        2.0,
+        2.1,
+        3.0,
+        3.1,
+        4.0,
+        4.1,
+    )
+
+    result.apply_to_mol(mol)
+
+    reconstructed = RABFEResult.from_mol(mol)
+    assert result == reconstructed
+
+
 def test_setting_up_restraints_using_distance():
     seed = 814
     smi_a = "CCCONNN"
