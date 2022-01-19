@@ -591,7 +591,9 @@ def test_compute_or_load_am1_charges():
 
 
 def test_bond_smirks_matches():
-    """Loop over test ligands, asserting that returned indices are in bounds"""
+    """Loop over test ligands, asserting that
+     * returned indices are in bounds
+     * returned bonds are present in the mol """
     # get some molecules
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
     all_mols = [mol for mol in suppl]
@@ -617,11 +619,12 @@ def test_bond_smirks_matches():
 
 
 def test_apply_bond_charge_corrections():
-    """assert that net charge is preserved when applying random bond charge corrections"""
+    """Assert that applying random bond charge corrections does not change net charge"""
 
-    np.random.seed(0)
+    n_random_tests = 100
+    np.random.seed(2022)
 
-    for _ in range(100):
+    for _ in range(n_random_tests):
         n_atoms = np.random.randint(10, 50)
         initial_charges = np.random.randn(n_atoms)
         initial_net_charge = np.sum(initial_charges)
