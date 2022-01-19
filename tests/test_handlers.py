@@ -270,7 +270,7 @@ def test_am1_bcc():
 
     assert len(charges) == mol.GetNumAtoms()
 
-    # new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, mol=mol))
+    new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, mol=mol))
 
     # charges_adjoints = np.random.randn(*charges.shape)
 
@@ -549,8 +549,8 @@ def test_am1_differences():
         if isinstance(ccc, nonbonded.AM1CCCHandler):
             break
 
-    # suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
-    # smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
+    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
     smi = "Clc1c(Cl)c(Cl)c(-c2c(Cl)c(Cl)c(Cl)c(Cl)c2Cl)c(Cl)c1Cl"
     mol = Chem.MolFromSmiles(smi)
     mol = Chem.AddHs(mol)
