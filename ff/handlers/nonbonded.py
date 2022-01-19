@@ -161,6 +161,27 @@ def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
 
+def apply_bond_charge_corrections(initial_charges, bonds, deltas):
+    """for each (atom_a, atom_b, delta), atom_a += delta, atom_b -= delta
+
+    Note: preserves charge sum
+
+    TODO: more descriptive name than deltas
+    """
+
+    assert bonds.shape[1] == 2
+    assert bonds.shape[0] == len(deltas)
+
+    incremented = ops.index_add(initial_charges, bonds[:, 0], +deltas)
+    decremented = ops.index_add(incremented, bonds[:, 1], -deltas)
+
+    final_charges = decremented
+
+    assert np.isclose(np.sum(final_charges), np.sum(initial_charges))
+
+    return final_charges
+
+
 class NonbondedHandler(SerializableMixIn):
     def __init__(self, smirks, params, props):
         """
@@ -406,10 +427,8 @@ class AM1CCCHandler(SerializableMixIn):
         bond_idx_params = np.array(bond_idx_params)
 
         deltas = params[bond_idx_params]
-        incremented = ops.index_add(am1_charges, bond_idxs[:, 0], deltas)
-        decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)
+        q_params = apply_bond_charge_corrections(am1_charges, bond_idxs, deltas)
 
-        q_params = decremented
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 
         return q_params
