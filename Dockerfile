@@ -1,7 +1,7 @@
 FROM nvidia/cuda:11.2.0-devel-ubuntu18.04
 
 RUN apt-get update \
-    && apt-get install --no-install-recommends -y wget git make cmake \
+    && apt-get install --no-install-recommends -y wget git make cmake=3.10.2-1ubuntu2.18.04.2 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
