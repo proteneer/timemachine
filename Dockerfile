@@ -5,12 +5,12 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.6.14-Linux-x86_64.sh -O ~/miniconda.sh && \
-    /bin/bash ~/miniconda.sh -b -p /opt/conda && \
-    rm ~/miniconda.sh && \
-    ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
-    echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
-    echo "conda activate timemachine" >> ~/.bashrc
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.6.14-Linux-x86_64.sh -O ~/miniconda.sh \
+    && /bin/bash ~/miniconda.sh -b -p /opt/conda \
+    && rm ~/miniconda.sh \
+    && ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh \
+    && echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc \
+    && echo "conda activate timemachine" >> ~/.bashrc
 
 RUN . /opt/conda/etc/profile.d/conda.sh \
     && conda create -c openeye -c conda-forge -n timemachine openeye-toolkits python=3.7 openmm rdkit==2021.03.1 \
