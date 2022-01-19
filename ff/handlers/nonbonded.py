@@ -223,19 +223,9 @@ def bond_smirks_matches(mol, smirks_list):
     for index in range(len(smirks_list)):
         smirks = smirks_list[index]
 
-        substructure_search = oechem.OESubSearch(smirks)
-        substructure_search.SetMaxMatches(0)
+        matches = match_smirks(smirks, oemol)
 
         matched_bonds = []
-        matches = []
-        for match in substructure_search.Match(oemol):
-            matched_indices = {
-                atom_match.pattern.GetMapIdx() - 1: atom_match.target.GetIdx()
-                for atom_match in match.GetAtoms()
-                if atom_match.pattern.GetMapIdx() != 0
-            }
-
-            matches.append(matched_indices)
 
         for matched_indices in matches:
 
