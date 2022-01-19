@@ -161,6 +161,27 @@ def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
 
 
+def compute_or_load_am1_charges(mol):
+    """use partial charges in mol's AM1Cache property, if available,
+    otherwise write to this property"""
+
+    # check for cache
+    cache_key = "AM1Cache"
+    if not mol.HasProp(cache_key):
+        # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
+        # to be an issue that the atom ordering modifies the return values as well. A follow up
+        # with OpenEye is in order
+        # https://github.com/openforcefield/openff-toolkit/issues/983
+        am1_charges = list(oe_assign_charges(mol, "AM1"))
+
+        mol.SetProp(cache_key, base64.b64encode(pickle.dumps(am1_charges)))
+
+    else:
+        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_key)))
+
+    return am1_charges
+
+
 def apply_bond_charge_corrections(initial_charges, bonds, deltas):
     """for each (atom_a, atom_b, delta), atom_a += delta, atom_b -= delta
 
@@ -363,23 +384,10 @@ class AM1CCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
+        am1_charges = compute_or_load_am1_charges(mol)
+
         # imported here for optional dependency
         from openeye import oechem
-
-        # check for cache
-        cache_key = "AM1Cache"
-        if not mol.HasProp(cache_key):
-            # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
-            # to be an issue that the atom ordering modifies the return values as well. A follow up
-            # with OpenEye is in order
-            # https://github.com/openforcefield/openff-toolkit/issues/983
-            am1_charges = list(oe_assign_charges(mol, "AM1"))
-
-            mol.SetProp(cache_key, base64.b64encode(pickle.dumps(am1_charges)))
-
-        else:
-            am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_key)))
-
 
         oemol = convert_to_oe(mol)
         AromaticityModel.assign(oemol)
