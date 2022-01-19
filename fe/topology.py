@@ -1,8 +1,10 @@
 from abc import ABC
+from typing import Callable
 from rdkit import Chem
 from rdkit.Chem import rdmolops
 
 import numpy as np
+from numpy.typing import NDArray
 import jax
 import jax.numpy as jnp
 
@@ -355,11 +357,15 @@ class BaseTopologyConversion(BaseTopology):
     jones parameters goto a standard, forcefield independent state.
     """
 
+    def __init__(self, *args, parameterize_ff_independent: Callable[[Chem.Mol], NDArray] = standard_qlj_typer):
+        super().__init__(*args)
+        self.parameterize_ff_independent = parameterize_ff_independent
+
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
 
         qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
         src_qlj_params = qlj_params
-        dst_qlj_params = standard_qlj_typer(self.mol)
+        dst_qlj_params = self.parameterize_ff_independent(self.mol)
 
         combined_qlj_params = jnp.concatenate([src_qlj_params, dst_qlj_params])
         lambda_plane_idxs = np.zeros(self.mol.GetNumAtoms(), dtype=np.int32)
@@ -383,8 +389,7 @@ class BaseTopologyStandardDecoupling(BaseTopology):
     def parameterize_nonbonded(self, ff_q_params, ff_lj_params):
 
         # mol is standardized into a forcefield independent state.
-        _, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
-        qlj_params = standard_qlj_typer(self.mol)
+        qlj_params, nb_potential = super().parameterize_nonbonded(ff_q_params, ff_lj_params)
 
         return qlj_params, nb_potential
 

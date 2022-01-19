@@ -1,15 +1,20 @@
+import os
 from abc import ABC
 
 import numpy as np
+from numpy.typing import NDArray
 
 from simtk import openmm
 from rdkit import Chem
 
-from timemachine.lib import potentials, LangevinIntegrator, MonteCarloBarostat
+
 from timemachine import constants
+from timemachine.lib import potentials, LangevinIntegrator, MonteCarloBarostat
 from fe.frames import endpoint_frames_only
+
 from fe import free_energy_rabfe, topology, estimator_abfe, model_utils
-from ff import Forcefield
+from ff import Forcefield, __file__ as ff_path
+from ff.handlers.deserialize import deserialize_handlers
 
 from parallel.client import AbstractClient, _MockFuture
 from typing import Optional, Tuple, Any, List
@@ -559,7 +564,20 @@ class RelativeHydrationModel(RelativeModel):
 
 class AbsoluteConversionModel(AbsoluteModel):
     def setup_topology(self, mol):
-        top = topology.BaseTopologyConversion(mol, self.ff)
+        with open(os.path.join(os.path.dirname(ff_path), "params/smirnoff_1_1_0_ccc.py")) as f:
+            ff_handlers = deserialize_handlers(f.read())
+
+        ref_forcefield = Forcefield(ff_handlers)
+
+        ff_params = ref_forcefield.get_ordered_params()
+
+        def ff_conversion(mol: Chem.Mol) -> NDArray:
+            q_params = ref_forcefield.q_handle.partial_parameterize(ff_params[4], mol)
+            lj_params = ref_forcefield.lj_handle.partial_parameterize(ff_params[5], mol)
+            qlj_params = np.concatenate([np.reshape(q_params, (-1, 1)), np.reshape(lj_params, (-1, 2))], axis=1)
+            return qlj_params
+
+        top = topology.BaseTopologyConversion(mol, self.ff, parameterize_ff_independent=ff_conversion)
         return top
 
 
@@ -571,5 +589,5 @@ class AbsoluteStandardHydrationModel(AbsoluteModel):
 
 class RelativeBindingModel(RelativeModel):
     def setup_topology(self, mol_a, mol_b):
-        top = topology.DualTopologyStandardDecoupling(mol_a, mol_b, self.ff)
+        top = topology.DualTopologyRHFE(mol_a, mol_b, self.ff)
         return top
