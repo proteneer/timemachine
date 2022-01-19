@@ -592,8 +592,8 @@ def test_compute_or_load_am1_charges():
 
 def test_bond_smirks_matches():
     """Loop over test ligands, asserting that
-     * returned indices are in bounds
-     * returned bonds are present in the mol """
+    * returned indices are in bounds
+    * returned bonds are present in the mol"""
     # get some molecules
     suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
     all_mols = [mol for mol in suppl]
