@@ -21,9 +21,13 @@ from dataclasses import dataclass
 class RABFEResult:
     mol_name: str
     dG_complex_conversion: float
+    dG_complex_conversion_error: float
     dG_complex_decouple: float
+    dG_complex_decouple_error: float
     dG_solvent_conversion: float
+    dG_solvent_conversion_error: float
     dG_solvent_decouple: float
+    dG_solvent_decouple_error: float
 
     def log(self):
         """print stage summary"""
@@ -32,12 +36,20 @@ class RABFEResult:
             self.mol_name,
             "dG_complex_conversion (K complex)",
             self.dG_complex_conversion,
+            "dG_complex_conversion_err",
+            self.dG_complex_conversion_error,
             "dG_complex_decouple (E0 + A0 + A1 + E1)",
             self.dG_complex_decouple,
+            "dG_complex_decouple_err",
+            self.dG_complex_decouple_error,
             "dG_solvent_conversion (K solvent)",
             self.dG_solvent_conversion,
+            "dG_solvent_conversion_err",
+            self.dG_solvent_conversion_error,
             "dG_solvent_decouple (D)",
             self.dG_solvent_decouple,
+            "dG_solvent_decouple_err",
+            self.dG_solvent_decouple_error,
         )
 
     @classmethod
@@ -64,6 +76,18 @@ class RABFEResult:
         """the final value we seek is the free energy of moving
         from the solvent into the complex"""
         return self.dG_solvent - self.dG_complex
+
+    @property
+    def dG_bind_err(self):
+        errors = np.asarray(
+            [
+                self.dG_complex_conversion_error,
+                self.dG_complex_decouple_error,
+                self.dG_solvent_conversion_error,
+                self.dG_solvent_decouple_error,
+            ]
+        )
+        return np.sqrt(np.sum(errors ** 2))
 
 
 class UnsupportedTopology(Exception):
