@@ -402,7 +402,7 @@ if __name__ == "__main__":
             "epoch": epoch,
         }
 
-    def predict_dG(results: dict):
+    def predict_dG(results: dict) -> RABFEResult:
         dG_complex_decouple, dG_complex_decouple_error = binding_model_complex_decouple.predict_from_futures(
             results["complex_decouple"][0],
             results["mol"],
@@ -433,19 +433,16 @@ if __name__ == "__main__":
         rabfe_result = RABFEResult(
             mol_name=mol_name,
             dG_complex_conversion=dG_complex_conversion,
+            dG_complex_conversion_error=dG_complex_conversion_error,
             dG_complex_decouple=dG_complex_decouple,
+            dG_complex_decouple_error=dG_complex_decouple_error,
             dG_solvent_conversion=dG_solvent_conversion,
+            dG_solvent_conversion_error=dG_solvent_conversion_error,
             dG_solvent_decouple=dG_solvent_decouple,
+            dG_solvent_decouple_error=dG_solvent_decouple_error,
         )
         rabfe_result.log()
-        dG_err = np.sqrt(
-            dG_complex_conversion_error ** 2
-            + dG_complex_decouple_error ** 2
-            + dG_solvent_conversion_error ** 2
-            + dG_solvent_decouple_error ** 2
-        )
-
-        return rabfe_result.dG_bind, dG_err
+        return rabfe_result
 
     runs = []
     for epoch in range(cmd_args.epochs):
@@ -479,7 +476,10 @@ if __name__ == "__main__":
                 print(f"Unable to find property {cmd_args.property_field}: {e}")
         print(f"Epoch: {epoch}, Processing Mol: {mol_name}, Label: {label_dG}")
         try:
-            dG, dG_err = predict_dG(run)
-            print(f"Epoch: {epoch}, Mol: {mol_name}, Predicted dG: {dG}, dG Err:" f" {dG_err}, Label: {label_dG}")
+            result = predict_dG(run)
+            print(
+                f"Epoch: {epoch}, Mol: {mol_name}, Predicted dG: {result.dG_bind}, dG Err:"
+                f" {result.dG_bind_err}, Label: {label_dG}"
+            )
         except Exception:
             logger.exception(f"Error processing Mol: {mol_name}")
