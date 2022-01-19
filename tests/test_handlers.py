@@ -628,7 +628,7 @@ def test_compute_or_load_am1_charges():
     fresh_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
 
     # expect each mol to have AM1 cache now
-    for mol in suppl:
+    for mol in all_mols:
         assert mol.HasProp(cache_key)
 
     # expect the same charges as the first time around
