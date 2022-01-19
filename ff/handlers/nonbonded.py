@@ -7,7 +7,8 @@ import networkx as nx
 import pickle
 
 from rdkit import Chem
-from ff.handlers.utils import match_smirks, sort_tuple
+from ff.handlers.utils import sort_tuple, match_smirks as rd_match_smirks
+from ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from ff.handlers.serialize import SerializableMixIn
 from ff.handlers.bcc_aromaticity import AromaticityModel
 
@@ -150,7 +151,7 @@ def generate_nonbonded_idxs(mol, smirks):
     N = mol.GetNumAtoms()
     param_idxs = np.zeros(N, dtype=np.int32)
     for p_idx, patt in enumerate(smirks):
-        matches = match_smirks(mol, patt)
+        matches = rd_match_smirks(mol, patt)
         for m in matches:
             param_idxs[m[0]] = p_idx
 
@@ -219,7 +220,7 @@ def bond_smirks_matches(mol, smirks_list):
     for type_idx, smirks in enumerate(smirks_list):
         matched_bonds = []
 
-        matches = match_smirks(smirks, oemol)
+        matches = oe_match_smirks(smirks, oemol)
 
         for matched_indices in matches:
             forward_matched_bond = [matched_indices[0], matched_indices[1]]
