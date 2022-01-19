@@ -203,6 +203,55 @@ def apply_bond_charge_corrections(initial_charges, bonds, deltas):
     return final_charges
 
 
+def bond_smirks_matches(mol, smirks_list):
+    """Return an array of ordered bonds and an array of their assigned types"""
+
+    # imported here for optional dependency
+    from openeye import oechem
+
+    oemol = convert_to_oe(mol)
+    AromaticityModel.assign(oemol)
+
+    bond_idxs = []  # [B, 2]
+    type_idxs = []  # [B]
+
+    for index in range(len(smirks_list)):
+        smirks = smirks_list[index]
+
+        substructure_search = oechem.OESubSearch(smirks)
+        substructure_search.SetMaxMatches(0)
+
+        matched_bonds = []
+        matches = []
+        for match in substructure_search.Match(oemol):
+            matched_indices = {
+                atom_match.pattern.GetMapIdx() - 1: atom_match.target.GetIdx()
+                for atom_match in match.GetAtoms()
+                if atom_match.pattern.GetMapIdx() != 0
+            }
+
+            matches.append(matched_indices)
+
+        for matched_indices in matches:
+
+            forward_matched_bond = [matched_indices[0], matched_indices[1]]
+            reverse_matched_bond = [matched_indices[1], matched_indices[0]]
+
+            if (
+                forward_matched_bond in matched_bonds
+                or reverse_matched_bond in matched_bonds
+                or forward_matched_bond in bond_idxs
+                or reverse_matched_bond in bond_idxs
+            ):
+                continue
+
+            matched_bonds.append(forward_matched_bond)
+            bond_idxs.append(forward_matched_bond)
+            type_idxs.append(index)
+
+    return np.array(bond_idxs), np.array(type_idxs)
+
+
 class NonbondedHandler(SerializableMixIn):
     def __init__(self, smirks, params, props):
         """
@@ -385,57 +434,9 @@ class AM1CCCHandler(SerializableMixIn):
 
         """
         am1_charges = compute_or_load_am1_charges(mol)
+        bond_idxs, type_idxs = bond_smirks_matches(mol, smirks)
 
-        # imported here for optional dependency
-        from openeye import oechem
-
-        oemol = convert_to_oe(mol)
-        AromaticityModel.assign(oemol)
-
-        bond_idxs = []
-        bond_idx_params = []
-
-        for index in range(len(smirks)):
-            smirk = smirks[index]
-            param = params[index]
-
-            substructure_search = oechem.OESubSearch(smirk)
-            substructure_search.SetMaxMatches(0)
-
-            matched_bonds = []
-            matches = []
-            for match in substructure_search.Match(oemol):
-
-                matched_indices = {
-                    atom_match.pattern.GetMapIdx() - 1: atom_match.target.GetIdx()
-                    for atom_match in match.GetAtoms()
-                    if atom_match.pattern.GetMapIdx() != 0
-                }
-
-                matches.append(matched_indices)
-
-            for matched_indices in matches:
-
-                forward_matched_bond = [matched_indices[0], matched_indices[1]]
-                reverse_matched_bond = [matched_indices[1], matched_indices[0]]
-
-                if (
-                    forward_matched_bond in matched_bonds
-                    or reverse_matched_bond in matched_bonds
-                    or forward_matched_bond in bond_idxs
-                    or reverse_matched_bond in bond_idxs
-                ):
-                    continue
-
-                matched_bonds.append(forward_matched_bond)
-                bond_idxs.append(forward_matched_bond)
-                bond_idx_params.append(index)
-
-        am1_charges = np.array(am1_charges)
-        bond_idxs = np.array(bond_idxs)
-        bond_idx_params = np.array(bond_idx_params)
-
-        deltas = params[bond_idx_params]
+        deltas = params[type_idxs]
         q_params = apply_bond_charge_corrections(am1_charges, bond_idxs, deltas)
 
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
