@@ -6,12 +6,12 @@ PYTEST_CI_ARGS := --cov=. --cov-report=term-missing
 
 NPROCS = `nproc`
 
-CUDA_ARCH := "sm_70"
+CUDA_ARCH := "70"
 
 .PHONY: build
 build:
 	mkdir -p $(CPP_DIR)build/ && cd $(CPP_DIR)build/ &&  \
-	cmake -DCUDA_ARCH=$(CUDA_ARCH) -DCMAKE_INSTALL_PREFIX=$(INSTALL_PREFIX) ../ && \
+	cmake -DCUDA_ARCH=$(shell echo $(CUDA_ARCH) | sed -e 's/^sm_//') -DCMAKE_INSTALL_PREFIX=$(INSTALL_PREFIX) ../ && \
 	make -j$(NPROCS) install
 
 clean:
