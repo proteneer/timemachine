@@ -11,15 +11,17 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.6.14-Linux-x86
     ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh && \
     echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc && \
     echo "conda activate timemachine" >> ~/.bashrc
-# Ensures that things are faster to build a new docker container
+
+RUN . /opt/conda/etc/profile.d/conda.sh \
+    && conda create -c openeye -c conda-forge -n timemachine openeye-toolkits python=3.7 openmm rdkit==2021.03.1 \
+    && conda activate timemachine
+
 ENV PATH /opt/conda/envs/timemachine/bin:$PATH
-RUN . /opt/conda/etc/profile.d/conda.sh && conda create -c openeye -c conda-forge -n timemachine openeye-toolkits python=3.7 openmm rdkit==2021.03.1 && conda activate timemachine
-
-COPY . /code/
 ENV PYTHONPATH /code/:$PYTHONPATH
-
 ENV CONDA_DEFAULT_ENV timemachine
 ARG cuda_arch=sm_75
+
+COPY . /code/
 WORKDIR /code/
 RUN make CUDA_ARCH=$cuda_arch build
 RUN pip install --no-cache-dir -r requirements.txt
