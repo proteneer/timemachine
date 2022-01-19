@@ -61,10 +61,6 @@ NonbondedPairs<RealType, Negated, Interpolated>::NonbondedPairs(
     gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
 
     if (Interpolated) {
-
-        gpuErrchk(cudaMalloc(&d_scales_, M_ * 2 * sizeof(*d_scales_)));
-        gpuErrchk(cudaMemcpy(d_scales_, &scales[0], M_ * 2 * sizeof(*d_scales_), cudaMemcpyHostToDevice));
-
         // initialize identity permutation
         std::vector<int> perm = std::vector<int>(N_);
         for (int i = 0; i < N_; i++) {
