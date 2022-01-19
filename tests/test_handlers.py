@@ -10,6 +10,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
 from ff.handlers.deserialize import deserialize_handlers
+from ff.charges import AM1CCC_CHARGES
 
 import functools
 
@@ -269,7 +270,7 @@ def test_am1_bcc():
 
     assert len(charges) == mol.GetNumAtoms()
 
-    new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, mol=mol))
+    # new_charges, vjp_fn = jax.vjp(functools.partial(am1h.partial_parameterize, mol=mol))
 
     # charges_adjoints = np.random.randn(*charges.shape)
 
@@ -548,8 +549,8 @@ def test_am1_differences():
         if isinstance(ccc, nonbonded.AM1CCCHandler):
             break
 
-    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
-    smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
+    # suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    # smi = "[H]c1c(OP(=S)(OC([H])([H])C([H])([H])[H])OC([H])([H])C([H])([H])[H])nc(C([H])(C([H])([H])[H])C([H])([H])[H])nc1C([H])([H])[H]"
     smi = "Clc1c(Cl)c(Cl)c(-c2c(Cl)c(Cl)c(Cl)c(Cl)c2Cl)c(Cl)c1Cl"
     mol = Chem.MolFromSmiles(smi)
     mol = Chem.AddHs(mol)
@@ -581,6 +582,32 @@ def test_am1_differences():
                     print(" ")
 
             assert 0
+
+
+def test_bond_smirks_matches():
+    """Loop over test ligands, asserting that returned indices are in bounds"""
+    # get some molecules
+    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    all_mols = [mol for mol in suppl]
+
+    # get some bond smirks
+    smirks_list = [smirks for (smirks, param) in AM1CCC_CHARGES["patterns"]]
+
+    for mol in all_mols:
+        bond_idxs, type_idxs = nonbonded.bond_smirks_matches(mol, smirks_list)
+
+        # assert indices in bounds
+        assert (bond_idxs.min() >= 0) and (bond_idxs.max() < mol.GetNumAtoms())
+        assert (type_idxs.min() >= 0) and (type_idxs.max() < len(smirks_list))
+
+        # assert that bond_idxs are present in the mol
+        bonds = set()
+        for bond in mol.GetBonds():
+            a, b = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+            bonds.add((a, b))
+            bonds.add((b, a))
+        for bond in bond_idxs:
+            assert tuple(bond) in bonds
 
 
 def test_compute_or_load_am1_charges():
