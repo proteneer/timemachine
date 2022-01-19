@@ -583,6 +583,32 @@ def test_am1_differences():
             assert 0
 
 
+def test_compute_or_load_am1_charges():
+    """Loop over test ligands, asserting that charges are stored in expected property and that the same charges are
+    returned on repeated calls"""
+
+    # get some molecules
+    cache_key = "AM1Cache"
+    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    all_mols = [mol for mol in suppl]
+
+    # don't expect AM1 cache yet
+    for mol in all_mols:
+        assert not mol.HasProp(cache_key)
+
+    # compute charges once
+    fresh_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+
+    # expect each mol to have AM1 cache now
+    for mol in suppl:
+        assert mol.HasProp(cache_key)
+
+    # expect the same charges as the first time around
+    cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+    for (fresh, cached) in zip(fresh_am1_charges, cached_am1_charges):
+        np.testing.assert_allclose(fresh, cached)
+
+
 def test_lennard_jones_handler():
 
     patterns = [
