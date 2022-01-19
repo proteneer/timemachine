@@ -210,39 +210,25 @@ def bond_smirks_matches(mol, smirks_list):
     * Uses OpenEye for substructure searches
     * "First match wins" -- e.g. if bond (a,b) can be matched by smirks_list[2], smirks_list[5], ..., only return 2
     """
-
-    # imported here for optional dependency
-    from openeye import oechem
-
     oemol = convert_to_oe(mol)
     AromaticityModel.assign(oemol)
 
     bond_idxs = []  # [B, 2]
     type_idxs = []  # [B]
 
-    for index in range(len(smirks_list)):
-        smirks = smirks_list[index]
-
-        matches = match_smirks(smirks, oemol)
-
+    for type_idx, smirks in enumerate(smirks_list):
         matched_bonds = []
 
-        for matched_indices in matches:
+        for (a, b) in match_smirks(smirks, oemol):
+            fwd_match = [a, b]
+            rev_match = [b, a]
+            already_matched = fwd_match in matched_bonds or rev_match in matched_bonds
+            already_assigned = fwd_match in bond_idxs or rev_match in bond_idxs
 
-            forward_matched_bond = [matched_indices[0], matched_indices[1]]
-            reverse_matched_bond = [matched_indices[1], matched_indices[0]]
-
-            if (
-                forward_matched_bond in matched_bonds
-                or reverse_matched_bond in matched_bonds
-                or forward_matched_bond in bond_idxs
-                or reverse_matched_bond in bond_idxs
-            ):
-                continue
-
-            matched_bonds.append(forward_matched_bond)
-            bond_idxs.append(forward_matched_bond)
-            type_idxs.append(index)
+            if not (already_matched or already_assigned):
+                matched_bonds.append([a, b])
+                bond_idxs.append([a, b])
+                type_idxs.append(type_idx)
 
     return np.array(bond_idxs), np.array(type_idxs)
 
