@@ -12,15 +12,11 @@ RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-4.6.14-Linux-x86
 ENV PATH /opt/conda/envs/timemachine/bin:$PATH
 RUN . /opt/conda/etc/profile.d/conda.sh && conda create -c openeye -c conda-forge -n timemachine openeye-toolkits python=3.7 openmm rdkit==2021.03.1 && conda activate timemachine
 
-ENV PYTHONPATH /code/timemachine/:$PYTHONPATH
-ADD timemachine/ /code/timemachine/
+ADD . /code/
+ENV PYTHONPATH /code/:$PYTHONPATH
 
 ENV CONDA_DEFAULT_ENV timemachine
 ARG cuda_arch=sm_75
-WORKDIR /code/timemachine/
+WORKDIR /code/
 RUN make CUDA_ARCH=$cuda_arch build
 RUN pip install -r requirements.txt
-
-ADD . /code/
-WORKDIR /code/
-RUN pip install -e . && pip install -r requirements.txt
