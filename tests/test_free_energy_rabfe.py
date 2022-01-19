@@ -1,6 +1,4 @@
-import io
 import numpy as np
-from contextlib import redirect_stdout
 from fe.free_energy_rabfe import (
     RABFEResult,
     setup_relative_restraints_by_distance,
@@ -18,25 +16,25 @@ from rdkit.Chem import AllChem, rdFMCS
 import pytest
 
 
-def capture_print(closure):
-    """capture anything printed when we call closure()"""
+def test_rabfe_result_to_from_mol():
+    """assert equality after round-trip to/from Mol SDF format"""
+    mol = Chem.MolFromSmiles("CCCONNN")
 
-    f = io.StringIO()
-    with redirect_stdout(f):
-        closure()
-    printed = f.getvalue()
-    return printed
+    result = RABFEResult(
+        "my mol",
+        1.0,
+        float("nan"),
+        2.0,
+        2.1,
+        3.0,
+        3.1,
+        4.0,
+        4.1,
+    )
 
+    result.apply_to_mol(mol)
 
-def test_rabfe_result_to_from_log():
-    """assert equality after round-trip to/from preferred terminal log format"""
-
-    result = RABFEResult("my mol", 1.0, 2.0, 3.0, 4.0)
-
-    printed = capture_print(result.log)
-    first_line = printed.splitlines()[0]
-
-    reconstructed = RABFEResult.from_log(first_line)
+    reconstructed = RABFEResult.from_mol(mol)
     assert result == reconstructed
 
 
