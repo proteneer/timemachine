@@ -201,8 +201,6 @@ def bond_smirks_matches(mol, smirks_list):
     type_idxs = []  # [B]
 
     for type_idx, smirks in enumerate(smirks_list):
-        matched_bonds = []
-
         matches = oe_match_smirks(smirks, oemol)
 
         for matched_indices in matches:
@@ -210,11 +208,9 @@ def bond_smirks_matches(mol, smirks_list):
             forward_matched_bond = [a, b]
             reverse_matched_bond = [b, a]
 
-            already_matched = forward_matched_bond in matched_bonds or reverse_matched_bond in matched_bonds
             already_assigned = forward_matched_bond in bond_idxs or reverse_matched_bond in bond_idxs
 
-            if not (already_matched or already_assigned):
-                matched_bonds.append(forward_matched_bond)
+            if not already_assigned:
                 bond_idxs.append(forward_matched_bond)
                 type_idxs.append(type_idx)
 
