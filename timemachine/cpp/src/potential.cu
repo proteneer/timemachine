@@ -7,6 +7,8 @@
 
 namespace timemachine {
 
+const int Potential::D = 3;
+
 void Potential::execute_host(
     const int N,
     const int P,
