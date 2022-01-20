@@ -17,6 +17,8 @@
 // #include "inertial_restraint.hpp"
 #include "centroid_restraint.hpp"
 #include "nonbonded.hpp"
+#include "nonbonded_dense.hpp"
+#include "nonbonded_pairs.hpp"
 #include "periodic_torsion.hpp"
 #include "rmsd_restraint.hpp"
 // #include "lennard_jones.hpp"
@@ -965,7 +967,14 @@ py_rmsd_align(const py::array_t<double, py::array::c_style> &x1, const py::array
     return py_x2_aligned;
 }
 
+void py_cuda_device_reset() { cudaDeviceReset(); }
+
 PYBIND11_MODULE(custom_ops, m) {
+
+    m.def(
+        "cuda_device_reset",
+        &py_cuda_device_reset,
+        "Destroy all allocations and reset all state on the current device in the current process.");
 
     m.def("rmsd_align", &py_rmsd_align, "RMSD align two molecules");
 

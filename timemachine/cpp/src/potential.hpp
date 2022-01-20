@@ -10,7 +10,7 @@ class Potential {
 public:
     virtual ~Potential(){};
 
-    static const int D = 3;
+    static const int D;
 
     void execute_host(
         const int N,

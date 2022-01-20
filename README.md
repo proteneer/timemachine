@@ -31,7 +31,7 @@ We currently support the following functional forms. Parameters that can be opti
 * OpenEye Toolkits
 * OpenMM
 * Cuda 11.0+
-* CMake 3.10.2 (newer versions may vary in the CMAKE_INSTALL_PREFIX and CUDA flags)
+* CMake 3.22.1
 
 ### Setup using Anaconda
 
@@ -47,7 +47,7 @@ conda install -c conda-forge -c openeye openmm openeye-toolkits=2020.2.0 rdkit=2
 
 ```
 pip install -r requirements.txt
-make CUDA_ARCH=sm_70 build
+make CUDA_ARCH=70 build
 ```
 
 ## Running Tests
