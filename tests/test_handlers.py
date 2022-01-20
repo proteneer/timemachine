@@ -587,7 +587,7 @@ def test_compute_or_load_am1_charges():
     # expect the same charges as the first time around
     cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
     for (fresh, cached) in zip(fresh_am1_charges, cached_am1_charges):
-        assert (fresh == cached).all()
+        np.testing.assert_array_equal(fresh, cached)
 
 
 def test_bond_smirks_matches():
