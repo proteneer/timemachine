@@ -188,7 +188,11 @@ def bond_smirks_matches(mol, smirks_list):
     Notes
     -----
     * Uses OpenEye for substructure searches
-    * "First match wins" -- e.g. if bond (a,b) can be matched by smirks_list[2], smirks_list[5], ..., only return 2
+    * Order within smirks_list matters
+        "First match wins."
+        For example, if bond (a,b) can be matched by smirks_list[2], smirks_list[5], ..., assign type 2
+    * Order within each smirks pattern matters
+        For example, "[#6:1]~[#1:2]" and "[#1:1]~[#6:2]" will match atom pairs in the opposite order
     """
     oemol = convert_to_oe(mol)
     AromaticityModel.assign(oemol)
@@ -223,8 +227,15 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
 
     Notes
     -----
-    * preserves sum(initial_charges)
-    * arbitrary values of bond_idxs or deltas are valid"""
+    * preserves sum(initial_charges) for arbitrary values of bond_idxs or deltas
+    * order within each row of bond_idxs is meaningful
+        `(..., bond_idxs, deltas)`
+        means the opposite of
+        `(..., bond_idxs[:, ::-1], deltas)`
+    * order within the first axis of bond_idxs, deltas is not meaningful
+        `(..., bond_idxs[perm], deltas[perm])`
+        means the same thing for any permutation `perm`
+    """
     num_bonds = len(bond_idxs)
 
     assert bond_idxs.shape[1] == 2
