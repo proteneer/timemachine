@@ -637,6 +637,7 @@ def test_apply_bond_charge_corrections():
         final_charges = nonbonded.apply_bond_charge_corrections(initial_charges, bonds, deltas)
         final_net_charge = np.sum(final_charges)
 
+        assert (final_charges != initial_charges).any()
         np.testing.assert_almost_equal(final_net_charge, initial_net_charge)
 
 
