@@ -10,12 +10,25 @@ import jax.numpy as jnp
 
 from timemachine.lib import potentials
 from ff.handlers import nonbonded, bonded
+from ff import Forcefield
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
 _SCALE_14 = 0.5
 _BETA = 2.0
 _CUTOFF = 1.2
+
+
+def construct_ff_qlj_typer(ff: Forcefield) -> Callable[[Chem.Mol], NDArray]:
+    ff_params = ff.get_ordered_params()
+
+    def ff_conversion(mol: Chem.Mol) -> NDArray:
+        q_params = ff.q_handle.partial_parameterize(ff_params[4], mol)
+        lj_params = ff.lj_handle.partial_parameterize(ff_params[5], mol)
+        qlj_params = jnp.concatenate([jnp.reshape(q_params, (-1, 1)), jnp.reshape(lj_params, (-1, 2))], axis=1)
+        return qlj_params
+
+    return ff_conversion
 
 
 def standard_qlj_typer(mol):

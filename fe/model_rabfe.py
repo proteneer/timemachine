@@ -564,18 +564,11 @@ class RelativeHydrationModel(RelativeModel):
 
 class AbsoluteConversionModel(AbsoluteModel):
     def setup_topology(self, mol):
+
         with open(os.path.join(os.path.dirname(ff_path), "params/smirnoff_1_1_0_ccc.py")) as f:
             ff_handlers = deserialize_handlers(f.read())
-
         ref_forcefield = Forcefield(ff_handlers)
-
-        ff_params = ref_forcefield.get_ordered_params()
-
-        def ff_conversion(mol: Chem.Mol) -> NDArray:
-            q_params = ref_forcefield.q_handle.partial_parameterize(ff_params[4], mol)
-            lj_params = ref_forcefield.lj_handle.partial_parameterize(ff_params[5], mol)
-            qlj_params = np.concatenate([np.reshape(q_params, (-1, 1)), np.reshape(lj_params, (-1, 2))], axis=1)
-            return qlj_params
+        ff_conversion = topology.construct_ff_qlj_typer(ref_forcefield)
 
         top = topology.BaseTopologyConversion(mol, self.ff, parameterize_ff_independent=ff_conversion)
         return top
