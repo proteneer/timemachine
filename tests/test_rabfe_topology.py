@@ -94,7 +94,7 @@ def test_base_topology_standard_decoupling():
 
     assert not isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
 
-    np.testing.assert_array_equal(topology.standard_qlj_typer(mol), qlj_params)
+    np.testing.assert_array_equal(topology.construct_ff_qlj_typer(ff)(mol), qlj_params)
 
     np.testing.assert_array_equal(
         nonbonded_potential.get_lambda_plane_idxs(), np.zeros(mol.GetNumAtoms(), dtype=np.int32)
