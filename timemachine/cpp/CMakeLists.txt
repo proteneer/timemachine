@@ -55,6 +55,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/barostat.cu
   src/rmsd_align.cpp
   src/summed_potential.cu
+  src/device_buffer.cu
   src/kernels/nonbonded_common.cu
 )
 
