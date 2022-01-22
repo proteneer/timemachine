@@ -1,25 +1,22 @@
 #pragma once
-#include <cstdlib>
+#include <cstddef>
 
 namespace timemachine {
 
 template <typename T> class DeviceBuffer {
-
 public:
-    DeviceBuffer(const std::size_t length);
+    DeviceBuffer(const size_t length);
 
     ~DeviceBuffer();
 
     const size_t size;
 
-    void allocate();
-
-    T *data();
+    T *const data;
 
     void memset(T x);
 
 private:
-    T *data_;
+    T *allocate_(size_t size);
 };
 
 } // namespace timemachine

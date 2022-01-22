@@ -5,30 +5,16 @@
 namespace timemachine {
 
 template <typename T>
-DeviceBuffer<T>::DeviceBuffer(const std::size_t length) : size(length * sizeof(T)), data_(nullptr) {}
+DeviceBuffer<T>::DeviceBuffer(const std::size_t length) : size(length * sizeof(T)), data(allocate_(size)) {}
 
-template <typename T> DeviceBuffer<T>::~DeviceBuffer() {
-    if (data_) {
-        gpuErrchk(cudaFree(data_));
-    }
-}
+template <typename T> DeviceBuffer<T>::~DeviceBuffer() { gpuErrchk(cudaFree(data)); }
 
-template <typename T> void DeviceBuffer<T>::allocate() {
-    if (!data_) {
-        gpuErrchk(cudaMalloc(&data_, size));
-    } else {
-        throw std::runtime_error("called allocate on an allocated buffer");
-    }
-}
+template <typename T> void DeviceBuffer<T>::memset(T x) { gpuErrchk(cudaMemset(data, x, size)); }
 
-template <typename T> T *DeviceBuffer<T>::data() { return data_; }
-
-template <typename T> void DeviceBuffer<T>::memset(T x) {
-    if (data_) {
-        gpuErrchk(cudaMemset(data_, x, size));
-    } else {
-        throw std::runtime_error("called memset on unallocated buffer");
-    }
+template <typename T> T *DeviceBuffer<T>::allocate_(const std::size_t size) {
+    T *data;
+    gpuErrchk(cudaMalloc(&data, size));
+    return data;
 }
 
 template class DeviceBuffer<double>;
