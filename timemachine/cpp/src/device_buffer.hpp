@@ -13,8 +13,6 @@ public:
 
     T *const data;
 
-    void memset(T x);
-
 private:
     T *allocate_(size_t size);
 };

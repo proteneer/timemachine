@@ -41,19 +41,19 @@ void Potential::execute_host(
     // very important that these are initialized to zero since the kernels themselves just accumulate
     if (h_du_dx) {
         d_du_dx.reset(new DeviceBuffer<unsigned long long>(N * D));
-        d_du_dx->memset(0);
+        gpuErrchk(cudaMemset(d_du_dx->data, 0, d_du_dx->size));
     }
     if (h_du_dp) {
         d_du_dp.reset(new DeviceBuffer<unsigned long long>(P));
-        d_du_dp->memset(0);
+        gpuErrchk(cudaMemset(d_du_dp->data, 0, d_du_dp->size));
     }
     if (h_du_dl) {
         d_du_dl.reset(new DeviceBuffer<unsigned long long>(N));
-        d_du_dl->memset(0);
+        gpuErrchk(cudaMemset(d_du_dl->data, 0, d_du_dl->size));
     }
     if (h_u) {
         d_u.reset(new DeviceBuffer<unsigned long long>(N));
-        d_u->memset(0);
+        gpuErrchk(cudaMemset(d_u->data, 0, d_u->size));
     }
 
     this->execute_device(
