@@ -28,9 +28,9 @@ void Potential::execute_host(
     DeviceBuffer<double> d_p(P);
     DeviceBuffer<double> d_box(D * D);
 
-    d_x.ensure_allocated();
-    d_p.ensure_allocated();
-    d_box.ensure_allocated();
+    d_x.allocate();
+    d_p.allocate();
+    d_box.allocate();
 
     gpuErrchk(cudaMemcpy(d_x.data(), h_x, d_x.size, cudaMemcpyHostToDevice));
     gpuErrchk(cudaMemcpy(d_p.data(), h_p, d_p.size, cudaMemcpyHostToDevice));
@@ -43,19 +43,19 @@ void Potential::execute_host(
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
     if (h_du_dx) {
-        d_du_dx.ensure_allocated();
+        d_du_dx.allocate();
         d_du_dx.memset(0);
     }
     if (h_du_dp) {
-        d_du_dp.ensure_allocated();
+        d_du_dp.allocate();
         d_du_dp.memset(0);
     }
     if (h_du_dl) {
-        d_du_dl.ensure_allocated();
+        d_du_dl.allocate();
         d_du_dl.memset(0);
     }
     if (h_u) {
-        d_u.ensure_allocated();
+        d_u.allocate();
         d_u.memset(0);
     }
 

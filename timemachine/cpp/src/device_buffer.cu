@@ -13,11 +13,11 @@ template <typename T> DeviceBuffer<T>::~DeviceBuffer() {
     }
 }
 
-template <typename T> void DeviceBuffer<T>::ensure_allocated() {
+template <typename T> void DeviceBuffer<T>::allocate() {
     if (!data_) {
         gpuErrchk(cudaMalloc(&data_, size));
     } else {
-        throw std::runtime_error("attempted to reallocate an allocated buffer");
+        throw std::runtime_error("called allocate on an allocated buffer");
     }
 }
 

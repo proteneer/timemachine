@@ -12,7 +12,7 @@ public:
 
     const size_t size;
 
-    void ensure_allocated();
+    void allocate();
 
     T *data();
 
