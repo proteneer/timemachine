@@ -62,7 +62,7 @@ void Potential::execute_host(
     try {
         this->execute_device(
             N, P, d_x, d_p, d_box, lambda, d_du_dx, d_du_dp, d_du_dl, d_u, static_cast<cudaStream_t>(0));
-    } catch (const std::runtime_error &error) {
+    } catch (...) {
         if (h_du_dx) {
             gpuErrchk(cudaFree(d_du_dx));
         }
