@@ -1,5 +1,7 @@
 #include <iostream>
+#include <memory>
 
+#include "device_buffer.hpp"
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
 #include "potential.hpp"
@@ -23,66 +25,63 @@ void Potential::execute_host(
 
     const int &D = Potential::D;
 
-    double *d_x;
-    double *d_p;
-    double *d_box;
+    DeviceBuffer<double> d_x(N * D);
+    DeviceBuffer<double> d_p(P);
+    DeviceBuffer<double> d_box(D * D);
 
-    gpuErrchk(cudaMalloc(&d_x, N * D * sizeof(double)));
-    gpuErrchk(cudaMemcpy(d_x, h_x, N * D * sizeof(double), cudaMemcpyHostToDevice));
+    d_x.copy_from(h_x);
+    d_p.copy_from(h_p);
+    d_box.copy_from(h_box);
 
-    gpuErrchk(cudaMalloc(&d_p, P * sizeof(double)));
-    gpuErrchk(cudaMemcpy(d_p, h_p, P * sizeof(double), cudaMemcpyHostToDevice));
-
-    gpuErrchk(cudaMalloc(&d_box, D * D * sizeof(double)));
-    gpuErrchk(cudaMemcpy(d_box, h_box, D * D * sizeof(double), cudaMemcpyHostToDevice));
-
-    unsigned long long *d_du_dx = nullptr;
-    unsigned long long *d_du_dp = nullptr;
-    unsigned long long *d_du_dl = nullptr;
-    unsigned long long *d_u = nullptr;
+    std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx;
+    std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dp;
+    std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dl;
+    std::unique_ptr<DeviceBuffer<unsigned long long>> d_u;
 
     // very important that these are initialized to zero since the kernels themselves just accumulate
     if (h_du_dx) {
-        gpuErrchk(cudaMalloc(&d_du_dx, N * D * sizeof(unsigned long long)));
-        gpuErrchk(cudaMemset(d_du_dx, 0, N * D * sizeof(unsigned long long)));
+        d_du_dx.reset(new DeviceBuffer<unsigned long long>(N * D));
+        gpuErrchk(cudaMemset(d_du_dx->data, 0, d_du_dx->size));
     }
     if (h_du_dp) {
-        gpuErrchk(cudaMalloc(&d_du_dp, P * sizeof(unsigned long long)));
-        gpuErrchk(cudaMemset(d_du_dp, 0, P * sizeof(unsigned long long)));
+        d_du_dp.reset(new DeviceBuffer<unsigned long long>(P));
+        gpuErrchk(cudaMemset(d_du_dp->data, 0, d_du_dp->size));
     }
     if (h_du_dl) {
-        gpuErrchk(cudaMalloc(&d_du_dl, N * sizeof(*d_du_dl)));
-        gpuErrchk(cudaMemset(d_du_dl, 0, N * sizeof(*d_du_dl)));
+        d_du_dl.reset(new DeviceBuffer<unsigned long long>(N));
+        gpuErrchk(cudaMemset(d_du_dl->data, 0, d_du_dl->size));
     }
     if (h_u) {
-        gpuErrchk(cudaMalloc(&d_u, N * sizeof(*d_u)));
-        gpuErrchk(cudaMemset(d_u, 0, N * sizeof(*d_u)));
+        d_u.reset(new DeviceBuffer<unsigned long long>(N));
+        gpuErrchk(cudaMemset(d_u->data, 0, d_u->size));
     }
 
-    this->execute_device(N, P, d_x, d_p, d_box, lambda, d_du_dx, d_du_dp, d_du_dl, d_u, static_cast<cudaStream_t>(0));
+    this->execute_device(
+        N,
+        P,
+        d_x.data,
+        d_p.data,
+        d_box.data,
+        lambda,
+        d_du_dx ? d_du_dx->data : nullptr,
+        d_du_dp ? d_du_dp->data : nullptr,
+        d_du_dl ? d_du_dl->data : nullptr,
+        d_u ? d_u->data : nullptr,
+        static_cast<cudaStream_t>(0));
 
     // outputs
     if (h_du_dx) {
-        gpuErrchk(cudaMemcpy(h_du_dx, d_du_dx, N * D * sizeof(*h_du_dx), cudaMemcpyDeviceToHost));
-        gpuErrchk(cudaFree(d_du_dx));
+        d_du_dx->copy_to(h_du_dx);
     }
     if (h_du_dp) {
-        gpuErrchk(cudaMemcpy(h_du_dp, d_du_dp, P * sizeof(*h_du_dp), cudaMemcpyDeviceToHost));
-        gpuErrchk(cudaFree(d_du_dp));
+        d_du_dp->copy_to(h_du_dp);
     }
     if (h_du_dl) {
-        gpuErrchk(cudaMemcpy(h_du_dl, d_du_dl, N * sizeof(*h_du_dl), cudaMemcpyDeviceToHost));
-        gpuErrchk(cudaFree(d_du_dl));
+        d_du_dl->copy_to(h_du_dl);
     }
     if (h_u) {
-        gpuErrchk(cudaMemcpy(h_u, d_u, N * sizeof(*h_u), cudaMemcpyDeviceToHost));
-        gpuErrchk(cudaFree(d_u));
+        d_u->copy_to(h_u);
     }
-
-    // inputs
-    gpuErrchk(cudaFree(d_x));
-    gpuErrchk(cudaFree(d_p));
-    gpuErrchk(cudaFree(d_box));
 };
 
 void Potential::execute_host_du_dx(
