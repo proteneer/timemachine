@@ -29,9 +29,9 @@ void Potential::execute_host(
     DeviceBuffer<double> d_p(P);
     DeviceBuffer<double> d_box(D * D);
 
-    gpuErrchk(cudaMemcpy(d_x.data, h_x, d_x.size, cudaMemcpyHostToDevice));
-    gpuErrchk(cudaMemcpy(d_p.data, h_p, d_p.size, cudaMemcpyHostToDevice));
-    gpuErrchk(cudaMemcpy(d_box.data, h_box, d_box.size, cudaMemcpyHostToDevice));
+    d_x.copy_from(h_x);
+    d_p.copy_from(h_p);
+    d_box.copy_from(h_box);
 
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dx;
     std::unique_ptr<DeviceBuffer<unsigned long long>> d_du_dp;
@@ -71,16 +71,16 @@ void Potential::execute_host(
 
     // outputs
     if (h_du_dx) {
-        gpuErrchk(cudaMemcpy(h_du_dx, d_du_dx->data, d_du_dx->size, cudaMemcpyDeviceToHost));
+        d_du_dx->copy_to(h_du_dx);
     }
     if (h_du_dp) {
-        gpuErrchk(cudaMemcpy(h_du_dp, d_du_dp->data, d_du_dp->size, cudaMemcpyDeviceToHost));
+        d_du_dp->copy_to(h_du_dp);
     }
     if (h_du_dl) {
-        gpuErrchk(cudaMemcpy(h_du_dl, d_du_dl->data, d_du_dl->size, cudaMemcpyDeviceToHost));
+        d_du_dl->copy_to(h_du_dl);
     }
     if (h_u) {
-        gpuErrchk(cudaMemcpy(h_u, d_u->data, d_u->size, cudaMemcpyDeviceToHost));
+        d_u->copy_to(h_u);
     }
 };
 
