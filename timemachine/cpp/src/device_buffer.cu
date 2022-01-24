@@ -10,9 +10,9 @@ DeviceBuffer<T>::DeviceBuffer(const std::size_t length) : size(length * sizeof(T
 template <typename T> DeviceBuffer<T>::~DeviceBuffer() { gpuErrchk(cudaFree(data)); }
 
 template <typename T> T *DeviceBuffer<T>::allocate_(const std::size_t size) {
-    T *data;
-    gpuErrchk(cudaMalloc(&data, size));
-    return data;
+    T *buffer;
+    gpuErrchk(cudaMalloc(&buffer, size));
+    return buffer;
 }
 
 template class DeviceBuffer<double>;
