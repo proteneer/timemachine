@@ -162,7 +162,7 @@ void NonbondedPairs<RealType, Negated, Interpolated>::execute_device(
     }
 }
 
-// TODO: this implementation is duplicated from NonbondedDense. Worth adding NonbondedBase?
+// TODO: this implementation is duplicated from NonbondedAllPairs
 template <typename RealType, bool Negated, bool Interpolated>
 void NonbondedPairs<RealType, Negated, Interpolated>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {

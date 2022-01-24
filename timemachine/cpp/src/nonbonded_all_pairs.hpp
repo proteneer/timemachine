@@ -25,7 +25,7 @@ typedef void (*k_nonbonded_fn)(
     unsigned long long *__restrict__ du_dl_buffer,
     unsigned long long *__restrict__ u_buffer);
 
-template <typename RealType, bool Interpolated> class NonbondedDense : public Potential {
+template <typename RealType, bool Interpolated> class NonbondedAllPairs : public Potential {
 
 private:
     std::array<k_nonbonded_fn, 16> kernel_ptrs_;
@@ -83,14 +83,14 @@ public:
     void set_nblist_padding(double val);
     void disable_hilbert_sort();
 
-    NonbondedDense(
+    NonbondedAllPairs(
         const std::vector<int> &lambda_plane_idxs,  // N
         const std::vector<int> &lambda_offset_idxs, // N
         const double beta,
         const double cutoff,
         const std::string &kernel_src);
 
-    ~NonbondedDense();
+    ~NonbondedAllPairs();
 
     virtual void execute_device(
         const int N,

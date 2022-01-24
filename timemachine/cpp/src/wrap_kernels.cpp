@@ -14,8 +14,6 @@
 #include "integrator.hpp"
 #include "neighborlist.hpp"
 #include "nonbonded.hpp"
-#include "nonbonded_dense.hpp"
-#include "nonbonded_pairs.hpp"
 #include "periodic_torsion.hpp"
 #include "potential.hpp"
 #include "rmsd_align.hpp"

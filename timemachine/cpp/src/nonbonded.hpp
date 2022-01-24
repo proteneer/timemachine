@@ -1,6 +1,6 @@
 #pragma once
 
-#include "nonbonded_dense.hpp"
+#include "nonbonded_all_pairs.hpp"
 #include "nonbonded_pairs.hpp"
 #include "potential.hpp"
 #include <vector>
@@ -10,7 +10,7 @@ namespace timemachine {
 template <typename RealType, bool Interpolated> class Nonbonded : public Potential {
 
 private:
-    NonbondedDense<RealType, Interpolated> dense_;
+    NonbondedAllPairs<RealType, Interpolated> dense_;
 
     static const bool Negated = true;
     NonbondedPairs<RealType, Negated, Interpolated> exclusions_; // implement exclusions as negated NonbondedPairs

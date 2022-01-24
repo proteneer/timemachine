@@ -10,10 +10,10 @@
 
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
-#include "nonbonded_dense.hpp"
+#include "nonbonded_all_pairs.hpp"
 #include "vendored/hilbert.h"
 
-#include "k_nonbonded_dense.cuh"
+#include "k_nonbonded_all_pairs.cuh"
 
 #include <fstream>
 #include <streambuf>
@@ -22,7 +22,7 @@
 namespace timemachine {
 
 template <typename RealType, bool Interpolated>
-NonbondedDense<RealType, Interpolated>::NonbondedDense(
+NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     const std::vector<int> &lambda_plane_idxs,  // [N]
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
@@ -138,7 +138,7 @@ NonbondedDense<RealType, Interpolated>::NonbondedDense(
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
 };
 
-template <typename RealType, bool Interpolated> NonbondedDense<RealType, Interpolated>::~NonbondedDense() {
+template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Interpolated>::~NonbondedAllPairs() {
 
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
@@ -173,16 +173,16 @@ template <typename RealType, bool Interpolated> NonbondedDense<RealType, Interpo
 };
 
 template <typename RealType, bool Interpolated>
-void NonbondedDense<RealType, Interpolated>::set_nblist_padding(double val) {
+void NonbondedAllPairs<RealType, Interpolated>::set_nblist_padding(double val) {
     nblist_padding_ = val;
 }
 
-template <typename RealType, bool Interpolated> void NonbondedDense<RealType, Interpolated>::disable_hilbert_sort() {
+template <typename RealType, bool Interpolated> void NonbondedAllPairs<RealType, Interpolated>::disable_hilbert_sort() {
     disable_hilbert_ = true;
 }
 
 template <typename RealType, bool Interpolated>
-void NonbondedDense<RealType, Interpolated>::hilbert_sort(
+void NonbondedAllPairs<RealType, Interpolated>::hilbert_sort(
     const double *d_coords, const double *d_box, cudaStream_t stream) {
 
     const int tpb = 32;
@@ -217,7 +217,7 @@ void __global__ k_arange(int N, unsigned int *arr) {
 }
 
 template <typename RealType, bool Interpolated>
-void NonbondedDense<RealType, Interpolated>::execute_device(
+void NonbondedAllPairs<RealType, Interpolated>::execute_device(
     const int N,
     const int P,
     const double *d_x,
@@ -248,14 +248,14 @@ void NonbondedDense<RealType, Interpolated>::execute_device(
 
     if (N != N_) {
         std::cout << N << " " << N_ << std::endl;
-        throw std::runtime_error("NonbondedDense::execute_device() N != N_");
+        throw std::runtime_error("NonbondedAllPairs::execute_device() N != N_");
     }
 
     const int M = Interpolated ? 2 : 1;
 
     if (P != M * N_ * 3) {
         std::cout << P << " " << N_ << std::endl;
-        throw std::runtime_error("NonbondedDense::execute_device() P != M*N_*3");
+        throw std::runtime_error("NonbondedAllPairs::execute_device() P != M*N_*3");
     }
 
     // identify which tiles contain interpolated parameters
@@ -410,7 +410,7 @@ void NonbondedDense<RealType, Interpolated>::execute_device(
 }
 
 template <typename RealType, bool Interpolated>
-void NonbondedDense<RealType, Interpolated>::du_dp_fixed_to_float(
+void NonbondedAllPairs<RealType, Interpolated>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     // In the interpolated case we have derivatives for the initial and final parameters
@@ -426,9 +426,9 @@ void NonbondedDense<RealType, Interpolated>::du_dp_fixed_to_float(
     }
 }
 
-template class NonbondedDense<double, true>;
-template class NonbondedDense<float, true>;
-template class NonbondedDense<double, false>;
-template class NonbondedDense<float, false>;
+template class NonbondedAllPairs<double, true>;
+template class NonbondedAllPairs<float, true>;
+template class NonbondedAllPairs<double, false>;
+template class NonbondedAllPairs<float, false>;
 
 } // namespace timemachine
