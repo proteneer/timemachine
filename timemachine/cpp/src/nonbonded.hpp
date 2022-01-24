@@ -1,7 +1,7 @@
 #pragma once
 
 #include "nonbonded_all_pairs.hpp"
-#include "nonbonded_pairs.hpp"
+#include "nonbonded_pair_list.hpp"
 #include "potential.hpp"
 #include <vector>
 
@@ -13,7 +13,7 @@ private:
     NonbondedAllPairs<RealType, Interpolated> dense_;
 
     static const bool Negated = true;
-    NonbondedPairs<RealType, Negated, Interpolated> exclusions_; // implement exclusions as negated NonbondedPairs
+    NonbondedPairList<RealType, Negated, Interpolated> exclusions_; // implement exclusions as negated NonbondedPairList
 
 public:
     // these are marked public but really only intended for testing.

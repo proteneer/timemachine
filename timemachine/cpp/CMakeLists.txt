@@ -43,7 +43,7 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/vendored/hilbert.cpp
   src/nonbonded.cu
   src/nonbonded_all_pairs.cu
-  src/nonbonded_pairs.cu
+  src/nonbonded_pair_list.cu
   src/neighborlist.cu
   src/harmonic_bond.cu
   src/harmonic_angle.cu
