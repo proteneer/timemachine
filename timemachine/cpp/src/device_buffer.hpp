@@ -12,9 +12,6 @@ public:
     const size_t size;
 
     T *const data;
-
-private:
-    T *allocate_(size_t size);
 };
 
 } // namespace timemachine
