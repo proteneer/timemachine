@@ -10,7 +10,7 @@
 
 #include "fixed_point.hpp"
 #include "gpu_utils.cuh"
-#include "nonbonded_all_pairs.hpp"
+#include "nonbonded_interaction_group.hpp"
 #include "vendored/hilbert.h"
 
 #include "k_nonbonded.cuh"
@@ -22,17 +22,12 @@
 namespace timemachine {
 
 template <typename RealType, bool Interpolated>
-NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
+NonbondedInteractionGroup<RealType, Interpolated>::NonbondedInteractionGroup(
     const std::vector<int> &lambda_plane_idxs,  // [N]
     const std::vector<int> &lambda_offset_idxs, // [N]
     const double beta,
     const double cutoff,
-    const std::string &kernel_src
-    // const std::string &transform_lambda_charge,
-    // const std::string &transform_lambda_sigma,
-    // const std::string &transform_lambda_epsilon,
-    // const std::string &transform_lambda_w
-    )
+    const std::string &kernel_src)
     : N_(lambda_offset_idxs.size()), cutoff_(cutoff), nblist_(lambda_offset_idxs.size()), beta_(beta),
       d_sort_storage_(nullptr), d_sort_storage_bytes_(0), nblist_padding_(0.1), disable_hilbert_(false),
       kernel_ptrs_({// enumerate over every possible kernel combination
@@ -138,7 +133,8 @@ NonbondedAllPairs<RealType, Interpolated>::NonbondedAllPairs(
     gpuErrchk(cudaMalloc(&d_sort_storage_, d_sort_storage_bytes_));
 };
 
-template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Interpolated>::~NonbondedAllPairs() {
+template <typename RealType, bool Interpolated>
+NonbondedInteractionGroup<RealType, Interpolated>::~NonbondedInteractionGroup() {
 
     gpuErrchk(cudaFree(d_lambda_plane_idxs_));
     gpuErrchk(cudaFree(d_lambda_offset_idxs_));
@@ -173,16 +169,17 @@ template <typename RealType, bool Interpolated> NonbondedAllPairs<RealType, Inte
 };
 
 template <typename RealType, bool Interpolated>
-void NonbondedAllPairs<RealType, Interpolated>::set_nblist_padding(double val) {
+void NonbondedInteractionGroup<RealType, Interpolated>::set_nblist_padding(double val) {
     nblist_padding_ = val;
 }
 
-template <typename RealType, bool Interpolated> void NonbondedAllPairs<RealType, Interpolated>::disable_hilbert_sort() {
+template <typename RealType, bool Interpolated>
+void NonbondedInteractionGroup<RealType, Interpolated>::disable_hilbert_sort() {
     disable_hilbert_ = true;
 }
 
 template <typename RealType, bool Interpolated>
-void NonbondedAllPairs<RealType, Interpolated>::hilbert_sort(
+void NonbondedInteractionGroup<RealType, Interpolated>::hilbert_sort(
     const double *d_coords, const double *d_box, cudaStream_t stream) {
 
     const int tpb = 32;
@@ -209,7 +206,7 @@ void NonbondedAllPairs<RealType, Interpolated>::hilbert_sort(
 }
 
 template <typename RealType, bool Interpolated>
-void NonbondedAllPairs<RealType, Interpolated>::execute_device(
+void NonbondedInteractionGroup<RealType, Interpolated>::execute_device(
     const int N,
     const int P,
     const double *d_x,
@@ -240,14 +237,14 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 
     if (N != N_) {
         std::cout << N << " " << N_ << std::endl;
-        throw std::runtime_error("NonbondedAllPairs::execute_device() N != N_");
+        throw std::runtime_error("NonbondedInteractionGroup::execute_device() N != N_");
     }
 
     const int M = Interpolated ? 2 : 1;
 
     if (P != M * N_ * 3) {
         std::cout << P << " " << N_ << std::endl;
-        throw std::runtime_error("NonbondedAllPairs::execute_device() P != M*N_*3");
+        throw std::runtime_error("NonbondedInteractionGroup::execute_device() P != M*N_*3");
     }
 
     // identify which tiles contain interpolated parameters
@@ -402,7 +399,7 @@ void NonbondedAllPairs<RealType, Interpolated>::execute_device(
 }
 
 template <typename RealType, bool Interpolated>
-void NonbondedAllPairs<RealType, Interpolated>::du_dp_fixed_to_float(
+void NonbondedInteractionGroup<RealType, Interpolated>::du_dp_fixed_to_float(
     const int N, const int P, const unsigned long long *du_dp, double *du_dp_float) {
 
     // In the interpolated case we have derivatives for the initial and final parameters
@@ -418,9 +415,9 @@ void NonbondedAllPairs<RealType, Interpolated>::du_dp_fixed_to_float(
     }
 }
 
-template class NonbondedAllPairs<double, true>;
-template class NonbondedAllPairs<float, true>;
-template class NonbondedAllPairs<double, false>;
-template class NonbondedAllPairs<float, false>;
+template class NonbondedInteractionGroup<double, true>;
+template class NonbondedInteractionGroup<float, true>;
+template class NonbondedInteractionGroup<double, false>;
+template class NonbondedInteractionGroup<float, false>;
 
 } // namespace timemachine
