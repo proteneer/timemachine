@@ -626,8 +626,14 @@ def test_apply_bond_charge_corrections():
 
     for _ in range(n_random_tests):
         n_atoms = np.random.randint(10, 50)
-        initial_charges = np.random.randn(n_atoms)
-        initial_net_charge = np.sum(initial_charges)
+
+        # random initial charges with integral net charge
+        initial_net_charge = np.random.randint(-5, +6)
+        __initial_charges = np.random.randn(n_atoms)
+        _initial_charges = __initial_charges - np.mean(__initial_charges)
+        assert np.isclose(np.sum(_initial_charges), 0)
+        initial_charges = _initial_charges + (initial_net_charge / n_atoms)
+        assert np.isclose(np.sum(initial_charges), initial_net_charge, atol=1e-5), "initial net charge not integral"
 
         # arbitrary: duplicates okay, reversals okay, symmetry not required
         n_directed_bonds = np.random.randint(50, 100)
