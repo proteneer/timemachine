@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import pickle
+from collections import Counter
 
 from rdkit import Chem
 from ff.handlers.utils import sort_tuple, match_smirks as rd_match_smirks
@@ -250,6 +251,17 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
 
     assert net_charge_is_integral
     assert net_charge_is_unchanged
+
+    # print some safety warnings
+    directed_bonds = Counter([tuple(b) for b in bond_idxs])
+    undirected_bonds = Counter([tuple(sorted(b)) for b in bond_idxs])
+
+    if max(directed_bonds.values()) > 1:
+        duplicates = [bond for (bond, count) in directed_bonds.items() if count > 1]
+        print(UserWarning(f"Duplicate directed bonds! {duplicates}"))
+    elif max(undirected_bonds.values()) > 1:
+        duplicates = [bond for (bond, count) in undirected_bonds.items() if count > 1]
+        print(UserWarning(f"Duplicate undirected bonds! {duplicates}"))
 
     return final_charges
 
