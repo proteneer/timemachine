@@ -232,15 +232,24 @@ def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
         `(..., bond_idxs[perm], deltas[perm])`
         means the same thing for any permutation `perm`
     """
-    num_bonds = len(bond_idxs)
 
-    assert bond_idxs.shape[1] == 2
-    assert len(deltas) == num_bonds
-
+    # apply bond charge corrections
     incremented = ops.index_add(initial_charges, bond_idxs[:, 0], +deltas)
     decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)
-
     final_charges = decremented
+
+    # make some safety assertions
+    assert bond_idxs.shape[1] == 2
+    assert len(deltas) == len(bond_idxs)
+
+    net_charge = jnp.sum(initial_charges)
+    net_charge_is_integral = jnp.isclose(net_charge, jnp.round(net_charge), atol=1e-5)
+
+    final_net_charge = jnp.sum(final_charges)
+    net_charge_is_unchanged = jnp.isclose(final_net_charge, net_charge, atol=1e-5)
+
+    assert net_charge_is_integral
+    assert net_charge_is_unchanged
 
     return final_charges
 
