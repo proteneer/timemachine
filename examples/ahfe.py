@@ -72,7 +72,7 @@ for bp in host_bps:
 
 ff = Forcefield(ff_handlers)
 gbt = topology.BaseTopology(romol, ff)
-hgt = topology.HostGuestTopology(host_p, gbt)
+hgt = topology.HostGuestTopology(host_bps, gbt)
 
 # setup the parameter handlers for the ligand
 tuples = [
