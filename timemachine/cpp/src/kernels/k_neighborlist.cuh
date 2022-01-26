@@ -168,7 +168,7 @@ void __global__ k_find_blocks_with_ixns(
     const double *__restrict__ box,
     unsigned int *__restrict__ interactionCount, // number of tiles that have interactions
     int *__restrict__ interactingTiles,          // the row block idx of the tile that is interacting
-    unsigned int *__restrict__ interactingAtoms, // the col block of the atoms that are interacting
+    unsigned int *__restrict__ interactingAtoms, // [NR * warp_size] atom indices interacting with each row block
     unsigned int *__restrict__ trim_atoms,       // the left-over trims that will later be compacted
     const double cutoff) {
 
