@@ -146,8 +146,8 @@ This is launched with a threadblock size of 32, (i.e. one warp).
 
 Each block proceeds as follows:
 
-1. Loads its own row block (32 atoms).
-2. Compare the row block against 32 other column blocks via bounding box tests.
+1. Loads its own row block (tile_size = 32 atoms).
+2. Compare the row block against tile_size = 32 other column blocks via bounding box tests.
 3. Determine which blocks potentially interact using warp-level programming.
 4. Loop over each interacting block j, and see which row block atoms may interact with j's bbox.
 5. For atoms that interact, do a fine-grained comparison of each row block again against each col block atom.
