@@ -3,7 +3,8 @@
 #include "kernel_utils.cuh"
 
 #define FULL_MASK 0xffffffff
-#define TILESIZE 32
+
+const int tile_size = 32;
 
 template <typename RealType>
 void __global__ k_find_block_bounds(
@@ -32,7 +33,7 @@ void __global__ k_find_block_bounds(
     const RealType inv_bx = 1 / bx;
     const RealType inv_by = 1 / by;
     const RealType inv_bz = 1 / bz;
-    const int base = index * TILESIZE;
+    const int base = index * tile_size;
 
     RealType pos_x = coords[base * 3 + 0];
     RealType pos_y = coords[base * 3 + 1];
@@ -46,7 +47,7 @@ void __global__ k_find_block_bounds(
     RealType maxPos_y = pos_y;
     RealType maxPos_z = pos_z;
 
-    const int last = min(base + TILESIZE, N);
+    const int last = min(base + tile_size, N);
     for (int i = base + 1; i < last; i++) {
         pos_x = coords[i * 3 + 0];
         pos_y = coords[i * 3 + 1];
@@ -203,7 +204,7 @@ void __global__ k_find_blocks_with_ixns(
     RealType pos_i_y = atom_i_idx < NR ? row_coords[atom_i_idx * 3 + 1] : 0;
     RealType pos_i_z = atom_i_idx < NR ? row_coords[atom_i_idx * 3 + 2] : 0;
 
-    const int NUM_COL_BLOCKS = (NC + TILESIZE - 1) / TILESIZE;
+    const int NUM_COL_BLOCKS = (NC + tile_size - 1) / tile_size;
 
     RealType bx = box[0 * 3 + 0];
     RealType by = box[1 * 3 + 1];
@@ -232,7 +233,7 @@ void __global__ k_find_blocks_with_ixns(
 
     const RealType cutoff_squared = static_cast<RealType>(cutoff) * static_cast<RealType>(cutoff);
 
-    int col_block_base = blockIdx.y * TILESIZE;
+    int col_block_base = blockIdx.y * tile_size;
 
     int col_block_idx = col_block_base + indexInWarp;
     bool include_col_block = (col_block_idx < NUM_COL_BLOCKS) && (!UPPER_TRIAG || col_block_idx >= row_block_idx);
