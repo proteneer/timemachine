@@ -178,8 +178,8 @@ void __global__ k_find_blocks_with_ixns(
     const int indexInWarp = threadIdx.x % warp_size;
     const int warpMask = (1 << indexInWarp) - 1;
 
-    __shared__ int ixn_j_buffer
-        [64]; // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
+    // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
+    __shared__ int ixn_j_buffer[2 * warp_size];
 
     // initialize
     ixn_j_buffer[threadIdx.x] = NC;
