@@ -388,20 +388,22 @@ if __name__ == "__main__":
 
         suffix = f"{mol_name}_{epoch}"
 
+        # Order of these simulations should match the order in which predictions are computed to ensure
+        # efficient use of parallelism.
         return {
-            "solvent_decouple": binding_model_solvent_decouple.simulate_futures(
-                ordered_params,
-                mol,
-                solvent_x0,
-                solvent_box0,
-                prefix="solvent_decouple_" + suffix,
-            ),
             "solvent_conversion": binding_model_solvent_conversion.simulate_futures(
                 ordered_params,
                 mol,
                 solvent_x0,
                 solvent_box0,
                 prefix="solvent_conversion_" + suffix,
+            ),
+            "solvent_decouple": binding_model_solvent_decouple.simulate_futures(
+                ordered_params,
+                mol,
+                solvent_x0,
+                solvent_box0,
+                prefix="solvent_decouple_" + suffix,
             ),
             "complex_conversion": binding_model_complex_conversion.simulate_futures(
                 ordered_params,
@@ -425,18 +427,11 @@ if __name__ == "__main__":
         }
 
     def predict_dG(results: dict) -> RABFEResult:
-        dG_complex_decouple, dG_complex_decouple_error = binding_model_complex_decouple.predict_from_futures(
-            results["complex_decouple"][0],
+        dG_solvent_conversion, dG_solvent_conversion_error = binding_model_solvent_conversion.predict_from_futures(
+            results["solvent_conversion"][0],
             results["mol"],
-            results["blocker"],
-            results["complex_decouple"][1],
-            results["complex_decouple"][2],
-        )
-        dG_complex_conversion, dG_complex_conversion_error = binding_model_complex_conversion.predict_from_futures(
-            results["complex_conversion"][0],
-            results["mol"],
-            results["complex_conversion"][1],
-            results["complex_conversion"][2],
+            results["solvent_conversion"][1],
+            results["solvent_conversion"][2],
         )
         dG_solvent_decouple, dG_solvent_decouple_error = binding_model_solvent_decouple.predict_from_futures(
             results["solvent_decouple"][0],
@@ -444,12 +439,18 @@ if __name__ == "__main__":
             results["solvent_decouple"][1],
             results["solvent_decouple"][2],
         )
-
-        dG_solvent_conversion, dG_solvent_conversion_error = binding_model_solvent_conversion.predict_from_futures(
-            results["solvent_conversion"][0],
+        dG_complex_conversion, dG_complex_conversion_error = binding_model_complex_conversion.predict_from_futures(
+            results["complex_conversion"][0],
             results["mol"],
-            results["solvent_conversion"][1],
-            results["solvent_conversion"][2],
+            results["complex_conversion"][1],
+            results["complex_conversion"][2],
+        )
+        dG_complex_decouple, dG_complex_decouple_error = binding_model_complex_decouple.predict_from_futures(
+            results["complex_decouple"][0],
+            results["mol"],
+            results["blocker"],
+            results["complex_decouple"][1],
+            results["complex_decouple"][2],
         )
 
         rabfe_result = RABFEResult(
