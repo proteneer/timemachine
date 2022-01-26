@@ -173,7 +173,7 @@ void __global__ k_find_blocks_with_ixns(
     unsigned int *__restrict__ trim_atoms,       // the left-over trims that will later be compacted
     const double cutoff) {
 
-    static_assert(tile_size == warp_size, "must have tile_size == warp_size");
+    static_assert(tile_size == warp_size, "tile_size != warp_size is not currently supported");
 
     const int indexInWarp = threadIdx.x % warp_size;
     const int warpMask = (1 << indexInWarp) - 1;
