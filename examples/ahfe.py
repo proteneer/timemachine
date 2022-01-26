@@ -4,142 +4,112 @@ import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from fe import pdb_writer
-from fe import topology
-from fe.utils import get_romol_conf
-from md import builders
 
-from timemachine.lib import potentials, custom_ops
-from timemachine.lib import LangevinIntegrator
-
-import functools
-import jax
+import timemachine
 
 from ff import Forcefield
-
-from ff.handlers import nonbonded, bonded, openmm_deserializer
-
+from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
 
-# 1. build water box
-# 2. build ligand
-# 3. convert to recipe
+from fe import topology
+from fe.utils import get_romol_conf
 
-# construct an RDKit molecule of aspirin
-# note: not using OpenFF Molecule because want to avoid the dependency (YTZ?)
+from md import builders
+from md.moves import NPTMove
+from md.states import CoordsVelBox
+
+from pathlib import Path
+
+from tqdm import tqdm
+
+# force field
+tm_path = Path(timemachine.__path__[0]).parent
+path_to_ff = tm_path / "ff/params/smirnoff_1_1_0_ccc.py"
+with open(path_to_ff, "r") as f:
+    ff_handlers = deserialize_handlers(f.read())
+
+# ligand
 romol = Chem.AddHs(Chem.MolFromSmiles("CC(=O)OC1=CC=CC=C1C(=O)O"))
-
 ligand_masses = [a.GetMass() for a in romol.GetAtoms()]
-
-# generate conformers
 AllChem.EmbedMolecule(romol)
-
-# extract the 0th conformer
 ligand_coords = get_romol_conf(romol)
 
-# construct a 4-nanometer water box (from openmmtools approach: selecting out
-#   of a large pre-equilibrated water box snapshot)
+# water box
 system, host_coords, box, omm_topology = builders.build_water_system(4.0)
-
 host_bps, host_masses = openmm_deserializer.deserialize_system(system, cutoff=1.2)
-
-combined_masses = np.concatenate([host_masses, ligand_masses])
-
-# write some conformations into this PDB file
-writer = pdb_writer.PDBWriter([omm_topology, romol], "debug.pdb")
-
-# note the order in which the coordinates are concatenated in this step --
-#   in a later step we will need to combine recipes in the same order
-combined_coords = np.concatenate([host_coords, ligand_coords])
-
 num_host_atoms = host_coords.shape[0]
 
-# note: .py file rather than .offxml file
-# note: _ccc suffix means "correctable charge corrections"
-ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+# water box + ligand
+masses = np.concatenate([host_masses, ligand_masses])
+coords = np.concatenate([host_coords, ligand_coords])
 
+# alchemical topologies / potentials
 final_potentials = []
-final_vjp_and_handles = []
-
-# keep the bonded terms in the host the same.
-# but we keep the nonbonded term for a subsequent modification
-for bp in host_bps:
-    if isinstance(bp, potentials.Nonbonded):
-        host_p = bp
-    else:
-        final_potentials.append(bp)
-        final_vjp_and_handles.append(None)
-
 ff = Forcefield(ff_handlers)
 gbt = topology.BaseTopology(romol, ff)
 hgt = topology.HostGuestTopology(host_bps, gbt)
 
-# setup the parameter handlers for the ligand
-tuples = [
+fn_handle_tuples = [
     [hgt.parameterize_harmonic_bond, [ff.hb_handle]],
     [hgt.parameterize_harmonic_angle, [ff.ha_handle]],
     [hgt.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]],
     [hgt.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]],
 ]
 
-# instantiate the vjps while parameterizing (forward pass)
-for fn, handles in tuples:
-    params, vjp_fn, potential = jax.vjp(fn, *[h.params for h in handles], has_aux=True)
+for fn, handles in fn_handle_tuples:
+    params, potential = fn(*[h.params for h in handles])
     final_potentials.append(potential.bind(params))
-    final_vjp_and_handles.append((vjp_fn, handles))
 
-# note: lambda goes from 0 to 1, 0 being fully-interacting and 1.0 being fully interacting.
-for final_lamb in np.linspace(0, 1, 8):
+# MD
+n_steps_per_move = 50
+n_prod_samples = 100
+n_equil_moves = 50
 
-    seed = 2020
+temperature = 300
+dt = 1.5e-3
+friction = 10
+pressure = 1.0
+seed = 2022
 
-    # note: the .impl() call at the end returns a pickle-able version of the
-    #   wrapper function -- since contexts are not pickle-able -- which will
-    #   be useful later in timemachine's multi-device parallelization strategy)
-    # note: OpenMM unit system used throughout
-    #   (temperature: kelvin, timestep: picosecond, collision_rate: picosecond^-1)
-    intg = LangevinIntegrator(300.0, 1.5e-3, 1.0, combined_masses, seed).impl()
 
-    x0 = combined_coords
-    v0 = np.zeros_like(x0)
+def construct_npt_move(lam, friction=1.0):
+    return NPTMove(final_potentials, lam, masses, temperature, pressure, n_steps_per_move, seed, friction=friction)
 
-    u_impls = []
 
-    for bp in final_potentials:
-        # note: YTZ recommends np.float32 here
-        # note: difference between .bound_impl() and .impl()
-        fn = bp.bound_impl(precision=np.float32)
+# collect samples from p(x | lam) for lam in lambda_schedule
+lambda_schedule = np.linspace(0, 1, 8)
+trajs = []
 
-        # note: fn.execute(...) rather than fn(...)
-        # TODO: what was the 3rd argument of fn.execute(...)?
-        du_dx, du_dl, u = fn.execute(x0, box, 100.0)
+for lam in lambda_schedule:
+    print("lam = ", lam)
 
-        # checking energy gradient norm can be more diagnostic than checking
-        #   energy directly
-        max_norm_water = np.amax(np.linalg.norm(du_dx[:num_host_atoms], axis=0))
-        max_norm_ligand = np.amax(np.linalg.norm(du_dx[num_host_atoms:], axis=0))
+    x0 = CoordsVelBox(coords, np.zeros_like(coords), box)
 
-        u_impls.append(fn)
+    # initial insertion step to remove clashes
+    # TODO: this is currently very slow, since NPTMove doesn't allow lambda to be set on the fly
+    #   --> modify NPTMove so that this can be fast
+    x_relaxed = x0
+    declash_schedule = np.linspace(1.0, lam, 2)
+    trange = tqdm(declash_schedule, desc="resolving clashes")
+    for noneq_lam in trange:
+        npt = construct_npt_move(noneq_lam, friction=np.inf)
+        x_relaxed = npt.move(x_relaxed)
 
-    # context components: positions, velocities, box, integrator, energy fxns
-    ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
+    # equilibration
+    x_equil = x_relaxed
+    assert npt.lamb == lam
+    trange = tqdm(range(n_equil_moves), desc="equilibration")
+    for _ in trange:
+        x_equil = npt.move(x_equil)
 
-    # initial insertion step to remove clashes, note that for production we probably
-    # want to adjust the box size slighty to accomodate for a uniform water density
-    # since we're doing an NVT simulation.
-    for lamb_idx, lamb in enumerate(np.linspace(1.0, final_lamb, 1000)):
-        # note: unlike in OpenMM, .step() accepts a float (for lambda) and does
-        #   not accept an integer (for n_steps) -- .step() takes 1 step at a time
-        ctxt.step(lamb)
+    # production
+    traj = [x_equil]
+    trange = tqdm(range(n_prod_samples - 1), desc="production")
+    for _ in trange:
+        traj.append(npt.move(traj[-1]))
+    trajs.append(traj)
 
-    # print("insertion energy", ctxt._get_u_t_minus_1())
-
-    # note: these 5000 steps are "equilibration", before we attach a reporter /
-    #   "observable" to the context and start running "production"
-    for _ in range(5000):
-        ctxt.step(final_lamb)
-
-    # print("equilibrium energy", ctxt._get_u_t_minus_1())
-
-    # TODO: what was the second argument -- reporting interval in steps?
-
+# analyze
+# TODO: define u(x, lam)
+# TODO: define work(xs, from_lam, to_lam)
+# TODO: \sum_i BAR(w_F=work(xs[i], lam[i], lam[i+1]), w_R=work(xs[i+1], lam[i+1], lam[i]))
