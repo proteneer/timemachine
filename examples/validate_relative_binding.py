@@ -31,7 +31,7 @@ from fe.free_energy_rabfe import (
 from fe.utils import convert_uM_to_kJ_per_mole
 from fe import model_rabfe
 from fe.model_utils import verify_rabfe_pair
-from fe.frames import endpoint_frames_only, all_frames
+from fe.frames import endpoint_frames_only, all_frames, no_frames
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
@@ -48,6 +48,7 @@ from md import builders, minimizer
 
 ALL_FRAMES = "all"
 ENDPOINTS_ONLY = "endpoints"
+NO_FRAMES = "none"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__file__)
@@ -172,7 +173,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--blocker_name", type=str, help="Name of the ligand the sdf file to be used as a blocker", required=True
     )
-    parser.add_argument("--frames_written", choices=[ALL_FRAMES, ENDPOINTS_ONLY], default=ENDPOINTS_ONLY)
+    parser.add_argument("--frames_written", choices=[ALL_FRAMES, ENDPOINTS_ONLY, NO_FRAMES], default=ENDPOINTS_ONLY)
 
     parser.add_argument("--protein_pdb", type=str, help="Path to the target pdb", required=True)
 
@@ -232,6 +233,8 @@ if __name__ == "__main__":
         frame_filter = all_frames
     elif cmd_args.frames_written == ENDPOINTS_ONLY:
         frame_filter = endpoint_frames_only
+    elif cmd_args.frames_written == NO_FRAMES:
+        frame_filter = no_frames
     assert frame_filter is not None, f"Unknown frame writing mode: {cmd_args.frames_written}"
 
     print("Reference Molecule:", blocker_mol.GetProp("_Name"), Chem.MolToSmiles(blocker_mol))

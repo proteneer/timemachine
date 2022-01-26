@@ -17,3 +17,7 @@ def endpoint_frames_only(results: List["SimulationResult"]) -> FrameIterator:
     if len(results) > 1:
         output.append((len(results) - 1, results[-1]))
     return output
+
+
+def no_frames(results: List["SimulationResult"]) -> FrameIterator:
+    return []
