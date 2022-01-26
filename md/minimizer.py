@@ -164,7 +164,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     return final_coords[:num_host_atoms]
 
 
-def equilibrate_complex(
+def equilibrate_host(
     mol: Chem.Mol,
     host_system: openmm.System,
     host_coords: np.array,
