@@ -143,35 +143,4 @@ for final_lamb in np.linspace(0, 1, 8):
     # print("equilibrium energy", ctxt._get_u_t_minus_1())
 
     # TODO: what was the second argument -- reporting interval in steps?
-    du_dl_obs = custom_ops.AvgPartialUPartialLambda(u_impls, 5)
 
-    du_dps = []
-    for ui in u_impls:
-        du_dp_obs = custom_ops.AvgPartialUPartialParam(ui, 5)
-        ctxt.add_observable(du_dp_obs)
-        du_dps.append(du_dp_obs)
-
-    ctxt.add_observable(du_dl_obs)
-
-    for _ in range(10000):
-        ctxt.step(final_lamb)
-
-    # print("final energy", ctxt._get_u_t_minus_1())
-
-    # print vector jacobian products back into the forcefield derivative
-    for du_dp_obs, vjp_and_handles in zip(du_dps, final_vjp_and_handles):
-        du_dp = du_dp_obs.avg_du_dp()
-
-        if vjp_and_handles:
-            vjp_fn, handles = vjp_and_handles
-            du_df = vjp_fn(du_dp)  # vjp into forcefield derivatives
-            for f_grad, h in zip(du_df, handles):
-                print("handle:", type(h).__name__)
-                for s, vv in zip(h.smirks, f_grad):
-                    if np.any(vv) != 0:
-                        print(s, vv)
-                print("\n")
-
-    du_dl = du_dl_obs.avg_du_dl()
-
-    print("lambda", final_lamb, "du_dl", du_dl)
