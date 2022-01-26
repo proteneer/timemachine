@@ -10,6 +10,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from ff.handlers import nonbonded, bonded
 from ff.handlers.deserialize import deserialize_handlers
+from ff.charges import AM1CCC_CHARGES
 
 import functools
 
@@ -560,6 +561,90 @@ def test_am1_differences():
                     print(" ")
 
             assert 0
+
+
+def test_compute_or_load_am1_charges():
+    """Loop over test ligands, asserting that charges are stored in expected property and that the same charges are
+    returned on repeated calls"""
+
+    # get some molecules
+    cache_key = "AM1Cache"
+    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    all_mols = [mol for mol in suppl]
+    all_mols = all_mols[:5]  # truncate so that whole test is ~ 10 seconds
+
+    # don't expect AM1 cache yet
+    for mol in all_mols:
+        assert not mol.HasProp(cache_key)
+
+    # compute charges once
+    fresh_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+
+    # expect each mol to have AM1 cache now
+    for mol in all_mols:
+        assert mol.HasProp(cache_key)
+
+    # expect the same charges as the first time around
+    cached_am1_charges = [nonbonded.compute_or_load_am1_charges(mol) for mol in all_mols]
+    for (fresh, cached) in zip(fresh_am1_charges, cached_am1_charges):
+        np.testing.assert_array_equal(fresh, cached)
+
+
+def test_bond_smirks_matches():
+    """Loop over test ligands, asserting that
+    * returned indices are in bounds
+    * returned bonds are present in the mol"""
+    # get some molecules
+    suppl = Chem.SDMolSupplier("tests/data/ligands_40.sdf", removeHs=False)
+    all_mols = [mol for mol in suppl]
+
+    # get some bond smirks
+    smirks_list = [smirks for (smirks, param) in AM1CCC_CHARGES["patterns"]]
+
+    for mol in all_mols:
+        bond_idxs, type_idxs = nonbonded.bond_smirks_matches(mol, smirks_list)
+
+        # assert indices in bounds
+        assert (bond_idxs.min() >= 0) and (bond_idxs.max() < mol.GetNumAtoms())
+        assert (type_idxs.min() >= 0) and (type_idxs.max() < len(smirks_list))
+
+        # assert that bond_idxs are present in the mol
+        bonds = set()
+        for bond in mol.GetBonds():
+            a, b = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+            bonds.add((a, b))
+            bonds.add((b, a))
+        for bond in bond_idxs:
+            assert tuple(bond) in bonds
+
+
+def test_apply_bond_charge_corrections():
+    """Assert that applying random bond charge corrections does not change net charge"""
+
+    n_random_tests = 100
+    np.random.seed(2022)
+
+    for _ in range(n_random_tests):
+        n_atoms = np.random.randint(10, 50)
+
+        # random initial charges with integral net charge
+        initial_net_charge = np.random.randint(-5, +6)
+        __initial_charges = np.random.randn(n_atoms)
+        _initial_charges = __initial_charges - np.mean(__initial_charges)
+        assert np.isclose(np.sum(_initial_charges), 0)
+        initial_charges = _initial_charges + (initial_net_charge / n_atoms)
+        assert np.isclose(np.sum(initial_charges), initial_net_charge, atol=1e-5), "initial net charge not integral"
+
+        # arbitrary: duplicates okay, reversals okay, symmetry not required
+        n_directed_bonds = np.random.randint(50, 100)
+        bonds = np.random.randint(0, n_atoms, size=(n_directed_bonds, 2))
+        deltas = np.random.randn(n_directed_bonds)
+
+        final_charges = nonbonded.apply_bond_charge_corrections(initial_charges, bonds, deltas)
+        final_net_charge = np.sum(final_charges)
+
+        assert (final_charges != initial_charges).any()
+        np.testing.assert_almost_equal(final_net_charge, initial_net_charge)
 
 
 def test_lennard_jones_handler():
