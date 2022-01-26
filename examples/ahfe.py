@@ -78,8 +78,7 @@ hgt = topology.HostGuestTopology(host_p, gbt)
 tuples = [
     [hgt.parameterize_harmonic_bond, [ff.hb_handle]],
     [hgt.parameterize_harmonic_angle, [ff.ha_handle]],
-    [hgt.parameterize_proper_torsion, [ff.pt_handle]],
-    [hgt.parameterize_improper_torsion, [ff.it_handle]],
+    [hgt.parameterize_periodic_torsion, [ff.pt_handle, ff.it_handle]],
     [hgt.parameterize_nonbonded, [ff.q_handle, ff.lj_handle]],
 ]
 
