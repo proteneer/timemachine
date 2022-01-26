@@ -152,7 +152,7 @@ if __name__ == "__main__":
         "--num_solvent_equil_steps",
         type=int,
         help="number of equilibration steps for each solvent lambda window",
-        default=200000,
+        default=50000,
     )
 
     parser.add_argument(
@@ -163,9 +163,9 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--num_complex_preequil_steps",
+        "--num_host_preequil_steps",
         type=int,
-        help="number of pre-equilibration steps for each complex lambda window",
+        help="number of pre-equilibration steps for the host systems",
         default=200000,
     )
 
@@ -240,12 +240,13 @@ if __name__ == "__main__":
     pressure = 1.0
     dt = 2.5e-3
 
-    cached_equil_path = "equil_{}_blocker_{}.pkl".format(
+    cached_equil_complex_path = "equil_{}_blocker_{}.pkl".format(
         os.path.basename(cmd_args.protein_pdb).split(".")[0], cmd_args.blocker_name
     ).replace(" ", "_")
+    cached_equil_solvent_path = "equil_solvent_blocker_{}.pkl".format(cmd_args.blocker_name).replace(" ", "_")
 
     # Generate an equilibrated reference structure to use.
-    complex_ref_x0, complex_ref_box0 = cache_wrapper(cached_equil_path, minimizer.equilibrate_complex)(
+    complex_ref_x0, complex_ref_box0 = cache_wrapper(cached_equil_complex_path, minimizer.equilibrate_host)(
         blocker_mol,
         complex_system,
         complex_coords,
@@ -253,7 +254,19 @@ if __name__ == "__main__":
         pressure,
         forcefield,
         complex_box,
-        cmd_args.num_complex_preequil_steps,
+        cmd_args.num_host_preequil_steps,
+    )
+
+    # Generate an equilibrated solvent box to use.
+    solvent_ref_x0, solvent_ref_box0 = cache_wrapper(cached_equil_solvent_path, minimizer.equilibrate_host)(
+        blocker_mol,
+        solvent_system,
+        solvent_coords,
+        temperature,
+        pressure,
+        forcefield,
+        solvent_box,
+        cmd_args.num_host_preequil_steps,
     )
 
     complex_conversion_schedule = construct_conversion_lambda_schedule(cmd_args.num_complex_conv_windows)
@@ -329,6 +342,7 @@ if __name__ == "__main__":
         mol_coords = get_romol_conf(mol)  # original coords
 
         num_complex_atoms = complex_coords.shape[0]
+        num_solvent_atoms = solvent_coords.shape[0]
 
         # Use core_idxs to generate
         R, t = rmsd.get_optimal_rotation_and_translation(
@@ -341,6 +355,9 @@ if __name__ == "__main__":
         ref_coords = complex_ref_x0[num_complex_atoms:]
         complex_host_coords = complex_ref_x0[:num_complex_atoms]
         complex_box0 = complex_ref_box0
+
+        solvent_host_coords = solvent_ref_x0[:num_solvent_atoms]
+        solvent_box0 = solvent_ref_box0
 
         # compute the free energy of swapping an interacting mol with a non-interacting reference mol
         complex_decouple_x0 = minimizer.minimize_host_4d(
@@ -364,9 +381,10 @@ if __name__ == "__main__":
         )
         complex_conversion_x0 = np.concatenate([complex_conversion_x0, aligned_mol_coords])
 
-        min_solvent_coords = minimizer.minimize_host_4d([mol], solvent_system, solvent_coords, forcefield, solvent_box)
+        min_solvent_coords = minimizer.minimize_host_4d(
+            [mol], solvent_system, solvent_host_coords, forcefield, solvent_box0
+        )
         solvent_x0 = np.concatenate([min_solvent_coords, mol_coords])
-        solvent_box0 = solvent_box
 
         suffix = f"{mol_name}_{epoch}"
 
