@@ -93,9 +93,7 @@ dt = 1.5e-3
 
 seed = 2022
 
-
-def construct_npt_move(lam):
-    return NPTMove(final_potentials, lam, masses, temperature, pressure, n_steps_per_move, seed)
+npt = NPTMove(final_potentials, 1.0, masses, temperature, pressure, n_steps_per_move, seed)
 
 
 # collect samples from p(x | lam) for lam in lambda_schedule
@@ -105,11 +103,10 @@ trajs = []
 
 for lam in lambda_schedule:
     print("lam = ", lam)
+    npt.lamb = lam
 
     x_equil = CoordsVelBox(coords, np.zeros_like(coords), box)
 
-    npt = construct_npt_move(lam)
-    assert npt.lamb == lam
     trange = tqdm(range(n_equil_moves), desc="equilibration")
     for _ in trange:
         x_equil = npt.move(x_equil)
