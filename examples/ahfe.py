@@ -76,21 +76,24 @@ bound_impls = [p.bound_impl(np.float32) for p in final_potentials]
 # reduced potential
 temperature = 300
 pressure = 1.0
+kBT = BOLTZ * temperature
+
+from fe.functional import construct_differentiable_interface_fast
+
+final_params = [p.params for p in final_potentials]
+U = construct_differentiable_interface_fast(final_potentials, final_params)
 
 
 def u(x: CoordsVelBox, lam: float) -> float:
-    # TODO: replace with SummedPotential
-    U_s = np.array([bp.execute(x.coords, x.box, lam)[-1] for bp in bound_impls])
-    u_s = U_s / (BOLTZ * temperature)
-    return np.sum(u_s)
+    return U(x.coords, final_params, x.box, lam) / kBT
 
 
 # MD
-n_steps_per_move = 50
+n_steps_per_move = 100
 n_prod_samples = 100
 n_equil_moves = 50
 
-dt = 1.5e-3
+dt = 1.5e-3  # TODO: increase using HMR
 
 npt = NPTMove(final_potentials, None, masses, temperature, pressure, n_steps_per_move, seed=2022)
 
