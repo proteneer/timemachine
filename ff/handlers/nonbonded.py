@@ -5,9 +5,11 @@ import jax
 import jax.numpy as jnp
 import networkx as nx
 import pickle
+from collections import Counter
 
 from rdkit import Chem
-from ff.handlers.utils import match_smirks, sort_tuple
+from ff.handlers.utils import sort_tuple, match_smirks as rd_match_smirks
+from ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
 from ff.handlers.serialize import SerializableMixIn
 from ff.handlers.bcc_aromaticity import AromaticityModel
 
@@ -150,7 +152,7 @@ def generate_nonbonded_idxs(mol, smirks):
     N = mol.GetNumAtoms()
     param_idxs = np.zeros(N, dtype=np.int32)
     for p_idx, patt in enumerate(smirks):
-        matches = match_smirks(mol, patt)
+        matches = rd_match_smirks(mol, patt)
         for m in matches:
             param_idxs[m[0]] = p_idx
 
@@ -159,6 +161,109 @@ def generate_nonbonded_idxs(mol, smirks):
 
 def parameterize_ligand(params, param_idxs):
     return params[param_idxs]
+
+
+def compute_or_load_am1_charges(mol):
+    """Unless already cached in mol's "AM1Cache" property, use OpenEye to compute AM1 partial charges."""
+
+    # check for cache
+    cache_key = "AM1Cache"
+    if not mol.HasProp(cache_key):
+        # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
+        # to be an issue that the atom ordering modifies the return values as well. A follow up
+        # with OpenEye is in order
+        # https://github.com/openforcefield/openff-toolkit/issues/983
+        am1_charges = list(oe_assign_charges(mol, "AM1"))
+
+        mol.SetProp(cache_key, base64.b64encode(pickle.dumps(am1_charges)))
+
+    else:
+        am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_key)))
+
+    return np.array(am1_charges)
+
+
+def bond_smirks_matches(mol, smirks_list):
+    """Return an array of ordered bonds and an array of their assigned types
+
+    Notes
+    -----
+    * Uses OpenEye for substructure searches
+    * Order within smirks_list matters
+        "First match wins."
+        For example, if bond (a,b) can be matched by smirks_list[2], smirks_list[5], ..., assign type 2
+    * Order within each smirks pattern matters
+        For example, "[#6:1]~[#1:2]" and "[#1:1]~[#6:2]" will match atom pairs in the opposite order
+    """
+    oemol = convert_to_oe(mol)
+    AromaticityModel.assign(oemol)
+
+    bond_idxs = []  # [B, 2]
+    type_idxs = []  # [B]
+
+    for type_idx, smirks in enumerate(smirks_list):
+        matches = oe_match_smirks(smirks, oemol)
+
+        for matched_indices in matches:
+            a, b = matched_indices[0], matched_indices[1]
+            forward_matched_bond = [a, b]
+            reverse_matched_bond = [b, a]
+
+            already_assigned = forward_matched_bond in bond_idxs or reverse_matched_bond in bond_idxs
+
+            if not already_assigned:
+                bond_idxs.append(forward_matched_bond)
+                type_idxs.append(type_idx)
+
+    return np.array(bond_idxs), np.array(type_idxs)
+
+
+def apply_bond_charge_corrections(initial_charges, bond_idxs, deltas):
+    """For an arbitrary collection of ordered bonds and associated increments `(a, b, delta)`,
+    update `charges` by `charges[a] += delta`, `charges[b] -= delta`
+
+    Notes
+    -----
+    * preserves sum(initial_charges) for arbitrary values of bond_idxs or deltas
+    * order within each row of bond_idxs is meaningful
+        `(..., bond_idxs, deltas)`
+        means the opposite of
+        `(..., bond_idxs[:, ::-1], deltas)`
+    * order within the first axis of bond_idxs, deltas is not meaningful
+        `(..., bond_idxs[perm], deltas[perm])`
+        means the same thing for any permutation `perm`
+    """
+
+    # apply bond charge corrections
+    incremented = ops.index_add(initial_charges, bond_idxs[:, 0], +deltas)
+    decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)
+    final_charges = decremented
+
+    # make some safety assertions
+    assert bond_idxs.shape[1] == 2
+    assert len(deltas) == len(bond_idxs)
+
+    net_charge = jnp.sum(initial_charges)
+    net_charge_is_integral = jnp.isclose(net_charge, jnp.round(net_charge), atol=1e-5)
+
+    final_net_charge = jnp.sum(final_charges)
+    net_charge_is_unchanged = jnp.isclose(final_net_charge, net_charge, atol=1e-5)
+
+    assert net_charge_is_integral
+    assert net_charge_is_unchanged
+
+    # print some safety warnings
+    directed_bonds = Counter([tuple(b) for b in bond_idxs])
+    undirected_bonds = Counter([tuple(sorted(b)) for b in bond_idxs])
+
+    if max(directed_bonds.values()) > 1:
+        duplicates = [bond for (bond, count) in directed_bonds.items() if count > 1]
+        print(UserWarning(f"Duplicate directed bonds! {duplicates}"))
+    elif max(undirected_bonds.values()) > 1:
+        duplicates = [bond for (bond, count) in undirected_bonds.items() if count > 1]
+        print(UserWarning(f"Duplicate undirected bonds! {duplicates}"))
+
+    return final_charges
 
 
 class NonbondedHandler(SerializableMixIn):
@@ -342,74 +447,12 @@ class AM1CCCHandler(SerializableMixIn):
             molecule to be parameterized.
 
         """
-        # imported here for optional dependency
-        from openeye import oechem
+        am1_charges = compute_or_load_am1_charges(mol)
+        bond_idxs, type_idxs = bond_smirks_matches(mol, smirks)
 
-        oemol = convert_to_oe(mol)
-        AromaticityModel.assign(oemol)
+        deltas = params[type_idxs]
+        q_params = apply_bond_charge_corrections(am1_charges, bond_idxs, deltas)
 
-        # check for cache
-        cache_key = "AM1Cache"
-        if not mol.HasProp(cache_key):
-            # The charges returned by OEQuacPac is not deterministic across OS platforms. It is known
-            # to be an issue that the atom ordering modifies the return values as well. A follow up
-            # with OpenEye is in order
-            # https://github.com/openforcefield/openff-toolkit/issues/983
-            am1_charges = list(oe_assign_charges(mol, "AM1"))
-
-            mol.SetProp(cache_key, base64.b64encode(pickle.dumps(am1_charges)))
-
-        else:
-            am1_charges = pickle.loads(base64.b64decode(mol.GetProp(cache_key)))
-
-        bond_idxs = []
-        bond_idx_params = []
-
-        for index in range(len(smirks)):
-            smirk = smirks[index]
-            param = params[index]
-
-            substructure_search = oechem.OESubSearch(smirk)
-            substructure_search.SetMaxMatches(0)
-
-            matched_bonds = []
-            matches = []
-            for match in substructure_search.Match(oemol):
-
-                matched_indices = {
-                    atom_match.pattern.GetMapIdx() - 1: atom_match.target.GetIdx()
-                    for atom_match in match.GetAtoms()
-                    if atom_match.pattern.GetMapIdx() != 0
-                }
-
-                matches.append(matched_indices)
-
-            for matched_indices in matches:
-
-                forward_matched_bond = [matched_indices[0], matched_indices[1]]
-                reverse_matched_bond = [matched_indices[1], matched_indices[0]]
-
-                if (
-                    forward_matched_bond in matched_bonds
-                    or reverse_matched_bond in matched_bonds
-                    or forward_matched_bond in bond_idxs
-                    or reverse_matched_bond in bond_idxs
-                ):
-                    continue
-
-                matched_bonds.append(forward_matched_bond)
-                bond_idxs.append(forward_matched_bond)
-                bond_idx_params.append(index)
-
-        am1_charges = np.array(am1_charges)
-        bond_idxs = np.array(bond_idxs)
-        bond_idx_params = np.array(bond_idx_params)
-
-        deltas = params[bond_idx_params]
-        incremented = ops.index_add(am1_charges, bond_idxs[:, 0], deltas)
-        decremented = ops.index_add(incremented, bond_idxs[:, 1], -deltas)
-
-        q_params = decremented
         assert q_params.shape[0] == mol.GetNumAtoms()  # check that return shape is consistent with input mol
 
         return q_params
