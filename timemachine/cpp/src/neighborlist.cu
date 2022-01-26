@@ -14,7 +14,7 @@ template <typename RealType> Neighborlist<RealType>::Neighborlist(const int NC, 
     if (NR > NC) {
         throw std::runtime_error("NR is greater than NC");
     }
-    const int tpb = 32;
+    const int tpb = warp_size;
     const int column_blocks = this->column_blocks();
     const int row_blocks = this->B();
     const int Y = this->Y();
@@ -111,7 +111,7 @@ std::vector<std::vector<int>> Neighborlist<RealType>::get_nblist_host(
     this->build_nblist_device(NC, NR, d_col_coords, d_row_coords, d_box, cutoff, static_cast<cudaStream_t>(0));
 
     cudaDeviceSynchronize();
-    const int tpb = 32;
+    const int tpb = warp_size;
     const int column_blocks = this->column_blocks();
     const int row_blocks = this->B();
     const int Y = this->Y();
@@ -167,7 +167,7 @@ void Neighborlist<RealType>::build_nblist_device(
     const int D = 3;
     this->compute_block_bounds_device(NC, NR, D, d_col_coords, d_row_coords, d_box, stream);
 
-    const int tpb = 32;
+    const int tpb = warp_size;
     const int column_blocks = this->column_blocks();
     const int row_blocks = this->B();
     const int Y = this->Y();
@@ -256,7 +256,7 @@ void Neighborlist<RealType>::compute_block_bounds_device(
 
     const bool compute_row_bounds = this->compute_full_matrix();
 
-    const int tpb = 32;
+    const int tpb = warp_size;
     const int column_blocks = this->column_blocks(); // total number of blocks we need to process
 
     k_find_block_bounds<RealType><<<column_blocks, tpb, 0, stream>>>(
