@@ -87,8 +87,9 @@ void __global__ k_compact_trim_atoms(
     int *__restrict__ interactingTiles,
     unsigned int *__restrict__ interactingAtoms) {
 
-    __shared__ int ixn_j_buffer
-        [64]; // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
+    // we can probably get away with using only 32 if we do some fancier remainder tricks, but this isn't a huge save
+    __shared__ int ixn_j_buffer[2 * warp_size];
+
     ixn_j_buffer[threadIdx.x] = NC;
     ixn_j_buffer[warp_size + threadIdx.x] = NC;
 
