@@ -155,8 +155,11 @@ def pair_bar(trajs: List[Traj], lambda_schedule: Array) -> Tuple[float, Diagnost
     return delta_f, dict(works=works, estimates=estimates)
 
 
-delta_f, diagnostics = pair_bar(trajs, lambda_schedule)
+delta_f_decouple, diagnostics = pair_bar(trajs, lambda_schedule)
+delta_f_hydration = -delta_f_decouple  # reduced
+delta_F_hydration = delta_f_hydration * (BOLTZ * temperature)  # in kJ/mol
 
-print(f"estimated free energy difference: {delta_f}")
-print("free energy difference estimated for each step:")
-print(diagnostics["estimates"])
+print(f"estimated absolute hydration free energy: {delta_F_hydration:.3f} kJ/mol")
+print("(delta_f, err_est) (in k_B T) for each lambda increment")
+for (df, ddf) in diagnostics["estimates"]:
+    print(f"{df:.3f} +/- {ddf:.3f}")
