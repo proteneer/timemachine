@@ -6,6 +6,8 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 
 import timemachine
+from timemachine.constants import BOLTZ
+
 
 from ff import Forcefield
 from ff.handlers import openmm_deserializer
@@ -13,8 +15,9 @@ from ff.handlers.deserialize import deserialize_handlers
 
 from fe import topology
 from fe.utils import get_romol_conf
+from fe.free_energy import construct_lambda_schedule
 
-from md import builders
+from md import builders, minimizer
 from md.moves import NPTMove
 from md.states import CoordsVelBox
 
@@ -25,10 +28,6 @@ from numpy.typing import ArrayLike
 from pathlib import Path
 
 from tqdm import tqdm
-
-from timemachine.constants import BOLTZ
-
-from md import minimizer
 
 
 # force field
@@ -91,17 +90,17 @@ n_prod_samples = 100
 n_equil_moves = 50
 
 dt = 1.5e-3
-friction = 10
 
 seed = 2022
 
 
-def construct_npt_move(lam, friction=1.0):
-    return NPTMove(final_potentials, lam, masses, temperature, pressure, n_steps_per_move, seed, friction=friction)
+def construct_npt_move(lam):
+    return NPTMove(final_potentials, lam, masses, temperature, pressure, n_steps_per_move, seed)
 
 
 # collect samples from p(x | lam) for lam in lambda_schedule
-lambda_schedule = np.linspace(0, 1, 8)
+lambda_schedule = construct_lambda_schedule(32)
+
 trajs = []
 
 for lam in lambda_schedule:
