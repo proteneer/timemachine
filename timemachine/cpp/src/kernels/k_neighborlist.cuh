@@ -4,7 +4,7 @@
 
 #define FULL_MASK 0xffffffff
 
-const int tile_size = 32;
+const int tile_size = warp_size;
 
 template <typename RealType>
 void __global__ k_find_block_bounds(
@@ -172,6 +172,8 @@ void __global__ k_find_blocks_with_ixns(
     unsigned int *__restrict__ interactingAtoms, // [NR * warp_size] atom indices interacting with each row block
     unsigned int *__restrict__ trim_atoms,       // the left-over trims that will later be compacted
     const double cutoff) {
+
+    static_assert(tile_size == warp_size, "must have tile_size == warp_size");
 
     const int indexInWarp = threadIdx.x % warp_size;
     const int warpMask = (1 << indexInWarp) - 1;
