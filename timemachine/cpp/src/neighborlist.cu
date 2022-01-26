@@ -225,6 +225,10 @@ void Neighborlist<RealType>::build_nblist_device(
     this->build_nblist_device(NC, 0, d_coords, nullptr, d_box, cutoff, stream);
 }
 
+template <typename RealType> int Neighborlist<RealType>::B() const {
+    return ceil_divide(this->compute_full_matrix() ? NR_ : NC_, tile_size);
+}
+
 template <typename RealType>
 void Neighborlist<RealType>::compute_block_bounds_device(
     const int NC,               // Number of atoms in column
@@ -265,6 +269,14 @@ void Neighborlist<RealType>::compute_block_bounds_device(
             NR, D, row_blocks, d_row_coords, d_box, d_row_block_bounds_ctr_, d_row_block_bounds_ext_);
         gpuErrchk(cudaPeekAtLastError());
     }
+};
+
+template <typename RealType> bool Neighborlist<RealType>::compute_full_matrix() const { return NR_ > 0; };
+
+template <typename RealType> int Neighborlist<RealType>::column_blocks() const { return ceil_divide(NC_, tile_size); };
+
+template <typename RealType> int Neighborlist<RealType>::Y() const {
+    return ceil_divide(this->column_blocks(), warp_size);
 };
 
 template class Neighborlist<double>;
