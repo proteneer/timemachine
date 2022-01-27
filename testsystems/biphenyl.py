@@ -25,8 +25,8 @@ from ff.handlers.deserialize import deserialize_handlers
 from md import builders, enhanced
 from md.noneq import NPTMove
 
-# (ytz): useful for visualization, so please leave this comment here!
-import asciiplotlib as apl
+## (ytz): useful for visualization, so please leave this comment here!
+#import asciiplotlib as apl
 
 temperature = 300.0
 pressure = 1.0
@@ -206,11 +206,11 @@ def construct_biphenyl_test_system(n_steps=1000):
         x_l = x[-num_ligand_atoms:]
         end_state_torsions.append(get_torsion(x_l))
 
-    # plot histogram using asciiplotlib
-    print("torsion distribution in sample cache")
-    fig = apl.figure()
-    fig.hist(*np.histogram(end_state_torsions, bins=25, range=(-np.pi, np.pi)))
-    fig.show()
+    # # plot histogram using asciiplotlib
+    # print("torsion distribution in sample cache")
+    # fig = apl.figure()
+    # fig.hist(*np.histogram(end_state_torsions, bins=25, range=(-np.pi, np.pi)))
+    # fig.show()
 
     for u, p in zip(ubps, params):
         u.bind(p)
