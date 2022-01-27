@@ -26,7 +26,7 @@ from md import builders, enhanced
 from md.noneq import NPTMove
 
 ## (ytz): useful for visualization, so please leave this comment here!
-#import asciiplotlib as apl
+# import asciiplotlib as apl
 
 temperature = 300.0
 pressure = 1.0
@@ -140,16 +140,12 @@ ligand_masses = np.array([a.GetMass() for a in mol.GetAtoms()])
 num_ligand_atoms = len(ligand_masses)
 
 
-def mini_get_solvent_phase_system(mol, ff):
-    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
+def get_solvent_phase_system(mol, ff):
     water_system, water_coords, water_box, water_topology = builders.build_water_system(3.0)
     water_box = water_box + np.eye(3) * 0.5  # add a small margin around the box for stability
     afe = free_energy.AbsoluteFreeEnergy(mol, ff)
     ff_params = ff.get_ordered_params()
     ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
-
-    # commented out minimization
-
     return ubps, params, masses, coords, water_box
 
 
@@ -168,7 +164,7 @@ def construct_biphenyl_test_system(n_steps=1000):
 
     ff = get_ff_am1ccc()
 
-    cache_path = "test_smc_cache.pkl"
+    cache_path = "test_smc_cache.pkl"  # TODO: store this somewhere safer!
     if not os.path.exists(cache_path):
 
         print("Generating cache")
@@ -188,7 +184,7 @@ def construct_biphenyl_test_system(n_steps=1000):
             pickle.dump([solvent_xvbs, ligand_samples, ligand_log_weights], fh)
     else:
         # elide minimize_host_4d
-        ubps, params, masses, coords, box = mini_get_solvent_phase_system(mol, ff)
+        ubps, params, masses, coords, box = get_solvent_phase_system(mol, ff)
 
     with open(cache_path, "rb") as fh:
         print("Loading cache")
