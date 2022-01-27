@@ -29,7 +29,7 @@ class TestBonded(GradientTest):
 
             # masses = np.random.rand(n_particles)
 
-            ref_nrg = jax.partial(
+            ref_nrg = functools.partial(
                 bonded.centroid_restraint,
                 # masses=masses,
                 group_a_idxs=gai,
@@ -77,7 +77,7 @@ class TestBonded(GradientTest):
                 kb = 10.0
                 b0 = 0.0
 
-                ref_nrg = jax.partial(bonded.centroid_restraint, group_a_idxs=gai, group_b_idxs=gbi, kb=kb, b0=b0)
+                ref_nrg = functools.partial(bonded.centroid_restraint, group_a_idxs=gai, group_b_idxs=gbi, kb=kb, b0=b0)
 
                 # we need to clear the du_dp buffer each time, so we need
                 # to instantiate test_nrg inside here
