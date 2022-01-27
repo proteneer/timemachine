@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     def propagate(xs, lam):
         mover.lamb = lam
-        xs_next = [mover.move(x, lam) for x in xs]
+        xs_next = [mover.move(x) for x in xs]
         return xs_next
 
     def log_prob(xs, lam):
