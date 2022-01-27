@@ -10,10 +10,10 @@ from typing import Tuple
 
 import numpy as np
 
-import lib
+from timemachine import lib
 from barostat.utils import get_bond_list, get_group_indices
-from lib import custom_ops
-from states import CoordsVelBox
+from timemachine.lib import custom_ops
+from md.states import CoordsVelBox
 
 
 class MonteCarloMove:
@@ -108,7 +108,7 @@ class NPTMove(MonteCarloMove):
             bound_impls = [bp.bound_impl(np.float32) for bp in self.ubps]
             intg_impl = lib.LangevinIntegrator(self.temperature, self.dt, self.friction, self.masses, self.seed).impl()
             barostat_impl = lib.MonteCarloBarostat(
-                len(self.masses), pressure, self.temperature, self.group_idxs, self.barostat_interval, self.seed + 1
+                len(self.masses), self.pressure, self.temperature, self.group_idxs, self.barostat_interval, self.seed + 1
             ).impl(bound_impls)
             self.move_impl = MoveImpl(bound_impls, barostat_impl, intg_impl)
 
