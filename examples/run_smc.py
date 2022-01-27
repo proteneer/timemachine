@@ -1,7 +1,7 @@
 from fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
 import numpy as np
 
-from smc import simple_smc, conditional_multinomial_resample
+from md.smc import simple_smc, conditional_multinomial_resample
 from testsystems.biphenyl import construct_biphenyl_test_system
 
 from parallel.client import AbstractClient, CUDAPoolClient
