@@ -1,18 +1,18 @@
-from fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
+from datetime import datetime
+from functools import partial
+from pickle import dump
+
 import numpy as np
 
+from fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
 from md.smc import simple_smc, conditional_multinomial_resample
+from parallel.client import AbstractClient, CUDAPoolClient
 from testsystems.biphenyl import construct_biphenyl_test_system
 
-from parallel.client import AbstractClient, CUDAPoolClient
-from functools import partial
-
-from pickle import dump
-from datetime import datetime
-
+# TODO: refactor so that n_md_steps doesn't have to be specified here...
 n_md_steps = 5000
-
 potential_energy_fxn, mover, initial_samples = construct_biphenyl_test_system(n_steps=n_md_steps)
+
 
 def advance(xlam):
     x, lam = xlam
@@ -40,36 +40,32 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--N", type=int, help="number of walkers", default=1000)
-    parser.add_argument("--T", type=int, help="number of lambda windows", default=100)
+    parser.add_argument("--n_walkers", type=int, help="number of walkers", default=1000)
+    parser.add_argument("--n_windows", type=int, help="number of lambda windows", default=100)
     parser.add_argument("--resample_thresh", type=float, help="resample when fractional ESS < thresh", default=0.6)
+    parser.add_argument("--n_gpus", type=int, help="number of devices that can be used in parallel", default=1)
     cmd_args = parser.parse_args()
     print(cmd_args)
 
     # parallel set up
-    n_gpus = 10
-    client = CUDAPoolClient(n_gpus)
+    client = CUDAPoolClient(cmd_args.n_gpus)
     pmap = partial(parallel_map, client=client)
 
     # SMC set up
-    N = cmd_args.N
-    T = cmd_args.T
+    n_walkers = cmd_args.n_walkers
+    n_windows = cmd_args.n_windows
     resample_thresh = cmd_args.resample_thresh
-    config = dict(N=N, T=T, resample_thresh=resample_thresh, n_md_steps=n_md_steps)
+    config = dict(n_walkers=n_walkers, n_windows=n_windows, resample_thresh=resample_thresh, n_md_steps=n_md_steps)
 
-    # samples = np.random.choice(initial_samples, size=N)
-    sample_inds = np.random.choice(np.arange(len(initial_samples)), size=N)
+    # samples = np.random.choice(initial_samples, size=n_walkers)
+    sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
     samples = [initial_samples[i] for i in sample_inds]
-    lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(T)[::-1]
+    lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)[::-1]
     resample = partial(conditional_multinomial_resample, thresh=resample_thresh)
 
     def propagate(xs, lam):
         xlams = [(x, lam) for x in xs]
-        results = pmap(advance, xlams)
-
-        # TODO: cleaner way to do this unpacking?
-        xs_next = [x_next for (x_next, timing) in results]
-
+        xs_next = pmap(advance, xlams)
         return xs_next
 
     def log_prob(xs, lam):
