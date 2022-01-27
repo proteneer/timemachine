@@ -2,7 +2,6 @@
 
 import numpy as np
 from pathlib import Path
-from tqdm import tqdm
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -108,15 +107,15 @@ for lam in lambda_schedule:
 
     # equilibration
     x_equil = CoordsVelBox(coords, np.zeros_like(coords), box)
-    trange = tqdm(range(n_equil_moves), desc="equilibration")
-    for _ in trange:
+    print(f"equilibrating for {n_equil_moves} * {n_steps_per_move} steps...")
+    for _ in range(n_equil_moves):
         x_equil = npt.move(x_equil)
     print("u(x_equil)", u(x_equil, lam))
 
     # production
     traj = [x_equil]
-    trange = tqdm(range(n_prod_samples - 1), desc="production")
-    for _ in trange:
+    print(f"collecting {n_prod_samples} samples...")
+    for _ in range(n_prod_samples - 1):
         traj.append(npt.move(traj[-1]))
     trajs.append(traj)
 
