@@ -11,7 +11,7 @@ from typing import Tuple
 import numpy as np
 
 from timemachine import lib
-from barostat.utils import get_bond_list, get_group_indices
+from md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.lib import custom_ops
 from md.states import CoordsVelBox
 

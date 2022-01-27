@@ -1,5 +1,4 @@
 import numpy as np
-import numpy as onp
 from scipy.special import logsumexp
 from tqdm import tqdm
 
@@ -62,14 +61,14 @@ def simple_smc(
 
 def null_resample(log_weights):
     """No interaction"""
-    indices = onp.arange(len(log_weights))
+    indices = np.arange(len(log_weights))
     return indices, log_weights
 
 
 def multinomial_resample(log_weights):
     weights = np.exp(log_weights - logsumexp(log_weights))
     n = len(log_weights)
-    indices = onp.random.choice(np.arange(n), size=n, p=weights)
+    indices = np.random.choice(np.arange(n), size=n, p=weights)
 
     # new weights
     avg_log_weights = logsumexp(log_weights - np.log(n)) * np.ones(n)
