@@ -6,6 +6,8 @@ from md import enhanced
 from md.moves import NPTMove
 from md.states import CoordsVelBox
 
+from tqdm import tqdm
+
 
 def generate_solvent_samples(
     coords,
@@ -29,7 +31,7 @@ def generate_solvent_samples(
     npt_mover = NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
 
     xvbs = [xvb0]
-    for _ in range(n_samples):
+    for _ in tqdm(range(n_samples), desc="generating solvent samples"):
         xvbs.append(npt_mover.move(xvbs[-1]))
     return xvbs
 
@@ -54,7 +56,7 @@ def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, liga
 
     TODO: document me more"""
     all_xvbs = []
-    for _ in range(num_samples):
+    for _ in tqdm(range(num_samples), desc="generating endstate samples"):
         choice_idx = np.random.choice(np.arange(len(solvent_samples)))
         solvent_x = solvent_samples[choice_idx].coords
         solvent_v = solvent_samples[choice_idx].velocities
