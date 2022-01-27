@@ -4,7 +4,7 @@ import numpy as np
 
 from md import enhanced
 from md.moves import NPTMove
-from states import CoordsVelBox
+from md.states import CoordsVelBox
 
 
 def generate_solvent_samples(
