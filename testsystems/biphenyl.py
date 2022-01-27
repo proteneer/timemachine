@@ -1,30 +1,32 @@
 # adapted from https://raw.githubusercontent.com/proteneer/timemachine/fa751c8e3c6ff51601d4ea1a58d4c6b7e35c4f19/tests/test_smc.py
 
 import jax
+
 jax.config.update("jax_enable_x64", True)
 
 import os
 import pickle
 import time
+from pathlib import Path
 
 from rdkit import Chem
 import numpy as np
 
+import timemachine
 from timemachine.constants import BOLTZ
 from timemachine.potentials import bonded
 
-from fe import functional
+from fe import functional, free_energy
+from fe.absolute_hydration import generate_solvent_samples, generate_ligand_samples, generate_endstate_samples
+
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
-from fe import free_energy
 from md import builders, enhanced
 from md.noneq import NPTMove
-from md.states import CoordsVelBox
 
 # (ytz): useful for visualization, so please leave this comment here!
 import asciiplotlib as apl
-
 
 temperature = 300.0
 pressure = 1.0
@@ -112,60 +114,13 @@ $$$$"""
     return mol, torsion_idxs
 
 
-def get_ff_am1cc():
-    # old: "/home/jfass/Documents/GitHub/timemachine/ff/params/smirnoff_1_1_0_ccc.py"
-    ff_handlers = deserialize_handlers(
-        open("/home/jfass/Documents/GitHub/timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
+def get_ff_am1ccc():
+    tm_path = Path(timemachine.__path__[0]).parent
+    path_to_ff = tm_path / "ff/params/smirnoff_1_1_0_ccc.py"
+    with open(path_to_ff, "r") as f:
+        ff_handlers = deserialize_handlers(f.read())
     ff = Forcefield(ff_handlers)
     return ff
-
-
-def generate_solvent_samples(coords, box, masses, ubps, params, temperature, pressure, seed, n_samples):
-    num_equil_steps = 50000  # bump to 50k to be safe/production
-    xvb0 = enhanced.equilibrate_solvent_phase(
-        ubps, params, masses, coords, box, temperature, pressure, num_equil_steps, seed
-    )
-
-    md_steps_per_move = 1000  # probably good enough?
-    lamb = 1.0  # non-interacting state
-    npt_mover = NPTMove(ubps, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
-    xvbs = []
-    xvb_t = xvb0
-    for _ in range(n_samples):
-        xvb_t = npt_mover.move(xvb_t, lamb)
-        xvbs.append(xvb_t)
-    return xvbs
-
-
-def generate_ligand_samples(num_batches, mol, ff, temperature, seed):
-    state = enhanced.VacuumState(mol, ff)
-    proposal_U = state.U_full
-    vacuum_samples, vacuum_log_weights = enhanced.generate_log_weighted_samples(
-        mol, temperature, state.U_easy, proposal_U, num_batches=num_batches, seed=seed
-    )
-
-    return vacuum_samples, vacuum_log_weights
-
-
-def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, ligand_log_weights, num_ligand_atoms):
-    """solvent + (noninteracting ligand) sample --> solvent + (vacuum ligand) sample
-
-    Assumptions:
-    ------------
-    * ligand indices: last num_ligand_atoms"""
-    all_xvbs = []
-    for _ in range(num_samples):
-        choice_idx = np.random.choice(np.arange(len(solvent_samples)))
-        solvent_x = solvent_samples[choice_idx].coords
-        solvent_v = solvent_samples[choice_idx].velocities
-        ligand_xv = enhanced.sample_from_log_weights(ligand_samples, ligand_log_weights, size=1)[0]
-        ligand_x = ligand_xv[0]
-        ligand_v = ligand_xv[1]
-        combined_x = np.concatenate([solvent_x[:-num_ligand_atoms], ligand_x], axis=0)
-        combined_v = np.concatenate([solvent_v[:-num_ligand_atoms], ligand_v], axis=0)
-        combined_box = solvent_samples[choice_idx].box
-        all_xvbs.append(CoordsVelBox(combined_x, combined_v, combined_box))
-    return all_xvbs
 
 
 mol, torsion_idxs = get_biphenyl()
@@ -211,7 +166,7 @@ def construct_biphenyl_test_system(n_steps=1000):
     seed = 2021
     np.random.seed(seed)
 
-    ff = get_ff_am1cc()
+    ff = get_ff_am1ccc()
 
     cache_path = "test_smc_cache.pkl"
     if not os.path.exists(cache_path):
