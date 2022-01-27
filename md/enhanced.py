@@ -401,7 +401,7 @@ def sample_from_log_weights(weighted_samples, log_weights, size):
     assert len(weights) == len(weighted_samples)
     assert np.abs(np.sum(weights) - 1) < 1e-5
     idxs = np.random.choice(np.arange(len(weights)), size=size, p=weights)
-    return weighted_samples[idxs]
+    return [weighted_samples[i] for i in idxs]
 
 
 import jax.numpy as jnp
