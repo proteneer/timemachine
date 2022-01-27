@@ -6,7 +6,8 @@ import numpy as np
 
 from fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
 from md.smc import simple_smc, conditional_multinomial_resample
-from parallel.client import AbstractClient, CUDAPoolClient
+
+# from parallel.client import AbstractClient, CUDAPoolClient
 from testsystems.biphenyl import construct_biphenyl_test_system
 
 # TODO: refactor so that n_md_steps doesn't have to be specified here...
@@ -41,17 +42,18 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--n_walkers", type=int, help="number of walkers", default=1000)
+    parser.add_argument("--n_walkers", type=int, help="number of walkers", default=100)
     parser.add_argument("--n_windows", type=int, help="number of lambda windows", default=100)
+    parser.add_argument("--n_md_steps", type=int, help="number of MD steps per move", default=1000)
     parser.add_argument("--resample_thresh", type=float, help="resample when fractional ESS < thresh", default=0.6)
-    #parser.add_argument("--n_gpus", type=int, help="number of devices that can be used in parallel", default=1)
+    # parser.add_argument("--n_gpus", type=int, help="number of devices that can be used in parallel", default=1)
     cmd_args = parser.parse_args()
     print(cmd_args)
 
     # parallel set up
-    #client = CUDAPoolClient(cmd_args.n_gpus)
-    #pmap = partial(parallel_map, client=client)
-    pmap = map
+    # client = CUDAPoolClient(cmd_args.n_gpus)
+    # pmap = partial(parallel_map, client=client)
+    pmap = map  # serial alias
 
     # SMC set up
     n_walkers = cmd_args.n_walkers
