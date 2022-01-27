@@ -73,7 +73,7 @@ def test_optimized_MTM():
         x_a = xvb_a.coords
         x_b = xvb_b.coords
         # double check this later
-        np.testing.assert_array_equal(x_a[:-num_ligand_atoms], x_b[:-num_ligand_atoms])
+        np.testing.assert_equal(x_a[:-num_ligand_atoms], x_b[:-num_ligand_atoms])
         return -proposal_U(x_b[-num_ligand_atoms:]) / kT
 
     def batch_log_Q_a_b_fn(xvbs_a, xvb_b):
