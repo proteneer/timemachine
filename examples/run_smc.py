@@ -42,13 +42,13 @@ if __name__ == "__main__":
     n_md_steps = cmd_args.n_md_steps
     config = dict(n_walkers=n_walkers, n_windows=n_windows, resample_thresh=resample_thresh, n_md_steps=n_md_steps)
 
+    potential_energy_fxn, mover, initial_samples = construct_biphenyl_test_system(n_steps=n_md_steps)
+
     # samples = np.random.choice(initial_samples, size=n_walkers)
     sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
     samples = [initial_samples[i] for i in sample_inds]
     lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)[::-1]
     resample = partial(conditional_multinomial_resample, thresh=resample_thresh)
-
-    potential_energy_fxn, mover, initial_samples = construct_biphenyl_test_system(n_steps=n_md_steps)
 
     def advance(xlam):
         x, lam = xlam
