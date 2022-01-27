@@ -304,7 +304,7 @@ def _wrap_simulate(args):
 
     # reshape into flat array by removing num_workers dimension
     xs_proposal = xs_proposal.reshape(-1, num_atoms, 3)
-    vs_proposal = np.stack([xs_proposal, vs_proposal], axis=1)
+    vs_proposal = vs_proposal.reshape(-1, num_atoms, 3)
 
     xvs_proposal = np.stack([xs_proposal, vs_proposal], axis=1)
 
