@@ -1,23 +1,16 @@
-from typing import Tuple
-from timemachine.lib import custom_ops
-from md.barostat.utils import get_group_indices, get_bond_list
-from timemachine import lib
+# adapted from https://raw.githubusercontent.com/proteneer/timemachine/fa751c8e3c6ff51601d4ea1a58d4c6b7e35c4f19/tests/test_smc.py
 
-# copied from https://raw.githubusercontent.com/proteneer/timemachine/fa751c8e3c6ff51601d4ea1a58d4c6b7e35c4f19/tests/test_smc.py
-from jax.config import config
+import jax
+jax.config.update("jax_enable_x64", True)
+
+import os
 import pickle
 import time
-
-from md.states import CoordsVelBox
-
-config.update("jax_enable_x64", True)
-
-from md import enhanced
 
 from rdkit import Chem
 import numpy as np
 
-import jax
+from timemachine.constants import BOLTZ
 from timemachine.potentials import bonded
 
 from fe import functional
@@ -25,145 +18,24 @@ from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
 from fe import free_energy
-from md import builders
-import os
+from md import builders, enhanced
+from md.noneq import NPTMove
+from md.states import CoordsVelBox
 
 # (ytz): useful for visualization, so please leave this comment here!
 import asciiplotlib as apl
 
-from timemachine.constants import BOLTZ
 
 temperature = 300.0
 pressure = 1.0
 
 kBT = BOLTZ * temperature
 
-
-class MonteCarloMove:
-    n_proposed: int = 0
-    n_accepted: int = 0
-
-    def propose(self, x: CoordsVelBox, lam: float) -> Tuple[CoordsVelBox, float]:
-        """return proposed state and log acceptance probability"""
-        raise NotImplementedError
-
-    def move(self, x: CoordsVelBox, lam: float) -> CoordsVelBox:
-        proposal, log_acceptance_probability = self.propose(x, lam)
-        self.n_proposed += 1
-
-        alpha = np.random.rand()
-        acceptance_probability = np.exp(log_acceptance_probability)
-        if alpha < acceptance_probability:
-            self.n_accepted += 1
-            return proposal
-        else:
-            return x
-
-    @property
-    def acceptance_fraction(self):
-        if self.n_proposed > 0:
-            return self.n_accepted / self.n_proposed
-        else:
-            return 0.0
-
-
-class MoveImpl:
-    def __init__(self, bound_impls, barostat_impl, integrator_impl):
-        self.bound_impls = bound_impls
-        self.barostat_impl = barostat_impl
-        self.integrator_impl = integrator_impl
-
-
-class NPTMove(MonteCarloMove):
-    def __init__(
-            self,
-            ubps,
-            masses,
-            temperature,
-            pressure,
-            n_steps,
-            seed,
-            dt=1.5e-3,
-            friction=1.0,
-            barostat_interval=5,
-    ):
-        print('constructing a new mover!')
-
-        self.ubps = ubps
-        self.masses = masses
-        self.temperature = temperature
-        self.pressure = pressure
-        self.seed = seed
-        self.dt = dt
-        self.friction = friction
-        self.barostat_interval = barostat_interval
-
-        # intg = lib.LangevinIntegrator(temperature, dt, friction, masses, seed)
-        # self.integrator_impl = intg.impl()
-        # all_impls = [bp.bound_impl(np.float32) for bp in ubps]
-
-        bond_list = get_bond_list(ubps[0])
-        self.group_idxs = get_group_indices(bond_list)
-
-        # barostat = lib.MonteCarloBarostat(len(masses), pressure, temperature, group_idxs, barostat_interval, seed + 1)
-        # barostat_impl = barostat.impl(all_impls)
-
-        # self.bound_impls = all_impls
-        # self.barostat_impl = barostat_impl
-
-        self.integrator_impl = None
-        self.barostat_impl = None
-        self.move_impl = None
-        self.n_steps = n_steps
-
-    def initialize_once(self):
-        if self.move_impl is None:
-
-            if "CUDA_VISIBLE_DEVICES" in os.environ:
-                print("Initializing on:", os.environ["CUDA_VISIBLE_DEVICES"])
-            else:
-                print("initialize_once() called serially")
-
-            bound_impls = [bp.bound_impl(np.float32) for bp in self.ubps]
-            intg_impl = lib.LangevinIntegrator(self.temperature, self.dt, self.friction, self.masses, self.seed).impl()
-            barostat_impl = lib.MonteCarloBarostat(
-                len(self.masses), pressure, self.temperature, self.group_idxs, self.barostat_interval, self.seed + 1
-            ).impl(bound_impls)
-            self.move_impl = MoveImpl(bound_impls, barostat_impl, intg_impl)
-
-        # else do nothing
-
-    def propose(self, x: CoordsVelBox, lam: float):
-
-        self.initialize_once()
-        # note: context creation overhead here is actually very small!
-
-        # print('impl', self.move_impl)
-        ctxt = custom_ops.Context(
-            x.coords,
-            x.velocities,
-            x.box,
-            self.move_impl.integrator_impl,
-            self.move_impl.bound_impls,
-            self.move_impl.barostat_impl,
-        )
-
-        # arguments: lambda_schedule, du_dl_interval, x_interval
-        _ = ctxt.multiple_steps(lam * np.ones(self.n_steps), 0, 0)
-        x_t = ctxt.get_x_t()
-        v_t = ctxt.get_v_t()
-        box = ctxt.get_box()
-
-        after_npt = CoordsVelBox(x_t, v_t, box)
-        log_accept_prob = 0.0  # always accept
-
-        return after_npt, log_accept_prob
-
-
 temperature = 300
 kBT = BOLTZ * temperature
 
 
+# TODO: where to move this definition?
 class PotentialEnergyFunction:
     def __init__(self, ubps, params):
         self.ubps = ubps
