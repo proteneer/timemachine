@@ -16,7 +16,8 @@ potential_energy_fxn, mover, initial_samples = construct_biphenyl_test_system(n_
 
 def advance(xlam):
     x, lam = xlam
-    x_next = mover.move(x, lam)
+    mover.lamb = lam
+    x_next = mover.move(x)
 
     return x_next
 
@@ -26,14 +27,14 @@ def u(xlam):
     return potential_energy_fxn.u(x, lam)
 
 
-# TODO: move this into parallel utils
-def parallel_map(fxn, xs, client: AbstractClient):
-    """[fxn(x) for x in xs], parallelized using client"""
-
-    futures = []
-    for x in xs:
-        futures.append(client.submit(fxn, x))
-    return [f.result() for f in futures]
+# # TODO: move this into parallel utils
+# def parallel_map(fxn, xs, client: AbstractClient):
+#     """[fxn(x) for x in xs], parallelized using client"""
+#
+#     futures = []
+#     for x in xs:
+#         futures.append(client.submit(fxn, x))
+#     return [f.result() for f in futures]
 
 
 import argparse
@@ -43,13 +44,14 @@ if __name__ == "__main__":
     parser.add_argument("--n_walkers", type=int, help="number of walkers", default=1000)
     parser.add_argument("--n_windows", type=int, help="number of lambda windows", default=100)
     parser.add_argument("--resample_thresh", type=float, help="resample when fractional ESS < thresh", default=0.6)
-    parser.add_argument("--n_gpus", type=int, help="number of devices that can be used in parallel", default=1)
+    #parser.add_argument("--n_gpus", type=int, help="number of devices that can be used in parallel", default=1)
     cmd_args = parser.parse_args()
     print(cmd_args)
 
     # parallel set up
-    client = CUDAPoolClient(cmd_args.n_gpus)
-    pmap = partial(parallel_map, client=client)
+    #client = CUDAPoolClient(cmd_args.n_gpus)
+    #pmap = partial(parallel_map, client=client)
+    pmap = map
 
     # SMC set up
     n_walkers = cmd_args.n_walkers

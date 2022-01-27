@@ -23,7 +23,7 @@ from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
 from md import builders, enhanced
-from md.noneq import NPTMove
+from md.moves import NPTMove
 
 ## (ytz): useful for visualization, so please leave this comment here!
 # import asciiplotlib as apl
@@ -214,7 +214,7 @@ def construct_biphenyl_test_system(n_steps=1000):
     # propagate with NPTMove
     seed = int(time.time())
 
-    mover = NPTMove(ubps, masses, temperature, pressure, n_steps, seed)
+    mover = NPTMove(ubps, None, masses, temperature, pressure, n_steps, seed)
     potential_energy_fxn = PotentialEnergyFunction(ubps, params)
 
     return potential_energy_fxn, mover, all_xvbs
