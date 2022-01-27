@@ -27,15 +27,13 @@ def parse_options():
     return cmd_args
 
 
-if __name__ == "__main__":
-    cmd_args = parse_options()
-
-    # SMC setup: define initial samples, lambdas schedule, propagate fxn, log_prob fxn, resample fxn
-    potential_energy_fxn, mover, initial_samples = construct_biphenyl_test_system(n_steps=cmd_args.n_md_steps)
-    sample_inds = np.random.choice(np.arange(len(initial_samples)), size=cmd_args.n_walkers)
+def set_up_biphenyl_system_for_smc(n_walkers, n_windows, n_md_steps, resample_thresh):
+    """define initial samples, lambdas schedule, propagate fxn, log_prob fxn, resample fxn"""
+    potential_energy_fxn, mover, initial_samples = construct_biphenyl_test_system(n_steps=n_md_steps)
+    sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
     samples = [initial_samples[i] for i in sample_inds]
 
-    lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(cmd_args.n_windows)[::-1]
+    lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)[::-1]
 
     def propagate(xs, lam):
         mover.lamb = lam
@@ -46,12 +44,12 @@ if __name__ == "__main__":
         u_s = np.array([potential_energy_fxn.u(x, lam) for x in xs])
         return -u_s
 
-    resample = partial(conditional_multinomial_resample, thresh=cmd_args.resample_thresh)
+    resample = partial(conditional_multinomial_resample, thresh=resample_thresh)
 
-    # run simulation
-    smc_result = simple_smc(samples, lambdas, propagate, log_prob, resample)
+    return samples, lambdas, propagate, log_prob, resample
 
-    # save summary
+
+def save_smc_result(smc_result, save_full_trajectories=False):
     uid = f"{datetime.now()}"
 
     traj, log_weights_traj, ancestry_traj, incremental_log_weights_traj = smc_result
@@ -67,6 +65,21 @@ if __name__ == "__main__":
         dump((summary, cmd_args), f)
 
     # optionally save trajectories
-    if cmd_args.debug_mode:
+    if save_full_trajectories:
         with open(f"full_smc_traj_{uid}.pkl", "wb") as f:
             dump((traj, cmd_args), f)
+
+
+if __name__ == "__main__":
+    cmd_args = parse_options()
+
+    # prepare initial samples and lambda schedule, define functions for propagating, evaluating log_prob, and resampling
+    samples, lambdas, propagate, log_prob, resample = set_up_biphenyl_system_for_smc(
+        cmd_args.n_walkers, cmd_args.n_windows, cmd_args.n_md_steps, cmd_args.resample_thresh
+    )
+
+    # run simulation
+    smc_result = simple_smc(samples, lambdas, propagate, log_prob, resample)
+
+    # save summary
+    save_smc_result(smc_result, save_full_trajectories=cmd_args.debug_mode)
