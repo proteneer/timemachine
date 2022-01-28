@@ -5,7 +5,7 @@
 
 #### Absolute hydration free energy
 
-`ahfe.py` runs 4D decoupling simulations of aspirin in a waterbox, prints pair BAR estimates
+`ahfe.py` runs 4D decoupling simulations of aspirin in a waterbox, for later use in a TI estimator of the absolute hydration free energy.
 
 #### Relative hydration free energy
 
