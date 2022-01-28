@@ -29,7 +29,7 @@ def parse_options():
 
 def set_up_biphenyl_system_for_smc(n_walkers, n_windows, n_md_steps, resample_thresh):
     """define initial samples, lambdas schedule, propagate fxn, log_prob fxn, resample fxn"""
-    potential_energy_fxn, mover, initial_samples = construct_biphenyl_test_system(n_steps=n_md_steps)
+    reduced_potential, mover, initial_samples = construct_biphenyl_test_system(n_steps=n_md_steps)
     sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
     samples = [initial_samples[i] for i in sample_inds]
 
@@ -41,7 +41,7 @@ def set_up_biphenyl_system_for_smc(n_walkers, n_windows, n_md_steps, resample_th
         return xs_next
 
     def log_prob(xs, lam):
-        u_s = np.array([potential_energy_fxn.u(x, lam) for x in xs])
+        u_s = np.array([reduced_potential(x, lam) for x in xs])
         return -u_s
 
     resample = partial(conditional_multinomial_resample, thresh=resample_thresh)

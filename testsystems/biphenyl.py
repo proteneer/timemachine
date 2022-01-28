@@ -33,11 +33,10 @@ pressure = 1.0
 
 kBT = BOLTZ * temperature
 
-temperature = 300
-kBT = BOLTZ * temperature
-
 
 # TODO: where to move this definition?
+
+
 class PotentialEnergyFunction:
     def __init__(self, ubps, params):
         self.ubps = ubps
@@ -215,6 +214,9 @@ def construct_biphenyl_test_system(n_steps=1000):
     seed = int(time.time())
 
     mover = NPTMove(ubps, None, masses, temperature, pressure, n_steps, seed)
-    potential_energy_fxn = PotentialEnergyFunction(ubps, params)
+    U_fn = functional.construct_differentiable_interface_fast(ubps, params)
 
-    return potential_energy_fxn, mover, all_xvbs
+    def reduced_potential(xvb, lam):
+        return U_fn(xvb.coords, params, xvb.box, lam) / kBT
+
+    return reduced_potential, mover, all_xvbs
