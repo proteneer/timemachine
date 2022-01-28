@@ -50,6 +50,9 @@ ALL_FRAMES = "all"
 ENDPOINTS_ONLY = "endpoints"
 NO_FRAMES = "none"
 
+NANO_MOLAR = "nM"
+MICRO_MOLAR = "uM"
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__file__)
 
@@ -114,9 +117,9 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--property_units",
-        help="must be either nM or uM",
-        required=True,
-        choices=["nM", "uM"],
+        help="Units of the label, either uM or nM",
+        default=MICRO_MOLAR,
+        choices=[NANO_MOLAR, MICRO_MOLAR],
     )
 
     parser.add_argument("--hosts", nargs="*", default=None, help="Hosts running GRPC worker to use for compute")
