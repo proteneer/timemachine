@@ -107,10 +107,8 @@ def test_base_topology_standard_decoupling():
 def test_dual_topology_standard_decoupling():
 
     # this class is used in double decoupling stages of the RABFE protocol. It modifies the
-    # DualTopology class in two ways:
-    # 1) the torsions between non-ring atoms are turned off
-    # 2) the nonbonded terms are standardized, but also interpolated at lambda=0 such that
-    #    the epsilons are at half strength.
+    # DualTopology class in one ways:
+    # 1) the nonbonded terms are interpolated at lambda=0 such that the epsilons and charges are at half strength.
 
     ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
@@ -139,6 +137,7 @@ def test_dual_topology_standard_decoupling():
     assert isinstance(nonbonded_potential, potentials.NonbondedInterpolated)
 
     expected_qlj = topology.standard_qlj_typer(mol_c)
+    expected_qlj[:, 0] = expected_qlj[:, 0] / 2  # charges should be halved
     expected_qlj[:, 2] = expected_qlj[:, 2] / 2  # eps should be halved
 
     src_qlj_params = qlj_params[: len(qlj_params) // 2]
