@@ -68,16 +68,17 @@ public:
     unsigned int *get_ixn_count() { return d_ixn_count_; }
 
     // get max number of row blocks
-    int B() const { return ceil_divide(this->compute_full_matrix() ? NR_ : NC_, 32); }
+    int B() const;
 
 private:
     // Indicates that should compute interactions of all rows and columns
     // when a row is provided, otherwise only compute upper triangle of the ixn matrix.
-    bool compute_full_matrix() const { return NR_ > 0; }
+    bool compute_full_matrix() const;
 
-    int column_blocks() const { return ceil_divide(NC_, 32); }
+    int column_blocks() const;
+
     // The number of column blocks divided by warp size. Each thread handles a block
-    int Y() const { return ceil_divide(this->column_blocks(), 32); }
+    int Y() const;
 
     void compute_block_bounds_device(
         const int NC,

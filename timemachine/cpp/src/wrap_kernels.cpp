@@ -52,6 +52,7 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
                const py::array_t<double, py::array::c_style> &box,
                const int block_size) -> py::tuple {
                 if (block_size != 32) {
+                    // The neighborlist kernel implementation assumes that block size is fixed to the CUDA warpSize
                     throw std::runtime_error("Block size must be 32.");
                 }
 
