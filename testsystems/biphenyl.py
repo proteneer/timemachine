@@ -38,28 +38,6 @@ pressure = 1.0
 kBT = BOLTZ * temperature
 
 
-# TODO: where to move this definition?
-
-
-class PotentialEnergyFunction:
-    def __init__(self, ubps, params):
-        self.ubps = ubps
-        self.params = params
-        self.U_fn = None
-
-    def initialize_once(self):
-        if self.U_fn is None:
-            if "CUDA_VISIBLE_DEVICES" in os.environ:
-                print("Initializing on:", os.environ["CUDA_VISIBLE_DEVICES"])
-            else:
-                print("initialize_once() called serially")
-            self.U_fn = functional.construct_differentiable_interface_fast(self.ubps, self.params)
-
-    def u(self, xvb, lam):
-        self.initialize_once()
-        return self.U_fn(xvb.coords, self.params, xvb.box, lam) / kBT
-
-
 def get_biphenyl():
     MOL_SDF = """
   Mrv2118 11122115063D
@@ -129,16 +107,6 @@ def get_ff_am1ccc():
 mol, torsion_idxs = get_biphenyl()
 
 
-@jax.jit
-def get_torsion(x_l):
-    ci = x_l[torsion_idxs[:, 0]]
-    cj = x_l[torsion_idxs[:, 1]]
-    ck = x_l[torsion_idxs[:, 2]]
-    cl = x_l[torsion_idxs[:, 3]]
-    # last [0] is used to return from a length-1 array
-    return bonded.signed_torsion_angle(ci, cj, ck, cl)[0]
-
-
 ligand_masses = np.array([a.GetMass() for a in mol.GetAtoms()])
 num_ligand_atoms = len(ligand_masses)
 
@@ -148,8 +116,8 @@ def construct_biphenyl_test_system(n_steps=1000):
     Generate samples from the equilibrium distribution at lambda=1
 
     Return:
-    * potential_energy_fxn : classy for parallelism-reasons
-    * mover : classy for parallelism reasons
+    * reduced_potential
+    * mover
     * initial_samples
     """
 
@@ -188,19 +156,6 @@ def construct_biphenyl_test_system(n_steps=1000):
     all_xvbs = generate_endstate_samples(
         n_endstate_samples, solvent_xvbs, ligand_samples, ligand_log_weights, num_ligand_atoms
     )
-
-    # plot torsions at the end-states
-    end_state_torsions = []
-    for xvb in all_xvbs:
-        x = xvb.coords
-        x_l = x[-num_ligand_atoms:]
-        end_state_torsions.append(get_torsion(x_l))
-
-    # # plot histogram using asciiplotlib
-    # print("torsion distribution in sample cache")
-    # fig = apl.figure()
-    # fig.hist(*np.histogram(end_state_torsions, bins=25, range=(-np.pi, np.pi)))
-    # fig.show()
 
     for u, p in zip(ubps, params):
         u.bind(p)
