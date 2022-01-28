@@ -2,7 +2,9 @@
 
 import numpy as np
 
-from md import enhanced
+from fe import free_energy
+
+from md import enhanced, builders
 from md.moves import NPTMove
 from md.states import CoordsVelBox
 
@@ -68,3 +70,12 @@ def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, liga
         combined_box = solvent_samples[choice_idx].box
         all_xvbs.append(CoordsVelBox(combined_x, combined_v, combined_box))
     return all_xvbs
+
+
+def get_solvent_phase_system(mol, ff):
+    water_system, water_coords, water_box, water_topology = builders.build_water_system(3.0)
+    water_box = water_box + np.eye(3) * 0.5  # add a small margin around the box for stability
+    afe = free_energy.AbsoluteFreeEnergy(mol, ff)
+    ff_params = ff.get_ordered_params()
+    ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
+    return ubps, params, masses, coords, water_box

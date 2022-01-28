@@ -14,15 +14,19 @@ import numpy as np
 
 import timemachine
 from timemachine.constants import BOLTZ
-from timemachine.potentials import bonded
 
-from fe import functional, free_energy
-from fe.absolute_hydration import generate_solvent_samples, generate_ligand_samples, generate_endstate_samples
+from fe import functional
+from fe.absolute_hydration import (
+    generate_solvent_samples,
+    generate_ligand_samples,
+    generate_endstate_samples,
+    get_solvent_phase_system,
+)
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
-from md import builders, enhanced
+from md import enhanced
 from md.moves import NPTMove
 
 ## (ytz): useful for visualization, so please leave this comment here!
@@ -137,15 +141,6 @@ def get_torsion(x_l):
 
 ligand_masses = np.array([a.GetMass() for a in mol.GetAtoms()])
 num_ligand_atoms = len(ligand_masses)
-
-
-def get_solvent_phase_system(mol, ff):
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(3.0)
-    water_box = water_box + np.eye(3) * 0.5  # add a small margin around the box for stability
-    afe = free_energy.AbsoluteFreeEnergy(mol, ff)
-    ff_params = ff.get_ordered_params()
-    ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
-    return ubps, params, masses, coords, water_box
 
 
 def construct_biphenyl_test_system(n_steps=1000):
