@@ -1,0 +1,9 @@
+name: timemachine
+channels:
+  - conda-forge
+  - openeye
+dependencies:
+  - python=3.7
+  - openeye-toolkits=2020.2.0
+  - openmm=7.5.1
+  - rdkit=2021.03.1
