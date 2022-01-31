@@ -11,7 +11,7 @@ from rdkit import Chem
 from fe.utils import to_md_units
 from fe import free_energy
 from ff.handlers.deserialize import deserialize_handlers
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator
 from timemachine.lib import custom_ops
 

@@ -20,7 +20,7 @@ import numpy as np
 from tests import test_ligands
 import copy
 
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
 # (ytz): useful for visualization, so please leave this comment here!

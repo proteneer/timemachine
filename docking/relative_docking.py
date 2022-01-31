@@ -19,7 +19,7 @@ from fe.atom_mapping import (
     get_core_by_smarts,
     mcs_map,
 )
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import custom_ops, LangevinIntegrator
 

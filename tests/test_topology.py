@@ -9,7 +9,7 @@ from fe import topology
 
 from rdkit import Chem
 
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 from fe.utils import get_romol_conf
 import jax

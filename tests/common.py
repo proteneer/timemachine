@@ -10,7 +10,7 @@ from timemachine.constants import ONE_4PI_EPS0
 import timemachine
 from pathlib import Path
 from ff.handlers.deserialize import deserialize_handlers
-from ff import Forcefield
+from timemachine.ff import Forcefield
 
 from timemachine.potentials import bonded, nonbonded, gbsa
 from timemachine.lib import potentials, custom_ops

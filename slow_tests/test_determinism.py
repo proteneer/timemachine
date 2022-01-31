@@ -2,7 +2,7 @@ import numpy as np
 
 from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
-from ff import Forcefield
+from timemachine.ff import Forcefield
 
 from timemachine.lib import custom_ops, LangevinIntegrator, MonteCarloBarostat
 

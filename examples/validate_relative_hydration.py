@@ -16,7 +16,7 @@ from md import builders, minimizer
 
 from testsystems.relative import hif2a_ligand_pair
 
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count

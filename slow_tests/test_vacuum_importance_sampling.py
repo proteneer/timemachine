@@ -17,7 +17,7 @@ import numpy as np
 from md import enhanced
 from timemachine.potentials import bonded
 from tests import test_ligands
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 import matplotlib.pyplot as plt
 import pytest

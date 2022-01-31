@@ -22,7 +22,7 @@ from ff.handlers.deserialize import deserialize_handlers
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from ff import handlers
+from timemachine.ff import handlers
 from timemachine.potentials import bonded, shape
 from timemachine.integrator import langevin_coefficients
 

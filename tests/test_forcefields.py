@@ -1,5 +1,5 @@
 from glob import glob
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
 

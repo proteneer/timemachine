@@ -5,7 +5,7 @@ from rdkit import Chem
 from md import minimizer, builders
 
 from ff.handlers.deserialize import deserialize_handlers
-from ff import Forcefield
+from timemachine.ff import Forcefield
 
 
 def test_minimizer():

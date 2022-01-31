@@ -15,7 +15,7 @@ from timemachine.lib import LangevinIntegrator
 import functools
 import jax
 
-from ff import Forcefield
+from timemachine.ff import Forcefield
 
 from ff.handlers import nonbonded, bonded, openmm_deserializer
 

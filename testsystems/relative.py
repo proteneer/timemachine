@@ -4,7 +4,7 @@ import numpy as np
 from rdkit import Chem
 
 from fe import free_energy, topology
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
 from pathlib import Path

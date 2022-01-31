@@ -18,7 +18,7 @@ import numpy as np
 from tests import test_ligands
 import copy
 
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
 import jax.numpy as jnp

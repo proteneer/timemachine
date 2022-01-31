@@ -29,7 +29,7 @@ from rdkit import Chem
 
 from fe import free_energy, topology
 from fe.free_energy import construct_lambda_schedule
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 from md import builders, minimizer
 

@@ -9,7 +9,7 @@ import timemachine
 from timemachine.training.dataset import Dataset
 
 # forcefield handlers
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler

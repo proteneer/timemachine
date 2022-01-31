@@ -33,7 +33,7 @@ from fe import model_rabfe
 from fe.model_utils import verify_rabfe_pair
 from fe.frames import endpoint_frames_only, all_frames, no_frames
 
-from ff import Forcefield
+from timemachine.ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count

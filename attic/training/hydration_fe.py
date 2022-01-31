@@ -14,7 +14,7 @@ import numpy as np
 import os
 import sys
 
-from ff import handlers
+from timemachine.ff import handlers
 from ff.handlers.serialize import serialize_handlers
 from ff.handlers.deserialize import deserialize_handlers
 
