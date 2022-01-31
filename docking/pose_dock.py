@@ -8,8 +8,8 @@ from simtk.openmm.app import PDBFile
 
 from rdkit import Chem
 
-from fe.utils import to_md_units
-from fe import free_energy
+from timemachine.fe import to_md_units
+from timemachine.fe import free_energy
 from ff.handlers.deserialize import deserialize_handlers
 from ff import Forcefield
 from timemachine.lib import LangevinIntegrator

@@ -4,15 +4,15 @@ from unittest import TestCase
 import numpy as np
 
 from md import builders, minimizer
-from fe.model_rabfe import RelativeBindingModel, AbsoluteConversionModel, AbsoluteStandardHydrationModel
-from fe.free_energy import construct_lambda_schedule
-from fe.free_energy_rabfe import (
+from timemachine.fe.model_rabfe import RelativeBindingModel, AbsoluteConversionModel, AbsoluteStandardHydrationModel
+from timemachine.fe.free_energy import construct_lambda_schedule
+from timemachine.fe.free_energy_rabfe import (
     setup_relative_restraints_by_distance,
     get_romol_conf,
     RelativeFreeEnergy,
     AbsoluteFreeEnergy,
 )
-from fe.frames import all_frames
+from timemachine.fe.frames import all_frames
 from timemachine.potentials import rmsd
 from timemachine.lib.potentials import NonbondedInterpolated, Nonbonded
 from testsystems.relative import hif2a_ligand_pair

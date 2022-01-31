@@ -40,7 +40,7 @@ import grpc
 from training import trainer
 from training import service_pb2_grpc
 
-from fe.utils import convert_uIC50_to_kJ_per_mole
+from timemachine.fe import convert_uIC50_to_kJ_per_mole
 
 if __name__ == "__main__":
 

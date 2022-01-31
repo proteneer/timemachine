@@ -11,7 +11,7 @@ from testsystems.relative import hif2a_ligand_pair
 from md.builders import build_water_system
 from md.minimizer import minimize_host_4d
 
-from fe.free_energy import AbsoluteFreeEnergy
+from timemachine.fe.free_energy import AbsoluteFreeEnergy
 
 from md.states import CoordsVelBox
 from md.ensembles import PotentialEnergyModel, NPTEnsemble

@@ -20,7 +20,7 @@ from md.thermostat.moves import UnadjustedLangevinMove
 from md.states import CoordsVelBox
 from md.utils import simulate_npt_traj
 
-from fe.free_energy import AbsoluteFreeEnergy, construct_lambda_schedule
+from timemachine.fe import AbsoluteFreeEnergy, construct_lambda_schedule
 
 from timemachine.lib import LangevinIntegrator
 from functools import partial

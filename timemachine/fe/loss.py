@@ -1,13 +1,10 @@
-import jax
 from jax import core
 import jax.numpy as jnp
-import numpy as onp
 
 from jax.interpreters import ad
 
-from fe import bar as tmbar
+from timemachine.fe import bar as tmbar, math_utils
 import pymbar
-from fe import math_utils
 
 from timemachine.constants import kB
 from simtk import unit

@@ -3,12 +3,11 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 
-import jax
 import numpy as np
 
-from fe import topology
-from fe.utils import get_romol_conf
-from timemachine.lib import potentials, custom_ops, LangevinIntegrator
+from timemachine.fe import topology
+from timemachine.fe.utils import get_romol_conf
+from timemachine.lib import LangevinIntegrator
 
 from ff.handlers import openmm_deserializer
 
