@@ -38,9 +38,8 @@ We currently support the following functional forms. Parameters that can be opti
 If using conda the following can be used to configure your environment
 
 ```
-conda create -n timemachine python=3.7
+conda create -f environment.yml -n timemachine
 conda activate timemachine
-conda install -c conda-forge -c openeye openmm openeye-toolkits=2020.2.0 rdkit=2021.03.1
 ```
 
 ### Install Time Machine
