@@ -6,7 +6,7 @@ from jax import numpy as jnp
 import numpy as np
 import datetime
 import timemachine
-from training.dataset import Dataset
+from timemachine.training.dataset import Dataset
 
 # forcefield handlers
 from ff import Forcefield
