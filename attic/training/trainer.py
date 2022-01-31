@@ -33,7 +33,7 @@ class Timer:
         self.last_time = time.time()
 
     def total(self):
-        print("total", time.time() - start_time)
+        print("total", time.time() - self.start_time)
 
 
 def compute_dGs(all_du_dls, lambda_schedules, du_dl_cutoff):

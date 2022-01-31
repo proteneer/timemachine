@@ -39,7 +39,7 @@ from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
 
 
-from training.dataset import Dataset
+from timemachine.training.dataset import Dataset
 from rdkit import Chem
 
 import timemachine
