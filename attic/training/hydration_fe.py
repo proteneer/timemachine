@@ -23,7 +23,7 @@ from rdkit import Chem
 import configparser
 import grpc
 
-from training import dataset
+from timemachine.training import dataset
 from training import hydration_model, hydration_setup
 from training import simulation
 from training import service_pb2_grpc
