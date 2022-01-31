@@ -29,7 +29,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdFMCS
 
-from fe import dataset
+from timemachine.training import dataset
 
 from fe import loss, bar
 from fe.pdb_writer import PDBWriter

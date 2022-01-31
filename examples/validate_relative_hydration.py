@@ -22,7 +22,7 @@ from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
 
 import multiprocessing
-from training.dataset import Dataset
+from timemachine.training.dataset import Dataset
 from rdkit import Chem
 
 if __name__ == "__main__":
