@@ -31,8 +31,8 @@ from rdkit.Chem import rdFMCS
 
 from timemachine.training import dataset
 
-from fe import loss, bar
-from fe.pdb_writer import PDBWriter
+from timemachine.fe import loss, bar
+from timemachine.fe.pdb_writer import PDBWriter
 
 import configparser
 import grpc
