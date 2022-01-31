@@ -19,7 +19,7 @@ from tests import test_ligands
 import copy
 
 from timemachine.ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 import jax.numpy as jnp
 import jax.random as jrandom

@@ -20,7 +20,7 @@ from fe.atom_mapping import (
     mcs_map,
 )
 from timemachine.ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import custom_ops, LangevinIntegrator
 
 from docking import report

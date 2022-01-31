@@ -1,7 +1,7 @@
-from ff.handlers.bonded import HarmonicBondHandler
-from ff.handlers.bonded import HarmonicAngleHandler
-from ff.handlers.bonded import ProperTorsionHandler
-from ff.handlers.bonded import ImproperTorsionHandler
+from timemachine.ff.handlers.bonded import HarmonicBondHandler
+from timemachine.ff.handlers.bonded import HarmonicAngleHandler
+from timemachine.ff.handlers.bonded import ProperTorsionHandler
+from timemachine.ff.handlers.bonded import ImproperTorsionHandler
 
-from ff.handlers.nonbonded import AM1CCCHandler
-from ff.handlers.nonbonded import LennardJonesHandler
+from timemachine.ff.handlers.nonbonded import AM1CCCHandler
+from timemachine.ff.handlers.nonbonded import LennardJonesHandler

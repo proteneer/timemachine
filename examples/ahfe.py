@@ -17,9 +17,9 @@ import jax
 
 from timemachine.ff import Forcefield
 
-from ff.handlers import nonbonded, bonded, openmm_deserializer
+from timemachine.ff.handlers import nonbonded, bonded, openmm_deserializer
 
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 # 1. build water box
 # 2. build ligand

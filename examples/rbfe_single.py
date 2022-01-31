@@ -15,8 +15,8 @@ from md import builders
 
 from testsystems.relative import hif2a_ligand_pair
 
-from ff.handlers.serialize import serialize_handlers
-from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
+from timemachine.ff.handlers.serialize import serialize_handlers
+from timemachine.ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 from parallel.client import CUDAPoolClient
 from parallel.utils import get_gpu_count
 

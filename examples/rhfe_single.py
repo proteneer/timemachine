@@ -19,7 +19,7 @@ from md import minimizer
 import functools
 
 from timemachine.ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 import multiprocessing
 

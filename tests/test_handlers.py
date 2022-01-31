@@ -8,9 +8,9 @@ import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from ff.handlers import nonbonded, bonded
-from ff.handlers.deserialize import deserialize_handlers
-from ff.charges import AM1CCC_CHARGES
+from timemachine.ff.handlers import nonbonded, bonded
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.charges import AM1CCC_CHARGES
 
 import functools
 

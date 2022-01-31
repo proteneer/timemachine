@@ -4,7 +4,7 @@ from rdkit import Chem
 
 from md import minimizer, builders
 
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff import Forcefield
 
 

@@ -3,7 +3,7 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 from timemachine.ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from fe import topology
 from rdkit import Chem

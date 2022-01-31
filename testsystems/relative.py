@@ -5,7 +5,7 @@ from rdkit import Chem
 
 from fe import free_energy, topology
 from timemachine.ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from pathlib import Path
 

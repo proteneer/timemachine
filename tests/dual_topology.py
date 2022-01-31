@@ -10,8 +10,8 @@ from rdkit.Chem import AllChem
 from timemachine.lib import potentials, custom_ops
 from timemachine.lib import LangevinIntegrator
 
-from ff.handlers import openmm_deserializer
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from fe import pdb_writer
 from fe.utils import get_romol_conf

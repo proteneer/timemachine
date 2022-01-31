@@ -14,7 +14,7 @@ from timemachine import constants
 import numpy as np
 
 from pathlib import Path
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff import Forcefield
 from fe.utils import get_romol_conf
 

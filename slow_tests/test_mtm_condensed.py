@@ -21,7 +21,7 @@ from tests import test_ligands
 import copy
 
 from timemachine.ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 # (ytz): useful for visualization, so please leave this comment here!
 from matplotlib import pyplot as plt

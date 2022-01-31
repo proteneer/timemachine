@@ -9,7 +9,7 @@ from tempfile import TemporaryDirectory
 from timemachine.constants import ONE_4PI_EPS0
 import timemachine
 from pathlib import Path
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff import Forcefield
 
 from timemachine.potentials import bonded, nonbonded, gbsa

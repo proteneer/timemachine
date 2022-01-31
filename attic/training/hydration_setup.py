@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from ff.handlers import bonded, nonbonded, openmm_deserializer
+from timemachine.ff.handlers import bonded, nonbonded, openmm_deserializer
 from timemachine.lib import potentials
 
 

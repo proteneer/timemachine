@@ -5,8 +5,8 @@ relative binding free energy edge from the HIF2A test system"""
 import time
 import numpy as np
 
-from ff.handlers import openmm_deserializer
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff import Forcefield
 
 from simtk.openmm import app

@@ -18,9 +18,9 @@ import jax
 
 from timemachine.ff import Forcefield
 
-from ff.handlers import nonbonded, bonded, openmm_deserializer
+from timemachine.ff.handlers import nonbonded, bonded, openmm_deserializer
 
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 
 # construct an RDKit molecule of aspirin

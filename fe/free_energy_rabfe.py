@@ -10,7 +10,7 @@ import numpy as np
 from fe import topology
 from fe.utils import get_romol_conf
 
-from ff.handlers import openmm_deserializer
+from timemachine.ff.handlers import openmm_deserializer
 
 from scipy.optimize import linear_sum_assignment
 from scipy.spatial.distance import cdist

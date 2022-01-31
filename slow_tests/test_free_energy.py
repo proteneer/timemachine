@@ -8,7 +8,7 @@ from rdkit import Chem
 from scipy.optimize import minimize, check_grad
 
 from timemachine.ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from fe import free_energy, topology
 from fe import estimator

@@ -1,6 +1,6 @@
 from glob import glob
 from timemachine.ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 
 def test_serialization_of_ffs():

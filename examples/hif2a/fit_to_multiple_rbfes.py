@@ -10,9 +10,9 @@ from timemachine.training.dataset import Dataset
 
 # forcefield handlers
 from timemachine.ff import Forcefield
-from ff.handlers.serialize import serialize_handlers
-from ff.handlers.deserialize import deserialize_handlers
-from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
+from timemachine.ff.handlers.serialize import serialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
 # free energy classes
 from fe.free_energy import (

@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 
 from timemachine.lib import potentials
-from ff.handlers import nonbonded, bonded
+from timemachine.ff.handlers import nonbonded, bonded
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
