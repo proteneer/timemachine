@@ -1,8 +1,8 @@
 import timemachine
 
-from optimize.step import truncated_step
-from optimize.utils import flatten_and_unflatten
-from optimize.precondition import learning_rates_like_params
+from timemachine.optimize.step import truncated_step
+from timemachine.optimize.utils import flatten_and_unflatten
+from timemachine.optimize.precondition import learning_rates_like_params
 
 from common import get_110_ccc_ff
 

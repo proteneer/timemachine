@@ -1,4 +1,4 @@
-from optimize.protocol import (
+from timemachine.optimize.protocol import (
     rebalance_initial_protocol,
     log_weights_from_mixture,
     linear_u_kn_interpolant,
