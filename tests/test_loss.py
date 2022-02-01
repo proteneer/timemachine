@@ -1,5 +1,5 @@
 import numpy as np
-from fe.loss import l1_loss, pseudo_huber_loss, flat_bottom_loss, truncated_residuals
+from timemachine.fe.loss import l1_loss, pseudo_huber_loss, flat_bottom_loss, truncated_residuals
 
 np.random.seed(2021)
 

@@ -6,8 +6,8 @@ from rdkit.Chem import rdFMCS
 
 import matplotlib.pyplot as plt
 
-from fe.topology import AtomMappingError
-from fe.utils import core_from_distances, simple_geometry_mapping
+from timemachine.fe.topology import AtomMappingError
+from timemachine.fe.utils import core_from_distances, simple_geometry_mapping
 
 
 class CompareDist(rdFMCS.MCSAtomCompare):

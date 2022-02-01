@@ -1,14 +1,13 @@
 import math
 from rdkit import Chem
-from collections import namedtuple
 from jax.config import config
 
 config.update("jax_enable_x64", True)
 
 import numpy as np
 
-from fe import topology
-from fe.utils import get_romol_conf
+from timemachine.fe import topology
+from timemachine.fe.utils import get_romol_conf
 
 from ff.handlers import openmm_deserializer
 
