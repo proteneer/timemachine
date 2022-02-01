@@ -17,7 +17,7 @@ def test_base_topology_conversion_ring_torsion():
     # test that the conversion protocol behaves as intended on a
     # simple linked cycle.
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
     mol = Chem.MolFromSmiles("C1CC1C1CC1")
     vanilla_mol_top = topology.BaseTopology(mol, ff)
@@ -46,7 +46,7 @@ def test_base_topology_conversion_ring_torsion():
 def test_base_topology_conversion_r_group():
 
     # check that phenol torsions are turned off
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
     mol_top = topology.BaseTopologyConversion(mol, ff)
@@ -62,7 +62,7 @@ def test_base_topology_standard_decoupling():
     # this class is typically used in the second step of the RABFE protocol for the solvent leg.
     # we expected the charges to be zero, and the lj parameters to be standardized. In addition,
     # the torsions should be turned off.
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
     mol = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
     vanilla_mol_top = topology.BaseTopology(mol, ff)
@@ -110,7 +110,7 @@ def test_dual_topology_standard_decoupling():
     # DualTopology class in one ways:
     # 1) the nonbonded terms are interpolated at lambda=0 such that the epsilons and charges are at half strength.
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
     mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1F"))
@@ -167,7 +167,7 @@ def test_dual_topology_standard_decoupling_charged():
     # based on each individual molecule's charge, as opposed to based on the sum
     # of the charges.
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
 
     mol_a = Chem.AddHs(Chem.MolFromSmiles("C1CC1[O-]"))
@@ -206,7 +206,7 @@ def test_dual_topology_minimization():
     # Identical to the vanilla Dual Topology class, except that both ligands are
     # decouple simultaneously
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
     mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1F"))
@@ -227,7 +227,7 @@ def test_dual_topology_rhfe():
     # used in testing the relative hydration protocol. The nonbonded charges and epsilons are reduced
     # to half strength
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
     mol_a = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1O"))
     mol_b = Chem.AddHs(Chem.MolFromSmiles("c1ccccc1F"))

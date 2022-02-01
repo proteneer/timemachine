@@ -123,7 +123,7 @@ def main(args, stage):
     AllChem.EmbedMolecule(benzene)
     AllChem.EmbedMolecule(phenol)
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
     r_benzene = Recipe.from_rdkit(benzene, ff_handlers)
     r_phenol = Recipe.from_rdkit(phenol, ff_handlers)
 

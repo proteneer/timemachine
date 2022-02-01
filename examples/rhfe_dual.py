@@ -55,7 +55,7 @@ combined_masses = np.concatenate([host_masses, ligand_masses_a, ligand_masses_b]
 
 # note: .py file rather than .offxml file
 # note: _ccc suffix means "correctable charge corrections"
-ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
 ff = Forcefield(ff_handlers)
 
 # for RHFE we need to insert the reference ligand first, before inserting the

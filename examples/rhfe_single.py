@@ -63,7 +63,7 @@ if __name__ == "__main__":
     mol_a = all_mols[0]
     mol_b = all_mols[1]
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
     ff = Forcefield(ff_handlers)
 
     # the water system first.

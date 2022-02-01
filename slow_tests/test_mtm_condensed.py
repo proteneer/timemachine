@@ -30,7 +30,7 @@ import pytest
 
 
 def get_ff_am1cc():
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
     ff = Forcefield(ff_handlers)
     return ff
 

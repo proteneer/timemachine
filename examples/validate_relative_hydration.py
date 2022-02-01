@@ -66,7 +66,7 @@ if __name__ == "__main__":
     path_to_ligand = "tests/data/ligands_40.sdf"
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
 
-    with open("ff/params/smirnoff_1_1_0_ccc.py") as f:
+    with open("timemachine/ff/params/smirnoff_1_1_0_ccc.py") as f:
         ff_handlers = deserialize_handlers(f.read())
 
     forcefield = Forcefield(ff_handlers)

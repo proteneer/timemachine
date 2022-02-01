@@ -108,7 +108,7 @@ def do_relative_docking(host_pdbfile, mol_a, mol_b, core, num_switches, transiti
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 "..",
-                "ff/params/smirnoff_1_1_0_ccc.py",
+                "timemachine/ff/params/smirnoff_1_1_0_ccc.py",
             )
         ).read()
     )

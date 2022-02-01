@@ -522,7 +522,7 @@ def test_gbsa_handler():
 
 def test_am1_differences():
 
-    ff_raw = open("ff/params/smirnoff_1_1_0_ccc.py").read()
+    ff_raw = open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read()
     ff_handlers = deserialize_handlers(ff_raw)
     for ccc in ff_handlers:
         if isinstance(ccc, nonbonded.AM1CCCHandler):

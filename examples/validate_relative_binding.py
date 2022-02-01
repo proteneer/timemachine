@@ -202,7 +202,7 @@ if __name__ == "__main__":
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
     root = Path(timemachine.__file__).parent.parent
 
-    with open(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py")) as f:
+    with open(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py")) as f:
         ff_handlers = deserialize_handlers(f.read())
 
     forcefield = Forcefield(ff_handlers)

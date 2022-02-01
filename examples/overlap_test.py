@@ -141,7 +141,7 @@ def convergence(args):
 
     nrg_fns = []
 
-    forcefield = "ff/params/smirnoff_1_1_0_ccc.py"
+    forcefield = "timemachine/ff/params/smirnoff_1_1_0_ccc.py"
     ff_raw = open(forcefield, "r").read()
     ff_handlers = deserialize_handlers(ff_raw)
 

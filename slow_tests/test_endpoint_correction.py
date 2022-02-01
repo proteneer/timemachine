@@ -23,7 +23,7 @@ def setup_system():
 
     root = Path(__file__).parent.parent
     path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))
-    path_to_ff = str(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py"))
+    path_to_ff = str(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py"))
 
     with open(path_to_ff) as f:
         ff_handlers = deserialize_handlers(f.read())

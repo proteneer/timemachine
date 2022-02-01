@@ -146,7 +146,7 @@ def calculate_rigorous_work(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 "..",
-                "ff/params/smirnoff_1_1_0_ccc.py",
+                "timemachine/ff/params/smirnoff_1_1_0_ccc.py",
             )
         ).read()
     )

@@ -199,7 +199,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
     parser.add_argument("--batch_size", default=1, type=int, help="Number of items to batch together for training")
 
-    parser.add_argument("--path_to_ff", default=str(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py")))
+    parser.add_argument("--path_to_ff", default=str(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py")))
     parser.add_argument(
         "--path_to_edges",
         default=["relative_transformations.pkl"],

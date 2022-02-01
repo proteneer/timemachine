@@ -36,7 +36,7 @@ def test_absolute_free_energy():
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
 
-    ff = Forcefield(deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read()))
+    ff = Forcefield(deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read()))
 
     ff_params = ff.get_ordered_params()
 
@@ -149,7 +149,7 @@ def test_relative_free_energy():
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
 
-    ff = Forcefield(deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read()))
+    ff = Forcefield(deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read()))
 
     ff_params = ff.get_ordered_params()
 

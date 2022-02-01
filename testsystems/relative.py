@@ -16,7 +16,7 @@ root = Path(__file__).parent.parent
 path_to_protein = str(root.joinpath("tests/data/hif2a_nowater_min.pdb"))
 
 
-def _setup_hif2a_ligand_pair(ff="ff/params/smirnoff_1_1_0_ccc.py"):
+def _setup_hif2a_ligand_pair(ff="timemachine/ff/params/smirnoff_1_1_0_ccc.py"):
     """Manually constructed atom map
 
     TODO: replace this with a testsystem class similar to those used in openmmtools
