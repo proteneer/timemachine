@@ -25,7 +25,7 @@ from fe.model import RBFEModel
 from fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 
 # MD initialization
-from md import builders
+from timemachine.md import builders
 
 # parallelization across multiple GPUs
 from parallel.client import CUDAPoolClient, GRPCClient

@@ -14,7 +14,7 @@ config.update("jax_enable_x64", True)
 import jax
 import numpy as np
 
-from md import enhanced
+from timemachine.md import enhanced
 from timemachine.potentials import bonded
 from tests import test_ligands
 from ff import Forcefield

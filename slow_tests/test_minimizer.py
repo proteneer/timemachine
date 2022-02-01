@@ -2,7 +2,7 @@ import numpy as np
 
 from rdkit import Chem
 
-from md import minimizer, builders
+from timemachine.md import minimizer, builders
 
 from ff.handlers.deserialize import deserialize_handlers
 from ff import Forcefield

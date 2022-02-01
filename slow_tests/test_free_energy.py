@@ -15,7 +15,7 @@ from fe import estimator
 
 from parallel.client import CUDAPoolClient
 
-from md import builders, minimizer
+from timemachine.md import builders, minimizer
 
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 

@@ -6,7 +6,7 @@ import dataclasses
 import time
 import copy
 import numpy as np
-from md import minimizer
+from timemachine.md import minimizer
 
 from typing import Tuple, List
 

@@ -18,7 +18,7 @@ from fe.model_utils import apply_hmr
 from fe import free_energy
 from fe.topology import SingleTopology
 
-from md import builders, minimizer
+from timemachine.md import builders, minimizer
 from md.barostat.utils import get_bond_list, get_group_indices
 
 

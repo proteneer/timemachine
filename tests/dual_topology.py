@@ -16,8 +16,8 @@ from ff.handlers.deserialize import deserialize_handlers
 from fe import pdb_writer
 from fe.utils import get_romol_conf
 from fe import rbfe
-from md import Recipe
-from md import builders
+from timemachine.md import Recipe
+from timemachine.md import builders
 
 from multiprocessing import Pool
 

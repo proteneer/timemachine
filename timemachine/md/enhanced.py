@@ -21,8 +21,8 @@ from timemachine import lib
 from timemachine.lib import custom_ops
 
 from md.states import CoordsVelBox
-from md import minimizer
-from md import builders
+from timemachine.md import minimizer
+from timemachine.md import builders
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors

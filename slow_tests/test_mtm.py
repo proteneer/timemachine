@@ -6,7 +6,7 @@ import jax
 from typing import List
 
 from md.states import CoordsVelBox
-from md import enhanced
+from timemachine.md import enhanced
 from md.moves import NPTMove, ReferenceMTMMove, OptimizedMTMMove
 
 import functools

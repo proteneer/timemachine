@@ -6,7 +6,7 @@ from pickle import dump, load
 from simtk import openmm
 from rdkit import Chem
 
-from md import minimizer
+from timemachine.md import minimizer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from fe import free_energy, topology, estimator
 from fe.model_utils import apply_hmr

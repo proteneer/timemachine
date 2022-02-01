@@ -13,8 +13,8 @@ from rdkit.Chem import rdFMCS
 from rdkit.Chem import AllChem
 
 from fe import topology
-from md import builders
-from md import minimizer
+from timemachine.md import builders
+from timemachine.md import minimizer
 
 import functools
 
