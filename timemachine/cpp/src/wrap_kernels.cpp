@@ -1019,8 +1019,5 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_nonbonded<double, false>(m, "f64");
     declare_nonbonded<float, false>(m, "f32");
 
-    // declare_gbsa<double>(m, "f64");
-    // declare_gbsa<float>(m, "f32");
-
     declare_context(m);
 }
