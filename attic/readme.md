@@ -3,7 +3,7 @@ Code, documentation, experiments we want to retain for reference, but that we're
 ### Contents
 * `codegen/` -- sympy script for generating CUDA code to compute bond, angle, and torsion gradients
 * `docs/` -- write-up of initial vision for `timemachine`, involving efficient backpropagation through MD trajectories
-* `gbsa/` -- CUDA implementation of GBSA OBC
+* `gbsa/` -- CUDA and Jax implementations of GBSA OBC
 * `langevin/` -- Langevin dynamics supporting backpropagation through time
 * `tests/` -- test protocol for relative binding free energies via dual topology
 * `thermo_deriv/` -- numerical experiments with "thermodynamic derivative" estimators, adjusting LJ parameters to match observables

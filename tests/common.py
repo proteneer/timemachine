@@ -12,7 +12,7 @@ from pathlib import Path
 from ff.handlers.deserialize import deserialize_handlers
 from ff import Forcefield
 
-from timemachine.potentials import bonded, nonbonded, gbsa
+from timemachine.potentials import bonded, nonbonded
 from timemachine.lib import potentials, custom_ops
 
 from hilbertcurve.hilbertcurve import HilbertCurve
