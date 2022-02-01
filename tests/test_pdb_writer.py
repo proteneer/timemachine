@@ -3,8 +3,8 @@ import numpy as np
 
 from tempfile import NamedTemporaryFile
 
-from fe.pdb_writer import PDBWriter, convert_single_topology_mols
-from fe.topology import SingleTopology, DualTopology
+from timemachine.fe.pdb_writer import PDBWriter, convert_single_topology_mols
+from timemachine.fe.topology import SingleTopology
 from md import builders
 
 from testsystems.relative import hif2a_ligand_pair

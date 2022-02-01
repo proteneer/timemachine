@@ -1,5 +1,5 @@
 import numpy as np
-from fe.free_energy_rabfe import (
+from timemachine.fe.free_energy_rabfe import (
     RABFEResult,
     setup_relative_restraints_by_distance,
     setup_relative_restraints_using_smarts,
@@ -7,8 +7,8 @@ from fe.free_energy_rabfe import (
     interpolate_pre_optimized_protocol,
     construct_pre_optimized_absolute_lambda_schedule_solvent,
 )
-from fe.atom_mapping import CompareDistNonterminal
-from fe.utils import get_romol_conf
+from timemachine.fe.atom_mapping import CompareDistNonterminal
+from timemachine.fe.utils import get_romol_conf
 
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdFMCS
