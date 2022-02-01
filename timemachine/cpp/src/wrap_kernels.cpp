@@ -23,7 +23,6 @@
 #include "rmsd_restraint.hpp"
 // #include "lennard_jones.hpp"
 // #include "electrostatics.hpp"
-// #include "gbsa.hpp"
 #include "fixed_point.hpp"
 #include "integrator.hpp"
 #include "neighborlist.hpp"
