@@ -1,5 +1,10 @@
 import numpy as np
-from timemachine.ff.handlers.bonded import HarmonicAngleHandler, HarmonicBondHandler, ImproperTorsionHandler, ProperTorsionHandler
+from timemachine.ff.handlers.bonded import (
+    HarmonicAngleHandler,
+    HarmonicBondHandler,
+    ImproperTorsionHandler,
+    ProperTorsionHandler,
+)
 from timemachine.ff.handlers.nonbonded import LennardJonesHandler, AM1CCCHandler
 
 default_learning_rates = {
