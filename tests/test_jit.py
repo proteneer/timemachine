@@ -5,8 +5,6 @@ from unittest import TestCase
 from md.builders import build_water_system
 from md.minimizer import minimize_host_4d
 
-from fe.free_energy import RelativeFreeEnergy
-
 from testsystems.relative import hif2a_ligand_pair
 
 

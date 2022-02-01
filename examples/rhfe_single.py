@@ -12,7 +12,7 @@ from rdkit import Chem
 from rdkit.Chem import rdFMCS
 from rdkit.Chem import AllChem
 
-from fe import topology
+from timemachine.fe import topology, free_energy
 from md import builders
 from md import minimizer
 
@@ -22,8 +22,6 @@ from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
 import multiprocessing
-
-from fe import free_energy
 
 
 def wrap_method(args, fn):
