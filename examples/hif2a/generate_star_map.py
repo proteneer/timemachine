@@ -11,10 +11,10 @@ from pickle import dump
 import timemachine
 from timemachine.parser import TimemachineConfig
 
-from fe import topology
-from fe.utils import convert_uIC50_to_kJ_per_mole
-from fe.free_energy import RelativeFreeEnergy
-from fe.topology import AtomMappingError
+from timemachine.fe import topology
+from timemachine.fe.utils import convert_uIC50_to_kJ_per_mole
+from timemachine.fe.free_energy import RelativeFreeEnergy
+from timemachine.fe.topology import AtomMappingError
 
 # 0. Get force field
 from timemachine.ff import Forcefield
@@ -24,11 +24,9 @@ from rdkit import Chem
 from rdkit.Chem import rdFMCS
 
 import numpy as np
-from fe.atom_mapping import (
+from timemachine.fe.atom_mapping import (
     get_core_by_geometry,
-    get_core_by_matching,
     get_core_by_mcs,
-    get_core_by_smarts,
     mcs_map,
     transformation_size,
     get_star_map,

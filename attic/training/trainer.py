@@ -5,7 +5,8 @@ import jax
 import jax.numpy as jnp
 from io import StringIO
 
-from fe import math_utils, system
+from timemachine.fe import system
+from timemachine.fe import math_utils
 from rdkit import Chem
 
 from training import setup_system, bootstrap
@@ -13,7 +14,7 @@ from training import service_pb2
 from matplotlib import pyplot as plt
 import pickle
 
-from fe.pdb_writer import PDBWriter
+from timemachine.fe.pdb_writer import PDBWriter
 from simtk.openmm.app import PDBFile
 
 from timemachine.ff.handlers import bonded, nonbonded

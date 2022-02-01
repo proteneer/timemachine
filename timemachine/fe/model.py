@@ -8,9 +8,10 @@ from rdkit import Chem
 
 from md import minimizer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
-from fe import free_energy, topology, estimator
-from fe.model_utils import apply_hmr
+from timemachine.fe import free_energy, topology, estimator
+from timemachine.fe.model_utils import apply_hmr
 from timemachine.ff import Forcefield
+
 from md.barostat.utils import get_bond_list, get_group_indices
 
 from parallel.client import AbstractClient, SerialClient

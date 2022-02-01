@@ -3,7 +3,9 @@
 import numpy as np
 from rdkit import Chem
 
-from fe import free_energy, topology
+from timemachine.fe import free_energy, topology
+
+from timemachine.fe import topology, free_energy
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 

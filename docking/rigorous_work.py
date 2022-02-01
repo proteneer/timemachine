@@ -11,9 +11,10 @@ import numpy as np
 from rdkit import Chem
 
 from md import builders, minimizer
-from fe import pdb_writer, free_energy
+from timemachine.fe import pdb_writer, free_energy
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
+
 from timemachine.lib import custom_ops, LangevinIntegrator
 
 from docking import report

@@ -24,7 +24,7 @@ from timemachine.lib import custom_ops, potentials
 from md import builders
 
 from hilbertcurve.hilbertcurve import HilbertCurve
-from fe.utils import to_md_units
+from timemachine.fe.utils import to_md_units
 
 from timemachine.ff.handlers import openmm_deserializer
 from simtk.openmm import app

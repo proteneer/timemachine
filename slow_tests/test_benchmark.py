@@ -13,10 +13,10 @@ from simtk.openmm import app
 
 from timemachine.lib import custom_ops, LangevinIntegrator, MonteCarloBarostat
 
-from fe.utils import to_md_units
-from fe.model_utils import apply_hmr
-from fe import free_energy
-from fe.topology import SingleTopology
+from timemachine.fe.utils import to_md_units
+from timemachine.fe.model_utils import apply_hmr
+from timemachine.fe import free_energy
+from timemachine.fe.topology import SingleTopology
 
 from md import builders, minimizer
 from md.barostat.utils import get_bond_list, get_group_indices

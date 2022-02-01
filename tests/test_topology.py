@@ -5,13 +5,13 @@ config.update("jax_enable_x64", True)
 import unittest
 import numpy as np
 
-from fe import topology
+from timemachine.fe import topology
 
 from rdkit import Chem
 
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-from fe.utils import get_romol_conf
+from timemachine.fe.utils import get_romol_conf
 import jax
 
 from timemachine.lib import potentials

@@ -1,13 +1,10 @@
-import jax
 from jax import core
 import jax.numpy as jnp
-import numpy as onp
 
 from jax.interpreters import ad
 
-from fe import bar as tmbar
+from timemachine.fe import bar as tmbar, math_utils
 import pymbar
-from fe import math_utils
 
 from timemachine.constants import kB
 from simtk import unit
@@ -21,7 +18,7 @@ def mybar_impl(w):
     return A
 
 
-def mybar_vjp(g, w):
+def mybar_jvp(g, w):
     return g * tmbar.dG_dw(w)
 
 
@@ -31,7 +28,7 @@ def mybar(x):
 
 mybar_p = core.Primitive("mybar")
 mybar_p.def_impl(mybar_impl)
-ad.defvjp(mybar_p, mybar_vjp)
+ad.defjvp(mybar_p, mybar_jvp)
 
 
 def BAR_leg(insertion_du_dls, deletion_du_dls, lambda_schedule):

@@ -10,8 +10,7 @@ from scipy.optimize import minimize, check_grad
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 
-from fe import free_energy, topology
-from fe import estimator
+from timemachine.fe import topology, estimator, free_energy
 
 from parallel.client import CUDAPoolClient
 
@@ -19,7 +18,7 @@ from md import builders, minimizer
 
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 
-from fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
+from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from md.barostat.utils import get_bond_list, get_group_indices
 from testsystems.relative import hif2a_ligand_pair
 
