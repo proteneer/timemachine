@@ -5,7 +5,7 @@ config.update("jax_enable_x64", True)
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers
 
-from fe import topology
+from timemachine.fe import topology
 from rdkit import Chem
 import numpy as np
 
