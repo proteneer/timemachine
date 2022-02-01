@@ -7,18 +7,18 @@ from simtk import unit
 
 from testsystems.relative import hif2a_ligand_pair
 
-from md.builders import build_water_system
-from md.minimizer import minimize_host_4d
+from timemachine.md.builders import build_water_system
+from timemachine.md.minimizer import minimize_host_4d
 
 from fe.free_energy import AbsoluteFreeEnergy
 
-from md.ensembles import PotentialEnergyModel, NPTEnsemble
-from md.barostat.moves import MonteCarloBarostat
-from md.barostat.utils import get_bond_list, get_group_indices
-from md.states import CoordsVelBox
-from md.utils import simulate_npt_traj
-from md.thermostat.moves import UnadjustedLangevinMove
-from md.thermostat.utils import sample_velocities
+from timemachine.md.ensembles import PotentialEnergyModel, NPTEnsemble
+from timemachine.md.barostat.moves import MonteCarloBarostat
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.states import CoordsVelBox
+from timemachine.md.utils import simulate_npt_traj
+from timemachine.md.thermostat.moves import UnadjustedLangevinMove
+from timemachine.md.thermostat.utils import sample_velocities
 
 from timemachine.lib import LangevinIntegrator
 

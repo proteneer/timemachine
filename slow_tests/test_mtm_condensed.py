@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 
 from timemachine.md import enhanced
-from md.moves import NPTMove, OptimizedMTMMove
+from timemachine.md.moves import NPTMove, OptimizedMTMMove
 
 import functools
 

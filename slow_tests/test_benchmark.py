@@ -19,7 +19,7 @@ from fe import free_energy
 from fe.topology import SingleTopology
 
 from timemachine.md import builders, minimizer
-from md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 
 
 def recenter(conf, box):
