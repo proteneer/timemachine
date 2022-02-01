@@ -35,8 +35,8 @@ from collections import namedtuple, defaultdict
 
 from pickle import load, dump
 
-from optimize.step import truncated_step
-from optimize.utils import flatten_and_unflatten
+from timemachine.optimize.step import truncated_step
+from timemachine.optimize.utils import flatten_and_unflatten
 
 from typing import Tuple, Dict, List, Union, Any
 
