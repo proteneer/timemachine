@@ -8,6 +8,17 @@
 
 namespace timemachine {
 
+//class Barostat {
+//
+//public:
+//
+//    virtual void inplace_move(
+//        double *d_x,
+//        double *d_box,
+//        const double lambda
+//    );
+//
+//};
 
 class MonteCarloBarostat {
 
