@@ -125,7 +125,10 @@ MonteCarloBarostat::~MonteCarloBarostat() {
     gpuErrchk(cudaFree(d_u_buffer_));
     gpuErrchk(cudaFree(d_init_u_));
     gpuErrchk(cudaFree(d_final_u_));
-    gpuErrchk(cudaFree(d_rand_)) gpuErrchk(cudaFree(d_length_scale_));
+    gpuErrchk(cudaFree(d_rand_));
+    gpuErrchk(cudaFree(d_length_scale_));
+    gpuErrchk(cudaFree(d_sum_storage_));
+    gpuErrchk(cudaFree(d_volume_));
     gpuErrchk(cudaFree(d_volume_scale_));
     gpuErrchk(cudaFree(d_volume_delta_));
     gpuErrchk(cudaFree(d_num_accepted_));
