@@ -11,7 +11,6 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 import numpy as np
-import pytest
 
 import functools
 import itertools
@@ -21,7 +20,7 @@ from common import prepare_water_system, prepare_reference_nonbonded
 
 from timemachine.potentials import nonbonded
 from timemachine.lib import potentials
-from md import builders
+from timemachine.md import builders
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 from timemachine.fe.utils import to_md_units

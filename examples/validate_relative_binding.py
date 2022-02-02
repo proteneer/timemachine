@@ -44,7 +44,7 @@ from rdkit import Chem
 
 import timemachine
 from timemachine.potentials import rmsd
-from md import builders, minimizer
+from timemachine.md import builders, minimizer
 
 ALL_FRAMES = "all"
 ENDPOINTS_ONLY = "endpoints"

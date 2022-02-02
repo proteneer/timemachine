@@ -8,8 +8,8 @@ config.update("jax_enable_x64", True)
 import jax
 import jax.numpy as jnp
 
-from md import enhanced
-from md.moves import NPTMove, OptimizedMTMMove
+from timemachine.md import enhanced
+from timemachine.md.moves import NPTMove, OptimizedMTMMove
 
 import functools
 

@@ -1,5 +1,5 @@
-from md.moves import MonteCarloMove
-from md.states import CoordsVelBox
+from timemachine.md.moves import MonteCarloMove
+from timemachine.md.states import CoordsVelBox
 from timemachine.lib import custom_ops
 import numpy as np
 
