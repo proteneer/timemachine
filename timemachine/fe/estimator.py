@@ -10,7 +10,7 @@ from typing import Tuple, List
 import dataclasses
 
 from parallel.client import SerialClient
-from md.states import CoordsVelBox
+from timemachine.md.states import CoordsVelBox
 
 
 @dataclasses.dataclass

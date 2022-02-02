@@ -11,8 +11,8 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
 
-from md import builders, minimizer
-from timemachine.fe import topology, free_energy
+from timemachine.md import builders, minimizer
+from timemachine.fe import free_energy, topology
 from timemachine.fe.atom_mapping import (
     get_core_by_geometry,
     get_core_by_mcs,

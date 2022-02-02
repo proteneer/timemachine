@@ -15,9 +15,9 @@ from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from timemachine.fe import pdb_writer
 from timemachine.fe.utils import get_romol_conf
-from timemachine.fe import rbfe  # unresolved
-from md import Recipe  # unresolved
-from md import builders
+from timemachine.fe import rbfe
+from timemachine.md import Recipe
+from timemachine.md import builders
 
 from multiprocessing import Pool
 

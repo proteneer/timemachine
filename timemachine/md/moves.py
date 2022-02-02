@@ -1,11 +1,11 @@
-from md.states import CoordsVelBox
+from timemachine.md.states import CoordsVelBox
 from typing import List, Tuple
 import numpy as np
 from scipy.special import logsumexp
 
 from jax.scipy.special import logsumexp as jlogsumexp
 from timemachine.lib import custom_ops
-from md.barostat.utils import get_group_indices, get_bond_list
+from timemachine.md.barostat.utils import get_group_indices, get_bond_list
 from timemachine import lib
 import jax
 import jax.numpy as jnp

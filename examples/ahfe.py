@@ -7,7 +7,7 @@ from rdkit.Chem import AllChem
 from timemachine.fe import pdb_writer
 from timemachine.fe import topology
 from timemachine.fe.utils import get_romol_conf
-from md import builders
+from timemachine.md import builders
 
 from timemachine.lib import potentials, custom_ops
 from timemachine.lib import LangevinIntegrator
