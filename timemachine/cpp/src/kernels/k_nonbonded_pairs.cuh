@@ -162,7 +162,7 @@ void __global__ k_nonbonded_pairs(
             g_epsj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DEPS>(eps_grad * eps_i);
 
             real_du_dl += sig_grad * (dsig_dl_i + dsig_dl_j);
-            RealType term = eps_grad * fix_nvidia_fmad(eps_j, deps_dl_i, eps_i, deps_dl_j);
+            RealType term = eps_grad * (strict_mul(eps_j, deps_dl_i) + strict_mul(eps_i, deps_dl_j));
             real_du_dl += term;
         }
 
@@ -181,7 +181,7 @@ void __global__ k_nonbonded_pairs(
         g_qj += FLOAT_TO_FIXED_DU_DP<RealType, FIXED_EXPONENT_DU_DCHARGE>(charge_scale * qi * inv_dij * ebd);
 
         real_du_dl += delta_w * delta_prefactor * (dw_dl_i - dw_dl_j);
-        real_du_dl += charge_scale * inv_dij * ebd * fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
+        real_du_dl += charge_scale * inv_dij * ebd * (strict_mul(qj, dq_dl_i) + strict_mul(qi, dq_dl_j));
 
         if (du_dx) {
             accumulate<Negated>(du_dx + atom_i_idx * 3 + 0, gi_x);

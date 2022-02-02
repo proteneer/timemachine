@@ -439,7 +439,7 @@ void __device__ v_nonbonded_unified(
 
                 if (COMPUTE_DU_DL && ALCHEMICAL) {
                     real_du_dl += sig_grad * (dsig_dl_i + dsig_dl_j);
-                    RealType term = eps_grad * fix_nvidia_fmad(eps_j, deps_dl_i, eps_i, deps_dl_j);
+                    RealType term = eps_grad * (strict_mul(eps_j, deps_dl_i) + strict_mul(eps_i, deps_dl_j));
                     real_du_dl += term;
                 }
             }
@@ -462,7 +462,7 @@ void __device__ v_nonbonded_unified(
             if (COMPUTE_DU_DL && ALCHEMICAL) {
                 // needed for cancellation of nans (if one term blows up)
                 real_du_dl += delta_w * delta_prefactor * (dw_dl_i - dw_dl_j);
-                real_du_dl += inv_dij * ebd * fix_nvidia_fmad(qj, dq_dl_i, qi, dq_dl_j);
+                real_du_dl += inv_dij * ebd * (strict_mul(qj, dq_dl_i) + strict_mul(qi, dq_dl_j));
                 du_dl += FLOAT_TO_FIXED_NONBONDED(real_du_dl);
             }
 
