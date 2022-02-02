@@ -406,13 +406,14 @@ def test_molecular_ideal_gas():
         v_0 = sample_velocities(masses * unit.amu, temperature)
 
         # rescale the box to be approximately the desired box volume already
-        rescaler = CentroidRescaler(group_indices)
+        # rescaler = CentroidRescaler(group_indices)
         initial_volume = compute_box_volume(complex_box)
-        initial_center = compute_box_center(complex_box)
+        # initial_center = compute_box_center(complex_box)
         length_scale = ((1 + initial_relative_box_perturbation) * expected_volume_in_md[i] / initial_volume) ** (
             1.0 / 3
         )
-        new_coords = rescaler.scale_centroids(coords, initial_center, length_scale)
+        new_coords = coords
+        # new_coords = rescaler.scale_centroids(coords, initial_center, length_scale)
         new_box = complex_box * length_scale
 
         baro = custom_ops.MonteCarloBarostat(
