@@ -20,8 +20,8 @@ from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 from parallel.client import CUDAPoolClient
 from parallel.utils import get_gpu_count
 
-from optimize.step import truncated_step
-from optimize.utils import flatten_and_unflatten
+from timemachine.optimize.step import truncated_step
+from timemachine.optimize.utils import flatten_and_unflatten
 
 if __name__ == "__main__":
 

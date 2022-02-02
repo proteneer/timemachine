@@ -8,3 +8,5 @@ Code, documentation, experiments we want to retain for reference, but that we're
     * note: `langevin_coefficients` dependency has since changed -- some scripts rely on a version of `langevin_coefficients` prior to PR #459
 * `training/` -- classes and functions for an earlier training workflow
     * note: somewhat tailored to use TI estimates, constant volume simulations, GRPC, ...
+* `scripts/`
+  * `bootstrap_am1.py` -- script for approximating AM1BCC with atom types rather than bond types
