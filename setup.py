@@ -91,7 +91,7 @@ setup(
         "pyyaml",
         "scipy",
     ],
-    extras_require={  # Optional
+    extras_require={
         "dev": ["black==21.10b0", "pre-commit"],
         "test": ["pytest", "pytest-cov"],
     },
@@ -103,7 +103,7 @@ setup(
     #         "sample=sample:main",
     #     ],
     # },
-    project_urls={  # Optional
+    project_urls={
         "Bug Reports": "https://github.com/proteneer/timemachine/issues",
         "Source": "https://github.com/proteneer/timemachine/",
     },
