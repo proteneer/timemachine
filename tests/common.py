@@ -9,8 +9,8 @@ from tempfile import TemporaryDirectory
 from timemachine.constants import ONE_4PI_EPS0
 import timemachine
 from pathlib import Path
-from ff.handlers.deserialize import deserialize_handlers
-from ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
 
 from timemachine.potentials import bonded, nonbonded, gbsa
 from timemachine.lib import potentials, custom_ops
@@ -33,7 +33,7 @@ def temporary_working_dir():
 
 def get_110_ccc_ff():
     root = Path(timemachine.__file__).parent.parent
-    path_to_ff = str(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py"))
+    path_to_ff = str(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py"))
 
     with open(path_to_ff) as f:
         ff_handlers = deserialize_handlers(f.read())

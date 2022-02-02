@@ -3,7 +3,7 @@ map_generation:
   atom_mapping_strategy: geometry
   transformation_threshold: 3
   protein: datasets/fep-benchmark/hif2a/5tbm_prepared.pdb
-  forcefield: ff/params/smirnoff_1_1_0_ccc.py
+  forcefield: timemachine/ff/params/smirnoff_1_1_0_ccc.py
   ligands:
     - datasets/fep-benchmark/hif2a/ligands.sdf
   # Cores and hubs must be in the same order.

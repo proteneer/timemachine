@@ -7,11 +7,10 @@ import numpy as np
 from rdkit import Chem
 from scipy.optimize import minimize, check_grad
 
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
-from fe import free_energy, topology
-from fe import estimator
+from timemachine.fe import topology, estimator, free_energy
 
 from parallel.client import CUDAPoolClient
 
@@ -19,7 +18,7 @@ from md import builders, minimizer
 
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 
-from fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
+from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from md.barostat.utils import get_bond_list, get_group_indices
 from testsystems.relative import hif2a_ligand_pair
 
@@ -37,7 +36,7 @@ def test_absolute_free_energy():
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
 
-    ff = Forcefield(deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read()))
+    ff = Forcefield(deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read()))
 
     ff_params = ff.get_ordered_params()
 
@@ -150,7 +149,7 @@ def test_relative_free_energy():
     # build the water system.
     solvent_system, solvent_coords, solvent_box, _ = builders.build_water_system(4.0)
 
-    ff = Forcefield(deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read()))
+    ff = Forcefield(deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read()))
 
     ff_params = ff.get_ordered_params()
 

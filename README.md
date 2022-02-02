@@ -38,9 +38,9 @@ We currently support the following functional forms. Parameters that can be opti
 If using conda the following can be used to configure your environment
 
 ```
-conda create -n timemachine python=3.7
+conda env create -f environment.yml -n timemachine
+conda install openmm=7.5.1 -c conda-forge # only if using openmm from conda
 conda activate timemachine
-conda install -c conda-forge -c openeye openmm openeye-toolkits=2020.2.0 rdkit=2021.03.1
 ```
 
 ### Install Time Machine
@@ -90,7 +90,7 @@ To update the forcefield parameters, the timemachine computes derivatives of the
 
 ## Forcefield Gotchas
 
-Most of the training is using the correctable charge corrections [ccc forcefield](https://github.com/proteneer/timemachine/blob/master/ff/params/smirnoff_1_1_0_ccc.py), which is SMIRNOFF 1.1.0 augmented with BCCs ported via the [recharge](https://github.com/openforcefield/openff-recharge) project. There are some additional modifications:
+Most of the training is using the correctable charge corrections [ccc forcefield](https://github.com/proteneer/timemachine/blob/1a721dd3f05d6011cf028b0588e066682d38ba59/ff/params/smirnoff_1_1_0_ccc.py), which is SMIRNOFF 1.1.0 augmented with BCCs ported via the [recharge](https://github.com/openforcefield/openff-recharge) project. There are some additional modifications:
 
 1. The charges have been multiplied by sqrt(ONE_4PI_EPS0) as an optimization.
 2. The eps parameter in LJ have been replaced by an alpha such that alpha^2=eps in order to avoid negative eps values during training.

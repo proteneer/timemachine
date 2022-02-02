@@ -4,8 +4,6 @@
 #include <iostream>
 #include <stdexcept>
 
-#define WARPSIZE 32
-
 #include <cooperative_groups.h>
 
 // since we need to do a full O(N^2) computing and we don't need to broadcast the forces,
@@ -147,7 +145,7 @@ __global__ void k_compute_born_radii(
             }
         }
 
-        const int srcLane = (threadIdx.x + 1) % WARPSIZE;
+        const int srcLane = (threadIdx.x + 1) % warp_size;
         scaledRadiusJ = __shfl_sync(0xffffffff, scaledRadiusJ, srcLane);
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
         for (int d = 0; d < 3; d++) {
@@ -313,7 +311,7 @@ void __global__ k_compute_born_first_loop_gpu(
             born_force_i_accum += sw * dGpol_dalpha2_ij * born_radii_j;
         }
 
-        const int srcLane = (threadIdx.x + 1) % WARPSIZE;
+        const int srcLane = (threadIdx.x + 1) % warp_size;
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
         qj = __shfl_sync(0xffffffff, qj, srcLane);
         born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
@@ -620,7 +618,7 @@ __global__ void k_compute_born_energy_and_forces(
             }
         }
 
-        const int srcLane = (threadIdx.x + 1) % WARPSIZE;
+        const int srcLane = (threadIdx.x + 1) % warp_size;
         atom_j_idx = __shfl_sync(0xffffffff, atom_j_idx, srcLane);
         born_radii_j = __shfl_sync(0xffffffff, born_radii_j, srcLane);
         radiusJ = __shfl_sync(0xffffffff, radiusJ, srcLane);

@@ -7,23 +7,23 @@ import copy
 import functools
 
 from rdkit import Chem
-from fe import endpoint_correction
+from timemachine.fe import endpoint_correction
 from timemachine.integrator import langevin_coefficients
 from timemachine.potentials import bonded
 from timemachine import constants
 import numpy as np
 
 from pathlib import Path
-from ff.handlers.deserialize import deserialize_handlers
-from ff import Forcefield
-from fe.utils import get_romol_conf
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.fe.utils import get_romol_conf
 
 
 def setup_system():
 
     root = Path(__file__).parent.parent
     path_to_ligand = str(root.joinpath("tests/data/ligands_40.sdf"))
-    path_to_ff = str(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py"))
+    path_to_ff = str(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py"))
 
     with open(path_to_ff) as f:
         ff_handlers = deserialize_handlers(f.read())

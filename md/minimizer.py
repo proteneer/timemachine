@@ -1,13 +1,12 @@
 import numpy as np
 
-from fe import topology
+from timemachine.fe import topology, model_utils
 
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 
-from ff.handlers import openmm_deserializer
-from ff import Forcefield
-from fe import model_utils
-from fe.utils import get_romol_conf
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff import Forcefield
+from timemachine.fe.utils import get_romol_conf
 from md.barostat.utils import get_group_indices, get_bond_list
 
 from rdkit import Chem
@@ -164,7 +163,7 @@ def minimize_host_4d(mols, host_system, host_coords, ff, box, mol_coords=None) -
     return final_coords[:num_host_atoms]
 
 
-def equilibrate_complex(
+def equilibrate_host(
     mol: Chem.Mol,
     host_system: openmm.System,
     host_coords: np.array,

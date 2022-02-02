@@ -1,0 +1,10 @@
+name: timemachine
+channels:
+  - conda-forge
+  - openeye
+dependencies:
+  - python=3.7
+  - jax=0.2.27
+  - jaxlib=0.1.75
+  - openeye-toolkits=2020.2.0
+  - rdkit=2021.03.1

@@ -24,9 +24,9 @@ from timemachine.lib import potentials
 from md import builders
 
 from hilbertcurve.hilbertcurve import HilbertCurve
-from fe.utils import to_md_units
+from timemachine.fe.utils import to_md_units
 
-from ff.handlers import openmm_deserializer
+from timemachine.ff.handlers import openmm_deserializer
 from simtk.openmm import app
 
 np.set_printoptions(linewidth=500)

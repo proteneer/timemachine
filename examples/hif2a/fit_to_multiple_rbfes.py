@@ -6,23 +6,23 @@ from jax import numpy as jnp
 import numpy as np
 import datetime
 import timemachine
-from training.dataset import Dataset
+from timemachine.training.dataset import Dataset
 
 # forcefield handlers
-from ff import Forcefield
-from ff.handlers.serialize import serialize_handlers
-from ff.handlers.deserialize import deserialize_handlers
-from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.serialize import serialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
 # free energy classes
-from fe.free_energy import (
+from timemachine.fe.free_energy import (
     RelativeFreeEnergy,
     construct_lambda_schedule,
     RBFETransformIndex,
 )
-from fe.estimator import SimulationResult
-from fe.model import RBFEModel
-from fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
+from timemachine.fe.estimator import SimulationResult
+from timemachine.fe.model import RBFEModel
+from timemachine.fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 
 # MD initialization
 from md import builders
@@ -35,8 +35,8 @@ from collections import namedtuple, defaultdict
 
 from pickle import load, dump
 
-from optimize.step import truncated_step
-from optimize.utils import flatten_and_unflatten
+from timemachine.optimize.step import truncated_step
+from timemachine.optimize.utils import flatten_and_unflatten
 
 from typing import Tuple, Dict, List, Union, Any
 
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
     parser.add_argument("--batch_size", default=1, type=int, help="Number of items to batch together for training")
 
-    parser.add_argument("--path_to_ff", default=str(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py")))
+    parser.add_argument("--path_to_ff", default=str(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py")))
     parser.add_argument(
         "--path_to_edges",
         default=["relative_transformations.pkl"],
