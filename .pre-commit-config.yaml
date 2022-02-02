@@ -10,7 +10,6 @@ repos:
     rev: 21.10b0
     hooks:
     -   id: black
-        args: [--line-length=120]
         exclude: '^versioneer.py$|^timemachine/_version.py'
 
 -   repo: https://github.com/pre-commit/mirrors-clang-format
