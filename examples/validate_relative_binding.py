@@ -33,8 +33,8 @@ from timemachine.fe import model_rabfe
 from timemachine.fe.model_utils import verify_rabfe_pair
 from timemachine.fe.frames import endpoint_frames_only, all_frames, no_frames
 
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from parallel.client import CUDAPoolClient, GRPCClient
 from parallel.utils import get_gpu_count
 
@@ -202,7 +202,7 @@ if __name__ == "__main__":
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
     root = Path(timemachine.__file__).parent.parent
 
-    with open(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py")) as f:
+    with open(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py")) as f:
         ff_handlers = deserialize_handlers(f.read())
 
     forcefield = Forcefield(ff_handlers)

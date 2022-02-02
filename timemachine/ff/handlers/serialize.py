@@ -2,7 +2,7 @@ import io
 import pprint
 import numpy as np
 
-from ff.handlers.suffix import _SUFFIX
+from timemachine.ff.handlers.suffix import _SUFFIX
 
 
 def serialize_handlers(all_handlers):

@@ -17,8 +17,8 @@ from timemachine.fe.free_energy import RelativeFreeEnergy
 from timemachine.fe.topology import AtomMappingError
 
 # 0. Get force field
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from rdkit import Chem
 from rdkit.Chem import rdFMCS

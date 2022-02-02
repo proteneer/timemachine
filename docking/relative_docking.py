@@ -19,8 +19,8 @@ from timemachine.fe.atom_mapping import (
     get_core_by_smarts,
     mcs_map,
 )
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import custom_ops, LangevinIntegrator
 
 from docking import report
@@ -108,7 +108,7 @@ def do_relative_docking(host_pdbfile, mol_a, mol_b, core, num_switches, transiti
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 "..",
-                "ff/params/smirnoff_1_1_0_ccc.py",
+                "timemachine/ff/params/smirnoff_1_1_0_ccc.py",
             )
         ).read()
     )

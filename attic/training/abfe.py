@@ -12,8 +12,8 @@ import itertools
 import os
 import sys
 
-from ff.handlers.serialize import serialize_handlers
-from ff.handlers.deserialize import deserialize
+from timemachine.ff.handlers.serialize import serialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize
 
 from multiprocessing import Process, Pipe
 

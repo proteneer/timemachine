@@ -1,6 +1,6 @@
 import numpy as np
 from jax import numpy as jnp
-from ff import nonbonded
+from timemachine.ff import nonbonded
 
 from typing import Union, Optional
 

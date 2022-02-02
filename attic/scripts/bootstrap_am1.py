@@ -7,7 +7,7 @@ from rdkit import Chem
 from openeye import oechem
 from openeye import oequacpac
 from openeye import oeomega
-from ff.handlers.nonbonded import convert_to_oe
+from timemachine.ff.handlers.nonbonded import convert_to_oe
 
 ONE_4PI_EPS0 = 138.935456
 

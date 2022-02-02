@@ -8,9 +8,8 @@ from rdkit import Chem
 from timemachine.lib import potentials, LangevinIntegrator, MonteCarloBarostat
 from timemachine import constants
 from timemachine.fe.frames import endpoint_frames_only
-from timemachine.fe import estimator_abfe, model_utils
-from timemachine.fe import topology, free_energy_rabfe
-from ff import Forcefield
+from timemachine.fe import free_energy_rabfe, topology, estimator_abfe, model_utils
+from timemachine.ff import Forcefield
 
 from parallel.client import AbstractClient, _MockFuture
 from typing import Optional, Tuple, Any, List

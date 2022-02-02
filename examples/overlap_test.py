@@ -17,12 +17,12 @@ import jax.numpy as np
 import numpy as onp
 
 from scipy.stats import special_ortho_group
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from ff import handlers
+from timemachine.ff import handlers
 from timemachine.potentials import bonded, shape
 from timemachine.integrator import langevin_coefficients
 
@@ -141,7 +141,7 @@ def convergence(args):
 
     nrg_fns = []
 
-    forcefield = "ff/params/smirnoff_1_1_0_ccc.py"
+    forcefield = "timemachine/ff/params/smirnoff_1_1_0_ccc.py"
     ff_raw = open(forcefield, "r").read()
     ff_handlers = deserialize_handlers(ff_raw)
 
