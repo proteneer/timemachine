@@ -75,7 +75,7 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     keywords="molecular dynamics",
-    ext_modules=[CMakeExtension("timemachine", "timemachine/cpp")],
+    ext_modules=[CMakeExtension("timemachine.lib.custom_ops", "timemachine/cpp")],
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[
