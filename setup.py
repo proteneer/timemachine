@@ -39,7 +39,6 @@ class CMakeBuild(build_ext):
         if "CMAKE_ARGS" in os.environ:
             cmake_args += [item for item in os.environ["CMAKE_ARGS"].split(" ") if item]
 
-        cmake_args += [f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{cfg.upper()}={extdir}"]
         build_args += ["--config", cfg]
 
         if "CMAKE_BUILD_PARALLEL_LEVEL" not in os.environ:
