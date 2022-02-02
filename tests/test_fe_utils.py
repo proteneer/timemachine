@@ -2,10 +2,10 @@ import numpy as np
 import pytest
 
 from rdkit import Chem
-from fe.model_utils import verify_rabfe_pair
+from timemachine.fe.model_utils import verify_rabfe_pair
 
-from fe import utils
-from fe.model_utils import image_molecule
+from timemachine.fe import utils
+from timemachine.fe.model_utils import image_molecule
 
 from rdkit import Chem
 

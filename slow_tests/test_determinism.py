@@ -6,8 +6,8 @@ from ff import Forcefield
 
 from timemachine.lib import custom_ops, LangevinIntegrator, MonteCarloBarostat
 
-from fe import free_energy
-from fe.topology import SingleTopology
+from timemachine.fe import free_energy
+from timemachine.fe.topology import SingleTopology
 
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices

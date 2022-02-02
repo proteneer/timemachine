@@ -13,9 +13,9 @@ from timemachine.lib import LangevinIntegrator
 from ff.handlers import openmm_deserializer
 from ff.handlers.deserialize import deserialize_handlers
 
-from fe import pdb_writer
-from fe.utils import get_romol_conf
-from fe import rbfe
+from timemachine.fe import pdb_writer
+from timemachine.fe.utils import get_romol_conf
+from timemachine.fe import rbfe
 from timemachine.md import Recipe
 from timemachine.md import builders
 

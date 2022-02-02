@@ -3,8 +3,8 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 
 from timemachine.md import builders
-from fe.model import RBFEModel
-from fe.free_energy import construct_lambda_schedule
+from timemachine.fe.model import RBFEModel
+from timemachine.fe.free_energy import construct_lambda_schedule
 from testsystems.relative import hif2a_ligand_pair
 from parallel.client import CUDAPoolClient
 from parallel.utils import get_gpu_count

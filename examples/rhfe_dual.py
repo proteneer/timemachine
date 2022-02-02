@@ -4,9 +4,9 @@ import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from fe import pdb_writer
-from fe import topology
-from fe.utils import get_romol_conf
+from timemachine.fe import pdb_writer
+from timemachine.fe import topology
+from timemachine.fe.utils import get_romol_conf
 from timemachine.md import builders
 from timemachine.md import minimizer
 

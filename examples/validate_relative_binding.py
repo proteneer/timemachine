@@ -20,7 +20,7 @@ import numpy as np
 
 from pathlib import Path
 
-from fe.free_energy_rabfe import (
+from timemachine.fe.free_energy_rabfe import (
     construct_absolute_lambda_schedule_complex,
     construct_absolute_lambda_schedule_solvent,
     construct_conversion_lambda_schedule,
@@ -28,10 +28,10 @@ from fe.free_energy_rabfe import (
     setup_relative_restraints_by_distance,
     RABFEResult,
 )
-from fe.utils import convert_uM_to_kJ_per_mole
-from fe import model_rabfe
-from fe.model_utils import verify_rabfe_pair
-from fe.frames import endpoint_frames_only, all_frames, no_frames
+from timemachine.fe.utils import convert_uM_to_kJ_per_mole
+from timemachine.fe import model_rabfe
+from timemachine.fe.model_utils import verify_rabfe_pair
+from timemachine.fe.frames import endpoint_frames_only, all_frames, no_frames
 
 from ff import Forcefield
 from ff.handlers.deserialize import deserialize_handlers

@@ -7,7 +7,7 @@ import copy
 import functools
 
 from rdkit import Chem
-from fe import endpoint_correction
+from timemachine.fe import endpoint_correction
 from timemachine.integrator import langevin_coefficients
 from timemachine.potentials import bonded
 from timemachine import constants
@@ -16,7 +16,7 @@ import numpy as np
 from pathlib import Path
 from ff.handlers.deserialize import deserialize_handlers
 from ff import Forcefield
-from fe.utils import get_romol_conf
+from timemachine.fe.utils import get_romol_conf
 
 
 def setup_system():

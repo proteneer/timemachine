@@ -15,14 +15,14 @@ from ff.handlers.deserialize import deserialize_handlers
 from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
 # free energy classes
-from fe.free_energy import (
+from timemachine.fe.free_energy import (
     RelativeFreeEnergy,
     construct_lambda_schedule,
     RBFETransformIndex,
 )
-from fe.estimator import SimulationResult
-from fe.model import RBFEModel
-from fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
+from timemachine.fe.estimator import SimulationResult
+from timemachine.fe.model import RBFEModel
+from timemachine.fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 
 # MD initialization
 from timemachine.md import builders
@@ -35,8 +35,8 @@ from collections import namedtuple, defaultdict
 
 from pickle import load, dump
 
-from optimize.step import truncated_step
-from optimize.utils import flatten_and_unflatten
+from timemachine.optimize.step import truncated_step
+from timemachine.optimize.utils import flatten_and_unflatten
 
 from typing import Tuple, Dict, List, Union, Any
 

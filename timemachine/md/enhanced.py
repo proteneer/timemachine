@@ -10,9 +10,8 @@ import numpy as np
 from scipy.special import logsumexp
 from jax.scipy.special import logsumexp as jlogsumexp
 
-from fe import topology
-from fe.utils import get_romol_conf
-from fe import free_energy
+from timemachine.fe import topology, free_energy
+from timemachine.fe.utils import get_romol_conf
 
 from timemachine.integrator import simulate
 from timemachine.potentials import bonded, nonbonded, rmsd

@@ -5,13 +5,13 @@
 import argparse
 import numpy as np
 
-from fe.free_energy_rabfe import (
+from timemachine.fe.free_energy_rabfe import (
     construct_absolute_lambda_schedule_solvent,
     construct_relative_lambda_schedule,
     setup_relative_restraints_by_distance,
     get_romol_conf,
 )
-from fe import model_rabfe
+from timemachine.fe import model_rabfe
 from timemachine.md import builders, minimizer
 
 from testsystems.relative import hif2a_ligand_pair

@@ -1,5 +1,5 @@
 import pymbar
-from fe import endpoint_correction
+from timemachine.fe import endpoint_correction, standard_state
 from collections import namedtuple
 
 import dataclasses
@@ -10,8 +10,7 @@ from timemachine.md import minimizer
 
 from typing import Tuple, List
 
-from fe import standard_state
-from fe.utils import sanitize_energies, extract_delta_Us_from_U_knk
+from timemachine.fe.utils import sanitize_energies, extract_delta_Us_from_U_knk
 
 from timemachine.lib import potentials, custom_ops
 

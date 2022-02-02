@@ -1,4 +1,4 @@
-from fe.functional import construct_differentiable_interface
+from timemachine.fe.functional import construct_differentiable_interface
 from testsystems.relative import hif2a_ligand_pair
 from jax import grad, value_and_grad, numpy as np
 
