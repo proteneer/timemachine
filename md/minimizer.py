@@ -4,8 +4,8 @@ from timemachine.fe import topology, model_utils
 
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 
-from ff.handlers import openmm_deserializer
-from ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff import Forcefield
 from timemachine.fe.utils import get_romol_conf
 from md.barostat.utils import get_group_indices, get_bond_list
 

@@ -10,8 +10,8 @@ from rdkit.Chem import AllChem
 from timemachine.lib import potentials, custom_ops
 from timemachine.lib import LangevinIntegrator
 
-from ff.handlers import openmm_deserializer
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from timemachine.fe import pdb_writer
 from timemachine.fe.utils import get_romol_conf
@@ -123,7 +123,7 @@ def main(args, stage):
     AllChem.EmbedMolecule(benzene)
     AllChem.EmbedMolecule(phenol)
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
     r_benzene = Recipe.from_rdkit(benzene, ff_handlers)
     r_phenol = Recipe.from_rdkit(phenol, ff_handlers)
 

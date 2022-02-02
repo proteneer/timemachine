@@ -3,9 +3,11 @@
 import numpy as np
 from rdkit import Chem
 
+from timemachine.fe import free_energy, topology
+
 from timemachine.fe import topology, free_energy
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from pathlib import Path
 
@@ -14,7 +16,7 @@ root = Path(__file__).parent.parent
 path_to_protein = str(root.joinpath("tests/data/hif2a_nowater_min.pdb"))
 
 
-def _setup_hif2a_ligand_pair(ff="ff/params/smirnoff_1_1_0_ccc.py"):
+def _setup_hif2a_ligand_pair(ff="timemachine/ff/params/smirnoff_1_1_0_ccc.py"):
     """Manually constructed atom map
 
     TODO: replace this with a testsystem class similar to those used in openmmtools

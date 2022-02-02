@@ -5,9 +5,9 @@ relative binding free energy edge from the HIF2A test system"""
 import time
 import numpy as np
 
-from ff.handlers import openmm_deserializer
-from ff.handlers.deserialize import deserialize_handlers
-from ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
 
 from simtk.openmm import app
 
@@ -204,7 +204,7 @@ def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
     mol_a, mol_b, core = testsystem.mol_a, testsystem.mol_b, testsystem.core
 
     # this
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)

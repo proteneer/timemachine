@@ -8,10 +8,10 @@ import pickle
 from collections import Counter
 
 from rdkit import Chem
-from ff.handlers.utils import sort_tuple, match_smirks as rd_match_smirks
-from ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
-from ff.handlers.serialize import SerializableMixIn
-from ff.handlers.bcc_aromaticity import AromaticityModel
+from timemachine.ff.handlers.utils import sort_tuple, match_smirks as rd_match_smirks
+from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
+from timemachine.ff.handlers.serialize import SerializableMixIn
+from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 
 from timemachine import constants
 

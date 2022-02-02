@@ -15,7 +15,7 @@ from jax.ops import index_update, index
 from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded_v3_on_specific_pairs, nonbonded_block
 from timemachine.potentials.jax_utils import convert_to_4d, get_all_pairs_indices, get_group_group_indices, distance
 from md import builders
-from ff.handlers import openmm_deserializer
+from timemachine.ff.handlers import openmm_deserializer
 from simtk import unit
 
 from functools import partial

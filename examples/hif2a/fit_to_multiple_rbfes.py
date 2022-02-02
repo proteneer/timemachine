@@ -9,10 +9,10 @@ import timemachine
 from timemachine.training.dataset import Dataset
 
 # forcefield handlers
-from ff import Forcefield
-from ff.handlers.serialize import serialize_handlers
-from ff.handlers.deserialize import deserialize_handlers
-from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.serialize import serialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
 
 # free energy classes
 from timemachine.fe.free_energy import (
@@ -199,7 +199,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="intermediate", choices=["intermediate", "production", "test"])
     parser.add_argument("--batch_size", default=1, type=int, help="Number of items to batch together for training")
 
-    parser.add_argument("--path_to_ff", default=str(root.joinpath("ff/params/smirnoff_1_1_0_ccc.py")))
+    parser.add_argument("--path_to_ff", default=str(root.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py")))
     parser.add_argument(
         "--path_to_edges",
         default=["relative_transformations.pkl"],

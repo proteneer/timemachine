@@ -3,9 +3,9 @@ import numpy as np
 
 import jax
 
-from ff.handlers.utils import match_smirks, sort_tuple
-from ff.handlers.serialize import SerializableMixIn, bin_to_str
-from ff.handlers.suffix import _SUFFIX
+from timemachine.ff.handlers.utils import match_smirks, sort_tuple
+from timemachine.ff.handlers.serialize import SerializableMixIn, bin_to_str
+from timemachine.ff.handlers.suffix import _SUFFIX
 
 
 def generate_vd_idxs(mol, smirks):

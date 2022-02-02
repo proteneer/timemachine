@@ -8,9 +8,9 @@ import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from ff.handlers import nonbonded, bonded
-from ff.handlers.deserialize import deserialize_handlers
-from ff.charges import AM1CCC_CHARGES
+from timemachine.ff.handlers import nonbonded, bonded
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.charges import AM1CCC_CHARGES
 
 import functools
 
@@ -522,7 +522,7 @@ def test_gbsa_handler():
 
 def test_am1_differences():
 
-    ff_raw = open("ff/params/smirnoff_1_1_0_ccc.py").read()
+    ff_raw = open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read()
     ff_handlers = deserialize_handlers(ff_raw)
     for ccc in ff_handlers:
         if isinstance(ccc, nonbonded.AM1CCCHandler):
