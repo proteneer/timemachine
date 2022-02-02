@@ -21,7 +21,7 @@ from common import prepare_water_system, prepare_reference_nonbonded
 
 from timemachine.potentials import nonbonded
 from timemachine.lib import custom_ops, potentials
-from md import builders
+from timemachine.md import builders
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 from timemachine.fe.utils import to_md_units

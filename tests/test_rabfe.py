@@ -3,7 +3,7 @@ from unittest import TestCase
 
 import numpy as np
 
-from md import builders, minimizer
+from timemachine.md import builders, minimizer
 from timemachine.fe.model_rabfe import RelativeBindingModel, AbsoluteConversionModel, AbsoluteStandardHydrationModel
 from timemachine.fe.free_energy import construct_lambda_schedule
 from timemachine.fe.free_energy_rabfe import (
