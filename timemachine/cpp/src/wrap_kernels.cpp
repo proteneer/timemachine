@@ -4,22 +4,22 @@
 #include <pybind11/stl.h>
 #include <regex>
 
+#include "barostat.hpp"
 #include "bound_potential.hpp"
+#include "centroid_restraint.hpp"
 #include "context.hpp"
+#include "fixed_point.hpp"
 #include "harmonic_angle.hpp"
 #include "harmonic_bond.hpp"
-#include "potential.hpp"
-#include "rmsd_align.hpp"
-#include "summed_potential.hpp"
-#include "centroid_restraint.hpp"
+#include "integrator.hpp"
+#include "neighborlist.hpp"
 #include "nonbonded.hpp"
 #include "nonbonded_dense.hpp"
 #include "nonbonded_pairs.hpp"
 #include "periodic_torsion.hpp"
-#include "fixed_point.hpp"
-#include "integrator.hpp"
-#include "neighborlist.hpp"
-#include "barostat.hpp"
+#include "potential.hpp"
+#include "rmsd_align.hpp"
+#include "summed_potential.hpp"
 
 #include <iostream>
 
