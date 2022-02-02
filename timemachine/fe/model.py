@@ -11,7 +11,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 from timemachine.fe import topology, estimator, free_energy
 from timemachine.fe.model_utils import apply_hmr
 from ff import Forcefield
-from md.barostat.utils import get_bond_list, get_group_indices
+from md.utils import get_bond_list, get_group_indices
 
 from parallel.client import AbstractClient, SerialClient
 from typing import Optional, List, Tuple

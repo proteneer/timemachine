@@ -19,7 +19,7 @@ from md import builders, minimizer
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 
 from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
-from md.barostat.utils import get_bond_list, get_group_indices
+from md.utils import get_bond_list, get_group_indices
 from testsystems.relative import hif2a_ligand_pair
 
 

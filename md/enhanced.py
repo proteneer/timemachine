@@ -449,7 +449,7 @@ def get_solvent_phase_system(mol, ff):
     return ubps, params, masses, coords, water_box
 
 
-from md.barostat.utils import get_group_indices, get_bond_list
+from md.utils import get_group_indices, get_bond_list
 
 
 def equilibrate_solvent_phase(

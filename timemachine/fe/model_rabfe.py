@@ -15,7 +15,7 @@ from ff import Forcefield
 from parallel.client import AbstractClient, _MockFuture
 from typing import Optional, Tuple, Any, List
 
-from md.barostat.utils import get_group_indices, get_bond_list
+from md.utils import get_group_indices, get_bond_list
 
 
 class AbsoluteModel(ABC):

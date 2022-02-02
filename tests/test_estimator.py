@@ -4,7 +4,7 @@ import numpy as np
 from timemachine.fe import estimator_abfe
 from timemachine.lib import LangevinIntegrator, potentials, MonteCarloBarostat
 from parallel.client import CUDAPoolClient
-from md.barostat.utils import get_bond_list, get_group_indices
+from md.utils import get_bond_list, get_group_indices
 
 
 def get_harmonic_bond(n_atoms, n_bonds):

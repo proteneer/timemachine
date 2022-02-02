@@ -12,7 +12,7 @@ from md.minimizer import minimize_host_4d
 
 from timemachine.fe.free_energy import AbsoluteFreeEnergy
 
-from md.barostat.utils import get_bond_list, get_group_indices, compute_box_volume, compute_box_center
+from md.utils import get_bond_list, get_group_indices, compute_box_volume, compute_box_center
 from md.thermostat.utils import sample_velocities
 
 from timemachine.lib import LangevinIntegrator, custom_ops

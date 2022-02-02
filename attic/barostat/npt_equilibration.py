@@ -12,7 +12,7 @@ from md.ensembles import PotentialEnergyModel, NPTEnsemble
 
 from md.thermostat.utils import sample_velocities
 
-from md.barostat.utils import get_bond_list, get_group_indices
+from md.utils import get_bond_list, get_group_indices
 from md.barostat.moves import MonteCarloBarostat
 
 from md.thermostat.moves import UnadjustedLangevinMove

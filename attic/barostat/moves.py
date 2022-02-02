@@ -6,7 +6,7 @@ config.update("jax_enable_x64", True)
 import numpy as onp
 
 from md.states import CoordsVelBox
-from md.barostat.utils import compute_box_volume, compute_box_center
+from md.utils import compute_box_volume, compute_box_center
 
 from md.moves import MonteCarloMove
 

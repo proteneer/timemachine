@@ -1,6 +1,6 @@
 import numpy as np
 from md.barostat.moves import CentroidRescaler
-from md.barostat.utils import compute_intramolecular_distances
+from md.utils import compute_intramolecular_distances
 
 np.random.seed(2021)
 

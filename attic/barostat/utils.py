@@ -8,7 +8,7 @@ from md.moves import CompoundMove
 from md.thermostat.moves import UnadjustedLangevinMove
 from md.barostat.moves import MonteCarloBarostat
 
-from md.barostat.utils import compute_box_volume
+from md.utils import compute_box_volume
 
 
 def simulate_npt_traj(
