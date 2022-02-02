@@ -409,10 +409,11 @@ def test_molecular_ideal_gas():
         length_scale = ((1 + initial_relative_box_perturbation) * expected_volume_in_md[i] / initial_volume) ** (
             1.0 / 3
         )
+        new_coords = coords
         new_box = complex_box * length_scale
 
         baro = custom_ops.MonteCarloBarostat(
-            coords.shape[0],
+            new_coords.shape[0],
             pressure.value_in_unit(unit.bar),
             temperature.value_in_unit(unit.kelvin),
             group_indices,
