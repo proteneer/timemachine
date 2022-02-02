@@ -65,7 +65,13 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/eigen)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 14)
+
+if (NOT CUDA_ARCH)
+  set(CUDA_ARCH "75")
+endif()
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH}")
+unset(CUDA_ARCH CACHE)
+
 target_link_libraries(${LIBRARY_NAME} PRIVATE -lcurand -lcuda -lcudart -lcudadevrt -lnvrtc)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 
