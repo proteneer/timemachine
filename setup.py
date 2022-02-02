@@ -6,6 +6,7 @@ Adapted from https://github.com/pypa/sampleproject/blob/main/setup.py
 # Always prefer setuptools over distutils
 from setuptools import setup, find_packages
 import pathlib
+import versioneer
 
 here = pathlib.Path(__file__).parent.resolve()
 
@@ -14,7 +15,8 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="timemachine",
-    version="0.1.0",
+    version=versioneer.get_version(),
+    cmdclass=versioneer.get_cmdclass(),
     description="A high-performance differentiable molecular dynamics, docking and optimization engine",
     long_description=long_description,
     long_description_content_type="text/markdown",
