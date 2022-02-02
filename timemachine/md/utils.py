@@ -2,13 +2,13 @@ import numpy as np
 
 from typing import Tuple, Dict, List
 
-from md.states import CoordsVelBox
-from md.moves import CompoundMove
+from timemachine.md.states import CoordsVelBox
+from timemachine.md.moves import CompoundMove
 
-from md.thermostat.moves import UnadjustedLangevinMove
-from md.barostat.moves import MonteCarloBarostat
+from timemachine.md.thermostat.moves import UnadjustedLangevinMove
+from timemachine.md.barostat.moves import MonteCarloBarostat
 
-from md.barostat.utils import compute_box_volume
+from timemachine.md.barostat.utils import compute_box_volume
 
 
 def simulate_npt_traj(

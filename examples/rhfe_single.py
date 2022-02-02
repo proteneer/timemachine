@@ -12,9 +12,9 @@ from rdkit import Chem
 from rdkit.Chem import rdFMCS
 from rdkit.Chem import AllChem
 
-from timemachine.fe import topology, free_energy
-from md import builders
-from md import minimizer
+from timemachine.fe import topology
+from timemachine.md import builders
+from timemachine.md import minimizer
 
 import functools
 

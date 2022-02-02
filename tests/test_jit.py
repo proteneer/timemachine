@@ -2,8 +2,8 @@ import os
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from md.builders import build_water_system
-from md.minimizer import minimize_host_4d
+from timemachine.md.builders import build_water_system
+from timemachine.md.minimizer import minimize_host_4d
 
 from testsystems.relative import hif2a_ligand_pair
 
