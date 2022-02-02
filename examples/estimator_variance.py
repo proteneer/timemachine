@@ -31,7 +31,7 @@ from timemachine.fe import topology, free_energy
 from timemachine.fe.free_energy import construct_lambda_schedule
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-from md import builders, minimizer
+from timemachine.md import builders, minimizer
 
 from time import time
 

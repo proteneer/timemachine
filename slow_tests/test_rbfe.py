@@ -2,7 +2,7 @@ import os
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 
-from md import builders
+from timemachine.md import builders
 from timemachine.fe.model import RBFEModel
 from timemachine.fe.free_energy import construct_lambda_schedule
 from testsystems.relative import hif2a_ligand_pair

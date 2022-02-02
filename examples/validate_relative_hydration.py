@@ -12,7 +12,7 @@ from timemachine.fe.free_energy_rabfe import (
     get_romol_conf,
 )
 from timemachine.fe import model_rabfe
-from md import builders, minimizer
+from timemachine.md import builders, minimizer
 
 from testsystems.relative import hif2a_ligand_pair
 

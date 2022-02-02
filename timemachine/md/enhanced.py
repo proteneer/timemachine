@@ -19,9 +19,9 @@ from timemachine.constants import BOLTZ
 from timemachine import lib
 from timemachine.lib import custom_ops
 
-from md.states import CoordsVelBox
-from md import minimizer
-from md import builders
+from timemachine.md.states import CoordsVelBox
+from timemachine.md import minimizer
+from timemachine.md import builders
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
@@ -449,7 +449,7 @@ def get_solvent_phase_system(mol, ff):
     return ubps, params, masses, coords, water_box
 
 
-from md.barostat.utils import get_group_indices, get_bond_list
+from timemachine.md.barostat.utils import get_group_indices, get_bond_list
 
 
 def equilibrate_solvent_phase(
