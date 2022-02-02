@@ -17,7 +17,7 @@ import pickle
 from timemachine.fe.pdb_writer import PDBWriter
 from simtk.openmm.app import PDBFile
 
-from ff.handlers import bonded, nonbonded
+from timemachine.ff.handlers import bonded, nonbonded
 
 
 import time

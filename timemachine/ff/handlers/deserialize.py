@@ -1,8 +1,8 @@
 import ast
 import numpy as np
 
-from ff.handlers import bonded, nonbonded
-from ff.handlers.suffix import _SUFFIX
+from timemachine.ff.handlers import bonded, nonbonded
+from timemachine.ff.handlers.suffix import _SUFFIX
 
 
 def deserialize_handlers(obj):

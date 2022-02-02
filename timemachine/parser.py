@@ -18,7 +18,7 @@ class MapGenerationConfig:
     label: str = "IC50[uM](SPA)"
     transformation_threshold: int = 3
     atom_mapping_strategy: str = "geometry"
-    forcefield: str = str(ROOT_DIR.joinpath("ff/params/smirnoff_1_1_0_ccc.py"))
+    forcefield: str = str(ROOT_DIR.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py"))
     output: Optional[str] = None
     cores: Optional[List[Dict]] = None
     networks: Optional[List[Dict]] = None

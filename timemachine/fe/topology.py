@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 
 from timemachine.lib import potentials
-from ff.handlers import nonbonded, bonded
+from timemachine.ff.handlers import nonbonded, bonded
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
@@ -22,7 +22,7 @@ def standard_qlj_typer(mol):
     in a relatively simple and forcefield independent way. The
     parameters here roughly follow the Smirnoff 1.1.0 Lennard Jones types.
 
-    These values are taken from ff/params/smirnoff_1_1_0_cc.py, rounding down
+    These values are taken from timemachine/ff/params/smirnoff_1_1_0_cc.py, rounding down
     to two decimal places for sigma and one decimal place for epsilon.
 
     Note that charges are set to net_formal_charge(mol)/num_atoms.

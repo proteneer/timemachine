@@ -20,8 +20,8 @@ import numpy as np
 from tests import test_ligands
 import copy
 
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 # (ytz): useful for visualization, so please leave this comment here!
 from matplotlib import pyplot as plt
@@ -30,7 +30,7 @@ import pytest
 
 
 def get_ff_am1cc():
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
     ff = Forcefield(ff_handlers)
     return ff
 
