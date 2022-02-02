@@ -29,7 +29,7 @@ if(NOT EXISTS ${EIGEN_SRC_DIR})
   execute_process(COMMAND git clone --branch 3.3.9 https://gitlab.com/libeigen/eigen.git ${EIGEN_SRC_DIR})
 endif()
 
-add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
+add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR} ${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
 
 
 # NO_EXTRAS is needed since cuda doesn't use flto

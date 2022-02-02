@@ -3,20 +3,68 @@
 Adapted from https://github.com/pypa/sampleproject/blob/main/setup.py
 """
 
-# Always prefer setuptools over distutils
-from setuptools import setup, find_packages
+from setuptools import Extension, find_packages, setup
+from setuptools.command.build_ext import build_ext
+
+import os
 import pathlib
+import subprocess
+import sys
 import versioneer
+
+# CMake configuration adapted from https://github.com/pybind/cmake_example
+class CMakeExtension(Extension):
+    def __init__(self, name, sourcedir=""):
+        Extension.__init__(self, name, sources=[])
+        self.sourcedir = os.path.abspath(sourcedir)
+
+
+class CMakeBuild(build_ext):
+    def build_extension(self, ext):
+        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
+
+        # required for auto-detection & inclusion of auxiliary "native" libs
+        if not extdir.endswith(os.path.sep):
+            extdir += os.path.sep
+
+        debug = int(os.environ.get("DEBUG", 0)) if self.debug is None else self.debug
+        cfg = "Debug" if debug else "Release"
+
+        cmake_args = [
+            f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
+            f"-DPYTHON_EXECUTABLE={sys.executable}",
+        ]
+
+        build_args = []
+        if "CMAKE_ARGS" in os.environ:
+            cmake_args += [item for item in os.environ["CMAKE_ARGS"].split(" ") if item]
+
+        cmake_args += [f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{cfg.upper()}={extdir}"]
+        build_args += ["--config", cfg]
+
+        if "CMAKE_BUILD_PARALLEL_LEVEL" not in os.environ:
+            if hasattr(self, "parallel") and self.parallel:
+                build_args += [f"-j{self.parallel}"]
+
+        if not os.path.exists(self.build_temp):
+            os.makedirs(self.build_temp)
+
+        subprocess.check_call(["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp)
+        subprocess.check_call(["cmake", "--build", "."] + build_args, cwd=self.build_temp)
+
 
 here = pathlib.Path(__file__).parent.resolve()
 
 # Get the long description from the README file
 long_description = (here / "README.md").read_text(encoding="utf-8")
 
+cmdclass = versioneer.get_cmdclass()
+cmdclass.update(build_ext=CMakeBuild)
+
 setup(
     name="timemachine",
     version=versioneer.get_version(),
-    cmdclass=versioneer.get_cmdclass(),
+    cmdclass=cmdclass,
     description="A high-performance differentiable molecular dynamics, docking and optimization engine",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -28,6 +76,7 @@ setup(
         "Programming Language :: Python :: 3",
     ],
     keywords="molecular dynamics",
+    ext_modules=[CMakeExtension("timemachine", "timemachine/cpp")],
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[
