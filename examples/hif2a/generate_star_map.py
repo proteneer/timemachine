@@ -147,7 +147,7 @@ def generate_star(
 def mol_matches_core(mol, core_query) -> bool:
     res = mol.GetSubstructMatches(core_query)
     if len(res) > 1:
-        print(f"Mol matched core multiple times")
+        print("Mol matched core multiple times")
     return len(res) == 1
 
 
@@ -160,7 +160,7 @@ def smarts_comparison(smarts: str):
         for mol in mols:
             res = mol.GetSubstructMatches(core_query)
             if len(res) > 1:
-                print(f"Mol matched core multiple times")
+                print("Mol matched core multiple times")
             if len(res) == 1:
                 matches.append(mol)
             else:
