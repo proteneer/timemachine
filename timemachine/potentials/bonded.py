@@ -26,7 +26,7 @@ def centroid_restraint(conf, params, box, lamb, group_a_idxs, group_b_idxs, kb, 
 
 
 def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
-    """
+    r"""
     Compute the harmonic bond energy given a collection of molecules.
 
     This implements a harmonic bond potential:
@@ -81,7 +81,7 @@ def restraint(conf, lamb, params, lamb_flags, box, bond_idxs):
 
 # lamb is *not used* it is used in the alchemical stuff after
 def harmonic_bond(conf, params, box, lamb, bond_idxs, lamb_mult=None, lamb_offset=None):
-    """
+    r"""
     Compute the harmonic bond energy given a collection of molecules.
 
     This implements a harmonic bond potential:
