@@ -9,7 +9,7 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.7 REQUIRED)
 find_package(PythonLibs 3.7 REQUIRED)
 
-string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -O3 -lineinfo")
+string(APPEND CMAKE_CUDA_FLAGS "-O3 -lineinfo")
 message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -36,7 +36,6 @@ add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR} ${CMAKE_CURRENT_B
 pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/fixed_point.hpp
   src/wrap_kernels.cpp
-  src/solver.cpp
   src/potential.cu
   src/bound_potential.cu
   src/centroid_restraint.cu
@@ -49,7 +48,6 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/harmonic_bond.cu
   src/harmonic_angle.cu
   src/periodic_torsion.cu
-  src/rmsd_restraint.cu
   src/integrator.cu
   src/context.cu
   src/barostat.cu
