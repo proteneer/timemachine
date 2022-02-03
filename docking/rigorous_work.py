@@ -10,10 +10,11 @@ import numpy as np
 
 from rdkit import Chem
 
-from md import builders, minimizer
+from timemachine.md import builders, minimizer
 from timemachine.fe import pdb_writer, free_energy
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+
 from timemachine.lib import custom_ops, LangevinIntegrator
 
 from docking import report
@@ -145,7 +146,7 @@ def calculate_rigorous_work(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 "..",
-                "ff/params/smirnoff_1_1_0_ccc.py",
+                "timemachine/ff/params/smirnoff_1_1_0_ccc.py",
             )
         ).read()
     )

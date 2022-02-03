@@ -9,7 +9,7 @@ from timemachine.fe import topology
 from timemachine.fe.utils import get_romol_conf
 from timemachine.lib import LangevinIntegrator
 
-from ff.handlers import openmm_deserializer
+from timemachine.ff.handlers import openmm_deserializer
 
 from rdkit.Chem import MolToSmiles
 

@@ -1,16 +1,16 @@
 import numpy as np
 
-from ff.handlers import openmm_deserializer
-from ff.handlers.deserialize import deserialize_handlers
-from ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
 
 from timemachine.lib import custom_ops, LangevinIntegrator, MonteCarloBarostat
 
 from timemachine.fe import free_energy
 from timemachine.fe.topology import SingleTopology
 
-from md import builders, minimizer
-from md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md import builders, minimizer
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from testsystems.relative import hif2a_ligand_pair as testsystem
 
 
@@ -30,7 +30,7 @@ def test_deterministic_energies():
     barostat_interval = 25
     mol_a, mol_b, core = testsystem.mol_a, testsystem.mol_b, testsystem.core
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_sc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_sc.py").read())
     ff = Forcefield(ff_handlers)
 
     single_topology = SingleTopology(mol_a, mol_b, core, ff)

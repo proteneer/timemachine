@@ -9,7 +9,7 @@ project(timemachine LANGUAGES CXX CUDA)
 find_package(PythonInterp 3.7 REQUIRED)
 find_package(PythonLibs 3.7 REQUIRED)
 
-string(APPEND CMAKE_CUDA_FLAGS "-Xptxas -v -O3 -lineinfo")
+string(APPEND CMAKE_CUDA_FLAGS "-O3 -lineinfo")
 message(${CMAKE_CUDA_FLAGS})
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -29,14 +29,13 @@ if(NOT EXISTS ${EIGEN_SRC_DIR})
   execute_process(COMMAND git clone --branch 3.3.9 https://gitlab.com/libeigen/eigen.git ${EIGEN_SRC_DIR})
 endif()
 
-add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
+add_subdirectory(${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR} ${CMAKE_CURRENT_BINARY_DIR}/${PYBIND_SRC_DIR})
 
 
 # NO_EXTRAS is needed since cuda doesn't use flto
 pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/fixed_point.hpp
   src/wrap_kernels.cpp
-  src/solver.cpp
   src/potential.cu
   src/bound_potential.cu
   src/centroid_restraint.cu
@@ -49,7 +48,6 @@ pybind11_add_module(${LIBRARY_NAME} SHARED NO_EXTRAS
   src/harmonic_bond.cu
   src/harmonic_angle.cu
   src/periodic_torsion.cu
-  src/rmsd_restraint.cu
   src/integrator.cu
   src/context.cu
   src/barostat.cu
@@ -65,7 +63,13 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/eigen)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/${CUB_SRC_DIR})
 
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_STANDARD 14)
+
+if (NOT CUDA_ARCH)
+  set(CUDA_ARCH "75")
+endif()
 set_property(TARGET ${LIBRARY_NAME} PROPERTY CUDA_ARCHITECTURES "${CUDA_ARCH}")
+unset(CUDA_ARCH CACHE)
+
 target_link_libraries(${LIBRARY_NAME} PRIVATE -lcurand -lcuda -lcudart -lcudadevrt -lnvrtc)
 set_target_properties(${LIBRARY_NAME} PROPERTIES PREFIX "")
 

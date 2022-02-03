@@ -1,4 +1,4 @@
-from md.ensembles import NVTEnsemble, NPTEnsemble
+from timemachine.md.ensembles import NVTEnsemble, NPTEnsemble
 from simtk.unit import kelvin, atmosphere, kilojoule_per_mole, nanometer
 
 from simtk import unit

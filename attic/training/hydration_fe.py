@@ -14,9 +14,9 @@ import numpy as np
 import os
 import sys
 
-from ff import handlers
-from ff.handlers.serialize import serialize_handlers
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import handlers
+from timemachine.ff.handlers.serialize import serialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from rdkit import Chem
 
@@ -29,7 +29,7 @@ from training import simulation
 from training import service_pb2_grpc
 
 from timemachine.lib import LangevinIntegrator
-from md import builders
+from timemachine.md import builders
 
 # used during visualization to bring everything back to home box
 def recenter(conf, box):

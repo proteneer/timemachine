@@ -7,9 +7,9 @@ import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from ff.handlers import nonbonded, bonded
-from ff.handlers.serialize import bin_to_str
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers import nonbonded, bonded
+from timemachine.ff.handlers.serialize import bin_to_str
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 
 def test_harmonic_bond():

@@ -365,7 +365,7 @@ inline std::string path_base(std::string p) {
   // "foo/bar"  -> "foo"
   // "foo/bar/" -> "foo/bar"
 #if defined _WIN32 || defined _WIN64
-  char sep = '\\';
+  const char* sep = "\\/";
 #else
   char sep = '/';
 #endif
@@ -649,7 +649,7 @@ inline bool load_source(
     std::string cleanline =
         line.substr(0, line.find("//"));  // Strip line comments
     // if( cleanline.back() == "\r" ) { // Remove Windows line ending
-    //  cleanline = cleanline.substr(0, cleanline.size()-1);
+    //	cleanline = cleanline.substr(0, cleanline.size()-1);
     //}
     // TODO: Should trim whitespace before checking .empty()
     if (cleanline.empty() && remove_next_blank_line) {
@@ -1388,7 +1388,16 @@ static const char* jitsafe_header_preinclude_h = R"(
 // WAR to allow exceptions to be parsed
 #define try
 #define catch(...)
-)";
+)"
+#if defined(_WIN32) || defined(_WIN64)
+// WAR for NVRTC <= 11.0 not defining _WIN64.
+R"(
+#ifndef _WIN64
+#define _WIN64 1
+#endif
+)"
+#endif
+;
 
 static const char* jitsafe_header_float_h = R"(
 #pragma once
@@ -1590,14 +1599,14 @@ struct DoubleLimits {
 };
 template<class T, T Min, T Max, int Digits=-1>
 struct IntegerLimits {
-    static inline __host__ __device__ T min() { return Min; }
-    static inline __host__ __device__ T max() { return Max; }
+	static inline __host__ __device__ T min() { return Min; }
+	static inline __host__ __device__ T max() { return Max; }
 #if __cplusplus >= 201103L
-    static constexpr inline __host__ __device__ T lowest() noexcept {
-        return Min;
-    }
+	static constexpr inline __host__ __device__ T lowest() noexcept {
+		return Min;
+	}
 #endif  // __cplusplus >= 201103L
-    enum {
+	enum {
        is_specialized = true,
        digits = (Digits == -1) ? (int)(sizeof(T)*8 - (Min != 0)) : Digits,
        digits10   = (digits * 30103) / 100000,
@@ -1607,7 +1616,7 @@ struct IntegerLimits {
        radix      = 2,
        is_bounded = true,
        is_modulo  = false
-    };
+	};
 };
 } // namespace __jitify_detail
 template<typename T> struct numeric_limits {
@@ -1882,6 +1891,42 @@ static const char* jitsafe_header_type_traits = R"(
     template<size_t len, size_t alignment> struct aligned_storage { struct type { alignas(alignment) char data[len]; }; };
     template <class T> struct alignment_of : std::integral_constant<size_t,alignof(T)> {};
 
+    template <typename T> struct make_unsigned;
+    template <> struct make_unsigned<signed char>        { typedef unsigned char type; };
+    template <> struct make_unsigned<signed short>       { typedef unsigned short type; };
+    template <> struct make_unsigned<signed int>         { typedef unsigned int type; };
+    template <> struct make_unsigned<signed long>        { typedef unsigned long type; };
+    template <> struct make_unsigned<signed long long>   { typedef unsigned long long type; };
+    template <> struct make_unsigned<unsigned char>      { typedef unsigned char type; };
+    template <> struct make_unsigned<unsigned short>     { typedef unsigned short type; };
+    template <> struct make_unsigned<unsigned int>       { typedef unsigned int type; };
+    template <> struct make_unsigned<unsigned long>      { typedef unsigned long type; };
+    template <> struct make_unsigned<unsigned long long> { typedef unsigned long long type; };
+    template <> struct make_unsigned<char>               { typedef unsigned char type; };
+    #if defined _WIN32 || defined _WIN64
+    template <> struct make_unsigned<wchar_t>            { typedef unsigned short type; };
+    #else
+    template <> struct make_unsigned<wchar_t>            { typedef unsigned int type; };
+    #endif
+
+    template <typename T> struct make_signed;
+    template <> struct make_signed<signed char>        { typedef signed char type; };
+    template <> struct make_signed<signed short>       { typedef signed short type; };
+    template <> struct make_signed<signed int>         { typedef signed int type; };
+    template <> struct make_signed<signed long>        { typedef signed long type; };
+    template <> struct make_signed<signed long long>   { typedef signed long long type; };
+    template <> struct make_signed<unsigned char>      { typedef signed char type; };
+    template <> struct make_signed<unsigned short>     { typedef signed short type; };
+    template <> struct make_signed<unsigned int>       { typedef signed int type; };
+    template <> struct make_signed<unsigned long>      { typedef signed long type; };
+    template <> struct make_signed<unsigned long long> { typedef signed long long type; };
+    template <> struct make_signed<char>               { typedef signed char type; };
+    #if defined _WIN32 || defined _WIN64
+    template <> struct make_signed<wchar_t>            { typedef signed short type; };
+    #else
+    template <> struct make_signed<wchar_t>            { typedef signed int type; };
+    #endif
+
     }  // namespace std
     #endif // c++11
 )";
@@ -1921,8 +1966,8 @@ static const char* jitsafe_header_stdint_h =
     "#define INT8_MIN    SCHAR_MIN\n"
     "#define INT16_MIN   SHRT_MIN\n"
     "#if defined _WIN32 || defined _WIN64\n"
-    "#define WCHAR_MIN   SHRT_MIN\n"
-    "#define WCHAR_MAX   SHRT_MAX\n"
+    "#define WCHAR_MIN   0\n"
+    "#define WCHAR_MAX   USHRT_MAX\n"
     "typedef unsigned long long uintptr_t; //optional\n"
     "#else\n"
     "#define WCHAR_MIN   INT_MIN\n"
@@ -2060,17 +2105,17 @@ static const char* jitsafe_header_utility =
     "namespace std {\n"
     "template<class T1, class T2>\n"
     "struct pair {\n"
-    "   T1 first;\n"
-    "   T2 second;\n"
-    "   inline pair() {}\n"
-    "   inline pair(T1 const& first_, T2 const& second_)\n"
-    "       : first(first_), second(second_) {}\n"
-    "   // TODO: Standard includes many more constructors...\n"
-    "   // TODO: Comparison operators\n"
+    "	T1 first;\n"
+    "	T2 second;\n"
+    "	inline pair() {}\n"
+    "	inline pair(T1 const& first_, T2 const& second_)\n"
+    "		: first(first_), second(second_) {}\n"
+    "	// TODO: Standard includes many more constructors...\n"
+    "	// TODO: Comparison operators\n"
     "};\n"
     "template<class T1, class T2>\n"
     "pair<T1,T2> make_pair(T1 const& first, T2 const& second) {\n"
-    "   return pair<T1,T2>(first, second);\n"
+    "	return pair<T1,T2>(first, second);\n"
     "}\n"
     "}  // namespace std\n";
 
@@ -2117,20 +2162,20 @@ static const char* jitsafe_header_complex =
     "namespace std {\n"
     "template<typename T>\n"
     "class complex {\n"
-    "   T _real;\n"
-    "   T _imag;\n"
+    "	T _real;\n"
+    "	T _imag;\n"
     "public:\n"
-    "   complex() : _real(0), _imag(0) {}\n"
-    "   complex(T const& real, T const& imag)\n"
-    "       : _real(real), _imag(imag) {}\n"
-    "   complex(T const& real)\n"
+    "	complex() : _real(0), _imag(0) {}\n"
+    "	complex(T const& real, T const& imag)\n"
+    "		: _real(real), _imag(imag) {}\n"
+    "	complex(T const& real)\n"
     "               : _real(real), _imag(static_cast<T>(0)) {}\n"
-    "   T const& real() const { return _real; }\n"
-    "   T&       real()       { return _real; }\n"
-    "   void real(const T &r) { _real = r; }\n"
-    "   T const& imag() const { return _imag; }\n"
-    "   T&       imag()       { return _imag; }\n"
-    "   void imag(const T &i) { _imag = i; }\n"
+    "	T const& real() const { return _real; }\n"
+    "	T&       real()       { return _real; }\n"
+    "	void real(const T &r) { _real = r; }\n"
+    "	T const& imag() const { return _imag; }\n"
+    "	T&       imag()       { return _imag; }\n"
+    "	void imag(const T &i) { _imag = i; }\n"
     "       complex<T>& operator+=(const complex<T> z)\n"
     "         { _real += z.real(); _imag += z.imag(); return *this; }\n"
     "};\n"
@@ -2153,16 +2198,16 @@ static const char* jitsafe_header_math_h =
     "namespace __jitify_math_ns {\n"
     "#if __cplusplus >= 201103L\n"
     "#define DEFINE_MATH_UNARY_FUNC_WRAPPER(f) \\\n"
-    "   inline double      f(double x)         { return ::f(x); } \\\n"
-    "   inline float       f##f(float x)       { return ::f(x); } \\\n"
-    "   /*inline long double f##l(long double x) { return ::f(x); }*/ \\\n"
-    "   inline float       f(float x)          { return ::f(x); } \\\n"
-    "   /*inline long double f(long double x)    { return ::f(x); }*/\n"
+    "	inline double      f(double x)         { return ::f(x); } \\\n"
+    "	inline float       f##f(float x)       { return ::f(x); } \\\n"
+    "	/*inline long double f##l(long double x) { return ::f(x); }*/ \\\n"
+    "	inline float       f(float x)          { return ::f(x); } \\\n"
+    "	/*inline long double f(long double x)    { return ::f(x); }*/\n"
     "#else\n"
     "#define DEFINE_MATH_UNARY_FUNC_WRAPPER(f) \\\n"
-    "   inline double      f(double x)         { return ::f(x); } \\\n"
-    "   inline float       f##f(float x)       { return ::f(x); } \\\n"
-    "   /*inline long double f##l(long double x) { return ::f(x); }*/\n"
+    "	inline double      f(double x)         { return ::f(x); } \\\n"
+    "	inline float       f##f(float x)       { return ::f(x); } \\\n"
+    "	/*inline long double f##l(long double x) { return ::f(x); }*/\n"
     "#endif\n"
     "DEFINE_MATH_UNARY_FUNC_WRAPPER(cos)\n"
     "DEFINE_MATH_UNARY_FUNC_WRAPPER(sin)\n"
@@ -2645,6 +2690,15 @@ inline nvrtcResult compile_kernel(std::string program_name,
       &nvrtc_program, program_source.c_str(), program_name.c_str(), num_headers,
       header_sources_c.data(), header_names_c.data()));
 
+  // Ensure nvrtc_program gets destroyed.
+  struct ScopedNvrtcProgramDestroyer {
+    nvrtcProgram& nvrtc_program_;
+    ~ScopedNvrtcProgramDestroyer() { nvrtcDestroyProgram(&nvrtc_program_); }
+    ScopedNvrtcProgramDestroyer(const ScopedNvrtcProgramDestroyer&) = delete;
+    ScopedNvrtcProgramDestroyer& operator=(const ScopedNvrtcProgramDestroyer&) =
+        delete;
+  } nvrtc_program_scope_guard{nvrtc_program};
+
 #if CUDA_VERSION >= 8000
   if (!instantiation.empty()) {
     CHECK_NVRTC(nvrtcAddNameExpression(nvrtc_program, instantiation.c_str()));
@@ -2692,7 +2746,6 @@ inline nvrtcResult compile_kernel(std::string program_name,
 #endif
   }
 
-  CHECK_NVRTC(nvrtcDestroyProgram(&nvrtc_program));
 #undef CHECK_NVRTC
   return NVRTC_SUCCESS;
 }
@@ -3755,11 +3808,11 @@ CUresult parallel_for(ExecutionPolicy policy, IndexType begin, IndexType end,
                "void parallel_for_kernel("
             << reflection::reflect_list(arg_decls)
             << ") {\n"
-               "    I i0 = threadIdx.x + blockDim.x*blockIdx.x;\n"
-               "    for( I i=i0+begin; i<end; i+=blockDim.x*gridDim.x ) {\n"
-               "    "
+               "	I i0 = threadIdx.x + blockDim.x*blockIdx.x;\n"
+               "	for( I i=i0+begin; i<end; i+=blockDim.x*gridDim.x ) {\n"
+               "	"
             << "\t" << lambda._func_string << ";\n"
-            << "    }\n"
+            << "	}\n"
                "}\n";
 
   Program program = kernel_cache.program(source_ss.str(), policy.headers,

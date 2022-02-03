@@ -10,6 +10,7 @@ repos:
     rev: 21.10b0
     hooks:
     -   id: black
+        exclude: '^versioneer.py$|^timemachine/_version.py'
 
 -   repo: https://github.com/pycqa/flake8
     rev: 4.0.1
@@ -23,4 +24,4 @@ repos:
         types_or: [c, c++, cuda]
         files: '^timemachine/cpp/src/'
 
-exclude: '\.pdb$|\.sdf$|\.proto$|\.xml$|/vendored/|^ff/params/|^parallel/grpc/'
+exclude: '\.pdb$|\.sdf$|\.proto$|\.xml$|/vendored/|^timemachine/ff/params/|^parallel/grpc/'

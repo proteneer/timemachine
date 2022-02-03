@@ -10,8 +10,8 @@ from rdkit import Chem
 
 from timemachine.fe.utils import to_md_units
 from timemachine.fe import free_energy
-from ff.handlers.deserialize import deserialize_handlers
-from ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
 from timemachine.lib import LangevinIntegrator
 from timemachine.lib import custom_ops
 
@@ -96,7 +96,7 @@ def pose_dock(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 "..",
-                "ff/params/smirnoff_1_1_0_ccc.py",
+                "timemachine/ff/params/smirnoff_1_1_0_ccc.py",
             )
         ).read()
     )
