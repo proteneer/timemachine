@@ -11,7 +11,6 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 
 import numpy as np
-import pytest
 
 import functools
 import itertools
@@ -20,7 +19,7 @@ from common import GradientTest
 from common import prepare_water_system, prepare_reference_nonbonded
 
 from timemachine.potentials import nonbonded
-from timemachine.lib import custom_ops, potentials
+from timemachine.lib import potentials
 from timemachine.md import builders
 
 from hilbertcurve.hilbertcurve import HilbertCurve
@@ -30,13 +29,6 @@ from timemachine.ff.handlers import openmm_deserializer
 from simtk.openmm import app
 
 np.set_printoptions(linewidth=500)
-
-
-@pytest.fixture(autouse=True)
-def run_before_and_after_tests():
-    yield
-    # needed for "cuda-memcheck --leak-check full" to catch leaks
-    custom_ops.cuda_device_reset()
 
 
 def hilbert_sort(conf, D):

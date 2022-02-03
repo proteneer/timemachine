@@ -20,5 +20,5 @@ clean:
 ci:
 	pre-commit run --all-files --show-diff-on-failure && \
 	export PYTHONPATH=$(MKFILE_DIR) && \
-	cuda-memcheck pytest $(PYTEST_CI_ARGS) tests/ && \
+	cuda-memcheck --leak-check full --error-exitcode 1 pytest $(PYTEST_CI_ARGS) tests/ && \
 	pytest $(PYTEST_CI_ARGS) slow_tests/
