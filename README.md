@@ -47,10 +47,38 @@ conda activate timemachine
 
 ```
 pip install -r requirements.txt
-make CUDA_ARCH=70 build
+pip install .
 ```
 
-## Running Tests
+## Developing Time Machine
+
+### Installing in develop mode
+
+```shell
+pip install -r requirements.txt
+pip install -e .
+```
+
+Possible variants of the last step include
+
+```shell
+pip install -e .[dev,test]                 # optionally install dev and test dependencies
+CMAKE_ARGS=-DCUDA_ARCH=86 pip install -e . # overriding CUDA_ARCH
+
+# use parallel CMake build with `nproc` threads
+CMAKE_BUILD_PARALLEL_LEVEL=$(nproc) pip install -e .
+```
+
+To rebuild the extension module after making changes to the C++/CUDA code, either rerun
+```
+pip install -e .
+```
+or
+```
+make build
+```
+
+### Running Tests
 
 Note that `PYTHONPATH` must be set to include the `timemachine` repo root. To run tests that use `openeye`, ensure that either `OE_LICENSE` or `OE_DIR` are set appropriately.
 

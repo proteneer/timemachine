@@ -6,8 +6,6 @@ PYTEST_CI_ARGS := --cov=. --cov-report=term-missing
 
 NPROCS = `nproc`
 
-CUDA_ARCH := "70"
-
 .PHONY: build
 build:
 	mkdir -p $(CPP_DIR)build/ && cd $(CPP_DIR)build/ &&  \
