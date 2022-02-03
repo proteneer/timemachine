@@ -3,6 +3,7 @@ import numpy as np
 import tempfile
 from simtk.openmm import app
 from simtk.openmm.app import PDBFile
+from fe.topology import SingleTopology
 
 # class PDBWriter():
 
@@ -39,7 +40,7 @@ from simtk.openmm.app import PDBFile
 from rdkit import Chem
 
 
-def convert_single_topology_mols(coords: np.ndarray, topo: "SingleTopology") -> np.ndarray:
+def convert_single_topology_mols(coords: np.ndarray, topo: SingleTopology) -> np.ndarray:
     """Convert a single topology frame's ligand coordinates into two complete ligands.
 
     coords: np.ndarray

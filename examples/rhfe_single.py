@@ -10,7 +10,7 @@ import numpy as np
 
 from rdkit import Chem
 
-from timemachine.fe import topology
+from timemachine.fe import free_energy, topology
 from timemachine.md import builders
 from timemachine.md import minimizer
 
