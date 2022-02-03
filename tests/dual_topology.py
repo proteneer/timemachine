@@ -59,9 +59,9 @@ def run(args):
 
     print(lamb, du_dl_obs.avg_du_dl())
 
-    assert np.any(np.abs(ctxt.get_x_t()) > 100) == False
-    assert np.any(np.isnan(ctxt.get_x_t())) == False
-    assert np.any(np.isinf(ctxt.get_x_t())) == False
+    assert not np.any(np.abs(ctxt.get_x_t()) > 100)
+    assert not np.any(np.isnan(ctxt.get_x_t()))
+    assert not np.any(np.isinf(ctxt.get_x_t()))
 
     return du_dl_obs.avg_du_dl()
 
