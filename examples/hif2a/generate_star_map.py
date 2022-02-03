@@ -1,6 +1,5 @@
 # Construct a star map for the fep-benchmark hif2a ligands
 import sys
-from collections import defaultdict
 from argparse import ArgumentParser
 from pathlib import Path
 from functools import partial
@@ -8,7 +7,6 @@ from typing import Dict, Any, List, Optional
 
 from pickle import dump
 
-import timemachine
 from timemachine.parser import TimemachineConfig
 
 from timemachine.fe import topology

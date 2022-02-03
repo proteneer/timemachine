@@ -9,8 +9,6 @@ import argparse
 import numpy as np
 
 from rdkit import Chem
-from rdkit.Chem import rdFMCS
-from rdkit.Chem import AllChem
 
 from timemachine.fe import topology
 from timemachine.md import builders

@@ -14,8 +14,6 @@ from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.fe.utils import get_romol_conf
 import jax
 
-from timemachine.lib import potentials
-
 
 class BenzenePhenolSparseTest(unittest.TestCase):
     def setUp(self, *args, **kwargs):

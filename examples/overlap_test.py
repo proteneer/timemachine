@@ -4,23 +4,19 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 from rdkit import Chem
-from rdkit.Chem import AllChem
 
 import multiprocessing
 
 
 import jax
-import jax.numpy.linalg as linalg
 import jax.numpy as np
 import functools
 import jax.numpy as np
 import numpy as onp
 
-from scipy.stats import special_ortho_group
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from rdkit import Chem
-from rdkit.Chem import AllChem
 
 from timemachine.ff import handlers
 from timemachine.potentials import bonded, shape

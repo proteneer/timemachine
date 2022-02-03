@@ -1,5 +1,3 @@
-import os
-
 # test importance sampling in the gas-phase.
 
 # (ytz): not pretty, but this is needed to get XLA to be less stupid
@@ -19,7 +17,6 @@ from timemachine.potentials import bonded
 from tests import test_ligands
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-import matplotlib.pyplot as plt
 import pytest
 
 

@@ -2,11 +2,8 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 
-import unittest
 import numpy as np
 
-from rdkit import Chem
-from rdkit.Chem import AllChem
 from timemachine.ff.handlers import nonbonded, bonded
 from timemachine.ff.handlers.serialize import bin_to_str
 from timemachine.ff.handlers.deserialize import deserialize_handlers

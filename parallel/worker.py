@@ -1,6 +1,5 @@
 import argparse
 
-import numpy as np
 from datetime import datetime
 import os
 

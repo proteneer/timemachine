@@ -49,7 +49,7 @@ from jax import jit, vmap, numpy as np
 from jax.scipy.special import logsumexp
 from scipy.optimize import bisect
 
-from typing import Tuple, Callable
+from typing import Callable
 
 Float = float
 Array = np.array

@@ -22,8 +22,6 @@ from functools import partial
 from parallel.client import CUDAPoolClient
 from parallel.utils import get_gpu_count
 
-import os
-
 import numpy as np
 from rdkit import Chem
 

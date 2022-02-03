@@ -2,7 +2,7 @@ import numpy as np
 
 import tempfile
 from simtk.openmm import app
-from simtk.openmm.app import PDBFile, Topology
+from simtk.openmm.app import PDBFile
 
 # class PDBWriter():
 

@@ -2,7 +2,6 @@ import os
 import unittest
 import numpy as np
 import jax
-import jax.numpy as jnp
 import functools
 import contextlib
 from tempfile import TemporaryDirectory
@@ -12,8 +11,8 @@ from pathlib import Path
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff import Forcefield
 
-from timemachine.potentials import bonded, nonbonded, gbsa
-from timemachine.lib import potentials, custom_ops
+from timemachine.potentials import bonded, nonbonded
+from timemachine.lib import potentials
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 

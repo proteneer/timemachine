@@ -1,10 +1,7 @@
-import functools
 import numpy as np
 
-import jax
-
 from timemachine.ff.handlers.utils import match_smirks, sort_tuple
-from timemachine.ff.handlers.serialize import SerializableMixIn, bin_to_str
+from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.suffix import _SUFFIX
 
 

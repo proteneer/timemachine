@@ -2,7 +2,6 @@ import os
 import platform
 import numpy as np
 from simtk import unit
-import time
 
 import pytest
 
@@ -13,17 +12,11 @@ from timemachine.md.minimizer import minimize_host_4d
 
 from timemachine.fe.free_energy import AbsoluteFreeEnergy
 
-from timemachine.md.states import CoordsVelBox
-from timemachine.md.ensembles import PotentialEnergyModel, NPTEnsemble
-from timemachine.md.thermostat.moves import UnadjustedLangevinMove
-from timemachine.md.barostat.moves import MonteCarloBarostat, CentroidRescaler
+from timemachine.md.barostat.moves import CentroidRescaler
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices, compute_box_volume, compute_box_center
-from timemachine.md.utils import simulate_npt_traj
 from timemachine.md.thermostat.utils import sample_velocities
 
 from timemachine.lib import LangevinIntegrator, custom_ops
-
-from functools import partial
 
 from timemachine.constants import BOLTZ, ENERGY_UNIT, DISTANCE_UNIT
 

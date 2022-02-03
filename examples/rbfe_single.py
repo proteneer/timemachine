@@ -6,7 +6,6 @@
 import argparse
 import numpy as np
 import jax
-from jax import numpy as jnp
 
 from timemachine.fe.free_energy import construct_lambda_schedule
 from timemachine.fe.utils import convert_uIC50_to_kJ_per_mole
