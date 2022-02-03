@@ -24,4 +24,13 @@ repos:
         types_or: [c, c++, cuda]
         files: '^timemachine/cpp/src/'
 
-exclude: '\.pdb$|\.sdf$|\.proto$|\.xml$|/vendored/|^timemachine/ff/params/|^parallel/grpc/'
+exclude: >
+  (?x)
+    \.pdb$
+  | \.sdf$
+  | \.proto$
+  | \.xml$
+  | /vendored/
+  | ^attic/
+  | ^parallel/grpc/
+  | ^timemachine/ff/params/
