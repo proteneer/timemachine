@@ -16,9 +16,9 @@ public:
 class LangevinIntegrator : public Integrator {
 
 private:
-    double dt_;
-    double N_;
-    double ca_;
+    const int N_;
+    const double dt_;
+    const double ca_;
     double *d_cbs_;
     double *d_ccs_;
     double *d_noise_;
