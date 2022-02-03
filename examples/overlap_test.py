@@ -11,12 +11,9 @@ import multiprocessing
 import jax
 import jax.numpy as np
 import functools
-import jax.numpy as np
 import numpy as onp
 
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-from rdkit import Chem
 
 from timemachine.ff import handlers
 from timemachine.potentials import bonded, shape
