@@ -155,7 +155,7 @@ class AbsoluteModel(ABC):
         dG, dG_err, results = estimator_abfe.deltaG_from_results(model, results, sys_params)
 
         # uncomment if we want to visualize
-        combined_topology = model_utils.generate_openmm_topology(
+        model_utils.generate_openmm_topology(
             [self.host_topology, mol], model.x0, box=model.box, out_filename="initial_" + model.prefix + ".pdb"
         )
 
@@ -269,8 +269,6 @@ class RelativeModel(ABC):
 
         core_params = np.zeros_like(combined_core_idxs).astype(np.float64)
         core_params[:, 0] = k_core
-
-        B = len(combined_core_idxs)
 
         restraint_potential = potentials.HarmonicBond(
             combined_core_idxs,
@@ -444,7 +442,7 @@ class RelativeModel(ABC):
             dG, dG_err, results = estimator_abfe.deltaG_from_results(model, results, params)
 
             # Save out the pdb
-            combined_topology = model_utils.generate_openmm_topology(
+            model_utils.generate_openmm_topology(
                 [self.host_topology, mol_a, mol_b], model.x0, box=model.box, out_filename=f"initial_{model.prefix}.pdb"
             )
 

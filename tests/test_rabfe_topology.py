@@ -75,7 +75,7 @@ def test_base_topology_standard_decoupling():
 
     # in the conversion phase, torsions that bridge the two rings should be set to
     # be alchemically turned off.
-    is_in_ring = [1, 1, 1, 1, 1, 1, 0, 0]
+    # is_in_ring = [1, 1, 1, 1, 1, 1, 0, 0]
 
     combined_decouple_torsion_params, combined_torsion_potential = mol_top.parameterize_periodic_torsion(
         ff.pt_handle.params, ff.it_handle.params
@@ -85,7 +85,7 @@ def test_base_topology_standard_decoupling():
     assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_lambda_offset())
 
     # impropers should always be turned on.
-    num_proper_torsions = len(torsion_potential.get_idxs())
+    # num_proper_torsions = len(torsion_potential.get_idxs())
 
     assert np.all(combined_torsion_potential.get_lambda_mult() == 0)
     assert np.all(combined_torsion_potential.get_lambda_offset() == 1)
@@ -127,7 +127,7 @@ def test_dual_topology_standard_decoupling():
     assert len(combined_torsion_potential.get_lambda_mult()) == len(combined_torsion_potential.get_lambda_offset())
 
     # impropers should always be turned on.
-    num_proper_torsions = len(torsion_potential.get_idxs())
+    # num_proper_torsions = len(torsion_potential.get_idxs())
 
     assert np.all(combined_torsion_potential.get_lambda_mult() == 0)
     assert np.all(combined_torsion_potential.get_lambda_offset() == 1)

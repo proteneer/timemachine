@@ -6,9 +6,6 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 
-from scipy.stats import special_ortho_group
-
-
 from timemachine.potentials.pmi import dsyevv3
 
 

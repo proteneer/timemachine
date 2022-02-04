@@ -1,10 +1,7 @@
-import functools
 import numpy as np
 
-import jax
-
 from timemachine.ff.handlers.utils import match_smirks, sort_tuple
-from timemachine.ff.handlers.serialize import SerializableMixIn, bin_to_str
+from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.suffix import _SUFFIX
 
 
@@ -126,7 +123,6 @@ class ProperTorsionHandler:
         assert len(torsion_idxs) == len(param_idxs)
 
         scatter_idxs = []
-        n_smirks = len(counts)  # number of patterns
         repeats = []
 
         # prefix sum of size + 1

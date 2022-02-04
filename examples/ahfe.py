@@ -12,12 +12,11 @@ from timemachine.md import builders
 from timemachine.lib import potentials, custom_ops
 from timemachine.lib import LangevinIntegrator
 
-import functools
 import jax
 
 from timemachine.ff import Forcefield
 
-from timemachine.ff.handlers import nonbonded, bonded, openmm_deserializer
+from timemachine.ff.handlers import openmm_deserializer
 
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 

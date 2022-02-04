@@ -2,7 +2,6 @@ import numpy as np
 import functools
 
 from timemachine.fe import standard_state
-import rmsd
 
 import scipy.integrate
 

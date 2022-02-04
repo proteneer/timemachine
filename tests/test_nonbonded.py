@@ -188,7 +188,6 @@ class TestNonbondedDHFR(GradientTest):
         """
         Test against the reference jax platform for correctness.
         """
-        max_N = self.host_conf.shape[0]
 
         # we can't go bigger than this due to memory limitations in the the reference platform.
         for N in [33, 65, 231, 1050, 4080]:
@@ -244,8 +243,6 @@ class TestNonbondedDHFR(GradientTest):
 
         N = self.host_conf.shape[0]
 
-        host_conf = self.host_conf[:N]
-
         precision = np.float32
 
         nb_fn = copy.deepcopy(self.nonbonded_fn)
@@ -295,8 +292,6 @@ class TestNonbondedWater(GradientTest):
         host_conf = np.array(host_conf)
 
         lamb = 0.1
-
-        N = host_conf.shape[0]
 
         ref_nonbonded_fn = prepare_reference_nonbonded(
             test_nonbonded_fn.params,
@@ -382,7 +377,6 @@ class TestNonbonded(GradientTest):
         # water_coords = self.get_water_coords(3, sort=False)
         water_coords = self.get_water_coords(3, sort=False)
         test_system = water_coords[:126]  # multiple of 3
-        padding = 0.2
         box = np.eye(3) * 3
 
         N = test_system.shape[0]
@@ -455,7 +449,6 @@ class TestNonbonded(GradientTest):
     def test_nonbonded(self):
 
         np.random.seed(4321)
-        D = 3
 
         for size in [33, 231, 1050]:
 
@@ -487,10 +480,8 @@ class TestNonbonded(GradientTest):
     def test_nonbonded_with_box_smaller_than_cutoff(self):
 
         np.random.seed(4321)
-        D = 3
 
         precision = np.float32
-        rtol = 1e-4
         cutoff = 1
         size = 33
         padding = 0.1
@@ -515,8 +506,9 @@ class TestNonbonded(GradientTest):
             x = (x.astype(np.float32)).astype(np.float64)
             params = (params.astype(np.float32)).astype(np.float64)
 
-            N = x.shape[0]
-            D = x.shape[1]
+            assert x.ndim == 2
+            # N = x.shape[0]
+            # D = x.shape[1]
 
             assert x.dtype == np.float64
             assert params.dtype == np.float64

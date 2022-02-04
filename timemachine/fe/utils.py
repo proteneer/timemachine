@@ -69,7 +69,6 @@ def convert_uM_to_kJ_per_mole(amount_in_uM):
 
 
 from scipy.spatial.distance import cdist
-import networkx as nx
 
 
 def _weighted_adjacency_graph(conf_a, conf_b, threshold=1.0):

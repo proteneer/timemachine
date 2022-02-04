@@ -480,7 +480,7 @@ if __name__ == "__main__":
         for mol in dataset.data:
             try:
                 runs.append(simulate_pair(epoch, blocker_mol, mol))
-            except Exception as e:
+            except Exception:
                 mol_name = mol.GetProp("_Name")
                 logger.exception(f"Error simulating Mol: {mol_name}")
     with Chem.SDWriter(cmd_args.output_path) as writer:
