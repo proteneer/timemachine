@@ -3,7 +3,7 @@ from typing import List, Tuple, Generator, Union
 
 
 SimulationResult = Union[estimator.SimulationResult, estimator_abfe.SimulationResult]
-FrameIterator = Generator[Tuple[int, "SimulationResult"], None, None]
+FrameIterator = Generator[Tuple[int, SimulationResult], None, None]
 
 
 def all_frames(results: List[SimulationResult]) -> FrameIterator:
