@@ -1,5 +1,5 @@
 from subprocess import check_output
-from parallel.grpc.service_pb2 import StatusResponse
+from timemachine.parallel.grpc.service_pb2 import StatusResponse
 
 
 def get_gpu_count() -> int:
