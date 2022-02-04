@@ -12,7 +12,7 @@ from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from timemachine.fe import topology, estimator, free_energy
 
-from parallel.client import CUDAPoolClient
+from timemachine.parallel.client import CUDAPoolClient
 
 from timemachine.md import builders, minimizer
 

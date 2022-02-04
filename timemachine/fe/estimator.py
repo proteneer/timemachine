@@ -9,7 +9,7 @@ from typing import Tuple, List
 
 import dataclasses
 
-from parallel.client import SerialClient
+from timemachine.parallel.client import SerialClient
 from timemachine.md.states import CoordsVelBox
 
 

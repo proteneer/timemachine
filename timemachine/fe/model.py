@@ -14,7 +14,7 @@ from timemachine.ff import Forcefield
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 
 
-from parallel.client import AbstractClient, SerialClient
+from timemachine.parallel.client import AbstractClient, SerialClient
 from typing import Optional, List, Tuple
 
 

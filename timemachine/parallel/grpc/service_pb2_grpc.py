@@ -2,7 +2,7 @@
 """Client and server classes corresponding to protobuf-defined services."""
 import grpc
 
-from parallel.grpc import service_pb2 as parallel_dot_service__pb2
+from timemachine.parallel.grpc import service_pb2 as timemachine_dot_parallel_dot_grpc_dot_service__pb2
 
 
 class WorkerStub(object):
@@ -16,13 +16,13 @@ class WorkerStub(object):
         """
         self.Submit = channel.unary_unary(
                 '/Worker/Submit',
-                request_serializer=parallel_dot_service__pb2.PickleData.SerializeToString,
-                response_deserializer=parallel_dot_service__pb2.PickleData.FromString,
+                request_serializer=timemachine_dot_parallel_dot_grpc_dot_service__pb2.PickleData.SerializeToString,
+                response_deserializer=timemachine_dot_parallel_dot_grpc_dot_service__pb2.PickleData.FromString,
                 )
         self.Status = channel.unary_unary(
                 '/Worker/Status',
-                request_serializer=parallel_dot_service__pb2.StatusRequest.SerializeToString,
-                response_deserializer=parallel_dot_service__pb2.StatusResponse.FromString,
+                request_serializer=timemachine_dot_parallel_dot_grpc_dot_service__pb2.StatusRequest.SerializeToString,
+                response_deserializer=timemachine_dot_parallel_dot_grpc_dot_service__pb2.StatusResponse.FromString,
                 )
 
 
@@ -46,13 +46,13 @@ def add_WorkerServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Submit': grpc.unary_unary_rpc_method_handler(
                     servicer.Submit,
-                    request_deserializer=parallel_dot_service__pb2.PickleData.FromString,
-                    response_serializer=parallel_dot_service__pb2.PickleData.SerializeToString,
+                    request_deserializer=timemachine_dot_parallel_dot_grpc_dot_service__pb2.PickleData.FromString,
+                    response_serializer=timemachine_dot_parallel_dot_grpc_dot_service__pb2.PickleData.SerializeToString,
             ),
             'Status': grpc.unary_unary_rpc_method_handler(
                     servicer.Status,
-                    request_deserializer=parallel_dot_service__pb2.StatusRequest.FromString,
-                    response_serializer=parallel_dot_service__pb2.StatusResponse.SerializeToString,
+                    request_deserializer=timemachine_dot_parallel_dot_grpc_dot_service__pb2.StatusRequest.FromString,
+                    response_serializer=timemachine_dot_parallel_dot_grpc_dot_service__pb2.StatusResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -75,8 +75,8 @@ class Worker(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Worker/Submit',
-            parallel_dot_service__pb2.PickleData.SerializeToString,
-            parallel_dot_service__pb2.PickleData.FromString,
+            timemachine_dot_parallel_dot_grpc_dot_service__pb2.PickleData.SerializeToString,
+            timemachine_dot_parallel_dot_grpc_dot_service__pb2.PickleData.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -91,7 +91,7 @@ class Worker(object):
             timeout=None,
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Worker/Status',
-            parallel_dot_service__pb2.StatusRequest.SerializeToString,
-            parallel_dot_service__pb2.StatusResponse.FromString,
+            timemachine_dot_parallel_dot_grpc_dot_service__pb2.StatusRequest.SerializeToString,
+            timemachine_dot_parallel_dot_grpc_dot_service__pb2.StatusResponse.FromString,
             options, channel_credentials,
             call_credentials, compression, wait_for_ready, timeout, metadata)

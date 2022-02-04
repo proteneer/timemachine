@@ -28,8 +28,8 @@ from timemachine.fe.loss import pseudo_huber_loss  # , l1_loss, flat_bottom_loss
 from timemachine.md import builders
 
 # parallelization across multiple GPUs
-from parallel.client import CUDAPoolClient, GRPCClient
-from parallel.utils import get_gpu_count
+from timemachine.parallel.client import CUDAPoolClient, GRPCClient
+from timemachine.parallel.utils import get_gpu_count
 
 from collections import namedtuple, defaultdict
 
