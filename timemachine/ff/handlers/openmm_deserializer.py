@@ -1,10 +1,6 @@
-import os
 import numpy as np
 
 from simtk import openmm as mm
-from simtk.openmm import app
-from simtk.openmm.app import PDBFile
-from simtk.openmm.app import forcefield as ff
 from simtk import unit
 
 from timemachine import constants

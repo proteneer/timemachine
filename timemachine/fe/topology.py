@@ -1,5 +1,4 @@
 from abc import ABC
-from rdkit import Chem
 from rdkit.Chem import rdmolops
 
 import numpy as np
@@ -7,7 +6,7 @@ import jax
 import jax.numpy as jnp
 
 from timemachine.lib import potentials
-from timemachine.ff.handlers import nonbonded, bonded
+from timemachine.ff.handlers import nonbonded
 
 _SCALE_12 = 1.0
 _SCALE_13 = 1.0
@@ -997,7 +996,7 @@ class SingleTopology:
         unique_params_r = jnp.array(unique_params_r)
 
         # number of parameters per term (2 for bonds, 2 for angles, 3 for torsions)
-        P = params_a.shape[-1]  # TODO: note P unused
+        # P = params_a.shape[-1]  # TODO: note P unused
 
         combined_params = self._concatenate([core_params_a, core_params_b, unique_params_r])
 

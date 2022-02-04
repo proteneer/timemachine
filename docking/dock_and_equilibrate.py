@@ -132,7 +132,7 @@ def dock_and_equilibrate(
 
         x0 = np.concatenate([minimized_coords, orig_guest_coords])
         v0 = np.zeros_like(x0)
-        print(f"SYSTEM", f"guest_name: {guest_name}", f"num_atoms: {len(x0)}")
+        print("SYSTEM", f"guest_name: {guest_name}", f"num_atoms: {len(x0)}")
 
         for atom_num in constant_atoms:
             combined_masses[atom_num - 1] += 50000

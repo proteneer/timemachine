@@ -43,9 +43,7 @@ class TimemachineConfig:
             data = safe_load(ifs)
         if MAP_GENERATION in data:
             conf.map_generation = MapGenerationConfig.from_dict(data[MAP_GENERATION])
-        inited = False
         for field in fields(cls):
             if getattr(cls, field.name) is not None:
-                inited = True
                 break
         return conf

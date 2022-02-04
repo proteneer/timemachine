@@ -14,8 +14,6 @@ from timemachine.fe.free_energy_rabfe import (
 from timemachine.fe import model_rabfe
 from timemachine.md import builders, minimizer
 
-from testsystems.relative import hif2a_ligand_pair
-
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 from parallel.client import CUDAPoolClient, GRPCClient

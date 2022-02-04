@@ -1,5 +1,3 @@
-import numpy as np
-
 from timemachine.lib import custom_ops
 from timemachine.integrator import langevin_coefficients
 

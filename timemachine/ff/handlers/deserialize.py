@@ -1,5 +1,4 @@
 import ast
-import numpy as np
 
 from timemachine.ff.handlers import bonded, nonbonded
 from timemachine.ff.handlers.suffix import _SUFFIX

@@ -108,7 +108,6 @@ class TestContext(unittest.TestCase):
         assert (ccs == 0).all()
 
         lamb = np.random.rand()
-        lambda_us = []
         lambda_windows = np.array([lamb + 0.05, lamb, lamb - 0.05])
 
         def integrate_once_through(x_t, v_t, box, params):
@@ -178,9 +177,6 @@ class TestContext(unittest.TestCase):
             # np.testing.assert_allclose(test_u_t, ref_all_us[step])
             np.testing.assert_allclose(test_du_dx_t, ref_all_du_dxs[step])
 
-        ref_avg_du_dps = np.mean(ref_all_du_dps, axis=0)
-        ref_std_du_dps = np.std(ref_all_du_dps, axis=0)
-
         # test the multiple_steps method
         ctxt_2 = custom_ops.Context(x0, v0, box, intg, bps)
 
@@ -234,7 +230,6 @@ class TestObservable(unittest.TestCase):
         v0 = np.random.rand(x0.shape[0], x0.shape[1])
 
         num_steps = 3
-        lambda_schedule = np.random.rand(num_steps)
         ca = np.random.rand()
         cbs = -np.random.rand(len(masses)) / 1
         ccs = np.zeros_like(cbs)

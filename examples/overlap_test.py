@@ -4,23 +4,16 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 from rdkit import Chem
-from rdkit.Chem import AllChem
 
 import multiprocessing
 
 
 import jax
-import jax.numpy.linalg as linalg
 import jax.numpy as np
 import functools
-import jax.numpy as np
 import numpy as onp
 
-from scipy.stats import special_ortho_group
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-from rdkit import Chem
-from rdkit.Chem import AllChem
 
 from timemachine.ff import handlers
 from timemachine.potentials import bonded, shape
@@ -54,7 +47,6 @@ def recenter(conf):
 def inertia_tensor(conf, masses):
     com = np.average(conf, axis=0, weights=masses)
     conf = conf - com
-    conf_T = conf.transpose()
 
     xs = conf[:, 0]
     ys = conf[:, 1]
@@ -133,11 +125,12 @@ def convergence(args):
     a_idxs = get_heavy_atom_idxs(ligand_a)
     b_idxs = get_heavy_atom_idxs(ligand_b)
 
-    a_full_idxs = np.arange(0, ligand_a.GetNumAtoms())
-    b_full_idxs = np.arange(0, ligand_b.GetNumAtoms())
+    # NOTE: used in commented code below
+    # a_full_idxs = np.arange(0, ligand_a.GetNumAtoms())
+    # b_full_idxs = np.arange(0, ligand_b.GetNumAtoms())
 
     b_idxs += ligand_a.GetNumAtoms()
-    b_full_idxs += ligand_a.GetNumAtoms()
+    # b_full_idxs += ligand_a.GetNumAtoms()
 
     nrg_fns = []
 
@@ -265,7 +258,7 @@ def convergence(args):
     x_t = coords
     v_t = np.zeros_like(x_t)
 
-    w = Chem.SDWriter("frames_heavy_" + str(epoch) + "_" + str(lamb_idx) + ".sdf")
+    Chem.SDWriter("frames_heavy_" + str(epoch) + "_" + str(lamb_idx) + ".sdf")
 
     dt = 1.5e-3
     ca, cb, cc = langevin_coefficients(300.0, dt, 1.0, combined_masses)

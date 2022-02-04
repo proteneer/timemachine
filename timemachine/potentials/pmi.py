@@ -181,17 +181,15 @@ def grad_inertia_tensor(conf, masses, tensor_grad):
     xs = conf[:, 0]
     ys = conf[:, 1]
     zs = conf[:, 2]
-    xx = np.average(ys * ys + zs * zs, weights=masses)
-    yy = np.average(xs * xs + zs * zs, weights=masses)
-    zz = np.average(xs * xs + ys * ys, weights=masses)
-    xy = np.average(-xs * ys, weights=masses)
-    xz = np.average(-xs * zs, weights=masses)
-    yz = np.average(-ys * zs, weights=masses)
-    tensor = np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+    # xx = np.average(ys * ys + zs * zs, weights=masses)
+    # yy = np.average(xs * xs + zs * zs, weights=masses)
+    # zz = np.average(xs * xs + ys * ys, weights=masses)
+    # xy = np.average(-xs * ys, weights=masses)
+    # xz = np.average(-xs * zs, weights=masses)
+    # yz = np.average(-ys * zs, weights=masses)
+    # tensor = np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
 
     [[dxx, dxy, dxz], [dxy, dyy, dyz], [dxz, dyz, dzz]] = tensor_grad  #
-
-    N = conf.shape[0]
 
     mass_sum = np.sum(masses)
 
