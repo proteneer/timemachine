@@ -13,7 +13,7 @@ from timemachine.fe.utils import convert_uIC50_to_kJ_per_mole
 from timemachine.fe import model
 from timemachine.md import builders
 
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 from timemachine.ff.handlers.serialize import serialize_handlers
 from timemachine.ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler

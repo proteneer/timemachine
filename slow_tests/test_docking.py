@@ -4,7 +4,7 @@ Tests for the timemachine/docking/ files
 import unittest
 import tempfile
 from pathlib import Path
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 from docking import pose_dock, dock_and_equilibrate, rigorous_work, relative_docking
 
 

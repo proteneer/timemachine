@@ -11,7 +11,7 @@ from timemachine.fe.atom_mapping import (
     get_core_by_mcs,
     get_core_by_geometry,
 )
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
 def test_mcs_map():

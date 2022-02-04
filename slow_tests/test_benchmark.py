@@ -199,7 +199,7 @@ def benchmark_dhfr(verbose=False, num_batches=100, steps_per_batch=1000):
 
 def benchmark_hif2a(verbose=False, num_batches=100, steps_per_batch=1000):
 
-    from testsystems.relative import hif2a_ligand_pair as testsystem
+    from timemachine.testsystems.relative import hif2a_ligand_pair as testsystem
 
     mol_a, mol_b, core = testsystem.mol_a, testsystem.mol_b, testsystem.core
 

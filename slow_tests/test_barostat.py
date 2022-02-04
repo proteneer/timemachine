@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 from timemachine.md.builders import build_water_system
 from timemachine.md.minimizer import minimize_host_4d

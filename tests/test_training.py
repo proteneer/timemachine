@@ -4,7 +4,7 @@ import numpy as np
 
 from timemachine.training.dataset import Dataset
 
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
 class TestDataset(unittest.TestCase):
