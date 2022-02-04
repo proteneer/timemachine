@@ -996,7 +996,7 @@ class SingleTopology:
         unique_params_r = jnp.array(unique_params_r)
 
         # number of parameters per term (2 for bonds, 2 for angles, 3 for torsions)
-        P = params_a.shape[-1]  # TODO: note P unused
+        # P = params_a.shape[-1]  # TODO: note P unused
 
         combined_params = self._concatenate([core_params_a, core_params_b, unique_params_r])
 

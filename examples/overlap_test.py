@@ -47,7 +47,6 @@ def recenter(conf):
 def inertia_tensor(conf, masses):
     com = np.average(conf, axis=0, weights=masses)
     conf = conf - com
-    conf_T = conf.transpose()
 
     xs = conf[:, 0]
     ys = conf[:, 1]
@@ -126,11 +125,11 @@ def convergence(args):
     a_idxs = get_heavy_atom_idxs(ligand_a)
     b_idxs = get_heavy_atom_idxs(ligand_b)
 
-    a_full_idxs = np.arange(0, ligand_a.GetNumAtoms())
-    b_full_idxs = np.arange(0, ligand_b.GetNumAtoms())
+    # a_full_idxs = np.arange(0, ligand_a.GetNumAtoms())
+    # b_full_idxs = np.arange(0, ligand_b.GetNumAtoms())
 
     b_idxs += ligand_a.GetNumAtoms()
-    b_full_idxs += ligand_a.GetNumAtoms()
+    # b_full_idxs += ligand_a.GetNumAtoms()
 
     nrg_fns = []
 
@@ -258,7 +257,7 @@ def convergence(args):
     x_t = coords
     v_t = np.zeros_like(x_t)
 
-    w = Chem.SDWriter("frames_heavy_" + str(epoch) + "_" + str(lamb_idx) + ".sdf")
+    Chem.SDWriter("frames_heavy_" + str(epoch) + "_" + str(lamb_idx) + ".sdf")
 
     dt = 1.5e-3
     ca, cb, cc = langevin_coefficients(300.0, dt, 1.0, combined_masses)

@@ -113,7 +113,6 @@ class AbsoluteFreeEnergy(BaseFreeEnergy):
         ligand_coords = get_romol_conf(self.mol)
 
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-        num_host_atoms = host_coords.shape[0]
 
         hgt = topology.HostGuestTopology(host_bps, self.top)
 
@@ -207,7 +206,6 @@ class RelativeFreeEnergy(BaseFreeEnergy):
         ligand_coords_b = get_romol_conf(self.mol_b)
 
         host_bps, host_masses = openmm_deserializer.deserialize_system(host_system, cutoff=1.2)
-        num_host_atoms = host_coords.shape[0]
 
         hgt = topology.HostGuestTopology(host_bps, self.top)
 

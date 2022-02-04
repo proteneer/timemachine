@@ -118,7 +118,7 @@ class RBFEModel:
                 unbound_potentials, sys_params, masses, coords = rfe.prepare_host_edge(
                     ordered_params, host_system, min_coords
                 )
-                num_host_coords = len(host_coords)
+                # num_host_coords = len(host_coords)
                 # masses[num_host_coords:] *= 1000000 # Lets see if masses are the difference
                 harmonic_bond_potential = unbound_potentials[0]
                 bond_list = get_bond_list(harmonic_bond_potential)

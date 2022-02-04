@@ -25,7 +25,6 @@ def test_barostat_zero_interval():
     pressure = 1.0 * unit.atmosphere
     temperature = 300.0 * unit.kelvin
     initial_waterbox_width = 2.5 * unit.nanometer
-    barostat_interval = 0
     seed = 2021
     np.random.seed(seed)
 
@@ -369,8 +368,6 @@ def test_molecular_ideal_gas():
     group_indices = get_group_indices(bond_list)
 
     volume_trajs = []
-
-    lam = 1.0
 
     relative_tolerance = 1e-2
     initial_relative_box_perturbation = 2 * relative_tolerance

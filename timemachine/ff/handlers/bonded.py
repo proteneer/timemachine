@@ -123,7 +123,6 @@ class ProperTorsionHandler:
         assert len(torsion_idxs) == len(param_idxs)
 
         scatter_idxs = []
-        n_smirks = len(counts)  # number of patterns
         repeats = []
 
         # prefix sum of size + 1

@@ -71,8 +71,6 @@ class TestBonded(GradientTest):
                 gai = np.arange(5).astype(np.int32)
                 gbi = (np.arange(5) + 5).astype(np.int32)
 
-                masses = np.random.rand(n_particles)
-
                 kb = 10.0
                 b0 = 0.0
 
@@ -107,9 +105,6 @@ class TestBonded(GradientTest):
 
                 n = coords.shape[0]
                 n_mapped_atoms = 5
-
-                atom_idxs_a = np.arange(n_particles_a)
-                atom_idxs_b = np.arange(n_particles_b)
 
                 atom_map = np.stack(
                     [

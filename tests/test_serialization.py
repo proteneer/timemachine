@@ -104,7 +104,6 @@ def test_harmonic_bond():
 
     smirks = [x[0] for x in patterns]
     params = np.array([[x[1], x[2]] for x in patterns])
-    props = None
     hbh = bonded.HarmonicBondHandler(smirks, params, None)
 
     obj = hbh.serialize()
@@ -133,7 +132,6 @@ def test_proper_torsion():
 
     smirks = [x[0] for x in patterns]
     params = [x[1] for x in patterns]
-    props = None
 
     ph = bonded.ProperTorsionHandler(smirks, params, None)
     obj = ph.serialize()

@@ -41,7 +41,7 @@ def _compute_label(mol_a, mol_b, prop_name: str):
     try:
         label_dG_a = convert_uIC50_to_kJ_per_mole(float(mol_a.GetProp(prop_name)))
         label_dG_b = convert_uIC50_to_kJ_per_mole(float(mol_b.GetProp(prop_name)))
-    except KeyError as e:
+    except KeyError:
         raise RuntimeError(f"Couldn't access IC50 label for either mol A or mol B, looking at {prop_name}")
 
     label = label_dG_b - label_dG_a
@@ -129,7 +129,7 @@ def generate_star(
             single_topology = topology.SingleTopology(hub, spoke, core, forcefield)
             rfe = RelativeFreeEnergy(single_topology, label=_compute_label(hub, spoke, label_property))
             transformations.append(rfe)
-        except AtomMappingError as e:
+        except AtomMappingError:
             # note: some of transformations may fail the factorizability assertion here:
             # https://github.com/proteneer/timemachine/blob/2eb956f9f8ce62287cc531188d1d1481832c5e96/fe/topology.py#L381-L431
             error_transformations.append((hub, spoke, core))

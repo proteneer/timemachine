@@ -82,8 +82,6 @@ def minimize(args):
 
     ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
 
-    steps = 500
-
     lambda_schedule = np.linspace(0.35, 0.0, 500)
     for lamb in lambda_schedule:
         ctxt.step(lamb)
@@ -97,7 +95,6 @@ def minimize_setup(r_host, r_ligand):
     print(len(r_combined.masses))
 
     # assert 0
-    host_atom_idxs = np.arange(len(r_host.masses))
     ligand_atom_idxs = np.arange(len(r_ligand.masses)) + len(r_host.masses)
     rbfe.set_nonbonded_lambda_idxs(r_combined, ligand_atom_idxs, 0, 1)
 

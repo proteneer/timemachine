@@ -35,7 +35,6 @@ class TestInterpolatedPotential(GradientTest):
 
         water_coords = self.get_water_coords(D, sort=False)
         coords = water_coords[:size]
-        padding = 0.2
         box = np.eye(3) * 3
 
         N = coords.shape[0]
@@ -88,7 +87,6 @@ class TestInterpolatedPotential(GradientTest):
 
         water_coords = self.get_water_coords(D, sort=False)
         coords = water_coords[:size]
-        padding = 0.2
         box = np.eye(3) * 3
 
         N = coords.shape[0]
