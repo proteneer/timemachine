@@ -3,7 +3,7 @@ import numpy as np
 import tempfile
 from simtk.openmm import app
 from simtk.openmm.app import PDBFile
-from fe.topology import SingleTopology
+from timemachine.fe.topology import SingleTopology
 
 # class PDBWriter():
 
