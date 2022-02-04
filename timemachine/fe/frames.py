@@ -1,8 +1,7 @@
-from timemachine.fe import estimator, estimator_abfe
-from typing import List, Tuple, Generator, Union
+from typing import Any, List, Tuple, Generator
 
 
-SimulationResult = Union[estimator.SimulationResult, estimator_abfe.SimulationResult]
+SimulationResult = Any
 FrameIterator = Generator[Tuple[int, SimulationResult], None, None]
 
 
