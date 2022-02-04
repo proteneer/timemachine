@@ -506,6 +506,10 @@ class TestNonbonded(GradientTest):
             x = (x.astype(np.float32)).astype(np.float64)
             params = (params.astype(np.float32)).astype(np.float64)
 
+            assert x.ndim >= 2
+            # N = x.shape[0]
+            # D = x.shape[1]
+
             assert x.dtype == np.float64
             assert params.dtype == np.float64
             for _ in range(steps):

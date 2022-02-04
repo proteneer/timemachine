@@ -125,6 +125,7 @@ def convergence(args):
     a_idxs = get_heavy_atom_idxs(ligand_a)
     b_idxs = get_heavy_atom_idxs(ligand_b)
 
+    # NOTE: used in commented code below
     # a_full_idxs = np.arange(0, ligand_a.GetNumAtoms())
     # b_full_idxs = np.arange(0, ligand_b.GetNumAtoms())
 

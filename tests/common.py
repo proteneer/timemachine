@@ -53,7 +53,9 @@ def prepare_lj_system(
     precision=np.float64,
 ):
 
+    assert x.ndim >= 2
     N = x.shape[0]
+    # D = x.shape[1]
 
     sig_params = np.random.rand(N) / p_scale
     eps_params = np.random.rand(N)
@@ -167,7 +169,9 @@ def prepare_reference_nonbonded(params, exclusion_idxs, scales, lambda_plane_idx
 
 def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):
 
+    assert x.ndim >= 2
     N = x.shape[0]
+    # D = x.shape[1]
 
     assert N % 3 == 0
 
@@ -230,7 +234,9 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
 def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):  # number of exclusions
 
+    assert x.ndim >= 2
     N = x.shape[0]
+    # D = x.shape[1]
 
     params = np.stack(
         [
@@ -278,7 +284,9 @@ def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
 def prepare_restraints(x, B, precision):
 
+    assert x.ndim >= 2
     N = x.shape[0]
+    # D = x.shape[1]
 
     atom_idxs = np.arange(N)
 
@@ -299,7 +307,9 @@ def prepare_restraints(x, B, precision):
 
 def prepare_bonded_system(x, B, A, T, precision):
 
+    assert x.ndim >= 2
     N = x.shape[0]
+    # D = x.shape[1]
 
     atom_idxs = np.arange(N)
 
@@ -410,6 +420,10 @@ class GradientTest(unittest.TestCase):
 
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
+
+        assert x.ndim >= 2
+        # N = x.shape[0]
+        # D = x.shape[1]
 
         assert x.dtype == np.float64
         assert params.dtype == np.float64
