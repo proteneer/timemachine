@@ -22,7 +22,8 @@ def test_reference_langevin_integrator(threshold=1e-4):
     dts = [0.1, 0.15]
     masses = [1.0, 2.0]
 
-    settings = list(product(temperatures, frictions, dts, masses))
+    all_combinations = list(product(temperatures, frictions, dts, masses))
+    settings = [all_combinations[0], all_combinations[-1]]  # reduced to speed up CI
     print(f"testing reference integrator for {len(settings)} combinations of settings:")
     print("(temperature, friction, dt, mass) -> histogram_mse")
 
