@@ -172,7 +172,6 @@ def get_core_by_mcs(mol_a, mol_b, query, threshold=0.5):
     # note that >1 match possible here -- must pick minimum-cost match
     matches_a = mol_a.GetSubstructMatches(query)
     matches_b = mol_b.GetSubstructMatches(query)
-    n_a, n_b = len(matches_a), len(matches_b)
 
     # cost[i, j] = sum_i distance(conf)
     cost = np.zeros((len(matches_a), len(matches_b)))

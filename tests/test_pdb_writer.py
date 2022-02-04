@@ -4,7 +4,7 @@ import numpy as np
 from tempfile import NamedTemporaryFile
 
 from timemachine.fe.pdb_writer import PDBWriter, convert_single_topology_mols
-from timemachine.fe.topology import SingleTopology, DualTopology
+from timemachine.fe.topology import SingleTopology
 from timemachine.md import builders
 
 from timemachine.testsystems.relative import hif2a_ligand_pair

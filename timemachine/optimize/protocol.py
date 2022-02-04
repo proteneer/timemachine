@@ -49,7 +49,7 @@ from jax import jit, vmap, numpy as np
 from jax.scipy.special import logsumexp
 from scipy.optimize import bisect
 
-from typing import Tuple, Callable
+from typing import Callable
 
 Float = float
 Array = np.array
@@ -101,7 +101,7 @@ def rebalance_initial_protocol(
 
 
 def log_weights_from_mixture(u_kn: Array, f_k: Array, N_k: Array) -> Array:
-    """Assuming
+    r"""Assuming
     * K reduced potential energy functions u_k
     * N_k samples from each state e^{-u_k} / Z_k
     * reduced free energy estimates f_k ~= - log Z_k

@@ -2,7 +2,6 @@ import os
 import unittest
 import numpy as np
 import jax
-import jax.numpy as jnp
 import functools
 import contextlib
 from tempfile import TemporaryDirectory
@@ -12,8 +11,8 @@ from pathlib import Path
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.ff import Forcefield
 
-from timemachine.potentials import bonded, nonbonded, gbsa
-from timemachine.lib import potentials, custom_ops
+from timemachine.potentials import bonded, nonbonded
+from timemachine.lib import potentials
 
 from hilbertcurve.hilbertcurve import HilbertCurve
 
@@ -54,8 +53,9 @@ def prepare_lj_system(
     precision=np.float64,
 ):
 
+    assert x.ndim == 2
     N = x.shape[0]
-    D = x.shape[1]
+    # D = x.shape[1]
 
     sig_params = np.random.rand(N) / p_scale
     eps_params = np.random.rand(N)
@@ -169,8 +169,9 @@ def prepare_reference_nonbonded(params, exclusion_idxs, scales, lambda_plane_idx
 
 def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):
 
+    assert x.ndim == 2
     N = x.shape[0]
-    D = x.shape[1]
+    # D = x.shape[1]
 
     assert N % 3 == 0
 
@@ -185,8 +186,6 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     params[:, 1] = params[:, 1] / 2
     params[:, 2] = np.sqrt(params[:, 2])
-
-    atom_idxs = np.arange(N)
 
     scales = []
     exclusion_idxs = []
@@ -204,7 +203,6 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
     scales = np.array(scales, dtype=np.float64)
     exclusion_idxs = np.array(exclusion_idxs, dtype=np.int32)
-    E = len(exclusion_idxs)
 
     beta = 2.0
 
@@ -236,8 +234,9 @@ def prepare_water_system(x, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
 def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cutoff):  # number of exclusions
 
+    assert x.ndim == 2
     N = x.shape[0]
-    D = x.shape[1]
+    # D = x.shape[1]
 
     params = np.stack(
         [
@@ -285,14 +284,14 @@ def prepare_nb_system(x, E, lambda_plane_idxs, lambda_offset_idxs, p_scale, cuto
 
 def prepare_restraints(x, B, precision):
 
+    assert x.ndim == 2
     N = x.shape[0]
-    D = x.shape[1]
+    # D = x.shape[1]
 
     atom_idxs = np.arange(N)
 
     params = np.random.randn(B, 3).astype(np.float64)
 
-    bond_params = np.random.rand(B, 2).astype(np.float64)
     bond_idxs = []
     for _ in range(B):
         bond_idxs.append(np.random.choice(atom_idxs, size=2, replace=False))
@@ -308,8 +307,9 @@ def prepare_restraints(x, B, precision):
 
 def prepare_bonded_system(x, B, A, T, precision):
 
+    assert x.ndim == 2
     N = x.shape[0]
-    D = x.shape[1]
+    # D = x.shape[1]
 
     atom_idxs = np.arange(N)
 
@@ -401,12 +401,12 @@ class GradientTest(unittest.TestCase):
 
         # print(errors)
         max_error = np.amax(np.abs(errors))
-        mean_error = np.mean(np.abs(errors).reshape(-1))
-        std_error = np.std(errors.reshape(-1))
         max_error_arg = np.argmax(errors) // truth.shape[1]
 
         errors = np.abs(errors) > rtol
 
+        # mean_error = np.mean(np.abs(errors).reshape(-1))
+        # std_error = np.std(errors.reshape(-1))
         # print("max relative error", max_error, "rtol", rtol, norms[max_error_arg], "mean error", mean_error, "std error", std_error)
         if np.sum(errors) > 0:
             print("FATAL: max relative error", max_error, truth[max_error_arg], test[max_error_arg])
@@ -421,8 +421,9 @@ class GradientTest(unittest.TestCase):
         x = (x.astype(np.float32)).astype(np.float64)
         params = (params.astype(np.float32)).astype(np.float64)
 
-        N = x.shape[0]
-        D = x.shape[1]
+        assert x.ndim == 2
+        # N = x.shape[0]
+        # D = x.shape[1]
 
         assert x.dtype == np.float64
         assert params.dtype == np.float64

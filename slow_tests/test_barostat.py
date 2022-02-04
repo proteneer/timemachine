@@ -2,7 +2,6 @@ import os
 import platform
 import numpy as np
 from simtk import unit
-import time
 
 import pytest
 
@@ -13,17 +12,11 @@ from timemachine.md.minimizer import minimize_host_4d
 
 from timemachine.fe.free_energy import AbsoluteFreeEnergy
 
-from timemachine.md.states import CoordsVelBox
-from timemachine.md.ensembles import PotentialEnergyModel, NPTEnsemble
-from timemachine.md.thermostat.moves import UnadjustedLangevinMove
-from timemachine.md.barostat.moves import MonteCarloBarostat, CentroidRescaler
+from timemachine.md.barostat.moves import CentroidRescaler
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices, compute_box_volume, compute_box_center
-from timemachine.md.utils import simulate_npt_traj
 from timemachine.md.thermostat.utils import sample_velocities
 
 from timemachine.lib import LangevinIntegrator, custom_ops
-
-from functools import partial
 
 from timemachine.constants import BOLTZ, ENERGY_UNIT, DISTANCE_UNIT
 
@@ -32,7 +25,6 @@ def test_barostat_zero_interval():
     pressure = 1.0 * unit.atmosphere
     temperature = 300.0 * unit.kelvin
     initial_waterbox_width = 2.5 * unit.nanometer
-    barostat_interval = 0
     seed = 2021
     np.random.seed(seed)
 
@@ -376,8 +368,6 @@ def test_molecular_ideal_gas():
     group_indices = get_group_indices(bond_list)
 
     volume_trajs = []
-
-    lam = 1.0
 
     relative_tolerance = 1e-2
     initial_relative_box_perturbation = 2 * relative_tolerance

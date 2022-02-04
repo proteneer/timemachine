@@ -97,7 +97,7 @@ def plot_density(volume_trajs):
     density = n_molecules * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
 
     plt.scatter(lambdas, density.value_in_unit(unit.kilogram / unit.liter))
-    plt.xlabel("$\lambda$")
+    plt.xlabel(r"$\lambda$")
     plt.ylabel("density (kg/L)")
     plt.savefig("density_vs_lambda.png", dpi=300, bbox_inches="tight")
     plt.close()

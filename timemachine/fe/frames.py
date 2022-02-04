@@ -1,14 +1,15 @@
-from typing import List, Tuple, Generator
+from typing import Any, List, Tuple, Generator
 
 
-FrameIterator = Generator[Tuple[int, "SimulationResult"], None, None]
+SimulationResult = Any
+FrameIterator = Generator[Tuple[int, SimulationResult], None, None]
 
 
-def all_frames(results: List["SimulationResult"]) -> FrameIterator:
+def all_frames(results: List[SimulationResult]) -> FrameIterator:
     return enumerate(results)
 
 
-def endpoint_frames_only(results: List["SimulationResult"]) -> FrameIterator:
+def endpoint_frames_only(results: List[SimulationResult]) -> FrameIterator:
     output = []
     if len(results) == 0:
         return output
@@ -19,5 +20,5 @@ def endpoint_frames_only(results: List["SimulationResult"]) -> FrameIterator:
     return output
 
 
-def no_frames(results: List["SimulationResult"]) -> FrameIterator:
+def no_frames(results: List[SimulationResult]) -> FrameIterator:
     return []

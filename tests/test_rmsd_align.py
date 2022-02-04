@@ -4,7 +4,7 @@ from timemachine.lib import custom_ops
 
 from timemachine.potentials import rmsd
 import numpy as np
-from timemachine.testsystems import relative
+
 from scipy.stats import special_ortho_group, ortho_group
 
 

@@ -14,8 +14,6 @@ from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.fe.utils import get_romol_conf
 import jax
 
-from timemachine.lib import potentials
-
 
 class BenzenePhenolSparseTest(unittest.TestCase):
     def setUp(self, *args, **kwargs):
@@ -60,7 +58,6 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         # we expect 15 bonds in total, of which 6 are duplicated.
         assert len(combined_potential.get_idxs() == 15)
 
-        combined_idxs = combined_potential.get_idxs()
         src_idxs = set([tuple(x) for x in combined_potential.get_idxs()[:6]])
         dst_idxs = set([tuple(x) for x in combined_potential.get_idxs()[6:12]])
 
@@ -90,7 +87,6 @@ class BenzenePhenolSparseTest(unittest.TestCase):
 
         assert len(combined_potential.get_idxs() == 15)
 
-        combined_idxs = combined_potential.get_idxs()
         src_idxs = set([tuple(x) for x in combined_potential.get_idxs()[:7]])
         dst_idxs = set([tuple(x) for x in combined_potential.get_idxs()[7:14]])
 
@@ -134,7 +130,8 @@ class BenzenePhenolSparseTest(unittest.TestCase):
         np.testing.assert_array_equal(x_a[6], x_avg[6])  # H
         np.testing.assert_array_equal(x_b[6:], x_avg[7:])  # OH
 
-        res = st.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
+        # NOTE: unused result
+        st.parameterize_nonbonded(self.ff.q_handle.params, self.ff.lj_handle.params)
 
         params, vjp_fn, pot_c = jax.vjp(
             st.parameterize_nonbonded, self.ff.q_handle.params, self.ff.lj_handle.params, has_aux=True
@@ -152,7 +149,7 @@ class BenzenePhenolSparseTest(unittest.TestCase):
 
         n_base_params = len(params) // 2  # params is actually interpolated, so its 2x number of base params
 
-        qlj_c = np.mean([params[:n_base_params], params[n_base_params:]], axis=0)
+        # qlj_c = np.mean([params[:n_base_params], params[n_base_params:]], axis=0)
 
         params_src = params[:n_base_params]
         params_dst = params[n_base_params:]
@@ -205,7 +202,7 @@ class BenzenePhenolSparseTest(unittest.TestCase):
 
         n_base_params = len(params) // 2  # params is actually interpolated, so its 2x number of base params
 
-        qlj_c = np.mean([params[:n_base_params], params[n_base_params:]], axis=0)
+        # qlj_c = np.mean([params[:n_base_params], params[n_base_params:]], axis=0)
 
         params_src = params[:n_base_params]
         params_dst = params[n_base_params:]
@@ -261,7 +258,7 @@ class TestFactorizability(unittest.TestCase):
         )
 
         with self.assertRaises(topology.AtomMappingError):
-            st = topology.SingleTopology(mol_a, mol_b, core, ff)
+            topology.SingleTopology(mol_a, mol_b, core, ff)
 
     def test_good_factor(self):
         # test a good mapping

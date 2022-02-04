@@ -107,7 +107,7 @@ def test_free_energy_estimator():
         return dG ** 2
 
     for client in [None, CUDAPoolClient(1)]:
-        dG = loss_fn(sys_params)
+        loss_fn(sys_params)
 
 
 def test_free_energy_estimator_with_endpoint_correction():
@@ -176,4 +176,4 @@ def test_free_energy_estimator_with_endpoint_correction():
         return dG ** 2
 
     for client in [None, CUDAPoolClient(1)]:
-        dG = loss_fn(sys_params)
+        loss_fn(sys_params)

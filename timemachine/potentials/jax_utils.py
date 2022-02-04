@@ -1,7 +1,6 @@
 import jax.numpy as np
 import numpy as onp
 import jax
-from jax.ops import index_update
 from jax import vmap
 
 from typing import Tuple
