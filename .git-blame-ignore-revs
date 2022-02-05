@@ -1,2 +1,26 @@
 # Migrate code style to black
 4545c577a8dae5827a64594e8bfb100f7e0423c8
+
+# Move fe/ to timemachine/fe/
+277cc7463d22af28e5d80478ed3628d0070ffd10
+
+# Move ff/ to timemachine/ff/
+f661c86f108acceeefc067c918dc007cd73219e9
+
+# Move optimize/ to timemachine/optimize/
+e21cbb8f048840dc24723b60ca3351dbeac8d207
+
+# Move md/ to timemachine/md/
+2508c3ff76b9b7c781909626ef4fbb2f9e514f80
+
+# Move training/ to attic/training
+772c37329dc4f16b238c425a37045b059747c946
+
+# Move scripts/ to attic/scripts
+1a721dd3f05d6011cf028b0588e066682d38ba59
+
+# TBD: Move testsystems/ to timemachine/testsystems/
+
+# TBD: Move datasets/ to timeamchine/datasets/
+
+# TBD: Move parallel/ to timemachine/parallel
