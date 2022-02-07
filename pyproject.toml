@@ -3,8 +3,8 @@ line-length = 120
 extend-exclude = '''
 ^/( versioneer.py$
   | timemachine/_version.py$
-  | ff/params
-  | parallel/grpc
+  | timemachine/ff/params
+  | timemachine/parallel/grpc
   )
 '''
 

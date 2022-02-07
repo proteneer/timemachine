@@ -4,9 +4,9 @@ import random
 
 from tempfile import NamedTemporaryFile
 
-import parallel
-from parallel import client, worker
-from parallel.utils import get_gpu_count
+from timemachine import parallel
+from timemachine.parallel import client, worker
+from timemachine.parallel.utils import get_gpu_count
 
 import os
 import unittest
@@ -64,7 +64,7 @@ def environ_check():
 
 
 class TestGPUCount(unittest.TestCase):
-    @patch("parallel.utils.check_output")
+    @patch("timemachine.parallel.utils.check_output")
     def test_get_gpu_count(self, mock_output):
         mock_output.return_value = b"\n".join([f"GPU #{i}".encode() for i in range(5)])
         assert parallel.utils.get_gpu_count() == 5
@@ -130,7 +130,7 @@ class TestGRPCClient(unittest.TestCase):
         self.hosts = [f"0.0.0.0:{port}" for port in self.ports]
         self.cli = client.GRPCClient(self.hosts)
 
-    @patch("parallel.worker.get_worker_status")
+    @patch("timemachine.parallel.worker.get_worker_status")
     def test_checking_host_status(self, mock_status):
         # All the workers return the same thing
         mock_status.side_effect = [
@@ -146,7 +146,7 @@ class TestGRPCClient(unittest.TestCase):
         with self.assertRaises(AssertionError):
             self.cli.verify()
 
-    @patch("parallel.worker.get_worker_status")
+    @patch("timemachine.parallel.worker.get_worker_status")
     def test_unavailable_host(self, mock_status):
 
         hosts = self.hosts.copy()

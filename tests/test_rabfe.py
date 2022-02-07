@@ -17,8 +17,8 @@ from timemachine.potentials import rmsd
 from timemachine.lib.potentials import NonbondedInterpolated, Nonbonded
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
-from parallel.client import CUDAPoolClient
-from parallel.utils import get_gpu_count
+from timemachine.parallel.client import CUDAPoolClient
+from timemachine.parallel.utils import get_gpu_count
 
 from common import temporary_working_dir
 

@@ -33,5 +33,5 @@ exclude: >
   | \.xml$
   | /vendored/
   | ^attic/
-  | ^parallel/grpc/
+  | ^timemachine/parallel/grpc/
   | ^timemachine/ff/params/

@@ -1,5 +1,5 @@
-// (ytz) activate venv and compile with
-// python3 -m grpc_tools.protoc -I proto/ --python_out=. --grpc_python_out=. proto/parallel/service.proto
+// activate venv and compile with
+// make grpc
 // this specific folder setup is required for import paths in generated _pb files to be correct.
 
 syntax = "proto3";
