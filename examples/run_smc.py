@@ -14,7 +14,7 @@ def parse_options():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n_walkers", type=int, help="number of walkers", default=100)
     parser.add_argument("--n_windows", type=int, help="number of lambda windows", default=100)
-    parser.add_argument("--n_md_steps", type=int, help="number of MD steps per move", default=1000)
+    parser.add_argument("--n_md_steps", type=int, help="number of MD steps per move", default=100)
     parser.add_argument("--resample_thresh", type=float, help="resample when fractional ESS < thresh", default=0.6)
     parser.add_argument("--debug_mode", type=bool, help="save full trajectories", default=False)
 
