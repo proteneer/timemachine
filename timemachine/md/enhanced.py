@@ -22,6 +22,7 @@ from timemachine.lib import custom_ops
 from timemachine.md.states import CoordsVelBox
 from timemachine.md import minimizer
 from timemachine.md import builders
+from timemachine.md.barostat.utils import get_group_indices, get_bond_list
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
@@ -438,23 +439,24 @@ def jax_sample_from_log_weights(weighted_samples, log_weights, size, key):
     return weighted_samples[idxs]
 
 
-def get_solvent_phase_system(mol, ff):
-    masses = np.array([a.GetMass() for a in mol.GetAtoms()])
-    water_system, water_coords, water_box, water_topology = builders.build_water_system(3.0)
+def get_solvent_phase_system(mol, ff, box_width=3.0):
+
+    # construct water box
+    water_system, water_coords, water_box, water_topology = builders.build_water_system(box_width)
     water_box = water_box + np.eye(3) * 0.5  # add a small margin around the box for stability
     num_water_atoms = len(water_coords)
+
+    # absolute free energy
     afe = free_energy.AbsoluteFreeEnergy(mol, ff)
     ff_params = ff.get_ordered_params()
     ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
 
+    # energy-minimize water coordinates
     host_coords = coords[:num_water_atoms]
     new_host_coords = minimizer.minimize_host_4d([mol], water_system, host_coords, ff, water_box)
     coords[:num_water_atoms] = new_host_coords
 
     return ubps, params, masses, coords, water_box
-
-
-from timemachine.md.barostat.utils import get_group_indices, get_bond_list
 
 
 def equilibrate_solvent_phase(

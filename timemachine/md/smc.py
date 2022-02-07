@@ -1,9 +1,8 @@
+# adapted from https://github.com/proteneer/timemachine/blob/7d6099b0f5b4a2d0b26c3edc7a91c18f7a526c00/md/experimental/smc.py
+
 import numpy as np
 from scipy.special import logsumexp
 from tqdm import tqdm
-
-
-# based on https://github.com/proteneer/timemachine/blob/7d6099b0f5b4a2d0b26c3edc7a91c18f7a526c00/md/experimental/smc.py
 
 
 def simple_smc(
@@ -92,6 +91,3 @@ def conditional_multinomial_resample(log_weights, thresh=0.5):
         return multinomial_resample(log_weights)
     else:
         return null_resample(log_weights)
-
-
-# TODO: stratified resampling, with a sorting function
