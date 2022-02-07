@@ -19,9 +19,10 @@ def simple_smc(
     traj = [samples]
     ancestry_traj = [np.arange(n)]
     log_weights_traj = [np.array(log_weights)]
-    incremental_log_weights_traj = (
-        []
-    )  # TODO: this is redundant -- can be reconstructed from log_weights_traj and ancestry...
+
+    # note: this is redundant (can be reconstructed from log_weights_traj and ancestry)
+    #   but convenient (can directly read off stddev(incremental_log_weights[t]), etc.)
+    incremental_log_weights_traj = []
 
     trange = tqdm(lambdas[:-2])
     for (lam_initial, lam_target) in zip(trange, lambdas[1:-1]):
@@ -36,13 +37,9 @@ def simple_smc(
         # propagate
         samples = propagate(resampled, lam_target)
 
-        trange.set_postfix(
-            # max_log_weight=max(log_weights),
-            # min_log_weight=min(log_weights),
-            # u_timings=summarize(u_timings),
-            # move_timings=summarize(move_timings),
-            EXP=-logsumexp(log_weights - np.log(len(log_weights)))
-        )
+        # log
+        running_estimate = -logsumexp(log_weights - np.log(len(log_weights)))
+        trange.set_postfix(EXP=running_estimate)
 
         # append to trajs
         traj.append(samples)
