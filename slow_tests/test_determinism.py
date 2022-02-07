@@ -8,7 +8,7 @@ from timemachine.lib import custom_ops, LangevinIntegrator, MonteCarloBarostat
 
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from testsystems.relative import hif2a_ligand_pair as testsystem
+from timemachine.testsystems.relative import hif2a_ligand_pair as testsystem
 
 
 def FIXED_TO_FLOAT(v):

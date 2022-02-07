@@ -5,7 +5,7 @@ from unittest import TestCase
 from timemachine.md import builders
 from timemachine.fe.model import RBFEModel
 from timemachine.fe.free_energy import construct_lambda_schedule
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count
 

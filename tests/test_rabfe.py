@@ -15,7 +15,7 @@ from timemachine.fe.free_energy_rabfe import (
 from timemachine.fe.frames import all_frames
 from timemachine.potentials import rmsd
 from timemachine.lib.potentials import NonbondedInterpolated, Nonbonded
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 from timemachine.parallel.client import CUDAPoolClient
 from timemachine.parallel.utils import get_gpu_count

@@ -3,13 +3,14 @@
 import numpy as np
 from rdkit import Chem
 
+import timemachine
 from timemachine.fe import free_energy, topology
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 from pathlib import Path
 
-root = Path(__file__).parent.parent
+root = Path(timemachine.__file__).parent.parent
 
 path_to_protein = str(root.joinpath("tests/data/hif2a_nowater_min.pdb"))
 

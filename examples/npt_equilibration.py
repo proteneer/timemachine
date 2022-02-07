@@ -3,7 +3,7 @@
 import numpy as np
 from simtk import unit
 
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 from timemachine.md.builders import build_water_system
 from timemachine.md.minimizer import minimize_host_4d

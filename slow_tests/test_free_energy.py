@@ -20,7 +20,7 @@ from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
 
 from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
 def test_absolute_free_energy():
