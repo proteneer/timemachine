@@ -5,9 +5,9 @@ from pickle import dump
 
 import numpy as np
 
-from fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
-from md.smc import simple_smc, conditional_multinomial_resample
-from testsystems.biphenyl import construct_biphenyl_test_system
+from timemachine.fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
+from timemachine.md.smc import simple_smc, conditional_multinomial_resample
+from timemachine.testsystems.biphenyl import construct_biphenyl_test_system
 
 
 def parse_options():
