@@ -2,11 +2,11 @@
 
 import numpy as np
 
-from fe import free_energy
+from timemachine.fe import free_energy
 
-from md import enhanced, builders
-from md.moves import NPTMove
-from md.states import CoordsVelBox
+from timemachine.md import enhanced, builders
+from timemachine.md.moves import NPTMove
+from timemachine.md.states import CoordsVelBox
 
 from tqdm import tqdm
 

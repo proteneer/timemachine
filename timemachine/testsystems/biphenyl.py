@@ -15,19 +15,19 @@ import numpy as np
 import timemachine
 from timemachine.constants import BOLTZ
 
-from fe import functional
-from fe.absolute_hydration import (
+from timemachine.fe import functional
+from timemachine.fe.absolute_hydration import (
     generate_solvent_samples,
     generate_ligand_samples,
     generate_endstate_samples,
     get_solvent_phase_system,
 )
 
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
-from md import enhanced
-from md.moves import NPTMove
+from timemachine.md import enhanced
+from timemachine.md.moves import NPTMove
 
 # (ytz): useful for visualization, so please leave this comment here!
 # import asciiplotlib as apl
