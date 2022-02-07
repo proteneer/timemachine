@@ -97,7 +97,7 @@ $$$$"""
 
 def get_ff_am1ccc():
     tm_path = Path(timemachine.__path__[0]).parent
-    path_to_ff = tm_path / "ff/params/smirnoff_1_1_0_ccc.py"
+    path_to_ff = tm_path / "timemachine/ff/params/smirnoff_1_1_0_ccc.py"
     with open(path_to_ff, "r") as f:
         ff_handlers = deserialize_handlers(f.read())
     ff = Forcefield(ff_handlers)
