@@ -8,9 +8,9 @@ import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from ff.handlers import nonbonded, bonded
-from ff.handlers.deserialize import deserialize_handlers
-from ff.charges import AM1CCC_CHARGES
+from timemachine.ff.handlers import nonbonded, bonded
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.charges import AM1CCC_CHARGES
 
 import functools
 
@@ -134,7 +134,7 @@ def test_harmonic_bond():
 
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(bond_params > 90)
-    assert np.all(ff_adjoints[mask] == 0.0) == True
+    assert np.all(ff_adjoints[mask] == 0.0)
 
 
 def test_proper_torsion():
@@ -174,7 +174,7 @@ def test_proper_torsion():
     ff_adjoints = torsion_vjp_fn(torsion_param_adjoints)[0]
 
     mask = np.argwhere(torsion_params > 90)
-    assert np.all(ff_adjoints[mask] == 0.0) == True
+    assert np.all(ff_adjoints[mask] == 0.0)
 
 
 def test_improper_torsion():
@@ -219,7 +219,7 @@ def test_improper_torsion():
 
     # # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(torsion_params > 90)
-    assert np.all(ff_adjoints[mask] == 0.0) == True
+    assert np.all(ff_adjoints[mask] == 0.0)
 
 
 def test_exclusions():
@@ -388,7 +388,7 @@ $$$$
 
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
-    assert np.all(adjoints[mask] == 0.0) == True
+    assert np.all(adjoints[mask] == 0.0)
 
     import time
 
@@ -467,7 +467,7 @@ def test_simple_charge_handler():
 
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
-    assert np.all(adjoints[mask] == 0.0) == True
+    assert np.all(adjoints[mask] == 0.0)
 
 
 @pytest.mark.skip("gbsa is deprecated")
@@ -517,12 +517,12 @@ def test_gbsa_handler():
 
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
-    assert np.all(adjoints[mask] == 0.0) == True
+    assert np.all(adjoints[mask] == 0.0)
 
 
 def test_am1_differences():
 
-    ff_raw = open("ff/params/smirnoff_1_1_0_ccc.py").read()
+    ff_raw = open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read()
     ff_handlers = deserialize_handlers(ff_raw)
     for ccc in ff_handlers:
         if isinstance(ccc, nonbonded.AM1CCCHandler):
@@ -722,4 +722,4 @@ def test_lennard_jones_handler():
 
     # if a parameter is > 99 then its adjoint should be zero (converse isn't necessarily true since)
     mask = np.argwhere(params > 90)
-    assert np.all(adjoints[mask] == 0.0) == True
+    assert np.all(adjoints[mask] == 0.0)

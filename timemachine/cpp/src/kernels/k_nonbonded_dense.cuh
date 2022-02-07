@@ -4,7 +4,6 @@
 #include "kernel_utils.cuh"
 #include "nonbonded_common.cuh"
 #include "surreal.cuh"
-#define WARPSIZE 32
 
 // generate kv values from coordinates to be radix sorted
 void __global__ k_coords_to_kv(
@@ -382,7 +381,7 @@ void __device__ v_nonbonded_unified(
 
     RealType real_beta = static_cast<RealType>(beta);
 
-    const int srcLane = (threadIdx.x + 1) % WARPSIZE; // fixed
+    const int srcLane = (threadIdx.x + 1) % warp_size; // fixed
     // #pragma unroll
     for (int round = 0; round < 32; round++) {
 

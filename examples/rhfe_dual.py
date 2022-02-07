@@ -4,23 +4,22 @@ import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from fe import pdb_writer
-from fe import topology
-from fe.utils import get_romol_conf
-from md import builders
-from md import minimizer
+from timemachine.fe import pdb_writer
+from timemachine.fe import topology
+from timemachine.fe.utils import get_romol_conf
+from timemachine.md import builders
+from timemachine.md import minimizer
 
 from timemachine.lib import potentials, custom_ops
 from timemachine.lib import LangevinIntegrator
 
-import functools
 import jax
 
-from ff import Forcefield
+from timemachine.ff import Forcefield
 
-from ff.handlers import nonbonded, bonded, openmm_deserializer
+from timemachine.ff.handlers import openmm_deserializer
 
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 
 # construct an RDKit molecule of aspirin
@@ -55,7 +54,7 @@ combined_masses = np.concatenate([host_masses, ligand_masses_a, ligand_masses_b]
 
 # note: .py file rather than .offxml file
 # note: _ccc suffix means "correctable charge corrections"
-ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
 ff = Forcefield(ff_handlers)
 
 # for RHFE we need to insert the reference ligand first, before inserting the

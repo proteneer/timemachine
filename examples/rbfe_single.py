@@ -6,22 +6,21 @@
 import argparse
 import numpy as np
 import jax
-from jax import numpy as jnp
 
-from fe.free_energy import construct_lambda_schedule
-from fe.utils import convert_uIC50_to_kJ_per_mole
-from fe import model
-from md import builders
+from timemachine.fe.free_energy import construct_lambda_schedule
+from timemachine.fe.utils import convert_uIC50_to_kJ_per_mole
+from timemachine.fe import model
+from timemachine.md import builders
 
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
-from ff.handlers.serialize import serialize_handlers
-from ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
-from parallel.client import CUDAPoolClient
-from parallel.utils import get_gpu_count
+from timemachine.ff.handlers.serialize import serialize_handlers
+from timemachine.ff.handlers.nonbonded import AM1CCCHandler, LennardJonesHandler
+from timemachine.parallel.client import CUDAPoolClient
+from timemachine.parallel.utils import get_gpu_count
 
-from optimize.step import truncated_step
-from optimize.utils import flatten_and_unflatten
+from timemachine.optimize.step import truncated_step
+from timemachine.optimize.utils import flatten_and_unflatten
 
 if __name__ == "__main__":
 

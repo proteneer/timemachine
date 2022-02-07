@@ -9,21 +9,17 @@ import argparse
 import numpy as np
 
 from rdkit import Chem
-from rdkit.Chem import rdFMCS
-from rdkit.Chem import AllChem
 
-from fe import topology
-from md import builders
-from md import minimizer
+from timemachine.fe import free_energy, topology
+from timemachine.md import builders
+from timemachine.md import minimizer
 
 import functools
 
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 import multiprocessing
-
-from fe import free_energy
 
 
 def wrap_method(args, fn):
@@ -65,7 +61,7 @@ if __name__ == "__main__":
     mol_a = all_mols[0]
     mol_b = all_mols[1]
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
     ff = Forcefield(ff_handlers)
 
     # the water system first.

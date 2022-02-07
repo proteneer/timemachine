@@ -1,5 +1,4 @@
 import numpy as np
-import jax
 from jax.config import config
 
 config.update("jax_enable_x64", True)
@@ -29,7 +28,7 @@ class TestBonded(GradientTest):
 
             # masses = np.random.rand(n_particles)
 
-            ref_nrg = jax.partial(
+            ref_nrg = functools.partial(
                 bonded.centroid_restraint,
                 # masses=masses,
                 group_a_idxs=gai,
@@ -72,12 +71,10 @@ class TestBonded(GradientTest):
                 gai = np.arange(5).astype(np.int32)
                 gbi = (np.arange(5) + 5).astype(np.int32)
 
-                masses = np.random.rand(n_particles)
-
                 kb = 10.0
                 b0 = 0.0
 
-                ref_nrg = jax.partial(bonded.centroid_restraint, group_a_idxs=gai, group_b_idxs=gbi, kb=kb, b0=b0)
+                ref_nrg = functools.partial(bonded.centroid_restraint, group_a_idxs=gai, group_b_idxs=gbi, kb=kb, b0=b0)
 
                 # we need to clear the du_dp buffer each time, so we need
                 # to instantiate test_nrg inside here
@@ -108,9 +105,6 @@ class TestBonded(GradientTest):
 
                 n = coords.shape[0]
                 n_mapped_atoms = 5
-
-                atom_idxs_a = np.arange(n_particles_a)
-                atom_idxs_b = np.arange(n_particles_b)
 
                 atom_map = np.stack(
                     [

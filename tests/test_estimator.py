@@ -1,10 +1,10 @@
 import numpy as np
 
 
-from fe import estimator_abfe
+from timemachine.fe import estimator_abfe
 from timemachine.lib import LangevinIntegrator, potentials, MonteCarloBarostat
-from parallel.client import CUDAPoolClient
-from md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.parallel.client import CUDAPoolClient
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 
 
 def get_harmonic_bond(n_atoms, n_bonds):
@@ -107,7 +107,7 @@ def test_free_energy_estimator():
         return dG ** 2
 
     for client in [None, CUDAPoolClient(1)]:
-        dG = loss_fn(sys_params)
+        loss_fn(sys_params)
 
 
 def test_free_energy_estimator_with_endpoint_correction():
@@ -176,4 +176,4 @@ def test_free_energy_estimator_with_endpoint_correction():
         return dG ** 2
 
     for client in [None, CUDAPoolClient(1)]:
-        dG = loss_fn(sys_params)
+        loss_fn(sys_params)

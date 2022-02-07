@@ -3,24 +3,24 @@
 import numpy as np
 from simtk import unit
 
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
-from md.builders import build_water_system
-from md.minimizer import minimize_host_4d
+from timemachine.md.builders import build_water_system
+from timemachine.md.minimizer import minimize_host_4d
 
-from md.ensembles import PotentialEnergyModel, NPTEnsemble
+from timemachine.md.ensembles import PotentialEnergyModel, NPTEnsemble
 
-from md.thermostat.utils import sample_velocities
+from timemachine.md.thermostat.utils import sample_velocities
 
-from md.barostat.utils import get_bond_list, get_group_indices
-from md.barostat.moves import MonteCarloBarostat
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.md.barostat.moves import MonteCarloBarostat
 
-from md.thermostat.moves import UnadjustedLangevinMove
+from timemachine.md.thermostat.moves import UnadjustedLangevinMove
 
-from md.states import CoordsVelBox
-from md.utils import simulate_npt_traj
+from timemachine.md.states import CoordsVelBox
+from timemachine.md.utils import simulate_npt_traj
 
-from fe.free_energy import AbsoluteFreeEnergy, construct_lambda_schedule
+from timemachine.fe.free_energy import AbsoluteFreeEnergy, construct_lambda_schedule
 
 from timemachine.lib import LangevinIntegrator
 from functools import partial
@@ -97,7 +97,7 @@ def plot_density(volume_trajs):
     density = n_molecules * water_molecule_mass / (volume * unit.AVOGADRO_CONSTANT_NA)
 
     plt.scatter(lambdas, density.value_in_unit(unit.kilogram / unit.liter))
-    plt.xlabel("$\lambda$")
+    plt.xlabel(r"$\lambda$")
     plt.ylabel("density (kg/L)")
     plt.savefig("density_vs_lambda.png", dpi=300, bbox_inches="tight")
     plt.close()

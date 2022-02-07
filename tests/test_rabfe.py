@@ -3,16 +3,22 @@ from unittest import TestCase
 
 import numpy as np
 
-from md import builders, minimizer
-from fe.model_rabfe import RelativeBindingModel, AbsoluteConversionModel
-from fe.free_energy import construct_lambda_schedule
-from fe.free_energy_rabfe import setup_relative_restraints_by_distance, get_romol_conf
-from fe.frames import all_frames
+from timemachine.md import builders, minimizer
+from timemachine.fe.model_rabfe import RelativeBindingModel, AbsoluteConversionModel, AbsoluteStandardHydrationModel
+from timemachine.fe.free_energy import construct_lambda_schedule
+from timemachine.fe.free_energy_rabfe import (
+    setup_relative_restraints_by_distance,
+    get_romol_conf,
+    RelativeFreeEnergy,
+    AbsoluteFreeEnergy,
+)
+from timemachine.fe.frames import all_frames
 from timemachine.potentials import rmsd
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.lib.potentials import NonbondedInterpolated, Nonbonded
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
-from parallel.client import CUDAPoolClient
-from parallel.utils import get_gpu_count
+from timemachine.parallel.client import CUDAPoolClient
+from timemachine.parallel.utils import get_gpu_count
 
 from common import temporary_working_dir
 
@@ -21,6 +27,201 @@ NUM_GPUS = get_gpu_count()
 
 
 class TestRABFEModels(TestCase):
+    def test_endpoint_parameters_match_decoupling_and_conversion_complex(self):
+        """Verifies that the parameters at the endpoint of conversion match with the starting parameters of
+        the decoupling. Done on a complex model, as the hydration models differ
+
+        Conv: P_start -> P_independent
+        Decouple: P_independent -> P_arbitrary
+
+        """
+        host_system, host_coords, host_box, host_topology = builders.build_water_system(4.0)
+
+        num_host_atoms = host_coords.shape[0]
+
+        ff_params = hif2a_ligand_pair.ff.get_ordered_params()
+
+        temperature = 300.0
+        pressure = 1.0
+        dt = 2.5e-3
+
+        client = CUDAPoolClient(NUM_GPUS)
+
+        decouple_model = RelativeBindingModel(
+            client,
+            hif2a_ligand_pair.ff,
+            host_system,
+            construct_lambda_schedule(2),
+            host_topology,
+            temperature,
+            pressure,
+            dt,
+            10,
+            50,
+            frame_filter=all_frames,
+        )
+
+        blocker = hif2a_ligand_pair.mol_a
+        ligand = hif2a_ligand_pair.mol_b
+
+        decouple_topo = decouple_model.setup_topology(blocker, ligand)
+        decouple_ref = RelativeFreeEnergy(decouple_topo)
+
+        decouple_unbound_potentials, decouple_sys_params, _ = decouple_ref.prepare_host_edge(
+            ff_params, decouple_model.host_system
+        )
+
+        conv_model = AbsoluteConversionModel(
+            client,
+            hif2a_ligand_pair.ff,
+            host_system,
+            construct_lambda_schedule(2),
+            host_topology,
+            temperature,
+            pressure,
+            dt,
+            10,
+            50,
+            frame_filter=all_frames,
+        )
+
+        conv_topo = conv_model.setup_topology(ligand)
+        conv_ref = AbsoluteFreeEnergy(ligand, conv_topo)
+
+        conv_unbound_potentials, conv_sys_params, _ = conv_ref.prepare_host_edge(ff_params, conv_model.host_system)
+
+        assert len(conv_sys_params) == len(decouple_sys_params)
+        seen_nonbonded = False
+        for i, decouple_pot in enumerate(decouple_unbound_potentials):
+            if not isinstance(decouple_pot, NonbondedInterpolated):
+                continue
+            seen_nonbonded = True
+
+            conv_pot = conv_unbound_potentials[i]
+            assert isinstance(conv_pot, NonbondedInterpolated)
+
+            conv_nonbonded_params = conv_sys_params[i]
+            decouple_nonbonded_params = decouple_sys_params[i]
+
+            # Shapes of parameters
+            # Conversion Leg [src_ligand, dest_ligand]
+            # Decouple Leg [dest_blocker, dest_ligand, blocker_halved, ligand_halved]
+
+            # Should have the same number of parameters besides the blocker. Since params are interpolated, multiply by 2
+            assert conv_nonbonded_params.shape[0] == decouple_nonbonded_params.shape[0] - blocker.GetNumAtoms() * 2
+            # Should both share the same number of parameters types
+            assert conv_nonbonded_params.shape[1] == decouple_nonbonded_params.shape[1]
+
+            conv_params = conv_nonbonded_params[num_host_atoms * 2 :]
+            decouple_params = decouple_nonbonded_params[num_host_atoms * 2 :]
+
+            assert conv_params.shape[0] == decouple_params.shape[0] - blocker.GetNumAtoms() * 2
+
+            # Verify the dest params of conv match the src params of decouple
+            np.testing.assert_array_equal(
+                conv_params[len(conv_params) // 2 :],
+                decouple_params[len(decouple_params) // 2 + blocker.GetNumAtoms() :],
+            )
+
+        assert seen_nonbonded, "Found no NonbondedInterpolated potential"
+
+    def test_endpoint_parameters_match_decoupling_and_conversion_solvent(self):
+        """Verifies that the parameters at the endpoint of conversion match with the starting parameters of
+        the decoupling. Done on a solvent model, as the complex models differ
+
+        Conv: P_start -> P_independent
+        Decouple: P_independent -> P_arbitrary
+
+        """
+        host_system, host_coords, host_box, host_topology = builders.build_water_system(4.0)
+
+        num_host_atoms = host_coords.shape[0]
+
+        ff_params = hif2a_ligand_pair.ff.get_ordered_params()
+
+        temperature = 300.0
+        pressure = 1.0
+        dt = 2.5e-3
+
+        client = CUDAPoolClient(NUM_GPUS)
+
+        decouple_model = AbsoluteStandardHydrationModel(
+            client,
+            hif2a_ligand_pair.ff,
+            host_system,
+            construct_lambda_schedule(2),
+            host_topology,
+            temperature,
+            pressure,
+            dt,
+            10,
+            50,
+            frame_filter=all_frames,
+        )
+
+        ligand = hif2a_ligand_pair.mol_b
+
+        decouple_topo = decouple_model.setup_topology(ligand)
+        decouple_ref = AbsoluteFreeEnergy(ligand, decouple_topo)
+
+        decouple_unbound_potentials, decouple_sys_params, _ = decouple_ref.prepare_host_edge(
+            ff_params, decouple_model.host_system
+        )
+
+        conv_model = AbsoluteConversionModel(
+            client,
+            hif2a_ligand_pair.ff,
+            host_system,
+            construct_lambda_schedule(2),
+            host_topology,
+            temperature,
+            pressure,
+            dt,
+            10,
+            50,
+            frame_filter=all_frames,
+        )
+
+        conv_topo = conv_model.setup_topology(ligand)
+        conv_ref = AbsoluteFreeEnergy(ligand, conv_topo)
+
+        conv_unbound_potentials, conv_sys_params, _ = conv_ref.prepare_host_edge(ff_params, conv_model.host_system)
+
+        assert len(conv_sys_params) == len(decouple_sys_params)
+        seen_nonbonded = False
+        for i, decouple_pot in enumerate(decouple_unbound_potentials):
+            if not isinstance(decouple_pot, Nonbonded):
+                continue
+            seen_nonbonded = True
+
+            conv_pot = conv_unbound_potentials[i]
+            assert isinstance(conv_pot, NonbondedInterpolated)
+
+            conv_nonbonded_params = conv_sys_params[i]
+            decouple_nonbonded_params = decouple_sys_params[i]
+
+            # Shapes of parameters
+            # Conversion Leg [src, dest]
+            # Decouple Leg [dest]
+
+            # The conv has twice the parameters that the decouple does, as it is interpolated
+            assert conv_nonbonded_params.shape[0] == decouple_nonbonded_params.shape[0] * 2
+            # Should both share the same number of parameters types
+            assert conv_nonbonded_params.shape[1] == decouple_nonbonded_params.shape[1]
+
+            conv_params = conv_nonbonded_params[num_host_atoms * 2 :]
+            decouple_params = decouple_nonbonded_params[num_host_atoms:]
+
+            assert conv_params.shape[0] == decouple_params.shape[0] * 2
+
+            # Verify the dest params of conv match the src params of decouple
+            np.testing.assert_array_equal(
+                conv_params[len(conv_params) // 2 :],
+                decouple_params,
+            )
+
+        assert seen_nonbonded, "Found no NonbondedInterpolated potential"
+
     def test_predict_complex_decouple(self):
         """Just to verify that we can handle the most basic complex decoupling RABFE prediction"""
         complex_system, complex_coords, _, _, complex_box, complex_topology = builders.build_protein_system(

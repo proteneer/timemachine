@@ -2,10 +2,10 @@ import pytest
 import numpy as np
 
 from timemachine.lib import custom_ops
-from md.builders import build_water_system
-from fe.utils import get_romol_conf
+from timemachine.md.builders import build_water_system
+from timemachine.fe.utils import get_romol_conf
 from hilbertcurve.hilbertcurve import HilbertCurve
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
 def test_block_bounds():

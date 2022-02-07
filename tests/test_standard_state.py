@@ -1,9 +1,7 @@
 import numpy as np
 import functools
 
-from simtk import unit
-from fe import standard_state
-import rmsd
+from timemachine.fe import standard_state
 
 import scipy.integrate
 

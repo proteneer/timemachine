@@ -7,17 +7,15 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from timemachine.lib import potentials, custom_ops
+from timemachine.lib import custom_ops
 from timemachine.lib import LangevinIntegrator
 
-from ff.handlers import openmm_deserializer
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
-from fe import pdb_writer
-from fe.utils import get_romol_conf
-from fe import rbfe
-from md import Recipe
-from md import builders
+from timemachine.fe.utils import get_romol_conf
+from timemachine.fe import rbfe
+from timemachine.md import Recipe
+from timemachine.md import builders
 
 from multiprocessing import Pool
 
@@ -61,9 +59,9 @@ def run(args):
 
     print(lamb, du_dl_obs.avg_du_dl())
 
-    assert np.any(np.abs(ctxt.get_x_t()) > 100) == False
-    assert np.any(np.isnan(ctxt.get_x_t())) == False
-    assert np.any(np.isinf(ctxt.get_x_t())) == False
+    assert not np.any(np.abs(ctxt.get_x_t()) > 100)
+    assert not np.any(np.isnan(ctxt.get_x_t()))
+    assert not np.any(np.isinf(ctxt.get_x_t()))
 
     return du_dl_obs.avg_du_dl()
 
@@ -84,8 +82,6 @@ def minimize(args):
 
     ctxt = custom_ops.Context(x0, v0, box, intg, u_impls)
 
-    steps = 500
-
     lambda_schedule = np.linspace(0.35, 0.0, 500)
     for lamb in lambda_schedule:
         ctxt.step(lamb)
@@ -99,7 +95,6 @@ def minimize_setup(r_host, r_ligand):
     print(len(r_combined.masses))
 
     # assert 0
-    host_atom_idxs = np.arange(len(r_host.masses))
     ligand_atom_idxs = np.arange(len(r_ligand.masses)) + len(r_host.masses)
     rbfe.set_nonbonded_lambda_idxs(r_combined, ligand_atom_idxs, 0, 1)
 
@@ -123,7 +118,7 @@ def main(args, stage):
     AllChem.EmbedMolecule(benzene)
     AllChem.EmbedMolecule(phenol)
 
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
     r_benzene = Recipe.from_rdkit(benzene, ff_handlers)
     r_phenol = Recipe.from_rdkit(phenol, ff_handlers)
 

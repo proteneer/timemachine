@@ -8,10 +8,11 @@ import numpy as np
 
 from rdkit import Chem
 
-from md import builders, minimizer
-from fe import pdb_writer, free_energy
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.md import builders, minimizer
+from timemachine.fe import pdb_writer, free_energy
+
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 from timemachine.lib import custom_ops, LangevinIntegrator
 
 from docking import report
@@ -99,7 +100,7 @@ def dock_and_equilibrate(
             os.path.join(
                 os.path.dirname(os.path.abspath(__file__)),
                 "..",
-                "ff/params/smirnoff_1_1_0_ccc.py",
+                "timemachine/ff/params/smirnoff_1_1_0_ccc.py",
             )
         ).read()
     )
@@ -131,7 +132,7 @@ def dock_and_equilibrate(
 
         x0 = np.concatenate([minimized_coords, orig_guest_coords])
         v0 = np.zeros_like(x0)
-        print(f"SYSTEM", f"guest_name: {guest_name}", f"num_atoms: {len(x0)}")
+        print("SYSTEM", f"guest_name: {guest_name}", f"num_atoms: {len(x0)}")
 
         for atom_num in constant_atoms:
             combined_masses[atom_num - 1] += 50000

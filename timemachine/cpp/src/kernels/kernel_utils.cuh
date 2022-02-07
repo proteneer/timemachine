@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdio>
-#define WARP_SIZE 32
 
 #define HESS_3N3N(i, j, N, di, dj) (di * N * 3 * N + i * 3 * N + dj * N + j)
 #define HESS_N3N3(i, j, N, di, dj) (i * 3 * N * 3 + di * N * 3 + j * 3 + dj)
@@ -31,6 +30,8 @@
 // #define MP_IDX_ND(p,i,N,d,D) (p*D*N + d*N + i)
 
 #define ONE_4PI_EPS0 138.935456
+
+static const int warp_size = 32;
 
 inline __device__ int linearize(int i, int j, int d) { return d * (d - 1) / 2 - (d - i) * (d - i - 1) / 2 + j; }
 

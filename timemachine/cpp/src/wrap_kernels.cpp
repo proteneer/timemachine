@@ -4,31 +4,22 @@
 #include <pybind11/stl.h>
 #include <regex>
 
+#include "barostat.hpp"
 #include "bound_potential.hpp"
+#include "centroid_restraint.hpp"
 #include "context.hpp"
+#include "fixed_point.hpp"
 #include "harmonic_angle.hpp"
 #include "harmonic_bond.hpp"
-#include "potential.hpp"
-#include "rmsd_align.hpp"
-#include "summed_potential.hpp"
-// #include "lambda_potential.hpp"
-// #include "interpolated_potential.hpp"
-// #include "restraint.hpp"
-// #include "inertial_restraint.hpp"
-#include "centroid_restraint.hpp"
+#include "integrator.hpp"
+#include "neighborlist.hpp"
 #include "nonbonded.hpp"
 #include "nonbonded_dense.hpp"
 #include "nonbonded_pairs.hpp"
 #include "periodic_torsion.hpp"
-#include "rmsd_restraint.hpp"
-// #include "lennard_jones.hpp"
-// #include "electrostatics.hpp"
-// #include "gbsa.hpp"
-#include "fixed_point.hpp"
-#include "integrator.hpp"
-#include "neighborlist.hpp"
-// #include "shape.hpp"
-#include "barostat.hpp"
+#include "potential.hpp"
+#include "rmsd_align.hpp"
+#include "summed_potential.hpp"
 
 #include <iostream>
 
@@ -52,6 +43,7 @@ template <typename RealType> void declare_neighborlist(py::module &m, const char
                const py::array_t<double, py::array::c_style> &box,
                const int block_size) -> py::tuple {
                 if (block_size != 32) {
+                    // The neighborlist kernel implementation assumes that block size is fixed to the CUDA warpSize
                     throw std::runtime_error("Block size must be 32.");
                 }
 
@@ -545,44 +537,6 @@ void declare_bound_potential(py::module &m) {
             py::arg("lam"));
 }
 
-// template <typename RealType>
-// void declare_shape(py::module &m, const char *typestr) {
-
-//     using Class = timemachine::Shape<RealType>;
-//     std::string pyclass_name = std::string("Shape_") + typestr;
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const int N,
-//         const py::array_t<int, py::array::c_style> &a_idxs,
-//         const py::array_t<int, py::array::c_style> &b_idxs,
-//         const py::array_t<double, py::array::c_style> &alphas,
-//         const py::array_t<double, py::array::c_style> &weights,
-//         double k) {
-
-//             std::vector<int> vec_a_idxs(a_idxs.data(), a_idxs.data()+a_idxs.size());
-//             std::vector<int> vec_b_idxs(b_idxs.data(), b_idxs.data()+b_idxs.size());
-//             std::vector<double> vec_alphas(alphas.data(), alphas.data()+alphas.size());
-//             std::vector<double> vec_weights(weights.data(), weights.data()+weights.size());
-
-//             return new timemachine::Shape<RealType>(
-//                 N,
-//                 vec_a_idxs,
-//                 vec_b_idxs,
-//                 vec_alphas,
-//                 vec_weights,
-//                 k
-//             );
-
-//         }
-//     ));
-
-// }
-
 template <typename RealType> void declare_harmonic_bond(py::module &m, const char *typestr) {
 
     using Class = timemachine::HarmonicBond<RealType>;
@@ -638,65 +592,6 @@ template <typename RealType> void declare_harmonic_angle(py::module &m, const ch
             py::arg("lamb_offset") = py::none());
 }
 
-// template <typename RealType>
-// void declare_restraint(py::module &m, const char *typestr) {
-
-//     using Class = timemachine::Restraint<RealType>;
-//     std::string pyclass_name = std::string("Restraint_") + typestr;
-//     py::class_<Class, timemachine::Gradient>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const py::array_t<int, py::array::c_style> &bond_idxs,
-//         const py::array_t<double, py::array::c_style> &params,
-//         const py::array_t<int, py::array::c_style> &lambda_flags
-//     ){
-//         std::vector<int> vec_bond_idxs(bond_idxs.size());
-//         std::memcpy(vec_bond_idxs.data(), bond_idxs.data(), vec_bond_idxs.size()*sizeof(int));
-//         std::vector<double> vec_params(params.size());
-//         std::memcpy(vec_params.data(), params.data(), vec_params.size()*sizeof(double)); // important to use doubles
-//         std::vector<int> vec_lambda_flags(lambda_flags.size());
-//         std::memcpy(vec_lambda_flags.data(), lambda_flags.data(), vec_lambda_flags.size()*sizeof(int));
-
-//         return new timemachine::Restraint<RealType>(
-//             vec_bond_idxs,
-//             vec_params,
-//             vec_lambda_flags
-//         );
-//     }
-//     ))
-//     .def("get_du_dp_primals", [](timemachine::Restraint<RealType> &grad) -> py::array_t<double, py::array::c_style> {
-//         const int B = grad.num_bonds();
-//         py::array_t<double, py::array::c_style> buffer({B, 3});
-//         grad.get_du_dp_primals(buffer.mutable_data());
-//         return buffer;
-//     })
-//     .def("get_du_dp_tangents", [](timemachine::Restraint<RealType> &grad) -> py::array_t<double, py::array::c_style> {
-//         const int B = grad.num_bonds();
-//         py::array_t<double, py::array::c_style> buffer({B, 3});
-//         grad.get_du_dp_tangents(buffer.mutable_data());
-//         return buffer;
-//     });
-
-// }
-
-template <typename RealType> void declare_rmsd_restraint(py::module &m, const char *typestr) {
-
-    using Class = timemachine::RMSDRestraint<RealType>;
-    std::string pyclass_name = std::string("RMSDRestraint_") + typestr;
-    py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-        m, pyclass_name.c_str(), py::buffer_protocol(), py::dynamic_attr())
-        .def(py::init([](const py::array_t<int, py::array::c_style> &atom_map, const int N, const double k) {
-            std::vector<int> vec_atom_map(atom_map.size());
-            std::memcpy(vec_atom_map.data(), atom_map.data(), vec_atom_map.size() * sizeof(int));
-
-            return new timemachine::RMSDRestraint<RealType>(vec_atom_map, N, k);
-        }));
-}
-
 template <typename RealType> void declare_centroid_restraint(py::module &m, const char *typestr) {
 
     using Class = timemachine::CentroidRestraint<RealType>;
@@ -715,41 +610,6 @@ template <typename RealType> void declare_centroid_restraint(py::module &m, cons
             return new timemachine::CentroidRestraint<RealType>(vec_group_a_idxs, vec_group_b_idxs, kb, b0);
         }));
 }
-
-// template <typename RealType>
-// void declare_inertial_restraint(py::module &m, const char *typestr) {
-
-//     using Class = timemachine::InertialRestraint<RealType>;
-//     std::string pyclass_name = std::string("InertialRestraint_") + typestr;
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         const py::array_t<int, py::array::c_style> &group_a_idxs,
-//         const py::array_t<int, py::array::c_style> &group_b_idxs,
-//         const py::array_t<double, py::array::c_style> &masses,
-//         double k
-//     ) {
-//         std::vector<int> vec_group_a_idxs(group_a_idxs.size());
-//         std::memcpy(vec_group_a_idxs.data(), group_a_idxs.data(), vec_group_a_idxs.size()*sizeof(int));
-//         std::vector<int> vec_group_b_idxs(group_b_idxs.size());
-//         std::memcpy(vec_group_b_idxs.data(), group_b_idxs.data(), vec_group_b_idxs.size()*sizeof(int));
-//         std::vector<double> vec_masses(masses.size());
-//         std::memcpy(vec_masses.data(), masses.data(), vec_masses.size()*sizeof(double));
-
-//         return new timemachine::InertialRestraint<RealType>(
-//             vec_group_a_idxs,
-//             vec_group_b_idxs,
-//             vec_masses,
-//             k
-//         );
-
-//     }));
-
-// }
 
 template <typename RealType> void declare_periodic_torsion(py::module &m, const char *typestr) {
 
@@ -778,62 +638,6 @@ template <typename RealType> void declare_periodic_torsion(py::module &m, const 
             py::arg("lamb_mult") = py::none(),
             py::arg("lamb_offset") = py::none());
 }
-
-// void declare_lambda_potential(py::module &m) {
-
-//     using Class = timemachine::LambdaPotential;
-//     std::string pyclass_name = std::string("LambdaPotential");
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         std::shared_ptr<timemachine::Potential> potential,
-//         int N,
-//         int P,
-//         double multiplier,
-//         double offset) {
-
-//         return new timemachine::LambdaPotential(
-//             potential,
-//             N,
-//             P,
-//             multiplier,
-//             offset
-//         );
-
-//     }
-//     ));
-
-// }
-
-// void declare_interpolated_potential(py::module &m) {
-
-//     using Class = timemachine::InterpolatedPotential;
-//     std::string pyclass_name = std::string("InterpolatedPotential");
-//     py::class_<Class, std::shared_ptr<Class>, timemachine::Potential>(
-//         m,
-//         pyclass_name.c_str(),
-//         py::buffer_protocol(),
-//         py::dynamic_attr()
-//     )
-//     .def(py::init([](
-//         std::shared_ptr<timemachine::Potential> potential,
-//         int N,
-//         int P) {
-
-//         return new timemachine::InterpolatedPotential(
-//             potential,
-//             N,
-//             P
-//         );
-
-//     }
-//     ));
-
-// }
 
 // stackoverflow
 std::string dirname(const std::string &fname) {
@@ -986,23 +790,12 @@ PYBIND11_MODULE(custom_ops, m) {
     declare_potential(m);
     declare_bound_potential(m);
     declare_summed_potential(m);
-    // declare_lambda_potential(m);
-    // declare_interpolated_potential(m);
 
     declare_neighborlist<double>(m, "f64");
     declare_neighborlist<float>(m, "f32");
 
     declare_centroid_restraint<double>(m, "f64");
     declare_centroid_restraint<float>(m, "f32");
-
-    // declare_inertial_restraint<double>(m, "f64");
-    // declare_inertial_restraint<float>(m, "f32");
-
-    declare_rmsd_restraint<double>(m, "f64");
-    declare_rmsd_restraint<float>(m, "f32");
-
-    // declare_shape<double>(m, "f64");
-    // declare_shape<float>(m, "f32");
 
     declare_harmonic_bond<double>(m, "f64");
     declare_harmonic_bond<float>(m, "f32");
@@ -1018,9 +811,6 @@ PYBIND11_MODULE(custom_ops, m) {
 
     declare_nonbonded<double, false>(m, "f64");
     declare_nonbonded<float, false>(m, "f32");
-
-    // declare_gbsa<double>(m, "f64");
-    // declare_gbsa<float>(m, "f32");
 
     declare_context(m);
 }

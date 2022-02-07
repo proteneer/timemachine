@@ -2,14 +2,11 @@ from jax.config import config
 
 config.update("jax_enable_x64", True)
 
-import unittest
 import numpy as np
 
-from rdkit import Chem
-from rdkit.Chem import AllChem
-from ff.handlers import nonbonded, bonded
-from ff.handlers.serialize import bin_to_str
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff.handlers import nonbonded, bonded
+from timemachine.ff.handlers.serialize import bin_to_str
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 
 def test_harmonic_bond():
@@ -107,7 +104,6 @@ def test_harmonic_bond():
 
     smirks = [x[0] for x in patterns]
     params = np.array([[x[1], x[2]] for x in patterns])
-    props = None
     hbh = bonded.HarmonicBondHandler(smirks, params, None)
 
     obj = hbh.serialize()
@@ -136,7 +132,6 @@ def test_proper_torsion():
 
     smirks = [x[0] for x in patterns]
     params = [x[1] for x in patterns]
-    props = None
 
     ph = bonded.ProperTorsionHandler(smirks, params, None)
     obj = ph.serialize()

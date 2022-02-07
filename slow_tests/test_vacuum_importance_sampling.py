@@ -1,5 +1,3 @@
-import os
-
 # test importance sampling in the gas-phase.
 
 # (ytz): not pretty, but this is needed to get XLA to be less stupid
@@ -14,17 +12,16 @@ config.update("jax_enable_x64", True)
 import jax
 import numpy as np
 
-from md import enhanced
+from timemachine.md import enhanced
 from timemachine.potentials import bonded
 from tests import test_ligands
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
-import matplotlib.pyplot as plt
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 import pytest
 
 
 def get_ff_am1ccc():
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
     ff = Forcefield(ff_handlers)
     return ff
 

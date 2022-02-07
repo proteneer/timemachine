@@ -18,7 +18,7 @@ class MapGenerationConfig:
     label: str = "IC50[uM](SPA)"
     transformation_threshold: int = 3
     atom_mapping_strategy: str = "geometry"
-    forcefield: str = str(ROOT_DIR.joinpath("ff/params/smirnoff_1_1_0_ccc.py"))
+    forcefield: str = str(ROOT_DIR.joinpath("timemachine/ff/params/smirnoff_1_1_0_ccc.py"))
     output: Optional[str] = None
     cores: Optional[List[Dict]] = None
     networks: Optional[List[Dict]] = None
@@ -43,9 +43,7 @@ class TimemachineConfig:
             data = safe_load(ifs)
         if MAP_GENERATION in data:
             conf.map_generation = MapGenerationConfig.from_dict(data[MAP_GENERATION])
-        inited = False
         for field in fields(cls):
             if getattr(cls, field.name) is not None:
-                inited = True
                 break
         return conf

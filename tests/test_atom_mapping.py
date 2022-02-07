@@ -3,10 +3,15 @@
 
 # TODO: test distance atom mapping
 
-from fe.atom_mapping import mcs_map, transformation_size, compute_all_pairs_mcs
-from fe.atom_mapping import compute_transformation_size_matrix
-from fe.atom_mapping import get_core_by_mcs, get_core_by_smarts, get_core_by_geometry
-from testsystems.relative import hif2a_ligand_pair
+from timemachine.fe.atom_mapping import (
+    mcs_map,
+    transformation_size,
+    compute_all_pairs_mcs,
+    compute_transformation_size_matrix,
+    get_core_by_mcs,
+    get_core_by_geometry,
+)
+from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
 def test_mcs_map():

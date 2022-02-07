@@ -5,9 +5,9 @@ import jax
 
 from typing import List
 
-from md.states import CoordsVelBox
-from md import enhanced
-from md.moves import NPTMove, ReferenceMTMMove, OptimizedMTMMove
+from timemachine.md.states import CoordsVelBox
+from timemachine.md import enhanced
+from timemachine.md.moves import NPTMove, ReferenceMTMMove, OptimizedMTMMove
 
 import functools
 
@@ -18,15 +18,15 @@ import numpy as np
 from tests import test_ligands
 import copy
 
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 import jax.numpy as jnp
 import jax.random as jrandom
 
 
 def get_ff_am1ccc():
-    ff_handlers = deserialize_handlers(open("ff/params/smirnoff_1_1_0_ccc.py").read())
+    ff_handlers = deserialize_handlers(open("timemachine/ff/params/smirnoff_1_1_0_ccc.py").read())
     ff = Forcefield(ff_handlers)
     return ff
 
@@ -73,7 +73,7 @@ def test_optimized_MTM():
         x_a = xvb_a.coords
         x_b = xvb_b.coords
         # double check this later
-        np.testing.assert_equal(x_a[:-num_ligand_atoms], x_b[:-num_ligand_atoms])
+        np.testing.assert_array_equal(x_a[:-num_ligand_atoms], x_b[:-num_ligand_atoms])
         return -proposal_U(x_b[-num_ligand_atoms:]) / kT
 
     def batch_log_Q_a_b_fn(xvbs_a, xvb_b):

@@ -5,24 +5,22 @@
 import argparse
 import numpy as np
 
-from fe.free_energy_rabfe import (
+from timemachine.fe.free_energy_rabfe import (
     construct_absolute_lambda_schedule_solvent,
     construct_relative_lambda_schedule,
     setup_relative_restraints_by_distance,
     get_romol_conf,
 )
-from fe import model_rabfe
-from md import builders, minimizer
+from timemachine.fe import model_rabfe
+from timemachine.md import builders, minimizer
 
-from testsystems.relative import hif2a_ligand_pair
-
-from ff import Forcefield
-from ff.handlers.deserialize import deserialize_handlers
-from parallel.client import CUDAPoolClient, GRPCClient
-from parallel.utils import get_gpu_count
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.parallel.client import CUDAPoolClient, GRPCClient
+from timemachine.parallel.utils import get_gpu_count
 
 import multiprocessing
-from training.dataset import Dataset
+from timemachine.training.dataset import Dataset
 from rdkit import Chem
 
 if __name__ == "__main__":
@@ -66,7 +64,7 @@ if __name__ == "__main__":
     path_to_ligand = "tests/data/ligands_40.sdf"
     suppl = Chem.SDMolSupplier(path_to_ligand, removeHs=False)
 
-    with open("ff/params/smirnoff_1_1_0_ccc.py") as f:
+    with open("timemachine/ff/params/smirnoff_1_1_0_ccc.py") as f:
         ff_handlers = deserialize_handlers(f.read())
 
     forcefield = Forcefield(ff_handlers)
