@@ -19,8 +19,9 @@ e21cbb8f048840dc24723b60ca3351dbeac8d207
 # Move scripts/ to attic/scripts
 1a721dd3f05d6011cf028b0588e066682d38ba59
 
-# TBD: Move testsystems/ to timemachine/testsystems/
+# Move testsystems/ to timemachine/testsystems/
+#   and datasets/ to timeamchine/datasets/
+1e414a0e778948441cd3d01e51c62380230c96ea
 
-# TBD: Move datasets/ to timeamchine/datasets/
-
-# TBD: Move parallel/ to timemachine/parallel
+# Move parallel/ to timemachine/parallel
+4b814f2ee02be99a4ee4a4e8a4b55fc03bc28adf
