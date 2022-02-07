@@ -11,7 +11,7 @@ from timemachine.fe.frames import endpoint_frames_only
 from timemachine.fe import free_energy_rabfe, topology, estimator_abfe, model_utils
 from timemachine.ff import Forcefield
 
-from parallel.client import AbstractClient, _MockFuture
+from timemachine.parallel.client import AbstractClient, _MockFuture
 from typing import Optional, Tuple, Any, List
 
 from timemachine.md.barostat.utils import get_group_indices, get_bond_list

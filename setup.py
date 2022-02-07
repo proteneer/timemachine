@@ -92,7 +92,7 @@ setup(
         "scipy",
     ],
     extras_require={
-        "dev": ["black==21.10b0", "pre-commit"],
+        "dev": ["black==21.10b0", "pre-commit", "grpcio==1.43.0"],
         "test": ["pytest", "pytest-cov"],
     },
     # package_data={

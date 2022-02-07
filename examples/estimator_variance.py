@@ -19,8 +19,8 @@
 from functools import partial
 
 # parallelization across multiple GPUs
-from parallel.client import CUDAPoolClient
-from parallel.utils import get_gpu_count
+from timemachine.parallel.client import CUDAPoolClient
+from timemachine.parallel.utils import get_gpu_count
 
 import numpy as np
 from rdkit import Chem

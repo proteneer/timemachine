@@ -16,8 +16,8 @@ from timemachine.md import builders, minimizer
 
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-from parallel.client import CUDAPoolClient, GRPCClient
-from parallel.utils import get_gpu_count
+from timemachine.parallel.client import CUDAPoolClient, GRPCClient
+from timemachine.parallel.utils import get_gpu_count
 
 import multiprocessing
 from timemachine.training.dataset import Dataset

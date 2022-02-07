@@ -5,9 +5,9 @@ import multiprocessing
 import pickle
 import grpc
 
-from parallel.grpc import service_pb2_grpc, service_pb2
-from parallel.utils import get_gpu_count
-from parallel.constants import DEFAULT_GRPC_OPTIONS
+from timemachine.parallel.grpc import service_pb2_grpc, service_pb2
+from timemachine.parallel.utils import get_gpu_count
+from timemachine.parallel.constants import DEFAULT_GRPC_OPTIONS
 
 from concurrent import futures
 
