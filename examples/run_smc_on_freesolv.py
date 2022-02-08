@@ -33,14 +33,13 @@ def parse_options():
 
 
 def save_smc_result(uid, smc_result, save_full_trajectories=False):
-    traj, log_weights_traj, ancestry_traj, incremental_log_weights_traj = smc_result
 
     # by default, just save the final weighted samples, incremental log weight trajectory (and cmd_args)
     summary = dict(
-        final_samples=traj[-1],
-        final_log_weights=log_weights_traj[-1],
-        ancestry_traj=ancestry_traj,
-        incremental_log_weights_traj=incremental_log_weights_traj,
+        final_samples=smc_result["traj"][-1],
+        final_log_weights=smc_result["log_weights_traj"][-1],
+        ancestry_traj=smc_result["ancestry_traj"],
+        incremental_log_weights_traj=smc_result["incremental_log_weights_traj"],
     )
     with open(f"summary_smc_result_{uid}.pkl", "wb") as f:
         dump((summary, cmd_args), f)
@@ -48,7 +47,7 @@ def save_smc_result(uid, smc_result, save_full_trajectories=False):
     # optionally save trajectories
     if save_full_trajectories:
         with open(f"full_smc_traj_{uid}.pkl", "wb") as f:
-            dump((traj, cmd_args), f)
+            dump((smc_result, cmd_args), f)
 
 
 def fetch_freesolv():
