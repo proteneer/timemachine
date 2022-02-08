@@ -1,11 +1,12 @@
 """
 Tests for the timemachine/docking/ files
 """
-import unittest
 import tempfile
+import unittest
 from pathlib import Path
+
+from docking import dock_and_equilibrate, pose_dock, relative_docking, rigorous_work
 from timemachine.testsystems.relative import hif2a_ligand_pair
-from docking import pose_dock, dock_and_equilibrate, rigorous_work, relative_docking
 
 
 class TestDocking(unittest.TestCase):

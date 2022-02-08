@@ -1,34 +1,31 @@
 # Construct a star map for the fep-benchmark hif2a ligands
 import sys
 from argparse import ArgumentParser
-from pathlib import Path
 from functools import partial
-from typing import Dict, Any, List, Optional
-
+from pathlib import Path
 from pickle import dump
+from typing import Any, Dict, List, Optional
 
-from timemachine.parser import TimemachineConfig
+import numpy as np
+from rdkit import Chem
+from rdkit.Chem import rdFMCS
 
 from timemachine.fe import topology
-from timemachine.fe.utils import convert_uIC50_to_kJ_per_mole
+from timemachine.fe.atom_mapping import (
+    get_core_by_geometry,
+    get_core_by_mcs,
+    get_star_map,
+    mcs_map,
+    transformation_size,
+)
 from timemachine.fe.free_energy import RelativeFreeEnergy
 from timemachine.fe.topology import AtomMappingError
+from timemachine.fe.utils import convert_uIC50_to_kJ_per_mole
 
 # 0. Get force field
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-from rdkit import Chem
-from rdkit.Chem import rdFMCS
-
-import numpy as np
-from timemachine.fe.atom_mapping import (
-    get_core_by_geometry,
-    get_core_by_mcs,
-    mcs_map,
-    transformation_size,
-    get_star_map,
-)
+from timemachine.parser import TimemachineConfig
 
 
 def get_mol_id(mol, mol_prop):

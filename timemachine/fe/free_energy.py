@@ -1,17 +1,16 @@
 from typing import List
+
 from jax.config import config
 
 config.update("jax_enable_x64", True)
 
 import numpy as np
+from rdkit.Chem import MolToSmiles
 
 from timemachine.fe import topology
 from timemachine.fe.utils import get_romol_conf
-from timemachine.lib import LangevinIntegrator
-
 from timemachine.ff.handlers import openmm_deserializer
-
-from rdkit.Chem import MolToSmiles
+from timemachine.lib import LangevinIntegrator
 
 
 class BaseFreeEnergy:

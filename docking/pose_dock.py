@@ -2,20 +2,16 @@ import os
 import time
 
 import numpy as np
-
+from rdkit import Chem
 from simtk.openmm import app
 from simtk.openmm.app import PDBFile
 
-from rdkit import Chem
-
-from timemachine.fe.utils import to_md_units
-from timemachine.fe import free_energy
-from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.ff import Forcefield
-from timemachine.lib import LangevinIntegrator
-from timemachine.lib import custom_ops
-
 from docking import report
+from timemachine.fe import free_energy
+from timemachine.fe.utils import to_md_units
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.lib import LangevinIntegrator, custom_ops
 
 
 def pose_dock(

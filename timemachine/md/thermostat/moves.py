@@ -1,7 +1,8 @@
+import numpy as np
+
+from timemachine.lib import custom_ops
 from timemachine.md.moves import MonteCarloMove
 from timemachine.md.states import CoordsVelBox
-from timemachine.lib import custom_ops
-import numpy as np
 
 
 class UnadjustedLangevinMove(MonteCarloMove):

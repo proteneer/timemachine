@@ -1,11 +1,10 @@
 # test the custom_op for rmsd alignment
 
-from timemachine.lib import custom_ops
-
-from timemachine.potentials import rmsd
 import numpy as np
+from scipy.stats import ortho_group, special_ortho_group
 
-from scipy.stats import special_ortho_group, ortho_group
+from timemachine.lib import custom_ops
+from timemachine.potentials import rmsd
 
 
 def test_rmsd_align_proper():

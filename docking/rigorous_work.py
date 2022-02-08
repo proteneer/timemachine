@@ -3,21 +3,19 @@
 2. Creates a water box, inserts guest(s) into water box, equilibrates, spins off deletion jobs, calculates work
 """
 import os
-import time
 import tempfile
+import time
 from collections import defaultdict
-import numpy as np
 
+import numpy as np
 from rdkit import Chem
 
-from timemachine.md import builders, minimizer
-from timemachine.fe import pdb_writer, free_energy
+from docking import report
+from timemachine.fe import free_energy, pdb_writer
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-from timemachine.lib import custom_ops, LangevinIntegrator
-
-from docking import report
+from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.md import builders, minimizer
 
 DELETION_MAX_LAMBDA = 1.0
 MIN_LAMBDA = 0.0

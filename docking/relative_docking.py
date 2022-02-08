@@ -6,25 +6,18 @@
 """
 import os
 import time
-import numpy as np
 
+import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdFMCS
 
-from timemachine.md import builders, minimizer
+from docking import report
 from timemachine.fe import free_energy, topology
-from timemachine.fe.atom_mapping import (
-    get_core_by_geometry,
-    get_core_by_mcs,
-    get_core_by_smarts,
-    mcs_map,
-)
+from timemachine.fe.atom_mapping import get_core_by_geometry, get_core_by_mcs, get_core_by_smarts, mcs_map
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.lib import custom_ops, LangevinIntegrator
-
-from docking import report
-
+from timemachine.lib import LangevinIntegrator, custom_ops
+from timemachine.md import builders, minimizer
 
 MAX_LAMBDA = 1.0
 MIN_LAMBDA = 0.0

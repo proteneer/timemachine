@@ -1,5 +1,4 @@
-from typing import Any, List, Tuple, Generator
-
+from typing import Any, Generator, List, Tuple
 
 SimulationResult = Any
 FrameIterator = Generator[Tuple[int, SimulationResult], None, None]

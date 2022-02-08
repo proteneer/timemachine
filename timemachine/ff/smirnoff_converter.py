@@ -3,12 +3,13 @@ import ast
 import operator as op
 import pprint
 from argparse import ArgumentParser
-
-from simtk import unit
 from xml.dom import minidom
+
 import numpy as np
+from simtk import unit
 
 from timemachine.ff.charges import AM1CCC_CHARGES
+
 
 # (ytz): lol i think i wrote this originally
 def _ast_eval(node):

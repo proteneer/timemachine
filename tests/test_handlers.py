@@ -1,18 +1,17 @@
 from jax.config import config
 
 config.update("jax_enable_x64", True)
+import functools
+
 import jax
-
-import pytest
 import numpy as np
-
+import pytest
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from timemachine.ff.handlers import nonbonded, bonded
-from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.ff.charges import AM1CCC_CHARGES
 
-import functools
+from timemachine.ff.charges import AM1CCC_CHARGES
+from timemachine.ff.handlers import bonded, nonbonded
+from timemachine.ff.handlers.deserialize import deserialize_handlers
 
 
 def test_harmonic_bond():

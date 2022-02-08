@@ -2,7 +2,9 @@
 # https://docs.pytest.org/en/latest/how-to/fixtures.html#scope-sharing-fixtures-across-classes-modules-packages-or-session
 
 import gc
+
 import pytest
+
 from timemachine.lib import custom_ops
 
 

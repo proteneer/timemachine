@@ -1,9 +1,7 @@
-import os
 import ast
+import os
 import sys
-
 from argparse import ArgumentParser
-
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Compare Timemachine FFs")

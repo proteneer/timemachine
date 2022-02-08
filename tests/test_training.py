@@ -2,9 +2,8 @@ import unittest
 
 import numpy as np
 
-from timemachine.training.dataset import Dataset
-
 from timemachine.testsystems.relative import hif2a_ligand_pair
+from timemachine.training.dataset import Dataset
 
 
 class TestDataset(unittest.TestCase):

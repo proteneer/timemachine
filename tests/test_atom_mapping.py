@@ -4,12 +4,12 @@
 # TODO: test distance atom mapping
 
 from timemachine.fe.atom_mapping import (
-    mcs_map,
-    transformation_size,
     compute_all_pairs_mcs,
     compute_transformation_size_matrix,
-    get_core_by_mcs,
     get_core_by_geometry,
+    get_core_by_mcs,
+    mcs_map,
+    transformation_size,
 )
 from timemachine.testsystems.relative import hif2a_ligand_pair
 

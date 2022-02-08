@@ -1,4 +1,4 @@
-from timemachine.ff.handlers import nonbonded, bonded
+from timemachine.ff.handlers import bonded, nonbonded
 
 
 class Forcefield:

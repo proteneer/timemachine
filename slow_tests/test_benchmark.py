@@ -3,21 +3,18 @@ and running an intermediate lambda window "rbfe" MD for a
 relative binding free energy edge from the HIF2A test system"""
 
 import time
+
 import numpy as np
-
-from timemachine.ff.handlers import openmm_deserializer
-from timemachine.ff.handlers.deserialize import deserialize_handlers
-from timemachine.ff import Forcefield
-
 from simtk.openmm import app
 
-from timemachine.lib import custom_ops, LangevinIntegrator, MonteCarloBarostat
-
-from timemachine.fe.utils import to_md_units
-from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe import free_energy
+from timemachine.fe.model_utils import apply_hmr
 from timemachine.fe.topology import SingleTopology
-
+from timemachine.fe.utils import to_md_units
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
 from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 

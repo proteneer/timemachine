@@ -1,25 +1,19 @@
-from jax import grad, value_and_grad, config, jacfwd, jacrev
+from jax import config, grad, jacfwd, jacrev, value_and_grad
 
 config.update("jax_enable_x64", True)
 
 import numpy as np
-
 from rdkit import Chem
-from scipy.optimize import minimize, check_grad
+from scipy.optimize import check_grad, minimize
 
+from timemachine.fe import estimator, free_energy, topology
+from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-from timemachine.fe import topology, estimator, free_energy
-
-from timemachine.parallel.client import CUDAPoolClient
-
-from timemachine.md import builders, minimizer
-
 from timemachine.lib import LangevinIntegrator, MonteCarloBarostat
-
-from timemachine.fe.functional import construct_differentiable_interface, construct_differentiable_interface_fast
+from timemachine.md import builders, minimizer
 from timemachine.md.barostat.utils import get_bond_list, get_group_indices
+from timemachine.parallel.client import CUDAPoolClient
 from timemachine.testsystems.relative import hif2a_ligand_pair
 
 
