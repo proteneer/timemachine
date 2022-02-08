@@ -25,3 +25,6 @@ e21cbb8f048840dc24723b60ca3351dbeac8d207
 
 # Move parallel/ to timemachine/parallel
 4b814f2ee02be99a4ee4a4e8a4b55fc03bc28adf
+
+# Apply isort fixes
+2200b6c482d41b49819a4081501e016328dbb839
