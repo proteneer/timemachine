@@ -1,11 +1,15 @@
 """Absolute hydration free energies"""
 
+from functools import partial
+
 import numpy as np
 from tqdm import tqdm
 
 from timemachine.constants import BOLTZ
 from timemachine.fe import free_energy
+from timemachine.fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
 from timemachine.md import enhanced, builders, moves
+from timemachine.md.smc import conditional_multinomial_resample
 from timemachine.md.states import CoordsVelBox
 from timemachine.utils import get_ff_am1ccc, construct_potential, bind_potentials
 
@@ -80,3 +84,26 @@ def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, press
     )
 
     return reduced_potential_fxn, npt_mover, all_xvbs
+
+
+def set_up_ahfe_system_for_smc(mol, n_walkers, n_windows, n_md_steps, resample_thresh):
+    """define initial samples, lambdas schedule, propagate fxn, log_prob fxn, resample fxn"""
+    reduced_potential, mover, initial_samples = setup_absolute_hydration_with_endpoint_samples(mol, n_steps=n_md_steps)
+
+    sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
+    samples = [initial_samples[i] for i in sample_inds]
+
+    lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)[::-1]
+
+    def propagate(xs, lam):
+        mover.lamb = lam
+        xs_next = [mover.move(x) for x in xs]
+        return xs_next
+
+    def log_prob(xs, lam):
+        u_s = np.array([reduced_potential(x, lam) for x in xs])
+        return -u_s
+
+    resample = partial(conditional_multinomial_resample, thresh=resample_thresh)
+
+    return samples, lambdas, propagate, log_prob, resample

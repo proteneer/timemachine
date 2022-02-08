@@ -1,14 +1,10 @@
 import argparse
 from datetime import datetime
-from functools import partial
 from pickle import dump
 
-import numpy as np
-
-from timemachine.fe.free_energy_rabfe import construct_pre_optimized_absolute_lambda_schedule_solvent
-from timemachine.md.smc import simple_smc, conditional_multinomial_resample
-from timemachine.fe.absolute_hydration import setup_absolute_hydration_with_endpoint_samples
-from timemachine.testsystems import biphenyl
+from timemachine.md.smc import simple_smc
+from timemachine.fe.absolute_hydration import set_up_ahfe_system_for_smc
+from timemachine.testsystems.biphenyl import get_biphenyl
 
 
 def parse_options():
@@ -26,30 +22,6 @@ def parse_options():
         print(f"Warning! This will take a lot of disk space! ({n_frames} simulation frames)")
 
     return cmd_args
-
-
-def set_up_biphenyl_system_for_smc(n_walkers, n_windows, n_md_steps, resample_thresh):
-    """define initial samples, lambdas schedule, propagate fxn, log_prob fxn, resample fxn"""
-    mol, _ = biphenyl.get_biphenyl()
-    reduced_potential, mover, initial_samples = setup_absolute_hydration_with_endpoint_samples(mol, n_steps=n_md_steps)
-
-    sample_inds = np.random.choice(np.arange(len(initial_samples)), size=n_walkers)
-    samples = [initial_samples[i] for i in sample_inds]
-
-    lambdas = construct_pre_optimized_absolute_lambda_schedule_solvent(n_windows)[::-1]
-
-    def propagate(xs, lam):
-        mover.lamb = lam
-        xs_next = [mover.move(x) for x in xs]
-        return xs_next
-
-    def log_prob(xs, lam):
-        u_s = np.array([reduced_potential(x, lam) for x in xs])
-        return -u_s
-
-    resample = partial(conditional_multinomial_resample, thresh=resample_thresh)
-
-    return samples, lambdas, propagate, log_prob, resample
 
 
 def save_smc_result(smc_result, save_full_trajectories=False):
@@ -77,8 +49,9 @@ if __name__ == "__main__":
     cmd_args = parse_options()
 
     # prepare initial samples and lambda schedule, define functions for propagating, evaluating log_prob, and resampling
-    samples, lambdas, propagate, log_prob, resample = set_up_biphenyl_system_for_smc(
-        cmd_args.n_walkers, cmd_args.n_windows, cmd_args.n_md_steps, cmd_args.resample_thresh
+    mol, _ = get_biphenyl()
+    samples, lambdas, propagate, log_prob, resample = set_up_ahfe_system_for_smc(
+        mol, cmd_args.n_walkers, cmd_args.n_windows, cmd_args.n_md_steps, cmd_args.resample_thresh
     )
 
     # run simulation
