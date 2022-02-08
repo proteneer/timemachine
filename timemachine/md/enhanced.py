@@ -59,7 +59,7 @@ def identify_rotatable_bonds(mol):
     matches = mol.GetSubstructMatches(pattern)
 
     # sanity check
-    assert len(matches) == rdMolDescriptors.CalcNumRotatableBonds(mol)
+    assert len(matches) >= rdMolDescriptors.CalcNumRotatableBonds(mol)
 
     sorted_matches = set()
 
