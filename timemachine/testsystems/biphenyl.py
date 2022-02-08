@@ -36,6 +36,9 @@ pressure = 1.0
 
 kBT = BOLTZ * temperature
 
+# global tmp directory # TODO: somewhere better?
+PATH_TO_SAMPLE_CACHES = "/tmp/sample_caches/"
+
 
 def get_biphenyl():
     MOL_SDF = """
@@ -124,12 +127,20 @@ def pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=
 
 def load_or_pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000):
 
-    # TODO: define cache path in a way that will be unique / invalidated when any of the following change
-    #   * code in `pregenerate_samples`
-    #   * any arguments to this function
-    #   --> git hash of whole repo? hash of `pregenerate_samples` source code?
-    #   -->
-    cache_path = "test_smc_cache.pkl"
+    # hash canonical smiles
+    mol_hash = hash(Chem.MolToSmiles(mol))
+    # TODO: do I want this to be sensitive to other mol properties? conformer?
+
+    # hash all of the other parameters
+    # ff_hash = hash(tuple(np.array(ff.get_ordered_params()).flatten()))
+    # arg_hash = hash((seed, n_solvent_samples, n_ligand_batches))
+    # TODO: do I want this to be sensitive to ff's smirks strings too?
+    # TODO: store and check ff_hash, arg_hash match the one stored...
+
+    cache_path = PATH_TO_SAMPLE_CACHES + f"/mol_{mol_hash}_x_solvent_samples.pkl"
+
+    if not os.path.exists(PATH_TO_SAMPLE_CACHES):
+        os.mkdir(PATH_TO_SAMPLE_CACHES)
 
     if not os.path.exists(cache_path):
         print(f"Cache not found at {cache_path}! Generating cache...")
@@ -141,7 +152,7 @@ def load_or_pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_
             pickle.dump([solvent_xvbs, ligand_samples, ligand_log_weights], fh)
     else:
         with open(cache_path, "rb") as fh:
-            print("Loading cache from {cache_path")
+            print(f"Loading cache from {cache_path}")
             solvent_xvbs, ligand_samples, ligand_log_weights = pickle.load(fh)
 
     return solvent_xvbs, ligand_samples, ligand_log_weights
