@@ -51,9 +51,13 @@ def simple_smc(
     log_weights_traj.append(np.array(log_weights))
 
     # don't cast xvb list to array, but cast everything else to arrays
-    return_lists = [log_weights_traj, ancestry_traj, incremental_log_weights_traj]
-    return_arrays = [np.array(t) for t in return_lists]
-    return tuple([traj] + return_arrays)
+    trajs_dict = dict(
+        traj=traj,
+        log_weights_traj=np.array(log_weights_traj),
+        ancestry_traj=np.array(ancestry_traj),
+        incremental_log_weights_traj=np.array(incremental_log_weights_traj),
+    )
+    return trajs_dict
 
 
 def null_resample(log_weights):
