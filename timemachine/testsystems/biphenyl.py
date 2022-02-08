@@ -37,7 +37,7 @@ pressure = 1.0
 kBT = BOLTZ * temperature
 
 # global tmp directory # TODO: somewhere better?
-PATH_TO_SAMPLE_CACHES = "/tmp/sample_caches/"
+PATH_TO_SAMPLE_CACHES = Path("/tmp/sample_caches/")
 
 
 def get_biphenyl():
@@ -137,7 +137,7 @@ def load_or_pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_
     # TODO: do I want this to be sensitive to ff's smirks strings too?
     # TODO: store and check ff_hash, arg_hash match the one stored...
 
-    cache_path = PATH_TO_SAMPLE_CACHES + f"/mol_{mol_hash}_x_solvent_samples.pkl"
+    cache_path = PATH_TO_SAMPLE_CACHES / f"mol_{mol_hash}_x_solvent_samples.pkl"
 
     if not os.path.exists(PATH_TO_SAMPLE_CACHES):
         os.mkdir(PATH_TO_SAMPLE_CACHES)
