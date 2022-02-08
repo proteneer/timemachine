@@ -3,14 +3,16 @@
 Adapted from https://github.com/pypa/sampleproject/blob/main/setup.py
 """
 
-from setuptools import Extension, find_packages, setup
-from setuptools.command.build_ext import build_ext
-
 import os
 import pathlib
 import subprocess
 import sys
+
+from setuptools import Extension, find_packages, setup
+from setuptools.command.build_ext import build_ext
+
 import versioneer
+
 
 # CMake configuration adapted from https://github.com/pybind/cmake_example
 class CMakeExtension(Extension):

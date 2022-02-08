@@ -4,22 +4,18 @@
 # 2) Relative free energy with full atom-mapping
 # 3) Relative free energy with partial atom-mapping (4D-decoupling)
 
-import os
 import argparse
-import numpy as np
+import functools
+import multiprocessing
+import os
 
+import numpy as np
 from rdkit import Chem
 
 from timemachine.fe import free_energy, topology
-from timemachine.md import builders
-from timemachine.md import minimizer
-
-import functools
-
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-import multiprocessing
+from timemachine.md import builders, minimizer
 
 
 def wrap_method(args, fn):

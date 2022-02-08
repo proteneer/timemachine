@@ -3,24 +3,24 @@ import jax
 jax.config.update("jax_enable_x64", True)
 
 import numpy as onp
-from numpy.random import randn, rand, randint, seed
+from numpy.random import rand, randint, randn, seed
 
 seed(2021)
 
+from functools import partial
+from typing import Callable, Tuple
+
+from jax import jit
+from jax import numpy as np
+from jax import value_and_grad, vmap
+from jax.ops import index, index_update
 from scipy.optimize import minimize
-
-from jax import numpy as np, value_and_grad, jit, vmap
-
-from jax.ops import index_update, index
-from timemachine.potentials.nonbonded import nonbonded_v3, nonbonded_v3_on_specific_pairs, nonbonded_block
-from timemachine.potentials.jax_utils import convert_to_4d, get_all_pairs_indices, get_group_group_indices, distance
-from timemachine.md import builders
-from timemachine.ff.handlers import openmm_deserializer
-
 from simtk import unit
 
-from functools import partial
-from typing import Tuple, Callable
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.md import builders
+from timemachine.potentials.jax_utils import convert_to_4d, distance, get_all_pairs_indices, get_group_group_indices
+from timemachine.potentials.nonbonded import nonbonded_block, nonbonded_v3, nonbonded_v3_on_specific_pairs
 
 Conf = Params = Box = ChargeMask = LJMask = LambdaPlaneIdxs = LambdaOffsetIdxs = np.array
 Lamb = Beta = Cutoff = Energy = float

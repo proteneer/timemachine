@@ -1,8 +1,8 @@
 import numpy as np
 
-from timemachine.ff.handlers.utils import match_smirks, sort_tuple
 from timemachine.ff.handlers.serialize import SerializableMixIn
 from timemachine.ff.handlers.suffix import _SUFFIX
+from timemachine.ff.handlers.utils import match_smirks, sort_tuple
 
 
 def generate_vd_idxs(mol, smirks):

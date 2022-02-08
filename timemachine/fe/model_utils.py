@@ -1,9 +1,8 @@
 import tempfile
 
 import numpy as np
-
-from simtk.openmm import app
 from rdkit import Chem
+from simtk.openmm import app
 
 
 def assert_mol_has_all_hydrogens(mol: Chem.Mol):

@@ -1,28 +1,23 @@
 from jax.config import config
 
 config.update("jax_enable_x64", True)
-import jax
-
+import copy
+import functools
 from typing import List
 
-from timemachine.md.states import CoordsVelBox
-from timemachine.md import enhanced
-from timemachine.md.moves import NPTMove, ReferenceMTMMove, OptimizedMTMMove
-
-import functools
-
-from timemachine.potentials import nonbonded
-from timemachine.constants import BOLTZ
-
-import numpy as np
-from tests import test_ligands
-import copy
-
-from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
-
+import jax
 import jax.numpy as jnp
 import jax.random as jrandom
+import numpy as np
+
+from tests import test_ligands
+from timemachine.constants import BOLTZ
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers.deserialize import deserialize_handlers
+from timemachine.md import enhanced
+from timemachine.md.moves import NPTMove, OptimizedMTMMove, ReferenceMTMMove
+from timemachine.md.states import CoordsVelBox
+from timemachine.potentials import nonbonded
 
 
 def get_ff_am1ccc():

@@ -1,10 +1,9 @@
-from timemachine.md.ensembles import NVTEnsemble, NPTEnsemble
-from simtk.unit import kelvin, atmosphere, kilojoule_per_mole, nanometer
-
-from simtk import unit
 import numpy as np
+from simtk import unit
+from simtk.unit import atmosphere, kelvin, kilojoule_per_mole, nanometer
 
-from timemachine.constants import ENERGY_UNIT, DISTANCE_UNIT
+from timemachine.constants import DISTANCE_UNIT, ENERGY_UNIT
+from timemachine.md.ensembles import NPTEnsemble, NVTEnsemble
 
 
 def _compute_reduced_potential(potential_energy, temperature, volume, pressure):

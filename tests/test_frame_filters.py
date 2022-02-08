@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from timemachine.fe.estimator_abfe import SimulationResult
-from timemachine.fe.frames import endpoint_frames_only, all_frames, no_frames
+from timemachine.fe.frames import all_frames, endpoint_frames_only, no_frames
 
 
 def make_dummy_sim_result(val):

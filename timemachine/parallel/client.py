@@ -1,17 +1,13 @@
-from typing import List, Optional, Any, Union
-
 import multiprocessing
-
-import pickle
-import grpc
-
-from timemachine.parallel.grpc import service_pb2_grpc, service_pb2
-from timemachine.parallel.utils import get_gpu_count
-from timemachine.parallel.constants import DEFAULT_GRPC_OPTIONS
-
-from concurrent import futures
-
 import os
+import pickle
+from concurrent import futures
+from typing import Any, List, Optional, Union
+
+import grpc
+from timemachine.parallel.constants import DEFAULT_GRPC_OPTIONS
+from timemachine.parallel.grpc import service_pb2, service_pb2_grpc
+from timemachine.parallel.utils import get_gpu_count
 
 # (ytz): The classes in this file are designed to help provide a consistent API between
 # multiprocessing (typically for local cluster use) and gRPC (distributed and multi-node).

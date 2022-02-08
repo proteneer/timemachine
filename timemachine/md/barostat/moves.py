@@ -1,16 +1,16 @@
-from jax import config, numpy as jnp
+from jax import config
+from jax import numpy as jnp
 from jax.ops import segment_sum
 
 config.update("jax_enable_x64", True)
 
+from typing import Iterable, List, Tuple
+
 import numpy as onp
 
-from timemachine.md.states import CoordsVelBox
-from timemachine.md.barostat.utils import compute_box_volume, compute_box_center
-
+from timemachine.md.barostat.utils import compute_box_center, compute_box_volume
 from timemachine.md.moves import MonteCarloMove
-
-from typing import List, Iterable, Tuple
+from timemachine.md.states import CoordsVelBox
 
 
 def compute_centroid(group):

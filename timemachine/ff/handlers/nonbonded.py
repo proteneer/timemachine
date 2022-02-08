@@ -1,20 +1,19 @@
-import numpy as np
-import jax.numpy as jnp
-import networkx as nx
+import base64
 import pickle
 from collections import Counter
 
+import jax.numpy as jnp
+import networkx as nx
+import numpy as np
+from jax import ops
 from rdkit import Chem
-from timemachine.ff.handlers.utils import sort_tuple, match_smirks as rd_match_smirks
-from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
-from timemachine.ff.handlers.serialize import SerializableMixIn
-from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
 
 from timemachine import constants
-
-from jax import ops
-
-import base64
+from timemachine.ff.handlers.bcc_aromaticity import AromaticityModel
+from timemachine.ff.handlers.bcc_aromaticity import match_smirks as oe_match_smirks
+from timemachine.ff.handlers.serialize import SerializableMixIn
+from timemachine.ff.handlers.utils import match_smirks as rd_match_smirks
+from timemachine.ff.handlers.utils import sort_tuple
 
 
 def convert_to_nx(mol):

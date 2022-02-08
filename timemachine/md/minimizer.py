@@ -1,18 +1,13 @@
 import numpy as np
-
-from timemachine.fe import topology, model_utils
-from timemachine.fe.utils import get_romol_conf
-
-from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
-
-from timemachine.ff import Forcefield
-from timemachine.ff.handlers import openmm_deserializer
-
-from timemachine.md.barostat.utils import get_group_indices, get_bond_list
-
 from rdkit import Chem
 from simtk import openmm
 
+from timemachine.fe import model_utils, topology
+from timemachine.fe.utils import get_romol_conf
+from timemachine.ff import Forcefield
+from timemachine.ff.handlers import openmm_deserializer
+from timemachine.lib import LangevinIntegrator, MonteCarloBarostat, custom_ops
+from timemachine.md.barostat.utils import get_bond_list, get_group_indices
 from timemachine.md.fire import fire_descent
 
 

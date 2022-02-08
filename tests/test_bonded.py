@@ -4,11 +4,11 @@ from jax.config import config
 config.update("jax_enable_x64", True)
 import functools
 
+import pytest
 from common import GradientTest
+
 from timemachine.lib import potentials
 from timemachine.potentials import bonded, rmsd
-
-import pytest
 
 
 class TestBonded(GradientTest):
