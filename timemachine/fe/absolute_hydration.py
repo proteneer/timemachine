@@ -10,44 +10,6 @@ from timemachine.md.states import CoordsVelBox
 from timemachine.utils import get_ff_am1ccc, construct_potential, bind_potentials
 
 
-def generate_solvent_samples(
-    coords,
-    box,
-    masses,
-    ubps,
-    params,
-    temperature,
-    pressure,
-    seed,
-    n_samples,
-    num_equil_steps=50000,
-    md_steps_per_move=1000,
-):
-    """TODO: document me"""
-    xvb0 = enhanced.equilibrate_solvent_phase(
-        ubps, params, masses, coords, box, temperature, pressure, num_equil_steps, seed
-    )
-
-    lamb = 1.0  # non-interacting state
-    npt_mover = moves.NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
-
-    xvbs = [xvb0]
-    for _ in tqdm(range(n_samples), desc="generating solvent samples"):
-        xvbs.append(npt_mover.move(xvbs[-1]))
-    return xvbs
-
-
-def generate_ligand_samples(num_batches, mol, ff, temperature, seed):
-    """TODO: document me"""
-    state = enhanced.VacuumState(mol, ff)
-    proposal_U = state.U_full
-    vacuum_samples, vacuum_log_weights = enhanced.generate_log_weighted_samples(
-        mol, temperature, state.U_easy, proposal_U, num_batches=num_batches, seed=seed
-    )
-
-    return vacuum_samples, vacuum_log_weights
-
-
 def generate_endstate_samples(num_samples, solvent_samples, ligand_samples, ligand_log_weights, num_ligand_atoms):
     """solvent + (noninteracting ligand) sample --> solvent + (vacuum ligand) sample
 

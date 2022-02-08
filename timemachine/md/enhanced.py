@@ -13,7 +13,6 @@ from scipy.special import logsumexp
 from jax.scipy.special import logsumexp as jlogsumexp
 
 from timemachine.fe import topology, free_energy
-from timemachine.fe.absolute_hydration import generate_solvent_samples, generate_ligand_samples
 from timemachine.fe.utils import get_romol_conf
 
 from timemachine.integrator import simulate
@@ -23,14 +22,15 @@ from timemachine import lib
 from timemachine.lib import custom_ops
 
 from timemachine.md.states import CoordsVelBox
-from timemachine.md import minimizer
-from timemachine.md import builders
+from timemachine.md import minimizer, builders, moves
 from timemachine.md.barostat.utils import get_group_indices, get_bond_list
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
 
 from pathlib import Path
+
+from tqdm import tqdm
 
 # global tmp directory # TODO: somewhere better?
 PATH_TO_SAMPLE_CACHES = Path("/tmp/sample_caches/")
@@ -612,3 +612,39 @@ def load_or_pregenerate_samples(
             solvent_xvbs, ligand_samples, ligand_log_weights = pickle.load(fh)
 
     return solvent_xvbs, ligand_samples, ligand_log_weights
+
+
+def generate_solvent_samples(
+    coords,
+    box,
+    masses,
+    ubps,
+    params,
+    temperature,
+    pressure,
+    seed,
+    n_samples,
+    num_equil_steps=50000,
+    md_steps_per_move=1000,
+):
+    """TODO: document me"""
+    xvb0 = equilibrate_solvent_phase(ubps, params, masses, coords, box, temperature, pressure, num_equil_steps, seed)
+
+    lamb = 1.0  # non-interacting state
+    npt_mover = moves.NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
+
+    xvbs = [xvb0]
+    for _ in tqdm(range(n_samples), desc="generating solvent samples"):
+        xvbs.append(npt_mover.move(xvbs[-1]))
+    return xvbs
+
+
+def generate_ligand_samples(num_batches, mol, ff, temperature, seed):
+    """TODO: document me"""
+    state = VacuumState(mol, ff)
+    proposal_U = state.U_full
+    vacuum_samples, vacuum_log_weights = generate_log_weighted_samples(
+        mol, temperature, state.U_easy, proposal_U, num_batches=num_batches, seed=seed
+    )
+
+    return vacuum_samples, vacuum_log_weights
