@@ -24,6 +24,7 @@ from timemachine.lib import custom_ops
 from timemachine.md.states import CoordsVelBox
 from timemachine.md import minimizer, builders, moves
 from timemachine.md.barostat.utils import get_group_indices, get_bond_list
+from timemachine.utils import hash_mol
 
 from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors
@@ -584,8 +585,7 @@ def load_or_pregenerate_samples(
 ):
 
     # hash canonical smiles
-    canon_smiles = Chem.CanonSmiles(Chem.MolToSmiles(mol))
-    mol_hash = hash(canon_smiles)
+    mol_hash = hash_mol(mol)
     # TODO: do I want this to be sensitive to other mol properties? conformer?
 
     # hash all of the other parameters

@@ -5,6 +5,9 @@ from timemachine.fe import functional
 from timemachine.ff import Forcefield
 from timemachine.ff.handlers.deserialize import deserialize_handlers
 
+from rdkit import Chem
+import hashlib
+
 
 def get_ff_am1ccc():
     tm_path = Path(timemachine.__path__[0]).parent
@@ -28,3 +31,11 @@ def construct_potential(ubps, params):
         return U_fn(xvb.coords, params, xvb.box, lam)
 
     return potential
+
+
+def hash_mol(mol: Chem.Mol) -> str:
+    # TODO: check if there's a more idiomatic way to do this
+    canon_smiles = Chem.CanonSmiles(Chem.MolToSmiles(mol))
+    mol_hash = hashlib.sha256(canon_smiles.encode("utf-8")).hexdigest()
+    short_version = mol_hash[:7]
+    return short_version
