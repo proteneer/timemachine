@@ -20,7 +20,6 @@ from timemachine.fe.absolute_hydration import (
     generate_solvent_samples,
     generate_ligand_samples,
     generate_endstate_samples,
-    get_solvent_phase_system,
 )
 
 from timemachine.ff import Forcefield
@@ -106,9 +105,68 @@ def get_ff_am1ccc():
 
 mol, torsion_idxs = get_biphenyl()
 
-
 ligand_masses = np.array([a.GetMass() for a in mol.GetAtoms()])
 num_ligand_atoms = len(ligand_masses)
+
+
+def pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000):
+    ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
+    print(f"Generating {n_solvent_samples} solvent samples")
+    solvent_xvbs = generate_solvent_samples(
+        coords, box, masses, ubps, params, temperature, pressure, seed, n_solvent_samples
+    )
+
+    print("Generating ligand samples")
+    ligand_samples, ligand_log_weights = generate_ligand_samples(n_ligand_batches, mol, ff, temperature, seed)
+
+    return solvent_xvbs, ligand_samples, ligand_log_weights
+
+
+def load_or_pregenerate_samples(mol, ff, seed, n_solvent_samples=1000, n_ligand_batches=30000):
+
+    # TODO: define cache path in a way that will be unique / invalidated when any of the following change
+    #   * code in `pregenerate_samples`
+    #   * any arguments to this function
+    #   --> git hash of whole repo? hash of `pregenerate_samples` source code?
+    #   -->
+    cache_path = "test_smc_cache.pkl"
+
+    if not os.path.exists(cache_path):
+        print(f"Cache not found at {cache_path}! Generating cache...")
+        solvent_xvbs, ligand_samples, ligand_log_weights = pregenerate_samples(
+            mol, ff, seed, n_solvent_samples, n_ligand_batches
+        )
+
+        with open(cache_path, "wb") as fh:
+            pickle.dump([solvent_xvbs, ligand_samples, ligand_log_weights], fh)
+    else:
+        with open(cache_path, "rb") as fh:
+            print("Loading cache from {cache_path")
+            solvent_xvbs, ligand_samples, ligand_log_weights = pickle.load(fh)
+
+    return solvent_xvbs, ligand_samples, ligand_log_weights
+
+
+def bind_potentials(ubps, params):
+    """modifies ubps in-place"""
+    for u, p in zip(ubps, params):
+        u.bind(p)
+
+
+def construct_potential(ubps, params):
+    U_fn = functional.construct_differentiable_interface_fast(ubps, params)
+
+    def potential(xvb, lam):
+        return U_fn(xvb.coords, params, xvb.box, lam)
+
+    return potential
+
+
+def construct_mover(ubps, masses, n_steps):
+    seed = int(time.time())  # TODO: why overwrite?
+    mover = NPTMove(ubps, None, masses, temperature, pressure, n_steps, seed)
+
+    return mover
 
 
 def construct_biphenyl_test_system(n_steps=1000):
@@ -124,49 +182,24 @@ def construct_biphenyl_test_system(n_steps=1000):
     seed = 2021
     np.random.seed(seed)
 
+    # set up potentials
     ff = get_ff_am1ccc()
+    ubps, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
+    potential_fxn = construct_potential(ubps, params)
 
-    cache_path = "test_smc_cache.pkl"  # TODO: store this somewhere safer!
-    if not os.path.exists(cache_path):
+    def reduced_potential_fxn(xvb, lam):
+        return potential_fxn(xvb, lam) / kBT
 
-        print("Generating cache")
-        ubps, params, masses, coords, box = enhanced.get_solvent_phase_system(mol, ff)
+    bind_potentials(ubps, params)
 
-        n_solvent_samples = 1000  # should be maybe 1000
-        print(f"generating {n_solvent_samples} solvent samples")
-        solvent_xvbs = generate_solvent_samples(
-            coords, box, masses, ubps, params, temperature, pressure, seed, n_solvent_samples
-        )
+    # set up npt mover
+    npt_mover = construct_mover(ubps, masses, n_steps)
 
-        n_ligand_batches = os.cpu_count() * 2000  # should be 30k # 24 == os.cpu_count()
-        print("generating ligand samples")
-        ligand_samples, ligand_log_weights = generate_ligand_samples(n_ligand_batches, mol, ff, temperature, seed)
-
-        with open(cache_path, "wb") as fh:
-            pickle.dump([solvent_xvbs, ligand_samples, ligand_log_weights], fh)
-    else:
-        # elide minimize_host_4d
-        ubps, params, masses, coords, box = get_solvent_phase_system(mol, ff)
-
-    with open(cache_path, "rb") as fh:
-        print("Loading cache")
-        solvent_xvbs, ligand_samples, ligand_log_weights = pickle.load(fh)
-
-    n_endstate_samples = 5000
+    # combine solvent and ligand samples
+    solvent_xvbs, ligand_samples, ligand_log_weights = load_or_pregenerate_samples(mol, ff, seed)
+    n_endstate_samples = 5000  # TODO: expose this parameter?
     all_xvbs = generate_endstate_samples(
         n_endstate_samples, solvent_xvbs, ligand_samples, ligand_log_weights, num_ligand_atoms
     )
 
-    for u, p in zip(ubps, params):
-        u.bind(p)
-
-    # propagate with NPTMove
-    seed = int(time.time())
-
-    mover = NPTMove(ubps, None, masses, temperature, pressure, n_steps, seed)
-    U_fn = functional.construct_differentiable_interface_fast(ubps, params)
-
-    def reduced_potential(xvb, lam):
-        return U_fn(xvb.coords, params, xvb.box, lam) / kBT
-
-    return reduced_potential, mover, all_xvbs
+    return reduced_potential_fxn, npt_mover, all_xvbs
