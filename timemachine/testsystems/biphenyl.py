@@ -2,37 +2,12 @@
 
 import jax
 
-from timemachine.md.enhanced import load_or_pregenerate_samples
-
 jax.config.update("jax_enable_x64", True)
-
-import time
-from pathlib import Path
 
 from rdkit import Chem
 import numpy as np
 
-import timemachine
-from timemachine.constants import BOLTZ
-
-from timemachine.fe import functional
-from timemachine.fe.absolute_hydration import (
-    generate_endstate_samples,
-)
-
-from timemachine.ff import Forcefield
-from timemachine.ff.handlers.deserialize import deserialize_handlers
-
-from timemachine.md import enhanced
-from timemachine.md.moves import NPTMove
-
-# (ytz): useful for visualization, so please leave this comment here!
-# import asciiplotlib as apl
-
-temperature = 300.0
-pressure = 1.0
-
-kBT = BOLTZ * temperature
+from timemachine.fe.absolute_hydration import setup_absolute_hydration_with_endpoint_samples
 
 
 def get_biphenyl():
@@ -92,76 +67,7 @@ $$$$"""
     return mol, torsion_idxs
 
 
-def get_ff_am1ccc():
-    tm_path = Path(timemachine.__path__[0]).parent
-    path_to_ff = tm_path / "timemachine/ff/params/smirnoff_1_1_0_ccc.py"
-    with open(path_to_ff, "r") as f:
-        ff_handlers = deserialize_handlers(f.read())
-    ff = Forcefield(ff_handlers)
-    return ff
-
-
-mol, torsion_idxs = get_biphenyl()
-
-ligand_masses = np.array([a.GetMass() for a in mol.GetAtoms()])
-num_ligand_atoms = len(ligand_masses)
-
-
-def bind_potentials(ubps, params):
-    """modifies ubps in-place"""
-    for u, p in zip(ubps, params):
-        u.bind(p)
-
-
-def construct_potential(ubps, params):
-    U_fn = functional.construct_differentiable_interface_fast(ubps, params)
-
-    def potential(xvb, lam):
-        return U_fn(xvb.coords, params, xvb.box, lam)
-
-    return potential
-
-
-def construct_mover(ubps, masses, n_steps):
-    seed = int(time.time())  # TODO: why overwrite?
-    mover = NPTMove(ubps, None, masses, temperature, pressure, n_steps, seed)
-
-    return mover
-
-
 def construct_biphenyl_test_system(n_steps=1000):
-    """
-    Generate samples from the equilibrium distribution at lambda=1
+    mol, torsion_idxs = get_biphenyl()
 
-    Return:
-    * reduced_potential
-    * mover
-    * initial_samples
-    """
-
-    seed = 2022
-    np.random.seed(seed)
-
-    # set up potentials
-    ff = get_ff_am1ccc()
-    ubps, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
-    potential_fxn = construct_potential(ubps, params)
-
-    def reduced_potential_fxn(xvb, lam):
-        return potential_fxn(xvb, lam) / kBT
-
-    bind_potentials(ubps, params)
-
-    # set up npt mover
-    npt_mover = construct_mover(ubps, masses, n_steps)
-
-    # combine solvent and ligand samples
-    solvent_xvbs, ligand_samples, ligand_log_weights = load_or_pregenerate_samples(
-        mol, ff, seed, temperature=temperature, pressure=pressure
-    )
-    n_endstate_samples = 5000  # TODO: expose this parameter?
-    all_xvbs = generate_endstate_samples(
-        n_endstate_samples, solvent_xvbs, ligand_samples, ligand_log_weights, num_ligand_atoms
-    )
-
-    return reduced_potential_fxn, npt_mover, all_xvbs
+    return setup_absolute_hydration_with_endpoint_samples(mol, n_steps)

@@ -1,14 +1,13 @@
 """Absolute hydration free energies"""
 
 import numpy as np
-
-from timemachine.fe import free_energy
-
-from timemachine.md import enhanced, builders
-from timemachine.md.moves import NPTMove
-from timemachine.md.states import CoordsVelBox
-
 from tqdm import tqdm
+
+from timemachine.constants import BOLTZ
+from timemachine.fe import free_energy
+from timemachine.md import enhanced, builders, moves
+from timemachine.md.states import CoordsVelBox
+from timemachine.utils import get_ff_am1ccc, construct_potential, bind_potentials
 
 
 def generate_solvent_samples(
@@ -30,7 +29,7 @@ def generate_solvent_samples(
     )
 
     lamb = 1.0  # non-interacting state
-    npt_mover = NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
+    npt_mover = moves.NPTMove(ubps, lamb, masses, temperature, pressure, n_steps=md_steps_per_move, seed=seed)
 
     xvbs = [xvb0]
     for _ in tqdm(range(n_samples), desc="generating solvent samples"):
@@ -79,3 +78,43 @@ def get_solvent_phase_system(mol, ff):
     ff_params = ff.get_ordered_params()
     ubps, params, masses, coords = afe.prepare_host_edge(ff_params, water_system, water_coords)
     return ubps, params, masses, coords, water_box
+
+
+def setup_absolute_hydration_with_endpoint_samples(mol, temperature=300.0, pressure=1.0, n_steps=1000):
+    """Generate samples from the equilibrium distribution at lambda=1
+
+    Return:
+    * reduced_potential_fxn
+    * npt_mover
+    * initial_samples from lam = 1
+    """
+
+    seed = 2022
+    np.random.seed(seed)
+
+    # set up potentials
+    ff = get_ff_am1ccc()
+    ubps, params, masses, _, _ = enhanced.get_solvent_phase_system(mol, ff)
+    potential_fxn = construct_potential(ubps, params)
+
+    kBT = BOLTZ * temperature
+
+    def reduced_potential_fxn(xvb, lam):
+        return potential_fxn(xvb, lam) / kBT
+
+    bind_potentials(ubps, params)
+
+    # set up npt mover
+    npt_mover = moves.NPTMove(ubps, None, masses, temperature, pressure, n_steps, seed)
+
+    # combine solvent and ligand samples
+    solvent_xvbs, ligand_samples, ligand_log_weights = enhanced.load_or_pregenerate_samples(
+        mol, ff, seed, temperature=temperature, pressure=pressure
+    )
+    n_endstate_samples = 5000  # TODO: expose this parameter?
+    num_ligand_atoms = mol.GetNumAtoms()
+    all_xvbs = generate_endstate_samples(
+        n_endstate_samples, solvent_xvbs, ligand_samples, ligand_log_weights, num_ligand_atoms
+    )
+
+    return reduced_potential_fxn, npt_mover, all_xvbs
